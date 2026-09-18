@@ -71,6 +71,14 @@ describe("tick", () => {
         loop: "watch",
         values: { "files.n": null },
       });
+      tick(repo, database);
+      expect(
+        database
+          .prepare(
+            "SELECT count(*) count FROM events WHERE kind = 'failed' AND sha = ? AND json_extract(payload, '$.sensor') = 'files'",
+          )
+          .get(git("rev-parse", "HEAD").toString().trim()),
+      ).toEqual({ count: 1 });
 
       rmSync(join(repo, "fail.flag"));
       tick(repo);
@@ -120,6 +128,11 @@ describe("tick", () => {
       await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
       const address = server.address();
       if (!address || typeof address === "string") throw new Error("server did not bind");
+      expect(
+        await fetch(`http://127.0.0.1:${address.port}/runs/%E0`).then(
+          (response) => response.status,
+        ),
+      ).toBe(400);
       const detail = (await fetch(
         `http://127.0.0.1:${address.port}/runs/${encodeURIComponent(run)}`,
       ).then((response) => response.json())) as { error: object };
@@ -211,33 +224,94 @@ describe("tick", () => {
       git("add", "factory.toml", "paused.txt");
       git("commit", "-m", "paused loop");
       const pausedSha = git("rev-parse", "main").toString().trim();
-      setLoopPaused(repo, "paused", true, database);
       tick(repo, database);
+      const pausedRun = `paused@${pausedSha}`;
+      setLoopPaused(repo, "paused", true, database);
+      const pauseServer = serve(repo, database);
+      await new Promise<void>((done) => pauseServer.listen(0, "127.0.0.1", done));
+      const pauseAddress = pauseServer.address();
+      if (!pauseAddress || typeof pauseAddress === "string") throw new Error("server did not bind");
+      const state = (await fetch(`http://127.0.0.1:${pauseAddress.port}/state`).then((response) =>
+        response.json(),
+      )) as { loops: { loop: string; state: string }[]; runs: { run: string; kind: string }[] };
+      expect(state.loops.find((loop) => loop.loop === "paused")?.state).toBe("paused");
+      expect(state.runs.find((run) => run.run === pausedRun)?.kind).toBe("gated");
+      await new Promise<void>((done) => pauseServer.close(() => done()));
+      recordVerdict(database, { run: pausedRun, decision: "accept", text: "accepted" });
+      const pausedMain = git("rev-parse", "main").toString().trim();
+      tick(repo, database);
+      expect(git("rev-parse", "main").toString().trim()).toBe(pausedMain);
       expect(
         database
           .prepare(
             "SELECT count(*) count FROM events WHERE loop = 'paused' AND sha = ? AND kind = 'acting'",
           )
           .get(pausedSha),
-      ).toEqual({ count: 0 });
+      ).toEqual({ count: 1 });
+      setLoopPaused(repo, "paused", false, database);
+      tick(repo, database);
+      expect(
+        database
+          .prepare(
+            "SELECT kind FROM events WHERE loop = 'paused' AND sha = ? ORDER BY seq DESC LIMIT 1",
+          )
+          .get(pausedSha),
+      ).toEqual({ kind: "merged" });
 
       writeFileSync(
         join(repo, "factory.toml"),
         '[factory]\nref="main"\npoll_seconds=1\nport=4747\ndb=".artifacts/backfill.sqlite"\n[sensor.files]\nrun="node {root}/sensor.mjs"\nscope=["**/*","*.txt","factory.toml"]\n[loop.watch]\nsense=["files"]\nsetpoint={"files.n"="down"}\n',
       );
+      backfill(repo, 0);
+      const historyPath = join(repo, ".artifacts", "backfill.sqlite");
+      const tip = git("rev-parse", "main").toString().trim();
+      const seeded = new DatabaseSync(historyPath);
+      seeded
+        .prepare("INSERT INTO events(ts,id,loop,kind,sha,payload) VALUES(?,?,?,?,?,?)")
+        .run(
+          new Date().toISOString(),
+          `files@${tip}`,
+          null,
+          "reading",
+          tip,
+          JSON.stringify({ sensor: "files", values: { n: -1000 } }),
+        );
+      seeded.close();
       backfill(repo, 3);
       backfill(repo, 3);
-      const history = new DatabaseSync(join(repo, ".artifacts", "backfill.sqlite"));
+      const history = new DatabaseSync(historyPath);
       expect(
         history.prepare("SELECT count(*) count FROM events WHERE kind = 'reading'").get(),
       ).toEqual({ count: 3 });
       expect(
         history.prepare("SELECT count(*) count FROM events WHERE kind = 'triggered'").get(),
       ).toEqual({ count: 0 });
+      const oldest = git("rev-list", "--first-parent", "--reverse", "--max-count=3", "main")
+        .toString()
+        .trim()
+        .split(/\r?\n/)[0];
+      const oldestError = history
+        .prepare("SELECT payload FROM events WHERE id = ?")
+        .get(`backfill:watch@${oldest}`) as { payload: string };
+      expect(JSON.parse(oldestError.payload).values["files.n"]).toBe(0);
       history.close();
       database.close();
     } finally {
       rmSync(repo, { recursive: true, force: true });
     }
   }, 60_000);
+
+  it("projects fixture readings into a non-empty charts array", () => {
+    const html = readFileSync(join(import.meta.dirname, "..", "src", "ui", "index.html"), "utf8");
+    const expression = html.match(
+      /const chartProjection = ([\s\S]*?);\r?\n      const chart =/,
+    )?.[1];
+    expect(expression).toBeDefined();
+    // oxlint-disable-next-line typescript/no-implied-eval -- exercise the page's function verbatim.
+    const project = Function(`return (${expression})`)() as (
+      setpoints: Record<string, string>,
+      events: { kind: string; sha: string }[],
+    ) => object[];
+    expect(project({ "files.n": "down" }, [{ kind: "reading", sha: "abc" }])).not.toHaveLength(0);
+  });
 });

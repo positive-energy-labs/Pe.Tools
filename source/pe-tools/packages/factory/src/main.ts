@@ -51,6 +51,9 @@ const schema = `CREATE TABLE IF NOT EXISTS events(
   payload TEXT NOT NULL
 )`;
 
+// ponytail: 8 MiB makes chatty commands explicit; stream to artifacts if commands outgrow it.
+const maxBuffer = 8 * 1024 * 1024;
+
 const git = (repo: string, ...args: string[]) =>
   execFileSync("git", ["-C", repo, ...args], { encoding: "utf8" }).trim();
 
@@ -137,6 +140,15 @@ const latestValues = (database: DatabaseSync, sensor: string, before = Number.MA
   return row ? (JSON.parse(row.payload) as { values: Record<string, number> }).values : undefined;
 };
 
+const loopPaused = (database: DatabaseSync, loop: string) =>
+  (
+    database
+      .prepare(
+        "SELECT kind FROM events WHERE loop = ? AND kind IN ('paused','resumed') ORDER BY seq DESC LIMIT 1",
+      )
+      .get(loop) as { kind: string } | undefined
+  )?.kind === "paused";
+
 const sense = (
   repo: string,
   config: Config,
@@ -156,7 +168,14 @@ const sense = (
       if (readValues(database, name, sha)) continue;
       const sensor = config.sensor[name];
       if (!sensor) {
-        append(database, "failed", sha, { sensor: name, stderr: "sensor is not declared" });
+        append(
+          database,
+          "failed",
+          sha,
+          { sensor: name, ...captured("stderr", "sensor is not declared") },
+          null,
+          `failed:${name}@${sha}`,
+        );
         continue;
       }
       const retry = database
@@ -193,6 +212,7 @@ const sense = (
           cwd: checkout,
           encoding: "utf8",
           env,
+          maxBuffer,
           shell: true,
         });
         if (result.status !== 0)
@@ -221,10 +241,17 @@ const sense = (
           `${name}@${sha}`,
         );
       } catch (error) {
-        append(database, "failed", sha, {
-          sensor: name,
-          stderr: error instanceof Error ? error.message : String(error),
-        });
+        append(
+          database,
+          "failed",
+          sha,
+          {
+            sensor: name,
+            ...captured("stderr", error instanceof Error ? error.message : String(error)),
+          },
+          null,
+          `failed:${name}@${sha}`,
+        );
       }
     }
   } finally {
@@ -241,9 +268,6 @@ const errors = (
   previous: string | undefined,
   id = null as string | null,
 ) => {
-  const first = database.prepare("SELECT min(seq) seq FROM events WHERE sha = ?").get(sha) as {
-    seq: number | null;
-  };
   for (const [loopName, loop] of Object.entries(config.loop)) {
     const values: Record<string, number | null> = {};
     for (const [key, setpoint] of Object.entries(loop.setpoint ?? {})) {
@@ -251,9 +275,7 @@ const errors = (
       const sensor = key.slice(0, dot);
       const field = key.slice(dot + 1);
       const current = readValues(database, sensor, sha)?.[field];
-      const prior = previous
-        ? latestValues(database, sensor, first.seq ?? Number.MAX_SAFE_INTEGER)?.[field]
-        : undefined;
+      const prior = previous ? readValues(database, sensor, previous)?.[field] : undefined;
       const failed = database
         .prepare(
           "SELECT 1 FROM events WHERE kind = 'failed' AND sha = ? AND json_extract(payload, '$.sensor') = ? LIMIT 1",
@@ -350,12 +372,7 @@ const act = (
   force = false,
 ) => {
   if (!loop.act) return false;
-  const pause = database
-    .prepare(
-      "SELECT kind FROM events WHERE loop = ? AND kind IN ('paused','resumed') ORDER BY seq DESC LIMIT 1",
-    )
-    .get(loopName) as { kind: string } | undefined;
-  if (pause?.kind === "paused") return false;
+  if (loopPaused(database, loopName)) return false;
   const branch = `factory/${loopName}/${sha.slice(0, 7)}`;
   const worktree = join(repo, ".artifacts", "factory", "runs", `${loopName}-${sha.slice(0, 7)}`);
   const fail = (actuator: string, stderr: string, stdout = "") => {
@@ -435,6 +452,7 @@ const act = (
       cwd: worktree,
       encoding: "utf8",
       env,
+      maxBuffer,
       shell: true,
     });
     if (result.status !== 0) {
@@ -570,6 +588,7 @@ export function tick(repo: string, suppliedDatabase?: DatabaseSync) {
       )
       .all() as { loop: string; sha: string; actuator: string }[];
     for (const run of accepted) {
+      if (loopPaused(database, run.loop)) continue;
       mergeRun(
         repo,
         config,
@@ -602,16 +621,7 @@ const projection = (database: DatabaseSync, config: Config, repo: string) => {
         (order.get(a.sha) ?? Number.MAX_SAFE_INTEGER) -
         (order.get(b.sha) ?? Number.MAX_SAFE_INTEGER),
     );
-  const runKinds = new Set([
-    "acting",
-    "proposed",
-    "gated",
-    "verdict",
-    "merged",
-    "failed",
-    "paused",
-    "resumed",
-  ]);
+  const runKinds = new Set(["acting", "proposed", "gated", "verdict", "merged", "failed"]);
   const loops = Object.entries(config.loop).map(([loop, declaration]) => {
     const error = database
       .prepare("SELECT * FROM events WHERE kind = 'error' AND loop = ? ORDER BY seq DESC LIMIT 1")
@@ -642,22 +652,15 @@ const projection = (database: DatabaseSync, config: Config, repo: string) => {
         return [key, { value, wrong }];
       }),
     );
-    const every = declaration.on?.match(/^every(?::|\s+)(\d+)/)?.[1];
-    const commits =
-      every && run
-        ? Number.parseInt(git(repo, "rev-list", "--count", `${run.sha}..${config.factory.ref}`), 10)
-        : 0;
     return {
       loop,
       sha: error?.sha,
       measured: error ? { ts: error.ts, sha: error.sha } : null,
       values,
       deltas,
-      state: run?.kind ?? "idle",
+      state: loopPaused(database, loop) ? "paused" : (run?.kind ?? "idle"),
       lastRun: run ? { ts: run.ts, sha: run.sha } : null,
-      next: every
-        ? `every ${every} commits: ${commits % Number.parseInt(every, 10)} of ${every}`
-        : `on ${declaration.on ?? `merge:${config.factory.ref}`}`,
+      next: `on merge:${config.factory.ref}`,
       stderr: run?.kind === "failed" ? data.stderr?.split(/\r?\n/, 1)[0] : undefined,
     };
   });
@@ -690,9 +693,7 @@ const projection = (database: DatabaseSync, config: Config, repo: string) => {
     readings,
     loops,
     runs: [...runs.values()],
-    setpoints: Object.fromEntries(
-      Object.entries(config.loop).map(([loop, value]) => [loop, value.setpoint]),
-    ),
+    setpoints: Object.assign({}, ...Object.values(config.loop).map((loop) => loop.setpoint ?? {})),
   };
 };
 
@@ -735,7 +736,13 @@ export const serve = (repo: string, database: DatabaseSync) =>
     const url = new URL(request.url ?? "/", "http://localhost");
     const since = Math.max(0, Number.parseInt(url.searchParams.get("since") ?? "0", 10) || 0);
     const runRoute = url.pathname.match(/^\/runs\/([^/]+)(?:\/(diff|open))?$/);
-    const run = runRoute ? decodeURIComponent(runRoute[1]!) : undefined;
+    let run: string | undefined;
+    try {
+      run = runRoute ? decodeURIComponent(runRoute[1]!) : undefined;
+    } catch {
+      sendText(response, "malformed run", 400);
+      return;
+    }
     const detail = run ? runDetail(database, run) : undefined;
     if (request.method === "POST" && runRoute?.[2] === "open") {
       const worktree = detail?.worktree as string | undefined;
@@ -745,8 +752,16 @@ export const serve = (repo: string, database: DatabaseSync) =>
         if (spawnSync(finder, ["code"], { stdio: "ignore" }).status !== 0) {
           sendText(response, worktree, 501);
         } else {
-          spawn("code", [worktree], { detached: true, stdio: "ignore" }).unref();
-          sendText(response, worktree);
+          const child = spawn("code", [worktree], {
+            detached: true,
+            shell: process.platform === "win32",
+            stdio: "ignore",
+          });
+          child.once("error", () => {
+            if (!response.writableEnded) sendText(response, worktree, 501);
+          });
+          child.once("spawn", () => sendText(response, worktree));
+          child.unref();
         }
       }
     } else if (request.method === "POST" && url.pathname === "/verdict") {
