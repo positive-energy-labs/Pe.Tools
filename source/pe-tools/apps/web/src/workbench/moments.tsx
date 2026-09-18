@@ -25,7 +25,7 @@ import {
 } from "./chat-state";
 import { Markdown } from "./prose";
 import { Code, stringify } from "#/components/lang/code";
-import { RouteChatPluginView } from "./route-chat-plugins";
+import { chatPluginTitle, proposedRecord, type ProposedRecord } from "./chat-plugins";
 import { Press } from "#/components/lang/press";
 import { annotation } from "#/components/anatomy";
 import { PressContent } from "#/components/anatomy/press-content";
@@ -312,6 +312,7 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
   const ran = readRecord(result);
   const ranTarget = readRecord(ran?.target);
   const revision = typeof ran?.revision === "number" ? ran.revision : undefined;
+  const proposed = proposedRecord(call.title, call.args, result);
   const question =
     approval?.kind === "suspension" && call.title === "ask_user"
       ? readQuestion(approval.payload)
@@ -403,20 +404,33 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
           )}
         </div>
       ) : null}
-      {!deferred.ref || result !== undefined ? (
-        <RouteChatPluginView
-          toolCallId={call.id}
-          toolName={call.title}
-          args={call.args}
-          sessionState={result}
-          running={running}
-        />
-      ) : null}
+      {proposed ? <ProposedLine record={proposed} /> : null}
       {/* Allow/refuse lives in the composer head's proposals band (`chat/composer-head.tsx`);
           a question still answers here, beside what it asks about. */}
       {question ? (
         <AskUserPrompt toolCallId={call.id} question={question} resolve={resolveApproval} />
       ) : null}
+    </div>
+  );
+}
+
+/** The one record a Pea call that wrote route Work leaves. Its count is the call's own, never live
+ * Work; it has no verbs, and `open ›` hosts the route beside the thread. */
+function ProposedLine({ record }: { record: ProposedRecord }) {
+  const { store } = useWorkbench();
+  return (
+    <div
+      className="flex min-w-0 items-baseline gap-2 t-small text-ink-2"
+      data-proposed={record.route}
+    >
+      <span className="truncate">
+        Pea proposed {record.changes} change{record.changes === 1 ? "" : "s"} in{" "}
+        {chatPluginTitle(record.route)}
+        {record.subject ? ` · ${record.subject}` : ""}
+      </span>
+      <Press tone="quiet" size="caption" onClick={() => store.actions.setPlugin(record.route)}>
+        open ›
+      </Press>
     </div>
   );
 }

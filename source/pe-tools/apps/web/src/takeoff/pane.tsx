@@ -4,13 +4,12 @@
  * source switch. `?work=` on the route is `capture` here.
  */
 import { useState } from "react";
-import type { WorkKey } from "@pe/agent-contracts";
 
 import { TakeoffsControllerOwner } from "#/takeoff/route";
 import { SavedTakeoffsView } from "#/takeoff/saved-review";
 import { ActionButton } from "#/components/lang/action-button";
 
-export function TakeoffsPane({ scope }: { scope: WorkKey }) {
+export function TakeoffsPane({ thread }: { thread?: string }) {
   // Embedded-pane navigation; closing the pane intentionally returns to its live route.
   const [capture, setCapture] = useState<string | undefined>();
   const [saved, setSaved] = useState(false);
@@ -18,7 +17,6 @@ export function TakeoffsPane({ scope }: { scope: WorkKey }) {
     return (
       <SavedTakeoffsView
         capture={capture}
-        {...(scope.target ? { document: scope.target } : {})}
         select={(patch) => {
           setCapture(patch.work);
           if (patch.work === undefined && capture === undefined) setSaved(false);
@@ -33,7 +31,7 @@ export function TakeoffsPane({ scope }: { scope: WorkKey }) {
         reason="Read dated captures without Revit"
         onClick={() => setSaved(true)}
       />
-      <TakeoffsControllerOwner target={scope.target ?? ""} />
+      <TakeoffsControllerOwner thread={thread} />
     </>
   );
 }

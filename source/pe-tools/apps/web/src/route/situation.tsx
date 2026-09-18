@@ -16,7 +16,7 @@
  * The route declares its verbs once (its manifest) and this file only draws them: dotted =
  * operable, dashed = empty slot, caution = the world disagrees, bold = unsaved, mono = measured.
  */
-import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { Fragment, createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { Gauge } from "lucide-react";
 import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
@@ -221,6 +221,12 @@ export function Cluster({
 /* ── the document ladder ───────────────────────────────────────────────────── */
 
 /**
+ * True inside Chat's plugin pane. The pane's target is the thread head's, and Chat's composer head
+ * is the one place to change it, so a hosted ladder offers no session or document levels.
+ */
+export const ChatHosted = createContext(false);
+
+/**
  * session › document, read from the bridge inventory: titles and pe-revit ids, not GUIDs.
  * A pick moves the thread head (the one target store) and drops a `?target` pin, so the route
  * shows what the thread shows. A route with no thread still binds through `?target`; Chat's
@@ -234,6 +240,7 @@ export function useDocumentLadder(
     bind: (ref: { session: string; openId: string }) => void;
   },
 ) {
+  const hosted = useContext(ChatHosted);
   const [pin, choose] = useChooseTarget();
   // The kernel's own inventory: a route need not declare an `inventory` Reading to show sessions.
   const inventory = handle.inventory;
@@ -275,37 +282,55 @@ export function useDocumentLadder(
     docWord: doc?.title ?? null,
     /** The head's refusal of the last pick (stale head, or a Pea turn holding it). */
     refusal: binding ? null : (head?.refusal ?? null),
-    levels: [
-      {
-        key: "session",
-        label: sessionWord,
-        placeholder: "choose a session",
-        options: sessions.map((item) => ({
-          id: item.sessionId,
-          label: item.sdkSessionId ?? item.sessionId,
-          sub: `${item.openDocumentCount} open${item.lane ? ` · ${item.lane}` : ""}`,
-        })),
-        note: note ?? "no Revit answers the host",
-        picked: (id: string) => id === sessionId,
-        pick: chooseSession,
-      },
-      {
-        key: "document",
-        label: doc?.title ?? null,
-        placeholder: "choose a document",
-        options: session
-          ? (session.openDocuments ?? []).map((item) => ({
-              id: item.openId,
-              label: item.title,
-              sub: item.isFamilyDocument ? "family" : "project",
-            }))
-          : null,
-        note: session ? "nothing open here" : "choose a session first",
-        picked: (id: string) => id === bound?.openId,
-        pick,
-      },
-    ],
+    hosted,
+    levels: hosted
+      ? []
+      : [
+          {
+            key: "session",
+            label: sessionWord,
+            placeholder: "choose a session",
+            options: sessions.map((item) => ({
+              id: item.sessionId,
+              label: item.sdkSessionId ?? item.sessionId,
+              sub: `${item.openDocumentCount} open${item.lane ? ` · ${item.lane}` : ""}`,
+            })),
+            note: note ?? "no Revit answers the host",
+            picked: (id: string) => id === sessionId,
+            pick: chooseSession,
+          },
+          {
+            key: "document",
+            label: doc?.title ?? null,
+            placeholder: "choose a document",
+            options: session
+              ? (session.openDocuments ?? []).map((item) => ({
+                  id: item.openId,
+                  label: item.title,
+                  sub: item.isFamilyDocument ? "family" : "project",
+                }))
+              : null,
+            note: session ? "nothing open here" : "choose a session first",
+            picked: (id: string) => id === bound?.openId,
+            pick,
+          },
+        ],
   };
+}
+
+/** The ladder's picker; hosted in Chat, only the bound document's word. */
+export function LadderPicker({
+  ladder,
+  disabled,
+}: {
+  ladder: ReturnType<typeof useDocumentLadder>;
+  disabled?: boolean;
+}) {
+  return ladder.hosted ? (
+    <span>{ladder.docWord ?? "no document"}</span>
+  ) : (
+    <Picker levels={ladder.levels} disabled={disabled} />
+  );
 }
 
 /* ── verbs ─────────────────────────────────────────────────────────────────── */

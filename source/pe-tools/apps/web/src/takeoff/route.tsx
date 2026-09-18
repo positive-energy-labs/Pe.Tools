@@ -64,15 +64,18 @@ export function LiveTakeoffsRoute({
 
 export function TakeoffsControllerOwner({
   target = "",
+  thread,
   savedCapture,
   navigation,
 }: {
   target?: string;
+  thread?: string;
   savedCapture?: TakeoffCapture;
   navigation?: Parameters<typeof useTakeoffsController>[0]["navigation"];
 }) {
   const store = useTakeoffsController({
     target,
+    ...(thread ? { thread } : {}),
     ...(savedCapture ? { savedCapture } : {}),
     ...(navigation ? { navigation } : {}),
   });

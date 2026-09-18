@@ -272,6 +272,8 @@ const observed = <T>(reading: Reading<unknown> | undefined): T | undefined =>
 
 export function useTakeoffsController(options: {
   target?: string;
+  /** The thread whose head is the target store (a chat pane). */
+  thread?: string;
   work?: string;
   savedCapture?: TakeoffCapture;
   navigation?: {
@@ -282,6 +284,7 @@ export function useTakeoffsController(options: {
   const handle = useRoute(manifest, {
     target: options.target ? (options.target as never) : null,
     ...(options.work !== undefined ? { work: options.work } : {}),
+    ...(options.thread ? { thread: options.thread } : {}),
   });
   const [page, setPage] = handle.page;
   const [localNavigation, setLocalNavigation] = useState<TakeoffNavigation>({
