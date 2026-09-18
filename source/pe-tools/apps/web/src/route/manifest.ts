@@ -67,6 +67,7 @@ export interface Ctx<W, R extends string, P> {
   readonly write: (patch: RouteStatePatch[]) => Promise<Refusal | null>;
   /** The command lane on the Work document, one of the Work spec's own commands. */
   readonly command: (name: string, input?: unknown) => Promise<Refusal | null>;
+  /** Publishes action progress only while its original Target, Work, and user Page remain current. */
   readonly setPage: (next: Partial<P>) => void;
 }
 

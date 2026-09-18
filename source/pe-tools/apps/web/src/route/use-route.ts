@@ -864,10 +864,11 @@ export function useRoute<W, R extends string, P, A extends string>(
     };
   }, [writer, owner, seed]);
   // Stable: it is `page[1]`, `ctx.setPage`, and a dep of consumer memos (families/store.ts).
-  const setPage = useCallback(
-    (next: Partial<P>) => setPageState((current) => ({ ...current, ...next })),
-    [],
-  );
+  const pageEpoch = useRef(0);
+  const setPage = useCallback((next: Partial<P>) => {
+    pageEpoch.current += 1;
+    setPageState((current) => ({ ...current, ...next }));
+  }, []);
   const scopeKey = JSON.stringify([boundKey, key]);
   const actionScope = useMemo(() => ({}), [scopeKey]);
   const currentActionScope = useRef(actionScope);
@@ -970,6 +971,17 @@ export function useRoute<W, R extends string, P, A extends string>(
           refusal: health ?? action.ready(ctx as never, undefined as never),
           run: async (input?: unknown) => {
             let stopped = false;
+            const startedPageEpoch = pageEpoch.current;
+            const runCtx = {
+              ...ctx,
+              setPage: (next: Partial<P>) => {
+                if (
+                  currentActionScope.current === actionScope &&
+                  pageEpoch.current === startedPageEpoch
+                )
+                  setPageState((current) => ({ ...current, ...next }));
+              },
+            };
             const refusal = await owner.runAction(
               name,
               async () => {
@@ -980,9 +992,9 @@ export function useRoute<W, R extends string, P, A extends string>(
                 const parsed = action.input.safeParse(input);
                 if (!parsed.success)
                   return refuse("not-ready", parsed.error.issues[0]?.message ?? "invalid input");
-                const reason = action.ready(ctx as never, parsed.data as never);
+                const reason = action.ready(runCtx as never, parsed.data as never);
                 if (reason) return refuse("not-ready", reason);
-                const refusal = (await action.run(ctx as never, parsed.data as never)) ?? null;
+                const refusal = (await action.run(runCtx as never, parsed.data as never)) ?? null;
                 if (!refusal)
                   for (const reading of action.dirties) {
                     const request = readingAtoms.find(([name]) => name === reading)?.[2];
