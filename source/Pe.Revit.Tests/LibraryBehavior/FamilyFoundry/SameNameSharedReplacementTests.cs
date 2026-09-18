@@ -145,7 +145,7 @@ public sealed class SameNameSharedReplacementTests {
             document = this.Build();
             var original = Observe(document);
             Assert.That(original["arrays"]!.Values<string>(), Is.EqualTo(new[] { "Count" }), "fixture: Count labels the vane array");
-            Assert.That(original["nested"]!.Values<string>(), Has.Count.GreaterThan(1).And.All.EqualTo("Depth"), "fixture: every arrayed vane associates _vane length to Depth");
+            Assert.That(original["nested"]!.Values<string>().ToList(), Has.Count.GreaterThan(1).And.All.EqualTo("Depth"), "fixture: every arrayed vane associates _vane length to Depth");
             Hops(document, original, 1);
         } finally { RevitFamilyFixtureHarness.CloseDocument(document); }
     }
