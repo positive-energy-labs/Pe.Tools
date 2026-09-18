@@ -6,6 +6,7 @@ import type {
   Session,
   WireDisplayState,
 } from "@mastra/core/agent-controller";
+import { createSignal, type AgentSignalInput } from "@mastra/core/agent";
 import { Buffer } from "node:buffer";
 import {
   askExpiryOf,
@@ -100,14 +101,47 @@ export function selectExpiredAsks(
   );
 }
 
-/** Drops the resume data a run that ended leaves parked, so an expired ask cannot be answered. */
+/** Drops parked resume data and its display mirror, so an expired ask cannot be answered. */
 export function expireAsks(
-  session: Pick<Session, "suspensions">,
+  session: Pick<Session, "suspensions" | "emit">,
   reason: Parameters<typeof askExpiryOf>[0],
 ): boolean {
-  if (askExpiryOf(reason) === null) return false;
-  session.suspensions.clear();
+  const expiry = askExpiryOf(reason);
+  if (expiry === null) return false;
+  for (const { toolCallId, toolName } of session.suspensions.clear())
+    session.emit({ type: "tool_suspension_cancelled", toolCallId, toolName, reason: expiry });
   return true;
+}
+
+/**
+ * Every turn start funnels through `sendSignal` (Mastra's sendMessage, steer and followUp call it;
+ * Pea's admitTurn does too); a resume does not. The parked run still owns the thread, and a signal
+ * sent into it hangs. So a new turn expires the asks, cancels the parked run (which ends `aborted`)
+ * and sends once that run's stream has torn down.
+ */
+export function expireAsksOnNewTurn(session: Session): void {
+  const sendSignal = session.sendSignal.bind(session);
+  session.sendSignal = ((input, options) => {
+    if (!session.suspensions.hasPending()) return sendSignal(input, options);
+    expireAsks(session, "new-turn");
+    session.abort();
+    const torndown = new AbortController();
+    const idle = Promise.race([
+      session.stream.waitForTeardown(torndown.signal),
+      // Bounded as Mastra bounds its own waitForStreamIdle; teardown lands well inside it.
+      new Promise((resolve) => setTimeout(resolve, 1000)),
+    ]).finally(() => torndown.abort());
+    const signal = createSignal(
+      "content" in input
+        ? { type: "user", tagName: "user", contents: input.content }
+        : (input as AgentSignalInput),
+    );
+    return {
+      id: signal.id,
+      type: signal.type,
+      accepted: idle.then(() => sendSignal(input, options).accepted),
+    };
+  }) as typeof session.sendSignal;
 }
 
 export function projectThreadMessages(messages: ThreadMessage[]): {

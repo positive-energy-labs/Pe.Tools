@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { createDeterministicRuntime } from "../src/testing.ts";
-import { expireAsks, readThreadState } from "../src/thread-state.ts";
+import { expireAsks, expireAsksOnNewTurn, readThreadState } from "../src/thread-state.ts";
 
-// Expiry by turn end, cancel and host restart; survival across reload. Only the model is fake.
+// Expiry by turn end, new turn, cancel and host restart; survival across reload. Only the model is fake.
 const askUser = {
   toolCall: {
     name: "ask_user" as const,
@@ -73,6 +73,41 @@ test("turn end expires a parked ask and drops its resume data", async () => {
     expect(pending(session)).toEqual([]);
     expect(session.suspensions.has({ toolCallId: call })).toBe(false);
     expect((await readThreadState(runtime, session, "t")).expiredAsks).toEqual([
+      expect.objectContaining({ toolCallId: call, toolName: "ask_user" }),
+    ]);
+  } finally {
+    await runtime.close?.();
+  }
+});
+
+test("a new turn expires a parked ask without resuming it", async () => {
+  const { runtime, session } = await start([askUser, { text: "fresh turn" }]);
+  try {
+    expireAsksOnNewTurn(session);
+    await park(session, "suspension");
+    const resumed: string[] = [];
+    session.subscribe((event) => {
+      if (event.type === "tool_end") resumed.push(event.toolCallId);
+    });
+    const ends: string[] = [];
+    const fresh = new Promise<void>((resolve) =>
+      session.subscribe((event) => {
+        if (event.type !== "agent_end") return;
+        ends.push(event.reason ?? "");
+        if (event.reason === "complete") resolve();
+      }),
+    );
+    await session.sendMessage({ content: "never mind" });
+    await fresh;
+
+    // The parked run is cancelled, then the new turn runs whole.
+    expect(ends).toEqual(["aborted", "complete"]);
+    expect(pending(session)).toEqual([]);
+    expect(session.suspensions.has({ toolCallId: call })).toBe(false);
+    expect(resumed).toEqual([]);
+    const state = await readThreadState(runtime, session, "t");
+    expect(JSON.stringify(state.messages)).toContain("fresh turn");
+    expect(state.expiredAsks).toEqual([
       expect.objectContaining({ toolCallId: call, toolName: "ask_user" }),
     ]);
   } finally {

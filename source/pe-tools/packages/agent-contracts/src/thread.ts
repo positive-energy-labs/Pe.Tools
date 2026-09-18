@@ -22,16 +22,18 @@ export function threadAccess(permissions: unknown): ThreadViewState["access"] {
 /**
  * The one ask lifetime: an ask (permission gate or tool suspension) lives as long as the turn
  * awaiting it. Navigation and reload are not here: the ask is thread state, replayed on reattach.
- * Open (Kai): a new turn sent while suspensions are parked leaves them live; it is not a turn end.
+ * Ruled (meta): a new turn (send, steer, followUp or signal) started while an ask is parked
+ * expires it; an abort-cancelled gate is expired, never denied.
  */
-export const askExpiryTriggers = ["turn-end", "cancel", "host-restart"] as const;
+export const askExpiryTriggers = ["turn-end", "cancel", "host-restart", "new-turn"] as const;
 export type AskExpiry = (typeof askExpiryTriggers)[number];
 
-/** A run's end reason → the trigger that expires its asks, or null while the run is parked on them. */
+/** A run's end reason, or a new turn → the trigger that expires parked asks; null keeps them. */
 export function askExpiryOf(
-  reason: "complete" | "error" | "aborted" | "suspended" | undefined,
+  reason: "complete" | "error" | "aborted" | "suspended" | "new-turn" | undefined,
 ): AskExpiry | null {
   if (reason === "suspended") return null;
+  if (reason === "new-turn") return reason;
   return reason === "aborted" ? "cancel" : "turn-end";
 }
 
