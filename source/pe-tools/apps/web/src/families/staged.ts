@@ -22,49 +22,6 @@ export interface FamilyCellEntry extends FamilyCellAddress {
 export const familyCellEntries = (cells: Record<string, FamilyCellState>): FamilyCellEntry[] =>
   Object.entries(cells).map(([key, cell]) => ({ key, ...familyCellAddress(key), cell }));
 
-const changeCells = (
-  cells: Record<string, FamilyCellState>,
-  addresses: readonly FamilyCellAddress[],
-  change: (cell: FamilyCellState) => FamilyCellState,
-) =>
-  Object.fromEntries(
-    Object.entries(cells).map(([key, cell]) => [
-      key,
-      addresses.some((address) => familyCellKey(address) === key) ? change(cell) : cell,
-    ]),
-  );
-
-export const stageProposals = (
-  cells: Record<string, FamilyCellState>,
-  addresses: readonly FamilyCellAddress[],
-) =>
-  changeCells(cells, addresses, (cell) =>
-    cell.proposal ? { ...cell, staged: { value: cell.proposal.value } } : cell,
-  );
-
-export const clearProposals = (
-  cells: Record<string, FamilyCellState>,
-  addresses: readonly FamilyCellAddress[],
-) => changeCells(cells, addresses, (cell) => ({ ...cell, proposal: null }));
-
-export const clearStaged = (
-  cells: Record<string, FamilyCellState>,
-  addresses: readonly FamilyCellAddress[],
-) => changeCells(cells, addresses, (cell) => ({ ...cell, staged: null }));
-
-export const stageHumanValue = (
-  cells: Record<string, FamilyCellState>,
-  address: FamilyCellAddress,
-  value: FamilyCellValue,
-  baseline: string,
-) => ({
-  ...cells,
-  [familyCellKey(address)]: {
-    proposal: cells[familyCellKey(address)]?.proposal ?? null,
-    staged: value.value === "" || value.value === baseline ? null : { value },
-  },
-});
-
 export const patchValue = (text: string): string | number | boolean =>
   text === "true"
     ? true

@@ -1,15 +1,7 @@
 import { familyCellKey, type FamilyCellAddress, type FamilyCellState } from "@pe/agent-contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import {
-  cellAt,
-  clearProposals,
-  familyCellEntries,
-  patchValue,
-  stageHumanValue,
-  stageProposals,
-  stagedMembers,
-} from "./staged.ts";
+import { cellAt, familyCellEntries, patchValue, stagedMembers } from "./staged.ts";
 
 const now = new Date("2026-09-17T12:00:00.000Z");
 const entry = (
@@ -38,29 +30,6 @@ describe("staged family cells", () => {
     const document = { [familyCellKey(address)]: state };
     expect(cellAt(document, address)).toBe(state);
     expect(familyCellEntries(document)[0]).toMatchObject(address);
-  });
-
-  it("stages proposals, preserves counter-proposals, and denies without erasing staged work", () => {
-    const address = { familyId: 1, typeName: "T1", parameter: "P" };
-    const proposed = cells({
-      address,
-      cell: {
-        proposal: { value: { familyName: "A", value: "pea" }, by: "pea" },
-        staged: null,
-      },
-    });
-    expect(stageProposals(proposed, [address])[familyCellKey(address)]?.staged?.value.value).toBe(
-      "pea",
-    );
-    const counter = stageHumanValue(proposed, address, { familyName: "A", value: "human" }, "old");
-    expect(counter[familyCellKey(address)]).toMatchObject({
-      proposal: { value: { value: "pea" } },
-      staged: { value: { value: "human" } },
-    });
-    expect(clearProposals(counter, [address])[familyCellKey(address)]).toMatchObject({
-      proposal: null,
-      staged: { value: { value: "human" } },
-    });
   });
 
   it("keeps a JSON scalar a scalar and everything else the typed text", () => {

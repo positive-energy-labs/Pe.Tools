@@ -245,11 +245,7 @@ export function useFamiliesColumns({
                 reason={reason}
                 cell={cellAt(cells, address)}
                 onCommit={(next) =>
-                  void propose(
-                    address,
-                    { familyName: row.familyName, value: next, by: "human" },
-                    value,
-                  )
+                  void propose(address, { familyName: row.familyName, value: next }, value)
                 }
               />
             );

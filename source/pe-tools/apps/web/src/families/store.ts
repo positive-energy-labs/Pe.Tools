@@ -7,11 +7,12 @@
  * receipt said, and which picker is open. Plain values, no atoms.
  */
 import { frozenDemo } from "#/host/demo-client";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   actionReceiptSchema,
   actionStatusSchema,
   diagnosticSchema,
+  familyCellKey,
   familiesCaptureEvidenceSchema,
   ffReceiptSchema,
   podMemberSourceSchema,
@@ -32,7 +33,6 @@ import { useRoute, type EntityPage, type EntitySearch } from "#/route";
 import { usePodList } from "#/route/pods";
 import { createLiveFamiliesHost, type FamiliesDraft } from "#/families/host";
 import { manifest, type FamiliesPage } from "#/families/manifest";
-import { clearProposals, clearStaged, stageHumanValue, stageProposals } from "#/families/staged";
 
 /* ── Page memory ───────────────────────────────────────────────────────────── */
 
@@ -173,24 +173,14 @@ export function useFamiliesStore(
   const excludedIds = doc?.excludedIds ?? NO_EXCLUDED;
   const cells = doc?.cells ?? NO_CELLS;
   /*
-   * Two cells typed back to back are two Work writes, and the second must build on the first even
-   * though the Work reading has not come back yet — otherwise the later write erases the earlier
-   * cell. `asked` is what we last wrote; it yields to Work the moment Work agrees, so Work stays
-   * the only authority and this is a queue, never a second copy of the document.
+   * Every cell verb writes only the rungs it names, so a write can never carry an older copy of a
+   * cell it did not touch. Accept binds the proposal the person saw to the revision they saw it at:
+   * if Work moved since, the write is refused rather than staging a value no one reviewed.
    */
-  const observed = useRef(cells);
-  observed.current = cells;
-  const asked = useRef<Record<string, FamilyCellState> | null>(null);
-  if (asked.current && JSON.stringify(asked.current) === JSON.stringify(observed.current))
-    asked.current = null;
-  const writeCells = useCallback(
-    (change: (cells: Record<string, FamilyCellState>) => Record<string, FamilyCellState>) => {
-      const nextCells = change(asked.current ?? observed.current);
-      asked.current = nextCells;
-      return handle.work.write([{ path: ["cells"], value: nextCells }]);
-    },
-    [handle.work],
-  );
+  const rung = (address: FamilyCellAddress, name: "proposal" | "staged", value: unknown) => ({
+    path: ["cells", familyCellKey(address), name],
+    value,
+  });
   const applied = (doc?.scope ?? null) as AppliedFilter | null;
 
   // The confirmed plan is the kernel's sheet: it lives exactly as long as the sheet is open.
@@ -266,19 +256,30 @@ export function useFamiliesStore(
       setPicker: (value: Setter<PickerState>) =>
         setMemory((current) => ({ ...current, picker: next(value, current.picker) })),
       /** A typed human value stages directly. Pea's standing proposal remains as a counter. */
-      propose: (
-        address: FamilyCellAddress,
-        value: FamilyCellValue & { by: "human" },
-        current: string,
-      ) => writeCells((cells) => stageHumanValue(cells, address, value, current)),
-      /** Accept copies the current proposal value into staged and leaves it standing. */
+      propose: (address: FamilyCellAddress, value: FamilyCellValue, current: string) =>
+        handle.work.write([
+          rung(
+            address,
+            "staged",
+            value.value === "" || value.value === current
+              ? null
+              : { value: { familyName: value.familyName, value: value.value } },
+          ),
+        ]),
+      /** Accept stages the proposal on screen, bound to the revision it was seen at. */
       accept: (addresses: readonly FamilyCellAddress[]) =>
-        writeCells((cells) => stageProposals(cells, addresses)),
+        handle.work.write(
+          addresses.flatMap((address) => {
+            const proposal = cells[familyCellKey(address)]?.proposal;
+            return proposal ? [rung(address, "staged", { value: proposal.value })] : [];
+          }),
+          handle.work.revision ?? undefined,
+        ),
       /** Deny clears the proposal only; an independently staged human value survives. */
       deny: (addresses: readonly FamilyCellAddress[]) =>
-        writeCells((cells) => clearProposals(cells, addresses)),
+        handle.work.write(addresses.map((address) => rung(address, "proposal", null))),
       unstage: (addresses: readonly FamilyCellAddress[]) =>
-        writeCells((cells) => clearStaged(cells, addresses)),
+        handle.work.write(addresses.map((address) => rung(address, "staged", null))),
       exclude: (id: number) => {
         const set = new Set(excludedIds);
         if (!set.delete(id)) set.add(id);
@@ -293,7 +294,7 @@ export function useFamiliesStore(
         callHostRpc("host.shell.open", { path }, { bridgeSessionId: target || undefined }),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [handle.work, draft, setPage, pickedIds, excludedIds, writeCells, target, documentScope],
+    [handle.work, cells, draft, setPage, pickedIds, excludedIds, target, documentScope],
   );
 
   return {
