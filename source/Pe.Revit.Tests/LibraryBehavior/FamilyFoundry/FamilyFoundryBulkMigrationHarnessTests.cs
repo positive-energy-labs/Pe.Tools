@@ -162,20 +162,77 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             var before = FamilyModelJson.Serialize(current);
             var currentType = document.FamilyManager.CurrentType.Name;
             var modified = document.IsModified;
-            FamilyModel Desired(string formula) => FamilyReconciler.Desired(current, new FamilyPatch { Patch = new JObject {
+            FamilyPatch Patch(string formula) => new() { Patch = new JObject {
                 ["parameters"] = new JObject { ["PE_E___NumberOfPoles"] = new JObject { ["formula"] = formula } }
-            } }).Value!;
+            } };
 
-            var canonical = FamilyReconciler.ResolveNativeFormulas(Desired(raw), document);
-            Assert.That(canonical.Parameters["PE_E___NumberOfPoles"].Formula, Is.EqualTo(native));
-            Assert.That(FamilyReconciler.Reconcile(canonical, current, UnitResolvers.Revit(document)).Changes, Is.Empty);
+            var canonical = document.PreviewFamily(Patch(raw));
+            Assert.That(canonical.Changes, Is.Empty);
+            Assert.That(canonical.Diagnostics, Is.Empty);
             Assert.That(FamilyModelJson.Serialize(document.CaptureFamilyModel()), Is.EqualTo(before));
             Assert.That(document.FamilyManager.CurrentType.Name, Is.EqualTo(currentType));
             Assert.That(document.IsModified, Is.EqualTo(modified));
 
-            var changed = FamilyReconciler.ResolveNativeFormulas(Desired(raw.Replace("120", "208")), document);
-            Assert.That(FamilyReconciler.Diff(changed, current, UnitResolvers.Revit(document)),
+            var changed = document.PreviewFamily(Patch(raw.Replace("120", "208")));
+            Assert.That(changed.Changes,
                 Has.Some.Matches<FamilyChange>(c => c.Section == "parameters" && c.Key == "PE_E___NumberOfPoles"));
+        } finally { document.Close(false); }
+    }
+
+    [Test]
+    public void Preview_refuses_invalid_units_without_mutation() {
+        var document = this.NewFamily("FF invalid unit preview");
+        try {
+            var before = FamilyModelJson.Serialize(document.CaptureFamilyModel());
+            var preview = document.PreviewFamily(FamilyPatch.Parse("""{"patch":{"parameters":{"Width":{"value":"3 bananas"}}}}"""));
+            Assert.That(preview.Diagnostics, Is.Not.Empty);
+            Assert.That(FamilyModelJson.Serialize(document.CaptureFamilyModel()), Is.EqualTo(before));
+        } finally { document.Close(false); }
+    }
+
+    [Test]
+    public void Preview_and_apply_refuse_the_same_existing_shared_tooltip_change() {
+        var document = this.NewFamily("FF shared tooltip preview");
+        try {
+            var definition = CompanyDefinitions().First();
+            Func<Document, FamilySharedParameterSource> source = d => new(d, [definition]);
+            var parameter = new JObject {
+                ["shared"] = true,
+                ["sharedGuid"] = definition.DownloadOptions.GetGuid(),
+                ["sharedSpecId"] = definition.DownloadOptions.GetSpecTypeId().TypeId,
+                ["tooltip"] = definition.Description ?? ""
+            };
+            var patch = new FamilyPatch { Patch = new JObject { ["parameters"] = new JObject { [definition.Name!] = parameter } } };
+            var create = new ReconcileFamily(patch, sharedSource: source);
+            using (var processor = new OperationProcessor(document))
+                _ = processor.ProcessQueue(new OperationQueue().Add(create));
+            Assert.That(create.LastReceipt?.Converged, Is.True);
+
+            parameter["tooltip"] = "replacement is unsupported";
+            var preview = document.PreviewFamily(patch, sharedSource: source);
+            var apply = new ReconcileFamily(patch, sharedSource: source);
+            IReadOnlyList<OperationLog>? logs;
+            using (var processor = new OperationProcessor(document)) {
+                var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(apply));
+                (logs, _) = contexts.Single().OperationLogs;
+            }
+            var diagnostic = preview.Diagnostics.Single();
+            Assert.That(diagnostic.Code, Is.EqualTo(FamilyModelDiagnosticCodes.SharedTooltipUnsupported));
+            Assert.That(logs!.Single().Entries.Single().Message, Is.EqualTo($"{diagnostic.Code}: {diagnostic.Message}"));
+            Assert.That(apply.LastReceipt, Is.Null);
+        } finally { document.Close(false); }
+    }
+
+    [Test]
+    public void Full_model_build_forwards_execution_options_into_plan_identity() {
+        var document = this.NewFamily("FF build options identity");
+        try {
+            var current = document.CaptureFamilyModel();
+            var options = new ExecutionOptions { OptimizeTypeOperations = false };
+            var receipt = FamilyModelBuild.Reconcile(document, current, options);
+            var expected = FamilyReconciler.Reconcile(current, current, UnitResolvers.Revit(document),
+                executionOptions: options).PlanHash;
+            Assert.That(receipt?.PlanHash, Is.EqualTo(expected));
         } finally { document.Close(false); }
     }
 
