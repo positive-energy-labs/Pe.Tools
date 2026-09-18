@@ -88,22 +88,4 @@ public sealed class FamilyEditorSnapshotWireCompatTests {
             Assert.That(roundTripped.Associations.Nested[0].ParamName, Is.EqualTo("Depth"));
         });
     }
-
-    [Test]
-    public void Apply_request_dry_run_defaults_false_and_round_trips() {
-        var withoutDryRun = JsonConvert.DeserializeObject<FamilyEditorApplyRequest>(
-            """{ "Edits": [] }""");
-        Assert.That(withoutDryRun, Is.Not.Null);
-        Assert.That(withoutDryRun!.DryRun, Is.False);
-
-        var request = new FamilyEditorApplyRequest(
-            new[] { new FamilyEditorApplyEdit("Width", "Default", "2'-0\"", null) },
-            DryRun: true
-        );
-        var roundTripped = JsonConvert.DeserializeObject<FamilyEditorApplyRequest>(
-            JsonConvert.SerializeObject(request));
-
-        Assert.That(roundTripped, Is.Not.Null);
-        Assert.That(roundTripped!.DryRun, Is.True);
-    }
 }

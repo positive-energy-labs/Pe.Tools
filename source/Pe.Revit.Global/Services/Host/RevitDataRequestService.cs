@@ -391,59 +391,6 @@ internal sealed class RevitDataRequestService {
         }
     }
 
-    [Op("family.editor.apply", Does = "Apply parameter value and formula edits to the active family editor document in one host-owned transaction.", Title = "Apply Family Editor Edits", Finds = ["family-editor", "family", "parameters", "apply", "formulas", "mutation"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
-    private FamilyEditorApplyData ApplyFamilyEditorEditsCore(FamilyEditorApplyRequest request, OpFamilyDocument activeDocument) {
-        var document = activeDocument.Value;
-        if (!request.DryRun && document.IsReadOnly) {
-            throw BridgeOperationExceptions.Conflict(
-                "Active family document is read-only.",
-                [
-                    BridgeOperationExceptions.Issue(
-                        "$",
-                        "FamilyEditorDocumentReadOnly",
-                        "Active family document is read-only.",
-                        "Open a writable family document and retry, or use dryRun=true to preview."
-                    )
-                ]
-            );
-        }
-
-        var edits = request.Edits ?? [];
-        if (edits.Count == 0)
-            return new FamilyEditorApplyData(0, []);
-
-        var familyDocument = new FamilyDocument(document);
-
-        using var sandbox = DocumentSandbox.BeginCommit(document, "Pe Family Editor Apply");
-        var commitFailures = new List<(bool IsError, string Message)>();
-        var failureOptions = sandbox.Transaction.GetFailureHandlingOptions();
-        _ = failureOptions.SetFailuresPreprocessor(PeToolsFailureHandling.CreatePreprocessor(commitFailures));
-        _ = failureOptions.SetForcedModalHandling(false);
-        sandbox.Transaction.SetFailureHandlingOptions(failureOptions);
-
-        var applied = 0;
-        var results = new List<FamilyEditorApplyEditResult>();
-        for (var i = 0; i < edits.Count; i++) {
-            try {
-                ApplyFamilyEditorEdit(familyDocument, edits[i]);
-                applied++;
-                results.Add(new FamilyEditorApplyEditResult(i, true, null));
-            } catch (Exception ex) {
-                results.Add(new FamilyEditorApplyEditResult(i, false, ex.Message));
-            }
-        }
-
-        // DryRun validates the full edit sequence inside the transaction, then rolls back on dispose
-        // (Complete is skipped) so nothing persists. Applied still reflects the would-apply count.
-        if (!request.DryRun && applied > 0)
-            sandbox.Complete();
-
-        foreach (var (_, message) in commitFailures)
-            results.Add(new FamilyEditorApplyEditResult(edits.Count + results.Count, false, message));
-
-        return new FamilyEditorApplyData(applied, results);
-    }
-
     [Op("revit.apply.parameter-values", Does = "Apply parameter values to project elements in one host-owned transaction, redeeming binding handles (target element id + parameter id) returned by revit.detail.schedules projection.includeBindings.", Title = "Apply Parameter Values", Finds = ["parameters", "apply", "mutation", "elements", "schedule-bindings", "binding-handles", "cell-edit", "write"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Example = "{ \"edits\": [{ \"elementId\": 12345, \"parameterId\": -1010106, \"value\": \"AHU-1\" }, { \"elementId\": 67890, \"parameterId\": -1002501, \"value\": \"Roof unit\" }] }")]
     private ParameterValueApplyData ApplyParameterValuesCore(ParameterValueApplyRequest request, RevitDocument activeDocument) {
         var document = activeDocument.Value;
@@ -1502,54 +1449,6 @@ internal sealed class RevitDataRequestService {
             };
         } catch {
             return string.Empty;
-        }
-    }
-
-    private static void ApplyFamilyEditorEdit(FamilyDocument familyDocument, FamilyEditorApplyEdit edit) {
-        var familyManager = familyDocument.FamilyManager;
-        var parameter = familyManager.FindParameter(edit.ParamName)
-            ?? throw new InvalidOperationException($"Parameter not found: {edit.ParamName}");
-
-        if (edit.Formula != null) {
-            // Route through the validating helper (friendly error strings, single SetFormula).
-            // An empty/whitespace formula clears the formula — preserved behavior.
-            if (!familyDocument.TrySetFormula(parameter, edit.Formula, out var formulaError))
-                throw new InvalidOperationException(
-                    formulaError ?? $"Failed to set formula on parameter '{edit.ParamName}'.");
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(edit.TypeName))
-            throw new InvalidOperationException("Value edits require typeName.");
-
-        var value = edit.Value ?? string.Empty;
-        // Gotcha #18: a per-type value that references parameter names is really a formula.
-        if (!string.IsNullOrEmpty(value) && familyManager.Parameters.GetReferencedIn(value).Any())
-            throw new InvalidOperationException("value references parameters — send it as a formula instead");
-
-        var familyType = familyManager.Types.Cast<FamilyType>()
-            .FirstOrDefault(type => string.Equals(type.Name, edit.TypeName, StringComparison.Ordinal))
-            ?? throw new InvalidOperationException($"Type not found: {edit.TypeName}");
-        familyManager.CurrentType = familyType;
-
-        try {
-            familyManager.SetValueString(parameter, value);
-            return;
-        } catch {
-        }
-
-        switch (parameter.StorageType) {
-            case StorageType.String:
-                familyManager.Set(parameter, value);
-                break;
-            case StorageType.Integer:
-                familyManager.Set(parameter, int.Parse(value, CultureInfo.InvariantCulture));
-                break;
-            case StorageType.Double:
-                familyManager.Set(parameter, double.Parse(value, CultureInfo.InvariantCulture));
-                break;
-            default:
-                throw new InvalidOperationException($"Unsupported storage type {parameter.StorageType}.");
         }
     }
 

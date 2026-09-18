@@ -18,7 +18,8 @@ public static class HostProtocol {
     // 39: parameter-values unit-aware conversion (value + unit canonical; bare numerals on
     //     measurable doubles rejected as ambiguous; parsedDisplay round-trip echo)
     // 40: model-owned parameter-link detail/apply operations and shared profile language
-    public const int ContractVersion = 40;
+    // 42: family.editor.apply deleted; family writes are FamilyPatch plan/apply (41 is parameter-evidence's note)
+    public const int ContractVersion = 42;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
