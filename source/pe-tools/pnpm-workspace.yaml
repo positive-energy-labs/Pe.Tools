@@ -25,7 +25,8 @@ overrides:
   "@mastra/code-sdk@1.4.0>zod": 4.3.6
   "mastracode@0.35.0>zod": 4.3.6
 patchedDependencies:
-  # SHIM: Remove when upstream core supports owned target-thread renames, detached clones, and settled approval cleanup.
+  # SHIM: Remove when upstream core supports owned target-thread renames, detached clones, settled approval cleanup,
+  # and releasing a detached suspended thread run on abort (E2E-J5; pinned by runtime ask-new-turn-web.test.ts).
   "@mastra/core@1.61.0": patches/@mastra__core@1.61.0.patch
   # SHIM: Remove when upstream server treats explicit rename/delete/clone routes as target-thread operations.
   "@mastra/server@1.61.0": patches/@mastra__server@1.61.0.patch

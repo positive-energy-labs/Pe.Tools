@@ -68,12 +68,7 @@ async function launch(databasePath: string) {
   throw Error("host did not start");
 }
 
-// RED, pinned with `test.fails` until the fix lands (E2E-J5 F-J5-2, cells-opus Mission 7):
-// after the person pauses, the parked run has detached; `endParkedTurn` clears the session's
-// suspension and aborts the session, but Mastra's agent thread registry still holds the suspended
-// run warm (MASTRA_SUSPENDED_RUN_TTL_MS, 30 min) and answers the new signal `thread-blocked`, so
-// the message never lands and the stored call keeps its `suspendedTools`. Flip to `test` with the fix.
-test.fails("J5 over HTTP: a new turn over a parked ask is kept, and the ask reads expired after a reload", async () => {
+test("J5 over HTTP: a new turn over a parked ask is kept, and the ask reads expired after a reload", async () => {
   vi.stubEnv("PE_LANE", "dev");
   vi.stubEnv("LOCALAPPDATA", mkdtempSync(join(tmpdir(), "pe-j5-app-")));
   const { done, service } = await launch(join(mkdtempSync(join(tmpdir(), "pe-j5-db-")), "j5.db"));
@@ -109,6 +104,7 @@ test.fails("J5 over HTTP: a new turn over a parked ask is kept, and the ask read
     const state = await read();
     expect(JSON.stringify(state.messages)).toContain("never mind");
     expect(state.expiredAsks).toEqual([expect.objectContaining({ toolCallId: call })]);
+    expect(JSON.stringify(state.messages)).not.toContain("suspendedTools");
   } finally {
     await fetch(`${base}/admin/shutdown`, {
       method: "POST",
