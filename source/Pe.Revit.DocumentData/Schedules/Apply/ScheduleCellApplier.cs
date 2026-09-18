@@ -156,9 +156,13 @@ public static class ScheduleCellApplier {
         IReadOnlyList<ParameterValueEdit> edits,
         IReadOnlyList<ParameterValueEditResult> results
     ) {
-        for (var i = 0; i < edits.Count; i++)
-            foreach (var owner in owners[(edits[i].ElementId, edits[i].ParameterId!.Value)])
-                owner.LeafResults.Add(results[i]);
+        for (var i = 0; i < edits.Count; i++) {
+            var key = (edits[i].ElementId, edits[i].ParameterId!.Value);
+            foreach (var owner in owners[key]) {
+                var targetIndex = owner.Current!.Targets.ToList().FindIndex(target => TargetKey(target) == key);
+                owner.LeafResults.Add(results[i] with { Index = targetIndex });
+            }
+        }
     }
 
     private sealed class CellState(int index, ScheduleCellEdit edit, ScheduleCellBinding? current) {

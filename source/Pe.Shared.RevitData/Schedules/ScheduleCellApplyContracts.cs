@@ -34,5 +34,7 @@ public sealed record ScheduleCellEditResult(
     bool Ok,
     string? Error,
     ScheduleCellBinding? CurrentBinding,
+    // Each nested Index is the corresponding CurrentBinding.Targets position, not the global
+    // coalesced native-batch index. Generic ParameterValueApplyData indices remain unchanged.
     IReadOnlyList<ParameterValueEditResult> ParameterResults
 );

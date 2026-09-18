@@ -181,6 +181,11 @@ public sealed class ScheduleCellBindingProofTests {
                 var row = BoundDataRows(entry).Single();
                 var binding = BindingFor(entry, row, "Mark");
                 Assert.That(binding.Targets, Has.Count.EqualTo(2));
+                var dryRun = projectDocument.ApplyReviewedScheduleCells(new ScheduleCellApplyRequest(
+                    entry.ScheduleId, entry.ScheduleUniqueId,
+                    [new(row.RowNumber, binding.ColumnNumber, binding, "PE-DRY-MULTI")], DryRun: true));
+                Assert.That(dryRun.Results.Single().ParameterResults.Select(result => result.Index),
+                    Is.EqualTo(new[] { 0, 1 }), "nested indices must map to this cell's Targets positions");
                 using (var transaction = new Transaction(projectDocument, "Change nonfirst reviewed target")) {
                     _ = transaction.Start();
                     _ = projectDocument.GetElement(binding.Targets[1].ElementId.ToElementId())
