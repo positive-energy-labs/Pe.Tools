@@ -47,8 +47,9 @@ export type ListProps<T> = Omit<CollectionOptions<T>, "target"> & {
   owner?: HTMLElement | null;
   /** Rows scroll inside this height; group heads stick. */
   maxHeight?: string;
-  /** Verbs under the rows that are not rows (the head picker's "Clear target", R11). */
-  footer?: ReactNode;
+  /** Verbs under the rows that are not rows (the head picker's "Clear target", R11); a ladder's
+   * footer may differ per rung. */
+  footer?: ReactNode | ((level: number) => ReactNode);
   /** Hand the collection to the caller (a table reads its selection, the composer its cursor). */
   onCollection?: (collection: Collection<T>) => void;
 };
@@ -78,6 +79,7 @@ export function List<T>(props: ListProps<T>) {
   });
   props.onCollection?.(collection);
   const { status, visible, query } = collection;
+  const footer = typeof props.footer === "function" ? props.footer(collection.level) : props.footer;
   // An owner (the composer's textarea, a free-text input) points at the list and its cursor (R14).
   const owner = props.owner;
   const active = collection.inputProps["aria-activedescendant"];
@@ -118,19 +120,27 @@ export function List<T>(props: ListProps<T>) {
       // An input-owned list never takes focus from its owner: a click picks, the caret stays (R14).
       onMouseDown={props.owner !== undefined ? (event) => event.preventDefault() : undefined}
     >
-      {props.levels && collection.path.length ? (
+      {props.levels && props.levels.length > 1 ? (
         <div className="hairline-b flex flex-wrap items-baseline gap-1 px-2 py-1 t-small">
-          <button type="button" className="text-ink-2" onClick={() => collection.backTo(0)}>
-            {props.levels[0]!.label}
-          </button>
-          {collection.path.map((step, depth) => (
-            <span key={props.keyOf(step)} className="inline-flex items-baseline gap-1">
-              <span className="text-ink-mute">›</span>
-              <button type="button" onClick={() => collection.backTo(depth + 1)}>
-                {props.labelOf(step)}
-              </button>
-            </span>
-          ))}
+          {props.levels.map((rung, depth) => {
+            const step = collection.path[depth];
+            return (
+              <span key={depth} className="inline-flex items-baseline gap-1">
+                {depth > 0 ? <span className="text-ink-mute">›</span> : null}
+                <button
+                  type="button"
+                  // Off the tab order: focus opens in the search, where the list's keys live;
+                  // Escape walks up a rung.
+                  tabIndex={-1}
+                  aria-current={depth === collection.level ? "step" : undefined}
+                  className={depth === collection.level ? "text-ink underline" : "text-ink-2"}
+                  onClick={() => collection.backTo(depth)}
+                >
+                  {rung.crumb ?? (step !== undefined ? props.labelOf(step) : rung.label)}
+                </button>
+              </span>
+            );
+          })}
         </div>
       ) : null}
       {searchable ? (
@@ -152,18 +162,22 @@ export function List<T>(props: ListProps<T>) {
         className="min-h-0 overflow-y-auto outline-none"
         style={{ maxHeight: props.maxHeight }}
       >
-        {status === "pending" ? (
+        {status === "refused" ? (
+          <StatusLine tone="caution">{props.levels?.[collection.level]?.refusal}</StatusLine>
+        ) : status === "pending" ? (
           <StatusLine>reading…</StatusLine>
         ) : status === "failed" ? (
           <StatusLine tone="caution">{props.failure ?? "read failed"}</StatusLine>
         ) : status === "empty" ? (
-          <StatusLine>{props.empty}</StatusLine>
+          <StatusLine>{props.levels?.[collection.level]?.note ?? props.empty}</StatusLine>
         ) : status === "no-match" && !visible.length ? (
           <StatusLine>{props.noMatch ?? `nothing matches “${query.trim()}”`}</StatusLine>
         ) : null}
-        {status === "pending" || status === "failed" ? null : visible.map(render)}
+        {status === "pending" || status === "failed" || status === "refused"
+          ? null
+          : visible.map(render)}
       </div>
-      {props.footer != null ? <div className="hairline-t px-1 pt-1">{props.footer}</div> : null}
+      {footer != null ? <div className="hairline-t px-1 pt-1">{footer}</div> : null}
     </div>
   );
 }
@@ -208,6 +222,8 @@ function PopupFrame({ children, anchor, label, owned }: PopupFrameProps) {
  * height, chevron on the right edge), `field` is a form field at control height.
  */
 const TRIGGER_FACE = {
+  /** A word in a sentence (the Situation ladder): dotted when held, dashed when derived or open. */
+  word: "cursor-pointer border-b border-current border-dotted whitespace-nowrap data-derived:border-dashed disabled:cursor-not-allowed disabled:text-ink-2",
   inline: "inline-flex min-w-0 cursor-pointer items-center gap-1 t-small",
   fill: "flex h-(--item-h) w-full min-w-0 cursor-pointer items-center justify-between gap-1 px-1 t-small face-mono",
   field:
@@ -224,6 +240,8 @@ export function ListPopup<T>({
   triggerLabel,
   title,
   disabled,
+  derived,
+  caution,
   open: controlled,
   onOpenChange,
   caret,
@@ -237,6 +255,10 @@ export function ListPopup<T>({
   triggerLabel?: string;
   title?: string;
   disabled?: boolean;
+  /** face=word: the value was reported by the world, not chosen (house law 8): dashed. */
+  derived?: boolean;
+  /** The trigger's feed disagrees or its ladder is incomplete: the caution tone. */
+  caution?: boolean;
   /** anchor=caret: the caller opens it and points at the caret. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -258,9 +280,17 @@ export function ListPopup<T>({
           title={title}
           disabled={disabled}
           data-list-trigger={face}
+          data-derived={derived ? "" : undefined}
+          data-tone={caution ? "caution" : undefined}
         >
-          <span className="flex min-w-0 flex-1 items-center gap-1 truncate">{trigger}</span>
-          <ChevronDown aria-hidden className="size-3 shrink-0 text-ink-2" />
+          {face === "word" ? (
+            trigger
+          ) : (
+            <>
+              <span className="flex min-w-0 flex-1 items-center gap-1 truncate">{trigger}</span>
+              <ChevronDown aria-hidden className="size-3 shrink-0 text-ink-2" />
+            </>
+          )}
         </Popover.Trigger>
       ) : null}
       {open ? (

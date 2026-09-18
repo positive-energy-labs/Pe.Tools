@@ -9,7 +9,7 @@ import { Press } from "#/components/lang/press";
 import { syntheticOps } from "#/lab/glance";
 import { SyntheticRunner } from "#/lab/synthetic";
 import { RouteShell, emptyManifest, useRoute, type RouteManifest } from "#/route";
-import { Picker } from "#/route/picker";
+import { Ladder } from "#/route/ladder";
 import { useChooseTarget } from "#/route/shell";
 import { useDocumentLadder } from "#/route/situation";
 
@@ -51,7 +51,7 @@ function LabRoute() {
               {entry.displayName}
             </Press>
           ))}
-          <Picker levels={ladder.levels} />
+          <Ladder levels={ladder.levels} />
         </div>
         {op ? <SyntheticRunner op={op} {...(session ? { bridgeSessionId: session } : {})} /> : null}
       </div>

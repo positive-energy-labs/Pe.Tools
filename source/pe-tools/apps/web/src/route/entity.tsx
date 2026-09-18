@@ -12,7 +12,7 @@ import { Surface } from "#/components/lang/surface";
 import { previousOf } from "#/readings";
 
 import { isSpecOf, sheetOf, type EntityPage, type EntityRouteDef, type PodRow } from "./manifest";
-import { Picker } from "./picker";
+import { Ladder } from "./ladder";
 import { PlanSheetView } from "./plan-sheet";
 import { SpecEditor, type DemoSpec } from "./spec-editor";
 import { LadderPicker, Situation, SituationCell, useDocumentLadder } from "./situation";
@@ -105,7 +105,7 @@ export function EntityRouteView({
 
   const podCell = (
     <SituationCell io="rw" empty={!pod}>
-      <Picker
+      <Ladder
         title={pod ? `${pod.folder}; pick to change` : "choose a pod"}
         levels={[
           {

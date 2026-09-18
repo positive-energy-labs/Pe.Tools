@@ -35,11 +35,10 @@
     }
   },
   "opacityDim": {
-    "total": 12,
+    "total": 11,
     "byArea": {
       "components": 9,
-      "family": 2,
-      "route": 1
+      "family": 2
     }
   },
   "longTitle": {

@@ -11,7 +11,7 @@ import { Check, X } from "lucide-react";
 import { ActionButton } from "#/components/lang/action-button";
 import { Rail } from "#/components/lang/rail";
 import { targetInventory } from "#/readings";
-import { Picker } from "#/route/picker";
+import { Ladder } from "#/route/ladder";
 import {
   ChainLamp,
   Cluster,
@@ -168,7 +168,7 @@ export function ComposerHead({
           <p className="t-prose text-ink-2 [&_b]:font-semibold [&_b]:text-ink">
             <b>Pea</b> in{" "}
             <SituationCell io="rw">
-              <Picker
+              <Ladder
                 levels={[
                   {
                     key: "thread",
@@ -188,7 +188,7 @@ export function ComposerHead({
             </SituationCell>{" "}
             on{" "}
             <SituationCell io="rw" empty={!head.defaultTarget}>
-              <Picker
+              <Ladder
                 levels={levels}
                 caution={Boolean(health)}
                 disabled={targetDisabled}

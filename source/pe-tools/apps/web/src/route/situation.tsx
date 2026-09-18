@@ -35,7 +35,7 @@ import { RouteHelpButton } from "./help";
 import { FlowMatrix } from "./flow";
 import { RouteInspector } from "./inspector";
 import type { RouteAction } from "./manifest";
-import { Picker } from "./picker";
+import { Ladder } from "./ladder";
 import { useChooseTarget, useHostLamp } from "./shell";
 import type { ActionHandle, LogEntry, RouteHandle } from "./use-route";
 
@@ -357,7 +357,7 @@ export function LadderPicker({
   return ladder.hosted ? (
     <span>{ladder.docWord ?? "no document"}</span>
   ) : (
-    <Picker levels={ladder.levels} disabled={disabled} />
+    <Ladder levels={ladder.levels} disabled={disabled} />
   );
 }
 
@@ -733,7 +733,7 @@ export function Situation({
             <p className="mb-1.5 t-prose text-ink-2 [&_b]:font-semibold [&_b]:text-ink">
               {stages.length ? (
                 <b>
-                  <Picker
+                  <Ladder
                     levels={[
                       {
                         key: "stage",
