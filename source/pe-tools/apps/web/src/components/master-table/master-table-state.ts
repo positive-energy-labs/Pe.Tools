@@ -2,23 +2,21 @@ import type { KeyboardEvent } from "react";
 import type { ColumnFiltersState, SortingState } from "@tanstack/react-table";
 
 import type { CellMove } from "#/components/master-table/cell-navigation";
-import type { MasterTableState } from "#/components/master-table/model";
+import type { TableState } from "#/components/master-table/model";
 
-export const emptyTableState = (): MasterTableState => ({ filters: {}, sorts: [], query: "" });
-
-export function toSortingState(sorts: MasterTableState["sorts"]): SortingState {
+export function toSortingState(sorts: TableState["sorts"]): SortingState {
   return sorts.map((sort) => ({ id: sort.key, desc: sort.dir === "desc" }));
 }
 
-export function fromSortingState(sorting: SortingState): MasterTableState["sorts"] {
+export function fromSortingState(sorting: SortingState): TableState["sorts"] {
   return sorting.map((sort) => ({ key: sort.id, dir: sort.desc ? "desc" : "asc" }));
 }
 
-export function toColumnFiltersState(filters: MasterTableState["filters"]): ColumnFiltersState {
+export function toColumnFiltersState(filters: TableState["filters"]): ColumnFiltersState {
   return Object.entries(filters).map(([id, value]) => ({ id, value }));
 }
 
-export function fromColumnFiltersState(filters: ColumnFiltersState): MasterTableState["filters"] {
+export function fromColumnFiltersState(filters: ColumnFiltersState): TableState["filters"] {
   return Object.fromEntries(filters.map((filter) => [filter.id, String(filter.value)]));
 }
 

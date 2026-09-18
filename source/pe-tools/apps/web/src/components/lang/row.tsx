@@ -52,6 +52,8 @@ type RowProps = RowState & {
   title?: string;
   onClick?: (event: React.MouseEvent<HTMLElement>) => void;
   onMouseMove?: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
   "data-key"?: string;
 } & (
     | {
@@ -66,7 +68,12 @@ type RowProps = RowState & {
         actions?: ReactNode;
         children?: never;
       }
-    | { as: "tr"; children: ReactNode; className?: string }
+    | {
+        as: "tr";
+        children: ReactNode;
+        className?: string;
+        ref?: React.Ref<HTMLTableRowElement>;
+      }
   );
 
 /** The states as attributes: the one place a row's state becomes DOM. */
@@ -89,6 +96,8 @@ export function Row(props: RowProps) {
     role,
     onClick: refusal ? undefined : onClick,
     onMouseMove,
+    onMouseEnter: props.onMouseEnter,
+    onMouseLeave: props.onMouseLeave,
     "data-key": props["data-key"],
     title: refusal ?? props.title,
     ...states,
@@ -96,7 +105,12 @@ export function Row(props: RowProps) {
   if (props.as === "tr") {
     const slots = rowRecipe();
     return (
-      <tr {...shared} className={slots.base({ className: props.className })} data-row="tr">
+      <tr
+        {...shared}
+        ref={props.ref}
+        className={slots.base({ className: props.className })}
+        data-row="tr"
+      >
         {props.children}
       </tr>
     );

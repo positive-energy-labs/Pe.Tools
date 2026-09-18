@@ -8,7 +8,7 @@ import {
   ComboboxList,
 } from "#/components/lang/combobox";
 import { ReadCell, StateDot, VERDICT_INK, VerdictCell } from "#/components/master-table/cells";
-import type { Column, MasterTableState, Verdict } from "#/components/master-table/model";
+import type { Column, TableState, Verdict } from "#/components/master-table/model";
 import {
   AGREEMENT_TONE,
   MARK,
@@ -59,7 +59,7 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
       note: MARK_TITLE[state],
     };
   };
-  const stateCol = (state: MasterTableState): Column<PRow> => ({
+  const stateCol = (state: TableState): Column<PRow> => ({
     key: "state",
     label: "state",
     title:

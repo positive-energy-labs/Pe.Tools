@@ -51,10 +51,10 @@ export function LangListSpecimens() {
             aria-label="popup list"
             region="swatch popup"
           />
-          <Table<string>
-            aria-label="cell list"
-            rows={["Width"]}
-            rowKey={(r) => r}
+          <Table<{ key: string }>
+            label="cell list"
+            rows={[{ key: "Width" }]}
+            rowKey={(r) => r.key}
             columns={[
               {
                 key: "storage",

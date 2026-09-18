@@ -16,7 +16,7 @@
  * Every helper below takes the world as its FIRST argument for the same reason: a helper that
  * closed over a module constant would silently keep answering about the fixture.
  */
-import type { MasterTableState, VerdictTone } from "#/components/master-table/model";
+import type { TableState, VerdictTone } from "#/components/master-table/model";
 import {
   FAMILY_SPEC,
   boundParam,
@@ -527,8 +527,8 @@ export function pinnedSort(row: PRow, value: string, dir: "asc" | "desc"): strin
 }
 
 /** The direction a column is about to be read in — the input `pinnedSort` needs, which is why
- * this surface owns its `MasterTableState` rather than letting the table keep it private. */
-export function sortDirOf(state: MasterTableState, key: string): "asc" | "desc" {
+ * this surface owns its `TableState` rather than letting the table keep it private. */
+export function sortDirOf(state: TableState, key: string): "asc" | "desc" {
   return state.sorts.find((sort) => sort.key === key)?.dir ?? "asc";
 }
 

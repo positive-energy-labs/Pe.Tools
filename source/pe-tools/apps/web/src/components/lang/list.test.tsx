@@ -175,17 +175,17 @@ test("the list's keys are registrations with meta in their region, as help reads
 const STORAGE = ["String", "Integer", "Double"];
 function Cells({ count }: { count: number }) {
   const [value, setValue] = useState<Record<string, string>>({});
-  const rows = Array.from({ length: count }, (_, i) => `p${i}`);
+  const rows = Array.from({ length: count }, (_, i) => ({ key: `p${i}` }));
   return (
-    <Table<string>
-      aria-label="params"
+    <Table<{ key: string }>
+      label="params"
       rows={rows}
-      rowKey={(r) => r}
+      rowKey={(r) => r.key}
       columns={[
         {
           key: "storage",
           label: "storage",
-          cell: (r) => (
+          cell: ({ key: r }) => (
             <CellListSelect<string>
               aria-label={`${r} storage`}
               region="table"
@@ -199,7 +199,7 @@ function Cells({ count }: { count: number }) {
             />
           ),
         },
-        { key: "note", label: "note", cell: (r) => <span>{r}</span> },
+        { key: "note", label: "note", cell: (r) => <span>{r.key}</span> },
       ]}
     />
   );
@@ -208,14 +208,14 @@ function Cells({ count }: { count: number }) {
 test("500 resting cells mount no popup root and no popup (the 2026-09-01 perf gate)", () => {
   popover.roots = 0;
   render(<Cells count={500} />);
-  expect(document.querySelectorAll("td[data-cell]").length).toBe(1000);
+  expect(document.querySelectorAll("td[data-master-cell]").length).toBe(1000);
   expect(popover.roots).toBe(0);
   expect(document.querySelectorAll("[data-list-popup]").length).toBe(0);
 });
 
 test("in-cell: Enter opens from the td, a pick commits and focus returns, Tab moves the cell", async () => {
   render(<Cells count={2} />);
-  const td = () => document.querySelectorAll<HTMLElement>("td[data-cell]")[0]!;
+  const td = () => document.querySelectorAll<HTMLElement>("td[data-master-cell]")[0]!;
   await act(async () => td().focus());
   await act(async () => fireEvent.keyDown(td(), { key: "Enter" }));
   await vi.waitFor(() => expect(document.querySelector("[data-list-popup]")).not.toBeNull());
@@ -236,12 +236,12 @@ test("in-cell: Enter opens from the td, a pick commits and focus returns, Tab mo
   await vi.waitFor(() => expect(document.querySelector("[data-list-popup]")).not.toBeNull());
   await act(async () => fireEvent.keyDown(document.activeElement!, { key: "Tab" }));
   await vi.waitFor(() => expect(document.querySelector("[data-list-popup]")).toBeNull());
-  expect(document.activeElement).toBe(document.querySelectorAll("td[data-cell]")[1]);
+  expect(document.activeElement).toBe(document.querySelectorAll("td[data-master-cell]")[1]);
 });
 
 test("in-cell: a printable key opens the list already filtered by it", async () => {
   render(<Cells count={1} />);
-  const td = document.querySelector<HTMLElement>("td[data-cell]")!;
+  const td = document.querySelector<HTMLElement>("td[data-master-cell]")!;
   await act(async () => td.focus());
   await act(async () => fireEvent.keyDown(td, { key: "d" }));
   await vi.waitFor(() => expect(document.querySelector("[data-list-popup]")).not.toBeNull());

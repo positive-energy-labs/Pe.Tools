@@ -214,7 +214,7 @@ export function atlasRows(
 
 export function visibleRowKeys(
   rows: readonly AtlasRow[],
-  state: import("#/components/master-table/model").MasterTableState,
+  state: import("#/components/master-table/model").TableState,
   fieldsMode: "columns" | "panel",
 ): readonly string[] {
   const query = state.query.trim().toLowerCase();

@@ -26,7 +26,7 @@ import {
 } from "@pe/agent-contracts";
 
 import type { CellWire } from "#/components/lang/band";
-import type { MasterTableState } from "#/components/master-table/model";
+import type { TableState } from "#/components/master-table/model";
 import { projectBuildReceipt, type BuildFacts, type BuildRefusal } from "#/family/build";
 import type { EvidenceSlice, FamilySnapshot, FieldState } from "#/family/host";
 import { familySource } from "#/family/source";
@@ -56,14 +56,14 @@ export type Binding = { slug: string; property: string } | null;
 export type ArmedBuild = { token: string | null; reason: string } | null;
 export type PickerState = { open: string | null; level: string | null; query: string };
 
-const emptyTable = (): MasterTableState => ({ filters: {}, sorts: [], query: "" });
+const emptyTable = (): TableState => ({ filters: {}, sorts: [], query: "" });
 
 /* ── Page memory ───────────────────────────────────────────────────────────── */
 
 export interface FamilyPageMemory {
   readonly overlay: Overlay;
-  readonly table: MasterTableState;
-  readonly drill: MasterTableState;
+  readonly table: TableState;
+  readonly drill: TableState;
   readonly docMode: "text" | "sheet";
   readonly docZoom: number;
   readonly drillType: string | null;
@@ -440,9 +440,9 @@ export function useFamilyStore(options: {
       },
       setOverlay: (value: Setter<Overlay>) =>
         setMemory((c) => ({ ...c, overlay: next(value, c.overlay) })),
-      setTable: (value: Setter<MasterTableState>) =>
+      setTable: (value: Setter<TableState>) =>
         setMemory((c) => ({ ...c, table: next(value, c.table) })),
-      setDrill: (value: Setter<MasterTableState>) =>
+      setDrill: (value: Setter<TableState>) =>
         setMemory((c) => ({ ...c, drill: next(value, c.drill) })),
       setDocMode: (value: Setter<"text" | "sheet">) =>
         setMemory((c) => ({ ...c, docMode: next(value, c.docMode) })),

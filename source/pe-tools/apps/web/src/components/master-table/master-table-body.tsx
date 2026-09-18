@@ -12,6 +12,7 @@ import {
 import type { ReactTable, RowData } from "@tanstack/react-table";
 
 import { CellHost } from "#/components/lang/cell";
+import { Row } from "#/components/lang/row";
 import { CellNavigationProvider, type CellMove } from "#/components/master-table/cell-navigation";
 import type { ResolvedColumn } from "#/components/master-table/master-table-columns";
 import {
@@ -35,6 +36,7 @@ type Gutter<Row> = (row: Row) => {
 interface MasterRowProps<Row extends RowData> {
   row: Row;
   active: boolean;
+  selected?: boolean;
   activeRowRef: React.RefObject<HTMLTableRowElement | null>;
   className: string;
   onRowClick?: (row: Row) => void;
@@ -48,6 +50,7 @@ interface MasterRowProps<Row extends RowData> {
 function MasterRowView<Row extends RowData>({
   row,
   active,
+  selected,
   activeRowRef,
   className,
   onRowClick,
@@ -56,20 +59,23 @@ function MasterRowView<Row extends RowData>({
   children,
 }: MasterRowProps<Row>) {
   return (
-    <tr
+    <Row
+      as="tr"
       ref={active ? activeRowRef : undefined}
+      active={active}
+      selected={selected}
       className={className}
       onMouseEnter={onRowHover ? () => onRowHover(row) : undefined}
       onMouseLeave={onRowHover ? () => onRowHover(null) : undefined}
       onClick={(event) => {
         if ((event.target as HTMLElement).closest("button,input,select,textarea,a,[role=button]"))
           return;
-        onSelect?.(event);
+        onSelect?.(event as MouseEvent<HTMLTableRowElement>);
         onRowClick?.(row);
       }}
     >
       {children}
-    </tr>
+    </Row>
   );
 }
 
@@ -78,6 +84,7 @@ const MasterRow = memo(
   (previous, next) =>
     previous.row === next.row &&
     previous.active === next.active &&
+    previous.selected === next.selected &&
     previous.className === next.className &&
     previous.onRowClick === next.onRowClick &&
     previous.onSelect === next.onSelect &&
@@ -99,7 +106,6 @@ export function MasterTableBody<Row extends RowData>({
   onRowHover,
   gutter,
   gutterWidth,
-  compact,
 }: {
   table: Table<Row>;
   visibleRows: VisibleRow<Row>[];
@@ -112,7 +118,6 @@ export function MasterTableBody<Row extends RowData>({
   onRowHover?: (row: Row | null) => void;
   gutter?: Gutter<Row>;
   gutterWidth: number;
-  compact: boolean;
 }) {
   const activeRowRef = useRef<HTMLTableRowElement | null>(null);
   // The td is each cell's keyboard host: one stable ref per cell id, handed to whatever the column
@@ -178,13 +183,9 @@ export function MasterTableBody<Row extends RowData>({
             key={key}
             row={tableRow.original}
             active={activeKey === key}
+            selected={selectedKeys ? selectedKeys.has(key) : undefined}
             activeRowRef={activeRowRef}
-            className={cn(
-              "veil h-(--item-h) scroll-mt-12",
-              activeKey === key && "on-select",
-              selectedKeys?.has(key) && "on-select",
-              rowClassName?.(tableRow.original),
-            )}
+            className={cn("veil h-(--item-h) scroll-mt-12", rowClassName?.(tableRow.original))}
             onRowClick={onRowClick}
             onSelect={onSelect ? (event) => onSelect(key, event.shiftKey) : undefined}
             onRowHover={onRowHover}
@@ -229,10 +230,7 @@ export function MasterTableBody<Row extends RowData>({
                       className={cn(
                         // The row rule is drawn INSIDE the cell: a border on a td adds to the row box and put
                         // every list row at 21px (measured, annotation round 2 2026-08-31).
-                        compact
-                          ? // One clipped mono line: the row holds the 20px rhythm whatever the value.
-                            "hairline-b-inset face-mono max-w-80 truncate p-0 outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-line-2"
-                          : "hairline-b-inset border-l border-line p-0 outline-none first:border-l-0 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-line-2",
+                        "hairline-b-inset border-l border-line p-0 outline-none first:border-l-0 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-line-2",
                         selection & 2 && "on-select",
                         column.right && "text-right",
                         column.width,

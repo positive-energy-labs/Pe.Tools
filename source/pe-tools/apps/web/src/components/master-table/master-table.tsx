@@ -1,27 +1,15 @@
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useHotkeys } from "@tanstack/react-hotkeys";
-import { useTable, type RowData } from "@tanstack/react-table";
+/**
+ * MASTER TABLE — for this wave of the table reshape only: a route's framed table composed from the
+ * new pieces (`TableFrame` + `Table`), so every consumer runs on them while it is migrated.
+ * Deleted when the last consumer composes the pieces itself.
+ */
+import type { ReactNode } from "react";
+import type { RowData } from "@tanstack/react-table";
 
-import { cellFactsText, cellStateLabel } from "#/components/lang/cell";
-import { NarrowChip, Tag } from "#/components/lang/chip";
-import { EmptyState } from "#/components/lang/empty";
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { Input } from "#/components/lang/input";
-import { Press } from "#/components/lang/press";
-import { MasterTableBody } from "#/components/master-table/master-table-body";
-import { resolveStateColumn } from "#/components/master-table/master-table-columns";
-import { MasterTableHeader, labelOf } from "#/components/master-table/master-table-header";
-import {
-  emptyTableState,
-  fromColumnFiltersState,
-  fromSortingState,
-  resolveUpdater,
-  toColumnFiltersState,
-  toSortingState,
-} from "#/components/master-table/master-table-state";
-import type { Column, MasterTableState } from "#/components/master-table/model";
-import { masterTableFeatures, toColumnDefs } from "#/components/master-table/tanstack-adapter";
-import { keyMeta } from "#/route/keys";
+import type { Column, TableState } from "#/components/master-table/model";
+import { Table } from "#/components/master-table/table";
+import { TableFrame } from "#/components/master-table/table-frame";
+import { useTableState } from "#/components/master-table/view";
 
 export interface MasterTableProps<Row extends RowData> {
   rows: readonly Row[];
@@ -42,378 +30,59 @@ export interface MasterTableProps<Row extends RowData> {
   onSelectedKeysChange?: (next: ReadonlySet<string>) => void;
   activeKey?: string | null;
   visibleKeys?: readonly string[];
-  tableState?: MasterTableState;
-  onTableStateChange?: (state: MasterTableState) => void;
+  tableState?: TableState;
+  onTableStateChange?: (state: TableState) => void;
   gutter?: (row: Row) => { count: number; title: string; tone?: "alarm" | "caution" } | null;
-  /** `compact` is the sheet row: no scope strip (so no search box, `modes`, `actions`, `summary`
-   * or select-all — `scopeLabel` names the grid instead), no column rules, mono one-line cells.
-   * Sort, filters, selection and cell keyboard stay. Absent = `default`. */
   density?: "default" | "compact";
 }
 
-const GUTTER_PX = 18;
-
-export function MasterTable<Row extends RowData>({
-  rows,
-  columns: rawColumns,
-  rowKey,
-  scopeLabel,
-  searchPlaceholder,
-  chips = [],
-  summary,
-  filters,
-  modes,
-  actions,
-  empty,
-  onRowClick,
-  rowClassName,
-  onRowHover,
-  selectedKeys,
-  onSelectedKeysChange,
-  activeKey,
-  visibleKeys,
-  tableState,
-  onTableStateChange,
-  gutter,
-  density = "default",
-}: MasterTableProps<Row>) {
-  const compact = density === "compact";
-  const columns = useMemo(() => rawColumns.map(resolveStateColumn), [rawColumns]);
-  const [internalState, setInternalState] = useState(emptyTableState);
-  const resolvedState = tableState ?? internalState;
-  const stateRef = useRef(resolvedState);
-  stateRef.current = resolvedState;
-
-  const updateState = (update: (state: MasterTableState) => MasterTableState) => {
-    const next = update(stateRef.current);
-    stateRef.current = next;
-    if (tableState === undefined) setInternalState(next);
-    onTableStateChange?.(next);
+export function MasterTable<Row extends RowData>(props: MasterTableProps<Row>) {
+  const [own, setOwn] = useTableState();
+  const state = props.tableState ?? own;
+  const onStateChange = (next: TableState) => {
+    if (props.tableState === undefined) setOwn(next);
+    props.onTableStateChange?.(next);
   };
-  const columnByKey = useMemo(
-    () => new Map(columns.map((column) => [column.key, column])),
-    [columns],
+  const selection =
+    props.selectedKeys && props.onSelectedKeysChange
+      ? { selected: props.selectedKeys, onChange: props.onSelectedKeysChange }
+      : undefined;
+  const grid = (
+    <Table
+      rows={props.rows}
+      columns={props.columns}
+      rowKey={props.rowKey}
+      label={props.scopeLabel}
+      state={state}
+      onStateChange={onStateChange}
+      selection={selection}
+      activeKey={props.activeKey}
+      visibleKeys={props.visibleKeys}
+      onRowClick={props.onRowClick}
+      onRowHover={props.onRowHover}
+      rowClassName={props.rowClassName}
+      gutter={props.gutter}
+      empty={props.empty}
+    />
   );
-  const tableColumns = useMemo(() => toColumnDefs(columns), [columns]);
-  const sorting = useMemo(() => toSortingState(resolvedState.sorts), [resolvedState.sorts]);
-  const columnFilters = useMemo(
-    () => toColumnFiltersState(resolvedState.filters),
-    [resolvedState.filters],
-  );
-  const columnPinning = useMemo(
-    () => ({ start: columns.filter((column) => column.lock).map((column) => column.key), end: [] }),
-    [columns],
-  );
-  const table = useTable(
-    {
-      features: masterTableFeatures,
-      data: rows,
-      columns: tableColumns,
-      getRowId: rowKey,
-      state: { sorting, columnFilters, globalFilter: resolvedState.query, columnPinning },
-      onSortingChange: (updater) =>
-        updateState((state) => ({
-          ...state,
-          sorts: fromSortingState(resolveUpdater(updater, toSortingState(state.sorts))),
-        })),
-      onColumnFiltersChange: (updater) =>
-        updateState((state) => ({
-          ...state,
-          filters: fromColumnFiltersState(
-            resolveUpdater(updater, toColumnFiltersState(state.filters)),
-          ),
-        })),
-      onGlobalFilterChange: (updater) =>
-        updateState((state) => ({
-          ...state,
-          query: String(resolveUpdater(updater, state.query) ?? ""),
-        })),
-      enableCellSelection: true,
-      enableColumnPinning: true,
-      enableMultiSort: true,
-      enableSortingRemoval: false,
-      isMultiSortEvent: (event) => Boolean((event as { shiftKey?: boolean } | undefined)?.shiftKey),
-      globalFilterFn: (row, columnId, value) => {
-        const query = String(value).trim().toLowerCase();
-        return (
-          !query ||
-          (columnByKey.get(columnId)?.search?.(row.original).toLowerCase().includes(query) ?? false)
-        );
-      },
-    },
-    (state) => ({
-      columnFilters: state.columnFilters,
-      columnPinning: state.columnPinning,
-      globalFilter: state.globalFilter,
-      sorting: state.sorting,
-    }),
-  );
-
-  const tableRows =
-    visibleKeys === undefined ? table.getRowModel().rows : table.getCoreRowModel().rows;
-  const visibleRows = useMemo(() => {
-    if (visibleKeys === undefined) return tableRows;
-    const byId = new Map(tableRows.map((row) => [row.id, row]));
-    return visibleKeys.map((key) => byId.get(key)).filter((row) => row !== undefined);
-  }, [tableRows, visibleKeys]);
-  const selectionAnchor = useRef<string | null>(null);
-  const selectable = selectedKeys !== undefined && onSelectedKeysChange !== undefined;
-  const toggleSelection = (key: string, range: boolean) => {
-    if (!selectable) return;
-    const next = new Set(selectedKeys);
-    if (range && selectionAnchor.current) {
-      const start = visibleRows.findIndex((row) => row.id === selectionAnchor.current);
-      const end = visibleRows.findIndex((row) => row.id === key);
-      if (start >= 0 && end >= 0) {
-        for (const row of visibleRows.slice(Math.min(start, end), Math.max(start, end) + 1))
-          next.add(row.id);
-      }
-    } else if (next.has(key)) next.delete(key);
-    else next.add(key);
-    selectionAnchor.current = key;
-    onSelectedKeysChange(next);
-  };
-  const visibleSelectionCount = selectable
-    ? visibleRows.filter((row) => selectedKeys.has(row.id)).length
-    : 0;
-  const selectionKey = useMemo(
-    () => [
-      {
-        hotkey: "Escape" as const,
-        callback: () => onSelectedKeysChange?.(new Set()),
-        options: {
-          enabled: selectable && (selectedKeys?.size ?? 0) > 0,
-          ignoreInputs: true,
-          meta: keyMeta({
-            name: "clear selection",
-            description: "drop the selected table rows",
-            tier: "widget",
-            region: "master table",
-          }),
-        },
-      },
-    ],
-    [onSelectedKeysChange, selectable, selectedKeys?.size],
-  );
-  useHotkeys(selectionKey);
-
-  const theadRef = useRef<HTMLTableSectionElement | null>(null);
-  const [rowTops, setRowTops] = useState<number[]>([]);
-  useLayoutEffect(() => {
-    const thead = theadRef.current;
-    if (!thead) return;
-    const measure = () => {
-      const headerRows = Array.from(thead.rows);
-      if (headerRows.length === 0) return;
-      const base = headerRows[0]!.getBoundingClientRect().top;
-      const next = headerRows.map((row) => row.getBoundingClientRect().top - base);
-      // FOOTGUN: a caller that rebuilds `columns` every render re-runs this effect every render;
-      // setting a fresh array each time is "Maximum update depth exceeded". Set only on change.
-      setRowTops((previous) =>
-        previous.length === next.length && previous.every((top, i) => top === next[i])
-          ? previous
-          : next,
-      );
-    };
-    measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(thead);
-    return () => observer.disconnect();
-  }, [columns]);
-
-  const activeFilters = columns.filter((column) => resolvedState.filters[column.key]);
-  const setFilter = (key: string, value: string | null) =>
-    updateState((state) => {
-      const filters = { ...state.filters };
-      if (value === null) delete filters[key];
-      else filters[key] = value;
-      return { ...state, filters };
-    });
-  const hasFilters =
-    filters != null || chips.length > 0 || Boolean(resolvedState.query) || activeFilters.length > 0;
-  const head = (
-    <>
-      <span
-        className="t-small t-upper"
-        title="Everything currently in scope. This table is never hidden and never narrowed silently — every filter acting on it is a chip in this strip."
-      >
-        {scopeLabel}
-      </span>
-      {summary && <span className="face-mono t-small text-ink-2">{summary}</span>}
-    </>
-  );
-  const headTrail = (
-    <>
-      {searchPlaceholder && (
-        <div className="w-44">
-          <Input
-            face="mono"
-            value={resolvedState.query}
-            onChange={(event) => updateState((state) => ({ ...state, query: event.target.value }))}
-            placeholder={searchPlaceholder}
-            title="Free-text filter. It reads only the columns that declare themselves searchable, so a match here always points at a visible column."
-          />
-        </div>
-      )}
-      {modes}
-      {selectable && visibleRows.length > 0 && (
-        <Press
-          type="button"
-          tone="quiet"
-          size="label"
-          onClick={() => {
-            const next = new Set(selectedKeys);
-            if (visibleSelectionCount === visibleRows.length)
-              for (const row of visibleRows) next.delete(row.id);
-            else for (const row of visibleRows) next.add(row.id);
-            onSelectedKeysChange(next);
-          }}
-        >
-          {visibleSelectionCount === visibleRows.length
-            ? `clear ${visibleRows.length}`
-            : `select ${visibleRows.length}`}
-        </Press>
-      )}
-      {actions}
-    </>
-  );
-
+  if (props.density === "compact") return grid;
   return (
-    <ArtifactFrame
-      className="flex min-h-0 flex-1 flex-col"
-      head={compact ? undefined : head}
-      headTrail={compact ? undefined : headTrail}
+    <TableFrame
+      label={props.scopeLabel}
+      rows={props.rows}
+      columns={props.columns}
+      rowKey={props.rowKey}
+      state={state}
+      onStateChange={onStateChange}
+      summary={props.summary}
+      searchPlaceholder={props.searchPlaceholder}
+      chips={props.chips}
+      filters={props.filters}
+      modes={props.modes}
+      actions={props.actions}
+      selection={selection}
     >
-      {hasFilters && (
-        <div
-          data-slot="table-filters"
-          className="flex shrink-0 flex-wrap items-center gap-2 px-2 py-1 hairline-b"
-        >
-          {filters}
-          {chips.map((chip) => (
-            <NarrowChip
-              key={chip.label}
-              label={chip.label}
-              count={visibleRows.length}
-              onRemove={chip.onClear}
-              title="A route-owned filter narrowing this table right now. The count is rows still in scope; removing it widens back out."
-            />
-          ))}
-          {resolvedState.query && (
-            <NarrowChip
-              label={`search: ${resolvedState.query}`}
-              count={visibleRows.length}
-              onRemove={() => updateState((state) => ({ ...state, query: "" }))}
-              title="The free-text filter narrowing this table right now. The count is rows still in scope; removing it widens back out."
-            />
-          )}
-          {activeFilters.map((column) => (
-            <NarrowChip
-              key={column.key}
-              label={`${column.label}: ${labelOf(column, rows, resolvedState.filters[column.key] ?? "")}`}
-              count={visibleRows.length}
-              onRemove={() => setFilter(column.key, null)}
-              title="A column filter narrowing this table right now. The count is rows still in scope; removing it widens back out."
-            />
-          ))}
-          {activeFilters.length > 0 && (
-            <Press
-              type="button"
-              onClick={() => updateState((state) => ({ ...state, filters: {} }))}
-              title="Drop every column filter at once. Filters owned by the route have their own chips and are left alone."
-              tone="quiet"
-              size="label"
-            >
-              clear column filters
-            </Press>
-          )}
-        </div>
-      )}
-
-      <div className="min-h-0 flex-1 overflow-auto">
-        <table
-          role="grid"
-          aria-label={compact ? scopeLabel : undefined}
-          aria-rowcount={visibleRows.length}
-          aria-colcount={columns.length + (gutter ? 1 : 0)}
-          // SEPARATE, not collapsed: a collapsed border belongs to the TABLE, so it does not travel
-          // with a sticky cell — it scrolls out from under the locked column and the header and
-          // leaves the page ground showing as a white seam. Every cell already draws its own
-          // `border-b border-l` with `first:border-l-0`, so nothing doubles (annotation, 2026-08-31).
-          className="w-full border-separate border-spacing-0 t-small"
-        >
-          <MasterTableHeader
-            table={table}
-            columnByKey={columnByKey}
-            rows={rows}
-            filters={resolvedState.filters}
-            setFilter={setFilter}
-            stickyTop={(rowIndex) => rowTops[rowIndex] ?? 0}
-            sortCount={table.state.sorting.length}
-            gutter={Boolean(gutter)}
-            gutterWidth={GUTTER_PX}
-            theadRef={theadRef}
-            compact={compact}
-          />
-          <MasterTableBody
-            table={table}
-            visibleRows={visibleRows}
-            columnByKey={columnByKey}
-            activeKey={activeKey}
-            rowClassName={rowClassName}
-            onRowClick={onRowClick}
-            selectedKeys={selectedKeys}
-            onSelect={selectable ? toggleSelection : undefined}
-            onRowHover={onRowHover}
-            gutter={gutter}
-            gutterWidth={GUTTER_PX}
-            compact={compact}
-          />
-        </table>
-        {visibleRows.length === 0 && (
-          <div className="mx-auto max-w-md p-6 text-center">
-            {rows.length > 0 ? (
-              <EmptyState story="filter" exit="clear a chip in the strip above to bring them back">
-                {`all ${rows.length} rows in scope are filtered out`}
-              </EmptyState>
-            ) : (
-              (empty ?? (
-                <EmptyState story="scope" exit="widen the scope above to fill the table">
-                  nothing in scope yet
-                </EmptyState>
-              ))
-            )}
-          </div>
-        )}
-      </div>
-
-      {columns.some((column) => column.readState) && (
-        <table.Subscribe
-          source={table.atoms.cellSelection}
-          selector={() => {
-            const focused = table.getFocusedCell();
-            return focused ? `${focused.row.id} ${focused.column.id}` : "";
-          }}
-        >
-          {() => {
-            const focused = table.getFocusedCell();
-            const column = focused ? columnByKey.get(focused.column.id) : undefined;
-            const cellState =
-              focused && column?.readState ? column.readState(focused.row.original) : undefined;
-            if (!focused || !cellState) return null;
-            return (
-              <div className="t-small t-upper flex h-6 min-w-0 shrink-0 items-center gap-2 overflow-hidden border-t border-line px-2 whitespace-nowrap on-recess">
-                <Tag>{column?.readWord?.(focused.row.original) ?? cellStateLabel(cellState)}</Tag>
-                <span className="truncate text-ink-2">
-                  {cellFactsText(cellState) ??
-                    "nothing further — the marks on the cell are the whole story"}
-                </span>
-              </div>
-            );
-          }}
-        </table.Subscribe>
-      )}
-    </ArtifactFrame>
+      {grid}
+    </TableFrame>
   );
 }

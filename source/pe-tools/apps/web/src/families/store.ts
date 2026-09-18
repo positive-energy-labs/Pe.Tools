@@ -28,7 +28,7 @@ import {
 import { z } from "zod";
 
 import type { CellWire } from "#/components/lang/band";
-import type { MasterTableState } from "#/components/master-table/model";
+import type { TableState } from "#/components/master-table/model";
 import { callHostRpc } from "#/host/client";
 import { useHostCall, previousOf, useReading } from "#/readings";
 import { useRoute, type EntityPage, type EntitySearch } from "#/route";
@@ -46,7 +46,7 @@ export type PickerState = {
 
 export interface FamiliesPageMemory {
   readonly showUncommon: boolean;
-  readonly table: MasterTableState;
+  readonly table: TableState;
   readonly picker: PickerState;
 }
 
@@ -257,7 +257,7 @@ export function useFamiliesStore(
         setPage({ selection: [...next(value, pickedIds)].map(String) }),
       setShowUncommon: (value: Setter<boolean>) =>
         setMemory((current) => ({ ...current, showUncommon: next(value, current.showUncommon) })),
-      setTable: (value: Setter<MasterTableState>) =>
+      setTable: (value: Setter<TableState>) =>
         setMemory((current) => ({ ...current, table: next(value, current.table) })),
       setPicker: (value: Setter<PickerState>) =>
         setMemory((current) => ({ ...current, picker: next(value, current.picker) })),

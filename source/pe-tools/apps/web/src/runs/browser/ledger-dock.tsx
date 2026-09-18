@@ -1,7 +1,7 @@
 import { token } from "#/lib/token";
 import { useEffect, useMemo, useState } from "react";
 import { MasterTable } from "#/components/master-table/master-table";
-import { fmtNum, type Column, type MasterTableState } from "#/components/master-table/model";
+import { fmtNum, type Column, type TableState } from "#/components/master-table/model";
 import { FactChip as Chip } from "#/components/lang/chip";
 import { cn } from "#/lib/utils";
 import { type RunIndexEntry } from "../world";
@@ -25,7 +25,7 @@ export function LedgerDock(props: {
   const source = useRunsSource();
   const { runs, pool, curId, prevId, open, onToggle, onPickCur, onPickBaseline } = props;
   const [rows, setRows] = useState<RunRow[] | null>(null);
-  const [tableState, setTableState] = useState<MasterTableState>({
+  const [tableState, setTableState] = useState<TableState>({
     filters: {},
     sorts: [{ key: "run", dir: "desc" }],
     query: "",

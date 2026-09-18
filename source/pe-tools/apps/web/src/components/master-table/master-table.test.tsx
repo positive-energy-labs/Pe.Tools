@@ -6,7 +6,9 @@ import { useState } from "react";
 import { NumberCell } from "#/components/master-table/cells";
 import { Press } from "#/components/lang/press";
 import { MasterTable } from "#/components/master-table/master-table";
-import type { Column, MasterTableState } from "#/components/master-table/model";
+import { Table } from "#/components/master-table/table";
+import { visibleRows } from "#/components/master-table/view";
+import type { Column, TableState } from "#/components/master-table/model";
 
 interface Fam {
   id: string;
@@ -65,7 +67,7 @@ const columns: Column<Fam>[] = [
   },
 ];
 
-const emptyState: MasterTableState = { filters: {}, sorts: [], query: "" };
+const emptyState: TableState = { filters: {}, sorts: [], query: "" };
 
 afterEach(cleanup);
 
@@ -97,14 +99,14 @@ const rowFor = (name: string) => screen.getByText(name).closest("tr")!;
 test("controlled selection toggles rows and leaves uncontrolled tables unchanged", () => {
   const { rerender } = render(<SelectedTable />);
   fireEvent.click(rowFor("VAV Box"));
-  expect(rowFor("VAV Box").classList.contains("on-select")).toBe(true);
+  expect(rowFor("VAV Box").getAttribute("aria-selected") === "true").toBe(true);
   fireEvent.click(rowFor("VAV Box"));
-  expect(rowFor("VAV Box").classList.contains("on-select")).toBe(false);
+  expect(rowFor("VAV Box").getAttribute("aria-selected") === "true").toBe(false);
 
   rerender(table());
   expect(screen.queryByRole("button", { name: /select 3/i })).toBeNull();
   fireEvent.click(rowFor("VAV Box"));
-  expect(rowFor("VAV Box").classList.contains("on-select")).toBe(false);
+  expect(rowFor("VAV Box").getAttribute("aria-selected") === "true").toBe(false);
 });
 
 test("shift-click selects a range in sorted row order", () => {
@@ -113,8 +115,8 @@ test("shift-click selects a range in sorted row order", () => {
   fireEvent.click(rowFor("Diffuser"));
   fireEvent.click(rowFor("VAV Box"), { shiftKey: true });
   expect(
-    ["Diffuser", "Panelboard", "VAV Box"].map((name) =>
-      rowFor(name).classList.contains("on-select"),
+    ["Diffuser", "Panelboard", "VAV Box"].map(
+      (name) => rowFor(name).getAttribute("aria-selected") === "true",
     ),
   ).toEqual([true, true, true]);
 });
@@ -123,8 +125,8 @@ test("the header selects visible rows and Escape clears selection", () => {
   render(<SelectedTable tableState={{ ...emptyState, filters: { cat: "mech" } }} />);
   fireEvent.click(screen.getByRole("button", { name: "select 2" }));
   expect(screen.getByRole("button", { name: "clear 2" })).toBeTruthy();
-  expect(rowFor("VAV Box").classList.contains("on-select")).toBe(true);
-  expect(rowFor("Diffuser").classList.contains("on-select")).toBe(true);
+  expect(rowFor("VAV Box").getAttribute("aria-selected") === "true").toBe(true);
+  expect(rowFor("Diffuser").getAttribute("aria-selected") === "true").toBe(true);
   expect(screen.queryByText("Panelboard")).toBeNull();
   fireEvent.keyDown(document, { key: "Escape" });
   expect(screen.getByRole("button", { name: "select 2" })).toBeTruthy();
@@ -170,7 +172,17 @@ test("sorting and search change the rendered row model, with search limited to d
 
 test("controlled table state can be read and driven without changing the Column contract", () => {
   const onTableStateChange = vi.fn();
-  renderTable({ tableState: emptyState, onTableStateChange });
+  function Controlled() {
+    const [state, setState] = useState(emptyState);
+    return table({
+      tableState: state,
+      onTableStateChange: (next) => {
+        onTableStateChange(next);
+        setState(next);
+      },
+    });
+  }
+  render(<Controlled />);
 
   fireEvent.click(screen.getByRole("button", { name: "params" }));
   expect(onTableStateChange).toHaveBeenLastCalledWith({
@@ -359,26 +371,23 @@ test("cell editing and navigation stay spreadsheet-fast", () => {
   expect(navigationRenders).toBeLessThanOrEqual(2);
 });
 
-test("absent density renders exactly the default table", () => {
-  // React ids (`_r_1_`) count up across renders; everything else must match byte for byte.
-  const html = (props: Parameters<typeof table>[0]) =>
-    renderTable(props).container.innerHTML.replace(/_r_[0-9a-z]+_/g, "id");
-  const absent = html({});
-  cleanup();
-  expect(html({ density: "default" })).toBe(absent);
-  expect(screen.getByText("families in scope")).toBeTruthy();
-  expect(screen.getAllByRole("gridcell")[0]!.className).toContain("border-l");
-});
-
-test("compact drops the scope strip and keeps sort, selection and cell keyboard", () => {
-  render(<SelectedTable density="compact" />);
+test("a bare Table draws no chrome and keeps sort, selection and cell keyboard", () => {
+  function Bare() {
+    const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+    return (
+      <Table
+        rows={rows}
+        columns={columns}
+        rowKey={(row) => row.id}
+        label="families in scope"
+        selection={{ selected, onChange: setSelected }}
+      />
+    );
+  }
+  render(<Bare />);
   expect(screen.queryByText("families in scope")).toBeNull();
   expect(screen.queryByPlaceholderText("search families")).toBeNull();
   expect(screen.getByRole("grid", { name: "families in scope" })).toBeTruthy();
-  const first = screen.getAllByRole("gridcell")[0]!;
-  expect(first.className).toContain("face-mono");
-  expect(first.className).toContain("truncate");
-  expect(first.className).not.toContain("border-l");
 
   fireEvent.click(screen.getByRole("button", { name: /asset name/i }));
   const names = () =>
@@ -390,12 +399,26 @@ test("compact drops the scope strip and keeps sort, selection and cell keyboard"
 
   fireEvent.click(rowFor("Diffuser"));
   fireEvent.click(rowFor("VAV Box"), { shiftKey: true });
-  expect(rowFor("Panelboard").classList.contains("on-select")).toBe(true);
+  expect(rowFor("Panelboard").getAttribute("aria-selected")).toBe("true");
   fireEvent.keyDown(document, { key: "Escape" });
-  expect(rowFor("Panelboard").classList.contains("on-select")).toBe(false);
+  expect(rowFor("Panelboard").getAttribute("aria-selected")).toBe("false");
 
   const cells = screen.getAllByRole("gridcell");
   cells[0]!.focus();
   fireEvent.keyDown(cells[0]!, { key: "ArrowRight" });
   expect(document.activeElement).toBe(cells[1]);
+});
+
+test("visibleRows is the grid's own order: the frame's counts and the rows cannot disagree", () => {
+  const state: TableState = {
+    filters: { cat: "mech" },
+    sorts: [{ key: "name", dir: "desc" }],
+    query: "",
+  };
+  render(table({ tableState: state }));
+  const drawn = screen
+    .getAllByRole("gridcell")
+    .filter((_, index) => index % columns.length === 0)
+    .map((cell) => cell.textContent);
+  expect(drawn).toEqual(visibleRows(rows, columns, state).map((row) => row.name));
 });

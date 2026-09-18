@@ -485,6 +485,17 @@ tr.dl-row {
   display: table-row;
   height: var(--item-h);
   padding: 0;
+  /* a table's values stay copyable */
+  user-select: auto;
+}
+/* In a table the active row is the one a side pane shows: the select fill, as tables drew it
+   before the one row; a rail on a table row would have no cell to sit in. */
+tr.dl-row[data-active] {
+  background-color: var(--pe-select);
+  --pe-on: var(--pe-select);
+}
+tr.dl-row[data-active]::before {
+  content: none;
 }
 .dl-row[data-lines="2"] {
   min-height: calc(var(--item-h) * 2);

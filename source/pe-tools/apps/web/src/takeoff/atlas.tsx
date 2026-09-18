@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 
-import type { MasterTableState } from "#/components/master-table/model";
+import type { TableState } from "#/components/master-table/model";
 import { useTableChips } from "#/components/anatomy";
 import type { PaneShortcut } from "#/components/lang/pane";
 import {
@@ -60,7 +60,7 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
   const [fieldsMode, setFieldsMode] = useState<"columns" | "panel">("columns");
   const [planOpen, setPlanOpen] = useState(true);
   const [statsOpen, setStatsOpen] = useState(false);
-  const [tableState, setTableState] = useState<MasterTableState>({
+  const [tableState, setTableState] = useState<TableState>({
     filters: {},
     sorts: [],
     query: "",

@@ -383,15 +383,15 @@ export function TablePanel({ say }: { say: (text: string) => void }) {
   const [storage, setStorage] = useState<Record<string, string>>(
     Object.fromEntries(FIELD_OPTIONS.map((o) => [o.key, "String"])),
   );
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   return (
     <div className="flex flex-col gap-1">
       <Table
-        aria-label="parameters"
+        label="parameters"
         rows={FIELD_OPTIONS}
         rowKey={(o) => o.key}
-        selected={selected}
-        onSelectedChange={setSelected}
+        selection={{ selected, onChange: setSelected }}
+        maxHeight="12rem"
         columns={[
           {
             key: "name",
@@ -423,7 +423,9 @@ export function TablePanel({ say }: { say: (text: string) => void }) {
           },
         ]}
       />
-      <span className="t-small face-mono text-ink-2">{selected.length} selected</span>
+      <span className="t-small face-mono text-ink-2">
+        {selected.size} selected (shift-click a range)
+      </span>
     </div>
   );
 }

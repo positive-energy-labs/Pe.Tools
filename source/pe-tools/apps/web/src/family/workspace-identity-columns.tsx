@@ -1,4 +1,4 @@
-import type { Column, MasterTableState } from "#/components/master-table/model";
+import type { Column, TableState } from "#/components/master-table/model";
 import { token } from "#/lib/token";
 import { PressContent } from "#/components/anatomy/press-content";
 import { Press } from "#/components/lang/press";
@@ -59,7 +59,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
    * proposal wears its fold here. That is honest about where the value lives, where a fourth
    * value column pretending to be a fourth type was not.
    */
-  const identityColumn = (state: MasterTableState): Column<PRow> => ({
+  const identityColumn = (state: TableState): Column<PRow> => ({
     key: "param",
     label: "parameter",
     group: "",

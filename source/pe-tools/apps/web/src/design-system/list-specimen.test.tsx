@@ -66,10 +66,12 @@ test("the slash menu opens on / and filters by the composer's own text", async (
   expect(document.body.textContent).toContain(COMMANDS.find((c) => c.key === "prove")!.label);
 });
 
-test("the table draws Row as tr with a checkbox per row", () => {
+test("the table draws Row as tr; click and shift-click select over the shown order", () => {
   render(<TablePanel say={say} />);
-  expect(document.querySelectorAll("tr.dl-row").length).toBeGreaterThan(0);
-  expect(screen.getAllByRole("checkbox").length).toBe(
-    document.querySelectorAll("tr.dl-row").length,
-  );
+  const rows = document.querySelectorAll<HTMLElement>("tr.dl-row");
+  expect(rows.length).toBeGreaterThan(1);
+  fireEvent.click(rows[0]!);
+  fireEvent.click(rows[rows.length - 1]!, { shiftKey: true });
+  expect(document.querySelectorAll('tr.dl-row[aria-selected="true"]').length).toBe(rows.length);
+  expect(document.body.textContent).toContain(`${rows.length} selected`);
 });
