@@ -37,9 +37,10 @@ export const instancesRouteState = {
   route: "instances",
   title: "Instances",
   description:
-    "Select Revit sessions and stage documents. Refresh to discover installed years, sessions and recents. Stage then open or start. Other lifecycle commands are human-only.",
+    "Select Revit sessions and stage documents. Refresh to discover installed years, sessions and recents. A person stages, then opens or starts; Pea reads the staged document and writes none of it. Other lifecycle commands are human-only.",
   schema: instancesDocumentSchema,
-  agentWriteMask: [["staged"]],
+  // The staged document is what open/start consumes; Pea gets a proposal cell at cutover.
+  agentWriteMask: [] as string[][],
   commands: {},
 } satisfies RouteStateSpec<typeof instancesDocumentSchema>;
 
