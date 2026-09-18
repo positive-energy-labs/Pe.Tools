@@ -128,8 +128,10 @@ export function LedgerDock(props: {
         right: true,
         width: "w-14",
         title: "Accepted rooms across every solved zone.",
-        sort: (row) => row.board.acceptedRooms,
-        cell: (row) => <span className="block px-1.5 text-right">{row.board.acceptedRooms}</span>,
+        sort: (row) => row.board.acceptedRooms ?? Number.NEGATIVE_INFINITY,
+        cell: (row) => (
+          <span className="block px-1.5 text-right">{row.board.acceptedRooms ?? "?"}</span>
+        ),
       },
       {
         key: "sqft",
@@ -138,9 +140,11 @@ export function LedgerDock(props: {
         right: true,
         width: "w-20",
         title: "Accepted square footage across every solved zone.",
-        sort: (row) => row.board.acceptedSqft,
+        sort: (row) => row.board.acceptedSqft ?? Number.NEGATIVE_INFINITY,
         cell: (row) => (
-          <span className="block px-1.5 text-right">{fmtNum(row.board.acceptedSqft, 0)}</span>
+          <span className="block px-1.5 text-right">
+            {row.board.acceptedSqft === null ? "unavailable" : fmtNum(row.board.acceptedSqft, 0)}
+          </span>
         ),
       },
       {
@@ -150,9 +154,11 @@ export function LedgerDock(props: {
         right: true,
         width: "w-16",
         title: "Square footage in held rooms — area the solver found but did not trust.",
-        sort: (row) => row.board.heldSqft,
+        sort: (row) => row.board.heldSqft ?? Number.NEGATIVE_INFINITY,
         cell: (row) => (
-          <span className="block px-1.5 text-right">{fmtNum(row.board.heldSqft, 0)}</span>
+          <span className="block px-1.5 text-right">
+            {row.board.heldSqft === null ? "unavailable" : fmtNum(row.board.heldSqft, 0)}
+          </span>
         ),
       },
       // scores.json columns (SHIMS.md #1 close): the python scorer's board, read from the run

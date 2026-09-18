@@ -1,7 +1,7 @@
 import { FactChip } from "#/components/lang/chip";
 import { StateCell } from "#/components/lang/cell";
 import { Press } from "#/components/lang/press";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { CounterExample, Law } from "#/design-system/exhibit";
 
 const noop = () => {};
@@ -29,7 +29,7 @@ export function ColourLaws({ owner }: { owner: (name: string) => string }) {
       >
         <StateCell value="2 hr" stage="proposed" />
         <CounterExample why="asking Pea is an agent action, not a committed write">
-          <Verb
+          <ActionButton
             tone="commit"
             label="ask pea"
             onClick={noop}
@@ -44,13 +44,13 @@ export function ColourLaws({ owner }: { owner: (name: string) => string }) {
         ruling="The only filled blue is the verb that writes beyond the page. Navigation uses the same role as text, never as a fill."
       >
         <div className="flex flex-wrap items-center gap-2">
-          <Verb
+          <ActionButton
             tone="commit"
             label="apply to Revit"
             onClick={noop}
             reason="Writes 42 parameters into the model"
           />
-          <Verb
+          <ActionButton
             tone="nav"
             direction="out"
             label="open in RHVAC"
@@ -59,7 +59,12 @@ export function ColourLaws({ owner }: { owner: (name: string) => string }) {
           />
         </div>
         <CounterExample why="opening another surface is navigation, not a write">
-          <Verb tone="commit" label="open in RHVAC" onClick={noop} reason="Leaves Pe.Tools" />
+          <ActionButton
+            tone="commit"
+            label="open in RHVAC"
+            onClick={noop}
+            reason="Leaves Pe.Tools"
+          />
         </CounterExample>
       </Law>
 

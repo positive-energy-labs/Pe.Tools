@@ -1,5 +1,5 @@
 /**
- * DESIGN-SYSTEM FIXTURES — the mocked worlds the index and its satellites render.
+ * DESIGN-SYSTEM SPECIMEN DATA — the mocked worlds the index and its satellites render.
  *
  * WHY THIS FILE EXISTS AND WHAT IT IS NOT: `/design-system` catalogues real components. It has
  * no host, no session, no document — so the DATA is mocked and every surface that renders it
@@ -354,7 +354,7 @@ export const PROPOSAL_TARGET = "Overhead Coiling Door 421";
 
 /* ── 3 · the arming world ───────────────────────────────────────────────────────────────── */
 
-export const ARMING_FIXTURE = {
+export const ARMING_SPECIMEN = {
   verb: "apply to Revit",
   target: "Overhead Coiling Door 421 · 3 types",
   count: 42,

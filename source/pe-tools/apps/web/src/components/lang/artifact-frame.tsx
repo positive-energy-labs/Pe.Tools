@@ -21,31 +21,45 @@
  */
 import { tv } from "#/lib/tv";
 
+import { Rail } from "./rail";
+
 import "./lang.css";
 
 export const artifactFrameRecipe = tv({
   slots: {
     base: "on-artifact inset-ring",
-    head: "flex items-baseline gap-2 border-b border-line on-recess px-2.5 py-[5px]",
-    foot: "flex items-center justify-between gap-2 border-t border-line on-recess px-2.5 py-1.5",
   },
 });
 
 export interface ArtifactFrameProps {
   /** Recessed band across the top — the object's name and its machine-measured facts. */
   head?: React.ReactNode;
+  headTrail?: React.ReactNode;
   /** Recessed band across the bottom — counts, receipts, and the object's one commit verb. */
   foot?: React.ReactNode;
   children: React.ReactNode;
+  className?: string;
+  label?: string;
 }
 
-export function ArtifactFrame({ head, foot, children }: ArtifactFrameProps) {
-  const { base, head: headSlot, foot: footSlot } = artifactFrameRecipe();
+export function ArtifactFrame({
+  head,
+  headTrail,
+  foot,
+  children,
+  className,
+  label,
+}: ArtifactFrameProps) {
+  const { base } = artifactFrameRecipe();
   return (
-    <div className={base()}>
-      {head != null ? <div className={headSlot()}>{head}</div> : null}
+    <div
+      className={base({ class: className })}
+      role={label ? "group" : undefined}
+      aria-label={label}
+    >
+      {head != null ? <Rail ground="recess" lead={head} trail={headTrail} /> : null}
       {children}
-      {foot != null ? <div className={footSlot()}>{foot}</div> : null}
+      {foot != null ? <Rail ground="recess" lead={foot} edge="top" /> : null}
     </div>
   );
 }

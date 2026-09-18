@@ -6,9 +6,10 @@ import { cn } from "#/lib/utils";
 import { fb, flagLabel, type StagedItem, useFb } from "./staging";
 import { useRunsSource } from "../source";
 import { Press } from "#/components/lang/press";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
+import { Code } from "#/components/lang/code";
 
-export function ExportVerbs(props: {
+export function ExportActions(props: {
   items: StagedItem[];
   pool: string | null;
   compact?: boolean;
@@ -24,9 +25,9 @@ export function ExportVerbs(props: {
         ? "An export is already running. "
         : "";
   const btn = (verb: "chat" | "sheet" | "snip", label: string, does: string, primary = false) => (
-    <Verb
+    <ActionButton
       label={label}
-      reason={refusal + does}
+      reason={disabled ? refusal : does}
       tone={primary ? "commit" : "act"}
       disabled={disabled}
       busy={exporting === verb}
@@ -34,7 +35,7 @@ export function ExportVerbs(props: {
     />
   );
   return (
-    <div className={cn("flex items-center gap-1.5", props.compact && "gap-1")}>
+    <div className={cn("flex flex-wrap items-center gap-1.5", props.compact && "gap-1")}>
       {btn(
         "chat",
         "copy for chat",
@@ -94,12 +95,9 @@ export function ExportStatus(props: { className?: string }) {
       {lastExport.warning && <span style={{ color: token("alarm") }}>{lastExport.warning}</span>}
       <details>
         <summary className="cursor-pointer">view the clip block</summary>
-        <pre
-          className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all p-1.5"
-          style={{ borderColor: token("line-2"), borderRadius: "var(--radius)" }}
-        >
-          {lastExport.text}
-        </pre>
+        <div className="mt-1">
+          <Code code={lastExport.text} lang="plaintext" />
+        </div>
       </details>
     </div>
   );

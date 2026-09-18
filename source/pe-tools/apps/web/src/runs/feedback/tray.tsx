@@ -1,7 +1,7 @@
 import { token } from "#/lib/token";
 
 import { fb, type StagedItem, useFb } from "./staging";
-import { ExportStatus, ExportVerbs, FlagChips, NoteInput, runShort, zoneShort } from "./verbs";
+import { ExportStatus, ExportActions, FlagChips, NoteInput, runShort, zoneShort } from "./verbs";
 import { Press } from "#/components/lang/press";
 import { PressContent } from "#/components/anatomy/press-content";
 
@@ -130,7 +130,7 @@ export function Tray(props: {
         )}
       </div>
       <div className="flex flex-col gap-1.5 px-2 py-2" style={{ borderColor: token("line-2") }}>
-        <ExportVerbs items={items} pool={props.pool} />
+        <ExportActions items={items} pool={props.pool} />
         <ExportStatus />
       </div>
     </div>

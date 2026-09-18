@@ -13,10 +13,10 @@
  * WHY TWO SPECIMENS ARE COMPOSED HERE RATHER THAN IMPORTED: the facet filter (`master-table`) and
  * the picker chip (`control-chips`) are PRIVATE functions inside their consumers. There is no
  * component to import — the composition is duplicated per consumer, which is itself the finding.
- * `FieldOptionSelect` and `FieldOptionMultiSelect` are real exported components and are mounted
+ * `FieldOptionSelect` and `FieldOptionPicker` are real exported components and are mounted
  * directly.
  *
- * FIXTURE, ANNOUNCED: the option lists are `design-system/fixtures.ts`. No host, no document, no
+ * SPECIMEN DATA, ANNOUNCED: the option lists are `design-system/specimens-data.ts`. No host, no document, no
  * live catalogue call (SHIMS entry 4).
  */
 import { useMemo, useState } from "react";
@@ -42,8 +42,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "#/components/lang/select";
-import { FieldOptionMultiSelect, FieldOptionSelect, type FieldOption } from "#/host/field-options";
-import { CATEGORY_OPTIONS } from "#/design-system/fixtures";
+import { FieldOptionPicker, FieldOptionSelect, type FieldOption } from "#/host/field-options";
+import { CATEGORY_OPTIONS } from "#/design-system/specimens-data";
 import { cn } from "#/lib/utils";
 
 export const Route = createFileRoute("/design-system_/popovers")({ component: PopoverHarness });
@@ -187,7 +187,7 @@ function FieldMultiSpecimen() {
   const [values, setValues] = useState<string[]>([]);
   return (
     <div className="flex w-44 flex-col gap-0.5">
-      <FieldOptionMultiSelect items={FIELD_OPTIONS} values={values} onChange={setValues} />
+      <FieldOptionPicker items={FIELD_OPTIONS} values={values} onChange={setValues} />
     </div>
   );
 }
@@ -224,7 +224,7 @@ const SPECIMENS: readonly Specimen[] = [
     id: "select",
     name: "ui/select",
     consumers:
-      "routes/settings.tsx, routes/ops.tsx (bridge session + scalar fields), routes/families.tsx",
+      "routes/pods.tsx, routes/ops.tsx (bridge session + scalar fields), routes/families.tsx",
     shape: "Base UI Select · trigger-width popup · bottom/start with collision fit",
     defects: [
       "FIXED — Select keeps the trigger's width while Combobox adds a readable floor only for narrow single-value triggers.",
@@ -247,7 +247,7 @@ const SPECIMENS: readonly Specimen[] = [
   },
   {
     id: "multi",
-    name: "FieldOptionMultiSelect",
+    name: "FieldOptionPicker",
     consumers: "routes/ops.tsx, ops/views-catalog.tsx, parameter-links/ProfileEditor.tsx",
     shape: "chips container is the anchor · the anchor GROWS as chips are added",
     defects: [

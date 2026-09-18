@@ -5,16 +5,23 @@ import { ArmingStrip, armingStripRecipe } from "#/components/lang/arming-strip";
 import { ArtifactFrame, artifactFrameRecipe } from "#/components/lang/artifact-frame";
 import { StateCell } from "#/components/lang/cell";
 import { FactChip, Tag } from "#/components/lang/chip";
-import { Verb } from "#/components/lang/verb";
-import { ARMING_FIXTURE } from "#/design-system/fixtures";
+import { Kbd } from "#/components/lang/kbd";
+import { ActionButton } from "#/components/lang/action-button";
+import { ARMING_SPECIMEN } from "#/design-system/specimens-data";
 
-import { RecipeGrid, type GridVariantProps } from "./recipe-grid";
+import { RecipeGrid, SpecimenFrame, type GridVariantProps } from "./recipe-grid";
 
 const noop = () => {};
 
 export function LangWorkflowSpecimens() {
   return (
     <>
+      <SpecimenFrame name="Kbd" importPath="#/components/lang/kbd">
+        <div className="flex items-center gap-2">
+          <Kbd>⌘K</Kbd>
+          <Kbd mute>Esc</Kbd>
+        </div>
+      </SpecimenFrame>
       <RecipeGrid
         name="AddressingBar"
         importPath="#/components/lang/addressing-bar"
@@ -29,7 +36,12 @@ export function LangWorkflowSpecimens() {
               </FactChip>
             }
             verb={
-              <Verb tone="commit" label="save profile" reason="Writes the profile" onClick={noop} />
+              <ActionButton
+                tone="commit"
+                label="save profile"
+                reason="Writes the profile"
+                onClick={noop}
+              />
             }
             seam={
               <FactChip dashed title="Fixture data; no document is connected.">
@@ -55,7 +67,7 @@ export function LangWorkflowSpecimens() {
             foot={
               <>
                 <Tag>2 unsaved</Tag>
-                <Verb
+                <ActionButton
                   tone="commit"
                   label="save"
                   icon={Save}
@@ -78,18 +90,18 @@ export function LangWorkflowSpecimens() {
 
 function ArmingSpecimen({ props }: { props: GridVariantProps }) {
   const state = props.state;
-  const reason = state === "unarmed" ? "" : ARMING_FIXTURE.reasonExample;
+  const reason = state === "unarmed" ? "" : ARMING_SPECIMEN.reasonExample;
   const phase =
     state === "refused"
-      ? ({ phase: "refused", refusal: ARMING_FIXTURE.refusal, onReplan: noop } as const)
+      ? ({ phase: "refused", refusal: ARMING_SPECIMEN.refusal, onReplan: noop } as const)
       : ({ phase: "arming" } as const);
   return (
     <div className="w-[24rem]">
       <ArmingStrip
-        verb={ARMING_FIXTURE.verb}
-        target={ARMING_FIXTURE.target}
-        count={ARMING_FIXTURE.count}
-        planHash={ARMING_FIXTURE.planHash}
+        verb={ARMING_SPECIMEN.verb}
+        target={ARMING_SPECIMEN.target}
+        count={ARMING_SPECIMEN.count}
+        planHash={ARMING_SPECIMEN.planHash}
         reason={reason}
         onReasonChange={noop}
         state={phase}

@@ -1,3 +1,5 @@
+import { difference } from "../world";
+import { closureText } from "./unknown";
 import { token } from "#/lib/token";
 import { type ReactNode } from "react";
 import { fb, itemKey, type StagedItem, useFb } from "../feedback/staging";
@@ -20,7 +22,7 @@ export function MissingPanel(props: { w: number; h: number; label: string }) {
   );
 }
 
-export function StageButton(props: {
+export function RunPickButton(props: {
   name: string;
   runA: string | null;
   runB: string;
@@ -97,20 +99,34 @@ export const STAT_ROWS: StatRow[] = [
   },
   {
     label: "accepted",
-    value: (z) => `${z.AcceptedRooms}/${z.OracleRooms}r · ${fmtSqft(z.AcceptedSqft)}`,
-    delta: (a, b) => <Delta value={b.AcceptedSqft - a.AcceptedSqft} suffix=" sf" />,
+    value: (z) => `${z.AcceptedRooms ?? "?"}/${z.OracleRooms ?? "?"}r · ${fmtSqft(z.AcceptedSqft)}`,
+    delta: (a, b) => <Delta value={difference(b.AcceptedSqft, a.AcceptedSqft)} suffix=" sf" />,
   },
   {
     label: "held",
-    value: (z) => `${z.HeldRooms}r · ${fmtSqft(z.HeldSqft)}`,
-    delta: (a, b) => <Delta value={b.HeldSqft - a.HeldSqft} goodWhenUp={false} suffix=" sf" />,
+    value: (z) => `${z.HeldRooms ?? "?"}r · ${fmtSqft(z.HeldSqft)}`,
+    delta: (a, b) => (
+      <Delta value={difference(b.HeldSqft, a.HeldSqft)} goodWhenUp={false} suffix=" sf" />
+    ),
+  },
+  {
+    label: "void",
+    value: (z) => fmtSqft(z.VoidSqft),
+  },
+  {
+    label: "excluded",
+    value: (z) => fmtSqft(z.ExcludedSqft),
   },
   {
     label: "ink-backed",
     value: (z) => fmtPct(z.InkBackedEdgeFraction),
     delta: (a, b) => (
       <Delta
-        value={(b.InkBackedEdgeFraction - a.InkBackedEdgeFraction) * 100}
+        value={
+          b.InkBackedEdgeFraction === null || a.InkBackedEdgeFraction === null
+            ? null
+            : (b.InkBackedEdgeFraction - a.InkBackedEdgeFraction) * 100
+        }
         digits={1}
         suffix="pp"
       />
@@ -118,12 +134,12 @@ export const STAT_ROWS: StatRow[] = [
   },
   {
     label: "closure",
-    value: (z) =>
-      `dh ${Math.round(z.closure.doorHeadSqft)} · wall ${Math.round(z.closure.wallRunGapSqft)} · gap ${Math.round(z.closure.gapCloseSqft)}`,
+    value: (z) => closureText(z),
   },
   {
     label: "rejections",
     value: (z) => {
+      if (z.triage.verdict === "error") return "unavailable";
       const top = topRejections(z, 2);
       return top.length === 0 ? (
         <span className="">none</span>

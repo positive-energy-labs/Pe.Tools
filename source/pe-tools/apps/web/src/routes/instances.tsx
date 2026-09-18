@@ -1,12 +1,14 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { FixtureInstancesPage } from "#/instances/fixture";
+import { instancesManifest } from "#/instances/manifest";
 import { InstancesPage } from "#/instances/route";
 
 export { InstancesPage } from "#/instances/route";
 
+/** The one manifest for `/instances` (route-primitive guard row 4). */
+export const manifest = instancesManifest;
+
 export const instancesSearch = (search: Record<string, unknown>) => ({
   thread: typeof search.thread === "string" ? search.thread.trim() : undefined,
-  source: search.source === "fixture" ? ("fixture" as const) : undefined,
   target: typeof search.target === "string" ? search.target.trim() : undefined,
 });
 
@@ -20,7 +22,6 @@ function InstancesFileRoute() {
   const search = Route.useSearch();
   return (
     <InstancesRouteContent
-      source={search.source}
       target={search.target ?? ""}
       setTarget={(target) =>
         void navigate({
@@ -33,17 +34,11 @@ function InstancesFileRoute() {
 }
 
 export function InstancesRouteContent({
-  source,
   target,
   setTarget,
 }: {
-  source?: "fixture";
   target: string;
   setTarget: (target: string) => void;
 }) {
-  return source === "fixture" ? (
-    <FixtureInstancesPage target={target} setTarget={setTarget} />
-  ) : (
-    <InstancesPage target={target} setTarget={setTarget} />
-  );
+  return <InstancesPage target={target} setTarget={setTarget} />;
 }

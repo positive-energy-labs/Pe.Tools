@@ -1,8 +1,10 @@
+import { sumKnown } from "../world";
 import { token } from "#/lib/token";
 import { FactChip as Chip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Pane, PaneSplit } from "#/components/lang/pane";
+import { Surface } from "#/components/lang/surface";
 import { fb } from "../feedback/staging";
 import { NoteInput } from "../feedback/verbs";
 import { Tray, TrayCollapsed } from "../feedback/tray";
@@ -59,39 +61,48 @@ export default function RunBrowser() {
 
   if (error) {
     return (
-      <div className="p-8">
-        <OutcomeLine kind="error" label="run pool unavailable" says={error} />
-      </div>
+      <Surface>
+        <Pane kind="content" title="runs">
+          <OutcomeLine kind="error" label="run pool unavailable" says={error} />
+        </Pane>
+      </Surface>
     );
   }
 
   if (!runs) {
-    return <div className="p-8 text-ink-2">loading run pool…</div>;
+    return (
+      <Surface>
+        <Pane kind="content" title="runs">
+          <span className="text-ink-2">loading run pool…</span>
+        </Pane>
+      </Surface>
+    );
   }
 
   if (runs.length === 0 || !curId) {
     return (
-      <div className="mx-auto flex max-w-xl flex-col gap-2 p-8">
-        <EmptyState story="scope" exit="run the takeoff harness to fill the pool">
-          No runs captured yet
-        </EmptyState>
-        <p className="t-small t-upper text-ink-2">
-          Every run of{" "}
-          <span className="face-mono text-ink">
-            ZoneBoundedDetectTests.ProjectA_zones_partition_within_declared_scope
-          </span>{" "}
-          auto-persists its package (report.json, zone TSVs, INKP bins) into the pool; this page
-          reads whatever is there. Nothing to configure.
-        </p>
-        {pool && (
-          <p
-            className="t-small face-mono break-all text-ink-2"
-            title="The run pool this page is reading — PE_TAKEOFF_RUNS_DIR if set, else <repo>/.artifacts/takeoff-runs."
-          >
-            pool {pool}
-          </p>
-        )}
-      </div>
+      <Surface>
+        <Pane kind="content" title="runs">
+          <div className="mx-auto flex max-w-xl flex-col gap-2">
+            <EmptyState story="scope" exit="publish a Partition capture to fill the pool">
+              No runs captured yet
+            </EmptyState>
+            <p className="t-small t-upper text-ink-2">
+              Publish a completed capture with{" "}
+              <code>python eval/rhvac/partition-run.py CAPTURE --label LABEL --zone-name ZONE</code>
+              , then reload.
+            </p>
+            {pool && (
+              <p
+                className="t-small face-mono break-all text-ink-2"
+                title="The run pool this page is reading — PE_TAKEOFF_RUNS_DIR if set, else <repo>/.artifacts/takeoff-runs."
+              >
+                pool {pool}
+              </p>
+            )}
+          </div>
+        </Pane>
+      </Surface>
     );
   }
 
@@ -193,7 +204,9 @@ export default function RunBrowser() {
             });
             const hidden = zonePairs.length - visible.length;
             const solved = zonePairs.filter((pair) => pair.b?.triage.verdict === "solve").length;
-            const sf = zonePairs.reduce((sum, pair) => sum + (pair.b?.AcceptedSqft ?? 0), 0);
+            const sf = sumKnown(
+              zonePairs.filter((pair) => pair.b).map((pair) => pair.b!.AcceptedSqft),
+            );
             return (
               <section
                 key={level}
@@ -305,64 +318,61 @@ export default function RunBrowser() {
   );
 
   return (
-    <div className="flex h-dvh min-h-0 flex-col">
-      <RunBrowserHeader model={model} />
-
-      <div className="min-h-0 flex-1">
-        <PaneSplit
-          axis="vertical"
-          resize={{
-            target: "start",
-            defaultSize: 360,
-            minSize: 180,
-            minOtherSize: 240,
-            persist: "pe-runs-combo-plan-h",
-            collapse: {
-              collapsed: !planOpen,
-              onCollapsedChange: (c) => setPlanOpen(!c),
-              collapsedSize: 33,
-              collapseBelow: 100,
-            },
-          }}
-          start={
-            <Pane
-              kind="visual"
-              title="plan"
-              meta={comparing ? "A | B — panes share one viewport" : "the level, spatially true"}
-              actions={
-                <Press
-                  type="button"
-                  tone="neutral"
-                  size="label"
-                  onClick={() => setPlanOpen((o) => !o)}
-                  title={
-                    planOpen
-                      ? "Collapse the plan dock (drag the divider to resize it)."
-                      : "Expand the plan dock."
-                  }
-                >
-                  {planOpen ? "▴ hide plan" : "▾ show plan"}
-                </Press>
-              }
-            >
-              {planOpen && (
-                <PlanDock
-                  curId={curId}
-                  prevId={prevId}
-                  underlay={underlay}
-                  focus={focus}
-                  levels={levels.map((l) => l.level)}
-                  level={planLevel}
-                  onPickLevel={pickLevel}
-                  highlight={highlight}
-                  onToggleZone={toggleZoneByName}
-                />
-              )}
-            </Pane>
-          }
-          end={sheetAndLedger}
-        />
-      </div>
-    </div>
+    <Surface head={<RunBrowserHeader model={model} />}>
+      <PaneSplit
+        axis="vertical"
+        resize={{
+          target: "start",
+          defaultSize: 360,
+          minSize: 180,
+          minOtherSize: 240,
+          persist: "pe-runs-combo-plan-h",
+          collapse: {
+            collapsed: !planOpen,
+            onCollapsedChange: (c) => setPlanOpen(!c),
+            collapsedSize: 33,
+            collapseBelow: 100,
+          },
+        }}
+        start={
+          <Pane
+            kind="visual"
+            title="plan"
+            flush
+            meta={comparing ? "A | B — panes share one viewport" : "the level, spatially true"}
+            actions={
+              <Press
+                type="button"
+                tone="neutral"
+                size="label"
+                onClick={() => setPlanOpen((o) => !o)}
+                title={
+                  planOpen
+                    ? "Collapse the plan dock (drag the divider to resize it)."
+                    : "Expand the plan dock."
+                }
+              >
+                {planOpen ? "▴ hide plan" : "▾ show plan"}
+              </Press>
+            }
+          >
+            {planOpen && (
+              <PlanDock
+                curId={curId}
+                prevId={prevId}
+                underlay={underlay}
+                focus={focus}
+                levels={levels.map((l) => l.level)}
+                level={planLevel}
+                onPickLevel={pickLevel}
+                highlight={highlight}
+                onToggleZone={toggleZoneByName}
+              />
+            )}
+          </Pane>
+        }
+        end={sheetAndLedger}
+      />
+    </Surface>
   );
 }

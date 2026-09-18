@@ -48,6 +48,8 @@
      input, select trigger — at --control-h. A third tier waits for a surface that demands it. */
   --item-h: 1.25rem;
   --control-h: 1.5rem;
+  --gutter: 8px;
+  --rail-h: 24px;
   --item-pad-x: 0.125rem;
   /* The second inset role, and the only one: a cell whose BODY carries a mark (pea's corner
      fold, the unsaved square) must leave the mark room. Everything else is --item-pad-x
@@ -74,6 +76,10 @@
   --dash-reference: 12 3 2 3;
   --dash-void: 4 3;
   --motion-control: 120ms;
+  /* Ambient loops in the chat lens: the streaming caret, the running sheen, the waiting bud. */
+  --motion-blink: 1.1s;
+  --motion-sheen: 2.4s;
+  --motion-pulse: 2s;
   --pattern-caution-hatch: repeating-linear-gradient(
     -45deg,
     color-mix(in srgb, var(--pe-ink) 40%, transparent) 0 2px,

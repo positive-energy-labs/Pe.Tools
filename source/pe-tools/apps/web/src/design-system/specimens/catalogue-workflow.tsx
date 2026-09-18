@@ -3,12 +3,13 @@ import { Save } from "lucide-react";
 
 import { ArmingStrip } from "#/components/lang/arming-strip";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { Code, JsonEditor } from "#/components/lang/code";
 import { StateCell } from "#/components/lang/cell";
 import { FactChip, Tag } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { CounterExample, Demo, Gap } from "#/design-system/exhibit";
-import { ARMING_FIXTURE } from "#/design-system/fixtures";
+import { ARMING_SPECIMEN } from "#/design-system/specimens-data";
 
 const noop = () => {};
 
@@ -34,7 +35,7 @@ export function CatalogueWorkflow() {
             foot={
               <>
                 <Tag>2 unsaved</Tag>
-                <Verb
+                <ActionButton
                   tone="commit"
                   label="save profile"
                   icon={Save}
@@ -62,8 +63,58 @@ export function CatalogueWorkflow() {
           full-width CellStateKey to be the last child.
         </Gap>
       </Demo>
+      <CodeCatalogue />
       <ArmingCatalogue />
     </>
+  );
+}
+
+const FAILED_OUT = `{
+  "target": null
+}`;
+
+const POD = `[Pod("door.audit")]
+public async Task<Element> Get(string id) => await _db.Find(id); // one element
+`;
+
+/** A duct system as pea would sketch it: one AHU, two mains, branches, terminals (10 nodes). */
+const DUCT_DIAGRAM = `flowchart LR
+  AHU[AHU-1] -->|6000 cfm| M1[Main A]
+  AHU -->|4000 cfm| M2[Main B]
+  M1 --> B1[Branch A1]
+  M1 --> B2[Branch A2]
+  M2 --> B3[Branch B1]
+  B1 --> T1([VAV A1-1])
+  B1 --> T2([VAV A1-2])
+  B2 --> T3([VAV A2-1])
+  B3 --> T4([VAV B1-1])
+`;
+
+function CodeCatalogue() {
+  const [draft, setDraft] = useState('{ "clear_width": 36 }');
+  return (
+    <Demo
+      label="Code / JsonEditor"
+      consumers="chat fenced blocks, the lens tool cell, receipts, ops output, and the settings panes"
+      spec="A code payload is a machine-operated object, so it wears the artifact frame: language left, machine facts right — line count, copy, and, past 64 KB, show all. A closed mermaid fence draws as a diagram with a source toggle; unsupported types stay source. Code owns the height clamp; the container owns show/hide."
+    >
+      <div className="max-w-lg">
+        <Code code={POD} lang="csharp" />
+      </div>
+      <div className="max-w-lg">
+        <Code code={FAILED_OUT} lang="json" title="out" tone="error" />
+      </div>
+      <div className="max-w-lg">
+        <Code code={DUCT_DIAGRAM} lang="mermaid" />
+      </div>
+      <CounterExample why="editing is a textarea's job — caret, selection and undo — so the editable half is paint with no chrome, and its caller frames it">
+        <div className="max-w-lg">
+          <ArtifactFrame head={<Tag>settings profile</Tag>}>
+            <JsonEditor value={draft} onChange={setDraft} aria-label="profile json" />
+          </ArtifactFrame>
+        </div>
+      </CounterExample>
+    </Demo>
   );
 }
 
@@ -77,10 +128,10 @@ function ArmingCatalogue() {
     >
       <div className="w-full max-w-3xl">
         <ArmingStrip
-          verb={ARMING_FIXTURE.verb}
-          target={ARMING_FIXTURE.target}
-          count={ARMING_FIXTURE.count}
-          planHash={ARMING_FIXTURE.planHash}
+          verb={ARMING_SPECIMEN.verb}
+          target={ARMING_SPECIMEN.target}
+          count={ARMING_SPECIMEN.count}
+          planHash={ARMING_SPECIMEN.planHash}
           reason={reason}
           onReasonChange={setReason}
           state={{ phase: "arming" }}
@@ -88,8 +139,13 @@ function ArmingCatalogue() {
           onCancel={() => setReason("")}
         />
       </div>
-      <CounterExample why="a commit Verb alone hides the reason, target, plan identity, and refusal path">
-        <Verb tone="commit" label="apply to Revit" onClick={noop} reason="Writes 42 parameters" />
+      <CounterExample why="a commit ActionButton alone hides the reason, target, plan identity, and refusal path">
+        <ActionButton
+          tone="commit"
+          label="apply to Revit"
+          onClick={noop}
+          reason="Writes 42 parameters"
+        />
       </CounterExample>
       <Gap>
         the component has no armed-at or armed-by identity. It must say that the plan age is unknown

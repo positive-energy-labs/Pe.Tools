@@ -1,14 +1,17 @@
 import { RefreshCw, Save, Sparkles, Upload } from "lucide-react";
 
 import { Press } from "#/components/lang/press";
-import { Verb, VerbGroup } from "#/components/lang/verb";
+import { ActionButton, ActionGroup } from "#/components/lang/action-button";
 import { CounterExample, Demo, Gap } from "#/design-system/exhibit";
+
+import { ActionDemoCatalogue } from "../action-demo-catalogue";
 
 const noop = () => {};
 
 export function CatalogueActions() {
   return (
     <>
+      <ActionDemoCatalogue />
       <Demo
         label="Press"
         consumers="theme toggle, popover triggers, tabs, and surface machinery"
@@ -24,73 +27,78 @@ export function CatalogueActions() {
             <RefreshCw />
           </Press>
         </div>
-        <CounterExample why="saving changes is a world action and needs Verb.reason">
+        <CounterExample why="saving changes is a world action and needs ActionButton.reason">
           <Press>save profile</Press>
         </CounterExample>
       </Demo>
 
       <Demo
-        label="Verb · VerbGroup"
+        label="ActionButton · ActionGroup"
         consumers="arming strips, document actions, navigation, and Pea actions"
-        spec="Verb acts in the world and requires a human-readable reason. Tone says the kind of action; VerbGroup says blast radius without minting another hue."
+        spec="ActionButton acts in the world and requires a human-readable reason. Tone says the kind of action; ActionGroup says blast radius without minting another hue."
       >
         <div className="flex flex-wrap gap-x-10 gap-y-5">
-          <VerbGroup title="stays here" radius="page · document">
-            <Verb label="refresh" icon={RefreshCw} onClick={noop} reason="Re-reads the model" />
-            <Verb
+          <ActionGroup title="stays here" radius="page · document">
+            <ActionButton
+              label="refresh"
+              icon={RefreshCw}
+              onClick={noop}
+              reason="Re-reads the model"
+            />
+            <ActionButton
               tone="agent"
               label="ask pea"
               icon={Sparkles}
               onClick={noop}
               reason="Hands this scope to Pea"
             />
-          </VerbGroup>
-          <VerbGroup title="goes somewhere" radius="back · forward · out">
-            <Verb
+          </ActionGroup>
+          <ActionGroup title="goes somewhere" radius="back · forward · out">
+            <ActionButton
               tone="nav"
               direction="back"
               label="all types"
               onClick={noop}
               reason="Returns to the type list"
             />
-            <Verb
+            <ActionButton
               tone="nav"
               direction="out"
               label="open in RHVAC"
               onClick={noop}
               reason="Leaves Pe.Tools"
             />
-          </VerbGroup>
-          <VerbGroup title="writes beyond the page" radius="document · model · external">
-            <Verb
+          </ActionGroup>
+          <ActionGroup title="writes beyond the page" radius="document · model · external">
+            <ActionButton
               tone="commit"
               label="save profile"
               icon={Save}
               onClick={noop}
               reason="Writes the family profile"
             />
-            <Verb
+            <ActionButton
               tone="commit"
               label="apply to Revit"
               icon={Upload}
               onClick={noop}
               reason="Writes 42 parameters into the model"
             />
-            <Verb
+            <ActionButton
               tone="commit"
               label="sync to .r10"
               onClick={noop}
               disabled
               reason="no .r10 target is bound"
             />
-          </VerbGroup>
+          </ActionGroup>
         </div>
         <CounterExample why="a disabled Press can omit the refusal reason">
           <Press disabled>sync to .r10</Press>
         </CounterExample>
         <Gap>
-          Verb composes busy and disabled props, but both render as one inert state. A world action
-          cannot say that it is busy and independently refused.
+          ActionButton composes busy and disabled props, but both render as one inert state. A world
+          action cannot say that it is busy and independently refused.
         </Gap>
       </Demo>
     </>

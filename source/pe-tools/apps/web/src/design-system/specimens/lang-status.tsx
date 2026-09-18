@@ -1,3 +1,4 @@
+import { ActivityDisclosure, ActivityRow } from "#/components/lang/activity";
 import { FactChip } from "#/components/lang/chip";
 import { CoverageBar, coverageBarRecipe } from "#/components/lang/coverage-bar";
 import { EmptyState, emptyStateRecipe } from "#/components/lang/empty";
@@ -6,13 +7,22 @@ import { OutcomeLine, outcomeLineRecipe, type OutcomeKind } from "#/components/l
 import { Provenance, Section, sectionRecipe } from "#/components/lang/section";
 import { Switcher, switcherRecipe } from "#/components/lang/switcher";
 
-import { RecipeGrid } from "./recipe-grid";
+import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
 
 const noop = () => {};
 
 export function LangStatusSpecimens() {
   return (
     <>
+      <SpecimenFrame
+        name="ActivityDisclosure · ActivityRow"
+        importPath="#/components/lang/activity"
+      >
+        <ActivityDisclosure summary="2 unresolved" tone="caution">
+          <ActivityRow label="lost write" says="the document moved on before the apply landed" />
+          <ActivityRow label="reading families" says="waiting on the session" tone="meta" />
+        </ActivityDisclosure>
+      </SpecimenFrame>
       <RecipeGrid
         name="CoverageBar"
         importPath="#/components/lang/coverage-bar"

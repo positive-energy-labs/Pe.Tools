@@ -6,11 +6,11 @@ import { CellStateKey } from "#/components/lang/cell-key";
 import { FactChip, Tag } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { Provenance, Section } from "#/components/lang/section";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { MasterTable } from "#/components/master-table/master-table";
 import type { Column } from "#/components/master-table/model";
 import { Gap } from "#/design-system/exhibit";
-import { PARAM_ROWS, ageText, cellProps, type ParamRow } from "#/design-system/fixtures";
+import { PARAM_ROWS, ageText, cellProps, type ParamRow } from "#/design-system/specimens-data";
 
 const noop = () => {};
 
@@ -130,7 +130,7 @@ export function RealTable() {
         foot={
           <>
             <Tag>2 unsaved · 1 refused by Revit</Tag>
-            <Verb
+            <ActionButton
               tone="commit"
               label="apply to Revit"
               icon={Upload}

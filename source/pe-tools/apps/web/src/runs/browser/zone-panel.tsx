@@ -1,40 +1,21 @@
 import { dash, token } from "#/lib/token";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { fb, useFb } from "../feedback/staging";
+import { fb, itemKey, useFb } from "../feedback/staging";
+import { CLOSE_M, INK_M, PLAN_LAW, SEAL_DOOR, SEAL_RUN, ZONE_STROKE, ZONE_WIDTH } from "../palette";
 import {
-  candidateTone,
-  CLOSE_M,
-  INK_M,
-  LABEL,
-  LABEL_SIZE,
-  PLAN_LAW,
-  RESIDUE_TREATMENT,
-  SEAL_DOOR,
-  SEAL_RUN,
-  ZONE_STROKE,
-  ZONE_WIDTH,
-} from "../palette";
-import {
+  comparisonPlan,
   paintPlan,
   paintClassRaster,
   paintRaster,
   type RegisteredPlan,
   ringPath,
-  toPx,
   type ZoneGeometry,
   type ZoneRecord,
   type ZoneViewport,
   zoneViewport,
 } from "../world";
 import { useRunsSource } from "../source";
-import type { PanelHover } from "./unknown";
-import {
-  HatchPattern,
-  UNKNOWN_TITLE,
-  heldPatternId,
-  residueKind,
-  residuePatternId,
-} from "./unknown";
+import { ReviewShapes, ReviewList, reviewShapes } from "../review";
 
 export function ZonePanel(props: {
   runId: string;
@@ -42,29 +23,21 @@ export function ZonePanel(props: {
   maxW: number;
   maxH: number;
   underlay: boolean;
+  registrationRunId?: string;
+  registrationZone?: ZoneRecord;
   fbKey?: string;
+  onStage?: () => void;
 }) {
   const source = useRunsSource();
   const { runId, zone, maxW, maxH, underlay } = props;
-  const { items, hoverFlag } = useFb();
-  const stagedItem = props.fbKey ? (items.find((i) => i.key === props.fbKey) ?? null) : null;
-  const lit = (el: string) => hoverFlag !== null && hoverFlag === `${props.fbKey}::${el}`;
-  const flags = useMemo(() => new Set(stagedItem?.flags ?? []), [stagedItem]);
+  const { items } = useFb();
+  const key = props.fbKey ?? itemKey(zone.Zone, null, runId);
+  const stagedItem = items.find((item) => item.key === key);
+  const flags = stagedItem?.flags ?? [];
+  const [selected, setSelected] = useState<string | null>(null);
   const toggleFlag = (el: string) => {
-    if (stagedItem) fb.toggleFlag(stagedItem.key, el);
-  };
-  const [hover, setHover] = useState<PanelHover | null>(null);
-  const hostRef = useRef<HTMLDivElement | null>(null);
-  const trackHover = (label: string, flagged: boolean) => (e: React.PointerEvent) => {
-    const rect = hostRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    setHover({
-      label,
-      flaggable: stagedItem !== null,
-      flagged,
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    });
+    if (!stagedItem) props.onStage?.();
+    fb.toggleFlag(key, el);
   };
   const vp: ZoneViewport = useMemo(() => {
     const pad = 4;
@@ -76,14 +49,17 @@ export function ZonePanel(props: {
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [geom, setGeom] = useState<ZoneGeometry | null>(null);
+  const [geometryError, setGeometryError] = useState<string | null>(null);
   const [plan, setPlan] = useState<RegisteredPlan | null>();
 
   useEffect(() => {
     let live = true;
+    setGeom(null);
+    setGeometryError(null);
     source
       .loadZoneGeometry(runId, zone.Tsv)
       .then((g) => live && setGeom(g))
-      .catch(() => live && setGeom({ rooms: [], polys: new Map(), residues: [] }));
+      .catch((err: unknown) => live && setGeometryError(String(err)));
     return () => {
       live = false;
     };
@@ -92,14 +68,22 @@ export function ZonePanel(props: {
   useEffect(() => {
     let live = true;
     setPlan(undefined);
-    source
-      .loadPlan(runId, zone.Ink)
-      .then((value) => live && setPlan(value))
+    Promise.all([
+      source.loadPlan(runId, zone.Ink, zone.plan),
+      props.registrationRunId && props.registrationZone
+        ? source.loadPlan(
+            props.registrationRunId,
+            props.registrationZone.Ink,
+            props.registrationZone.plan,
+          )
+        : Promise.resolve(null),
+    ])
+      .then(([value, reference]) => live && setPlan(comparisonPlan(value, reference)))
       .catch(() => live && setPlan(null));
     return () => {
       live = false;
     };
-  }, [runId, zone.Ink, source]);
+  }, [runId, zone.Ink, zone.plan, props.registrationRunId, props.registrationZone, source]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -108,7 +92,7 @@ export function ZonePanel(props: {
     void (async () => {
       const [ink, seals, close, sealClasses] = underlay
         ? await Promise.all([
-            source.loadReplaySeedInk(runId, zone.Ink).catch(() => null),
+            zone.Ink ? source.loadReplaySeedInk(runId, zone.Ink).catch(() => null) : null,
             zone.Seals ? source.loadRaster(runId, zone.Seals).catch(() => null) : null,
             zone.Close ? source.loadRaster(runId, zone.Close).catch(() => null) : null,
             zone.Seals ? source.loadSealClasses(runId, zone.Seals).catch(() => null) : null,
@@ -146,210 +130,69 @@ export function ZonePanel(props: {
     };
   }, [runId, zone, vp, geom, plan, underlay, source]);
 
+  const shapes = geom ? reviewShapes(geom, zone) : [];
   return (
-    <div
-      ref={hostRef}
-      className="relative shrink-0 overflow-hidden"
-      style={{
-        width: maxW,
-        height: maxH,
-        backgroundColor: token("page"),
-        borderRadius: "var(--radius)",
-      }}
-    >
+    <div>
       <div
-        className="absolute"
+        className="relative shrink-0 overflow-hidden"
         style={{
-          left: (maxW - vp.widthPx) / 2,
-          top: (maxH - vp.heightPx) / 2,
-          width: vp.widthPx,
-          height: vp.heightPx,
+          width: maxW,
+          height: maxH,
+          backgroundColor: token("page"),
+          borderRadius: "var(--radius)",
         }}
       >
-        <canvas ref={canvasRef} width={vp.widthPx} height={vp.heightPx} />
-        <svg className="absolute inset-0" width={vp.widthPx} height={vp.heightPx} aria-hidden>
-          <defs>
-            {geom?.rooms
-              .filter((room) => room.disposition === "held")
-              .map((room) => (
-                <HatchPattern
-                  key={`pattern:${room.id}`}
-                  id={heldPatternId(runId, zone, room.id)}
-                  color={candidateTone(zone.Zone, room.id).dark}
-                />
-              ))}
-            {geom?.rooms
-              .filter((room) => room.disposition === null)
-              .map((room) => (
-                <HatchPattern
-                  key={`void-room-pattern:${room.id}`}
-                  id={residuePatternId(runId, zone, `room:${room.id}`, "void")}
-                  color={RESIDUE_TREATMENT.void.hatch.color}
-                  hatch={RESIDUE_TREATMENT.void.hatch}
-                />
-              ))}
-            {geom?.residues
-              .filter((res) => res.reason === "rejected")
-              .map((res) => (
-                <HatchPattern
-                  key={`pattern:${res.id}`}
-                  id={heldPatternId(runId, zone, res.id)}
-                  color={candidateTone(zone.Zone, res.id).dark}
-                />
-              ))}
-            {geom?.residues
-              .filter((res) => res.reason !== "rejected")
-              .map((res) => {
-                const kind = residueKind(res.reason);
-                return (
-                  <HatchPattern
-                    key={`${kind}-residue-pattern:${res.id}`}
-                    id={residuePatternId(runId, zone, `residue:${res.id}`, kind)}
-                    color={RESIDUE_TREATMENT[kind].hatch.color}
-                    hatch={RESIDUE_TREATMENT[kind].hatch}
-                  />
-                );
-              })}
-          </defs>
-          {geom?.rooms.map((room) => {
-            const rings = geom.polys.get(room.id);
-            if (!rings) return null;
-            const flagged = flags.has(`room:${room.id}`);
-            const hot = lit(`room:${room.id}`);
-            // Unflagged, the room wears its PERSISTED disposition (SHIMS.md #3): unknown is a
-            const tone = candidateTone(zone.Zone, room.id);
-            const residue = room.disposition === null ? RESIDUE_TREATMENT.void : null;
-            const d = ringPath(
-              vp,
-              rings.map((r) => r.points),
-            );
-            const [labelX, labelY] = toPx(vp, room.lx, room.ly);
-            return (
-              <g key={room.id}>
-                <path
-                  d={d}
-                  fill={residue ? "none" : tone.fill}
-                  stroke={hot || flagged ? token("alarm") : (residue?.outline.color ?? "none")}
-                  strokeWidth={hot ? 4 : flagged ? 2.5 : (residue?.outline.widthPx ?? 0)}
-                  pointerEvents="all"
-                  style={{ cursor: stagedItem ? "crosshair" : "default" }}
-                  onPointerMove={trackHover(`room ${room.id}`, flagged)}
-                  onPointerLeave={() => setHover(null)}
-                  onClick={stagedItem ? () => toggleFlag(`room:${room.id}`) : undefined}
-                >
-                  {room.disposition === null ? <title>{UNKNOWN_TITLE}</title> : null}
-                </path>
-                {residue ? (
-                  <path
-                    d={d}
-                    fill={`url(#${residuePatternId(runId, zone, `room:${room.id}`, "void")})`}
-                    pointerEvents="none"
-                  />
-                ) : null}
-                {room.disposition === "held" ? (
-                  <path
-                    d={d}
-                    fill={`url(#${heldPatternId(runId, zone, room.id)})`}
-                    pointerEvents="none"
-                  />
-                ) : null}
-                {room.disposition ? (
-                  <text
-                    x={labelX}
-                    y={labelY}
-                    fill={LABEL}
-                    fontSize={LABEL_SIZE}
-                    fontFamily="var(--font-mono)"
-                    textAnchor="middle"
-                    pointerEvents="none"
-                  >
-                    {room.disposition === "held" ? "H" : "A"} {room.id}
-                  </text>
-                ) : null}
-              </g>
-            );
-          })}
-          {geom?.residues.map((res) => {
-            const flagged = flags.has(`residue:${res.id}`);
-            const hot = lit(`residue:${res.id}`);
-            const held = res.reason === "rejected";
-            const kind = residueKind(res.reason);
-            const residue = held ? null : RESIDUE_TREATMENT[kind];
-            const tone = candidateTone(zone.Zone, res.id);
-            const d = ringPath(vp, res.loops);
-            const labelPoint = res.loops[0]?.[0];
-            return (
-              <g key={res.id}>
-                <path
-                  d={d}
-                  fill={held ? tone.fill : "none"}
-                  stroke={hot || flagged ? token("alarm") : (residue?.outline.color ?? "none")}
-                  strokeWidth={hot ? 4 : flagged ? 2.5 : (residue?.outline.widthPx ?? 0)}
-                  pointerEvents="all"
-                  style={{ cursor: stagedItem ? "crosshair" : "default" }}
-                  onPointerMove={trackHover(`residue ${res.id}`, flagged)}
-                  onPointerLeave={() => setHover(null)}
-                  onClick={stagedItem ? () => toggleFlag(`residue:${res.id}`) : undefined}
-                />
-                {residue ? (
-                  <path
-                    d={d}
-                    fill={`url(#${residuePatternId(runId, zone, `residue:${res.id}`, kind)})`}
-                    pointerEvents="none"
-                  />
-                ) : null}
-                {held ? (
-                  <>
-                    <path
-                      d={d}
-                      fill={`url(#${heldPatternId(runId, zone, res.id)})`}
-                      pointerEvents="none"
-                    />
-                    {labelPoint ? (
-                      <text
-                        x={toPx(vp, labelPoint[0], labelPoint[1])[0]}
-                        y={toPx(vp, labelPoint[0], labelPoint[1])[1]}
-                        fill={LABEL}
-                        fontSize={LABEL_SIZE}
-                        fontFamily="var(--font-mono)"
-                        pointerEvents="none"
-                      >
-                        H {res.id}
-                      </text>
-                    ) : null}
-                  </>
-                ) : null}
-              </g>
-            );
-          })}
-          <path
-            d={ringPath(vp, zone.ZoneLoops as [number, number][][])}
-            fill="none"
-            stroke={ZONE_STROKE}
-            strokeWidth={ZONE_WIDTH}
-            strokeDasharray={dash("reference")}
-          />
-        </svg>
-      </div>
-      {plan === null ? (
-        <div className="absolute bottom-1 left-1 px-1">plan unavailable in this package</div>
-      ) : null}
-
-      {hover && (
         <div
-          className="pointer-events-none absolute z-raised whitespace-nowrap px-1.5 py-0.5"
+          className="absolute"
           style={{
-            left: Math.min(hover.x + 10, maxW - 90),
-            top: Math.min(hover.y + 12, maxH - 22),
-            borderColor: hover.flagged ? token("alarm") : token("line-2"),
-            color: hover.flagged ? token("alarm") : token("ink"),
-            borderRadius: "var(--radius)",
+            left: (maxW - vp.widthPx) / 2,
+            top: (maxH - vp.heightPx) / 2,
+            width: vp.widthPx,
+            height: vp.heightPx,
           }}
         >
-          {hover.flagged ? "⚑ " : ""}
-          {hover.label}
+          <canvas ref={canvasRef} width={vp.widthPx} height={vp.heightPx} />
+          {geometryError && (
+            <span className="absolute inset-x-0 top-0" data-tone="alarm">
+              Geometry unavailable: {geometryError}
+            </span>
+          )}
+          <svg
+            fillRule="evenodd"
+            className="absolute inset-0"
+            width={vp.widthPx}
+            height={vp.heightPx}
+            aria-label="room and residue review"
+          >
+            <ReviewShapes
+              shapes={shapes}
+              zone={zone.Zone}
+              runId={runId}
+              vp={vp}
+              flags={flags}
+              selected={selected}
+              onSelect={setSelected}
+            />
+            <path
+              d={ringPath(vp, zone.ZoneLoops as [number, number][][])}
+              fill="none"
+              stroke={ZONE_STROKE}
+              strokeWidth={ZONE_WIDTH}
+              strokeDasharray={dash("reference")}
+            />
+          </svg>
         </div>
-      )}
+        {plan === null ? (
+          <div className="absolute bottom-1 left-1 px-1">plan unavailable in this package</div>
+        ) : null}
+      </div>
+      <ReviewList
+        shapes={shapes}
+        selected={selected}
+        flags={flags}
+        onSelect={setSelected}
+        onFlag={props.fbKey ? toggleFlag : undefined}
+      />
     </div>
   );
 }

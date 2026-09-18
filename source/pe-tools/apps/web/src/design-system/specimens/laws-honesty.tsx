@@ -4,9 +4,9 @@ import { ArmingStrip } from "#/components/lang/arming-strip";
 import { StateCell } from "#/components/lang/cell";
 import { FactChip } from "#/components/lang/chip";
 import { Provenance } from "#/components/lang/section";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { CounterExample, Gap, Law } from "#/design-system/exhibit";
-import { ARMING_FIXTURE, PARAM_ROWS, cellProps } from "#/design-system/fixtures";
+import { ARMING_SPECIMEN, PARAM_ROWS, cellProps } from "#/design-system/specimens-data";
 
 const noop = () => {};
 const row = (key: string) => PARAM_ROWS.find((item) => item.key === key)!;
@@ -49,7 +49,7 @@ export function HonestyLaws({ owner }: { owner: (name: string) => string }) {
 }
 
 function CeremonyLaw({ owner }: { owner: string }) {
-  const [reason, setReason] = useState<string>(ARMING_FIXTURE.reasonExample);
+  const [reason, setReason] = useState<string>(ARMING_SPECIMEN.reasonExample);
   return (
     <Law
       name="ceremony scales with blast radius"
@@ -58,10 +58,10 @@ function CeremonyLaw({ owner }: { owner: string }) {
     >
       <div className="w-full max-w-3xl">
         <ArmingStrip
-          verb={ARMING_FIXTURE.verb}
-          target={ARMING_FIXTURE.target}
-          count={ARMING_FIXTURE.count}
-          planHash={ARMING_FIXTURE.planHash}
+          verb={ARMING_SPECIMEN.verb}
+          target={ARMING_SPECIMEN.target}
+          count={ARMING_SPECIMEN.count}
+          planHash={ARMING_SPECIMEN.planHash}
           reason={reason}
           onReasonChange={setReason}
           state={{ phase: "arming" }}
@@ -70,7 +70,12 @@ function CeremonyLaw({ owner }: { owner: string }) {
         />
       </div>
       <CounterExample why="the write has no visible target, reason, or plan identity">
-        <Verb tone="commit" label="apply to Revit" onClick={noop} reason="Writes to the model" />
+        <ActionButton
+          tone="commit"
+          label="apply to Revit"
+          onClick={noop}
+          reason="Writes to the model"
+        />
       </CounterExample>
       <Gap>
         ArmingStrip cannot show who armed it or how old the plan is because that identity does not

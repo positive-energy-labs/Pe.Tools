@@ -1,12 +1,13 @@
 import { token } from "#/lib/token";
 import { FactChip as Chip } from "#/components/lang/chip";
-import { itemKey, type StagedItem } from "../feedback/staging";
+import { fb, itemKey, type StagedItem } from "../feedback/staging";
 import { type RunIndexEntry, type ZoneRecord } from "../world";
 import { Press } from "#/components/lang/press";
 import { Delta, adaptedKnobs, fmtTime, partialTitle, zoneShort } from "./unknown";
 import { ZonePanel } from "./zone-panel";
-import { MissingPanel, STAT_ROWS, StageButton } from "./missing-panel";
+import { MissingPanel, STAT_ROWS, RunPickButton } from "./missing-panel";
 import { PressContent } from "#/components/anatomy/press-content";
+import { Code } from "#/components/lang/code";
 
 export function ZoneCard(props: {
   name: string;
@@ -28,10 +29,15 @@ export function ZoneCard(props: {
 }) {
   const { name, a, b, pairedBy, runA, runB, panelFullW, panelHalfW, panelH, underlay } = props;
   const comparing = runA !== null;
-  const deltaSf = comparing && a && b ? Math.round(b.AcceptedSqft - a.AcceptedSqft) : null;
+  const deltaSf =
+    comparing && a && b && a.AcceptedSqft !== null && b.AcceptedSqft !== null
+      ? Math.round(b.AcceptedSqft - a.AcceptedSqft)
+      : null;
   const locatable = b ?? a;
   const knobs = b ? adaptedKnobs(b) : [];
   const fbKey = itemKey(name, runA, runB);
+  const stage = () =>
+    fb.toggleStage({ key: fbKey, zone: name, level: (b ?? a)?.Level ?? "?", runA, runB, a, b });
 
   return (
     <div
@@ -44,7 +50,13 @@ export function ZoneCard(props: {
         </span>
         {b ? (
           <Chip
-            tone={b.triage.verdict === "solve" ? "done" : "caution"}
+            tone={
+              b.triage.verdict === "error"
+                ? "alarm"
+                : b.triage.verdict === "solve"
+                  ? "done"
+                  : "caution"
+            }
             title={`Triage verdict for the current run: ${b.triage.verdict} — ${b.triage.reason}`}
           >
             {b.triage.verdict}
@@ -72,7 +84,7 @@ export function ZoneCard(props: {
           </span>
         ) : null}
         <span className="ml-auto flex shrink-0 items-center gap-1.5">
-          <StageButton name={name} runA={runA} runB={runB} a={a} b={b} onSwing={props.onSwing} />
+          <RunPickButton name={name} runA={runA} runB={runB} a={a} b={b} onSwing={props.onSwing} />
           {locatable ? (
             <Press
               type="button"
@@ -91,6 +103,43 @@ export function ZoneCard(props: {
           ) : null}
         </span>
       </div>
+
+      {b?.capture && (
+        <div className="flex flex-wrap gap-2">
+          <span>
+            {b.capture.capturedUtc} ·{" "}
+            {b.capture.stamp.Fresh ? "fresh at capture" : "stale at capture"} · epoch{" "}
+            {b.capture.stamp.Epoch}
+          </span>
+          <a href={`/api/runs-data/${runB}/${b.capture.result}`} target="_blank" rel="noreferrer">
+            {b.triage.verdict === "error" ? "failure" : "answer / room reasons"}
+          </a>
+          <a href={`/api/runs-data/${runB}/${b.capture.manifest}`} target="_blank" rel="noreferrer">
+            source hashes
+          </a>
+          <a href={`/api/runs-data/${runB}/capture/zone.json`} target="_blank" rel="noreferrer">
+            scope
+          </a>
+          <a href={`/api/runs-data/${runB}/capture/knee.json`} target="_blank" rel="noreferrer">
+            knee input
+          </a>
+          <a href={`/api/runs-data/${runB}/capture/header.json`} target="_blank" rel="noreferrer">
+            header input
+          </a>
+          <a href={`/api/runs-data/${runB}/capture/probes.json`} target="_blank" rel="noreferrer">
+            actual probes
+          </a>
+          {b.capture.input && (
+            <a href={`/api/runs-data/${runB}/${b.capture.input}`} target="_blank" rel="noreferrer">
+              full input / Room proposals
+            </a>
+          )}
+          <span>{b.capture.note}</span>
+        </div>
+      )}
+      {b?.triage.verdict === "error" && (
+        <Code code={b.triage.reason} lang="plaintext" tone="error" wrap />
+      )}
 
       <div className="flex gap-2">
         {comparing ? (
@@ -114,6 +163,9 @@ export function ZoneCard(props: {
                 maxH={panelH}
                 underlay={underlay}
                 fbKey={fbKey}
+                onStage={stage}
+                registrationRunId={a && runA ? runA : undefined}
+                registrationZone={a ?? undefined}
               />
             ) : (
               <MissingPanel w={panelHalfW} h={panelH} label="not in current" />
@@ -127,6 +179,7 @@ export function ZoneCard(props: {
             maxH={panelH}
             underlay={underlay}
             fbKey={fbKey}
+            onStage={stage}
           />
         ) : (
           <MissingPanel w={panelFullW} h={panelH} label="not in run" />

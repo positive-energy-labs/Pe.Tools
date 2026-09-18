@@ -2,11 +2,39 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import { Pane, PaneWorkspace } from "#/components/lang/pane";
+import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { ActionButton } from "#/components/lang/action-button";
+import { Pane, PaneSplit } from "#/components/lang/pane";
+import { Rail } from "#/components/lang/rail";
+import { Surface } from "#/components/lang/surface";
 
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+});
+
+test("a focused Rail lead control scrolls into view without changing the 24px Rail", () => {
+  const scrollIntoView = vi.fn();
+  const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollIntoView");
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+    configurable: true,
+    value: scrollIntoView,
+  });
+  try {
+    const { container } = render(<Rail lead={<button type="button">long selector</button>} />);
+    fireEvent.focus(screen.getByRole("button", { name: "long selector" }));
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" });
+    expect(
+      container.querySelector("[data-slot='rail-lead']")?.classList.contains("overflow-x-auto"),
+    ).toBe(true);
+    expect(container.querySelector("[data-slot='rail']")?.classList.contains("h-(--rail-h)")).toBe(
+      true,
+    );
+  } finally {
+    if (original) Object.defineProperty(HTMLElement.prototype, "scrollIntoView", original);
+    else Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+  }
 });
 
 test("pane focus owns its hotkeys, halo, and fading shortcut card", async () => {
@@ -24,7 +52,11 @@ test("pane focus owns its hotkeys, halo, and fading shortcut card", async () => 
   );
 
   act(() => screen.getByRole("button", { name: "Room row" }).focus());
-  expect(container.querySelector("[data-slot='pane']")?.getAttribute("data-active")).toBe("true");
+  const pane = container.querySelector<HTMLElement>("[data-slot='pane']")!;
+  expect(pane.dataset.active).toBe("true");
+  expect(pane.dataset.helpVisible).toBe("true");
+  expect(pane.classList.contains("outline-ink-mute")).toBe(true);
+  expect(pane.classList.contains("z-sticky")).toBe(true);
   expect(screen.getByLabelText("rooms keyboard shortcuts").dataset.visible).toBe("true");
 
   fireEvent.keyDown(screen.getByRole("button", { name: "Room row" }), {
@@ -41,6 +73,8 @@ test("pane focus owns its hotkeys, halo, and fading shortcut card", async () => 
   expect(run).toHaveBeenCalledOnce();
 
   await act(() => vi.advanceTimersByTimeAsync(4000));
+  expect(pane.dataset.helpVisible).toBeUndefined();
+  expect(pane.classList.contains("outline-line-2")).toBe(true);
   expect(screen.getByLabelText("rooms keyboard shortcuts").dataset.visible).toBe("false");
   expect(screen.getByRole("button", { name: "Show rooms keyboard shortcuts" })).toBeTruthy();
 });
@@ -134,70 +168,284 @@ test("the actions slot renders caller JSX in the header", () => {
   expect(selected).toBe("export");
 });
 
-test("workspace resize is opt-in and keyboard accessible", () => {
+test("split panes reserve a gutter and keep keyboard resizing", () => {
   const { container } = render(
-    <PaneWorkspace
-      visual={<div>plan</div>}
-      content={<div>table</div>}
-      resize={{ visual: { defaultSize: 340, minSize: 140, maxSize: 720 } }}
+    <PaneSplit
+      axis="horizontal"
+      start={<Pane kind="content">left</Pane>}
+      end={<Pane kind="content">right</Pane>}
     />,
   );
-  const workspace = container.querySelector<HTMLElement>("[data-slot='pane-workspace']")!;
+  const split = container.querySelector<HTMLElement>("[data-slot='pane-split']")!;
 
-  expect(workspace.style.gridTemplateRows).toBe("340px 8px minmax(0, 1fr)");
-  fireEvent.keyDown(screen.getByRole("separator", { name: "Resize pane" }), {
-    key: "ArrowDown",
-  });
-  expect(workspace.style.gridTemplateRows).toBe("356px 8px minmax(0, 1fr)");
-});
+  expect(split.dataset.surface).toBe("recess");
+  expect(split.style.gridTemplateColumns).toBe("minmax(0, 1fr) var(--gutter) minmax(0, 1fr)");
+  expect(split.querySelector("[role='separator']")).toBeNull();
+  expect(split.classList.contains("overflow-hidden")).toBe(false);
+  expect((split.children[0] as HTMLElement).style.gridColumn).toBe("1");
+  expect((split.children[1] as HTMLElement).style.gridColumn).toBe("3");
 
-test("a missing persisted size starts at the declared default", () => {
-  const { container } = render(
-    <PaneWorkspace
-      visual={<div>plan</div>}
-      content={<div>table</div>}
-      resize={{
-        visual: {
-          defaultSize: 374,
-          minSize: 174,
-          persist: "test.plan-height",
-        },
-      }}
+  const vertical = render(
+    <PaneSplit
+      axis="vertical"
+      start={<Pane kind="content">top</Pane>}
+      end={<Pane kind="content">bottom</Pane>}
     />,
   );
-  const workspace = container.querySelector<HTMLElement>("[data-slot='pane-workspace']")!;
+  const verticalSplit = vertical.container.querySelector<HTMLElement>("[data-slot='pane-split']")!;
+  expect((verticalSplit.children[0] as HTMLElement).style.gridRow).toBe("1");
+  expect((verticalSplit.children[1] as HTMLElement).style.gridRow).toBe("3");
 
-  expect(workspace.style.gridTemplateRows).toBe("374px 8px minmax(0, 1fr)");
+  const resizable = render(
+    <PaneSplit
+      axis="horizontal"
+      start={<Pane kind="content">left</Pane>}
+      end={<Pane kind="content">right</Pane>}
+      resize={{ target: "start", defaultSize: 200, minSize: 120 }}
+    />,
+  );
+  const handle = screen.getByRole("separator", { name: "Resize pane" });
+  expect(
+    resizable.container.querySelector<HTMLElement>("[data-slot='pane-split']")?.dataset.surface,
+  ).toBe("recess");
+  expect(handle.parentElement?.style.gridColumn).toBe("2");
+  expect(handle.parentElement?.style.gridRow).toBe("1");
+  expect(handle.parentElement?.classList.contains("size-full")).toBe(true);
+  fireEvent.keyDown(handle, { key: "ArrowRight" });
+  expect(
+    resizable.container.querySelector<HTMLElement>("[data-slot='pane-split']")?.style
+      .gridTemplateColumns,
+  ).toBe("216px var(--gutter) minmax(0, 1fr)");
 });
 
-test("controlled collapse and inspector span are reflected by the workspace", () => {
+test("a null split side retains wrappers without a gutter or handle", () => {
   const view = render(
-    <PaneWorkspace
-      visual={<div>plan</div>}
-      content={<div>table</div>}
-      inspector={<div>details</div>}
-      inspectorSpan="visual"
-      resize={{
-        visual: {
-          defaultSize: 340,
-          minSize: 140,
-          collapse: { collapsed: true, collapsedSize: 34 },
-        },
-      }}
+    <PaneSplit
+      axis="horizontal"
+      start={<Pane kind="content">composer</Pane>}
+      end={null}
+      resize={{ target: "end", defaultSize: 288, minSize: 240 }}
     />,
   );
-  const workspace = view.container.querySelector<HTMLElement>("[data-slot='pane-workspace']")!;
+  const split = view.container.querySelector<HTMLElement>("[data-slot='pane-split']")!;
+  const wrappers = Array.from(split.children) as HTMLElement[];
 
-  expect(workspace.style.gridTemplateRows).toBe("34px 8px minmax(0, 1fr)");
-  expect(workspace.dataset.inspectorSpan).toBe("visual");
+  expect(wrappers).toHaveLength(2);
+  expect(split.style.gridTemplateColumns).toBe("minmax(0, 1fr)");
+  expect(split.querySelector("[role='separator']")).toBeNull();
+  expect(wrappers.map((wrapper) => wrapper.style.gridColumn)).toEqual(["1", "1"]);
+  expect(wrappers[0]?.classList.contains("hidden")).toBe(false);
+  expect(wrappers[1]?.classList.contains("hidden")).toBe(true);
+  fireEvent.pointerDown(screen.getByText("composer"));
+  expect(
+    (screen.getByText("composer").closest("[data-slot='pane']") as HTMLElement | null)?.dataset
+      .active,
+  ).toBe("true");
 
   view.rerender(
-    <PaneWorkspace
-      visual={<div>plan</div>}
-      content={<div>table</div>}
-      inspector={<div>details</div>}
-      inspectorSpan="full"
+    <PaneSplit
+      axis="horizontal"
+      start={null}
+      end={<Pane kind="content">plugin</Pane>}
+      resize={{ target: "end", defaultSize: 288, minSize: 240 }}
     />,
   );
-  expect(workspace.dataset.inspectorSpan).toBe("full");
+  const next = Array.from(split.children) as HTMLElement[];
+  expect(next).toEqual(wrappers);
+  expect(split.style.gridTemplateColumns).toBe("minmax(0, 1fr)");
+  expect(next[0]?.classList.contains("hidden")).toBe(true);
+  expect(next[1]?.classList.contains("hidden")).toBe(false);
+  fireEvent.pointerDown(screen.getByText("plugin"));
+  expect(
+    (screen.getByText("plugin").closest("[data-slot='pane']") as HTMLElement | null)?.dataset
+      .active,
+  ).toBe("true");
+  expect(screen.getByText("plugin")).toBeTruthy();
+});
+
+test("split sides bound panes and direct artifacts as flex columns", () => {
+  const { container } = render(
+    <PaneSplit
+      axis="horizontal"
+      start={<Pane kind="content">table pane</Pane>}
+      end={
+        <ArtifactFrame className="flex min-h-0 flex-1 flex-col" head="table">
+          table artifact
+        </ArtifactFrame>
+      }
+    />,
+  );
+  const split = container.querySelector<HTMLElement>("[data-slot='pane-split']")!;
+  const [paneSide, artifactSide] = Array.from(split.children) as HTMLElement[];
+
+  for (const side of [paneSide, artifactSide]) {
+    expect(side.classList.contains("flex")).toBe(true);
+    expect(side.classList.contains("flex-col")).toBe(true);
+    expect(side.classList.contains("min-h-0")).toBe(true);
+  }
+  expect(paneSide.firstElementChild?.classList.contains("size-full")).toBe(true);
+  expect(artifactSide.firstElementChild?.classList.contains("flex-1")).toBe(true);
+});
+
+test("surface fills its parent without fixing to the viewport and keeps a scrolling head", () => {
+  const { container } = render(
+    <Surface head={<div>head</div>}>
+      <div>body</div>
+    </Surface>,
+  );
+  const scroller = container.querySelector("main")!;
+  const surface = container.querySelector<HTMLElement>("[data-slot='surface']")!;
+
+  expect(scroller.classList.contains("size-full")).toBe(true);
+  expect(scroller.classList.contains("overflow-y-auto")).toBe(true);
+  expect(surface.classList.contains("fixed")).toBe(false);
+  expect(surface.classList.contains("h-dvh")).toBe(false);
+  expect(surface.classList.contains("size-full")).toBe(true);
+  expect(surface.classList.contains("flex")).toBe(true);
+  expect(surface.classList.contains("flex-col")).toBe(true);
+  expect(surface.style.padding).toBe("var(--gutter)");
+});
+
+test("a pane header owns one rail and no halo node", () => {
+  const { container } = render(
+    <Pane kind="content" title="rooms">
+      body
+    </Pane>,
+  );
+
+  expect(container.querySelector("[data-slot='pane-header'] [data-slot='rail']")).toBeTruthy();
+  expect(container.querySelector("[data-slot='pane-halo']")).toBeNull();
+});
+
+test("pane headers default on and require an explicit headerless opt-out", () => {
+  const view = render(<Pane kind="content">body</Pane>);
+  expect(view.container.querySelector("[data-slot='pane-header'] [data-slot='rail']")).toBeTruthy();
+
+  view.rerender(
+    <Pane kind="content" title="room table" headerless>
+      body
+    </Pane>,
+  );
+  expect(view.container.querySelector("[data-slot='pane-header']")).toBeNull();
+  expect(screen.getByRole("region", { name: "room table" })).toBeTruthy();
+});
+
+test("pane body defaults to the shared inset and flush opts out", () => {
+  const view = render(<Pane kind="content">body</Pane>);
+  const body = view.container.querySelector<HTMLElement>("[data-slot='pane-body']")!;
+
+  expect(body.classList.contains("p-(--gutter)")).toBe(true);
+
+  view.rerender(
+    <Pane kind="content" flush>
+      body
+    </Pane>,
+  );
+  expect(body.classList.contains("p-0")).toBe(true);
+  expect(body.classList.contains("p-(--gutter)")).toBe(false);
+});
+
+test("artifact feet keep their top separator", () => {
+  const { container } = render(
+    <ArtifactFrame head="head" foot="foot">
+      body
+    </ArtifactFrame>,
+  );
+  const rails = container.querySelectorAll("[data-slot='rail']");
+  expect(rails).toHaveLength(2);
+  expect(rails[1]?.classList.contains("hairline-t")).toBe(true);
+  expect(rails[1]?.classList.contains("hairline-b")).toBe(false);
+});
+
+test("artifact rail keeps disabled commit refusals in the button title", () => {
+  const reason = "Resolve validation errors before committing.";
+  render(
+    <ArtifactFrame
+      head="table"
+      headTrail={
+        <ActionButton
+          tone="commit"
+          label="Commit"
+          reason={reason}
+          disabled
+          onClick={() => undefined}
+        />
+      }
+    >
+      body
+    </ArtifactFrame>,
+  );
+
+  expect(screen.getByRole("button", { name: "Commit" }).getAttribute("title")).toBe(reason);
+  expect(screen.queryByText(reason)).toBeNull();
+});
+
+test("a collapsed flank keeps its shortcut registration and hides its body", () => {
+  const run = vi.fn();
+  const { container } = render(
+    <Pane
+      kind="flank"
+      title="rooms"
+      collapsed
+      shortcuts={[{ hotkey: "J", label: "next room", callback: run }]}
+    >
+      hidden body
+    </Pane>,
+  );
+  const pane = container.querySelector<HTMLElement>("[data-slot='pane']")!;
+
+  act(() => pane.focus());
+  fireEvent.keyDown(pane, { key: "j", code: "KeyJ" });
+  expect(run).toHaveBeenCalledOnce();
+  expect(screen.getByText("rooms")).toBeTruthy();
+  expect(screen.queryByText("hidden body")).toBeNull();
+  expect(container.querySelector("[data-slot='pane-header']")).toBeNull();
+});
+
+test("pane boundaries show suspension, retry errors, and recover for a new target", () => {
+  const waiting = new Promise<void>(() => {});
+  const Waiting = () => {
+    throw waiting;
+  };
+  const Broken = ({ target }: { target: string }) => {
+    if (target === "old") throw new Error("old target failed");
+    return <>new target</>;
+  };
+  const onRetry = vi.fn();
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  const loading = render(
+    <Pane kind="content" title="rooms">
+      <Waiting />
+    </Pane>,
+  );
+  expect(screen.getByRole("status").textContent).toBe("loading rooms…");
+  loading.unmount();
+
+  const view = render(
+    <Pane kind="content" title="rooms" onRetry={onRetry} boundaryKey="old">
+      <Broken target="old" />
+    </Pane>,
+  );
+  expect(screen.getByRole("alert").textContent).toContain("rooms failed to load");
+  fireEvent.click(screen.getByRole("button", { name: "retry" }));
+  expect(onRetry).toHaveBeenCalledOnce();
+
+  view.rerender(
+    <Pane kind="content" title="rooms" boundaryKey="new">
+      <Broken target="new" />
+    </Pane>,
+  );
+  expect(screen.getByText("new target")).toBeTruthy();
+  error.mockRestore();
+});
+
+test("boundary opt-out renders normal content without a recovery state", () => {
+  render(
+    <Pane kind="content" boundary={false}>
+      plain body
+    </Pane>,
+  );
+  expect(screen.getByText("plain body")).toBeTruthy();
+  expect(screen.queryByRole("status")).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull();
 });

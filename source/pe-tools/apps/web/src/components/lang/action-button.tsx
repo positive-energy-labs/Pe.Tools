@@ -24,7 +24,7 @@
  *       never applied to the lone page-blast verb. All other tones stay title-only.
  *     · mono type collided with "mono means the machine measured this". Verbs are sans now.
  * - BLAST RADIUS IS NOT A TONE. It groups the lane and buys no hue: all three writes wear the
- *   same single blue however far they reach. That is `VerbGroup`, below.
+ *   same single blue however far they reach. That is `ActionGroup`, below.
  * - NAV SPLITS THREE WAYS — back, forward, out — because browsers already taught the difference.
  *   `open in RHVAC` is nav:out; `sync to .r10` is a write, not a nav. `direction` is required on
  *   nav so the split cannot be skipped.
@@ -43,7 +43,7 @@ import { tv } from "#/lib/tv";
 
 import "./lang.css";
 
-export const verbRecipe = tv({
+export const actionRecipe = tv({
   slots: {
     base: "veil inline-flex h-(--item-h) cursor-pointer items-center gap-[5px] whitespace-nowrap border border-transparent bg-transparent px-2 t-small font-medium text-ink focus-visible:outline focus-visible:outline-line-2 disabled:cursor-not-allowed disabled:border-line-2 disabled:text-ink-2 disabled:italic [&>svg]:size-[13px] [&>svg]:shrink-0",
     reason: "max-w-[36ch] self-center t-small face-mono text-ink-2 italic",
@@ -65,7 +65,7 @@ export const verbRecipe = tv({
 });
 
 /** `nav` is separated out at the type level because it alone requires a `direction`. */
-export type VerbTone = "act" | "commit" | "nav" | "agent";
+export type ActionTone = "act" | "commit" | "nav" | "agent";
 
 /** The three directions browsers already taught. Each supplies its own arrow. */
 export type NavDirection = "back" | "forward" | "out";
@@ -93,7 +93,7 @@ interface VerbBase {
   busy?: boolean;
 }
 
-export type VerbProps =
+export type ActionButtonProps =
   | (VerbBase & {
       tone?: "act" | "commit" | "agent";
       icon?: LucideIcon;
@@ -117,9 +117,9 @@ export type VerbProps =
 const VerbChromeContext = createContext(false);
 
 /** Marks a region as chrome — see `VerbChromeContext`. The pane header is its one consumer. */
-export const VerbChrome = VerbChromeContext.Provider;
+export const ActionChrome = VerbChromeContext.Provider;
 
-export function Verb(props: VerbProps) {
+export function ActionButton(props: ActionButtonProps) {
   const { label, onClick, reason, disabled, busy } = props;
   // Narrow on `props.tone`, not on the defaulted local — the discriminant is what carries
   // `direction` into scope.
@@ -127,7 +127,7 @@ export function Verb(props: VerbProps) {
   const tone = props.tone ?? "act";
   const inert = disabled === true || busy === true;
   const chrome = useContext(VerbChromeContext);
-  const slots = verbRecipe({ tone });
+  const slots = actionRecipe({ tone });
 
   return (
     <>
@@ -156,7 +156,7 @@ export function Verb(props: VerbProps) {
   );
 }
 
-export interface VerbGroupProps {
+export interface ActionGroupProps {
   /** What this group of verbs has in common, e.g. "writes beyond the page". */
   title: string;
   /** The blast radius in words, e.g. "document · model · external". Grouping's whole payload. */
@@ -172,8 +172,8 @@ export interface VerbGroupProps {
  * BORDER BUDGET: a lane of plain controls carries no state, so it is deliberately NOT wrapped in
  * an `ArtifactFrame`. The group head is all the grouping it is allowed to buy.
  */
-export function VerbGroup({ title, radius, children }: VerbGroupProps) {
-  const slots = verbRecipe();
+export function ActionGroup({ title, radius, children }: ActionGroupProps) {
+  const slots = actionRecipe();
   return (
     <div className={slots.group()}>
       <div className={slots.groupHead()}>

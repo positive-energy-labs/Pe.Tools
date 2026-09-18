@@ -1,10 +1,20 @@
 import { z } from "zod";
+import { nativeProcessSchema } from "./action-receipts.ts";
+import { documentRefSchema } from "./target.ts";
 import type { RouteStateSpec } from "./route-state.ts";
-const sdkSessionSelectorSchema = z.templateLiteral(["session:", z.string().min(1)]);
+const SDK_SESSION_SELECTOR_PREFIX = "session:";
+export const sdkSessionSelectorSchema = z.templateLiteral([
+  SDK_SESSION_SELECTOR_PREFIX,
+  z.string().min(1),
+]);
+export type SdkSessionSelector = z.infer<typeof sdkSessionSelectorSchema>;
+export const sdkSessionSelectorOf = (target: string): SdkSessionSelector =>
+  sdkSessionSelectorSchema.parse(`${SDK_SESSION_SELECTOR_PREFIX}${target}`);
+export const sdkSessionTargetOf = (selector: SdkSessionSelector): string =>
+  selector.slice(SDK_SESSION_SELECTOR_PREFIX.length);
 
 const documentSelector = z.string().trim().min(1);
 export const instancesDocumentSchema = z.object({
-  selectedSession: sdkSessionSelectorSchema.nullable().default(null),
   staged: z
     .discriminatedUnion("kind", [
       z.object({
@@ -21,11 +31,6 @@ export const instancesDocumentSchema = z.object({
     ])
     .nullable()
     .default(null),
-  observation: z.json().nullable().default(null),
-  outcome: z
-    .object({ action: z.string(), at: z.string(), receipt: z.json() })
-    .nullable()
-    .default(null),
 });
 export type InstancesDocument = z.infer<typeof instancesDocumentSchema>;
 export const instancesRouteState = {
@@ -34,49 +39,75 @@ export const instancesRouteState = {
   description:
     "Select Revit sessions and stage documents. Refresh to discover installed years, sessions and recents. Stage then open or start. Other lifecycle commands are human-only.",
   schema: instancesDocumentSchema,
-  agentWriteMask: [["selectedSession"], ["staged"]],
-  commands: {
-    refresh: {
-      description: "Read SDK sessions, installed years and recent documents.",
-      input: z.object({}),
-      actor: "any",
-    },
-    open: {
-      description: "Open or activate the staged document in its exact session.",
-      input: z.object({}),
-      actor: "any",
-      mutatesExternal: true,
-    },
-    start: {
-      description: "Start installed Revit with the staged year, name and optional document.",
-      input: z.object({}),
-      actor: "any",
-      mutatesExternal: true,
-    },
-    restart: {
-      description: "Restart the selected session.",
-      input: z.object({}),
-      actor: "human",
-      mutatesExternal: true,
-    },
-    stop: {
-      description: "Stop the selected session.",
-      input: z.object({ force: z.boolean().default(false) }),
-      actor: "human",
-      mutatesExternal: true,
-    },
-    recover: {
-      description:
-        "After inspecting Revit and SDK receipts, acknowledge an uncertain operation before another mutation.",
-      input: z.object({ inspected: z.literal(true) }),
-      actor: "human",
-      recoversExternal: true,
-    },
-    close: {
-      description: "Close a document in the selected session with an explicit SDK close intent.",
-      input: z.object({ document: documentSelector, intent: z.string().min(1) }),
-      actor: "human",
-      mutatesExternal: true,
-    },
-  },
+  agentWriteMask: [["staged"]],
+  commands: {},
 } satisfies RouteStateSpec<typeof instancesDocumentSchema>;
+
+export const instancesSessionSchema = z.strictObject({
+  id: z.string().min(1),
+  process: nativeProcessSchema,
+});
+const workInput = z.object({ workspaceId: z.string().min(1) });
+const sessionInput = workInput.extend({ session: instancesSessionSchema });
+export const instancesActions = {
+  "instances.start": {
+    says: "Start the authored staged session through the SDK under this action id; the receipt is the SDK envelope.",
+    dirties: ["sdk"],
+    needs: "nothing",
+    actor: "any",
+    input: workInput,
+    description:
+      "Start the authored staged session through the SDK under this action id; the receipt is the SDK envelope.",
+  },
+  "instances.open": {
+    says: "Open the authored staged document in the explicitly supplied session incarnation; refused if that document is already open there.",
+    dirties: ["sdk"],
+    needs: "nothing",
+    actor: "any",
+    input: sessionInput,
+    description:
+      "Open the authored staged document in the explicitly supplied session incarnation; refused if that document is already open there.",
+  },
+  "instances.restart": {
+    says: "Restart the explicitly supplied session incarnation. Human-only.",
+    dirties: ["sdk"],
+    needs: "nothing",
+    actor: "human",
+    input: sessionInput,
+    description: "Restart the explicitly supplied session incarnation. Human-only.",
+  },
+  "instances.stop": {
+    says: "Stop the explicitly supplied session incarnation. Human-only.",
+    dirties: ["sdk"],
+    needs: "nothing",
+    actor: "human",
+    input: sessionInput.extend({ force: z.boolean().default(false) }),
+    description: "Stop the explicitly supplied session incarnation. Human-only.",
+  },
+  "instances.close": {
+    says: "Close the explicitly supplied document lifetime by its published openId. Human-only.",
+    dirties: ["sdk"],
+    needs: "nothing",
+    actor: "human",
+    input: sessionInput.extend({ document: documentRefSchema, intent: z.string().min(1) }),
+    description:
+      "Close the explicitly supplied document lifetime by its published openId. Human-only.",
+  },
+} as const;
+export type InstancesActionKey = keyof typeof instancesActions;
+
+export const instancesReading = {
+  says: "Read SDK sessions, installed years, recents or current documents without changing authored Instances Work.",
+  dirties: [],
+  needs: "nothing",
+  actor: "any",
+  mutates: false,
+  description:
+    "Read SDK sessions, installed years, recents or current documents without changing authored Instances Work.",
+  input: z.object({
+    read: z.enum(["sessions", "doctor", "recents", "current"]),
+    id: z.string().optional(),
+    year: z.string().optional(),
+    all: z.boolean().optional(),
+  }),
+} as const;
