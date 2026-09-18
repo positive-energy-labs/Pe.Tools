@@ -208,6 +208,16 @@ Held: shape 4 field options until the demiurge round; `/families` read pressure;
 5. w9-draft (demiurge shape B1): `/family` audits the live family into a draft with no saved member; `/schedules` cell values become a section of the schedule spec so one editor serves the grid and the spec.
 6. Held for wave 10: Pea's door (a proposal tool into a thread draft, the inline chat card), field options by source key (shape 4), `PodReceipt` nullable member, `DocWarnDialog` provocation, `/host/update` 404, `LogEntry` link slot.
 
+### Wave 9 (cast 2026-09-17, user said "yes continue")
+
+| Builder | Seam | Branch |
+|---|---|---|
+| w9-connectors | connector system types agree between capture and apply; Unverifiable refuses at plan; all-failed settles failed; traces leave `reason` | crusade/w9-connectors |
+| w9-cancel | `/actions/cancel` proxied in dev; the linked token reaches the script; cancel sends without a catalog read; cancelled execution writes a receipt; Edit Family title republishes | crusade/w9-cancel |
+| w9-target | thread head is the one target store on every product route and `/pods`; the plan sheet gates apply | crusade/w9-target |
+| w9-families-read | one catalog read per scope change; running state replaces the 30 s signal; band and plan counts agree; ids refresh after apply | crusade/w9-families-read |
+| w9-draft | `/family` audits the live family with no saved member; schedule cell values are a section of the spec | crusade/w9-draft |
+
 ### Wave 8 candidates (none cast; the user's shape pick from `reports/w7-census.md` comes first)
 
 1. w8-revit: walk the landed tree in a controlled session. Claims: the air-terminal plan with no hand edit (w7-engine); scoped `families.plan` sends the category's ids and w6-cancel's stop-after-this-family (w7-scope, w6-cancel); save-as address refresh and Edit Family capture (w7-address); `pea script bootstrap` with no `--bridge-session-id` (w7-pea); the dialog answers (w7-engine); `schedule.capture` run on `/pods`.
