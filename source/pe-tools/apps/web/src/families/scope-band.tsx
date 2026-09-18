@@ -100,9 +100,11 @@ export function FamiliesFilterBand() {
               placeholder={
                 draftCategories.length === 0
                   ? "pick categories first"
-                  : !fixture && (familyFeed.state === "loading" || familyFeed.stale)
-                    ? "resolving families…"
-                    : "no families resolved"
+                  : draftFamilyNames.length > 0
+                    ? `pick from ${draftFamilyNames.length} resolved families`
+                    : !fixture && (familyFeed.state === "loading" || familyFeed.stale)
+                      ? "resolving families…"
+                      : "no families resolved"
               }
               ariaLabel="draft families"
               title="Every family the draft categories resolve to, all picked by default. Dropping one narrows exactly what apply asks the matrix op for — it does not filter a loaded table, it loads less."

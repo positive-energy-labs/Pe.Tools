@@ -9,8 +9,8 @@ public sealed record FamilyFoundryDiagnostic(string Code, string Path, string Me
 /// <summary>Plan a spec (`{ select, patch, run }` JSON) against the active family document.</summary>
 public sealed record FamilyPlanRequest(string SpecJson, ExecutionOptions? ExecutionOptions = null);
 
-/// <summary>Plan a spec against the loaded families it selects, or one explicit loaded family.</summary>
-public sealed record FamiliesPlanRequest(string SpecJson, long? FamilyId = null, ExecutionOptions? ExecutionOptions = null);
+/// <summary>Plan a spec against exactly the target's resolved family ids; the spec's `select` is the default scope only when none are passed.</summary>
+public sealed record FamiliesPlanRequest(string SpecJson, IReadOnlyList<long>? FamilyIds = null, ExecutionOptions? ExecutionOptions = null);
 
 /// <summary>One change the reconciler would make: section + key is the address, kind is the verb.</summary>
 public sealed record FamilyFoundryChangeData(string Section, string Key, string Kind, string? MappedFrom);

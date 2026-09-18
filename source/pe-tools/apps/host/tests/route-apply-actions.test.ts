@@ -46,6 +46,13 @@ const entry = (familyId: number, familyName: string, planHash: string) => ({
   refusals: [],
   warnings: [],
 });
+/** The document's loaded families; the fake catalog filters them the way the native filter does. */
+const loaded = [
+  { familyId: 1, familyName: "Box", categoryName: "Ducts" },
+  { familyId: 2, familyName: "Pipe", categoryName: "Ducts" },
+  { familyId: 3, familyName: "Elbow", categoryName: "Ducts" },
+  { familyId: 9, familyName: "Grille", categoryName: "Air Terminals" },
+];
 const link = {
   formatVersion: 1,
   definitions: [
@@ -106,7 +113,8 @@ async function setup() {
         state: { openDocuments: [{ openId: "open-A", address: at, isFamilyDocument: false }] },
       },
     ]),
-    invoke: (key: string, input: unknown, _s: string, _o: string, id?: string) =>
+    // biome-ignore lint/suspicious/noExplicitAny: fixture bridge payloads mirror untyped host frames.
+    invoke: (key: string, input: any, _s: string, _o: string, id?: string) =>
       Effect.promise(async () => {
         sent.push({ key, input, id });
         if (key === "families.capture")
@@ -120,7 +128,23 @@ async function setup() {
               ],
             },
           };
-        if (key === "families.plan") return { value: { diagnostics: [], families: planEntries } };
+        if (key === "revit.catalog.loaded-families") {
+          const { categoryNames, familyNames } = input.filter;
+          const families = loaded.filter(
+            (f) =>
+              (!categoryNames.length || categoryNames.includes(f.categoryName)) &&
+              (!familyNames.length || familyNames.includes(f.familyName)),
+          );
+          return { value: { summary: { truncated: false }, families, issues: [] } };
+        }
+        // The engine plans exactly the ids it is passed.
+        if (key === "families.plan")
+          return {
+            value: {
+              diagnostics: [],
+              families: planEntries.filter((e) => input.familyIds.includes(e.familyId)),
+            },
+          };
         if (nativeUnknown) throw Object.assign(Error("bridge timeout"), { statusCode: 504 });
         if (nativeFails) throw Object.assign(Error("native refused"), { statusCode: 409 });
         if (key === "families.apply") {
@@ -298,8 +322,8 @@ test("an agent patch cannot reach anything but authored input", async () => {
 
 /* ── families ────────────────────────────────────────────────────────────────────────────── */
 
-test("plan narrows to the authored family names, names what apply would send, and refuses without a scope", async () => {
-  const { work, admit, entries } = await setup();
+test("plan sends the scope's resolved ids, names what apply would send, and refuses without a scope", async () => {
+  const { work, admit, entries, sent } = await setup();
   entries([entry(1, "Box", "h1"), entry(2, "Pipe", "h2"), entry(9, "Grille", "h9")]);
   const bare = await work.apply(
     scope,
@@ -313,8 +337,58 @@ test("plan narrows to the authored family names, names what apply would send, an
   expect(String((refused as { error?: string }).error)).toMatch(/Author a scope/);
   const revision = await authorFamilies(work, bare.revision!);
   const plan = resultOf<Plan>(await admit("families.plan", { source, excludedIds: [2] }, revision));
+  expect(sent.find((s) => s.key === "families.plan")!.input.familyIds).toEqual([1, 2]);
   expect(plan.plan.map((row) => row.familyId)).toEqual([1, 2]);
   expect(plan.included).toEqual({ "1": "h1" });
+});
+
+test("a category-only scope plans exactly its three families and never a fourth", async () => {
+  const { work, admit, entries, sent } = await setup();
+  entries([
+    entry(1, "Box", "h1"),
+    entry(2, "Pipe", "h2"),
+    entry(3, "Elbow", "h3"),
+    entry(9, "Grille", "h9"),
+  ]);
+  const revision = (
+    await work.apply(
+      scope,
+      "families",
+      "human",
+      [
+        {
+          path: ["scope"],
+          value: { categoryNames: ["Ducts"], familyNames: [], placementScope: "AllLoaded" },
+        },
+      ],
+      0,
+    )
+  ).revision!;
+  const plan = resultOf<Plan>(await admit("families.plan", { source }, revision));
+  expect(sent.find((s) => s.key === "families.plan")!.input.familyIds).toEqual([1, 2, 3]);
+  expect(plan.plan.map((row) => row.familyId)).toEqual([1, 2, 3]);
+  expect(Object.keys(plan.included)).toEqual(["1", "2", "3"]);
+});
+
+test("a scope that resolves no loaded family refuses before the native plan", async () => {
+  const { work, admit, sent } = await setup();
+  const revision = (
+    await work.apply(
+      scope,
+      "families",
+      "human",
+      [
+        {
+          path: ["scope"],
+          value: { categoryNames: ["Walls"], familyNames: [], placementScope: "AllLoaded" },
+        },
+      ],
+      0,
+    )
+  ).revision!;
+  const refused = await admit("families.plan", { source }, revision);
+  expect(String((refused as { error?: string }).error)).toMatch(/resolves no loaded family/);
+  expect(sent.filter((s) => s.key === "families.plan")).toHaveLength(0);
 });
 
 test("an agent may plan, and only a human may apply", async () => {

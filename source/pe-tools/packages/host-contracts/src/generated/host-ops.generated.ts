@@ -309,15 +309,15 @@ export namespace FamiliesCapture {
   }
 }
 
-/** Diff an inline family spec against each loaded family it selects (or one explicit family) and return the plan per family with a deterministic hash. */
+/** Diff an inline family spec against exactly the passed `familyIds` (the spec's `select` only when none are passed) and return the plan per family with a deterministic hash. */
 export namespace FamiliesPlan {
   export namespace Req {
     /**
-     * Plan a spec against the loaded families it selects, or one explicit loaded family.
+     * Plan a spec against exactly the target's resolved family ids; the spec's `select` is the default scope only when none are passed.
      */
     export interface Request {
       specJson: string;
-      familyId?: number | null;
+      familyIds?: number[] | null;
       executionOptions?: null | ExecutionOptions;
     }
     /**

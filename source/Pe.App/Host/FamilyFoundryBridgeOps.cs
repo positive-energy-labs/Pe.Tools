@@ -42,9 +42,9 @@ internal static class FamilyFoundryBridgeOps {
     private static Task<FamiliesCaptureData> CaptureLoaded(FamiliesCaptureRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => CaptureFamilies(request.FamilyIds, document.Value), cancellationToken);
 
-    [Op("families.plan", Does = "Diff an inline family spec against each loaded family it selects (or one explicit family) and return the plan per family with a deterministic hash.", Title = "Plan Loaded Families", Finds = ["families", "spec", "plan", "plan-hash", "reconcile", "bulk"], Cost = OpCost.Expensive)]
+    [Op("families.plan", Does = "Diff an inline family spec against exactly the passed `familyIds` (the spec's `select` only when none are passed) and return the plan per family with a deterministic hash.", Title = "Plan Loaded Families", Finds = ["families", "spec", "plan", "plan-hash", "reconcile", "bulk"], Cost = OpCost.Expensive)]
     private static Task<FamilyFoundryPlanData> PlanLoaded(FamiliesPlanRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
-        PaletteThreading.RunRevitAsync(() => PlanFamilies(request.SpecJson, document.Value, request.FamilyId, request.ExecutionOptions, cancellationToken), cancellationToken);
+        PaletteThreading.RunRevitAsync(() => PlanFamilies(request.SpecJson, document.Value, request.FamilyIds, request.ExecutionOptions, cancellationToken), cancellationToken);
 
     [Op("families.apply", Does = "Reconcile explicit loaded families to a saved spec, refusing plan drift per family, and write the run receipt into the source pod.", Title = "Apply Loaded Families", Finds = ["families", "spec", "apply", "plan-hash", "receipt", "bulk"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
     private static Task<FamilyFoundryApplyData> ApplyLoaded(FamiliesApplyRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
@@ -157,19 +157,25 @@ internal static class FamilyFoundryBridgeOps {
     /// <summary>Run outputs are flat file names; an artifact's relative path becomes its `--`-joined name prefix.</summary>
     private static string RunPath(string artifacts, string path) => path[(artifacts.Length + 1)..].Replace(Path.DirectorySeparatorChar.ToString(), "--");
 
-    internal static FamilyFoundryPlanData PlanFamilies(string specJson, Document document, long? familyId = null, ExecutionOptions? executionOptions = null,
+    /// <summary>Plans exactly <paramref name="familyIds" /> when passed; the spec's `select` is the default scope, never a post-filter.</summary>
+    internal static FamilyFoundryPlanData PlanFamilies(string specJson, Document document, IReadOnlyList<long>? familyIds = null, ExecutionOptions? executionOptions = null,
         CancellationToken cancellationToken = default) {
         var (patch, diagnostics) = ParseSpec(specJson);
         if (patch is null) return new FamilyFoundryPlanData([], diagnostics);
         executionOptions ??= new ExecutionOptions();
 
+        if (familyIds is not null && !document.IsFamilyDocument) {
+            var missing = familyIds.Where(id => document.GetElement(id.ToElementId()) is not Family).Distinct().ToList();
+            if (missing.Count > 0)
+                return new FamilyFoundryPlanData([], missing.Select(id => new FamilyFoundryDiagnostic("FamilyNotFound", "$.familyIds", $"Element id {id} is not a loaded family.")).ToList());
+        }
         var families = document.IsFamilyDocument
-            ? familyId is null || familyId == document.OwnerFamily.Id.Value() ? new List<Family> { document.OwnerFamily } : []
-            : familyId is { } id
-            ? document.GetElement(id.ToElementId()) is Family f ? [f] : []
+            ? familyIds is null || familyIds.Contains(document.OwnerFamily.Id.Value()) ? new List<Family> { document.OwnerFamily } : []
+            : familyIds is not null
+            ? familyIds.Distinct().Select(id => (Family)document.GetElement(id.ToElementId())).ToList()
             : document.FamiliesMatching(patch.Select);
         if (families.Count == 0)
-            return new FamilyFoundryPlanData([], [new FamilyFoundryDiagnostic("FamilyNotFound", "$.familyId", familyId is { } x ? $"Element id {x} is not a loaded family." : "The spec selects no loaded family.")]);
+            return new FamilyFoundryPlanData([], [new FamilyFoundryDiagnostic("FamilyNotFound", "$.familyIds", familyIds is null ? "The spec selects no loaded family." : "The target resolves no loaded family.")]);
 
         return new FamilyFoundryPlanData(families.Select(family => {
             // A cancelled plan returns nothing: the confirmation sheet is only worth reading whole.

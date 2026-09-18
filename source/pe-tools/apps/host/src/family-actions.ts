@@ -26,6 +26,7 @@ import {
   type PodMemberSource,
   type SettingsRouteDocument,
   type FamilyCapture,
+  type AppliedFilter,
 } from "@pe/agent-contracts";
 import type {
   PodMemberSaveRequest,
@@ -37,6 +38,7 @@ import type {
   FamiliesPlan,
   FamilyCapture as NativeFamilyCapture,
   FamilyPlan,
+  RevitCatalogLoadedFamilies,
 } from "@pe/host-contracts/generated";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { BridgeError, type RevitBridge } from "./bridge.ts";
@@ -212,10 +214,10 @@ type Prepared =
       nativeKey: string;
       input: unknown;
       /**
-       * A plan request reads, returns, and mutates nothing; apply confirms it. A `scope` of null
-       * is one family document, which plans exactly one family.
+       * A plan request reads, returns, and mutates nothing; apply confirms it. A `scope` resolves to
+       * family ids before the native plan; null is one family document, which plans exactly one family.
        */
-      planned?: { scope: readonly string[] | null; excludedIds: readonly number[] };
+      planned?: { scope: AppliedFilter | null; excludedIds: readonly number[] };
     }
   | {
       kind: "capture";
@@ -226,6 +228,9 @@ type Prepared =
       path: string | null;
       at: string;
     };
+
+/** ponytail: one catalog page; a larger scope refuses rather than paging. */
+const FAMILY_SCOPE_LIMIT = 5000;
 
 export async function admitFamilyAction(
   raw: unknown,
@@ -340,7 +345,7 @@ export async function admitFamilyAction(
             specJson: await familySpec(deps, input.source, pods),
             ...(input.executionOptions ? { executionOptions: input.executionOptions } : {}),
           },
-          planned: { scope: scope.familyNames, excludedIds: input.excludedIds },
+          planned: { scope, excludedIds: input.excludedIds },
         };
       }
       if (key === "families.apply") {
@@ -410,6 +415,17 @@ export async function admitFamilyAction(
           await current(bridge, target!, documentKind(key), nativeProcessSchema.parse(process));
           return invoke(bridge, target!, nativeKey, input, id);
         });
+      const resolveFamilyIds = async (scope: AppliedFilter, process: NativeProcess) => {
+        const catalog = (await native(
+          "revit.catalog.loaded-families",
+          { filter: scope, budget: { maxEntries: FAMILY_SCOPE_LIMIT } },
+          process,
+        )) as RevitCatalogLoadedFamilies.Res.Response;
+        if (catalog.summary.truncated)
+          throw refused(`The scope resolves more than ${FAMILY_SCOPE_LIMIT} families; narrow it`);
+        if (!catalog.families.length) throw refused("The scope resolves no loaded family");
+        return catalog.families.map((family) => family.familyId);
+      };
       if (prepared.kind === "capture") {
         const captured = await native(prepared.nativeKey, prepared.input, prepared.process);
         const at = new Date(prepared.at);
@@ -507,20 +523,24 @@ export async function admitFamilyAction(
         };
       }
       if (prepared.kind === "native") {
-        const result = await native(prepared.nativeKey, prepared.input, prepared.process);
+        const scope = prepared.planned?.scope;
+        // The target resolves to family ids once, here; the engine plans exactly those ids.
+        const familyIds = scope ? await resolveFamilyIds(scope, prepared.process) : undefined;
+        const result = await native(
+          prepared.nativeKey,
+          familyIds ? { ...(prepared.input as object), familyIds } : prepared.input,
+          prepared.process,
+        );
         if (prepared.planned) {
-          const { scope, excludedIds } = prepared.planned;
+          const { excludedIds } = prepared.planned;
           const planned = result as FamilyPlan.Res.Response | FamiliesPlan.Res.Response;
           if (scope) {
             if (planned.diagnostics.length)
               throw refused(planned.diagnostics.map(diagnosticLine).join(" · "));
-            // The engine plans every loaded family; authored family names are the only scope
-            // narrowing this contract can honestly claim. Placement scope is not a native filter.
-            const plan = planned.families.filter((entry) => scope.includes(entry.familyName));
             return {
               executionContext: target,
-              plan,
-              included: familiesIncluded({ entries: plan }, excludedIds),
+              plan: planned.families,
+              included: familiesIncluded({ entries: planned.families }, excludedIds),
             };
           }
           // One family document plans exactly one family, or it refuses.

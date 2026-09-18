@@ -47,9 +47,7 @@ public class CmdFFMigrator : IExternalCommand {
     private static void Process(FoundryContext ctx, bool apply) {
         var (spec, source) = ctx.SelectedProfile!.LoadSpec();
         var picked = Pickers.GetSelectedFamilies(ctx.UiDoc);
-        var plans = picked is { Count: > 0 }
-            ? picked.SelectMany(family => FamilyFoundryBridgeOps.PlanFamilies(spec, ctx.Doc, family.Id.Value()).Families).ToList()
-            : FamilyFoundryBridgeOps.PlanFamilies(spec, ctx.Doc).Families.ToList();
+        var plans = FamilyFoundryBridgeOps.PlanFamilies(spec, ctx.Doc, picked is { Count: > 0 } ? picked.Select(family => family.Id.Value()).ToList() : null).Families.ToList();
         if (plans.Count == 0) {
             new Ballogger().Add(LogEventLevel.Warning, new StackFrame(), "The spec selects no loaded family.").Show();
             return;

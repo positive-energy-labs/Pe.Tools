@@ -61,6 +61,8 @@ export function NamePicker({
     <Combobox
       items={options}
       multiple
+      // Type a prefix, press Enter: the first match commits without an arrow key first.
+      autoHighlight
       value={values}
       disabled={disabled}
       onValueChange={(next: string[]) => onChange(next)}

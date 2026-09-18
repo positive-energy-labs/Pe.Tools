@@ -373,10 +373,11 @@ export async function createDemoOwner(parent: string, raw: unknown) {
               simulatedPlan = planned;
               value = {
                 diagnostics: [],
-                families: seed.readings.families.map((familyName, index) => ({
-                  familyId: index + 1,
-                  familyName,
-                  planHash: `${planned.hash}:${index + 1}`,
+                // The engine plans exactly the ids the target resolved.
+                families: (input as { familyIds: number[] }).familyIds.map((familyId) => ({
+                  familyId,
+                  familyName: seed.readings.families[familyId - 1],
+                  planHash: `${planned.hash}:${familyId}`,
                   changes: [{ section: "types", key: "Width", kind: "set" }],
                   runEffects: [],
                   warnings: [],
@@ -590,10 +591,12 @@ export async function createDemoOwner(parent: string, raw: unknown) {
               (key === "revit.catalog.loaded-families" || key === "revit.matrix.loaded-families") &&
               seed.route === "families"
             ) {
+              const names = (input as { filter?: { familyNames?: string[] } }).filter?.familyNames;
               value = {
-                families: seed.readings.families.map((familyName, index) =>
-                  loadedFamily(index + 1, familyName),
-                ),
+                summary: { truncated: false },
+                families: seed.readings.families
+                  .map((familyName, index) => loadedFamily(index + 1, familyName))
+                  .filter((family) => !names?.length || names.includes(family.familyName)),
                 simulated: true,
               };
             } else if (key === "families.capture" && seed.route === "families") {
