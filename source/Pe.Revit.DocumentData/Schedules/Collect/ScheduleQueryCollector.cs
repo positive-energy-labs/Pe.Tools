@@ -47,6 +47,19 @@ public static class ScheduleQueryCollector {
         );
     }
 
+    internal static ScheduleRenderedScheduleEntry? CollectRequestedCells(
+        Document doc,
+        ViewSchedule schedule,
+        IReadOnlyCollection<(int RowNumber, int ColumnNumber)> coordinates,
+        List<RevitDataIssue> issues
+    ) {
+        var rows = coordinates.Select(item => item.RowNumber).ToHashSet();
+        var columns = coordinates.Select(item => item.ColumnNumber).ToHashSet();
+        return TryCollectProjection(doc, schedule, new ScheduleQuery {
+            Projection = new ScheduleQueryProjection { View = RevitDataResultView.Full, IncludeBindings = true }
+        }, issues, rows, columns);
+    }
+
     private static QueryResolution ResolveQuery(
         Document doc,
         ScheduleQuery? query,
@@ -199,7 +212,9 @@ public static class ScheduleQueryCollector {
         Document doc,
         ViewSchedule schedule,
         ScheduleQuery query,
-        List<RevitDataIssue> issues
+        List<RevitDataIssue> issues,
+        IReadOnlyCollection<int>? requestedRows = null,
+        IReadOnlyCollection<int>? requestedColumns = null
     ) {
         var totalStopwatch = Stopwatch.StartNew();
         long sheetPlacementsMs = 0;
@@ -257,14 +272,18 @@ public static class ScheduleQueryCollector {
             var rows = collectedRows.Select(item => item.Row).ToList();
             var bindingSummary = SummarizeBinding(collectedRows);
             var projection = query.Projection ?? new ScheduleQueryProjection();
+            var requestedRowNumbers = requestedRows?.ToHashSet();
+            var requestedColumnNumbers = requestedColumns?.ToHashSet();
+            var selectedRows = requestedRowNumbers == null ? rows : rows.Where(row => requestedRowNumbers.Contains(row.RowNumber)).ToList();
+            var selectedContexts = requestedColumnNumbers == null ? contexts : contexts.Where(context => requestedColumnNumbers.Contains(context.Column.ColumnNumber)).ToList();
             var projectedRows = Measure(
-                () => ProjectRows(schedule.Name, rows, contexts, projection, query.Budget, issues),
+                () => ProjectRows(schedule.Name, selectedRows, contexts, projection, requestedRows == null ? query.Budget : null, issues),
                 out projectRowsMs
             );
             if (projection.IncludeBindings && contexts.Count != 0) {
                 // Post-projection so only surviving rows pay resolution cost.
                 projectedRows = Measure(
-                    () => ResolveRowBindings(doc, projectedRows, contexts, subjectElements, resolutionCache),
+                    () => ResolveRowBindings(doc, projectedRows, selectedContexts, subjectElements, resolutionCache),
                     out bindingsMs
                 );
             }
@@ -323,7 +342,7 @@ public static class ScheduleQueryCollector {
                 rows.Count,
                 subjects.Count,
                 includeSubjects ? subjects : [],
-                includeColumns ? contexts.Select(context => context.Column).ToList() : [],
+                includeColumns ? selectedContexts.Select(context => context.Column).ToList() : [],
                 includeRows ? projectedRows : [],
                 rowIssues
             );
