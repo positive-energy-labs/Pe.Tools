@@ -282,7 +282,12 @@ test("neither route document can hold an observation or a receipt", async () => 
   // A native plan was returned, and neither the Work document nor a reading moved.
   expect(plan.plan).toHaveLength(2);
   expect(doc.revision).toBe(revision);
-  expect(Object.keys(doc.doc as object).sort()).toEqual(["excludedIds", "scope"]);
+  expect(Object.keys(doc.doc as object).sort()).toEqual([
+    "accepted",
+    "edits",
+    "excludedIds",
+    "scope",
+  ]);
   expect(JSON.stringify(doc.doc)).not.toContain("planHash");
   expect(await captures.familyReadings(scope)).toEqual([]);
 
@@ -318,6 +323,35 @@ test("an agent patch cannot reach anything but authored input", async () => {
     0,
   );
   expect(stored.ok).toBe(false);
+});
+
+test("pea proposes a families cell like a person does, and cannot accept it", async () => {
+  const { work } = await setup();
+  const revision = await authorFamilies(work);
+  const edit = {
+    familyId: 1,
+    familyName: "Box",
+    typeName: "T1",
+    parameter: "PE_G___Model",
+    value: "FXMQ20",
+    by: "pea",
+  };
+  const proposed = await work.apply(
+    scope,
+    "families",
+    "agent",
+    [{ path: ["edits"], value: [edit] }],
+    revision,
+  );
+  expect(proposed.ok).toBe(true);
+  const accepted = await work.apply(
+    scope,
+    "families",
+    "agent",
+    [{ path: ["accepted"], value: [edit] }],
+    proposed.revision!,
+  );
+  expect(accepted.ok).toBe(false);
 });
 
 /* ── families ────────────────────────────────────────────────────────────────────────────── */
@@ -368,6 +402,22 @@ test("a category-only scope plans exactly its three families and never a fourth"
   expect(sent.find((s) => s.key === "families.plan")!.input.familyIds).toEqual([1, 2, 3]);
   expect(plan.plan.map((row) => row.familyId)).toEqual([1, 2, 3]);
   expect(Object.keys(plan.included)).toEqual(["1", "2", "3"]);
+});
+
+test("a generated member's plan names its one family and the host plans exactly that id", async () => {
+  const { work, admit, entries, sent } = await setup();
+  entries([entry(1, "Box", "h1"), entry(2, "Pipe", "h2"), entry(3, "Elbow", "h3")]);
+  const ducts = { categoryNames: ["Ducts"], familyNames: [], placementScope: "AllLoaded" };
+  const revision = (
+    await work.apply(scope, "families", "human", [{ path: ["scope"], value: ducts }], 0)
+  ).revision!;
+  const plan = resultOf<Plan>(await admit("families.plan", { source, familyIds: [2] }, revision));
+  expect(sent.find((s) => s.key === "families.plan")!.input.familyIds).toEqual([2]);
+  expect(plan.plan.map((row) => row.familyId)).toEqual([2]);
+  // A named id outside the scope refuses rather than widening it.
+  const outside = await admit("families.plan", { source, familyIds: [9] }, revision, "outside");
+  expect(String((outside as { error?: string }).error)).toMatch(/outside the reviewed scope/);
+  expect(sent.filter((s) => s.key === "families.plan")).toHaveLength(1);
 });
 
 test("a scope that resolves no loaded family refuses before the native plan", async () => {

@@ -72,6 +72,8 @@ const projectSeed = (): DemoSeed => ({
         placementScope: "AllLoaded",
       },
       excludedIds: [],
+      edits: [],
+      accepted: [],
     },
   },
   readings: {

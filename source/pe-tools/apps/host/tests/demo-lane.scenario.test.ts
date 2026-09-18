@@ -369,6 +369,78 @@ test("live /family: capture, plan, apply files a run receipt", async () => {
   expect(workflows).toEqual(["family.capture", "family.plan", "family.apply"]);
 }, 180_000);
 
+/**
+ * THE EDITABLE TABLE, in the proposal language. Two cells are typed across two families: each is a
+ * proposal by "you", the same Work shape Pea writes, and it survives a reload. One is accepted and
+ * one denied; PLAN takes the accepted one only, generates one patch member for that family, files
+ * it in the working pod, and plans exactly that family's id. Apply sends the row's hash back to the
+ * member that produced it, and `/pods` shows the run against the generated member.
+ */
+test("live /families: proposed cells, one accepted and one denied, plan and apply", async () => {
+  const { shown, workflows } = await liveLoop("families-table", async (page) => {
+    const pod = await openLive(page, "/families", "demo=edit&live=1");
+    await page.goto(`${page.url()}&pod=${pod}`, { waitUntil: "domcontentloaded" });
+    const body = page.locator("body");
+    const proposals = (open: number, accepted: number) =>
+      expect
+        .poll(() => page.locator('section[aria-label="proposals"]').innerText(), {
+          timeout: 30_000,
+        })
+        .toMatch(new RegExp(`${open} open[\\s\\S]*${accepted} accepted`));
+    let typed = 0;
+    for (const [family, next] of [
+      ["Fan Coil Unit - Ducted", "FXMQ20"],
+      ["Heat Pump - Split", "RXL30"],
+    ]) {
+      const cell = page.locator(`input[value="${family} model"]`).first();
+      await expect.poll(() => cell.count(), { timeout: 30_000 }).toBe(1);
+      await cell.fill(next!);
+      await cell.press("Enter");
+      // One cell at a time, as a person edits: a proposal rebuilds the table, and a value typed
+      // into a second cell before the first lands can be lost with it (owed, `families/store.ts`).
+      typed += 1;
+      await proposals(typed, 0);
+    }
+    // Proposals are Work, not page memory: a reload still finds them.
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await proposals(2, 0);
+    const row = (family: string) => page.locator("[data-proposal-row]").filter({ hasText: family });
+    await expect.poll(() => row("Fan Coil Unit - Ducted").innerText()).toContain("by you");
+    await row("Fan Coil Unit - Ducted")
+      .getByRole("button", { name: /^accept/ })
+      .click();
+    await proposals(1, 1);
+    if (SCRATCH)
+      await page.screenshot({ path: join(SCRATCH, "families-table-accepted.png"), fullPage: true });
+    await row("Heat Pump - Split").getByRole("button", { name: /^deny/ }).click();
+    await proposals(0, 1);
+    // A denial leaves nothing behind: the cell shows Revit's value again.
+    await expect.poll(() => page.locator('input[value="Heat Pump - Split model"]').count()).toBe(1);
+    if (SCRATCH)
+      await page.screenshot({
+        path: join(SCRATCH, "families-table-proposals.png"),
+        fullPage: true,
+      });
+    await run(page, "plan");
+    // Plan wrote the spec nobody authored, from the accepted cell alone.
+    const path = await landed(page, /^settings\/families\/staged-Fan-Coil-Unit-+Ducted-.*\.json$/);
+    // The sheet names the member the family applies from.
+    await expect.poll(() => body.innerText(), { timeout: 30_000 }).toContain(`from ${path}`);
+    if (SCRATCH)
+      await page.screenshot({ path: join(SCRATCH, "families-table-plan.png"), fullPage: true });
+    await run(page, "apply families");
+    await expect.poll(() => body.innerText(), { timeout: 30_000 }).toContain("apply families ran");
+    // Applied proposals are spent; the receipt is the record from here.
+    await expect
+      .poll(() => page.locator('section[aria-label="proposals"]').count(), { timeout: 30_000 })
+      .toBe(0);
+    return receiptOnPods(page, pod, path, "families.apply");
+  });
+  expect(shown).toContain("Succeeded");
+  // One plan and one apply for the one accepted family: the denied one never reached the wire.
+  expect(workflows).toEqual(["families.plan", "families.apply"]);
+}, 180_000);
+
 test("live /families: capture, plan, apply files a run receipt", async () => {
   const { shown, workflows } = await liveLoop("families", async (page) => {
     const pod = await openLive(page, "/families", "demo=capture&live=1");

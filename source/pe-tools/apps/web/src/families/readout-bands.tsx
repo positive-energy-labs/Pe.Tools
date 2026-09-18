@@ -4,6 +4,9 @@ import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { ActionButton } from "#/components/lang/action-button";
+import { ValueDiff } from "#/components/lang/value-diff";
+import type { FamilyCellEdit } from "@pe/agent-contracts";
+import { at, editKey, isAccepted } from "#/families/staged";
 import { Seam, SectionLabel } from "#/families/readout-primitives";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 import { cn } from "#/lib/utils";
@@ -181,6 +184,112 @@ export function FamiliesCaptureBand() {
           ))}
         </div>
       ))}
+    </section>
+  );
+}
+
+/**
+ * THE PROPOSALS BAND — the house proposal specimen at table scale (`/design-system/proposal-flow`,
+ * schedules' pending strip): one line per proposed cell, current → proposed, who proposed it, and
+ * accept / deny per cell and for the whole table. Accept promotes the value into `accepted`; deny
+ * clears the proposal and any accept, so the cell shows Revit's value again (no denied state).
+ * Plan reads `accepted` and nothing else.
+ */
+export function FamiliesProposalsBand() {
+  const { store, edits, accepted, rows, params } = useFamiliesWorkspace();
+  // A cell stands in the band while a proposal or an accept stands on it.
+  const cells = [...edits, ...accepted.filter((edit) => !at(edits, edit))];
+  if (!cells.length) return null;
+  const current = (edit: FamilyCellEdit) => {
+    const key = params.find((param) => param.name === edit.parameter)?.key;
+    const row = rows.find((r) => r.familyId === edit.familyId && r.typeName === edit.typeName);
+    return key && row ? (row.values[key] ?? "") : null;
+  };
+  const open = edits.filter((edit) => !isAccepted(accepted, edit));
+  return (
+    <section aria-label="proposals" className="hairline-b flex flex-col gap-1 px-4 py-1.5">
+      <div className="flex items-center gap-2">
+        <SectionLabel>
+          <span title="Every proposed cell on this table. Pea and you propose the same way; only you accept. Plan generates the spec from accepted cells only.">
+            proposals
+          </span>
+        </SectionLabel>
+        <FactChip tone={open.length ? "pea" : "meta"} title="Proposals nobody has accepted yet.">
+          {open.length} open
+        </FactChip>
+        <FactChip
+          tone={accepted.length ? "caution" : "meta"}
+          title="Accepted cells: what plan will generate."
+        >
+          {accepted.length} accepted
+        </FactChip>
+        <span className="ml-auto flex items-center gap-1">
+          <ActionButton
+            tone="agent"
+            label="accept all"
+            disabled={!open.length}
+            reason={
+              open.length
+                ? `Accept all ${open.length} open proposals — plan includes them; nothing reaches Revit until apply.`
+                : "nothing is open to accept"
+            }
+            onClick={() => void store.actions.accept(open)}
+          />
+          <ActionButton
+            label="deny all"
+            reason="Clear every proposal and accept on this table — every cell shows Revit's value again."
+            onClick={() => void store.actions.deny(cells)}
+          />
+        </span>
+      </div>
+      {cells.map((edit) => {
+        const acceptedHere = at(accepted, edit);
+        const proposal = at(edits, edit);
+        const isOpen = proposal != null && !isAccepted(accepted, proposal);
+        return (
+          <div
+            key={editKey(edit)}
+            data-proposal-row={editKey(edit)}
+            className="flex items-center gap-3 t-small"
+          >
+            <span className="face-mono w-72 truncate text-ink-2">
+              {edit.familyName} · {edit.typeName} · {edit.parameter}
+            </span>
+            <span className="min-w-0 flex-1 truncate">
+              <ValueDiff from={current(edit)} to={(acceptedHere ?? edit).value} />
+            </span>
+            {proposal && acceptedHere && proposal.value !== acceptedHere.value ? (
+              <FactChip tone="pea" title="Pea's value against the one you accepted.">
+                Pea proposes {proposal.value}
+              </FactChip>
+            ) : null}
+            <FactChip tone={edit.by === "pea" ? "pea" : "caution"} title="Who proposed this value.">
+              by {edit.by === "pea" ? "Pea" : "you"}
+            </FactChip>
+            <FactChip
+              tone={isOpen ? "pea" : "caution"}
+              title="Open waits for you; accepted goes into plan."
+            >
+              {isOpen ? "open" : "accepted"}
+            </FactChip>
+            <span className="flex shrink-0 items-center gap-1">
+              {isOpen ? (
+                <ActionButton
+                  tone="agent"
+                  label="accept"
+                  reason={`Accept ${proposal!.value} — plan includes it; nothing reaches Revit until apply.`}
+                  onClick={() => void store.actions.accept([proposal!])}
+                />
+              ) : null}
+              <ActionButton
+                label="deny"
+                reason="Clear this proposal — the cell shows Revit's value again and plan leaves it out."
+                onClick={() => void store.actions.deny([edit])}
+              />
+            </span>
+          </div>
+        );
+      })}
     </section>
   );
 }

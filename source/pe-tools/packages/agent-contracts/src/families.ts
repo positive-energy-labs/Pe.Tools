@@ -82,13 +82,39 @@ const appliedScopeSchema = z.object({
 export type AppliedFilter = z.infer<typeof appliedScopeSchema>;
 
 /**
+ * One proposed cell value on the `/families` audit: a family type's parameter cell and the value
+ * someone proposes for it. Pea and a person write the same shape and are told apart by `by`. It is
+ * authored Work, not a result — it survives a reload. The address is a family, a type and the EXACT
+ * Revit parameter name, because that is what a Family Foundry patch keys on
+ * (`patch.types.<typeName>.<parameter>`).
+ */
+export const familyCellEditSchema = z.object({
+  familyId: z.number(),
+  familyName: z.string(),
+  typeName: z.string(),
+  parameter: z.string(),
+  value: z.string(),
+  by: z.enum(["pea", "human"]),
+});
+export type FamilyCellEdit = z.infer<typeof familyCellEditSchema>;
+
+/**
  * The Families route document is authored Work and nothing else. The spec is the page's member
- * (one address, sent as `source`); plans and receipts are results. This document holds only the
- * scope and what a human or pea held back.
+ * (one address, sent as `source`) or, for accepted proposals, the members plan generates from them;
+ * plans and receipts are results. This document holds only the scope, the cell proposals and their
+ * accepts, and what a human or pea held back.
  */
 const familiesDocumentSchema = z.object({
   scope: appliedScopeSchema.nullable().default(null),
   excludedIds: z.array(z.number()).default([]),
+  /** Standing proposals, one per cell (agent-writable). */
+  edits: z.array(familyCellEditSchema).default([]),
+  /**
+   * What a person accepted, value and author as accepted (human-only, off the agent mask). Plan
+   * reads this list and nothing else. It carries the value, not a key, so a proposal Pea changes
+   * after the accept stands as a counter-proposal instead of riding the old approval.
+   */
+  accepted: z.array(familyCellEditSchema).default([]),
   executionOptions: familyExecutionOptionsSchema.optional(),
 });
 export type FamiliesRouteDocument = z.infer<typeof familiesDocumentSchema>;
@@ -112,9 +138,12 @@ export const familiesIncluded = (
 export const familiesRouteState = {
   route: "families",
   title: "Families",
-  description: "Family Foundry: author a scope, plan a spec member, exclude, apply.",
+  description:
+    "Family Foundry: author a scope, propose cell values, accept or deny them, plan a spec member, exclude, apply.",
   schema: familiesDocumentSchema,
-  agentWriteMask: [["scope"], ["excludedIds"], ["executionOptions"]],
+  // Pea proposes into `edits` exactly as a person does; `accepted` is human-only, so a proposal
+  // reaches a plan only through a person's accept.
+  agentWriteMask: [["scope"], ["excludedIds"], ["edits"], ["executionOptions"]],
   // Planning and applying are the `families.plan` and `families.apply` workflows. Neither is
   // a route command, so neither can write into authored Work.
   commands: {},
