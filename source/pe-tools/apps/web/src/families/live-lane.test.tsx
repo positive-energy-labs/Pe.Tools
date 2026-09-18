@@ -132,6 +132,7 @@ test("the families live lane mounts without an update-depth loop", async () => {
     target: { session: SESSION, openId: OPEN_ID },
   });
   expect(receiptRequests).toContainEqual({ kind: "receipts", id: APPLY_ID });
-  expect(hostCalls).toContain("revit.catalog.loaded-families");
+  expect(hostCalls).toContain("revit.catalog.field-options");
+  expect(hostCalls).not.toContain("revit.catalog.loaded-families");
   expect(hostCalls).not.toContain("host.status");
 });

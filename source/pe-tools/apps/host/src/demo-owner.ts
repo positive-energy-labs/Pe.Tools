@@ -49,7 +49,11 @@ const SIMULATED_UNMODELED = [
   { reason: "PlaneNotNamed", path: "$.refPlanes.0", facts: { simulated: "true" } },
 ];
 
-const SIMULATED_READS = ["revit.catalog.loaded-families", "revit.matrix.loaded-families"];
+const SIMULATED_READS = [
+  "revit.catalog.field-options",
+  "revit.catalog.loaded-families",
+  "revit.matrix.loaded-families",
+];
 
 type RunSource = { pod: string; path: string; sha256: string };
 
@@ -614,6 +618,19 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                   },
                 ],
                 page: { isTruncated: false },
+                simulated: true,
+              };
+            } else if (
+              key === "revit.catalog.field-options" &&
+              (input as { sourceKey: string }).sourceKey === "category-names" &&
+              seed.route === "families"
+            ) {
+              // The one category every simulated family carries (`loadedFamily`).
+              value = {
+                sourceKey: "category-names",
+                mode: "Suggestion",
+                allowsCustomValue: false,
+                items: [{ value: "Mechanical Equipment", label: "Mechanical Equipment" }],
                 simulated: true,
               };
             } else if (

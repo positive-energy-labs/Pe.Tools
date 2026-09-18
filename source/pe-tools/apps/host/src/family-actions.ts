@@ -27,6 +27,7 @@ import {
   type SettingsRouteDocument,
   type FamilyCapture,
   type AppliedFilter,
+  FAMILY_SCOPE_LIMIT,
 } from "@pe/agent-contracts";
 import type {
   PodMemberSaveRequest,
@@ -269,9 +270,6 @@ type Prepared =
       path: string | null;
       at: string;
     };
-
-/** ponytail: one catalog page; a larger scope refuses rather than paging. */
-const FAMILY_SCOPE_LIMIT = 5000;
 
 export async function admitFamilyAction(
   raw: unknown,

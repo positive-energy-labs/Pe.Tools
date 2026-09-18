@@ -164,6 +164,13 @@ export async function submitAction(
 ): Promise<ActionReceipt | DetachedAction> {
   const deadline = Date.now() + waitMs;
   const signal = () => AbortSignal.timeout(Math.max(1, Math.min(30_000, deadline - Date.now())));
+  /*
+   * The POST answers once the host has prepared the action, which waits its turn on the Revit
+   * queue; aborting it abandoned a plan the host went on to finish (w8-revit trip 10). It waits
+   * as long as the caller does; the caller's verb reads running meanwhile.
+   */
+  const admitted = () =>
+    Number.isFinite(deadline) ? AbortSignal.timeout(Math.max(1, deadline - Date.now())) : undefined;
   const detached = (acceptance: DetachedAction["acceptance"]): DetachedAction => ({
     state: "detached",
     kind: admission.kind,
@@ -178,7 +185,7 @@ export async function submitAction(
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(admission),
-      signal: signal(),
+      signal: admitted(),
     });
   } catch (error) {
     if (Date.now() >= deadline) return detached("unknown");

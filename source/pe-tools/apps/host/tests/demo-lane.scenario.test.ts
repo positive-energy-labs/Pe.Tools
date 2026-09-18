@@ -370,6 +370,51 @@ test("live /family: capture, plan, apply files a run receipt", async () => {
 }, 180_000);
 
 /**
+ * w8-revit trip 9: the page dispatched the loaded-families catalog twice a second. Over a quiet
+ * wait the page reads categories once from field-options and the matrix once, and one scope change
+ * reads the catalog once. Counted on the wire, by op key.
+ */
+test("live /families: one catalog read per scope change, none while idle", async () => {
+  const { shown } = await liveLoop("families-reads", async (page) => {
+    const calls: string[] = [];
+    page.on("request", (request: { method(): string; url(): string; postDataJSON(): unknown }) => {
+      if (request.method() === "POST" && request.url().endsWith("/call"))
+        calls.push((request.postDataJSON() as { key: string }).key);
+    });
+    await openLive(page, "/families", "demo=edit&live=1");
+    const count = (key: string) => calls.filter((call) => call === key).length;
+    const input = page.getByRole("combobox", { name: "draft categories" });
+    await expect.poll(() => input.count(), { timeout: 30_000 }).toBe(1);
+    await page.waitForTimeout(3_000);
+    const idle = {
+      options: count("revit.catalog.field-options"),
+      catalog: count("revit.catalog.loaded-families"),
+      matrix: count("revit.matrix.loaded-families"),
+    };
+    await input.fill("Mech");
+    await input.press("Enter");
+    await expect
+      .poll(() => count("revit.catalog.loaded-families"), { timeout: 10_000 })
+      .toBe(idle.catalog + 1);
+    await page.waitForTimeout(3_000);
+    return JSON.stringify({
+      idle,
+      afterScope: {
+        options: count("revit.catalog.field-options"),
+        catalog: count("revit.catalog.loaded-families"),
+        matrix: count("revit.matrix.loaded-families"),
+      },
+    });
+  });
+  console.log(`families-reads ${shown}`);
+  const { idle, afterScope } = JSON.parse(shown) as Record<string, Record<string, number>>;
+  expect(idle!.options).toBe(1);
+  expect(idle!.catalog).toBe(0);
+  expect(idle!.matrix).toBe(1);
+  expect(afterScope).toEqual({ ...idle, catalog: 1 });
+}, 180_000);
+
+/**
  * THE EDITABLE TABLE, in the proposal language. Two cells are typed across two families: each is a
  * proposal by "you", the same Work shape Pea writes, and it survives a reload. One is accepted and
  * one denied; PLAN takes the accepted one only, generates one patch member for that family, files
