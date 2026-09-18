@@ -1,17 +1,23 @@
 /**
  * The band specimen's three consumers of one cell: the matrix table (row scale), a spec-style form
- * field (card scale) and the chat head's ask. Every verb is the cell's own transition; the band's
- * discard is only a fan-out of the same unstage patches.
+ * field (card scale) and the chat head's ask. Every verb is the cell's own contract transition;
+ * the band's discard and the Voltage column's accept-all are only `fanOut`s of the same kinds.
  */
-import type { RouteStatePatch } from "@pe/agent-contracts";
 import { Check, X } from "lucide-react";
 
 import { ActionButton } from "#/components/lang/action-button";
-import { reviewPatches, reviewTransitions, type ReviewCell } from "#/components/lang/band";
+import {
+  reviewTransitions,
+  runFanOut,
+  type CellWire,
+  type FanOutOutcome,
+} from "#/components/lang/band";
 import { cellFromTrichotomy, StateCell, type StateCellProps } from "#/components/lang/cell";
-import { Gap } from "#/design-system/exhibit";
+import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { Section } from "#/components/lang/section";
 import { ReadCell } from "#/components/master-table/cells";
 import type { Column } from "#/components/master-table/model";
+import { Gap } from "#/design-system/exhibit";
 
 import {
   cellKey,
@@ -19,18 +25,29 @@ import {
   MATRIX,
   PARAMETERS,
   shownOf,
-  stagePatch,
+  stagePatches,
   type MatrixCells,
   type MatrixRow,
 } from "./band-matrix";
 
-export type Write = (patches: RouteStatePatch[]) => Promise<null>;
+/** One state every consumer reads: the cells, how they are written, the last aggregate's outcome. */
+export interface Matrix {
+  cells: MatrixCells;
+  wire: CellWire;
+  outcome: FanOutOutcome | null;
+}
 
-const EMPTY: ReviewCell = { proposal: null, staged: null };
+export const matrixWire = (write: CellWire["write"]): CellWire => ({
+  segment: "cells",
+  write,
+  // ponytail: the fixture has no Work, so bound kinds carry no revision and never refuse.
+  revision: null,
+  lockOf: (key) => LOCKS[key] ?? null,
+});
 
 /** One address as every consumer reads it: the reader's marks plus the cell's own verbs. */
-export function cellState(cells: MatrixCells, key: string, write: Write): StateCellProps {
-  const cell = cells[key] ?? EMPTY;
+export function cellState({ cells, wire, outcome }: Matrix, key: string): StateCellProps {
+  const cell = cells[key] ?? {};
   const lock = LOCKS[key] ?? null;
   return {
     ...cellFromTrichotomy(cell, {
@@ -38,18 +55,20 @@ export function cellState(cells: MatrixCells, key: string, write: Write): StateC
       cap: lock ? "locked" : "editable",
       capReason: lock ?? undefined,
     }),
-    onCommit: lock ? undefined : (text) => void write([stagePatch(key, text)]),
-    transitions: reviewTransitions("cells", key, cell, write, lock),
+    onCommit: lock ? undefined : (text) => void wire.write(stagePatches(cells, key, text)),
+    transitions: reviewTransitions(wire, key, cell),
+    refused:
+      outcome?.refusal && outcome.covered.includes(key) ? outcome.refusal.message : undefined,
   };
 }
 
-/** A table row carries its cells: MasterTable re-renders a row only when its identity changes. */
-export type StatefulRow = MatrixRow & { cells: MatrixCells };
+/** A table row carries its state: MasterTable re-renders a row only when its identity changes. */
+export type StatefulRow = MatrixRow & { matrix: Matrix };
 // ponytail: every write re-identifies all 18 rows; slice per row if the matrix grows.
-export const matrixRows = (cells: MatrixCells): StatefulRow[] =>
-  MATRIX.map((row) => ({ ...row, cells }));
+export const matrixRows = (matrix: Matrix): StatefulRow[] =>
+  MATRIX.map((row) => ({ ...row, matrix }));
 
-export const matrixColumns = (write: Write): Column<StatefulRow>[] => [
+export const MATRIX_COLUMNS: Column<StatefulRow>[] = [
   {
     key: "family",
     label: "family",
@@ -71,30 +90,24 @@ export const matrixColumns = (write: Write): Column<StatefulRow>[] => [
       key: parameter,
       label: parameter,
       width: "w-28",
-      search: (row) => shownOf(cellKey(row.key, parameter), row.cells[cellKey(row.key, parameter)]),
-      state: (row) => cellState(row.cells, cellKey(row.key, parameter), write),
+      search: (row) =>
+        shownOf(cellKey(row.key, parameter), row.matrix.cells[cellKey(row.key, parameter)]),
+      state: (row) => cellState(row.matrix, cellKey(row.key, parameter)),
     }),
   ),
 ];
 
-/** The band's discard: the same unstage transition, fanned over every staged address. */
-export const discardAll = (cells: MatrixCells, write: Write) =>
-  write(
-    Object.keys(cells)
-      .filter((key) => cells[key]?.staged != null)
-      .flatMap((key) => reviewPatches("cells").unstage(key)),
+/** The column aggregate: `accept` fanned over every Voltage address. Contested keys are skipped. */
+export const acceptVoltage = ({ cells, wire }: Matrix) =>
+  runFanOut(
+    wire,
+    cells,
+    MATRIX.map((row) => cellKey(row.key, "Voltage")),
+    "accept",
   );
 
 /** A spec-editor field per parameter of one type: the same cell, at card scale. */
-export function TypeForm({
-  row,
-  cells,
-  write,
-}: {
-  row: MatrixRow;
-  cells: MatrixCells;
-  write: Write;
-}) {
+export function TypeForm({ row, matrix }: { row: MatrixRow; matrix: Matrix }) {
   return (
     <div className="flex flex-col">
       <p className="t-prose">
@@ -103,7 +116,7 @@ export function TypeForm({
       {PARAMETERS.map((parameter) => (
         <div key={parameter} className="grid grid-cols-[9rem_minmax(0,1fr)] items-baseline py-1">
           <span className="text-ink-2">{parameter}</span>
-          <StateCell {...cellState(cells, cellKey(row.key, parameter), write)} />
+          <StateCell {...cellState(matrix, cellKey(row.key, parameter))} />
         </div>
       ))}
     </div>
@@ -144,13 +157,47 @@ export function BandGaps() {
     <section className="flex flex-col gap-1.5">
       <span>known gaps and owed work</span>
       <Gap>
-        <strong>Owed (phase 2):</strong> availability moves to <code>availableTransitions</code>;
-        the band&apos;s discard and any header or group accept become <code>fanOut</code>.
+        <strong>Fixture revision:</strong> the specimen has no Work, so accept and deny carry no
+        revision here and cannot show a stale-revision refusal; the routes carry theirs.
       </Gap>
       <Gap>
         <strong>Structural proposals:</strong> the cell draws delete; rename and add-row have no
         language shape yet.
       </Gap>
     </section>
+  );
+}
+
+/** Chat scale: the ask as ruled, and the owed summary. */
+export function ChatScale({ ask, setAsk }: { ask: Ask; setAsk: (ask: Ask) => void }) {
+  return (
+    <Section label="02 · chat scale">
+      <ArtifactFrame
+        head={
+          <span className="flex items-baseline gap-2">
+            <b>Pea</b> in Families on MEP Coordination.rvt
+          </span>
+        }
+      >
+        <div className="flex flex-col px-3 py-2">
+          <AskHead ask={ask} resolve={setAsk} />
+          <Gap>
+            <strong>Owed:</strong> chat summary — waits on summarize S1–S4 fix.
+          </Gap>
+        </div>
+      </ArtifactFrame>
+      <div className="flex flex-wrap items-baseline gap-3 pt-2">
+        <ActionButton
+          label="end turn · SIMULATED"
+          reason="Ends Pea's turn; its awaiting ask expires with it"
+          disabled={ask !== "live"}
+          onClick={() => setAsk("expired")}
+        />
+        <span className="t-small text-ink-2">
+          Ruled: an ask lives as long as its awaiting turn. Turn end, cancel and host restart expire
+          it; navigation and reload do not.
+        </span>
+      </div>
+    </Section>
   );
 }

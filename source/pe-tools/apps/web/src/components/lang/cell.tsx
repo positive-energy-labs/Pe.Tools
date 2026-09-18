@@ -136,6 +136,7 @@ export function StateCell(props: StateCellProps) {
   initial.current = typeof value === "string" ? value : "";
 
   // A transition in flight inerts every verb on the cell; its refusal rides the same note.
+  const refusalNote = refusal ?? props.refused ?? null;
   const [pending, startRun] = useTransition();
   const transitions = props.transitions ?? [];
   const fire = (t: CellTransition) => {
@@ -290,16 +291,16 @@ export function StateCell(props: StateCellProps) {
         {focusHost != null && hasTransitions ? (
           <CellKeys target={focusHost} transitions={transitions} fire={fire} />
         ) : null}
-        {refusal != null ? (
+        {refusalNote != null ? (
           <button
             type="button"
             className={slots.refusal()}
-            title={`${refusal} — click to dismiss`}
+            title={`${refusalNote} — click to dismiss`}
             // "do not steal the caret": the note must never take focus from the input under it.
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => setRefusal(null)}
           >
-            {refusal}
+            {refusalNote}
           </button>
         ) : null}
       </span>
@@ -367,14 +368,14 @@ export function StateCell(props: StateCellProps) {
             onClick={() => fire(t)}
           />
         ))}
-        {refusal != null ? (
+        {refusalNote != null ? (
           <button
             type="button"
             className={slots.refusal()}
-            title={`${refusal} — click to dismiss`}
+            title={`${refusalNote} — click to dismiss`}
             onClick={() => setRefusal(null)}
           >
-            {refusal}
+            {refusalNote}
           </button>
         ) : null}
       </span>

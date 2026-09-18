@@ -1,10 +1,21 @@
 import type { ReactNode } from "react";
-import type { RouteStatePatch, TrichotomyCellLike } from "@pe/agent-contracts";
+import {
+  availableTransitions,
+  fanOut,
+  transitionBinding,
+  transitionPatches,
+  type FanOutKind,
+  type RouteStatePatch,
+  type SkipReason,
+  type TransitionKind,
+  type TrichotomyCellLike,
+} from "@pe/agent-contracts";
 
 import {
   cellFromTrichotomy,
   StateCell,
   type CellTransition,
+  type CellTransitionKind,
   type StateCellProps,
 } from "#/components/lang/cell";
 import { Press } from "#/components/lang/press";
@@ -130,66 +141,97 @@ export function WorkBand({
   );
 }
 
-/** A trichotomy cell as the reviewer reads it; a proposal or staged rung may delete. */
-export type ReviewCell = Pick<TrichotomyCellLike, "proposal" | "staged"> & {
-  proposal?: { delete?: true } | null;
-  staged?: { value?: unknown; delete?: true } | null;
+/**
+ * How a consumer's cells are written: its route-document segment, its write, and the Work
+ * revision the cells were rendered at. Bound kinds (accept, deny) carry that revision, so a
+ * foreign write in between refuses instead of landing on a value the person never saw.
+ */
+export interface CellWire {
+  segment: string;
+  write: (
+    patches: RouteStatePatch[],
+    expectedRevision?: number,
+  ) => Promise<{ code: string; message: string } | null>;
+  revision: number | null;
+  lockOf?: (key: string) => string | null;
+  baselineOf?: (key: string) => unknown;
+}
+
+const DRAWN = new Set<string>(["accept", "deny", "unstage"] satisfies CellTransitionKind[]);
+
+const bindingOf = (wire: CellWire, kind: TransitionKind) =>
+  transitionBinding(kind) === "bound" ? (wire.revision ?? undefined) : undefined;
+
+/** The cell's verbs: exactly what the contract makes available to a person on it. */
+export function reviewTransitions(
+  wire: CellWire,
+  key: string,
+  cell: TrichotomyCellLike,
+): CellTransition[] {
+  // Wording only: the reader says whether Pea is arguing against a staged value.
+  const counter = cellFromTrichotomy(cell, { value: null }).counterValue != null;
+  const reason: Record<CellTransitionKind, string> = {
+    accept: counter
+      ? "Stage Pea's counter-proposal in place of your staged value"
+      : "Stage Pea's proposal",
+    deny: counter
+      ? "Clear Pea's counter-proposal; your staged value stays"
+      : "Clear Pea's proposal",
+    unstage: "Clear the staged value; restore the standing proposal or baseline",
+  };
+  return availableTransitions(cell, "human", {
+    baseline: wire.baselineOf?.(key),
+    lock: wire.lockOf?.(key) ?? null,
+  })
+    .filter((kind): kind is CellTransitionKind => DRAWN.has(kind))
+    .map((kind) => ({
+      kind,
+      reason: reason[kind],
+      run: () =>
+        wire.write(transitionPatches([wire.segment], key, cell, { kind }), bindingOf(wire, kind)),
+    }));
+}
+
+export interface FanOutOutcome {
+  kind: FanOutKind;
+  covered: string[];
+  skipped: { key: string; reason: SkipReason }[];
+  refusal: { code: string; message: string } | null;
+}
+
+/**
+ * Every aggregate (the band's discard, a column's accept-all, a Chat count) is this: one kind over
+ * many keys as ONE write through the contract's `fanOut`. It owns no path, state or wording.
+ */
+export async function runFanOut(
+  wire: CellWire,
+  cells: Record<string, TrichotomyCellLike>,
+  keys: readonly string[],
+  kind: FanOutKind,
+): Promise<FanOutOutcome> {
+  const { patches, covered, skipped } = fanOut(cells, keys, kind, {
+    cellsPath: [wire.segment],
+    actor: "human",
+    lockOf: wire.lockOf,
+  });
+  const refusal = covered.length ? await wire.write(patches, bindingOf(wire, kind)) : null;
+  return { kind, covered, skipped, refusal };
+}
+
+const PAST: Record<FanOutKind, string> = {
+  accept: "accepted",
+  deny: "denied",
+  withdraw: "withdrawn",
+  unstage: "unstaged",
 };
 
-type Write = (patches: RouteStatePatch[]) => Promise<{ code: string; message: string } | null>;
-
-// bridge: replaced by availableTransitions from @pe/agent-contracts (v3) — delete on SHA
-/**
- * The cell's verbs over one segment of a route document. The ONLY availability code in the web
- * app: a proposal that differs from what is staged stands (open, or a counter-proposal) and takes
- * accept/deny; anything staged takes unstage; a contested cell takes all three. A locked cell
- * (`lock` is its reason) keeps only deny, to clear a stray Pea proposal. StateCell draws exactly
- * what this returns.
- */
-export function reviewTransitions(
-  segment: string,
-  address: string,
-  cell: ReviewCell,
-  write: Write,
-  lock: string | null = null,
-): CellTransition[] {
-  const read = cellFromTrichotomy(cell, { value: null });
-  const counter = read.counterValue != null;
-  const standing = read.stage === "proposed" || counter;
-  const patch = reviewPatches(segment);
-  return [
-    ...(standing && lock == null
-      ? ([
-          {
-            kind: "accept",
-            reason: counter
-              ? "Stage Pea's counter-proposal in place of your staged value"
-              : "Stage Pea's proposal",
-            run: () => write(patch.accept(address, cell)),
-          },
-        ] as const)
-      : []),
-    ...(standing
-      ? ([
-          {
-            kind: "deny",
-            reason: counter
-              ? "Clear Pea's counter-proposal; your staged value stays"
-              : "Clear Pea's proposal",
-            run: () => write(patch.deny(address)),
-          },
-        ] as const)
-      : []),
-    ...(cell.staged != null && lock == null
-      ? ([
-          {
-            kind: "unstage",
-            reason: "Clear the staged value; restore the standing proposal or baseline",
-            run: () => write(patch.unstage(address)),
-          },
-        ] as const)
-      : []),
-  ];
+/** An aggregate's outcome in words: n done · n skipped by reason, or the one refusal. */
+export function fanOutWord({ kind, covered, skipped, refusal }: FanOutOutcome): string {
+  if (refusal) return `refused · ${covered.length} cells · ${refusal.message}`;
+  const by = new Map<SkipReason, number>();
+  for (const skip of skipped) by.set(skip.reason, (by.get(skip.reason) ?? 0) + 1);
+  const reasons = [...by].map(([reason, n]) => `${n} ${reason}`);
+  return `${PAST[kind]} ${covered.length}${skipped.length ? ` · skipped ${skipped.length} (${reasons.join(", ")})` : ""}`;
 }
 
 /**
@@ -197,29 +239,27 @@ export function reviewTransitions(
  * staged value it is in words (a compact head has no table to carry that).
  */
 export function ReviewRow({
-  segment,
+  wire,
   address,
   label,
   cell,
   facts,
   show,
-  write,
 }: {
-  segment: string;
+  wire: CellWire;
   address: string;
   label: ReactNode;
-  cell: ReviewCell;
+  cell: TrichotomyCellLike;
   facts: StateCellProps;
   /** The caller's word for a counter-proposed value. */
   show?: (value: unknown) => string;
-  write: Write;
 }) {
   const props = cellFromTrichotomy(cell, facts, show);
   return (
     <div className="grid grid-cols-[9rem_minmax(0,1fr)] items-baseline gap-3 py-2">
       <span className="truncate">{label}</span>
       <span className="flex min-w-0 flex-wrap items-baseline gap-2">
-        <StateCell {...props} transitions={reviewTransitions(segment, address, cell, write)} />
+        <StateCell {...props} transitions={reviewTransitions(wire, address, cell)} />
         {props.stagedBy ? (
           <span className="t-small text-ink-2">by {props.stagedBy === "pea" ? "Pea" : "you"}</span>
         ) : null}
@@ -229,23 +269,17 @@ export function ReviewRow({
 }
 
 /** The addresses a reviewer draws: every cell carrying a proposal or a staged value. */
-export const reviewAddresses = <C extends ReviewCell>(cells: Record<string, C>) =>
+export const reviewAddresses = <C extends TrichotomyCellLike>(cells: Record<string, C>) =>
   Object.entries(cells).filter(([, cell]) => cell.proposal != null || cell.staged != null);
 
-/**
- * The Work patches behind the verbs, over one segment of a route document (`fields`, `cells`).
- * Accept stages the proposal's rung; deny clears the proposal; unstage clears `staged`.
- */
-export const reviewPatches = (segment: string) => ({
-  accept: (address: string, cell: ReviewCell): RouteStatePatch[] => [
-    {
-      path: [segment, address, "staged"],
-      value: cell.proposal?.delete === true ? { delete: true } : { value: cell.proposal?.value },
-    },
-  ],
-  deny: (address: string): RouteStatePatch[] => [{ path: [segment, address, "proposal"] }],
-  unstage: (address: string): RouteStatePatch[] => [{ path: [segment, address, "staged"] }],
-});
+/** The band's discard: `unstage` fanned over every staged address. */
+export const discardStaged = (wire: CellWire, cells: Record<string, TrichotomyCellLike>) =>
+  runFanOut(
+    wire,
+    cells,
+    Object.keys(cells).filter((key) => cells[key]?.staged != null),
+    "unstage",
+  );
 
 /**
  * The consumer's commit verb on the band: refused while nothing is staged, or for the consumer's

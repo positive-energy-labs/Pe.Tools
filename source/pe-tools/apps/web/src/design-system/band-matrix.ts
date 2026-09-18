@@ -1,14 +1,16 @@
 /**
  * The band specimen's Families matrix: 6 families × 3 types × 8 parameters, grown from the
  * Families demo seeds (`families/seeds.ts`). A stand-in for a live `families` matrix reading; the
- * proposals are shaped like real Pea work — one uniform group, one diverse group, one contested
- * cell, one locked cell with a stray proposal, one delete. Writes go through the same
+ * proposals are shaped like real Pea work — one uniform group (with one contested cell in it), one diverse
+ * group, one contested cell, one locked cell with a stray proposal, one delete. Writes go through the same
  * `RouteStatePatch`es a route document takes, applied locally.
  */
-import type { RouteStatePatch } from "@pe/agent-contracts";
-import { canonicalRouteInput } from "@pe/agent-contracts";
+import {
+  transitionPatches,
+  type RouteStatePatch,
+  type TrichotomyCellLike,
+} from "@pe/agent-contracts";
 
-import type { ReviewCell } from "#/components/lang/band";
 import { DEMO_FAMILIES } from "#/families/seeds";
 
 export const PARAMETERS = [
@@ -30,8 +32,8 @@ export interface MatrixRow {
   baseline: Record<Parameter, string>;
 }
 
-type Proposal = NonNullable<ReviewCell["proposal"]> & { note?: string };
-export type MatrixCells = Record<string, ReviewCell & { proposal?: Proposal | null }>;
+type Proposal = NonNullable<TrichotomyCellLike["proposal"]>;
+export type MatrixCells = Record<string, TrichotomyCellLike>;
 
 const seedModel = (family: number, type: string) =>
   DEMO_FAMILIES[family]?.parameters.find((p) => p.definition.identity.name === "PE_G___Model")
@@ -187,6 +189,11 @@ export const MATRIX_CELLS: MatrixCells = {
       { proposal: pea(value, "M-401 air schedule"), staged: null },
     ]),
   ),
+  // contested inside the uniform group: you staged 240V before Pea said 208V
+  [cellKey("FCU-2", "Voltage")]: {
+    proposal: pea("208V", "service is 208V/3ph per E-001"),
+    staged: { value: "240V" },
+  },
   // contested: you staged 30A, Pea argues 25A
   [cellKey("HP-2", "MOCP")]: {
     proposal: pea("25A", "nameplate MOCP is 25A"),
@@ -211,14 +218,16 @@ export function applyPatches(cells: MatrixCells, patches: readonly RouteStatePat
   return next;
 }
 
-/** A typed edit is `stage`: the exact value, or nothing when it equals the baseline. */
-export const stagePatch = (key: string, text: string): RouteStatePatch =>
-  canonicalRouteInput(text) === canonicalRouteInput(baselineOf(key))
-    ? { path: ["cells", key, "staged"] }
-    : { path: ["cells", key, "staged"], value: { value: text } };
+/** A typed edit is the contract's `stage`: the exact value, nothing when it equals the baseline. */
+export const stagePatches = (cells: MatrixCells, key: string, text: string) =>
+  transitionPatches(["cells"], key, cells[key] ?? {}, {
+    kind: "stage",
+    rung: { value: text },
+    baseline: { value: baselineOf(key) },
+  });
 
 /** The value the cell shows: staged, else the proposal, else the baseline. */
-export const shownOf = (key: string, cell: ReviewCell | undefined) => {
+export const shownOf = (key: string, cell: TrichotomyCellLike | undefined) => {
   const rung = cell?.staged ?? cell?.proposal;
   return rung?.delete ? "DELETE" : rung ? String(rung.value) : (baselineOf(key) ?? "—");
 };

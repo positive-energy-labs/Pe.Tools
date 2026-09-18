@@ -1,20 +1,20 @@
+import { transitionPatches } from "@pe/agent-contracts";
 import { expect, test } from "vite-plus/test";
 
-import { reviewPatches, reviewTransitions } from "#/components/lang/band";
+import { reviewTransitions } from "#/components/lang/band";
 
 import {
   applyPatches,
   cellKey,
-  LOCKS,
   MATRIX,
   MATRIX_CELLS,
   PARAMETERS,
-  stagePatch,
+  stagePatches,
 } from "./band-matrix";
+import { matrixWire } from "./band-specimen";
 
-const write = async () => null;
-const kinds = (key: string) =>
-  reviewTransitions("cells", key, MATRIX_CELLS[key]!, write, LOCKS[key] ?? null).map((t) => t.kind);
+const wire = matrixWire(async () => null);
+const kinds = (key: string) => reviewTransitions(wire, key, MATRIX_CELLS[key]!).map((t) => t.kind);
 
 test("the matrix is 6 families × 3 types × 8 parameters, with the journeys proposal shapes", () => {
   expect(new Set(MATRIX.map((row) => row.family)).size).toBe(6);
@@ -29,17 +29,20 @@ test("the matrix is 6 families × 3 types × 8 parameters, with the journeys pro
   expect(MATRIX_CELLS[cellKey("UH-3", "Weight")]?.proposal?.delete).toBe(true);
 });
 
-test("the specimen writes the same patches a route document takes", () => {
+test("the specimen writes the contract's patches, applied locally", () => {
   const key = cellKey("HP-2", "MOCP");
-  const patch = reviewPatches("cells");
-  const accepted = applyPatches(MATRIX_CELLS, patch.accept(key, MATRIX_CELLS[key]!));
+  const cell = MATRIX_CELLS[key]!;
+  const accepted = applyPatches(
+    MATRIX_CELLS,
+    transitionPatches(["cells"], key, cell, { kind: "accept" }),
+  );
   expect(accepted[key]).toMatchObject({ proposal: { value: "25A" }, staged: { value: "25A" } });
-  expect(applyPatches(accepted, patch.deny(key))[key]?.proposal).toBeNull();
-  expect(applyPatches(accepted, patch.unstage(key))[key]?.staged).toBeNull();
+  const denied = transitionPatches(["cells"], key, accepted[key]!, { kind: "deny" });
+  expect(applyPatches(accepted, denied)[key]?.proposal).toBeNull();
 });
 
 test("typing the baseline back stages nothing", () => {
   const key = cellKey("FCU-1", "Weight");
-  expect(stagePatch(key, "88 lb")).toEqual({ path: ["cells", key, "staged"] });
-  expect(applyPatches({}, [stagePatch(key, "90 lb")])[key]?.staged).toEqual({ value: "90 lb" });
+  expect(applyPatches({}, stagePatches({}, key, "88 lb"))[key]?.staged).toBeNull();
+  expect(applyPatches({}, stagePatches({}, key, "90 lb"))[key]?.staged).toEqual({ value: "90 lb" });
 });

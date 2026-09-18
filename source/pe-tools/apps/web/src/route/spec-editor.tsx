@@ -20,7 +20,6 @@ import {
   settingsCandidate,
   settingsRouteState,
   type PodMember,
-  type RouteStatePatch,
   type SettingsFieldState,
   type SettingsRouteDocument,
   type SettingsSnapshot,
@@ -47,7 +46,8 @@ import { schemaFormModel } from "#/settings/schema-form";
 import {
   reviewAddresses,
   reviewCommit,
-  reviewPatches,
+  discardStaged,
+  type CellWire,
   ReviewRow,
   WorkBand,
 } from "#/components/lang/band";
@@ -236,9 +236,11 @@ function ProposalLane({ work, readSha }: { work: MemberWorkHandle; readSha: stri
   // The Work reviews bytes the editor no longer sees on disk: only a person may adopt the new ones.
   const moved = !work.demo && readSha !== null && basisSha !== null && readSha !== basisSha;
   if (!items.length && !moved) return null;
-  const patch = reviewPatches("fields");
-  const write = (patches: RouteStatePatch[]) => work.work.write(patches);
-  const run = (patches: RouteStatePatch[]) => void write(patches).catch(() => undefined);
+  const wire: CellWire = {
+    segment: "fields",
+    write: work.work.write,
+    revision: work.work.revision,
+  };
   const busy = work.busy !== null;
   return (
     <ArtifactFrame
@@ -268,7 +270,7 @@ function ProposalLane({ work, readSha }: { work: MemberWorkHandle; readSha: stri
           reload={work.work.reload}
           busy={busy}
           visible
-          discard={() => run(staged.flatMap(([path]) => patch.unstage(path)))}
+          discard={() => void discardStaged(wire, fields).catch(() => undefined)}
           commit={reviewCommit(
             `save ${staged.length} staged`,
             staged.length,
@@ -279,12 +281,11 @@ function ProposalLane({ work, readSha }: { work: MemberWorkHandle; readSha: stri
           body={items.map(([path, cell]) => (
             <ReviewRow
               key={path}
-              segment="fields"
+              wire={wire}
               address={path}
               label={<span className="face-mono">{path}</span>}
               cell={cell}
               facts={{ value: display(cell.staged ?? cell.proposal) }}
-              write={write}
             />
           ))}
         />

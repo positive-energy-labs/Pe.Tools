@@ -116,6 +116,11 @@ export interface StateCellProps {
    * its verbs; a returned refusal shows its message beside the cell (the `onCommit` note).
    */
   transitions?: readonly CellTransition[];
+  /**
+   * A refusal this cell did not ask for: an aggregate's one write covered it and was refused.
+   * Drawn in the same note as the cell's own refusal; the caller clears it on its next write.
+   */
+  refused?: string;
 }
 
 export type CellTransitionKind = "accept" | "deny" | "unstage";

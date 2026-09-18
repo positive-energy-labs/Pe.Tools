@@ -1,8 +1,4 @@
-import {
-  splitScheduleCellKey,
-  scheduleReadingSchema,
-  type RouteStatePatch,
-} from "@pe/agent-contracts";
+import { splitScheduleCellKey, scheduleReadingSchema } from "@pe/agent-contracts";
 import { LiveScheduleGridWorkspace } from "#/route/schedules/live";
 import type { ScheduleGridState } from "#/route/schedules/workspace";
 import { useThreadScope } from "#/chat/scope";
@@ -10,7 +6,8 @@ import { useWorkbench } from "../provider";
 import {
   reviewAddresses,
   reviewCommit,
-  reviewPatches,
+  discardStaged,
+  type CellWire,
   ReviewRow,
   WorkBand,
 } from "#/components/lang/band";
@@ -53,9 +50,8 @@ export function ScheduleGridReview({ state }: { state: ScheduleGridState }) {
   const snapshot = state.snapshot;
   const items = reviewAddresses(state.slice?.cells ?? {});
   const staged = items.filter(([, cell]) => cell.staged != null);
-  const patch = reviewPatches("cells");
-  const write = (patches: RouteStatePatch[]) => state.apply(patches);
-  const run = (patches: RouteStatePatch[]) => void write(patches).catch(() => undefined);
+  const cells = state.slice?.cells ?? {};
+  const wire: CellWire = { segment: "cells", write: state.apply, revision: state.revision };
   const busy = state.busy != null;
   return (
     <WorkBand
@@ -64,7 +60,7 @@ export function ScheduleGridReview({ state }: { state: ScheduleGridState }) {
       revision={state.revision}
       busy={busy}
       visible={items.length > 0}
-      discard={() => run(staged.flatMap(([key]) => patch.unstage(key)))}
+      discard={() => void discardStaged(wire, cells).catch(() => undefined)}
       commit={reviewCommit(
         `Push ${staged.length} to Revit`,
         staged.length,
@@ -79,7 +75,7 @@ export function ScheduleGridReview({ state }: { state: ScheduleGridState }) {
         return (
           <ReviewRow
             key={key}
-            segment="cells"
+            wire={wire}
             address={key}
             label={`${snapshot?.columns.find((c) => c.columnNumber === columnNumber)?.headerText ?? columnNumber} · row ${rowNumber}`}
             cell={cell}
@@ -93,7 +89,6 @@ export function ScheduleGridReview({ state }: { state: ScheduleGridState }) {
                 />
               ),
             }}
-            write={write}
           />
         );
       })}

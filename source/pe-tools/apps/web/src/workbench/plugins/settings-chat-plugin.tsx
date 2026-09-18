@@ -6,7 +6,7 @@ import { useRoute } from "#/route/use-route";
 import { memberWorkManifest } from "#/route/spec-editor";
 import { Link } from "@tanstack/react-router";
 
-import { settingsRouteState, stagedEntries, type RouteStatePatch } from "@pe/agent-contracts";
+import { settingsRouteState, stagedEntries } from "@pe/agent-contracts";
 import { recordedRouteDoc } from "#/workbench/route-chat-plugins/tool-names";
 
 import {
@@ -18,7 +18,8 @@ import {
 import {
   reviewAddresses,
   reviewCommit,
-  reviewPatches,
+  discardStaged,
+  type CellWire,
   ReviewRow,
   WorkBand,
 } from "#/components/lang/band";
@@ -69,7 +70,7 @@ function SettingsReview({
 }: RouteChatPluginProps & {
   work: {
     revision: number | null;
-    write: (patches: RouteStatePatch[]) => Promise<{ code: string; message: string } | null>;
+    write: CellWire["write"];
     conflict: boolean;
     reload: () => void;
   };
@@ -88,9 +89,7 @@ function SettingsReview({
   const items = reviewAddresses(fields);
   const reviewable = items.length > 0;
   const staged = items.filter(([, field]) => field.staged != null);
-  const patch = reviewPatches("fields");
-  const write = (patches: RouteStatePatch[]) => work.write(patches);
-  const run = (patches: RouteStatePatch[]) => void write(patches).catch(() => undefined);
+  const wire: CellWire = { segment: "fields", write: work.write, revision: work.revision };
 
   if (active && !reviewable) return null;
 
@@ -127,7 +126,7 @@ function SettingsReview({
           reload={work.reload}
           busy={busy}
           visible
-          discard={() => run(staged.flatMap(([path]) => patch.unstage(path)))}
+          discard={() => void discardStaged(wire, fields).catch(() => undefined)}
           commit={reviewCommit(
             `Save ${staged.length}`,
             staged.length,
@@ -137,12 +136,11 @@ function SettingsReview({
           body={items.map(([path, field]) => (
             <ReviewRow
               key={path}
-              segment="fields"
+              wire={wire}
               address={path}
               label={path}
               cell={field}
               facts={{ value: displaySettingsValue(field.staged ?? field.proposal) }}
-              write={write}
             />
           ))}
         />

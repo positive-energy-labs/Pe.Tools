@@ -3,8 +3,13 @@ import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { ActionButton } from "#/components/lang/action-button";
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { reviewCommit, WorkBand } from "#/components/lang/band";
+import {
+  discardStaged,
+  fanOutWord,
+  reviewCommit,
+  WorkBand,
+  type FanOutOutcome,
+} from "#/components/lang/band";
 import { FactChip } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Section } from "#/components/lang/section";
@@ -12,16 +17,16 @@ import { ThemeToggle } from "#/components/lang/theme-toggle";
 import { MasterTable } from "#/components/master-table/master-table";
 import { applyPatches, MATRIX, MATRIX_CELLS } from "#/design-system/band-matrix";
 import {
-  AskHead,
+  ChatScale,
   BandGaps,
-  discardAll,
-  matrixColumns,
+  acceptVoltage,
+  MATRIX_COLUMNS,
   matrixRows,
+  matrixWire,
   TypeForm,
   type Ask,
-  type Write,
+  type Matrix,
 } from "#/design-system/band-specimen";
-import { Gap } from "#/design-system/exhibit";
 import { SituationCell } from "#/route/situation";
 
 export const Route = createFileRoute("/design-system_/band")({ component: BandRoute });
@@ -31,12 +36,19 @@ function BandRoute() {
   const [picked, setPicked] = useState("HP-2");
   const [ask, setAsk] = useState<Ask>("live");
   const [planned, setPlanned] = useState<number | null>(null);
-  const write: Write = async (patches) => {
-    setCells((current) => applyPatches(current, patches));
-    return null;
-  };
-  const columns = useMemo(() => matrixColumns(write), []);
-  const rows = useMemo(() => matrixRows(cells), [cells]);
+  const [outcome, setOutcome] = useState<FanOutOutcome | null>(null);
+  const wire = useMemo(
+    () =>
+      matrixWire(async (patches) => {
+        setOutcome(null);
+        setCells((current) => applyPatches(current, patches));
+        return null;
+      }),
+    [],
+  );
+  const matrix: Matrix = { cells, wire, outcome };
+  const aggregate = (run: Promise<FanOutOutcome>) => void run.then(setOutcome);
+  const rows = useMemo(() => matrixRows(matrix), [cells, outcome]);
   const staged = Object.values(cells).filter((cell) => cell.staged != null).length;
   const row = MATRIX.find((r) => r.key === picked) ?? MATRIX[0]!;
 
@@ -74,7 +86,7 @@ function BandRoute() {
                 noun="cell"
                 revision={null}
                 visible
-                discard={() => void discardAll(cells, write)}
+                discard={() => aggregate(discardStaged(wire, cells))}
                 commit={reviewCommit(`plan ${staged} staged · SIMULATED`, staged, () =>
                   setPlanned(staged),
                 )}
@@ -82,14 +94,29 @@ function BandRoute() {
               <div className="h-[26rem]">
                 <MasterTable
                   rows={rows}
-                  columns={columns}
+                  columns={MATRIX_COLUMNS}
                   rowKey={(r) => r.key}
                   scopeLabel="family types"
                   searchPlaceholder="search families, types, values…"
                   activeKey={picked}
                   onRowClick={(r) => setPicked(r.key)}
+                  actions={
+                    <ActionButton
+                      tone="agent"
+                      label="accept all · Voltage"
+                      reason="Accept every standing Voltage proposal in one write; your own staged values are skipped"
+                      onClick={() => aggregate(acceptVoltage(matrix))}
+                    />
+                  }
                 />
               </div>
+              {outcome ? (
+                <OutcomeLine
+                  kind={outcome.refusal ? "refused" : "receipt"}
+                  label={fanOutWord(outcome)}
+                  says="one write through fanOut"
+                />
+              ) : null}
               {planned != null ? (
                 <OutcomeLine
                   kind="advisory"
@@ -104,39 +131,11 @@ function BandRoute() {
                 The picked table row as a spec-editor form. Its verbs are the same transitions over
                 the same addresses: accept here and the table cell changes.
               </p>
-              <TypeForm row={row} cells={cells} write={write} />
+              <TypeForm row={row} matrix={matrix} />
             </Section>
           </div>
 
-          <Section label="02 · chat scale">
-            <ArtifactFrame
-              head={
-                <span className="flex items-baseline gap-2">
-                  <b>Pea</b> in Families on MEP Coordination.rvt
-                </span>
-              }
-            >
-              <div className="flex flex-col px-3 py-2">
-                <AskHead ask={ask} resolve={setAsk} />
-                <Gap>
-                  <strong>Owed:</strong> chat summary from <code>summarize()</code> — contract SHA
-                  pending.
-                </Gap>
-              </div>
-            </ArtifactFrame>
-            <div className="flex flex-wrap items-baseline gap-3 pt-2">
-              <ActionButton
-                label="end turn · SIMULATED"
-                reason="Ends Pea's turn; its awaiting ask expires with it"
-                disabled={ask !== "live"}
-                onClick={() => setAsk("expired")}
-              />
-              <span className="t-small text-ink-2">
-                Ruled: an ask lives as long as its awaiting turn. Turn end, cancel and host restart
-                expire it; navigation and reload do not.
-              </span>
-            </div>
-          </Section>
+          <ChatScale ask={ask} setAsk={setAsk} />
         </div>
 
         <BandGaps />

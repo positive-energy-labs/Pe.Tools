@@ -1,3 +1,4 @@
+import type { TrichotomyCellLike } from "@pe/agent-contracts";
 import { Save } from "lucide-react";
 
 import { AddressingBar, addressingBarRecipe } from "#/components/lang/addressing-bar";
@@ -8,7 +9,7 @@ import {
   reviewCommit,
   ReviewRow,
   WorkBand,
-  type ReviewCell,
+  type CellWire,
 } from "#/components/lang/band";
 import { StateCell } from "#/components/lang/cell";
 import { FactChip, Tag } from "#/components/lang/chip";
@@ -21,7 +22,7 @@ import { RecipeGrid, SpecimenFrame, type GridVariantProps } from "./recipe-grid"
 const noop = () => {};
 
 /** Open, contested and Pea-agreed staged: the three verb sets the reviewer draws. */
-const REVIEW_SPECIMEN: Record<string, ReviewCell> = {
+const REVIEW_SPECIMEN: Record<string, TrichotomyCellLike> = {
   "Neck Width": { proposal: { value: "10in", confidence: "high" }, staged: null },
   "Face Width": {
     proposal: { value: "Neck Width + 5in" },
@@ -29,7 +30,7 @@ const REVIEW_SPECIMEN: Record<string, ReviewCell> = {
   },
   "Neck Height": { proposal: { value: "10in" }, staged: { value: "10in" } },
 };
-const write = async () => null;
+const wire: CellWire = { segment: "fields", write: async () => null, revision: 4 };
 
 export function LangWorkflowSpecimens() {
   return (
@@ -51,12 +52,11 @@ export function LangWorkflowSpecimens() {
           body={reviewAddresses(REVIEW_SPECIMEN).map(([address, cell]) => (
             <ReviewRow
               key={address}
-              segment="fields"
+              wire={wire}
               address={address}
               label={address}
               cell={cell}
               facts={{ value: String((cell.staged ?? cell.proposal)?.value) }}
-              write={write}
             />
           ))}
         />
