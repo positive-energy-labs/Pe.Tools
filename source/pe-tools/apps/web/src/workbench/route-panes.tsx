@@ -8,7 +8,7 @@ import { createPortal } from "react-dom";
 
 import { LiveScheduleGridWorkspace } from "#/route/schedules/live";
 import { FamilyRouteView } from "#/route/family/live";
-import { ChatHosted } from "#/route/situation";
+import { ChatFocus, ChatHosted, ChatPlanIntent } from "#/route/situation";
 import { PodsRouteContent } from "#/routes/pods";
 import { FamiliesRouteContent } from "#/routes/families";
 import { ParameterLinksRouteContent } from "#/routes/parameter-links";
@@ -34,7 +34,12 @@ const views: Record<ChatPluginRoute, View> = {
  * the same page log, and reopening shows it (K3 lifetime; only the route's own stop cancels).
  * ponytail: every opened route stays live until Chat unmounts; evict idle ones if readings cost.
  */
-export function useChatPluginHost(plugin: ChatPluginRoute | undefined, thread: string) {
+export function useChatPluginHost(
+  plugin: ChatPluginRoute | undefined,
+  thread: string,
+  intent: { route: string; take: () => boolean } | null = null,
+  focus: readonly string[] | null = null,
+) {
   const [homes, setHomes] = useState<ReadonlyMap<ChatPluginRoute, HTMLElement>>(new Map());
   // Created after mount: the server renders no portals, and a portal's home must outlive the pane.
   useEffect(() => {
@@ -52,7 +57,11 @@ export function useChatPluginHost(plugin: ChatPluginRoute | undefined, thread: s
     const View = views[route];
     return createPortal(
       <ChatHosted.Provider value>
-        <View thread={thread} />
+        <ChatPlanIntent.Provider value={intent?.route === route ? intent : null}>
+          <ChatFocus.Provider value={route === plugin ? focus : null}>
+            <View thread={thread} />
+          </ChatFocus.Provider>
+        </ChatPlanIntent.Provider>
       </ChatHosted.Provider>,
       element,
       route,

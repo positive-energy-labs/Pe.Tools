@@ -228,6 +228,33 @@ export function Cluster({
 export const ChatHosted = createContext(false);
 
 /**
+ * Chat head's commit verb, handed to the hosted route (K3): the route named here runs its own
+ * commit action once, in the pane, where its real confirmation sheet opens. `take` answers true
+ * exactly once per press, so a remount never re-runs it. One-shot page state, never URL state.
+ */
+/**
+ * Run the route's commit once when Chat's head asked for it and this route's Work is read.
+ * Refusals are the action's own and land in the route's page log, as a pressed button's do.
+ */
+export function useChatPlanIntent(
+  handle: Pick<RouteHandle<any, any, any, any>, "manifest" | "work">,
+  commit: ActionHandle | undefined,
+) {
+  const intent = useContext(ChatPlanIntent);
+  // A route with Work plans what it read; one without has nothing to wait for.
+  const intended =
+    intent?.route === handle.manifest.key && (handle.work.current || !handle.manifest.work);
+  useEffect(() => {
+    if (intended && commit && intent.take()) void commit.run();
+  }, [intended, intent, commit]);
+}
+
+/** The head's group drill-in: the hosted route narrows to the addresses under this path. */
+export const ChatFocus = createContext<readonly string[] | null>(null);
+
+export const ChatPlanIntent = createContext<{ route: string; take: () => boolean } | null>(null);
+
+/**
  * session › document, read from the bridge inventory: titles and pe-revit ids, not GUIDs.
  * A pick moves the thread head (the one target store) and drops a `?target` pin, so the route
  * shows what the thread shows. A route with no thread still binds through `?target`; Chat's
@@ -662,6 +689,7 @@ export function Situation({
   ) as [string, ActionHandle][];
   const staged = work && work.count > 0 ? work : null;
   const commitAction = commit ? handle.actions[commit] : undefined;
+  useChatPlanIntent(handle, commitAction);
   const workWord = workBandWord({
     revision: handle.work.revision,
     count: staged?.count ?? 0,

@@ -112,8 +112,16 @@ function ChatSurface({ plugin, focus }: Plugin) {
   useEffect(() => {
     if (plugin) store.actions.setPluginOpen(true);
   }, [plugin, store]);
-  const host = useChatPluginHost(plugin, currentThreadId);
+  const planIntent = useAtomValue(store.atoms.planIntent);
+  const intent = useMemo(
+    () =>
+      planIntent
+        ? { route: planIntent.route, take: () => store.actions.takePlan(planIntent.route) }
+        : null,
+    [planIntent, store],
+  );
   const focusPath = parseFocus(focus);
+  const host = useChatPluginHost(plugin, currentThreadId, intent, focusPath);
 
   // Context gauges (cap + OM meters) ride beside the composer now, so the cache view is derived
   // here instead of inside the Lens. userTurns gates the diff baseline (advances on each send).

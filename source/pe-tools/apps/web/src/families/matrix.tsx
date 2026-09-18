@@ -1,6 +1,10 @@
 import { EmptyState } from "#/components/lang/empty";
 import { MasterTable } from "#/components/master-table/master-table";
+import { useContext } from "react";
+
+import { focusedTypes } from "#/families/staged";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
+import { ChatFocus } from "#/route/situation";
 
 export function FamiliesMatrix() {
   const {
@@ -17,6 +21,16 @@ export function FamiliesMatrix() {
     connected,
     applied,
   } = useFamiliesWorkspace();
+  // Chat's group drill-in: only the types holding a pending cell under the focused path.
+  const focus = useContext(ChatFocus);
+  const focused = focus && focusedTypes(store.cells, focus);
+  const visibleKeys = focused
+    ? rows
+        .filter((row) =>
+          focused.some((at) => at.familyId === row.familyId && at.typeName === row.typeName),
+        )
+        .map((row) => row.key)
+    : undefined;
   return (
     <>
       {fixture && (
@@ -29,6 +43,7 @@ export function FamiliesMatrix() {
         rows={rows}
         columns={columns}
         rowKey={(row) => row.key}
+        visibleKeys={visibleKeys}
         scopeLabel="families in scope"
         searchPlaceholder="family or type"
         tableState={tableState}

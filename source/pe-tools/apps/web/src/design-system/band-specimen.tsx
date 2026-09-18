@@ -19,7 +19,10 @@ import { ReadCell } from "#/components/master-table/cells";
 import type { Column } from "#/components/master-table/model";
 import { Gap } from "#/design-system/exhibit";
 
+import { ProposalHead, type HeadWork } from "#/chat/proposal-head";
+
 import {
+  baselineOf,
   cellKey,
   LOCKS,
   MATRIX,
@@ -40,6 +43,7 @@ export interface Matrix {
 export const matrixWire = (write: CellWire["write"]): CellWire => ({
   segment: "cells",
   write,
+  baselineOf,
   // ponytail: the fixture has no Work, so bound kinds carry no revision and never refuse.
   revision: null,
   lockOf: (key) => LOCKS[key] ?? null,
@@ -125,10 +129,10 @@ export function TypeForm({ row, matrix }: { row: MatrixRow; matrix: Matrix }) {
 
 export type Ask = "live" | "allowed" | "refused" | "expired";
 
-/** RULED: an ask lives as long as its awaiting turn; turn end, cancel and host restart expire it. */
-export function AskHead({ ask, resolve }: { ask: Ask; resolve: (verdict: Ask) => void }) {
-  return ask === "live" ? (
-    <div className="flex flex-wrap items-baseline gap-3 py-1.5">
+/** A live ask: one head line with its answer. RULED: it lives as long as its awaiting turn. */
+function AskLine({ resolve }: { resolve: (verdict: Ask) => void }) {
+  return (
+    <div className="flex flex-wrap items-baseline gap-3 py-0.5">
       <span className="face-mono text-ink">⌗ family.capture</span>
       <span>on Air Handler</span>
       <ActionButton
@@ -145,12 +149,27 @@ export function AskHead({ ask, resolve }: { ask: Ask; resolve: (verdict: Ask) =>
         onClick={() => resolve("refused")}
       />
     </div>
-  ) : (
-    <p className="py-1.5 face-mono text-ink-2">
-      family.capture {ask === "expired" ? "expired · the turn ended" : ask}
-    </p>
   );
 }
+
+/** The matrix as the Chat head reads it: the same cells, wire and group path as the table. */
+export const matrixHeadWork = (matrix: Matrix, say: (text: string) => void): HeadWork => ({
+  id: "families:MEP Coordination.rvt",
+  route: "Families",
+  subject: "MEP Coordination.rvt",
+  cells: matrix.cells,
+  wire: matrix.wire,
+  groupOf: (key) => {
+    const [type, parameter] = key.split("::") as [string, string];
+    return [parameter, MATRIX.find((row) => row.key === type)?.family ?? "", type];
+  },
+  commit: {
+    word: "plan",
+    run: () => say("SIMULATED · the Families pane opens unscoped and plans"),
+  },
+  open: (focus) =>
+    say(`SIMULATED · the Families pane opens${focus ? ` on ${focus.join(" › ")}` : ""}`),
+});
 
 export function BandGaps() {
   return (
@@ -168,8 +187,18 @@ export function BandGaps() {
   );
 }
 
-/** Chat scale: the ask as ruled, and the owed summary. */
-export function ChatScale({ ask, setAsk }: { ask: Ask; setAsk: (ask: Ask) => void }) {
+/** Chat scale: the composer head's summary on the same matrix, and the transcript's records. */
+export function ChatScale({
+  ask,
+  setAsk,
+  matrix,
+  say,
+}: {
+  ask: Ask;
+  setAsk: (ask: Ask) => void;
+  matrix: Matrix;
+  say: (text: string) => void;
+}) {
   return (
     <Section label="02 · chat scale">
       <ArtifactFrame
@@ -180,10 +209,16 @@ export function ChatScale({ ask, setAsk }: { ask: Ask; setAsk: (ask: Ask) => voi
         }
       >
         <div className="flex flex-col px-3 py-2">
-          <AskHead ask={ask} resolve={setAsk} />
-          <Gap>
-            <strong>Owed:</strong> chat summary — waits on summarize S1–S4 fix.
-          </Gap>
+          <ProposalHead
+            asks={ask === "live" ? [<AskLine key="ask" resolve={setAsk} />] : []}
+            works={[matrixHeadWork(matrix, say)]}
+          />
+          <span className="pt-2 t-small t-upper text-ink-2">transcript</span>
+          {ask === "live" ? null : (
+            <p className="face-mono text-ink-2">
+              family.capture {ask === "expired" ? "expired · the turn ended" : ask}
+            </p>
+          )}
         </div>
       </ArtifactFrame>
       <div className="flex flex-wrap items-baseline gap-3 pt-2">

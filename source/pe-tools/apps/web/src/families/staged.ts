@@ -9,6 +9,25 @@ import {
 
 import { FF_SPEC_SCHEMA } from "#/host/familyfoundry";
 
+/** A cell's group path, the one the Chat head and the pane's focus read: parameter › family › type. */
+export const familiesGroupOf = (key: string): string[] => {
+  const { parameter, familyId, typeName } = familyCellAddress(key);
+  return [parameter, String(familyId), typeName];
+};
+
+/** Rows (`familyId`, `typeName`) holding a pending cell under a group path prefix. */
+export const focusedTypes = (
+  cells: Record<string, FamilyCellState>,
+  focus: readonly string[],
+): { familyId: number; typeName: string }[] =>
+  Object.entries(cells)
+    .filter(
+      ([key, cell]) =>
+        (cell.proposal != null || cell.staged != null) &&
+        focus.every((segment, i) => familiesGroupOf(key)[i] === segment),
+    )
+    .map(([key]) => familyCellAddress(key));
+
 export const cellAt = (
   cells: Record<string, FamilyCellState>,
   address: FamilyCellAddress,

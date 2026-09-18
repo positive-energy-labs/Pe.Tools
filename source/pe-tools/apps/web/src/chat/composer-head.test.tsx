@@ -64,6 +64,7 @@ test("the Situation keeps both selectors reachable in its scrolling sentence", (
     chat,
     openThread,
     resolveApproval: vi.fn(),
+    store: { actions: { setPlugin: vi.fn(), planIn: vi.fn() } },
   };
   const view = render(
     <ComposerHead
@@ -90,7 +91,9 @@ test("the Situation keeps both selectors reachable in its scrolling sentence", (
   expect(view.container.querySelector("[data-slot='rail']")?.className).toContain("h-(--rail-h)");
   expect(screen.getByTestId("composer-status").textContent).toBe("failed");
   expect(screen.getByRole("alert").textContent).toBe("the host connection ended");
-  expect(screen.getByLabelText("Pea proposals").textContent).toContain("waiting on you");
+  expect(
+    screen.getByLabelText("Pea proposals").querySelector("[data-tool-id='call-1']"),
+  ).not.toBeNull();
   expect(screen.getByTestId("page-log").textContent).toBe("sent");
 });
 
@@ -103,6 +106,7 @@ test("the head lists live asks only; an expired ask is a transcript record, not 
     chat,
     openThread: vi.fn(),
     resolveApproval: vi.fn(),
+    store: { actions: { setPlugin: vi.fn(), planIn: vi.fn() } },
   };
   const view = render(
     <ComposerHead

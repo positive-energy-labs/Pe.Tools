@@ -222,13 +222,16 @@ const PAST: Record<FanOutKind, string> = {
   unstage: "unstaged",
 };
 
-/** An aggregate's outcome in words: n done · n skipped by reason, or the one refusal. */
+/**
+ * An aggregate's outcome in words, from counts only: `accepted 11 · skipped 7 (contested: 1,
+ * no-proposal: 6)`. A refused write wrote nothing and says the write's own refusal verbatim.
+ */
 export function fanOutWord({ kind, covered, skipped, refusal }: FanOutOutcome): string {
-  if (refusal) return `refused · ${covered.length} cells · ${refusal.message}`;
+  if (refusal) return refusal.message;
   const by = new Map<SkipReason, number>();
   for (const skip of skipped) by.set(skip.reason, (by.get(skip.reason) ?? 0) + 1);
-  const reasons = [...by].map(([reason, n]) => `${n} ${reason}`);
-  return `${PAST[kind]} ${covered.length}${skipped.length ? ` · skipped ${skipped.length} (${reasons.join(", ")})` : ""}`;
+  const reasons = [...by].map(([reason, n]) => `${reason}: ${n}`).join(", ");
+  return `${PAST[kind]} ${covered.length}${skipped.length ? ` · skipped ${skipped.length} (${reasons})` : ""}`;
 }
 
 /**

@@ -63,7 +63,7 @@ test("accepting in the form field changes the same cell in the table", async () 
 test("the Voltage accept-all is one fanOut that leaves your contested 240V alone", async () => {
   render(<Specimen />);
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "all" })));
-  expect(fanOutWord(said!)).toBe("accepted 11 · skipped 7 (1 contested, 6 no-proposal)");
+  expect(fanOutWord(said!)).toBe("accepted 11 · skipped 7 (contested: 1, no-proposal: 6)");
   expect(latest.cells[cellKey("FCU-2", "Voltage")]?.staged).toEqual({ value: "240V" });
   expect(latest.cells[cellKey("FCU-1", "Voltage")]?.staged).toEqual({ value: "208V" });
 });

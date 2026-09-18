@@ -35,7 +35,7 @@ function BandRoute() {
   const [cells, setCells] = useState(MATRIX_CELLS);
   const [picked, setPicked] = useState("HP-2");
   const [ask, setAsk] = useState<Ask>("live");
-  const [planned, setPlanned] = useState<number | null>(null);
+  const [said, say] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<FanOutOutcome | null>(null);
   const wire = useMemo(
     () =>
@@ -88,7 +88,7 @@ function BandRoute() {
                 visible
                 discard={() => aggregate(discardStaged(wire, cells))}
                 commit={reviewCommit(`plan ${staged} staged · SIMULATED`, staged, () =>
-                  setPlanned(staged),
+                  say(`SIMULATED · plan of ${staged} staged cells`),
                 )}
               />
               <div className="h-[26rem]">
@@ -117,12 +117,8 @@ function BandRoute() {
                   says="one write through fanOut"
                 />
               ) : null}
-              {planned != null ? (
-                <OutcomeLine
-                  kind="advisory"
-                  label={`SIMULATED · plan of ${planned} staged cells`}
-                  says="the fixture writes nothing"
-                />
+              {said ? (
+                <OutcomeLine kind="advisory" label={said} says="the fixture writes nothing" />
               ) : null}
             </Section>
 
@@ -135,7 +131,7 @@ function BandRoute() {
             </Section>
           </div>
 
-          <ChatScale ask={ask} setAsk={setAsk} />
+          <ChatScale ask={ask} setAsk={setAsk} matrix={matrix} say={say} />
         </div>
 
         <BandGaps />

@@ -33,6 +33,9 @@ import {
   type ChatState,
 } from "#/workbench/chat-state";
 import { useWorkbench } from "#/workbench/provider";
+
+import { useHeadWorks } from "./head-works";
+import { ProposalHead } from "./proposal-head";
 import type { ChatDraft } from "#/workbench/prompt";
 
 export type ChatHandle = RouteHandle<ChatState, ChatReading, ChatPage, ChatActionKey>;
@@ -78,6 +81,17 @@ const complaint = (resolution: TargetResolution): string | null =>
             ambiguous: "two Revits hold it — choose the document again",
           }[resolution.reason];
 
+/** The bound document's Address, which keys document-owned Work. */
+const documentAddress = (
+  inventory: ReturnType<typeof targetInventory>,
+  ref: { session: string; openId: string } | null,
+) => {
+  const found = ref && inventory.kind === "ready" ? inventory.sessions[ref.session] : undefined;
+  return found?.kind === "ready"
+    ? (found.values.find((doc) => doc.openId === ref!.openId)?.address ?? null)
+    : null;
+};
+
 export function ComposerHead({
   handle,
   status,
@@ -88,7 +102,7 @@ export function ComposerHead({
    * disappears over the chat shifted the whole lane every time it spoke. */
   status?: { text: string; caution: boolean; detail?: string };
 }) {
-  const { currentThreadId, threads, chat, openThread, resolveApproval } = useWorkbench();
+  const { currentThreadId, threads, chat, openThread, resolveApproval, store } = useWorkbench();
   const isRunning = selectRunStatus(chat) !== "idle";
   const head = useThreadScope(currentThreadId, !handle.demo, handle.readings.head);
   const inventory = targetInventory(
@@ -129,7 +143,12 @@ export function ComposerHead({
       : level,
   );
   const health = head.defaultTarget ? complaint(resolution) : null;
+  // Live asks only: an expired ask is a transcript record, never a head row.
   const approvals = selectApprovals(chat.display);
+  const works = useHeadWorks(documentAddress(inventory, bound), ladder.docWord ?? "document", {
+    open: store.actions.setPlugin,
+    planIn: store.actions.planIn,
+  });
   // "Do" alone says nothing about what is being asked for. The proposal row names the capability
   // key and the target the call would run against, read off the call itself in the stream.
   const callsById = new Map(selectToolCalls(chat).map((call) => [call.id, call]));
@@ -234,67 +253,57 @@ export function ComposerHead({
           {status.detail}
         </div>
       ) : null}
-      {approvals.length ? (
-        <div
-          aria-label="Pea proposals"
-          className="hairline-t hairline-b flex flex-col gap-1 py-2 t-prose"
-        >
-          <span>
-            <b>
-              {approvals.length} proposal{approvals.length === 1 ? "" : "s"}
-            </b>{" "}
-            waiting on you
-          </span>
-          {approvals.map((approval) => (
-            <div
-              key={approval.toolCallId}
-              className="flex flex-wrap items-baseline gap-3"
-              data-tool-id={approval.toolCallId}
-            >
-              <span className="face-mono text-ink">⌗ {toolTitle(approval.toolName)}</span>
-              {(() => {
-                const call = callsById.get(approval.toolCallId);
-                const target = call ? toolTarget(call.args) : undefined;
-                return target ? (
-                  <code className="face-mono t-small text-ink" data-testid="approval-target">
-                    {target}
-                  </code>
-                ) : null;
-              })()}
-              {(() => {
-                const call = callsById.get(approval.toolCallId);
-                return call?.target && call.target !== toolTarget(call.args) ? (
-                  <span className="t-small truncate text-ink-2">{call.target}</span>
-                ) : null;
-              })()}
-              <span className="t-small text-ink-2">{approval.kind}</span>
-              {approval.kind === "suspension" && approval.toolName === "ask_user" ? (
-                <span className="text-ink-2">answer it in the stream</span>
-              ) : (
-                APPROVAL_OPTIONS.map((option) => {
-                  const allow = option.kind.startsWith("allow");
-                  return (
-                    <ActionButton
-                      key={option.id}
-                      tone={allow ? "commit" : "act"}
-                      icon={allow ? Check : X}
-                      label={option.label}
-                      reason={
-                        allow
-                          ? `Let pea run ${toolTitle(approval.toolName)} — the call executes against the live target`
-                          : `Refuse this ${toolTitle(approval.toolName)} call — pea continues without it`
-                      }
-                      onClick={() => {
-                        void resolveApproval(approval.toolCallId, option.id);
-                      }}
-                    />
-                  );
-                })
-              )}
-            </div>
-          ))}
-        </div>
-      ) : null}
+      <ProposalHead
+        asks={approvals.map((approval) => (
+          <div
+            key={approval.toolCallId}
+            className="flex flex-wrap items-baseline gap-3 py-0.5"
+            data-tool-id={approval.toolCallId}
+          >
+            <span className="face-mono text-ink">⌗ {toolTitle(approval.toolName)}</span>
+            {(() => {
+              const call = callsById.get(approval.toolCallId);
+              const target = call ? toolTarget(call.args) : undefined;
+              return target ? (
+                <code className="face-mono t-small text-ink" data-testid="approval-target">
+                  {target}
+                </code>
+              ) : null;
+            })()}
+            {(() => {
+              const call = callsById.get(approval.toolCallId);
+              return call?.target && call.target !== toolTarget(call.args) ? (
+                <span className="t-small truncate text-ink-2">{call.target}</span>
+              ) : null;
+            })()}
+            <span className="t-small text-ink-2">{approval.kind}</span>
+            {approval.kind === "suspension" && approval.toolName === "ask_user" ? (
+              <span className="text-ink-2">answer it in the stream</span>
+            ) : (
+              APPROVAL_OPTIONS.map((option) => {
+                const allow = option.kind.startsWith("allow");
+                return (
+                  <ActionButton
+                    key={option.id}
+                    tone={allow ? "commit" : "act"}
+                    icon={allow ? Check : X}
+                    label={option.label}
+                    reason={
+                      allow
+                        ? `Let pea run ${toolTitle(approval.toolName)} — the call executes against the live target`
+                        : `Refuse this ${toolTitle(approval.toolName)} call — pea continues without it`
+                    }
+                    onClick={() => {
+                      void resolveApproval(approval.toolCallId, option.id);
+                    }}
+                  />
+                );
+              })
+            )}
+          </div>
+        ))}
+        works={works}
+      />
     </section>
   );
 }

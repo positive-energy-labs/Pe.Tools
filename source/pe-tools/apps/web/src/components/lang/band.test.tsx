@@ -70,14 +70,14 @@ test("an aggregate accept is one bound write that skips the contested key and sa
   expect(w.write).toHaveBeenCalledOnce();
   expect(vi.mocked(w.write).mock.calls[0]![1]).toBe(7);
   expect(outcome.covered).toEqual(["x", "y"]);
-  expect(fanOutWord(outcome)).toBe("accepted 2 · skipped 1 (1 contested)");
+  expect(fanOutWord(outcome)).toBe("accepted 2 · skipped 1 (contested: 1)");
 });
 
 test("a refused aggregate reports the one refusal over every covered key", async () => {
   const w = { ...wire(), write: vi.fn(async () => ({ code: "stale-revision", message: "moved" })) };
   const outcome = await runFanOut(w, { x: CASES[0]![1] }, ["x"], "deny");
   expect(outcome.covered).toEqual(["x"]);
-  expect(fanOutWord(outcome)).toBe("refused · 1 cells · moved");
+  expect(fanOutWord(outcome)).toBe("moved");
 });
 
 test("discard unstages every staged address in one write", async () => {

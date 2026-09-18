@@ -26,6 +26,11 @@ export function createChatPageStore(deps: {
     "widget/expanded-pane",
     Atom.make<"side" | "plugin" | null>(deps.search.plugin ? "plugin" : "side"),
   );
+  /** The head's commit verb, waiting for its hosted route to run it once (page state, not URL). */
+  const planIntent = core.owned(
+    "widget/plan-intent",
+    Atom.make<{ route: ChatPluginRoute; nonce: number } | null>(null),
+  );
   const sideOpen = Atom.map(expandedPane, (pane) => pane === "side");
   const pluginOpen = Atom.map(expandedPane, (pane) => pane === "plugin");
 
@@ -47,6 +52,7 @@ export function createChatPageStore(deps: {
       paletteOpen,
       sideOpen,
       pluginOpen,
+      planIntent,
     },
     actions: {
       setPaletteOpen: (value: Setter<boolean>) => set("set-palette", paletteOpen, value),
@@ -63,6 +69,21 @@ export function createChatPageStore(deps: {
           plugin,
           focus: plugin && focus ? JSON.stringify(focus) : undefined,
         }),
+      /**
+       * The head's commit verb (K3): open the route's pane UNSCOPED (plan consumes the whole staged
+       * set, so no group filter may hide part of it) and ask its Situation to run its own commit
+       * once. Posts nothing to the thread; it is a route action, never a message.
+       */
+      planIn: (plugin: ChatPluginRoute) => {
+        set("plan-in", planIntent, { route: plugin, nonce: Date.now() });
+        void deps.search.patch({ plugin, focus: undefined });
+      },
+      /** The hosted route took the intent; true only for the first taker. */
+      takePlan: (plugin: ChatPluginRoute) => {
+        if (deps.registry.get(planIntent)?.route !== plugin) return false;
+        deps.registry.set(planIntent, null);
+        return true;
+      },
       openThread: (thread: string, replace = false) =>
         deps.search.patch({ thread, prompt: undefined, turn: undefined }, replace),
     },

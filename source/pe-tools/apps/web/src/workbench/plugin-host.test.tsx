@@ -6,6 +6,7 @@
  */
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { ZodType } from "zod";
 
@@ -14,7 +15,7 @@ import type { ChatPluginRoute } from "./chat-plugins";
 import { useChatPluginHost } from "./route-panes";
 import { createChatPageStore, type ChatSearch } from "./store";
 
-const plan = vi.hoisted(() => ({ release: () => {}, mounts: 0, unmounts: 0 }));
+const plan = vi.hoisted(() => ({ release: () => {}, mounts: 0, unmounts: 0, runs: 0 }));
 vi.mock("#/route/schedules/live", () => ({ LiveScheduleGridWorkspace: () => null }));
 vi.mock("#/route/family/live", () => ({ FamilyRouteView: () => null }));
 vi.mock("#/routes/pods", () => ({ PodsRouteContent: () => null }));
@@ -25,9 +26,9 @@ vi.mock("#/routes/families", async () => {
   const { useContext, useEffect } = await import("react");
   const { z } = await import("zod");
   const { defineRoute, useRoute } = await import("#/route");
-  const { ChatHosted } = await import("#/route/situation");
+  const { ChatHosted, useChatPlanIntent } = await import("#/route/situation");
   const manifest = defineRoute({
-    key: "hosted-plan",
+    key: "families",
     name: "Hosted plan",
     actions: {
       plan: {
@@ -38,7 +39,10 @@ vi.mock("#/routes/families", async () => {
         input: z.void() as unknown as ZodType<never>,
         dirties: [],
         ready: () => null,
-        run: () => new Promise<void>((resolve) => (plan.release = resolve)),
+        run: () => {
+          plan.runs += 1;
+          return new Promise<void>((resolve) => (plan.release = resolve));
+        },
       },
     },
   });
@@ -46,6 +50,7 @@ vi.mock("#/routes/families", async () => {
     FamiliesRouteContent: function Families({ thread }: { thread: string }) {
       const handle = useRoute(manifest, { thread });
       const hosted = useContext(ChatHosted);
+      useChatPlanIntent(handle, handle.actions.plan);
       useEffect(() => {
         plan.mounts += 1;
         return () => void (plan.unmounts += 1);
@@ -116,4 +121,55 @@ test("open → plan → close → reopen: one mount, the outcome in the page log
   // (the new-turn trigger), cancel, or answer a parked ask; `askExpiryTriggers` stays untouched.
   for (const patch of patches) expect(Object.keys(patch).sort()).toEqual(["focus", "plugin"]);
   expect(url.thread).toBe("thread-1");
+});
+
+test("the head's plan opens the pane unscoped and the hosted route runs its own plan once", async () => {
+  vi.spyOn(peReadings, "subscribe").mockImplementation(() => () => {});
+  const registry = AtomRegistry.make();
+  const patches: Partial<ChatSearch>[] = [];
+  let url: Partial<ChatSearch> = { mode: "threads", focus: '["Neck Width"]' };
+  function Intent({ store }: { store: ReturnType<typeof createChatPageStore> }) {
+    const pending = useAtomValue(store.atoms.planIntent);
+    const host = useChatPluginHost(
+      url.plugin,
+      "thread-1",
+      pending ? { route: pending.route, take: () => store.actions.takePlan(pending.route) } : null,
+    );
+    return (
+      <>
+        {url.plugin ? <div data-testid="pane" ref={host.slot} /> : null}
+        {host.kept}
+      </>
+    );
+  }
+  const store = createChatPageStore({
+    registry,
+    search: {
+      mode: "threads",
+      patch: async (partial) => {
+        patches.push(partial);
+        url = { ...url, ...partial };
+        view.rerender(
+          <RegistryContext.Provider value={registry}>
+            <Intent store={store} />
+          </RegistryContext.Provider>,
+        );
+      },
+    },
+  });
+  const view = render(
+    <RegistryContext.Provider value={registry}>
+      <Intent store={store} />
+    </RegistryContext.Provider>,
+  );
+  const runs = plan.runs;
+  await act(async () => store.actions.planIn("families"));
+  expect(url).toMatchObject({ plugin: "families", focus: undefined });
+  await vi.waitFor(() => expect(plan.runs).toBe(runs + 1));
+  // Taken once: a re-render or remount never runs it again, and nothing but plugin/focus moved.
+  await act(async () => store.actions.setPlugin("families"));
+  expect(plan.runs).toBe(runs + 1);
+  expect(registry.get(store.atoms.planIntent)).toBeNull();
+  for (const patch of patches) expect(Object.keys(patch).sort()).toEqual(["focus", "plugin"]);
+  await act(async () => plan.release());
 });
