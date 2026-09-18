@@ -19,7 +19,7 @@ import {
 import { isTsOnlyOperationKey, tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 import { HostRpcCaller } from "./host-rpc-caller.ts";
 import { readScheduleCapture } from "./schedule-client.ts";
-import { actionResult, submitAction } from "./takeoff-action-client.ts";
+import { actionResult, readAction, submitAction } from "./takeoff-action-client.ts";
 
 export interface AdmissionContext {
   hostBaseUrl: string;
@@ -61,12 +61,16 @@ export function admissionDestination(
   };
 }
 
-/** What the contract says about a key, and the session a native key was read against. */
+/**
+ * What the contract says about a key, and the session a native key was read against. A replay
+ * carries its original receipt's destination instead.
+ */
 export type CapabilityIntent = {
   kind: "operation" | "workflow" | "schedule-read";
   needs: string;
   mutates: boolean;
   session?: string;
+  destination?: ExecutionTarget;
 };
 
 /**
@@ -76,11 +80,20 @@ export type CapabilityIntent = {
  * action contract (every one of which is a `workflow`), the compiled schedule readings, then the
  * session's generated operation catalog at `GET /ops`. `/ops` lists native keys only for a named
  * session, so the session resolves first. A key none of them carries is a refusal, not a POST.
+ *
+ * An original `actionId` with no named session is a replay: its receipt is the authority for
+ * kind and destination, so no catalog or session is read. The host journal refuses a replay whose
+ * key, actor, input, target, or bases differ from the original.
  */
 export async function readCapabilityIntent(
   key: string,
   context: AdmissionContext,
 ): Promise<CapabilityIntent> {
+  const prior =
+    context.actionId && !context.bridgeSessionId
+      ? await readAction(context.actionId, context.hostBaseUrl)
+      : undefined;
+  if (prior) return { kind: prior.kind, needs: "", mutates: true, destination: prior.destination };
   const local = tsOnlyOperationCatalog.find((row) => row.key === key);
   if (local) return { kind: "operation", needs: local.needs, mutates: local.intent !== "Read" };
   if (Object.hasOwn(semanticActions, key))
@@ -126,7 +139,15 @@ const caller = (context: AdmissionContext) =>
  */
 async function resolveSession(context: AdmissionContext): Promise<string | undefined> {
   if (context.bridgeSessionId) return context.bridgeSessionId;
-  return (await caller(context).call("bridge.sessions.summary")).sessionId ?? undefined;
+  const summary = await caller(context)
+    .call("bridge.sessions.summary")
+    .catch((error: unknown) => {
+      throw new Error(
+        `The connected session could not be read from ${context.hostBaseUrl}/call: ${error instanceof Error ? error.message : String(error)}. Name it with --bridge-session-id.`,
+        { cause: error },
+      );
+    });
+  return summary.sessionId ?? undefined;
 }
 
 async function requireSession(key: string, context: AdmissionContext): Promise<string> {
@@ -171,10 +192,12 @@ export async function runCapability(
     kind: intent.kind,
     key,
     actor: context.actor,
-    destination: admissionDestination(key, intent.needs, {
-      bridgeSessionId: intent.session ?? (await resolveSession(context)),
-      openDocumentId: context.openDocumentId,
-    }),
+    destination:
+      intent.destination ??
+      admissionDestination(key, intent.needs, {
+        bridgeSessionId: intent.session ?? (await resolveSession(context)),
+        openDocumentId: context.openDocumentId,
+      }),
     input,
     bases: context.bases ?? {},
   });
