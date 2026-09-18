@@ -20,7 +20,8 @@ public static class HostProtocol {
     // 40: model-owned parameter-link detail/apply operations and shared profile language
     // 41: parameter-values wet edits require exact parameterId + expected ParameterTarget evidence (dry run
     //     returns it as current); stale/missing evidence, admission groups and aliases judged by ParameterEditPlan
-    public const int ContractVersion = 41;
+    // 42: family.editor.apply deleted; family writes are FamilyPatch plan/apply
+    public const int ContractVersion = 42;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]

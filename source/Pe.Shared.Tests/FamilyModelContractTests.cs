@@ -263,6 +263,27 @@ public sealed class FamilyModelContractTests {
         Assert.That(again.Value!.Forms.Values.Select(f => f.Kind), Has.All.EqualTo(FormKind.Extrusion));
     }
 
+    // Gotcha 18: a value that names a parameter is a formula; it is refused, never written as a literal. Measured
+    // specs already refuse any text; unit-carrying specs admit text for Revit units, so they need the name check.
+    // A text-like parameter's value is a string, so a name there is literal text, exactly as Revit stores it.
+    [TestCase("AirFlow", "Supply * 2", "value-names-parameter")]
+    [TestCase("AirFlow", "Supply", "value-names-parameter")]
+    [TestCase("Area", "Width * Depth", "value-names-parameter")]
+    [TestCase("Length", "Width * 2", "value-datatype-mismatch")]
+    [TestCase("AirFlow", "280 CFM", null)]
+    [TestCase("Text", "Width", null)]
+    public void A_value_naming_a_parameter_is_refused_as_a_formula(string dataType, string cell, string? code) {
+        var declared = """{"Supply":{"dataType":"AirFlow"},"Width":{"dataType":"Length"},"Depth":{"dataType":"Length"},"V":{"dataType":"DT"}}"""
+            .Replace("DT", dataType);
+        var cellJson = Newtonsoft.Json.JsonConvert.ToString(cell);
+        var perType = FamilyModelJson.Parse(Doc("{\"parameters\":" + declared + ",\"types\":{\"A\":{\"V\":" + cellJson + "}}}"));
+        var single = FamilyModelJson.Parse(Doc("{\"parameters\":" + declared.Replace("\"V\":{", "\"V\":{\"value\":" + cellJson + ",") + "}"));
+        Assert.Multiple(() => {
+            Assert.That(perType.Diagnostics.Select(x => x.Code), code == null ? Is.Empty : Does.Contain(code), "per-type cell");
+            Assert.That(single.Diagnostics.Select(x => x.Code), code == null ? Is.Empty : Does.Contain(code), "parameter value");
+        });
+    }
+
     // s-pea §2.4 numbering. Deliberately silent: #7 wasNamed (names the current family), #12 bowtie (plane loops cannot self-intersect).
     // Dead by construction: #3 wall-hosted solid, #22 connector direction. Product-only: #2 template, #13 nested type, #14 associate key, #16 array plane direction.
     [TestCase(1, """{"family":{"name":"x","category":"Not A Revit Category","template":"t","placement":"OneLevelBased"}}""", "invalid-json")]
