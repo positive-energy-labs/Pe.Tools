@@ -85,16 +85,15 @@ const completion: [Outcome[], End, Terminal][] = [
   [["succeeded", "unknown"], "rethrow", { state: "unknown", notDispatched: false }],
   [["succeeded"], "incomplete", { state: "incomplete", notDispatched: false }],
   [["succeeded", "unknown"], "incomplete", { state: "unknown", notDispatched: false }],
-  // TODAY: an error in host code after a known effect reads as an uncertain effect.
-  [["succeeded"], "hostError", { state: "unknown", notDispatched: false }],
-  // TODAY: an error in host code before any step reads as uncertain although nothing dispatched.
-  [[], "hostError", { state: "unknown", notDispatched: false }],
-  [[], "incomplete", { state: "unknown", notDispatched: false }],
-  // TODAY: a later refusal or cancel hides an earlier uncertain step.
-  [["unknown", "failed"], "rethrow", { state: "failed", notDispatched: true }],
-  [["unknown", "cancelled"], "rethrow", { state: "cancelled", notDispatched: false }],
-  // TODAY: an executor that swallows an uncertain step still settles succeeded.
-  [["unknown"], "return", { state: "succeeded", notDispatched: false }],
+  // Changed: an error in host code after a known effect is a known partial, not an uncertain effect.
+  [["succeeded"], "hostError", { state: "incomplete", notDispatched: false }],
+  // Changed: an error before any step is a pre-effect failure; every effect is a recorded step.
+  [[], "hostError", { state: "failed", notDispatched: true }],
+  [[], "incomplete", { state: "failed", notDispatched: true }],
+  // Changed: an earlier uncertain step is never hidden by a later refusal, cancel, or return.
+  [["unknown", "failed"], "rethrow", { state: "unknown", notDispatched: false }],
+  [["unknown", "cancelled"], "rethrow", { state: "unknown", notDispatched: false }],
+  [["unknown"], "return", { state: "unknown", notDispatched: false }],
 ];
 test.each(completion)("completion %j then %s", async (steps, end, expected) => {
   expect(terminal(await complete(steps, end))).toEqual(expected);
@@ -114,11 +113,10 @@ const recovery: [Outcome[], Outcome[], Terminal | "throws"][] = [
   // Recovery cannot know the executor finished after its effects; resume settles it.
   [["unknown"], ["succeeded"], { state: "unknown", notDispatched: false }],
   [["succeeded", "unknown"], ["succeeded"], { state: "unknown", notDispatched: false }],
-  // TODAY: recover throws a ZodError. The completion copied nativeOutcome/issues/evidence onto the
-  // unknown row, and the cancelled receipt schema admits none of them.
-  [["succeeded", "unknown"], ["cancelled"], "throws"],
-  // TODAY: a known effect followed by a proven refusal stays uncertain after recovery.
-  [["succeeded", "unknown"], ["failed"], { state: "unknown", notDispatched: false }],
+  // Fixed: recover used to throw here (unknown-only fields reached the cancelled receipt).
+  [["succeeded", "unknown"], ["cancelled"], { state: "cancelled", notDispatched: false }],
+  // Changed: a known effect followed by a proven refusal is incomplete, as at completion.
+  [["succeeded", "unknown"], ["failed"], { state: "incomplete", notDispatched: false }],
   [["unknown", "unknown"], ["failed", "cancelled"], { state: "cancelled", notDispatched: false }],
   [["unknown", "unknown"], ["failed", "failed"], { state: "failed", notDispatched: true }],
 ];
@@ -190,11 +188,12 @@ async function restart(steps: ActionStep["state"][], prepared: boolean) {
 const restarts: [ActionStep["state"][], boolean, Terminal][] = [
   [["running"], true, { state: "unknown", notDispatched: false }],
   [["succeeded", "running"], true, { state: "unknown", notDispatched: false }],
-  // TODAY: a restart before any step, or between known steps, reads as uncertain.
-  [[], true, { state: "unknown", notDispatched: false }],
-  [["succeeded"], true, { state: "unknown", notDispatched: false }],
-  // TODAY: a restart before preparation froze leaves an unknown row that recover and resume both refuse.
-  [[], false, { state: "unknown", notDispatched: false }],
+  // Changed: a restart before any step is a pre-effect failure; between known steps, a known partial.
+  [[], true, { state: "failed", notDispatched: true }],
+  [["succeeded"], true, { state: "incomplete", notDispatched: false }],
+  // Changed: before preparation froze nothing can have dispatched. The old unknown row could be
+  // neither recovered nor resumed, so it blocked its destination for good.
+  [[], false, { state: "failed", notDispatched: true }],
 ];
 test.each(restarts)("restart with steps %j, prepared %s", async (steps, prepared, expected) => {
   expect(terminal(await restart(steps, prepared))).toEqual(expected);
