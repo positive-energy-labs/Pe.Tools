@@ -240,41 +240,78 @@ describe("fanOut", () => {
 });
 
 describe("summarize", () => {
-  const cells: Record<string, TrichotomyCellLike> = {
-    "A/1": { proposal: { value: "x" }, staged: null },
-    "A/2": { proposal: { value: "y" }, staged: { value: "z" } },
-    "A/3": { proposal: null, staged: { value: "w" } },
-    "B/1": { proposal: { value: "7" }, staged: null },
-    "B/2": { proposal: null, staged: null },
-  };
-  const groupOf = (key: string) => [key.split("/")[0]!];
-  const baselineOf = (key: string) => (key === "B/1" ? "5" : undefined);
+  const byGroup = (cells: Record<string, TrichotomyCellLike>, baselineOf = (_: string) => "8in") =>
+    summarize(cells, { groupOf: (key) => [key.split("/")[0]!], baselineOf }).groups;
+  const many = (n: number, value: (i: number) => string) =>
+    Object.fromEntries(
+      Array.from({ length: n }, (_, i) => [
+        `N/${i}`,
+        { proposal: { value: value(i) }, staged: null },
+      ]),
+    );
 
-  it("counts per group, spans every address, and digests one change as from → to", () => {
-    const { groups } = summarize(cells, {
-      groupOf,
-      baselineOf,
-      lockOf: (key) => (key === "A/3" ? "ro" : null),
-    });
-    expect(groups).toEqual([
+  it("twelve identical proposals digest as one change with their shared baseline", () => {
+    expect(byGroup(many(12, () => "10in"))).toEqual([
       {
-        path: ["A"],
-        proposed: 2,
-        staged: 2,
-        contested: 1,
-        locked: 1,
-        span: 3,
-        digest: { many: { count: 3, examples: [{ to: "x" }, { to: "z" }, { to: "w" }] } },
-      },
-      {
-        path: ["B"],
-        proposed: 1,
+        path: ["N"],
+        proposed: 12,
         staged: 0,
         contested: 0,
         locked: 0,
-        span: 2,
-        digest: { single: { from: "5", to: "7" } },
+        span: 12,
+        digest: { single: { from: "8in", to: "10in" } },
       },
     ]);
+  });
+
+  it("mixed baselines keep the single value and drop the from", () => {
+    const [group] = byGroup(
+      many(3, () => "10in"),
+      (key) => `${key.length}${key}`,
+    );
+    expect(group!.digest).toEqual({ single: { to: "10in" } });
+  });
+
+  it("forty cells with thirty-eight distinct values count distinct values", () => {
+    const [group] = byGroup(many(40, (i) => (i < 3 ? "same" : `v${i}`)));
+    expect(group!.digest).toEqual({ many: { count: 38, examples: ["same", "v3", "v4"] } });
+  });
+
+  it("a verbatim-accepted cell counts staged only; a contested one staged and contested", () => {
+    const [group] = byGroup({
+      "A/agreed": { proposal: { value: "x" }, staged: { value: "x" } },
+      "A/contested": { proposal: { value: "y" }, staged: { value: "mine" } },
+    });
+    expect(group).toMatchObject({ proposed: 0, staged: 2, contested: 1, span: 2, digest: null });
+  });
+
+  it("the digest covers only standing, uncontested, unlocked proposals", () => {
+    const groups = summarize(
+      {
+        "A/open": { proposal: { value: "p" }, staged: null },
+        "A/locked": { proposal: { value: "q" }, staged: null },
+        "A/contested": { proposal: { value: "r" }, staged: { value: "mine" } },
+      },
+      {
+        groupOf: () => ["A"],
+        baselineOf: () => "b",
+        lockOf: (key) => (key === "A/locked" ? "ro" : null),
+      },
+    ).groups;
+    expect(groups[0]).toMatchObject({
+      proposed: 2,
+      locked: 1,
+      digest: { single: { from: "b", to: "p" } },
+    });
+  });
+
+  it("cells with nothing pending are not counted and make no group", () => {
+    expect(byGroup({ "E/1": { proposal: null, staged: null }, "E/2": {} })).toEqual([]);
+    expect(
+      byGroup({
+        "A/1": { proposal: { value: "p" }, staged: null },
+        "A/2": { proposal: null, staged: null },
+      })[0]!.span,
+    ).toBe(1);
   });
 });
