@@ -8,14 +8,14 @@ port = 4747
 db = ".artifacts/factory/events.sqlite"
 
 # ---- sensors: pure reads of the tree at a commit. A command that prints one flat JSON object of numbers.
-# The command runs with cwd = a clean checkout of the sha being measured; FACTORY_SHA is set.
+# The command runs with cwd = a clean checkout of the sha being measured; FACTORY_SHA and FACTORY_ROOT are set.
 
 [sensor.loc]
-run = "node source/pe-tools/packages/factory/sensors/loc.ts"
+run = "node {root}/source/pe-tools/packages/factory/sensors/loc.ts"
 scope = ["source/**"]
 
 [sensor.markers]
-run = "node source/pe-tools/packages/factory/sensors/markers.ts"
+run = "node {root}/source/pe-tools/packages/factory/sensors/markers.ts"
 scope = ["source/**", "docs/**", ".agents/**", ".claude/**"]
 
 # ---- loops: trigger, sensors, setpoints. Round 1 has no actuators; a loop with no `act` only measures.

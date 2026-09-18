@@ -18,11 +18,11 @@ describe("tick", () => {
       git("config", "user.name", "Factory Test");
       writeFileSync(
         join(repo, "sensor.mjs"),
-        'import {readdirSync} from "node:fs"; console.log(JSON.stringify({n:readdirSync(".").filter(x=>x.endsWith(".txt")).length}))\n',
+        'import {readdirSync} from "node:fs"; import {dirname} from "node:path"; import {fileURLToPath} from "node:url"; if(process.env.FACTORY_ROOT!==dirname(fileURLToPath(import.meta.url))) throw new Error("wrong FACTORY_ROOT"); console.log(JSON.stringify({n:readdirSync(".").filter(x=>x.endsWith(".txt")).length}))\n',
       );
       writeFileSync(
         join(repo, "factory.toml"),
-        '[factory]\nref="main"\npoll_seconds=1\nport=4747\ndb=".artifacts/events.sqlite"\n[sensor.files]\nrun="node sensor.mjs"\nscope=["**/*.txt","*.txt"]\n[loop.watch]\nsense=["files"]\nsetpoint={"files.n"="down"}\n',
+        '[factory]\nref="main"\npoll_seconds=1\nport=4747\ndb=".artifacts/events.sqlite"\n[sensor.files]\nrun="node {root}/sensor.mjs"\nscope=["**/*.txt","*.txt"]\n[loop.watch]\nsense=["files"]\nsetpoint={"files.n"="down"}\n',
       );
       writeFileSync(join(repo, "one.txt"), "one\n");
       git("add", "factory.toml", "sensor.mjs", "one.txt");

@@ -115,11 +115,16 @@ const sense = (
         throw new Error(`checkout is not clean at ${sha}`);
       }
 
-      const env: NodeJS.ProcessEnv = { ...process.env, FACTORY_SHA: sha };
+      const env: NodeJS.ProcessEnv = { ...process.env, FACTORY_ROOT: repo, FACTORY_SHA: sha };
       delete env.ANTHROPIC_API_KEY;
       delete env.ANTHROPIC_AUTH_TOKEN;
       delete env.OPENAI_API_KEY;
-      const result = spawnSync(sensor.run, { cwd: checkout, encoding: "utf8", env, shell: true });
+      const result = spawnSync(sensor.run.replace("{root}", repo), {
+        cwd: checkout,
+        encoding: "utf8",
+        env,
+        shell: true,
+      });
       if (result.status !== 0)
         throw new Error(result.stderr.trim() || `sensor exited ${result.status}`);
       const values: unknown = JSON.parse(result.stdout.trim());
