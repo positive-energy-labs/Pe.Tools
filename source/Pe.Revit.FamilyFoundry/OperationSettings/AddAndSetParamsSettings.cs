@@ -110,9 +110,10 @@ public sealed class SetKnownParamsSettings : IOperationSettings {
             }
 
             foreach (var kvp in row.ValuesByType) {
+                // A type can be named " " (Old_Template prioAir fans); trim for matching, never skip it.
                 var typeName = kvp.Key?.Trim();
                 var value = kvp.Value?.ToString();
-                if (string.IsNullOrWhiteSpace(typeName) || string.IsNullOrWhiteSpace(value))
+                if (typeName is null || string.IsNullOrWhiteSpace(value))
                     continue;
                 if (valuesPerType.ContainsKey(typeName)) {
                     throw new InvalidOperationException(

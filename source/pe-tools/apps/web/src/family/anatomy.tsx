@@ -40,11 +40,12 @@
 import { HelpTip } from "#/components/lang/help";
 import { PressContent } from "#/components/anatomy/press-content";
 import type { FamilyModel } from "#/family/family-model";
-import { bindingOf, type Draft, type Focus, type PageWorld } from "#/family/model";
+import { bindingOf, type Draft, type Focus, type FamilyPageModel } from "#/family/model";
 import { boundParam } from "#/family/world";
 import { Press } from "#/components/lang/press";
-import { FixtureViews } from "#/family/anatomy-fixture-views";
+import { AnatomyViews } from "#/family/anatomy-fixture-views";
 import { ModelViews } from "#/family/anatomy-model-views";
+import { Code, stringify } from "#/components/lang/code";
 
 export function AnatomyDrawing({
   world,
@@ -57,7 +58,7 @@ export function AnatomyDrawing({
   onInspect,
   inspecting,
 }: {
-  world: PageWorld;
+  world: FamilyPageModel;
   draft: Draft;
   typeName: string;
   /** null → the declared fixture lane (buildParts). Non-null → the parsed document, drawn through
@@ -74,7 +75,7 @@ export function AnatomyDrawing({
 }) {
   const views =
     model == null ? (
-      <FixtureViews
+      <AnatomyViews
         world={world}
         draft={draft}
         typeName={typeName}
@@ -110,6 +111,29 @@ export function AnatomyDrawing({
             </HelpTip>
           </p>
         </div>
+        {model?.parameters && (
+          <div className="hairline-b mb-2 pb-2 t-small">
+            <p>Native authored declarations</p>
+            {(["datums", "refPlanes", "refLines", "dimensions", "nested", "arrays"] as const).map(
+              (section) => {
+                const entries = Object.entries(model[section] ?? {});
+                return entries.length ? (
+                  <details key={section}>
+                    <summary>
+                      {section} / {entries.length}
+                    </summary>
+                    {entries.map(([name, spec]) => (
+                      <details key={name}>
+                        <summary>{name}</summary>
+                        <Code code={stringify(spec)} lang="json" title={name} />
+                      </details>
+                    ))}
+                  </details>
+                ) : null;
+              },
+            )}
+          </div>
+        )}
         {world.constituents.map((part) => {
           const geom = world.geomBySlug.get(part.slug);
           const unbound =

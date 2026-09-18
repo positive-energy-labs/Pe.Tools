@@ -18,6 +18,7 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
     public static readonly Guid MetadataProjectBoundSharedGuid = new("22222222-3333-4444-5555-666666666603");
 
     public const string SourceText = "FF Matrix Source Text";
+    public const string SourceUnsetText = "FF Matrix Source Unset Text";
     public const string SourceBlankText = "FF Matrix Source Blank Text";
     public const string SourceFallbackText = "FF Matrix Source Fallback Text";
     public const string SourceInteger = "FF Matrix Source Integer";
@@ -72,7 +73,9 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
     public static Family BuildAndLoadSetValueMatrixFamily(
         Application application,
         Document projectDocument,
-        string outputDirectory
+        string outputDirectory,
+        Action<string, Document>? observe = null,
+        bool selectFirstTypeForArrayCreate = true
     ) {
         var familyDocument = RevitFamilyFixtureHarness.CreateFamilyDocument(
             application,
@@ -81,16 +84,18 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
 
         try {
             var nestedFamily = BuildAndLoadNestedFamily(application, familyDocument, outputDirectory);
-            BuildSetValueMatrixFamilyDocument(familyDocument, nestedFamily);
+            BuildSetValueMatrixFamilyDocument(familyDocument, nestedFamily, observe, selectFirstTypeForArrayCreate);
             var familyPath = RevitFamilyFixtureHarness.SaveDocumentCopy(
                 familyDocument,
                 outputDirectory,
                 SetValueMatrixFamilyName);
+            observe?.Invoke("afterSaveAs", familyDocument);
             return RevitFamilyFixtureHarness.LoadFamilyIntoProject(
                 application,
                 projectDocument,
                 familyPath,
-                new DefaultFamilyLoadOptions());
+                new DefaultFamilyLoadOptions(),
+                document => observe?.Invoke("afterReopen", document));
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(familyDocument);
         }
@@ -201,7 +206,12 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
         }
     }
 
-    private static void BuildSetValueMatrixFamilyDocument(Document familyDocument, Family nestedFamily) {
+    private static void BuildSetValueMatrixFamilyDocument(
+        Document familyDocument,
+        Family nestedFamily,
+        Action<string, Document>? observe,
+        bool selectFirstTypeForArrayCreate
+    ) {
         using var transaction = new Transaction(familyDocument, "Build FF set-value matrix family");
         _ = transaction.Start();
 
@@ -211,6 +221,7 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
             _ = RevitFamilyFixtureHarness.EnsureFamilyType(familyDocument, typeName);
 
         var sourceText = AddFamilyParameter(familyDocument, SourceText, SpecTypeId.String.Text, GroupTypeId.Text, false);
+        _ = AddFamilyParameter(familyDocument, SourceUnsetText, SpecTypeId.String.Text, GroupTypeId.Text, false);
         var sourceBlankText = AddFamilyParameter(familyDocument, SourceBlankText, SpecTypeId.String.Text, GroupTypeId.Text, false);
         var sourceFallbackText = AddFamilyParameter(familyDocument, SourceFallbackText, SpecTypeId.String.Text, GroupTypeId.Text, false);
         var sourceInteger = AddFamilyParameter(familyDocument, SourceInteger, SpecTypeId.Int.Integer, GroupTypeId.IdentityData, false);
@@ -231,7 +242,9 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
         AssertFormulaSet(familyDoc, sourceFormulaNested, $"{SourceFormulaBase} * 2");
         AssertFormulaSet(familyDoc, targetExistingFormulaLength, $"{SourceFormulaBase} + 1");
 
+        observe?.Invoke("beforeSeed", familyDocument);
         SeedMatrixValues(
+            familyDocument,
             manager,
             sourceText,
             sourceBlankText,
@@ -247,18 +260,24 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
             sourceAngularDimension,
             sourceRadialDimension,
             sourceArrayCount,
-            sourceNestedWidth);
+            sourceNestedWidth,
+            observe);
 
+        observe?.Invoke("beforeTopology", familyDocument);
         CreateLabeledDimensionTopology(
             familyDocument,
             sourceLinearDimension,
             sourceAngularDimension,
-            sourceRadialDimension);
-        CreateLabeledArrayTopology(familyDocument, sourceArrayCount);
-        CreateNestedParameterAssociation(familyDocument, nestedFamily, sourceNestedWidth);
+            sourceRadialDimension,
+            observe);
+        CreateLabeledArrayTopology(familyDocument, sourceArrayCount, observe, selectFirstTypeForArrayCreate);
+        CreateNestedParameterAssociation(familyDocument, nestedFamily, sourceNestedWidth, observe);
+        observe?.Invoke("afterTopology", familyDocument);
 
         familyDocument.Regenerate();
+        observe?.Invoke("afterRegenerate", familyDocument);
         _ = transaction.Commit();
+        observe?.Invoke("afterCommit", familyDocument);
     }
 
     private static void BuildMetadataStateFamilyDocument(Document familyDocument) {
@@ -334,6 +353,7 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
     }
 
     private static void SeedMatrixValues(
+        Document familyDocument,
         FamilyManager manager,
         FamilyParameter sourceText,
         FamilyParameter sourceBlankText,
@@ -349,9 +369,11 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
         FamilyParameter sourceAngularDimension,
         FamilyParameter sourceRadialDimension,
         FamilyParameter sourceArrayCount,
-        FamilyParameter sourceNestedWidth
+        FamilyParameter sourceNestedWidth,
+        Action<string, Document>? observe
     ) {
         for (var index = 0; index < MatrixTypeNames.Length; index++) {
+            observe?.Invoke($"beforeSeed:{MatrixTypeNames[index]}", familyDocument);
             manager.CurrentType = manager.Types.Cast<FamilyType>()
                 .First(type => string.Equals(type.Name, MatrixTypeNames[index], StringComparison.Ordinal));
             manager.Set(sourceText, $"matrix-text-{index + 1}");
@@ -369,6 +391,7 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
             manager.Set(sourceRadialDimension, 0.5 + index);
             manager.Set(sourceArrayCount, index + 2);
             manager.Set(sourceNestedWidth, 1.25 + index);
+            observe?.Invoke($"afterSeed:{MatrixTypeNames[index]}", familyDocument);
         }
     }
 
@@ -397,7 +420,8 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
         Document familyDocument,
         FamilyParameter linearLabel,
         FamilyParameter angularLabel,
-        FamilyParameter radialLabel
+        FamilyParameter radialLabel,
+        Action<string, Document>? observe
     ) {
         var view = GetPlanView(familyDocument);
         var factory = familyDocument.FamilyCreate;
@@ -408,32 +432,46 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
         var linearReferences = new ReferenceArray();
         linearReferences.Append(linearA.GeometryCurve.Reference);
         linearReferences.Append(linearB.GeometryCurve.Reference);
+        observe?.Invoke("beforeLinearDimensionCreate", familyDocument);
         var linearDimension = factory.NewLinearDimension(
             view,
             Line.CreateBound(new XYZ(0, -4, 0), new XYZ(4, -4, 0)),
             linearReferences);
+        observe?.Invoke("afterLinearDimensionCreate", familyDocument);
         linearDimension.FamilyLabel = linearLabel;
+        observe?.Invoke("afterLinearDimensionLabel", familyDocument);
 
         var angleA = factory.NewModelCurve(Line.CreateBound(XYZ.Zero, new XYZ(4, 0, 0)), sketchPlane);
         var angleB = factory.NewModelCurve(Line.CreateBound(XYZ.Zero, new XYZ(4, 4, 0)), sketchPlane);
+        observe?.Invoke("beforeAngularDimensionCreate", familyDocument);
         var angularDimension = factory.NewAngularDimension(
             view,
             Arc.Create(XYZ.Zero, 3.0, 0.0, Math.PI / 4.0, XYZ.BasisX, XYZ.BasisY),
             angleA.GeometryCurve.Reference,
             angleB.GeometryCurve.Reference);
+        observe?.Invoke("afterAngularDimensionCreate", familyDocument);
         angularDimension.FamilyLabel = angularLabel;
+        observe?.Invoke("afterAngularDimensionLabel", familyDocument);
 
         var radialModelCurve = factory.NewModelCurve(
             Arc.Create(new XYZ(8, 0, 0), 1.0, 0.0, Math.PI, XYZ.BasisX, XYZ.BasisY),
             sketchPlane);
+        observe?.Invoke("beforeRadialDimensionCreate", familyDocument);
         var radialDimension = factory.NewRadialDimension(
             view,
             radialModelCurve.GeometryCurve.Reference,
             new XYZ(9.0, 0.0, 0.0));
+        observe?.Invoke("afterRadialDimensionCreate", familyDocument);
         radialDimension.FamilyLabel = radialLabel;
+        observe?.Invoke("afterRadialDimensionLabel", familyDocument);
     }
 
-    private static void CreateLabeledArrayTopology(Document familyDocument, FamilyParameter arrayLabel) {
+    private static void CreateLabeledArrayTopology(
+        Document familyDocument,
+        FamilyParameter arrayLabel,
+        Action<string, Document>? observe,
+        bool selectFirstTypeForArrayCreate
+    ) {
         var view = GetPlanView(familyDocument);
         var sketchPlane = SketchPlane.Create(familyDocument, Plane.CreateByNormalAndOrigin(XYZ.BasisZ, XYZ.Zero));
         var seedLine = familyDocument.FamilyCreate.NewModelCurve(
@@ -443,37 +481,63 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
         if (!LinearArray.IsElementArrayable(familyDocument, seedLine.Id))
             throw new InvalidOperationException("The FF matrix model line was not arrayable.");
 
-        var array = LinearArray.Create(
-            familyDocument,
-            view,
-            seedLine.Id,
-            3,
-            new XYZ(0, 1, 0),
-            (ArrayAnchorMember)0);
+        observe?.Invoke("beforeArrayCreate", familyDocument);
+        var manager = familyDocument.FamilyManager;
+        var previousType = manager.CurrentType;
+        if (selectFirstTypeForArrayCreate) {
+            manager.CurrentType = manager.Types.Cast<FamilyType>().First();
+            observe?.Invoke("beforeArrayCreate:firstType", familyDocument);
+        }
+        LinearArray array;
+        try {
+            array = LinearArray.Create(
+                familyDocument,
+                view,
+                seedLine.Id,
+                3,
+                new XYZ(0, 1, 0),
+                (ArrayAnchorMember)0);
+        } finally {
+            if (selectFirstTypeForArrayCreate)
+                manager.CurrentType = previousType;
+        }
+        observe?.Invoke("afterArrayCreate", familyDocument);
         array.Label = arrayLabel;
+        observe?.Invoke("afterArrayLabel", familyDocument);
     }
 
-    private static void CreateNestedParameterAssociation(Document familyDocument, Family nestedFamily, FamilyParameter hostLabel) {
+    private static void CreateNestedParameterAssociation(
+        Document familyDocument,
+        Family nestedFamily,
+        FamilyParameter hostLabel,
+        Action<string, Document>? observe
+    ) {
         var nestedSymbol = nestedFamily.GetFamilySymbolIds()
                                .Select(id => familyDocument.GetElement(id))
                                .OfType<FamilySymbol>()
                                .FirstOrDefault()
                            ?? throw new InvalidOperationException($"Nested family '{nestedFamily.Name}' has no symbols.");
 
+        observe?.Invoke("beforeNestedActivate", familyDocument);
         if (!nestedSymbol.IsActive)
             nestedSymbol.Activate();
+        observe?.Invoke("afterNestedActivate", familyDocument);
 
+        observe?.Invoke("beforeNestedCreate", familyDocument);
         var nestedInstance = familyDocument.FamilyCreate.NewFamilyInstance(
             new XYZ(0, 0, 0),
             nestedSymbol,
             StructuralType.NonStructural);
+        observe?.Invoke("afterNestedCreate", familyDocument);
         var nestedWidth = nestedInstance.LookupParameter(NestedWidth)
                           ?? throw new InvalidOperationException($"Nested parameter '{NestedWidth}' was not found.");
 
         if (!familyDocument.FamilyManager.CanElementParameterBeAssociated(nestedWidth))
             throw new InvalidOperationException($"Nested parameter '{NestedWidth}' cannot be associated.");
 
+        observe?.Invoke("beforeNestedAssociation", familyDocument);
         familyDocument.FamilyManager.AssociateElementParameterToFamilyParameter(nestedWidth, hostLabel);
+        observe?.Invoke("afterNestedAssociation", familyDocument);
     }
 
     private static void SetStrongReference(ReferencePlane referencePlane) =>

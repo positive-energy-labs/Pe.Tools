@@ -88,132 +88,247 @@
  *   under `⇄ live`, because a bulk crossing you cannot see the far side of is a bulk crossing made
  *   blind (SURFACE-PHILOSOPHY §2). Per-cell capture/apply stay in the drill-in.
  *
- * ── WHAT IS AND IS NOT WIRED (phase B, 2026-08-17) ──────────────────────────────────────────
- * TWO LANES, ONE SHAPE. The family store answers the only question that separates them — is a
- * family document open in `route:settings`? — and the page below it renders ONE `PageWorld` either
- * way. Nothing in this file asks whether a host exists.
+ * ── WHERE IT SITS (2026-09-17) ─────────────────────────────────────────────────────────────
+ * This is the AUDIT of the `/family` entity route. The kernel draws the Situation (document, pod,
+ * spec), owns capture and apply (apply confirms the host's plan first), and opens the shared spec
+ * editor beside this body. The body edits the open member through its Settings Work: authored
+ * edits stage as field patches, Pea proposals dock on the doc pane, and `build .rfa` is the one
+ * crossing this body arms itself.
  *
- *   LIVE     — a real `family.json`, parsed and projected. The document slot lists what the bound
- *              session can see and picking one runs settings `open`; `save profile` diffs the
- *              draft into staged field patches and runs settings `save`, whose refusal (a version
- *              conflict, a schema failure, a field still flagged for attention) is surfaced
- *              VERBATIM on the same receipt channel every other verb uses.
- *   FIXTURE  — no document. `FIXTURE_WORLD`, wearing the dashed seam chip, save page-local. Not a
- *              fallback: a DECLARED lane, and the chip says what replaces it.
- *
- * ── THE TWO HOST CROSSINGS (phase D, 2026-08-17) ────────────────────────────────────────────
- * The table pane header's last two verbs are the only two on this page that talk to Revit, and they
- * are the two directions evidence travels:
- *
- *   capture live   `route:family` `capture_evidence` → `revit.detail.family-model`. A READ. Its
- *                  result lands in the evidence slice, the projection turns it into the live half,
- *                  and the ⇄ live overlay, the drift marks and the freshness chip are all readings
- *                  OF it. Refuses in the host's own words when no family document is active in
- *                  Revit. It moves nothing into the profile — `capture all` does that, under the
- *                  overlay, once there is a reading to move.
- *   build .rfa     `route:family` `build_evidence` → `revit.apply.family-model`. A WRITE, and the
- *                  only one that leaves both the page and the document: it re-opens the SAVED
- *                  family.json host-side and materializes a timestamped .rfa. Because it reads the
- *                  file rather than the table, it is armed rather than pressed — the ceremony, its
- *                  refusal predicates and its receipt live in `#/family/build`.
- *
- * STILL PAGE-LOCAL ON BOTH LANES, and honest about it: `apply` in both its bulk and per-type shapes
- * (`family.editor.apply` is a later phase — the profile-wins direction has no concurrency guard yet),
- * and the proposals with their accept/deny (they need `route:settings` field
- * proposals, which the projection deliberately does not invent), and the doc pane's parse.
+ *   capture live   the kernel's `family.capture` workflow. It files the open family as a NEW
+ *                  member, the page lands on it, and the capture's evidence (coverage, the
+ *                  unmodeled ledger) shows beside it and feeds the ⇄ live overlay.
+ *   build .rfa     `family.build`. A WRITE that leaves the page and
+ *                  the document: it composes the SAVED member host-side and materializes an .rfa.
+ *                  Because it reads the saved bytes rather than the table, it is armed rather than
+ *                  pressed — the ceremony, its refusals and its receipt live in `#/family/build`.
  */
-import { useCallback } from "react";
-import { useAtomValue } from "@effect/atom-react";
+import { Link } from "@tanstack/react-router";
 
-import { FAMILY_PRODUCT, type FamilySlot } from "#/family/product";
+import { ActionButton } from "#/components/lang/action-button";
+import { Code, stringify } from "#/components/lang/code";
+import { FactChip } from "#/components/lang/chip";
+import { OutcomeLine } from "#/components/lang/outcome";
+import { PaneSplit } from "#/components/lang/pane";
+import { buildReceiptSummary } from "#/family/build";
 import type { FamilyStore } from "#/family/store";
-import { useFleet } from "#/host/fleet";
-import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/targeting/kit";
-import { worldTrunk } from "#/targeting/world";
-import { FamilyWorkspaceProvider } from "#/family/workspace-context";
-import { FamilyWorkspaceView } from "#/family/workspace-view";
+import { FamilyWorkspaceAnatomy } from "#/family/workspace-anatomy";
+import { FamilyWorkspaceDocPane } from "#/family/workspace-doc-pane";
+import { FamilyWorkspaceTable } from "#/family/workspace-table";
+import { FamilyWorkspaceProvider, useFamilyWorkspace } from "#/family/workspace-context";
 import { useFamilyWorkspaceCore } from "#/family/workspace-core";
 import { useFamilyColumns } from "#/family/workspace-columns";
 
-function useFamilyWorkspaceModel(store: FamilyStore, requestedFamily?: string, source?: "fixture") {
+function useFamilyWorkspaceModel(store: FamilyStore) {
   const core = useFamilyWorkspaceCore(store);
   const columnModel = useFamilyColumns(core);
-  const { profile, stage, target, busy } = core;
-
-  const picker = useAtomValue(store.atoms.picker);
-  const fleet = useFleet({ enabled: source !== "fixture" });
-  const feeds = {
-    world: worldTrunk.feed(fleet),
-    profile: useAtomValue(store.feeds.profile),
-  };
-  const product = FAMILY_PRODUCT(feeds, {
-    open: store.commandVerb("open", () => ({
-      documentId: { moduleKey: "FamilyFoundry", rootKey: "models", relativePath: profile },
-    })),
-    ...store.verbs,
-  });
-  const bindingState: BindingState<FamilySlot> = {
-    bound: { world: target || null, profile: profile || null },
-    multi: {},
-    stage,
-  };
-  const setBindingState = useCallback(
-    (patch: BindingPatch<FamilySlot>) => {
-      const nextWorld = patch.bound?.world ?? null;
-      const nextProfile = patch.bound?.profile ?? null;
-      if (nextWorld !== null && nextWorld !== target)
-        void store.actions.bind(nextWorld).catch(() => undefined);
-      if (nextProfile !== null && nextProfile !== profile) void store.actions.open(nextProfile);
-      const nextStage = patch.stage === "evidence" ? "evidence" : "author";
-      if (patch.stage && nextStage !== stage) void store.actions.setStage(nextStage);
-    },
-    [profile, stage, store, target],
-  );
-  const bindings = useBindings(
-    product,
-    bindingState,
-    setBindingState,
-    picker.open,
-    (open) => store.actions.setPicker((previous) => ({ ...previous, open })),
-    picker.level,
-    (level) => store.actions.setPicker((previous) => ({ ...previous, level })),
-    picker.query,
-    (query) => store.actions.setPicker((previous) => ({ ...previous, query })),
-  );
-  const runner = useRunner(product, bindings, busy?.id ?? null);
-
-  return {
-    ...core,
-    ...columnModel,
-    requestedFamily,
-    picker,
-    fleet,
-    feeds,
-    product,
-    bindingState,
-    setBindingState,
-    bindings,
-    runner,
-  };
+  return { ...core, ...columnModel, picker: store.picker };
 }
 
 export type FamilyWorkspaceModel = ReturnType<typeof useFamilyWorkspaceModel>;
 
-export function FamilyWorkspace({
-  store,
-  requestedFamily,
-  source,
-}: {
-  store: FamilyStore;
-  requestedFamily?: string;
-  source?: "fixture";
-}) {
-  const model = useFamilyWorkspaceModel(store, requestedFamily, source);
+const noun = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** The audit body: the member bar, the capture evidence, then anatomy and table beside the doc. */
+export function FamilyWorkspace({ store }: { store: FamilyStore }) {
+  const model = useFamilyWorkspaceModel(store);
+  const { readings } = store;
   return (
     <FamilyWorkspaceProvider value={model}>
-      <FamilyWorkspaceView />
+      <div className="flex size-full min-h-0 min-w-0 flex-col">
+        {store.editFailure && (
+          <div role="alert">
+            <span>{store.editFailure.message} Your input is retained for this member.</span>
+            <ActionButton
+              label="retry staging"
+              reason="Retry the retained input against its original Work revision"
+              onClick={() => void store.actions.flush().catch(() => undefined)}
+            />
+          </div>
+        )}
+        <DraftBand />
+        <CaptureEvidence />
+        {readings.length > 0 && (
+          <details>
+            <summary>Saved Family readings</summary>
+            {readings.map((capture) => (
+              <p key={capture.id}>
+                <a href={`/family/readings?id=${capture.id}`}>
+                  {capture.reading.kind} captured {capture.capturedAt} ({capture.provenance.kind})
+                </a>
+              </p>
+            ))}
+          </details>
+        )}
+        <FamilyAuditPanes />
+      </div>
     </FamilyWorkspaceProvider>
   );
 }
 
-/** A constituent the profile names in prose but declares no structured geometry for. */
+/**
+ * What is unsaved and staged on the open member. The member itself is picked in the Situation
+ * (the kernel spec picker); a draft that does not parse is said here, beside its edits.
+ */
+function DraftBand() {
+  const { store, draft, unsavedCount } = useFamilyWorkspace();
+  const staged = store.buildFacts.stagedCount;
+  const revision = store.review.revision;
+  const parseError = store.lane.parseError;
+  if (!draft.dirty && !staged && revision === null && parseError == null) return null;
+  return (
+    <div className="hairline-b flex flex-wrap items-baseline gap-3 px-3 py-1.5 t-small">
+      <span className="text-ink-2">family model</span>
+      {parseError != null ? <span data-tone="caution">{parseError}</span> : null}
+      {draft.dirty ? <b>{noun(unsavedCount, "unsaved edit")}</b> : null}
+      {staged ? <b>{noun(staged, "staged field")}</b> : null}
+      {revision !== null ? <span className="face-mono text-ink-mute">r{revision}</span> : null}
+    </div>
+  );
+}
+
+/** What the latest capture saw, beside the member it filed (ruling 2026-09-16). */
+function CaptureEvidence() {
+  const { store } = useFamilyWorkspace();
+  const captured = store.captured;
+  if (!captured) return null;
+  const { member, evidence } = captured;
+  const here =
+    store.member?.pod === member.pod && store.member.path === member.path
+      ? "this member"
+      : `${member.pod} · ${member.path}`;
+  if (!("modelJson" in evidence)) return null;
+  return (
+    <section aria-label="capture evidence" className="hairline-b flex flex-col gap-1 px-3 py-1.5">
+      <div className="flex flex-wrap items-baseline gap-2 t-small">
+        <span className="text-ink-2">
+          captured {evidence.familyName} into {here}
+        </span>
+        {Object.entries(evidence.coverage).map(([section, state]) => (
+          <FactChip key={section} tone={state === "Full" ? "done" : "caution"} title={section}>
+            {section}: {state}
+          </FactChip>
+        ))}
+        {/* The facts themselves are the run's `unmodeled.json`, never the member (law 12). */}
+        <FactChip tone={evidence.unmodeledCount ? "caution" : "done"} title="unmodeled facts">
+          {evidence.run ? (
+            <Link to="/pods" search={{ pod: member.pod, path: `${evidence.run}/unmodeled.json` }}>
+              {noun(evidence.unmodeledCount, "unmodeled fact")}
+            </Link>
+          ) : (
+            noun(evidence.unmodeledCount, "unmodeled fact")
+          )}
+        </FactChip>
+        <span className="face-mono text-ink-mute">{evidence.observedAt}</span>
+      </div>
+      {evidence.issues.map((issue, index) => (
+        <OutcomeLine
+          key={index}
+          kind={issue.severity === "Error" ? "error" : "advisory"}
+          label={issue.code}
+          says={issue.message}
+        />
+      ))}
+    </section>
+  );
+}
+
+function FamilyAuditPanes() {
+  const { anatomyCollapsed, setAnatomyCollapsed } = useFamilyWorkspace();
+  return (
+    <PaneSplit
+      axis="horizontal"
+      grow
+      resize={{ target: "end", defaultSize: 340, minSize: 260, minOtherSize: 560 }}
+      start={
+        <PaneSplit
+          axis="vertical"
+          grow
+          resize={{
+            target: "start",
+            defaultSize: 220,
+            minSize: 34,
+            collapse: {
+              collapsed: anatomyCollapsed,
+              onCollapsedChange: setAnatomyCollapsed,
+              collapsedSize: 34,
+              collapseBelow: 90,
+            },
+          }}
+          start={<FamilyWorkspaceAnatomy />}
+          end={<FamilyWorkspaceTable />}
+        />
+      }
+      end={<FamilyWorkspaceDocPane />}
+    />
+  );
+}
+
+/** The ledger lines the audit adds to the kernel's Situation. */
+export function familyFacts(store: FamilyStore) {
+  const { lane, snapshot, sharedEdit, evidence } = store;
+  const file = lane.document?.relativePath ?? store.profile;
+  const validation = snapshot?.validation;
+  return [
+    [
+      "model",
+      lane.parseError != null
+        ? `${file} · will not parse: ${lane.parseError}`
+        : validation
+          ? validation.isValid
+            ? `${file} · valid`
+            : `${file} · ${noun(validation.issues.length, "issue")}: ${validation.issues
+                .map((issue) => issue.message)
+                .join(" · ")}`
+          : file || "none",
+    ],
+    [
+      "coverage",
+      evidence && "modelJson" in evidence
+        ? `${Object.entries(evidence.coverage)
+            .map(([key, value]) => `${key}: ${value}`)
+            .join(" / ")} / ${evidence.unmodeledCount} unmodeled`
+        : "not captured",
+    ],
+    ...(store.buildReceipt ? [["build", buildReceiptSummary(store.buildReceipt)] as const] : []),
+    ...(evidence && "modelJson" in evidence
+      ? [
+          [
+            "capture",
+            <details key="capture">
+              <summary className="cursor-pointer">native capture</summary>
+              <Code
+                code={`${stringify(evidence.coverage)}\n${evidence.modelJson}`}
+                lang="json"
+                title="native capture"
+              />
+            </details>,
+          ] as const,
+        ]
+      : []),
+    ...(sharedEdit
+      ? [
+          [
+            "shared",
+            `${sharedEdit.pointer} · no local edit was staged; open the referenced source below`,
+          ] as const,
+        ]
+      : []),
+    ...(snapshot?.dependencies ?? []).map(
+      (dependency) =>
+        [
+          "depends",
+          <a
+            key={`${dependency.id}:${dependency.path}`}
+            href={`/pods?${new URLSearchParams({ pod: dependency.id, path: dependency.path })}`}
+            title="Edit the shared source JSON in its pod. Changes affect every member that includes it."
+          >
+            {sharedEdit?.directives.some((directive) => directive.endsWith(dependency.path))
+              ? "open referenced source "
+              : "edit shared "}
+            @{dependency.id}/{dependency.path}
+          </a>,
+        ] as const,
+    ),
+  ] as const;
+}

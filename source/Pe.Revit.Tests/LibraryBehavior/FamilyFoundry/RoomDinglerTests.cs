@@ -5,9 +5,10 @@ using Pe.Revit.DocumentData.AgentContext;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.Operations;
-using Pe.Revit.FamilyFoundry.Profiles;
+using Pe.Revit.FamilyFoundry.Reconcile;
 using Pe.Shared.RevitData.Families;
 using System.Globalization;
+using Newtonsoft.Json.Linq;
 
 namespace Pe.Revit.Tests.LibraryBehavior.FamilyFoundry;
 
@@ -16,32 +17,107 @@ public sealed class RoomDinglerTests {
     private const string RoomName = "Room Dingler Proof Room";
 
     [Test]
-    public void Manager_and_migrator_queues_include_room_dingler_when_enabled() {
-        var managerQueue = FFManagerQueueBuilder.Build(
-            new FFManagerProfile { AddRoomDingler = new AddRoomDinglerSettings { Enabled = true } },
-            []);
-        var migratorQueue = FFMigratorQueueBuilder.Build(
-            new FFMigratorProfile { AddRoomDingler = new AddRoomDinglerSettings { Enabled = true } },
-            []);
+    public void Native_room_point_parameters_report_binding_and_position_response(UIApplication uiApplication) {
+        RevitTestFailureGuard.EnsureInstalled(uiApplication.Application);
+        var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Native_room_point_parameters_report_binding_and_position_response));
+        var evidence = new JArray();
+        try {
+            foreach (var template in new[] { "Mechanical Equipment.rft", "Generic Model face based.rft", "Mechanical Equipment wall based.rft", "Door.rft" }) {
+                var document = uiApplication.Application.NewFamilyDocument(ResolveFamilyTemplatePath(uiApplication.Application, template));
+                try {
+                    using var transaction = new Transaction(document, "Probe room point native bindings");
+                    transaction.Start();
+                    document.OwnerFamily.ShowSpatialElementCalculationPoint = true;
+                    var manager = document.FamilyManager;
+                    if (manager.CurrentType is null) manager.NewType("Binding probe");
+                    var source = manager.AddParameter("Probe room offset", GroupTypeId.Geometry, SpecTypeId.Length, false);
+                    manager.Set(source, 1d);
+                    document.Regenerate();
+                    var points = new FilteredElementCollector(document).WhereElementIsNotElementType().OfType<SpatialElementCalculationLocation>().ToList();
+                    Assert.That(points, Is.Not.Empty, template);
+                    foreach (var point in points) {
+                        var row = new JObject { ["template"] = template, ["class"] = point.GetType().Name, ["parameters"] = new JArray() };
+                        evidence.Add(row);
+                        foreach (Parameter parameter in point.Parameters) {
+                            var item = new JObject { ["name"] = parameter.Definition.Name, ["spec"] = parameter.Definition.GetDataType().TypeId,
+                                ["storage"] = parameter.StorageType.ToString(), ["readOnly"] = parameter.IsReadOnly };
+                            ((JArray)row["parameters"]!).Add(item);
+                            item["canAssociate"] = manager.CanElementParameterBeAssociated(parameter);
+                            if (!(bool)item["canAssociate"]! || parameter.Definition.GetDataType() != SpecTypeId.Length) continue;
+                            using var attempt = new SubTransaction(document);
+                            attempt.Start();
+                            try {
+                                manager.AssociateElementParameterToFamilyParameter(parameter, source);
+                                manager.Set(source, 1d);
+                                document.Regenerate();
+                                item["atOneFoot"] = Positions(point);
+                                manager.Set(source, 2d);
+                                document.Regenerate();
+                                item["atTwoFeet"] = Positions(point);
+                                item["associationReadback"] = manager.GetAssociatedFamilyParameter(parameter)?.Definition.Name;
+                            } catch (Exception error) { item["error"] = error.ToString(); }
+                            finally { attempt.RollBack(); }
+                        }
+                    }
+                    transaction.RollBack();
+                } finally { document.Close(false); }
+            }
+        } finally { File.WriteAllText(Path.Combine(output, "room-point-native-bindings.json"), evidence.ToString()); }
 
-        Assert.Multiple(() => {
-            Assert.That(managerQueue.Operations.Select(operation => operation.GetType()),
-                Does.Contain(typeof(AddRoomDingler)));
-            Assert.That(migratorQueue.Operations.Select(operation => operation.GetType()),
-                Does.Contain(typeof(AddRoomDingler)));
-        });
+        static JArray Positions(SpatialElementCalculationLocation point) => new((point is SpatialElementCalculationPoint single
+            ? new[] { single.Position } : point is SpatialElementFromToCalculationPoints pair ? new[] { pair.FromPosition, pair.ToPosition } : [])
+            .Select(p => new JArray(p.X, p.Y, p.Z)));
     }
 
     [Test]
-    public void Manager_and_migrator_queues_omit_room_dingler_when_disabled() {
-        var managerQueue = FFManagerQueueBuilder.Build(new FFManagerProfile(), []);
-        var migratorQueue = FFMigratorQueueBuilder.Build(new FFMigratorProfile(), []);
+    public void Reconciler_enables_moves_disables_and_reapplies_room_point(UIApplication uiApplication) {
+        var document = CreateFamilyDocument(uiApplication.Application, RoomDinglerHostKind.Unhosted, "Room point desired state");
+        try {
+            using var processor = new OperationProcessor(document);
+            foreach (var state in new[] { "{\"enabled\":true,\"offset\":\"1ft\"}", "{\"enabled\":true,\"offset\":\"2ft\"}", "{\"enabled\":false}" }) {
+                for (var pass = 0; pass < 2; pass++) {
+                    var operation = new ReconcileFamily(FamilyPatch.Parse("{\"patch\":{\"roomCalculationPoint\":" + state + "}}"));
+                    var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+                    var (_, error) = contexts.Single().OperationLogs;
+                    Assert.That(error, Is.Null, error?.Message);
+                    Assert.That(operation.LastReceipt?.Converged, Is.True);
+                    if (pass == 1) Assert.That(operation.LastPlan!.Changes, Is.Empty);
+                }
+                var enabled = !state.Contains("false");
+                Assert.That(document.OwnerFamily.ShowSpatialElementCalculationPoint, Is.EqualTo(enabled));
+                if (enabled) Assert.That(new FilteredElementCollector(document).OfClass(typeof(SpatialElementCalculationPoint))
+                    .Cast<SpatialElementCalculationPoint>().Single().Position.Z, Is.EqualTo(state.Contains("2ft") ? 2d : 1d).Within(1e-9));
+                if (state.Contains("2ft")) {
+                    var change = new ReconcileFamily(FamilyPatch.Parse("""{"patch":{"roomCalculationPoint":{"enabled":true,"offset":"4ft"}}}"""));
+                    var (failed, _) = processor.ProcessQueue(new OperationQueue().Add(change).Add(new RenameParams([("missing parameter", "never created")])));
+                    var (_, error) = failed.Single().OperationLogs;
+                    Assert.That(error, Is.Not.Null);
+                    Assert.That(change.LastReceipt?.Converged ?? false, Is.False);
+                    Assert.That(new FilteredElementCollector(document).OfClass(typeof(SpatialElementCalculationPoint))
+                        .Cast<SpatialElementCalculationPoint>().Single().Position.Z, Is.EqualTo(2d).Within(1e-9));
+                }
+            }
+            processor.ProcessQueue(new OperationQueue().Add(new AddRoomDingler(new AddRoomDinglerSettings { Enabled = false })));
+            Assert.That(document.OwnerFamily.ShowSpatialElementCalculationPoint, Is.False, "Legacy Enabled=false must still skip the operation.");
+            var rejected = new ReconcileFamily(FamilyPatch.Parse("""{"patch":{"parameters":{"Room Offset":{"dataType":"Length","value":"3ft"}},"roomCalculationPoint":{"enabled":true,"offset":"param:Room Offset"}}}"""));
+            var (refused, _) = processor.ProcessQueue(new OperationQueue().Add(rejected));
+            var (_, refusal) = refused.Single().OperationLogs;
+            Assert.That(refusal, Is.Not.Null);
+            Assert.That(document.FamilyManager.get_Parameter("Room Offset"), Is.Null, "Refuse before mutation.");
+            Assert.That(document.OwnerFamily.ShowSpatialElementCalculationPoint, Is.False);
+        } finally { document.Close(false); }
+    }
+
+    [Test]
+    public void Reconcile_plan_includes_room_dingler_only_when_the_document_declares_the_point() {
+        var header = new FamilyModelHeader { Name = "T", Category = FamilyCategory.GenericModels, Template = "Generic Model", Placement = FamilyModelPlacement.OneLevelBased };
+        var with = new FamilyModel { Family = header, RoomCalculationPoint = new FamilyModelRoomCalculationPoint { Enabled = true } };
+        var without = new FamilyModel { Family = header };
+        var template = new FamilyModel { Family = header };
 
         Assert.Multiple(() => {
-            Assert.That(managerQueue.Operations.Select(operation => operation.GetType()),
-                Does.Not.Contain(typeof(AddRoomDingler)));
-            Assert.That(migratorQueue.Operations.Select(operation => operation.GetType()),
-                Does.Not.Contain(typeof(AddRoomDingler)));
+            Assert.That(FamilyReconciler.Reconcile(with, template, UnitResolvers.Portable).Queue.Operations.Select(o => o.GetType()), Does.Contain(typeof(AddRoomDingler)));
+            Assert.That(FamilyReconciler.Reconcile(without, template, UnitResolvers.Portable).Queue.Operations.Select(o => o.GetType()), Does.Not.Contain(typeof(AddRoomDingler)));
         });
     }
 
@@ -60,17 +136,11 @@ public sealed class RoomDinglerTests {
     [Test]
     public void Generated_grd_opens_into_the_room_and_exports_visual_proof(UIApplication uiApplication) {
         var application = uiApplication.Application;
-        var fixturePath = RevitFamilyFixtureHarness.GetProfileFixturePath(
-            Path.Combine("family-model", "pe-grd-vane.family.json"));
-        var parsed = FamilyModelJson.Parse(File.ReadAllText(fixturePath));
-        Assert.That(parsed.Diagnostics, Is.Empty,
-            string.Join(Environment.NewLine, parsed.Diagnostics.Select(item => item.Message)));
+        var parsed = RevitFamilyFixtureHarness.LoadFamilyModelFixture("b-grd");
         var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(
             nameof(this.Generated_grd_opens_into_the_room_and_exports_visual_proof));
-        var familyDocument = FamilyModelBuilder.Build(
-            application,
-            parsed.Value!,
-            Path.GetDirectoryName(fixturePath)).Document;
+        var familyDocument = FamilyModelBuild.Build(application, parsed,
+            modelDirectory: Path.GetDirectoryName(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("b-grd.json"))).Document;
         Document? projectDocument = RevitFamilyFixtureHarness.CreateProjectDocument(application);
         UIDocument? activeProject = null;
 
@@ -87,7 +157,7 @@ public sealed class RoomDinglerTests {
                 (room, hostWall) = BuildSingleRoom(projectDocument);
                 var symbol = loadedFamily.GetFamilySymbolIds()
                     .Select(id => (FamilySymbol)projectDocument.GetElement(id))
-                    .Single(item => item.Name == "Thirty Seven Vanes");
+                    .First();
                 if (!symbol.IsActive)
                     symbol.Activate();
                 instance = PlaceFaceHostedInstance(projectDocument, symbol, hostWall);

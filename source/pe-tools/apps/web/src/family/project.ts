@@ -1,7 +1,7 @@
 /**
  * /family — THE PROJECTION, both directions, and the only place the two schemas meet.
  *
- * The page renders a `ProtoWorld` (a reading of a family, in the page's own vocabulary). The host
+ * The page renders a `FamilySpecModel` (a reading of a family, in the page's own vocabulary). The host
  * owns a `FamilyModel` (the authored `family.json`, in Revit's). Phase B's whole job is that this
  * module is the ONE translator between them, so nothing above it has to know which lane it is on:
  *
@@ -26,9 +26,15 @@ import { settingsFieldPointer } from "@pe/agent-contracts";
 import type { RouteStatePatch } from "@pe/agent-contracts";
 import { timeAgo } from "#/lib/utils";
 import type { ConnectorSpec, FamilyModel, ParamSpec, SolidSpec } from "#/family/family-model";
-import { paramRef, paramSpec } from "#/family/family-model";
+import {
+  paramRef,
+  paramSpec,
+  parameterSpecs,
+  parameterSection,
+  parameterText,
+} from "#/family/family-model";
 import type { EvidenceSlice } from "#/family/host";
-import { bindingOf, isFormula, type Draft, type PageWorld } from "#/family/model";
+import { bindingOf, isFormula, type Draft, type FamilyPageModel } from "#/family/model";
 import type {
   GeomConstituent,
   GeomDim,
@@ -36,7 +42,7 @@ import type {
   ProtoLive,
   ProtoLiveValue,
   ProtoParam,
-  ProtoWorld,
+  FamilySpecModel,
 } from "#/family/world";
 
 /** The length dataType a promoted literal inherits when nothing in the document says otherwise.
@@ -66,20 +72,30 @@ export function projectFamilyModel(
   model: FamilyModel,
   evidence: EvidenceSlice | null,
   options: ProjectionOptions = {},
-): ProtoWorld {
+): FamilySpecModel {
   const params = projectParams(model);
   const lengthType = lengthDataType(model);
   return {
     profile: {
-      path: options.path ?? `${model.family.name}.family.json`,
+      path: options.path ?? `${model.family.name}.json`,
       familyName: model.family.name,
       category: model.family.category,
       template: model.family.template,
       placement: model.family.placement,
       params,
-      types: model.types,
+      types: Object.fromEntries(
+        Object.entries(model.types ?? {}).map(([name, values]) => [
+          name,
+          Object.fromEntries(
+            Object.entries(values).map(([key, value]) => [key, parameterText(value)]),
+          ),
+        ]),
+      ),
       solids: Object.fromEntries(
-        Object.entries(model.solids ?? {}).map(([slug, solid]) => [slug, solidProse(solid)]),
+        Object.entries(model.forms ?? model.solids ?? {}).map(([slug, solid]) => [
+          slug,
+          solidProse(solid),
+        ]),
       ),
       connectors: Object.fromEntries(
         Object.entries(model.connectors ?? {}).map(([slug, connector]) => [
@@ -88,7 +104,7 @@ export function projectFamilyModel(
         ]),
       ),
       geometry: [
-        ...Object.entries(model.solids ?? {}).map(([slug, solid]) =>
+        ...Object.entries(model.forms ?? model.solids ?? {}).map(([slug, solid]) =>
           projectSolid(model, slug, solid, lengthType),
         ),
         ...Object.entries(model.connectors ?? {}).map(([slug, connector]) =>
@@ -110,25 +126,19 @@ export function projectFamilyModel(
 function projectParams(model: FamilyModel): ProtoParam[] {
   const project = ([name, spec]: [string, ParamSpec]): ProtoParam => ({
     name,
-    dataType: spec.dataType,
-    value: spec.formula != null ? `= ${spec.formula}` : (spec.value ?? ""),
+    dataType: spec.dataType ?? spec.sharedSpecId ?? "shared",
+    value: spec.formula != null ? `= ${spec.formula}` : parameterText(spec.value),
     isInstance: spec.isInstance ?? false,
     group: spec.propertiesGroup ?? "other",
   });
-  return [
-    ...Object.entries(model.familyParameters).map(project),
-    ...Object.entries(model.sharedParameters ?? {}).map(project),
-  ];
+  return Object.entries(parameterSpecs(model)).map(project);
 }
 
 /** The spelling this document uses for a length. Read off its own parameters rather than assumed,
  * so a document written in another vocabulary still binds literals to matching candidates. */
 function lengthDataType(model: FamilyModel): string {
-  for (const spec of [
-    ...Object.values(model.familyParameters),
-    ...Object.values(model.sharedParameters ?? {}),
-  ])
-    if (spec.dataType.startsWith("Length")) return spec.dataType;
+  for (const spec of Object.values(parameterSpecs(model)))
+    if (spec.dataType?.startsWith("Length")) return spec.dataType;
   return FALLBACK_LENGTH_TYPE;
 }
 
@@ -175,7 +185,8 @@ function connectorProse(connector: ConnectorSpec): string {
 /** The frame a constituent sits on, as the two READ metadata rows the page shows: where its origin
  * is, and which way it faces. Both are computed from the sketch in Revit, so neither is editable
  * here — a text box would be claiming an edit nothing downstream would make. */
-function frameMeta(model: FamilyModel, frameRef: string): GeomMeta[] {
+function frameMeta(model: FamilyModel, frameRef: string | undefined): GeomMeta[] {
+  if (!frameRef) return [];
   const slug = frameRef.startsWith("frame:") ? frameRef.slice("frame:".length) : frameRef;
   const frame = model.frames?.[slug];
   const origin = frame
@@ -232,7 +243,22 @@ function projectSolid(
     const raw = solid[property];
     if (raw != null) dims.push(dim(model, property, raw, lengthType));
   }
-  return { slug, kind: solid.kind, dims, meta: frameMeta(model, solid.frame) };
+  return {
+    slug,
+    kind: solid.kind,
+    dims,
+    meta: solid.center
+      ? [
+          {
+            key: "center",
+            label: "center / bottom",
+            control: "read",
+            value: [...solid.center, solid.bottom ?? ""].join(" / "),
+            note: "Native authored plane references.",
+          },
+        ]
+      : frameMeta(model, solid.frame),
+  };
 }
 
 function projectConnector(
@@ -282,14 +308,27 @@ function projectConnector(
     key: "shape",
     label: "shape",
     control: "read",
-    value: connector.shape,
+    value: connector.shape ?? (connector.diameter ? "Round" : "Unspecified"),
     note: "Round or Rectangular. Read-only: a round connector does not become rectangular because a word changed — its dims would have to change with it, which is a document edit, not a value.",
   });
   return {
     slug,
     kind: `${connector.domain}Connector`,
     dims,
-    meta: [...meta, ...frameMeta(model, connector.frame)],
+    meta: [
+      ...meta,
+      ...(connector.on
+        ? [
+            {
+              key: "on",
+              label: "on / at",
+              control: "read" as const,
+              value: [connector.on, ...(connector.at ?? [])].join(" / "),
+              note: "Native authored plane intersections; reference-plane positions are seeds until Revit solves constraints.",
+            },
+          ]
+        : frameMeta(model, connector.frame)),
+    ],
   };
 }
 
@@ -302,6 +341,27 @@ function projectEvidence(
 ): ProtoLive {
   const authored = new Set(params.map((param) => param.name));
   const values: Record<string, Record<string, ProtoLiveValue>> = {};
+  if ("modelJson" in evidence) {
+    const captured = JSON.parse(evidence.modelJson) as FamilyModel;
+    const reported = parameterSpecs(captured);
+    for (const [typeName, cells] of Object.entries(captured.types ?? {}))
+      for (const [name, value] of Object.entries(cells)) {
+        if (reported[name]?.formula != null || value == null) continue;
+        (values[name] ??= {})[typeName] = { value: parameterText(value) };
+      }
+    return {
+      familyName: evidence.familyName,
+      worldLabel: evidence.rfaPath ?? evidence.origin,
+      readAgo: timeAgo(evidence.observedAt) || "just now",
+      typeNames: Object.keys(captured.types ?? {}),
+      values,
+      extraParams: Object.keys(reported).filter((name) => !authored.has(name)),
+      missingParams:
+        evidence.coverage.parameters === "Read"
+          ? [...authored].filter((name) => !(name in reported))
+          : [],
+    };
+  }
   for (const parameter of evidence.parameters) {
     const perType: Record<string, ProtoLiveValue> = {};
     for (const [typeName, resolved] of Object.entries(parameter.valuesPerType)) {
@@ -350,13 +410,17 @@ const CONNECTOR_DIM_FIELDS = ["diameter", "width", "height"] as const;
  * evidence-resolved values survive (a blanket rewrite would erase them); an untouched draft
  * returns a model that draws identically to the document.
  */
-export function draftedModel(model: FamilyModel, draft: Draft, world: PageWorld): FamilyModel {
+export function draftedModel(
+  model: FamilyModel,
+  draft: Draft,
+  world: FamilyPageModel,
+): FamilyModel {
   const next = structuredClone(model);
 
   // Promoted literals are WHOLE new parameters — seeded first, so their authored value below
   // has a spec to land on and the drawing moves in the same beat as the promotion.
   for (const param of draft.newParams) {
-    next.familyParameters[param.name] = {
+    (next.parameters ?? next.familyParameters)[param.name] = {
       dataType: param.dataType,
       ...(param.group ? { propertiesGroup: param.group } : {}),
     };
@@ -364,9 +428,9 @@ export function draftedModel(model: FamilyModel, draft: Draft, world: PageWorld)
 
   // Family-level values: value XOR formula, applied only where the draft MOVED the cell.
   for (const [name, value] of Object.entries(draft.authored)) {
-    const spec = next.familyParameters[name] ?? next.sharedParameters?.[name];
+    const spec = paramSpec(next, name);
     if (!spec) continue;
-    const seeded = spec.formula != null ? `= ${spec.formula}` : (spec.value ?? "");
+    const seeded = spec.formula != null ? `= ${spec.formula}` : parameterText(spec.value);
     if (value === seeded) continue;
     if (isFormula(value)) spec.formula = value.replace(/^\s*=\s*/, "");
     else {
@@ -386,7 +450,7 @@ export function draftedModel(model: FamilyModel, draft: Draft, world: PageWorld)
   // projection stages — solids' four fields, connectors' three plus the nested stub. Metadata
   // lands only on its editable connector homes; `read` rows have no path and get none.
   for (const part of world.geom) {
-    const solid = next.solids?.[part.slug];
+    const solid = (next.forms ?? next.solids)?.[part.slug];
     const connector = next.connectors?.[part.slug];
     for (const dim of part.dims) {
       const binding = bindingOf(world, draft, part.slug, dim.property);
@@ -446,7 +510,11 @@ export function draftToPatches(
     if (promoted.has(name) && !(name in savedDraft.authored)) {
       const seed = draft.newParams.find((param) => param.name === name);
       patches.push({
-        path: ["fields", settingsFieldPointer(["familyParameters", name]), "staged"],
+        path: [
+          "fields",
+          settingsFieldPointer([model.parameters ? "parameters" : "familyParameters", name]),
+          "staged",
+        ],
         value: {
           value: {
             dataType: seed?.dataType ?? FALLBACK_LENGTH_TYPE,
@@ -458,7 +526,7 @@ export function draftToPatches(
       continue;
     }
 
-    const section = model.familyParameters[name] ? "familyParameters" : "sharedParameters";
+    const section = parameterSection(model, name);
     const spec = paramSpec(model, name);
     if (isFormula(value)) {
       patches.push(stage([section, name, "formula"], value.replace(/^\s*=\s*/, "")));
@@ -500,9 +568,9 @@ export function draftToPatches(
 /** Where a bindable dim lives in the document. A property the projection did not come from returns
  * null and stages nothing — silence beats inventing a path the schema does not have. */
 function dimSegments(model: FamilyModel, slug: string, property: string): string[] | null {
-  if (model.solids?.[slug])
+  if ((model.forms ?? model.solids)?.[slug])
     return ["width", "depth", "height", "diameter"].includes(property)
-      ? ["solids", slug, property]
+      ? [model.forms ? "forms" : "solids", slug, property]
       : null;
   if (model.connectors?.[slug]) {
     if (property === "stub.depth") return ["connectors", slug, "stub", "depth"];

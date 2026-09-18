@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useRef } from "react";
-import { useAtomValue } from "@effect/atom-react";
 import type { FamilyStore } from "#/family/store";
 import {
   consumersOf,
   agreementOf,
   bindingOf,
-  effective,
   ghostRows,
   isUnsavedAt,
   paramNameFor,
@@ -18,61 +16,60 @@ import {
 import type { ProtoProposal } from "#/family/world";
 
 export function useFamilyWorkspaceCore(store: FamilyStore) {
-  const profile = useAtomValue(store.atoms.profile);
-  const stage = useAtomValue(store.atoms.routeStage);
-  /** WHICH LANE — the one question that separates them, asked once (see `#/family/lane`). */
-  const lane = useAtomValue(store.atoms.lane);
+  const profile = store.profile;
+  /** WHICH SOURCE — the one question that separates them, asked once (see `#/family/source`). */
+  const lane = store.lane;
   const world = lane.world;
   /**
    * The last-read document, as a draft. It is the page's record of the DISK and the baseline the
    * reverse projection diffs against — so a save writes what moved and nothing else, and a draft
    * back at its baseline honestly has nothing to save.
    */
-  const draft = useAtomValue(store.atoms.draft);
+  const draft = store.draft;
   const setDraft = store.actions.setDraft;
   /** THE PSEUDO-DIMENSION. PAGE state, never the URL: which reading you are looking through is not
    * a place, and a link that restored someone else's overlay would be claiming it is. Draft is the
    * default because it is the only one you can work in. */
-  const overlay = useAtomValue(store.atoms.overlay);
+  const overlay = store.overlay;
   const setOverlay = store.actions.setOverlay;
   /** The disk, per cell. Seeded from the document — it starts saved — and re-snapshotted on save. */
-  const saved = useAtomValue(store.atoms.saved);
+  const saved = store.saved;
   /** Table state is OWNED here, because the sort direction is an input to the ghost-pinning
    * workaround — the sort key has to know which way it is about to be read. */
-  const tableState = useAtomValue(store.atoms.table);
+  const tableState = store.table;
   const setTableState = store.actions.setTable;
-  const drillState = useAtomValue(store.atoms.drill);
+  const drillState = store.drill;
   const setDrillState = store.actions.setDrill;
-  const docMode = useAtomValue(store.atoms.docMode);
+  const docMode = store.docMode;
   const setDocMode = store.actions.setDocMode;
-  const docZoom = useAtomValue(store.atoms.docZoom);
+  const docZoom = store.docZoom;
   const setDocZoom = store.actions.setDocZoom;
-  const drillType = useAtomValue(store.atoms.drillType);
+  const drillType = store.drillType;
   const setDrillType = store.actions.setDrillType;
-  const stageType = useAtomValue(store.atoms.stageType);
+  const stageType = store.stageType;
   const setStageType = store.actions.setStageType;
-  const focus = useAtomValue(store.atoms.focus);
+  const focus = store.focus;
   const setFocus = store.actions.setFocus;
-  const focusedProposal = useAtomValue(store.atoms.focusedProposal);
+  const focusedProposal = store.focusedProposal;
   const setFocusedProposal = store.actions.setFocusedProposal;
   /** The row whose proposals were last LOCATED from the table. Sticky — hover comes and goes, but
    * "I clicked this row's rail dot" has to survive the pointer leaving the row on its way to the
    * sidebar, or the cards would go dark exactly as you reached for them. */
-  const pinnedParam = useAtomValue(store.atoms.pinnedParam);
+  const pinnedParam = store.pinnedParam;
   const setPinnedParam = store.actions.setPinnedParam;
-  const anatomyCollapsed = useAtomValue(store.atoms.anatomyCollapsed);
+  const anatomyCollapsed = store.anatomyCollapsed;
   const setAnatomyCollapsed = store.actions.setAnatomyCollapsed;
-  const target = useAtomValue(store.atoms.target);
+  const target = store.target;
   /**
    * What the doc pane's LOWER HALF is showing. One slot, two subjects: a constituent's
    * non-bindable metadata, or a parameter's family-level value. They share the slot because they
    * are the same question asked twice — "what is true of this thing itself, rather than of it at
    * some type" — and because a page with two inspectors has no answer to which one you meant.
    */
-  const inspect = useAtomValue(store.atoms.inspect);
+  const inspect = store.inspect;
   const setInspect = store.actions.setInspect;
   /** The ghost row whose bind picker is open. One at a time; picking or cancelling closes it. */
-  const binding = useAtomValue(store.atoms.binding);
+  const binding = store.binding;
   const setBinding = store.actions.setBinding;
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -266,7 +263,7 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
       say(text);
       return text;
     }
-    setDraft((previous) => {
+    return setDraft((previous) => {
       const next = structuredClone(previous);
       next.authored[param] = trimmed;
       sever(next, param, null);
@@ -312,41 +309,17 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
       return next;
     });
 
-  /** apply — the profile wins. The one direction that MODIFIES the model, hence the commit tone. */
-  const apply = (types: string[], only?: string) =>
-    setDraft((previous) => {
-      const next = structuredClone(previous);
-      for (const row of rows) {
-        if (row.kind !== "profile") continue;
-        if (only !== undefined && row.name !== only) continue;
-        for (const typeName of types) {
-          if (agreementOf(world, previous, row, typeName) !== "drift") continue;
-          const entry = next.live[row.name]?.[typeName];
-          if (!entry) continue;
-          entry.value = effective(next, row.name, typeName);
-          entry.drift = false;
-        }
-      }
-      return next;
-    });
-
   const captureAll = (types: string[]) => {
     const count = driftCells.filter((cell) => types.includes(cell.typeName)).length;
     capture(types);
     say(`captured ${count} value${count === 1 ? "" : "s"} out of Revit into the profile`);
   };
 
-  const applyAll = (types: string[]) => {
-    const count = driftCells.filter((cell) => types.includes(cell.typeName)).length;
-    apply(types);
-    say(`applied ${count} value${count === 1 ? "" : "s"} into the live family`);
-  };
-
-  const busy = useAtomValue(store.atoms.busy);
+  const busy = store.busy;
 
   /** The host's own schema verdict on the SAVED file. Only meaningful on the live lane: the fixture
    * has no schema behind it, and a green chip there would be claiming a check nobody ran. */
-  const snapshot = useAtomValue(store.atoms.snapshot);
+  const snapshot = store.snapshot;
   const validation = lane.document ? (snapshot?.validation ?? null) : null;
   const validationSays = (validation?.issues ?? [])
     .slice(0, 3)
@@ -372,28 +345,28 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
    */
   // ── THE HOST CROSSINGS (phase D) ──────────────────────────────────────────────────────────────
   //
-  // Two verbs, and they are the only two on this page that talk to Revit. Everything else above is
-  // arithmetic on the draft — a page-local move that becomes real when `save profile` writes it.
+  // Capture and build below cross into Revit. The targeting header also runs native Plan/Apply
+  // through the store, using the saved composed profile and expected plan hash.
   //
   //   capture live   READS. `route:family`'s `capture_evidence` wraps `revit.detail.family-model`
   //                  and stamps the result into the evidence slice. It moves nothing into the
   //                  profile; that is `capture all`'s job, under the ⇄ live overlay, once there is
   //                  a reading to move.
   //   build .rfa     WRITES, outside the page and outside the document: `build_evidence` re-opens
-  //                  the SAVED family.json host-side and hands it to `revit.apply.family-model`,
+  //                  the SAVED family.json host-side and hands it to `family.build`,
   //                  which materializes an .rfa and returns evidence pinned to that revision. It
   //                  is the whole reason the arming ceremony exists — see `#/family/build`.
   //
-  // `family.editor.apply` is deliberately NOT wired: the profile-wins direction is a later phase,
-  // and the apply verbs above stay page-local and honest about it.
+  // Cell-level apply above simulates only in the explicit fixture lane. Native profile-wins
+  // writes use the header's reviewed familyfoundry plan/apply, not family.editor.apply.
 
-  const capturing = busy?.id === "capture";
+  const capturing = busy?.key === "capture";
   /** null → unarmed. Carries the token the plan was armed against — the plan hash a drift cites. */
-  const armedBuild = useAtomValue(store.atoms.armedBuild);
-  const building = busy?.id === "build";
+  const armedBuild = store.armedBuild;
+  const building = busy?.key === "build";
   /** A latched unknown outcome. Host failures stay on the core's failure channel. */
-  const buildFacts = useAtomValue(store.atoms.buildFacts);
-  const buildOutcome = useAtomValue(store.atoms.buildOutcome);
+  const buildFacts = store.buildFacts;
+  const buildOutcome = store.buildOutcome;
 
   // ── the geometry verbs ────────────────────────────────────────────────────────────────────────
 
@@ -527,7 +500,6 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   return {
     store,
     profile,
-    stage,
     lane,
     world,
     draft,
@@ -579,9 +551,7 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
     editAuthored,
     editOverride,
     capture,
-    apply,
     captureAll,
-    applyAll,
     busy,
     snapshot,
     validation,

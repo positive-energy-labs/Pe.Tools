@@ -1,0 +1,100 @@
+{
+  "ExecutionOptions": {},
+  "FilterFamilies": {
+    "IncludeCategoriesEqualing": [],
+    "IncludeByCondition": {},
+    "IncludeNames": {
+      "Equaling": [
+        "SpacePak_CC32"
+      ]
+    },
+    "ExcludeNames": {}
+  },
+  "FilterApsParams": {
+    "IncludeNames": {
+      "Equaling": [
+        {
+          "$include": "@global/_shared-parameter-names/include-dim-params"
+        },
+        "PE_M_Eff_SEER",
+        "PE_M_Eff_EER",
+        "PE_M_Eff_HSPF",
+        "PE_M_Eff_COP47",
+        "PE_M_Eff_COP17",
+        "PE_M_Eff_EnergyStar",
+        "PE_M_PerfHeat_FluidPressureDrop",
+        "PE_M_PerfHeat_FluidLWT",
+        "PE_M_PerfHeat_FluidEWT",
+        "PE_M_PerfHeat_FluidFlowLoadSide",
+        "PE_M_PerfCool_FluidPressureDrop",
+        "PE_M_PerfCool_FluidLWT",
+        "PE_M_PerfCool_FluidEWT",
+        "PE_M_PerfCool_FluidFlowLoadSide"
+      ],
+      "StartingWith": [
+        "PE_E",
+        "PE_G___",
+        "PE_M_Fan",
+        "PE_M___Serves",
+        "PE_M_PerfHeat_Capacity",
+        "PE_M_PerfCool_Capacity",
+        "PE_G___RefrigerantType"
+      ]
+    },
+    "ExcludeNames": {
+      "Equaling": [
+        {
+          "$include": "@global/_shared-parameter-names/exclude-elec-panel-params"
+        },
+        "PE_G___Fluid",
+        "PE_G___FuelType",
+        "PE_G___Horsepower",
+        "PE_M___DehuPintsPerDayDesign",
+        "PE_M___DehuPintsPerDayRated",
+        "PE_M___HuGallonsPerHour"
+      ]
+    }
+  },
+  "CleanFamilyDocument": {},
+  "AddAndMapSharedParams": {
+    "MappingData": [
+      {
+        "$include": "@global/_mapping-data/mech-equip-mapping-data"
+      }
+    ]
+  },
+  "SetKnownParams": {
+    "GlobalAssignments": [
+      {
+        "Parameter": "PE_E___ApparentPower",
+        "Value": "PE_E___Voltage * PE_E___MCA * 0.8 * if(PE_E___NumberOfPoles = 3, sqrt(3), 1)",
+        "Kind": "Formula"
+      },
+      {
+        "Parameter": "PE_E___NumberOfPoles",
+        "Value": "if(PE_E___Voltage = 120, 1, if(PE_E___Voltage = 208, 2, (if(PE_E___Voltage = 240, 2, 1))))",
+        "Kind": "Formula"
+      },
+      {
+        "Parameter": "PE_M_PerfHeat_FluidPressureDrop",
+        "Value": "PE_M_PerfCool_FluidPressureDrop",
+        "Kind": "Formula"
+      },
+      {
+        "Parameter": "PE_G___TagInstance",
+        "Value": "AWHP-#",
+        "Kind": "Value"
+      }
+    ]
+  },
+  "MakeElectricalConnector": {
+    "SourceParameterNames": {
+      "NumberOfPoles": "PE_E___NumberOfPoles",
+      "ApparentPower": "PE_E___ApparentPower",
+      "Voltage": "PE_E___Voltage",
+      "MinimumCircuitAmpacity": "PE_E___MCA"
+    }
+  },
+  "SortParams": {},
+  "$schema": "../../../../Global/schemas/cmdffmigrator/profiles/pe-revit-familyfoundry-profiles-ffmigratorprofile.schema.json"
+}

@@ -1,7 +1,7 @@
 /**
  * Client-side Revit-formula validation — instant UX before a formula stages.
  *
- * The host is authoritative (settings.document.validate → FamilyModelValidator); this is
+ * The host is authoritative (settings.validate → FamilyModelValidator); this is
  * the fast-feedback cousin that runs entirely from the AUTHORED model. It mirrors the C#
  * tokenizer (`Pe.Revit/Extensions/FamParameter/Formula/Tokenizer.cs`): strip string
  * literals, mask valid parameter names (longest-first, boundary-aware), then split on

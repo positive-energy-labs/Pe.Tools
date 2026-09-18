@@ -1,75 +1,51 @@
 using System.Windows.Media;
+using Newtonsoft.Json.Linq;
+using Pe.App.Pods;
+using Pe.Revit.Scripting.Pods;
 using Pe.Revit.Ui.Core;
-using Pe.Shared.StorageRuntime;
+using Pe.Shared.HostContracts.Operations;
+using Pe.Shared.RevitData.Families;
 using System.IO;
 using WpfColor = System.Windows.Media.Color;
 
 namespace Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
 
-/// <summary>
-///     Palette list item representing a Family Foundry profile JSON file.
-///     Displays metadata: filename, line count, and dates.
-/// </summary>
-public class ProfileListItem : IPaletteListItem {
-    public readonly FileInfo _fileInfo;
-    private readonly string? _relativePath;
+public enum FoundryFileKind { FamilyModel, Patch }
 
-    public ProfileListItem(string filePath, string? relativePath = null) {
-        this.FilePath = filePath;
-        this._fileInfo = new FileInfo(filePath);
-        this._relativePath = relativePath;
-        this.LineCount = File.ReadAllLines(filePath).Length;
+/// <summary>One pod member whose `$schema` is a family model or a family patch.</summary>
+public class ProfileListItem : IPaletteListItem {
+    private readonly FileInfo _fileInfo;
+
+    internal ProfileListItem(PreparedPod pod, PodMember member, FoundryFileKind kind) {
+        this.Pod = pod;
+        this.Member = member;
+        this.Kind = kind;
+        this._fileInfo = new FileInfo(member.FullPath(pod));
+        this.LineCount = File.ReadAllLines(member.FullPath(pod)).Length;
     }
 
-    /// <summary> Full path to the profile JSON file </summary>
-    public string FilePath { get; }
-
-    /// <summary> Number of lines in the profile file </summary>
+    internal PreparedPod Pod { get; }
+    internal PodMember Member { get; }
+    public string FilePath => this.Member.FullPath(this.Pod);
+    public string RelativePath => $"{this.Pod.Manifest.Id}:{this.Member.Path}";
+    public FoundryFileKind Kind { get; }
     public int LineCount { get; }
-
-    /// <summary> Last modified date for sorting </summary>
     public DateTime LastModified => this._fileInfo.LastWriteTime;
 
-    /// <summary> Profile filename without extension (or relative path if nested) </summary>
-    public string TextPrimary => this._relativePath != null
-        ? Path.ChangeExtension(this._relativePath, null)
-        : Path.GetFileNameWithoutExtension(this.FilePath);
-
-    /// <summary> Shows profile path context </summary>
-    public string TextSecondary => this._relativePath != null
-        ? Path.GetDirectoryName(this._relativePath)?.Replace('\\', '/') ?? "Profile"
-        : "Profile";
-
-    /// <summary> Line count badge </summary>
+    public string TextPrimary => Path.GetFileName(this.FilePath);
+    public string TextSecondary => $"{this.Pod.Manifest.Id} · {(this.Kind == FoundryFileKind.Patch ? "patch" : "family.json")}";
     public string TextPill => $"{this.LineCount} lines";
-
-    public Func<string> GetTextInfo => () => string.Empty; // Tooltip disabled - info shown in preview panel
-
+    public Func<string> GetTextInfo => () => string.Empty;
     public ImageSource? Icon => null;
     public WpfColor? ItemColor => null;
 
-    public static List<ProfileListItem> DiscoverProfiles(
-        ModuleDocumentStorage storage,
-        string? rootKey = null
-    ) {
-        var discovered = storage
-            .DiscoverAsync(
-                new SettingsDiscoveryOptions(
-                    Recursive: true,
-                    IncludeFragments: false,
-                    IncludeSchemas: false
-                ),
-                rootKey
-            )
-            .GetAwaiter()
-            .GetResult();
-
-        return discovered.Files
-            .Select(file => new ProfileListItem(
-                storage.ResolveDocumentPath(file.RelativePath, rootKey),
-                file.RelativePath
-            ))
-            .OrderByDescending(p => p.LastModified)
-            .ToList();
+    /// <summary>The composed member as authored; the family edge reads its `$schema`.</summary>
+    internal (string SpecJson, PodMemberSource Source) LoadSpec() {
+        if (this.Kind == FoundryFileKind.Patch) {
+            var (_, composed, source) = this.Member.Load<FamilyPatch>(this.Pod);
+            return (composed, source);
+        }
+        var (_, composedModel, modelSource) = this.Member.Load<FamilyModel>(this.Pod);
+        return (composedModel, modelSource);
     }
 }

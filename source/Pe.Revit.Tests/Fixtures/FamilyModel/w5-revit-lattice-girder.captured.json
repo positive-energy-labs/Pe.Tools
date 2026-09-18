@@ -1,0 +1,578 @@
+{
+  "$schema": "http://127.0.0.1:65251/schemas/settings/FamilyFoundry/models.json",
+  "family": {
+    "name": "w5-fam",
+    "category": "GenericModels",
+    "template": "Unknown",
+    "placement": "CurveBased"
+  },
+  "parameters": {
+    "Bottom Cover": {
+      "shared": true,
+      "sharedGuid": "2c785257-e6e7-4b15-9712-ef1272633fc2",
+      "sharedSpecId": "autodesk.spec.aec:length-2.0.0",
+      "sharedVisible": true,
+      "sharedUserModifiable": true,
+      "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+      "isInstance": false
+    },
+    "Diagonal Diameter": {
+      "shared": true,
+      "sharedGuid": "3457e307-c2d9-4ea8-8e26-712f7cebbdec",
+      "sharedSpecId": "autodesk.spec.aec:length-2.0.0",
+      "sharedVisible": true,
+      "sharedUserModifiable": true,
+      "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+      "isInstance": false
+    },
+    "Diagonal Material": {
+      "shared": true,
+      "sharedGuid": "81d2e268-8e17-4f84-997c-2a8eb6a320b2",
+      "sharedSpecId": "autodesk.spec.aec:material-1.0.0",
+      "sharedVisible": true,
+      "sharedUserModifiable": true,
+      "propertiesGroup": "autodesk.parameter.group:materials-1.0.0",
+      "isInstance": false
+    },
+    "Height": {
+      "shared": true,
+      "sharedGuid": "b93e7940-591d-46d0-83dd-60db6280776c",
+      "sharedSpecId": "autodesk.spec.aec:length-2.0.0",
+      "sharedVisible": true,
+      "sharedUserModifiable": true,
+      "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+      "isInstance": false
+    },
+    "LG Length": {
+      "shared": true,
+      "sharedGuid": "76c74dfb-726b-4767-aff0-a7343e879427",
+      "sharedSpecId": "autodesk.spec.aec:length-2.0.0",
+      "sharedVisible": true,
+      "sharedUserModifiable": true,
+      "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+      "isInstance": true,
+      "formula": "Length"
+    },
+    "Lineal Weight": {
+      "shared": true,
+      "sharedGuid": "7ff5ce7c-18e4-4dfd-af11-0473261280b5",
+      "sharedSpecId": "autodesk.spec.aec.structural:massPerUnitLength-2.0.0",
+      "sharedVisible": true,
+      "sharedUserModifiable": true,
+      "propertiesGroup": "autodesk.parameter.group:construction-1.0.0",
+      "isInstance": false
+    },
+    "Location": {
+      "shared": true,
+      "sharedGuid": "d29af5f7-fcd8-493a-ad86-e352e829b0f1",
+      "sharedSpecId": "autodesk.spec:spec.string-2.0.0",
+      "sharedVisible": true,
+      "sharedUserModifiable": true,
+      "propertiesGroup": "autodesk.parameter.group:construction-1.0.0",
+      "isInstance": true
+    },
+    "Lower Chord Diameter": {
+      "shared": true,
+      "sharedGuid": "86817f92-f144-4534-b3cc-d184e740732a",
+      "sharedSpecId": "autodesk.spec.aec:length-2.0.0",
+      "sharedVisible": true,
+      "sharedUserModifiable": true,
+      "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+      "isInstance": false
+    },
+    "Lower Chord Material": {
+      "shared": true,
+      "sharedGuid": "799f32d0-2af9-4735-bd5e-464bb70a30a5",
+      "sharedSpecId": "autodesk.spec.aec:material-1.0.0",
+      "sharedVisible": true,
+      "sharedUserModifiable": true,
+      "propertiesGroup": "autodesk.parameter.group:materials-1.0.0",
+      "isInstance": false
+    },
+    "Num": {
+      "dataType": "Integer",
+      "isInstance": true,
+      "formula": "(Length - Start Gap) / Pitch of Diagonals - 0.5"
+    },
+    "Pitch of Diagonals": {
+      "shared": true,
+      "sharedGuid": "a3a2230e-7dec-4870-bbf0-93558a7db261",
+      "sharedSpecId": "autodesk.spec.aec:length-2.0.0",
+      "sharedVisible": true,
+      "sharedUserModifiable": true,
+      "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+      "isInstance": false
+    },
+    "Position Number": {
+      "shared": true,
+      "sharedGuid": "3051ba5d-50f5-4d1f-a70e-bb0bd86fd7dc",
+      "sharedSpecId": "autodesk.spec:spec.string-2.0.0",
+      "sharedVisible": true,
+      "sharedUserModifiable": true,
+      "propertiesGroup": "autodesk.parameter.group:construction-1.0.0",
+      "isInstance": true
+    },
+    "Start Gap": {
+      "shared": true,
+      "sharedGuid": "f7d45902-20b2-43f8-8aae-08021ba8163b",
+      "sharedSpecId": "autodesk.spec.aec:length-2.0.0",
+      "sharedVisible": true,
+      "sharedUserModifiable": true,
+      "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+      "isInstance": false
+    },
+    "Upper Chord Diameter": {
+      "shared": true,
+      "sharedGuid": "a92a425e-84f5-41d2-83fe-ba621a9298e9",
+      "sharedSpecId": "autodesk.spec.aec:length-2.0.0",
+      "sharedVisible": true,
+      "sharedUserModifiable": true,
+      "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+      "isInstance": false
+    },
+    "Upper Chord Material": {
+      "shared": true,
+      "sharedGuid": "ef366a3d-50d7-4f17-a332-e4d1dc341d79",
+      "sharedSpecId": "autodesk.spec.aec:material-1.0.0",
+      "sharedVisible": true,
+      "sharedUserModifiable": true,
+      "propertiesGroup": "autodesk.parameter.group:materials-1.0.0",
+      "isInstance": false
+    },
+    "Visibility dimension line": {
+      "shared": true,
+      "sharedGuid": "dec73a33-df92-4eff-aab3-33a7d4633888",
+      "sharedSpecId": "autodesk.spec:spec.bool-1.0.0",
+      "sharedVisible": true,
+      "sharedUserModifiable": true,
+      "propertiesGroup": "autodesk.parameter.group:visibility-1.0.0",
+      "isInstance": true
+    },
+    "Width": {
+      "shared": true,
+      "sharedGuid": "70285f6d-5f84-4dc7-8ad7-6bc242bdea5d",
+      "sharedSpecId": "autodesk.spec.aec:length-2.0.0",
+      "sharedVisible": true,
+      "sharedUserModifiable": true,
+      "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+      "isInstance": false
+    }
+  },
+  "types": {
+    "Type1": {
+      "Bottom Cover": "0ft",
+      "Diagonal Diameter": "0.020833333333333332ft",
+      "Diagonal Material": "BSt 500 M(A) [ID:2352]",
+      "Height": "0.5208333333333334ft",
+      "Lineal Weight": "1.4881639435695537 kg/m",
+      "Location": "t",
+      "Lower Chord Diameter": "0.03125ft",
+      "Lower Chord Material": "BSt 500 M(B) [ID:2353]",
+      "Pitch of Diagonals": "0.6666666666666666ft",
+      "Position Number": "1",
+      "Start Gap": "0.3333333333333333ft",
+      "Upper Chord Diameter": "0.03125ft",
+      "Upper Chord Material": "BSt 500 M(B) [ID:2353]",
+      "Visibility dimension line": "No",
+      "Width": "0.3333333333333333ft"
+    }
+  },
+  "datums": {
+    "Ref. Level": {
+      "normal": "Z",
+      "isLevel": true
+    },
+    "Center (Front/Back)": {
+      "normal": "Y"
+    },
+    "Reference Plane": {
+      "normal": "Z"
+    },
+    "Left": {
+      "normal": "X"
+    }
+  },
+  "refPlanes": {
+    "Right": {
+      "normal": "PlusX",
+      "at": "4ft",
+      "isReference": "Right"
+    },
+    "plane-1": {
+      "normal": "PlusX",
+      "at": "1ft",
+      "isReference": "NotAReference"
+    },
+    "plane-2": {
+      "normal": "PlusY",
+      "at": "0.166666667ft",
+      "isReference": "WeakReference"
+    },
+    "plane-3": {
+      "normal": "PlusY",
+      "at": "-0.166666667ft",
+      "isReference": "WeakReference"
+    },
+    "plane-4": {
+      "normal": "PlusZ",
+      "at": "-0.015625ft",
+      "isReference": "NotAReference"
+    },
+    "plane-5": {
+      "normal": "PlusX",
+      "at": "0.333333333ft",
+      "isReference": "NotAReference"
+    },
+    "plane-6": {
+      "normal": "PlusZ",
+      "at": "-0.505208333ft",
+      "isReference": "NotAReference"
+    },
+    "plane-7": {
+      "normal": "PlusY",
+      "at": "-0.135416667ft",
+      "isReference": "NotAReference"
+    },
+    "plane-8": {
+      "normal": "PlusY",
+      "at": "0.135416667ft",
+      "isReference": "NotAReference"
+    },
+    "plane-9": {
+      "normal": "PlusY",
+      "at": "-0.151041667ft",
+      "isReference": "NotAReference"
+    },
+    "plane-10": {
+      "normal": "PlusY",
+      "at": "0.151041667ft",
+      "isReference": "NotAReference"
+    },
+    "plane-11": {
+      "normal": "PlusZ",
+      "at": "0ft",
+      "isReference": "WeakReference"
+    },
+    "plane-12": {
+      "normal": "MinusZ",
+      "at": "0.03125ft",
+      "isReference": "NotAReference"
+    },
+    "plane-13": {
+      "normal": "PlusZ",
+      "at": "-0.489583333ft",
+      "isReference": "NotAReference"
+    },
+    "plane-14": {
+      "normal": "MinusZ",
+      "at": "0.520833333ft",
+      "isReference": "WeakReference"
+    }
+  },
+  "refLines": {
+    "line-1": {
+      "on": "Ref. Level",
+      "from": [
+        "Left"
+      ],
+      "length": "4ft"
+    }
+  },
+  "dimensions": {
+    "lock-left-right": {
+      "between": [
+        "Left",
+        "Right"
+      ],
+      "locked": "4ft",
+      "view": "RefLevel"
+    },
+    "eq-plane-2-center-front-back-plane-3": {
+      "between": [
+        "plane-2",
+        "Center (Front/Back)",
+        "plane-3"
+      ],
+      "equality": true,
+      "view": "RefLevel"
+    },
+    "width": {
+      "between": [
+        "plane-2",
+        "plane-3"
+      ],
+      "label": "Width",
+      "view": "RefLevel"
+    },
+    "start-gap": {
+      "between": [
+        "Left",
+        "plane-5"
+      ],
+      "label": "Start Gap",
+      "view": "RefLevel"
+    },
+    "pitch-of-diagonals": {
+      "between": [
+        "plane-5",
+        "plane-1"
+      ],
+      "label": "Pitch of Diagonals",
+      "view": "RefLevel"
+    },
+    "lower-chord-diameter": {
+      "between": [
+        "plane-7",
+        "plane-3"
+      ],
+      "label": "Lower Chord Diameter",
+      "view": "RefLevel"
+    },
+    "lower-chord-diameter-2": {
+      "between": [
+        "plane-2",
+        "plane-8"
+      ],
+      "label": "Lower Chord Diameter",
+      "view": "RefLevel"
+    },
+    "eq-plane-2-plane-10-plane-8": {
+      "between": [
+        "plane-2",
+        "plane-10",
+        "plane-8"
+      ],
+      "equality": true,
+      "view": "RefLevel"
+    },
+    "eq-plane-7-plane-9-plane-3": {
+      "between": [
+        "plane-7",
+        "plane-9",
+        "plane-3"
+      ],
+      "equality": true,
+      "view": "RefLevel"
+    },
+    "eq-plane-12-plane-4-plane-11": {
+      "between": [
+        "plane-12",
+        "plane-4",
+        "plane-11"
+      ],
+      "equality": true,
+      "view": "Left"
+    },
+    "lower-chord-diameter-3": {
+      "between": [
+        "plane-12",
+        "plane-11"
+      ],
+      "label": "Lower Chord Diameter",
+      "view": "Left"
+    },
+    "bottom-cover": {
+      "between": [
+        "Reference Plane",
+        "plane-11"
+      ],
+      "label": "Bottom Cover",
+      "view": "Left"
+    },
+    "eq-plane-14-plane-6-plane-13": {
+      "between": [
+        "plane-14",
+        "plane-6",
+        "plane-13"
+      ],
+      "equality": true,
+      "view": "Left"
+    },
+    "upper-chord-diameter": {
+      "between": [
+        "plane-14",
+        "plane-13"
+      ],
+      "label": "Upper Chord Diameter",
+      "view": "Left"
+    },
+    "height": {
+      "between": [
+        "plane-14",
+        "plane-11"
+      ],
+      "label": "Height",
+      "view": "Left"
+    }
+  },
+  "forms": {},
+  "nested": {
+    "lg-chord": {
+      "family": "LG-Chord",
+      "type": "Upper Chord",
+      "host": "Ref. Level",
+      "align": [
+        {
+          "instance": "Right",
+          "to": "Right"
+        },
+        {
+          "instance": "WeakReference",
+          "to": "Center (Front/Back)"
+        },
+        {
+          "instance": "Left",
+          "to": "Left"
+        },
+        {
+          "instance": "WeakReference",
+          "to": "plane-6"
+        }
+      ],
+      "associate": {
+        "Bar Diameter": "param:Upper Chord Diameter",
+        "Material": "param:Upper Chord Material"
+      }
+    },
+    "lg-chord-2": {
+      "family": "LG-Chord",
+      "type": "Lower Chord",
+      "host": "plane-4",
+      "align": [
+        {
+          "instance": "Left",
+          "to": "Left"
+        },
+        {
+          "instance": "Right",
+          "to": "Right"
+        },
+        {
+          "instance": "Center (Front/Back)",
+          "to": "plane-10"
+        }
+      ],
+      "associate": {
+        "Bar Diameter": "param:Lower Chord Diameter",
+        "Material": "param:Lower Chord Material"
+      }
+    },
+    "lg-chord-3": {
+      "family": "LG-Chord",
+      "type": "Lower Chord",
+      "host": "plane-4",
+      "align": [
+        {
+          "instance": "Right",
+          "to": "Right"
+        },
+        {
+          "instance": "Left",
+          "to": "Left"
+        },
+        {
+          "instance": "Center (Front/Back)",
+          "to": "plane-9"
+        }
+      ],
+      "associate": {
+        "Bar Diameter": "param:Lower Chord Diameter",
+        "Material": "param:Lower Chord Material"
+      }
+    },
+    "diaganal-fine-view-bottom-based": {
+      "family": "Diaganal-fine view(bottom based)",
+      "type": "Diaganal-fine view(bottom based)",
+      "host": "Ref. Level",
+      "align": [
+        {
+          "instance": "Center (Front/Back)",
+          "to": "Center (Front/Back)"
+        },
+        {
+          "instance": "WeakReference",
+          "to": "plane-5"
+        },
+        {
+          "instance": "WeakReference",
+          "to": "plane-4"
+        }
+      ],
+      "associate": {
+        "OG": "param:Lower Chord Diameter",
+        "Unit Width": "param:Pitch of Diagonals",
+        "Width": "param:Width",
+        "Height": "param:Height",
+        "UG": "param:Upper Chord Diameter",
+        "Diag": "param:Diagonal Diameter",
+        "Material": "param:Diagonal Material"
+      }
+    },
+    "diaganal-medium-view-bottom-based": {
+      "family": "Diaganal-medium view(bottom based)",
+      "type": "Diaganal-medium view(bottom based)",
+      "host": "Ref. Level",
+      "align": [
+        {
+          "instance": "WeakReference",
+          "to": "plane-5"
+        },
+        {
+          "instance": "Center (Front/Back)",
+          "to": "Center (Front/Back)"
+        },
+        {
+          "instance": "WeakReference",
+          "to": "plane-4"
+        }
+      ],
+      "associate": {
+        "OG": "param:Upper Chord Diameter",
+        "Unit Width": "param:Pitch of Diagonals",
+        "Width": "param:Width",
+        "Height": "param:Height",
+        "UG": "param:Lower Chord Diameter",
+        "Diag": "param:Diagonal Diameter"
+      }
+    }
+  },
+  "arrays": {
+    "diaganal-fine-view-bottom-based-plusx": {
+      "member": "diaganal-fine-view-bottom-based",
+      "direction": "PlusX",
+      "label": "param:Num",
+      "moveTo": "Second",
+      "spacing": "0.666666667ft"
+    },
+    "diaganal-medium-view-bottom-based-plusx": {
+      "member": "diaganal-medium-view-bottom-based",
+      "direction": "PlusX",
+      "label": "param:Num",
+      "moveTo": "Second",
+      "spacing": "0.666666667ft"
+    }
+  },
+  "connectors": {},
+  "details": {},
+  "settings": {
+    "alwaysVertical": true,
+    "partType": "Normal"
+  },
+  "lookupTables": {},
+  "coverage": {
+    "parameters": "Read",
+    "types": "Read",
+    "datums": "Read",
+    "refPlanes": "Partial",
+    "refLines": "Partial",
+    "dimensions": "Read",
+    "forms": "Read",
+    "nested": "Read",
+    "arrays": "Partial",
+    "connectors": "Read",
+    "details": "Read",
+    "settings": "Read",
+    "lookupTables": "Read",
+    "roomCalculationPoint": "Read"
+  }
+}

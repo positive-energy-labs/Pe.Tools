@@ -1,4 +1,4 @@
-import type { Draft, Focus, PageWorld } from "#/family/model";
+import type { Draft, Focus, FamilyPageModel } from "#/family/model";
 import { bindingOf, effective, inches } from "#/family/model";
 import { boundParam } from "#/family/world";
 
@@ -30,7 +30,7 @@ export type Part =
 /** A dim resolved THROUGH its binding: bound → the parameter at this type, unbound → the frozen
  * literal. This is what makes bind/unbind and ghost-row edits visible in the drawing. */
 function dimOf(
-  world: PageWorld,
+  world: FamilyPageModel,
   draft: Draft,
   typeName: string,
   slug: string,
@@ -41,7 +41,7 @@ function dimOf(
   return param ? inches(effective(draft, param, typeName)) : inches(binding);
 }
 
-export function buildParts(world: PageWorld, draft: Draft, typeName: string): Part[] {
+export function buildParts(world: FamilyPageModel, draft: Draft, typeName: string): Part[] {
   const dim = (slug: string, property: string) => dimOf(world, draft, typeName, slug, property);
   const bodyW = dim("body", "width");
   const bodyD = dim("body", "depth");

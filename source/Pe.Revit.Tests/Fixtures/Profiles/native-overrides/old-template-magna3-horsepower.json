@@ -1,0 +1,15 @@
+{
+  "FilterFamilies": {
+    "IncludeNames": {
+      "Equaling": ["Magna3 - Mechanical Equipment"]
+    }
+  },
+  "AddAndMapSharedParams": {
+    "MappingData": [
+      {
+        "NewName": "PE_G_Perf_Horsepower",
+        "SourceValuesTreatedAsMissing": ["N/A"]
+      }
+    ]
+  }
+}

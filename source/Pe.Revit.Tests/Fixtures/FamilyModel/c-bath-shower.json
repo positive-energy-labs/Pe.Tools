@@ -1,0 +1,69 @@
+{
+  "$schema": "/schemas/settings/FamilyFoundry/models.json",
+  "family": { "name": "PE Bath-Shower", "category": "PlumbingFixtures", "template": "Plumbing Fixture wall based", "placement": "OneLevelBasedHosted" },
+  "parameters": {
+    "_conn angle":            { "dataType": "Angle",  "value": "90deg" },
+    "_conn size":             { "dataType": "Length", "value": "3/4in", "isInstance": true },
+    "_conn x offset between": { "dataType": "Length", "value": "6in", "isInstance": true },
+    "_conn z offset":         { "dataType": "Length", "value": "1/2in", "isInstance": true },
+    "_drain angle":           { "dataType": "Angle",  "formula": "90°" },
+    "_drain size":            { "dataType": "Length", "value": "2in", "isInstance": true },
+    "_drain visible":         { "dataType": "YesNo",  "value": "Yes" },
+    "_drain x offset":        { "dataType": "Length", "value": "36in", "isInstance": true },
+    "_drain y offset":        { "dataType": "Length", "value": "24in", "isInstance": true },
+    "_drain z offset":        { "dataType": "Length", "value": "1/2in", "isInstance": true },
+    "_hot conn visible":      { "dataType": "YesNo",  "value": "Yes" },
+    "PE_P_LoadCalc_CWFU":     { "shared": true, "value": 7.5 },
+    "PE_P_LoadCalc_DFU":      { "shared": true, "value": 2 },
+    "PE_P_LoadCalc_HWFU":     { "shared": true, "value": 7.5 }
+  },
+  "types": { "Bathtub Floor Mounted": {} },
+  "datums": {
+    "Ref. Level":          { "normal": "Z", "isLevel": true },
+    "Center (Left/Right)": { "normal": "X" }
+  },
+  "refPlanes": {
+    "Center (Front/Back)": { "normal": "PlusY", "at": "0in" },
+    "conn (left)":  { "normal": "PlusX",  "at": "-3in" },
+    "conn (right)": { "normal": "PlusX",  "at": "3in" },
+    "conn top":     { "normal": "PlusZ",  "at": "1' - 0 1/2\"" },
+    "drain y":      { "normal": "PlusY",  "at": "24in", "isReference": "StrongReference" },
+    "drain x":      { "normal": "MinusX", "at": "0in",  "isReference": "StrongReference" },
+    "arbitrary plane for positioning": { "normal": "MinusX", "at": "36in" }
+  },
+  "dimensions": {
+    "conn-eq":   { "between": ["conn (left)", "Center (Left/Right)", "conn (right)"], "equality": true },
+    "conn-x":    { "between": ["conn (left)", "conn (right)"], "label": "_conn x offset between" },
+    "conn-z":    { "between": ["Ref. Level", "conn top"], "label": "_conn z offset", "view": "PlacementSide" },
+    "drain-x":   { "between": ["arbitrary plane for positioning", "drain x"], "label": "_drain x offset" },
+    "drain-fix": { "between": ["arbitrary plane for positioning", "Center (Left/Right)"], "locked": "3'" },
+    "drain-y":   { "between": ["Center (Front/Back)", "drain y"], "label": "_drain y offset" }
+  },
+  "nested": {
+    "conn-cold": {
+      "family": "puck", "type": "default", "host": "Ref. Level",
+      "align": [ { "instance": "Center (Left/Right)", "to": "conn (left)" } ],
+      "associate": { "_angle": "param:_conn angle", "_diameter": "param:_conn size", "Elevation from Level": "param:_conn z offset" }
+    },
+    "conn-hot": {
+      "family": "puck", "type": "default", "host": "Ref. Level",
+      "align": [ { "instance": "Center (Left/Right)", "to": "conn (right)" } ],
+      "associate": { "_angle": "param:_conn angle", "_diameter": "param:_conn size", "Elevation from Level": "param:_conn z offset" },
+      "visible": "param:_hot conn visible"
+    },
+    "drain": {
+      "family": "puck", "type": "default", "host": "Ref. Level",
+      "align": [ { "instance": "Center (Left/Right)", "to": "drain x" }, { "instance": "Center (Front/Back)", "to": "drain y" } ],
+      "associate": { "_angle": "param:_drain angle", "_diameter": "param:_drain size", "Elevation from Level": "param:_drain z offset" },
+      "visible": "param:_drain visible"
+    }
+  },
+  "connectors": {
+    "cold":  { "domain": "Pipe", "systemType": "DomesticColdWater", "on": "conn top", "at": ["conn (left)", "Center (Front/Back)"], "diameter": "param:_conn size", "flowDirection": "In", "flowConfiguration": "Demand",
+               "associate": { "Fixture Units": "param:PE_P_LoadCalc_CWFU" } },
+    "hot":   { "domain": "Pipe", "systemType": "DomesticHotWater",  "on": "conn top", "at": ["conn (right)", "Center (Front/Back)"], "diameter": "param:_conn size", "flowDirection": "In", "flowConfiguration": "Demand",
+               "associate": { "Fixture Units": "param:PE_P_LoadCalc_HWFU" } },
+    "drain": { "domain": "Pipe", "systemType": "Sanitary",          "on": "conn top", "at": ["drain x", "drain y"], "diameter": "param:_drain size", "flowDirection": "Out", "flowConfiguration": "Demand",
+               "associate": { "Fixture Units": "param:PE_P_LoadCalc_DFU" } }
+  }
+}

@@ -81,7 +81,7 @@ public class OperationLog(string operationName, List<LogEntry> entries) {
     public int SuccessCount => this.Entries.Count(e => e.Status == LogStatus.Success);
     public int SkippedCount => this.Entries.Count(e => e.Status == LogStatus.Skipped);
     public int ErrorCount => this.Entries.Count(e => e.Status == LogStatus.Error);
-    public int PendingCount => this.Entries.Count(e => e.Status == LogStatus.Pending);
+    public int PendingCount => this.Entries.Count(e => e.HasPendingWork);
 }
 
 /// <summary>
@@ -107,6 +107,14 @@ public class LogEntry(string name) {
 
     public LogStatus Status { get; private set; } = LogStatus.Pending;
     public Exception? Exception { get; private set; }
+    private LogStatus? _typeOutcome;
+    internal LogEntry? SnapshotOwner { get; set; }
+    public bool HasPendingWork => this.Status == LogStatus.Pending && (this.SnapshotOwner?.Status ?? this.Status) == LogStatus.Pending;
+
+    /// <summary>Complete this type's attempt without suppressing work for later types.</summary>
+    public LogEntry SuccessForType(string message) { this._typeOutcome = LogStatus.Success; return this.Defer(message); }
+    public LogEntry SkipForType(string message) { this._typeOutcome = LogStatus.Skipped; return this.Defer(message); }
+
     public bool IsComplete => this.Status != LogStatus.Pending;
 
     public LogEntry WithParameterEvent(ParameterLogEvent parameterEvent) {
@@ -188,7 +196,8 @@ public class LogEntry(string name) {
     public LogEntry Clone() {
         var clone = new LogEntry(this.Name) {
             FamilyTypeName = this.FamilyTypeName,
-            Status = this.Status,
+            Status = this._typeOutcome ?? this.Status,
+            SnapshotOwner = this,
             Exception = this.Exception,
             ParameterEvent = this.ParameterEvent
         };
@@ -202,6 +211,7 @@ public class LogEntry(string name) {
     ///     Used after TakeSnapshot() to prevent detail accumulation across type iterations.
     /// </summary>
     internal void ClearMessages() {
+        this._typeOutcome = null;
         this.MessageList.Clear();
         this.ParameterEvent = null;
     }

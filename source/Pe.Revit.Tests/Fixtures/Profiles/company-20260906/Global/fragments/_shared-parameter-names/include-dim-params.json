@@ -1,0 +1,8 @@
+{
+  "Items": [
+    "PE_G_Dim_Width1",
+    "PE_G_Dim_Length1",
+    "PE_G_Dim_Height1"
+  ],
+  "$schema": "../../schemas/global/fragments/include/_shared-parameter-names/_shared-parameter-names.schema.json"
+}

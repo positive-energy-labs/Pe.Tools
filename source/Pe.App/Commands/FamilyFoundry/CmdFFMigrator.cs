@@ -1,61 +1,36 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
-using Newtonsoft.Json;
 using Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
 using Pe.App.Commands.Palette.FamilyPalette;
 using Pe.App.Host;
 using Pe.Revit;
 using Pe.Revit.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.Apply;
-using Pe.Revit.FamilyFoundry.OperationGroups;
-using Pe.Revit.FamilyFoundry.Operations;
-using Pe.Revit.FamilyFoundry.Profiles;
-using Pe.Revit.FamilyFoundry.Resolution;
-using Pe.Revit.Global;
 using Pe.Revit.Global.Lib;
 using Pe.Revit.Global.Ui;
-using Pe.Revit.SettingsRuntime.Modules;
-using Pe.Shared.HostContracts;
-using Pe.Shared.HostContracts.Transport;
-using Pe.Shared.Product;
 using Pe.Shared.StorageRuntime;
-using Pe.Shared.StorageRuntime.Modules;
 using Serilog.Events;
 using System.Diagnostics;
 using System.IO;
-using RuntimeStorageClient = Pe.Shared.StorageRuntime.StorageClient;
 
 namespace Pe.App.Commands.FamilyFoundry;
 
+/// <summary>Bulk lane: plan and apply a family spec to the selected loaded families, or every family the spec selects.</summary>
 [Transaction(TransactionMode.Manual)]
 public class CmdFFMigrator : IExternalCommand {
     public const string AddinKey = nameof(CmdFFMigrator);
     public const string DisplayName = "FF Migrator";
-    private static readonly ISettingsRootBinding<FFMigratorProfile> SettingsRoot = FFMigratorSettingsRegistration.Root;
 
-    public Result Execute(
-        ExternalCommandData commandData,
-        ref string message,
-        ElementSet elementSet
-    ) {
+    public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elementSet) {
         var uiDoc = commandData.Application.ActiveUIDocument;
-        var doc = uiDoc.Document;
-
         try {
-            var window = new FoundryPaletteBuilder<FFMigratorProfile>(DisplayName, SettingsRoot, doc, uiDoc)
-                .WithAction("Open Pe Tools", this.HandleOpenPeTools)
-                .WithAction("Open Profile File", this.HandleOpenFile,
-                    ctx => ctx.SelectedProfile != null)
-                .WithAction("Process Families", this.HandleProcessFamilies,
-                    ctx => ctx.PreviewData?.IsValid == true)
-                .WithAction("Place Families", this.HandlePlaceFamilies,
-                    ctx => ctx.SelectedProfile != null)
-                .WithQueueBuilder((profile, apsParamData) => FFMigratorQueueBuilder.Build(profile, apsParamData))
-                .WithPostProcess((ctx, familyNames) =>
-                    FamilyPlacementHelper.PromptAndPlaceFamilies(ctx.UiDoc.Application, familyNames, DisplayName))
-                .Build();
-
-            window.Show();
+            new FoundryPaletteBuilder(DisplayName, uiDoc.Document, uiDoc)
+                .WithAction("Open Spec File", ctx => Open(ctx.SelectedProfile!.FilePath), ctx => ctx.SelectedProfile != null)
+                .WithAction("Plan selected families", ctx => CmdFFManager.Guarded(() => Process(ctx, apply: false)), ctx => ctx.Patch is not null && !ctx.Doc.IsFamilyDocument)
+                .WithAction("Apply to selected families", ctx => CmdFFManager.Guarded(() => Process(ctx, apply: true)), ctx => ctx.Patch is not null && !ctx.Doc.IsFamilyDocument)
+                .WithAction("Place Families", ctx => FamilyPlacementHelper.PromptAndPlaceFamilies(ctx.UiDoc.Application, ctx.Doc.FamiliesMatching(ctx.Patch!.Select).Select(f => f.Name).ToList(), DisplayName),
+                    ctx => ctx.Patch is not null && !ctx.Doc.IsFamilyDocument)
+                .Build()
+                .Show();
             return Result.Succeeded;
         } catch (Exception ex) {
             new Ballogger().Add(LogEventLevel.Error, new StackFrame(), ex, true).Show();
@@ -63,180 +38,38 @@ public class CmdFFMigrator : IExternalCommand {
         }
     }
 
-    private void HandlePlaceFamilies(FoundryContext<FFMigratorProfile> context) {
-        if (context.SelectedProfile == null) return;
+    private static void Open(string path) {
+        var opened = File.Exists(path) && FileUtils.OpenInDefaultApp(path);
+        new Ballogger().Add(opened ? LogEventLevel.Information : LogEventLevel.Warning, new StackFrame(), opened ? $"Opened {path}" : $"Could not open {path}").Show();
+    }
 
-        try {
-            var profile = ReadProfile(
-                context.SelectedProfile.TextPrimary,
-                SettingsRoot.RootKey
-            );
-            var placeResult = PlaceFamiliesCore(context.UiDoc.Application, profile);
-            var level = placeResult.Success ? LogEventLevel.Information : LogEventLevel.Error;
-            var message = placeResult.Success
-                ? $"Placed {placeResult.PlacedCount} family entries for profile '{context.SelectedProfile.TextPrimary}'."
-                : placeResult.Error ?? "Failed to place families.";
-            new Ballogger().Add(level, new StackFrame(), message).Show();
-        } catch (Exception ex) {
-            new Ballogger().Add(LogEventLevel.Error, new StackFrame(), ex, true).Show();
+    /// <summary>The families come from the palette selection when any are selected, else from the spec's `select`. Apply runs exactly the plan's hashes.</summary>
+    private static void Process(FoundryContext ctx, bool apply) {
+        var (spec, source) = ctx.SelectedProfile!.LoadSpec();
+        var picked = Pickers.GetSelectedFamilies(ctx.UiDoc);
+        var plans = FamilyFoundryBridgeOps.PlanFamilies(spec, ctx.Doc, picked is { Count: > 0 } ? picked.Select(family => family.Id.Value()).ToList() : null).Families.ToList();
+        if (plans.Count == 0) {
+            new Ballogger().Add(LogEventLevel.Warning, new StackFrame(), "The spec selects no loaded family.").Show();
+            return;
         }
-    }
-
-    private void HandleOpenFile(FoundryContext<FFMigratorProfile> context) {
-        if (context.SelectedProfile == null) return;
-        var result = OpenProfileInDefaultApp(
-            context.SelectedProfile.TextPrimary,
-            SettingsRoot.RootKey
-        );
-        var level = result.Success ? LogEventLevel.Information : LogEventLevel.Warning;
-        var message = result.Success
-            ? $"Opened profile file: {result.FilePath}"
-            : result.Error ?? "Profile file could not be opened.";
-        new Ballogger().Add(level, new StackFrame(), message).Show();
-    }
-
-    private void HandleProcessFamilies(FoundryContext<FFMigratorProfile> ctx) {
-        if (ctx.SelectedProfile == null) return;
-        if (ctx.PreviewData?.IsValid != true) {
-            new Ballogger()
-                .Add(LogEventLevel.Error, new StackFrame(), "Cannot process families - profile has validation errors")
-                .Show();
+        var refused = plans.Where(plan => plan.Refusals.Count > 0).ToList();
+        var ready = plans.Where(plan => plan.Refusals.Count == 0).ToList();
+        var refusedText = string.Join("\n", refused.Select(plan => $"  • {plan.FamilyName}: {string.Join("; ", plan.Refusals.Select(r => r.Message))}"));
+        if (!apply || ready.Count == 0) {
+            new Ballogger().Add(refused.Count == 0 ? LogEventLevel.Information : LogEventLevel.Warning, new StackFrame(),
+                $"Planned {plans.Count} families: {ready.Sum(plan => plan.Changes.Count)} changes across {ready.Count} ready, {refused.Count} refused.\n{refusedText}").Show();
             return;
         }
 
-        var profile = ReadProfile(
-            ctx.SelectedProfile.TextPrimary,
-            SettingsRoot.RootKey
-        );
-        var runOutput = RuntimeStorageClient.Default.Module(AddinKey).Output().TimestampedSubDir();
-        var selectedFamilies = Pickers.GetSelectedFamilies(ctx.UiDoc);
-        var runResult = ctx.UiDoc.Document.ApplyFamilyMigrationProfile(
-            profile,
-            ctx.SelectedProfile.TextPrimary,
-            selectedFamilies,
-            ctx.OnFinishSettings,
-            runOutput
-        );
-        var level = runResult.Success ? LogEventLevel.Information : LogEventLevel.Error;
-        var message = runResult.Success
-            ? $"Processed {runResult.FamilyCount} families in {runResult.TotalMs:F0}ms."
-            : runResult.Error ?? "Processing failed.";
-        if (!string.IsNullOrWhiteSpace(runResult.OutputFolderPath))
-            message += $"\nOutput: {runResult.OutputFolderPath}";
-        new Ballogger().Add(level, new StackFrame(), message).Show();
-        if (runResult.ProcessedFamilyNames.Count > 0 && !ctx.Doc.IsFamilyDocument) {
-            FamilyPlacementHelper.PromptAndPlaceFamilies(
-                ctx.UiDoc.Application,
-                runResult.ProcessedFamilyNames,
-                DisplayName
-            );
-        }
+        var result = FamilyFoundryBridgeOps.ApplyWithReceipt("families.apply", spec, source,
+            ready.ToDictionary(plan => plan.FamilyId, plan => plan.PlanHash), ctx.Doc, null,
+            new LoadAndSaveOptions {
+                OpenOutputFilesOnCommandFinish = ctx.OnFinishSettings.OpenOutputFilesOnCommandFinish, LoadFamily = true,
+                SaveFamilyToInternalPath = ctx.OnFinishSettings.SaveFamilyToInternalPath, SaveFamilyToOutputDir = ctx.OnFinishSettings.SaveFamilyToOutputDir
+            });
+        var failed = result.Receipts.Count(receipt => !receipt.Success);
+        new Ballogger().Add(failed == 0 && refused.Count == 0 ? LogEventLevel.Information : LogEventLevel.Error, new StackFrame(),
+            $"Applied {result.Receipts.Count} families, {failed} failed, {refused.Count} refused at plan.\n{refusedText}\nReceipt: {result.ReceiptPath}").Show();
+        FamilyPlacementHelper.PromptAndPlaceFamilies(ctx.UiDoc.Application, result.Receipts.Where(r => r.Success).Select(r => r.FamilyName!).ToList(), DisplayName);
     }
-
-    private void HandleOpenPeTools(FoundryContext<FFMigratorProfile> context) {
-        var selectedProfileName = context.SelectedProfile?.TextPrimary;
-        var launched = PeToolsBrowser.TryLaunch(
-            SettingsRoot.Module.ModuleKey,
-            SettingsRoot.RootKey,
-            selectedProfileName
-        );
-        if (launched) {
-            new Ballogger()
-                .Add(
-                    LogEventLevel.Information,
-                    new StackFrame(),
-                    "Opened FF Migrator external Pe Tools route in your default browser."
-                )
-                .Show();
-            return;
-        }
-
-        new Ballogger()
-            .Add(
-                LogEventLevel.Warning,
-                new StackFrame(),
-                $"Could not open external Pe Tools route. Check {HostEndpoint.FrontendBaseUrlVariable}."
-            )
-            .Show();
-    }
-
-    internal static FFMigratorPlaceFamiliesActionResult PlaceFamiliesCore(UIApplication uiApp,
-        FFMigratorProfile profile) {
-        var doc = uiApp.ActiveUIDocument?.Document;
-        if (doc == null)
-            return new FFMigratorPlaceFamiliesActionResult(false, "No active document.", [], 0);
-
-        try {
-            var familyNames = profile.GetFamilies(doc)
-                .Select(f => f.Name)
-                .Where(name => !string.IsNullOrWhiteSpace(name))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            if (familyNames.Count == 0) {
-                return new FFMigratorPlaceFamiliesActionResult(
-                    false,
-                    "No families matched the current profile settings.",
-                    [],
-                    0
-                );
-            }
-
-            FamilyPlacementHelper.PromptAndPlaceFamilies(uiApp, familyNames, DisplayName);
-            return new FFMigratorPlaceFamiliesActionResult(true, null, familyNames, familyNames.Count);
-        } catch (Exception ex) {
-            return new FFMigratorPlaceFamiliesActionResult(false, ex.Message, [], 0);
-        }
-    }
-
-    internal static string ResolveProfileFilePath(string relativePath, string? subDirectory = null) =>
-        ResolveStorage().Documents().ResolveDocumentPath(relativePath, ResolveRootKey(subDirectory));
-
-    internal static FFMigratorProfile ReadProfile(
-        string relativePath,
-        string? subDirectory = null
-    ) => ResolveStorage().Settings().ReadRequired(relativePath, ResolveRootKey(subDirectory));
-
-    internal static FFMigratorOpenProfileFileActionResult OpenProfileInDefaultApp(
-        string relativePath,
-        string? subDirectory = null
-    ) {
-        try {
-            var filePath = ResolveProfileFilePath(relativePath, subDirectory);
-            if (!File.Exists(filePath)) {
-                return new FFMigratorOpenProfileFileActionResult(
-                    false,
-                    $"Profile file not found: {Path.GetFileName(filePath)}",
-                    filePath,
-                    false
-                );
-            }
-
-            _ = FileUtils.OpenInDefaultApp(filePath);
-            return new FFMigratorOpenProfileFileActionResult(true, null, filePath, true);
-        } catch (Exception ex) {
-            return new FFMigratorOpenProfileFileActionResult(false, ex.Message, null, false);
-        }
-    }
-
-    private static ModuleStorage<FFMigratorProfile> ResolveStorage() =>
-        RuntimeStorageClient.Default.Root(SettingsRoot);
-
-    private static string ResolveRootKey(string? subDirectory) =>
-        string.IsNullOrWhiteSpace(subDirectory)
-            ? SettingsRoot.RootKey
-            : subDirectory;
 }
-
-internal record FFMigratorPlaceFamiliesActionResult(
-    bool Success,
-    string? Error,
-    List<string> FamilyNames,
-    int PlacedCount
-);
-
-internal record FFMigratorOpenProfileFileActionResult(
-    bool Success,
-    string? Error,
-    string? FilePath,
-    bool Opened
-);

@@ -1,4 +1,5 @@
 using System.Globalization;
+using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.Parameters;
 
@@ -9,6 +10,26 @@ namespace Pe.Revit.Parameters;
 ///     falling back to invariant-culture numbers, and reads round-trip invariantly.
 /// </summary>
 public static class ParameterStringIo {
+    /// <summary>Native unit syntax plus constrained portable and known legacy explicit-unit literals.</summary>
+    public static bool TryParseMeasuredValue(Units units, ForgeTypeId spec, string text, out double value) {
+        if (UnitFormatUtils.TryParse(units, spec, text, out value)) return true;
+        if (spec == SpecTypeId.HvacTemperature && text.EndsWith(" F", StringComparison.Ordinal) &&
+            double.TryParse(text[..^2], NumberStyles.Float, CultureInfo.InvariantCulture, out var fahrenheit)) {
+            value = UnitUtils.ConvertToInternalUnits(fahrenheit, UnitTypeId.Fahrenheit);
+            return true;
+        }
+        if (!PortableScalar.TryParse(text, out var literal)) return false;
+        if (spec == SpecTypeId.Length && literal.Kind == PortableScalarKind.Length) {
+            value = literal.Feet;
+            return true;
+        }
+        if (spec == SpecTypeId.Angle && literal.Kind == PortableScalarKind.Angle) {
+            value = UnitUtils.ConvertToInternalUnits(literal.Value, UnitTypeId.Degrees);
+            return true;
+        }
+        return false;
+    }
+
     /// <summary>
     ///     Parses <paramref name="value" /> per the parameter's StorageType/DataType and sets it.
     ///     Null clears string parameters and is rejected for numeric ones. Requires an open
@@ -72,7 +93,7 @@ public static class ParameterStringIo {
 
         var dataType = parameter.Definition.GetDataType();
         if (UnitUtils.IsMeasurableSpec(dataType) &&
-            UnitFormatUtils.TryParse(parameter.Element.Document.GetUnits(), dataType, value, out result))
+            TryParseMeasuredValue(parameter.Element.Document.GetUnits(), dataType, value, out result))
             return true;
 
         return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out result);

@@ -1,5 +1,5 @@
 import { Pane } from "#/components/lang/pane";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { AnatomyDrawing } from "#/family/anatomy";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 
@@ -20,6 +20,7 @@ export function FamilyWorkspaceAnatomy() {
   return (
     <Pane
       kind="visual"
+      flush
       headerSurface="recess"
       title="anatomy"
       meta={anatomyCollapsed ? "collapsed" : stageType}
@@ -29,7 +30,7 @@ export function FamilyWorkspaceAnatomy() {
           : `Drawn from the ${stageType} type's own numbers in the profile — a reading of the document, not a render of Revit.`
       }
       actions={
-        <Verb
+        <ActionButton
           label={anatomyCollapsed ? "show" : "hide"}
           onClick={() => setAnatomyCollapsed((current) => !current)}
           reason={
@@ -44,7 +45,7 @@ export function FamilyWorkspaceAnatomy() {
         world={world}
         draft={draft}
         typeName={stageType}
-        model={lane.document?.model ?? null}
+        model={lane.drawingModel}
         focusedParts={focusedParts}
         focusedParams={focusedParams}
         onFocus={setFocus}

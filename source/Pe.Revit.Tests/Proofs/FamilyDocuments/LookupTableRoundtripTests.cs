@@ -1,3 +1,8 @@
+using Pe.Revit.FamilyFoundry.Apply;
+using Newtonsoft.Json;
+using Pe.Shared.RevitData.Families;
+using Pe.Revit.Extensions.FamParameter.Formula;
+
 namespace Pe.Revit.Tests;
 
 [TestFixture]
@@ -38,48 +43,40 @@ public sealed class LookupTableRoundtripTests {
             var sourceTable = sourceTables.Single(table =>
                 string.Equals(table.TableName, LookupTableName, StringComparison.Ordinal));
 
-            var snapshot = sourceDocument!.CaptureFamilySnapshot();
+            var snapshot = sourceDocument!.CaptureFamilyModel();
             Assert.Multiple(() => {
-                Assert.That(snapshot.LookupTables?.Data, Has.Count.EqualTo(1));
-                Assert.That(snapshot.Parameters?.Data, Is.Not.Empty);
+                Assert.That(snapshot.LookupTables, Has.Count.EqualTo(1));
+                Assert.That(snapshot.Parameters, Is.Not.Empty);
             });
 
-            var capturedTable = snapshot.LookupTables!.Data.Single();
+            var capturedTable = snapshot.LookupTables[LookupTableName];
             Assert.Multiple(() => {
-                Assert.That(capturedTable.Schema.Name, Is.EqualTo(LookupTableName));
-                Assert.That(capturedTable.Schema.Columns[0].Name, Is.EqualTo(LookupKeyColumnName));
-                Assert.That(capturedTable.Schema.Columns[0].Role, Is.EqualTo(LookupTableColumnRole.LookupKey));
-                Assert.That(capturedTable.Rows, Has.Count.EqualTo(1));
+                Assert.That(capturedTable.Csv, Does.Contain(LookupKeyColumnName));
+                Assert.That(capturedTable.Csv, Does.Contain("ResultVoltage"));
             });
 
-            var profile = FamilyFoundryRoundtripHarness.ProjectToProfile(snapshot);
-            Assert.That(profile.SetLookupTables.Tables, Has.Count.EqualTo(1));
+            File.WriteAllText(Path.Combine(outputDirectory, "source.json"), FamilyModelJson.Serialize(snapshot));
+            WriteValues(sourceDocument, outputDirectory, "source-values.json");
+            var parsed = FamilyModelJson.Parse(FamilyModelJson.Serialize(snapshot));
+            Assert.That(parsed.Diagnostics, Is.Empty);
+            var profile = parsed.Value!;
             Assert.That(
-                profile.FamilyParameters.Any(parameter =>
+                profile.Parameters.Values.Any(parameter =>
                     parameter.Formula?.Contains("size_lookup(", StringComparison.OrdinalIgnoreCase) == true),
                 Is.True,
                 "Expected projected profile to carry size_lookup formulas.");
 
-            replayDocument = RevitFamilyFixtureHarness.CreateFamilyDocument(
-                application,
-                TestFamilyCategory,
-                "FF-LookupRoundtrip-Replay");
-            var result = FamilyFoundryRoundtripHarness.ProcessRoundtrip(
-                replayDocument,
-                profile,
-                nameof(this.Snapshot_projection_roundtrips_embedded_lookup_tables_and_size_lookup_formulas),
-                outputDirectory);
-            var savedFamilyPath = RevitFamilyFixtureHarness.GetExpectedSavedFamilyPath(
-                result.OutputFolderPath!,
-                replayDocument);
-
-            RevitFamilyFixtureHarness.CloseDocument(replayDocument);
-            replayDocument = null;
+            var savedFamilyPath = Path.Combine(outputDirectory, "lookup-replay.rfa");
+            var result = FamilyModelBuild.BuildAndSave(application, profile, savedFamilyPath);
+            Assert.That(result.Receipt?.Converged, Is.True, "Lookup replay must converge before it is saved.");
 
             savedDocument = application.OpenDocumentFile(savedFamilyPath)
                             ?? throw new InvalidOperationException(
                                 $"Failed to open saved lookup roundtrip family '{savedFamilyPath}'.");
 
+            WriteValues(savedDocument, outputDirectory, "reopened-values.json");
+            File.WriteAllText(Path.Combine(outputDirectory, "reopened.json"),
+                FamilyModelJson.Serialize(savedDocument.CaptureFamilyModel()));
             var savedTables = RevitFamilyFixtureHarness.ExportFamilySizeTables(
                 savedDocument,
                 Path.Combine(outputDirectory, "saved-lookups"));
@@ -88,6 +85,8 @@ public sealed class LookupTableRoundtripTests {
 
             Assert.That(savedTable.Rows, Is.EqualTo(sourceTable.Rows),
                 "Expected the embedded lookup CSV to roundtrip unchanged.");
+            Assert.That(savedTable.HeaderColumns, Is.EqualTo(sourceTable.HeaderColumns),
+                "Column order, spec and units must survive alongside the data rows.");
 
             var parameterProbes = RevitFamilyFixtureHarness.CollectFamilyParameterProbes(savedDocument)
                 .Where(probe => !string.IsNullOrWhiteSpace(probe.Formula))
@@ -107,22 +106,110 @@ public sealed class LookupTableRoundtripTests {
                         [LookupTypeName]).Single();
                     Assert.That(valueSnapshot.HasValue, Is.True,
                         $"Expected '{lookupCase.ParameterName}' to evaluate after replay.");
+                    var sourceType = sourceDocument.FamilyManager.Types.Cast<FamilyType>()
+                        .Single(type => type.Name == LookupTypeName);
+                    var sourceParameter = sourceDocument.FamilyManager.get_Parameter(lookupCase.ParameterName);
+                    var expected = sourceParameter.StorageType == StorageType.Integer
+                        ? (double?)sourceType.AsInteger(sourceParameter)
+                        : sourceType.AsDouble(sourceParameter);
+                    Assert.That(Convert.ToDouble(valueSnapshot.RawValue), Is.EqualTo(expected).Within(1e-7),
+                        $"'{lookupCase.ParameterName}' must retain its evaluated internal value.");
                 }
 
                 _ = transaction.RollBack();
             }
 
-            var lookupArtifactFiles = Directory.GetFiles(
-                Path.Combine(result.OutputFolderPath!, savedDocument.OwnerFamily.Name, "snapshot-lookuptables-post"),
-                "*.csv",
-                SearchOption.TopDirectoryOnly);
-            Assert.That(lookupArtifactFiles, Is.Not.Empty,
-                "Expected post-snapshot lookup CSV artifacts to be written.");
+            Assert.That(savedTables, Has.Count.EqualTo(sourceTables.Count));
+        } catch {
+            // Probe only after the original assertion has already failed; never turn a repair into a pass.
+            if (savedDocument is not null) ProbeFormulaRefresh(savedDocument, outputDirectory);
+            throw;
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(savedDocument);
             RevitFamilyFixtureHarness.CloseDocument(replayDocument);
             RevitFamilyFixtureHarness.CloseDocument(sourceDocument);
         }
+    }
+
+    // Keep evidence before assertions: CSV/formula equality alone does not prove evaluated values.
+    private static void WriteValues(Document document, string output, string name) {
+        var fm = document.FamilyManager;
+        var values = fm.Types.Cast<FamilyType>().SelectMany(type => fm.GetParameters()
+            .Where(p => p.Definition.Name.StartsWith("Lookup", StringComparison.Ordinal)
+                || p.Definition.Name.StartsWith("Result", StringComparison.Ordinal))
+            .Select(p => new {
+                Type = type.Name, Parameter = p.Definition.Name, p.Formula,
+                HasValue = type.HasValue(p),
+                Value = p.StorageType switch {
+                    StorageType.String => (object?)type.AsString(p),
+                    StorageType.Integer => type.AsInteger(p),
+                    StorageType.Double => type.AsDouble(p),
+                    _ => null
+                }
+            })).ToArray();
+        File.WriteAllText(Path.Combine(output, name), JsonConvert.SerializeObject(values, Formatting.Indented));
+    }
+
+    private static void ProbeFormulaRefresh(Document document, string output) {
+        using var transaction = new Transaction(document, "Probe lookup evaluation without retaining changes");
+        transaction.Start();
+        try {
+            var fm = document.FamilyManager;
+            fm.CurrentType = fm.Types.Cast<FamilyType>().Single(t => t.Name == LookupTypeName);
+            document.Regenerate();
+            WriteValues(document, output, "regenerated-values.json");
+            var formulas = fm.GetParameters().Where(p => !string.IsNullOrEmpty(p.Formula))
+                .Select(p => (Parameter: p, Formula: p.Formula!))
+                .OrderBy(p => p.Formula.Contains("size_lookup(", StringComparison.OrdinalIgnoreCase) ? 0 : 1).ToArray();
+            var capturedOrder = formulas.OrderBy(p => p.Parameter.Definition.Name, StringComparer.Ordinal).ToArray();
+            var pending = capturedOrder.ToList();
+            var dependencyOrder = new List<(FamilyParameter Parameter, string Formula)>();
+            while (pending.Count > 0) {
+                var ready = pending.Where(p => !fm.Parameters.GetReferencedIn(p.Formula)
+                    .Any(reference => pending.Any(other => other.Parameter.Id == reference.Id))).ToArray();
+                if (ready.Length == 0) throw new InvalidOperationException("Formula order probe found a dependency cycle.");
+                foreach (var item in ready) { dependencyOrder.Add(item); pending.Remove(item); }
+            }
+            foreach (var order in new[] { (Name: "captured", Items: capturedOrder), (Name: "dependencies", Items: dependencyOrder.ToArray()) }) {
+                using var trial = new SubTransaction(document);
+                trial.Start();
+                try {
+                    // Equal starting values: clearing a formula alone retains its last evaluated value.
+                    foreach (var (parameter, _) in formulas) fm.SetFormula(parameter, null);
+                    foreach (var (parameter, _) in formulas) {
+                        if (parameter.StorageType == StorageType.Integer) fm.Set(parameter, 0);
+                        else fm.Set(parameter, 0d);
+                    }
+                    File.WriteAllText(Path.Combine(output, $"order-{order.Name}-plan.json"), JsonConvert.SerializeObject(
+                        order.Items.Select(p => new { Parameter = p.Parameter.Definition.Name, p.Formula,
+                            References = fm.Parameters.GetReferencedIn(p.Formula).Select(r => r.Definition.Name).ToArray() }), Formatting.Indented));
+                    WriteValues(document, output, $"order-{order.Name}-before.json");
+                    foreach (var (parameter, formula) in order.Items) fm.SetFormula(parameter, formula);
+                    document.Regenerate();
+                    WriteValues(document, output, $"order-{order.Name}-after.json");
+                } catch (Exception ex) {
+                    File.WriteAllText(Path.Combine(output, $"order-{order.Name}-error.txt"), ex.ToString());
+                } finally { trial.RollBack(); }
+            }
+            foreach (var mode in new[] { "same-formulas", "outputs-only", "lookups-only", "all-formulas" }) {
+                using var trial = new SubTransaction(document);
+                trial.Start();
+                try {
+                    foreach (var (parameter, formula) in formulas) {
+                        var lookup = formula.Contains("size_lookup(", StringComparison.OrdinalIgnoreCase);
+                        if (mode == "outputs-only" && lookup || mode == "lookups-only" && !lookup) continue;
+                        if (mode != "same-formulas") fm.SetFormula(parameter, null);
+                        fm.SetFormula(parameter, formula);
+                    }
+                    document.Regenerate();
+                    WriteValues(document, output, $"refresh-{mode}-values.json");
+                } catch (Exception ex) {
+                    File.WriteAllText(Path.Combine(output, $"refresh-{mode}-error.txt"), ex.ToString());
+                } finally { trial.RollBack(); }
+            }
+        } catch (Exception ex) {
+            File.WriteAllText(Path.Combine(output, "formula-refresh-error.txt"), ex.ToString());
+        } finally { transaction.RollBack(); }
     }
 
     private static void SeedLookupFamily(Document familyDocument) {

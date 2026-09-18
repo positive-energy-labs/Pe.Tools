@@ -14,10 +14,11 @@ import { EmptyState } from "#/components/lang/empty";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { FactChip, Tag } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Verb } from "#/components/lang/verb";
+import { ActionButton } from "#/components/lang/action-button";
 import { Switcher } from "#/components/lang/switcher";
 import { hashOf } from "#/family/model";
 import type { ProtoProposal, ProtoSpec } from "#/family/world";
+import { Code } from "#/components/lang/code";
 
 export function SpecText({
   spec,
@@ -70,7 +71,7 @@ export function SpecText({
                   </>
                 }
               >
-                <pre className="mt-1 px-2 py-1.5">{block.md}</pre>
+                <Code code={block.md} lang="markdown" />
               </ArtifactFrame>
             </div>
           );
@@ -255,7 +256,7 @@ export function ProposalCard({
         <span className="truncate">{target}</span>
         <span className="ml-auto shrink-0 text-ink-2">{settled.word}</span>
         {state === "cleared" && (
-          <Verb
+          <ActionButton
             label="re-open"
             onClick={onReopen}
             reason={`Put pea's reading of ${target} back on the table. Clearing it was page state, not a decision written anywhere, so this is a plain undo — the cell wears its fold again and accept and deny come back.`}
@@ -300,13 +301,13 @@ export function ProposalCard({
           AGENT tone because it adopts pea's reading; `deny` is an ordinary safe verb. Only
           `save profile` crosses out of the page, and it is not on this sidebar. */}
       <div className="mt-1 flex gap-1">
-        <Verb
+        <ActionButton
           label="accept"
           tone="agent"
           onClick={onAccept}
           reason={`Write ${proposal.proposed} into the table for ${target}. You will see it land in the cell — that IS the accept; the profile then reads unsaved until you save it.`}
         />
-        <Verb
+        <ActionButton
           label="deny"
           onClick={onDeny}
           reason="Clear the proposal. It stops standing, the cell goes back to showing the profile's real value and draws nothing, and the profile is unchanged. The card collapses to one line carrying a re-open verb, so the sidebar still records that it was answered and the denial is undoable."

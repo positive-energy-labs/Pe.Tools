@@ -2,7 +2,7 @@
  * The projection, both directions, against the SHOWCASE model.
  *
  * The fixture below is `source/Pe.Revit.Tests/Fixtures/Profiles/family-model/
- * family-model-showcase.family.json` transcribed as a typed `FamilyModel`. Transcribed rather than
+ * family-model-showcase.json` transcribed as a typed `FamilyModel`. Transcribed rather than
  * imported because this project does not enable `resolveJsonModule` — and typed rather than `any`,
  * so a schema change that would break the real document breaks this file first.
  *
@@ -17,7 +17,8 @@ import { address } from "@pe/agent-contracts";
 
 import { buildSheet, planeGeos, type FamilyModel } from "./family-model.ts";
 import type { EvidenceSlice } from "./host.ts";
-import { buildPageWorld, ghostRows, initialDraft, type Draft } from "./model.ts";
+import { buildFamilyPageModel, ghostRows, initialDraft, type Draft } from "./model.ts";
+import { familyEditBuffer } from "./edit-buffer";
 import { draftToPatches, draftedModel, projectFamilyModel } from "./project.ts";
 
 const L = "Length (Common)";
@@ -113,7 +114,7 @@ const SHOWCASE: FamilyModel = {
 };
 
 const world = () =>
-  buildPageWorld(projectFamilyModel(SHOWCASE, null, { path: "showcase-spike.family.json" }));
+  buildFamilyPageModel(projectFamilyModel(SHOWCASE, null, { path: "showcase-spike.json" }));
 
 /** The page's own edit channel, condensed: clone the baseline and mutate it like a verb would. */
 function edited(fn: (draft: Draft) => void): { draft: Draft; baseline: Draft } {
@@ -125,8 +126,8 @@ function edited(fn: (draft: Draft) => void): { draft: Draft; baseline: Draft } {
 
 describe("projectFamilyModel — document → page world", () => {
   it("carries the family's identity onto the profile the sentence names", () => {
-    const proto = projectFamilyModel(SHOWCASE, null, { path: "showcase-spike.family.json" });
-    expect(proto.profile.path).toBe("showcase-spike.family.json");
+    const proto = projectFamilyModel(SHOWCASE, null, { path: "showcase-spike.json" });
+    expect(proto.profile.path).toBe("showcase-spike.json");
     expect(proto.profile.familyName).toBe("PE Family Model Showcase");
     expect(proto.profile.category).toBe("Generic Models");
     expect(proto.profile.placement).toBe("Unhosted");
@@ -216,7 +217,7 @@ describe("projectFamilyModel — document → page world", () => {
         "core-bore": { ...SHOWCASE.solids!["core-bore"]!, diameter: "3in" },
       },
     };
-    const page = buildPageWorld(projectFamilyModel(frozen, null));
+    const page = buildFamilyPageModel(projectFamilyModel(frozen, null));
     expect(ghostRows(page, initialDraft(page)).map((row) => row.name)).toEqual([
       "core-bore.diameter",
     ]);
@@ -388,7 +389,7 @@ describe("draftToPatches — draft → staged field patches", () => {
         "core-bore": { ...SHOWCASE.solids!["core-bore"]!, diameter: "3in" },
       },
     };
-    const page = buildPageWorld(projectFamilyModel(frozen, null));
+    const page = buildFamilyPageModel(projectFamilyModel(frozen, null));
     const baseline = initialDraft(page);
     const draft = structuredClone(baseline);
     // Exactly what `bindToNew` does: keep the literal as the new parameter's family value, so the
@@ -459,7 +460,7 @@ describe("draftedModel — the draft laid over the document, for the drawing", (
         "core-bore": { ...SHOWCASE.solids!["core-bore"]!, diameter: "3in" },
       },
     };
-    const page = buildPageWorld(projectFamilyModel(frozen, null));
+    const page = buildFamilyPageModel(projectFamilyModel(frozen, null));
     const draft = structuredClone(initialDraft(page));
     draft.authored["Core Bore Diameter"] = "3in";
     draft.newParams = [{ name: "Core Bore Diameter", dataType: L, group: "geometry" }];
@@ -475,7 +476,7 @@ describe("draftedModel — the draft laid over the document, for the drawing", (
   it("keeps value XOR formula, and drops resolved values a changed formula no longer earns", () => {
     const withResolved: FamilyModel = structuredClone(SHOWCASE);
     withResolved.familyParameters["Core Height"]!.resolvedValues = { Standard: "34in" };
-    const page = buildPageWorld(projectFamilyModel(withResolved, null));
+    const page = buildFamilyPageModel(projectFamilyModel(withResolved, null));
 
     // Untouched: the evidence-resolved value survives the composition.
     const untouched = draftedModel(withResolved, initialDraft(page), page);
@@ -506,4 +507,44 @@ describe("draftedModel — the draft laid over the document, for the drawing", (
     expect(drafted.connectors?.["supply-air"]?.systemType).toBe("ExhaustAir");
     expect(drafted.connectors?.["supply-air"]?.frame).toBe("frame:supply-air");
   });
+});
+
+it("keeps newer family input through an older acknowledgement, refusal and pane remount", async () => {
+  const baseline = initialDraft(world());
+  const first = structuredClone(baseline);
+  first.authored["Body Width"] = "25in";
+  const second = structuredClone(first);
+  second.authored["Body Width"] = "26in";
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const revisions: number[] = [];
+  const key = { route: "settings", target: null, work: "family-editor-retention-check" };
+  const buffer = familyEditBuffer(key, async (_patches, revision) => {
+    revisions.push(revision);
+    if (revisions.length === 1) {
+      await held;
+      return null;
+    }
+    return { code: "failed", message: "temporary write failure" };
+  });
+  buffer.observe(10);
+  buffer.stage(first, draftToPatches(SHOWCASE, first, baseline), 10);
+  buffer.stage(second, draftToPatches(SHOWCASE, second, first), 10);
+  const writing = buffer.flush();
+  release();
+  await expect(writing).rejects.toThrow("temporary write failure");
+  expect(revisions).toEqual([10, 11]);
+  expect(buffer.getSnapshot().draft).toBe(second);
+  const remounted = familyEditBuffer(key, async (patches, revision) => {
+    expect(revision).toBe(11);
+    expect(patches).toEqual(draftToPatches(SHOWCASE, second, first));
+    return null;
+  });
+  expect(remounted).toBe(buffer);
+  await remounted.flush();
+  expect(remounted.getSnapshot().draft).toBe(second);
+  remounted.observe(12);
+  expect(remounted.getSnapshot().draft).toBeNull();
 });

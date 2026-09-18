@@ -1,957 +1,996 @@
-using Autodesk.Revit.DB.Architecture;
-using Pe.Revit.DocumentData.Parameters;
-using Pe.Revit.FamilyFoundry.Apply;
-using Pe.Revit.FamilyFoundry.Helpers;
+﻿using Autodesk.Revit.DB.Mechanical;
+using Autodesk.Revit.DB.Plumbing;
+using DataStorage = Autodesk.Revit.DB.ExtensibleStorage.DataStorage;
+using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.LookupTables;
+using Pe.Revit.FamilyFoundry.Operations;
+using Pe.Revit.FamilyFoundry.Reconcile;
+using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Families;
+using System.Globalization;
 
 namespace Pe.Revit.FamilyFoundry.Capture;
 
 /// <summary>
-///     Projects observable family-document state back to the portable authored language. It deliberately accepts
-///     only a Document: the original profile and compiler plan must be unavailable at this boundary.
+///     Reads a family document BY NAME into the native <see cref="FamilyModel" /> (VERDICTS-R2 §L2). Only a
+///     Document goes in: no authored profile, no plan, no metadata. Every section reports its
+///     <see cref="FamilyModel.Coverage" />; every fact the schema cannot say lands in
+///     <see cref="FamilyModel.Unmodeled" /> with a closed reason. Capture never folds a macro back (§1).
+///     Method proofs: r2-revit claims 3 (nested alignments by <c>FamilyInstanceReferenceType</c>),
+///     4 (sketch locks via <c>Sketch.GetAllElements</c> + Constraints alignments), 5 (array anchor is not
+///     stored); c-revit §4 (visibility both directions), §5 LAW rows.
 /// </summary>
 public static class FamilyModelCaptureExtensions {
-    /// <summary>The PE room-calculation-point convention: one foot along the host-inferred direction.</summary>
+    public static FamilyModel CaptureFamilyModel(this Document document) {
+        if (document == null) throw new ArgumentNullException(nameof(document));
+        if (!document.IsFamilyDocument) throw new InvalidOperationException("Expected a family document.");
+        return new FamilyModelCapturer(document).Run();
+    }
+}
+
+internal sealed class FamilyModelCapturer {
+    private const double Tol = 1e-6;
+    private const double FaceTol = 1e-4;
     private const double PeRoomCalculationOffsetFeet = 1.0;
 
-    public static FamilyModel CaptureFamilyModel(this Document document) {
-        if (document == null)
-            throw new ArgumentNullException(nameof(document));
-        if (!document.IsFamilyDocument)
-            throw new InvalidOperationException("Expected a family document.");
+    private readonly Document _d;
+    private readonly FamilyManager _fm;
+    private readonly List<FamilyModelUnmodeledFact> _un = [];
+    private readonly List<RevitDataIssue> _issues = [];
+    private readonly Dictionary<ElementId, string> _planeName = [];
+    private readonly List<ReferencePlane> _refPlanes;
+    private readonly List<Level> _levels;
+    private readonly List<ModelCurve> _refLines;
+    private readonly List<(Dimension Dim, List<Reference> Refs)> _alignments;
+    private readonly List<Dimension> _dimensions;
+    private readonly Dictionary<ElementId, string> _nestedSlug = [];
+    private readonly Dictionary<ElementId, string> _formSlug = [];
+    private readonly Dictionary<ElementId, IReadOnlyList<string>> _nestedPlaneNames = [];
+    private readonly Dictionary<object, ElementId[]> _elements = [];
+    private FamilyModel? _model;
 
-        var snapshot = document.CaptureFamilySnapshot();
-        var placement = FamilyModelBuilder.GetPlacement(document.OwnerFamily.FamilyPlacementType);
-        var category = document.OwnerFamily.FamilyCategory?.Name ?? string.Empty;
-        var unmodeled = new List<FamilyModelUnmodeledFact>();
-        var template = InferTemplate(category, placement, unmodeled);
-        var types = document.FamilyManager.Types
-            .Cast<FamilyType>()
-            .OrderBy(type => type.Name, StringComparer.Ordinal)
-            .ToDictionary(
-                type => type.Name,
-                _ => new Dictionary<string, string>(StringComparer.Ordinal),
-                StringComparer.Ordinal);
-        var familyParameters = new Dictionary<string, FamilyModelFamilyParameter>(StringComparer.Ordinal);
-        var sharedParameters = new Dictionary<string, FamilyModelSharedParameter>(StringComparer.Ordinal);
+    internal IReadOnlyList<Element> FindElements(object spec) {
+        this._model ??= this.Run();
+        var identity = FamilyReconciler.StructuralIdentity(spec);
+        var matches = this._elements.Where(entry => entry.Key.GetType() == spec.GetType() &&
+            FamilyReconciler.StructuralIdentity(entry.Key) == identity).ToList();
+        if (matches.Count != 1)
+            throw new InvalidOperationException($"Expected one native {spec.GetType().Name} for '{identity}', found {matches.Count}.");
+        return matches[0].Value.Select(id => this._d.GetElement(id) ??
+            throw new InvalidOperationException($"Captured element {id} no longer exists.")).ToList();
+    }
 
-        foreach (var parameter in snapshot.Parameters?.Data?.Where(item => !item.IsBuiltIn) ?? []) {
-            var values = ProjectAssignments(parameter, types);
-            if (parameter.IsShared) {
-                sharedParameters[parameter.Name] = new FamilyModelSharedParameter {
-                    PropertiesGroup = ProjectPropertiesGroup(parameter),
-                    IsInstance = parameter.IsInstance,
-                    Value = values.UniformValue,
-                    Formula = parameter.Formula
-                };
-            } else {
-                familyParameters[parameter.Name] = new FamilyModelFamilyParameter {
-                    DataType = ProjectDataType(parameter),
-                    PropertiesGroup = ProjectPropertiesGroup(parameter),
-                    IsInstance = parameter.IsInstance,
-                    Tooltip = parameter.Tooltip,
-                    Value = values.UniformValue,
-                    Formula = parameter.Formula
-                };
-            }
+    public FamilyModelCapturer(Document d) {
+        this._d = d;
+        this._fm = d.FamilyManager;
+        this._refPlanes = Collect<ReferencePlane>().OrderBy(p => p.Id.Value()).ToList();
+        this._levels = Collect<Level>().OrderBy(l => l.Id.Value()).ToList();
+        this._refLines = FamilyRefs.ReferenceLines(d).ToList();
+        var dims = Collect<Dimension>().Where(x => x is not SpotDimension).OrderBy(x => x.Id.Value()).ToList();
+        this._alignments = dims.Where(x => x.Category?.Id.Value() == (long)BuiltInCategory.OST_Constraints && x.Name == "Alignment")
+            .Select(x => (x, x.References.Cast<Reference>().ToList())).ToList();
+        this._dimensions = dims.Where(x => x.Category?.Id.Value() != (long)BuiltInCategory.OST_Constraints).ToList();
+    }
+
+    public FamilyModel Run() {
+        var placement = (FamilyModelPlacement)Enum.Parse(typeof(FamilyModelPlacement), this._d.OwnerFamily.FamilyPlacementType.ToString());
+        var categoryName = this._d.OwnerFamily.FamilyCategory?.Name ?? string.Empty;
+        if (!LenientEnumConverter<FamilyCategory>.TryParse(categoryName, out var category)) {
+            this.Add(UnmodeledReason.TemplateUnknown, "$.family.category", ("category", categoryName));
+            category = FamilyCategory.GenericModels;
         }
 
-        var solids = ProjectSolids(snapshot.AuthoredParamDrivenSolids, unmodeled);
-        var planes = ProjectPlanes(snapshot.AuthoredParamDrivenSolids, solids, unmodeled);
-        var frames = new Dictionary<string, FamilyModelFrame>(StringComparer.Ordinal);
-        var connectors = ProjectConnectors(document, snapshot.AuthoredParamDrivenSolids, solids, frames,
-            unmodeled);
-        var composition = ProjectComposition(document, unmodeled);
-        var roomCalculationPoint = ProjectRoomCalculationPoint(document, placement, unmodeled);
-        var settings = ProjectSettings(document, unmodeled);
-        var lookupTables = ProjectLookupTables(snapshot, unmodeled);
-        AddUnmodeledObservableState(document, snapshot, unmodeled);
-        return new FamilyModel {
+        var snapshot = this._d.CaptureFamilySnapshot();
+        if (snapshot.Parameters?.IsPartial == true) {
+            var errors = snapshot.Parameters.Issues.Where(issue => issue.Severity == Pe.Shared.RevitData.RevitDataIssueSeverity.Error);
+            throw new InvalidOperationException("Family parameter capture is partial; refusing unsafe reconciliation. " +
+                                                string.Join(" | ", errors.Select(issue => issue.Message)));
+        }
+        foreach (var issue in snapshot.Parameters?.Issues.Where(issue => issue.Code == "FamilyParameterDescriptionReadFailed") ?? [])
+            this.Add(UnmodeledReason.ParameterMetadataUnreadable, $"$.parameters.{issue.ParameterName}.tooltip",
+                ("code", issue.Code), ("message", issue.Message));
+        var typeNames = this._fm.Types.Cast<FamilyType>().Select(t => t.Name).ToList();
+        var projected = FamilyModelParameterProjection.Project(
+            (snapshot.Parameters?.Data ?? []).Select(p => p.ToCanonical()), typeNames);
+        this._un.AddRange(projected.Unmodeled);
+
+        var (datums, refPlanes) = this.Planes();
+        var known = new HashSet<string>(datums.Keys.Concat(refPlanes.Keys), StringComparer.Ordinal);
+        var refLines = this.RefLines(known);
+        var forms = this.Forms(known);
+        var nested = this.Nested(known);
+        var arrays = this.Arrays();
+        var connectors = this.Connectors(known);
+        var dimensions = this.Dimensions(known);
+        if (Collect<DataStorage>().Any())
+            this.Add(UnmodeledReason.ThirdPartyStorage, "$", ("dataStorageElements", Collect<DataStorage>().Count().ToString(CultureInfo.InvariantCulture)));
+
+        var model = new FamilyModel {
             Family = new FamilyModelHeader {
-                // OwnerFamily.Name is empty for family documents opened from an .rfa on disk; the
-                // document title (file name) is the observable family name in that case.
-                Name = string.IsNullOrWhiteSpace(document.OwnerFamily.Name)
-                    ? System.IO.Path.GetFileNameWithoutExtension(document.Title)
-                    : document.OwnerFamily.Name,
+                Name = string.IsNullOrWhiteSpace(this._d.OwnerFamily.Name) ? Path.GetFileNameWithoutExtension(this._d.Title) : this._d.OwnerFamily.Name,
                 Category = category,
-                Template = template,
+                Template = this.InferTemplate(category, placement),
                 Placement = placement
             },
-            FamilyParameters = familyParameters,
-            SharedParameters = sharedParameters,
-            Types = types,
-            Planes = planes,
-            Frames = frames,
-            Solids = solids,
-            NestedFamilies = composition.NestedFamilies,
+            Parameters = projected.Parameters,
+            BuiltIns = projected.BuiltIns,
+            Types = projected.Types,
+            Datums = datums,
+            RefPlanes = refPlanes,
+            RefLines = refLines,
+            Dimensions = dimensions,
+            Forms = forms,
+            Nested = nested,
+            Arrays = arrays,
             Connectors = connectors,
-            Arrays = composition.Arrays,
-            Settings = settings,
-            LookupTables = lookupTables,
-            RoomCalculationPoint = roomCalculationPoint,
-            Unmodeled = unmodeled
+            Details = this.Details(),
+            Settings = this.Settings(),
+            LookupTables = this.LookupTables(snapshot),
+            RoomCalculationPoint = this.RoomCalculationPoint(placement),
+            Unmodeled = this._un,
+            CaptureIssues = this._issues
         };
+        // What the executable model cannot express leaves the member and becomes a fact of the run.
+        model.Unmodeled.AddRange(FamilyModelPrune.RefLinesWithoutTwoPlanes(model));
+        var incomplete = this._un.Select(fact => fact.Path.Split('.').ElementAtOrDefault(1))
+            .OfType<string>().ToHashSet(StringComparer.Ordinal);
+        foreach (var section in FamilyModel.SectionNames)
+            model.Coverage[section] = incomplete.Contains(section) ? CoverageState.Partial : CoverageState.Read;
+        return model;
     }
 
-    private static ProjectedComposition ProjectComposition(
-        Document document,
-        ICollection<FamilyModelUnmodeledFact> unmodeled
-    ) {
-        var arrays = new FilteredElementCollector(document)
-            .OfClass(typeof(LinearArray))
-            .Cast<LinearArray>()
-            .ToList();
-        if (arrays.Count == 0)
-            return new ProjectedComposition(
-                new Dictionary<string, FamilyModelNestedFamily>(StringComparer.Ordinal),
-                new Dictionary<string, FamilyModelArray>(StringComparer.Ordinal));
+    // ───────────────────────────── datums, refPlanes, refLines ─────────────────────────────
 
-        var nestedFamilies = new Dictionary<string, FamilyModelNestedFamily>(StringComparer.Ordinal);
-        var projectedArrays = new Dictionary<string, FamilyModelArray>(StringComparer.Ordinal);
-        foreach (var pair in arrays.GroupBy(array => array.GetOriginalMemberIds().Single())) {
-            var halves = pair.ToList();
-            if (halves.Count != 2 || halves.Any(array => array.Label == null)) {
-                AddUnmodeledArray(unmodeled, pair.Key, "array-is-not-centered-two-half-topology");
-                continue;
+    private (Dictionary<string, FamilyModelDatum>, Dictionary<string, FamilyModelRefPlane>) Planes() {
+        var datums = new Dictionary<string, FamilyModelDatum>(StringComparer.Ordinal);
+        var planes = new Dictionary<string, FamilyModelRefPlane>(StringComparer.Ordinal);
+        foreach (var level in this._levels) {
+            this._planeName[level.Id] = level.Name;
+            datums[level.Name] = new FamilyModelDatum { Normal = Axis.Z, IsLevel = true };
+        }
+
+        var unnamed = 0;
+        foreach (var rp in this._refPlanes) {
+            var definesOrigin = rp.get_Parameter(BuiltInParameter.DATUM_PLANE_DEFINES_ORIGIN)?.AsInteger() == 1;
+            var name = rp.Name;
+            if (!definesOrigin && (string.IsNullOrWhiteSpace(name) || name == "Reference Plane")) {
+                name = $"plane-{++unnamed}";
+                this.Add(UnmodeledReason.PlaneNotNamed, $"$.refPlanes.{name}", ("revitName", rp.Name ?? ""));
             }
-
-            var seed = GetSingleNestedFamily(document, pair.Key);
-            if (seed == null) {
-                AddUnmodeledArray(unmodeled, pair.Key, "array-center-is-not-one-nested-family");
-                continue;
-            }
-
-            var dependencySlug = ToLogicalSlug(seed.Symbol.Family.Name);
-            if (string.IsNullOrWhiteSpace(dependencySlug) ||
-                nestedFamilies.ContainsKey(dependencySlug) ||
-                projectedArrays.ContainsKey(dependencySlug)) {
-                AddUnmodeledArray(unmodeled, pair.Key, "nested-family-identity-is-not-unique");
-                continue;
-            }
-
-            var endpoints = halves.Select(array => GetArrayEndpoint(document, array, seed)).ToList();
-            if (endpoints.Any(endpoint => endpoint == null)) {
-                AddUnmodeledArray(unmodeled, pair.Key, "array-endpoint-is-not-observable");
-                continue;
-            }
-
-            var resolvedEndpoints = endpoints.Select(endpoint => endpoint!).ToList();
-            var axis = InferPlanAxis(seed, resolvedEndpoints);
+            name = Unique(name, k => datums.ContainsKey(k) || planes.ContainsKey(k));
+            this._planeName[rp.Id] = name;
+            var axis = ToAxis(rp.Normal);
             if (axis == null) {
-                AddUnmodeledArray(unmodeled, pair.Key, "array-axis-is-not-planar-and-centered");
+                this.Add(UnmodeledReason.PlaneNotAxisAligned, $"$.refPlanes.{name}", ("normal", Fmt(rp.Normal)));
                 continue;
             }
 
-            var ordered = resolvedEndpoints
-                .OrderBy(endpoint => AxisCoordinate(endpoint.Point, axis))
-                .ToList();
-            var startLimit = FindAlignedLimitPlane(document, ordered[0].Instance);
-            var endLimit = FindAlignedLimitPlane(document, ordered[1].Instance);
-            if (startLimit == null || endLimit == null) {
-                AddUnmodeledArray(unmodeled, pair.Key, "array-endpoint-limit-alignment-not-found");
+            if (definesOrigin) {
+                // RULING (kaitpw, 2026-09-06): a datum normal is unsigned. Revit's stored sign for a
+                // template plane varies ('Center (Front/Back)' reads MinusY here), and a datum carries no
+                // seed for the sign to drive, so the sign is folded away.
+                datums[name] = new FamilyModelDatum { Normal = axis.Value.Unsigned() };
                 continue;
             }
 
-            nestedFamilies[dependencySlug] = new FamilyModelNestedFamily {
-                Family = $"dependency:{dependencySlug}",
-                Type = seed.Symbol.Name,
-                Frame = "frame:family",
-                ParameterBindings = seed.Parameters
-                    .Cast<Parameter>()
-                    .Select(parameter => (
-                        Target: parameter.Definition?.Name,
-                        Source: document.FamilyManager.GetAssociatedFamilyParameter(parameter)?.Definition?.Name))
-                    .Where(binding => !string.IsNullOrWhiteSpace(binding.Target) &&
-                                      !string.IsNullOrWhiteSpace(binding.Source))
-                    .ToDictionary(
-                        binding => binding.Target!,
-                        binding => $"param:{binding.Source}",
-                        StringComparer.Ordinal)
-            };
-            projectedArrays[dependencySlug] = new FamilyModelArray {
-                Kind = FamilyModelArrayKind.CenteredLinear,
-                Member = $"nested:{dependencySlug}",
-                Axis = axis,
-                HalfCount = $"param:{halves[0].Label.Definition.Name}",
-                Limits = new FamilyModelArrayLimits {
-                    Start = $"plane:{startLimit.Name}",
-                    End = $"plane:{endLimit.Name}"
-                }
+            planes[name] = new FamilyModelRefPlane {
+                Normal = axis.Value,
+                At = PortableLength.FromFeet(Math.Round(rp.GetPlane().Origin.DotProduct(rp.Normal), 9) + 0.0),
+                IsReference = Strength(rp.get_Parameter(BuiltInParameter.ELEM_REFERENCE_NAME)?.AsInteger()),
+                Subcategory = rp.Category?.Parent == null ? null : rp.Category.Name
             };
         }
 
-        return new ProjectedComposition(nestedFamilies, projectedArrays);
-    }
-
-    private static FamilyInstance? GetSingleNestedFamily(Document document, ElementId memberId) {
-        var element = document.GetElement(memberId);
-        return element switch {
-            Group group => group.GetMemberIds().Select(document.GetElement).OfType<FamilyInstance>().SingleOrDefault(),
-            FamilyInstance familyInstance => familyInstance,
-            _ => null
-        };
-    }
-
-    private static ArrayEndpoint? GetArrayEndpoint(
-        Document document,
-        LinearArray array,
-        FamilyInstance seed
-    ) => array.GetCopiedMemberIds()
-        .Select(id => (MemberId: id, Instance: GetSingleNestedFamily(document, id)))
-        .Where(item => item.Instance?.Location is LocationPoint)
-        .Select(item => new ArrayEndpoint(
-            item.Instance!,
-            ((LocationPoint)item.Instance!.Location).Point))
-        .OrderByDescending(item => item.Point.DistanceTo(((LocationPoint)seed.Location).Point))
-        .FirstOrDefault();
-
-    private static string? InferPlanAxis(FamilyInstance seed, IReadOnlyList<ArrayEndpoint> endpoints) {
-        if (seed.Location is not LocationPoint seedLocation || endpoints.Count != 2)
-            return null;
-        var deltas = endpoints.Select(endpoint => endpoint.Point - seedLocation.Point).ToList();
-        var xDominant = deltas.All(delta => Math.Abs(delta.X) > Math.Abs(delta.Y) && Math.Abs(delta.Z) < 1e-6);
-        var yDominant = deltas.All(delta => Math.Abs(delta.Y) > Math.Abs(delta.X) && Math.Abs(delta.Z) < 1e-6);
-        if (!xDominant && !yDominant)
-            return null;
-        var coordinates = xDominant ? deltas.Select(delta => delta.X) : deltas.Select(delta => delta.Y);
-        var values = coordinates.ToList();
-        if (values.Min() >= -1e-6 || values.Max() <= 1e-6)
-            return null;
-        return xDominant ? "+X" : "+Y";
-    }
-
-    private static double AxisCoordinate(XYZ point, string axis) =>
-        axis.EndsWith("X", StringComparison.Ordinal) ? point.X : point.Y;
-
-    private static ReferencePlane? FindAlignedLimitPlane(Document document, FamilyInstance endpoint) =>
-        new FilteredElementCollector(document)
-            .OfClass(typeof(Dimension))
-            .Cast<Dimension>()
-            .Select(dimension => dimension.References
-                .Cast<Reference>()
-                .Select(reference => document.GetElement(reference.ElementId))
-                .ToList())
-            .Where(elements => elements.OfType<FamilyInstance>().Any(instance => instance.Id == endpoint.Id))
-            .SelectMany(elements => elements.OfType<ReferencePlane>())
-            .FirstOrDefault(plane => plane.Name is not "Center (Left/Right)" and not "Center (Front/Back)");
-
-    private static void AddUnmodeledArray(
-        ICollection<FamilyModelUnmodeledFact> unmodeled,
-        ElementId originalMemberId,
-        string reason
-    ) => unmodeled.Add(new FamilyModelUnmodeledFact {
-        Reason = reason,
-        Path = "$.arrays",
-        Facts = new Dictionary<string, string>(StringComparer.Ordinal) {
-            ["originalMemberId"] = originalMemberId.Value().ToString()
-        }
-    });
-
-    private static Dictionary<string, FamilyModelPlane> ProjectPlanes(
-        AuthoredParamDrivenSolidsSettings? authored,
-        IReadOnlyDictionary<string, FamilyModelSolid> solids,
-        ICollection<FamilyModelUnmodeledFact> unmodeled
-    ) {
-        var result = new Dictionary<string, FamilyModelPlane>(StringComparer.Ordinal);
-        if (authored == null)
-            return result;
-
-        foreach (var pair in authored.Planes) {
-            if (!TryProjectPlaneReference(pair.Value.From, solids, preferSolidFace: false, out var from)) {
-                AddUnmodeledConstituent(unmodeled, "plane-reference-not-portable", pair.Key, pair.Value.From);
-                continue;
-            }
-
-            result[pair.Key] = new FamilyModelPlane {
-                From = from,
-                By = pair.Value.By,
-                Direction = string.Equals(pair.Value.Dir, "in", StringComparison.OrdinalIgnoreCase)
-                    ? FamilyModelOffsetDirection.In
-                    : FamilyModelOffsetDirection.Out
-            };
-        }
-
-        return result;
-    }
-
-    private static Dictionary<string, FamilyModelConnector> ProjectConnectors(
-        Document document,
-        AuthoredParamDrivenSolidsSettings? authored,
-        IReadOnlyDictionary<string, FamilyModelSolid> solids,
-        IDictionary<string, FamilyModelFrame> frames,
-        ICollection<FamilyModelUnmodeledFact> unmodeled
-    ) {
-        var result = new Dictionary<string, FamilyModelConnector>(StringComparer.Ordinal);
-        if (authored == null)
-            return result;
-
-        foreach (var connector in authored.Connectors) {
-            // Revit connector elements expose generic names ("Pipe Connector", "Pipe Connector 2") rather than
-            // the authored key. Normalize that observable ordering deterministically; do not smuggle the old key.
-            var slug = ToLogicalSlug(connector.Name);
-            var geometry = (Round: connector.Round, Rect: connector.Rect);
-            var center = geometry.Round?.Center ?? geometry.Rect?.Center;
-            if (string.IsNullOrWhiteSpace(slug) || center?.Count != 2 ||
-                !TryProjectPlaneReference(connector.Face, solids, preferSolidFace: true, out var face) ||
-                !TryProjectPlaneReference(center[0], solids, preferSolidFace: false, out var center1) ||
-                !TryProjectPlaneReference(center[1], solids, preferSolidFace: false, out var center2)) {
-                AddUnmodeledConstituent(unmodeled, "connector-frame-not-portable", slug, connector.Face);
-                continue;
-            }
-
-            var normal = connector.FrameNormal ?? InferAxis(document, connector.Face);
-            var up = connector.FrameUp ?? (normal.EndsWith("Z", StringComparison.Ordinal) ? "+Y" : "+Z");
-            frames[slug] = new FamilyModelFrame {
-                Origin = [face, center1, center2],
-                Normal = normal,
-                Up = up
-            };
-
-            result[slug] = new FamilyModelConnector {
-                Domain = connector.Domain switch {
-                    ParamDrivenConnectorDomain.Duct => FamilyConnectorDomain.Duct,
-                    ParamDrivenConnectorDomain.Pipe => FamilyConnectorDomain.Pipe,
-                    ParamDrivenConnectorDomain.Electrical => FamilyConnectorDomain.Electrical,
-                    _ => throw new ArgumentOutOfRangeException()
-                },
-                Frame = $"frame:{slug}",
-                Shape = geometry.Round != null ? FamilyConnectorShape.Round : FamilyConnectorShape.Rectangular,
-                Diameter = geometry.Round?.Diameter.By,
-                Width = geometry.Rect?.Width.By,
-                Height = geometry.Rect?.Length.By,
-                Stub = new FamilyConnectorStub {
-                    Depth = connector.Depth.By,
-                    Direction = string.Equals(connector.Depth.Dir, "in", StringComparison.OrdinalIgnoreCase)
-                        ? FamilyModelOffsetDirection.In
-                        : FamilyModelOffsetDirection.Out,
-                    IsSolid = connector.IsSolid ? null : false
-                },
-                SystemType = connector.Config.SystemType,
-                FlowDirection = string.IsNullOrWhiteSpace(connector.Config.FlowDirection)
-                    ? null
-                    : connector.Config.FlowDirection,
-                FlowConfiguration = connector.Domain == ParamDrivenConnectorDomain.Duct
-                    ? connector.Config.FlowConfiguration
-                    : null,
-                LossMethod = connector.Domain == ParamDrivenConnectorDomain.Duct
-                    ? connector.Config.LossMethod
-                    : null,
-                ParameterBindings = connector.Bindings.Parameters.ToDictionary(
-                    binding => binding.Target.ToString(),
-                    binding => $"param:{binding.SourceParameter}",
-                    StringComparer.Ordinal)
-            };
-        }
-
-        return result;
-    }
-
-    private static string ToLogicalSlug(string value) {
-        var characters = value.Trim()
-            .Select(character => char.IsLetterOrDigit(character) ? char.ToLowerInvariant(character) : '-')
-            .ToArray();
-        var collapsed = string.Join("-", new string(characters)
-            .Split(['-'], StringSplitOptions.RemoveEmptyEntries));
-        return collapsed;
-    }
-
-    private static bool TryProjectPlaneReference(
-        string authoredReference,
-        IReadOnlyDictionary<string, FamilyModelSolid> solids,
-        bool preferSolidFace,
-        out string portableReference
-    ) {
-        portableReference = string.Empty;
-        var reference = authoredReference.Trim();
-        var builtIn = reference switch {
-            "@CenterLR" => "plane:family.CenterLR",
-            "@CenterFB" => "plane:family.CenterFB",
-            "@Bottom" => "plane:family.Bottom",
-            "@Top" => "plane:family.Top",
-            "@Left" => "plane:family.Left",
-            "@Right" => "plane:family.Right",
-            "@Front" => "plane:family.Front",
-            "@Back" => "plane:family.Back",
-            _ => null
-        };
-        if (builtIn != null) {
-            if (preferSolidFace && reference == "@Bottom" && solids.Count == 1)
-                portableReference = $"face:{solids.Keys.Single()}.Bottom";
-            else
-                portableReference = builtIn;
-            return true;
-        }
-
-        if (!reference.StartsWith("plane:", StringComparison.Ordinal))
-            return false;
-
-        var planeName = reference["plane:".Length..];
-        if (preferSolidFace) {
-            foreach (var solid in solids.Keys) {
-                foreach (var face in new[] { "Top", "Left", "Right", "Front", "Back" }) {
-                    if (!string.Equals(planeName, $"{solid}.{face.ToLowerInvariant()}", StringComparison.Ordinal))
-                        continue;
-
-                    portableReference = $"face:{solid}.{face}";
-                    return true;
-                }
-            }
-        }
-
-        portableReference = $"plane:{planeName}";
-        return true;
-    }
-
-    private static string InferAxis(Document document, string authoredPlaneReference) {
-        if (authoredPlaneReference == "@Bottom")
-            return "+Z";
-
-        var planeName = authoredPlaneReference.StartsWith("plane:", StringComparison.Ordinal)
-            ? authoredPlaneReference["plane:".Length..]
-            : authoredPlaneReference.TrimStart('@');
-        var plane = new FilteredElementCollector(document)
-            .OfClass(typeof(ReferencePlane))
-            .Cast<ReferencePlane>()
-            .FirstOrDefault(item => string.Equals(item.Name, planeName, StringComparison.Ordinal));
-        if (plane == null)
-            return "+Z";
-
-        var normal = plane.Normal.Normalize();
-        var components = new[] {
-            (Value: normal.X, Axis: "X"),
-            (Value: normal.Y, Axis: "Y"),
-            (Value: normal.Z, Axis: "Z")
-        };
-        var dominant = components.OrderByDescending(item => Math.Abs(item.Value)).First();
-        return $"{(dominant.Value < 0 ? "-" : "+")}{dominant.Axis}";
-    }
-
-    private static void AddUnmodeledConstituent(
-        ICollection<FamilyModelUnmodeledFact> unmodeled,
-        string reason,
-        string slug,
-        string observedReference
-    ) => unmodeled.Add(new FamilyModelUnmodeledFact {
-        Reason = reason,
-        Path = "$.unmodeled",
-        Facts = new Dictionary<string, string>(StringComparer.Ordinal) {
-            ["slug"] = slug,
-            ["observedReference"] = observedReference
-        }
-    });
-
-    private static FamilyModelRoomCalculationPoint? ProjectRoomCalculationPoint(
-        Document document,
-        FamilyModelPlacement placement,
-        ICollection<FamilyModelUnmodeledFact> unmodeled
-    ) {
-        if (!document.OwnerFamily.ShowSpatialElementCalculationPoint)
-            return null;
-
-        var direction = placement == FamilyModelPlacement.Unhosted ? XYZ.BasisZ : new XYZ(0, -1, 0);
-        var singlePoints = new FilteredElementCollector(document)
-            .OfClass(typeof(SpatialElementCalculationPoint))
-            .Cast<SpatialElementCalculationPoint>()
-            .ToList();
-        var fromToPoints = new FilteredElementCollector(document)
-            .OfClass(typeof(SpatialElementFromToCalculationPoints))
-            .Cast<SpatialElementFromToCalculationPoints>()
-            .ToList();
-        // The PE convention fixes the DIRECTION the point travels, not how far: the distance is authored as
-        // `roomCalculationPoint.offset`. A point off that axis is the thing this contract cannot express.
-        var isPeConvention = singlePoints.Count + fromToPoints.Count > 0 &&
-                             singlePoints.All(point => IsAlongDirection(point.Position, direction)) &&
-                             fromToPoints.All(point =>
-                                 IsAlongDirection(point.FromPosition, direction.Negate()) &&
-                                 IsAlongDirection(point.ToPosition, direction));
-        if (!isPeConvention) {
-            unmodeled.Add(new FamilyModelUnmodeledFact {
-                Reason = "non-default-room-calculation-point",
-                Path = "$.roomCalculationPoint",
-                Facts = new Dictionary<string, string>(StringComparer.Ordinal) {
-                    ["placement"] = placement.ToString(),
-                    ["singlePoints"] = singlePoints.Count.ToString(),
-                    ["fromToPoints"] = fromToPoints.Count.ToString()
-                }
-            });
-        }
-
-        // The offset is the point's own distance from the origin. It is emitted only when it is not the PE
-        // one-foot convention, the same "omission means the default" rule the settings keys follow.
-        var observedOffset = singlePoints
-            .Select(point => point.Position.GetLength())
-            .Concat(fromToPoints.Select(point => point.ToPosition.GetLength()))
-            .DefaultIfEmpty(PeRoomCalculationOffsetFeet)
-            .First();
-        return new FamilyModelRoomCalculationPoint {
-            Enabled = true,
-            Offset = Math.Abs(observedOffset - PeRoomCalculationOffsetFeet) < 1e-9
-                ? null
-                : FormatFeet(observedOffset)
-        };
+        return (datums, planes);
     }
 
     /// <summary>
-    ///     Reads the closed family-global key set off the family element. Each key is one Revit parameter,
-    ///     named in <see cref="FamilyModelSettings" />. A key whose parameter the category does not carry is
-    ///     absent, not defaulted; a key present with a value the portable vocabulary cannot name becomes a
-    ///     named unmodeled fact rather than a quiet omission.
+    ///     RULING (kaitpw, 2026-09-06): a reference line keys as `line-&lt;n&gt;` in document order.
+    ///     Revit gives a reference line no user name. `Element.Name` of a reference line is its line STYLE,
+    ///     for example `Reference Lines`. Every reference line in a family therefore reads the same name,
+    ///     and a name cannot be the key.
+    ///     Capture numbers the reference lines in the order the document returns them, and writes `line-1`,
+    ///     `line-2`, and so on. The author writes the same keys. Capture also records each reference line as
+    ///     `unmodeled` with reason `PlaneNotNamed`, because the key is a position and not a name.
+    ///     This naming scheme is a PLACEHOLDER. A positional key changes when the author adds a reference
+    ///     line before an existing one, and the diff then reports every later reference line as changed.
+    ///     Replace this scheme when Revit gives a reference line a stable user name, or when the reconciler
+    ///     keys a reference line on its own structure.
     /// </summary>
-    private static FamilyModelSettings? ProjectSettings(
-        Document document,
-        ICollection<FamilyModelUnmodeledFact> unmodeled
-    ) {
-        var family = document.OwnerFamily;
-        // AlwaysVertical and PartType carry no portable default — their template value varies by category
-        // and Revit year — so whatever the document says is emitted. The other three are emitted only when
-        // they differ from the stated default.
-        var alwaysVertical = ReadBooleanSetting(family, BuiltInParameter.FAMILY_ALWAYS_VERTICAL);
-        var shared = ReadBooleanSetting(family, BuiltInParameter.FAMILY_SHARED);
-        var cutWithVoids = ReadBooleanSetting(family, BuiltInParameter.FAMILY_ALLOW_CUT_WITH_VOIDS);
+    private Dictionary<string, FamilyModelRefLine> RefLines(ISet<string> known) {
+        var result = new Dictionary<string, FamilyModelRefLine>(StringComparer.Ordinal);
+        var n = 0;
+        foreach (var line in this._refLines) {
+            var name = $"line-{++n}";
+            this._planeName[line.Id] = name;
+            this.Add(UnmodeledReason.PlaneNotNamed, $"$.refLines.{name}", ("element", "ModelCurve"), ("style", line.Name ?? ""));
+            var on = line.SketchPlane?.Name ?? string.Empty;
+            var from = this._alignments
+                .Where(a => a.Refs.Any(r => r.ElementId == line.Id && StableOf(r).EndsWith("/0", StringComparison.Ordinal)))
+                .SelectMany(a => a.Refs.Where(r => r.ElementId != line.Id).Select(r => this.NameOf(r)))
+                .OfType<string>().Distinct(StringComparer.Ordinal).ToList();
+            var angular = this._dimensions
+                .Where(x => x.DimensionShape == DimensionShape.Angular && x.References.Cast<Reference>().Any(r => r.ElementId == line.Id))
+                .Select(x => (Label: SafeLabel(x), Other: x.References.Cast<Reference>().Where(r => r.ElementId != line.Id).Select(r => this.NameOf(r)).FirstOrDefault()))
+                .FirstOrDefault(x => x.Label != null && x.Other != null);
+            var lengthLabel = this._dimensions.Where(x => x.DimensionShape == DimensionShape.Linear &&
+                    x.References.Size == 2 && x.References.Cast<Reference>().All(r => r.ElementId == line.Id))
+                .Select(SafeLabel).FirstOrDefault(label => label is not null);
+            result[name] = new FamilyModelRefLine {
+                On = on,
+                From = from,
+                Length = lengthLabel is null ? PortableLength.FromFeet(line.GeometryCurve.Length) : PortableLength.Parse($"param:{lengthLabel}"),
+                AngleFrom = angular.Other,
+                Angle = angular.Label == null ? null : PortableAngle.Parse($"param:{angular.Label}")
+            };
+            if (!known.Contains(on)) this.Add(UnmodeledReason.PlaneNotNamed, $"$.refLines.{name}.on", ("sketchPlane", on));
+        }
+
+        return result;
+    }
+
+    // ───────────────────────────── dimensions ─────────────────────────────
+
+    private Dictionary<string, FamilyModelDim> Dimensions(ISet<string> known) {
+        var result = new Dictionary<string, FamilyModelDim>(StringComparer.Ordinal);
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var dim in this._dimensions) {
+            if ((dim.Category?.Name ?? "").Contains("Automatic Sketch", StringComparison.Ordinal)) continue;
+            var refs = dim.References.Cast<Reference>().ToList();
+            var label = SafeLabel(dim);
+            if (refs.Any(r => this._refLines.Any(line => line.Id == r.ElementId)) &&
+                (dim.DimensionShape == DimensionShape.Angular || refs.Select(r => r.ElementId).Distinct().Count() == 1)) continue;
+            var eq = dim.NumberOfSegments > 1 && dim.AreSegmentsEqual;
+            var locked = dim.NumberOfSegments <= 1 && Try(() => dim.IsLocked);
+            if (label == null && !eq && !locked) continue; // annotation only; not authored truth
+
+            var names = refs.Select(r => this.NameOf(r)).ToList();
+            if (names.Any(x => x == null)) {
+                // A labeled radial/diameter dimension on a sketch curve belongs to its form (forms[].profile).
+                if (label != null && refs.All(r => this._d.GetElement(r.ElementId) is CurveElement curve && curve is not ModelCurve { IsReferenceLine: true })) continue;
+                this.Add(UnmodeledReason.DimensionToFace, "$.dimensions",
+                    ("label", label ?? ""), ("references", string.Join(" | ", refs.Select(r => this.Describe(r)))));
+                continue;
+            }
+
+            var between = names.Select(x => x!).ToList();
+            var slug = label != null ? Slug(label) : (eq ? "eq-" : "lock-") + string.Join("-", between.Select(Slug));
+            var identity = (label ?? (eq ? "eq" : "lock")) + "|" + string.Join("|", between);
+            if (!keys.Add(identity)) {
+                this.Add(UnmodeledReason.IdentityNotUnique, $"$.dimensions.{slug}", ("identity", identity));
+                continue;
+            }
+
+            slug = Unique(slug, result.ContainsKey);
+            result[slug] = new FamilyModelDim {
+                Between = between,
+                Label = label,
+                Equality = eq ? true : null,
+                Locked = label == null && !eq && locked ? PortableLength.FromFeet(Math.Round(dim.Value ?? 0, 9)) : null,
+                View = this.StockViewOf(dim.View, $"$.dimensions.{slug}.view")
+            };
+            this._elements.Add(result[slug], [dim.Id]);
+        }
+
+        return result;
+    }
+
+    private StockView? StockViewOf(View? view, string path) {
+        if (view == null) return null;
+        var stock = view.Name switch {
+            "Ref. Level" => (StockView?)StockView.RefLevel,
+            "Front" => StockView.Front, "Back" => StockView.Back, "Left" => StockView.Left, "Right" => StockView.Right,
+            "Placement Side" => StockView.PlacementSide, "Backside" => StockView.Backside,
+            _ => null
+        };
+        if (stock == null) this.Add(UnmodeledReason.ViewNotStock, path, ("view", view.Name));
+        return stock;
+    }
+
+    // ───────────────────────────── forms ─────────────────────────────
+
+    private Dictionary<string, FamilyModelForm> Forms(ISet<string> known) {
+        var result = new Dictionary<string, FamilyModelForm>(StringComparer.Ordinal);
+        var planeSets = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var form in Collect<GenericForm>().OrderBy(f => f.Id.Value())) {
+            if (form is not Extrusion ext) {
+                this.Add(UnmodeledReason.KindNotInVocabulary, "$.forms", ("class", form.GetType().Name), ("name", form.Name ?? ""));
+                continue;
+            }
+
+            var sketchPlane = ext.Sketch?.SketchPlane?.Name ?? string.Empty;
+            if (!known.Contains(sketchPlane)) {
+                this.Add(sketchPlane == "Reference Lines" ? UnmodeledReason.FormSketchPlaneOnReferenceLine : UnmodeledReason.PlaneNotNamed,
+                    "$.forms", ("name", ext.Name ?? ""), ("sketchPlane", sketchPlane));
+                continue;
+            }
+
+            var curves = ext.Sketch!.GetAllElements().Select(this._d.GetElement).OfType<ModelCurve>().ToList();
+            var loops = new List<FamilyModelLoop>();
+            var lockedTo = new List<string>();
+            var ok = true;
+            var remaining = curves.ToList();
+            foreach (CurveArray loop in ext.Sketch.Profile) {
+                var native = new List<CurveElement>();
+                foreach (Curve curve in loop) {
+                    var mc = remaining.FirstOrDefault(c => FamilyRefs.SameCurve(c.GeometryCurve, curve));
+                    if (mc is null) {
+                        this.Add(UnmodeledReason.CurveNotLineOrCircle, "$.forms", ("reason", "No matching native sketch curve."));
+                        ok = false;
+                        break;
+                    }
+                    native.Add(mc);
+                    remaining.Remove(mc);
+                }
+                if (!ok) break;
+
+                var portable = this.SketchLoop(native, "$.forms");
+                if (portable is null) {
+                    ok = false;
+                    break;
+                }
+                foreach (var item in portable) {
+                    if (item.On is { } on) lockedTo.Add(on); else lockedTo.AddRange(item.Center!);
+                }
+                loops.Add(new FamilyModelLoop { Curves = portable });
+            }
+
+            if (!ok) continue;
+
+            var support = ext.Sketch.SketchPlane.GetPlane();
+            var start = this.CapPlane(ext, support, ext.StartOffset);
+            var end = this.CapPlane(ext, support, ext.EndOffset);
+            if (start is null || end is null) {
+                this.Add(UnmodeledReason.PlaneNotNamed, "$.forms", ("sketchPlane", sketchPlane),
+                    ("start", start ?? ext.StartOffset.ToString("R", CultureInfo.InvariantCulture)),
+                    ("end", end ?? ext.EndOffset.ToString("R", CultureInfo.InvariantCulture)));
+                continue;
+            }
+
+            var slug = Unique(SlugFromPlanes(lockedTo) ?? (ext.IsSolid ? "extrusion" : "void"), result.ContainsKey);
+            var identity = string.Join("|", lockedTo.OrderBy(x => x, StringComparer.Ordinal)) + "|" + sketchPlane;
+            if (!planeSets.Add(identity)) this.Add(UnmodeledReason.IdentityNotUnique, $"$.forms.{slug}", ("identity", identity));
+            var visibility = ext.GetVisibility();
+            this._formSlug[ext.Id] = slug;
+            result[slug] = new FamilyModelForm {
+                Kind = FormKind.Extrusion,
+                Void = ext.IsSolid ? null : true,
+                Subcategory = ext.Subcategory?.Name,
+                Material = this.Material(ext),
+                Visible = this.Assoc(ext.get_Parameter(BuiltInParameter.IS_VISIBLE_PARAM)),
+                Visibility = new FamilyModelVisibilityViews {
+                    PlanRcp = visibility.IsShownInPlanRCPCut, FrontBack = visibility.IsShownInFrontBack, LeftRight = visibility.IsShownInLeftRight,
+                    OnlyWhenCut = visibility.IsShownOnlyWhenCut, Coarse = visibility.IsShownInCoarse, Medium = visibility.IsShownInMedium, Fine = visibility.IsShownInFine
+                },
+                SketchPlane = sketchPlane,
+                Profile = loops,
+                Start = start,
+                End = end
+            };
+            this._elements.Add(result[slug], [ext.Id]);
+        }
+
+        return result;
+    }
+
+    private List<FamilyModelSketchCurve>? SketchLoop(IReadOnlyList<CurveElement> elements, string path) {
+        if (elements.All(element => element.GeometryCurve is Arc)) {
+            var circle = this.SketchCircle(elements, path);
+            return circle is null ? null : [circle];
+        }
+        var curves = elements.Select(element => this.SketchCurve(element, path)).ToList();
+        return curves.Any(curve => curve is null) ? null : curves.Select(curve => curve!).ToList();
+    }
+
+    private FamilyModelSketchCurve? SketchCircle(IReadOnlyList<CurveElement> elements, string path) {
+        var arcs = elements.Select(element => element.GeometryCurve).OfType<Arc>().ToList();
+        if (arcs.Count == elements.Count && FamilyRefs.IsCompleteCircle(arcs) && this.CrossingPlanesThrough(arcs[0].Center, arcs[0].Normal) is { } center) {
+            var ids = elements.Select(element => element.Id).ToHashSet();
+            var label = this._dimensions.Where(d => d.References.Cast<Reference>().Any(r => ids.Contains(r.ElementId)))
+                .Select(SafeLabel).FirstOrDefault(name => name is not null);
+            return new FamilyModelSketchCurve {
+                Kind = CurveKind.Circle, Center = center,
+                Diameter = label is not null ? PortableLength.Parse($"param:{label}") : PortableLength.FromFeet(arcs[0].Radius * 2)
+            };
+        }
+        this.Add(UnmodeledReason.CurveNotLineOrCircle, path,
+            ("elements", string.Join(",", elements.Select(element => element.Id))), ("curve", "Incomplete circle"));
+        return null;
+    }
+
+    private FamilyModelSketchCurve? SketchCurve(CurveElement element, string path) {
+        if (element.GeometryCurve is Line && this.LockPlane(element.Id) is { } on)
+            return new FamilyModelSketchCurve { Kind = CurveKind.Line, On = on };
+        if (element.GeometryCurve is Arc) return this.SketchCircle([element], path);
+        this.Add(element.GeometryCurve is Line ? UnmodeledReason.SketchLineUnlocked : UnmodeledReason.CurveNotLineOrCircle,
+            path, ("element", element.Id.ToString()), ("curve", element.GeometryCurve.GetType().Name));
+        return null;
+    }
+
+    private Dictionary<string, FamilyModelDetail> Details() {
+        var result = new Dictionary<string, FamilyModelDetail>(StringComparer.Ordinal);
+        foreach (var instance in Collect<FamilyInstance>().Where(f => f.Symbol.Family.FamilyPlacementType == FamilyPlacementType.ViewBased)) {
+            var view = this.StockViewOf(this._d.GetElement(instance.OwnerViewId) as View, "$.details.view");
+            if (view is null) continue;
+            var align = this.InstanceAlignments(instance, "$.details.align");
+            if (align.Count == 0 && PointOf(instance) is { } location && !location.IsAlmostEqualTo(XYZ.Zero)) {
+                this.Add(UnmodeledReason.HingePlaneNotConstructible, "$.details", ("family", instance.Symbol.Family.Name), ("position", Fmt(location)));
+                continue;
+            }
+            var key = Unique(Slug(instance.Symbol.Family.Name), result.ContainsKey);
+            result[key] = new FamilyModelDetail {
+                View = view.Value, Family = instance.Symbol.Family.Name, Type = instance.Symbol.Name,
+                Align = align.Count == 0 ? null : align,
+                Visible = this.Assoc(instance.get_Parameter(BuiltInParameter.IS_VISIBLE_PARAM))
+            };
+            this._elements.Add(result[key], [instance.Id]);
+        }
+        var pending = Collect<CurveElement>().OfType<SymbolicCurve>().OrderBy(c => c.Id.Value()).ToList();
+        while (pending.Count > 0) {
+            var first = pending[0];
+            pending.RemoveAt(0);
+            var loop = new List<SymbolicCurve> { first };
+            if (first.GeometryCurve is Line firstLine) {
+                var start = firstLine.GetEndPoint(0);
+                var end = firstLine.GetEndPoint(1);
+                while (!end.IsAlmostEqualTo(start)) {
+                    var next = pending.Where(c => c.GeometryCurve is Line line &&
+                        (line.GetEndPoint(0).IsAlmostEqualTo(end) || line.GetEndPoint(1).IsAlmostEqualTo(end))).ToList();
+                    if (next.Count != 1) break;
+                    var curve = next[0];
+                    pending.Remove(curve);
+                    loop.Add(curve);
+                    end = curve.GeometryCurve.GetEndPoint(curve.GeometryCurve.GetEndPoint(0).IsAlmostEqualTo(end) ? 1 : 0);
+                }
+                if (!end.IsAlmostEqualTo(start)) {
+                    this.Add(UnmodeledReason.KindNotInVocabulary, "$.details", ("reason", "Symbolic lines do not form an unambiguous closed loop."));
+                    continue;
+                }
+            } else if (first.GeometryCurve is Arc firstArc) {
+                var parts = pending.Where(curve => curve.GeometryCurve is Arc arc && FamilyRefs.SameCircle(firstArc, arc)).ToList();
+                loop.AddRange(parts);
+                foreach (var part in parts) pending.Remove(part);
+            }
+            var curves = this.SketchLoop(loop, "$.details");
+            if (curves is null) continue;
+            var visibility = loop.Select(curve => this.Assoc(curve.get_Parameter(BuiltInParameter.IS_VISIBLE_PARAM))).Distinct().ToList();
+            if (visibility.Count != 1) {
+                this.Add(UnmodeledReason.KindNotInVocabulary, "$.details", ("reason", "One connected loop has different curve visibility bindings."));
+                continue;
+            }
+            var view = this.StockViewOf(FamilyRefs.ViewFor(this._d, null, first.SketchPlane.GetPlane().Normal), "$.details.view");
+            if (view is null) continue;
+            var key = Unique("detail", result.ContainsKey);
+            result[key] = new FamilyModelDetail {
+                View = view.Value, Curves = [new FamilyModelLoop { Curves = curves }], Visible = visibility[0]
+            };
+            this._elements.Add(result[key], loop.Select(curve => curve.Id).ToArray());
+        }
+        return result;
+    }
+
+    private List<FamilyModelAlign> InstanceAlignments(FamilyInstance instance, string path) {
+        var result = new List<FamilyModelAlign>();
+        foreach (var (_, references) in this._alignments.Where(a => a.Refs.Any(r => r.ElementId == instance.Id))) {
+            var to = references.Where(r => r.ElementId != instance.Id).Select(this.NameOf).FirstOrDefault(name => name is not null);
+            var mine = references.First(r => r.ElementId == instance.Id);
+            var name = this.NestedReferenceName(instance, mine);
+            if (to is null || name is null) this.Add(UnmodeledReason.DimensionToFace, path, ("reference", StableOf(mine)), ("to", to ?? ""));
+            else result.Add(new FamilyModelAlign { Instance = name, To = to });
+        }
+        return result;
+    }
+
+    private string? LockPlane(ElementId curveId) =>
+        this._alignments.Where(a => a.Refs.Any(r => r.ElementId == curveId))
+            .SelectMany(a => a.Refs.Where(r => r.ElementId != curveId).Select(r => this.NameOf(r)))
+            .FirstOrDefault(n => n != null);
+
+    private string? CapPlane(Extrusion extrusion, Plane support, double offset) {
+        var aligned = this._alignments
+            .Where(alignment => alignment.Refs.Any(reference => reference.ElementId == extrusion.Id &&
+                Try(() => extrusion.GetGeometryObjectFromReference(reference)) is PlanarFace face &&
+                Math.Abs(Math.Abs(face.FaceNormal.Normalize().DotProduct(support.Normal.Normalize())) - 1) < Tol &&
+                Math.Abs((face.Origin - support.Origin).DotProduct(support.Normal.Normalize()) - offset) < FaceTol))
+            .SelectMany(alignment => alignment.Refs.Where(reference => reference.ElementId != extrusion.Id).Select(this.NameOf))
+            .OfType<string>().Distinct(StringComparer.Ordinal).ToList();
+        if (aligned.Count == 1) return aligned[0];
+        if (aligned.Count > 1) return null;
+
+        var geometric = this.NamedPlanesThrough(support.Origin + support.Normal * offset,
+            plane => Math.Abs(Math.Abs(plane.Normal.DotProduct(support.Normal)) - 1) < Tol);
+        return geometric.Count == 1 ? geometric[0] : null;
+    }
+
+    private string? Material(Extrusion ext) {
+        var p = ext.get_Parameter(BuiltInParameter.MATERIAL_ID_PARAM);
+        if (p == null) return null;
+        var assoc = this.Assoc(p);
+        if (assoc != null) return assoc;
+        var id = p.AsElementId();
+        return id == null || id == ElementId.InvalidElementId ? null : this._d.GetElement(id)?.Name;
+    }
+
+    private static string? SlugFromPlanes(IReadOnlyList<string> planes) {
+        if (planes.Count == 0) return null;
+        var prefix = planes[0];
+        foreach (var p in planes.Skip(1)) {
+            var i = 0;
+            while (i < prefix.Length && i < p.Length && prefix[i] == p[i]) i++;
+            prefix = prefix[..i];
+        }
+
+        var slug = Slug(prefix.TrimEnd(' ', '(', '-', '.', '_'));
+        return slug.Length == 0 ? null : slug;
+    }
+
+    // ───────────────────────────── nested ─────────────────────────────
+
+    private Dictionary<string, FamilyModelNested> Nested(ISet<string> known) {
+        var result = new Dictionary<string, FamilyModelNested>(StringComparer.Ordinal);
+        var arrays = Collect<LinearArray>().ToList();
+        var seeds = arrays.SelectMany(a => a.GetOriginalMemberIds()).SelectMany(this.MemberInstances).Select(i => i.Id).ToHashSet();
+        var seedDefinitions = new Dictionary<string, string>(StringComparer.Ordinal);
+        var copies = arrays.SelectMany(a => a.GetCopiedMemberIds()).SelectMany(this.MemberInstances).Select(i => i.Id).ToHashSet();
+        foreach (var fi in Collect<FamilyInstance>().Where(f => f.Symbol?.Family != null && f.Symbol.Family.FamilyPlacementType is not (FamilyPlacementType.ViewBased or FamilyPlacementType.CurveBasedDetail) && !copies.Contains(f.Id)).OrderBy(f => f.Id.Value())) {
+            var family = fi.Symbol.Family.Name;
+            var slug = Unique(Slug(family), result.ContainsKey);
+            var host = this.HostOf(fi);
+            if (host == null) {
+                this.Add(UnmodeledReason.HingePlaneNotConstructible, $"$.nested.{slug}", ("family", family), ("type", fi.Symbol.Name),
+                    ("host", fi.Host?.GetType().Name ?? "null"));
+                continue;
+            }
+
+            var align = this.InstanceAlignments(fi, $"$.nested.{slug}.align");
+
+            var associate = new Dictionary<string, string>(StringComparer.Ordinal);
+            string? visible = null;
+            foreach (var p in fi.Parameters.Cast<Parameter>().Concat(fi.Symbol.Parameters.Cast<Parameter>())) {
+                var source = this.Assoc(p);
+                if (source == null) continue;
+                if ((p.Definition as InternalDefinition)?.BuiltInParameter == BuiltInParameter.IS_VISIBLE_PARAM) visible = source;
+                else associate[p.Definition.Name] = source;
+            }
+
+            var spec = new FamilyModelNested {
+                Family = family,
+                Type = fi.Symbol.Name,
+                Host = host,
+                Align = align.Count == 0 ? null : align,
+                Associate = associate.Count == 0 ? null : associate,
+                Visible = visible
+            };
+            // Array seeds are reusable specifications; equal standalone placements remain distinct.
+            var definition = Newtonsoft.Json.JsonConvert.SerializeObject(spec, FamilyModelJson.Settings);
+            if (seeds.Contains(fi.Id) && seedDefinitions.TryGetValue(definition, out var existing)) {
+                this._nestedSlug[fi.Id] = existing;
+                this._elements[result[existing]] = this._elements[result[existing]].Append(fi.Id).ToArray();
+                continue;
+            }
+            this._nestedSlug[fi.Id] = slug;
+            result[slug] = spec;
+            this._elements.Add(spec, [fi.Id]);
+            if (seeds.Contains(fi.Id)) seedDefinitions[definition] = slug;
+        }
+
+        return result;
+    }
+
+    private string? HostOf(FamilyInstance fi) {
+        if (fi.Host is ModelCurve line && this._planeName.TryGetValue(line.Id, out var lineName)) {
+            if (fi.Location is not LocationPoint location) return null;
+            if (location.Point.IsAlmostEqualTo(line.GeometryCurve.GetEndPoint(0))) return $"line:{lineName}.start";
+            return location.Point.IsAlmostEqualTo(line.GeometryCurve.GetEndPoint(1)) ? $"line:{lineName}.end" : null;
+        }
+        if (fi.HostFace is { } face && this.NameOf(face) is { } faceName) return faceName;
+        if (fi.Host != null && this._planeName.TryGetValue(fi.Host.Id, out var hostName)) return hostName;
+        if (fi.LevelId != null && this._planeName.TryGetValue(fi.LevelId, out var level)) return level;
+        var sketchPlane = fi.get_Parameter(BuiltInParameter.SKETCH_PLANE_PARAM);
+        if (sketchPlane?.StorageType == StorageType.ElementId && this._planeName.TryGetValue(sketchPlane.AsElementId(), out var planeName))
+            return planeName;
+        var display = sketchPlane?.StorageType == StorageType.String ? sketchPlane.AsString() : null;
+        // Native display text can be qualified (e.g. "Reference Plane: Name"); emit only a known plane name.
+        var names = this._planeName.Values.Distinct(StringComparer.Ordinal)
+            .Where(name => display == name || display?.EndsWith(": " + name, StringComparison.Ordinal) == true).ToArray();
+        return names.Length == 1 ? names[0] : null;
+    }
+
+    /// <summary>
+    ///     r2-revit claim 3: the host-side reference of a nested instance resolves to a
+    ///     <see cref="FamilyInstanceReferenceType" /> with no `EditFamily`; the named strengths ARE the nested
+    ///     plane's name. Only a Strong/Weak reference needs the nested document opened (read-only) to learn which
+    ///     plane carries it.
+    /// </summary>
+    private string? NestedReferenceName(FamilyInstance fi, Reference mine) {
+        var stable = StableOf(mine);
+        foreach (FamilyInstanceReferenceType type in Enum.GetValues(typeof(FamilyInstanceReferenceType))) {
+            if (type == FamilyInstanceReferenceType.NotAReference) continue;
+            IList<Reference> refs;
+            try { refs = fi.GetReferences(type); } catch { continue; }
+            if (!refs.Any(r => StableOf(r) == stable)) continue;
+            return type switch {
+                FamilyInstanceReferenceType.CenterLeftRight => "Center (Left/Right)",
+                FamilyInstanceReferenceType.CenterFrontBack => "Center (Front/Back)",
+                FamilyInstanceReferenceType.CenterElevation => "Center (Elevation)",
+                FamilyInstanceReferenceType.StrongReference or FamilyInstanceReferenceType.WeakReference =>
+                    this.NestedPlaneNames(fi.Symbol.Family).FirstOrDefault(n => Try(() => StableOf(fi.GetReferenceByName(n)) == stable)) ?? type.ToString(),
+                _ => type.ToString()
+            };
+        }
+
+        return null;
+    }
+
+    private IReadOnlyList<string> NestedPlaneNames(Family family) {
+        if (this._nestedPlaneNames.TryGetValue(family.Id, out var cached)) return cached;
+        var editDiagnostics = new List<(bool IsError, string Message)>();
+        try {
+            cached = this._d.ReadFamilyCopy(family, nested =>
+                new FilteredElementCollector(nested.Document).OfClass(typeof(ReferencePlane)).Cast<ReferencePlane>()
+                    .Select(p => p.Name).Where(n => !string.IsNullOrWhiteSpace(n)).Distinct(StringComparer.Ordinal).ToList(),
+                editDiagnostics);
+        } catch (Exception ex) {
+            if (editDiagnostics.Any(diagnostic => diagnostic.IsError))
+                throw new InvalidOperationException(
+                    $"Native errors prevented read-only capture of nested family '{family.Name}': " +
+                    string.Join("; ", editDiagnostics.Where(diagnostic => diagnostic.IsError).Select(diagnostic => diagnostic.Message)), ex);
+            this.Add(UnmodeledReason.HingePlaneNotConstructible, "$.nested", ("family", family.Name), ("editFamily", ex.Message));
+            cached = [];
+        } finally {
+            foreach (var warning in editDiagnostics.Where(diagnostic => !diagnostic.IsError))
+                this._issues.Add(new RevitDataIssue("FamilyEditWarning", RevitDataIssueSeverity.Warning,
+                    $"EditFamily for nested family '{family.Name}': {warning.Message}", FamilyName: family.Name));
+        }
+
+        return this._nestedPlaneNames[family.Id] = cached;
+    }
+
+    // ───────────────────────────── arrays ─────────────────────────────
+
+    private Dictionary<string, FamilyModelArray> Arrays() {
+        var result = new Dictionary<string, FamilyModelArray>(StringComparer.Ordinal);
+        foreach (var radial in Collect<RadialArray>())
+            this.Add(UnmodeledReason.ArrayRadial, "$.arrays", ("label", radial.Label?.Definition.Name ?? ""));
+        foreach (var array in Collect<LinearArray>().OrderBy(a => a.Id.Value())) {
+            var label = array.Label?.Definition.Name;
+            if (label == null) {
+                this.Add(UnmodeledReason.KindNotInVocabulary, "$.arrays", ("reason", "array has no label"), ("id", array.Id.Value().ToString(CultureInfo.InvariantCulture)));
+                continue;
+            }
+
+            var original = array.GetOriginalMemberIds().SelectMany(this.MemberInstances).ToList();
+            if (original.Count != 1 || !this._nestedSlug.TryGetValue(original[0].Id, out var member)) {
+                this.Add(UnmodeledReason.ArrayMemberNotNested, "$.arrays", ("label", label), ("originalMembers", original.Count.ToString(CultureInfo.InvariantCulture)));
+                continue;
+            }
+
+            var origin = PointOf(original[0]);
+            var copies = array.GetCopiedMemberIds().SelectMany(this.MemberInstances)
+                .Select(i => (Instance: i, Delta: PointOf(i) - origin)).OrderByDescending(x => x.Delta.GetLength()).ToList();
+            if (copies.Count == 0 || origin == null) {
+                this.Add(UnmodeledReason.ArrayAnchorNotObservable, "$.arrays", ("label", label), ("copiedMembers", "0"));
+                continue;
+            }
+
+            var far = copies[0];
+            var axis = ToAxis(far.Delta);
+            if (axis == null) {
+                this.Add(UnmodeledReason.PlaneNotAxisAligned, "$.arrays", ("label", label), ("direction", Fmt(far.Delta)));
+                continue;
+            }
+
+            var spacingPlane = this._alignments.Where(a => a.Refs.Any(r => r.ElementId == far.Instance.Id))
+                .SelectMany(a => a.Refs.Where(r => r.ElementId != far.Instance.Id).Select(r => this.NameOf(r))).FirstOrDefault(n => n != null);
+            var slug = Unique($"{member}-{(spacingPlane != null ? Slug(spacingPlane) : axis.Value.ToString().ToLowerInvariant())}", result.ContainsKey);
+            if (spacingPlane == null)
+                this.Add(UnmodeledReason.ArrayAnchorNotObservable, $"$.arrays.{slug}", ("label", label), ("reason", "no alignment on the far copied member; pitch is a measurement"));
+            result[slug] = new FamilyModelArray {
+                Member = member,
+                Direction = axis.Value,
+                Label = $"param:{label}",
+                MoveTo = spacingPlane != null ? ArrayAnchor.Last : ArrayAnchor.Second,
+                SpacingPlane = spacingPlane,
+                Spacing = spacingPlane != null ? null : PortableLength.FromFeet(Math.Round(copies[^1].Delta.GetLength(), 9))
+            };
+            this._elements.Add(result[slug], [array.Id]);
+        }
+
+        return result;
+    }
+
+    private IEnumerable<FamilyInstance> MemberInstances(ElementId id) => this._d.GetElement(id) switch {
+        Group g => g.GetMemberIds().Select(this._d.GetElement).OfType<FamilyInstance>(),
+        FamilyInstance fi => [fi],
+        _ => []
+    };
+
+    // ───────────────────────────── connectors ─────────────────────────────
+
+    private Dictionary<string, FamilyModelConnector> Connectors(ISet<string> known) {
+        var result = new Dictionary<string, FamilyModelConnector>(StringComparer.Ordinal);
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var c in Collect<ConnectorElement>().OrderBy(x => x.Id.Value())) {
+            var domain = c.Domain switch {
+                Domain.DomainHvac => (ConnectorDomain?)ConnectorDomain.Duct,
+                Domain.DomainPiping => ConnectorDomain.Pipe,
+                Domain.DomainElectrical => ConnectorDomain.Electrical,
+                _ => null
+            };
+            var system = SystemTypeOf(c.SystemClassification);
+            if (domain == null || system == null) {
+                this.Add(UnmodeledReason.KindNotInVocabulary, "$.connectors", ("domain", c.Domain.ToString()), ("systemClassification", c.SystemClassification.ToString()));
+                continue;
+            }
+
+            var normal = c.CoordinateSystem.BasisZ.Normalize();
+            // A connector hosted by a nested instance is unmodeled, whatever plane happens to be coplanar with it.
+            var nestedHost = this.NestedHostOf(c);
+            if (nestedHost != null) {
+                this.Add(UnmodeledReason.ConnectorOnNestedFace, "$.connectors", ("domain", domain.ToString()!), ("systemType", system.ToString()!),
+                    ("family", nestedHost.Symbol.Family.Name), ("instance", this._nestedSlug[nestedHost.Id]), ("origin", Fmt(c.Origin)));
+                continue;
+            }
+
+            var on = this.NamedPlanesThrough(c.Origin, p => Math.Abs(Math.Abs(p.Normal.DotProduct(normal)) - 1) < Tol).FirstOrDefault();
+            if (on == null) {
+                this.Add(UnmodeledReason.ConnectorFaceNotOnPlane, "$.connectors", ("domain", domain.ToString()!), ("systemType", system.ToString()!),
+                    ("origin", Fmt(c.Origin)), ("normal", Fmt(normal)));
+                continue;
+            }
+
+            var at = this.CrossingPlanesThrough(c.Origin, normal);
+            if (at == null) {
+                this.Add(UnmodeledReason.ConnectorFaceNotOnPlane, "$.connectors", ("domain", domain.ToString()!), ("on", on), ("origin", Fmt(c.Origin)), ("reason", "no two crossing planes through the origin"));
+                continue;
+            }
+
+            var slug = Unique($"{domain}-{system}".ToLowerInvariant(), result.ContainsKey);
+            var identity = $"{domain}|{on}|{string.Join("|", at.OrderBy(x => x, StringComparer.Ordinal))}";
+            if (!keys.Add(identity)) {
+                this.Add(UnmodeledReason.IdentityNotUnique, $"$.connectors.{slug}", ("identity", identity));
+                continue;
+            }
+
+            var sizeParams = new[] { BuiltInParameter.CONNECTOR_DIAMETER, BuiltInParameter.CONNECTOR_RADIUS, BuiltInParameter.CONNECTOR_WIDTH, BuiltInParameter.CONNECTOR_HEIGHT };
+            var associate = c.Parameters.Cast<Parameter>()
+                .Where(p => !sizeParams.Contains((p.Definition as InternalDefinition)?.BuiltInParameter ?? BuiltInParameter.INVALID))
+                .Select(p => (Name: p.Definition.Name, Source: this.Assoc(p)))
+                .Where(x => x.Source != null)
+                .ToDictionary(x => x.Name, x => x.Source!, StringComparer.Ordinal);
+            var isDuct = domain == ConnectorDomain.Duct;
+            var isPipe = domain == ConnectorDomain.Pipe;
+            var flowDirection = c.get_Parameter(isDuct ? BuiltInParameter.RBS_DUCT_FLOW_DIRECTION_PARAM : BuiltInParameter.RBS_PIPE_FLOW_DIRECTION_PARAM);
+            var flowConfiguration = c.get_Parameter(isDuct ? BuiltInParameter.RBS_DUCT_FLOW_CONFIGURATION_PARAM : BuiltInParameter.RBS_PIPE_FLOW_CONFIGURATION_PARAM);
+            var loss = c.get_Parameter(isDuct ? BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_PARAM : BuiltInParameter.RBS_PIPE_FITTING_LOSS_METHOD_PARAM);
+            var round = c.Shape == ConnectorProfileType.Round;
+            result[slug] = new FamilyModelConnector {
+                Domain = domain.Value,
+                SystemType = system.Value,
+                On = on,
+                At = at,
+                Shape = domain == ConnectorDomain.Electrical ? null : c.Shape switch {
+                    ConnectorProfileType.Round => ConnectorShape.Round,
+                    ConnectorProfileType.Rectangular => ConnectorShape.Rectangular,
+                    ConnectorProfileType.Oval => ConnectorShape.Oval,
+                    _ => null
+                },
+                Diameter = round && (isDuct || isPipe) ? this.LengthOf(c.get_Parameter(BuiltInParameter.CONNECTOR_DIAMETER)) : null,
+                Width = !round && (isDuct || isPipe) ? this.LengthOf(c.get_Parameter(BuiltInParameter.CONNECTOR_WIDTH)) : null,
+                Height = !round && (isDuct || isPipe) ? this.LengthOf(c.get_Parameter(BuiltInParameter.CONNECTOR_HEIGHT)) : null,
+                FlowDirection = isDuct || isPipe ? EnumOf<FlowDirectionType, FlowDirection>(flowDirection) : null,
+                FlowConfiguration = isDuct ? EnumOf<DuctFlowConfigurationType, FlowConfiguration>(flowConfiguration)
+                    : isPipe ? EnumOf<PipeFlowConfigurationType, FlowConfiguration>(flowConfiguration) : null,
+                LossMethod = isDuct ? EnumOf<DuctLossMethodType, LossMethod>(loss) : isPipe ? EnumOf<PipeLossMethodType, LossMethod>(loss) : null,
+                Associate = associate.Count == 0 ? null : associate
+            };
+            this._elements.Add(result[slug], [c.Id]);
+        }
+
+        return result;
+    }
+
+    private static ConnectorSystemType? SystemTypeOf(MEPSystemClassification classification) =>
+        ConnectorRevitNames.FromRevitName<ConnectorSystemType>(classification.ToString());
+
+    private static TOut? EnumOf<TIn, TOut>(Parameter? p) where TIn : struct, Enum where TOut : struct, Enum =>
+        p == null || p.StorageType != StorageType.Integer ? null : ConnectorRevitNames.FromRevitName<TOut>(((TIn)(object)p.AsInteger()).ToString());
+
+    private FamilyInstance? NestedHostOf(ConnectorElement connector) => this._nestedSlug.Keys
+        .Select(id => this._d.GetElement(id))
+        .OfType<FamilyInstance>()
+        .FirstOrDefault(instance => instance.GetDependentElements(null).Contains(connector.Id));
+
+    // ───────────────────────────── settings, lookup tables, room point, template ─────────────────────────────
+
+    private FamilyModelSettings? Settings() {
+        var family = this._d.OwnerFamily;
+        var alwaysVertical = Bool(family, BuiltInParameter.FAMILY_ALWAYS_VERTICAL);
+        var shared = Bool(family, BuiltInParameter.FAMILY_SHARED);
+        var cutWithVoids = Bool(family, BuiltInParameter.FAMILY_ALLOW_CUT_WITH_VOIDS);
 #if REVIT2026_OR_GREATER
-        // Revit 2026 removed BuiltInParameter.OMNICLASS_CODE and OMNICLASS_DESCRIPTION and replaced the
-        // single OmniClass string with the ClassificationEntry model (several systems, several entries).
-        // That is a different shape, not a renamed parameter, so this year reads no OmniClass at all rather
-        // than inventing one from a model the portable contract does not speak yet.
-        string? omniClass = null;
+        string? omniClass = null; // Revit 2026 replaced OMNICLASS_CODE with ClassificationEntries; a different shape, not read here.
 #else
         var omniClass = family.get_Parameter(BuiltInParameter.OMNICLASS_CODE)?.AsString();
 #endif
-        var partType = ProjectPartType(family, unmodeled);
-
         var settings = new FamilyModelSettings {
             AlwaysVertical = alwaysVertical,
             Shared = shared == true ? true : null,
             CutWithVoidsWhenLoaded = cutWithVoids == true ? true : null,
-            PartType = partType,
+            PartType = this.PartType(family),
             OmniClass = string.IsNullOrWhiteSpace(omniClass) ? null : omniClass
         };
-        return settings.AlwaysVertical == null &&
-               settings.Shared == null &&
-               settings.CutWithVoidsWhenLoaded == null &&
-               settings.PartType == null &&
-               settings.OmniClass == null
+        return settings.AlwaysVertical == null && settings.Shared == null && settings.CutWithVoidsWhenLoaded == null &&
+               settings.PartType == null && settings.OmniClass == null
             ? null
             : settings;
     }
 
-    private static bool? ReadBooleanSetting(Family family, BuiltInParameter builtInParameter) {
-        var parameter = family.get_Parameter(builtInParameter);
-        return parameter == null || parameter.StorageType != StorageType.Integer
-            ? null
-            : parameter.AsInteger() != 0;
+    private static bool? Bool(Element e, BuiltInParameter bip) {
+        var p = e.get_Parameter(bip);
+        return p == null || p.StorageType != StorageType.Integer ? null : p.AsInteger() != 0;
     }
 
-    private static FamilyPartType? ProjectPartType(
-        Family family,
-        ICollection<FamilyModelUnmodeledFact> unmodeled
-    ) {
-        var parameter = family.get_Parameter(BuiltInParameter.FAMILY_CONTENT_PART_TYPE);
-        if (parameter == null || parameter.StorageType != StorageType.Integer)
-            return null;
-
-        var value = parameter.AsInteger();
-        // The stored number is a PartType member. Name it through both enums; a number this Revit version
-        // knows and the portable vocabulary does not is a fact to report, never a silently dropped setting.
-        if (Enum.IsDefined(typeof(PartType), value) &&
-            Enum.TryParse<FamilyPartType>(((PartType)value).ToString(), out var portable))
-            return portable;
-
-        unmodeled.Add(new FamilyModelUnmodeledFact {
-            Reason = "part-type-not-portable",
-            Path = "$.settings.partType",
-            Facts = new Dictionary<string, string>(StringComparer.Ordinal) {
-                ["storedValue"] = value.ToString()
-            }
-        });
+    private FamilyPartType? PartType(Family family) {
+        var p = family.get_Parameter(BuiltInParameter.FAMILY_CONTENT_PART_TYPE);
+        if (p == null || p.StorageType != StorageType.Integer) return null;
+        var value = p.AsInteger();
+        if (Enum.IsDefined(typeof(PartType), value) && Enum.TryParse<FamilyPartType>(((PartType)value).ToString(), out var portable)) return portable;
+        this.Add(UnmodeledReason.PartTypeNotPortable, "$.settings.partType", ("storedValue", value.ToString(CultureInfo.InvariantCulture)));
         return null;
     }
 
-    /// <summary>
-    ///     Re-encodes each captured size table through the ONE codec, so the portable document carries the
-    ///     same CSV grammar Revit imports. `LookupTableSnapshotCollector` has already exported and decoded
-    ///     them from `FamilySizeTableManager`, which is the only door to embedded table data.
-    /// </summary>
-    private static Dictionary<string, FamilyModelLookupTable> ProjectLookupTables(
-        FamilySnapshot snapshot,
-        ICollection<FamilyModelUnmodeledFact> unmodeled
-    ) {
+    private Dictionary<string, FamilyModelLookupTable> LookupTables(FamilySnapshot snapshot) {
         var tables = new Dictionary<string, FamilyModelLookupTable>(StringComparer.Ordinal);
         foreach (var table in snapshot.LookupTables?.Data ?? []) {
             var name = table.Schema?.Name?.Trim();
             if (string.IsNullOrWhiteSpace(name)) {
-                unmodeled.Add(new FamilyModelUnmodeledFact {
-                    Reason = "lookup-table-has-no-name",
-                    Path = "$.lookupTables",
-                    Facts = new Dictionary<string, string>(StringComparer.Ordinal) {
-                        ["rows"] = table.Rows.Count.ToString()
-                    }
-                });
+                this.Add(UnmodeledReason.LookupTableUnreadable, "$.lookupTables", ("rows", table.Rows.Count.ToString(CultureInfo.InvariantCulture)), ("reason", "no name"));
                 continue;
             }
 
             try {
                 tables[name!] = new FamilyModelLookupTable { Csv = LookupTableCsvCodec.Encode(table) };
-            } catch (InvalidOperationException exception) {
-                unmodeled.Add(new FamilyModelUnmodeledFact {
-                    Reason = "lookup-table-not-portable",
-                    Path = $"$.lookupTables.{name}",
-                    Facts = new Dictionary<string, string>(StringComparer.Ordinal) {
-                        ["reason"] = exception.Message
-                    }
-                });
+            } catch (InvalidOperationException ex) {
+                this.Add(UnmodeledReason.LookupTableUnreadable, $"$.lookupTables.{name}", ("reason", ex.Message));
             }
         }
 
         return tables;
     }
 
-    /// <summary>True when the point sits on the ray the placement implies, at any distance along it.</summary>
-    private static bool IsAlongDirection(XYZ position, XYZ direction) {
-        var distance = position.GetLength();
-        return distance > 1e-9 && position.Normalize().IsAlmostEqualTo(direction.Normalize(), 1e-6);
+    private FamilyModelRoomCalculationPoint? RoomCalculationPoint(FamilyModelPlacement placement) {
+        if (!this._d.OwnerFamily.ShowSpatialElementCalculationPoint) return null;
+        var direction = placement == FamilyModelPlacement.OneLevelBasedHosted ? new XYZ(0, -1, 0) : XYZ.BasisZ;
+        var single = Collect<SpatialElementCalculationPoint>().ToList();
+        var fromTo = Collect<SpatialElementFromToCalculationPoints>().ToList();
+        var onAxis = single.Count + fromTo.Count > 0 &&
+                     single.All(p => Along(p.Position, direction)) &&
+                     fromTo.All(p => Along(p.FromPosition, direction.Negate()) && Along(p.ToPosition, direction));
+        if (!onAxis)
+            this.Add(UnmodeledReason.RoomPointNotOnAxis, "$.roomCalculationPoint", ("placement", placement.ToString()),
+                ("singlePoints", single.Count.ToString(CultureInfo.InvariantCulture)), ("fromToPoints", fromTo.Count.ToString(CultureInfo.InvariantCulture)));
+        var offset = single.Select(p => p.Position.GetLength()).Concat(fromTo.Select(p => p.ToPosition.GetLength())).DefaultIfEmpty(PeRoomCalculationOffsetFeet).First();
+        return new FamilyModelRoomCalculationPoint {
+            Enabled = true,
+            Offset = Math.Abs(offset - PeRoomCalculationOffsetFeet) < 1e-9 ? null : PortableLength.FromFeet(Math.Round(offset, 9))
+        };
     }
 
-    /// <summary>Feet, printed the way a portable length literal is authored.</summary>
-    private static string FormatFeet(double feet) =>
-        Math.Round(feet, 9).ToString("0.#########", System.Globalization.CultureInfo.InvariantCulture) + "ft";
+    private static bool Along(XYZ position, XYZ direction) =>
+        position.GetLength() > 1e-9 && position.Normalize().IsAlmostEqualTo(direction.Normalize(), Tol);
 
-    private static void AddUnmodeledObservableState(
-        Document document,
-        FamilySnapshot snapshot,
-        ICollection<FamilyModelUnmodeledFact> unmodeled
-    ) {
-        var authored = snapshot.AuthoredParamDrivenSolids;
-        if (authored == null)
-            return;
-
-        var extrusions = new FilteredElementCollector(document)
-            .OfClass(typeof(Extrusion))
-            .Cast<Extrusion>()
-            // Face/work-plane templates carry a category-less 8x8x1 host placeholder extrusion. Match that exact
-            // installed-template artifact; ordinary authored extrusions may also have a null Category.
-            .Where(extrusion => !IsFaceHostPlaceholderExtrusion(document, extrusion))
-            .ToList();
-        var observedExtrusions = extrusions.Count;
-        // A turned sketch plane is real geometry the legacy solid collector reads back as nothing, because its
-        // authored spec has no rotation to recover. Name the loss instead of letting the count check imply that
-        // some ordinary extrusion went missing.
-        var turnedExtrusions = extrusions.Count(extrusion => !IsAxisAlignedSketchPlane(extrusion));
-        // A sketch that is neither a four-line rectangle nor a circle is real geometry the legacy solid
-        // collector cannot describe: the portable vocabulary reaches it only as an ExtrudedPolygon, and the
-        // legacy authored spec has no ring of sketch lines to recover one from. Name it instead of leaving it
-        // inside the count mismatch, where it reads as an extrusion that merely went missing.
-        var unportableProfiles = extrusions.Count(extrusion => !IsPortableSketchProfile(extrusion));
-        if (unportableProfiles > 0) {
-            unmodeled.Add(new FamilyModelUnmodeledFact {
-                Reason = "extrusion-profile-not-portable",
-                Path = "$.solids",
-                Facts = new Dictionary<string, string>(StringComparer.Ordinal) {
-                    ["extrusions"] = unportableProfiles.ToString()
-                }
-            });
-        }
-
-        if (turnedExtrusions > 0) {
-            unmodeled.Add(new FamilyModelUnmodeledFact {
-                Reason = "frame-rotation-not-observable",
-                Path = "$.frames",
-                Facts = new Dictionary<string, string>(StringComparer.Ordinal) {
-                    ["turnedExtrusions"] = turnedExtrusions.ToString()
-                }
-            });
-        }
-
-        var recognizedConnectorStubs = RawConnectorUnitInference.MatchOwnedStubs(document)
-            .Values
-            .Select(match => match.Extrusion.Id)
-            .Distinct()
-            .Count();
-        var recognizedExtrusions = authored.Prisms.Count + authored.Cylinders.Count + recognizedConnectorStubs;
-        if (observedExtrusions == recognizedExtrusions)
-            return;
-
-        // The legacy solid collector is intentionally best-effort. Count the raw observable forms as a second
-        // honesty check so an unsupported extrusion cannot disappear merely because decompilation skipped it.
-        unmodeled.Add(new FamilyModelUnmodeledFact {
-            Reason = "extrusion-capture-count-mismatch",
-            Path = "$.solids",
-            Facts = new Dictionary<string, string>(StringComparer.Ordinal) {
-                ["observed"] = observedExtrusions.ToString(),
-                ["recognized"] = recognizedExtrusions.ToString(),
-                ["connectorStubs"] = recognizedConnectorStubs.ToString()
-            }
-        });
-    }
-
-    /// <summary>
-    ///     True when the extrusion's sketch sits on a plane whose axes are the family axes. The portable
-    ///     `rotation` clause is symbolic, so a turned sketch cannot be captured back into it.
-    /// </summary>
-    private static bool IsAxisAlignedSketchPlane(Extrusion extrusion) {
-        var plane = extrusion.Sketch?.SketchPlane?.GetPlane();
-        if (plane == null)
-            return true;
-
-        return IsFamilyAxis(plane.Normal) && IsFamilyAxis(plane.XVec);
-    }
-
-    /// <summary>
-    ///     True when the extrusion's sketch is one of the two shapes the portable vocabulary and the legacy
-    ///     plan agree on: a rectangle authored as four lines, or a circle authored as arcs. Anything else is
-    ///     an `ExtrudedPolygon` at best, and capture cannot author one yet.
-    /// </summary>
-    private static bool IsPortableSketchProfile(Extrusion extrusion) {
-        var profile = extrusion.Sketch?.Profile;
-        if (profile == null)
-            return true;
-
-        var curves = profile.Cast<CurveArray>().SelectMany(loop => loop.Cast<Curve>()).ToList();
-        if (curves.Count == 0)
-            return true;
-
-        return (curves.Count == 4 && curves.TrueForAll(curve => curve is Line)) ||
-               curves.TrueForAll(curve => curve is Arc);
-    }
-
-    private static bool IsFamilyAxis(XYZ vector) {
-        var direction = vector.Normalize();
-        return Math.Abs(Math.Abs(direction.X) - 1) < 1e-6 ||
-               Math.Abs(Math.Abs(direction.Y) - 1) < 1e-6 ||
-               Math.Abs(Math.Abs(direction.Z) - 1) < 1e-6;
-    }
-
-    private static bool IsFaceHostPlaceholderExtrusion(Document document, Extrusion extrusion) {
-        if (document.OwnerFamily.FamilyPlacementType != FamilyPlacementType.WorkPlaneBased ||
-            extrusion.Category != null ||
-            !string.Equals(extrusion.Sketch?.SketchPlane?.Name, "Ref. Level", StringComparison.Ordinal))
-            return false;
-        var bounds = extrusion.get_BoundingBox(null);
-        if (bounds == null)
-            return false;
-        var size = bounds.Max - bounds.Min;
-        return Math.Abs(size.X - 8.0) < 1e-6 &&
-               Math.Abs(size.Y - 8.0) < 1e-6 &&
-               Math.Abs(size.Z - 1.0) < 1e-6;
-    }
-
-    private static string InferTemplate(
-        string category,
-        FamilyModelPlacement placement,
-        ICollection<FamilyModelUnmodeledFact> unmodeled
-    ) {
-        // Revit does not retain the source .rft path in an RFA. Capture therefore recognizes only proven PE
-        // template conventions from observable category + placement; it never writes recovery metadata.
-        if (placement == FamilyModelPlacement.Unhosted &&
-            (string.Equals(category, "Generic Models", StringComparison.OrdinalIgnoreCase) ||
-             string.Equals(category, "Air Terminals", StringComparison.OrdinalIgnoreCase)))
-            return "Generic Model";
-        if (placement == FamilyModelPlacement.FaceHosted &&
-            (string.Equals(category, "Generic Models", StringComparison.OrdinalIgnoreCase) ||
-             string.Equals(category, "Air Terminals", StringComparison.OrdinalIgnoreCase)))
-            return "Generic Model face based";
-        // Wall-hosted rows. Revit ships one wall-based template per category, named "<Category> wall based",
-        // and the category is observable while the template path is not — so the pair names the template.
-        if (placement == FamilyModelPlacement.WallHosted &&
-            string.Equals(category, "Plumbing Fixtures", StringComparison.OrdinalIgnoreCase))
-            return "Plumbing Fixture wall based";
-        if (placement == FamilyModelPlacement.WallHosted &&
-            string.Equals(category, "Generic Models", StringComparison.OrdinalIgnoreCase))
-            return "Generic Model wall based";
-
-        unmodeled.Add(new FamilyModelUnmodeledFact {
-            Reason = "template-convention-unknown",
-            Path = "$.family.template",
-            Facts = new Dictionary<string, string>(StringComparer.Ordinal) {
-                ["category"] = category,
-                ["placement"] = placement.ToString()
-            }
-        });
+    private string InferTemplate(FamilyCategory category, FamilyModelPlacement placement) {
+        // Revit keeps no .rft path in an .rfa; only proven category+placement conventions name a template.
+        var generic = category is FamilyCategory.GenericModels or FamilyCategory.AirTerminals;
+        var template = (placement, generic, category) switch {
+            (FamilyModelPlacement.OneLevelBased, true, _) => "Generic Model",
+            (FamilyModelPlacement.OneLevelBased, _, FamilyCategory.ElectricalEquipment) => "Electrical Equipment",
+            (FamilyModelPlacement.ViewBased, _, FamilyCategory.DetailItems) => "Detail Item",
+            (FamilyModelPlacement.ViewBased, _, FamilyCategory.GenericAnnotations) => "Generic Annotation",
+            (FamilyModelPlacement.WorkPlaneBased, true, _) => "Generic Model face based",
+            (FamilyModelPlacement.OneLevelBasedHosted, _, FamilyCategory.PlumbingFixtures) => "Plumbing Fixture wall based",
+            (FamilyModelPlacement.OneLevelBasedHosted, _, FamilyCategory.GenericModels) => "Generic Model wall based",
+            _ => null
+        };
+        if (template != null) return template;
+        this.Add(UnmodeledReason.TemplateUnknown, "$.family.template", ("category", category.ToString()), ("placement", placement.ToString()));
         return "Unknown";
     }
 
-    private static ProjectedAssignment ProjectAssignments(
-        ParameterSnapshot parameter,
-        IDictionary<string, Dictionary<string, string>> types
-    ) {
-        if (!string.IsNullOrWhiteSpace(parameter.Formula))
-            return new ProjectedAssignment(null);
+    // ───────────────────────────── reference and plane helpers ─────────────────────────────
 
-        var presentValues = types.Keys
-            .Select(typeName => parameter.ValuesPerType.TryGetValue(typeName, out var value) ? value : null)
-            .Where(value => value != null)
-            .Select(value => value!)
-            .ToList();
-        if (presentValues.Count == types.Count &&
-            presentValues.Distinct(StringComparer.Ordinal).Take(2).Count() == 1)
-            return new ProjectedAssignment(presentValues[0]);
+    private string? NameOf(Reference r) => this._planeName.TryGetValue(r.ElementId, out var n) ? n : null;
 
-        foreach (var typeName in types.Keys) {
-            if (parameter.ValuesPerType.TryGetValue(typeName, out var value) && value != null)
-                types[typeName][parameter.Name] = value;
-        }
-
-        return new ProjectedAssignment(null);
+    private string Describe(Reference r) {
+        var e = this._d.GetElement(r.ElementId);
+        return $"{e?.GetType().Name}<{e?.Name}> {StableOf(r)}";
     }
 
-    private static Dictionary<string, FamilyModelSolid> ProjectSolids(
-        AuthoredParamDrivenSolidsSettings? authored,
-        ICollection<FamilyModelUnmodeledFact> unmodeled
-    ) {
-        var result = new Dictionary<string, FamilyModelSolid>(StringComparer.Ordinal);
-        if (authored == null)
-            return result;
+    private string StableOf(Reference r) => Try(() => r.ConvertToStableRepresentation(this._d)) ?? string.Empty;
 
-        foreach (var prism in authored.Prisms) {
-            if (!TryProjectPrism(prism, out var slug, out var solid)) {
-                AddUnmodeledSolid(unmodeled, prism.Name, "prism-outside-family-frame-subset");
-                continue;
-            }
-
-            AddSolid(result, unmodeled, slug, solid);
-        }
-
-        foreach (var cylinder in authored.Cylinders) {
-            if (!TryProjectCylinder(cylinder, out var slug, out var solid)) {
-                AddUnmodeledSolid(unmodeled, cylinder.Name, "cylinder-outside-family-frame-subset");
-                continue;
-            }
-
-            AddSolid(result, unmodeled, slug, solid);
-        }
-
-        if (authored.Spans.Count > 0) {
-            unmodeled.Add(new FamilyModelUnmodeledFact {
-                Reason = "param-driven-constituents-not-yet-modeled",
-                Path = "$.solids",
-                Facts = new Dictionary<string, string>(StringComparer.Ordinal) {
-                    ["spans"] = authored.Spans.Count.ToString()
-                }
-            });
-        }
-
-        return result;
+    private string? Assoc(Parameter? p) {
+        if (p == null) return null;
+        var source = Try(() => this._fm.GetAssociatedFamilyParameter(p));
+        return source == null ? null : $"param:{source.Definition.Name}";
     }
 
-    private static bool TryProjectPrism(
-        AuthoredPrismSpec prism,
-        out string slug,
-        out FamilyModelSolid solid
-    ) {
-        slug = TryInferSlug(prism.Height.InlinePlane?.Name, ".top")
-               ?? TryInferSlug(prism.Length.InlineSpan?.Negative, ".left")
-               ?? string.Empty;
-        var length = prism.Length.InlineSpan;
-        var width = prism.Width.InlineSpan;
-        var height = prism.Height.InlinePlane;
-        if (string.IsNullOrWhiteSpace(slug) ||
-            !string.Equals(prism.On, "@Bottom", StringComparison.Ordinal) ||
-            length == null || width == null || height == null ||
-            !string.Equals(length.About, "@CenterLR", StringComparison.Ordinal) ||
-            !string.Equals(width.About, "@CenterFB", StringComparison.Ordinal) ||
-            !string.Equals(height.From, "@Bottom", StringComparison.Ordinal) ||
-            !string.Equals(height.Dir, "out", StringComparison.OrdinalIgnoreCase) ||
-            !HasExpectedSpanNames(length, slug, ".left", ".right") ||
-            !HasExpectedSpanNames(width, slug, ".back", ".front") ||
-            !string.Equals(height.Name, $"{slug}.top", StringComparison.Ordinal)) {
-            solid = new FamilyModelSolid();
-            return false;
+    private string? Length(Parameter? p) => this.LengthOf(p)?.Text;
+
+    private PortableLength? LengthOf(Parameter? p) {
+        if (p == null) return null;
+        var assoc = this.Assoc(p);
+        if (assoc != null) return PortableLength.Parse(assoc);
+        return p.StorageType == StorageType.Double ? PortableLength.FromFeet(Math.Round(p.AsDouble(), 9)) : null;
+    }
+
+    private sealed record NamedPlane(string Name, XYZ Origin, XYZ Normal, bool IsDatum);
+
+    private IEnumerable<NamedPlane> NamedPlanes() {
+        foreach (var level in this._levels)
+            yield return new NamedPlane(this._planeName[level.Id], new XYZ(0, 0, level.ProjectElevation), XYZ.BasisZ, true);
+        foreach (var rp in this._refPlanes) {
+            if (!this._planeName.TryGetValue(rp.Id, out var name)) continue;
+            yield return new NamedPlane(name, rp.GetPlane().Origin, rp.Normal.Normalize(),
+                rp.get_Parameter(BuiltInParameter.DATUM_PLANE_DEFINES_ORIGIN)?.AsInteger() == 1);
+        }
+    }
+
+    /// <summary>Named planes containing <paramref name="point" />, datums first then by name, filtered by <paramref name="where" />.</summary>
+    private List<string> NamedPlanesThrough(XYZ point, Func<NamedPlane, bool> where) =>
+        this.NamedPlanes().Where(p => Math.Abs((point - p.Origin).DotProduct(p.Normal)) < FaceTol && where(p))
+            .OrderByDescending(p => p.IsDatum).ThenBy(p => p.Name, StringComparer.Ordinal).Select(p => p.Name).ToList();
+
+    /// <summary>Two named planes through <paramref name="point" />, both containing <paramref name="axis" />, with crossing normals.</summary>
+    private List<string>? CrossingPlanesThrough(XYZ point, XYZ axis) {
+        var candidates = this.NamedPlanes().Where(p => Math.Abs(p.Normal.DotProduct(axis)) < Tol && Math.Abs((point - p.Origin).DotProduct(p.Normal)) < FaceTol)
+            .OrderByDescending(p => p.IsDatum).ThenBy(p => p.Name, StringComparer.Ordinal).ToList();
+        foreach (var a in candidates) {
+            var b = candidates.FirstOrDefault(x => Math.Abs(Math.Abs(x.Normal.DotProduct(a.Normal)) - 1) > Tol);
+            if (b != null) return [a.Name, b.Name];
         }
 
-        solid = new FamilyModelSolid {
-            Kind = prism.IsSolid ? FamilySolidKind.Prism : FamilySolidKind.VoidPrism,
-            Frame = "frame:family",
-            Width = length.By,
-            Depth = width.By,
-            Height = height.By
-        };
-        return true;
+        return null;
     }
 
-    private static bool TryProjectCylinder(
-        AuthoredCylinderSpec cylinder,
-        out string slug,
-        out FamilyModelSolid solid
-    ) {
-        slug = TryInferSlug(cylinder.Height.InlinePlane?.Name, ".top") ?? string.Empty;
-        var height = cylinder.Height.InlinePlane;
-        if (string.IsNullOrWhiteSpace(slug) ||
-            !string.Equals(cylinder.On, "@Bottom", StringComparison.Ordinal) ||
-            cylinder.Center.Count != 2 ||
-            !cylinder.Center.Contains("@CenterLR", StringComparer.Ordinal) ||
-            !cylinder.Center.Contains("@CenterFB", StringComparer.Ordinal) ||
-            height == null ||
-            !string.Equals(height.Name, $"{slug}.top", StringComparison.Ordinal) ||
-            !string.Equals(height.From, "@Bottom", StringComparison.Ordinal) ||
-            !string.Equals(height.Dir, "out", StringComparison.OrdinalIgnoreCase)) {
-            solid = new FamilyModelSolid();
-            return false;
-        }
+    private static XYZ? PointOf(FamilyInstance fi) => (fi.Location as LocationPoint)?.Point;
 
-        solid = new FamilyModelSolid {
-            Kind = cylinder.IsSolid ? FamilySolidKind.Cylinder : FamilySolidKind.VoidCylinder,
-            Frame = "frame:family",
-            Diameter = cylinder.Diameter.By,
-            Height = height.By
-        };
-        return true;
+    private static string? SafeLabel(Dimension dim) => Try(() => dim.FamilyLabel)?.Definition.Name;
+
+    private static RefStrength? Strength(int? value) => value switch {
+        0 => RefStrength.Left, 1 => RefStrength.CenterLeftRight, 2 => RefStrength.Right, 3 => RefStrength.Front,
+        4 => RefStrength.CenterFrontBack, 5 => RefStrength.Back, 6 => RefStrength.Bottom, 7 => RefStrength.CenterElevation,
+        8 => RefStrength.Top, 12 => RefStrength.NotAReference, 13 => RefStrength.StrongReference, 14 => RefStrength.WeakReference,
+        _ => null
+    };
+
+    private static Axis? ToAxis(XYZ v) {
+        if (v.GetLength() < Tol) return null;
+        var n = v.Normalize();
+        if (Math.Abs(Math.Abs(n.X) - 1) < Tol) return n.X > 0 ? Axis.PlusX : Axis.MinusX;
+        if (Math.Abs(Math.Abs(n.Y) - 1) < Tol) return n.Y > 0 ? Axis.PlusY : Axis.MinusY;
+        if (Math.Abs(Math.Abs(n.Z) - 1) < Tol) return n.Z > 0 ? Axis.PlusZ : Axis.MinusZ;
+        return null;
     }
 
-    private static bool HasExpectedSpanNames(
-        AuthoredSpanSpec span,
-        string slug,
-        string negativeSuffix,
-        string positiveSuffix
-    ) =>
-        string.Equals(span.Negative, slug + negativeSuffix, StringComparison.Ordinal) &&
-        string.Equals(span.Positive, slug + positiveSuffix, StringComparison.Ordinal);
+    private IEnumerable<T> Collect<T>() where T : Element => new FilteredElementCollector(this._d).OfClass(typeof(T)).Cast<T>();
 
-    private static string? TryInferSlug(string? name, string suffix) =>
-        !string.IsNullOrWhiteSpace(name) && name.EndsWith(suffix, StringComparison.Ordinal)
-            ? name[..^suffix.Length]
-            : null;
+    private void Add(UnmodeledReason reason, string path, params (string Key, string Value)[] facts) =>
+        this._un.Add(FamilyModelParameterProjection.Fact(reason, path, facts));
 
-    private static void AddSolid(
-        IDictionary<string, FamilyModelSolid> solids,
-        ICollection<FamilyModelUnmodeledFact> unmodeled,
-        string slug,
-        FamilyModelSolid solid
-    ) {
-        if (solids.TryAdd(slug, solid))
-            return;
-
-        AddUnmodeledSolid(unmodeled, slug, "duplicate-observable-solid-identity");
+    private static string Unique(string slug, Func<string, bool> taken) {
+        if (!taken(slug)) return slug;
+        for (var i = 2; ; i++)
+            if (!taken($"{slug}-{i}")) return $"{slug}-{i}";
     }
 
-    private static void AddUnmodeledSolid(
-        ICollection<FamilyModelUnmodeledFact> unmodeled,
-        string name,
-        string reason
-    ) => unmodeled.Add(new FamilyModelUnmodeledFact {
-        Reason = reason,
-        Path = "$.solids",
-        Facts = new Dictionary<string, string>(StringComparer.Ordinal) { ["observedName"] = name }
-    });
+    private static string Slug(string value) =>
+        string.Join("-", new string(value.Trim().Select(ch => char.IsLetterOrDigit(ch) ? char.ToLowerInvariant(ch) : '-').ToArray())
+            .Split(['-'], StringSplitOptions.RemoveEmptyEntries));
 
-    private static string? ProjectDataType(ParameterSnapshot parameter) =>
-        !string.IsNullOrWhiteSpace(parameter.DataTypeLabel)
-            ? parameter.DataTypeLabel
-            : string.IsNullOrWhiteSpace(parameter.DataTypeId)
-                ? null
-                : RevitLabelCatalog.GetLabelForSpec(parameter.DataType);
+    private static string Fmt(XYZ p) => FormattableString.Invariant($"({p.X:0.####},{p.Y:0.####},{p.Z:0.####})");
 
-    private static string? ProjectPropertiesGroup(ParameterSnapshot parameter) =>
-        !string.IsNullOrWhiteSpace(parameter.GroupTypeLabel)
-            ? parameter.GroupTypeLabel
-            : string.IsNullOrWhiteSpace(parameter.GroupTypeId)
-                ? null
-                : RevitLabelCatalog.GetLabelForPropertyGroup(parameter.PropertiesGroup);
-
-    private sealed record ProjectedAssignment(string? UniformValue);
-    private sealed record ProjectedComposition(
-        Dictionary<string, FamilyModelNestedFamily> NestedFamilies,
-        Dictionary<string, FamilyModelArray> Arrays
-    );
-    private sealed record ArrayEndpoint(FamilyInstance Instance, XYZ Point);
+    private static T? Try<T>(Func<T> f) {
+        try { return f(); } catch { return default; }
+    }
 }
