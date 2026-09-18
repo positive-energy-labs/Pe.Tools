@@ -18,19 +18,18 @@ public sealed class SameNameSharedReplacementTests {
     [OneTimeSetUp]
     public void SetUp(UIApplication ui) => this._ui = ui;
 
-    // Depth: per-type values, the label of a driving dimension, a nested instance association and a lookup key. Height: its own formula.
+    // Depth: per-type values, the label of a driving dimension and a nested instance association. Height: its own formula.
     // Show: per-type values plus a detail visibility association. Count: per-type values plus the label of a linear array of that nested
-    // family. Half Depth and Looked Up are not replaced; their formulas reference Depth by name.
-    private Document Build() {
-        var parsed = FamilyModelJson.Parse("""
+    // family. Half Depth is not replaced; its formula references Depth by name. With `lookup`, Depth is also the key of a size table
+    // that the unreplaced Looked Up reads.
+    private Document Build(bool lookup = false) {
+        var json = JObject.Parse("""
             { "family": { "name": "Same-name shared replacement", "category": "GenericModels", "template": "Generic Model", "placement": "OneLevelBased" },
               "parameters": {
                 "Depth": { "dataType": "Length" }, "Show": { "dataType": "YesNo" },
                 "Height": { "dataType": "Length", "formula": "Depth * 2" }, "Half Depth": { "dataType": "Length", "formula": "Depth / 2" },
-                "Count": { "dataType": "Integer" }, "Looked Up": { "dataType": "Number", "formula": "size_lookup(LookupTableName, \"Out\", 0, Depth)" },
-                "LookupTableName": { "dataType": "Text", "value": "Depths" } },
+                "Count": { "dataType": "Integer" } },
               "types": { "A": { "Depth": "1ft", "Show": "Yes", "Count": "2" }, "B": { "Depth": "2ft", "Show": "No", "Count": "3" } },
-              "lookupTables": { "Depths": { "csv": ",Key##length##feet,Out##number##general\nr1,1,10\nr2,2,20\n" } },
               "datums": { "Ref. Level": { "normal": "Z", "isLevel": true }, "Center (Left/Right)": { "normal": "X" }, "Center (Front/Back)": { "normal": "Y" } },
               "refPlanes": { "left": { "normal": "PlusX", "at": "-1ft" }, "right": { "normal": "PlusX", "at": "1ft" }, "back": { "normal": "PlusY", "at": "1ft" },
                              "front": { "normal": "PlusY", "at": "-1ft" } },
@@ -41,6 +40,17 @@ public sealed class SameNameSharedReplacementTests {
                 "associate": { "_vane length": "param:Depth" } } },
               "arrays": { "vanes": { "member": "vane", "direction": "PlusY", "label": "param:Count", "moveTo": "Last", "spacingPlane": "back" } } }
             """);
+        if (lookup) {
+            var parameters = (JObject)json["parameters"]!;
+            parameters["Looked Up"] = new JObject { ["dataType"] = "Number", ["formula"] = "size_lookup(LookupTableName, \"Out\", 0, Depth)" };
+            parameters["LookupTableName"] = new JObject { ["dataType"] = "Text", ["value"] = "Depths" };
+            // Authored in Revit's canonical export form (CRLF rows, six-decimal numbers), copied from the native capture at exec-guid
+            // PRE 593aa0c. Residue compares the csv text literally (FamilyReconciler.cs:406-428), so any other spelling of the same
+            // table never converges; see crusade-domains-guid-result.md follow-up 10.
+            json["lookupTables"] = new JObject { ["Depths"] = new JObject {
+                ["csv"] = ",Key##length##feet,Out##number##general\r\nr1,1.000000,10.000000\r\nr2,2.000000,20.000000\r\n" } };
+        }
+        var parsed = FamilyModelJson.Parse(json.ToString());
         Assert.That(parsed.Diagnostics, Is.Empty, string.Join("; ", parsed.Diagnostics.Select(d => $"{d.Path} {d.Code}: {d.Message}")));
         // The nested family builds from the sibling Fixtures/FamilyModel/vane.json.
         var modelDirectory = Path.GetDirectoryName(RevitFamilyFixtureHarness.GetFamilyModelFixturePath("vane.json"));
@@ -64,7 +74,8 @@ public sealed class SameNameSharedReplacementTests {
             cells[type.Name] = new JObject {
                 ["Depth"] = type.AsDouble(fm.FindParameter("Depth")), ["Height"] = type.AsDouble(fm.FindParameter("Height")),
                 ["Half Depth"] = type.AsDouble(fm.FindParameter("Half Depth")), ["Show"] = type.AsInteger(fm.FindParameter("Show")),
-                ["Count"] = type.AsInteger(fm.FindParameter("Count")), ["Looked Up"] = type.AsDouble(fm.FindParameter("Looked Up"))
+                ["Count"] = type.AsInteger(fm.FindParameter("Count")),
+                ["Looked Up"] = fm.FindParameter("Looked Up") is { } lookedUp ? type.AsDouble(lookedUp) : null
             };
         return new JObject {
             ["cells"] = cells,
@@ -101,49 +112,67 @@ public sealed class SameNameSharedReplacementTests {
             Assert.That(original["cells"]!["A"]!["Height"]!.Value<double>(), Is.EqualTo(2d), "fixture: Height reads its formula");
             Assert.That(original["arrays"]!.Values<string>(), Is.EqualTo(new[] { "Count" }), "fixture: Count labels the vane array");
             Assert.That(original["nested"]!.Values<string>(), Is.Not.Empty.And.All.EqualTo("Depth"), "fixture: every vane associates _vane length to Depth");
+            Hops(document, original, finalHop);
+        } finally { RevitFamilyFixtureHarness.CloseDocument(document); }
+    }
+
+    // Split from the core proof above: authored lookup CSV converges only in Revit's canonical form
+    // (crusade-domains-guid-result.md follow-up 10), so a lookup defect must not hide the identity-preservation result.
+    [TestCase(1, TestName = "Family_to_shared_keeps_lookup_reference")]
+    [TestCase(2, TestName = "Shared_to_other_guid_keeps_lookup_reference")]
+    [TestCase(3, TestName = "Shared_to_family_keeps_lookup_reference")]
+    public void Same_name_identity_change_preserves_lookup_reference(int finalHop) {
+        Document? document = null;
+        try {
+            document = this.Build(lookup: true);
+            var original = Observe(document);
             Assert.That((original["cells"]!["A"]!["Looked Up"]!.Value<double>(), original["cells"]!["B"]!["Looked Up"]!.Value<double>()), Is.EqualTo((10d, 20d)),
                 "fixture: Looked Up reads the table keyed on Depth");
-            using var processor = new OperationProcessor(document);
-            Func<Document, FamilySharedParameterSource> source = d => new(d, []);
-            for (var hop = 1; hop <= finalHop; hop++) {
-                var patch = Hop(hop);
-                var before = document.CaptureFamilyModel();
-                var preview = document.PreviewFamily(patch, sharedSource: source);
-                Assert.That(preview.Diagnostics, Is.Empty, $"hop {hop} preview");
-                // Preview promises an identity change only: no cell, formula, label or visibility edit. Apply must deliver exactly that.
-                Assert.That(preview.Changes.Where(change => change.Section is "types.cell" or "dimensions" or "details" or "arrays" or "nested" or "lookupTables" ||
-                    change.Section == "parameters" && change.Key is "Half Depth" or "Looked Up"), Is.Empty, $"hop {hop} preview claims a non-identity change");
-                var apply = new ReconcileFamily(patch, expectedPlanHash: preview.PlanHash, sharedSource: source);
-                var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(apply));
-                var (_, error) = contexts.Single().OperationLogs;
-                var observed = Observe(document);
-                var lost = !JToken.DeepEquals(original, observed);
-                // Receipt honesty first: a converged receipt over a lossy native replacement is the invisible loss this fixture exists for.
-                Assert.That(apply.LastReceipt?.Converged == true && lost, Is.False,
-                    $"hop {hop}: receipt converged while native state changed.\noriginal: {original}\nobserved: {observed}");
-                Assert.That(error, Is.Null, $"hop {hop}: {error}");
-                Assert.That(apply.LastReceipt?.Converged, Is.True, $"hop {hop}");
-                Assert.That(apply.LastReceipt!.PlanHash, Is.EqualTo(preview.PlanHash), $"hop {hop}");
-                Assert.That(observed.ToString(), Is.EqualTo(original.ToString()), $"hop {hop}: native values, formulas or associations changed");
-                var fm = document.FamilyManager;
-                foreach (var name in Replaced) {
-                    var parameter = fm.FindParameter(name) ?? throw new AssertionException($"hop {hop}: '{name}' is gone");
-                    var wanted = (string?)patch.Patch["parameters"]![name]!["sharedGuid"];
-                    Assert.That(parameter.IsShared ? parameter.GUID.ToString() : null, Is.EqualTo(wanted), $"hop {hop}: '{name}' identity");
-                }
-                Assert.That(fm.Parameters.Cast<FamilyParameter>().Select(p => p.Definition.Name), Has.None.StartsWith("FF_Transfer_"), $"hop {hop}");
-                var after = document.CaptureFamilyModel();
-                foreach (var (name, section) in new (string, Func<FamilyModel, object>)[] {
-                             ("types", m => m.Types), ("dimensions", m => m.Dimensions), ("details", m => m.Details),
-                             ("arrays", m => m.Arrays), ("nested", m => m.Nested), ("lookupTables", m => m.LookupTables),
-                             ("formulas", m => m.Parameters.ToDictionary(p => p.Key, p => p.Value.Formula)) })
-                    Assert.That(JToken.DeepEquals(Section(after, section), Section(before, section)), Is.True,
-                        $"hop {hop}: captured {name} differ from the preview baseline\nbefore: {Section(before, section)}\nafter: {Section(after, section)}");
-                var repeated = new ReconcileFamily(patch, sharedSource: source);
-                _ = processor.ProcessQueue(new OperationQueue().Add(repeated));
-                Assert.That(repeated.LastReceipt?.Converged, Is.True, $"hop {hop} reapply");
-                Assert.That(repeated.LastPlan!.Changes, Is.Empty, $"hop {hop} reapply");
-            }
+            Hops(document, original, finalHop);
         } finally { RevitFamilyFixtureHarness.CloseDocument(document); }
+    }
+
+    private static void Hops(Document document, JObject original, int finalHop) {
+        using var processor = new OperationProcessor(document);
+        Func<Document, FamilySharedParameterSource> source = d => new(d, []);
+        for (var hop = 1; hop <= finalHop; hop++) {
+            var patch = Hop(hop);
+            var before = document.CaptureFamilyModel();
+            var preview = document.PreviewFamily(patch, sharedSource: source);
+            Assert.That(preview.Diagnostics, Is.Empty, $"hop {hop} preview");
+            // Preview promises an identity change only: no cell, formula, label or visibility edit. Apply must deliver exactly that.
+            Assert.That(preview.Changes.Where(change => change.Section is "types.cell" or "dimensions" or "details" or "arrays" or "nested" or "lookupTables" ||
+                change.Section == "parameters" && change.Key is "Half Depth" or "Looked Up"), Is.Empty, $"hop {hop} preview claims a non-identity change");
+            var apply = new ReconcileFamily(patch, expectedPlanHash: preview.PlanHash, sharedSource: source);
+            var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(apply));
+            var (_, error) = contexts.Single().OperationLogs;
+            var observed = Observe(document);
+            var lost = !JToken.DeepEquals(original, observed);
+            // Receipt honesty first: a converged receipt over a lossy native replacement is the invisible loss this fixture exists for.
+            Assert.That(apply.LastReceipt?.Converged == true && lost, Is.False,
+                $"hop {hop}: receipt converged while native state changed.\noriginal: {original}\nobserved: {observed}");
+            Assert.That(error, Is.Null, $"hop {hop}: {error}");
+            Assert.That(apply.LastReceipt?.Converged, Is.True, $"hop {hop}");
+            Assert.That(apply.LastReceipt!.PlanHash, Is.EqualTo(preview.PlanHash), $"hop {hop}");
+            Assert.That(observed.ToString(), Is.EqualTo(original.ToString()), $"hop {hop}: native values, formulas or associations changed");
+            var fm = document.FamilyManager;
+            foreach (var name in Replaced) {
+                var parameter = fm.FindParameter(name) ?? throw new AssertionException($"hop {hop}: '{name}' is gone");
+                var wanted = (string?)patch.Patch["parameters"]![name]!["sharedGuid"];
+                Assert.That(parameter.IsShared ? parameter.GUID.ToString() : null, Is.EqualTo(wanted), $"hop {hop}: '{name}' identity");
+            }
+            Assert.That(fm.Parameters.Cast<FamilyParameter>().Select(p => p.Definition.Name), Has.None.StartsWith("FF_Transfer_"), $"hop {hop}");
+            var after = document.CaptureFamilyModel();
+            foreach (var (name, section) in new (string, Func<FamilyModel, object>)[] {
+                         ("types", m => m.Types), ("dimensions", m => m.Dimensions), ("details", m => m.Details),
+                         ("arrays", m => m.Arrays), ("nested", m => m.Nested), ("lookupTables", m => m.LookupTables),
+                         ("formulas", m => m.Parameters.ToDictionary(p => p.Key, p => p.Value.Formula)) })
+                Assert.That(JToken.DeepEquals(Section(after, section), Section(before, section)), Is.True,
+                    $"hop {hop}: captured {name} differ from the preview baseline\nbefore: {Section(before, section)}\nafter: {Section(after, section)}");
+            var repeated = new ReconcileFamily(patch, sharedSource: source);
+            _ = processor.ProcessQueue(new OperationQueue().Add(repeated));
+            Assert.That(repeated.LastReceipt?.Converged, Is.True, $"hop {hop} reapply");
+            Assert.That(repeated.LastPlan!.Changes, Is.Empty, $"hop {hop} reapply");
+        }
     }
 }
