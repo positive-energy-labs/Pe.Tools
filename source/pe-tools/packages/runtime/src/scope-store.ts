@@ -26,6 +26,8 @@ const scopeType = (threadId: string) => `scope:${threadId}`;
 export class ScopeStore {
   readonly #listeners = new Set<(threadId: string, next: ThreadHead) => void>();
   readonly #turns = new Map<string, string>();
+  readonly #pending = new Set<string>();
+  readonly #tails = new Map<string, Promise<void>>();
   readonly #reads = new OwnerReads();
 
   constructor(
@@ -51,6 +53,17 @@ export class ScopeStore {
     threadId: string,
     defaultTarget: DocumentRequest | null,
     expectedRevision: number,
+    refuse?: () => PutTargetResult | undefined,
+  ): Promise<PutTargetResult> {
+    return this.#serialized(threadId, () =>
+      Promise.resolve(refuse?.() ?? this.#set(threadId, defaultTarget, expectedRevision)),
+    );
+  }
+
+  async #set(
+    threadId: string,
+    defaultTarget: DocumentRequest | null,
+    expectedRevision: number,
   ): Promise<PutTargetResult> {
     const current = await this.read(threadId);
     if (current.revision !== expectedRevision) return { ok: false, why: "stale", head: current };
@@ -66,12 +79,33 @@ export class ScopeStore {
     return { ok: true, why: "set", head: next };
   }
 
-  admit(threadId: string, turnId: string): void {
-    this.#turns.set(threadId, turnId);
+  admit<T>(threadId: string, turnId: string, work: (head: ThreadHead) => Promise<T>): Promise<T> {
+    return this.#serialized(threadId, async () => {
+      const head = await this.read(threadId);
+      const previousTurn = this.#turns.get(threadId);
+      this.#turns.set(threadId, turnId);
+      this.#pending.add(threadId);
+      try {
+        const result = await work(head);
+        this.#pending.delete(threadId);
+        return result;
+      } catch (error) {
+        this.#pending.delete(threadId);
+        if (this.#turns.get(threadId) === turnId) {
+          if (previousTurn) this.#turns.set(threadId, previousTurn);
+          else this.#turns.delete(threadId);
+        }
+        throw error;
+      }
+    });
   }
 
   admittedTurn(threadId: string): string | undefined {
     return this.#turns.get(threadId);
+  }
+
+  admissionPending(threadId: string): boolean {
+    return this.#pending.has(threadId);
   }
 
   subscribe(listener: (threadId: string, next: ThreadHead) => void): () => void {
@@ -90,6 +124,18 @@ export class ScopeStore {
       listener,
     );
   }
+  #serialized<T>(threadId: string, work: () => Promise<T>): Promise<T> {
+    const previous = this.#tails.get(threadId) ?? Promise.resolve();
+    const run = previous.catch(() => undefined).then(work);
+    const tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.#tails.set(threadId, tail);
+    return run.finally(() => {
+      if (this.#tails.get(threadId) === tail) this.#tails.delete(threadId);
+    });
+  }
 }
 
 type MessageFile = { data: string; mediaType: string; filename?: string };
@@ -101,25 +147,22 @@ export async function admitTurn(
   input: { content: string; files?: MessageFile[]; requestContext?: unknown },
 ): Promise<void> {
   const thread = session.thread.requireId();
-  const head = await scopes.read(thread);
-  const turn: Turn = {
-    id: crypto.randomUUID(),
-    thread,
-    ...head,
-  };
-  const requestContext =
-    input.requestContext instanceof RequestContext ? input.requestContext : new RequestContext();
-  (requestContext as RequestContext<Record<string, unknown>>).set(turnContextKey, turn);
-  scopes.admit(thread, turn.id);
-  const signal = session.sendSignal(
-    {
-      type: "user",
-      tagName: "user",
-      id: turn.id,
-      contents: messageContents(input.content, input.files),
-      metadata: { turn },
-    },
-    { requestContext },
-  );
-  await signal.accepted;
+  const id = crypto.randomUUID();
+  await scopes.admit(thread, id, async (head) => {
+    const turn: Turn = { id, thread, ...head };
+    const requestContext =
+      input.requestContext instanceof RequestContext ? input.requestContext : new RequestContext();
+    (requestContext as RequestContext<Record<string, unknown>>).set(turnContextKey, turn);
+    const signal = session.sendSignal(
+      {
+        type: "user",
+        tagName: "user",
+        id: turn.id,
+        contents: messageContents(input.content, input.files),
+        metadata: { turn },
+      },
+      { requestContext, requireDelivery: true },
+    );
+    await signal.accepted;
+  });
 }
