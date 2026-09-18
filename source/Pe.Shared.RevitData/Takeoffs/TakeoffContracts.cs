@@ -108,12 +108,6 @@ public sealed record TakeoffReviewShape(
     string Id, string Kind, string? Disposition, string? Reason, double? Sqft,
     double[]? Label, IReadOnlyList<IReadOnlyList<double[]>> Loops);
 
-public sealed record TakeoffResolution(
-    string Subject,
-    string Flag,
-    string Verb,
-    string At,
-    string RunId);
 public sealed record TakeoffWriteResult(long ElementId, Guid ZoneGuid, int Bytes, string Blob);
 
 public sealed record TakeoffRhvacLink(
