@@ -21,7 +21,7 @@ import { familiesSpec } from "#/families/manifest";
 import { FAMILY_DEMO_PODS, familySpec } from "#/route/family/manifest";
 import { scheduleSpec } from "#/route/schedules/manifest";
 import { familyFixtures } from "#/family/authored-families";
-import { familyDemoFields } from "#/family/store";
+import { familyDemoFields } from "#/route/family/manifest";
 import { DEMO_FAMILIES_SPEC } from "#/families/seeds";
 import {
   DEMO_FAMILIES_SPEC_PATH,

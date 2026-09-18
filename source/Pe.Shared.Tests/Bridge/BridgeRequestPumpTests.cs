@@ -76,6 +76,59 @@ public sealed class BridgeRequestPumpTests {
         });
     }
 
+    /// <summary>
+    ///     w8-revit 4c: scripting.execute returns its Task at its first await, so the Revit task
+    ///     queue settles the run and disposes its per-run linked token before the script starts.
+    ///     BridgeAgent used to hand the op that per-run token; op.cancel then fired a token nothing
+    ///     linked. The handler below has the same shape as BridgeAgent's Revit branch.
+    /// </summary>
+    [TestCase(true, TestName = "An async script handed the request token stops at ThrowIfCancelled on op.cancel")]
+    [TestCase(false, TestName = "An async script handed the queue's disposed per-run token never hears op.cancel")]
+    public async Task OpCancelReachesAScriptThatOutlivesTheQueueRun(bool handsRequestToken) {
+        using var pair = await WebSocketPair.ConnectAsync();
+        var started = new TaskCompletionSource();
+        var checkpoint = new TaskCompletionSource<bool>(); // true: ThrowIfCancelled fired
+        Task? script = null;
+
+        using var shutdown = new CancellationTokenSource();
+        var pump = new BridgeRequestPump(pair.Client, async (_, requestToken) => {
+            using (var perRun = CancellationTokenSource.CreateLinkedTokenSource(requestToken))
+                script = FakeScriptAsync(handsRequestToken ? requestToken : perRun.Token, started, checkpoint);
+            await script;
+        });
+        var loop = pump.RunAsync(shutdown.Token);
+
+        await pair.Server.WriteAsync(RequestFrame("script"), CancellationToken.None);
+        await started.Task.WaitAsync(Patience);
+        var cancelled = await pump.CancelAsync(new OpCancelRequest("script"), CancellationToken.None);
+
+        var fired = await Task.WhenAny(checkpoint.Task, Task.Delay(TimeSpan.FromMilliseconds(500))) == checkpoint.Task;
+        shutdown.Cancel();
+
+        Assert.Multiple(() => {
+            Assert.That(cancelled.Cancelled, Is.True);
+            Assert.That(fired, Is.EqualTo(handsRequestToken));
+        });
+    }
+
+    /// <summary>The ScriptingBridgeMessageHandler.ExecuteAsync shape: link a timeout, await, then loop on ThrowIfCancelled.</summary>
+    private static async Task FakeScriptAsync(CancellationToken token, TaskCompletionSource started, TaskCompletionSource<bool> checkpoint) {
+        using var timeout = new CancellationTokenSource();
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, token);
+        var scope = new Pe.Revit.Scripting.Execution.ScriptCancellationScope(linked.Token, () => timeout.IsCancellationRequested, 120);
+        await Task.Yield();
+        started.TrySetResult();
+        try {
+            for (var i = 0; i < 100; i++) {
+                scope.Token.ThrowIfCancellationRequested(); // PeScriptContainer.ThrowIfCancelled
+                await Task.Delay(10);
+            }
+        } catch (OperationCanceledException) {
+            checkpoint.TrySetResult(true);
+            throw;
+        }
+    }
+
     [Test]
     public async Task CancelForAnUnknownIdIsAPlainRefusal() {
         using var pair = await WebSocketPair.ConnectAsync();

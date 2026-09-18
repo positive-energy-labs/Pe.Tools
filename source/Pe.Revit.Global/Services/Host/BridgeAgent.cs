@@ -248,11 +248,14 @@ internal sealed class BridgeAgent : IDisposable {
 
             Task<object?> responseTask;
             if (op.Thread == OpThread.Revit) {
+                // The op gets the request's own token, never context.Cancellation: the queue disposes
+                // that per-run link when the delegate returns, and an async op (scripting.execute)
+                // returns at its first await, so op.cancel would fire a token nothing links anymore.
                 var run = await this._revitTaskQueue.RunForResult(
                     context => op.ExecuteAsync(
                         request.PayloadJson,
                         ResolveDocument(op, request.OpenDocumentId, context.Cancellation),
-                        context.Cancellation),
+                        cancellationToken),
                     new RevitRunOptions { Label = op.Key },
                     cancellationToken
                 ).ConfigureAwait(false);

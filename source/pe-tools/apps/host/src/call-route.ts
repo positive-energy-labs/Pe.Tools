@@ -1,7 +1,7 @@
 import { admitScheduleAction, recoverScheduleAction, readSchedule } from "./schedule-actions.ts";
 import { admitInstancesAction, recoverInstancesAction } from "./instances-actions.ts";
 import { instancesActions } from "@pe/agent-contracts";
-import { semanticActions } from "@pe/agent-contracts";
+import { actionControls, semanticActions } from "@pe/agent-contracts";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { hostActionJournal } from "./gateway-owner.ts";
 import {
@@ -525,7 +525,11 @@ export function makeCallRoute(
       ),
     ),
   );
-  const controls = ["recover", "resume", "cancel"].map((choice) =>
+  // action.read is GET /actions; every other control is POST /actions/<verb>, the path the client builds.
+  const controlVerbs = Object.keys(actionControls)
+    .filter((key) => key !== "action.read")
+    .map((key) => key.slice("action.".length));
+  const controls = controlVerbs.map((choice) =>
     HttpRouter.add("POST", `/actions/${choice}`, (req) =>
       RevitBridge.use((bridge) =>
         Effect.tryPromise({
@@ -554,13 +558,19 @@ export function makeCallRoute(
             }
             if (choice === "cancel")
               return Response.jsonUnsafe(
-                await owner().cancel(body.id, (requestId) =>
-                  Effect.runPromise(
+                await owner().cancel(body.id, async (requestId) => {
+                  const { value } = await Effect.runPromise(
                     bridge
                       .invoke(CANCEL_OPERATION_KEY, { requestId })
-                      .pipe(Effect.catchCause(Effect.failCause)) as Effect.Effect<unknown>,
-                  ),
-                ),
+                      .pipe(Effect.catchCause(Effect.failCause)) as Effect.Effect<
+                      { value: unknown },
+                      unknown
+                    >,
+                  );
+                  // Revit answers 200 even when the id is not in flight; that is a refusal, not a stop.
+                  const answer = value as { cancelled?: boolean; message?: string } | null;
+                  if (answer?.cancelled === false) throw Error(answer.message);
+                }),
                 { status: 202 },
               );
             if (choice === "recover") {
@@ -577,6 +587,8 @@ export function makeCallRoute(
                         : recoverGatewayAction(body.id, owner(), actionDeps.sdk)),
               );
             }
+            // A control added to actionControls gets a route before it gets a handler.
+            if (choice !== "resume") throw Error(`Action control '${choice}' has no handler`);
             const prior = (await owner().list(undefined, body.id))[0];
             if (!prior) throw Error("Original action has no resumable authored admission");
             const row = await admit(

@@ -1,6 +1,6 @@
-import { mkdtemp, readFile, rm, writeFile, symlink, mkdir } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile, symlink, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, expect, test } from "vite-plus/test";
 import { address, exportSeed, importSeed, type DemoSeed } from "@pe/agent-contracts";
 import { Context, Layer } from "effect";
@@ -241,6 +241,46 @@ test("demo Family capture files a new member and returns what the capture saw", 
     outcome: "Succeeded",
     outputs: ["unmodeled.json"],
   });
+});
+
+test("demo Family capture with no pod reads the live spec and files nothing; with a draft it files the draft", async () => {
+  const f = await setup();
+  const capture = async (suffix: string, input: object) => {
+    await f.fetch("/actions", {
+      id: `${f.owner.id}:${suffix}`,
+      kind: "workflow",
+      key: "family.capture",
+      actor: "agent",
+      destination: { kind: "document", ref: f.owner.target },
+      input,
+      bases: {},
+    });
+    const row = await f.owner.journal.wait(`${f.owner.id}:${suffix}`);
+    expect(row.state, JSON.stringify(row)).toBe("succeeded");
+    return (row as { result: Record<string, unknown> }).result;
+  };
+  const pod = f.owner.member!.pod;
+  const folder = dirname(
+    await f.owner.settings.memberPath({ pod, path: "settings/family/x.json" }),
+  );
+  const files = async () => (await readdir(folder).catch(() => [])).length;
+  const before = await files();
+  const read = (await capture("read", {})) as { spec: string; member?: unknown };
+  expect(read.member).toBeUndefined();
+  expect(JSON.parse(read.spec).unmodeled).toBeUndefined();
+  expect(await files()).toBe(before);
+  // The draft the person edited is what lands, and the run beside it is the capture's.
+  const draft = { ...JSON.parse(read.spec), $schema: "elsewhere", note: "edited in the draft" };
+  const saved = (await capture("save", { pod, spec: JSON.stringify(draft) })) as {
+    member: { pod: string; path: string };
+    evidence: { run: string };
+  };
+  const written = JSON.parse(
+    await readFile(await f.owner.settings.memberPath(saved.member), "utf8"),
+  );
+  expect(written.note).toBe("edited in the draft");
+  expect(written.$schema).toMatch(/\/schemas\/settings\/FamilyFoundry\/models\.json$/);
+  expect(saved.evidence.run).toBeTruthy();
 });
 
 test("demo Family plan returns a hash, apply sends that exact hash, and changed bytes refuse", async () => {

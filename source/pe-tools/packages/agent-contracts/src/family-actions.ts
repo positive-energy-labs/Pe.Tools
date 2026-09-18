@@ -40,14 +40,16 @@ export const familyActions = {
     }),
   },
   "family.capture": {
-    says: "Capture the open family as a new spec member in the route's pod; returns the member address and sha256.",
+    says: "Read the open family's spec. With a pod, file it as a new member there (the draft's `spec` text when given, else what Revit said) and write the run; without one, return the spec and write nothing.",
     needs: "family-document",
     actor: "any",
     dirties: ["pods"],
     executors: ["family.capture", "pod.member.write"],
     description:
-      "Capture the open family as a new spec member in the route's pod; returns the member address and sha256.",
-    input: z.object(captureInto),
+      "Read the open family's spec. With a pod, file it as a new member there (the draft's `spec` text when given, else what Revit said) and write the run; without one, return the spec and write nothing.",
+    input: z
+      .object({ ...captureInto, pod: captureInto.pod.optional(), spec: z.string().optional() })
+      .refine((input) => input.pod || (!input.spec && !input.path), "A draft saves into a pod"),
   },
   "family.plan": {
     says: "Plan a saved family spec against the open family and return the plan; changes nothing.",

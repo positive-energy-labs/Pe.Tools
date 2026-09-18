@@ -3,28 +3,26 @@
  *
  * The owner, the registry, the Target resolution, busy, refusals, the pod and spec selection, and
  * capture/apply live in the route kernel (`route/family/manifest.ts` over `entityRoute`). What is
- * left here is what only Family knows: how the member's Settings Work, its saved bytes and the
- * capture evidence become one lane, and which selections the sheet holds while it is open.
+ * left here is what only Family knows: how the draft (the live reading and its proposals), the
+ * capture evidence and the saved member a build needs become one lane, and which selections the
+ * sheet holds while it is open.
  */
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   actionReceiptSchema,
   familyCaptureSchema,
   familyProjectionSchema,
   memberWork,
   settingsFieldDirectives,
-  settingsFieldPointer,
   settingsFieldSegments,
-  settingsRouteState,
   settingsWorkSnapshot,
   type FamilyCapture,
   type FamilyDocument,
+  type FamilyDraft,
   type PodMember,
   type Reading,
-  type SettingsFieldState,
   type SettingsRouteDocument,
   type SettingsSnapshot,
-  type WorkKey,
 } from "@pe/agent-contracts";
 
 import type { MasterTableState } from "#/components/master-table/model";
@@ -32,11 +30,13 @@ import { projectBuildReceipt, type BuildFacts, type BuildRefusal } from "#/famil
 import type { EvidenceSlice, FieldState } from "#/family/host";
 import { familySource } from "#/family/source";
 import { initialDraft, savedFrom, type Draft, type Focus, type Overlay } from "#/family/model";
-import { familyEditBuffer } from "./edit-buffer";
 import { draftToPatches } from "#/family/project";
+import { familyEditBuffer } from "./edit-buffer";
 import {
   captureEvidence,
+  draftFields,
   familyManifest,
+  proposeOnDraft,
   latestApplyStatus,
   latestBuildStatus,
   latestCaptureStatus,
@@ -46,45 +46,7 @@ import {
 } from "#/route/family/manifest";
 import { previousOf, useReading } from "#/readings";
 import { useRoute, type EntityPage } from "#/route";
-import { openMember, useMemberWork } from "#/route/spec-editor";
-import { familyFixtures, type AuthoredFamilyName } from "#/family/authored-families";
-
-/**
- * The demo lane's proposal lane on a family fixture: its first Length parameter staged, its
- * second proposed by Pea. Real pointers of the fixture's bytes; the values are fixture.
- */
-export function familyDemoFields(raw: string): Record<string, SettingsFieldState> {
-  const parameters = (JSON.parse(raw) as { parameters?: Record<string, { dataType?: string }> })
-    .parameters;
-  const [staged, proposed] = Object.entries(parameters ?? {})
-    .filter(([, spec]) => spec.dataType === "Length")
-    .map(([name]) => settingsFieldPointer(["parameters", name, "value"]));
-  return {
-    ...(staged ? { [staged]: { proposal: null, staged: { value: "5in" } } } : {}),
-    ...(proposed
-      ? {
-          [proposed]: {
-            proposal: { value: "6in", by: "pea", note: "office standard", confidence: "low" },
-            staged: null,
-          },
-        }
-      : {}),
-  };
-}
-
-const demoWorkOf = (member: PodMember | null): SettingsRouteDocument | undefined => {
-  const raw = member
-    ? familyFixtures[
-        member.path
-          .split("/")
-          .at(-1)
-          ?.replace(/\.json$/, "") as AuthoredFamilyName
-      ]
-    : undefined;
-  return member && raw
-    ? { basis: { member, rawContent: raw, sha256: "demo" }, fields: familyDemoFields(raw) }
-    : undefined;
-};
+import { openMember } from "#/route/spec-editor";
 
 type Setter<A> = A | ((previous: A) => A);
 const next = <A>(value: Setter<A>, previous: A): A =>
@@ -229,9 +191,8 @@ export function useFamilyStore(options: {
     } as typeof declared;
   }, [facts, options.thread]);
 
-  // The member: the page's pod and path. Its Work, bytes and readings are all keyed by it.
+  // The member the draft was opened from or saved as; only build reads its saved bytes.
   const [pageForMember, setPageForMember] = useState<PodMember | null>(null);
-  const work = pageForMember ? memberWork(pageForMember) : undefined;
   const observed = useMemberObservation(pageForMember, !demo);
   const provided = useMemo(
     () => (demo ? { pods: options.pods } : { pods: options.pods, profile: observed }),
@@ -239,7 +200,6 @@ export function useFamilyStore(options: {
   );
   const handle = useRoute(routeManifest, {
     target: options.target ?? null,
-    work,
     page: options.initial as Partial<FamilyPage & EntityPage> | undefined,
     provided,
   });
@@ -253,40 +213,68 @@ export function useFamilyStore(options: {
   );
   useEffect(() => setPageForMember(member), [member]);
 
-  // The member's Settings Work: the Pea proposal and staging lane, and the save.
-  const fileKey: WorkKey = useMemo(
-    () => ({ route: settingsRouteState.route, target: null, work: work ?? "" }),
-    [work],
-  );
-  const demoWork = useMemo(
-    () => (demo ? demoWorkOf(pageForMember) : undefined),
-    [demo, pageForMember],
-  );
-  const settingsHandle = useMemberWork(pageForMember, demoWork);
-  const settingsDoc = settingsHandle.work.doc as SettingsRouteDocument | null;
-  const settingsRevision = settingsHandle.work.revision;
+  const profileObservation = previousOf(handle.readings.profile as Reading<SettingsSnapshot>);
+  // The draft: the live reading and the proposals on it, as the route's Work.
+  const draftDoc = handle.work.doc as FamilyDraft | null;
+  const draftRevision = handle.work.revision;
+  /**
+   * The person's input, held per draft until the Work takes it (a refusal keeps it for a retry).
+   * Each write lays its patches on the last draft this buffer wrote, so two quick edits compose.
+   */
+  const lastWritten = useRef<FamilyDraft | null>(null);
+  useEffect(() => {
+    lastWritten.current = null;
+  }, [draftDoc]);
   const edits = useMemo(
-    () => familyEditBuffer(fileKey, settingsHandle.work.write),
-    [fileKey, settingsHandle.work.write],
+    () =>
+      familyEditBuffer(handle.work.key, async (patches, revision) => {
+        const base = lastWritten.current ?? draftDoc;
+        if (!base) throw Error("Read the family first.");
+        const next = proposeOnDraft(base, patches);
+        const refusal = await handle.work.write(
+          [
+            { path: ["edits"], value: next.edits },
+            { path: ["accepted"], value: next.accepted },
+          ],
+          revision,
+        );
+        if (!refusal) lastWritten.current = next;
+        return refusal;
+      }),
+    [handle.work, draftDoc],
   );
   const editState = useSyncExternalStore(edits.subscribe, edits.getSnapshot, edits.getSnapshot);
   useEffect(() => {
-    if (settingsRevision != null) edits.observe(settingsRevision);
-  }, [edits, settingsRevision]);
-
-  const profileObservation = previousOf(handle.readings.profile as Reading<SettingsSnapshot>);
-  // Work is the edit basis; before it hydrates (and in the demo lane) the saved bytes stand in.
-  const snapshot = useMemo(
-    () => (settingsDoc ? settingsWorkSnapshot(settingsDoc) : (profileObservation ?? null)),
-    [settingsDoc, profileObservation],
+    if (draftRevision != null) edits.observe(draftRevision);
+  }, [edits, draftRevision]);
+  const flush = edits.flush;
+  const fields = useMemo(
+    () => (draftDoc ? draftFields(draftDoc) : {}) as Record<string, FieldState>,
+    [draftDoc],
   );
-  const fields = (settingsDoc?.fields ?? {}) as Record<string, FieldState>;
-  const authoredLane = useMemo(
-    () => familySource(snapshot, null, fields),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [snapshot, settingsDoc?.fields],
+  const draftWork = useMemo(
+    (): SettingsRouteDocument | null =>
+      draftDoc?.reading == null
+        ? null
+        : {
+            basis: {
+              member: member ?? { pod: "", path: "" },
+              rawContent: draftDoc.reading,
+              sha256: "",
+            },
+            fields: fields as SettingsRouteDocument["fields"],
+          },
+    [draftDoc, fields, member],
   );
-  const authoredDraft = editState.draft ?? initialDraft(authoredLane.world);
+  const snapshot = useMemo(() => (draftWork ? settingsWorkSnapshot(draftWork) : null), [draftWork]);
+  const authoredLane = useMemo(() => familySource(snapshot, null, fields), [snapshot, fields]);
+  const authoredDraft = useMemo(
+    () =>
+      initialDraft(
+        familySource(draftWork ? settingsWorkSnapshot(draftWork, true) : null, null).world,
+      ),
+    [draftWork],
+  );
   const authoringFacts = useMemo(
     (): FamilyAuthoringFacts => ({
       relativePath: authoredLane.document?.relativePath ?? null,
@@ -300,16 +288,9 @@ export function useFamilyStore(options: {
           ).length
         : 0,
       stagedCount: Object.values(fields).filter((field) => field.staged != null).length,
-      current: settingsHandle.work.current && editState.failure === null,
+      current: handle.work.current,
     }),
-    [
-      authoredLane,
-      authoredDraft,
-      fields,
-      snapshot?.validation,
-      settingsHandle.work.current,
-      editState.failure,
-    ],
+    [authoredLane, authoredDraft, fields, snapshot?.validation, handle.work.current],
   );
   useEffect(() => {
     setFacts((previous) =>
@@ -371,7 +352,7 @@ export function useFamilyStore(options: {
   );
 
   /* ── Derived lane ───────────────────────────────────────────────────────── */
-  const review = { revision: settingsRevision };
+  const review = { revision: draftRevision };
   /**
    * What the latest capture from this document saw — coverage and unmodeled facts — shown beside
    * the member it filed. Another member's capture is not this member's evidence.
@@ -388,15 +369,17 @@ export function useFamilyStore(options: {
   }, [captured, member]);
   const lane = useMemo(
     () => familySource(snapshot, evidence, fields, familyDoc.doc),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [snapshot, evidence, settingsDoc?.fields, familyDoc.doc],
+    [snapshot, evidence, fields, familyDoc.doc],
   );
   const saved = useMemo(() => savedFrom(initialDraft(lane.world)), [lane]);
-  const draft = useMemo(() => {
-    if (editState.draft) return editState.draft;
-    const projected = settingsDoc ? settingsWorkSnapshot(settingsDoc, true) : snapshot;
-    return initialDraft(familySource(projected, evidence).world);
-  }, [editState.draft, settingsDoc, snapshot, evidence]);
+  const draft = useMemo(
+    () =>
+      editState.draft ??
+      initialDraft(
+        familySource(draftWork ? settingsWorkSnapshot(draftWork, true) : null, evidence).world,
+      ),
+    [editState.draft, draftWork, evidence],
+  );
   const profile = member?.path ?? "";
 
   /* ── Build ──────────────────────────────────────────────────────────────── */
@@ -420,9 +403,6 @@ export function useFamilyStore(options: {
         }
       : null;
 
-  /* ── Staged authored input: coalesced into one settings apply ───────────── */
-  const flush = edits.flush;
-
   const actions = useMemo(
     () => ({
       /** Authored edits are staged into the settings Work; a pointer field refuses locally. */
@@ -445,13 +425,13 @@ export function useFamilyStore(options: {
             }
           }
         }
-        if (!lane.document) return "Open a valid authored member before editing fields.";
-        if (settingsRevision == null) return "Wait for the authored member to finish loading.";
+        if (!lane.document) return "Read the family before editing fields.";
         const patches = draftToPatches(lane.document.model, nextDraft, previous);
         for (const id of nextDraft.cleared.filter((id) => !previous.cleared.includes(id)))
           patches.push({ path: ["fields", id, "proposal"] });
+        if (draftRevision == null) return "Wait for the draft to finish loading.";
         if (patches.length) setPage({ buildReview: null });
-        edits.stage(nextDraft, patches, settingsRevision);
+        edits.stage(nextDraft, patches, draftRevision);
       },
       setOverlay: (value: Setter<Overlay>) =>
         setMemory((c) => ({ ...c, overlay: next(value, c.overlay) })),
@@ -488,9 +468,13 @@ export function useFamilyStore(options: {
         }),
       say: (text: string) => patch({ receipt: { verb: "page", text, at: Date.now() } }),
       flush,
-      /** Opening a different authored member is a page navigation, never a doc write. */
+      /** Re-read the open family into the draft; the proposals stay on it. */
+      read: () => handle.actions.read.run(),
+      /** Opening a saved member puts its bytes in the draft as the reading; the page names it. */
       async open(next: PodMember) {
         await flush();
+        const { rawContent } = await openMember(next);
+        await handle.work.write([{ path: ["reading"], value: rawContent }]);
         setPage({ pod: next.pod, path: next.path, buildReview: null });
       },
       /** Capture files a new member (the kernel lands the page on it) and returns its evidence. */
@@ -503,15 +487,15 @@ export function useFamilyStore(options: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       handle.actions,
+      handle.work,
       draft,
       lane,
       snapshot,
-      settingsRevision,
-      settingsHandle.actions,
-      flush,
-      patch,
+      draftRevision,
       edits,
       editState.draft,
+      flush,
+      patch,
       page.buildReview,
     ],
   );
@@ -520,7 +504,6 @@ export function useFamilyStore(options: {
     manifest: routeManifest,
     demo,
     member,
-    scope: fileKey,
     // Work + Readings, projected
     ready: familyDoc,
     readings,
@@ -556,8 +539,8 @@ export function useFamilyStore(options: {
     armedBuild,
     sharedEdit: memory.sharedEdit,
     receipt: memory.receipt,
-    busy: settingsHandle.busy ?? handle.busy,
-    failure: editState.failure ?? settingsHandle.failure ?? handle.failure,
+    busy: handle.busy,
+    failure: editState.failure ?? handle.failure,
     editFailure: editState.failure,
     actions,
   };
