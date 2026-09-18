@@ -81,7 +81,7 @@ public static class FamilyModelValidator {
             if (p.SharedSpecId is not null && (p.Shared != true || p.SharedGuid is null || string.IsNullOrWhiteSpace(p.SharedSpecId))) d.Add(new(FamilyModelDiagnosticCodes.Required, path, "sharedSpecId requires shared=true and sharedGuid."));
             if (p.SharedGuid is { } guid && (p.Shared != true || guid == Guid.Empty)) d.Add(new(FamilyModelDiagnosticCodes.Required, path, "sharedGuid requires shared=true and a nonempty GUID."));
             if (p.Shared != true && p.DataType == null) d.Add(new(FamilyModelDiagnosticCodes.Required, $"{path}.dataType", "Family parameters declare dataType. Legal: " + string.Join(", ", Enum.GetNames(typeof(DataType)))));
-            if (p.Value is { } v && p.DataType is { } dt) CheckValue(v, dt, $"{path}.value", nameable, d);
+            if (p.Value is { } v && ValueType(p) is { } dt) CheckValue(v, dt, $"{path}.value", nameable, d);
             if (p.Formula is { } f) {
                 foreach (var tok in FormulaNames(f).Where(t => !nameable.Contains(t)))
                     d.Add(new(FamilyModelDiagnosticCodes.FormulaUnknownName, $"{path}.formula", $"'{tok}' is neither a declared parameter nor a declared built-in. Nearest: {Nearest(tok, nameable)}"));
@@ -99,7 +99,7 @@ public static class FamilyModelValidator {
             var path = $"$.types.{type}.{name}";
             if (!m.Parameters.TryGetValue(name, out var p)) { d.Add(new(FamilyModelDiagnosticCodes.UnknownParameter, path, $"Not declared. Nearest: {Nearest(name, m.Parameters.Keys)}")); continue; }
             if (p.Formula != null) d.Add(new(FamilyModelDiagnosticCodes.FormulaTypeOverride, path, "Formula-driven parameters take no per-type value."));
-            if (p.DataType is { } dt) CheckValue(v, dt, path, nameable, d);
+            if (ValueType(p) is { } dt) CheckValue(v, dt, path, nameable, d);
         }
         // RULING (kaitpw, 2026-09-06): Revit's stored sign for a template plane varies, so a datum normal
         // is unsigned; a refPlane seed runs along its normal, so a refPlane normal stays signed.
@@ -230,6 +230,11 @@ public static class FamilyModelValidator {
             if (Parallel(normals, ons[i], n)) d.Add(new(FamilyModelDiagnosticCodes.LoopConsecutiveParallel, path, $"'{ons[i]}' and '{n}' are parallel; consecutive lines must cross."));
         }
     }
+
+    // A shared parameter carries its spec as sharedSpecId, not dataType (capture: FamilyModelParameterProjection). Judge its values by
+    // that spec too, or a shared Yes/No cell accepts any text (F-J3-5). A spec the vocabulary cannot name stays unjudged.
+    private static DataType? ValueType(FamilyModelParameter p) =>
+        p.DataType ?? (p.SharedSpecId is { } spec && DataTypeConverter.TryParse(spec, out var named) ? named : null);
 
     private static void CheckValue(PortableValue v, DataType dt, string path, HashSet<string> nameable, List<FamilyModelDiagnostic> d) {
         var ok = dt.Measure() switch {
