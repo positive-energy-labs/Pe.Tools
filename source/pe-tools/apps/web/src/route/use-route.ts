@@ -12,6 +12,7 @@ import {
   parseRouteDoc,
   resolveCallTarget,
   sameAddress,
+  START_FRESH,
   threadHeadSchema,
   workKey,
   type Address,
@@ -373,7 +374,11 @@ class RouteAtomKey implements Equal.Equal {
   }
 }
 
-function routeUrl(route: string, operation: "apply" | "command", key: WorkKey) {
+function routeUrl(
+  route: string,
+  operation: "apply" | "command" | typeof START_FRESH,
+  key: WorkKey,
+) {
   const url = new URL(peUrl(resolveWorkbenchConfig(), `/route-state/${route}/${operation}`));
   if (key.work !== undefined) url.searchParams.set("work", key.work);
   else if (key.target !== null) url.searchParams.set("target", key.target);
@@ -426,15 +431,16 @@ export function docWriter<S extends RouteStateSpec<any>>(
   conflict: Atom.Writable<boolean> | undefined,
 ) {
   const send = async (
-    operation: "apply" | "command",
-    body: { expectedRevision: number } & Record<string, unknown>,
+    operation: "apply" | "command" | typeof START_FRESH,
+    body: Record<string, unknown> & { expectedRevision?: number },
     onAccepted?: (base: number, revision: number) => void,
   ): Promise<Refusal | null> => {
     try {
       const { status, result } = await postRouteWrite(routeUrl(spec.route, operation, key), body);
       if (!result) return refuse("failed", `${operation} failed (${status})`);
       if (!result.ok && result.code === "stale_revision" && conflict) registry.set(conflict, true);
-      if (result.ok) onAccepted?.(body.expectedRevision, result.revision);
+      if (result.ok && body.expectedRevision !== undefined)
+        onAccepted?.(body.expectedRevision, result.revision);
       return writeRefusal(result);
     } catch (cause) {
       return causeRefusal(cause);
@@ -474,6 +480,8 @@ export function docWriter<S extends RouteStateSpec<any>>(
             onAccepted,
           );
     },
+    /** The human door only; the host refuses Pea's door and readable Work. */
+    startFresh: () => send(START_FRESH, {}),
   };
 }
 
@@ -529,6 +537,11 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
     readonly conflict: boolean;
     /** The owner's own sentence when Work cannot be read (e.g. saved in an older shape). */
     readonly refusal: string | null;
+    /**
+     * Human-only: sets the unreadable Work aside, untouched, and starts an empty Work. A refusal
+     * lands on `failure`; success re-reads Work. Null when Work is readable.
+     */
+    readonly startFresh: (() => Promise<Refusal | null>) | null;
     readonly reload: () => void;
   };
   readonly readings: Readonly<Record<R, Reading<unknown>>>;
@@ -1054,13 +1067,22 @@ export function useRoute<W, R extends string, P, A extends string>(
       write: writeWork,
       conflict: conflictNow,
       refusal: sliceResult?.state === "failed" ? sliceResult.message : null,
+      startFresh:
+        sliceResult?.state === "failed" && writer && !seed
+          ? async () => {
+              const refusal = await writer.startFresh();
+              if (refusal) owner.registry.set(owner.failure, refusal);
+              else dirty({ ...key, kind: "work" });
+              return refusal;
+            }
+          : null,
       reload: () => {
         if (seed) return;
         owner.registry.set(owner.conflict, false);
         if (spec) dirty({ ...key, kind: "work" });
       },
     }),
-    [key, doc, workCurrent, sliceResult, writeWork, owner, conflictNow, spec, seed],
+    [key, doc, workCurrent, sliceResult, writer, writeWork, owner, conflictNow, spec, seed],
   );
 
   return {

@@ -752,6 +752,17 @@ export function Situation({
                     reload
                   </Press>
                 ) : null}
+                {handle.work.startFresh ? (
+                  <Press
+                    frame="line"
+                    tone="quiet"
+                    size="value"
+                    title="Sets the saved Work aside, untouched on disk, and starts a new empty Work here. Pea cannot do this."
+                    onClick={() => void handle.work.startFresh?.()}
+                  >
+                    start fresh
+                  </Press>
+                ) : null}
               </div>
             ) : null}
             {band}

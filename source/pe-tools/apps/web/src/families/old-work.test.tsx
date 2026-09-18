@@ -5,7 +5,7 @@
  * answered by that test's retained Work Reading.
  */
 import { expect, test, vi } from "vite-plus/test";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -25,10 +25,14 @@ vi.mock("#/lib/token", async (importOriginal) => ({
 }));
 
 import { FamiliesRouteContent } from "#/routes/families";
+import { manifest as familiesManifest } from "#/families/manifest";
 
 const SESSION = "session-old-work";
 const UNREADABLE =
   "This route's saved Work is in a shape this version cannot read, so it was left untouched; it cannot be opened here.";
+
+/** Flipped by the host's start-fresh answer; the next Work read is then an empty Work. */
+let fresh = false;
 
 /** The one wire: the document resolves and the Work Reading is the host's refusal. */
 class WireSource {
@@ -57,7 +61,9 @@ class WireSource {
               },
             }
           : request.kind === "work"
-            ? { kind: "failure", key, error: UNREADABLE }
+            ? fresh
+              ? { kind: "snapshot", key, value: null }
+              : { kind: "failure", key, error: UNREADABLE }
             : null;
       if (frame) setTimeout(() => this.onmessage?.({ data: JSON.stringify(frame) }), 0);
     }
@@ -84,4 +90,22 @@ test("old-shape saved Work reaches the Situation as the host's sentence, not a b
   );
   expect(status).toBeTruthy();
   expect(screen.getByText("unreadable")).toBeTruthy();
+
+  // The human verb beside the sentence posts the host's human door once, never Pea's.
+  const posts: string[] = [];
+  vi.stubGlobal("fetch", async (url: string) => {
+    posts.push(url);
+    fresh = true;
+    return new Response(JSON.stringify({ ok: true, revision: 1 }));
+  });
+  fireEvent.click(screen.getByRole("button", { name: "start fresh" }));
+  await waitFor(() => expect(screen.queryByText("unreadable")).toBeNull(), { timeout: 5_000 });
+  expect(posts).toHaveLength(1);
+  expect(new URL(posts[0]).pathname).toMatch(/\/route-state\/families\/start-fresh$/);
+  expect(posts[0]).not.toContain("/agent/");
+  expect(screen.queryByText(UNREADABLE, { exact: false })).toBeNull();
+  expect(screen.queryByRole("button", { name: "start fresh" })).toBeNull();
+  // Pea's surface is the manifest's actions; start fresh is not one of them.
+  expect(Object.keys(familiesManifest.actions ?? {})).not.toContain("start-fresh");
+  vi.unstubAllGlobals();
 });
