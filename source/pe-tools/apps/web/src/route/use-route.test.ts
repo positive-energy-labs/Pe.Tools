@@ -3,12 +3,19 @@
  * the case moved here from `targeting/model.test.ts:192`), and a StrictMode double-mount disposes
  * the owner exactly once.
  */
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 
 import { firstRefusal, refuse, writeRefusal, REFUSAL_ORDER } from "./refusal";
 import { createRouteOwner, parseTarget } from "./use-route";
+
+// The host's answer to the stop is the only thing these tests vary.
+const host = vi.hoisted(() => ({ settled: [] as PromiseSettledResult<unknown>[] }));
+vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async (actual) => ({
+  ...(await actual<object>()),
+  cancelRunningAdmissions: async () => host.settled,
+}));
 
 test("a refusal set says the first reason in order, not the last one raised", () => {
   const chosen = firstRefusal([
@@ -34,7 +41,9 @@ test("a stale_revision write is a stale-revision refusal, not a generic failure"
 });
 
 test("stop detaches the wait but keeps the action busy until it lands", async () => {
-  const owner = createRouteOwner("test", AtomRegistry.make());
+  host.settled = [{ status: "fulfilled", value: {} }];
+  const registry = AtomRegistry.make();
+  const owner = createRouteOwner("test", registry);
   let release = () => {};
   const first = owner.runAction("slow", async () => {
     await new Promise<void>((resolve) => (release = resolve));
@@ -42,10 +51,36 @@ test("stop detaches the wait but keeps the action busy until it lands", async ()
   });
   owner.stop();
   expect(await first).toBeNull();
+  expect(registry.get(owner.log)[0]?.says).toMatch(/^stopped · /);
   expect((await owner.runAction("early", async () => null))?.code).toBe("busy");
   release();
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(await owner.runAction("after", async () => null)).toBeNull();
+  owner.dispose();
+});
+
+test("a refused stop keeps waiting and says why in a sentence, never 'stopped'", async () => {
+  host.settled = [
+    { status: "rejected", reason: Error("The stop did not reach the host (404 Not Found).") },
+  ];
+  const registry = AtomRegistry.make();
+  const owner = createRouteOwner("test", registry);
+  let release = () => {};
+  let landed = false;
+  const running = owner
+    .runAction("slow", async () => {
+      await new Promise<void>((resolve) => (release = resolve));
+      return null;
+    })
+    .then(() => (landed = true));
+  owner.stop();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const said = registry.get(owner.log).map((entry) => entry.says);
+  expect(said).toContain("stop refused · The stop did not reach the host (404 Not Found).");
+  expect(said.some((says) => says.startsWith("stopped"))).toBe(false);
+  expect(landed).toBe(false);
+  release();
+  await running;
   owner.dispose();
 });
 

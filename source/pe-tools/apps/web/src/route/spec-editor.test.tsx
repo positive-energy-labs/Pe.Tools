@@ -12,7 +12,7 @@ vi.mock("#/host/client", async (importOriginal) => ({
   callHostRpc: (key: string) => Promise.reject(new Error(`no host in test: ${key}`)),
 }));
 
-import { familyDemoFields } from "#/family/store";
+import { familyDemoFields } from "#/route/family/manifest";
 import { familyFixtures } from "#/family/authored-families";
 
 import { DEMO_SPEC, DEMO_SPEC_PATH } from "./seeds";

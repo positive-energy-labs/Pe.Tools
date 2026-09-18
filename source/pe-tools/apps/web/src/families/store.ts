@@ -219,14 +219,24 @@ export function useFamiliesStore(
     [captureStatus, captureReceipt],
   );
 
+  /*
+   * Keyed on the ref's strings, never the ref: the resolution rebuilds it whenever the inventory
+   * reading moves, and a catalog dispatch moves it, so an object key re-read on its own result.
+   */
   const categoryCall = useHostCall(
     () => host.categories(documentTarget!),
-    ["categories", documentTarget],
+    ["categories", documentTarget?.session, documentTarget?.openId],
     documentTarget !== null,
   );
   const familyCall = useHostCall(
     () => (draft.categories.length ? host.families(documentTarget!, draft) : Promise.resolve([])),
-    ["families", documentTarget, draft.placement, draft.categories.join("|")],
+    [
+      "families",
+      documentTarget?.session,
+      documentTarget?.openId,
+      draft.placement,
+      draft.categories.join("|"),
+    ],
     documentTarget !== null,
   );
   // FOOTGUN: base-ui `Combobox items` must keep identity between renders; a fresh `options`

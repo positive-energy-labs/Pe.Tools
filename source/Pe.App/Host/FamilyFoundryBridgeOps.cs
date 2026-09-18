@@ -119,18 +119,24 @@ internal static class FamilyFoundryBridgeOps {
         var artifacts = Path.Combine(Path.GetTempPath(), "Pe.Tools", "family-apply", Guid.NewGuid().ToString("N"));
         try {
             var data = EngineEdge.NoModal(handled, () => ApplyFamilies(specJson, expectedPlanHashes, document, executionOptions, loadAndSave, artifacts, cancellationToken));
-            var relative = data with { Receipts = data.Receipts.Select(r => r with { ArtifactDirectory = r.ArtifactDirectory is { } dir ? RunPath(artifacts, dir) : null }).ToList() };
+            var failures = Failures(data);
+            var relative = data with {
+                Reason = Reason(data, failures),
+                Receipts = data.Receipts.Select(r => r with { ArtifactDirectory = r.ArtifactDirectory is { } dir ? RunPath(artifacts, dir) : null }).ToList()
+            };
             var outputs = (Directory.Exists(artifacts) ? Directory.EnumerateFiles(artifacts, "*", SearchOption.AllDirectories) : [])
                 .Select(file => (name: RunPath(artifacts, file), bytes: File.ReadAllBytes(file)))
                 .Append((name: "apply.json", bytes: System.Text.Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(relative, Formatting.Indented))))
+                .Concat(failures.Count == 0 ? [] : [(name: "failures.json", bytes: System.Text.Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(failures.Select(f => new { subject = f.Subject, message = f.Message }), Formatting.Indented)))])
                 .Concat(EngineEdge.WarningsOutput(handled))
                 .ToList();
+            // One family applied is a run that changed Revit, so it succeeded; its failed siblings are on the receipts.
             var receiptPath = PodRuns.WriteReceipt(podFolder, new PodReceipt(source.Pod, source.Path, source.Sha256, operation,
                     data.Receipts.Select(r => r.PlanHash).Where(h => h is not null).Distinct().ToList() is { Count: > 0 } hashes ? string.Join(",", hashes) : null,
                     data.Diagnostics.Any(d => d.Code == CancelledCode) ? "Cancelled"
-                        : data.Diagnostics.Count == 0 && data.Receipts.All(r => r.Success) ? "Succeeded" : "Failed",
+                        : data.Receipts.Any(r => r.Success) ? "Succeeded" : "Failed",
                     [],
-                    Reason(data)),
+                    relative.Reason),
                 outputs);
             return relative with {
                 ReceiptPath = receiptPath,
@@ -141,17 +147,25 @@ internal static class FamilyFoundryBridgeOps {
         }
     }
 
-    /// <summary>
-    ///     Why the run failed, in the receipt itself (w4-revit defect 18: the receipt read `reason: null`
-    ///     while `apply.json` held the error). Op-level diagnostics first, then each family's own failure.
-    /// </summary>
-    private static string? Reason(FamilyFoundryApplyData data) {
-        var reasons = data.Diagnostics.Select(d => d.Message)
-            .Concat(data.Receipts.Where(r => !r.Success).Select(r =>
-                $"{r.FamilyName ?? r.FamilyId.ToString(System.Globalization.CultureInfo.InvariantCulture)}: " +
-                string.Join("; ", new[] { r.Error }.Concat(r.Errors).OfType<string>().Where(m => m.Length > 0).DefaultIfEmpty("failed with no message"))))
+    /// <summary>Every failure with its full text: op-level diagnostics first, then each family's own. The run keeps it as `failures.json`.</summary>
+    private static List<(string Subject, string Message)> Failures(FamilyFoundryApplyData data) =>
+        data.Diagnostics.Select(d => (Subject: d.Code, Message: d.Message))
+            .Concat(data.Receipts.Where(r => !r.Success).Select(r => (
+                Subject: r.FamilyName ?? r.FamilyId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                Message: string.Join(Environment.NewLine, new[] { r.Error }.Concat(r.Errors).OfType<string>().Where(m => m.Length > 0).DefaultIfEmpty("failed with no message")))))
             .ToList();
-        return reasons.Count == 0 ? null : string.Join(" | ", reasons);
+
+    /// <summary>
+    ///     One sentence naming the first failure (w8-revit trip 7: `reason` was kilobytes of stack trace). The innermost
+    ///     exception message on its first line is the cause; the trace stays in `failures.json`.
+    /// </summary>
+    private static string? Reason(FamilyFoundryApplyData data, List<(string Subject, string Message)> failures) {
+        if (failures.Count == 0) return null;
+        var (subject, message) = failures[0];
+        var line = message.Split('\n')[0].Trim();
+        var cause = line.LastIndexOf("Exception: ", StringComparison.Ordinal) is var at and >= 0 ? line[(at + "Exception: ".Length)..] : line;
+        var failed = data.Receipts.Count(r => !r.Success);
+        return failed == 0 ? $"{subject}: {cause}" : $"{failed} of {data.Receipts.Count} families failed; the first, {subject}: {cause}";
     }
 
     /// <summary>Run outputs are flat file names; an artifact's relative path becomes its `--`-joined name prefix.</summary>
@@ -239,9 +253,9 @@ internal static class FamilyFoundryBridgeOps {
                 var (logs, error) = context.OperationLogs;
                 var receipt = op.LastReceipt;
                 var errors = logs?.SelectMany(l => l.Entries).Where(e => e.Status == LogStatus.Error).Select(e => $"{e.Name}: {e.Message}").ToList() ?? [];
-                receipts.Add(new FamilyFoundryApplyReceipt(context.LoadedFamilyId ?? familyId, familyName, error is null && errors.Count == 0 && receipt?.Converged == true, receipt?.Converged ?? false, error?.Message, receipt?.PlanHash,
+                receipts.Add(new FamilyFoundryApplyReceipt(familyId, familyName, error is null && errors.Count == 0 && receipt?.Converged == true, receipt?.Converged ?? false, error?.Message, receipt?.PlanHash,
                     receipt?.Residue.Select(ToChange).ToList() ?? [], errors, context.Artifacts is { } a ? Path.Combine(runOutput.DirectoryPath, a.FamilyDirectory) : null,
-                    receipt?.ObservedParametersDigest));
+                    receipt?.ObservedParametersDigest, context.LoadedFamilyId));
             } catch (Exception exception) {
                 receipts.Add(Failed(familyId, familyName, exception.Message));
             }

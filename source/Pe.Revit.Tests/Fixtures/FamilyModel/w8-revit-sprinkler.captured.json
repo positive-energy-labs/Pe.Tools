@@ -1,0 +1,215 @@
+{
+  "$schema": "http://127.0.0.1:50802/schemas/settings/FamilyFoundry/models.json",
+  "family": {
+    "name": "Sprinkler - Dry - Horizontal Sidewall - Hosted",
+    "category": "Sprinklers",
+    "template": "Unknown",
+    "placement": "WorkPlaneBased"
+  },
+  "parameters": {
+    "CEL": {
+      "dataType": "PipeSize",
+      "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+      "isInstance": false
+    },
+    "Escutcheon Diameter": {
+      "dataType": "PipeSize",
+      "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+      "isInstance": false,
+      "formula": "Nominal Diameter"
+    },
+    "Escutcheon Radius": {
+      "dataType": "PipeSize",
+      "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+      "isInstance": false,
+      "formula": "0.5 * Escutcheon Diameter"
+    },
+    "Escutcheon Thickness": {
+      "dataType": "PipeSize",
+      "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+      "isInstance": false
+    },
+    "Flow": {
+      "dataType": "PipingFlow",
+      "propertiesGroup": "autodesk.parameter.group:fireProtection-1.0.0",
+      "isInstance": true
+    },
+    "Nominal Diameter": {
+      "dataType": "PipeSize",
+      "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+      "isInstance": false,
+      "formula": "Nominal Radius * 2"
+    },
+    "Nominal Radius": {
+      "dataType": "PipeSize",
+      "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+      "isInstance": false
+    },
+    "Overall Length": {
+      "dataType": "PipeSize",
+      "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+      "isInstance": false
+    },
+    "Pressure Drop": {
+      "dataType": "Pressure",
+      "propertiesGroup": "autodesk.parameter.group:fireProtection-1.0.0",
+      "isInstance": true
+    },
+    "Protrusion": {
+      "dataType": "PipeSize",
+      "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+      "isInstance": false,
+      "formula": "Overall Length - CEL"
+    }
+  },
+  "builtIns": [
+    "Assembly Code",
+    "Cost",
+    "Coverage",
+    "Default Elevation",
+    "Description",
+    "Diameter",
+    "Export Type to IFC As",
+    "K-Factor",
+    "Keynote",
+    "Manufacturer",
+    "Model",
+    "Orifice",
+    "Orifice Size",
+    "Pressure Class",
+    "Response",
+    "Temperature Rating",
+    "Type Comments",
+    "Type IFC Predefined Type",
+    "Type Image",
+    "URL"
+  ],
+  "types": {
+    "1/2\" Dry Horizontal Sidewall": {
+      "CEL": "6.3500000000000005 mm",
+      "Escutcheon Thickness": "3.1750000000000003 mm",
+      "Flow": "1.8927059999999998 L/s",
+      "Nominal Radius": "6.3500000000000005 mm",
+      "Overall Length": "103.1875 mm",
+      "Pressure Drop": "48263.29899999999 Pa"
+    }
+  },
+  "datums": {
+    "Ref. Level": {
+      "normal": "Z",
+      "isLevel": true
+    },
+    "Center (Front/Back)": {
+      "normal": "Y"
+    },
+    "Reference Plane": {
+      "normal": "Z"
+    },
+    "Center (Left/Right)": {
+      "normal": "X"
+    }
+  },
+  "refPlanes": {
+    "plane-1": {
+      "normal": "PlusZ",
+      "at": "-0.020833333ft",
+      "isReference": "NotAReference"
+    },
+    "plane-2": {
+      "normal": "PlusZ",
+      "at": "0.010416667ft",
+      "isReference": "NotAReference"
+    },
+    "plane-3": {
+      "normal": "PlusZ",
+      "at": "0.317708333ft",
+      "isReference": "NotAReference"
+    },
+    "plane-4": {
+      "normal": "PlusZ",
+      "at": "0ft",
+      "isReference": "NotAReference"
+    }
+  },
+  "refLines": {},
+  "dimensions": {
+    "escutcheon-thickness": {
+      "between": [
+        "plane-2",
+        "Ref. Level"
+      ],
+      "label": "Escutcheon Thickness",
+      "view": "Front"
+    },
+    "protrusion": {
+      "between": [
+        "plane-3",
+        "Ref. Level"
+      ],
+      "label": "Protrusion",
+      "view": "Front"
+    },
+    "overall-length": {
+      "between": [
+        "plane-3",
+        "plane-1"
+      ],
+      "label": "Overall Length",
+      "view": "Front"
+    },
+    "cel": {
+      "between": [
+        "plane-4",
+        "plane-1"
+      ],
+      "label": "CEL",
+      "view": "Front"
+    }
+  },
+  "forms": {},
+  "nested": {},
+  "arrays": {},
+  "connectors": {
+    "pipe-fireprotectiondry": {
+      "domain": "Pipe",
+      "systemType": "FireProtectionDry",
+      "on": "Ref. Level",
+      "at": [
+        "Center (Front/Back)",
+        "Center (Left/Right)"
+      ],
+      "shape": "Round",
+      "diameter": "0.041666667ft",
+      "flowDirection": "In",
+      "flowConfiguration": "Preset",
+      "lossMethod": "SpecificLoss",
+      "associate": {
+        "Flow": "param:Flow",
+        "Pressure Drop": "param:Pressure Drop"
+      }
+    }
+  },
+  "details": {},
+  "settings": {
+    "alwaysVertical": false,
+    "partType": "Normal",
+    "omniClass": "23.65.70.17.11.24"
+  },
+  "lookupTables": {},
+  "coverage": {
+    "parameters": "Read",
+    "types": "Read",
+    "datums": "Read",
+    "refPlanes": "Partial",
+    "refLines": "Read",
+    "dimensions": "Read",
+    "forms": "Partial",
+    "nested": "Read",
+    "arrays": "Read",
+    "connectors": "Read",
+    "details": "Read",
+    "settings": "Read",
+    "lookupTables": "Read",
+    "roomCalculationPoint": "Read"
+  }
+}

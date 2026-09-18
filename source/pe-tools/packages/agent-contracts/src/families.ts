@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { draftProposals } from "./draft.ts";
 import type { RouteStateSpec } from "./route-state.ts";
 
 export const diagnosticSchema = z.object({
@@ -80,6 +81,11 @@ const appliedScopeSchema = z.object({
   placementScope: z.enum(["AllLoaded", "PlacedOnly", "UnplacedOnly"]),
 });
 export type AppliedFilter = z.infer<typeof appliedScopeSchema>;
+/**
+ * One page of families a scope may resolve to. The band's matrix and the host's plan both read the
+ * scope at this budget, so they count the same families; a larger scope refuses rather than pages.
+ */
+export const FAMILY_SCOPE_LIMIT = 5000;
 
 /**
  * One proposed cell value on the `/families` audit: a family type's parameter cell and the value
@@ -107,14 +113,7 @@ export type FamilyCellEdit = z.infer<typeof familyCellEditSchema>;
 const familiesDocumentSchema = z.object({
   scope: appliedScopeSchema.nullable().default(null),
   excludedIds: z.array(z.number()).default([]),
-  /** Standing proposals, one per cell (agent-writable). */
-  edits: z.array(familyCellEditSchema).default([]),
-  /**
-   * What a person accepted, value and author as accepted (human-only, off the agent mask). Plan
-   * reads this list and nothing else. It carries the value, not a key, so a proposal Pea changes
-   * after the accept stands as a counter-proposal instead of riding the old approval.
-   */
-  accepted: z.array(familyCellEditSchema).default([]),
+  ...draftProposals(familyCellEditSchema),
   executionOptions: familyExecutionOptionsSchema.optional(),
 });
 export type FamiliesRouteDocument = z.infer<typeof familiesDocumentSchema>;

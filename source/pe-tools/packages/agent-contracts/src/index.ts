@@ -3,6 +3,7 @@ export * from "./route-state.ts";
 export * from "./route-doc.ts";
 export * from "./reading.ts";
 export * from "./trichotomy.ts";
+export * from "./draft.ts";
 export * from "./family.ts";
 export * from "./families.ts";
 export * from "./takeoffs.ts";

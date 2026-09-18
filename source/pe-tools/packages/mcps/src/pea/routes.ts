@@ -8,6 +8,7 @@ import type { z } from "zod";
 import type { RouteStateCommandHandlers, RouteStateSpec } from "@pe/agent-contracts";
 import {
   familiesRouteState,
+  familyDraftRouteState,
   parameterLinksRouteState,
   scheduleGridRouteState,
   settingsRouteState,
@@ -39,6 +40,7 @@ export function createRouteRegistrations(
     // Families and Parameter Links carry no route commands: their readings are host reads and
     // their applies are semantic actions, so neither can write into authored Work.
     entry(familiesRouteState, {}),
+    entry(familyDraftRouteState, {}),
     entry(parameterLinksRouteState, {}),
     entry(settingsRouteState, createSettingsCommandHandlers(options)),
     entry(scheduleGridRouteState, {}),

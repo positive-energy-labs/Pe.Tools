@@ -790,22 +790,11 @@ internal sealed class FamilyModelCapturer {
         return result;
     }
 
-    private static ConnectorSystemType? SystemTypeOf(MEPSystemClassification classification) {
-        var name = classification switch {
-            MEPSystemClassification.SupplyHydronic => "HydronicSupply",
-            MEPSystemClassification.ReturnHydronic => "HydronicReturn",
-            MEPSystemClassification.FireProtectWet => "FireProtectionWet",
-            MEPSystemClassification.FireProtectDry => "FireProtectionDry",
-            MEPSystemClassification.FireProtectPreaction => "FireProtectionPreAction",
-            MEPSystemClassification.FireProtectOther => "FireProtectionOther",
-            _ => classification.ToString()
-        };
-        return Enum.TryParse<ConnectorSystemType>(name, out var v) ? v : null;
-    }
+    private static ConnectorSystemType? SystemTypeOf(MEPSystemClassification classification) =>
+        ConnectorRevitNames.FromRevitName<ConnectorSystemType>(classification.ToString());
 
     private static TOut? EnumOf<TIn, TOut>(Parameter? p) where TIn : struct, Enum where TOut : struct, Enum =>
-        p == null || p.StorageType != StorageType.Integer ? null
-        : Enum.TryParse<TOut>(((TIn)(object)p.AsInteger()).ToString(), out var v) ? v : null;
+        p == null || p.StorageType != StorageType.Integer ? null : ConnectorRevitNames.FromRevitName<TOut>(((TIn)(object)p.AsInteger()).ToString());
 
     private FamilyInstance? NestedHostOf(ConnectorElement connector) => this._nestedSlug.Keys
         .Select(id => this._d.GetElement(id))

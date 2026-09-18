@@ -9,6 +9,7 @@ import { useDocumentLadder } from "./situation";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { createMemoryHistory, createRoute, createRouter } from "@tanstack/react-router";
 import { afterEach, expect, test, vi } from "vite-plus/test";
+import { address } from "@pe/agent-contracts";
 import { peReadings } from "#/readings";
 import { Route as rootRoute } from "#/routes/__root";
 import { familySearch } from "#/routes/family";
@@ -25,6 +26,7 @@ vi.mock("./shell", async (original) => ({
 const choose = url.choose;
 
 const A = { session: "A", openId: "doc-A" };
+const TOWER = address("C:/demo/tower.rvt");
 const B = { session: "A", openId: "doc-B" };
 const inventory = {
   sessions: [
@@ -34,7 +36,7 @@ const inventory = {
       sdkSessionId: "rvt-1",
       openDocumentCount: 2,
       openDocuments: [
-        { openId: "doc-A", title: "Tower", address: null, isFamilyDocument: false },
+        { openId: "doc-A", title: "Tower", address: TOWER, isFamilyDocument: false },
         { openId: "doc-B", title: "Annex", address: null, isFamilyDocument: false },
       ],
     },
@@ -98,6 +100,8 @@ test("/pods → /family carries the thread, so /family reads the same document",
   answer("thread-head", { defaultTarget: { kind: "open", ref: A }, revision: 3 });
   expect(requests).toContainEqual({ kind: "thread-head", thread: "T" });
   expect(result.current.resolution).toMatchObject({ kind: "resolved", target: { ref: A } });
+  // The /family draft keys on the resolved target (w9-draft); the head is what resolves it.
+  expect(result.current.work.key).toMatchObject({ route: "family", target: TOWER });
 });
 
 test("/chat → /schedules carries the thread's document", () => {

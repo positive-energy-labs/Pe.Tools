@@ -1,3 +1,5 @@
+using Autodesk.Revit.UI.Events;
+using Pe.Revit.Extensions.ProjDocument;
 using Pe.Revit.Loader.Documents;
 using Pe.Shared.HostContracts.Bridge;
 using Pe.Shared.HostContracts.Protocol;
@@ -74,6 +76,16 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
         if (this._isReplaying)
             return;
         _ = this.PublishCurrentAsync(DocumentInvalidationReason.Opened);
+        // Revit titles an EditFamily document after DocumentOpened (w8-revit 2c), and nothing else
+        // fires for it. Every open republishes once, on the next idle; the snapshot reads titles live.
+        var uiApplication = RevitUiSession.CurrentUIApplication;
+        EventHandler<IdlingEventArgs>? republish = null;
+        republish = (_, _) => {
+            uiApplication.Idling -= republish;
+            if (!this._disposed)
+                _ = this.PublishCurrentAsync(DocumentInvalidationReason.Changed);
+        };
+        uiApplication.Idling += republish;
     }
 
     private void OnClosed(DocumentKey key) =>

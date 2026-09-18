@@ -89,7 +89,7 @@ public sealed class FamilyProjectIdentityTests {
             var replacement = project.GetElement(applied.FamilyId.ToElementId()) as Family;
             Assert.That(replacement, Is.Not.Null, "Receipt must identify the committed replacement, not an invalid pre-load Family.");
             Assert.That(applied.FamilyName, Is.EqualTo("PE Identity"));
-            var repeat = FamilyFoundryBridgeOps.PlanFamilies(patch, project, [applied.FamilyId]).Families.Single();
+            var repeat = FamilyFoundryBridgeOps.PlanFamilies(patch, project, [applied.LoadedFamilyId!.Value]).Families.Single();
             Assert.That(repeat.Changes, Is.Empty);
             Assert.That(repeat.Refusals, Is.Empty);
         } finally {
@@ -174,11 +174,12 @@ public sealed class FamilyProjectIdentityTests {
             var tablePatch = """{"patch":{"lookupTables":{"Coverage Probe":{"csv":",Key##number##general,Value##number##general\nrow,1,2\n"}}}}""";
             var tablePlan = FamilyFoundryBridgeOps.PlanFamilies(tablePatch, project, [family.Id.Value()]).Families.Single();
             Assert.That(tablePlan.Changes.Single(change => change.Key == "Coverage Probe").Kind, Is.EqualTo("Unverifiable"));
+            Assert.That(tablePlan.Refusals.Single().Code, Is.EqualTo(FamilyModelDiagnosticCodes.Unverifiable), "An unverifiable row refuses at plan, not at apply.");
             var repeat = FamilyFoundryBridgeOps.PlanFamilies(patch, project, [family.Id.Value()]).Families.Single();
             Assert.That(repeat.PlanHash, Is.EqualTo(plan.PlanHash), "Transient EditFamily reference GUIDs must not change the reviewed intent.");
             var applied = FamilyFoundryBridgeOps.ApplyFamilies(patch, new Dictionary<long, string> { [family.Id.Value()] = plan.PlanHash }, project, null, null, Path.Combine(Path.GetTempPath(), "Pe.Tools", "family-apply-test", Guid.NewGuid().ToString("N"))).Receipts.Single();
             Assert.That(applied.Success && applied.Converged, Is.True, applied.Error);
-            var final = FamilyFoundryBridgeOps.PlanFamilies(patch, project, [applied.FamilyId]).Families.Single();
+            var final = FamilyFoundryBridgeOps.PlanFamilies(patch, project, [applied.LoadedFamilyId!.Value]).Families.Single();
             Assert.That(final.Changes, Is.Empty);
         } finally { project.Close(false); }
     }

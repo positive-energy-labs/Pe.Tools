@@ -27,6 +27,7 @@ import {
   type SettingsRouteDocument,
   type FamilyCapture,
   type AppliedFilter,
+  FAMILY_SCOPE_LIMIT,
 } from "@pe/agent-contracts";
 import type {
   PodMemberSaveRequest,
@@ -34,6 +35,7 @@ import type {
   PodMemberWritten,
 } from "@pe/host-contracts/operation-types";
 import type {
+  FamiliesApply,
   FamiliesCapture,
   FamiliesPlan,
   FamilyCapture as NativeFamilyCapture,
@@ -110,6 +112,15 @@ const familyMember = (modelJson: string) => {
     content: `${JSON.stringify({ $schema: familyModelSchema(), ...model }, null, 2)}\n`,
     unmodeled,
   };
+};
+
+/** A draft saved as a member says what it is, whatever `$schema` it carried. */
+const draftContent = (spec: string) => {
+  const { $schema: _, ...model } = JSON.parse(spec.replace(/^﻿/, "")) as object & {
+    $schema?: string;
+  };
+  return `${JSON.stringify({ $schema: familyModelSchema(), ...model }, null, 2)}
+`;
 };
 
 export const runPods = <A, E>(
@@ -265,13 +276,28 @@ type Prepared =
       process: NativeProcess;
       nativeKey: string;
       input: unknown;
-      pod: string;
+      /** Null: a live read that files nothing. */
+      pod: string | null;
       path: string | null;
+      /** The draft's text to file instead of what Revit said. */
+      spec: string | null;
       at: string;
     };
 
-/** ponytail: one catalog page; a larger scope refuses rather than paging. */
-const FAMILY_SCOPE_LIMIT = 5000;
+/**
+ * An apply where no family succeeded changed nothing (each failure rolls back whole), so it settles `failed` with the
+ * receipt's one-sentence reason; one success is a run that changed Revit and settles `succeeded` with per-family receipts.
+ * `notDispatched` is the journal's only settled-failure shape; here it means "no effect", not "never sent".
+ */
+const appliedSomething = (result: unknown) => {
+  const applied = result as FamiliesApply.Res.Response;
+  if (applied.receipts.some((receipt) => receipt.success)) return;
+  if (applied.diagnostics.some((diagnostic) => diagnostic.code === "Cancelled")) return;
+  throw new BridgeError(applied.reason ?? "No family was applied", 422, {
+    notDispatched: true,
+    result,
+  });
+};
 
 export async function admitFamilyAction(
   raw: unknown,
@@ -334,15 +360,21 @@ export async function admitFamilyAction(
       }
       const { process } = await lifetime(bridge, target!, documentKind(key), deps);
       if (key === "family.capture" || key === "families.capture") {
-        const input = admission.input as { pod: string; path?: string; familyIds?: number[] };
-        await runPods(deps, podFolder(input.pod, pods));
+        const input = admission.input as {
+          pod?: string;
+          path?: string;
+          spec?: string;
+          familyIds?: number[];
+        };
+        if (input.pod) await runPods(deps, podFolder(input.pod, pods));
         return {
           kind: "capture",
           process,
           nativeKey: key,
           input: key === "families.capture" ? { familyIds: input.familyIds } : {},
-          pod: input.pod,
+          pod: input.pod ?? null,
           path: input.path ?? null,
+          spec: input.spec ?? null,
           at: new Date().toISOString(),
         };
       }
@@ -458,7 +490,10 @@ export async function admitFamilyAction(
       const native = (nativeKey: string, input: unknown, process: NativeProcess) =>
         execution.step("native", nativeKey, input, async (id) => {
           await current(bridge, target!, documentKind(key), nativeProcessSchema.parse(process));
-          return invoke(bridge, target!, nativeKey, input, id);
+          const result = await invoke(bridge, target!, nativeKey, input, id);
+          if (nativeKey === "family.apply" || nativeKey === "families.apply")
+            appliedSomething(result);
+          return result;
         });
       const resolveFamilyIds = async (scope: AppliedFilter, process: NativeProcess) => {
         const catalog = (await native(
@@ -491,6 +526,8 @@ export async function admitFamilyAction(
                 {
                   familyId: 0,
                   ...familyMember((captured as NativeFamilyCapture.Res.Response).modelJson),
+                  // Saving a draft files the draft's text; the run still holds what Revit said.
+                  ...(prepared.spec ? { content: draftContent(prepared.spec) } : {}),
                   path:
                     prepared.path ??
                     capturePath(
@@ -500,12 +537,20 @@ export async function admitFamilyAction(
                     ),
                 },
               ];
+        // No pod: the live read the audit drafts from. Nothing is filed.
+        if (!prepared.pod)
+          return {
+            executionContext: target,
+            spec: specs[0]!.content,
+            evidence: { ...(captured as object), origin: "capture", rfaPath: null, run: null },
+          };
+        const pod = prepared.pod;
         const members: PodMemberWritten[] = [];
         // Each captured member gets its own run, so `/pods` lists it against that member like any
         // other run; the run holds the unmodeled facts the member cannot carry.
         const runs = new Map<number, string>();
         for (const { familyId, content, unmodeled, path } of specs) {
-          const request = { pod: prepared.pod, path, content };
+          const request = { pod, path, content };
           const written = (await execution.step("file", "pod.member.write", request, () =>
             writeMemberOnce(deps, request, pods),
           )) as PodMemberWritten;

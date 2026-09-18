@@ -186,16 +186,21 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
     };
     // The stop reaches the RUNNING OP: the host sends `op.cancel` outside its per-session gate,
     // so Revit stops at the operation's next checkpoint and the row settles `cancelled`. The wait
-    // is released either way, and a late result still lands as its own row.
+    // is released only once the host said yes; a refusal leaves the op running and says why.
+    // A late result still lands as its own row.
     const stopped = new Promise<"stopped">((resolve) => {
       stopper = () => {
         void cancelRunningAdmissions().then((settled) => {
           const refused = settled.flatMap((one) =>
-            one.status === "rejected" ? [String(one.reason)] : [],
+            one.status === "rejected"
+              ? [one.reason instanceof Error ? one.reason.message : String(one.reason)]
+              : [],
           );
-          if (refused.length) note("verb", label, `stop · ${refused.join("; ")}`, true);
+          if (!settled.length)
+            refused.push("Nothing this page started is running on the host yet.");
+          if (refused.length) note("verb", label, `stop refused · ${refused.join(" ")}`, true);
+          else resolve("stopped");
         });
-        resolve("stopped");
       };
     });
     try {

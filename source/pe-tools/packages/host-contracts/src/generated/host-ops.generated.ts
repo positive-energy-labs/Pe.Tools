@@ -217,15 +217,22 @@ export namespace FamiliesApply {
   }
   export namespace Res {
     /**
-     * `receiptPath` is the pod run's receipt.json; null when the request was refused before running.
+     * `receiptPath` is the pod run's receipt.json; null when the request was refused before running. `reason` is the
+     * receipt's: one sentence naming the first failure, null when none failed; the full text is the run's `failures.json`.
+     *
      */
     export interface Response {
       receipts: FamilyFoundryApplyReceipt[];
       diagnostics: FamilyFoundryDiagnostic[];
       receiptPath?: null | string;
+      reason?: null | string;
     }
     /**
-     * The receipt: outcomes per change, residue after re-capture, converged = residue 0 and no errors.
+     * The receipt: outcomes per change, residue after re-capture, converged = residue 0 and no errors. `familyId` is the
+     * id the apply was asked for (its `expectedPlanHashes` key). A reload gives the family a new element id, so
+     * `loadedFamilyId` is the id it has now, null when nothing reloaded; an element id names one load, and only the
+     * family name is stable across applies.
+     *
      */
     export interface FamilyFoundryApplyReceipt {
       familyId: number;
@@ -238,6 +245,7 @@ export namespace FamiliesApply {
       errors: string[];
       artifactDirectory?: null | string;
       observedParametersDigest?: null | string;
+      loadedFamilyId?: number | null;
     }
     /**
      * One change the reconciler would make: section + key is the address, kind is the verb.
@@ -444,15 +452,22 @@ export namespace FamilyApply {
   }
   export namespace Res {
     /**
-     * `receiptPath` is the pod run's receipt.json; null when the request was refused before running.
+     * `receiptPath` is the pod run's receipt.json; null when the request was refused before running. `reason` is the
+     * receipt's: one sentence naming the first failure, null when none failed; the full text is the run's `failures.json`.
+     *
      */
     export interface Response {
       receipts: FamilyFoundryApplyReceipt[];
       diagnostics: FamilyFoundryDiagnostic[];
       receiptPath?: null | string;
+      reason?: null | string;
     }
     /**
-     * The receipt: outcomes per change, residue after re-capture, converged = residue 0 and no errors.
+     * The receipt: outcomes per change, residue after re-capture, converged = residue 0 and no errors. `familyId` is the
+     * id the apply was asked for (its `expectedPlanHashes` key). A reload gives the family a new element id, so
+     * `loadedFamilyId` is the id it has now, null when nothing reloaded; an element id names one load, and only the
+     * family name is stable across applies.
+     *
      */
     export interface FamilyFoundryApplyReceipt {
       familyId: number;
@@ -465,6 +480,7 @@ export namespace FamilyApply {
       errors: string[];
       artifactDirectory?: null | string;
       observedParametersDigest?: null | string;
+      loadedFamilyId?: number | null;
     }
     /**
      * One change the reconciler would make: section + key is the address, kind is the verb.

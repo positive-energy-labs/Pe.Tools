@@ -14,7 +14,6 @@ const operations = [
   { key: "scripting.execute", intent: "Mutate", needs: "nothing" },
   { key: "pod.import", intent: "Mutate", needs: "nothing" },
   { key: "pod.export", intent: "Mutate", needs: "nothing" },
-  { key: "op.cancel", intent: "Mutate", needs: "nothing" },
 ];
 
 /**
@@ -93,7 +92,6 @@ test("every mutating pea script verb builds the exact /actions admission", async
     await pea.execute({ sourcePath: "src/SampleScript.cs" });
     await pea.importPod({ archivePath: "a.zip" });
     await pea.exportPod({ pod: "demo-pod", archivePath: "b.zip" });
-    await pea.cancel({ requestId: "request-1" });
     expect(
       host.submitted.map((admission) => {
         const { id: _id, ...rest } = admission as Record<string, unknown>;
@@ -132,17 +130,33 @@ test("every mutating pea script verb builds the exact /actions admission", async
         input: { pod: "demo-pod", archivePath: "b.zip" },
         bases: {},
       },
-      {
-        kind: "operation",
-        key: "op.cancel",
-        actor: "agent",
-        destination: { kind: "session", session: "session-catalog" },
-        input: { requestId: "request-1" },
-        bases: {},
-      },
     ]);
   } finally {
     host.restore();
+  }
+});
+
+test("pea script cancel reaches /call with no catalog read and no session lookup", async () => {
+  // w8-revit 4c: /ops is served on the Revit thread the running script holds, so any read of it
+  // times out exactly when a cancel is needed. Here every route but /call throws.
+  const seen: string[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    seen.push(`${init?.method ?? "GET"} ${new URL(url).pathname}`);
+    if (!url.endsWith("/call")) throw new Error(`cancel must not touch ${url}`);
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      key: "op.cancel",
+      request: { requestId: "running-script" },
+    });
+    return Response.json({ cancelled: true, requestId: "running-script", message: "signalled" });
+  }) as typeof fetch;
+  try {
+    const result = await tools().cancel({ requestId: "running-script" });
+    expect(result).toMatchObject({ cancelled: true, requestId: "running-script" });
+    expect(seen).toEqual(["POST /call"]);
+  } finally {
+    globalThis.fetch = original;
   }
 });
 
