@@ -195,6 +195,8 @@ export const writeCaptureRun = (
             podId: written.pod,
             memberPath: written.path,
             memberSha256: written.sha256,
+            // A native capture's input was Revit, not a member's bytes (PodRunOrigin).
+            origin: "Operation",
             operation,
             planHash: null,
             outcome: "Succeeded",

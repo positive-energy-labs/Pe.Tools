@@ -4,11 +4,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, expect, test } from "vite-plus/test";
 import { address, exportSeed, importSeed, type DemoSeed } from "@pe/agent-contracts";
-import { Context, Layer } from "effect";
+import { Context, Layer, Schema } from "effect";
 import { HttpEffect, HttpRouter } from "effect/unstable/http";
 import { RouteWorkspace, resourceResponse } from "@pe/runtime";
 import { readingKey, scheduleGridRouteState, settingsRouteState } from "@pe/agent-contracts";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
+import { podReceiptSchema } from "@pe/host-contracts/operation-types";
 import { demoRoutes, createDemoOwner, verifyCaptured } from "../src/demo-owner.ts";
 import { assertDemoPath } from "../src/demo-settings.ts";
 
@@ -235,7 +236,12 @@ test("demo Family capture files a new member and returns what the capture saw", 
   const runFile = (name: string) =>
     f.owner.settings.memberPath({ pod: result.member.pod, path: `${result.evidence.run}/${name}` });
   expect(JSON.parse(await readFile(await runFile("unmodeled.json"), "utf8"))).toHaveLength(2);
-  expect(JSON.parse(await readFile(await runFile("receipt.json"), "utf8"))).toMatchObject({
+  const receipt = JSON.parse(await readFile(await runFile("receipt.json"), "utf8"));
+  // A native capture runs as an operation: its input was Revit, not a member's bytes.
+  expect(Schema.decodeUnknownSync(podReceiptSchema)(receipt)).toMatchObject({
+    origin: "Operation",
+  });
+  expect(receipt).toMatchObject({
     memberPath: result.member.path,
     memberSha256: result.member.sha256,
     operation: "family.capture",
