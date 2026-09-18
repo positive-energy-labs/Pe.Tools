@@ -93,3 +93,22 @@ test("the Situation keeps both selectors reachable in its scrolling sentence", (
   expect(screen.getByLabelText("Pea proposals").textContent).toContain("waiting on you");
   expect(screen.getByTestId("page-log").textContent).toBe("sent");
 });
+
+test("the head lists live asks only; an expired ask is a transcript record, not a proposal", () => {
+  const chat = emptyChatState();
+  chat.expiredAsks = [{ messageId: "a1", toolCallId: "ask-old", toolName: "ask_user" }];
+  workbench.value = {
+    currentThreadId: "t",
+    threads: [],
+    chat,
+    openThread: vi.fn(),
+    resolveApproval: vi.fn(),
+  };
+  const view = render(
+    <ComposerHead
+      handle={{ demo: true, readings: { head: {}, inventory: {} }, log: [] } as never}
+    />,
+  );
+  expect(screen.queryByLabelText("Pea proposals")).toBe(null);
+  expect(view.container.querySelector("[data-tool-id='ask-old']")).toBe(null);
+});
