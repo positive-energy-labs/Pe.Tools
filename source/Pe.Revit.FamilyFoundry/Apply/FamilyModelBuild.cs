@@ -108,7 +108,7 @@ public static class FamilyModelBuild {
     public static FamilyReceipt? Reconcile(Document familyDocument, FamilyModel model, ExecutionOptions? options = null,
         string? outputFolder = null, LoadAndSaveOptions? save = null,
         Func<Document, FamilySharedParameterSource>? sharedSource = null) {
-        var op = new ReconcileFamily(model, sharedSource: sharedSource);
+        var op = new ReconcileFamily(model, sharedSource: sharedSource, executionOptions: options);
         using var processor = new OperationProcessor(familyDocument, options);
         var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(op), null, outputFolder, save);
         var (_, error) = contexts.Single().OperationLogs;
