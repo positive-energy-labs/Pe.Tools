@@ -302,6 +302,8 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
   const running = call.status === "in_progress";
   const diagram = succeededDiagram(call);
   const failed = call.status === "failed";
+  // ponytail: no cause word; `ExpiredAsk` does not carry one and the ruling forbids inventing it.
+  const expired = call.status === "expired";
   const tone = failed ? "failed" : running ? "active" : "";
   const result = failed ? (call.result ?? call.error) : deferred.result;
   const images = deferred.ref ? toolImages(result) : call.images;
@@ -337,6 +339,11 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
         className={tone}
       >
         <span>⌗ {toolTitle(call.title)}</span>
+        {expired ? (
+          <span className="t-small text-ink-2">
+            {" — expired, unanswered"}
+          </span>
+        ) : null}
         {call.target ? <code>{call.target}</code> : null}
         {revision !== undefined ? (
           <span className="t-small face-mono text-ink-2" data-testid="tool-revision">
@@ -349,12 +356,14 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
           </span>
         ) : null}
 
-        <span
-          className={`ml-auto t-small face-mono tracking-[0.02em] ${running ? "text-ink-2" : ""}`}
-          data-tone={failed ? "caution" : running ? undefined : "done"}
-        >
-          {failed ? "err" : running ? "run" : "ok"}
-        </span>
+        {expired ? null : (
+          <span
+            className={`ml-auto t-small face-mono tracking-[0.02em] ${running ? "text-ink-2" : ""}`}
+            data-tone={failed ? "caution" : running ? undefined : "done"}
+          >
+            {failed ? "err" : running ? "run" : "ok"}
+          </span>
+        )}
       </div>
       {deferred.ref ? (
         <span className="t-small text-ink-2" data-testid="deferred-result-summary">
