@@ -52,6 +52,17 @@ export function planOf(response: Response): { plan: TakeoffPlanImage } | { refus
   return { refusal: response.registrationRefusal };
 }
 
+/**
+ * The view whose plan image the Atlas draws for `level`: a chosen view on that level, in the order
+ * the person chose them. Two lanes can share a level label; the label never picks the view (23).
+ */
+export const planView = (
+  lanes: readonly { view: string; label: string }[],
+  views: readonly string[],
+  level: string,
+): string | undefined =>
+  views.find((view) => lanes.some((lane) => lane.view === view && lane.label === level));
+
 export function usePlanImage(resolution: TargetResolution, view: string | undefined) {
   const document =
     resolution.kind === "resolved" && resolution.target.kind === "document"

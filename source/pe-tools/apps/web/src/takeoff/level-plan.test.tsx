@@ -4,7 +4,7 @@ import { afterEach, expect, test } from "vite-plus/test";
 
 import { fitFrame, type Point2 } from "#/lib/affine-frame";
 import { LevelPlan, PlanImageLayer, type TakeoffPlanImage } from "#/takeoff/level-plan";
-import { PLAN_REFUSAL, planOf } from "#/takeoff/plan-image";
+import { PLAN_REFUSAL, planOf, planView } from "#/takeoff/plan-image";
 import { mockModel } from "#/takeoff/proto/mock";
 import { projectMockModel } from "#/takeoff/proto/project-model";
 
@@ -129,4 +129,19 @@ test("each registration refusal is said by name in the plan area, and no image i
 test("a response that pairs neither half, or names no reason, is refused, not drawn as nothing", () => {
   expect(() => planOf(response({ registration: null, imageUrl: "/view-image/x.png" }))).toThrow();
   expect(() => planOf(response({ registration: null, imageUrl: null }))).toThrow();
+});
+
+/* ── 23: the image is the chosen view's own, never the first lane with the level's label ── */
+
+test("two lanes on one level: the plan image follows the chosen view, not the first label match", () => {
+  const lanes = [
+    { view: "Mechanical Plan - Lower Level", label: "Level 1/Main Level" },
+    { view: "Mechanical Zoning Plan - Lower Level", label: "Level 1/Main Level" },
+  ];
+  expect(planView(lanes, ["Mechanical Zoning Plan - Lower Level"], "Level 1/Main Level")).toBe(
+    "Mechanical Zoning Plan - Lower Level",
+  );
+  // A level with no chosen view on it draws no image: a label never picks a view.
+  expect(planView(lanes, [], "Level 1/Main Level")).toBeUndefined();
+  expect(planView(lanes, ["Other"], "Level 1/Main Level")).toBeUndefined();
 });
