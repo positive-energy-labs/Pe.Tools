@@ -1,8 +1,6 @@
 import { useMemo } from "react";
 import { Key } from "#/components/anatomy";
 import { EmptyState } from "#/components/lang/empty";
-import { OutcomeLine } from "#/components/lang/outcome";
-import { PLAN_REFUSAL, type PlanRefusal } from "#/takeoff/plan-image";
 import { token } from "#/lib/token";
 import {
   contentViewport,
@@ -58,8 +56,6 @@ export function PlanImageLayer({ plan, frame }: { plan: TakeoffPlanImage; frame:
 
 export function LevelPlan({
   plan,
-  planRefusal,
-  planError,
   zones,
   stageFilter,
   selectedKey,
@@ -72,10 +68,6 @@ export function LevelPlan({
 }: {
   /** Absent until a plan image reaches the route; the zones draw alone. */
   plan?: TakeoffPlanImage | null;
-  /** The host's named reason the view has no registered image; said, never drawn as nothing. */
-  planRefusal?: PlanRefusal | null;
-  /** The view-image read itself failed. */
-  planError?: string | null;
   zones: ModelZone[];
   stageFilter: Phase | null;
   selectedKey: string | null;
@@ -126,15 +118,6 @@ export function LevelPlan({
 
   return (
     <div className="flex size-full min-h-0 flex-col">
-      {planRefusal ? (
-        <OutcomeLine
-          kind="refused"
-          label={`no plan image · ${planRefusal}`}
-          says={PLAN_REFUSAL[planRefusal]}
-        />
-      ) : planError ? (
-        <OutcomeLine kind="error" label="plan image unread" says={planError} />
-      ) : null}
       <svg
         viewBox={`0 0 ${viewport.width} ${viewport.height}`}
         preserveAspectRatio="xMidYMid meet"

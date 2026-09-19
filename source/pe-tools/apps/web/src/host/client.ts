@@ -10,9 +10,6 @@ import {
 } from "@pe/host-contracts/operation-types";
 export type HostCallOptions = HostSessionScope & { signal?: AbortSignal; baseURL?: string };
 
-/** A host-relative path on the base host calls use (the page's origin, proxied in dev). */
-export const hostUrl = (path: string, baseURL = "") => `${baseURL}${path}`;
-
 /**
  * The typed client: POST { key, request } as JSON, keys constrained to the
  * checked-in typegen output + TS-only ops. Errors arrive as problem-JSON with
@@ -50,7 +47,7 @@ async function postCall(
   // queue-provenance §1: `web:<route>` — the current path is the route id at call time.
   headers[HOST_RPC_ORIGIN_HEADER] = `web:${window.location.pathname}`;
 
-  const response = await fetch(hostUrl("/call", options?.baseURL), {
+  const response = await fetch(`${options?.baseURL ?? ""}/call`, {
     method: "POST",
     headers,
     body: JSON.stringify({ key, request }),
