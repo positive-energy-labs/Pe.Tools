@@ -411,21 +411,40 @@ export async function admitScheduleAction(
       // The readback rebinds the Work, as the person's re-read does: a cell refused on moved evidence
       // comes back stale with what was reviewed (`was`) beside what Revit holds now. No readback, no
       // rebind, nor does an unresolved push (its resume publishes against the original basis); a
-      // person's re-read that moved the basis meanwhile is the newer rebind and stands.
-      for (let attempt = 0; readback && !outcome.unresolved && attempt < 4; attempt++) {
-        const view = await work.read(base.key, scheduleGridRouteState.route);
-        const latest = view && scheduleGridDocumentSchema.parse(view.doc);
-        if (!latest || latest.basis?.captureId !== document.basis!.captureId) break;
-        const patches = rebindScheduleWork(latest, reading, readback);
-        if (!patches.length) break;
-        const rebound = await work.apply(
-          base.key,
-          scheduleGridRouteState.route,
-          "human",
-          patches,
-          view.revision,
-        );
-        if (rebound.ok) break;
+      // person's re-read that moved the basis meanwhile is the newer rebind and stands. A
+      // post-publication convenience: nothing it throws changes the push's outcome (`rebindError`).
+      let rebind: "rebound" | "contended" | `skipped:${string}` = !readback
+          ? "skipped:no-readback"
+          : outcome.unresolved
+            ? "skipped:unresolved"
+            : "contended",
+        rebindError: string | undefined;
+      try {
+        for (let attempt = 0; rebind === "contended" && attempt < 4; attempt++) {
+          const view = await work.read(base.key, scheduleGridRouteState.route);
+          const latest = view && scheduleGridDocumentSchema.parse(view.doc);
+          if (!latest || latest.basis?.captureId !== document.basis!.captureId) {
+            rebind = "skipped:basis-moved";
+            break;
+          }
+          const patches = rebindScheduleWork(latest, reading, readback!);
+          if (!patches.length) rebind = "skipped:unchanged";
+          else if (
+            (
+              await work.apply(
+                base.key,
+                scheduleGridRouteState.route,
+                "human",
+                patches,
+                view.revision,
+              )
+            ).ok
+          )
+            rebind = "rebound";
+        }
+      } catch (error) {
+        rebind = "skipped:error";
+        rebindError = String(error);
       }
       const result = {
         applied: outcome.successes.length,
@@ -435,6 +454,8 @@ export async function admitScheduleAction(
         publication,
         readback,
         readbackError,
+        rebind,
+        rebindError,
       };
       if (outcome.unresolved)
         throw new ActionIncomplete(

@@ -22,6 +22,7 @@ test("actual HTTP Work + journal consumes fanout only after positive acknowledgm
     result: {
       applied: 1,
       failures: [],
+      rebind: "rebound",
       readback: { snapshot: { rows: [{ values: ["P-1", "100 VA"] }] } },
       // No pod bound: the run receipt lives in this action record (host state), not in a pod.
       run: null,
@@ -303,7 +304,11 @@ test("readback failure is explicit and original resume performs only a read, nev
   const result = await f.submit();
   expect(result).toMatchObject({
     state: "incomplete",
-    result: { applied: 1, readbackError: expect.stringContaining("readback unavailable") },
+    result: {
+      applied: 1,
+      readbackError: expect.stringContaining("readback unavailable"),
+      rebind: "skipped:no-readback",
+    },
   });
   expect((await f.post("/actions", await f.admission())).status).toBe(409);
   f.failReadback(false);
@@ -552,6 +557,7 @@ test("ask A: a push refused on moved evidence rebinds on its readback; the refus
       applied: 1,
       // The native's code rides through when it supplies one; the host never parses the sentence.
       failures: [{ key: "1::2", code: "target-evidence-stale" }],
+      rebind: "rebound",
     },
   });
   const readback = (first.result as { readback: { id: string } }).readback;
@@ -583,4 +589,27 @@ test("ask A: a push refused on moved evidence rebinds on its readback; the refus
   doc = (await f.view()).doc;
   expect(doc.cells["1::2"]?.staged).toBeUndefined();
   expect(doc.basis).toEqual({ captureId: expect.any(String) });
+});
+
+test("a rebind that throws after publication never changes the push's outcome: Succeeded, receipt filed, rebindError recorded", async () => {
+  const f = await setup();
+  const apply = f.work.apply.bind(f.work);
+  let calls = 0;
+  // The first Work write is the publication; the second is the readback rebind, which throws.
+  const spy = vi.spyOn(f.work, "apply").mockImplementation(async (...args) => {
+    if (++calls === 2) throw Error("Work store I/O");
+    return apply(...args);
+  });
+  const result = await f.submit();
+  spy.mockRestore();
+  expect(result).toMatchObject({
+    state: "succeeded",
+    result: {
+      applied: 1,
+      rebind: "skipped:error",
+      rebindError: expect.stringContaining("Work store I/O"),
+      receipt: { operation: "schedule.grid.push", outcome: "Succeeded" },
+    },
+  });
+  expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined();
 });
