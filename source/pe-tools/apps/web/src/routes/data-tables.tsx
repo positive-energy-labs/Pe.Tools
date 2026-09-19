@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { createFileRoute } from "@tanstack/react-router";
-import { CheckCheck, List, Plus } from "lucide-react";
+import { CheckCheck, List as ListIcon, Plus } from "lucide-react";
 import { useState } from "react";
 import { AddressingBar } from "#/components/lang/addressing-bar";
 import { FactChip } from "#/components/lang/chip";
@@ -8,7 +8,7 @@ import { EmptyState } from "#/components/lang/empty";
 import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { ActionButton } from "#/components/lang/action-button";
-import { PickList } from "#/components/lang/pick-list";
+import { List } from "#/components/lang/list-popup";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { Surface } from "#/components/lang/surface";
 import { callHostRpc } from "#/host/client";
@@ -219,7 +219,7 @@ function DataTablesWorkspace({
               <>
                 <ActionButton
                   label="re-read"
-                  icon={List}
+                  icon={ListIcon}
                   busy={isFetching}
                   disabled={!onRefetch}
                   onClick={() => void onRefetch?.()}
@@ -238,23 +238,15 @@ function DataTablesWorkspace({
               </>
             }
           >
-            <PickList
-              items={tables.map((t) => ({
-                id: t.name,
-                label: t.name,
-                meta: `${t.columns.length}×${t.rows.length}`,
-                hint:
-                  t.placements.length > 0
-                    ? `on ${t.placements.map((p) => p.sheetNumber).join(", ")}`
-                    : undefined,
-              }))}
-              activeId={draft && !draft.isNew ? draft.name : null}
-              onPick={(id) => {
-                const handle = tables.find((t) => t.name === id);
-                if (handle) openTable(handle);
-              }}
-              placeholder="Filter tables…"
-              emptyNote={
+            <List
+              aria-label="data tables"
+              region="data tables"
+              items={tables}
+              keyOf={(t) => t.name}
+              labelOf={(t) => t.name}
+              filter="substring"
+              searchPlaceholder="Filter tables…"
+              empty={
                 isLoading ? (
                   <OutcomeLine kind="busy" label="reading data tables" />
                 ) : (
@@ -263,6 +255,16 @@ function DataTablesWorkspace({
                   </EmptyState>
                 )
               }
+              onPick={openTable}
+              row={(t) => ({
+                label: t.name,
+                active: draft !== null && !draft.isNew && draft.name === t.name,
+                meta: `${t.columns.length}×${t.rows.length}`,
+                title:
+                  t.placements.length > 0
+                    ? `on ${t.placements.map((p) => p.sheetNumber).join(", ")}`
+                    : undefined,
+              })}
             />
           </Pane>
         }

@@ -1,15 +1,16 @@
 import { ActionButton } from "#/components/lang/action-button";
+import { StateCell } from "#/components/lang/cell";
+import { EmptyState } from "#/components/lang/empty";
 import { Input } from "#/components/lang/input";
+import { CellListSelect } from "#/components/lang/list-popup";
+import type { Column } from "#/components/master-table/model";
+import { Table } from "#/components/master-table/table";
 import type { SchemaNodeRef } from "@pe/schema-core";
-import {
-  FieldChangeBadge,
-  FieldLabelRow,
-  FieldMessages,
-  FieldOptionsMetadata,
-} from "./field-metadata";
+import { FieldLabelRow, FieldMessages, FieldOptionsMetadata } from "./field-metadata";
 import {
   primitiveInputValue,
   type ResolvedFieldRendererProps,
+  useFieldChangeSummary,
   useFieldOptions,
   useSettingsField,
 } from "./shared";
@@ -109,33 +110,56 @@ function createRowTemplate(
   return nextRow;
 }
 
-function TableCellField({
+/** One cell: the table's editable cell, marked unsaved when it differs from the saved value and
+ * carrying its field's issues as the cell's refusal note. With suggestions it is the in-cell list,
+ * whose typed text is still a value (the list's create row). */
+function SchemaCell({
   path,
   value,
   onChange,
-  list,
+  suggestions,
 }: {
   path: string;
   value: unknown;
   onChange: (nextValue: string) => void;
-  list?: string;
+  suggestions?: readonly string[];
 }) {
   const field = useSettingsField(path);
+  const changed = useFieldChangeSummary(path) !== undefined;
+  const text = primitiveInputValue(field.value ?? value);
+  const issues = field.errors.map((issue) => issue.message).join("; ") || undefined;
+  const facts = {
+    value: text,
+    stage: changed ? ("staged" as const) : ("clean" as const),
+    stagedBy: "you" as const,
+    scale: "row" as const,
+  };
+  if (!suggestions)
+    return <StateCell {...facts} refused={issues} onCommit={(next) => onChange(next)} />;
   return (
-    <div className="space-y-1">
-      <Input
-        face="mono"
-        list={list}
-        value={primitiveInputValue(field.value ?? value)}
-        onChange={(event) => onChange(event.currentTarget.value)}
-      />
-      <div className="flex flex-wrap items-center gap-2">
-        <FieldChangeBadge path={path} compact />
-      </div>
-      <FieldMessages messages={field.errors} compact />
-    </div>
+    <CellListSelect<string>
+      aria-label={path}
+      region="table"
+      value={text}
+      display={<StateCell {...facts} />}
+      invalid={issues !== undefined}
+      title={issues}
+      items={suggestions}
+      keyOf={(suggestion) => suggestion}
+      labelOf={(suggestion) => suggestion}
+      row={(suggestion) => ({ label: suggestion })}
+      select="single"
+      selected={[text]}
+      filter="substring"
+      empty="no suggestions"
+      createLabel={(typed) => `use "${typed}"`}
+      onCreate={onChange}
+      onPick={onChange}
+    />
   );
 }
+
+type Line = { row: TableRow; index: number };
 
 export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRendererProps) {
   const field = useSettingsField(path);
@@ -161,7 +185,6 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
   const optionValues = primaryColumnOptions.items
     .map((item) => item.value.trim())
     .filter((value) => value.length > 0);
-  const datalistId = `${path.replaceAll(".", "-")}-table-primary-column-options`;
   const description = effectiveNodeRef.description();
   const defaultValue = effectiveNodeRef.hasExplicitDefault()
     ? effectiveNodeRef.explicitDefault()
@@ -237,96 +260,77 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
         path={path}
       />
       <FieldMessages messages={field.errors} />
-      <div className="overflow-auto">
-        <table className="min-w-full">
-          <thead className="text-left">
-            <tr>
-              {fixedColumns.map(([columnKey]) => (
-                <th key={columnKey} className="px-3 py-2">
-                  {columnKey}
-                </th>
-              ))}
-              {dynamicColumnKeys.map((columnKey) => (
-                <th key={columnKey} className="min-w-36 px-3 py-2">
-                  <div className="flex items-center gap-2">
-                    <Input
-                      face="mono"
-                      defaultValue={columnKey}
-                      onBlur={(event) => renameColumn(columnKey, event.currentTarget.value)}
-                    />
-                    <ActionButton
-                      label="remove"
-                      reason={`Drop the "${columnKey}" column from every row of this table. The change lives in the form until save writes it.`}
-                      onClick={() => removeColumn(columnKey)}
-                    />
-                  </div>
-                </th>
-              ))}
-              <th className="w-24 px-3 py-2 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={fixedColumns.length + dynamicColumnKeys.length + 1}
-                  className="px-3 py-6 text-center"
-                >
-                  No rows yet.
-                </td>
-              </tr>
-            ) : (
-              rows.map((row, rowIndex) => (
-                <tr key={`${path}.${rowIndex}`} className="align-top">
-                  {fixedColumns.map(([columnKey], fixedColumnIndex) => {
-                    const cellPath = `${path}.${rowIndex}.${columnKey}`;
-                    return (
-                      <td key={columnKey} className="px-3 py-2">
-                        <TableCellField
-                          path={cellPath}
-                          value={row[columnKey]}
-                          list={
-                            fixedColumnIndex === 0 && optionValues.length > 0
-                              ? datalistId
-                              : undefined
-                          }
-                          onChange={(nextValue) => updateCell(rowIndex, columnKey, nextValue)}
-                        />
-                      </td>
-                    );
-                  })}
-                  {dynamicColumnKeys.map((columnKey) => {
-                    const cellPath = `${path}.${rowIndex}.${columnKey}`;
-                    return (
-                      <td key={columnKey} className="px-3 py-2">
-                        <TableCellField
-                          path={cellPath}
-                          value={row[columnKey] ?? missingValue}
-                          onChange={(nextValue) => updateCell(rowIndex, columnKey, nextValue)}
-                        />
-                      </td>
-                    );
-                  })}
-                  <td className="px-3 py-2 text-right">
-                    <ActionButton
-                      label="remove"
-                      reason={`Drop row ${rowIndex + 1} from this table. The change lives in the form until save writes it.`}
-                      onClick={() => field.remove(rowIndex)}
-                    />
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        {optionValues.length > 0 ? (
-          <datalist id={datalistId}>
-            {optionValues.map((value) => (
-              <option key={value} value={value} />
-            ))}
-          </datalist>
-        ) : null}
-      </div>
+      <Table<Line>
+        label={label}
+        rows={rows.map((row, index) => ({ row, index }))}
+        rowKey={(line) => `${path}.${line.index}`}
+        maxHeight="28rem"
+        empty={
+          <EmptyState story="scope" exit="add row below">
+            no rows yet
+          </EmptyState>
+        }
+        columns={[
+          ...fixedColumns.map(
+            ([columnKey], fixedColumnIndex): Column<Line> => ({
+              key: `fixed:${columnKey}`,
+              label: columnKey,
+              cell: ({ row, index }) => (
+                <SchemaCell
+                  path={`${path}.${index}.${columnKey}`}
+                  value={row[columnKey]}
+                  suggestions={
+                    fixedColumnIndex === 0 && optionValues.length > 0 ? optionValues : undefined
+                  }
+                  onChange={(nextValue) => updateCell(index, columnKey, nextValue)}
+                />
+              ),
+            }),
+          ),
+          ...dynamicColumnKeys.map(
+            (columnKey): Column<Line> => ({
+              key: `dynamic:${columnKey}`,
+              label: columnKey,
+              width: "min-w-36",
+              header: (
+                <span className="flex items-center gap-2 normal-case">
+                  <Input
+                    face="mono"
+                    aria-label={`${columnKey} column name`}
+                    defaultValue={columnKey}
+                    onBlur={(event) => renameColumn(columnKey, event.currentTarget.value)}
+                  />
+                  <ActionButton
+                    label="remove"
+                    reason={`Drop the "${columnKey}" column from every row of this table. The change lives in the form until save writes it.`}
+                    onClick={() => removeColumn(columnKey)}
+                  />
+                </span>
+              ),
+              cell: ({ row, index }) => (
+                <SchemaCell
+                  path={`${path}.${index}.${columnKey}`}
+                  value={row[columnKey] ?? missingValue}
+                  onChange={(nextValue) => updateCell(index, columnKey, nextValue)}
+                />
+              ),
+            }),
+          ),
+          {
+            key: "actions",
+            label: "Actions",
+            right: true,
+            width: "w-24",
+            cell: ({ index }) => (
+              <ActionButton
+                label="remove"
+                reason={`Drop row ${index + 1} from this table. The change lives in the form until save writes it.`}
+                onClick={() => field.remove(index)}
+              />
+            ),
+          },
+        ]}
+      />
       <div className="flex items-center justify-between gap-3">
         <span className="">
           {primaryColumnOptions.isLoading

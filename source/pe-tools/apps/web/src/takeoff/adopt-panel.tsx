@@ -1,7 +1,10 @@
+import { Fragment, type ComponentProps } from "react";
+import { showAdopt, TakeoffProposalRows } from "#/takeoff/proposals";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { ActionButton } from "#/components/lang/action-button";
+import { Input } from "#/components/lang/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "#/components/lang/dialog";
 import { fmtNum } from "#/components/master-table/model";
 import { type CandidateRegion } from "#/takeoff/model";
@@ -13,6 +16,27 @@ export interface AdoptRow {
   checked: boolean;
   name: string;
   systemTag: string;
+}
+
+/** A text field that writes Work once, on blur or Enter, never per keystroke (29). */
+function CommitInput({
+  value,
+  onCommit,
+  ...props
+}: Omit<ComponentProps<typeof Input>, "value" | "defaultValue" | "onChange"> & {
+  value: string;
+  onCommit: (next: string) => void;
+}) {
+  return (
+    <Input
+      {...props}
+      // Remounts on a landed value, so Work stays the one source between edits.
+      key={value}
+      defaultValue={value}
+      onBlur={(e) => e.target.value !== value && onCommit(e.target.value)}
+      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+    />
+  );
 }
 
 export function AdoptRegions({ store }: { store: TakeoffsController }) {
@@ -48,60 +72,86 @@ export function AdoptRegions({ store }: { store: TakeoffsController }) {
       )}
       <div className="mt-2 max-h-96 overflow-y-auto">
         {(listed ?? []).map((r) => (
-          <div
-            key={`${r.view}:${r.region.elementId}`}
-            className="flex items-center gap-2 px-2 py-1"
-          >
-            <input
-              type="checkbox"
-              aria-label={`Select ${r.name} in ${r.view}`}
-              checked={r.checked}
-              onChange={(e) => patchRow(r.view, r.region.elementId, { checked: e.target.checked })}
-            />
-            <span className="w-28" title={r.view}>
-              {r.view}
-            </span>
-            <span className="size-2.5" style={{ backgroundColor: `rgb(${r.region.color})` }} />
-            <span className="w-24" title={r.region.typeName}>
-              {r.region.typeName}
-            </span>
-            <span className="w-16">{fmtNum(r.region.sqft, 0)} sf</span>
-            <input
-              aria-label={`Zone name for region ${r.region.elementId} in ${r.view}`}
-              value={r.name}
-              placeholder="zone name"
-              onChange={(e) => patchRow(r.view, r.region.elementId, { name: e.target.value })}
-              className="h-6 min-w-0 flex-1 px-1.5"
-            />
-            <input
-              aria-label={`System tag for region ${r.region.elementId} in ${r.view}`}
-              value={r.systemTag}
-              placeholder="system tag"
-              onChange={(e) => patchRow(r.view, r.region.elementId, { systemTag: e.target.value })}
-              className="h-6 w-24 px-1.5"
-            />
-            {r.region.role === "zoning-region" && (
-              <FactChip
-                tone="done"
-                title="This region is already stamped as a Zoning Region. Re-adopting edits its name and system tag in place."
-              >
-                stamped
-              </FactChip>
-            )}
-          </div>
+          <Fragment key={`${r.view}:${r.region.elementId}`}>
+            <div className="flex items-center gap-2 px-2 py-1">
+              <Input
+                type="checkbox"
+                aria-label={`Select ${r.name} in ${r.view}`}
+                checked={r.checked}
+                onChange={(e) =>
+                  patchRow(r.view, r.region.elementId, { checked: e.target.checked })
+                }
+              />
+              <span className="w-28" title={r.view}>
+                {r.view}
+              </span>
+              <span className="size-2.5" style={{ backgroundColor: `rgb(${r.region.color})` }} />
+              <span className="w-24" title={r.region.typeName}>
+                {r.region.typeName}
+              </span>
+              <span className="w-16">{fmtNum(r.region.sqft, 0)} sf</span>
+              <div className="min-w-0 flex-1">
+                <CommitInput
+                  aria-label={`Zone name for region ${r.region.elementId} in ${r.view}`}
+                  value={r.name}
+                  placeholder="zone name"
+                  onCommit={(name) => patchRow(r.view, r.region.elementId, { name })}
+                />
+              </div>
+              <div className="w-24">
+                <CommitInput
+                  aria-label={`System tag for region ${r.region.elementId} in ${r.view}`}
+                  value={r.systemTag}
+                  placeholder="system tag"
+                  onCommit={(systemTag) => patchRow(r.view, r.region.elementId, { systemTag })}
+                />
+              </div>
+              {r.region.role === "zoning-region" && (
+                <FactChip
+                  tone="done"
+                  title="This region is already stamped as a Zoning Region. Re-adopting edits its name and system tag in place."
+                >
+                  stamped
+                </FactChip>
+              )}
+            </div>
+            {/* Pea's proposed choice for this candidate, in the band grammar. */}
+            <div className="px-2">
+              <TakeoffProposalRows
+                cells={store.cells.adopt}
+                wire={store.wires.adopt}
+                keep={(key) => key === `${r.view}:${r.region.elementId}`}
+                label={() => r.name || r.region.typeName}
+                show={showAdopt}
+              />
+            </div>
+          </Fragment>
         ))}
-        {listed === null && (
+        {!views.length ? (
           <div className="px-2 py-3">
-            <OutcomeLine kind="busy" label="reading regions" says={views.join(", ")} />
-          </div>
-        )}
-        {listed !== null && listed.length === 0 && (
-          <div className="px-2 py-3">
-            <EmptyState story="scope" exit="draw the zones in Revit first, or bind other views">
-              no filled regions — these views carry no designer-drawn regions to adopt
+            <EmptyState story="scope" exit="choose views in the sentence above">
+              no views chosen — candidates are read per plan view
             </EmptyState>
           </div>
-        )}
+        ) : store.candidatesIssue ? (
+          <div className="px-2 py-3">
+            <OutcomeLine
+              kind="error"
+              label="candidates unread"
+              says={store.candidatesIssue.message}
+            />
+          </div>
+        ) : store.candidatesReading || listed === null ? (
+          <div className="px-2 py-3">
+            <OutcomeLine kind="busy" label="reading candidates" says={views.join(", ")} />
+          </div>
+        ) : listed.length === 0 ? (
+          <div className="px-2 py-3">
+            <EmptyState story="scope" exit="or bind other views">
+              no filled regions on this plan: initialize the zoning plan in Revit
+            </EmptyState>
+          </div>
+        ) : null}
       </div>
       <div className="mt-2 flex items-center gap-2">
         <ActionButton

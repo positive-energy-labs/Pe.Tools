@@ -2,7 +2,8 @@ import { Suspense } from "react";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { Press } from "#/components/lang/press";
-import { MasterTable } from "#/components/master-table/master-table";
+import { Table } from "#/components/master-table/table";
+import { TableFrame } from "#/components/master-table/table-frame";
 import { fmtNum } from "#/components/master-table/model";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { RoomPanelFromStore } from "#/takeoff/room-panel";
@@ -67,14 +68,13 @@ export function AtlasTable() {
             collapse: { collapsed: cursorRow == null, collapsedSize: 0 },
           }}
           start={
-            <MasterTable
+            <TableFrame
+              label="rooms in scope"
               rows={rows}
               columns={columns}
               rowKey={rowKey}
-              gutter={gutter}
-              scopeLabel="rooms in scope"
-              searchPlaceholder="room / type / zone…"
-              chips={chips}
+              state={tableState}
+              onStateChange={setTableState}
               summary={
                 <>
                   <span className="text-ink">
@@ -90,6 +90,8 @@ export function AtlasTable() {
                   )}
                 </>
               }
+              searchPlaceholder="room / type / zone…"
+              chips={chips}
               modes={
                 <Press
                   type="button"
@@ -106,32 +108,40 @@ export function AtlasTable() {
                   fields · {fieldsMode}
                 </Press>
               }
-              empty={
-                rows.length > 0 ? (
-                  <EmptyState story="filter" exit="clear a column filter or the search">
-                    the narrowing hid all {rows.length} rooms in scope
-                  </EmptyState>
-                ) : world.zones.some((z) => z.rooms.length > 0) ? (
-                  <EmptyState story="filter" exit="widen the rail filter or press Esc">
-                    no rooms in this scope — the rail filter or the plan selection narrowed past
-                    every partitioned zone
-                  </EmptyState>
-                ) : (
-                  <EmptyState
-                    story="scope"
-                    exit="adopt a zoning region, then partition it — rooms are materialized by partition"
-                  >
-                    no rooms anywhere yet — zones before partitioned have no rooms
-                  </EmptyState>
-                )
-              }
-              activeKey={cursor}
-              tableState={tableState}
-              onTableStateChange={setTableState}
-              visibleKeys={visibleKeys}
-              onRowClick={selectTableRow}
-              onRowHover={hoverTableRow}
-            />
+            >
+              <Table
+                rows={rows}
+                columns={columns}
+                rowKey={rowKey}
+                label="rooms in scope"
+                state={tableState}
+                onStateChange={setTableState}
+                activeKey={cursor}
+                visibleKeys={visibleKeys}
+                onRowClick={selectTableRow}
+                onRowHover={hoverTableRow}
+                gutter={gutter}
+                empty={
+                  rows.length > 0 ? (
+                    <EmptyState story="filter" exit="clear a column filter or the search">
+                      the narrowing hid all {rows.length} rooms in scope
+                    </EmptyState>
+                  ) : world.zones.some((z) => z.rooms.length > 0) ? (
+                    <EmptyState story="filter" exit="widen the rail filter or press Esc">
+                      no rooms in this scope — the rail filter or the plan selection narrowed past
+                      every partitioned zone
+                    </EmptyState>
+                  ) : (
+                    <EmptyState
+                      story="scope"
+                      exit="adopt a zoning region, then partition it — rooms are materialized by partition"
+                    >
+                      no rooms anywhere yet — zones before partitioned have no rooms
+                    </EmptyState>
+                  )
+                }
+              />
+            </TableFrame>
           }
           end={
             cursorRow && (

@@ -19,7 +19,7 @@ import { StateCell, type StateCellProps } from "#/components/lang/cell";
 import { useCellNavigation } from "#/components/master-table/cell-navigation";
 
 /**
- * The editable `StateCell`, wired to whatever cell navigation surrounds it. Inside a MasterTable
+ * The editable `StateCell`, wired to whatever cell navigation surrounds it. Inside a Table
  * the provider is present and Enter/Tab/arrows walk the grid; in the inspector there is no
  * provider and the hook returns null, so the cell simply blurs — one component, both homes.
  */

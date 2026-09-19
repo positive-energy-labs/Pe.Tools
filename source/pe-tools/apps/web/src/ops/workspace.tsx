@@ -14,7 +14,7 @@ import { Provenance } from "#/components/lang/section";
 import { Surface } from "#/components/lang/surface";
 import { previousOf, useFleet, useReading } from "#/readings";
 import { RouteShell, useRoute } from "#/route";
-import { Picker } from "#/route/picker";
+import { Ladder } from "#/route/ladder";
 import { useChooseTarget } from "#/route/shell";
 import { Situation, SituationCell, useDocumentLadder } from "#/route/situation";
 import { OpForm, requestOf, seedValues, type FormValues } from "#/ops/form";
@@ -129,14 +129,14 @@ export function OpsRoute({
                 <>
                   runs{" "}
                   <SituationCell io="r" empty={!selected}>
-                    <Picker levels={[opLevel]} />
+                    <Ladder levels={[opLevel]} />
                   </SituationCell>{" "}
                   on{" "}
                   <SituationCell
                     io={selected && isMutation(selected) ? "w" : "r"}
                     empty={!ladder.docWord}
                   >
-                    <Picker levels={ladder.levels} />
+                    <Ladder levels={ladder.levels} />
                   </SituationCell>
                   .
                 </>

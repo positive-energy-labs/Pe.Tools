@@ -157,6 +157,7 @@ test("a re-establishing stream reads as refreshing, not as a dead bridge", () =>
     <ScheduleGridWorkspace
       state={{
         slice: null,
+        revision: null,
         hydrated: true,
         refreshing: true,
         peaActive: false,

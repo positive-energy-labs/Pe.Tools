@@ -28,18 +28,19 @@
  *   exactly one question, top to bottom, without reading a single value: WHERE do proposals live.
  *
  *   CELLS = LOCATABLE. Each proposed cell wears a small corner fold in pea's ink. The rail says
- *   the row is contested; the folds say WHICH cells in it are. Neither covers a value, neither
- *   changes the table's geometry, and neither carries a verdict.
+ *   the row is contested; the folds say WHICH cells in it are. Neither covers a value, and neither
+ *   changes the table's geometry.
  *
- *   CARDS = DECIDABLE. Accept and deny live only on the sidebar cards, next to the spec text that
- *   justifies them. Clicking the CELL brings its card into view (`StateCell`'s own `onLocate`);
- *   nothing pops over the table, so the evidence and the decision are never hidden by the
- *   affordance that reached them. The rail counts and points; it decides and locates nothing.
+ *   THE CELL DECIDES. Accept and deny are the cell's own contract transitions (verdict
+ *   2026-09-18), drawn on the table cell, the inspector's family value and the sidebar card alike;
+ *   the card is the same Work field as a `ReviewRow`, beside the spec text that justifies it.
+ *   Clicking the CELL brings its card into view (`StateCell`'s own `onLocate`). The rail counts
+ *   and points; it decides nothing.
  *
  *   ONE LIFECYCLE, TWO RUNGS (ruled 2026-08-31). A cell holds pea's PROPOSAL and the draft's
  *   STAGED value, and nothing else. Accept stages pea's value and leaves the proposal standing
  *   behind it, which is how the square is known to be pea's ink. Deny CLEARS the proposal — there
- *   is no denied state to draw, the cell simply shows the real value again. Re-open puts it back.
+ *   is no denied state to draw, the cell simply shows the real value again.
  *
  *   TYPING BEATS PROPOSING. A proposed cell is an ordinary editable cell. The moment you commit
  *   your own value into it the proposal is CLEARED — the same outcome as a denial, because the

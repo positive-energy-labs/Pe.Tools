@@ -1,11 +1,12 @@
 /**
- * THE SHEET — the product, like /family: one MasterTable row per candidate profile, inputs
+ * THE SHEET — the product, like /family: one Table row per candidate profile, inputs
  * editable in the row, derived columns live; the active row is what the drawing and chart show.
  * No drawing in the row: per-slot information lives only in the drawing pane.
- * Row density is a MasterTable gap owned by the design-system ledger; this consumer uses it as-is.
  */
 import { NumberCell } from "#/components/master-table/cells";
-import { MasterTable } from "#/components/master-table/master-table";
+import { Table } from "#/components/master-table/table";
+import { TableFrame } from "#/components/master-table/table-frame";
+import { useTableState } from "#/components/master-table/view";
 import type { Column } from "#/components/master-table/model";
 import { Tag } from "#/components/lang/chip";
 
@@ -61,7 +62,7 @@ export function Sheet({
   set,
   add,
   picked,
-  onPick,
+  onPickedChange,
 }: {
   rows: SheetRow[];
   active: string;
@@ -70,28 +71,10 @@ export function Sheet({
   add: () => void;
   /** rows chosen for the export sheet */
   picked: ReadonlySet<string>;
-  onPick: (id: string, on: boolean) => void;
+  onPickedChange: (next: ReadonlySet<string>) => void;
 }) {
+  const [tableState, setTableState] = useTableState();
   const columns: Column<SheetRow>[] = [
-    {
-      key: "pick",
-      label: "sheet",
-      title: "Put this profile on the export sheet",
-      width: "w-10",
-      facet: (r) => (picked.has(r.id) ? "on" : "off"),
-      options: [
-        { value: "on", label: "on the sheet" },
-        { value: "off", label: "not on the sheet" },
-      ],
-      cell: (r) => (
-        <input
-          type="checkbox"
-          checked={picked.has(r.id)}
-          onChange={(e) => onPick(r.id, e.target.checked)}
-          aria-label="on the export sheet"
-        />
-      ),
-    },
     num("boardLength", "L", "Board length, inches", set),
     num("endBorder", "end", "End border, each end", set),
     num("boardWidth", "W", "Board width, inches", set),
@@ -136,28 +119,41 @@ export function Sheet({
     ),
   ];
   return (
-    <MasterTable
+    <TableFrame
+      label="grille profiles"
       rows={rows}
       columns={columns}
       rowKey={(r) => r.id}
-      scopeLabel="grille profiles"
-      activeKey={active}
-      onRowClick={(r) => onActive(r.id)}
-      gutter={(r) =>
-        r.slack < -1e-9
-          ? {
-              count: 1,
-              title: `middle is over by ${frac(-r.slack)}″ — does not fit`,
-              tone: "alarm",
-            }
-          : null
-      }
+      state={tableState}
+      onStateChange={setTableState}
       summary={
         <Press type="button" tone="quiet" size="label" onClick={add}>
           + profile
         </Press>
       }
-    />
+      selection={{ selected: picked, onChange: onPickedChange }}
+    >
+      <Table
+        rows={rows}
+        columns={columns}
+        rowKey={(r) => r.id}
+        label="grille profiles"
+        state={tableState}
+        onStateChange={setTableState}
+        selection={{ selected: picked, onChange: onPickedChange }}
+        activeKey={active}
+        onRowClick={(r) => onActive(r.id)}
+        gutter={(r) =>
+          r.slack < -1e-9
+            ? {
+                count: 1,
+                title: `middle is over by ${frac(-r.slack)}″ — does not fit`,
+                tone: "alarm",
+              }
+            : null
+        }
+      />
+    </TableFrame>
   );
 }
 

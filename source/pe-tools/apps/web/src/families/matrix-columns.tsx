@@ -1,11 +1,22 @@
 import { useMemo } from "react";
-import { familyCellValueSchema, type FamilyCellState } from "@pe/agent-contracts";
+import {
+  familyCellAddress,
+  familyCellKey,
+  familyCellValueSchema,
+  type FamilyCellState,
+} from "@pe/agent-contracts";
+import { reviewTransitions, type CellWire } from "#/components/lang/band";
 import { ReadCell } from "#/components/master-table/cells";
 import { useCellNavigation } from "#/components/master-table/cell-navigation";
-import { cellFromTrichotomy, StateCell } from "#/components/lang/cell";
+import {
+  cellFromTrichotomy,
+  StateCell,
+  type CellRefusal,
+  type CellTransition,
+} from "#/components/lang/cell";
+import { CellListSelect } from "#/components/lang/list-popup";
 import type { Column, Verdict } from "#/components/master-table/model";
 import type { FamilyParameterSnapshot } from "#/host/loaded-families-view";
-import { Press } from "#/components/lang/press";
 import type { FamiliesStore } from "#/families/store";
 import { cellAt } from "#/families/staged";
 import { cn } from "#/lib/utils";
@@ -33,7 +44,15 @@ export interface ParamColumn {
   isBuiltIn: boolean;
   isProjectOnly: boolean;
   familyCount: number;
+  /** A Yes/No parameter: a closed choice, never free text. */
+  yesNo?: boolean;
 }
+
+/** Revit's Yes/No spec (`autodesk.spec:spec.bool-1.0.0`), read off the definition's data type. */
+export const isYesNo = (dataTypeId: string | null | undefined) =>
+  dataTypeId?.startsWith("autodesk.spec:spec.bool") === true;
+
+const YES_NO = ["Yes", "No"] as const;
 
 type Cluster = "built-in" | "common" | "uncommon" | "project-only";
 
@@ -67,6 +86,20 @@ export function patchable(row: TypeRow, key: string): boolean {
   );
 }
 
+/**
+ * The families lock facts: a cell a patch cannot write (unresolved, project-bound, formula-driven)
+ * is locked, and its reason is the one the matrix already says. Unknown addresses are not locked.
+ */
+export const familiesLockOf =
+  (rows: readonly TypeRow[], params: readonly ParamColumn[]) =>
+  (key: string): string | null => {
+    const { familyName, typeName, parameter } = familyCellAddress(key);
+    const row = rows.find((r) => r.familyName === familyName && r.typeName === typeName);
+    const param = params.find((p) => p.name === parameter);
+    if (!row || !param || patchable(row, param.key)) return null;
+    return cellReason(row, param.key, param.isInstance);
+  };
+
 /** What a cell's value MEANS — the title text, so a read-only cell still explains itself. */
 function cellReason(row: TypeRow, key: string, instance: boolean): string {
   const scope = row.scopes[key];
@@ -95,21 +128,20 @@ function cellReason(row: TypeRow, key: string, instance: boolean): string {
 export function useFamiliesColumns({
   familyState,
   params,
-  pickedIds,
-  setPickedIds,
   showUncommon,
   totalFamilies,
   cells,
   propose,
+  wire,
 }: {
-  familyState: (familyId: number) => Verdict;
+  familyState: (row: { familyName: string }) => Verdict;
   params: ParamColumn[];
-  pickedIds: Set<number>;
-  setPickedIds: FamiliesStore["actions"]["setPickedIds"];
   showUncommon: boolean;
   totalFamilies: number;
   cells: Record<string, FamilyCellState>;
   propose: FamiliesStore["actions"]["propose"];
+  /** The families cell wire, with the matrix's lock facts. */
+  wire: CellWire;
 }) {
   const columns = useMemo<Column<TypeRow>[]>(() => {
     const ordered = [...params].sort((a, b) => {
@@ -129,40 +161,6 @@ export function useFamiliesColumns({
        family / type / category says nothing, and a header band that says nothing is noise above
        every scroll. The parameter clusters keep theirs — "built-in" vs "common" is real news. */
     const identity: Column<TypeRow>[] = [
-      {
-        key: "pick",
-        label: "pick",
-        title:
-          "Picked families are what capture files into the pod, one spec member each. Picking changes nothing in Revit — Esc clears the whole set.",
-        /* Wide enough for its own facet trigger — a facet column narrower than its picker clips
-           the word "any" and reads as a rendering bug. */
-        width: "w-16",
-        facet: (row) => (pickedIds.has(row.familyId) ? "picked" : ""),
-        all: "any",
-        cell: (row) => (
-          <Press
-            type="button"
-            title={
-              pickedIds.has(row.familyId)
-                ? `Drop ${row.familyName} from the capture set — the plan and the apply lane are untouched either way.`
-                : `Add ${row.familyName} to the capture set, so capture files it into the pod as a spec member.`
-            }
-            onClick={() =>
-              setPickedIds((prev) => {
-                const next = new Set(prev);
-                if (next.has(row.familyId)) next.delete(row.familyId);
-                else next.add(row.familyId);
-                return next;
-              })
-            }
-            tone="quiet"
-            size="value"
-            state={pickedIds.has(row.familyId) ? "selected" : "rest"}
-          >
-            {pickedIds.has(row.familyId) ? "▪" : "□"}
-          </Press>
-        ),
-      },
       {
         key: "family",
         label: "family",
@@ -219,7 +217,7 @@ export function useFamiliesColumns({
         width: "w-28",
         title:
           "What the compiled plan says about this family. The plan is a LENS: it tints rows and fills the decision queue, but it never hides a family or narrows the scope you asked for.",
-        verdict: (row) => familyState(row.familyId),
+        verdict: (row) => familyState(row),
       },
     ];
 
@@ -237,21 +235,74 @@ export function useFamiliesColumns({
           const value = row.values[col.key] ?? "";
           const unresolved = !scopeOf || scopeOf === "Unresolved";
           const reason = cellReason(row, col.key, col.isInstance);
+          // Identity by NAME (ruling, msg-authority-family-identity): a cell keys on the family's
+          // name, never its element id, which Revit reissues on every reload.
+          const address = {
+            familyName: row.familyName,
+            typeName: row.typeName,
+            parameter: col.name,
+          };
+          const cell = cellAt(cells, address);
+          // Every drawn trichotomy cell carries exactly the contract's transitions. A Pea proposal
+          // on a cell a patch cannot write draws locked, where the contract leaves deny only.
+          const transitions = cell
+            ? reviewTransitions(wire, familyCellKey(address), cell)
+            : undefined;
+          if (patchable(row, col.key) && col.yesNo) {
+            // A Yes/No parameter is a closed choice (F-J3-5b): the in-cell list, never free text.
+            // Its face is the cell's own state; accept/deny of a proposal live in the band.
+            const rung = cell?.staged ?? cell?.proposal;
+            const shown = rung ? showFamilyCell(rung.value) : value;
+            return (
+              <CellListSelect<string>
+                aria-label={`${col.name} (Yes/No)`}
+                region="table"
+                value={shown}
+                display={
+                  <StateCell
+                    {...cellFromTrichotomy(
+                      cell ?? { proposal: null, staged: null },
+                      { value: shown, note: reason, scale: "row" },
+                      showFamilyCell,
+                    )}
+                  />
+                }
+                title={`${col.name} is Yes/No: pick Yes or No`}
+                items={[...YES_NO]}
+                keyOf={(choice) => choice}
+                labelOf={(choice) => choice}
+                row={(choice) => ({ label: choice })}
+                select="single"
+                selected={[shown]}
+                empty="no choices"
+                onPick={(choice) => void propose(address, { value: choice }, value)}
+              />
+            );
+          }
           if (patchable(row, col.key)) {
-            const address = {
-              familyName: row.familyName,
-              typeName: row.typeName,
-              parameter: col.name,
-            };
             return (
               <ProposalCell
                 current={value}
                 reason={reason}
-                cell={cellAt(cells, address)}
-                onCommit={(next) => void propose(address, { value: next }, value)}
+                cell={cell}
+                transitions={transitions}
+                // A refused write puts the cell back and says why on it (25 item 3).
+                onCommit={(next) =>
+                  propose(address, { value: next }, value).then((refusal) => refusal ?? null)
+                }
               />
             );
           }
+          if (cell?.proposal != null || cell?.staged != null)
+            return (
+              <ProposalCell
+                current={value}
+                reason={reason}
+                cell={cell}
+                transitions={transitions}
+                lock={reason}
+              />
+            );
           return (
             <ReadCell
               value={unresolved ? "" : value || "—"}
@@ -273,7 +324,7 @@ export function useFamiliesColumns({
     });
 
     return [...identity, ...parameterColumns];
-  }, [params, totalFamilies, showUncommon, pickedIds, familyState, cells, propose]);
+  }, [params, totalFamilies, showUncommon, familyState, cells, propose, wire]);
 
   const uncommonCount = useMemo(
     () => params.filter((col) => clusterOf(col, totalFamilies) === "uncommon").length,
@@ -293,12 +344,19 @@ export function ProposalCell({
   current,
   reason,
   cell,
+  transitions,
+  lock,
   onCommit,
 }: {
   current: string;
   reason: string;
   cell: FamilyCellState | undefined;
-  onCommit: (text: string) => void;
+  /** The cell's own verbs: exactly `availableTransitions`, over the families wire. */
+  transitions?: readonly CellTransition[];
+  /** Why a patch cannot write this cell; present, the cell draws locked and takes no typing. */
+  lock?: string;
+  /** Resolves to the write's refusal, if any: the kit then restores the drawn value and says it. */
+  onCommit?: (text: string) => Promise<CellRefusal | null>;
 }) {
   const move = useCellNavigation();
   const proposal = cell?.proposal;
@@ -310,7 +368,7 @@ export function ProposalCell({
           ? "; staged — plan will include it"
           : staged
             ? `; you staged ${staged.value.value}, so Pea's value is a counter-proposal`
-            : "; open — accept or deny it in the proposals band"
+            : "; open — accept (a) or deny (d) it on this cell"
       }. Nothing has reached Revit.`
     : staged
       ? `You staged ${current || "(blank)"} → ${staged.value.value}. Nothing has reached Revit.`
@@ -323,8 +381,11 @@ export function ProposalCell({
           { value: shown, note, scale: "row" },
           showFamilyCell,
         )}
+        cap={lock ? "locked" : "editable"}
+        capReason={lock}
+        transitions={transitions}
         placeholder={proposal || staged ? current : undefined}
-        onCommit={(text) => onCommit(text)}
+        onCommit={lock || !onCommit ? undefined : (text) => onCommit(text)}
         onNavigate={(direction) => move?.(direction) ?? false}
       />
     </span>

@@ -20,3 +20,25 @@ export async function postRouteWrite(
   const result = (await response.json().catch(() => null)) as RouteStateWriteResult | null;
   return { status: response.status, result };
 }
+
+/**
+ * The route's salvage of Work it can no longer read (human door only): `{ from, value }`, or null
+ * when there is nothing to salvage. A refusal throws in the host's words.
+ */
+export async function getRouteSalvage(
+  url: string,
+): Promise<{ from: string; value: unknown } | null> {
+  const response = await fetch(url);
+  if (response.status === 404) return null;
+  const body = (await response.json().catch(() => null)) as
+    | { from: string; value: unknown }
+    | { error?: string; message?: string }
+    | null;
+  if (!response.ok || !body || !("from" in body))
+    throw Error(
+      (body && "message" in body && body.message) ||
+        (body && "error" in body && body.error) ||
+        `salvage failed (${response.status})`,
+    );
+  return body;
+}

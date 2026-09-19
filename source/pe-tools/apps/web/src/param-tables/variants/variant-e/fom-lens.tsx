@@ -9,6 +9,7 @@ export function VariantFomLens() {
         <span className="">SXL - FOM HWCH Plant</span> → sheet exhibit · a saved projection of the
         same {FC_UNITS.length}-row substrate — switching lens re-projects, nothing is retyped
       </div>
+      {/* DOMAIN (kept hand table): reproduces a printed sheet, merged header cells included. */}
       <table className="" style={{ border: hairline }}>
         <tbody>
           <tr>

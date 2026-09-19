@@ -1,4 +1,4 @@
-import { canonicalRouteInput, type TrichotomyCellLike } from "@pe/agent-contracts";
+import { sameValue, type TrichotomyCellLike } from "@pe/agent-contracts";
 import type React from "react";
 
 /** The one squiggle slot. Ranked; exactly one may draw. `never` is NOT here on purpose —
@@ -13,6 +13,12 @@ export interface StateCellProps {
    * beside the value — drift's second half, at zero row-height cost.
    */
   modelValue?: string;
+  /**
+   * A stale staged cell's A (ask A, 2026-09-19): the value the person reviewed against before Revit
+   * moved under it (`basis.stale[].was`; null when unread). Present on drift, the cell reads in
+   * words: "you reviewed A · Revit now C · yours B", C being `modelValue` and B the value.
+   */
+  reviewed?: string | null;
   /**
    * The epistemic ladder — how much do we know about this value (ruled 2026-08-16):
    * `fresh` checked recently · `stale` checked long ago · `unverified` a value exists but was
@@ -79,8 +85,20 @@ export interface StateCellProps {
    * commit: the cell restores the prior value and shows a dismissible caution note carrying
    * the reason — §3's "restore AND say why, near the cell, without resizing the row". Requires
    * `scale="row"` and a string `value`; `cap` other than editable wins and renders locked.
+   * An async commit (a Work write) may return a promise of that refusal: it restores the same
+   * way when the refusal arrives, so typed text is never left looking accepted.
+   *
+   * UNITS AT STAGE TIME (user ruling 2026-09-19, `ruling-units-at-human-surfaces.md`): a human
+   * surface attaches the column's display unit to a bare number when it is STAGED, so the staged
+   * cell reads "300 CFM" at once and what is reviewed is what is applied. A typed unit ("300 L/s")
+   * wins. A measured field with no display unit asks at the cell before the push, never as a
+   * push-time refusal. The unit is the binding's own `DisplayUnit` evidence read from Revit, never a
+   * web guess or a project-units assumption; the host contract keeps refusing bare numbers.
+   * Not built: waits on `ScheduleCellBinding.DisplayUnit` (domains).
    */
-  onCommit?: (text: string) => string | void;
+  onCommit?: (
+    text: string,
+  ) => string | void | Promise<string | { message: string; detail?: string } | null | void>;
   /**
    * NUMERIC COMMIT (ruled 2026-08-16, fit reviews #2 — §3's named silent-swallow defect, killed
    * here): present ⇒ the commit path parses per `parseCell` before `onCommit` sees anything. A
@@ -106,7 +124,35 @@ export interface StateCellProps {
   onLocate?: () => void;
   /** Cell-to-cell navigation hook (Enter/Tab/arrows). Return true when the move was taken. */
   onNavigate?: (dir: "up" | "down" | "left" | "right") => boolean;
+  /**
+   * THE CELL'S OWN VERBS (verdict 2026-09-18: approve/deny belong to the cell, as transitions of
+   * the language). The caller decides which kinds are available; the cell draws exactly these,
+   * in this order, and holds NO availability logic. Typing is `stage` and stays `onCommit`.
+   * Card scale draws them inline after the value. Row scale costs zero footprint: they overlay
+   * the trailing edge while the cell is hovered or focused, and a focused table cell takes
+   * `a` / `d` / `u` through the hotkey registry. A run in flight marks the cell busy and inerts
+   * its verbs; a returned refusal shows its message beside the cell (the `onCommit` note).
+   */
+  transitions?: readonly CellTransition[];
+  /**
+   * A refusal this cell did not ask for: an aggregate's one write covered it and was refused.
+   * Drawn in the same note as the cell's own refusal; the caller clears it on its next write.
+   */
+  refused?: string;
 }
+
+export type CellTransitionKind = "accept" | "deny" | "unstage";
+
+export interface CellTransition {
+  kind: CellTransitionKind;
+  /** Resolves to a refusal when the write was refused; nothing or null when it landed. */
+  run: () => Promise<{ code: string; message: string; detail?: string } | null | void>;
+  /** What pressing it does, in this cell's words. Defaults to the kind's plain sentence. */
+  reason?: string;
+}
+
+/** The default counter word: a string as written, anything else as JSON — never `[object Object]`. */
+const showJson = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
 
 /**
  * THE ONE READER (ruled 2026-08-31, proposal-state demiurge). A trichotomy cell —
@@ -118,15 +164,6 @@ export interface StateCellProps {
  * - no `denied`: a denial CLEARS the proposal upstream and the cell shows the real value again.
  * - no `written`: a commit CLEARS `staged`; saved/unsaved and fresh/stale carry that signal.
  */
-/**
- * What a rung WRITES: its value and whether it deletes. Rungs are compared as canonical JSON, never
- * by identity — Work is deserialized, so two equal object values are never the same reference.
- */
-const rungPayload = (rung: { value?: unknown; delete?: true }) =>
-  canonicalRouteInput({ value: rung.value, delete: rung.delete === true });
-
-/** The default counter word: a string as written, anything else as JSON — never `[object Object]`. */
-const showJson = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
 
 export function cellFromTrichotomy(
   cell: Pick<TrichotomyCellLike, "proposal" | "staged">,
@@ -138,14 +175,11 @@ export function cellFromTrichotomy(
   // Staging is the later rung, so it wins the stage slot; a proposal still standing behind a
   // staged value is authorship evidence, not a second state.
   const stage = staged != null ? "staged" : proposal != null ? "proposed" : "clean";
-  const stagedBy =
-    staged != null && proposal != null && rungPayload(staged) === rungPayload(proposal)
-      ? "pea"
-      : "you";
+  const stagedBy = sameValue(staged, proposal) ? "pea" : "you";
   // Pea arguing against a staged value: both rungs stand and disagree. The fold draws; see
   // `counterValue` on StateCellProps.
   const contested =
-    staged != null && proposal != null && rungPayload(proposal) !== rungPayload(staged)
+    staged != null && proposal != null && !sameValue(proposal, staged)
       ? proposal.delete === true
         ? "delete"
         : show(proposal.value)
@@ -258,7 +292,12 @@ export function cellStateLabel(p: StateCellProps): CellStateName {
  */
 export function cellFactsText(p: StateCellProps): string | null {
   const parts: string[] = [];
-  if (p.agree === "drift" && p.modelValue != null) parts.push(`model holds ${p.modelValue}`);
+  if (p.agree === "drift" && p.modelValue != null)
+    parts.push(
+      p.reviewed !== undefined
+        ? `you reviewed ${p.reviewed ?? "—"} · Revit now ${p.modelValue} · yours`
+        : `model holds ${p.modelValue}`,
+    );
   if (p.counterValue != null) parts.push(`pea proposes ${p.counterValue}`);
   if (p.capReason != null) parts.push(p.capReason);
   if (p.note != null)

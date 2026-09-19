@@ -4,8 +4,11 @@ import {
   nativeProcessSchema,
   sdkSessionSelectorOf,
   sdkSessionTargetOf,
+  sameValue,
   transitionPatches,
+  type InstancesLaunch,
 } from "@pe/agent-contracts";
+import { ReviewRow, WorkBand, type CellWire } from "#/components/lang/band";
 import { type InstancesHandle } from "#/instances/manifest";
 import { useMemo, useState } from "react";
 import { peReadings, readReading, useHostCall } from "#/readings";
@@ -16,9 +19,13 @@ import { EmptyState } from "#/components/lang/empty";
 import { StateCell } from "#/components/lang/cell";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Press } from "#/components/lang/press";
+import { Switcher } from "#/components/lang/switcher";
+import { Input } from "#/components/lang/input";
 import { ActionButton as VerbButton } from "#/components/lang/action-button";
 import { Pane, PaneSplit } from "#/components/lang/pane";
-import { MasterTable } from "#/components/master-table/master-table";
+import { Table } from "#/components/master-table/table";
+import { TableFrame } from "#/components/master-table/table-frame";
+import { useTableState } from "#/components/master-table/view";
 import type { Column } from "#/components/master-table/model";
 import type { Inventory } from "#/readings";
 import { timeAgo } from "#/lib/utils";
@@ -136,6 +143,17 @@ type ClusterProps = {
   requestedDocument?: string;
 };
 
+/** The host's refusal for a launch verb over a proposal nobody staged, said before the press. */
+const NOT_STAGED = "Pea's proposal is not staged; accept it first";
+
+/** A launch as the person reads it: what opening or starting it would do. */
+const describeLaunch = (value: unknown) => {
+  const launch = value as InstancesLaunch;
+  return launch.kind === "open"
+    ? `open ${launch.document} in ${launch.session}`
+    : `start a new ${launch.year} session${launch.document ? ` opening ${launch.document}` : ""}`;
+};
+
 export function InstancesCluster({
   handle,
   fleet,
@@ -145,6 +163,8 @@ export function InstancesCluster({
   onDocument,
   requestedDocument,
 }: ClusterProps) {
+  const [tableState, setTableState] = useTableState();
+  const [docsState, setDocsState] = useTableState();
   const route = handle;
   const work = route.work;
   const workspaceId = work.key.work!;
@@ -192,8 +212,16 @@ export function InstancesCluster({
       : undefined);
 
   const [yearPick, setYearPick] = useState<string | null>(null);
-  // The person's staged launch; Pea's proposal is not drawn here yet (interaction's cutover).
+  // The person's staged launch. Pea's proposal is drawn beside it in the band grammar, and the
+  // launch verbs read the staged value only: a proposal must be accepted first (the host's rule).
   const stored = work.doc?.launch.staged?.value;
+  const launchCell = work.doc?.launch ?? {};
+  const proposed = launchCell.proposal?.value;
+  const proposedOnly = proposed != null && launchCell.staged == null;
+  // Accepted, the proposal stays as authorship evidence of the staged value: nothing to review.
+  const reviewing =
+    launchCell.proposal != null && !sameValue(launchCell.proposal, launchCell.staged);
+  const launchWire: CellWire = { segment: null, write: work.write, revision: work.revision };
   const storedDoc = stored?.document
     ? (documents.find((d) => d.selector === stored.document) ?? {
         id: stored.document,
@@ -451,6 +479,20 @@ export function InstancesCluster({
     [liveWorlds],
   );
 
+  // Old-shape saved Work fails closed on the shared path: its refusal is the only instruction,
+  // with start fresh, exactly as a Situation route draws it (C1/O-8/G1).
+  if (work.refusal)
+    return (
+      <WorkBand
+        count={0}
+        noun="launch"
+        revision={work.revision}
+        discard={() => {}}
+        visible={false}
+        unresolved={[work.refusal]}
+        startFresh={work.startFresh ? () => void work.startFresh?.() : undefined}
+      />
+    );
   if (!work.current)
     return (
       <OutcomeLine
@@ -473,48 +515,58 @@ export function InstancesCluster({
             toolbar={
               <div className="flex items-center gap-2">
                 <span className="t-small face-mono text-ink-2">year</span>
-                {years.map((candidate) => (
-                  <Press
-                    key={candidate}
-                    size="caption"
-                    frame="line"
-                    tone="quiet"
-                    state={yearPick === candidate ? "selected" : "rest"}
-                    onClick={() =>
-                      setYearPick((previous) => (previous === candidate ? null : candidate))
-                    }
-                  >
-                    20{candidate}
-                  </Press>
-                ))}
+                {/* One year or none: picking the held year again clears it. */}
+                <Switcher
+                  ariaLabel="year"
+                  value={yearPick ?? ""}
+                  onChange={(candidate) =>
+                    setYearPick((previous) => (previous === candidate ? null : candidate))
+                  }
+                  options={years.map((candidate) => ({
+                    value: candidate,
+                    label: `20${candidate}`,
+                    title: `Only instances from 20${candidate}; pick it again to show every year.`,
+                  }))}
+                />
               </div>
             }
           >
             <div className="flex max-h-[40vh] flex-col">
-              <MasterTable
+              <TableFrame
+                label="fleet — pick a session to filter documents"
                 rows={visibleWorlds}
                 columns={fleetColumns}
                 rowKey={(world) => world.id}
-                scopeLabel="fleet — pick a session to filter documents"
+                state={tableState}
+                onStateChange={setTableState}
                 searchPlaceholder="search sessions"
-                activeKey={pickedWorld?.id}
-                onRowClick={(world) => {
-                  const id = sessionTarget(world);
-                  setTarget(target === id ? "" : id);
-                }}
-                empty={
-                  isLoading ? (
-                    <OutcomeLine kind="busy" label="reading the fleet" />
-                  ) : (
-                    <EmptyState
-                      story="scope"
-                      exit="stage a document below — it starts its own session"
-                    >
-                      no live sessions
-                    </EmptyState>
-                  )
-                }
-              />
+              >
+                <Table
+                  rows={visibleWorlds}
+                  columns={fleetColumns}
+                  rowKey={(world) => world.id}
+                  label="fleet — pick a session to filter documents"
+                  state={tableState}
+                  onStateChange={setTableState}
+                  activeKey={pickedWorld?.id}
+                  onRowClick={(world) => {
+                    const id = sessionTarget(world);
+                    setTarget(target === id ? "" : id);
+                  }}
+                  empty={
+                    isLoading ? (
+                      <OutcomeLine kind="busy" label="reading the fleet" />
+                    ) : (
+                      <EmptyState
+                        story="scope"
+                        exit="stage a document below — it starts its own session"
+                      >
+                        no live sessions
+                      </EmptyState>
+                    )
+                  }
+                />
+              </TableFrame>
             </div>
           </Pane>
         }
@@ -525,31 +577,46 @@ export function InstancesCluster({
             start={
               <Pane kind="content" title="documents" flush>
                 <div className="flex max-h-[60vh] flex-col">
-                  <MasterTable
-                    rows={visibleDocs}
-                    columns={docColumns}
-                    rowKey={(document) => document.id}
-                    scopeLabel={
+                  <TableFrame
+                    label={
                       pickedWorld
                         ? `documents openable in ${sessionLabel(pickedWorld)}`
                         : "documents — pick a session explicitly, or stage a new session"
                     }
+                    rows={visibleDocs}
+                    columns={docColumns}
+                    rowKey={(document) => document.id}
+                    state={docsState}
+                    onStateChange={setDocsState}
                     searchPlaceholder="search documents"
-                    activeKey={staged?.doc?.id}
-                    onRowClick={stageDoc}
-                    empty={
-                      recentsLoading || isLoading ? (
-                        <OutcomeLine kind="busy" label="reading recents and the fleet" />
-                      ) : (
-                        <EmptyState
-                          story="scope"
-                          exit="open a document in Revit, or clear the fleet pick"
-                        >
-                          no documents known
-                        </EmptyState>
-                      )
-                    }
-                  />
+                  >
+                    <Table
+                      rows={visibleDocs}
+                      columns={docColumns}
+                      rowKey={(document) => document.id}
+                      label={
+                        pickedWorld
+                          ? `documents openable in ${sessionLabel(pickedWorld)}`
+                          : "documents — pick a session explicitly, or stage a new session"
+                      }
+                      state={docsState}
+                      onStateChange={setDocsState}
+                      activeKey={staged?.doc?.id}
+                      onRowClick={stageDoc}
+                      empty={
+                        recentsLoading || isLoading ? (
+                          <OutcomeLine kind="busy" label="reading recents and the fleet" />
+                        ) : (
+                          <EmptyState
+                            story="scope"
+                            exit="open a document in Revit, or clear the fleet pick"
+                          >
+                            no documents known
+                          </EmptyState>
+                        )
+                      }
+                    />
+                  </TableFrame>
                 </div>
               </Pane>
             }
@@ -565,6 +632,30 @@ export function InstancesCluster({
                   {recovery && (
                     <Press onClick={() => stageDoc(recovery)}>recover {recovery.title}</Press>
                   )}
+                  {reviewing ? (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <ReviewRow
+                        wire={launchWire}
+                        address="launch"
+                        label={<span className="t-small face-mono text-ink-2">pea proposes</span>}
+                        cell={launchCell}
+                        facts={{
+                          value: describeLaunch(launchCell.staged?.value ?? proposed),
+                          scale: "row",
+                        }}
+                        show={describeLaunch}
+                      />
+                      {proposedOnly ? (
+                        <VerbButton
+                          tone="commit"
+                          label={proposed.kind === "open" ? "open" : "start"}
+                          reason={NOT_STAGED}
+                          disabled
+                          onClick={() => {}}
+                        />
+                      ) : null}
+                    </div>
+                  ) : null}
                   {staged ? (
                     <div className="flex flex-wrap items-center gap-3">
                       <span className="t-small face-mono text-ink-2">staged</span>
@@ -574,8 +665,8 @@ export function InstancesCluster({
                           : `start a new 20${staged.year} session ${staged.doc ? `opening ${staged.doc.title}` : ""}`}
                       </span>
                       {staged.kind === "start" ? (
-                        <input
-                          className="hairline-x hairline-y t-small face-mono bg-transparent px-2 py-1 text-ink"
+                        <Input
+                          face="mono"
                           aria-label="session name"
                           placeholder="name this session"
                           value={sessionName}
@@ -645,7 +736,7 @@ export function InstancesCluster({
                         onClick={() => setTarget("")}
                       />
                     </div>
-                  ) : (
+                  ) : proposedOnly ? null : (
                     <span className="t-small face-mono text-ink-mute">
                       nothing staged — pick a session above, or click a document row
                     </span>

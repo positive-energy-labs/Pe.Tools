@@ -12,7 +12,9 @@ import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Pane, PaneSplit } from "#/components/lang/pane";
-import { PickList } from "#/components/lang/pick-list";
+import { List } from "#/components/lang/list-popup";
+import { Press } from "#/components/lang/press";
+import { RunsList } from "#/route/runs-list";
 import { Provenance } from "#/components/lang/section";
 import { Surface } from "#/components/lang/surface";
 import {
@@ -23,8 +25,7 @@ import {
   type MemberRef,
   type PodRow,
 } from "#/route";
-import { Picker } from "#/route/picker";
-import { useDocumentLadder } from "#/route/situation";
+import { LadderPicker, useDocumentLadder } from "#/route/situation";
 import { podHost, usePodList, type Run } from "#/route/pods";
 import { familiesSpec } from "#/families/manifest";
 import { FAMILY_DEMO_PODS, familySpec } from "#/route/family/manifest";
@@ -153,7 +154,14 @@ export function PodsRouteContent({
   const product = member
     ? PRODUCT_ROUTES.find((route) => isSpecOf(member.schema, route.def.schema))
     : undefined;
-  const { failure: runsFailure, runs } = usePodRuns(row?.id ?? null, member?.path ?? null, !!demo);
+  // The member's runs, or the whole pod's (a draft's run belongs to no member).
+  const [podRuns, setPodRuns] = useState(false);
+  const runScope = podRuns || !member ? "pod" : "member";
+  const { failure: runsFailure, runs } = usePodRuns(
+    row?.id ?? null,
+    runScope === "pod" ? null : member!.path,
+    !!demo,
+  );
 
   return (
     <Surface>
@@ -168,7 +176,7 @@ export function PodsRouteContent({
             ) : (
               <Provenance>no member open</Provenance>
             )}{" "}
-            options from <Picker levels={ladder.levels} />
+            options from <LadderPicker ladder={ladder} />
             {ladder.refusal ? (
               <span role="status" data-tone="caution">
                 {" "}
@@ -227,28 +235,29 @@ export function PodsRouteContent({
                   says={item.diagnostics.map((d) => d.message).join("; ")}
                 />
               ))}
-            <PickList
-              items={pods.flatMap((item) =>
-                item.members.map((m) => ({
-                  id: `${item.id}${SEP}${m.path}`,
-                  label: m.path,
-                  group: `${item.name} · ${item.version}`,
-                  meta: m.schema
-                    ? m.schema
-                        .split("/")
-                        .at(-1)
-                        ?.replace(/\.json$/, "")
-                    : undefined,
-                  hint: m.schema ?? "no $schema: plain data",
-                })),
-              )}
-              activeId={member ? `${row!.id}${SEP}${member.path}` : null}
-              onPick={(id) => {
-                const [p, m] = id.split(SEP);
-                select({ pod: p!, path: m! });
-              }}
-              placeholder="Filter members…"
-              emptyNote={live.state === "absent" && !demo ? "reading pods…" : "No pods installed."}
+            <List
+              aria-label="pod members"
+              region="pods"
+              items={pods.flatMap((item) => item.members.map((m) => ({ pod: item, member: m })))}
+              keyOf={({ pod, member: m }) => `${pod.id}${SEP}${m.path}`}
+              labelOf={({ member: m }) => m.path}
+              groupOf={({ pod }) => `${pod.name} · ${pod.version}`}
+              filter="substring"
+              searchPlaceholder="Filter members…"
+              status={live.state === "absent" && !demo ? "pending" : "ready"}
+              empty="No pods installed."
+              onPick={({ pod, member: m }) => select({ pod: pod.id, path: m.path })}
+              row={({ pod, member: m }) => ({
+                label: m.path,
+                active: row?.id === pod.id && member?.path === m.path,
+                meta: m.schema
+                  ? m.schema
+                      .split("/")
+                      .at(-1)
+                      ?.replace(/\.json$/, "")
+                  : undefined,
+                title: m.schema ?? "no $schema: plain data",
+              })}
             />
           </Pane>
         }
@@ -284,45 +293,32 @@ export function PodsRouteContent({
               </Pane>
             }
             end={
-              <Pane kind="inspector" title="runs" meta={String(runs.length)} side="right">
-                {runsFailure ? <OutcomeLine kind="error" label="runs" says={runsFailure} /> : null}
-                {runs.length ? (
-                  <div className="hairline-rows">
-                    {runs.map(({ runId, receipt, error }) => (
-                      <div key={runId} className="flex flex-col px-3 py-1">
-                        <span className="face-mono t-small text-ink">{runId}</span>
-                        {receipt ? (
-                          <>
-                            <span>
-                              {receipt.operation} · {receipt.outcome}
-                            </span>
-                            <span className="face-mono t-small text-ink-mute">
-                              {receipt.origin === "SuppliedDraft"
-                                ? "draft · not the saved bytes"
-                                : receipt.origin === "Operation"
-                                  ? "operation input · no member"
-                                  : receipt.memberSha256
-                                    ? `${receipt.memberSha256.slice(0, 12)}${receipt.memberSha256 === member?.sha256 ? " · these bytes" : " · older bytes"}`
-                                    : "source not recorded"}
-                            </span>
-                            {receipt.outputs?.map((output) => (
-                              <span key={output} className="t-small text-ink-2">
-                                {output}
-                              </span>
-                            ))}
-                          </>
-                        ) : (
-                          // A crashed run leaves this folder on disk; the op reports it, not hides it.
-                          <OutcomeLine kind="error" label="receipt" says={error ?? "unreadable"} />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState story="scope" exit="apply this spec from its product route">
-                    no runs for this member
-                  </EmptyState>
-                )}
+              <Pane
+                kind="inspector"
+                title="runs"
+                meta={
+                  <span className="flex items-center gap-1.5">
+                    <span className="face-mono">{runs.length}</span>
+                    <Press
+                      type="button"
+                      tone="quiet"
+                      size="label"
+                      disabled={!member}
+                      title="A draft's run belongs to no member: the whole pod lists it."
+                      onClick={() => setPodRuns(!podRuns)}
+                    >
+                      {runScope === "pod" ? "whole pod" : "this member"}
+                    </Press>
+                  </span>
+                }
+                side="right"
+              >
+                <RunsList
+                  runs={runs}
+                  memberSha256={member?.sha256}
+                  scope={runScope}
+                  failure={runsFailure}
+                />
               </Pane>
             }
           />
@@ -332,16 +328,18 @@ export function PodsRouteContent({
   );
 }
 
-/** The pod's runs, narrowed to the open member. One host read, newest first. */
+/** The pod's runs, narrowed to the open member when a path is given. One host read, newest first. */
 function usePodRuns(pod: string | null, path: string | null, demo: boolean) {
   const [runs, setRuns] = useState<readonly Run[]>([]);
   const [failure, setFailure] = useState<string | null>(null);
   useEffect(() => {
     setFailure(null);
-    if (demo) return setRuns(path === DEMO_RUN.receipt!.memberPath ? [DEMO_RUN] : []);
-    if (!pod || !path) return setRuns([]);
+    if (demo)
+      return setRuns(path === null || path === DEMO_RUN.receipt!.memberPath ? [DEMO_RUN] : []);
+    if (!pod) return setRuns([]);
     let live = true;
-    podHost.runs(pod, path).then(
+    // No path: the pod-level read, which lists drafts' runs too.
+    podHost.runs(pod, path ?? undefined).then(
       (rows) => live && setRuns(rows),
       (error: unknown) =>
         live && (setRuns([]), setFailure(error instanceof Error ? error.message : String(error))),

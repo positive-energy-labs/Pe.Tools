@@ -44,6 +44,7 @@ export function ZonePeekFloater(props: {
         <span className="">{props.zoneName}</span>
         {props.highlighted && <span className="">highlighted · esc clears</span>}
       </div>
+      {/* DOMAIN (kept hand table): a transient peek over the drawing that must take no focus; Table is a focusable grid. */}
       <table className="w-full table-fixed">
         <colgroup>
           {comparing && <col />}

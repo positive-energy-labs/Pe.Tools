@@ -1,10 +1,12 @@
 import { Suspense } from "react";
 import { Press } from "#/components/lang/press";
+import { Switcher } from "#/components/lang/switcher";
 import { Pane } from "#/components/lang/pane";
 import { LevelPlan } from "#/takeoff/level-plan";
 import { LevelStats } from "#/takeoff/level-stats";
 import { ZoneCard } from "#/takeoff/zone-card";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
+import { levelsOf } from "#/takeoff/plan-image";
 
 export function AtlasVisual() {
   const {
@@ -20,6 +22,7 @@ export function AtlasVisual() {
     planOpen,
     statsOpen,
     level,
+    planImage,
     setLevel,
     setPlanOpen,
     setStatsOpen,
@@ -44,32 +47,33 @@ export function AtlasVisual() {
         shortcuts={scopeShortcuts}
         toolbar={
           <>
-            {world.lanes.map((lane) => {
-              const zs = world.zones.filter((z) => z.zone.lane.label === lane.label);
-              const calls = zs.reduce((n, z) => n + zoneCalls(z), 0);
-              return (
-                <Press
-                  key={lane.label}
-                  type="button"
-                  onClick={() => setLevel(lane.label)}
-                  size="caption"
-                  frame="line"
-                  tone={lane.label === level ? "neutral" : "quiet"}
-                  state={lane.label === level ? "selected" : "rest"}
-                  title={`${lane.view}${lane.replayPath ? " · captured this session" : " · not captured yet"}`}
-                >
-                  <span className="face-mono">
-                    {lane.label}
-                    <span className="ml-1">{zs.length}</span>
-                    {calls > 0 && (
-                      <span className="ml-1" data-tone="alarm">
-                        ·{calls}
-                      </span>
-                    )}
-                  </span>
-                </Press>
-              );
-            })}
+            {/* The lanes are a segmented choose-one in the toolbar, not a list. */}
+            <Switcher
+              ariaLabel="level"
+              value={level}
+              onChange={setLevel}
+              options={levelsOf(world.lanes).map((label) => {
+                const lanes = world.lanes.filter((lane) => lane.label === label);
+                const captured = lanes.filter((lane) => lane.replayPath).length;
+                const zs = world.zones.filter((z) => z.zone.lane.label === label);
+                const calls = zs.reduce((n, z) => n + zoneCalls(z), 0);
+                return {
+                  value: label,
+                  label: (
+                    <>
+                      {label}
+                      <span className="ml-1">{zs.length}</span>
+                      {calls > 0 && (
+                        <span className="ml-1" data-tone="alarm">
+                          ·{calls}
+                        </span>
+                      )}
+                    </>
+                  ),
+                  title: `${lanes.length} view${lanes.length === 1 ? "" : "s"} on this level · ${captured} captured this session`,
+                };
+              })}
+            />
 
             <span className="hairline-l ml-1 flex items-center gap-1 pl-1">
               <Press
@@ -104,6 +108,12 @@ export function AtlasVisual() {
         }
       >
         <LevelPlan
+          plan={planImage.image && "plan" in planImage.image ? planImage.image.plan : null}
+          planRefusal={
+            planImage.image && "refusal" in planImage.image ? planImage.image.refusal : null
+          }
+          planError={planImage.error}
+          planNote={planImage.note}
           zones={levelZones}
           stageFilter={stageFilter}
           selectedKey={zoneKey}

@@ -119,3 +119,68 @@ test("a picker target preserves its exact session and open document; malformed i
   expect(parseTarget("ux-revival")).toEqual({ kind: "session", session: "ux-revival" });
   expect(parseTarget("{broken")).toEqual({ kind: "session", session: "{broken" });
 });
+
+test("a verb refused as busy logs one line naming the verb still running, and keeps its refusal", async () => {
+  const registry = AtomRegistry.make();
+  const owner = createRouteOwner("test", registry);
+  let release = () => {};
+  const first = owner.runAction(
+    "plan",
+    async () => {
+      await new Promise<void>((resolve) => (release = resolve));
+      return null;
+    },
+    undefined,
+    undefined,
+    "plan",
+  );
+  const refused = await owner.runAction(
+    "apply",
+    async () => null,
+    undefined,
+    undefined,
+    "apply 2 rows",
+  );
+  expect(refused).toMatchObject({ code: "busy", message: "plan still running (0s)" });
+  expect(registry.get(owner.failure)).toEqual(refused);
+  const [line] = registry.get(owner.log);
+  expect(line).toMatchObject({
+    kind: "verb",
+    label: "apply 2 rows",
+    says: "refused · plan still running (0s)",
+    refused: true,
+  });
+  release();
+  await first;
+  owner.dispose();
+});
+
+test("a verb in flight past its bound ends as stopped, releases busy, and its late answer is only logged", async () => {
+  const registry = AtomRegistry.make();
+  const owner = createRouteOwner("test", registry);
+  let answer = () => {};
+  let runs = 0;
+  const work = async () => {
+    runs += 1;
+    await new Promise<void>((resolve) => (answer = resolve));
+    return null;
+  };
+  const outcome = await owner.runAction("read", work, undefined, undefined, "read schedule", 0.05);
+  // Never success, never a retry: a stated stop, with the bound it hit.
+  expect(outcome).toMatchObject({ code: "unknown", message: "stopped: no answer after 0.05s" });
+  expect(registry.get(owner.log)[0]).toMatchObject({
+    label: "read schedule",
+    says: "stopped: no answer after 0.05s",
+    refused: true,
+  });
+  expect(registry.get(owner.busy)).toBeNull();
+  expect(await owner.runAction("list", async () => null, undefined, undefined, "list")).toBeNull();
+  // The late answer is logged as late and applies nothing on its own.
+  answer();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(
+    registry.get(owner.log).some((line) => line.says.startsWith("late · answered after the stop")),
+  ).toBe(true);
+  expect(runs).toBe(1);
+  owner.dispose();
+});

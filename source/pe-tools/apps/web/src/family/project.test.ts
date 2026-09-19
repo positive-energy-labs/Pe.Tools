@@ -294,7 +294,7 @@ describe("draftToPatches — draft → staged field patches", () => {
       d.types[typeName] = { ...d.types[typeName], "Body Width": "" };
     });
     expect(draftToPatches(SHOWCASE, draft, baseline)).toContainEqual({
-      path: ["fields", `/types/${typeName}/Body Width`, "staged"],
+      path: ["cells", `/types/${typeName}/Body Width`, "staged"],
       value: { value: "" },
     });
   });
@@ -305,7 +305,7 @@ describe("draftToPatches — draft → staged field patches", () => {
     });
     expect(draftToPatches(SHOWCASE, draft, baseline)).toEqual([
       {
-        path: ["fields", "/parameters/Body Width/value", "staged"],
+        path: ["cells", "/parameters/Body Width/value", "staged"],
         value: { value: "26in" },
       },
     ]);
@@ -317,7 +317,7 @@ describe("draftToPatches — draft → staged field patches", () => {
     });
     expect(draftToPatches(SHOWCASE, draft, baseline)).toEqual([
       {
-        path: ["fields", "/parameters/Core Height/formula", "staged"],
+        path: ["cells", "/parameters/Core Height/formula", "staged"],
         value: { value: "Body Height * 2" },
       },
     ]);
@@ -329,10 +329,10 @@ describe("draftToPatches — draft → staged field patches", () => {
     });
     expect(draftToPatches(SHOWCASE, draft, baseline)).toEqual([
       {
-        path: ["fields", "/parameters/Body Width/formula", "staged"],
+        path: ["cells", "/parameters/Body Width/formula", "staged"],
         value: { value: "Body Depth + 6in" },
       },
-      { path: ["fields", "/parameters/Body Width/value", "staged"], value: { delete: true } },
+      { path: ["cells", "/parameters/Body Width/value", "staged"], value: { delete: true } },
     ]);
   });
 
@@ -341,14 +341,14 @@ describe("draftToPatches — draft → staged field patches", () => {
       d.types.Standard = { ...d.types.Standard, "Body Width": "25in" };
     });
     expect(draftToPatches(SHOWCASE, set.draft, set.baseline)).toEqual([
-      { path: ["fields", "/types/Standard/Body Width", "staged"], value: { value: "25in" } },
+      { path: ["cells", "/types/Standard/Body Width", "staged"], value: { value: "25in" } },
     ]);
 
     const cleared = edited((d) => {
       delete d.types.Tall!["Return Elevation"];
     });
     expect(draftToPatches(SHOWCASE, cleared.draft, cleared.baseline)).toEqual([
-      { path: ["fields", "/types/Tall/Return Elevation", "staged"], value: { delete: true } },
+      { path: ["cells", "/types/Tall/Return Elevation", "staged"], value: { delete: true } },
     ]);
   });
 
@@ -357,14 +357,14 @@ describe("draftToPatches — draft → staged field patches", () => {
       d.geom.body!.dims.width = "30in";
     });
     expect(draftToPatches(SHOWCASE, form.draft, form.baseline)).toEqual([
-      { path: ["fields", "/forms/body/width", "staged"], value: { value: "30in" } },
+      { path: ["cells", "/forms/body/width", "staged"], value: { value: "30in" } },
     ]);
 
     const connector = edited((d) => {
       d.geom["return-air"]!.dims.width = "12in";
     });
     expect(draftToPatches(SHOWCASE, connector.draft, connector.baseline)).toEqual([
-      { path: ["fields", "/connectors/return-air/width", "staged"], value: { value: "12in" } },
+      { path: ["cells", "/connectors/return-air/width", "staged"], value: { value: "12in" } },
     ]);
   });
 
@@ -377,11 +377,11 @@ describe("draftToPatches — draft → staged field patches", () => {
     });
     expect(draftToPatches(SHOWCASE, draft, baseline)).toEqual([
       {
-        path: ["fields", "/connectors/supply-air/flowDirection", "staged"],
+        path: ["cells", "/connectors/supply-air/flowDirection", "staged"],
         value: { value: "In" },
       },
       {
-        path: ["fields", "/connectors/supply-air/systemType", "staged"],
+        path: ["cells", "/connectors/supply-air/systemType", "staged"],
         value: { value: "ExhaustAir" },
       },
     ]);
@@ -406,13 +406,13 @@ describe("draftToPatches — draft → staged field patches", () => {
 
     expect(draftToPatches(frozen, draft, baseline)).toEqual([
       {
-        path: ["fields", "/parameters/Core Bore Diameter", "staged"],
+        path: ["cells", "/parameters/Core Bore Diameter", "staged"],
         value: {
           value: { dataType: L, propertiesGroup: "geometry", value: "3in" },
         },
       },
       {
-        path: ["fields", "/forms/core-bore/diameter", "staged"],
+        path: ["cells", "/forms/core-bore/diameter", "staged"],
         value: { value: "param:Core Bore Diameter" },
       },
     ]);

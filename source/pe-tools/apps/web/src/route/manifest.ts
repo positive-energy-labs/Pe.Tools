@@ -11,6 +11,7 @@ import type { ReactNode } from "react";
 import { z } from "zod";
 import type { UseHotkeyDefinition } from "@tanstack/react-hotkeys";
 import {
+  sameValue,
   semanticActions,
   stagedEntries,
   type ActionBases,
@@ -65,6 +66,8 @@ export interface Ctx<W, R extends string, P> {
     readonly key: WorkKey;
     readonly doc: W | null;
     readonly revision: number | null;
+    /** Why the Work cannot be read (unreadable saved Work); null when it can. */
+    readonly refusal: string | null;
   };
   readonly readings: Readonly<Record<R, Reading<unknown>>>;
   readonly page: P;
@@ -77,14 +80,25 @@ export interface Ctx<W, R extends string, P> {
   readonly setPage: (next: Partial<P>) => void;
 }
 
+import { DEFAULT_WAIT_S, HOST_READ_WAIT_S, NATIVE_APPLY_WAIT_S, NATIVE_READ_WAIT_S } from "./waits";
+export { DEFAULT_WAIT_S, HOST_READ_WAIT_S, NATIVE_APPLY_WAIT_S, NATIVE_READ_WAIT_S };
+
 export interface RouteAction<W, R extends string, P, I = void> {
   label: string;
+  /** What the verb does in any state: the catalog's words. */
   says: string;
+  /** What it does now, when that depends on the state (plan: the staged draft or the saved spec). */
+  saysNow?: (ctx: Ctx<W, R, P>) => string;
   needs: "host" | "session" | "document" | "project" | "family";
   actor: "any" | "human";
   input: z.ZodType<I>;
   /** Browser Reading keys invalidated on success; semantic actions name Host and Pea resources. */
   dirties: readonly R[];
+  /**
+   * How long this verb may stay in flight before it ends as "stopped: no answer after Ns" and
+   * releases busy (a timeout is a diagnostic boundary, never a retry). Default `DEFAULT_WAIT_S`.
+   */
+  waitSeconds?: number;
   /** State that must be current before this action may mutate. Previous values remain display-only. */
   requires?: { readonly work?: true; readonly readings?: readonly R[] };
   chord?: UseHotkeyDefinition["hotkey"];
@@ -163,6 +177,9 @@ export interface PlanEntry {
   warnings: readonly string[];
   /** The plan action this row came from; apply names it, and the host consumes its sealed input. */
   plan?: string;
+  /** The key apply's `expectedPlanHashes` uses for this row, when it is not `id` (a family's id
+   * as that plan resolved its name: a wire fact of the sealed plan, never the row's identity). */
+  hashKey?: string;
 }
 
 /** Apply each plan action's included rows, one host apply per plan, as `{ plan, hashes }`. */
@@ -170,7 +187,8 @@ export const byPlan = (included: readonly PlanEntry[]) => {
   const plans = new Map<string, Record<string, string>>();
   for (const row of included) {
     if (!row.plan) throw Error(`the planned row for ${row.name} names no plan`);
-    (plans.get(row.plan) ?? plans.set(row.plan, {}).get(row.plan)!)[row.id] = row.planHash;
+    (plans.get(row.plan) ?? plans.set(row.plan, {}).get(row.plan)!)[row.hashKey ?? row.id] =
+      row.planHash;
   }
   return [...plans].map(([plan, expectedPlanHashes]) => ({ plan, expectedPlanHashes }));
 };
@@ -183,7 +201,17 @@ export interface PlanSheet {
    * evidence. A cell that no longer holds it makes the sheet stale, the host's refusal rule.
    */
   staged?: Readonly<Record<string, Rung>>;
+  /** The rows the plan says were held back, and who held each: the host's words, by name. */
+  held?: readonly HeldRow[];
 }
+
+export interface HeldRow {
+  name: string;
+  by: "person" | "pea";
+}
+
+/** The host's words for a plan whose staged cells moved; the sheet says them before the press. */
+export const STALE_PLAN = "The staged cells changed since this plan; plan again";
 
 export interface EntityPage {
   stage: EntityStage;
@@ -263,6 +291,9 @@ export interface EntityRouteDef<W, R extends string, P> {
   capture: SemanticActionKey;
   /** The host workflow that applies a saved spec in one step, when there is no plan. */
   apply: SemanticActionKey;
+  /** The audit Readings an apply changes in Revit (a new schedule joins the catalog): its
+   * completion re-reads them, so the route never shows a pre-apply count. */
+  applies?: readonly R[];
   /** Present = apply is a confirmation over this plan. */
   plan?: ApplyPlan<W, R, P>;
   /**
@@ -277,10 +308,11 @@ export interface EntityRouteDef<W, R extends string, P> {
       ctx: Ctx<W, R | EntityReading, P & EntityPage>,
     ) => Readonly<Record<string, { staged?: Rung | null }>>;
     plan: (ctx: Ctx<W, R | EntityReading, P & EntityPage>) => Promise<PlanSheet>;
+    /** Resolves to the apply's own outcome when it has one (partial, refused, failed). */
     apply: (
       ctx: Ctx<W, R | EntityReading, P & EntityPage>,
       included: readonly PlanEntry[],
-    ) => Promise<void>;
+    ) => Promise<Refusal | null | void>;
   };
   /**
    * What the route needs bound before it reads anything; default `project`. The verbs need what
@@ -314,7 +346,7 @@ export const isSpecOf = (schema: string | null | undefined, path: string | reado
 type EntityCtx = Ctx<unknown, string, EntityPage>;
 type Viewed = { page: EntityPage; readings: Readonly<Record<string, Reading<unknown>>> };
 
-const documentOf = (ctx: { target: ExecutionTarget }) => {
+export const documentOf = (ctx: { target: ExecutionTarget }) => {
   if (ctx.target.kind !== "document") throw Error("pick a document");
   return ctx.target.ref;
 };
@@ -344,6 +376,8 @@ export const admissionPlan = <W, R extends string, P>(
   keys: { plan: SemanticActionKey; apply: SemanticActionKey },
   row: (plan: unknown) => PlanEntry,
   authored?: (work: W) => { executionOptions?: unknown } & Record<string, unknown>,
+  /** Who the plan result says held rows back, named by the sheet's own rows. */
+  held?: (result: Record<string, unknown>, entries: readonly PlanEntry[]) => readonly HeldRow[],
 ): ApplyPlan<W, R, P> => {
   const workOf = (
     ctx: Ctx<W, R | EntityReading, P & EntityPage>,
@@ -357,9 +391,11 @@ export const admissionPlan = <W, R extends string, P>(
     read: async (ctx, source) => {
       const { input, bases } = workOf(ctx);
       const result = await workflow(keys.plan, { source, ...input }, ctx, bases);
-      return {
-        entries: [result.plan].flat().map((plan) => ({ ...row(plan), plan: String(result.id) })),
-      };
+      const entries = [result.plan]
+        .flat()
+        .map((plan) => ({ ...row(plan), plan: String(result.id) }));
+      const rows = held?.(result, entries) ?? [];
+      return rows.length ? { entries, held: rows } : { entries };
     },
     // The plan sealed the source and options; apply names that plan and the hashes it confirms.
     apply: async (ctx, included) => {
@@ -382,14 +418,23 @@ export const memberOf = (view: Viewed) =>
 export function sheetOf<W, R extends string, P>(
   def: EntityRouteDef<W, R, P>,
   view: EntityView<W, R, P>,
-): { sheet: PlanSheet; excluded: ReadonlySet<string>; included: readonly PlanEntry[] } | null {
+): {
+  sheet: PlanSheet;
+  excluded: ReadonlySet<string>;
+  included: readonly PlanEntry[];
+  stale: boolean;
+} | null {
   const sheet = view.page.sheet;
   if (!sheet) return null;
   const excluded = new Set(def.plan?.excluded?.(view) ?? []);
+  const now = sheet.staged && def.staged ? def.staged.cells(view as never) : {};
   return {
     sheet,
     excluded,
     included: sheet.entries.filter((entry) => !entry.flag && !excluded.has(entry.id)),
+    stale: Object.entries(sheet.staged ?? {}).some(
+      ([cell, rung]) => !sameValue(now[cell]?.staged, rung),
+    ),
   };
 }
 
@@ -423,6 +468,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
     return isSpecOf(member.schema, def.schema) ? null : `the member is not a ${def.entity} spec`;
   };
   const capture: RouteAction<unknown, string, EntityPage, never> = {
+    waitSeconds: NATIVE_READ_WAIT_S,
     label: `capture ${def.entity}`,
     says: `reads the ${def.entity} from Revit into new members of the chosen pod`,
     actor: "any",
@@ -451,8 +497,19 @@ export function entityRoute<W, const R extends string, P extends object, const A
   /** A sheet planned from staged work; apply sends its plans, never the page's member. */
   const stagedSheet = (ctx: EntityCtx) => Boolean(staged && sheetView(ctx)?.sheet.staged);
   const planVerb: RouteAction<unknown, string, EntityPage, never> = {
+    waitSeconds: NATIVE_READ_WAIT_S,
     label: "plan",
-    says: `plans the saved ${def.entity} spec and opens the confirmation sheet; changes nothing`,
+    says: staged
+      ? `plans the staged draft, or the saved ${def.entity} spec when nothing is staged, and opens the confirmation sheet; changes nothing`
+      : `plans the saved ${def.entity} spec and opens the confirmation sheet; changes nothing`,
+    ...(staged
+      ? {
+          saysNow: (ctx) =>
+            stagedCount(ctx)
+              ? `plans the staged draft (${stagedCount(ctx)} cells, filed nowhere) and opens the confirmation sheet; changes nothing`
+              : `plans the saved ${def.entity} spec and opens the confirmation sheet; changes nothing`,
+        }
+      : {}),
     needs: semanticActionFacts(def.apply).needs,
     actor: "any",
     input: z.void() as unknown as z.ZodType<never>,
@@ -473,12 +530,13 @@ export function entityRoute<W, const R extends string, P extends object, const A
     },
   };
   const apply: RouteAction<unknown, string, EntityPage, never> = {
+    waitSeconds: NATIVE_APPLY_WAIT_S,
     label: `apply ${def.entity}`,
     ...semanticActionFacts(def.apply),
     // The plan sheet gates apply: its button is the only one (w8-revit trip 5).
     ...(plan || staged ? { sheet: true as const } : {}),
     input: z.void() as unknown as z.ZodType<never>,
-    dirties: ["pods"],
+    dirties: ["pods", ...(def.applies ?? [])],
     count: (ctx) => (plan || staged ? sheetView(ctx)?.included.length || null : null),
     ready: (ctx) => {
       // A staged sheet carries its own sealed plans; the page's member is not sent.
@@ -487,6 +545,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
       if (!ctx.page.confirming) return "plan first";
       const view = sheetView(ctx);
       if (!view) return "the plan no longer describes this spec; plan again";
+      if (view.stale) return STALE_PLAN;
       return view.included.length ? null : "no included row has changes to apply";
     },
     run: async (ctx) => {
@@ -497,9 +556,12 @@ export function entityRoute<W, const R extends string, P extends object, const A
       }
       const view = sheetView(ctx);
       if (!view) throw Error("plan first");
-      if (stagedSheet(ctx)) await staged!.apply(ctx as never, view.included);
-      else await plan!.apply(ctx as never, view.included, sourceOf(ctx));
+      // A staged apply may report its own outcome (applied X of N, refused, failed in Revit).
+      const outcome = stagedSheet(ctx)
+        ? await staged!.apply(ctx as never, view.included)
+        : await plan!.apply(ctx as never, view.included, sourceOf(ctx));
       ctx.setPage({ confirming: false, sheet: null });
+      return outcome ?? null;
     },
   };
   return defineRoute({

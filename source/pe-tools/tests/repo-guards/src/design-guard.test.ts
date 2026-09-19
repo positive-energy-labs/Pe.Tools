@@ -1074,12 +1074,7 @@ for (const specimen of FILES.filter(
   visit(source);
 }
 const MISSING_SWATCH = [...LANG_COMPONENTS].filter((name) => !SPECIMEN_JSX.has(name)).sort();
-const REQUIRED_RECIPE_GRIDS = new Set([
-  ...LANG_RECIPES,
-  "dialogRecipe",
-  "inputGroupRecipe",
-  "selectRecipe",
-]);
+const REQUIRED_RECIPE_GRIDS = new Set([...LANG_RECIPES, "dialogRecipe", "inputGroupRecipe"]);
 const BAD_RECIPE_GRIDS = [...REQUIRED_RECIPE_GRIDS]
   .filter((name) => RECIPE_GRID_USES.get(name) !== 1)
   .map((name) => `${name}: ${RECIPE_GRID_USES.get(name) ?? 0} grids`)
@@ -1101,15 +1096,11 @@ const REQUIRED_SPECIMEN_PATHS = [
   "#/components/lang/switcher",
   "#/components/lang/action-button",
   "#/components/lang/card",
-  "#/components/lang/combobox",
-  "#/components/lang/command",
   "#/components/lang/dialog",
   "#/components/lang/input",
   "#/components/lang/input-group",
   "#/components/lang/label",
   "#/components/lang/pane",
-  "#/components/lang/pick-list",
-  "#/components/lang/select",
   "#/components/lang/kbd",
   "#/components/lang/switch",
   "#/components/lang/textarea",

@@ -25,12 +25,13 @@ import {
   type SettingsSnapshot,
 } from "@pe/agent-contracts";
 
-import type { MasterTableState } from "#/components/master-table/model";
+import type { CellWire } from "#/components/lang/band";
+import type { TableState } from "#/components/master-table/model";
 import { projectBuildReceipt, type BuildFacts, type BuildRefusal } from "#/family/build";
 import type { EvidenceSlice, FamilySnapshot, FieldState } from "#/family/host";
 import { familySource } from "#/family/source";
 import { initialDraft, savedFrom, type Draft, type Focus, type Overlay } from "#/family/model";
-import { draftToPatches } from "#/family/project";
+import { draftToPatches, FAMILY_CELLS } from "#/family/project";
 import { familyEditBuffer } from "./edit-buffer";
 import {
   captureEvidence,
@@ -55,14 +56,14 @@ export type Binding = { slug: string; property: string } | null;
 export type ArmedBuild = { token: string | null; reason: string } | null;
 export type PickerState = { open: string | null; level: string | null; query: string };
 
-const emptyTable = (): MasterTableState => ({ filters: {}, sorts: [], query: "" });
+const emptyTable = (): TableState => ({ filters: {}, sorts: [], query: "" });
 
 /* ── Page memory ───────────────────────────────────────────────────────────── */
 
 export interface FamilyPageMemory {
   readonly overlay: Overlay;
-  readonly table: MasterTableState;
-  readonly drill: MasterTableState;
+  readonly table: TableState;
+  readonly drill: TableState;
   readonly docMode: "text" | "sheet";
   readonly docZoom: number;
   readonly drillType: string | null;
@@ -210,10 +211,8 @@ export function useFamilyStore(options: {
     () =>
       familyEditBuffer(handle.work.key, async (patches, revision) => {
         if (!draftDoc) throw Error("Read the family first.");
-        return handle.work.write(
-          patches.map((patch) => ({ ...patch, path: ["cells", ...patch.path.slice(1)] })),
-          revision,
-        );
+        // The patches come built under the Work's own cell segment (FAMILY_CELLS).
+        return handle.work.write(patches, revision);
       }),
     [handle.work, draftDoc],
   );
@@ -259,6 +258,24 @@ export function useFamilyStore(options: {
     [draftDoc, member],
   );
   const snapshot = useMemo(() => draftSnapshot(false), [draftSnapshot]);
+  const authored = useMemo(
+    (): unknown => (snapshot?.rawContent ? JSON.parse(snapshot.rawContent.replace(/^﻿/, "")) : null),
+    [snapshot],
+  );
+  /** Every Family cell's accept, deny and unstage: one wire over the draft Work's `cells`. */
+  const wire = useMemo(
+    (): CellWire => ({
+      segment: FAMILY_CELLS,
+      revision: draftRevision,
+      // Buffered typing lands first; a bound verb rendered before it then refuses as stale.
+      write: async (patches, revision) => {
+        await flush();
+        return handle.work.write(patches, revision);
+      },
+      lockOf: familyLockOf(authored),
+    }),
+    [handle.work, draftRevision, flush, authored],
+  );
   const authoredLane = useMemo(() => familySource(snapshot, null, fields), [snapshot, fields]);
   const authoredDraft = useMemo(
     () => initialDraft(familySource(draftSnapshot(true), null).world),
@@ -414,16 +431,18 @@ export function useFamilyStore(options: {
         const patches = draftToPatches(lane.document.model, nextDraft, previous);
         // A cleared proposal is a deny: the edit buffer binds it to the revision it was seen at.
         for (const id of nextDraft.cleared.filter((id) => !previous.cleared.includes(id)))
-          patches.push(...transitionPatches(["fields"], id, fields[id] ?? {}, { kind: "deny" }));
+          patches.push(
+            ...transitionPatches([FAMILY_CELLS], id, fields[id] ?? {}, { kind: "deny" }),
+          );
         if (draftRevision == null) return "Wait for the draft to finish loading.";
         if (patches.length) setPage({ buildReview: null });
         edits.stage(nextDraft, patches, draftRevision);
       },
       setOverlay: (value: Setter<Overlay>) =>
         setMemory((c) => ({ ...c, overlay: next(value, c.overlay) })),
-      setTable: (value: Setter<MasterTableState>) =>
+      setTable: (value: Setter<TableState>) =>
         setMemory((c) => ({ ...c, table: next(value, c.table) })),
-      setDrill: (value: Setter<MasterTableState>) =>
+      setDrill: (value: Setter<TableState>) =>
         setMemory((c) => ({ ...c, drill: next(value, c.drill) })),
       setDocMode: (value: Setter<"text" | "sheet">) =>
         setMemory((c) => ({ ...c, docMode: next(value, c.docMode) })),
@@ -460,6 +479,7 @@ export function useFamilyStore(options: {
       async open(next: PodMember) {
         await flush();
         const { rawContent } = await openMember(next);
+        // not a cell: reading
         await handle.work.write([{ path: ["reading"], value: rawContent }]);
         setPage({ pod: next.pod, path: next.path, buildReview: null });
       },
@@ -502,6 +522,7 @@ export function useFamilyStore(options: {
     snapshot,
     review,
     fields,
+    wire,
     saved,
     draft,
     buildFacts,
@@ -533,3 +554,11 @@ export function useFamilyStore(options: {
 }
 
 export type FamilyStore = ReturnType<typeof useFamilyStore>;
+
+/** A field inside a shared-source pointer is locked: the profile holds the pointer, not the value. */
+export const familyLockOf =
+  (authored: unknown) =>
+  (key: string): string | null =>
+    authored != null && settingsFieldDirectives(authored, settingsFieldSegments(key))
+      ? `${key} points to a shared source — edit that source instead`
+      : null;

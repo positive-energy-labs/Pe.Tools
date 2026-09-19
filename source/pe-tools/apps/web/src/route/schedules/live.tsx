@@ -5,6 +5,7 @@ import {
   unstale,
   scheduleCatalogSchema,
   scheduleReadingSchema,
+  type ScheduleReading,
   type ActionStatus,
   type Reading,
   type RouteStatePatch,
@@ -14,9 +15,12 @@ import { previousOf } from "#/readings";
 import { refuse, useRoute, type EntitySearch } from "#/route";
 import { ActionReceiptView } from "#/actions/receipt";
 import { EntityRouteView } from "#/route/entity";
+import { ActionFlag } from "#/route/situation";
 import { usePodList } from "#/route/pods";
 import { DEMO_SPEC } from "#/route/seeds";
 import { scheduleSpec, schedulesManifest, type ScheduleGridPage } from "./manifest";
+import { cellText } from "./columns";
+import { StaleResolve } from "./stale-resolve";
 import { ScheduleGridWorkspace, type ScheduleGridState } from "./workspace";
 
 const valueOf = <T,>(reading: Reading<unknown>, schema: { parse(value: unknown): T }) => {
@@ -34,6 +38,7 @@ export function LiveScheduleGridWorkspace({
   target: chosen = null,
   thread,
   entry,
+  url = true,
 }: {
   workspaceId?: string;
   render?: (state: ScheduleGridState) => ReactNode;
@@ -45,6 +50,8 @@ export function LiveScheduleGridWorkspace({
   thread?: string;
   /** The route's URL page state (stage, pod, path), read once at mount. */
   entry?: EntitySearch;
+  /** False in a chat pane, which does not own the URL. */
+  url?: boolean;
 }) {
   const workbench = useContext(WorkbenchContext);
   const manifest = useMemo(() => schedulesManifest(), []);
@@ -85,7 +92,7 @@ export function LiveScheduleGridWorkspace({
   // `/schedules` owns its URL: the open schedule rides it, so a reload reopens it.
   const navigate = useNavigate();
   useEffect(() => {
-    if (!framed) return;
+    if (!framed || !url) return;
     void navigate({
       to: ".",
       search: (previous: Record<string, unknown>) => ({
@@ -94,7 +101,7 @@ export function LiveScheduleGridWorkspace({
       }),
       replace: true,
     } as never);
-  }, [framed, navigate, page.workspaceId]);
+  }, [framed, url, navigate, page.workspaceId]);
 
   const work = handle.work;
   const catalog = valueOf(handle.readings.catalog, scheduleCatalogSchema);
@@ -112,7 +119,15 @@ export function LiveScheduleGridWorkspace({
       setPage({ captureId: basisId });
   }, [acting, basisId, hasWork, page.captureId, setPage]);
 
-  const shown = hasWork && basisId ? saved : (retained ?? saved);
+  // Staged cells are keyed by the basis reading's rows. A later reading (a push's readback) is
+  // drawn only while its rows are the same elements in the same positions: written cells then show
+  // what Revit now holds, and a still-staged cell overlays the row it was staged on (F-S-1).
+  const shown =
+    hasWork && basisId
+      ? retained && saved && retained.id !== basisId && sameRows(saved, retained)
+        ? retained
+        : saved
+      : (retained ?? saved);
   const unresolved = receipts.some((row) =>
     ["running", "unknown", "incomplete"].includes(row.state),
   );
@@ -125,7 +140,8 @@ export function LiveScheduleGridWorkspace({
     );
     return work.write(
       writing && (!hasWork || !work.doc?.basis)
-        ? [{ path: ["basis"], value: { captureId: shown.id } }, ...patches]
+        ? // not a cell: basis
+          [{ path: ["basis"], value: { captureId: shown.id } }, ...patches]
         : [...patches, ...unstale(work.doc, restaged)],
       expectedRevision,
     );
@@ -154,6 +170,7 @@ export function LiveScheduleGridWorkspace({
                 : handle.actions.push.refusal;
   const state: ScheduleGridState = {
     slice: work.doc,
+    revision: work.revision,
     hydrated: work.current || work.revision !== null,
     refreshing: work.revision !== null && !work.current,
     apply,
@@ -167,11 +184,24 @@ export function LiveScheduleGridWorkspace({
     blockedBecause,
   };
 
+  const resolve = (
+    <StaleResolve
+      doc={work.doc}
+      current={(key) => cellText(shown?.snapshot, key)}
+      write={apply}
+      revision={work.revision}
+      push={() => execute("push")}
+      unread={page.unread}
+      readAgain={() => execute("refresh")}
+    />
+  );
   const audit = (
     <div className="flex size-full min-h-0 min-w-0 flex-col">
       {(readingFailure || !target) && (
         <div role="status">
-          {readingFailure ?? "Select an available document and session to read schedules"}
+          {readingFailure ??
+            handle.bindingLost?.sentence ??
+            "Select an available document and session to read schedules"}
         </div>
       )}
       {hasWork && retained && basisId !== retained.id && (
@@ -189,19 +219,25 @@ export function LiveScheduleGridWorkspace({
       )}
       {page.pushRun && <div role="status">push run · {page.pushRun}</div>}
       <ScheduleReceipts workspaceId={page.workspaceId} receipts={receipts} />
+      {/* Unframed there is no head: the stale cells and their aggregate stand in the audit. */}
+      {framed ? null : resolve}
       {render ? render(state) : <ScheduleGridWorkspace state={state} />}
     </div>
   );
   if (!framed) return audit;
   return (
-    <EntityRouteView
-      def={scheduleSpec}
-      handle={handle as never}
-      refreshPods={refreshPods}
-      fixture={demo ? DEMO_SPEC : undefined}
-    >
-      {audit}
-    </EntityRouteView>
+    <ActionFlag.Provider value={{ push: resolve }}>
+      <EntityRouteView
+        def={scheduleSpec}
+        handle={handle as never}
+        refreshPods={refreshPods}
+        fixture={demo ? DEMO_SPEC : undefined}
+        url={url}
+        band={resolve}
+      >
+        {audit}
+      </EntityRouteView>
+    </ActionFlag.Provider>
   );
 }
 
@@ -222,3 +258,13 @@ function ScheduleReceipts({
     </section>
   );
 }
+
+/** The same schedule rows: each row number stands for the same elements in both readings. */
+const sameRows = (a: ScheduleReading, b: ScheduleReading) =>
+  a.snapshot.scheduleUniqueId === b.snapshot.scheduleUniqueId &&
+  a.snapshot.rows.length === b.snapshot.rows.length &&
+  a.snapshot.rows.every(
+    (row, index) =>
+      row.rowNumber === b.snapshot.rows[index]!.rowNumber &&
+      JSON.stringify(row.subjectIds) === JSON.stringify(b.snapshot.rows[index]!.subjectIds),
+  );

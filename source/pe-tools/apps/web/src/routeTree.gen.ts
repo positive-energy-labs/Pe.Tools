@@ -28,8 +28,9 @@ import { Route as SchedulesRouteImport } from "./routes/schedules";
 import { Route as TakeoffsRouteImport } from "./routes/takeoffs";
 import { Route as ApiRunsExportRouteImport } from "./routes/api/runs-export";
 import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
+import { Route as DesignSystemBandRouteImport } from "./routes/design-system_.band";
+import { Route as DesignSystemListRouteImport } from "./routes/design-system_.list";
 import { Route as DesignSystemPopoversRouteImport } from "./routes/design-system_.popovers";
-import { Route as DesignSystemProposalFlowRouteImport } from "./routes/design-system_.proposal-flow";
 import { Route as DesignSystemSwatchRouteImport } from "./routes/design-system_.swatch";
 import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
 import { Route as ApiRunsDataSplatRouteImport } from "./routes/api/runs-data.$";
@@ -130,17 +131,21 @@ const DesignSystemArmingRoute = DesignSystemArmingRouteImport.update({
   path: "/design-system/arming",
   getParentRoute: () => rootRouteImport,
 } as any);
+const DesignSystemBandRoute = DesignSystemBandRouteImport.update({
+  id: "/design-system_/band",
+  path: "/design-system/band",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const DesignSystemListRoute = DesignSystemListRouteImport.update({
+  id: "/design-system_/list",
+  path: "/design-system/list",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const DesignSystemPopoversRoute = DesignSystemPopoversRouteImport.update({
   id: "/design-system_/popovers",
   path: "/design-system/popovers",
   getParentRoute: () => rootRouteImport,
 } as any);
-const DesignSystemProposalFlowRoute =
-  DesignSystemProposalFlowRouteImport.update({
-    id: "/design-system_/proposal-flow",
-    path: "/design-system/proposal-flow",
-    getParentRoute: () => rootRouteImport,
-  } as any);
 const DesignSystemSwatchRoute = DesignSystemSwatchRouteImport.update({
   id: "/design-system_/swatch",
   path: "/design-system/swatch",
@@ -182,8 +187,9 @@ export interface FileRoutesByFullPath {
   "/takeoffs": typeof TakeoffsRoute;
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
+  "/design-system/band": typeof DesignSystemBandRoute;
+  "/design-system/list": typeof DesignSystemListRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
-  "/design-system/proposal-flow": typeof DesignSystemProposalFlowRoute;
   "/design-system/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/runs-data/$": typeof ApiRunsDataSplatRoute;
@@ -209,8 +215,9 @@ export interface FileRoutesByTo {
   "/takeoffs": typeof TakeoffsRoute;
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
+  "/design-system/band": typeof DesignSystemBandRoute;
+  "/design-system/list": typeof DesignSystemListRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
-  "/design-system/proposal-flow": typeof DesignSystemProposalFlowRoute;
   "/design-system/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/runs-data/$": typeof ApiRunsDataSplatRoute;
@@ -237,8 +244,9 @@ export interface FileRoutesById {
   "/takeoffs": typeof TakeoffsRoute;
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system_/arming": typeof DesignSystemArmingRoute;
+  "/design-system_/band": typeof DesignSystemBandRoute;
+  "/design-system_/list": typeof DesignSystemListRoute;
   "/design-system_/popovers": typeof DesignSystemPopoversRoute;
-  "/design-system_/proposal-flow": typeof DesignSystemProposalFlowRoute;
   "/design-system_/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/runs-data/$": typeof ApiRunsDataSplatRoute;
@@ -266,8 +274,9 @@ export interface FileRouteTypes {
     | "/takeoffs"
     | "/api/runs-export"
     | "/design-system/arming"
+    | "/design-system/band"
+    | "/design-system/list"
     | "/design-system/popovers"
-    | "/design-system/proposal-flow"
     | "/design-system/swatch"
     | "/api/pdf-audit/parse"
     | "/api/runs-data/$"
@@ -293,8 +302,9 @@ export interface FileRouteTypes {
     | "/takeoffs"
     | "/api/runs-export"
     | "/design-system/arming"
+    | "/design-system/band"
+    | "/design-system/list"
     | "/design-system/popovers"
-    | "/design-system/proposal-flow"
     | "/design-system/swatch"
     | "/api/pdf-audit/parse"
     | "/api/runs-data/$"
@@ -320,8 +330,9 @@ export interface FileRouteTypes {
     | "/takeoffs"
     | "/api/runs-export"
     | "/design-system_/arming"
+    | "/design-system_/band"
+    | "/design-system_/list"
     | "/design-system_/popovers"
-    | "/design-system_/proposal-flow"
     | "/design-system_/swatch"
     | "/api/pdf-audit/parse"
     | "/api/runs-data/$"
@@ -348,8 +359,9 @@ export interface RootRouteChildren {
   TakeoffsRoute: typeof TakeoffsRoute;
   ApiRunsExportRoute: typeof ApiRunsExportRoute;
   DesignSystemArmingRoute: typeof DesignSystemArmingRoute;
+  DesignSystemBandRoute: typeof DesignSystemBandRoute;
+  DesignSystemListRoute: typeof DesignSystemListRoute;
   DesignSystemPopoversRoute: typeof DesignSystemPopoversRoute;
-  DesignSystemProposalFlowRoute: typeof DesignSystemProposalFlowRoute;
   DesignSystemSwatchRoute: typeof DesignSystemSwatchRoute;
   ApiPdfAuditParseRoute: typeof ApiPdfAuditParseRouteWithChildren;
   ApiRunsDataSplatRoute: typeof ApiRunsDataSplatRoute;
@@ -490,18 +502,25 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DesignSystemArmingRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/design-system_/band": {
+      id: "/design-system_/band";
+      path: "/design-system/band";
+      fullPath: "/design-system/band";
+      preLoaderRoute: typeof DesignSystemBandRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/design-system_/list": {
+      id: "/design-system_/list";
+      path: "/design-system/list";
+      fullPath: "/design-system/list";
+      preLoaderRoute: typeof DesignSystemListRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/design-system_/popovers": {
       id: "/design-system_/popovers";
       path: "/design-system/popovers";
       fullPath: "/design-system/popovers";
       preLoaderRoute: typeof DesignSystemPopoversRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/design-system_/proposal-flow": {
-      id: "/design-system_/proposal-flow";
-      path: "/design-system/proposal-flow";
-      fullPath: "/design-system/proposal-flow";
-      preLoaderRoute: typeof DesignSystemProposalFlowRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/design-system_/swatch": {
@@ -566,8 +585,9 @@ const rootRouteChildren: RootRouteChildren = {
   TakeoffsRoute: TakeoffsRoute,
   ApiRunsExportRoute: ApiRunsExportRoute,
   DesignSystemArmingRoute: DesignSystemArmingRoute,
+  DesignSystemBandRoute: DesignSystemBandRoute,
+  DesignSystemListRoute: DesignSystemListRoute,
   DesignSystemPopoversRoute: DesignSystemPopoversRoute,
-  DesignSystemProposalFlowRoute: DesignSystemProposalFlowRoute,
   DesignSystemSwatchRoute: DesignSystemSwatchRoute,
   ApiPdfAuditParseRoute: ApiPdfAuditParseRouteWithChildren,
   ApiRunsDataSplatRoute: ApiRunsDataSplatRoute,

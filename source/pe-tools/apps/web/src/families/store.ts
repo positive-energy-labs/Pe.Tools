@@ -7,7 +7,7 @@
  * receipt said, and which picker is open. Plain values, no atoms.
  */
 import { frozenDemo } from "#/host/demo-client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   actionReceiptSchema,
   actionStatusSchema,
@@ -17,6 +17,7 @@ import {
   ffReceiptSchema,
   podMemberSourceSchema,
   type ActionStatus,
+  type AppliedFilter,
   type FamilyCellAddress,
   type FamilyCellState,
   type FamilyCellValue,
@@ -24,23 +25,16 @@ import {
   type FamiliesRouteDocument,
   type FamilyExclusions,
   type Reading,
-  fanOut,
-  transitionBinding,
   transitionPatches,
-  type FanOutKind,
-  type RouteStatePatch,
-  type SkipReason,
-  type Transition,
-  type TransitionKind,
 } from "@pe/agent-contracts";
 import { z } from "zod";
 
-import type { MasterTableState } from "#/components/master-table/model";
+import type { CellWire } from "#/components/lang/band";
+import type { TableState } from "#/components/master-table/model";
 import { callHostRpc } from "#/host/client";
 import { useHostCall, previousOf, useReading } from "#/readings";
 import { useRoute, type EntityPage, type EntitySearch } from "#/route";
 import { usePodList } from "#/route/pods";
-import type { Refusal } from "#/route/refusal";
 import { createLiveFamiliesHost, type FamiliesDraft } from "#/families/host";
 import { manifest, type FamiliesPage } from "#/families/manifest";
 
@@ -54,7 +48,7 @@ export type PickerState = {
 
 export interface FamiliesPageMemory {
   readonly showUncommon: boolean;
-  readonly table: MasterTableState;
+  readonly table: TableState;
   readonly picker: PickerState;
 }
 
@@ -143,13 +137,6 @@ export function applyDataOf(statuses: unknown, receipts: unknown) {
   };
 }
 
-/** A cell write's outcome, per address: one refusal covers every address the write covered. */
-export interface CellWrite {
-  covered: string[];
-  skipped: { key: string; reason: SkipReason }[];
-  refused?: Refusal & { addresses: string[] };
-}
-
 /* ── The hook ──────────────────────────────────────────────────────────────── */
 
 export function useFamiliesStore(
@@ -167,7 +154,8 @@ export function useFamiliesStore(
   // The draft and the selection are Page: the verbs read them off `ctx.page`.
   const page = handle.page[0] as FamiliesPage & EntityPage;
   const setPage = handle.page[1] as (next: Partial<FamiliesPage & EntityPage>) => void;
-  const pickedIds = useMemo(() => new Set(page.selection.map(Number)), [page.selection]);
+  // The capture picks, by family NAME (ruling): they survive a reload that reissues the ids.
+  const picked = useMemo(() => new Set(page.selection), [page.selection]);
   const draft = page.draft;
 
   const host = useMemo(() => createLiveFamiliesHost(), []);
@@ -190,45 +178,18 @@ export function useFamiliesStore(
   const excluded = doc?.excluded ?? NO_EXCLUDED;
   const cells = doc?.cells ?? NO_CELLS;
   /*
-   * Every cell verb is one transition of the shared cell machine, written as one Work write of its
-   * rung patches. Bound kinds (accept, deny) carry the rendered revision, which the queue rebases
-   * over this owner's own landed writes only. One address is the cell's own control; more is an
-   * aggregate fan-out, which skips keys the kind is not open on (and contested keys, for accept).
+   * Every cell verb is one transition of the shared cell machine over this one wire: the cell's
+   * own controls (`reviewTransitions`) and any aggregate (`runFanOut`) write through it, and bound
+   * kinds carry the rendered revision. The workspace adds the matrix's lock facts (`lockOf`).
    */
-  const writeCells = async (
-    kind: TransitionKind,
-    covered: string[],
-    skipped: { key: string; reason: SkipReason }[],
-    patches: RouteStatePatch[],
-  ): Promise<CellWrite> => {
-    if (!patches.length) return { covered, skipped };
-    const refusal = await handle.work.write(
-      patches,
-      transitionBinding(kind) === "bound" ? handle.work.revision : undefined,
-    );
-    return {
-      covered,
-      skipped,
-      ...(refusal ? { refused: { ...refusal, addresses: covered } } : {}),
-    };
-  };
-  const transition = (address: FamilyCellAddress, change: Transition) => {
-    const key = familyCellKey(address);
-    return writeCells(
-      change.kind,
-      [key],
-      [],
-      transitionPatches(["cells"], key, cells[key] ?? {}, change),
-    );
-  };
-  const aggregate = (addresses: readonly FamilyCellAddress[], kind: FanOutKind) => {
-    if (addresses.length === 1) return transition(addresses[0]!, { kind });
-    const out = fanOut(cells, addresses.map(familyCellKey), kind, {
-      cellsPath: ["cells"],
-      actor: "human",
-    });
-    return writeCells(kind, out.covered, out.skipped, out.patches);
-  };
+  const wire = useMemo(
+    (): CellWire => ({
+      segment: "cells",
+      revision: handle.work.revision,
+      write: handle.work.write,
+    }),
+    [handle.work.revision, handle.work.write],
+  );
   const applied = doc ? stagedFilter(doc) : null;
 
   // The confirmed plan is the kernel's sheet: it lives exactly as long as the sheet is open.
@@ -292,14 +253,68 @@ export function useFamiliesStore(
     ],
   );
 
+  /*
+   * What the old Work held back, as the catalog names each id now (null: no longer loaded). Read
+   * while the Work is unreadable (the start-fresh confirm shows it) and while the fresh page's
+   * offer is open. Human-only on the host; read-only here: nothing carries over without a press.
+   */
+  const unreadable = handle.work.startFresh !== null;
+  const salvage = handle.work.salvage;
+  const salvaged = useHostCall(
+    async (): Promise<Salvaged> => {
+      const got = await salvage!();
+      const { familyNames, familyIds, scope } = salvageSchema.parse(got?.value ?? {});
+      const names = familyIds.length ? await host.namesById(documentTarget!) : new Map();
+      return {
+        rows: [
+          ...familyNames.map((name) => ({ id: null, name })),
+          ...familyIds.map((id) => ({ id, name: names.get(id) ?? null })),
+        ],
+        scope: (scope as AppliedFilter | undefined) ?? null,
+      };
+    },
+    ["salvage", documentTarget?.session, documentTarget?.openId, unreadable, page.carryOver],
+    salvage !== null && documentTarget !== null && (unreadable || page.carryOver),
+  );
+
+  // The offer lasts until pressed, dismissed, or the next plan (journeys' ruling).
+  useEffect(() => {
+    if (page.sheet && page.carryOver) setPage({ carryOver: false });
+  }, [page.sheet, page.carryOver, setPage]);
+
   const actions = useMemo(
     () => ({
+      /** Start fresh landed: the fresh page offers what the old Work held back. */
+      startedFresh: () => setPage({ carryOver: true }),
+      dismissCarryOver: () => setPage({ carryOver: false }),
+      /**
+       * The person's one press, one human write: the old scope staged again (when it had one), and
+       * the old exclusions that still name a family held back again, as theirs (authority's ruling).
+       */
+      restore: async ({ rows, scope }: Salvaged) => {
+        const names = [
+          ...new Set(
+            rows.flatMap((row) =>
+              row.name && !Object.hasOwn(excluded, row.name) ? [row.name] : [],
+            ),
+          ),
+        ];
+        const patches = [
+          ...(scope ? [{ path: ["scope", "staged"], value: { value: scope } }] : []),
+          // not a cell: excluded
+          ...names.map((name) => ({ path: ["excluded", name], value: { by: "person" } })),
+        ];
+        const refusal = patches.length ? await handle.work.write(patches) : null;
+        if (!refusal) setPage({ carryOver: false });
+        return refusal;
+      },
       setDraft: (value: Setter<FamiliesDraft>) => setPage({ draft: next(value, draft) }),
-      setPickedIds: (value: Setter<Set<number>>) =>
-        setPage({ selection: [...next(value, pickedIds)].map(String) }),
+      setPicked: (value: Setter<Set<string>>) => setPage({ selection: [...next(value, picked)] }),
+      /** The current reading's name → id, which capture's contract still takes (by id). */
+      setLoaded: (loaded: Record<string, number>) => setPage({ loaded }),
       setShowUncommon: (value: Setter<boolean>) =>
         setMemory((current) => ({ ...current, showUncommon: next(value, current.showUncommon) })),
-      setTable: (value: Setter<MasterTableState>) =>
+      setTable: (value: Setter<TableState>) =>
         setMemory((current) => ({ ...current, table: next(value, current.table) })),
       setPicker: (value: Setter<PickerState>) =>
         setMemory((current) => ({ ...current, picker: next(value, current.picker) })),
@@ -308,18 +323,20 @@ export function useFamiliesStore(
        * parameter. Equal to the family's current value, it stages nothing. Pea's standing
        * proposal remains as a counter.
        */
-      propose: (address: FamilyCellAddress, value: FamilyCellValue, current: string) =>
-        transition(address, {
-          kind: "stage",
-          rung: { value: { value: value.value } },
-          baseline: { value: { value: current } },
-        }),
-      accept: (addresses: readonly FamilyCellAddress[]) => aggregate(addresses, "accept"),
-      /** Deny clears the proposal on screen only; an independently staged value survives. */
-      deny: (addresses: readonly FamilyCellAddress[]) => aggregate(addresses, "deny"),
-      unstage: (addresses: readonly FamilyCellAddress[]) => aggregate(addresses, "unstage"),
+      propose: (address: FamilyCellAddress, value: FamilyCellValue, current: string) => {
+        const key = familyCellKey(address);
+        return handle.work.write(
+          transitionPatches(["cells"], key, cells[key] ?? {}, {
+            kind: "stage",
+            rung: { value: { value: value.value } },
+            baseline: { value: { value: current } },
+          }),
+        );
+      },
       // A person's toggle: include again (whoever held it back), or hold back as the person.
+      // Keyed by family NAME (ruling): an element id is reissued on every reload.
       exclude: (familyName: string) =>
+        // not a cell: excluded
         handle.work.write([
           Object.hasOwn(excluded, familyName)
             ? { path: ["excluded", familyName] }
@@ -334,7 +351,7 @@ export function useFamiliesStore(
         callHostRpc("host.shell.open", { path }, { bridgeSessionId: target || undefined }),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [handle.work, cells, draft, setPage, pickedIds, excluded, target, documentScope],
+    [handle.work, cells, draft, setPage, picked, excluded, target, documentScope],
   );
 
   return {
@@ -349,7 +366,7 @@ export function useFamiliesStore(
     applyData,
     captured,
     draft,
-    pickedIds,
+    picked,
     demo,
     refreshPods,
     showUncommon: memory.showUncommon,
@@ -360,8 +377,30 @@ export function useFamiliesStore(
     busy: handle.busy,
     failure: handle.failure,
     feeds,
+    salvaged,
     actions,
+    wire,
   };
 }
+
+/** One exclusion the set-aside Work held: by name, or by an id and the name the catalog gives it now. */
+export interface SalvagedExclusion {
+  id: number | null;
+  /** Null: no loaded family has this id now. */
+  name: string | null;
+}
+
+/** What the set-aside Work offers back: its exclusions and its scope (S-1/S-2). */
+export interface Salvaged {
+  rows: SalvagedExclusion[];
+  scope: AppliedFilter | null;
+}
+
+// ponytail: the route's own salvage (FamiliesSalvage); the scope is the host's typed AppliedFilter.
+const salvageSchema = z.object({
+  familyNames: z.array(z.string()).default([]),
+  familyIds: z.array(z.number().int()).default([]),
+  scope: z.unknown().optional(),
+});
 
 export type FamiliesStore = ReturnType<typeof useFamiliesStore>;

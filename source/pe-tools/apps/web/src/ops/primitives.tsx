@@ -1,5 +1,5 @@
 import { token } from "#/lib/token";
-import { type CSSProperties, type ReactNode, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { cn } from "#/lib/utils";
 
 export type VizIndex = 1 | 2 | 3 | 4 | 5 | 6;
@@ -126,76 +126,5 @@ function TreeRow({ node, depth, dense }: { node: TreeNode; depth: number; dense:
         </ul>
       )}
     </li>
-  );
-}
-
-export type Column<Row> = {
-  key: string;
-  header: ReactNode;
-  cell: (row: Row, index: number) => ReactNode;
-  numeric?: boolean;
-  width?: number | string;
-};
-
-const RECESS_GROUND = {
-  backgroundColor: token("recess"),
-  "--pe-on": token("recess"),
-} as CSSProperties;
-
-export function DataTable<Row>({
-  title,
-  columns,
-  rows,
-  rowKey,
-  maxHeight = "28rem",
-  footer,
-}: {
-  title?: string;
-  columns: Column<Row>[];
-  rows: Row[];
-  rowKey: (row: Row, index: number) => string;
-  maxHeight?: string;
-  footer?: ReactNode;
-}) {
-  return (
-    <div className="min-w-0">
-      {title && <div className="px-2 py-1 text-center">{title}</div>}
-      <div className="overflow-auto" style={{ maxHeight }}>
-        <table className="w-full text-left">
-          <thead className="sticky top-0 z-sticky" style={RECESS_GROUND}>
-            <tr>
-              {columns.map((col) => (
-                <th
-                  key={col.key}
-                  className={cn("whitespace-nowrap px-2 py-1", col.numeric && "text-right")}
-                  style={{ width: col.width }}
-                >
-                  {col.header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, index) => (
-              <tr key={rowKey(row, index)}>
-                {columns.map((col) => (
-                  <td
-                    key={col.key}
-                    className={cn(
-                      "max-w-[320px] overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1 align-top",
-                      col.numeric && "text-right",
-                    )}
-                  >
-                    {col.cell(row, index)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {rows.length === 0 && <div className="px-2 py-6 text-center">no rows</div>}
-      </div>
-      {footer && <div className="px-2 py-1">{footer}</div>}
-    </div>
   );
 }

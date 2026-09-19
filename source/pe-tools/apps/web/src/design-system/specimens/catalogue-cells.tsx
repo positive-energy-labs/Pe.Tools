@@ -54,7 +54,7 @@ export function CatalogueCells() {
       <ChipCatalogue />
       <Demo
         label="StateCell"
-        consumers="MasterTable cells, proposal cards, and CellStateKey"
+        consumers="Table cells, proposal cards, and CellStateKey"
         spec="One grammar carries proposal, authorship, freshness, disagreement, capability, and provenance without making the row taller."
       >
         <div className="flex flex-col">

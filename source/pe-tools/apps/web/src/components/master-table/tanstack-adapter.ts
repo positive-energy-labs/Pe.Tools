@@ -1,11 +1,7 @@
 ﻿import {
   cellSelectionFeature,
-  columnFilteringFeature,
   columnPinningFeature,
   columnVisibilityFeature,
-  createFilteredRowModel,
-  createSortedRowModel,
-  globalFilteringFeature,
   rowSortingFeature,
   tableFeatures,
   type ColumnDef,
@@ -14,16 +10,16 @@
 
 import type { ValueColumn } from "#/components/master-table/model";
 
-/** The complete TanStack surface MasterTable owns. Do not replace this with stockFeatures. */
+/**
+ * The TanStack surface the grid uses: the column tree, pinning, the focused cell and the sort
+ * state the header draws. No filtered or sorted row model: which rows show, and in what order, is
+ * `visibleRows` (view.ts), the one view the grid and every wrapper read.
+ */
 export const masterTableFeatures = tableFeatures({
   cellSelectionFeature,
-  columnFilteringFeature,
   columnPinningFeature,
   columnVisibilityFeature,
-  globalFilteringFeature,
   rowSortingFeature,
-  filteredRowModel: createFilteredRowModel(),
-  sortedRowModel: createSortedRowModel(),
 });
 
 export type MasterTableFeatures = typeof masterTableFeatures;
@@ -76,25 +72,8 @@ function toLeafDef<Row extends RowData>(column: ValueColumn<Row>): MasterColumnD
       column.search?.(row) ?? column.facet?.(row) ?? column.sort?.(row) ?? undefined,
     cell: ({ row }) => column.cell(row.original),
     enableCellSelection: true,
-    enableColumnFilter: Boolean(column.facet || column.match),
-    enableGlobalFilter: Boolean(column.search),
     enablePinning: Boolean(column.lock),
     enableSorting: Boolean(column.sort),
     sortDescFirst: false,
-    filterFn: (row, _columnId, value) => {
-      const filter = String(value);
-      return column.match
-        ? column.match(row.original, filter)
-        : column.facet?.(row.original) === filter;
-    },
-    sortFn: (rowA, rowB) => compare(column.sort?.(rowA.original), column.sort?.(rowB.original)),
   };
-}
-
-function compare(a: string | number | undefined, b: string | number | undefined): number {
-  if (a === b) return 0;
-  if (a === undefined) return -1;
-  if (b === undefined) return 1;
-  if (typeof a === "number" && typeof b === "number") return a - b;
-  return String(a) < String(b) ? -1 : 1;
 }

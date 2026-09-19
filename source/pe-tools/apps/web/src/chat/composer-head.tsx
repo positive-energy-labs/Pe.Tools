@@ -5,13 +5,14 @@
  * Situation's flag, and Pea's proposals as the Work band under the verb row, so approve and
  * reject have one location and the stream stays a record.
  */
+import { AskUserPrompt, readQuestion } from "#/chat/ask-prompt";
 import { resolveCallTarget, toolTitle, type TargetResolution } from "@pe/agent-contracts";
 import { Check, X } from "lucide-react";
 
 import { ActionButton } from "#/components/lang/action-button";
 import { Rail } from "#/components/lang/rail";
 import { targetInventory } from "#/readings";
-import { Picker } from "#/route/picker";
+import { Ladder } from "#/route/ladder";
 import {
   ChainLamp,
   Cluster,
@@ -26,6 +27,7 @@ import { useThreadScope } from "#/chat/scope";
 import type { ChatPage } from "#/chat/seeds";
 import {
   APPROVAL_OPTIONS,
+  isParkedAsk,
   selectApprovals,
   selectRunStatus,
   selectToolCalls,
@@ -33,6 +35,9 @@ import {
   type ChatState,
 } from "#/workbench/chat-state";
 import { useWorkbench } from "#/workbench/provider";
+
+import { useHeadWorks } from "./head-works";
+import { ProposalHead } from "./proposal-head";
 import type { ChatDraft } from "#/workbench/prompt";
 
 export type ChatHandle = RouteHandle<ChatState, ChatReading, ChatPage, ChatActionKey>;
@@ -78,6 +83,17 @@ const complaint = (resolution: TargetResolution): string | null =>
             ambiguous: "two Revits hold it — choose the document again",
           }[resolution.reason];
 
+/** The bound document's Address, which keys document-owned Work. */
+const documentAddress = (
+  inventory: ReturnType<typeof targetInventory>,
+  ref: { session: string; openId: string } | null,
+) => {
+  const found = ref && inventory.kind === "ready" ? inventory.sessions[ref.session] : undefined;
+  return found?.kind === "ready"
+    ? (found.values.find((doc) => doc.openId === ref!.openId)?.address ?? null)
+    : null;
+};
+
 export function ComposerHead({
   handle,
   status,
@@ -88,9 +104,11 @@ export function ComposerHead({
    * disappears over the chat shifted the whole lane every time it spoke. */
   status?: { text: string; caution: boolean; detail?: string };
 }) {
-  const { currentThreadId, threads, chat, openThread, resolveApproval } = useWorkbench();
+  const { currentThreadId, threads, chat, openThread, resolveApproval, store } = useWorkbench();
   const isRunning = selectRunStatus(chat) !== "idle";
   const head = useThreadScope(currentThreadId, !handle.demo, handle.readings.head);
+  const refusal =
+    head.refusal ?? (handle.outcome?.key === "send" ? handle.outcome.refusal?.message : null);
   const inventory = targetInventory(
     handle.readings.inventory as Parameters<typeof targetInventory>[0],
   );
@@ -129,7 +147,12 @@ export function ComposerHead({
       : level,
   );
   const health = head.defaultTarget ? complaint(resolution) : null;
+  // Live asks only: an expired ask is a transcript record, never a head row.
   const approvals = selectApprovals(chat.display);
+  const works = useHeadWorks(documentAddress(inventory, bound), ladder.docWord ?? "document", {
+    open: store.actions.setPlugin,
+    planIn: store.actions.planIn,
+  });
   // "Do" alone says nothing about what is being asked for. The proposal row names the capability
   // key and the target the call would run against, read off the call itself in the stream.
   const callsById = new Map(selectToolCalls(chat).map((call) => [call.id, call]));
@@ -146,7 +169,7 @@ export function ComposerHead({
           <p className="t-prose text-ink-2 [&_b]:font-semibold [&_b]:text-ink">
             <b>Pea</b> in{" "}
             <SituationCell io="rw">
-              <Picker
+              <Ladder
                 levels={[
                   {
                     key: "thread",
@@ -166,7 +189,7 @@ export function ComposerHead({
             </SituationCell>{" "}
             on{" "}
             <SituationCell io="rw" empty={!head.defaultTarget}>
-              <Picker
+              <Ladder
                 levels={levels}
                 caution={Boolean(health)}
                 disabled={targetDisabled}
@@ -177,9 +200,9 @@ export function ComposerHead({
                 }
               />
             </SituationCell>
-            {head.refusal ? (
+            {refusal ? (
               <span className="ml-3 t-small" data-tone="caution">
-                {head.refusal}
+                {refusal}
               </span>
             ) : null}
             {status ? (
@@ -234,44 +257,45 @@ export function ComposerHead({
           {status.detail}
         </div>
       ) : null}
-      {approvals.length ? (
-        <div
-          aria-label="Pea proposals"
-          className="hairline-t hairline-b flex flex-col gap-1 py-2 t-prose"
-        >
-          <span>
-            <b>
-              {approvals.length} proposal{approvals.length === 1 ? "" : "s"}
-            </b>{" "}
-            waiting on you
-          </span>
-          {approvals.map((approval) => (
-            <div
-              key={approval.toolCallId}
-              className="flex flex-wrap items-baseline gap-3"
-              data-tool-id={approval.toolCallId}
-            >
-              <span className="face-mono text-ink">⌗ {toolTitle(approval.toolName)}</span>
-              {(() => {
-                const call = callsById.get(approval.toolCallId);
-                const target = call ? toolTarget(call.args) : undefined;
-                return target ? (
-                  <code className="face-mono t-small text-ink" data-testid="approval-target">
-                    {target}
-                  </code>
-                ) : null;
-              })()}
-              {(() => {
-                const call = callsById.get(approval.toolCallId);
-                return call?.target && call.target !== toolTarget(call.args) ? (
-                  <span className="t-small truncate text-ink-2">{call.target}</span>
-                ) : null;
-              })()}
-              <span className="t-small text-ink-2">{approval.kind}</span>
-              {approval.kind === "suspension" && approval.toolName === "ask_user" ? (
-                <span className="text-ink-2">answer it in the stream</span>
-              ) : (
-                APPROVAL_OPTIONS.map((option) => {
+      <ProposalHead
+        asks={approvals.map((approval) => (
+          <div
+            key={approval.toolCallId}
+            className="flex flex-wrap items-baseline gap-3 py-0.5"
+            data-tool-id={approval.toolCallId}
+          >
+            <span className="face-mono text-ink">⌗ {toolTitle(approval.toolName)}</span>
+            {(() => {
+              const call = callsById.get(approval.toolCallId);
+              const target = call ? toolTarget(call.args) : undefined;
+              return target ? (
+                <code className="face-mono t-small text-ink" data-testid="approval-target">
+                  {target}
+                </code>
+              ) : null;
+            })()}
+            {(() => {
+              const call = callsById.get(approval.toolCallId);
+              return call?.target && call.target !== toolTarget(call.args) ? (
+                <span className="t-small truncate text-ink-2">{call.target}</span>
+              ) : null;
+            })()}
+            <span className="t-small text-ink-2">{approval.kind}</span>
+            {isParkedAsk(approval)
+              ? // A live ask answers HERE: asks live in the head, the transcript holds records.
+                (() => {
+                  const question = readQuestion(approval.payload);
+                  return question ? (
+                    <AskUserPrompt
+                      toolCallId={approval.toolCallId}
+                      question={question}
+                      resolve={resolveApproval}
+                    />
+                  ) : (
+                    <span className="text-ink-2">the ask carries no question to answer</span>
+                  );
+                })()
+              : APPROVAL_OPTIONS.map((option) => {
                   const allow = option.kind.startsWith("allow");
                   return (
                     <ActionButton
@@ -289,12 +313,11 @@ export function ComposerHead({
                       }}
                     />
                   );
-                })
-              )}
-            </div>
-          ))}
-        </div>
-      ) : null}
+                })}
+          </div>
+        ))}
+        works={works}
+      />
     </section>
   );
 }
