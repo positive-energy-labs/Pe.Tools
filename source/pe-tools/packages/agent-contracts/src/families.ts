@@ -178,9 +178,15 @@ export type FamilyExclusions = Record<string, { by: z.infer<typeof exclusionAuth
 const familiesDocumentSchema = z
   .object({
     scope: appliedScopeSchema.nullable().default(null),
-    /** Families held back from plan, keyed by family NAME, each with who held it back. */
+    /**
+     * Families held back from plan, keyed by family NAME, each with who held it back. An all-digit
+     * key is an old element id, so it fails closed rather than reading as a name.
+     */
     excluded: z
-      .record(z.string().min(1), z.object({ by: exclusionAuthorSchema }).strict())
+      .record(
+        z.string().regex(/\D/, "an exclusion key is a family name, never an element id"),
+        z.object({ by: exclusionAuthorSchema }).strict(),
+      )
       .default({}),
     cells: z.record(familyCellKeySchema, familyCellStateSchema).default({}),
     executionOptions: familyExecutionOptionsSchema.optional(),
@@ -229,4 +235,15 @@ export const familiesRouteState = {
   // Planning and applying are the `families.plan` and `families.apply` workflows. Neither is
   // a route command, so neither can write into authored Work.
   commands: {},
+  // Old Work held exclusions by element id (`excludedIds`, then id-keyed `excluded`); the page
+  // resolves them to current names and re-excludes by name.
+  salvage: (raw) => {
+    const doc = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+    const ids = Array.isArray(doc.excludedIds)
+      ? doc.excludedIds
+      : doc.excluded && typeof doc.excluded === "object"
+        ? Object.keys(doc.excluded).map((key) => (/^\d+$/.test(key) ? Number(key) : NaN))
+        : [];
+    return { familyIds: ids.filter((id): id is number => Number.isSafeInteger(id)) };
+  },
 } satisfies RouteStateSpec<typeof familiesDocumentSchema>;

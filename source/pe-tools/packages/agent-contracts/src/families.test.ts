@@ -110,6 +110,10 @@ describe("familiesRouteState", () => {
     // An exclusion names a family, so it still excludes after an apply reloads it under a new id.
     const reloaded = { entries: [entry(7, "h7", { familyName: "f2" })] };
     expect(familiesIncluded(reloaded, { f2: { by: "person" } })).toEqual({});
+    // An id-keyed exclusion is old Work: it fails closed rather than naming a family "2".
+    expect(familiesRouteState.schema.safeParse({ excluded: { "2": { by: "pea" } } }).success).toBe(
+      false,
+    );
     // The pre-attribution array is old Work: it fails closed.
     expect(familiesRouteState.schema.safeParse({ excludedIds: [2] }).success).toBe(false);
   });
