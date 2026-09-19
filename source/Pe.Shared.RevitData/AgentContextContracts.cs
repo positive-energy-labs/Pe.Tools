@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
 namespace Pe.Shared.RevitData;
@@ -404,21 +404,16 @@ public record RevitViewImageRegistration(
     /// <summary>
     ///     Crop min/max are in the crop box's own frame; origin and bases are its transform projected to model XY.
     ///     The image's X runs along basisX and its up along basisY, so top-left is (min.X, max.Y).
-    ///     <paramref name="annotationMargin" /> is how far the exported extent reaches past each crop side, in model feet
-    ///     along the crop's own axes: with annotation crop on, the PNG covers the annotation crop, not the model crop.
     /// </summary>
     public static (RevitViewImageRegistration? Registration, RevitViewImageRegistrationRefusal? Refusal) FromCrop(
         int width, int height, string imageSha256,
         (double X, double Y) min, (double X, double Y) max,
-        (double X, double Y) origin, (double X, double Y) basisX, (double X, double Y) basisY,
-        (double Left, double Right, double Bottom, double Top) annotationMargin = default
+        (double X, double Y) origin, (double X, double Y) basisX, (double X, double Y) basisY
     ) {
-        min = (min.X - annotationMargin.Left, min.Y - annotationMargin.Bottom);
-        max = (max.X + annotationMargin.Right, max.Y + annotationMargin.Top);
         double cropW = max.X - min.X, cropH = max.Y - min.Y;
         if (width <= 0 || height <= 0 || cropW <= 0 || cropH <= 0) return (null, RevitViewImageRegistrationRefusal.DegenerateCrop);
-        // ponytail: aspect agreement is the only check that the PNG covers exactly this extent; an extent shifted
-        // without changing its aspect (e.g. annotations past a crop with annotation crop off) would slip through.
+        // ponytail: aspect agreement is the only check that the PNG covers exactly the crop. Annotation crop or
+        // out-of-crop annotations could still shift the extent symmetrically; the native proof owes that.
         var expectedHeight = width * cropH / cropW;
         if (Math.Abs(height - expectedHeight) > Math.Max(2, expectedHeight * 0.005))
             return (null, RevitViewImageRegistrationRefusal.AspectDisagrees);

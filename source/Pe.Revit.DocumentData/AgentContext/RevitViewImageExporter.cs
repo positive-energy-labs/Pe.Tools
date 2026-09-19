@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows.Media.Imaging;
 using Pe.Shared.RevitData;
 
@@ -207,20 +207,7 @@ public static class RevitViewImageExporter {
         return RevitViewImageRegistration.FromCrop(frame.PixelWidth, frame.PixelHeight, sha,
             (crop.Min.X, crop.Min.Y), (crop.Max.X, crop.Max.Y),
             (transform.Origin.X, transform.Origin.Y), (transform.BasisX.X, transform.BasisX.Y),
-            (transform.BasisY.X, transform.BasisY.Y), AnnotationMargin(view));
-    }
-
-    /// <summary>
-    ///     With annotation crop on, the PNG covers the annotation crop: the model crop grown by each side's offset. The
-    ///     offsets are paper feet (Revit API remarks), so model feet = offset × view scale, along the crop's own axes.
-    /// </summary>
-    private static (double Left, double Right, double Bottom, double Top) AnnotationMargin(View view) {
-        if (view.get_Parameter(BuiltInParameter.VIEWER_ANNOTATION_CROP_ACTIVE)?.AsInteger() != 1) return default;
-        var shape = view.GetCropRegionShapeManager();
-        if (!shape.CanHaveAnnotationCrop) return default;
-        double scale = view.Scale;
-        return (shape.LeftAnnotationCropOffset * scale, shape.RightAnnotationCropOffset * scale,
-            shape.BottomAnnotationCropOffset * scale, shape.TopAnnotationCropOffset * scale);
+            (transform.BasisY.X, transform.BasisY.Y));
     }
 
     private static string CropSheetPng(string sheetPath, BoundingBoxUV outline, BoundingBoxXYZ box, double marginPercent) {
