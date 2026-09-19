@@ -4,8 +4,11 @@ import {
   nativeProcessSchema,
   sdkSessionSelectorOf,
   sdkSessionTargetOf,
+  sameValue,
   transitionPatches,
+  type InstancesLaunch,
 } from "@pe/agent-contracts";
+import { ReviewRow, WorkBand, type CellWire } from "#/components/lang/band";
 import { type InstancesHandle } from "#/instances/manifest";
 import { useMemo, useState } from "react";
 import { peReadings, readReading, useHostCall } from "#/readings";
@@ -140,6 +143,17 @@ type ClusterProps = {
   requestedDocument?: string;
 };
 
+/** The host's refusal for a launch verb over a proposal nobody staged, said before the press. */
+const NOT_STAGED = "Pea's proposal is not staged; accept it first";
+
+/** A launch as the person reads it: what opening or starting it would do. */
+const describeLaunch = (value: unknown) => {
+  const launch = value as InstancesLaunch;
+  return launch.kind === "open"
+    ? `open ${launch.document} in ${launch.session}`
+    : `start a new ${launch.year} session${launch.document ? ` opening ${launch.document}` : ""}`;
+};
+
 export function InstancesCluster({
   handle,
   fleet,
@@ -198,8 +212,16 @@ export function InstancesCluster({
       : undefined);
 
   const [yearPick, setYearPick] = useState<string | null>(null);
-  // The person's staged launch; Pea's proposal is not drawn here yet (interaction's cutover).
+  // The person's staged launch. Pea's proposal is drawn beside it in the band grammar, and the
+  // launch verbs read the staged value only: a proposal must be accepted first (the host's rule).
   const stored = work.doc?.launch.staged?.value;
+  const launchCell = work.doc?.launch ?? {};
+  const proposed = launchCell.proposal?.value;
+  const proposedOnly = proposed != null && launchCell.staged == null;
+  // Accepted, the proposal stays as authorship evidence of the staged value: nothing to review.
+  const reviewing =
+    launchCell.proposal != null && !sameValue(launchCell.proposal, launchCell.staged);
+  const launchWire: CellWire = { segment: null, write: work.write, revision: work.revision };
   const storedDoc = stored?.document
     ? (documents.find((d) => d.selector === stored.document) ?? {
         id: stored.document,
@@ -457,6 +479,20 @@ export function InstancesCluster({
     [liveWorlds],
   );
 
+  // Old-shape saved Work fails closed on the shared path: its refusal is the only instruction,
+  // with start fresh, exactly as a Situation route draws it (C1/O-8/G1).
+  if (work.refusal)
+    return (
+      <WorkBand
+        count={0}
+        noun="launch"
+        revision={work.revision}
+        discard={() => {}}
+        visible={false}
+        unresolved={[work.refusal]}
+        startFresh={work.startFresh ? () => void work.startFresh?.() : undefined}
+      />
+    );
   if (!work.current)
     return (
       <OutcomeLine
@@ -596,6 +632,30 @@ export function InstancesCluster({
                   {recovery && (
                     <Press onClick={() => stageDoc(recovery)}>recover {recovery.title}</Press>
                   )}
+                  {reviewing ? (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <ReviewRow
+                        wire={launchWire}
+                        address="launch"
+                        label={<span className="t-small face-mono text-ink-2">pea proposes</span>}
+                        cell={launchCell}
+                        facts={{
+                          value: describeLaunch(launchCell.staged?.value ?? proposed),
+                          scale: "row",
+                        }}
+                        show={describeLaunch}
+                      />
+                      {proposedOnly ? (
+                        <VerbButton
+                          tone="commit"
+                          label={proposed.kind === "open" ? "open" : "start"}
+                          reason={NOT_STAGED}
+                          disabled
+                          onClick={() => {}}
+                        />
+                      ) : null}
+                    </div>
+                  ) : null}
                   {staged ? (
                     <div className="flex flex-wrap items-center gap-3">
                       <span className="t-small face-mono text-ink-2">staged</span>
@@ -676,7 +736,7 @@ export function InstancesCluster({
                         onClick={() => setTarget("")}
                       />
                     </div>
-                  ) : (
+                  ) : proposedOnly ? null : (
                     <span className="t-small face-mono text-ink-mute">
                       nothing staged — pick a session above, or click a document row
                     </span>

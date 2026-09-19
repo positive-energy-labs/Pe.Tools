@@ -7,7 +7,10 @@ const workbench = vi.hoisted(() => ({ value: undefined as any }));
 const targetPick = vi.hoisted(() => vi.fn());
 
 vi.mock("#/workbench/provider", () => ({ useWorkbench: () => workbench.value }));
-vi.mock("#/readings", () => ({ targetInventory: () => [] }));
+vi.mock("#/readings", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/readings")>()),
+  targetInventory: () => [],
+}));
 vi.mock("#/chat/scope", () => ({
   useThreadScope: () => ({
     defaultTarget: null,

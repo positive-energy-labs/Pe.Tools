@@ -220,7 +220,11 @@ function GroupRow({
   // are memoized: they rerun only when the cells, the group's keys or the locks move.
   const { segment, lockOf } = work.wire;
   const { acceptK, denyK } = useMemo(() => {
-    const ctx = { cellsPath: [segment], actor: "human" as const, lockOf };
+    const ctx = {
+      cellsPath: segment === null ? [] : [segment],
+      actor: "human" as const,
+      lockOf,
+    };
     return {
       acceptK: fanOut(work.cells, keys, "accept", ctx).covered.length,
       denyK: fanOut(work.cells, keys, "deny", ctx).covered.length,

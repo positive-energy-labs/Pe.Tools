@@ -161,7 +161,8 @@ export function WorkBand({
  * foreign write in between refuses instead of landing on a value the person never saw.
  */
 export interface CellWire {
-  segment: string;
+  /** The Work segment holding the cells; null = the cells sit at the Work's root (`launch`). */
+  segment: string | null;
   write: (
     patches: RouteStatePatch[],
     expectedRevision?: number,
@@ -170,6 +171,9 @@ export interface CellWire {
   lockOf?: (key: string) => string | null;
   baselineOf?: (key: string) => unknown;
 }
+
+/** Where a wire's cells sit in its Work: under its segment, or at the root. */
+export const cellsPath = (wire: CellWire) => (wire.segment === null ? [] : [wire.segment]);
 
 const DRAWN = new Set<string>(["accept", "deny", "unstage"] satisfies CellTransitionKind[]);
 
@@ -209,7 +213,7 @@ export function reviewTransitions(
     .map((kind) => ({
       kind,
       reason: reason[kind],
-      run: () => writeKind(wire, kind, transitionPatches([wire.segment], key, cell, { kind })),
+      run: () => writeKind(wire, kind, transitionPatches(cellsPath(wire), key, cell, { kind })),
     }));
 }
 
@@ -231,7 +235,7 @@ export async function runFanOut(
   kind: FanOutKind,
 ): Promise<FanOutOutcome> {
   const { patches, covered, skipped } = fanOut(cells, keys, kind, {
-    cellsPath: [wire.segment],
+    cellsPath: cellsPath(wire),
     actor: "human",
     lockOf: wire.lockOf,
   });
