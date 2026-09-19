@@ -1176,7 +1176,10 @@ public static class FamilyModelJson {
     public static FamilyModelParseResult Parse(string json) {
         try {
             var token = JToken.Parse(json, new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
-            if (token is JObject o) o.Remove("$schema");
+            if (token is JObject o) {
+                o.Remove("$schema");
+                YesNoValue.Canonicalize(o);
+            }
             var model = token.ToObject<FamilyModel>(JsonSerializer.Create(Settings))
                         ?? throw new JsonSerializationException("Family model deserialized to null.");
             var diagnostics = FamilyModelMacros.Expand(model);

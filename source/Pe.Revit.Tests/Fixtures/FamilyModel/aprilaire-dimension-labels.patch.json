@@ -1,0 +1,288 @@
+{
+  "source": "CmdFFManager/profiles/SavedEquip/AprilAire 800 Series.json",
+  "patch": {
+    "select": {
+      "includeNames": {
+        "Equaling": [
+          "AprilAire 800 801 Series Humidifier"
+        ],
+        "Containing": [],
+        "StartingWith": []
+      },
+      "excludeNames": {
+        "Equaling": [],
+        "Containing": [],
+        "StartingWith": []
+      },
+      "categories": []
+    },
+    "patch": {
+      "parameters": {
+        "PE_E___Frequency": {
+          "shared": true,
+          "sharedGuid": "03338f70-2406-4126-be8e-4486f810cb4b",
+          "sharedSpecId": "autodesk.spec.aec.electrical:frequency-2.0.0",
+          "sharedVisible": true,
+          "sharedUserModifiable": true,
+          "isInstance": false,
+          "propertiesGroup": "",
+          "tooltip": "Frequency (Hz)",
+          "value": "60 Hz"
+        },
+        "PE_E___MCA": {
+          "shared": true,
+          "sharedGuid": "7b298396-c984-40f2-9199-a25b6584873b",
+          "sharedSpecId": "autodesk.spec.aec.electrical:current-2.0.0",
+          "sharedVisible": true,
+          "sharedUserModifiable": true,
+          "isInstance": false,
+          "propertiesGroup": "",
+          "tooltip": "Minimum Circuit Ampacity."
+        },
+        "PE_E___Voltage": {
+          "shared": true,
+          "sharedGuid": "3655d934-7866-44a6-a50e-276047d2c371",
+          "sharedSpecId": "autodesk.spec.aec.electrical:potential-2.0.0",
+          "sharedVisible": true,
+          "sharedUserModifiable": true,
+          "isInstance": false,
+          "propertiesGroup": "",
+          "tooltip": "The “pressure” from an electrical circuit’s power source that pushes charged electrons (current) through a conducting loop (circuit), enabling them to do work such as illuminating a light. Measured in Volts (V)."
+        },
+        "PE_G___Description": {
+          "shared": true,
+          "sharedGuid": "e836c78e-e87a-4962-949a-44543c1c927d",
+          "sharedSpecId": "autodesk.spec:spec.string-2.0.0",
+          "sharedVisible": true,
+          "sharedUserModifiable": true,
+          "isInstance": false,
+          "propertiesGroup": "",
+          "tooltip": "PE's parameter to describe the type of a piece of equipment.",
+          "value": "Steam humidifier"
+        },
+        "PE_G___Manufacturer": {
+          "shared": true,
+          "sharedGuid": "b30e4be4-e973-4ffe-8bad-060c0b98de30",
+          "sharedSpecId": "autodesk.spec:spec.string-2.0.0",
+          "sharedVisible": true,
+          "sharedUserModifiable": true,
+          "isInstance": false,
+          "propertiesGroup": "",
+          "tooltip": "PE's parameter for an equipment manufacturer.",
+          "value": "AprilAire"
+        },
+        "PE_G___Model": {
+          "shared": true,
+          "sharedGuid": "d404bd54-c15a-4d3d-8cbc-f7d5c7cc513b",
+          "sharedSpecId": "autodesk.spec:spec.string-2.0.0",
+          "sharedVisible": true,
+          "sharedUserModifiable": true,
+          "isInstance": false,
+          "propertiesGroup": "",
+          "tooltip": "PE's parameter for an equipment model.",
+          "value": "800"
+        },
+        "PE_G___TagInstance": {
+          "shared": true,
+          "sharedGuid": "36414fcc-3330-4f07-bb76-b6724f9ece4f",
+          "sharedSpecId": "autodesk.spec:spec.string-2.0.0",
+          "sharedVisible": true,
+          "sharedUserModifiable": true,
+          "isInstance": true,
+          "propertiesGroup": "",
+          "tooltip": "PE's alternative to the built-in \"Mark\" parameter. Used for instance-based tagging. This is the primary driver for filtering in schedules",
+          "value": "HU-#"
+        },
+        "PE_G___URL": {
+          "shared": true,
+          "sharedGuid": "09f212c8-2159-43e1-a86d-927769baca2f",
+          "sharedSpecId": "autodesk.spec.string:url-2.0.0",
+          "sharedVisible": true,
+          "sharedUserModifiable": true,
+          "isInstance": false,
+          "propertiesGroup": "",
+          "tooltip": "URL for the product, ideally for to its spec sheet specifically.",
+          "wasNamed": [
+            "PE_G___Url"
+          ],
+          "value": "https://gasexperts.ca/wp-content/uploads/2017/02/aprilaire-800-800lc-steam-humidifier-submittal-sheet-SUB-800.pdf"
+        },
+        "PE_G___Weight": {
+          "shared": true,
+          "sharedGuid": "e9728bc1-a63c-437f-a7eb-0efbd275fa39",
+          "sharedSpecId": "autodesk.spec.aec:number-2.0.0",
+          "sharedVisible": true,
+          "sharedUserModifiable": true,
+          "isInstance": false,
+          "propertiesGroup": "",
+          "tooltip": "Weight",
+          "value": "27"
+        },
+        "PE_G_Dim_Height1": {
+          "shared": true,
+          "sharedGuid": "753cb921-3f32-43f3-b9c4-a23c8e3fa639",
+          "sharedSpecId": "autodesk.spec.aec:length-2.0.1",
+          "sharedVisible": true,
+          "sharedUserModifiable": true,
+          "isInstance": false,
+          "propertiesGroup": "",
+          "tooltip": "PE's first parameter for height.",
+          "value": "1.7395833333333333ft"
+        },
+        "PE_G_Dim_Length1": {
+          "shared": true,
+          "sharedGuid": "01345221-f65a-489e-9259-2f9a6cd08035",
+          "sharedSpecId": "autodesk.spec.aec:length-2.0.1",
+          "sharedVisible": true,
+          "sharedUserModifiable": true,
+          "isInstance": false,
+          "propertiesGroup": "",
+          "tooltip": "PE's first parameter for length. Use for the primary dimension intended for scheduling",
+          "value": "0.84375ft"
+        },
+        "PE_G_Dim_Width1": {
+          "shared": true,
+          "sharedGuid": "692091cc-1e3d-47e6-a7c5-9336c3149419",
+          "sharedSpecId": "autodesk.spec.aec:length-2.0.1",
+          "sharedVisible": true,
+          "sharedUserModifiable": true,
+          "isInstance": false,
+          "propertiesGroup": "",
+          "tooltip": "PE's first parameter for width.",
+          "value": "0.59375ft"
+        },
+        "PE_M___HuGallonsPerHour": {
+          "shared": true,
+          "sharedGuid": "128bc426-6aa3-4907-a317-a3e1e26df214",
+          "sharedSpecId": "autodesk.spec.aec:number-2.0.0",
+          "sharedVisible": true,
+          "sharedUserModifiable": true,
+          "isInstance": false,
+          "propertiesGroup": ""
+        },
+        "Pipe Size": {
+          "dataType": "Length",
+          "propertiesGroup": "autodesk.parameter.group:dimensions-1.0.0",
+          "isInstance": false,
+          "formula": "0'  0 1/4\""
+        }
+      },
+      "types": {
+        "800 - 120v - 11.5 gal/day": {
+          "PE_E___MCA": "11.5 A",
+          "PE_E___Voltage": "119.99999999999999 V",
+          "PE_M___HuGallonsPerHour": "0.479"
+        },
+        "800 - 120v - 16 gal/day": {
+          "PE_E___MCA": "16 A",
+          "PE_E___Voltage": "119.99999999999999 V",
+          "PE_M___HuGallonsPerHour": "0.667"
+        },
+        "800 - 208v - 20.5 gal/day": {
+          "PE_E___MCA": "11.5 A",
+          "PE_E___Voltage": "208 V",
+          "PE_M___HuGallonsPerHour": "0.854"
+        },
+        "800 - 208v - 30 gal/day": {
+          "PE_E___MCA": "16 A",
+          "PE_E___Voltage": "208 V",
+          "PE_M___HuGallonsPerHour": "1.250"
+        },
+        "800 - 240v - 23.3 gal/day": {
+          "PE_E___MCA": "11.5 A",
+          "PE_E___Voltage": "239.99999999999997 V",
+          "PE_M___HuGallonsPerHour": "0.971"
+        },
+        "800 - 240v - 34.6 gal/day": {
+          "PE_E___MCA": "16 A",
+          "PE_E___Voltage": "239.99999999999997 V",
+          "PE_M___HuGallonsPerHour": "1.442"
+        }
+      },
+      "refPlanes": {
+        "Reference Plane (Left)": {
+          "normal": "PlusX",
+          "at": "-0.5ft",
+          "isReference": "WeakReference"
+        },
+        "Reference Plane (Right)": {
+          "normal": "PlusX",
+          "at": "0.5ft",
+          "isReference": "WeakReference"
+        },
+        "Reference Plane (Back)": {
+          "normal": "PlusY",
+          "at": "-0.5ft",
+          "isReference": "WeakReference"
+        },
+        "Reference Plane (Front)": {
+          "normal": "PlusY",
+          "at": "0.5ft",
+          "isReference": "WeakReference"
+        }
+      },
+      "dimensions": {
+        "legacy-mirror-0-size": {
+          "between": [
+            "Reference Plane (Left)",
+            "Reference Plane (Right)"
+          ],
+          "label": "PE_G_Dim_Length1"
+        },
+        "legacy-mirror-0-eq": {
+          "between": [
+            "Reference Plane (Left)",
+            "Center (Left/Right)",
+            "Reference Plane (Right)"
+          ],
+          "equality": true
+        },
+        "legacy-mirror-1-size": {
+          "between": [
+            "Reference Plane (Back)",
+            "Reference Plane (Front)"
+          ],
+          "label": "PE_G_Dim_Width1"
+        },
+        "legacy-mirror-1-eq": {
+          "between": [
+            "Reference Plane (Back)",
+            "Center (Front/Back)",
+            "Reference Plane (Front)"
+          ],
+          "equality": true
+        }
+      }
+    },
+    "run": {
+      "blanksBecome": [
+        {
+          "specs": [
+            "Number"
+          ],
+          "value": "-1"
+        },
+        {
+          "specs": [
+            "ElectricalPotential"
+          ],
+          "value": "-1 V"
+        },
+        {
+          "specs": [
+            "Current"
+          ],
+          "value": "-1 A"
+        }
+      ],
+      "backlinkBuiltIns": true
+    }
+  },
+  "options": {
+    "SingleTransaction": false,
+    "OptimizeTypeOperations": true,
+    "EnableCollectors": true,
+    "SuppressWarnings": false,
+    "CaptureDependencyGraph": false
+  }
+}

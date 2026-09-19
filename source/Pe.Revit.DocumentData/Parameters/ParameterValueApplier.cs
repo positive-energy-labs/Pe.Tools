@@ -1,3 +1,4 @@
+using Pe.Shared.RevitData.Families;
 using Pe.Revit.Failures;
 using Pe.Revit.Tasks;
 using Pe.Shared.RevitData;
@@ -221,23 +222,13 @@ public static class ParameterValueApplier {
     }
 
     private static int ParseInteger(Parameter parameter, string value) {
+        // A Yes/No parameter reads through the one Yes/No reader; any other integer (2, -5) is not a Yes/No value (F-J3-5b).
+        if (parameter.Definition?.GetDataType() is { } dataType && dataType == SpecTypeId.Boolean.YesNo)
+            return YesNoValue.TryParse(value, out var yes) ? (yes ? 1 : 0) : throw new InvalidOperationException(
+                $"Value '{value}' is not a Yes/No value for parameter '{parameter.Definition.Name}' (yes/no/true/false in any case, or 1/0).");
         if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var intValue))
             return intValue;
-
-        var isYesNo = parameter.Definition?.GetDataType() is { } dataType && dataType == SpecTypeId.Boolean.YesNo;
-        if (isYesNo) {
-            var normalized = value.Trim();
-            if (normalized.Equals("yes", StringComparison.OrdinalIgnoreCase) ||
-                normalized.Equals("true", StringComparison.OrdinalIgnoreCase))
-                return 1;
-            if (normalized.Equals("no", StringComparison.OrdinalIgnoreCase) ||
-                normalized.Equals("false", StringComparison.OrdinalIgnoreCase))
-                return 0;
-        }
-
-        throw new InvalidOperationException(
-            $"Value '{value}' is not a valid integer for parameter '{parameter.Definition?.Name}'" +
-            (isYesNo ? " (yes/no/true/false are also accepted)." : "."));
+        throw new InvalidOperationException($"Value '{value}' is not a valid integer for parameter '{parameter.Definition?.Name}'.");
     }
 
     private static double ParseDouble(Document document, Parameter parameter, ParameterValueEdit edit, string value) {

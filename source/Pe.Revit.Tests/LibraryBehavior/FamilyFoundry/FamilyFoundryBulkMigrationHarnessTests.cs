@@ -1044,6 +1044,33 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         } finally { document.Close(false); }
     }
 
+    // Freezes the converted input of the AprilAire test below before FamilyProfileConverter is deleted (domains-purge, domains-opus Q2
+    // ruling 1). Writes aprilaire-dimension-labels.patch.json to the test output directory; the hold copies it into Fixtures/FamilyModel/.
+    [Test, Timeout(600000)]
+    public void Freeze_AprilAire_converted_patch() {
+        const string profilePath = "CmdFFManager/profiles/SavedEquip/AprilAire 800 Series.json";
+        var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Freeze_AprilAire_converted_patch));
+        var copy = Path.Combine(output, "Old_Template.rvt");
+        File.Copy(RevitFamilyFixtureHarness.GetProjectFixturePath("Old_Template.rvt"), copy);
+        var project = this._application.OpenDocumentFile(copy);
+        try {
+            var settings = (JObject)JArray.Parse(File.ReadAllText(RevitFamilyFixtureHarness.GetProfileFixturePath("company-composed-20260906.json")))
+                .Single(profile => (string)profile["source"]! == profilePath)["settings"]!;
+            var conversion = CompanyNormalizationFixture.ConvertProfileParameters(settings, project, CompanyCorpusDefinitions());
+            var serializer = JsonSerializer.Create(FamilyModelJson.Settings);
+            var frozen = new JObject {
+                ["source"] = profilePath,
+                ["patch"] = JToken.FromObject(conversion.Patch, serializer),
+                ["options"] = JToken.FromObject(conversion.Options, serializer)
+            };
+            Assert.That(JToken.DeepEquals(JToken.FromObject(FamilyPatch.Parse(frozen["patch"]!.ToString()), serializer), frozen["patch"]), Is.True,
+                "the frozen patch re-reads to itself");
+            var path = Path.Combine(output, "aprilaire-dimension-labels.patch.json");
+            File.WriteAllText(path, frozen.ToString(Formatting.Indented));
+            TestContext.WriteLine($"[FROZEN] {path}");
+        } finally { project.Close(false); }
+    }
+
     [TestCase("800 - 120v - 11.5 gal/day")]
     [TestCase("800 - 120v - 16 gal/day")]
     [TestCase("800 - 240v - 23.3 gal/day")]

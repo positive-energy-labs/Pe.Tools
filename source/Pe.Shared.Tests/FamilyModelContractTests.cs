@@ -231,7 +231,7 @@ public sealed class FamilyModelContractTests {
         }
     }
 
-    public static IEnumerable<string> Fixtures => Directory.GetFiles(FixtureDir, "*.json").Where(path => !path.EndsWith(".captured.json", StringComparison.Ordinal)).Select(Path.GetFileName)!;
+    public static IEnumerable<string> Fixtures => Directory.GetFiles(FixtureDir, "*.json").Where(path => !path.EndsWith(".captured.json", StringComparison.Ordinal) && !path.EndsWith(".patch.json", StringComparison.Ordinal)).Select(Path.GetFileName)!;
 
     [Test]
     public void Nested_model_resolves_by_schema_and_family_name_not_filename() {
