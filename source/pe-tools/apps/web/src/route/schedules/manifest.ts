@@ -10,6 +10,7 @@ import {
 
 import {
   entityRoute,
+  refuse,
   HOST_READ_WAIT_S,
   NATIVE_APPLY_WAIT_S,
   semanticActionFacts,
@@ -47,11 +48,20 @@ type Ctx = RouteCtx<ScheduleGridDocument, ScheduleGridReading, ScheduleGridPage>
 type PushReceipt = {
   podId: string | null;
   outcome: string;
-  cells: { cell: string; before: string | null; after: string | null }[];
+  cells: { cell: string; before: string | null; after: string | null; error?: string | null }[];
+};
+/**
+ * The run's word, from its cells: the host's receipt says "Failed" for any refused cell even when
+ * others were written (F-S-1, NEEDS-CONTRACT), so a mixed push reads "Partly applied" here.
+ */
+const pushWord = (receipt: PushReceipt) => {
+  const refused = receipt.cells.filter((cell) => cell.error).length;
+  if (!refused) return receipt.outcome;
+  return refused === receipt.cells.length ? "Refused" : "Partly applied";
 };
 export const pushRunLine = (receipt: PushReceipt, run?: string | null) =>
   [
-    receipt.outcome,
+    pushWord(receipt),
     receipt.podId && run
       ? `${receipt.podId} · ${run}/receipt.json`
       : "action receipt (no pod bound)",
@@ -173,6 +183,7 @@ export const schedulesManifest = () =>
               }),
             ) as {
               readback?: unknown;
+              applied?: number;
               failures?: { key: string; error: string }[];
               readbackError?: string;
               run?: string | null;
@@ -186,15 +197,19 @@ export const schedulesManifest = () =>
                 captureId: reading.id,
               });
             }
-            if (result.failures?.length || result.readbackError)
-              throw Error(
-                [
-                  ...(result.failures ?? []).map((failure) => `${failure.key}: ${failure.error}`),
-                  result.readbackError,
-                ]
-                  .filter(Boolean)
-                  .join("; "),
-              );
+            if (result.readbackError) throw Error(result.readbackError);
+            // Some cells landed and some were refused: an outcome, not a failure. Returned, so the
+            // verb's dirties re-read the grid and the written cells show what Revit now holds.
+            const failures = result.failures ?? [];
+            if (!failures.length) return null;
+            const first = `${failures[0]!.key}: ${failures[0]!.error}`;
+            const written = result.applied ?? 0;
+            return written
+              ? refuse(
+                  "partial",
+                  `partly applied: ${written} written, ${failures.length} refused: ${first}`,
+                )
+              : refuse("not-ready", `refused — nothing ran: ${first}`);
           },
         },
       },
