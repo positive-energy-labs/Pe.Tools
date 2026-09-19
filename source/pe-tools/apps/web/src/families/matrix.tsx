@@ -33,7 +33,7 @@ export function FamiliesMatrix() {
   const focusKeys = focused
     ? rows
         .filter((row) =>
-          focused.some((at) => at.familyId === row.familyId && at.typeName === row.typeName),
+          focused.some((at) => at.familyName === row.familyName && at.typeName === row.typeName),
         )
         .map((row) => row.key)
     : undefined;

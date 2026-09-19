@@ -171,15 +171,15 @@ test("9 · a group's › opens the route scoped to its path; the pane narrows to
   review();
   fireEvent.click(screen.getByRole("button", { name: "open Neck Width in Families" }));
   expect(w.open).toHaveBeenCalledWith(["Neck Width"]);
-  const key = (familyId: number, typeName: string, parameter: string) =>
-    familyCellKey({ familyId, typeName, parameter });
+  const key = (familyName: string, typeName: string, parameter: string) =>
+    familyCellKey({ familyName, typeName, parameter });
   const familyCells = {
-    [key(1, "A", "Neck Width")]: { proposal: { value: { familyName: "F", value: "10in" } } },
-    [key(2, "B", "Throw")]: { proposal: { value: { familyName: "G", value: "12ft" } } },
-    [key(3, "C", "Neck Width")]: {},
+    [key("F", "A", "Neck Width")]: { proposal: { value: { value: "10in" } } },
+    [key("G", "B", "Throw")]: { proposal: { value: { value: "12ft" } } },
+    [key("H", "C", "Neck Width")]: {},
   };
   expect(focusedTypes(familyCells as never, ["Neck Width"])).toEqual([
-    { familyId: 1, typeName: "A", parameter: "Neck Width" },
+    { familyName: "F", typeName: "A", parameter: "Neck Width" },
   ]);
 });
 

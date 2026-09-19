@@ -88,8 +88,8 @@ export function patchable(row: TypeRow, key: string): boolean {
 export const familiesLockOf =
   (rows: readonly TypeRow[], params: readonly ParamColumn[]) =>
   (key: string): string | null => {
-    const { familyId, typeName, parameter } = familyCellAddress(key);
-    const row = rows.find((r) => r.familyId === familyId && r.typeName === typeName);
+    const { familyName, typeName, parameter } = familyCellAddress(key);
+    const row = rows.find((r) => r.familyName === familyName && r.typeName === typeName);
     const param = params.find((p) => p.name === parameter);
     if (!row || !param || patchable(row, param.key)) return null;
     return cellReason(row, param.key, param.isInstance);
@@ -230,7 +230,13 @@ export function useFamiliesColumns({
           const value = row.values[col.key] ?? "";
           const unresolved = !scopeOf || scopeOf === "Unresolved";
           const reason = cellReason(row, col.key, col.isInstance);
-          const address = { familyId: row.familyId, typeName: row.typeName, parameter: col.name };
+          // Identity by NAME (ruling, msg-authority-family-identity): a cell keys on the family's
+          // name, never its element id, which Revit reissues on every reload.
+          const address = {
+            familyName: row.familyName,
+            typeName: row.typeName,
+            parameter: col.name,
+          };
           const cell = cellAt(cells, address);
           // Every drawn trichotomy cell carries exactly the contract's transitions. A Pea proposal
           // on a cell a patch cannot write draws locked, where the contract leaves deny only.
@@ -264,9 +270,7 @@ export function useFamiliesColumns({
                 select="single"
                 selected={[shown]}
                 empty="no choices"
-                onPick={(choice) =>
-                  void propose(address, { familyName: row.familyName, value: choice }, value)
-                }
+                onPick={(choice) => void propose(address, { value: choice }, value)}
               />
             );
           }
@@ -277,9 +281,7 @@ export function useFamiliesColumns({
                 reason={reason}
                 cell={cell}
                 transitions={transitions}
-                onCommit={(next) =>
-                  void propose(address, { familyName: row.familyName, value: next }, value)
-                }
+                onCommit={(next) => void propose(address, { value: next }, value)}
               />
             );
           }

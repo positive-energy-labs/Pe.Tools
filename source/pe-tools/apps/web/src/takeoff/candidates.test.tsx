@@ -170,4 +170,4 @@ test("the pane says why it lists nothing: no regions on the plan, or the read un
   await screen.findByText("candidates unread", undefined, { timeout: 5_000 });
   expect(document.body.textContent).toContain("no answer after 120s");
   mounted.unmount();
-}, 30_000);
+}, 60_000); // two whole-route mounts

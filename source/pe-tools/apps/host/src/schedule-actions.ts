@@ -454,9 +454,12 @@ function pushReceipt(
     origin: "Operation",
     operation: "schedule.grid.push",
     planHash: null,
-    outcome: failures.length ? "Failed" : "Succeeded",
+    // F-S-1: any cell written is Succeeded, each refused cell listed; Failed only when none was.
+    outcome: failures.length < keys.length ? "Succeeded" : "Failed",
     outputs: [],
-    reason: failures.length ? failures.map((f) => `${f.key}: ${f.error}`).join("; ") : null,
+    reason: failures.length
+      ? `${failures.length} of ${keys.length} cells refused: ${failures.map((f) => `${f.key}: ${f.error}`).join("; ")}`
+      : null,
     scheduleId: before.snapshot.scheduleId,
     scheduleUniqueId: before.snapshot.scheduleUniqueId,
     cells: keys.map((key) => {

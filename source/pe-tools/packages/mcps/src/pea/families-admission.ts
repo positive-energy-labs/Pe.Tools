@@ -19,7 +19,7 @@ import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 export type LoadedFamilies = (
   target: Address | null,
   scope: AppliedFilter | null,
-) => Promise<readonly { familyId: number; types: readonly { typeName: string }[] }[]>;
+) => Promise<readonly { familyName: string; types: readonly { typeName: string }[] }[]>;
 
 /**
  * The Families door. An exclusion is stamped with its writer: every one a write adds or changes
@@ -33,17 +33,18 @@ export function familiesAdmission(loadedFamilies: LoadedFamilies): RouteWriteAdm
     const before = familiesRouteState.schema.parse(prior).excluded;
     const by = actor === "agent" ? "pea" : "person";
     for (const id of new Set([...Object.keys(before), ...Object.keys(excluded)])) {
+      // `id` is a family name; it stays the key across reloads, which replace the element id.
       if (before[id]?.by === excluded[id]?.by) continue;
       if (actor === "agent" && before[id]?.by === "person")
         return refuse(
           "refused",
-          `family ${id} was held back by the person; Pea cannot change or lift that exclusion`,
+          `family "${id}" was held back by the person; Pea cannot change or lift that exclusion`,
           "Nothing was written. Ask the person to include it again.",
         );
       if (excluded[id] && excluded[id].by !== by)
         return refuse(
           "refused",
-          `an exclusion is stamped with its writer: excluded.${id} must be { by: "${by}" }`,
+          `an exclusion is stamped with its writer: excluded[${JSON.stringify(id)}] must be { by: "${by}" }`,
           "Nothing was written.",
         );
     }
@@ -70,19 +71,23 @@ export function familiesAdmission(loadedFamilies: LoadedFamilies): RouteWriteAdm
         "Nothing was written. Open the Work's document in Revit, then write again.",
       );
     }
-    const types = new Map(
-      families.map((family) => [family.familyId, new Set(family.types.map((t) => t.typeName))]),
-    );
+    // ponytail: a same-name pair unions its types here; plan refuses that name as ambiguous.
+    const types = new Map<string, Set<string>>();
+    for (const family of families) {
+      const known = types.get(family.familyName) ?? new Set<string>();
+      for (const type of family.types) known.add(type.typeName);
+      types.set(family.familyName, known);
+    }
     const bad = written.filter((key) => {
-      const { familyId, typeName } = familyCellAddress(key);
-      return !types.get(familyId)?.has(typeName);
+      const { familyName, typeName } = familyCellAddress(key);
+      return !types.get(familyName)?.has(typeName);
     });
     if (!bad.length) return null;
     const sample = families.find((family) => family.types.length);
     return refuse(
       "refused",
       `${bad.length} cell key(s) name no type of a family loaded in this Work's scope: ${bad.slice(0, 3).join(", ")}${bad.length > 3 ? ", ..." : ""}`,
-      `Nothing was written. A key is [familyId,typeName,parameter]: familyId is a family's id from revit.catalog.loaded-families, never a type's element id, and typeName is one of that family's types${sample ? `, e.g. ${familyCellKey({ familyId: sample.familyId, typeName: sample.types[0]!.typeName, parameter: "<parameter>" })}` : ""}.`,
+      `Nothing was written. A key is [familyName,typeName,parameter]: familyName is a family's exact name from revit.catalog.loaded-families, never an element id, and typeName is one of that family's types${sample ? `, e.g. ${familyCellKey({ familyName: sample.familyName, typeName: sample.types[0]!.typeName, parameter: "<parameter>" })}` : ""}.`,
     );
   };
 }

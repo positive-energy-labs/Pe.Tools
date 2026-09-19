@@ -72,8 +72,8 @@ test("plan reads the page's member against the reviewed Work, and writes no Work
   });
 });
 
-test("held-back rows are the Work's exclusions", () => {
-  expect(familiesSpec.plan!.excluded!(view() as never)).toEqual(["3102"]);
+test("held-back rows are the Work's exclusions, by name, as this sheet's row ids", () => {
+  expect(familiesSpec.plan!.excluded!(view({ sheet: seed.page.sheet }) as never)).toEqual(["3102"]);
 });
 
 test("apply names its plan with exactly the included hashes", async () => {
@@ -118,9 +118,9 @@ test("capture evidence is read off the capture's own receipt, failures included"
 });
 
 /* F-J3-6: plan words what it plans; saving the draft to the pod is its own, optional verb. */
-const staged = (familyId: number, familyName: string, value: string) => [
-  familyCellKey({ familyId, typeName: "T", parameter: "Mark" }),
-  { staged: { value: { familyName, value } } },
+const staged = (familyName: string, value: string) => [
+  familyCellKey({ familyName, typeName: "T", parameter: "Mark" }),
+  { staged: { value: { value } } },
 ];
 const stagedView = () =>
   view({
@@ -130,7 +130,7 @@ const stagedView = () =>
 const withCells = (ctx: ReturnType<typeof stagedView>) => {
   ctx.work.doc = {
     ...seed.work,
-    cells: Object.fromEntries([staged(1, "Alpha", "a"), staged(2, "Beta", "b")]),
+    cells: Object.fromEntries([staged("Alpha", "a"), staged("Beta", "b")]),
   };
   return ctx;
 };

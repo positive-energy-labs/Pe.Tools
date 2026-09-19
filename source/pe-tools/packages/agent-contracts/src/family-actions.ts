@@ -105,8 +105,11 @@ export const familyActions = {
     input: z
       .object({
         source: planSourceSchema,
-        /** Plan only these families of the scope (a generated one-family member); absent = the scope. */
-        familyIds: z.array(z.number().int()).nonempty().optional(),
+        /**
+         * Plan only these families of the scope, by NAME (a generated one-family member); absent =
+         * the scope. The library resolves each name against the open document at plan.
+         */
+        familyNames: z.array(z.string().min(1)).nonempty().optional(),
         executionOptions: familyExecutionOptionsSchema.optional(),
       })
       // Exclusions are read from the reviewed Work, never sent; a stale caller sending them refuses.

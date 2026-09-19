@@ -34,6 +34,11 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
    */
   agentWriteMask: string[][];
   commands: Record<string, RouteStateCommandSpec>;
+  /**
+   * What a person may carry over from Work this schema can no longer read (before or after start
+   * fresh), read tolerantly from the old document. Never throws, never parses into Work.
+   */
+  salvage?: (raw: unknown) => unknown;
 }
 
 /**

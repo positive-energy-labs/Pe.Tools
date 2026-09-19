@@ -228,7 +228,9 @@ export function FamiliesProposalsBand() {
   );
   const current = (entry: (typeof entries)[number]) => {
     const key = params.find((param) => param.name === entry.parameter)?.key;
-    const row = rows.find((r) => r.familyId === entry.familyId && r.typeName === entry.typeName);
+    const row = rows.find(
+      (r) => r.familyName === entry.familyName && r.typeName === entry.typeName,
+    );
     return key && row ? (row.values[key] ?? "") : null;
   };
   const keys = entries.map((entry) => entry.key);
@@ -293,8 +295,7 @@ export function FamiliesProposalsBand() {
             address={entry.key}
             label={
               <span className="face-mono text-ink-2" data-proposal-row={entry.key}>
-                {(entry.cell.proposal ?? entry.cell.staged)?.value.familyName ?? "family"} ·{" "}
-                {entry.typeName} · {entry.parameter}
+                {entry.familyName} · {entry.typeName} · {entry.parameter}
               </span>
             }
             cell={entry.cell}

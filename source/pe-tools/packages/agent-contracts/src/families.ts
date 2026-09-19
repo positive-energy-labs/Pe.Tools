@@ -24,7 +24,8 @@ const changeSchema = z.object({
   mappedFrom: z.string().nullish(),
 });
 export const ffPlanEntrySchema = z.object({
-  familyId: z.number(),
+  /** The id the name resolved to at plan; null when the name refused (no loaded family, ambiguous, not editable). */
+  familyId: z.number().nullish(),
   familyName: z.string(),
   planHash: z.string(),
   changes: z.array(changeSchema),
@@ -35,7 +36,7 @@ export const ffPlanEntrySchema = z.object({
 export type FfPlanEntry = z.infer<typeof ffPlanEntrySchema>;
 export const ffReceiptSchema = z.object({
   familyId: z.number(),
-  familyName: z.string().nullish(),
+  familyName: z.string(),
   success: z.boolean(),
   converged: z.boolean(),
   error: z.string().nullish(),
@@ -90,33 +91,31 @@ export const FAMILY_CATALOG_LIMIT = 5000;
 /**
  * One proposed cell value on the `/families` audit: a family type's parameter cell and the value
  * someone proposes for it. Pea and a person write the same shape and are told apart by `by`. It is
- * authored Work, not a result — it survives a reload. The address is a family, a type and the EXACT
- * Revit parameter name, because that is what a Family Foundry patch keys on
- * (`patch.types.<typeName>.<parameter>`).
+ * authored Work, not a result — it survives a reload. The address is a family NAME, a type and the
+ * EXACT Revit parameter name, because that is what a Family Foundry patch keys on
+ * (`patch.types.<typeName>.<parameter>`). Never a family element id: every LoadFamily after an edit
+ * replaces the Family element, so only the name is stable across applies.
  */
-export const familyCellValueSchema = z.object({
-  familyName: z.string(),
-  value: z.string(),
-});
+export const familyCellValueSchema = z.object({ value: z.string() }).strict();
 export type FamilyCellValue = z.infer<typeof familyCellValueSchema>;
 export const familyCellStateSchema = trichotomyCellSchema(familyCellValueSchema);
 export type FamilyCellState = z.infer<typeof familyCellStateSchema>;
 
 export interface FamilyCellAddress {
-  familyId: number;
+  familyName: string;
   typeName: string;
   parameter: string;
 }
 
-const familyCellAddressTupleSchema = z.tuple([z.number(), z.string(), z.string()]);
+const familyCellAddressTupleSchema = z.tuple([z.string().min(1), z.string(), z.string()]);
 
 /** JSON tuple encoding is collision-free even when names contain separators. */
-export const familyCellKey = ({ familyId, typeName, parameter }: FamilyCellAddress): string =>
-  JSON.stringify(familyCellAddressTupleSchema.parse([familyId, typeName, parameter]));
+export const familyCellKey = ({ familyName, typeName, parameter }: FamilyCellAddress): string =>
+  JSON.stringify(familyCellAddressTupleSchema.parse([familyName, typeName, parameter]));
 
 export const familyCellAddress = (key: string): FamilyCellAddress => {
-  const [familyId, typeName, parameter] = familyCellAddressTupleSchema.parse(JSON.parse(key));
-  return { familyId, typeName, parameter };
+  const [familyName, typeName, parameter] = familyCellAddressTupleSchema.parse(JSON.parse(key));
+  return { familyName, typeName, parameter };
 };
 
 const familyCellKeySchema = z.string().refine(
@@ -127,7 +126,7 @@ const familyCellKeySchema = z.string().refine(
       return false;
     }
   },
-  { error: "a family cell key must be a canonical [familyId,typeName,parameter] JSON tuple" },
+  { error: "a family cell key must be a canonical [familyName,typeName,parameter] JSON tuple" },
 );
 
 /** A typed cell value as the Family Foundry patch writes it: a JSON scalar stays one. */
@@ -147,7 +146,7 @@ export const patchValue = (text: string): string | number | boolean =>
  */
 export function familyStagedPatch(
   cells: Record<string, FamilyCellState>,
-  familyId: number,
+  familyName: string,
 ): {
   familyName: string;
   spec: { select: { names: string[] }; patch: { types: Record<string, Record<string, unknown>> } };
@@ -155,15 +154,13 @@ export function familyStagedPatch(
 } | null {
   const types: Record<string, Record<string, unknown>> = {};
   const keys: string[] = [];
-  let familyName: string | null = null;
   for (const [key, cell] of Object.entries(cells)) {
     const address = familyCellAddress(key);
-    if (address.familyId !== familyId || !cell.staged) continue;
-    familyName ??= cell.staged.value.familyName;
+    if (address.familyName !== familyName || !cell.staged) continue;
     (types[address.typeName] ??= {})[address.parameter] = patchValue(cell.staged.value.value);
     keys.push(key);
   }
-  return familyName === null
+  return keys.length === 0
     ? null
     : { familyName, spec: { select: { names: [familyName] }, patch: { types } }, keys };
 }
@@ -181,9 +178,15 @@ export type FamilyExclusions = Record<string, { by: z.infer<typeof exclusionAuth
 const familiesDocumentSchema = z
   .object({
     scope: appliedScopeSchema.nullable().default(null),
-    /** Families held back from plan, keyed by family id, each with who held it back. */
+    /**
+     * Families held back from plan, keyed by family NAME, each with who held it back. An all-digit
+     * key is an old element id, so it fails closed rather than reading as a name.
+     */
     excluded: z
-      .record(z.string().regex(/^\d+$/), z.object({ by: exclusionAuthorSchema }).strict())
+      .record(
+        z.string().regex(/\D/, "an exclusion key is a family name, never an element id"),
+        z.object({ by: exclusionAuthorSchema }).strict(),
+      )
       .default({}),
     cells: z.record(familyCellKeySchema, familyCellStateSchema).default({}),
     executionOptions: familyExecutionOptionsSchema.optional(),
@@ -191,7 +194,10 @@ const familiesDocumentSchema = z
   .strict();
 export type FamiliesRouteDocument = z.infer<typeof familiesDocumentSchema>;
 
-/** The included plan hashes an apply must reproduce exactly. Server and client share this. */
+/**
+ * The included plan hashes an apply must reproduce exactly, keyed by the id each name resolved to in
+ * that sealed plan. Server and client share this.
+ */
 export const familiesIncluded = (
   plan: { entries: readonly FfPlanEntry[] },
   excluded: FamilyExclusions,
@@ -200,7 +206,8 @@ export const familiesIncluded = (
     plan.entries
       .filter(
         (entry) =>
-          !Object.hasOwn(excluded, String(entry.familyId)) &&
+          entry.familyId != null &&
+          !Object.hasOwn(excluded, entry.familyName) &&
           entry.refusals.length === 0 &&
           (entry.changes.length > 0 || entry.runEffects.length > 0),
       )
@@ -213,19 +220,30 @@ export const familiesExcluded = (
   excluded: FamilyExclusions,
 ) =>
   plan.entries.flatMap((entry) => {
-    const held = excluded[String(entry.familyId)];
-    return held ? [{ familyId: entry.familyId, by: held.by }] : [];
+    const held = Object.hasOwn(excluded, entry.familyName) ? excluded[entry.familyName] : undefined;
+    return held ? [{ familyName: entry.familyName, by: held.by }] : [];
   });
 
 export const familiesRouteState = {
   route: "families",
   title: "Families",
   description:
-    'Family Foundry: author a scope and propose through cells.<key>.proposal, where <key> is [familyId,typeName,parameter] of a family type loaded in the scope. A person stages reviewed cells before plan or apply. Hold a family back with excluded.<familyId> = { by: "pea" }; the plan sheet names who held it back, and only the person lifts their own.',
+    'Family Foundry: author a scope and propose through cells.<key>.proposal, where <key> is [familyName,typeName,parameter] of a family type loaded in the scope (the family NAME, never an element id). A person stages reviewed cells before plan or apply. Hold a family back with excluded.<familyName> = { by: "pea" }; the plan sheet names who held it back, and only the person lifts their own.',
   schema: familiesDocumentSchema,
   // Pea writes proposals only. A staged value reaches plan only through a person's review.
   agentWriteMask: [["scope"], ["excluded"], ...trichotomyAgentMask(), ["executionOptions"]],
   // Planning and applying are the `families.plan` and `families.apply` workflows. Neither is
   // a route command, so neither can write into authored Work.
   commands: {},
+  // Old Work held exclusions by element id (`excludedIds`, then id-keyed `excluded`); the page
+  // resolves them to current names and re-excludes by name.
+  salvage: (raw) => {
+    const doc = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+    const ids = Array.isArray(doc.excludedIds)
+      ? doc.excludedIds
+      : doc.excluded && typeof doc.excluded === "object"
+        ? Object.keys(doc.excluded).map((key) => (/^\d+$/.test(key) ? Number(key) : NaN))
+        : [];
+    return { familyIds: ids.filter((id): id is number => Number.isSafeInteger(id)) };
+  },
 } satisfies RouteStateSpec<typeof familiesDocumentSchema>;

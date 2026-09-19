@@ -20,8 +20,8 @@ afterEach(cleanup);
 const staged = (n: number): Record<string, FamilyCellState> =>
   Object.fromEntries(
     Array.from({ length: n }, (_, i) => [
-      familyCellKey({ familyId: 3100 + i, typeName: "T", parameter: "Model" }),
-      { proposal: null, staged: { value: { familyName: `F${i}`, value: `v${i}` } } },
+      familyCellKey({ familyName: `F${i}`, typeName: "T", parameter: "Model" }),
+      { proposal: null, staged: { value: { value: `v${i}` } } },
     ]),
   );
 

@@ -272,18 +272,19 @@ export function useFamiliesStore(
         return handle.work.write(
           transitionPatches(["cells"], key, cells[key] ?? {}, {
             kind: "stage",
-            rung: { value: { familyName: value.familyName, value: value.value } },
-            baseline: { value: { familyName: value.familyName, value: current } },
+            rung: { value: { value: value.value } },
+            baseline: { value: { value: current } },
           }),
         );
       },
       // A person's toggle: include again (whoever held it back), or hold back as the person.
-      exclude: (id: number) =>
+      // Keyed by family NAME (ruling): an element id is reissued on every reload.
+      exclude: (familyName: string) =>
         // not a cell: excluded
         handle.work.write([
-          Object.hasOwn(excluded, String(id))
-            ? { path: ["excluded", String(id)] }
-            : { path: ["excluded", String(id)], value: { by: "person" } },
+          Object.hasOwn(excluded, familyName)
+            ? { path: ["excluded", familyName] }
+            : { path: ["excluded", familyName], value: { by: "person" } },
         ]),
       openFamily: (familyId: number) => {
         if (!documentScope)

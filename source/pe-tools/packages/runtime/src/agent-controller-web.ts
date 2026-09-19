@@ -230,6 +230,19 @@ export async function buildAgentControllerApp(
       return c.json({ error: errorMessage(error) }, 403);
     }
   });
+  // Human-only and read-only; the agent prefix is mounted so it is refused by name, not 404.
+  for (const [prefix, actor] of [
+    ["/pe/route-state", "human"],
+    ["/pe/agent/route-state", "agent"],
+  ] as const)
+    app.get(`${prefix}/:route/salvage`, async (c) => {
+      const scope = scopeOr400(c, "read");
+      if (scope instanceof Response) return scope;
+      const route = c.req.param("route");
+      const salvaged = await routeWorkspace.salvage(scope, route, actor);
+      if (!salvaged) return c.json({ error: `nothing to salvage on '${route}'` }, 404);
+      return "ok" in salvaged ? c.json(salvaged, 403) : c.json(salvaged);
+    });
   const writes = [
     {
       suffix: "apply",
