@@ -5,6 +5,7 @@ import { TableFrame } from "#/components/master-table/table-frame";
 import { useContext, useMemo } from "react";
 
 import { nextPicks, pickedRowKeys } from "#/families/picks";
+import { scopeWords, standingScopeProposal } from "#/families/scope-band";
 import { focusedTypes } from "#/families/staged";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 import { ChatFocus } from "#/route/situation";
@@ -29,6 +30,8 @@ export function FamiliesMatrix() {
     matrixIssue,
   } = useFamiliesWorkspace();
   // Chat's group drill-in: only the types holding a pending cell under the focused path.
+  const scope = store.handle.work.doc?.scope;
+  const proposed = scope ? standingScopeProposal(scope) : null;
   const focus = useContext(ChatFocus);
   const focused = focus && focusedTypes(store.cells, focus);
   const focusKeys = focused
@@ -121,12 +124,22 @@ export function FamiliesMatrix() {
                 nothing to audit — the bridge is disconnected
               </EmptyState>
             ) : applied === null ? (
-              <EmptyState
-                story="scope"
-                exit="pick categories in the scope row above, then press “apply scope” in the verb row"
-              >
-                no scope applied yet — the matrix op is expensive, so it waits to be asked
-              </EmptyState>
+              // The matrix reads the staged scope only; Pea's proposal waits for the person.
+              proposed ? (
+                <EmptyState
+                  story="scope"
+                  exit="accept it in the scope row above, or draft your own and press “apply scope”"
+                >
+                  Pea proposes {scopeWords(proposed)}, accept or deny
+                </EmptyState>
+              ) : (
+                <EmptyState
+                  story="scope"
+                  exit="pick categories in the scope row above, then press “apply scope” in the verb row"
+                >
+                  no scope staged — stage one; the matrix op is expensive, so it waits to be asked
+                </EmptyState>
+              )
             ) : matrixReading ? (
               <OutcomeLine kind="busy" label="reading the matrix" says="the applied scope" />
             ) : matrixIssue ? (

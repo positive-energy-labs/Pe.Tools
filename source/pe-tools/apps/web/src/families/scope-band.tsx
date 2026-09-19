@@ -1,3 +1,7 @@
+import { sameValue, type AppliedFilter, type FamiliesRouteDocument } from "@pe/agent-contracts";
+
+import { reviewTransitions, type CellWire } from "#/components/lang/band";
+import { cellFromTrichotomy, StateCell } from "#/components/lang/cell";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { ListPopup } from "#/components/lang/list-popup";
@@ -22,6 +26,42 @@ const PLACEMENT_OPTIONS = (Object.keys(PLACEMENT_LABELS) as LoadedFamilyPlacemen
   (value) => ({ value, label: PLACEMENT_LABELS[value], note: PLACEMENT_NOTES[value] }),
 );
 
+/** A scope in words: its categories, its families, its placement. */
+export const scopeWords = (scope: AppliedFilter) =>
+  `${scope.categoryNames.join(", ") || "every category"} · ${scope.familyNames.join(", ") || "every family"} · ${PLACEMENT_LABELS[scope.placementScope as LoadedFamilyPlacement]}`;
+
+/** Pea's scope proposal while it still stands (present, and not what is staged), else null. */
+export const standingScopeProposal = (scope: FamiliesRouteDocument["scope"]) =>
+  scope.proposal && !sameValue(scope.proposal, scope.staged) ? scope.proposal.value : null;
+
+/**
+ * Pea's scope proposal as the one scope cell (F-J1-10): the scope sits at the Work's root, and
+ * its verbs are exactly the contract's (`reviewTransitions`). A person's own apply stages beside
+ * it, so a differing proposal stays drawn as the counter-proposal.
+ */
+export function ScopeProposal({
+  scope,
+  wire,
+}: {
+  scope: FamiliesRouteDocument["scope"];
+  wire: CellWire;
+}) {
+  const proposed = standingScopeProposal(scope);
+  if (!proposed) return null;
+  const show = (value: unknown) => scopeWords(value as AppliedFilter);
+  const scopeWire = { ...wire, segment: null };
+  return (
+    <div className="hairline-b flex flex-wrap items-baseline gap-1.5 px-2 py-1">
+      <SectionLabel>scope</SectionLabel>
+      <span className="t-small">Pea proposes</span>
+      <StateCell
+        {...cellFromTrichotomy(scope, { value: show(proposed) }, show)}
+        transitions={reviewTransitions(scopeWire, "scope", scope)}
+      />
+    </div>
+  );
+}
+
 export function FamiliesFilterBand() {
   const {
     fixture,
@@ -36,9 +76,13 @@ export function FamiliesFilterBand() {
     familyFeed,
     categoryFeed,
     workUnreadable,
+    store,
+    wire,
   } = useFamiliesWorkspace();
+  const scope = store.handle.work.doc?.scope;
   return (
     <>
+      {scope && !workUnreadable ? <ScopeProposal scope={scope} wire={wire} /> : null}
       {/* ── scope: placement → draft categories → picked families, explicit apply ────────── */}
       <div className="hairline-b flex flex-wrap items-center gap-1.5 px-2 py-1">
         <SectionLabel>

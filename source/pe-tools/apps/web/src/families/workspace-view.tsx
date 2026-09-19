@@ -33,10 +33,10 @@ export function FamiliesWorkspaceView({ url }: { url?: boolean }) {
         title={
           applied
             ? `${applied.placementScope} · ${applied.categoryNames.join(", ") || "every category"}; the scope draft changes it`
-            : "no scope applied; draft one in the audit and apply it"
+            : "no scope staged; draft one in the audit and apply it, or accept Pea's"
         }
       >
-        {applied ? noun(scoped, "family") : "no scope"}
+        {applied ? noun(scoped, "family") : "no staged scope"}
       </span>
     </SituationCell>
   );
@@ -60,7 +60,7 @@ export function FamiliesWorkspaceView({ url }: { url?: boolean }) {
           "scope",
           applied
             ? `${applied.placementScope} · ${applied.categoryNames.join(", ") || "every category"} · ${noun(scoped, "family")}`
-            : "none applied",
+            : "none staged",
         ],
         [
           "plan",
