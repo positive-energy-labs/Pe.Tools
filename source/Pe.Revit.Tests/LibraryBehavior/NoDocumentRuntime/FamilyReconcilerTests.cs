@@ -228,6 +228,20 @@ public sealed class FamilyReconcilerTests {
         }
     }
 
+    // Hand and Pea authors see the mapping strategies only through the served settings schema (families ops carry modelJson opaquely).
+    [TestCase(typeof(FamilyModel))]
+    [TestCase(typeof(FamilyPatch))]
+    public void Settings_schema_offers_mappingStrategy_as_its_four_names(Type root) {
+        _ = Pe.Revit.FamilyFoundry.FamilyModelSettingsRegistration.RootBindings;
+        var schema = Newtonsoft.Json.Linq.JObject.Parse(JsonSchemaFactory.CreateEditorSchemaJson(root, new JsonSchemaBuildOptions(SettingsRuntimeMode.HostOnly)));
+        var slot = schema.SelectToken("$.definitions.FamilyModelParameter.properties.mappingStrategy")!;
+        Assert.That(slot.SelectTokens("oneOf[*].$ref").Select(t => (string?)t), Is.EqualTo(new[] { "#/definitions/MappingStrategy" }));
+        Assert.That(slot.SelectTokens("oneOf[*].type").Select(t => (string?)t), Is.EqualTo(new[] { "null" }));
+        var strategies = schema.SelectToken("$.definitions.MappingStrategy")!;
+        Assert.That((string?)strategies["type"], Is.EqualTo("string"));
+        Assert.That(strategies["enum"]!.Values<string>(), Is.EqualTo(new[] { "Strict", "CoerceByStorageType", "CoerceMeasurableToNumber", "CoerceElectrical" }));
+    }
+
     [Test]
     public void Prism_authored_desired_against_its_expanded_captured_form_diffs_empty() {
         var authored = Load("a-box");                                  // Parse expanded the prism into planes, dims, one extrusion
