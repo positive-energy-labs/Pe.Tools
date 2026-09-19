@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { RouteStateSpec } from "./route-state.ts";
+import { isRecord, type RouteStateSpec } from "./route-state.ts";
 import { trichotomyAgentMask, trichotomyCellSchema } from "./trichotomy.ts";
 
 export const diagnosticSchema = z.object({
@@ -301,6 +301,9 @@ export const familiesExcluded = (
     return held ? [{ familyName: entry.familyName, by: held.by }] : [];
   });
 
+/** What start fresh can carry over from unreadable Work, each piece only on the person's press. */
+export type FamiliesSalvage = { familyNames: string[]; familyIds: number[]; scope?: AppliedFilter };
+
 export const familiesRouteState = {
   route: "families",
   title: "Families",
@@ -317,15 +320,28 @@ export const familiesRouteState = {
   // Planning and applying are the `families.plan` and `families.apply` workflows. Neither is
   // a route command, so neither can write into authored Work.
   commands: {},
-  // Old Work held exclusions by element id (`excludedIds`, then id-keyed `excluded`); the page
-  // resolves them to current names and re-excludes by name.
-  salvage: (raw) => {
-    const doc = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-    const ids = Array.isArray(doc.excludedIds)
-      ? doc.excludedIds
-      : doc.excluded && typeof doc.excluded === "object"
-        ? Object.keys(doc.excluded).map((key) => (/^\d+$/.test(key) ? Number(key) : NaN))
-        : [];
-    return { familyIds: ids.filter((id): id is number => Number.isSafeInteger(id)) };
+  // Old Work held exclusions by element id (`excludedIds`, then id-keyed `excluded`), then by name;
+  // the page resolves ids to current names and re-excludes by name. Its scope was a bare filter
+  // (or `plan.scope` before that): offered back, it is staged only by the person's press.
+  salvage: (raw): FamiliesSalvage => {
+    const doc = isRecord(raw) ? raw : {};
+    const keys = isRecord(doc.excluded) ? Object.keys(doc.excluded) : [];
+    const ids = [
+      ...(Array.isArray(doc.excludedIds) ? doc.excludedIds : []),
+      ...keys.filter((key) => /^\d+$/.test(key)).map(Number),
+    ];
+    const scopeCell = isRecord(doc.scope) ? doc.scope : {};
+    const scope = [
+      doc.scope,
+      isRecord(scopeCell.staged) ? scopeCell.staged.value : undefined,
+      isRecord(doc.plan) ? doc.plan.scope : undefined,
+    ]
+      .map((candidate) => appliedScopeSchema.safeParse(candidate))
+      .find((parsed) => parsed.success)?.data;
+    return {
+      familyNames: keys.filter((key) => !/^\d+$/.test(key)),
+      familyIds: ids.filter((id): id is number => Number.isSafeInteger(id)),
+      ...(scope ? { scope } : {}),
+    };
   },
 } satisfies RouteStateSpec<typeof familiesDocumentSchema>;

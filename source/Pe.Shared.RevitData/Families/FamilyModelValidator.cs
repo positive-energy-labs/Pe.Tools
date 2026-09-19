@@ -16,7 +16,7 @@ public static class FamilyModelDiagnosticCodes {
     public const string SharedOwnsDataType = "shared-owns-datatype";
     public const string SharedTooltipUnsupported = "shared-tooltip-unsupported";
     public const string IdentityChangeThroughGroup = "identity-change-through-group";
-    public const string FormulaCopyDataType = "formula-copy-data-type";
+    public const string ValueNotCoercible = "value-not-coercible";
     public const string TypeRefsInstance = "type-refs-instance";
     public const string ValueDataTypeMismatch = "value-datatype-mismatch";
     public const string FormulaUnknownName = "formula-unknown-name";

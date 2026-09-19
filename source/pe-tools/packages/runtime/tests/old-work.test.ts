@@ -245,12 +245,12 @@ test("/families: salvage carries the old excluded ids over, before and after sta
   expect(await module.salvage(scope, "families", "agent")).toMatchObject({ ok: false });
   expect(await module.salvage(scope, "families", "human")).toEqual({
     from: "unreadable",
-    value: { familyIds: [3102, 7] },
+    value: { familyNames: [], familyIds: [3102, 7] },
   });
   expect(await module.startFresh(scope, "families", "human")).toMatchObject({ ok: true });
   expect(await module.salvage(scope, "families", "human")).toEqual({
     from: "aside:1",
-    value: { familyIds: [3102, 7] },
+    value: { familyNames: [], familyIds: [3102, 7] },
   });
   // The id-keyed record Mission 11 wrote is old Work too; the newest aside answers.
   state.set(key("families"), {
@@ -261,7 +261,7 @@ test("/families: salvage carries the old excluded ids over, before and after sta
   expect(await module.startFresh(scope, "families", "human")).toMatchObject({ ok: true });
   expect(await module.salvage(scope, "families", "human")).toEqual({
     from: "aside:2",
-    value: { familyIds: [41] },
+    value: { familyNames: [], familyIds: [41] },
   });
   // Read-only: nothing moved.
   expect(JSON.stringify(state.get(key(`families${START_FRESH_ASIDE}1`)))).toBe(bytes);

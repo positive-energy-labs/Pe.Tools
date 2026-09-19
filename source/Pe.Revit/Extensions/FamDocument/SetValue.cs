@@ -1,3 +1,4 @@
+using Pe.Shared.RevitData.Families;
 using Pe.Revit.Extensions.FamDocument.SetValue;
 using System.Globalization;
 using Pe.Revit.Parameters;
@@ -95,7 +96,7 @@ public static class FamilyDocumentSetValue {
         this FamilyDocument famDoc,
         FamilyParameter targetParam,
         FamilyParameter sourceParam,
-        string strategyName = nameof(BuiltInCoercionStrategy.Strict)
+        string strategyName = nameof(MappingStrategy.Strict)
     ) {
         var context = CoercionContext.FromParam(famDoc, sourceParam, targetParam);
         var strategyInstance = ParamCoercionStrategyRegistry.Get(strategyName);
@@ -106,7 +107,7 @@ public static class FamilyDocumentSetValue {
         this FamilyDocument famDoc,
         FamilyParameter targetParam,
         object? sourceValue,
-        string strategyName = nameof(BuiltInCoercionStrategy.Strict)
+        string strategyName = nameof(MappingStrategy.Strict)
     ) {
         var context = CoercionContext.FromValue(famDoc, sourceValue, targetParam);
         var strategyInstance = ValueCoercionStrategyRegistry.Get(strategyName);
@@ -146,7 +147,7 @@ public static class FamilyDocumentSetValue {
         this FamilyDocument famDoc,
         FamilyParameter targetParam,
         FamilyParameter sourceParam,
-        string strategyName = nameof(BuiltInCoercionStrategy.Strict)
+        string strategyName = nameof(MappingStrategy.Strict)
     ) {
         var context = CoercionContext.FromParam(famDoc, sourceParam, targetParam);
         if (context.SourceValue == null) return null;
@@ -184,7 +185,7 @@ public static class FamilyDocumentSetValue {
         this FamilyDocument famDoc,
         FamilyParameter targetParam,
         object? sourceValue,
-        string strategyName = nameof(BuiltInCoercionStrategy.Strict)
+        string strategyName = nameof(MappingStrategy.Strict)
     ) {
         var context = CoercionContext.FromValue(famDoc, sourceValue, targetParam);
         if (context.SourceValue == null) return null;
