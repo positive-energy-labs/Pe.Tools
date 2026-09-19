@@ -1,16 +1,12 @@
 import type {
-  FamilyEditorSnapshot,
   RevitMatrixParameterCoverage,
   RevitMatrixScheduleCoverage,
 } from "@pe/host-contracts/generated";
 import { CoverageBar } from "#/components/lang/coverage-bar";
 import { EmptyState } from "#/components/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
-import { type Column } from "#/components/master-table/model";
-import { Table } from "#/components/master-table/table";
-import { KVGrid, VizChip } from "#/ops/primitives";
+import { VizChip } from "#/ops/primitives";
 import { type OpViewProps, UnrecognizedShape, asRecord } from "#/ops/registry";
-import { MAX_TYPE_COLUMNS } from "./parameter-links";
 import { issueLine, pageNote } from "./schedules";
 
 export function ParameterCoverageView({ data }: OpViewProps) {
@@ -118,74 +114,6 @@ export function ScheduleCoverageView({ data }: OpViewProps) {
       <Provenance>
         {res.totalElements} elements in scope{pageNote(res.page)}
       </Provenance>
-    </div>
-  );
-}
-
-export function FamilyEditorSnapshotView({ data }: OpViewProps) {
-  const rec = asRecord(data);
-  if (!rec || !Array.isArray(rec.parameters) || typeof rec.familyName !== "string")
-    return <UnrecognizedShape />;
-  const res = rec as unknown as FamilyEditorSnapshot.Res.Response;
-  const typeNames = res.typeNames.slice(0, MAX_TYPE_COLUMNS);
-  const overflow = res.typeNames.length - typeNames.length;
-
-  const columns: Column<FamilyEditorSnapshot.Res.FamilyEditorParameterSnapshot>[] = [
-    {
-      key: "name",
-      label: "parameter",
-      cell: (p) => (
-        <span title={p.identity?.key}>
-          {p.name}{" "}
-          <span className="">
-            {p.isInstance ? "inst" : "type"}
-            {p.isShared ? " · shared" : ""}
-            {p.isReadOnly ? " · ro" : ""}
-          </span>
-        </span>
-      ),
-    },
-    {
-      key: "formula",
-      label: "formula",
-      cell: (p) => (p.formula ? <span className="">= {p.formula}</span> : ""),
-    },
-    ...typeNames.map((typeName) => ({
-      key: `t:${typeName}`,
-      label: typeName,
-      header:
-        typeName === res.currentTypeName ? (
-          <span>
-            {typeName} <span className="">current</span>
-          </span>
-        ) : (
-          typeName
-        ),
-      right: true,
-      cell: (p: FamilyEditorSnapshot.Res.FamilyEditorParameterSnapshot) =>
-        p.valuesPerType[typeName] ?? "∅",
-    })),
-  ];
-
-  return (
-    <div className="flex flex-col gap-3">
-      <KVGrid
-        columns={3}
-        items={[
-          { label: "family", value: res.familyName },
-          { label: "current type", value: res.currentTypeName },
-          { label: "types", value: res.typeNames.length },
-          { label: "parameters", value: res.parameters.length },
-        ]}
-      />
-      <Table
-        label="family parameters by type"
-        maxHeight="28rem"
-        columns={columns}
-        rows={res.parameters}
-        rowKey={(p) => p.identity?.key ?? p.name}
-      />
-      {overflow > 0 && <Provenance>{overflow} type columns not shown</Provenance>}
     </div>
   );
 }

@@ -164,12 +164,6 @@ export interface PlanEntry {
   /** Why this row cannot be applied (a refusal, or nothing to do); null = applicable. */
   flag: string | null;
   warnings: readonly string[];
-  /**
-   * The saved member this row was planned from, when the sheet's rows come from more than one —
-   * a staged audit generates one member per subject, so apply has to send each row's hashes back
-   * to the member that produced them.
-   */
-  source?: MemberSource;
   /** The plan action this row came from; apply names it, and the host consumes its sealed input. */
   plan?: string;
 }
@@ -472,21 +466,19 @@ export function entityRoute<W, const R extends string, P extends object, const A
       def.onCaptured?.(result, ctx as never);
     },
   };
-  /** A sheet planned from staged work names each row's generated member; apply sends those. */
-  const stagedSheet = (ctx: EntityCtx) =>
-    Boolean(staged && sheetView(ctx)?.sheet.entries.some((entry) => entry.source));
+  /** A sheet planned from staged work; apply sends its plans, never the page's member. */
+  const stagedSheet = (ctx: EntityCtx) => Boolean(staged && sheetView(ctx)?.sheet.staged);
   const planVerb: RouteAction<unknown, string, EntityPage, never> = {
     label: "plan",
     says: `plans the saved ${def.entity} spec and opens the confirmation sheet; changes nothing`,
     needs: semanticActionFacts(def.apply).needs,
     actor: "any",
     input: z.void() as unknown as z.ZodType<never>,
-    dirties: ["pods"],
+    dirties: [],
     count: (ctx) => stagedCount(ctx) || null,
     ready: (ctx) => {
-      // Staged work IS the spec: plan files it as new members, so nothing is open yet.
-      if (stagedCount(ctx))
-        return ctx.page.pod ? null : "choose the pod the generated spec lands in";
+      // Staged work IS the spec; the pod holds the run, not a member.
+      if (stagedCount(ctx)) return ctx.page.pod ? null : "choose the pod the run is filed in";
       return plan ? savedSpec(ctx) : "nothing is staged to plan";
     },
     run: async (ctx) => {
@@ -507,7 +499,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
     dirties: ["pods", ...(def.applies ?? [])],
     count: (ctx) => (plan || staged ? sheetView(ctx)?.included.length || null : null),
     ready: (ctx) => {
-      // A staged sheet carries its own generated member per row; the page's member is not sent.
+      // A staged sheet carries its own sealed plans; the page's member is not sent.
       const missing = stagedSheet(ctx) ? null : savedSpec(ctx);
       if (missing || !(plan || staged)) return missing;
       if (!ctx.page.confirming) return "plan first";

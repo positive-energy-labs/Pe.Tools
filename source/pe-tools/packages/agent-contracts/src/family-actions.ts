@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { documentRefSchema } from "./target.ts";
 import { workKeySchema } from "./route-state.ts";
-import { podMemberSchema, podMemberSourceSchema } from "./settings.ts";
+import { podDraftSourceSchema, podMemberSchema, podMemberSourceSchema } from "./settings.ts";
 import { familyExecutionOptionsSchema } from "./families.ts";
 import { parameterLinksReadingSchema } from "./parameter-links.ts";
 
@@ -89,15 +89,19 @@ export const familyActions = {
     input: z.object({ pod: z.string().min(1), familyIds: z.array(z.number().int()).min(1) }),
   },
   "families.plan": {
-    says: "Plan a saved spec over the loaded families in the reviewed Families Work scope; returns the plan and the hashes apply would send, and changes nothing.",
+    says: "Plan a saved spec, or a supplied draft's exact bytes (filed nowhere), over the loaded families in the reviewed Families Work scope; returns the plan and the hashes apply would send, and changes nothing.",
     needs: "project-document",
     actor: "any",
     dirties: [],
     executors: ["pod.member.compose", "families.plan"],
     description:
-      "Plan a saved spec over the loaded families in the reviewed Families Work scope; returns the plan and the hashes apply would send, and changes nothing.",
+      "Plan a saved spec, or a supplied draft's exact bytes (filed nowhere), over the loaded families in the reviewed Families Work scope; returns the plan and the hashes apply would send, and changes nothing.",
     input: z.object({
-      source: podMemberSourceSchema,
+      /**
+       * A saved member, or a draft's bytes; the run apply files captures either exactly. Strict
+       * arms: a shape with both `sha256` and `content` refuses instead of losing one to stripping.
+       */
+      source: z.union([podMemberSourceSchema.strict(), podDraftSourceSchema.strict()]),
       /** Plan only these families of the scope (a generated one-family member); absent = the scope. */
       familyIds: z.array(z.number().int()).nonempty().optional(),
       excludedIds: z.array(z.number().int()).default([]),

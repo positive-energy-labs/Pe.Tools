@@ -140,12 +140,7 @@ export const familySpec: EntityRouteDef<FamilyRouteDocument, FamilyReadingKey, F
       const row = ffPlanRow(ffPlanEntrySchema.parse(result.plan));
       return {
         entries: [
-          {
-            ...row,
-            detail: `${row.detail} · from ${source.path}`,
-            source,
-            plan: String(result.id),
-          },
+          { ...row, detail: `${row.detail} · from ${source.path}`, plan: String(result.id) },
         ],
       };
     },

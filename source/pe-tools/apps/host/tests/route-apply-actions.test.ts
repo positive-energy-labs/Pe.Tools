@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Effect } from "effect";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -614,18 +614,42 @@ async function stagedPlan(
     await env.work.apply(scope, "families", "human", [{ path: ["cells"], value: cells }], authored)
   ).revision!;
   const generated = familyStagedPatch(cells, 1)!;
-  const member = await env.file(
-    "staged-Box.json",
-    content ??
+  // The reviewed draft travels as bytes; nothing is filed in the pod.
+  const draft = {
+    pod: "global",
+    path: "staged/Box.json",
+    content:
+      content ??
       `${JSON.stringify({ $schema: "https://ff/schema.json", ...generated.spec }, null, 2)}\n`,
-  );
+  };
   const plan = resultOf<Plan>(
-    await env.admit("families.plan", { source: member, familyIds: [1] }, revision),
+    await env.admit("families.plan", { source: draft, familyIds: [1] }, revision),
   );
-  return { plan, revision, apply: { plan: plan.id, expectedPlanHashes: plan.included } };
+  return { plan, revision, draft, apply: { plan: plan.id, expectedPlanHashes: plan.included } };
 }
 const cellsNow = async (work: RouteWorkspace) =>
   familiesRouteState.schema.parse((await work.read(scope, "families"))!.doc).cells;
+
+test("a staged plan files nothing in the pod; apply carries the exact draft bytes as a SuppliedDraft", async () => {
+  const env = await setup();
+  const before = await readdir(join(env.podsRoot, "Global"), { recursive: true });
+  const { apply, revision, draft } = await stagedPlan(env, { [W]: staged("10") });
+  resultOf(await env.admit("families.apply", apply, revision));
+  expect(await readdir(join(env.podsRoot, "Global"), { recursive: true })).toEqual(before);
+  const root = env.sent.find((s) => s.key === "families.apply")!.input.source.root;
+  expect(root).toMatchObject({ id: "global", path: draft.path, origin: "SuppliedDraft" });
+  expect(Buffer.from(root.bytesBase64, "base64").toString("utf8")).toBe(draft.content);
+  expect(root.sha256).toBe(createHash("sha256").update(draft.content).digest("hex"));
+  expect((await cellsNow(env.work))[W]?.staged).toBeNull();
+});
+
+test("a source that is both a saved member and a draft refuses; neither arm wins by stripping", async () => {
+  const env = await setup();
+  const revision = await authorFamilies(env.work);
+  const mixed = { ...source, content: '{"patch":{"types":{}}}' };
+  await expect(env.admit("families.plan", { source: mixed }, revision)).rejects.toThrow();
+  expect(env.sent.filter((s) => s.key === "families.plan")).toHaveLength(0);
+});
 
 test("a user who keeps editing during apply loses nothing; unchanged consumed cells retire", async () => {
   const env = await setup();

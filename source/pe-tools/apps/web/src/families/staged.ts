@@ -1,4 +1,4 @@
-/** Keyed `/families` cells and the Family Foundry members staged cells generate. */
+/** Keyed `/families` cells and the Family Foundry drafts staged cells generate. */
 import {
   familyCellAddress,
   familyCellKey,
@@ -41,37 +41,31 @@ export interface FamilyCellEntry extends FamilyCellAddress {
 export const familyCellEntries = (cells: Record<string, FamilyCellState>): FamilyCellEntry[] =>
   Object.entries(cells).map(([key, cell]) => ({ key, ...familyCellAddress(key), cell }));
 
-export interface StagedMember {
+export interface StagedDraft {
   familyId: number;
   familyName: string;
+  /** Names the draft in its run; nothing is filed here. */
   path: string;
   content: string;
-  cells: readonly string[];
 }
 
-/** Family Foundry patch members, one per family with staged cells, in family-name order. */
-export function stagedMembers(
+/** Family Foundry patch drafts, one per family with staged cells, in family-name order. */
+export function stagedDrafts(
   cells: Record<string, FamilyCellState>,
-  at: Date,
   schema: string = FF_SPEC_SCHEMA,
-): StagedMember[] {
-  const stamp = at.toISOString().replace(/[:.]/g, "-");
+): StagedDraft[] {
   const ids = [
     ...new Set(familyCellEntries(cells).flatMap((e) => (e.cell.staged ? [e.familyId] : []))),
   ];
   return ids
     .map((familyId) => {
-      const { familyName, spec, keys } = familyStagedPatch(cells, familyId)!;
+      const { familyName, spec } = familyStagedPatch(cells, familyId)!;
       return {
         familyId,
         familyName,
-        path: `settings/families/staged-${familyName.replace(/[^\w.-]+/g, "-")}-${stamp}.json`,
-        // The host proves a planned member is exactly this before the plan may retire its cells.
+        path: `staged/${familyName.replace(/[^\w.-]+/g, "-")}.json`,
+        // The host proves these captured bytes are exactly the staged cells before the plan may retire them.
         content: `${JSON.stringify({ $schema: schema, ...spec }, null, 2)}\n`,
-        cells: keys.map((key) => {
-          const { typeName, parameter } = familyCellAddress(key);
-          return `${typeName} · ${parameter} = ${cells[key]!.staged!.value.value}`;
-        }),
       };
     })
     .sort((a, b) => a.familyName.localeCompare(b.familyName));

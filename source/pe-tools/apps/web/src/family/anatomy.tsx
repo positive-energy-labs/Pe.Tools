@@ -14,15 +14,14 @@
  *              world it does not recognise draws the empty state.
  *   LIVE     — a `model` prop arrives (the parsed document). The DRAFT is composed over it
  *              (`draftedModel`) and the real evaluator (`family-model`'s `buildSheet`) resolves
- *              frames, planes, faces and connectors properly — so the drawing shows the page's
- *              live truth: type a number in the table and the geometry moves.
+ *              planes through their labeled dimensions, form boxes, and connectors — so the
+ *              drawing shows the page's live truth: type a number in the table and the geometry
+ *              moves.
  *
  * THE RPs ARE DRAWN. A reference plane whose axis is in-plane renders as a labelled line — these
  * are the dims the FF processor will create, so hovering a param-driven plane lights its
  * parameter's row exactly as a dim chip would. A plane the evaluator cannot place (formula-driven,
- * no resolvable offset) is NAMED in words under the drawing, never drawn at a guess. Frames get a
- * small origin cross only where every needed axis resolves; the room point keeps its old marker
- * (leader + dot) on a viz rung, because it is a KIND of thing, not a state.
+ * no resolvable offset) is NAMED in words under the drawing, never drawn at a guess.
  *
  * GHOSTS: every OTHER type is drawn behind the staged one as a thin outline at the same fixed
  * scale, so a type comparison needs no second drawing. Fixed scale is the law here — a taller
@@ -33,7 +32,7 @@
  * exactly what the viz ladder is for; nothing in this drawing carries a verdict, so nothing in it
  * may wear a meaning role. Material is plain ink; connectors keep their taxonomy hue; the void's
  * dash is the one legal dash AMONG PARTS (declared volume with no material behind it) — the datum
- * crosshair and the room point's leader are annotation, not parts; that distinction still needs a
+ * crosshair is annotation, not a part; that distinction still needs a
  * ruling. FOCUS is page vocabulary, not drawing vocabulary: a `--pe-select` fill and
  * an ink stroke, exactly as the table's focused row does.
  */

@@ -1,5 +1,5 @@
 import { settingsFieldPointer } from "@pe/agent-contracts";
-import { parameterSection, parameterText, paramSpec } from "#/family/family-model";
+import { parameterText, paramSpec } from "#/family/family-model";
 import { EmptyState } from "#/components/lang/empty";
 import { FactChip, Tag } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
@@ -140,11 +140,7 @@ export function FamilyWorkspaceDocPane() {
     const familyKey =
       family[0]?.id ??
       (model
-        ? settingsFieldPointer([
-            parameterSection(model, name),
-            name,
-            isFormula(authored) ? "formula" : "value",
-          ])
+        ? settingsFieldPointer(["parameters", name, isFormula(authored) ? "formula" : "value"])
         : null);
     return (
       <>

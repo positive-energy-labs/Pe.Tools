@@ -11,11 +11,7 @@ import { ProjectBrowserView } from "#/ops/views/catalog/project-browser";
 import { ProjectIndexView } from "#/ops/views/catalog/viz-cycle";
 import { ContextSummaryView } from "#/ops/views/context/kind-viz";
 import { ResolveReferencesView } from "#/ops/views/context/resolve-references";
-import {
-  FamilyEditorSnapshotView,
-  ParameterCoverageView,
-  ScheduleCoverageView,
-} from "#/ops/views/detail/parameter-coverage";
+import { ParameterCoverageView, ScheduleCoverageView } from "#/ops/views/detail/parameter-coverage";
 import { LoadedFamiliesView, ParameterLinksView } from "#/ops/views/detail/parameter-links";
 import { SchedulesView } from "#/ops/views/detail/schedules";
 import { SheetsView } from "#/ops/views/detail/sheets";
@@ -33,5 +29,4 @@ export const outputRenderers: Record<string, ComponentType<OpViewProps>> = {
   "revit.matrix.parameter-coverage": ParameterCoverageView,
   "revit.matrix.schedule-coverage": ScheduleCoverageView,
   "revit.matrix.loaded-families": LoadedFamiliesView,
-  "family.editor.snapshot": FamilyEditorSnapshotView,
 };

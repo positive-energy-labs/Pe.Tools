@@ -329,7 +329,7 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   //                  is the whole reason the arming ceremony exists — see `#/family/build`.
   //
   // Cell-level apply above simulates only in the explicit fixture lane. Native profile-wins
-  // writes use the header's reviewed familyfoundry plan/apply, not family.editor.apply.
+  // writes use the header's reviewed familyfoundry plan/apply, not a direct family editor write.
 
   const capturing = busy?.key === "capture";
   /** null → unarmed. Carries the token the plan was armed against — the plan hash a drift cites. */
