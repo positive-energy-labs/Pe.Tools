@@ -442,13 +442,13 @@ test("the browser walks one durable chat lifecycle", async () => {
         elements.map((element) => element.getAttribute("data-key")),
       ),
     ).toEqual(beforeRestartKeys);
-    const accessPicker = page.getByRole("combobox", { name: "Access" });
+    const accessPicker = page.getByRole("button", { name: "Access", exact: true });
     await accessPicker.click();
     await page.getByRole("option", { name: /Trusted/ }).click();
     await expect.poll(async () => (await readThread()).access, { timeout: 15_000 }).toBe("trusted");
     rows = page.getByRole("region", { name: /^(User|Assistant) message$/ });
     await waitForRowText(abortedText);
-    const modelPicker = page.getByRole("combobox", { name: "Model" });
+    const modelPicker = page.getByRole("button", { name: "Model", exact: true });
     const alternateOption = page.getByRole("option", { name: /alternate/i });
     await modelPicker.click();
     await alternateOption.click();
@@ -457,10 +457,10 @@ test("the browser walks one durable chat lifecycle", async () => {
       .toBe("scenario/alternate");
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect
-      .poll(() => page.getByRole("combobox", { name: "Model" }).innerText())
+      .poll(() => page.getByRole("button", { name: "Model", exact: true }).innerText())
       .toContain("alternate");
     await expect
-      .poll(() => page.getByRole("combobox", { name: "Access" }).innerText())
+      .poll(() => page.getByRole("button", { name: "Access", exact: true }).innerText())
       .toContain("Trusted");
 
     const finalBody = await readThread();
