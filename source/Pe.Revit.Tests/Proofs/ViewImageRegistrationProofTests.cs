@@ -9,7 +9,9 @@ namespace Pe.Revit.Tests;
 ///     D4 (hold 4a, projectA: rotated crop + annotation crop ON refused AspectDisagrees): the registration must place model points
 ///     where the exported PNG draws them. A plan with a crop rotated ~30° and two detail-line crosses; each cross's drawn centroid
 ///     must land within 2 px of its registered position. Annotation crop ON uses asymmetric offsets so a side or axis mix-up shows.
-///     Far annotations (a grid and a note outside the crop; D4 Pool House) must not widen the export.
+///     Far annotations (a grid and a note outside the crop; D4 Pool House) must not widen the export. A note that CROSSES the crop
+///     edge (D4 Lower Level: a 249.75 x 110.25 ft crop still exported 1500 x 682 px with the far notes hidden) cannot be hidden
+///     without losing what it draws inside; the image must still be cut to exactly the crop.
 ///     `[PE_VIEW_IMAGE_EXTENT]` prints the image size against the model crop and the annotation crop, the diagnosis evidence.
 /// </summary>
 [TestFixture]
@@ -25,7 +27,10 @@ public sealed class ViewImageRegistrationProofTests {
     [TestCase(0, false, true)]
     [TestCase(0, true, true)]
     [TestCase(30, true, true)]
-    public void Registered_model_points_land_on_their_drawn_pixels(double degrees, bool annotationCrop, bool farAnnotations) {
+    [TestCase(0, false, false, true)]
+    [TestCase(45, false, true, true)]
+    [TestCase(45, true, true, true)]
+    public void Registered_model_points_land_on_their_drawn_pixels(double degrees, bool annotationCrop, bool farAnnotations, bool crossing = false) {
         var doc = RevitFamilyFixtureHarness.CreateProjectDocument(this._ui.Application);
         try {
             // Far from the template's origin annotations (elevation markers), so the crop holds only the two crosses.
@@ -48,6 +53,10 @@ public sealed class ViewImageRegistrationProofTests {
                     _ = Grid.Create(doc, Line.CreateBound(center + new XYZ(300, -100, 0), center + new XYZ(300, 100, 0)));
                     _ = TextNote.Create(doc, view.Id, center + new XYZ(0, -400, 0), "FAR", doc.GetDefaultElementTypeId(ElementTypeGroup.TextNoteType));
                 }
+                // Inside the crop at 0° and 45°, running ~70 ft past its right edge (about 0.6 ft per character at 1/8").
+                if (crossing)
+                    _ = TextNote.Create(doc, view.Id, center + new XYZ(20, -30, 0), "CROSSING " + new string('X', 120),
+                        doc.GetDefaultElementTypeId(ElementTypeGroup.TextNoteType));
                 var crop = view.CropBox;
                 var toView = crop.Transform.Inverse;
                 var c = toView.OfPoint(center);
@@ -78,10 +87,10 @@ public sealed class ViewImageRegistrationProofTests {
 
             var image = RevitViewImageExporter.Export(doc, view, 1600);
             var (width, height, dark) = DarkPixels(image.FilePath);
-            Console.WriteLine($"[PE_VIEW_IMAGE_EXTENT] degrees={degrees} annotationCrop={annotationCrop} far={farAnnotations} image={width}x{height} " +
+            Console.WriteLine($"[PE_VIEW_IMAGE_EXTENT] degrees={degrees} annotationCrop={annotationCrop} far={farAnnotations} crossing={crossing} image={width}x{height} " +
                               $"crop={Extent(view.CropBox.Min, view.CropBox.Max)} annotationCropShape={AnnotationShapeExtent(view)} " +
                               $"refusal={image.RegistrationRefusal} file={image.FilePath}");
-            if (degrees == 0 && !annotationCrop)
+            if (degrees == 0)
                 Assert.That(Math.Abs(width - height), Is.LessThanOrEqualTo(1), "a square crop exports a square PNG");
             Assert.That(image.RegistrationRefusal, Is.Null, "the crop registers, rotated or not, annotation crop on or off, far annotations or not");
             var reg = image.Registration!;
