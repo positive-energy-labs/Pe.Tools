@@ -379,7 +379,7 @@ function InstancesChatPlugin({
   revision,
 }: RouteChatPluginProps) {
   const doc = recordedRouteDoc(sessionState, instancesRouteState);
-  const staged = doc?.staged;
+  const staged = doc?.launch.staged?.value;
   return (
     <InlineRoutePlugin
       title="Instances"

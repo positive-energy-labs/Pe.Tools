@@ -85,7 +85,7 @@ type InstancesInput = {
   document?: { session: string; openId: string };
 };
 type Prepared = {
-  staged: import("@pe/agent-contracts").InstancesDocument["staged"];
+  staged: import("@pe/agent-contracts").InstancesLaunch | null;
   session?: { id: string; process: { pid: number; processStartUtc: string; executable: string } };
 };
 
@@ -183,7 +183,12 @@ export async function admitInstancesAction(
         throw refuse("An explicit Instances Work address and revision are required");
       const view = await workspace.read(base.key, "instances");
       if (!view || view.revision !== base.revision) throw refuse("Instances Work changed");
-      const { staged } = instancesRouteState.schema.parse(view.doc);
+      // Open/start launch the person's staged value only; a Pea proposal never arms a launch.
+      const { launch } = instancesRouteState.schema.parse(view.doc);
+      const staged = launch.staged ? launch.staged.value : null;
+      const wants = key === "instances.start" ? "start" : key === "instances.open" ? "open" : null;
+      if (wants && staged?.kind !== wants && launch.proposal?.value?.kind === wants)
+        throw refuse(`Pea proposed this ${wants}; a person stages it first`);
       if (key === "instances.start" && staged?.kind !== "start")
         throw refuse("Stage a start first");
       if (

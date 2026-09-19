@@ -79,7 +79,10 @@ function scenarioRuntime(
               expectedRevision: 0,
               input: {
                 patches: [
-                  { path: ["staged"], value: { kind: "start", year: "2026", name: "scenario" } },
+                  {
+                    path: ["launch", "staged"],
+                    value: { value: { kind: "start", year: "2026", name: "scenario" } },
+                  },
                 ],
               },
             },
@@ -351,12 +354,10 @@ test("the browser walks one durable chat lifecycle", async () => {
     // pe_read route:instances under that Target: the document lands under the Work key.
     await driveTurn("READ_TURN", readFinalText);
     expect(JSON.stringify((await readThread()).messages)).toContain('"key":"route:instances"');
-    // O-2: the staged document is what start consumes, so it is a person's. Instances offers Pea
-    // no propose door: the call refuses by name and no Work is written.
+    // The staged launch is what start consumes, so it is a person's: Pea's propose door writes
+    // only the launch proposal, so staging refuses by the mask and no Work is written.
     await driveTurn("PROPOSE_TURN", proposeFinalText);
-    expect(JSON.stringify((await readThread()).messages)).toContain(
-      "Unknown capability 'route:instances.propose'",
-    );
+    expect(JSON.stringify((await readThread()).messages)).toContain("not agent-writable");
     // A registered route with no Work reads its empty document at r0: nothing was written.
     expect(
       await (await fetch(`${baseUrl}/pe/route-state/instances?work=instances`)).json(),
