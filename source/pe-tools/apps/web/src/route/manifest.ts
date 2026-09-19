@@ -197,6 +197,13 @@ export interface PlanSheet {
    * evidence. A cell that no longer holds it makes the sheet stale, the host's refusal rule.
    */
   staged?: Readonly<Record<string, Rung>>;
+  /** The rows the plan says were held back, and who held each: the host's words, by name. */
+  held?: readonly HeldRow[];
+}
+
+export interface HeldRow {
+  name: string;
+  by: "person" | "pea";
 }
 
 /** The host's words for a plan whose staged cells moved; the sheet says them before the press. */
@@ -365,6 +372,8 @@ export const admissionPlan = <W, R extends string, P>(
   keys: { plan: SemanticActionKey; apply: SemanticActionKey },
   row: (plan: unknown) => PlanEntry,
   authored?: (work: W) => { executionOptions?: unknown } & Record<string, unknown>,
+  /** Who the plan result says held rows back, named by the sheet's own rows. */
+  held?: (result: Record<string, unknown>, entries: readonly PlanEntry[]) => readonly HeldRow[],
 ): ApplyPlan<W, R, P> => {
   const workOf = (
     ctx: Ctx<W, R | EntityReading, P & EntityPage>,
@@ -378,9 +387,11 @@ export const admissionPlan = <W, R extends string, P>(
     read: async (ctx, source) => {
       const { input, bases } = workOf(ctx);
       const result = await workflow(keys.plan, { source, ...input }, ctx, bases);
-      return {
-        entries: [result.plan].flat().map((plan) => ({ ...row(plan), plan: String(result.id) })),
-      };
+      const entries = [result.plan]
+        .flat()
+        .map((plan) => ({ ...row(plan), plan: String(result.id) }));
+      const rows = held?.(result, entries) ?? [];
+      return rows.length ? { entries, held: rows } : { entries };
     },
     // The plan sealed the source and options; apply names that plan and the hashes it confirms.
     apply: async (ctx, included) => {

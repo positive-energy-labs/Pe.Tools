@@ -22,6 +22,7 @@ import {
   entityRoute,
   workflow,
   type EntityPage,
+  type HeldRow,
   type EntityRouteDef,
   type PlanEntry,
 } from "#/route";
@@ -50,6 +51,15 @@ export const familiesPageSchema = z.object({
 
 export type FamiliesReadingKey = "receipts" | "inventory";
 
+/** The plan result's `excluded` ({ familyId, by }), named by the plan's own rows: never an id. */
+const heldResult = z.array(z.object({ familyId: z.number(), by: z.enum(["person", "pea"]) }));
+const heldOf = (result: Record<string, unknown>, entries: readonly PlanEntry[]): HeldRow[] =>
+  heldResult.parse(result.excluded ?? []).map(({ familyId, by }) => {
+    const entry = entries.find((row) => row.id === String(familyId));
+    if (!entry) throw Error(`the plan held back family ${familyId}, which it did not plan`);
+    return { name: entry.name, by };
+  });
+
 /* ── The definition ────────────────────────────────────────────────────────── */
 
 /** The generated draft's `$schema`: this library, on the host actually serving the page. */
@@ -73,6 +83,7 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
         { plan: "families.plan", apply: "families.apply" },
         (plan) => ffPlanRow(ffPlanEntrySchema.parse(plan)),
         (work) => (work.executionOptions ? { executionOptions: work.executionOptions } : {}),
+        heldOf,
       ),
       // Held-back rows are authored Work; the sheet toggles them there.
       excluded: (view) => Object.keys(view.work.doc?.excluded ?? {}),
@@ -92,6 +103,7 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
         if (!ctx.page.pod) throw Error("choose the pod the run is filed in");
         const bases = { work: { key: ctx.work.key, revision: ctx.work.revision } };
         const entries: PlanEntry[] = [];
+        const held: HeldRow[] = [];
         for (const draft of stagedDrafts(doc.cells, stagedSchema())) {
           const result = await workflow(
             "families.plan",
@@ -105,10 +117,14 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
             ctx,
             bases,
           );
-          for (const plan of [result.plan].flat())
-            entries.push({ ...ffPlanRow(ffPlanEntrySchema.parse(plan)), plan: String(result.id) });
+          const rows = [result.plan].flat().map((plan) => ({
+            ...ffPlanRow(ffPlanEntrySchema.parse(plan)),
+            plan: String(result.id),
+          }));
+          entries.push(...rows);
+          held.push(...heldOf(result, rows));
         }
-        return { entries };
+        return held.length ? { entries, held } : { entries };
       },
       // Each draft's plan sealed its bytes and the staged cells it consumed; the host retires
       // those cells after proven native success, only where they are still unchanged.

@@ -146,6 +146,11 @@ export function PlanSheetView({
       {head}
       <div className="min-h-0 overflow-auto px-2 py-1">
         {stale ? <OutcomeLine kind="refused" label="stale plan" says={STALE_PLAN} /> : null}
+        {sheet.held?.map((row) => (
+          <p key={row.name} className="t-small text-ink-2">
+            excluded by {row.by === "pea" ? "Pea" : "you"}: {row.name}
+          </p>
+        ))}
         {sheet.entries.flatMap((entry) =>
           entry.warnings.map((warning) => (
             <OutcomeLine
