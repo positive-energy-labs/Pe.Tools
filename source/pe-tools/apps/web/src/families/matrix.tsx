@@ -1,4 +1,5 @@
 import { EmptyState } from "#/components/lang/empty";
+import { OutcomeLine } from "#/components/lang/outcome";
 import { Table, type TableSelection } from "#/components/master-table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
 import { useContext, useMemo } from "react";
@@ -23,17 +24,23 @@ export function FamiliesMatrix() {
     connected,
     applied,
     workUnreadable,
+    matrixReading,
+    matrixIssue,
   } = useFamiliesWorkspace();
   // Chat's group drill-in: only the types holding a pending cell under the focused path.
   const focus = useContext(ChatFocus);
   const focused = focus && focusedTypes(store.cells, focus);
-  const visibleKeys = focused
+  const focusKeys = focused
     ? rows
         .filter((row) =>
           focused.some((at) => at.familyId === row.familyId && at.typeName === row.typeName),
         )
         .map((row) => row.key)
     : undefined;
+  // A focus FILTERS, never empties (F-J1-4): when nothing pending sits under it, every family in
+  // scope stays drawn and a line says the focus matched nothing.
+  const focusMissed = focusKeys !== undefined && focusKeys.length === 0 && rows.length > 0;
+  const visibleKeys = focusMissed ? undefined : focusKeys;
   const selectedKeys = useMemo(
     () => new Set(rows.filter((row) => pickedIds.has(row.familyId)).map((row) => row.key)),
     [pickedIds, rows],
@@ -71,6 +78,13 @@ export function FamiliesMatrix() {
           <a href="/families?demo=apply">plan confirmation fixture</a>
         </p>
       )}
+      {focusMissed ? (
+        <OutcomeLine
+          kind="advisory"
+          label={`nothing pending under ${focus!.join(" › ")}`}
+          says="showing every family in scope"
+        />
+      ) : null}
       <TableFrame
         label="families in scope"
         rows={rows}
@@ -135,6 +149,10 @@ export function FamiliesMatrix() {
               >
                 no scope applied yet — the matrix op is expensive, so it waits to be asked
               </EmptyState>
+            ) : matrixReading ? (
+              <OutcomeLine kind="busy" label="reading the matrix" says="the applied scope" />
+            ) : matrixIssue ? (
+              <OutcomeLine kind="error" label="matrix unread" says={matrixIssue.message} />
             ) : rows.length === 0 ? (
               <EmptyState
                 story="scope"

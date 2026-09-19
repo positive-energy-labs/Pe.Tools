@@ -324,6 +324,8 @@ function useFamiliesWorkspaceModel(
   const matrixIssue = matrix.error
     ? toHostIssue(matrix.error, "Couldn't load the matrix")
     : undefined;
+  /** The matrix read is in flight: an empty table is "reading", never "resolved to none". */
+  const matrixReading = !fixture && matrix.pending;
   const totalTypes = rows.length;
 
   // Families in scope the plan does not claim — surfaced as excluded-with-reason, never hidden.
@@ -378,6 +380,7 @@ function useFamiliesWorkspaceModel(
     chips,
     includedPlanned,
     matrixIssue,
+    matrixReading,
     totalTypes,
     outsideProfile,
   };

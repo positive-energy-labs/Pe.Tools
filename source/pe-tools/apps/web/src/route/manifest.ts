@@ -80,14 +80,8 @@ export interface Ctx<W, R extends string, P> {
   readonly setPage: (next: Partial<P>) => void;
 }
 
-/** A host read (a catalog, a snapshot): an answer this late means something is stuck. */
-export const HOST_READ_WAIT_S = 15;
-/** A plan or capture: a native read of a document, bounded but slower. */
-export const NATIVE_READ_WAIT_S = 120;
-/** A native apply writes a model and may legitimately run for minutes. */
-export const NATIVE_APPLY_WAIT_S = 600;
-/** Any verb that names no bound of its own. */
-export const DEFAULT_WAIT_S = 120;
+import { DEFAULT_WAIT_S, HOST_READ_WAIT_S, NATIVE_APPLY_WAIT_S, NATIVE_READ_WAIT_S } from "./waits";
+export { DEFAULT_WAIT_S, HOST_READ_WAIT_S, NATIVE_APPLY_WAIT_S, NATIVE_READ_WAIT_S };
 
 export interface RouteAction<W, R extends string, P, I = void> {
   label: string;
