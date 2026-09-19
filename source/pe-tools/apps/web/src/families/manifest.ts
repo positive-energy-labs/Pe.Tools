@@ -51,13 +51,16 @@ export const familiesPageSchema = z.object({
 
 export type FamiliesReadingKey = "receipts" | "inventory";
 
-/** The plan result's `excluded` ({ familyId, by }), named by the plan's own rows: never an id. */
-const heldResult = z.array(z.object({ familyId: z.number(), by: z.enum(["person", "pea"]) }));
+/**
+ * The plan result's `excluded` ({ familyName, by }): the sheet says who held each family back, by
+ * name. A name the plan did not plan fails loud rather than drawing a row nothing backs.
+ */
+const heldResult = z.array(z.object({ familyName: z.string(), by: z.enum(["person", "pea"]) }));
 const heldOf = (result: Record<string, unknown>, entries: readonly PlanEntry[]): HeldRow[] =>
-  heldResult.parse(result.excluded ?? []).map(({ familyId, by }) => {
-    const entry = entries.find((row) => row.id === String(familyId));
-    if (!entry) throw Error(`the plan held back family ${familyId}, which it did not plan`);
-    return { name: entry.name, by };
+  heldResult.parse(result.excluded ?? []).map(({ familyName, by }) => {
+    if (!entries.some((row) => row.id === familyName))
+      throw Error(`the plan held back '${familyName}', which it did not plan`);
+    return { name: familyName, by };
   });
 
 /* ── The definition ────────────────────────────────────────────────────────── */

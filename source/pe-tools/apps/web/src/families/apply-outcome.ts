@@ -30,7 +30,7 @@ export function applyOutcome(runs: readonly PlanRun[], planned: number): Refusal
         if (receipt.success) applied += 1;
         else
           failed.push(
-            `${receipt.familyName ?? `family ${receipt.familyId}`} (${receipt.error ?? receipt.errors.join(", ") ?? "no reason given"})`,
+            `${receipt.familyName} (${receipt.error ?? receipt.errors.join(", ") ?? "no reason given"})`,
           );
       }
     } else if (action.state === "failed" && action.steps.length === 0) {

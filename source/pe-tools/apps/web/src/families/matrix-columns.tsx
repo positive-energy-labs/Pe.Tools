@@ -129,7 +129,7 @@ export function useFamiliesColumns({
   propose,
   wire,
 }: {
-  familyState: (familyId: number) => Verdict;
+  familyState: (row: { familyName: string }) => Verdict;
   params: ParamColumn[];
   showUncommon: boolean;
   totalFamilies: number;
@@ -212,7 +212,7 @@ export function useFamiliesColumns({
         width: "w-28",
         title:
           "What the compiled plan says about this family. The plan is a LENS: it tints rows and fills the decision queue, but it never hides a family or narrows the scope you asked for.",
-        verdict: (row) => familyState(row.familyId),
+        verdict: (row) => familyState(row),
       },
     ];
 

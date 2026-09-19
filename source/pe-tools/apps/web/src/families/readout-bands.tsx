@@ -31,9 +31,7 @@ const receiptColumns = (openPath: (path: string) => unknown): Column<Receipt>[] 
     key: "family",
     label: "family",
     width: "w-56",
-    cell: (entry) => (
-      <span className={CELL}>{entry.familyName ?? `element ${entry.familyId}`}</span>
-    ),
+    cell: (entry) => <span className={CELL}>{entry.familyName}</span>,
   },
   {
     key: "verdict",
@@ -129,7 +127,8 @@ export function FamiliesReceiptsBand() {
             label="receipts"
             rows={applyData.receipts}
             columns={receiptColumns(store.actions.openPath)}
-            rowKey={(entry) => String(entry.familyId)}
+            // A receipt is its family's, by name (ruling); the id it applied under is gone on reload.
+            rowKey={(entry) => entry.familyName}
             empty={
               <EmptyState story="scope" exit="re-plan and read the decision queue before retrying">
                 no receipts — apply ran and reported nothing

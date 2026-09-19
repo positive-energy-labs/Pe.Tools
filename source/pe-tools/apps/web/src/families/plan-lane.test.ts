@@ -68,12 +68,15 @@ test("plan reads the page's member against the reviewed Work, and writes no Work
   expect(ctx.setPage).toHaveBeenCalledWith({
     stage: "apply",
     confirming: true,
-    sheet: { entries: [expect.objectContaining({ id: "3101", planHash: "p" })] },
+    // The row is its family, by name; the id the plan resolved is apply's hash key only.
+    sheet: { entries: [expect.objectContaining({ id: "A", hashKey: "3101", planHash: "p" })] },
   });
 });
 
 test("held-back rows are the Work's exclusions, by name, as this sheet's row ids", () => {
-  expect(familiesSpec.plan!.excluded!(view({ sheet: seed.page.sheet }) as never)).toEqual(["3102"]);
+  expect(familiesSpec.plan!.excluded!(view({ sheet: seed.page.sheet }) as never)).toEqual([
+    "Heat Pump - Split",
+  ]);
 });
 
 test("apply names its plan with exactly the included hashes", async () => {

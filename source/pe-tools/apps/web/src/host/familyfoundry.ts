@@ -51,7 +51,9 @@ export function familyFlag(entry: FfPlanEntry): string | null {
 
 /** One Family Foundry plan (from `families.plan` or `family.plan`) as a sheet row. */
 export const ffPlanRow = (entry: FfPlanEntry): PlanEntry => ({
-  id: String(entry.familyId),
+  // Identity by NAME (ruling): the row is its family; the id the plan resolved is only apply's key.
+  id: entry.familyName,
+  ...(entry.familyId != null ? { hashKey: String(entry.familyId) } : {}),
   name: entry.familyName,
   planHash: entry.planHash,
   actions: entry.changes.length + entry.runEffects.length,

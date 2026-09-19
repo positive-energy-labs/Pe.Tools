@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
-import { FAMILY_CATALOG_LIMIT, type FfReceipt } from "@pe/agent-contracts";
+import { FAMILY_CATALOG_LIMIT } from "@pe/agent-contracts";
 
 import { runFanOut, type CellWire } from "#/components/lang/band";
-import type { Verdict } from "#/components/master-table/model";
 import type { FamiliesStore } from "#/families/store";
 import { toHostIssue } from "#/host/issues";
 import {
@@ -26,6 +25,7 @@ import { FamiliesWorkspaceProvider } from "#/families/workspace-context";
 import { FamiliesWorkspaceView } from "#/families/workspace-view";
 import { DEMO_FAMILIES } from "#/families/seeds";
 import { familyCellEntries } from "#/families/staged";
+import { familyVerdicts } from "#/families/verdict";
 
 /**
  * Revit reloads every applied family under a new element id (w8-revit trip 12) and the receipt
@@ -128,12 +128,8 @@ function useFamiliesWorkspaceModel(
     () => fixtureFamilies ?? matrix.data?.families ?? [],
     [fixtureFamilies, matrix.data?.families],
   );
-  // Work holds exclusions by name; this catalog read names each one's current id.
-  const excludedIds = new Set(
-    families.flatMap((family) =>
-      Object.hasOwn(store.excluded, family.familyName) ? [family.familyId] : [],
-    ),
-  );
+  // Work holds exclusions by family name; so does every verdict and plan row read here.
+  const excludedNames = useMemo(() => new Set(Object.keys(store.excluded)), [store.excluded]);
 
   // ── table model ──────────────────────────────────────────────────────────────────────────────
   const { rows, params } = useMemo(() => {
@@ -190,72 +186,13 @@ function useFamiliesWorkspaceModel(
   }, [families]);
   const totalFamilies = families.length;
 
-  const planByFamilyId = useMemo(() => {
-    const map = new Map<number, PlanEntry>();
-    for (const entry of plan?.entries ?? []) map.set(Number(entry.id), entry);
-    return map;
-  }, [plan]);
-  const receiptByFamilyId = useMemo(() => {
-    const map = new Map<number, FfReceipt>();
-    for (const entry of applyData?.receipts ?? []) map.set(entry.familyId, entry);
-    return map;
-  }, [applyData]);
-
+  const planByName = useMemo(
+    () => new Set((plan?.entries ?? []).map((entry: PlanEntry) => entry.id)),
+    [plan],
+  );
   const familyState = useMemo(
-    () =>
-      (familyId: number): Verdict => {
-        const done = receiptByFamilyId.get(familyId);
-        if (done) {
-          return done.success
-            ? {
-                word: done.converged ? "converged" : "residue",
-                tone: done.converged ? "done" : "alarm",
-                note: `${done.residue.length} change(s) remaining; ${done.errors.length} error(s)`,
-              }
-            : {
-                // A refused write is the one thing on this row asking for a person: the ONE alarm.
-                word: "failed",
-                tone: "alarm",
-                note: done.error ?? "apply failed with no reported reason",
-              };
-        }
-        const entry = planByFamilyId.get(familyId);
-        if (!plan) {
-          return {
-            word: "unplanned",
-            tone: "mute",
-            dim: true,
-            note: "no plan compiled yet — the table is scope, not judgment",
-          };
-        }
-        if (!entry) {
-          return {
-            word: "outside spec",
-            tone: "mute",
-            dim: true,
-            note: "in scope, but the planned spec does not claim this family",
-          };
-        }
-        const flag = entry.flag;
-        // Not a warning about the model and not a refusal — a verdict with nothing behind it.
-        if (flag) return { word: "no actions", tone: "mute", note: flag };
-        return excludedIds.has(familyId)
-          ? {
-              word: "excluded",
-              tone: "mute",
-              dim: true,
-              note: "excluded from apply in the decision queue",
-            }
-          : {
-              /* Queued actions are UNSAVED work: nothing has left the page, and caution is the
-                 language's staged rank. Deliberately NOT the commit blue — that is the verb's,
-                 and a state dot wearing it would spend the one filled blue on a readout. */
-              word: "included",
-              tone: "caution",
-              note: `${entry.actions} action(s) queued`,
-            };
-      },
-    [plan, planByFamilyId, receiptByFamilyId, excludedIds],
+    () => familyVerdicts(plan, applyData?.receipts ?? [], excludedNames),
+    [plan, applyData, excludedNames],
   );
 
   // The one families cell wire: the store's write, plus the lock facts only the matrix knows.
@@ -323,10 +260,8 @@ function useFamiliesWorkspaceModel(
   // ── verbs ────────────────────────────────────────────────────────────────────────────────────
   const includedPlanned = useMemo(
     () =>
-      (plan?.entries ?? []).filter(
-        (entry) => !excludedIds.has(Number(entry.id)) && entry.flag === null,
-      ),
-    [plan, excludedIds],
+      (plan?.entries ?? []).filter((entry) => !excludedNames.has(entry.id) && entry.flag === null),
+    [plan, excludedNames],
   );
 
   const matrixIssue = matrix.error
@@ -338,8 +273,8 @@ function useFamiliesWorkspaceModel(
 
   // Families in scope the plan does not claim — surfaced as excluded-with-reason, never hidden.
   const outsideProfile = useMemo(
-    () => (plan ? families.filter((family) => !planByFamilyId.has(family.familyId)) : []),
-    [plan, families, planByFamilyId],
+    () => (plan ? families.filter((family) => !planByName.has(family.familyName)) : []),
+    [plan, families, planByName],
   );
 
   return {
@@ -360,7 +295,6 @@ function useFamiliesWorkspaceModel(
     setPickedFamilies,
     applied,
     plan,
-    excludedIds,
     pickedIds,
     setPickedIds,
     applyData,
@@ -379,8 +313,6 @@ function useFamiliesWorkspaceModel(
     rows,
     params,
     totalFamilies,
-    planByFamilyId,
-    receiptByFamilyId,
     familyState,
     columns,
     uncommonCount,

@@ -177,6 +177,9 @@ export interface PlanEntry {
   warnings: readonly string[];
   /** The plan action this row came from; apply names it, and the host consumes its sealed input. */
   plan?: string;
+  /** The key apply's `expectedPlanHashes` uses for this row, when it is not `id` (a family's id
+   * as that plan resolved its name: a wire fact of the sealed plan, never the row's identity). */
+  hashKey?: string;
 }
 
 /** Apply each plan action's included rows, one host apply per plan, as `{ plan, hashes }`. */
@@ -184,7 +187,8 @@ export const byPlan = (included: readonly PlanEntry[]) => {
   const plans = new Map<string, Record<string, string>>();
   for (const row of included) {
     if (!row.plan) throw Error(`the planned row for ${row.name} names no plan`);
-    (plans.get(row.plan) ?? plans.set(row.plan, {}).get(row.plan)!)[row.id] = row.planHash;
+    (plans.get(row.plan) ?? plans.set(row.plan, {}).get(row.plan)!)[row.hashKey ?? row.id] =
+      row.planHash;
   }
   return [...plans].map(([plan, expectedPlanHashes]) => ({ plan, expectedPlanHashes }));
 };

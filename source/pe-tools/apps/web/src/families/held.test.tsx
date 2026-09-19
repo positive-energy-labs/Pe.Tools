@@ -28,7 +28,7 @@ const ctx = (cells: Record<string, unknown> = {}) => ({
   target: { kind: "document", ref: { session: "s", openId: "o" } },
   work: {
     key: { route: "families", target: null },
-    doc: { scope: null, cells, excluded: { "3102": { by: "pea" }, "3103": { by: "person" } } },
+    doc: { scope: null, cells, excluded: { Beta: { by: "pea" }, Gamma: { by: "person" } } },
     revision: 4,
   },
   readings: {
@@ -68,8 +68,8 @@ test("plan carries who held each family back, by name, onto the sheet", async ()
       id: "plan-1",
       plan: [row(3101, "Alpha"), row(3102, "Beta"), row(3103, "Gamma")],
       excluded: [
-        { familyId: 3102, by: "pea" },
-        { familyId: 3103, by: "person" },
+        { familyName: "Beta", by: "pea" },
+        { familyName: "Gamma", by: "person" },
       ],
     },
   });
@@ -84,8 +84,8 @@ test("plan carries who held each family back, by name, onto the sheet", async ()
   render(
     <PlanSheetView
       sheet={sheet}
-      excluded={new Set(["3102", "3103"])}
-      included={sheet.entries.filter((entry) => entry.id === "3101")}
+      excluded={new Set(["Beta", "Gamma"])}
+      included={sheet.entries.filter((entry) => entry.id === "Alpha")}
       apply={() => {}}
       cancel={() => {}}
       replan={{ says: "plans the saved spec", run: () => {} }}
