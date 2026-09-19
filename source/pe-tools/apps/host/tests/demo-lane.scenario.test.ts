@@ -427,10 +427,10 @@ test("live /families: one catalog read per scope change, none while idle", async
 /**
  * THE EDITABLE TABLE, on keyed cells. Two cells are typed across two families: a typed value
  * stages directly, and it survives a reload. Typing one back to Revit's value clears its stage.
- * PLAN takes the staged cell only, generates one patch member for that family, files it in the
- * working pod, and plans exactly that family's id. Apply names that plan; after the native apply
- * succeeds the host retires the unchanged staged cell, and `/pods` shows the run against the
- * generated member.
+ * PLAN takes the staged cell only, generates one patch draft for that family, files nothing, and
+ * plans exactly that family's id from the draft's bytes. Apply names that plan; after the native
+ * apply succeeds the host retires the unchanged staged cell, and `/pods` shows the run under the
+ * draft's name as a supplied draft, not a saved member.
  */
 test("live /families: typed cells stage, one is typed back, plan and apply retire the other", async () => {
   const { shown, workflows } = await liveLoop("families-table", async (page) => {
@@ -473,21 +473,33 @@ test("live /families: typed cells stage, one is typed back, plan and apply retir
     if (SCRATCH)
       await page.screenshot({ path: join(SCRATCH, "families-table-staged.png"), fullPage: true });
     await run(page, "plan");
-    // Plan wrote the spec nobody authored, from the staged cell alone.
-    const path = await landed(page, /^settings\/families\/staged-Fan-Coil-Unit-+Ducted-.*\.json$/);
-    // The sheet names the member the family applies from.
-    await expect.poll(() => body.innerText(), { timeout: 30_000 }).toContain(`from ${path}`);
     if (SCRATCH)
       await page.screenshot({ path: join(SCRATCH, "families-table-plan.png"), fullPage: true });
     await applySheet(page);
+    // Plan filed no spec nobody authored: the page names no member.
+    expect(new URL(page.url()).searchParams.get("path") ?? "").toBe("");
     await expect.poll(() => body.innerText(), { timeout: 30_000 }).toContain("apply families ran");
     // The applied, unchanged staged cell retired: the band empties; the receipt is the record.
     await expect
       .poll(() => page.locator('section[aria-label="proposals"]').count(), { timeout: 30_000 })
       .toBe(0);
-    return receiptOnPods(page, pod, path, "families.apply");
+    // The run is filed under the draft's name; `/pods` browses members, and none was filed.
+    // A string, so vitest leaves the page's own dynamic import alone.
+    const runs = (await page.evaluate(
+      `import("/src/host/pods.ts").then((m) => m.listRuns(${JSON.stringify(pod)}, "staged/Fan-Coil-Unit---Ducted.json"))`,
+    )) as { receipt: unknown }[];
+    const members = await receiptOnPods(page, pod, "", "MEMBERS");
+    expect(members).not.toContain("staged");
+    return JSON.stringify(runs.map((r) => r.receipt));
   });
-  expect(shown).toContain("Succeeded");
+  expect(JSON.parse(shown)).toEqual([
+    expect.objectContaining({
+      operation: "families.apply",
+      outcome: "Succeeded",
+      origin: "SuppliedDraft",
+      memberSha256: null,
+    }),
+  ]);
   // One plan and one apply for the one staged family: the cleared one never reached the wire.
   expect(workflows).toEqual(["families.plan", "families.apply"]);
 }, 180_000);

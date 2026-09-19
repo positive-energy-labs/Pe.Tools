@@ -558,8 +558,16 @@ test("the simulated engine refuses captured bytes that disagree with their hash"
     sha256: createHash("sha256").update(bytes).digest("hex"),
     bytesBase64: content.toString("base64"),
   });
-  expect(() => verifyCaptured({ root: file(bytes), dependencies: [file(bytes)] })).not.toThrow();
   expect(() =>
-    verifyCaptured({ root: file(bytes), dependencies: [file(Buffer.from('{"a":2}'))] }),
+    verifyCaptured({
+      root: { ...file(bytes), origin: "SavedMember" },
+      dependencies: [file(bytes)],
+    }),
+  ).not.toThrow();
+  expect(() =>
+    verifyCaptured({
+      root: { ...file(bytes), origin: "SavedMember" },
+      dependencies: [file(Buffer.from('{"a":2}'))],
+    }),
   ).toThrow("captured bytes do not match SHA-256");
 });

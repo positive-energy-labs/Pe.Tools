@@ -8,7 +8,7 @@
  * boundary chars. Everything left that isn't a number or a known Revit function is a
  * suspicious reference.
  *
- * Three checks, all derived from the authored `familyParameters` / `sharedParameters`
+ * Three checks, all derived from the authored `parameters` map
  * plus the in-progress draft:
  *   - invalid-ref: a token that resolves to no parameter and no function,
  *   - cycle: the edited param reaches itself through the formula graph (draft included),
@@ -30,14 +30,15 @@ export interface FormulaParam extends AuthoredParamLike {
   name: string;
 }
 
-/** Flatten the authored parameter records into the validator's parameter source. */
+/** The authored parameter map as the validator's parameter source. */
 export function authoredFormulaParams(
-  familyParameters?: Record<string, AuthoredParamLike>,
-  sharedParameters?: Record<string, AuthoredParamLike>,
+  parameters: Record<string, AuthoredParamLike>,
 ): FormulaParam[] {
-  return [...Object.entries(familyParameters ?? {}), ...Object.entries(sharedParameters ?? {})].map(
-    ([name, spec]) => ({ name, formula: spec.formula, isInstance: spec.isInstance }),
-  );
+  return Object.entries(parameters).map(([name, spec]) => ({
+    name,
+    formula: spec.formula,
+    isInstance: spec.isInstance,
+  }));
 }
 
 /** Revit built-in functions (lowercased), excluded from parameter-reference detection.

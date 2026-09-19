@@ -58,7 +58,10 @@ const SIMULATED_READS = [
 
 /** The composed source a native apply receives; the simulated engine reads its root. */
 type Captured = { id: string; path: string; sha256: string; bytesBase64: string };
-type RunSource = { root: Captured; dependencies: Captured[] };
+type RunSource = {
+  root: Captured & { origin: "SavedMember" | "SuppliedDraft" };
+  dependencies: Captured[];
+};
 /**
  * The simulated engine checks captured bytes the way `PodRuns.Decode` does: every root and
  * dependency hash must match its bytes, or the run refuses before anything is filed.
@@ -294,8 +297,10 @@ export async function createDemoOwner(parent: string, raw: unknown) {
           {
             podId: root.id,
             memberPath: root.path,
-            memberSha256: root.sha256,
-            origin: "SavedMember",
+            // As `PodReceipt.ForSource`: a draft never claims a saved member's hash.
+            ...(root.origin === "SuppliedDraft"
+              ? { memberSha256: null, origin: "SuppliedDraft" }
+              : { memberSha256: root.sha256, origin: "SavedMember" }),
             operation,
             planHash,
             outcome: "Succeeded",
