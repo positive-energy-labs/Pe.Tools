@@ -86,6 +86,8 @@ public static class ValueCoercionStrategyRegistry {
             new CoerceMeasurableToNumber(),
             new CoerceByStorageType()
         ));
+
+        Register(nameof(MappingStrategy.CoerceElectrical), new CoerceElectrical());
     }
 
     /// <summary>

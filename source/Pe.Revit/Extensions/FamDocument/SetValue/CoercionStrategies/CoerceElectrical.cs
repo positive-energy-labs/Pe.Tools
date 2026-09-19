@@ -23,6 +23,8 @@ public class CoerceElectrical : ICoercionStrategy {
             var t when t?.TypeId.Contains(".electrical:") == true => this.ExtractDouble(
                 context.SourceValueString ?? context.SourceValue?.ToString() ?? string.Empty,
                 context.TargetParam),
+            // A bare value (the Value registry carries no source data type).
+            _ when context.SourceValue is string text => this.ExtractDouble(text, context.TargetParam),
             // Any other numeric storage (Old_Template VMB carries Voltage under a non-electrical spec) is taken at face value.
             _ when context.SourceValue is double raw => raw,
             _ when context.SourceValue is int rawInt => rawInt,
