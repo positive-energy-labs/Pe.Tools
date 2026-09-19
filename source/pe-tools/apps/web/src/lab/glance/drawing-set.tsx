@@ -91,6 +91,7 @@ function EmptyFrame() {
   );
 }
 
+// DOMAIN (kept off the one List): a sheet-tile gallery; its layout is the point, not a list item.
 function Thumbnail({
   sheet,
   entry,
