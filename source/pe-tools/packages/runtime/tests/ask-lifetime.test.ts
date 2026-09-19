@@ -62,6 +62,30 @@ const pending = (session: Session) => {
   );
 };
 
+test("a selection mode with no options is a free-text ask, never a refusal (F-H6-1)", async () => {
+  const freeText = {
+    toolCall: {
+      name: "ask_user" as const,
+      input: { question: "Which view?", options: null, selectionMode: "single_select" as const },
+    },
+  };
+  const { runtime, session } = await start([freeText, { text: "done" }]);
+  try {
+    const gate = next(session, "tool_approval_required");
+    const suspended = next(session, "tool_suspended").then(() => "suspended");
+    const ended = next(session, "agent_end").then((event) => `ended ${event.reason}`);
+    await session.sendMessage({ content: "go" });
+    await gate;
+    session.respondToToolApproval({ decision: "approve", toolCallId: call });
+    expect(await Promise.race([suspended, ended])).toBe("suspended");
+    expect(pending(session)).toEqual([call]);
+    const stored = JSON.stringify((await readThreadState(runtime, session, "t")).messages);
+    expect(stored).not.toContain("selectionMode requires options");
+  } finally {
+    await runtime.close?.();
+  }
+});
+
 test("turn end expires a parked ask and drops its resume data", async () => {
   const { runtime, session } = await start([askUser, { text: "done" }]);
   try {

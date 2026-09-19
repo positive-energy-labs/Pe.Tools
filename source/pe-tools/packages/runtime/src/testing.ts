@@ -26,7 +26,8 @@ type DeterministicResponse =
         name: "ask_user";
         input: {
           question: string;
-          options: { label: string; description?: string }[];
+          // A strict-schema model fills every optional field, so a free-text ask can arrive as `null`.
+          options: { label: string; description?: string }[] | null;
           selectionMode?: "single_select" | "multi_select";
         };
       };

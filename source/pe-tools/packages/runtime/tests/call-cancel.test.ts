@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { createDeterministicRuntime } from "../src/testing.ts";
-import { readThreadState } from "../src/thread-state.ts";
+import { readThreadState, turnEndKey } from "../src/thread-state.ts";
 
 // A person's cancel is recorded per call, so the transcript can say `cancelled` honestly; a host
 // restart and an unanswered ask stay what they were. Only the model is fake.
@@ -114,6 +114,26 @@ test("an ask a cancel ends stays an expired ask, not a cancelled call", async ()
       expect.objectContaining({ toolCallId: call, toolName: "pe_find" }),
     ]);
     expect(state.cancelledCalls).toBeUndefined();
+  } finally {
+    await runtime.close?.();
+  }
+});
+
+test("a turn that ends in error records its cause and the calls it left running (F-H6-8)", async () => {
+  const { runtime, session } = await start();
+  try {
+    const started = next(session, "tool_start");
+    await gate(runtime, session, true);
+    await started;
+    const runId = session.run.getRunId()!;
+    // What the controller does when a stream chunk throws (handleSubscribedStreamError): it
+    // ends the session's turn while the call is still in flight.
+    session.emit({ type: "error", error: new Error("chunk handler threw") });
+    await session.finishAgentRun("error");
+
+    await expect
+      .poll(() => session.thread.getSetting({ key: turnEndKey(runId) }))
+      .toEqual({ reason: "error", error: "chunk handler threw", running: [call] });
   } finally {
     await runtime.close?.();
   }

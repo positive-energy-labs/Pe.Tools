@@ -71,6 +71,8 @@ type ThreadMessage = Awaited<ReturnType<AgentController["queryThreadMessages"]>>
 
 const askKey = (toolCallId: string) => `ask:${toolCallId}`;
 const cancelKey = (toolCallId: string) => `cancelled:${toolCallId}`;
+/** Why a run ended in error, and the calls it left running; keyed by run. */
+export const turnEndKey = (runId: string) => `turn-end:${runId}`;
 /** Sessions the runtime aborts on its own (host shutdown, a new turn over a parked ask). */
 const systemAborts = new WeakSet<object>();
 
