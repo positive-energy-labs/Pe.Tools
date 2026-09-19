@@ -1,3 +1,4 @@
+﻿using Pe.Revit.Failures;
 using Pe.Revit.Tasks;
 using Pe.Shared.RevitData.Families;
 
@@ -29,6 +30,11 @@ public sealed class LoadedFamiliesMatrixEvaluationContext : IDisposable {
         new(ElementIdEqualityComparer.Instance);
 
     public Dictionary<long, List<ProjectLoadedFamilyIssue>> IssuesByFamilyId { get; } = new();
+
+    /// <summary>What Revit posted in the throwaway evaluation, named by family and type; filled when the evaluation rolls back.</summary>
+    public List<ProjectLoadedFamilyIssue> EvaluationIssues { get; } = [];
+
+    private readonly List<(bool IsError, string Message, IReadOnlyList<long> ElementIds)> _failures = [];
     private DocumentSandbox? _sandbox;
     public Transaction? EvaluationTransaction => this._sandbox?.Transaction;
     public int PlacementAttempts { get; internal set; }
@@ -56,13 +62,34 @@ public sealed class LoadedFamiliesMatrixEvaluationContext : IDisposable {
         if (this._sandbox != null)
             throw new InvalidOperationException("Evaluation transaction is already active.");
 
-        this._sandbox = DocumentSandbox.BeginRollback(this.ProjectDocument, transactionName);
+        this._failures.Clear();
+        this.EvaluationIssues.Clear();
+        this._sandbox = PeToolsFailureHandling.BeginReadSandbox(this.ProjectDocument, transactionName, this._failures);
         this.ResetPlacementState();
     }
 
     public void RollBackTransaction() {
-        this._sandbox?.Dispose();
+        if (this._sandbox is null) {
+            this.ResetPlacementState();
+            return;
+        }
+        // Read the placements before they are reset: a failing element id names the temp instance, so its family and type.
+        var placements = this.TempPlacementsBySymbolId.Values.ToDictionary(p => p.InstanceId.Value());
+        this._sandbox.Dispose();
         this._sandbox = null;
+        foreach (var (isError, message, elementIds) in this._failures) {
+            List<TempPlacedSymbolRecord?> named = [.. elementIds.Where(placements.ContainsKey).Select(id => placements[id]).Distinct()];
+            foreach (var placement in named.Count == 0 ? [null] : named) {
+                var family = placement is null ? null : this.FamiliesById[placement.FamilyId].Name;
+                var subject = placement is null ? "The throwaway evaluation" : $"Evaluation of '{family}' type '{placement.SymbolName}'";
+                this.EvaluationIssues.Add(new ProjectLoadedFamilyIssue(
+                    isError ? "FamilyEvaluationRolledBack" : "FamilyEvaluationWarning",
+                    isError ? ProjectLoadedFamilyIssueSeverity.Error : ProjectLoadedFamilyIssueSeverity.Warning,
+                    isError ? $"{subject} rolled back: Revit posted '{message}'. Values read from it may not be regenerated."
+                        : $"{subject}: Revit warned '{message}' (acknowledged).",
+                    family, placement?.SymbolName, null));
+            }
+        }
         this.ResetPlacementState();
     }
 

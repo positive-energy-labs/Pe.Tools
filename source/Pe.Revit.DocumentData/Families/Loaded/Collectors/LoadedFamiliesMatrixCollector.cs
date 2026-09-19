@@ -1,4 +1,4 @@
-using Pe.Revit.DocumentData.Families.Extraction;
+﻿using Pe.Revit.DocumentData.Families.Extraction;
 using Pe.Revit.DocumentData.Families.Loaded.Models;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Shared.RevitData;
@@ -74,6 +74,7 @@ public static class LoadedFamiliesMatrixCollector {
         var scheduleEvalElapsed = TimeSpan.Zero;
         TimeSpan projectValueElapsed;
         TimeSpan scheduleMatchElapsed;
+        List<CollectedIssue> evaluationIssues;
         using (var evaluationContext = LoadedFamiliesTempPlacementEngine.CreateEvaluationContext(doc, selectedFamilyIds)) {
             onProgress?.Invoke($"Family matrix collecting project values for {catalogFamilies.Count} families.");
             if (includeTempPlacement)
@@ -126,6 +127,14 @@ public static class LoadedFamiliesMatrixCollector {
             } finally {
                 evaluationContext.RollBackTransaction();
             }
+            evaluationIssues = evaluationContext.EvaluationIssues.Select(LoadedFamiliesCollectorSupport.MapProjectIssue).ToList();
+        }
+
+        // What Revit posted in the throwaway evaluation lands on the family's row, never a silent gap; unnamed ones on the matrix.
+        var unnamedEvaluationIssues = new List<CollectedIssue>();
+        foreach (var issue in evaluationIssues) {
+            if (scheduleFamilies.FirstOrDefault(family => family.FamilyName == issue.FamilyName) is { } row) row.Issues.Add(issue);
+            else unnamedEvaluationIssues.Add(issue);
         }
 
         onProgress?.Invoke(
@@ -172,7 +181,7 @@ public static class LoadedFamiliesMatrixCollector {
         var matrixFamilies = maxFamilies is > 0
             ? supplementedFamilies.Take(maxFamilies.Value).ToList()
             : supplementedFamilies;
-        var issues = supplementedFamilies.SelectMany(family => family.Issues)
+        var issues = supplementedFamilies.SelectMany(family => family.Issues).Concat(unnamedEvaluationIssues)
             .Select(LoadedFamiliesCollectorSupport.ToContractIssue)
             .Distinct()
             .ToList();
