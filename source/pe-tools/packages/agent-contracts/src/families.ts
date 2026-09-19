@@ -263,6 +263,8 @@ const familiesDocumentSchema = z
       .default({}),
     cells: z.record(familyCellKeySchema, familyCellStateSchema).default({}),
     executionOptions: familyExecutionOptionsSchema.optional(),
+    /** The pod the person plans the draft in and saves it to (F-B-5b). The person's choice; Pea never writes it. */
+    pod: z.string().min(1).optional(),
   })
   .strict();
 export type FamiliesRouteDocument = z.infer<typeof familiesDocumentSchema>;
