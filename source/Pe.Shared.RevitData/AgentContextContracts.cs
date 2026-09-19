@@ -375,6 +375,14 @@ public record RevitViewImageData(
     public string? ImageUrl => this.Registration is null ? null : $"/view-image/{this.Registration.ImageSha256}.png";
 }
 
+/// <summary>Where a set of model points sits against a view's model crop. Outside means it can never draw under that view's image.</summary>
+[JsonConverter(typeof(StringEnumConverter))]
+public enum RevitCropCoverage {
+    Inside,
+    Crossing,
+    Outside
+}
+
 /// <summary>Why a view image carries no <see cref="RevitViewImageRegistration" />.</summary>
 [JsonConverter(typeof(StringEnumConverter))]
 public enum RevitViewImageRegistrationRefusal {
@@ -405,6 +413,26 @@ public record RevitViewImageRegistration(
     ///     Crop min/max are in the crop box's own frame; origin and bases are its transform projected to model XY.
     ///     The image's X runs along basisX and its up along basisY, so top-left is (min.X, max.Y).
     /// </summary>
+    /// <summary>
+    ///     Where model XY points sit against a crop, read in the crop's own frame (same inputs as <see cref="FromCrop" />; a crop
+    ///     transform's bases are orthonormal, so the frame coordinate is a dot product).
+    /// </summary>
+    public static RevitCropCoverage Coverage(
+        IEnumerable<double[]> points,
+        (double X, double Y) min, (double X, double Y) max,
+        (double X, double Y) origin, (double X, double Y) basisX, (double X, double Y) basisY
+    ) {
+        var local = points.Select(p => (X: (p[0] - origin.X) * basisX.X + (p[1] - origin.Y) * basisX.Y,
+            Y: (p[0] - origin.X) * basisY.X + (p[1] - origin.Y) * basisY.Y)).ToList();
+        if (local.Count == 0) throw new ArgumentException("no points to place against the crop", nameof(points));
+        const double tolerance = 1e-6;
+        if (local.All(p => p.X >= min.X - tolerance && p.X <= max.X + tolerance && p.Y >= min.Y - tolerance && p.Y <= max.Y + tolerance))
+            return RevitCropCoverage.Inside;
+        return local.All(p => p.X < min.X) || local.All(p => p.X > max.X) || local.All(p => p.Y < min.Y) || local.All(p => p.Y > max.Y)
+            ? RevitCropCoverage.Outside
+            : RevitCropCoverage.Crossing;
+    }
+
     public static (RevitViewImageRegistration? Registration, RevitViewImageRegistrationRefusal? Refusal) FromCrop(
         int width, int height, string imageSha256,
         (double X, double Y) min, (double X, double Y) max,

@@ -1,4 +1,23 @@
+using System.Runtime.Serialization;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+
 namespace Pe.Shared.RevitData;
+
+/// <summary>The closed set of reasons <see cref="ParameterEditPlan" /> refuses an edit; the prose stays the refusal's message.</summary>
+[JsonConverter(typeof(StringEnumConverter))]
+public enum EditRefusalCode {
+    /// <summary>A given Expected differs from the fresh read.</summary>
+    [EnumMember(Value = "target-evidence-stale")] TargetEvidenceStale,
+    /// <summary>A wet run edit carries no Expected.</summary>
+    [EnumMember(Value = "target-evidence-missing")] TargetEvidenceMissing,
+    /// <summary>The edit's element or parameter did not resolve (every resolver refusal).</summary>
+    [EnumMember(Value = "target-unresolved")] TargetUnresolved,
+    /// <summary>Another edit of the admission group was refused; <see cref="ParameterEditPlan.Refusal.Cause" /> names its code.</summary>
+    [EnumMember(Value = "admission-group-refused")] AdmissionGroupRefused,
+    /// <summary>Differing values alias one native parameter across a connected alias group.</summary>
+    [EnumMember(Value = "alias-conflict")] AliasConflict
+}
 
 /// <summary>
 ///     The one place parameter-write evidence is judged. Edits arrive in groups that are admitted whole (a
@@ -28,9 +47,12 @@ public static class ParameterEditPlan {
     /// <param name="Edits">Every edit this write answers, ascending.</param>
     public sealed record Write(int Edit, IReadOnlyList<int> Edits);
 
+    /// <summary>Why one edit is not written: a closed code, its prose, and for a group refusal the code of the cause its prose names.</summary>
+    public sealed record Refusal(EditRefusalCode Code, string Message, EditRefusalCode? Cause = null);
+
     /// <param name="Refusals">Per edit: why it will not be written, or null when a <see cref="Write" /> answers it.</param>
     /// <param name="Writes">One per native target, in order of first edit.</param>
-    public sealed record Plan(IReadOnlyList<string?> Refusals, IReadOnlyList<Write> Writes);
+    public sealed record Plan(IReadOnlyList<Refusal?> Refusals, IReadOnlyList<Write> Writes);
 
     public const string MissingExpected =
         "A wet run needs expected target evidence per edit; read it as Current with a dry run first.";
@@ -39,13 +61,15 @@ public static class ParameterEditPlan {
         "Conflicting edits alias the same native parameter; nothing in the connected alias group was written.";
 
     public static Plan Build(IReadOnlyList<Edit> edits, Evidence evidence) {
-        var refusals = edits.Select(edit => edit.Refusal ?? Judge(edit, evidence)).ToArray();
+        // A resolver refusal is an unresolved target, whatever it names.
+        var refusals = edits.Select(edit => edit.Refusal is { } resolver ? new Refusal(EditRefusalCode.TargetUnresolved, resolver) : Judge(edit, evidence)).ToArray();
 
         foreach (var group in Enumerable.Range(0, edits.Count).GroupBy(index => edits[index].Group)) {
             // Ordinal-first cause keeps the answer independent of input order.
-            var causes = group.Select(index => refusals[index]).OfType<string>().OrderBy(cause => cause, StringComparer.Ordinal).ToList();
+            var causes = group.Select(index => refusals[index]).OfType<Refusal>().OrderBy(cause => cause.Message, StringComparer.Ordinal).ToList();
             if (causes.Count == 0) continue;
-            var sibling = GroupRefused + causes[0] + (causes.Count > 1 ? $" (+{causes.Count - 1} more refused)" : "");
+            var sibling = new Refusal(EditRefusalCode.AdmissionGroupRefused,
+                GroupRefused + causes[0].Message + (causes.Count > 1 ? $" (+{causes.Count - 1} more refused)" : ""), causes[0].Code);
             foreach (var index in group) refusals[index] ??= sibling;
         }
 
@@ -57,7 +81,7 @@ public static class ParameterEditPlan {
                 components.Union(edits[index].Group, edits[byTarget.First()].Group);
         foreach (var component in live.GroupBy(index => components.Find(edits[index].Group))) {
             if (component.Select(index => Payload(edits[index].Value)).Distinct().Count() <= 1) continue;
-            foreach (var index in component) refusals[index] = AliasConflict;
+            foreach (var index in component) refusals[index] = new Refusal(EditRefusalCode.AliasConflict, AliasConflict);
         }
 
         var writes = Enumerable.Range(0, edits.Count).Where(index => refusals[index] == null)
@@ -67,10 +91,10 @@ public static class ParameterEditPlan {
         return new Plan(refusals, writes);
     }
 
-    private static string? Judge(Edit edit, Evidence evidence) {
-        if (edit.Current == null) return $"Target element {edit.Value.ElementId} did not resolve.";
-        if (edit.Value.Expected is not { } expected) return evidence == Evidence.IfGiven ? null : MissingExpected;
-        return expected == edit.Current ? null : Stale(expected, edit.Current);
+    private static Refusal? Judge(Edit edit, Evidence evidence) {
+        if (edit.Current == null) return new Refusal(EditRefusalCode.TargetUnresolved, $"Target element {edit.Value.ElementId} did not resolve.");
+        if (edit.Value.Expected is not { } expected) return evidence == Evidence.IfGiven ? null : new Refusal(EditRefusalCode.TargetEvidenceMissing, MissingExpected);
+        return expected == edit.Current ? null : new Refusal(EditRefusalCode.TargetEvidenceStale, Stale(expected, edit.Current));
     }
 
     /// <summary>Stale evidence names its target and each field that moved since review, expected then now.</summary>

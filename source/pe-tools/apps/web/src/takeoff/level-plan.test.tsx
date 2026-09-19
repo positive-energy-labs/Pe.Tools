@@ -138,12 +138,14 @@ test("two lanes on one level: the plan image follows the chosen view, not the fi
     { view: "Mechanical Plan - Lower Level", label: "Level 1/Main Level" },
     { view: "Mechanical Zoning Plan - Lower Level", label: "Level 1/Main Level" },
   ];
-  expect(planView(lanes, ["Mechanical Zoning Plan - Lower Level"], "Level 1/Main Level", [])).toBe(
-    "Mechanical Zoning Plan - Lower Level",
-  );
+  expect(
+    planView(lanes, ["Mechanical Zoning Plan - Lower Level"], "Level 1/Main Level", []),
+  ).toEqual({
+    view: "Mechanical Zoning Plan - Lower Level",
+  });
   // A level with no chosen view on it draws no image: a label never picks a view.
-  expect(planView(lanes, [], "Level 1/Main Level", [])).toBeUndefined();
-  expect(planView(lanes, ["Other"], "Level 1/Main Level", [])).toBeUndefined();
+  expect(planView(lanes, [], "Level 1/Main Level", []).view).toBeUndefined();
+  expect(planView(lanes, ["Other"], "Level 1/Main Level", []).view).toBeUndefined();
 });
 
 /* ── 31: the image is the drawn zones' own view (zone.lane.view), never a level-label neighbour ── */
@@ -156,13 +158,58 @@ test("two views on one level, zones owned by one: the image is the owner's, not 
     { view: poolHouse, label: level },
     { view: guestHouse, label: level },
   ];
+  const zone = (
+    view: string,
+    name: string,
+    ownerCrop: "Inside" | "Crossing" | null = "Inside",
+  ) => ({
+    view,
+    name,
+    ownerCrop,
+  });
   // E/F are Guest House's own regions; the person chose Pool House, which shares the label.
-  expect(planView(lanes, [poolHouse], level, [guestHouse, guestHouse])).toBe(guestHouse);
-  expect(planView(lanes, [], level, [guestHouse])).toBe(guestHouse);
-  // Zones of two owners: no one view owns them all, and the web cannot know "Inside" yet (ownerCrop).
-  expect(planView(lanes, [poolHouse], level, [guestHouse, poolHouse])).toBeUndefined();
+  expect(
+    planView(lanes, [poolHouse], level, [zone(guestHouse, "E"), zone(guestHouse, "F", "Crossing")]),
+  ).toEqual({ view: guestHouse });
+  expect(planView(lanes, [], level, [zone(guestHouse, "E", null)])).toEqual({ view: guestHouse });
+  // Zones of two owners: ownerCrop measures each zone against its own view only, so no one image is
+  // known to hold them all; the plan says so rather than showing nothing.
+  expect(
+    planView(lanes, [poolHouse], level, [zone(guestHouse, "E"), zone(poolHouse, "C")]),
+  ).toEqual({
+    note: `zones here belong to 2 views (${guestHouse}, ${poolHouse}); no one view's image is known to hold them all`,
+  });
   // No zones drawn: the chosen view stands.
-  expect(planView(lanes, [poolHouse], level, [])).toBe(poolHouse);
+  expect(planView(lanes, [poolHouse], level, [])).toEqual({ view: poolHouse });
+});
+
+/* ── 31b: a zone outside its own view's crop is named, never drawn over that view's image ─── */
+
+test("a zone Outside its view's crop is named on the plan; no image is drawn under it", () => {
+  const level = "Level 1/Main Level";
+  const poolHouse = "Mechanical Zoning Plan - Main Lvl Pool House Controls";
+  const lanes = [{ view: poolHouse, label: level }];
+  // C/D lie 59 ft below Pool House's crop (the project-a probe): its image cannot contain them.
+  expect(
+    planView(lanes, [poolHouse], level, [{ view: poolHouse, name: "C", ownerCrop: "Outside" }]),
+  ).toEqual({ note: "zone C lies outside its view's crop" });
+  expect(
+    planView(lanes, [poolHouse], level, [
+      { view: poolHouse, name: "C", ownerCrop: "Outside" },
+      { view: poolHouse, name: "D", ownerCrop: "Outside" },
+      { view: poolHouse, name: "G", ownerCrop: "Inside" },
+    ]),
+  ).toEqual({ note: "zones C, D lie outside their views' crops" });
+  // Not yet read: no image is chosen, so none flashes under a zone it may not contain.
+  expect(
+    planView(lanes, [poolHouse], level, [{ view: poolHouse, name: "C", ownerCrop: undefined }]),
+  ).toEqual({});
+  // The note sits in the plan's one note slot, above zones that still draw.
+  const { container } = levelPlan({ planNote: "zone C lies outside its view's crop" });
+  expect(container.textContent).toContain("no plan image");
+  expect(container.textContent).toContain("zone C lies outside its view's crop");
+  expect(container.querySelector("image")).toBe(null);
+  expect(container.querySelectorAll("svg path").length).toBeGreaterThan(0);
 });
 
 /* ── 29: the Guest House crop (45°) on projectA, HOLD 5 leg B, drawn outside the plan ──────── */

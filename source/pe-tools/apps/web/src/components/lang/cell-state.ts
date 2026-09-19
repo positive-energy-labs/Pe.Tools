@@ -81,6 +81,14 @@ export interface StateCellProps {
    * `scale="row"` and a string `value`; `cap` other than editable wins and renders locked.
    * An async commit (a Work write) may return a promise of that refusal: it restores the same
    * way when the refusal arrives, so typed text is never left looking accepted.
+   *
+   * UNITS AT STAGE TIME (user ruling 2026-09-19, `ruling-units-at-human-surfaces.md`): a human
+   * surface attaches the column's display unit to a bare number when it is STAGED, so the staged
+   * cell reads "300 CFM" at once and what is reviewed is what is applied. A typed unit ("300 L/s")
+   * wins. A measured field with no display unit asks at the cell before the push, never as a
+   * push-time refusal. The unit is the binding's own `DisplayUnit` evidence read from Revit, never a
+   * web guess or a project-units assumption; the host contract keeps refusing bare numbers.
+   * Not built: waits on `ScheduleCellBinding.DisplayUnit` (domains).
    */
   onCommit?: (
     text: string,

@@ -60,6 +60,7 @@ export function LevelPlan({
   plan,
   planRefusal,
   planError,
+  planNote,
   zones,
   stageFilter,
   selectedKey,
@@ -76,6 +77,8 @@ export function LevelPlan({
   planRefusal?: PlanRefusal | null;
   /** The view-image read itself failed. */
   planError?: string | null;
+  /** Why the plan draws no image though zones are drawn (`planView`): said in the same slot. */
+  planNote?: string | null;
   zones: ModelZone[];
   stageFilter: Phase | null;
   selectedKey: string | null;
@@ -134,6 +137,8 @@ export function LevelPlan({
         />
       ) : planError ? (
         <OutcomeLine kind="error" label="plan image unread" says={planError} />
+      ) : planNote ? (
+        <OutcomeLine kind="advisory" label="no plan image" says={planNote} />
       ) : null}
       <svg
         viewBox={`0 0 ${viewport.width} ${viewport.height}`}

@@ -113,6 +113,7 @@ export function AtlasVisual() {
             planImage.image && "refusal" in planImage.image ? planImage.image.refusal : null
           }
           planError={planImage.error}
+          planNote={planImage.note}
           zones={levelZones}
           stageFilter={stageFilter}
           selectedKey={zoneKey}

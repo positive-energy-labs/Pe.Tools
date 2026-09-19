@@ -419,3 +419,26 @@ test("a push run line says where its receipt lives and each cell before → afte
     "Succeeded · action receipt (no pod bound) · 2::1 R-32 → R-454B",
   );
 });
+
+test("a refused cell reads refused with its reason, keyed on its code when it carries one", async () => {
+  const { pushRunLine } = await import("./manifest");
+  const cells = [
+    { cell: "7::1", before: "Main", after: "R7" },
+    {
+      cell: "8::1",
+      before: "Main",
+      after: "oob",
+      error: "Expected target evidence is stale: element 1 changed",
+      code: "stale-staged-cell",
+    },
+    {
+      cell: "9::1",
+      before: "Main",
+      after: "oob",
+      error: "Expected target evidence is stale: element 2 changed",
+    },
+  ];
+  expect(pushRunLine({ podId: null, outcome: "Succeeded", cells }, null)).toBe(
+    "Succeeded · action receipt (no pod bound) · 7::1 Main → R7, 8::1 refused (stale), 9::1 refused (Expected target evidence is stale)",
+  );
+});

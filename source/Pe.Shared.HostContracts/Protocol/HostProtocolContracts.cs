@@ -26,7 +26,8 @@ public static class HostProtocol {
     // 45: family.editor.open renamed family.open (same request/response shape: FamilyOpenRequest/FamilyOpenData)
     // 46: families.plan takes familyNames (not familyIds); a plan entry's familyId is nullable (a refused name);
     //     families.apply takes familyNames {planned id: name} and refuses a family reloaded since the plan; receipt familyName non-null
-    public const int ContractVersion = 46;
+    // 47: TakeoffRegionFacts gains ownerCrop (nullable RevitCropCoverage: Inside | Crossing | Outside)
+    public const int ContractVersion = 47;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]

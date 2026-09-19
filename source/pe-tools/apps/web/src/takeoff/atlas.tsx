@@ -20,7 +20,7 @@ import {
 import { AtlasProvider } from "#/takeoff/atlas-context";
 import { AtlasWorkspace } from "#/takeoff/atlas-workspace";
 import { useAtlasColumns } from "#/takeoff/atlas-columns";
-import { planView, usePlanImage } from "#/takeoff/plan-image";
+import { planView, useOwnerCrops, usePlanImage } from "#/takeoff/plan-image";
 
 export type Verdict = "accept" | "dismiss";
 
@@ -75,15 +75,24 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
   const firstBoundLane = world.lanes.find((lane) => lane.view === views[0]);
   const level = pageLevel || firstBoundLane?.label || world.lanes[0]?.label || "";
   const levelZones = world.zones.filter((z) => z.zone.lane.label === level);
-  const planImage = usePlanImage(
+  const ownerCrops = useOwnerCrops(
     store.handle.resolution,
-    planView(
-      world.lanes,
-      views,
-      level,
-      levelZones.map((z) => z.zone.lane.view),
-    ),
+    levelZones.map((z) => z.zone.lane.view),
   );
+  const pick = planView(
+    world.lanes,
+    views,
+    level,
+    levelZones.map((z) => ({
+      view: z.zone.lane.view,
+      name: z.name,
+      ownerCrop: ownerCrops.crops
+        ? (ownerCrops.crops.get(`${z.zone.lane.view}:${z.zone.elementId}`) ?? null)
+        : undefined,
+    })),
+  );
+  const image = usePlanImage(store.handle.resolution, pick.view);
+  const planImage = { ...image, error: image.error ?? ownerCrops.error, note: pick.note ?? null };
   const setStageFilter = (value: Phase | null) => store.actions.filterStage(value);
   const setLevel = useCallback((value: string) => store.actions.chooseLevel(value), [store]);
   const setCursor = useCallback((value: string | null) => store.actions.chooseRoom(value), [store]);

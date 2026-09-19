@@ -3,11 +3,11 @@
  * `revit.context.view-image` with a registration (Revit's frame, never re-derived here) and an
  * `imageUrl` that is non-null exactly when the registration is; without one it names why.
  */
-import type { RevitContextViewImage } from "@pe/host-contracts/generated";
+import type { RevitContextViewImage, TakeoffsCandidates } from "@pe/host-contracts/generated";
 import type { TargetResolution } from "@pe/agent-contracts";
 
-import { hostUrl } from "#/host/client";
-import { useHostOp } from "#/readings";
+import { callHostRpc, hostUrl } from "#/host/client";
+import { HOST_QUERY_KEY, useHostCall, useHostOp } from "#/readings";
 import type { TakeoffPlanImage } from "#/takeoff/level-plan";
 
 type Response = RevitContextViewImage.Res.Response;
@@ -52,22 +52,69 @@ export function planOf(response: Response): { plan: TakeoffPlanImage } | { refus
   return { refusal: response.registrationRefusal };
 }
 
+export type OwnerCrop = NonNullable<TakeoffsCandidates.Res.TakeoffRegionFacts["ownerCrop"]>;
+/** A drawn zone as the plan picks its image: its owner view, name, and `ownerCrop` (undefined: unread). */
+export type DrawnZone = { view: string; name: string; ownerCrop: OwnerCrop | null | undefined };
+
 /**
- * The view whose plan image the Atlas draws for `level`. Drawn zones pick it: their one owner view
- * (`zone.lane.view`), and none when they have several, since only `ownerCrop` could say one view
- * holds them all (31). With no zones drawn, a chosen view on that level, in the person's order; a
- * level label never picks the view (23).
+ * The view whose plan image the Atlas draws for `level`, or the note that says why there is none.
+ * Drawn zones pick it: their one owner view (`zone.lane.view`, 31). A zone `Outside` its own view's
+ * crop is named and no image is drawn (31b); several owners draw none either, since `ownerCrop`
+ * measures a zone against its own view only. With no zones drawn, a chosen view on that level, in
+ * the person's order; a level label never picks the view (23).
  */
 export const planView = (
   lanes: readonly { view: string; label: string }[],
   views: readonly string[],
   level: string,
-  owners: readonly string[],
-): string | undefined => {
-  const owner = new Set(owners);
-  if (owner.size > 0) return owner.size === 1 ? owners[0] : undefined;
-  return views.find((view) => lanes.some((lane) => lane.view === view && lane.label === level));
+  zones: readonly DrawnZone[],
+): { view?: string; note?: string } => {
+  if (zones.some((zone) => zone.ownerCrop === undefined)) return {};
+  // ponytail: one Outside zone withholds the image for the level; draw it under the others only if asked.
+  const outside = zones.filter((zone) => zone.ownerCrop === "Outside").map((zone) => zone.name);
+  if (outside.length === 1) return { note: `zone ${outside[0]} lies outside its view's crop` };
+  if (outside.length > 1)
+    return {
+      note: `zones ${outside.join(", ")} lie outside their views' crops`,
+    };
+  const owners = [...new Set(zones.map((zone) => zone.view))];
+  if (owners.length === 1) return { view: owners[0] };
+  if (owners.length > 1)
+    return {
+      note: `zones here belong to ${owners.length} views (${owners.join(", ")}); no one view's image is known to hold them all`,
+    };
+  const view = views.find((view) =>
+    lanes.some((lane) => lane.view === view && lane.label === level),
+  );
+  return view ? { view } : {};
 };
+
+/** Each region's `ownerCrop`, by `view:elementId`, read from `takeoffs.candidates` on its owner views. */
+export function useOwnerCrops(resolution: TargetResolution, views: readonly string[]) {
+  const document =
+    resolution.kind === "resolved" && resolution.target.kind === "document"
+      ? resolution.target.ref
+      : undefined;
+  const owners = [...new Set(views)].sort();
+  const call = useHostCall(
+    async () => {
+      const crops = new Map<string, OwnerCrop | null>();
+      for (const view of owners) {
+        const read = await callHostRpc(
+          "takeoffs.candidates",
+          { view },
+          { bridgeSessionId: document?.session, openDocumentId: document?.openId },
+        );
+        for (const region of read.regions)
+          crops.set(`${view}:${region.elementId}`, region.ownerCrop ?? null);
+      }
+      return crops;
+    },
+    [...HOST_QUERY_KEY, "owner-crops", document?.session ?? "", document?.openId ?? "", ...owners],
+    Boolean(document && owners.length),
+  );
+  return { crops: call.data ?? null, error: call.error?.message ?? null };
+}
 
 /** Each level once, in lane order: a lane is a view, and many views share a level (29). */
 export const levelsOf = (lanes: readonly { label: string }[]): string[] => [
