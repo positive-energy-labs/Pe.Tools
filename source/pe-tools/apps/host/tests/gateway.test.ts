@@ -868,3 +868,54 @@ test("source seal carries only authored pod bytes, never outputs or stray trees"
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("/call refuses an agent actor on a human-only Read op by declared catalog actor; human reaches the bridge", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "gateway-actor-"));
+  const dispatched: string[] = [];
+  const bridge = {
+    list: Effect.sync(() => [{ sessionId: "A", processId: 1, processStartUtcUnixMs: 1 }]),
+    invoke: (key: string) =>
+      Effect.sync(() => {
+        if (key === "host.ops.catalog")
+          return {
+            value: {
+              operations: [
+                { key: "families.plan", intent: "Read", needs: "nothing", actor: "human" },
+              ],
+            },
+          };
+        dispatched.push(key);
+        return { value: { planned: true } };
+      }),
+  } as unknown as RevitBridge["Service"];
+  const web = router(new ActionJournal(join(dir, "journal.json")), bridge);
+  try {
+    const agent = await web.call(
+      "/call",
+      { key: "families.plan", request: {} },
+      { "x-pe-action-actor": "agent" },
+    );
+    const refusal = { status: agent.status, body: await agent.json() };
+    expect(refusal).toMatchObject({
+      status: 409,
+      body: {
+        kind: "HostFailure",
+        message: "'families.plan' is human-only; agent calls are refused",
+        notDispatched: true,
+      },
+    });
+    expect(dispatched).toEqual([]);
+    // No actor header is today's human default for /call (browser/CLI callers send none).
+    for (const headers of [{ "x-pe-action-actor": "human" }, {}] as Record<string, string>[]) {
+      const human = await web.call("/call", { key: "families.plan", request: {} }, headers);
+      expect({ status: human.status, body: await human.json() }).toEqual({
+        status: 200,
+        body: { planned: true },
+      });
+    }
+    expect(dispatched).toEqual(["families.plan", "families.plan"]);
+  } finally {
+    await web.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
