@@ -28,7 +28,8 @@ public static class HostProtocol {
     //     families.apply takes familyNames {planned id: name} and refuses a family reloaded since the plan; receipt familyName non-null
     // 47: TakeoffRegionFacts gains ownerCrop (nullable RevitCropCoverage: Inside | Crossing | Outside)
     // 48: ParameterValueEditResult and ScheduleCellEditResult gain code and causeCode (nullable closed EditRefusalCode)
-    public const int ContractVersion = 48;
+    // 49: RevitViewImageRegistrationRefusal gains CropOutsideImage
+    public const int ContractVersion = 49;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
