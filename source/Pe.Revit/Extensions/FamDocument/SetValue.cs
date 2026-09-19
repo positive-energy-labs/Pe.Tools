@@ -147,9 +147,10 @@ public static class FamilyDocumentSetValue {
         this FamilyDocument famDoc,
         FamilyParameter targetParam,
         FamilyParameter sourceParam,
-        string strategyName = nameof(MappingStrategy.Strict)
+        string strategyName = nameof(MappingStrategy.Strict),
+        ForgeTypeId? sourceUnit = null
     ) {
-        var context = CoercionContext.FromParam(famDoc, sourceParam, targetParam);
+        var context = CoercionContext.FromParam(famDoc, sourceParam, targetParam, sourceUnit);
         if (context.SourceValue == null) return null;
 
         var strategyInstance = ParamCoercionStrategyRegistry.Get(strategyName);

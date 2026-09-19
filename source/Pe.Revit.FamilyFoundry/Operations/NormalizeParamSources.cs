@@ -1,4 +1,5 @@
 using Pe.Revit.Extensions.FamDocument;
+using Pe.Revit.Extensions.FamDocument.SetValue;
 using Pe.Revit.Extensions.FamManager;
 using Pe.Revit.Extensions.FamParameter;
 using Pe.Shared.RevitData.Families;
@@ -12,7 +13,17 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
     : DocOperation<DefaultOperationSettings>(new()) {
     public override string Description => "Normalize explicit parameter sources and shared identities";
 
+    /// <summary>
+    ///     Each value the last Execute left uncarried for want of a declared mappingUnit, by name (ruling 2026-09-19: reported, never a family
+    ///     refusal). The receipt carries them as run effects.
+    /// </summary>
+    public List<string> Reports { get; } = [];
+
+    private readonly Dictionary<string, ForgeTypeId?> units = new(StringComparer.Ordinal);
+
     public override OperationLog Execute(FamilyDocument doc, FamilyProcessingContext context, OperationContext group) {
+        this.Reports.Clear();
+        this.units.Clear();
         var fm = doc.FamilyManager;
         var originalType = fm.CurrentType;
         var logs = new List<LogEntry>();
@@ -71,6 +82,7 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                 fm = doc.FamilyManager;
                 if (dataType is not null && existing.Definition.GetDataType() != dataType)
                     throw new InvalidOperationException($"'{name}' has an incompatible destination datatype.");
+                this.units[name] = spec.MappingUnit is { } symbol ? MappingUnit.Resolve(existing.Definition.GetDataType(), symbol) : null;
                 // The replan seeds itself from a re-capture taken after this step, so an identity that did not settle here would read as
                 // converged and replan forever (rung 5b: same-named shared destinations carrying an older GUID). Say so instead.
                 if (spec.Shared == true && spec.SharedGuid is { } wantedGuid && (!existing.IsShared || existing.GUID != wantedGuid))
@@ -100,17 +112,29 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                 if (fm.CurrentType != type) fm.CurrentType = type;
                 foreach (var transfer in pending) {
                     Exception? failure = null;
+                    (FamilyParameter Source, MissingUnitException Why)? unitless = null;
                     foreach (var source in transfer.Sources.Where(source => !Blank(doc, type, source, transfer.MissingValues))) {
                         using var attempt = new SubTransaction(doc.Document);
                         attempt.Start();
                         try {
-                            if (doc.SetValue(transfer.Target, source, transfer.Strategy) is null) throw new InvalidOperationException("Coercion produced no value.");
+                            if (doc.SetValue(transfer.Target, source, transfer.Strategy, this.units.GetValueOrDefault(transfer.Target.Definition.Name)) is null)
+                                throw new InvalidOperationException("Coercion produced no value.");
                             if (attempt.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Value transfer did not commit.");
                             failure = null;
                             break;
-                        } catch (Exception exception) { failure = exception; }
+                        } catch (Exception exception) {
+                            failure = exception;
+                            if (exception is MissingUnitException why) unitless ??= (source, why);
+                        }
                     }
-                    if (failure is not null) throw new InvalidOperationException($"All sources failed for '{transfer.Target.Definition.Name}' in '{type.Name}': {failure.Message}", failure);
+                    // A bare number with no declared unit is left uncarried and named; the family still migrates.
+                    if (failure is not null && unitless is var (from, missing)) {
+                        var report = FamilyFormulaCopy.NotCarried(doc, from, sourceLabels.GetValueOrDefault(from.Definition.Name) ?? from.Definition.Name,
+                            type.AsValueString(from), transfer.Target, type.Name, transfer.Strategy, missing);
+                        this.Reports.Add(report);
+                        logs.Add(new LogEntry(transfer.Target.Definition.Name).Skip(report));
+                    } else if (failure is not null)
+                        throw new InvalidOperationException($"All sources failed for '{transfer.Target.Definition.Name}' in '{type.Name}': {failure.Message}", failure);
                 }
                 foreach (var target in created)
                     if (SetBlankValues.Fill(doc, type, target, blanks!, created: true) is { } written)
@@ -140,12 +164,13 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                     }
                     continue;
                 }
-                var evaluated = doc.TransferAndRemoveParameter(source, target, connectorRule is null ? null : new Dictionary<BuiltInParameter, string> {
+                var notes = doc.TransferAndRemoveParameter(source, target, connectorRule is null ? null : new Dictionary<BuiltInParameter, string> {
                     [BuiltInParameter.RBS_ELEC_VOLTAGE] = connectorRule.Voltage,
                     [BuiltInParameter.RBS_ELEC_NUMBER_OF_POLES] = connectorRule.NumberOfPoles,
                     [BuiltInParameter.RBS_ELEC_APPARENT_LOAD] = connectorRule.ApparentPower
-                }, StrategyOf(targetName), sourceLabels.GetValueOrDefault(sourceName));
-                if (evaluated is not null) logs.Add(new LogEntry(sourceName).Success(evaluated));
+                }, StrategyOf(targetName), sourceLabels.GetValueOrDefault(sourceName), this.units.GetValueOrDefault(targetName));
+                // Preview already names these (FamilyPlanning.SourceFormulaCrossings); the log repeats them per source.
+                foreach (var note in notes) logs.Add(new LogEntry(sourceName).Success(note));
                 // TransferAndRemoveParameter commits its own sub-transaction, and Revit regenerates on commit;
                 // one explicit regeneration after the loop replaces one per removed source.
                 fm = doc.FamilyManager;

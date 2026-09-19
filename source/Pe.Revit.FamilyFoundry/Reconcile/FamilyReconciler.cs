@@ -262,6 +262,7 @@ public static class FamilyReconciler {
             if (p.Value.Shared == true) o.Remove("tooltip");
             o.Remove("wasNamed");
             o.Remove("mappingStrategy");
+            o.Remove("mappingUnit");
             o.Remove("fillBlanksFromSources");
             o.Remove("sourceValuesTreatedAsMissing");
             return o;

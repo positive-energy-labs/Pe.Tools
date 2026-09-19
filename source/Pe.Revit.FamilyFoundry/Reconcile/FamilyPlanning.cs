@@ -1,5 +1,6 @@
 using Newtonsoft.Json.Linq;
 using Pe.Revit.Extensions.FamDocument;
+using Pe.Revit.Extensions.FamDocument.SetValue;
 using Pe.Revit.Extensions.FamManager;
 using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.FamilyFoundry.Capture;
@@ -158,6 +159,8 @@ internal static class FamilyPreparation {
                 var targetSpec = target?.Definition.GetDataType() ?? Spec(wanted);
                 if (targetSpec is null) continue;
                 var strategy = (wanted.MappingStrategy ?? MappingStrategy.CoerceByStorageType).ToString();
+                // FamilyModelUnitValidation already refused a declared unit that is not one of this spec's.
+                var unit = wanted.MappingUnit is { } symbol ? MappingUnit.Resolve(targetSpec, symbol) : null;
                 foreach (var (name, from) in sources) {
                     if (!string.IsNullOrEmpty(target?.Formula)) break; // the destination's own formula wins; nothing is copied
                     if (target is not null && FamilyFormulaCopy.IsExactAliasOf(fm.Parameters, from, target)) continue;
@@ -166,11 +169,14 @@ internal static class FamilyPreparation {
                     if (blocker is null)
                         try { fm.SetFormula(target, from.Formula); continue; }
                         catch (Autodesk.Revit.Exceptions.ApplicationException) { blocker = FamilyFormulaCopy.NativeRefusal; }
-                    var carried = FamilyFormulaCopy.Carry(new FamilyDocument(document), from, name, target, strategy, keep: true);
+                    var (carried, reports) = FamilyFormulaCopy.Carry(new FamilyDocument(document), from, name, target, strategy, keep: true, unit);
                     if (carried.Count > 0)
                         refusals.AddRange(carried.Select(refusal => new FamilyModelDiagnostic(FamilyModelDiagnosticCodes.ValueNotCoercible,
                             $"$.parameters.{change.Key}.wasNamed", refusal)));
-                    else effects.Add(FamilyFormulaCopy.DroppedNote(from.Formula, name, change.Key, blocker, strategy));
+                    else {
+                        effects.Add(FamilyFormulaCopy.DroppedNote(from.Formula, name, change.Key, blocker, strategy));
+                        effects.AddRange(reports);
+                    }
                 }
             }
         } finally {

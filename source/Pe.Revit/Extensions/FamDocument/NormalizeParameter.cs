@@ -42,10 +42,12 @@ public static class FamilyDocumentNormalizeParameter {
 
     /// <summary>
     ///     Destination values win. Transfer source references, honoring exact connector routes, then remove the source; any failure rolls back.
-    ///     Returns the named note when the source formula could not cross and its per-type values were carried by <paramref name="strategy" /> instead.
+    ///     Returns the named notes: the source formula that could not cross, whose per-type values <paramref name="strategy" /> carried instead,
+    ///     and each value it left uncarried for want of a declared unit (<paramref name="unit" />).
     /// </summary>
-    public static string? TransferAndRemoveParameter(this FamilyDocument document, FamilyParameter source, FamilyParameter target,
-        IReadOnlyDictionary<BuiltInParameter, string>? associationRoutes = null, string strategy = "CoerceByStorageType", string? sourceLabel = null) {
+    public static List<string> TransferAndRemoveParameter(this FamilyDocument document, FamilyParameter source, FamilyParameter target,
+        IReadOnlyDictionary<BuiltInParameter, string>? associationRoutes = null, string strategy = "CoerceByStorageType", string? sourceLabel = null,
+        ForgeTypeId? unit = null) {
         if (source.IsBuiltInParameter()) throw new InvalidOperationException("Revit-owned built-in parameters cannot be removed.");
         if (source.Id == target.Id) throw new InvalidOperationException("Source and destination must be distinct parameters.");
         var fm = document.FamilyManager;
@@ -56,7 +58,7 @@ public static class FamilyDocumentNormalizeParameter {
         // `Model = PE_G___Model`): its value is the destination's in every type, and its dependents are rewritten to the destination below,
         // so not copying that circular formula loses nothing.
         var sourceIsExactAlias = FamilyFormulaCopy.IsExactAliasOf(fm.Parameters, source, target);
-        string? note = null;
+        var notes = new List<string>();
         if (targetDependsOnSource && !targetIsExactAlias)
             throw new InvalidOperationException(
                 $"Cannot remove source '{source.Definition.Name}': destination '{target.Definition.Name}' formula '{target.Formula}' depends on the source but is not an exact alias. Refusing to discard formula intent.");
@@ -106,9 +108,10 @@ public static class FamilyDocumentNormalizeParameter {
                     try { fm.SetFormula(target, formula); }
                     catch (Autodesk.Revit.Exceptions.ApplicationException) { blocker = FamilyFormulaCopy.NativeRefusal; }
                 if (blocker is not null) {
-                    if (FamilyFormulaCopy.Carry(document, source, sourceName, target, strategy, keep: true).FirstOrDefault() is { } refusal)
-                        throw new InvalidOperationException(refusal);
-                    note = FamilyFormulaCopy.DroppedNote(formula, sourceName, target.Definition.Name, blocker, strategy);
+                    var (refusals, reports) = FamilyFormulaCopy.Carry(document, source, sourceName, target, strategy, keep: true, unit);
+                    if (refusals.FirstOrDefault() is { } refusal) throw new InvalidOperationException(refusal);
+                    notes.Add(FamilyFormulaCopy.DroppedNote(formula, sourceName, target.Definition.Name, blocker, strategy));
+                    notes.AddRange(reports);
                 }
             }
             if (targetIsExactAlias) {
@@ -135,7 +138,7 @@ public static class FamilyDocumentNormalizeParameter {
             if (originalType is not null && fm.CurrentType != originalType) fm.CurrentType = originalType;
         }
         if (transaction.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Source transfer did not commit.");
-        return note;
+        return notes;
     }
 
     /// <summary>Renames a parameter out of the way under a unique temporary name, keeping its values and references; returns that name.</summary>
@@ -178,41 +181,47 @@ public static class FamilyFormulaCopy {
         $"formula `{formula}` on '{source}' not copied to '{target}' ({blocker}); per-type values carried by {strategy}";
 
     /// <summary>
-    ///     Carries every family type's value of <paramref name="source" /> into <paramref name="target" /> under <paramref name="strategy" />,
-    ///     one sub-transaction per value. Returns one refusal per value the strategy cannot carry, naming value, type and both parameters.
+    ///     Carries every family type's value of <paramref name="source" /> into <paramref name="target" /> under <paramref name="strategy" />
+    ///     and the mapping's declared <paramref name="unit" />, one sub-transaction per value. Refusals name each value the strategy cannot carry;
+    ///     reports name each bare number left uncarried for want of a declared unit (ruling 2026-09-19: reported, never a family refusal).
     ///     <paramref name="keep" /> false rolls every write back (preview).
     /// </summary>
-    public static List<string> Carry(FamilyDocument document, FamilyParameter source, string sourceName, FamilyParameter target, string strategy, bool keep) {
+    public static (List<string> Refusals, List<string> Reports) Carry(FamilyDocument document, FamilyParameter source, string sourceName,
+        FamilyParameter target, string strategy, bool keep, ForgeTypeId? unit = null) {
         var fm = document.FamilyManager;
         var coercion = ParamCoercionStrategyRegistry.Get(strategy);
         var refusals = new List<string>();
+        var reports = new List<string>();
         var originalType = fm.CurrentType;
         try {
             foreach (var type in fm.Types.Cast<FamilyType>().ToList()) {
                 if (fm.CurrentType != type) fm.CurrentType = type;
-                var context = CoercionContext.FromParam(document, source, target);
+                var context = CoercionContext.FromParam(document, source, target, unit);
                 if (context.SourceValue is null) continue;
                 using var attempt = new SubTransaction(document.Document);
                 attempt.Start();
-                string? reason = $"{strategy} cannot carry it";
+                Exception? failure = new ArgumentException($"{strategy} cannot carry it");
                 try {
-                    if (coercion.CanMap(context)) {
-                        var (_, error) = coercion.Map(context);
-                        reason = error?.Message;
-                    }
-                } catch (Exception exception) { reason = exception.Message; }
-                if (reason is null && keep) attempt.Commit();
+                    if (coercion.CanMap(context)) failure = coercion.Map(context).AsTuple().error;
+                } catch (Exception exception) { failure = exception; }
+                if (failure is null && keep) attempt.Commit();
                 else attempt.RollBack();
-                if (reason is not null)
-                    refusals.Add($"Family '{document.Document.Title}': cannot carry '{sourceName}' value '{context.SourceValueString ?? context.SourceValue}' " +
-                                 $"({source.Definition.GetDataType().TypeId}, {Scope(source.IsInstance)}) into '{target.Definition.Name}' " +
-                                 $"({target.Definition.GetDataType().TypeId}, {Scope(target.IsInstance)}) in type '{type.Name}' under {strategy}: {reason}");
+                if (failure is not null)
+                    (failure is MissingUnitException ? reports : refusals).Add(NotCarried(document, source, sourceName, context.SourceValueString ?? context.SourceValue,
+                        target, type.Name, strategy, failure));
             }
         } finally {
             if (originalType is not null && fm.CurrentType != originalType) fm.CurrentType = originalType;
         }
-        return refusals;
+        return (refusals, reports);
     }
+
+    /// <summary>One uncarried value by name: family, source, value, type, destination and strategy. A missing unit is reported, anything else refused.</summary>
+    public static string NotCarried(FamilyDocument document, FamilyParameter source, string sourceName, object? value, FamilyParameter target,
+        string type, string strategy, Exception failure) =>
+        $"Family '{document.Document.Title}': {(failure is MissingUnitException ? "did not carry" : "cannot carry")} '{sourceName}' value '{value}' " +
+        $"({source.Definition.GetDataType().TypeId}, {Scope(source.IsInstance)}) into '{target.Definition.Name}' " +
+        $"({target.Definition.GetDataType().TypeId}, {Scope(target.IsInstance)}) in type '{type}' under {strategy}: {failure.Message}";
 
     /// <summary>
     ///     True when <paramref name="source" />'s formula is exactly <paramref name="target" />'s name, or exactly the name of a parameter whose
