@@ -351,3 +351,41 @@ export async function setup() {
     owner: () => owner,
   };
 }
+
+/** A web EventSource over this fixture's app (as resource-consumer.test); the runtime owns all frames. */
+export function stubEventSource(f: Awaited<ReturnType<typeof setup>>) {
+  class Source {
+    onmessage: EventSource["onmessage"] = null;
+    onerror: EventSource["onerror"] = null;
+    onopen: EventSource["onopen"] = null;
+    closed = false;
+    abort = new AbortController();
+    constructor(url: string) {
+      cleanup.push(async () => this.close());
+      void (async () => {
+        const response = await f.app.fetch(
+          new Request(new URL(url, "http://host"), { signal: this.abort.signal }),
+        );
+        const reader = response.body!.getReader();
+        this.onopen?.call(this as unknown as EventSource, new Event("open"));
+        try {
+          while (!this.closed) {
+            const next = await reader.read();
+            if (next.done) break;
+            this.onmessage?.call(
+              this as unknown as EventSource,
+              new MessageEvent("message", { data: new TextDecoder().decode(next.value).slice(6) }),
+            );
+          }
+        } catch {
+          /* closing cancels production stream */
+        }
+      })();
+    }
+    close() {
+      this.closed = true;
+      this.abort.abort();
+    }
+  }
+  vi.stubGlobal("EventSource", Source);
+}

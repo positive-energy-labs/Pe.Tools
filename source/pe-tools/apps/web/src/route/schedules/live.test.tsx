@@ -4,56 +4,14 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { RegistryContext } from "@effect/atom-react";
 
 import { appAtomRegistry } from "#/route";
-import { cellsApplied, setup } from "../../../../host/tests/schedule-test-fixture";
+import { cellsApplied, setup, stubEventSource } from "../../../../host/tests/schedule-test-fixture";
 import { detailResponse, target } from "../../../../host/tests/schedule-fixture";
 import { LiveScheduleGridWorkspace } from "./live";
 import { REOPENED, schedulesManifest } from "./manifest";
 import { ScheduleGridWorkspace, type ScheduleGridState } from "./workspace";
 
 vi.mock("#/lib/token", () => ({ token: () => "currentColor", dash: () => "none" }));
-const sources: { close(): void }[] = [];
-afterEach(() => {
-  cleanup();
-  for (const source of sources.splice(0)) source.close();
-});
-
-/** Same SSE adapter as resource-consumer.test; the actual runtime owns all frames. */
-const stubEventSource = (f: Awaited<ReturnType<typeof setup>>) => {
-  class Source {
-    onmessage: EventSource["onmessage"] = null;
-    onerror: EventSource["onerror"] = null;
-    onopen: EventSource["onopen"] = null;
-    closed = false;
-    abort = new AbortController();
-    constructor(url: string) {
-      sources.push(this);
-      void (async () => {
-        const response = await f.app.fetch(
-          new Request(new URL(url, "http://host"), { signal: this.abort.signal }),
-        );
-        const reader = response.body!.getReader();
-        this.onopen?.call(this as unknown as EventSource, new Event("open"));
-        try {
-          while (!this.closed) {
-            const next = await reader.read();
-            if (next.done) break;
-            this.onmessage?.call(
-              this as unknown as EventSource,
-              new MessageEvent("message", { data: new TextDecoder().decode(next.value).slice(6) }),
-            );
-          }
-        } catch {
-          /* closing cancels production stream */
-        }
-      })();
-    }
-    close() {
-      this.closed = true;
-      this.abort.abort();
-    }
-  }
-  vi.stubGlobal("EventSource", Source);
-};
+afterEach(cleanup);
 
 test("real grid edits and route-approved proposals apply through HTTP, journal, Work and independent readback", async () => {
   const f = await setup();
@@ -103,18 +61,21 @@ test("real grid edits and route-approved proposals apply through HTTP, journal, 
   await screen.findByDisplayValue("100 VA"); // Native read fixture did NOT report the authored 175.
   expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
   await f.patch([{ path: ["cells", "1::2", "proposal"], value: { value: "180 VA" } }]);
-  // The proposal is accepted where it lives: the grid cell's own contract transition.
-  const proposed = (await screen.findByDisplayValue("180 VA")).closest<HTMLElement>(
-    "[data-master-cell]",
-  )!;
-  fireEvent.click(within(proposed).getByRole("button", { name: "accept" }));
-  await vi.waitFor(async () =>
-    expect((await f.view()).doc.cells["1::2"].staged.value).toBe("180 VA"),
-  );
+  // The proposal is accepted where it lives: the grid cell's own contract transition. The push's
+  // readback is now the basis; until that capture loads, apply refuses "read the schedule". Accept
+  // is idempotent, so press until it lands rather than racing the load.
+  await vi.waitFor(async () => {
+    const proposed = screen
+      .queryByDisplayValue("180 VA")
+      ?.closest<HTMLElement>("[data-master-cell]");
+    const accept = proposed && within(proposed).queryByRole("button", { name: "accept" });
+    if (accept) fireEvent.click(accept);
+    expect((await f.view()).doc.cells["1::2"].staged?.value).toBe("180 VA");
+  });
   // Work clears before the push ends: the host still reads back and persists the receipt, and the
   // button is busy until that receipt reads settled. In this lane host, SSE and jsdom share one
   // event loop, which stretches those steps to seconds (measured: a one-row journal persist
-  // ~3.8 s), hence the long wait and the test's 20 s budget.
+  // ~3.8 s), hence the long wait and the test's 30 s budget.
   await vi.waitFor(
     () =>
       expect(screen.getByRole("button", { name: "push 1 to Revit" }).hasAttribute("disabled")).toBe(
@@ -129,7 +90,7 @@ test("real grid edits and route-approved proposals apply through HTTP, journal, 
   await vi.waitFor(async () => expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined());
   expect(f.sent.every((s) => s.session === "B" && s.openId === "open-B")).toBe(true);
   mounted.unmount();
-}, 20_000);
+}, 30_000);
 
 test("F-H5-1..3: a dead-lifetime Work says read again; the bare verb re-reads the open schedule, rebinds, marks a changed cell stale with accept/deny, and the grid draws the new reading", async () => {
   // F-H5-2: the Situation presses a verb with no input.
@@ -190,7 +151,7 @@ test("F-H5-1..3: a dead-lifetime Work says read again; the bare verb re-reads th
   });
   const fresh = (await f.captures.scheduleWork(f.scope.work)) as { id: string };
   expect((await f.view()).doc).toMatchObject({
-    basis: { captureId: fresh.id, stale: ["1::2"] },
+    basis: { captureId: fresh.id, stale: [{ key: "1::2", was: "100 VA" }] },
     cells: { "1::2": { staged: { value: "150 VA" } } },
   });
   // Drawn as drift against the live value, with the ruled accept/deny.
@@ -267,7 +228,9 @@ test("a push's run line reads a refused cell refused by its code, never before â
     expect(await state!.execute("refresh")).toBeNull();
   });
   await vi.waitFor(async () =>
-    expect((await f.view()).doc).toMatchObject({ basis: { stale: ["1::2"] } }),
+    expect((await f.view()).doc).toMatchObject({
+      basis: { stale: [{ key: "1::2", was: "100 VA" }] },
+    }),
   );
   f.setResponse(cellsApplied([[1, 1, true]]));
   await vi.waitFor(() =>

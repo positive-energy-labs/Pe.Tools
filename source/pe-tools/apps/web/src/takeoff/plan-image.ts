@@ -20,6 +20,8 @@ export const PLAN_REFUSAL: Record<PlanRefusal, string> = {
   NoImage: "Revit exported no image for the view",
   DegenerateCrop: "the view's crop box has no area",
   AspectDisagrees: "the exported image's shape disagrees with the crop, so it is not the crop",
+  CropOutsideImage:
+    "the view's crop falls outside its exported image, so the image does not hold it",
 };
 
 /** A registration corner is model XY in feet; anything else is not a corner. */

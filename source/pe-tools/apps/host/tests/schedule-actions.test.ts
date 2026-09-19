@@ -448,34 +448,36 @@ test("an old reading of another schedule does not break this schedule's Work rea
   expect(read.value.id).toBe(f.reading.id);
 });
 
+/** Two bound cells in row 1: Mark (1::1) and Load (1::2) at `load`. */
+const withMark = (load = "100") => {
+  const d = detailResponse();
+  const row = d.entries[0].rows[0];
+  row.bindings[0] = {
+    ...row.bindings[0],
+    rawValue: load,
+    displayValue: `${load} VA`,
+    targets: [target(7, load), target(8, load)],
+  };
+  row.bindings.unshift({
+    ...row.bindings[0],
+    columnNumber: 1,
+    targetElementIds: [7],
+    parameterName: "Mark",
+    parameterId: 556,
+    storageType: "String",
+    rawValue: "P-1",
+    displayValue: "P-1",
+    isTypeParameter: false,
+    targets: [
+      { ...target(7, "P-1"), parameterId: 556, parameterName: "Mark", storageType: "String" },
+    ],
+  });
+  return d;
+};
+
 test("F-H5-1: a dead-lifetime push names its exit; a re-read rebinds and marks a changed staged cell stale; it refuses per cell by code while the rest push live", async () => {
   const f = await setup();
   // Two cells under one basis: Mark (1::1) and Load (1::2, staged by setup).
-  const withMark = (load = "100") => {
-    const d = detailResponse();
-    const row = d.entries[0].rows[0];
-    row.bindings[0] = {
-      ...row.bindings[0],
-      rawValue: load,
-      displayValue: `${load} VA`,
-      targets: [target(7, load), target(8, load)],
-    };
-    row.bindings.unshift({
-      ...row.bindings[0],
-      columnNumber: 1,
-      targetElementIds: [7],
-      parameterName: "Mark",
-      parameterId: 556,
-      storageType: "String",
-      rawValue: "P-1",
-      displayValue: "P-1",
-      isTypeParameter: false,
-      targets: [
-        { ...target(7, "P-1"), parameterId: 556, parameterName: "Mark", storageType: "String" },
-      ],
-    });
-    return d;
-  };
   f.setDetail(withMark());
   const old = await f.read();
   await f.patch([
@@ -505,7 +507,7 @@ test("F-H5-1: a dead-lifetime push names its exit; a re-read rebinds and marks a
     await f.patch(rebindScheduleWork((await f.view()).doc as never, old, fresh)),
   ).toMatchObject({ ok: true });
   const doc = (await f.view()).doc;
-  expect(doc.basis).toEqual({ captureId: fresh.id, stale: ["1::2"] });
+  expect(doc.basis).toEqual({ captureId: fresh.id, stale: [{ key: "1::2", was: "100 VA" }] });
   expect(doc.cells["1::1"].staged).toEqual({ value: "P-9" });
   expect(doc.cells["1::2"].staged).toEqual({ value: "150 VA" });
   // The stale cell refuses per cell, by code, before dispatch; the other cell pushes live.
@@ -524,4 +526,61 @@ test("F-H5-1: a dead-lifetime push names its exit; a re-read rebinds and marks a
     input: { edits: [{ rowNumber: 1, columnNumber: 1, value: "P-9" }] },
   });
   expect((await f.view()).doc.cells["1::2"].staged).toEqual({ value: "150 VA" });
+});
+
+test("ask A: a push refused on moved evidence rebinds on its readback; the refused cell is stale with what was reviewed, and accept then push lands it", async () => {
+  const f = await setup();
+  f.setDetail(withMark());
+  const old = await f.read();
+  await f.patch([
+    { path: ["basis"], value: { captureId: old.id } },
+    { path: ["cells", "1::1"], value: { staged: { value: "P-9" } } },
+  ]);
+  // Revit moves Load (1::2) after the review; the domain refuses that cell on its evidence.
+  f.setDetail(withMark("120"));
+  // Edits follow the Work's cell order: 1::2 (staged by setup), then 1::1.
+  const refused = cellsApplied([
+    [1, 2, false, "Expected target evidence is stale"],
+    [1, 1, true],
+  ]);
+  Object.assign(refused.results[0]!, { code: "target-evidence-stale" });
+  f.setResponse(refused);
+  const first = await f.submit();
+  expect(first).toMatchObject({
+    state: "succeeded",
+    result: {
+      applied: 1,
+      // The native's code rides through when it supplies one; the host never parses the sentence.
+      failures: [{ key: "1::2", code: "target-evidence-stale" }],
+    },
+  });
+  const readback = (first.result as { readback: { id: string } }).readback;
+  // The readback rebinds in the push: basis = the readback, and the refused cell names A.
+  let doc = (await f.view()).doc;
+  expect(doc.basis).toEqual({ captureId: readback.id, stale: [{ key: "1::2", was: "100 VA" }] });
+  expect(doc.cells["1::1"]?.staged).toBeUndefined();
+  expect(doc.cells["1::2"].staged).toEqual({ value: "150 VA" });
+  // Accept: restage B over C. The key leaves `basis.stale`; the push sends C as the evidence.
+  await f.patch([
+    { path: ["cells", "1::2", "staged"], value: { value: "150 VA" } },
+    { path: ["basis", "stale"] },
+  ]);
+  f.setResponse(cellsApplied([[1, 2, true]]));
+  expect(await f.submit()).toMatchObject({
+    state: "succeeded",
+    result: { applied: 1, failures: [] },
+  });
+  const pushed = f.sent.filter((s) => s.key === "schedule.cells.apply");
+  expect(pushed).toHaveLength(2);
+  expect(pushed[1]!.input.edits).toEqual([
+    expect.objectContaining({
+      rowNumber: 1,
+      columnNumber: 2,
+      value: "150 VA",
+      expectedBinding: expect.objectContaining({ rawValue: "120" }),
+    }),
+  ]);
+  doc = (await f.view()).doc;
+  expect(doc.cells["1::2"]?.staged).toBeUndefined();
+  expect(doc.basis).toEqual({ captureId: expect.any(String) });
 });

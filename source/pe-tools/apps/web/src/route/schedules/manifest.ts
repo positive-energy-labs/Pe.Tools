@@ -58,17 +58,11 @@ type PushReceipt = {
     code?: string | null;
   }[];
 };
-/**
- * The run's word, from its cells: the host's receipt says "Failed" for any refused cell even when
- * others were written (F-S-1, NEEDS-CONTRACT), so a mixed push reads "Partly applied" here.
- */
-const pushWord = (receipt: PushReceipt) => {
-  const refused = receipt.cells.filter((cell) => cell.error).length;
-  if (!refused) return receipt.outcome;
-  return refused === receipt.cells.length ? "Refused" : "Partly applied";
-};
 type PushCell = PushReceipt["cells"][number];
-const REFUSAL_WORD: Record<string, string> = { "stale-staged-cell": "stale" };
+const REFUSAL_WORD: Record<string, string> = {
+  "stale-staged-cell": "stale",
+  "target-evidence-stale": "stale",
+};
 /**
  * A refused cell's `after` is what Revit holds, not what this run wrote, so it reads refused with
  * its code's word, or the error's first clause when the cell carries no code.
@@ -77,6 +71,12 @@ const cellLine = (c: PushCell) =>
   c.error
     ? `${c.cell} refused (${c.code ? (REFUSAL_WORD[c.code] ?? c.code) : c.error.split(": ")[0]})`
     : `${c.cell} ${c.before ?? "?"} → ${c.after ?? "?"}`;
+/** The run's word, from its cells: a push that wrote some cells and refused others is partly applied. */
+const pushWord = (receipt: PushReceipt) => {
+  const refused = receipt.cells.filter((cell) => cell.error).length;
+  if (!refused) return receipt.outcome;
+  return refused === receipt.cells.length ? "Refused" : "Partly applied";
+};
 export const pushRunLine = (receipt: PushReceipt, run?: string | null) =>
   [
     pushWord(receipt),
@@ -285,7 +285,7 @@ export const schedulesManifest = () =>
             }
             if (result.readbackError) throw Error(result.readbackError);
             // Some cells landed and some were refused: an outcome, not a failure. Returned, so the
-            // verb's dirties re-read the grid and the written cells show what Revit now holds.
+            // verb's dirties re-read the grid; the readback already rebound the basis to what Revit holds.
             const failures = result.failures ?? [];
             if (!failures.length) return null;
             const first = `${failures[0]!.key}: ${failures[0]!.error}`;

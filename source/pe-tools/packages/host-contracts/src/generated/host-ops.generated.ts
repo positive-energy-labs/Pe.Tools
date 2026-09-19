@@ -2816,7 +2816,7 @@ export namespace RevitContextSummary {
   }
 }
 
-/** Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. Capture runs in a rolled-back sandbox and never changes the user's view; focus capture sets a temporary crop box (clearing any scope box) and restores it afterward (editable document only). A cropped view's image covers exactly its model crop (annotations outside it are not drawn) and returns registration: the model XY of the image's top-left, top-right and bottom-left corners plus the image sha256, which places pixels under model geometry even on a rotated crop. */
+/** Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. The view exports unmodified, with all the user's settings; focus capture sets a temporary crop box (clearing any scope box) and restores it afterward (editable document only). A cropped view's image is exactly its model crop, cut from the export (which covers the view's whole outline) at the requested width, and returns registration: the model XY of the image's top-left, top-right and bottom-left corners plus the image sha256, which places pixels under model geometry even on a rotated crop. */
 export namespace RevitContextViewImage {
   export namespace Req {
     export interface Request {
@@ -2863,7 +2863,12 @@ export namespace RevitContextViewImage {
     /**
      * Why a view image carries no RevitViewImageRegistration.
      */
-    export type RevitViewImageRegistrationRefusal = "NoCrop" | "NoImage" | "DegenerateCrop" | "AspectDisagrees";
+    export type RevitViewImageRegistrationRefusal =
+      | "NoCrop"
+      | "NoImage"
+      | "DegenerateCrop"
+      | "AspectDisagrees"
+      | "CropOutsideImage";
 
     export interface Response {
       view: RevitAgentContextHandle;

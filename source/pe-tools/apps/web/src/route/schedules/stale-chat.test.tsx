@@ -84,7 +84,9 @@ test("Chat's schedules pane draws a stale key as drift, answered by the cell's o
   const markStale = async () => {
     const { captureId } = (await f.view()).doc.basis!;
     expect(
-      await f.patch([{ path: ["basis"], value: { captureId, stale: ["1::2"] } }]),
+      await f.patch([
+        { path: ["basis"], value: { captureId, stale: [{ key: "1::2", was: "100 VA" }] } },
+      ]),
     ).toMatchObject({ ok: true });
   };
   await markStale();

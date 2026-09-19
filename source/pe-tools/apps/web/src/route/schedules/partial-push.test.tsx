@@ -2,23 +2,19 @@
 /**
  * F-S-1 (hold 3, D5 part 3): a push where one cell landed and one was refused as stale reads
  * "partly applied", never "failed"; the written cell reads back as its new value in the grid, and
- * the refused cell keeps its staged value.
+ * the refused cell keeps its staged value (the readback rebinds the basis, so the grid draws it).
  */
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { RegistryContext } from "@effect/atom-react";
 
 import { appAtomRegistry } from "#/route";
-import { cellsApplied, setup } from "../../../../host/tests/schedule-test-fixture";
+import { cellsApplied, setup, stubEventSource } from "../../../../host/tests/schedule-test-fixture";
 import { detailResponse, target } from "../../../../host/tests/schedule-fixture";
 import { LiveScheduleGridWorkspace } from "./live";
 
 vi.mock("#/lib/token", () => ({ token: () => "currentColor", dash: () => "none" }));
-const sources: { close(): void }[] = [];
-afterEach(() => {
-  cleanup();
-  for (const source of sources.splice(0)) source.close();
-});
+afterEach(cleanup);
 
 test("a partial push reads partly applied, the written cell reads back new, the stale one stays staged", async () => {
   const f = await setup();
@@ -28,41 +24,7 @@ test("a partial push reads partly applied, the written cell reads back new, the 
     setItem: (key: string, value: string) => storage.set(key, value),
     removeItem: (key: string) => storage.delete(key),
   });
-  // Same SSE adapter as resource-consumer.test; the actual runtime owns all frames.
-  class Source {
-    onmessage: EventSource["onmessage"] = null;
-    onerror: EventSource["onerror"] = null;
-    onopen: EventSource["onopen"] = null;
-    closed = false;
-    abort = new AbortController();
-    constructor(url: string) {
-      sources.push(this);
-      void (async () => {
-        const response = await f.app.fetch(
-          new Request(new URL(url, "http://host"), { signal: this.abort.signal }),
-        );
-        const reader = response.body!.getReader();
-        this.onopen?.call(this as unknown as EventSource, new Event("open"));
-        try {
-          while (!this.closed) {
-            const next = await reader.read();
-            if (next.done) break;
-            this.onmessage?.call(
-              this as unknown as EventSource,
-              new MessageEvent("message", { data: new TextDecoder().decode(next.value).slice(6) }),
-            );
-          }
-        } catch {
-          /* closing cancels production stream */
-        }
-      })();
-    }
-    close() {
-      this.closed = true;
-      this.abort.abort();
-    }
-  }
-  vi.stubGlobal("EventSource", Source);
+  stubEventSource(f);
   // Two rows, each one editable Load cell behind its own element.
   const twoRows = (load1: string) => {
     const detail = detailResponse();
