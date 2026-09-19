@@ -7,7 +7,7 @@ import {
   familyCaptureSchema,
   parameterLinksReadingSchema,
   sameValue,
-  stagedParameterLinks,
+  stagedParameterProfile,
   transitionPatches,
 } from "@pe/agent-contracts";
 
@@ -139,7 +139,7 @@ export function ParameterLinksWorkspace({
   fieldOptionsEnabled?: boolean;
 }) {
   const document = route.work.doc;
-  const savedDraft = document ? stagedParameterLinks(document) : null;
+  const savedDraft = document ? stagedParameterProfile(document) : null;
   // Pea's proposed profile, drawn in the band grammar while it differs from what is staged
   // (accepted, it stays as authorship evidence of the staged value: nothing left to review).
   const profileCell = document?.profile ?? {};

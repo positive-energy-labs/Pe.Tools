@@ -18,7 +18,7 @@ import {
   transitionPatches,
   parameterLinksRouteState,
   parameterLinksBasis,
-  stagedParameterLinks,
+  stagedParameterProfile,
   parameterLinksReadingSchema,
   settingsCandidate,
   settingsRouteState,
@@ -584,7 +584,7 @@ export async function admitFamilyAction(
         const input = familyActions["parameter-links.apply"].input.parse(admission.input);
         const document = parameterLinksRouteState.schema.parse(view.doc);
         // Apply reconciles the person's staged profile only; a Pea proposal never arms it.
-        const staged = stagedParameterLinks(document);
+        const staged = stagedParameterProfile(document);
         if (!staged) throw refused("Stage a profile before applying");
         const capture = await captures.family(input.readingId);
         if (
@@ -957,7 +957,7 @@ export async function readFamily(
     const profile =
       subject === "proposal"
         ? (document.profile.proposal?.value ?? null)
-        : stagedParameterLinks(document);
+        : stagedParameterProfile(document);
     if (evaluate && !profile)
       throw refused(
         subject === "proposal"
