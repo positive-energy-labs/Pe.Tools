@@ -21,12 +21,11 @@ public static class HostProtocol {
     // 41: parameter-values wet edits require exact parameterId + expected ParameterTarget evidence (dry run
     //     returns it as current); stale/missing evidence, admission groups and aliases judged by ParameterEditPlan
     // 42: family.editor.apply deleted; family writes are FamilyPatch plan/apply
-    // 43: revit.context.view-image response gains imageUrl (/view-image/<imageSha256>.png, null iff no registration)
-    // 44: family.editor.snapshot deleted; family reads are family.capture
-    // 45: family.editor.open renamed family.open (same request/response shape: FamilyOpenRequest/FamilyOpenData)
-    // 46: families.plan takes familyNames (not familyIds); a plan entry's familyId is nullable (a refused name);
+    // 43: family.editor.snapshot deleted; family reads are family.capture
+    // 44: family.editor.open renamed family.open (same request/response shape: FamilyOpenRequest/FamilyOpenData)
+    // 45: families.plan takes familyNames (not familyIds); a plan entry's familyId is nullable (a refused name);
     //     families.apply takes familyNames {planned id: name} and refuses a family reloaded since the plan; receipt familyName non-null
-    public const int ContractVersion = 46;
+    public const int ContractVersion = 45;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]

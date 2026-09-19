@@ -5,7 +5,7 @@ import { Schema } from "effect";
 import type { SessionObservation } from "../vendor/generated/pe-revit-contract.ts";
 import type { HostLane } from "../service-identity.ts";
 
-export const HOST_CONTRACT_VERSION = 46 as const;
+export const HOST_CONTRACT_VERSION = 45 as const;
 export const BRIDGE_CONTRACT_VERSION = 22 as const;
 export const BRIDGE_PATH = "/api/bridge" as const;
 export const HOST_RPC_BRIDGE_SESSION_HEADER = "x-pe-bridge-session-id" as const;

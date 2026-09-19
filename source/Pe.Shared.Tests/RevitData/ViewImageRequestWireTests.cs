@@ -49,19 +49,4 @@ public sealed class ViewImageRequestWireTests {
         var request = JsonConvert.DeserializeObject<RevitViewImageRequest>(json, BridgeSettings)!;
         Assert.That(request.Focus?.ElementIds, Is.EqualTo(new[] { 1L, 2L, 3L }));
     }
-
-    [Test]
-    public void Image_url_names_the_registered_sha_and_is_absent_without_registration() {
-        var sha = new string('a', 64);
-        var handle = new RevitAgentContextHandle(RevitAgentContextHandleKind.View, "doc", 1, "u", "L1");
-        var registered = new RevitViewImageData(handle, "C:/t/view.png", 3, 1500,
-            Registration: new RevitViewImageRegistration(10, 10, sha, [0, 1], [1, 1], [0, 0]));
-        var refused = new RevitViewImageData(handle, "C:/t/sheet.png", 3, 1500,
-            RegistrationRefusal: RevitViewImageRegistrationRefusal.NoCrop);
-        Assert.Multiple(() => {
-            Assert.That(JsonConvert.SerializeObject(registered, BridgeSettings),
-                Does.Contain($"\"imageUrl\":\"/view-image/{sha}.png\""));
-            Assert.That(JsonConvert.SerializeObject(refused, BridgeSettings), Does.Not.Contain("imageUrl"));
-        });
-    }
 }
