@@ -171,12 +171,13 @@ export async function readSchedule(
   return reading;
 }
 
-/** A cell refused before or by Revit; `code` names a refusal the web keys on. */
-type CellFailure = { key: string; error: string; code?: string };
+/**
+ * A cell refused before or by Revit; `code` names a refusal the web keys on: the host's own
+ * (`stale-staged-cell`) or the domain's `EditRefusalCode`, with `causeCode` for a group refusal.
+ */
+type CellFailure = { key: string; error: string; code?: string; causeCode?: string };
 type Edit = ScheduleCellsApply.Req.ScheduleCellEdit & { key: string };
-// ponytail: `code` is domains' closed ParameterEditPlan refusal set, not yet in the generated
-// contract; the host passes it through when present and never parses `error`.
-type CellResult = ScheduleCellsApply.Res.ScheduleCellEditResult & { code?: string | null };
+type CellResult = ScheduleCellsApply.Res.ScheduleCellEditResult;
 /**
  * Each staged cell with its reviewed binding, handed back unchanged: the domain compares every
  * target inside its transaction and refuses stale, blocked, or incomplete evidence per cell.
@@ -251,7 +252,9 @@ function acknowledge(raw: unknown, edits: Edit[]) {
     else
       failures.push({
         key: edit.key,
+        // The domain's code, never a parse of its sentence.
         ...(!malformed && result?.code ? { code: result.code } : {}),
+        ...(!malformed && result?.causeCode ? { causeCode: result.causeCode } : {}),
         error: malformed
           ? "Malformed native acknowledgment"
           : (result?.error ?? (result ? "Native refused the cell" : "Missing native cell result")),

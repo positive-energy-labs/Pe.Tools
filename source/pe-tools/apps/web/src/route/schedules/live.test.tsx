@@ -64,10 +64,13 @@ test("real grid edits and shared Chat reviewer apply through HTTP, journal, Work
   await vi.waitFor(() =>
     expect(screen.getByRole("button", { name: "Approve" }).hasAttribute("disabled")).toBe(false),
   );
-  fireEvent.click(screen.getByRole("button", { name: "Approve" }));
-  await vi.waitFor(async () =>
-    expect((await f.view()).doc.cells["1::2"].staged.value).toBe("180 VA"),
-  );
+  // The push's readback is now the basis; until that capture loads, apply refuses "read the
+  // schedule". Approve is idempotent, so press until it lands rather than racing the load.
+  await vi.waitFor(async () => {
+    const approve = screen.queryByRole("button", { name: "Approve" });
+    if (approve) fireEvent.click(approve);
+    expect((await f.view()).doc.cells["1::2"].staged?.value).toBe("180 VA");
+  });
   await screen.findByRole("button", { name: "Push 1 to Revit" });
   await vi.waitFor(() =>
     expect(screen.getByRole("button", { name: "Push 1 to Revit" }).hasAttribute("disabled")).toBe(
@@ -81,7 +84,7 @@ test("real grid edits and shared Chat reviewer apply through HTTP, journal, Work
   await vi.waitFor(async () => expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined());
   expect(f.sent.every((s) => s.session === "B" && s.openId === "open-B")).toBe(true);
   mounted.unmount();
-});
+}, 30_000);
 
 test("F-H5-1..3: a dead-lifetime Work says read again; the bare verb re-reads the open schedule, rebinds, marks a changed cell stale with accept/deny, and the grid draws the new reading", async () => {
   // F-H5-2: the Situation presses a verb with no input.

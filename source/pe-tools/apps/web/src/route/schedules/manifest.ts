@@ -57,7 +57,10 @@ type PushReceipt = {
   }[];
 };
 type PushCell = PushReceipt["cells"][number];
-const REFUSAL_WORD: Record<string, string> = { "stale-staged-cell": "stale" };
+const REFUSAL_WORD: Record<string, string> = {
+  "stale-staged-cell": "stale",
+  "target-evidence-stale": "stale",
+};
 /**
  * A refused cell's `after` is what Revit holds, not what this run wrote, so it reads refused with
  * its code's word, or the error's first clause when the cell carries no code.
@@ -66,9 +69,15 @@ const cellLine = (c: PushCell) =>
   c.error
     ? `${c.cell} refused (${c.code ? (REFUSAL_WORD[c.code] ?? c.code) : c.error.split(": ")[0]})`
     : `${c.cell} ${c.before ?? "?"} → ${c.after ?? "?"}`;
+/** The run's word, from its cells: a push that wrote some cells and refused others is partly applied. */
+const pushWord = (receipt: PushReceipt) => {
+  const refused = receipt.cells.filter((cell) => cell.error).length;
+  if (!refused) return receipt.outcome;
+  return refused === receipt.cells.length ? "Refused" : "Partly applied";
+};
 export const pushRunLine = (receipt: PushReceipt, run?: string | null) =>
   [
-    receipt.outcome,
+    pushWord(receipt),
     receipt.podId && run
       ? `${receipt.podId} · ${run}/receipt.json`
       : "action receipt (no pod bound)",
@@ -241,6 +250,7 @@ export const schedulesManifest = () =>
               return refuse("not-ready", REOPENED);
             const result = actionResult(row) as {
               readback?: unknown;
+              applied?: number;
               failures?: { key: string; error: string; code?: string }[];
               readbackError?: string;
               run?: string | null;
@@ -267,15 +277,19 @@ export const schedulesManifest = () =>
                 captureId: reading.id,
               });
             }
-            if (result.failures?.length || result.readbackError)
-              throw Error(
-                [
-                  ...(result.failures ?? []).map((failure) => `${failure.key}: ${failure.error}`),
-                  result.readbackError,
-                ]
-                  .filter(Boolean)
-                  .join("; "),
-              );
+            if (result.readbackError) throw Error(result.readbackError);
+            // Some cells landed and some were refused: an outcome, not a failure. Returned, so the
+            // verb's dirties re-read the grid; the readback already rebound the basis to what Revit holds.
+            const failures = result.failures ?? [];
+            if (!failures.length) return null;
+            const first = `${failures[0]!.key}: ${failures[0]!.error}`;
+            const written = result.applied ?? 0;
+            return written
+              ? refuse(
+                  "partial",
+                  `partly applied: ${written} written, ${failures.length} refused: ${first}`,
+                )
+              : refuse("not-ready", `refused — nothing ran: ${first}`);
           },
         },
       },

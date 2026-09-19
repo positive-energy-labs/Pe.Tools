@@ -543,7 +543,7 @@ test("ask A: a push refused on moved evidence rebinds on its readback; the refus
     [1, 2, false, "Expected target evidence is stale"],
     [1, 1, true],
   ]);
-  (refused.results[0] as { code?: string }).code = "target-evidence-stale";
+  Object.assign(refused.results[0]!, { code: "target-evidence-stale" });
   f.setResponse(refused);
   const first = await f.submit();
   expect(first).toMatchObject({

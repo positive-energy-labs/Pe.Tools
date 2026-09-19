@@ -47,11 +47,13 @@ test("ask A: a push refused on moved evidence draws the cell stale with what Rev
     targets: [target(7, "120"), target(8, "120")],
   };
   f.setDetail(moved);
-  f.setResponse(cellsApplied([[1, 2, false, "Expected target evidence is stale"]]));
+  const refused = cellsApplied([[1, 2, false, "Expected target evidence is stale"]]);
+  Object.assign(refused.results[0]!, { code: "target-evidence-stale" });
+  f.setResponse(refused);
   await act(async () => {
     // The refusal names the cell; its own readback already rebound the Work.
     expect(await state!.execute("push")).toMatchObject({
-      message: expect.stringMatching(/^1::2: /),
+      message: expect.stringMatching(/^refused — nothing ran: 1::2: /),
     });
   });
   // The push's readback rebound the Work: A is on the key, C is the basis, B is still staged.
@@ -59,6 +61,8 @@ test("ask A: a push refused on moved evidence draws the cell stale with what Rev
     expect((await f.view()).doc.basis).toMatchObject({ stale: [{ key: "1::2", was: "100 VA" }] }),
   );
   expect((await f.view()).doc.cells["1::2"].staged).toEqual({ value: "150 VA" });
+  // The run line reads the domain's code as a word, never its sentence.
+  expect((await screen.findByText(/^push run ·/)).textContent).toContain("1::2 refused (stale)");
   expect((await screen.findAllByTitle(/model holds 120 VA/)).length).toBeGreaterThan(0);
   fireEvent.click(await screen.findByRole("button", { name: "accept" }));
   await vi.waitFor(async () =>
