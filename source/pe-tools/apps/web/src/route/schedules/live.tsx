@@ -2,6 +2,7 @@ import { useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { frozenDemo } from "#/host/demo-client";
 import {
+  unstale,
   scheduleCatalogSchema,
   scheduleReadingSchema,
   type ActionStatus,
@@ -114,10 +115,14 @@ export function LiveScheduleGridWorkspace({
   const apply = async (patches: RouteStatePatch[], expectedRevision?: number) => {
     if (!shown) return refuse("not-ready", "Read the schedule before editing: Select a schedule");
     const writing = patches.some((patch) => patch.value !== undefined);
+    // Staging or unstaging a stale key is the person's answer to it: the key leaves `basis.stale`.
+    const restaged = patches.flatMap(({ path: [cells, key, rung] }) =>
+      cells === "cells" && rung === "staged" ? [String(key)] : [],
+    );
     return work.write(
       writing && (!hasWork || !work.doc?.basis)
         ? [{ path: ["basis"], value: { captureId: shown.id } }, ...patches]
-        : patches,
+        : [...patches, ...unstale(work.doc, restaged)],
       expectedRevision,
     );
   };

@@ -22,39 +22,48 @@ export const scheduleReadingSchema = z.object({
 export type ScheduleReading = z.infer<typeof scheduleReadingSchema>;
 
 /**
- * A successful read of this Work's schedule rebinds it, in one write: `basis` moves to `reading`
- * (its live document lifetime), and every staged cell then pushes against `reading`. A staged cell
- * whose binding differs between the old basis and `reading` (or whose old basis is unreadable) is
- * stale: the base has no rung for "staged over a moved baseline" (proposals are Pea's alone), so
- * the rebind refuses and names each stale cell instead of carrying it under a binding it was never
- * reviewed against. `stale` empty ⇔ `patches` is the rebind.
+ * A person's successful read of this Work's schedule rebinds it in ONE write: `basis` moves to
+ * `reading` (its live document lifetime) and names in `basis.stale` every staged cell whose binding
+ * differs between the old basis and `reading` (or whose old basis is unreadable), plus any cell
+ * still stale from before. Cells are untouched; push refuses a stale key per cell, and staging or
+ * unstaging the key drops it (`unstale`).
  */
 export function rebindScheduleWork(
   doc: ScheduleGridDocument,
   basis: ScheduleReading | null,
   reading: ScheduleReading,
-): { patches: RouteStatePatch[]; stale: string[] } {
-  if (!doc.basis || doc.basis.captureId === reading.id) return { patches: [], stale: [] };
+): RouteStatePatch[] {
+  if (!doc.basis || doc.basis.captureId === reading.id) return [];
   const binding = (at: ScheduleReading | null, key: string) => {
     const { rowNumber, columnNumber } = splitScheduleCellKey(key);
     return at?.snapshot.rows
       .find((row) => row.rowNumber === rowNumber)
       ?.bindings.find((b) => b.columnNumber === columnNumber);
   };
-  const stale: string[] = [];
-  for (const [key, cell] of Object.entries(doc.cells)) {
-    if (!cell.staged) continue;
-    const before = binding(basis, key),
-      after = binding(reading, key);
-    if (before && after && canonicalRouteInput(before) === canonicalRouteInput(after)) continue;
-    stale.push(
-      `${key} staged "${String(cell.staged.value)}" (was ${before?.displayValue ?? "?"}, now ${after ? (after.displayValue ?? "—") : "no binding"})`,
-    );
-  }
-  return {
-    patches: stale.length ? [] : [{ path: ["basis"], value: { captureId: reading.id } }],
-    stale,
-  };
+  const was = new Set(doc.basis.stale ?? []);
+  const stale = Object.entries(doc.cells)
+    .filter(([key, cell]) => {
+      if (!cell.staged) return false;
+      if (was.has(key)) return true;
+      const before = binding(basis, key),
+        after = binding(reading, key);
+      return !before || !after || canonicalRouteInput(before) !== canonicalRouteInput(after);
+    })
+    .map(([key]) => key);
+  return [
+    { path: ["basis"], value: { captureId: reading.id, ...(stale.length ? { stale } : {}) } },
+  ];
+}
+
+/** The patch that drops `keys` from `basis.stale` when a write stages or unstages them. */
+export function unstale(
+  doc: ScheduleGridDocument | null,
+  keys: readonly string[],
+): RouteStatePatch[] {
+  const stale = doc?.basis?.stale ?? [];
+  const rest = stale.filter((key) => !keys.includes(key));
+  if (rest.length === stale.length) return [];
+  return [rest.length ? { path: ["basis", "stale"], value: rest } : { path: ["basis", "stale"] }];
 }
 export const scheduleActions = {
   "schedule.grid.push": {

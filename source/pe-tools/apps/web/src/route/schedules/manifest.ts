@@ -71,7 +71,7 @@ const basisOf = (ctx: Ctx) => {
 };
 /** F-H5-1: a Work bound to a closed document lifetime; the way out is a re-read, which rebinds. */
 export const REOPENED =
-  "Re-opened in Revit since this was staged: read the schedule again. A changed cell is named before anything rebinds.";
+  "Re-opened in Revit since this was staged: read the schedule again. Changed cells come back marked stale.";
 const reopened = (ctx: Ctx) => {
   const basis = basisOf(ctx);
   return (
@@ -153,7 +153,7 @@ export const schedulesManifest = () =>
           label: "read schedule",
           says: "reads the selected schedule from Revit into a fresh capture",
           needs: "document",
-          actor: "any",
+          actor: "human",
           input: scheduleReads["schedule.grid.snapshot"].input.prefault(
             {},
           ) as unknown as z.ZodType<never>,
@@ -184,12 +184,7 @@ export const schedulesManifest = () =>
                   (value) => scheduleReadingSchema.parse(value),
                   () => null,
                 ));
-              const { patches, stale } = rebindScheduleWork(doc, basis, reading);
-              if (stale.length)
-                return refuse(
-                  "not-ready",
-                  `Read, not rebound: ${stale.length} staged cell${stale.length === 1 ? "" : "s"} changed in Revit since staged: ${stale.join("; ")}. Unstage ${stale.length === 1 ? "it" : "them"} (retype over the new value if still wanted) and read again.`,
-                );
+              const patches = rebindScheduleWork(doc, basis, reading);
               if (patches.length) await ctx.write(patches);
             }
             ctx.setPage({

@@ -121,11 +121,14 @@ test("real grid edits and shared Chat reviewer apply through HTTP, journal, Work
   mounted.unmount();
 });
 
-test("F-H5-1..3: a dead-lifetime Work says read again; the bare verb re-reads the open schedule, names a stale cell or rebinds, and the grid draws the new reading", async () => {
+test("F-H5-1..3: a dead-lifetime Work says read again; the bare verb re-reads the open schedule, rebinds, marks a changed cell stale with accept/deny, and the grid draws the new reading", async () => {
   // F-H5-2: the Situation presses a verb with no input.
   const manifest = schedulesManifest();
   expect(manifest.actions!.refresh.input.safeParse(undefined)).toMatchObject({ success: true });
   expect(manifest.actions!.catalog.input.safeParse(undefined)).toMatchObject({ success: true });
+  // Q4, the contract: the read that rebinds is the person's; listing writes nothing.
+  expect(manifest.actions!.refresh.actor).toBe("human");
+  expect(manifest.actions!.catalog.actor).toBe("any");
 
   const f = await setup(); // 1::2 staged "150 VA" under the open-B reading
   class Source {
@@ -182,6 +185,9 @@ test("F-H5-1..3: a dead-lifetime Work says read again; the bare verb re-reads th
   await screen.findByText("P-1");
   // F-H5-1: the dead binding refuses before dispatch, by a reason that names the way out.
   await vi.waitFor(() => expect(state?.blockedBecause).toBe(REOPENED));
+  expect(REOPENED).toBe(
+    "Re-opened in Revit since this was staged: read the schedule again. Changed cells come back marked stale.",
+  );
 
   // The model moved while closed: Mark reads P-2, Load reads 120 VA.
   const next = detailResponse();
@@ -194,19 +200,9 @@ test("F-H5-1..3: a dead-lifetime Work says read again; the bare verb re-reads th
     targets: [target(7, "120"), target(8, "120")],
   };
   f.setDetail(next);
-  const before = (await f.view()).doc.basis;
-  // Stale: the read refuses to rebind and names the cell, by a reason, never "unknown".
-  let refusal: unknown;
+  // The bare verb reads the open schedule and rebinds in one write; the changed cell is marked stale.
   await act(async () => {
-    refusal = await state!.execute("refresh");
-  });
-  expect(refusal).toMatchObject({
-    code: "not-ready",
-    message: expect.stringContaining('1::2 staged "150 VA" (was 100 VA, now 120 VA)'),
-  });
-  expect((await f.view()).doc).toMatchObject({
-    basis: before,
-    cells: { "1::2": { staged: { value: "150 VA" } } },
+    expect(await state!.execute("refresh")).toBeNull();
   });
   // F-H5-2: no input still reads the open schedule, not the active view.
   expect(
@@ -215,15 +211,20 @@ test("F-H5-1..3: a dead-lifetime Work says read again; the bare verb re-reads th
     kind: "ScheduleReferences",
     scheduleIds: [42],
   });
-  // The person unstages it; the bare read now rebinds.
-  await f.patch([{ path: ["cells", "1::2", "staged"], value: null }]);
-  // A standing Pea proposal keeps the Work non-empty, so the grid draws the basis reading.
-  await f.patch([{ path: ["cells", "1::2", "proposal"], value: { value: "130 VA" } }], "agent");
-  await act(async () => {
-    expect(await state!.execute("refresh")).toBeNull();
-  });
   const fresh = (await f.captures.scheduleWork(f.scope.work)) as { id: string };
-  expect((await f.view()).doc.basis).toEqual({ captureId: fresh.id });
+  expect((await f.view()).doc).toMatchObject({
+    basis: { captureId: fresh.id, stale: ["1::2"] },
+    cells: { "1::2": { staged: { value: "150 VA" } } },
+  });
+  // Drawn as drift against the live value, with the ruled accept/deny.
+  const accept = await screen.findByRole("button", { name: "accept" });
+  expect(screen.getByRole("button", { name: "deny" })).toBeTruthy();
+  // Drift is drawn by the kit StateCell; its note rides the hover title at row scale.
+  expect((await screen.findAllByTitle(/accept to stage it again/)).length).toBeGreaterThan(0);
+  // Accept re-stages the value and drops the key from stale.
+  fireEvent.click(accept);
+  await vi.waitFor(async () => expect((await f.view()).doc.basis).toEqual({ captureId: fresh.id }));
+  expect((await f.view()).doc.cells["1::2"].staged).toEqual({ value: "150 VA" });
   // F-H5-3: the grid draws the new reading, not the old basis.
   await screen.findByText("P-2");
   expect(screen.queryByText("P-1")).toBeNull();
