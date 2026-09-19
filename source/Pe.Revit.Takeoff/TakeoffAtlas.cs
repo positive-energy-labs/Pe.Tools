@@ -106,7 +106,9 @@ public static class TakeoffAtlas
                 TakeoffJson.Serialize(new TakeoffZoneProvenance(1, request.View, item.Name.Trim(), item.SystemTag.Trim())));
             if (!string.IsNullOrWhiteSpace(item.SystemTag) && registry.FindByTag(item.SystemTag) == null)
                 registry.Register(item.SystemTag);
-            adopted.Add(new TakeoffAdopted(item.ElementId, guid));
+            var loops = Boundaries(fr);
+            adopted.Add(new TakeoffAdopted(item.ElementId, guid,
+                view.CropBoxActive && loops.Count > 0 ? OwnerCrop(view.CropBox, loops) : null));
         }
 
         TakeoffCarriers.WriteRegistry(doc, registry);

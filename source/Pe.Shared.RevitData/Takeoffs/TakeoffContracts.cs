@@ -55,7 +55,8 @@ public sealed record TakeoffCandidatesData(IReadOnlyList<TakeoffRegionFacts> Reg
 
 public sealed record TakeoffAdoptItem(long ElementId, string Name, string SystemTag);
 public sealed record TakeoffAdoptRequest(string View, List<TakeoffAdoptItem> Items);
-public sealed record TakeoffAdopted(long ElementId, Guid Guid);
+// OwnerCrop: where the adopted region lies against the view's model crop (null: no active crop). Adoption never refuses on it.
+public sealed record TakeoffAdopted(long ElementId, Guid Guid, RevitCropCoverage? OwnerCrop);
 public sealed record TakeoffAdoptResult(IReadOnlyList<TakeoffAdopted> Adopted);
 
 
