@@ -63,7 +63,7 @@ export function ScheduleGridWorkspace({
 }) {
   const document = slice;
   const cells = document?.cells ?? {};
-  const stale = document?.basis?.stale ?? [];
+  const stale = (document?.basis?.stale ?? []).map((cell) => cell.key);
 
   const [activeRow, setActiveRow] = useState<string | null>(null);
   const [railCollapsed, setRailCollapsed] = useState(false);

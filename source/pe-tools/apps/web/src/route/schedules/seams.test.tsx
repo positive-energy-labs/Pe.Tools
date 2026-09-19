@@ -438,6 +438,6 @@ test("a refused cell reads refused with its reason, keyed on its code when it ca
     },
   ];
   expect(pushRunLine({ podId: null, outcome: "Succeeded", cells }, null)).toBe(
-    "Succeeded · action receipt (no pod bound) · 7::1 Main → R7, 8::1 refused (stale), 9::1 refused (Expected target evidence is stale)",
+    "Partly applied · action receipt (no pod bound) · 7::1 Main → R7, 8::1 refused (stale), 9::1 refused (Expected target evidence is stale)",
   );
 });

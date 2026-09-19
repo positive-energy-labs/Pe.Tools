@@ -104,9 +104,13 @@ export function LiveScheduleGridWorkspace({
   const hasWork = Object.values(work.doc?.cells ?? {}).some((cell) => cell.staged || cell.proposal);
   const basisId = work.doc?.basis?.captureId;
 
+  // Held while an action runs: a push's readback rebinds the basis mid-action, and a page move here
+  // would void that action's own page writes (its run line); it lands on the same capture anyway.
+  const acting = handle.busy !== null;
   useEffect(() => {
-    if (hasWork && basisId && page.captureId !== basisId) setPage({ captureId: basisId });
-  }, [basisId, hasWork, page.captureId, setPage]);
+    if (!acting && hasWork && basisId && page.captureId !== basisId)
+      setPage({ captureId: basisId });
+  }, [acting, basisId, hasWork, page.captureId, setPage]);
 
   const shown = hasWork && basisId ? saved : (retained ?? saved);
   const unresolved = receipts.some((row) =>
