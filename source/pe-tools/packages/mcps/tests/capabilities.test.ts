@@ -184,6 +184,27 @@ test("F-H6-2: the Families route tells Pea to propose a scope, then cells agains
   expect(read).not.toMatch(/loaded in the staged scope/);
 });
 
+test.each([
+  "set Width on types of the duct fittings",
+  "set a parameter value on family types",
+  "change type parameters for families",
+])("F-B-1: family type changes find the Families propose door: %s", async (query) => {
+  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
+  vi.stubGlobal("fetch", async () => Response.json(catalog()));
+  try {
+    const found = (await run(peFind, { query, limit: 50 })) as {
+      matches: Array<{ key: string }>;
+    };
+    expect(found.matches[0]?.key).toBe("route:families.propose");
+    expect(found.matches.map((row) => row.key)).not.toContain("op:families.plan");
+    expect(found.matches.map((row) => row.key)).not.toContain("op:families.capture");
+    expect(found.matches.map((row) => row.key)).not.toContain("op:families.apply");
+  } finally {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  }
+});
+
 type ExecutableTool = { execute?: (input: never, context: never) => Promise<unknown> };
 const turn: Turn = {
   id: "11111111-1111-4111-8111-111111111111",

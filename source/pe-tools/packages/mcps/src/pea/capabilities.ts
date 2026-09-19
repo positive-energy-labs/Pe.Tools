@@ -161,6 +161,7 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
     kind: "route-doc",
     title: `${spec.title}: propose`,
     description: `Patch paths inside the ${spec.title} agent write mask (${spec.agentWriteMask.map((path) => path.join("/")).join(", ")}); everything else is human-only. Omit value to delete a key. Needs expectedRevision from the read. ${scopeHint}`,
+    finds: spec.finds ? [...spec.finds] : undefined,
     needs: "nothing",
     mutates: true,
     actor: "any",
