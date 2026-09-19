@@ -282,7 +282,10 @@ export function useDocumentLadder(
       ? handle.resolution.target.ref
       : null;
   const [chosenSession, chooseSession] = useState<string | null>(null);
-  const sessionId = chosenSession ?? bound?.session ?? null;
+  // A binding whose document closed still names its session, so the ladder can offer the same
+  // title reopened there as its first row (F-X-1). Never taken for the person.
+  const lost = binding ? null : handle.bindingLost;
+  const sessionId = chosenSession ?? bound?.session ?? lost?.ref.session ?? null;
   const session = sessions.find((item) => item.sessionId === sessionId) ?? null;
   const doc = session?.openDocuments?.find((item) => item.openId === bound?.openId) ?? null;
   const note =
@@ -307,7 +310,9 @@ export function useDocumentLadder(
   const sessionWord = session ? (session.sdkSessionId ?? session.sessionId) : null;
   return {
     sessionWord,
-    docWord: doc?.title ?? null,
+    docWord: doc?.title ?? lost?.title ?? null,
+    /** The bound document closed: the document word wears the caution tone. */
+    lost: lost != null,
     /** The head's refusal of the last pick (stale head, or a Pea turn holding it). */
     refusal: binding ? null : (head?.refusal ?? null),
     hosted,
@@ -332,11 +337,22 @@ export function useDocumentLadder(
             label: doc?.title ?? null,
             placeholder: "choose a document",
             options: session
-              ? (session.openDocuments ?? []).map((item) => ({
-                  id: item.openId,
-                  label: item.title,
-                  sub: item.isFamilyDocument ? "family" : "project",
-                }))
+              ? (session.openDocuments ?? [])
+                  .map((item) => ({
+                    id: item.openId,
+                    label: item.title,
+                    sub:
+                      item.openId === lost?.reopened?.openId
+                        ? "reopened — the document this page was bound to, under a new openId"
+                        : item.isFamilyDocument
+                          ? "family"
+                          : "project",
+                  }))
+                  .sort(
+                    (a, b) =>
+                      Number(b.id === lost?.reopened?.openId) -
+                      Number(a.id === lost?.reopened?.openId),
+                  )
               : null,
             note: session ? "nothing open here" : "choose a session first",
             picked: (id: string) => id === bound?.openId,
@@ -355,9 +371,9 @@ export function LadderPicker({
   disabled?: boolean;
 }) {
   return ladder.hosted ? (
-    <span>{ladder.docWord ?? "no document"}</span>
+    <span data-tone={ladder.lost ? "caution" : undefined}>{ladder.docWord ?? "no document"}</span>
   ) : (
-    <Picker levels={ladder.levels} disabled={disabled} />
+    <Picker levels={ladder.levels} disabled={disabled} caution={ladder.lost} />
   );
 }
 
@@ -701,6 +717,7 @@ export function Situation({
   // when no verb flag says it (a Work write and a late result after a stop have no button to grow a flag from).
   const late = handle.failure === (handle.outcome?.refusal ?? null) ? null : handle.failure;
   const unresolved = [
+    handle.bindingLost?.sentence,
     handle.work.refusal,
     handle.work.conflict ? "another writer changed this Work; your last write did not land" : null,
     late ? `${late.code}: ${late.message}` : null,
