@@ -66,26 +66,29 @@ public sealed class MappingStrategyCoercionTests {
     // Old_template's class, ruling 2026-09-19: a bare Number into PE_M___BoilerOutput (hvac:power) crosses through the declared unit, exactly.
     [Test]
     public void A_bare_number_into_hvac_power_converts_exactly_through_its_declared_mapping_unit() {
-        var (error, receipt, btuh, sourceGone) = this.MigrateBoilerOutput("Btu/h");
+        var (error, _, receipt, btuh, source) = this.MigrateBoilerOutput("Btu/h");
         Assert.That(error, Is.Null, error?.ToString());
         Assert.That(receipt?.Converged, Is.True);
-        Assert.That(sourceGone, Is.True);
+        Assert.That(source, Is.Null, "a carried source is removed");
         Assert.That(btuh, Is.EqualTo(new double?[] { 12000d, 24000d }).Within(1e-6));
     }
 
-    // With no mappingUnit the value is not guessed and the family is not refused: it migrates, and the receipt names each value, its type,
-    // and the exact declaration that would carry it.
+    // With no mappingUnit the value is not guessed and the family is not refused: it migrates, and preview and receipt name each value, its
+    // type, and the exact declaration that would carry it. Its source stays with its values, so nothing the person never saw is lost.
     [Test]
-    public void A_bare_number_into_hvac_power_without_a_mapping_unit_is_reported_by_name_and_the_family_still_migrates() {
-        var (error, receipt, btuh, sourceGone) = this.MigrateBoilerOutput(null);
+    public void A_bare_number_into_hvac_power_without_a_mapping_unit_is_reported_by_name_its_source_kept_and_the_family_still_migrates() {
+        var (error, preview, receipt, btuh, source) = this.MigrateBoilerOutput(null);
         Assert.That(error, Is.Null, error?.ToString());
         Assert.That(receipt?.Converged, Is.True);
-        Assert.That(sourceGone, Is.True);
         Assert.That(btuh, Is.All.Null, "a value is never guessed");
-        foreach (var (type, value) in new[] { ("A", "12000"), ("B", "24000") })
-            Assert.That(receipt!.RunEffects, Has.Some.Contains($"did not carry 'Boiler Output' value '{value}'")
+        Assert.That(source, Is.EqualTo(new double?[] { 12000d, 24000d }), "the source keeps its values");
+        foreach (var (type, value) in new[] { ("A", "12000"), ("B", "24000") }) {
+            var named = Has.Some.Contains($"did not carry 'Boiler Output' value '{value}'")
                 .And.Contain($"into 'PE_M___BoilerOutput' ({SpecTypeId.HvacPower.TypeId}, type) in type '{type}' under CoerceByStorageType")
-                .And.Contain("declare mappingUnit on 'PE_M___BoilerOutput' (a unit of power, e.g. \"Btu/h\")"));
+                .And.Contain("declare mappingUnit on 'PE_M___BoilerOutput' (a unit of power, e.g. \"Btu/h\"); source 'Boiler Output' kept so its values are not lost");
+            Assert.That(preview.RunEffects, named, "preview names it before any effect");
+            Assert.That(receipt!.RunEffects, named, "the receipt names it");
+        }
     }
 
     // Never a raw internal copy across dimensions: Length (feet) into Area is refused per value, naming both specs.
@@ -141,7 +144,7 @@ public sealed class MappingStrategyCoercionTests {
     ///     Seeds `Boiler Output` (Number: 12000 in type A, 24000 in B) and reconciles a patch mapping it into the company's shared
     ///     PE_M___BoilerOutput (hvac:power), declaring <paramref name="unit" /> or none. Returns each type's destination value in Btu/h (null when unset).
     /// </summary>
-    private (Exception? Error, FamilyReceipt? Receipt, List<double?> Btuh, bool SourceGone) MigrateBoilerOutput(string? unit) {
+    private (Exception? Error, FamilyPreview Preview, FamilyReceipt? Receipt, List<double?> Btuh, List<double?>? Source) MigrateBoilerOutput(string? unit) {
         var definitions = JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
             RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-company-definitions.json")))!.Where(d => d.Name == "PE_M___BoilerOutput").ToList();
         Assert.That(definitions, Has.Count.EqualTo(1));
@@ -162,8 +165,10 @@ public sealed class MappingStrategyCoercionTests {
                 ["wasNamed"] = new JArray("Boiler Output")
             };
             if (unit is not null) target["mappingUnit"] = unit;
-            var operation = new ReconcileFamily(new FamilyPatch { Patch = new JObject { ["parameters"] = new JObject { ["PE_M___BoilerOutput"] = target } } },
-                sharedSource: d => new FamilySharedParameterSource(d, definitions));
+            var patch = new FamilyPatch { Patch = new JObject { ["parameters"] = new JObject { ["PE_M___BoilerOutput"] = target } } };
+            var preview = document.PreviewFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
+            Assert.That(preview.Diagnostics, Is.Empty, string.Join("; ", preview.Diagnostics.Select(d => d.Message)));
+            var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
             Exception? error;
             using (var processor = new OperationProcessor(document)) {
                 var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
@@ -174,7 +179,9 @@ public sealed class MappingStrategyCoercionTests {
             var btuh = fm.Types.Cast<FamilyType>().Where(t => t.Name is "A" or "B").OrderBy(t => t.Name)
                 .Select(t => output is not null && t.HasValue(output) && t.AsDouble(output) is { } v && v != 0
                     ? UnitUtils.ConvertFromInternalUnits(v, UnitTypeId.BritishThermalUnitsPerHour) : (double?)null).ToList();
-            return (error, operation.LastReceipt, btuh, fm.get_Parameter("Boiler Output") is null);
+            var kept = fm.get_Parameter("Boiler Output");
+            var sourceValues = kept is null ? null : fm.Types.Cast<FamilyType>().Where(t => t.Name is "A" or "B").OrderBy(t => t.Name).Select(t => t.AsDouble(kept)).ToList();
+            return (error, preview, operation.LastReceipt, btuh, sourceValues);
         } finally { document.Close(false); }
     }
 }

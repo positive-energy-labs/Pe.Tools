@@ -137,10 +137,18 @@ internal static class FamilyPreparation {
         // A destination of another data type steps aside and is its own first source (NormalizeParamSources), so its formula is judged too.
         bool Retyped(string key, FamilyModelParameter wanted) => fm.FindParameter(key) is { } have && !have.IsBuiltInParameter() &&
             Spec(wanted) is { } spec && have.Definition.GetDataType() != spec;
+        // A plain source into a new destination with no mappingUnit, as the only present source: apply carries each of its values as it will
+        // here, so a bare number that needs a unit is named now, not only at apply.
+        // Only a bare source (Number or unitless) into a measured spec can need a unit, so no other mapping pays for the per-type carry.
+        bool Predicted(string key, FamilyModelParameter wanted, FamilyParameter from) => fm.FindParameter(key) is null && wanted.MappingUnit is null &&
+            (wanted.WasNamed ?? []).Count(name => fm.FindParameter(name) is not null) == 1 &&
+            Spec(wanted) is { } to && UnitUtils.IsMeasurableSpec(to) && to != SpecTypeId.Number &&
+            from.Definition.GetDataType() is var spec && (spec == SpecTypeId.Number || !UnitUtils.IsMeasurableSpec(spec));
         var work = plan.Changes.Where(c => c.Section == "parameters.sources" && desired.Parameters.TryGetValue(c.Key, out var wanted) && wanted.Formula is null)
             .Select(c => (Change: c, Sources: ((c.Before as IReadOnlyDictionary<string, FamilyModelParameter>)?.Keys ?? [])
                 .Where(name => (name != c.Key || Retyped(c.Key, desired.Parameters[c.Key])) && !authoredNames.Contains(name) &&
-                               fm.FindParameter(name) is { } from && !from.IsBuiltInParameter() && !string.IsNullOrEmpty(from.Formula))
+                               fm.FindParameter(name) is { } from && !from.IsBuiltInParameter() &&
+                               (!string.IsNullOrEmpty(from.Formula) || Predicted(c.Key, desired.Parameters[c.Key], from)))
                 .OrderBy(name => name == c.Key ? 0 : 1).Select(name => (Name: name, Parameter: fm.FindParameter(name)!)).ToList()))
             .Where(w => w.Sources.Count > 0).ToList();
         if (work.Count == 0) return (effects, refusals);
@@ -165,6 +173,11 @@ internal static class FamilyPreparation {
                     if (!string.IsNullOrEmpty(target?.Formula)) break; // the destination's own formula wins; nothing is copied
                     if (target is not null && FamilyFormulaCopy.IsExactAliasOf(fm.Parameters, from, target)) continue;
                     target ??= fm.AddParameter(change.Key, GroupTypeId.General, targetSpec, wanted.IsInstance ?? false);
+                    if (string.IsNullOrEmpty(from.Formula)) {
+                        effects.AddRange(FamilyFormulaCopy.Carry(new FamilyDocument(document), from, name, target, strategy, keep: true, unit).Reports
+                            .Select(report => report + Operations.NormalizeParamSources.Kept(name)));
+                        continue;
+                    }
                     var blocker = FamilyFormulaCopy.Blocker(fm.Parameters, from.Formula, from.Definition.GetDataType(), targetSpec, target.IsInstance);
                     if (blocker is null)
                         try { fm.SetFormula(target, from.Formula); continue; }
@@ -175,7 +188,7 @@ internal static class FamilyPreparation {
                             $"$.parameters.{change.Key}.wasNamed", refusal)));
                     else {
                         effects.Add(FamilyFormulaCopy.DroppedNote(from.Formula, name, change.Key, blocker, strategy));
-                        effects.AddRange(reports);
+                        effects.AddRange(reports.Select(report => report + Operations.NormalizeParamSources.Kept(name)));
                     }
                 }
             }
