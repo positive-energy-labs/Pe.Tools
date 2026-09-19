@@ -136,15 +136,25 @@ test("plan takes the staged cell only; the open proposal never reaches the wire"
   );
   expect(manifest.actions!.plan.count!(c as never)).toBe(1);
   await manifest.actions!.plan.run(c as never, undefined as never);
-  expect(written.map((w) => w.path)).toEqual([
-    expect.stringMatching(/^settings\/families\/staged-Fan-Coil-Unit-+Ducted-.*\.json$/),
-  ]);
+  // The draft travels as its bytes: nothing is filed in the pod, and the page names no member.
+  expect(written).toEqual([]);
   expect(client.runSemanticAction).toHaveBeenCalledTimes(1);
-  expect(client.runSemanticAction.mock.calls[0]![1]).toMatchObject({ familyIds: [3101] });
-  const sheet = (c.setPage.mock.calls.at(-1)![0] as { sheet: { entries: { detail: string }[] } })
-    .sheet;
-  // The sheet names the member the family applies from.
-  expect(sheet.entries[0]!.detail).toContain(`from ${written[0]!.path}`);
+  const input = client.runSemanticAction.mock.calls[0]![1] as {
+    source: { pod: string; path: string; content: string };
+  };
+  expect(input).toMatchObject({ familyIds: [3101], source: { pod: "demo-pod" } });
+  expect(input.source).not.toHaveProperty("sha256");
+  expect(JSON.parse(input.source.content)).toMatchObject({
+    select: { names: ["Fan Coil Unit - Ducted"] },
+    patch: { types: { "FCU-1": { PE_G___Model: "FXMQ20" } } },
+  });
+  expect(c.setPage.mock.calls.some(([next]) => "path" in (next as object))).toBe(false);
+  // The plan verb, not the route, stamps the staged cells it read as the sheet's evidence.
+  const sheet = (c.setPage.mock.calls.at(-1)![0] as { sheet: { staged: unknown } }).sheet;
+  expect(sheet.staged).toEqual({ [familyCellKey(fcu)]: staged(fcu).staged });
+  // A staged sheet applies its own plans: no saved member needs to be open.
+  const confirmed = { ...c, page: { ...c.page, confirming: true, sheet } };
+  expect(manifest.actions!.apply.ready(confirmed as never, undefined as never)).toBeNull();
 });
 
 test("a denied proposal is gone from Work, so plan has nothing of it", async () => {
@@ -155,7 +165,7 @@ test("a denied proposal is gone from Work, so plan has nothing of it", async () 
   expect(manifest.actions!.plan.count!(c as never)).toBeNull();
 });
 
-test("each staged family gets its own member, selecting exactly that family and planning its id", async () => {
+test("each staged family gets its own draft, selecting exactly that family and planning its id", async () => {
   written.length = 0;
   client.runSemanticAction.mockClear();
   client.runSemanticAction
@@ -170,10 +180,11 @@ test("each staged family gets its own member, selecting exactly that family and 
     ) as never,
     undefined as never,
   );
-  expect(written.map((w) => JSON.parse(w.content).select)).toEqual([
-    { names: ["Fan Coil Unit - Ducted"] },
-    { names: ["Heat Pump - Split"] },
-  ]);
+  expect(
+    client.runSemanticAction.mock.calls.map(
+      (call) => JSON.parse((call[1] as { source: { content: string } }).source.content).select,
+    ),
+  ).toEqual([{ names: ["Fan Coil Unit - Ducted"] }, { names: ["Heat Pump - Split"] }]);
   expect(
     client.runSemanticAction.mock.calls.map(
       (call) => (call[1] as { familyIds: number[] }).familyIds,

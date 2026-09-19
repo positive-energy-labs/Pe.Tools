@@ -29,6 +29,7 @@ import {
   type FamilyReadKey,
   type DocumentRef,
   type PodMember,
+  type PodDraftSource,
   type PodMemberSource,
   type SettingsRouteDocument,
   type FamilyCapture,
@@ -109,7 +110,11 @@ const familyModelSchema = () =>
  * The composed member as authored, and the exact root and dependency bytes that one composition read.
  * A native run keeps those bytes; the C# family edge reads the spec's `$schema`.
  */
-const familySpec = async (deps: PodDependencies, member: PodMemberSource, pods: PodContext) => {
+const familySpec = async (
+  deps: PodDependencies,
+  member: PodMemberSource | PodDraftSource,
+  pods: PodContext,
+) => {
   const { spec, source, dependencies } = await runPods(deps, composedSpec(member, pods));
   return { specJson: spec, source: { root: source, dependencies } };
 };
@@ -540,8 +545,8 @@ export async function admitFamilyAction(
         const scope = doc.scope;
         if (!scope) throw refused("Author a scope before planning");
         const { specJson, source } = await familySpec(deps, input.source, pods);
-        // A generated member plans one family; it consumes that family's staged cells only if the
-        // member is exactly what those cells generate.
+        // A generated draft plans one family; it consumes that family's staged cells only if the
+        // captured bytes are exactly what those cells generate.
         const generated =
           input.familyIds?.length === 1 ? familyStagedPatch(doc.cells, input.familyIds[0]!) : null;
         const consumed =

@@ -2,9 +2,8 @@ import { familyCellKey, type FamilyCellAddress, type FamilyCellState } from "@pe
 import { describe, expect, it } from "vite-plus/test";
 
 import { patchValue } from "@pe/agent-contracts";
-import { cellAt, familyCellEntries, stagedMembers } from "./staged.ts";
+import { cellAt, familyCellEntries, stagedDrafts } from "./staged.ts";
 
-const now = new Date("2026-09-17T12:00:00.000Z");
 const entry = (
   familyId: number,
   familyName: string,
@@ -41,7 +40,7 @@ describe("staged family cells", () => {
     expect(patchValue("3' - 6\"")).toBe("3' - 6\"");
   });
 
-  it("generates one patch member per family from staged cells only", () => {
+  it("generates one patch draft per family from staged cells only", () => {
     const open: ReturnType<typeof entry> = {
       address: { familyId: 3, typeName: "O-1", parameter: "PE_G___Model" },
       cell: {
@@ -49,9 +48,8 @@ describe("staged family cells", () => {
         staged: null,
       },
     };
-    const members = stagedMembers(
+    const members = stagedDrafts(
       cells(entry(2, "Heat Pump", "HP-1", "RXL30"), entry(1, "Fan Coil", "FCU-1", "FXMQ20"), open),
-      now,
       "http://localhost:5150/schemas/settings/FamilyFoundry/patches.json",
     );
     expect(members.map((member) => member.familyName)).toEqual(["Fan Coil", "Heat Pump"]);
@@ -62,19 +60,17 @@ describe("staged family cells", () => {
     });
   });
 
-  it("collects every staged cell of one family into that family's member", () => {
-    const members = stagedMembers(
+  it("collects every staged cell of one family into that family's draft", () => {
+    const members = stagedDrafts(
       cells(
         entry(1, "Fan Coil", "FCU-1", "FXMQ20"),
         entry(1, "Fan Coil", "FCU-2", "FXMQ24"),
         entry(1, "Fan Coil", "FCU-1", "24", "PE_G___Capacity"),
       ),
-      now,
     );
     expect(JSON.parse(members[0]!.content).patch.types).toEqual({
       "FCU-1": { PE_G___Model: "FXMQ20", PE_G___Capacity: 24 },
       "FCU-2": { PE_G___Model: "FXMQ24" },
     });
-    expect(members[0]!.cells).toHaveLength(3);
   });
 });
