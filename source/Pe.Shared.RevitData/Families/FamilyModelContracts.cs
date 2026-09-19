@@ -290,6 +290,14 @@ public sealed class FamilyModelParameter {
     [JsonProperty("mappingStrategy", NullValueHandling = NullValueHandling.Ignore)]
     public MappingStrategy? MappingStrategy { get; init; }
 
+    /// <summary>
+    ///     The unit a bare source number (Number, Integer, or text naming no unit) is written in, e.g. `Btu/h`, `in`, `V`: such a value
+    ///     converts into this measured destination through it. Never the project's display units. One of <see cref="MappingUnits" /> for the
+    ///     destination spec.
+    /// </summary>
+    [JsonProperty("mappingUnit", NullValueHandling = NullValueHandling.Ignore)]
+    public string? MappingUnit { get; init; }
+
     /// <summary>Exact source string values treated as missing for this mapping; other mappings retain normal coercion.</summary>
     [JsonProperty("sourceValuesTreatedAsMissing", NullValueHandling = NullValueHandling.Ignore)]
     public List<string>? SourceValuesTreatedAsMissing { get; init; }
