@@ -9,6 +9,7 @@ import { z } from "zod";
 import {
   familiesRouteState,
   ffPlanEntrySchema,
+  type ActionReceipt,
   type FamiliesRouteDocument,
 } from "@pe/agent-contracts";
 
@@ -17,6 +18,7 @@ import { FAMILY_MODEL_SCHEMA } from "#/route/family/manifest";
 import {
   admissionPlan,
   byPlan,
+  documentOf,
   entityRoute,
   workflow,
   type EntityPage,
@@ -24,6 +26,8 @@ import {
   type PlanEntry,
 } from "#/route";
 
+import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { applyOutcome, type PlanRun } from "./apply-outcome";
 import type { FamiliesDraft } from "./host";
 import { FAMILIES_SEEDS } from "./seeds";
 import { stagedDrafts } from "./staged";
@@ -110,8 +114,19 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
       },
       // Each draft's plan sealed its bytes and the staged cells it consumed; the host retires
       // those cells after proven native success, only where they are still unchanged.
+      // One action per plan; the verb's outcome is every family's receipt, summed (F-J3-3/4).
       apply: async (ctx, included) => {
-        for (const input of byPlan(included)) await workflow("families.apply", input, ctx);
+        const runs: PlanRun[] = [];
+        for (const input of byPlan(included))
+          runs.push({
+            families: included.filter((row) => row.plan === input.plan).map((row) => row.name),
+            action: (await runSemanticAction(
+              "families.apply",
+              input,
+              documentOf(ctx),
+            )) as ActionReceipt,
+          });
+        return applyOutcome(runs, included.length);
       },
     },
     docs: "Audit loaded families over a scope, propose values in keyed cells and stage or deny each proposal, capture picked families into a pod as specs, then plan a saved spec or the staged cells as a draft (filed nowhere) and apply exactly the families it changes.",

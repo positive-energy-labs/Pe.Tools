@@ -286,10 +286,11 @@ export interface EntityRouteDef<W, R extends string, P> {
       ctx: Ctx<W, R | EntityReading, P & EntityPage>,
     ) => Readonly<Record<string, { staged?: Rung | null }>>;
     plan: (ctx: Ctx<W, R | EntityReading, P & EntityPage>) => Promise<PlanSheet>;
+    /** Resolves to the apply's own outcome when it has one (partial, refused, failed). */
     apply: (
       ctx: Ctx<W, R | EntityReading, P & EntityPage>,
       included: readonly PlanEntry[],
-    ) => Promise<void>;
+    ) => Promise<Refusal | null | void>;
   };
   /**
    * What the route needs bound before it reads anything; default `project`. The verbs need what
@@ -323,7 +324,7 @@ export const isSpecOf = (schema: string | null | undefined, path: string | reado
 type EntityCtx = Ctx<unknown, string, EntityPage>;
 type Viewed = { page: EntityPage; readings: Readonly<Record<string, Reading<unknown>>> };
 
-const documentOf = (ctx: { target: ExecutionTarget }) => {
+export const documentOf = (ctx: { target: ExecutionTarget }) => {
   if (ctx.target.kind !== "document") throw Error("pick a document");
   return ctx.target.ref;
 };
@@ -516,9 +517,12 @@ export function entityRoute<W, const R extends string, P extends object, const A
       }
       const view = sheetView(ctx);
       if (!view) throw Error("plan first");
-      if (stagedSheet(ctx)) await staged!.apply(ctx as never, view.included);
-      else await plan!.apply(ctx as never, view.included, sourceOf(ctx));
+      // A staged apply may report its own outcome (applied X of N, refused, failed in Revit).
+      const outcome = stagedSheet(ctx)
+        ? await staged!.apply(ctx as never, view.included)
+        : await plan!.apply(ctx as never, view.included, sourceOf(ctx));
       ctx.setPage({ confirming: false, sheet: null });
+      return outcome ?? null;
     },
   };
   return defineRoute({

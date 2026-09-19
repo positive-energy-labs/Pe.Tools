@@ -240,8 +240,9 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
         return null;
       }
       write(key, "failure", () => registry.set(failure, result));
-      note("verb", label, result ? `refused · ${result.message}` : "ran", Boolean(result));
-      if (!result) invalidateKeys();
+      note("verb", label, result ? outcomeSays(result) : "ran", Boolean(result));
+      // A partial outcome landed something: what it dirties is stale either way.
+      if (!result || result.code === "partial") invalidateKeys();
       return result;
     } catch (cause) {
       const refusal = refusalOf(cause);
@@ -306,6 +307,16 @@ export interface LogEntry {
   readonly says: string;
   readonly refused: boolean;
 }
+
+/**
+ * How the page log says a verb's returned outcome. A sentence that already names what happened
+ * ("partly applied — …", "refused — nothing ran: …", "failed in Revit — …") is said as is; any
+ * other refusal is prefixed so a refusal never reads as a failure, nor a failure as a refusal.
+ */
+const outcomeSays = (refusal: Refusal) =>
+  /^(partly applied|refused|failed)/.test(refusal.message)
+    ? refusal.message
+    : `${refusal.code === "failed" ? "failed" : "refused"} · ${refusal.message}`;
 
 /** Mount an owner for the life of a component; StrictMode's double-mount disposes once. */
 export function useRouteOwner<T extends { dispose(): void; registry: AtomRegistry.AtomRegistry }>(
