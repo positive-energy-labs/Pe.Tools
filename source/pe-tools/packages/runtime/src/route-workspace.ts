@@ -75,11 +75,24 @@ export class RouteWorkspace {
     }));
   }
 
+  /** The route's Work at the scope; null when the route is unregistered or no Work exists yet. */
   async read(scope: WorkKey, route: string) {
+    return this.#read(scope, route, false);
+  }
+
+  /**
+   * A reader's view of the route: absent Work reads as the empty document at r0, the one `apply`
+   * starts from. Null only for an unregistered route, so a registered route never reads unknown.
+   */
+  async view(scope: WorkKey, route: string) {
+    return this.#read(scope, route, true);
+  }
+
+  async #read(scope: WorkKey, route: string, orEmpty: boolean) {
     const registration = this.#registry.get(route);
     if (!registration) return null;
     const { spec } = registration;
-    const envelope = await this.#serialized(scope, route, () => this.#load(scope, spec, false));
+    const envelope = await this.#serialized(scope, route, () => this.#load(scope, spec, orEmpty));
     if (!envelope) return null;
     return {
       route,
@@ -280,7 +293,7 @@ export class RouteWorkspace {
   #load(
     scope: WorkKey,
     spec: RouteStateSpec<z.ZodType>,
-    create: false,
+    create: boolean,
   ): Promise<RouteEnvelope<unknown> | null>;
   async #load(
     scope: WorkKey,

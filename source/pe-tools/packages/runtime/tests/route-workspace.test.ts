@@ -318,6 +318,14 @@ test("HTTP authored writes enforce short local revision checks", async () => {
       new Request("http://local/pe/route-state/test-route?target=not-an-address"),
     );
     expect(response.status).toBe(400);
+    // E2E-J1: a registered route with no Work at the scope reads the empty document at r0, the
+    // one apply starts from; "unknown route" names only an unregistered route.
+    const absent = await app.fetch(new Request(`http://local/pe/route-state/test-route?${queryA}`));
+    expect(absent.status).toBe(200);
+    expect(await absent.json()).toMatchObject({ route: "test-route", revision: 0, doc: {} });
+    const unknown = await app.fetch(new Request(`http://local/pe/route-state/nope?${queryA}`));
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toEqual({ error: "unknown route 'nope'" });
     expect(await response.json()).toMatchObject({ error: /invalid Target/ });
 
     const post = (path: string, body: unknown) =>
