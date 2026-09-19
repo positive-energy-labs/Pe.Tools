@@ -30,6 +30,7 @@ Recentered 2026-09-08 from the operator stories, source history, and native test
 - 2026-09-08 — Parameters Service is authoritative for company definitions. A frozen fixture must identify its source and reject drift, including archived identities and duplicate active names.
 - 2026-09-08 — Keep one native mutation authority. Do not restore the Desired Migrator compiler and parallel profile execution paths.
 - 2026-09-08 — Tests at the public family seam and realistic fixtures carry the executable specification. Source inspection, compiled code, and native readback are distinct evidence.
+- 2026-09-19 (F-J3-2): A round connector whose Radius is associated to a family parameter (and whose Diameter is not) captures its diameter as the unmodeled fact `ConnectorSizeByRadius`, not as the current type's literal. A throwing `GetAssociatedFamilyParameter` on an associable parameter is the unmodeled fact `AssociationUnreadable`, never a silent literal. Evidence: project-a Mechanical Damper, both round connectors `CONNECTOR_RADIUS` → "Duct Radius" (`Pe.Tools-crusade-journal/.artifacts/proof/domains/F-J3-2-project-a/`). No API fixture: Revit 2025 refuses to create a Radius association. Proof owed: session, J3 Mechanical Damper leg re-run on projectA.
 
 ## Tried & rejected
 
@@ -50,7 +51,6 @@ Recentered 2026-09-08 from the operator stories, source history, and native test
 - Express company-standard closure separately from overlay patches, including the disposition of required nonstandard drivers.
 - Prevent deleted type cells from becoming silent convergence; prove refusal or preservation through a public native scenario.
 - Old_template migration: hold #3 has 29 failing families (57 before), with every refusal named. Two new mapping classes wait for the user: `hvac:heatingLoad` onto `PE_M___BoilerOutput` `hvac:power` (44), and Phase from `numberOfPoles` or Text onto Number (24). Instance-to-type (10) refuses by rule; 1 family rolls back on a Revit constraint failure.
-- F-J3-2 (project-a Mechanical Damper): a value-only write fails on connector residue (`connectors:duct-global` diameter 5in vs 8in). The cause is unproven. Revit 2025 refuses to associate `CONNECTOR_RADIUS` through the API, so a Radius-driven size cannot be built as a fixture. Candidates: `Assoc()` swallows a throwing `GetAssociatedFamilyParameter` and capture falls back to the current type's literal; or the size has a nested or other driver that capture reads only as a literal. Needed first: a native read of that family's connector associations (exec-proof's project-a hold).
 - User decision: support an identity change through grouped or arrayed associations with group edit mode, or keep the refusal. Prove first that the array label alone triggers the Revit refusal.
 - Browser acceptance on the project-a cloud model for the identity change, lookup convergence and formula refusal from `/families`.
 - Express and verify mandatory connector pose, hosting, and room-point state independently of optional geometry reconstruction.

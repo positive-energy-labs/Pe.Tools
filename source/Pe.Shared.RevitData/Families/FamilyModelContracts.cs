@@ -915,9 +915,11 @@ public enum UnmodeledReason {
     ConnectorOnCurvedFace,
     ConnectorFaceNotOnPlane,
     ConnectorOnNestedFace,           // kaitpw 2026-09-06: the connector rides a nested instance's face; the host names no plane for it
+    ConnectorSizeByRadius,           // a round connector sized through its Radius slot; the vocabulary names diameter only
     FormulaNameNotDeclared,
     RefLineStartNotTwoPlanes,        // the start is fixed by `on` crossed with two planes; capture found other than two
     ParameterMetadataUnreadable,
+    AssociationUnreadable,           // Revit says the element parameter can be associated, but reading its association threw
     ParameterValueUnreadable,        // a type row the capture produced no cell for; the value lane cannot claim to have read it
     LookupTableUnreadable,
     PartTypeNotPortable,

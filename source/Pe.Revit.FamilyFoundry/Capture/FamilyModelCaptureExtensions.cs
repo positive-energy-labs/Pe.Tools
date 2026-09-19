@@ -909,10 +909,21 @@ internal sealed class FamilyModelCapturer {
 
     private string StableOf(Reference r) => Try(() => r.ConvertToStableRepresentation(this._d)) ?? string.Empty;
 
+    /// <summary>
+    ///     The family parameter driving <paramref name="p" />. A read that throws on an associable parameter is an unmodeled fact,
+    ///     not a silent "no association": the caller would fall back to the current type's literal (F-J3-2 candidate).
+    /// </summary>
     private string? Assoc(Parameter? p) {
         if (p == null) return null;
-        var source = Try(() => this._fm.GetAssociatedFamilyParameter(p));
-        return source == null ? null : $"param:{source.Definition.Name}";
+        try {
+            var source = this._fm.GetAssociatedFamilyParameter(p);
+            return source == null ? null : $"param:{source.Definition.Name}";
+        } catch (Exception e) {
+            if (Try(() => this._fm.CanElementParameterBeAssociated(p)))
+                this.Add(UnmodeledReason.AssociationUnreadable, "$", ("element", p.Element?.Id.Value().ToString(CultureInfo.InvariantCulture) ?? "?"),
+                    ("parameter", p.Definition?.Name ?? "?"), ("error", e.Message));
+            return null;
+        }
     }
 
     private string? Length(Parameter? p) => this.LengthOf(p)?.Text;
@@ -922,6 +933,9 @@ internal sealed class FamilyModelCapturer {
     ///     parameter) has no diameter association, and its literal is the CURRENT type's size, so it changed with
     ///     <c>FamilyManager.CurrentType</c> and a value-only patch left connector residue (F-J3-2, project-a Mechanical Damper). The vocabulary
     ///     names diameter only, so the radius association is recorded as unmodeled rather than as a type-dependent literal.
+    ///     Evidence: project-a joint hold 2 read (`Pe.Tools-crusade-journal/.artifacts/proof/domains/F-J3-2-project-a/`): both round connectors have
+    ///     CONNECTOR_RADIUS associated to "Duct Radius", DIAMETER unassociated. No test fixture exists: Revit 2025 refuses to CREATE a radius
+    ///     association through the API ("This parameter cannot be associated", hold #3), though UI-authored content has one. Proof is session.
     /// </summary>
     private PortableLength? RoundSize(ConnectorElement connector, string slug) {
         var diameter = connector.get_Parameter(BuiltInParameter.CONNECTOR_DIAMETER);
