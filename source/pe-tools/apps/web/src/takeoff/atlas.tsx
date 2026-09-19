@@ -20,7 +20,7 @@ import {
 import { AtlasProvider } from "#/takeoff/atlas-context";
 import { AtlasWorkspace } from "#/takeoff/atlas-workspace";
 import { useAtlasColumns } from "#/takeoff/atlas-columns";
-import { planView, usePlanImage } from "#/takeoff/plan-image";
+import { usePlanImage } from "#/takeoff/plan-image";
 
 export type Verdict = "accept" | "dismiss";
 
@@ -74,7 +74,10 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
   // ponytail: one plan pane draws the first bound view; add comparison panes only if demanded.
   const firstBoundLane = world.lanes.find((lane) => lane.view === views[0]);
   const level = pageLevel || firstBoundLane?.label || world.lanes[0]?.label || "";
-  const planImage = usePlanImage(store.handle.resolution, planView(world.lanes, views, level));
+  const planImage = usePlanImage(
+    store.handle.resolution,
+    world.lanes.find((lane) => lane.label === level)?.view,
+  );
   const setStageFilter = (value: Phase | null) => store.actions.filterStage(value);
   const setLevel = useCallback((value: string) => store.actions.chooseLevel(value), [store]);
   const setCursor = useCallback((value: string | null) => store.actions.chooseRoom(value), [store]);
