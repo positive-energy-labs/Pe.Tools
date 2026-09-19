@@ -203,12 +203,14 @@ export const manifest = entityRoute<
         (ctx.setPage as (next: Partial<EntityPage>) => void)({ confirming: false, sheet: null });
         await ctx.write([
           {
-            // not a cell: scope
-            path: ["scope"],
+            // The person's scope is the staged rung; Pea's proposal waits beside it (F-J1-10).
+            path: ["scope", "staged"],
             value: {
-              categoryNames: [...categories],
-              familyNames: [...families],
-              placementScope: placement,
+              value: {
+                categoryNames: [...categories],
+                familyNames: [...families],
+                placementScope: placement,
+              },
             },
           },
         ]);

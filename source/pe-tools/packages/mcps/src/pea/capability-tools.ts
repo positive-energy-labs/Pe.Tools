@@ -742,7 +742,7 @@ async function routeFetch(path: string, body?: unknown): Promise<Record<string, 
   );
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   if (!response.ok || payload.ok === false) {
-    const hint = payload.hint ?? payload.error;
+    const hint = payload.hint ?? payload.agentHint ?? payload.error;
     return {
       isError: true,
       content: typeof hint === "string" ? hint : `request failed (${response.status})`,

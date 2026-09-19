@@ -8,6 +8,7 @@ import {
   guardCommand,
   message,
   refuse,
+  refusalText,
   START_FRESH_ASIDE,
   UNREADABLE_WORK,
   type RouteActor,
@@ -141,7 +142,7 @@ export class RouteWorkspace {
           revision: envelope.revision,
           patchCount: patches.length,
           ok: false,
-          error: landed.error,
+          error: refusalText(landed),
         });
         return landed;
       }
@@ -188,7 +189,7 @@ export class RouteWorkspace {
             command,
             revision: envelope.revision,
             ok: false,
-            error: result.error,
+            error: refusalText(result),
           });
         return result;
       };

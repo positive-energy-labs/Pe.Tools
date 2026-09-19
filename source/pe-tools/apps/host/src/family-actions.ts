@@ -40,7 +40,10 @@ import {
   type AppliedFilter,
   type Rung,
   type WorkKey,
-  FAMILY_CATALOG_LIMIT,
+  familyCatalogProblem,
+  familyCatalogRequest,
+  stagedScope,
+  refusalText,
 } from "@pe/agent-contracts";
 import type {
   PodMemberSaveRequest,
@@ -562,8 +565,8 @@ export async function admitFamilyAction(
         if (!view || view.revision !== base!.revision)
           throw refused("Current reviewed Families Work is required");
         const doc = familiesRouteState.schema.parse(view.doc);
-        const scope = doc.scope;
-        if (!scope) throw refused("Author a scope before planning");
+        const scope = stagedScope(doc);
+        if (!scope) throw refused("Stage a scope before planning");
         const { specJson, source } = await familySpec(deps, input.source, pods);
         // A generated draft plans one family; it consumes that family's staged cells only if the
         // captured bytes are exactly what those cells generate.
@@ -667,12 +670,11 @@ export async function admitFamilyAction(
       const resolveScope = async (scope: AppliedFilter, process: NativeProcess) => {
         const catalog = (await native(
           "revit.catalog.loaded-families",
-          { filter: scope, budget: { maxEntries: FAMILY_CATALOG_LIMIT } },
+          familyCatalogRequest(scope),
           process,
         )) as RevitCatalogLoadedFamilies.Res.Response;
-        if (catalog.summary.truncated)
-          throw refused(`The scope resolves more than ${FAMILY_CATALOG_LIMIT} families; narrow it`);
-        if (!catalog.families.length) throw refused("The scope resolves no loaded family");
+        const problem = familyCatalogProblem(catalog);
+        if (problem) throw refused(problem.message);
         return catalog.families;
       };
       if (prepared.kind === "capture") {
@@ -910,7 +912,7 @@ async function retire(
     if (landed.ok) return { retired, revision: landed.revision };
     if (landed.code !== "stale_revision")
       throw new ActionIncomplete(
-        `Applied; retiring staged cells was refused: ${landed.error}`,
+        `Applied; retiring staged cells was refused: ${refusalText(landed)}`,
         landed,
       );
   }

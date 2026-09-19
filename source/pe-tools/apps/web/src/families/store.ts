@@ -20,7 +20,7 @@ import {
   type FamilyCellAddress,
   type FamilyCellState,
   type FamilyCellValue,
-  type AppliedFilter,
+  stagedScope,
   type FamiliesRouteDocument,
   type FamilyExclusions,
   type Reading,
@@ -189,7 +189,7 @@ export function useFamiliesStore(
     }),
     [handle.work.revision, handle.work.write],
   );
-  const applied = (doc?.scope ?? null) as AppliedFilter | null;
+  const applied = doc ? stagedScope(doc) : null;
 
   // The confirmed plan is the kernel's sheet: it lives exactly as long as the sheet is open.
   const plan = page.sheet;

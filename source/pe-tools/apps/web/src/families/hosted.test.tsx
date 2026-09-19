@@ -77,9 +77,13 @@ class WireSource {
                   revision: 3,
                   doc: {
                     scope: {
-                      categoryNames: ["Mechanical Equipment"],
-                      familyNames: [],
-                      placementScope: "AllLoaded",
+                      staged: {
+                        value: {
+                          categoryNames: ["Mechanical Equipment"],
+                          familyNames: [],
+                          placementScope: "AllLoaded",
+                        },
+                      },
                     },
                     cells: {},
                     excluded: {},
