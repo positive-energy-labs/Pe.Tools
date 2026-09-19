@@ -47,6 +47,12 @@ export const podMemberSourceSchema = podMemberSchema.extend({
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
 });
 export type PodMemberSource = z.infer<typeof podMemberSourceSchema>;
+/**
+ * An unsaved draft consumed as supplied bytes: nothing is filed. `pod` is where the run lands and
+ * what `$include` resolves against; `path` only names the draft in that run.
+ */
+export const podDraftSourceSchema = podMemberSchema.extend({ content: z.string() });
+export type PodDraftSource = z.infer<typeof podDraftSourceSchema>;
 /** The Work key of an authored member: derived from its address, never stored beside it. */
 export const memberWork = (member: PodMember): string => `member:${member.pod}/${member.path}`;
 
