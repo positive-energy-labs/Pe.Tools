@@ -33,7 +33,7 @@ export type ScheduleGridAction = "catalog" | "refresh" | "push";
 export interface ScheduleGridPage {
   workspaceId: string;
   captureId: string;
-  /** The last push's run, as one line: outcome, where its receipt lives, cells before → after. */
+  /** The last push's run, as one line: outcome, where its receipt lives, written cells before → after, refused cells refused. */
   pushRun: string;
 }
 
@@ -48,15 +48,31 @@ type Ctx = RouteCtx<ScheduleGridDocument, ScheduleGridReading, ScheduleGridPage>
 type PushReceipt = {
   podId: string | null;
   outcome: string;
-  cells: { cell: string; before: string | null; after: string | null }[];
+  cells: {
+    cell: string;
+    before: string | null;
+    after: string | null;
+    error?: string | null;
+    code?: string | null;
+  }[];
 };
+type PushCell = PushReceipt["cells"][number];
+const REFUSAL_WORD: Record<string, string> = { "stale-staged-cell": "stale" };
+/**
+ * A refused cell's `after` is what Revit holds, not what this run wrote, so it reads refused with
+ * its code's word, or the error's first clause when the cell carries no code.
+ */
+const cellLine = (c: PushCell) =>
+  c.error
+    ? `${c.cell} refused (${c.code ? (REFUSAL_WORD[c.code] ?? c.code) : c.error.split(": ")[0]})`
+    : `${c.cell} ${c.before ?? "?"} → ${c.after ?? "?"}`;
 export const pushRunLine = (receipt: PushReceipt, run?: string | null) =>
   [
     receipt.outcome,
     receipt.podId && run
       ? `${receipt.podId} · ${run}/receipt.json`
       : "action receipt (no pod bound)",
-    receipt.cells.map((c) => `${c.cell} ${c.before ?? "?"} → ${c.after ?? "?"}`).join(", "),
+    receipt.cells.map(cellLine).join(", "),
   ].join(" · ");
 
 const targetOf = (ctx: Ctx) => {
@@ -225,12 +241,25 @@ export const schedulesManifest = () =>
               return refuse("not-ready", REOPENED);
             const result = actionResult(row) as {
               readback?: unknown;
-              failures?: { key: string; error: string }[];
+              failures?: { key: string; error: string; code?: string }[];
               readbackError?: string;
               run?: string | null;
               receipt?: PushReceipt;
             };
-            if (result.receipt) ctx.setPage({ pushRun: pushRunLine(result.receipt, result.run) });
+            // The receipt's cells carry the error; the refusal's code rides `failures`, by key.
+            if (result.receipt)
+              ctx.setPage({
+                pushRun: pushRunLine(
+                  {
+                    ...result.receipt,
+                    cells: result.receipt.cells.map((c) => ({
+                      ...c,
+                      code: result.failures?.find((f) => f.key === c.cell)?.code,
+                    })),
+                  },
+                  result.run,
+                ),
+              });
             if (result.readback) {
               const reading = scheduleReadingSchema.parse(result.readback);
               ctx.setPage({
