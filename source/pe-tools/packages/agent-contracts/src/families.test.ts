@@ -26,9 +26,9 @@ describe("familiesRouteState", () => {
 
   it("encodes separator, quote, and unicode addresses as distinct canonical tuples", () => {
     const addresses = [
-      { familyId: 1, typeName: "a|b", parameter: "c" },
-      { familyId: 1, typeName: "a", parameter: "b|c" },
-      { familyId: 1, typeName: 'a"b', parameter: "Δ/水" },
+      { familyName: "F", typeName: "a|b", parameter: "c" },
+      { familyName: "F", typeName: "a", parameter: "b|c" },
+      { familyName: 'F"|', typeName: 'a"b', parameter: "Δ/水" },
     ];
     const keys = addresses.map(familyCellKey);
     expect(new Set(keys).size).toBe(addresses.length);
@@ -39,19 +39,20 @@ describe("familiesRouteState", () => {
       ).not.toThrow();
   });
 
-  it.each(["not json", "{}", '[1,"T"]', '["1","T","P"]', '[1,"T","P",4]'])(
+  // A number in the family slot is an element id: old id-keyed Work fails closed.
+  it.each(["not json", "{}", '["F","T"]', '[1,"T","P"]', '["","T","P"]', '["F","T","P",4]'])(
     "rejects malformed cell key %s at the Work boundary",
     (key) => {
       expect(() =>
         familiesRouteState.schema.parse({ cells: { [key]: { proposal: null, staged: null } } }),
-      ).toThrow("canonical [familyId,typeName,parameter] JSON tuple");
+      ).toThrow("canonical [familyName,typeName,parameter] JSON tuple");
     },
   );
 
-  it.each(['[ 1, "T", "P" ]', '[1e0,"T","P"]'])(
+  it.each(['[ "F", "T", "P" ]', '["F","T","P"] '])(
     "rejects noncanonical alias %s for an existing address",
     (key) => {
-      const canonical = familyCellKey({ familyId: 1, typeName: "T", parameter: "P" });
+      const canonical = familyCellKey({ familyName: "F", typeName: "T", parameter: "P" });
       expect(key).not.toBe(canonical);
       expect(familyCellAddress(key)).toEqual(familyCellAddress(canonical));
       expect(() =>
@@ -61,7 +62,7 @@ describe("familiesRouteState", () => {
             [key]: { proposal: null, staged: null },
           },
         }),
-      ).toThrow("canonical [familyId,typeName,parameter] JSON tuple");
+      ).toThrow("canonical [familyName,typeName,parameter] JSON tuple");
     },
   );
 
@@ -74,7 +75,11 @@ describe("familiesRouteState", () => {
   });
 
   it("includes only unexcluded entries that have an effect and no refusal", () => {
-    const entry = (familyId: number, planHash: string, over: Record<string, unknown> = {}) => ({
+    const entry = (
+      familyId: number | null,
+      planHash: string,
+      over: Record<string, unknown> = {},
+    ) => ({
       familyId,
       familyName: `f${familyId}`,
       planHash,
@@ -90,13 +95,25 @@ describe("familiesRouteState", () => {
         entry(2, "h2"),
         entry(3, "h3", { refusals: [{ code: "X", path: "/", message: "no" }] }),
         entry(4, "h4", { changes: [], runEffects: [] }),
+        // A name the library could not resolve plans nothing.
+        entry(null, "h5", {
+          familyName: "f5",
+          refusals: [{ code: "family-not-found", path: "/", message: "no" }],
+        }),
       ],
     };
-    expect(familiesIncluded(plan, { "2": { by: "pea" } })).toEqual({ "1": "h1" });
+    expect(familiesIncluded(plan, { f2: { by: "pea" } })).toEqual({ "1": "h1" });
     expect(familiesIncluded(plan, {})).toEqual({ "1": "h1", "2": "h2" });
-    expect(familiesExcluded(plan, { "2": { by: "pea" }, "9": { by: "person" } })).toEqual([
-      { familyId: 2, by: "pea" },
+    expect(familiesExcluded(plan, { f2: { by: "pea" }, f9: { by: "person" } })).toEqual([
+      { familyName: "f2", by: "pea" },
     ]);
+    // An exclusion names a family, so it still excludes after an apply reloads it under a new id.
+    const reloaded = { entries: [entry(7, "h7", { familyName: "f2" })] };
+    expect(familiesIncluded(reloaded, { f2: { by: "person" } })).toEqual({});
+    // An id-keyed exclusion is old Work: it fails closed rather than naming a family "2".
+    expect(familiesRouteState.schema.safeParse({ excluded: { "2": { by: "pea" } } }).success).toBe(
+      false,
+    );
     // The pre-attribution array is old Work: it fails closed.
     expect(familiesRouteState.schema.safeParse({ excludedIds: [2] }).success).toBe(false);
   });

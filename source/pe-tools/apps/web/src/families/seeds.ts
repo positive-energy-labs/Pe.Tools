@@ -97,7 +97,7 @@ const entry = (
 
 const work: FamiliesRouteDocument = familiesRouteState.schema.parse({
   scope: { categoryNames: ["Mechanical Equipment"], familyNames: [], placementScope: "AllLoaded" },
-  excluded: { "3102": { by: "person" } },
+  excluded: { "Heat Pump - Split": { by: "person" } },
 });
 
 const plan = [
@@ -138,7 +138,6 @@ const seed = (
  * exists — plan generates one patch member per family from the staged cell only.
  */
 const peaModel = {
-  familyId: 3101,
   familyName: "Fan Coil Unit - Ducted",
   typeName: "FCU-1",
   parameter: "PE_G___Model",
@@ -148,13 +147,15 @@ const staged: FamiliesRouteDocument = familiesRouteState.schema.parse({
   scope: { categoryNames: ["Mechanical Equipment"], familyNames: [], placementScope: "AllLoaded" },
   cells: {
     [familyCellKey(peaModel)]: {
-      proposal: { value: { familyName: peaModel.familyName, value: peaModel.value } },
-      staged: { value: { familyName: peaModel.familyName, value: peaModel.value } },
+      proposal: { value: { value: peaModel.value } },
+      staged: { value: { value: peaModel.value } },
     },
-    [familyCellKey({ familyId: 3102, typeName: "HP-1", parameter: "PE_G___Manufacturer" })]: {
-      proposal: {
-        value: { familyName: "Heat Pump - Split", value: "Mitsubishi" },
-      },
+    [familyCellKey({
+      familyName: "Heat Pump - Split",
+      typeName: "HP-1",
+      parameter: "PE_G___Manufacturer",
+    })]: {
+      proposal: { value: { value: "Mitsubishi" } },
       staged: null,
     },
   },

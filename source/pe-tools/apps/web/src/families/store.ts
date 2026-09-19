@@ -311,19 +311,19 @@ export function useFamiliesStore(
       propose: (address: FamilyCellAddress, value: FamilyCellValue, current: string) =>
         transition(address, {
           kind: "stage",
-          rung: { value: { familyName: value.familyName, value: value.value } },
-          baseline: { value: { familyName: value.familyName, value: current } },
+          rung: { value: { value: value.value } },
+          baseline: { value: { value: current } },
         }),
       accept: (addresses: readonly FamilyCellAddress[]) => aggregate(addresses, "accept"),
       /** Deny clears the proposal on screen only; an independently staged value survives. */
       deny: (addresses: readonly FamilyCellAddress[]) => aggregate(addresses, "deny"),
       unstage: (addresses: readonly FamilyCellAddress[]) => aggregate(addresses, "unstage"),
       // A person's toggle: include again (whoever held it back), or hold back as the person.
-      exclude: (id: number) =>
+      exclude: (familyName: string) =>
         handle.work.write([
-          Object.hasOwn(excluded, String(id))
-            ? { path: ["excluded", String(id)] }
-            : { path: ["excluded", String(id)], value: { by: "person" } },
+          Object.hasOwn(excluded, familyName)
+            ? { path: ["excluded", familyName] }
+            : { path: ["excluded", familyName], value: { by: "person" } },
         ]),
       openFamily: (familyId: number) => {
         if (!documentScope)

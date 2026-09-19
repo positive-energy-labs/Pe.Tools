@@ -238,15 +238,17 @@ export function useFamiliesColumns({
           const unresolved = !scopeOf || scopeOf === "Unresolved";
           const reason = cellReason(row, col.key, col.isInstance);
           if (patchable(row, col.key)) {
-            const address = { familyId: row.familyId, typeName: row.typeName, parameter: col.name };
+            const address = {
+              familyName: row.familyName,
+              typeName: row.typeName,
+              parameter: col.name,
+            };
             return (
               <ProposalCell
                 current={value}
                 reason={reason}
                 cell={cellAt(cells, address)}
-                onCommit={(next) =>
-                  void propose(address, { familyName: row.familyName, value: next }, value)
-                }
+                onCommit={(next) => void propose(address, { value: next }, value)}
               />
             );
           }

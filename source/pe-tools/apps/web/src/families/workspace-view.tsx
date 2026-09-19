@@ -47,7 +47,10 @@ export function FamiliesWorkspaceView({ url }: { url?: boolean }) {
       url={url}
       subject={<>families over {scope}</>}
       health={matrixIssue ? `${matrixIssue.title} · ${matrixIssue.message}` : null}
-      hold={(id) => void store.actions.exclude(Number(id))}
+      hold={(id) => {
+        const row = store.plan?.entries.find((entry) => entry.id === id);
+        if (row) void store.actions.exclude(row.name);
+      }}
       facts={[
         [
           "scope",

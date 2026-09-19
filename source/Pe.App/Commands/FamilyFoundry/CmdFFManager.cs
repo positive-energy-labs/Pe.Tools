@@ -58,7 +58,7 @@ public class CmdFFManager : IExternalCommand {
             return;
         }
         var result = FamilyFoundryBridgeOps.ApplyWithReceipt("family.apply", spec, source,
-            new Dictionary<long, string> { [plan.FamilyId] = plan.PlanHash }, ctx.Doc, null, ctx.OnFinishSettings);
+            new Dictionary<long, string> { [plan.FamilyId!.Value] = plan.PlanHash }, ctx.Doc, null, ctx.OnFinishSettings);
         var receipt = result.Receipts.Single();
         new Ballogger().Add(receipt.Success ? LogEventLevel.Information : LogEventLevel.Error, new StackFrame(),
             $"Applied {ctx.Doc.Title}: {plan.Changes.Count} changes, {receipt.Errors.Count} errors, residue {receipt.Residue.Count}. {receipt.Error}\nReceipt: {result.ReceiptPath}").Show();

@@ -366,6 +366,13 @@ test("HTTP authored writes enforce short local revision checks", async () => {
       ok: false,
       error: "this route's Work is readable",
     });
+    // Salvage is a human read: a route that declares none has nothing (404); Pea is refused by name.
+    const salvage = (prefix: string) =>
+      app.fetch(new Request(`http://local${prefix}/test-route/salvage?${queryA}`));
+    expect((await salvage("/pe/route-state")).status).toBe(404);
+    const pea = await salvage("/pe/agent/route-state");
+    expect(pea.status).toBe(403);
+    expect(await pea.json()).toMatchObject({ ok: false, error: "salvage is human-only" });
   } finally {
     await runtime.close?.();
     await rm(workspaceRoot, { recursive: true, force: true });

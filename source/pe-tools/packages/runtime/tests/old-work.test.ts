@@ -222,6 +222,51 @@ test("/families: start fresh sets old Work aside byte-for-byte, refuses Pea, nev
   expect(JSON.stringify(state.get(key(`families${START_FRESH_ASIDE}2`)))).toBe(second);
 });
 
+test("/families: salvage carries the old excluded ids over, before and after start fresh, to a person only", async () => {
+  const scope: WorkKey = { route: "families", target };
+  const key = (route: string) => `${workKey(scope)} ${route}`;
+  const state = new Map<string, unknown>();
+  const module = new RouteWorkspace({
+    registrations: [
+      { spec: familiesRouteState as unknown as RouteStateSpec<z.ZodType>, handlers: {} },
+    ],
+    store: {
+      getState: async ({ targetKey, route }) => structuredClone(state.get(`${targetKey} ${route}`)),
+      setState: async ({ targetKey, route, value }) =>
+        void state.set(`${targetKey} ${route}`, structuredClone(value)),
+    },
+  });
+  expect(await module.salvage(scope, "families", "human")).toBeNull();
+  const bytes = JSON.stringify({
+    ...oldFamilies,
+    doc: { ...oldFamilies.doc, excludedIds: [3102, 7] },
+  });
+  state.set(key("families"), JSON.parse(bytes));
+  expect(await module.salvage(scope, "families", "agent")).toMatchObject({ ok: false });
+  expect(await module.salvage(scope, "families", "human")).toEqual({
+    from: "unreadable",
+    value: { familyIds: [3102, 7] },
+  });
+  expect(await module.startFresh(scope, "families", "human")).toMatchObject({ ok: true });
+  expect(await module.salvage(scope, "families", "human")).toEqual({
+    from: "aside:1",
+    value: { familyIds: [3102, 7] },
+  });
+  // The id-keyed record Mission 11 wrote is old Work too; the newest aside answers.
+  state.set(key("families"), {
+    version: 1,
+    revision: 2,
+    doc: { excluded: { "41": { by: "person" } } },
+  });
+  expect(await module.startFresh(scope, "families", "human")).toMatchObject({ ok: true });
+  expect(await module.salvage(scope, "families", "human")).toEqual({
+    from: "aside:2",
+    value: { familyIds: [41] },
+  });
+  // Read-only: nothing moved.
+  expect(JSON.stringify(state.get(key(`families${START_FRESH_ASIDE}1`)))).toBe(bytes);
+});
+
 test("/instances: a pre-cells staged start is set aside by start fresh, never launched or kept", async () => {
   const scope: WorkKey = { route: "instances", target: null, work: "instances" };
   const key = (route: string) => `${workKey(scope)}\0${route}`;

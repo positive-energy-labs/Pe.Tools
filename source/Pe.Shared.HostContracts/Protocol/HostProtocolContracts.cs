@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
 namespace Pe.Shared.HostContracts.Protocol;
@@ -24,7 +24,9 @@ public static class HostProtocol {
     // 43: revit.context.view-image response gains imageUrl (/view-image/<imageSha256>.png, null iff no registration)
     // 44: family.editor.snapshot deleted; family reads are family.capture
     // 45: family.editor.open renamed family.open (same request/response shape: FamilyOpenRequest/FamilyOpenData)
-    public const int ContractVersion = 45;
+    // 46: families.plan takes familyNames (not familyIds); a plan entry's familyId is nullable (a refused name);
+    //     families.apply takes familyNames {planned id: name} and refuses a family reloaded since the plan; receipt familyName non-null
+    public const int ContractVersion = 46;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]

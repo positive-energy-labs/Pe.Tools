@@ -280,6 +280,34 @@ export class RouteWorkspace {
     });
   }
 
+  /**
+   * Human-only, read-only: what the route's `salvage` carries over from Work it can no longer
+   * read, the unreadable document before start fresh, else the newest aside. Null when the route
+   * declares no salvage or there is nothing to salvage.
+   */
+  async salvage(
+    scope: WorkKey,
+    route: string,
+    actor: RouteActor,
+  ): Promise<{ from: string; value: unknown } | RouteRefusal | null> {
+    const spec = this.#registry.get(route)?.spec;
+    if (actor !== "human")
+      return refuse("refused", "salvage is human-only", "Ask the user to carry old Work over.");
+    if (!spec?.salvage) return null;
+    const targetKey = workKey(scope);
+    const docOf = (raw: unknown) => (raw as { doc?: unknown } | null)?.doc;
+    const raw = await this.options.store.getState({ targetKey, route });
+    if (raw != null && !readable(raw, spec))
+      return { from: "unreadable", value: spec.salvage(docOf(raw)) };
+    let newest: { slot: number; raw: unknown } | null = null;
+    for (let slot = 1; ; slot++) {
+      const found = await this.options.store.getState({ targetKey, route: aside(route, slot) });
+      if (found == null) break;
+      newest = { slot, raw: found };
+    }
+    return newest && { from: `aside:${newest.slot}`, value: spec.salvage(docOf(newest.raw)) };
+  }
+
   observe(
     scope: WorkKey,
     route: string,

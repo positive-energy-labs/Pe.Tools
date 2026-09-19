@@ -201,7 +201,9 @@ export function FamiliesProposalsBand() {
   if (!entries.length) return null;
   const current = (entry: (typeof entries)[number]) => {
     const key = params.find((param) => param.name === entry.parameter)?.key;
-    const row = rows.find((r) => r.familyId === entry.familyId && r.typeName === entry.typeName);
+    const row = rows.find(
+      (r) => r.familyName === entry.familyName && r.typeName === entry.typeName,
+    );
     return key && row ? (row.values[key] ?? "") : null;
   };
   const open = entries.filter(({ cell }) => cell.proposal != null && cell.staged == null);
@@ -245,7 +247,6 @@ export function FamiliesProposalsBand() {
       {entries.map((entry) => {
         const proposal = entry.cell.proposal;
         const stagedHere = entry.cell.staged;
-        const display = proposal?.value ?? stagedHere?.value;
         const isOpen = proposal != null && stagedHere == null;
         return (
           <div
@@ -254,7 +255,7 @@ export function FamiliesProposalsBand() {
             className="flex items-center gap-3 t-small"
           >
             <span className="face-mono w-72 truncate text-ink-2">
-              {display?.familyName ?? "family"} · {entry.typeName} · {entry.parameter}
+              {entry.familyName} · {entry.typeName} · {entry.parameter}
             </span>
             <span className="min-w-0 flex-1 truncate">
               <ValueDiff from={current(entry)} to={(stagedHere ?? proposal)?.value.value ?? ""} />

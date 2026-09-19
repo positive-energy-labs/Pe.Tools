@@ -6,7 +6,7 @@ import { createRouteRegistrations } from "../src/pea/routes.ts";
 
 const at = address("c:\\models\\j1.rvt");
 const scope = { route: "families", target: at };
-// One loaded family, 3573700, with one type; 3573718 is that TYPE's element id (F-J1-7).
+// One loaded family, "Casework", with one type. Its element id changes on every reload; its name does not.
 const loaded = [{ familyId: 3573700, familyName: "Casework", types: [{ typeName: "12 X 4" }] }];
 
 function workspace() {
@@ -31,34 +31,52 @@ function workspace() {
     }),
   };
 }
-const propose = (familyId: number, typeName = "12 X 4") => ({
-  path: ["cells", familyCellKey({ familyId, typeName, parameter: "View Description" }), "proposal"],
-  value: { value: { familyName: "Casework", value: "Base" } },
+const propose = (familyName: string, typeName = "12 X 4") => ({
+  path: [
+    "cells",
+    familyCellKey({ familyName, typeName, parameter: "View Description" }),
+    "proposal",
+  ],
+  value: { value: { value: "Base" } },
 });
 
-test("F-J1-7: a proposal keyed by a type's element id is refused at the door, naming the key", async () => {
+test("F-J1-7: a proposal naming no loaded family is refused at the door, naming the key", async () => {
   const { work } = workspace();
-  const refused = await work.apply(scope, "families", "agent", [propose(3573718)], 0);
+  const refused = await work.apply(scope, "families", "agent", [propose("Casework 2")], 0);
   expect(refused).toMatchObject({ ok: false, kind: "refused" });
   if (refused.ok) return;
-  expect(refused.error).toContain('[3573718,"12 X 4","View Description"]');
-  expect(refused.hint).toContain('[3573700,"12 X 4",');
+  expect(refused.error).toContain('["Casework 2","12 X 4","View Description"]');
+  expect(refused.hint).toContain('["Casework","12 X 4",');
   expect((await work.view(scope, "families"))!.revision).toBe(0);
+});
+
+test("an element id in the family slot is refused by the schema, before Revit is asked", async () => {
+  const { work, reads } = workspace();
+  const key = JSON.stringify([3573700, "12 X 4", "View Description"]);
+  const refused = await work.apply(
+    scope,
+    "families",
+    "agent",
+    [{ path: ["cells", key, "proposal"], value: { value: { value: "Base" } } }],
+    0,
+  );
+  expect(refused).toMatchObject({ ok: false });
+  expect(reads).toHaveLength(0);
 });
 
 test("a type the family does not have is refused, a human write too", async () => {
   const { work } = workspace();
-  const refused = await work.apply(scope, "families", "human", [propose(3573700, "24 X 4")], 0);
+  const refused = await work.apply(scope, "families", "human", [propose("Casework", "24 X 4")], 0);
   expect(refused).toMatchObject({ ok: false, kind: "refused" });
 });
 
 test("a valid key lands, and clearing a cell never asks Revit", async () => {
   const { work, reads } = workspace();
-  const landed = await work.apply(scope, "families", "agent", [propose(3573700)], 0);
+  const landed = await work.apply(scope, "families", "agent", [propose("Casework")], 0);
   expect(landed).toMatchObject({ ok: true, revision: 1 });
   expect(reads).toEqual([{ target: at, filter: null }]);
   const key = familyCellKey({
-    familyId: 3573700,
+    familyName: "Casework",
     typeName: "12 X 4",
     parameter: "View Description",
   });
@@ -78,7 +96,7 @@ test("a valid key lands, and clearing a cell never asks Revit", async () => {
 
 test("an exclusion carries its writer: Pea cannot write one as the person, nor lift the person's", async () => {
   const { work, reads } = workspace();
-  const exclude = (by: string) => [{ path: ["excluded", "3573700"], value: { by } }];
+  const exclude = (by: string) => [{ path: ["excluded", "Casework"], value: { by } }];
   expect(await work.apply(scope, "families", "agent", exclude("person"), 0)).toMatchObject({
     ok: false,
     kind: "refused",
@@ -92,7 +110,7 @@ test("an exclusion carries its writer: Pea cannot write one as the person, nor l
     scope,
     "families",
     "agent",
-    [{ path: ["excluded", "3573700"] }],
+    [{ path: ["excluded", "Casework"] }],
     1,
   );
   expect(lifted).toMatchObject({ ok: false, kind: "refused" });

@@ -216,7 +216,7 @@ Every route works the same way. You write proposals; the person stages them, and
 ## Method
 
 1. Read first: pe_read key=route:<route>. It returns the document, its revision, the schema, the agent write mask, and the commands. The mask is the truth about what you may write: only the proposal rungs it names.
-2. Copy cell keys from the read, never compose them from other ids. A key names what the route shows (for families, the Family's own id with the type name and parameter, not the type's element id). If you cannot find the key in the read or the schema, ask rather than guess.
+2. Copy cell keys from the read, never compose them from other ids. A key names what the route shows (for families, [family name, type name, parameter] exactly as the read spells them). If you cannot find the key in the read or the schema, ask rather than guess.
 3. Write only proposals: pe_do key=route:<route>.propose with patches to proposal rungs and expectedRevision from your read. Never write staged. If a route has no proposal rung, describe the change in chat and let the person make it.
 4. Propose even when access is Trusted. A change the person could review on a route goes through that route; do not reach the same values through a script, an op, or a file edit. Trusted runs tools; it does not skip the person's review.
 5. What the person sees: each proposal sits on its own cell next to the current value, with accept and deny on that cell. The Chat head shows a compact summary and opens the route inside Chat. A staged value beside a different proposal of yours is a counter-proposal; do not overwrite it.
