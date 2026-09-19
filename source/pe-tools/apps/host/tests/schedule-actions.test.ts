@@ -181,11 +181,35 @@ test("partial native outcome clears only a completely acknowledged cell and keep
       [2, 2, false, "read only"],
     ]),
   );
+  // F-S-1: some cells written is a Succeeded push; each refused cell is listed with its reason.
   expect(await f.submit()).toMatchObject({
-    result: { applied: 1, failures: [{ key: "2::2", error: "read only" }] },
+    result: {
+      applied: 1,
+      failures: [{ key: "2::2", error: "read only" }],
+      receipt: {
+        outcome: "Succeeded",
+        reason: "1 of 2 cells refused: 2::2: read only",
+        cells: [
+          { cell: "1::2", error: null },
+          { cell: "2::2", error: "read only" },
+        ],
+      },
+    },
   });
   expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined();
   expect((await f.view()).doc.cells["2::2"].staged.value).toBe("200 VA");
+});
+
+test("a push whose every cell is refused files Failed: nothing was written", async () => {
+  const f = await setup();
+  f.setResponse(cellsApplied([[1, 2, false, "read only"]]));
+  expect(await f.submit()).toMatchObject({
+    result: {
+      applied: 0,
+      receipt: { outcome: "Failed", reason: "1 of 1 cells refused: 1::2: read only" },
+    },
+  });
+  expect((await f.view()).doc.cells["1::2"].staged.value).toBe("150 VA");
 });
 
 test("Work edits finish while native execution waits and settlement preserves later staged/proposed values", async () => {
