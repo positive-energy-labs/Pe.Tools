@@ -1,6 +1,5 @@
 ﻿using System.IO;
 using System.Windows.Media.Imaging;
-using Pe.Revit.Tasks;
 using Pe.Shared.RevitData;
 
 namespace Pe.Revit.DocumentData.AgentContext;
@@ -9,124 +8,41 @@ namespace Pe.Revit.DocumentData.AgentContext;
 ///     Exports a graphical view or sheet to a PNG file so agents can visually inspect it.
 ///     Captures views exactly as configured — templates, VG overrides, and temporary
 ///     hide/isolate all apply. Never creates or permanently mutates views.
-///     A cropped view is captured in a rollback sandbox, cut to exactly its crop (read-only documents export as is); focus capture
+///     A cropped view exports unmodified and is cut to exactly its crop arithmetically; focus capture
 ///     sets a temporary crop box (clearing any scope box) then restores it (editable doc only).
 ///     Sheet-filtered schedules get their filter temporarily lifted the same way (editable doc only).
 /// </summary>
 public static class RevitViewImageExporter {
     public static RevitViewImageData Export(Document document, View view, int pixelSize) {
-        var producedPath = ExportCropped(document, view, pixelSize, out var clamped);
-        return BuildResult(document, view, producedPath, clamped, TryModelRect(view), null, TryRegistration(view, producedPath));
+        var producedPath = ExportCropped(document, view, pixelSize, out var clamped, out var refusal);
+        return BuildResult(document, view, producedPath, clamped, TryModelRect(view), null,
+            refusal is { } refused ? (null, refused) : TryRegistration(view, producedPath));
     }
 
     /// <summary>
-    ///     ExportImage fits the view's whole EXTENT, not its crop: annotations and datums the crop does not clip (a grid or
-    ///     text far outside, or one that crosses the crop edge) widen it, so the PNG no longer covers the crop (D4, projectA:
-    ///     Pool House 84 x 84 ft exported 1500 x 2171 px, Lower Level 249.75 x 110.25 ft exported 1500 x 682 px, even with the
-    ///     far annotations hidden). So the crop is LOCATED in the pixels, not assumed: inside a rollback sandbox, far annotations
-    ///     are hidden (for resolution), two marker crosses are drawn at known model points inside the crop, and the image is cut
-    ///     to the crop they imply. Nothing reaches the document.
+    ///     The user's view exports unmodified (user policy: "render exactly one of the views of the user (so u get all their settings)").
+    ///     ExportImage fits the view's whole extent, View.Outline (paper) x Scale in the crop box's own frame, not its crop
+    ///     (PROVEN[session, project-a 4/4 views + 3 fixtures]: Pool House 84 x 84 ft crop exports 1500 x 2171 px, the outline's aspect).
+    ///     So the export is sized for the crop (<see cref="RevitViewImageRegistration.ExportWidth" />) and cut to the crop's pixel rectangle
+    ///     inside the outline (<see cref="RevitViewImageRegistration.CropPixels" />); <paramref name="refusal" /> says why it could not be.
     /// </summary>
-    private static string ExportCropped(Document document, View view, int pixelSize, out int clampedPixelSize) {
-        if (view is ViewSheet || !view.CropBoxActive || document.IsReadOnly)
+    private static string ExportCropped(Document document, View view, int pixelSize, out int clampedPixelSize,
+        out RevitViewImageRegistrationRefusal? refusal) {
+        refusal = null;
+        if (view is ViewSheet || !view.CropBoxActive)
             return ExportToTemp(document, view, pixelSize, out clampedPixelSize);
-        using var sandbox = DocumentSandbox.BeginRollback(document, "view-image export window");
-        var outside = OutsideExportWindow(document, view);
-        // A view Revit will not let us touch (e.g. owned by another user) exports as is; the aspect gate then decides.
-        try {
-            if (outside.Count > 0) {
-                view.HideElements(outside);
-                document.Regenerate();
-            }
-        } catch (Autodesk.Revit.Exceptions.ApplicationException) { }
-        var path = CutToCrop(document, view, pixelSize, out clampedPixelSize, out var cropWidthPx);
-        // Elements the hide could not reach leave the crop a small part of the image: export once more, larger.
-        if (cropWidthPx is { } px && px < pixelSize * 0.9 && clampedPixelSize < 8000) {
-            File.Delete(path);
-            path = CutToCrop(document, view, (int)Math.Ceiling(clampedPixelSize * (double)pixelSize / px), out clampedPixelSize, out _);
-        }
-        return path;
-    }
-
-    /// <summary>
-    ///     Exports with and without two marker crosses at 10% and 90% of the crop, finds them where the two images differ, and
-    ///     cuts the unmarked image to the crop they imply. Markers inside the crop do not move the extent (hold 88746ed: an
-    ///     80 x 80 ft crop with marks inside exported 1600 x 1600), so both exports share one pixel frame. Falls back to the whole
-    ///     image (the aspect gate decides) when the view takes no detail lines or the markers are not found consistently.
-    ///     <paramref name="cropWidthPx" /> is the located crop's pixel width, null when it was not located.
-    /// </summary>
-    private static string CutToCrop(Document document, View view, int pixelSize, out int clampedPixelSize, out int? cropWidthPx) {
-        cropWidthPx = null;
         var crop = view.CropBox;
-        double w = crop.Max.X - crop.Min.X, h = crop.Max.Y - crop.Min.Y, arm = Math.Max(w, h) / 150;
-        (double X, double Y)[] local = [(crop.Min.X + w * 0.1, crop.Min.Y + h * 0.1), (crop.Min.X + w * 0.9, crop.Min.Y + h * 0.9)];
-        List<ElementId> markers;
-        try {
-            markers = local.SelectMany(m => new[] { (X: arm, Y: 0.0), (X: 0.0, Y: arm) }.Select(d => document.Create.NewDetailCurve(view,
-                    Line.CreateBound(OnViewPlane(view, crop, m.X - d.X, m.Y - d.Y), OnViewPlane(view, crop, m.X + d.X, m.Y + d.Y))).Id))
-                .ToList();
-            document.Regenerate();
-        } catch (Autodesk.Revit.Exceptions.ApplicationException) {
-            return ExportToTemp(document, view, pixelSize, out clampedPixelSize);
-        }
-        var marked = ExportToTemp(document, view, pixelSize, out _);
-        _ = document.Delete(markers);
-        document.Regenerate();
-        var path = ExportToTemp(document, view, pixelSize, out clampedPixelSize);
-        var located = LocateCrop(path, marked, crop, local);
-        File.Delete(marked);
-        if (located is not { } rect) return path;
-        cropWidthPx = rect.Width;
-        return CutPng(path, rect);
-    }
-
-    private static XYZ OnViewPlane(View view, BoundingBoxXYZ crop, double x, double y) {
-        var p = crop.Transform.OfPoint(new XYZ(x, y, 0));
-        return p - view.ViewDirection * (p - view.Origin).DotProduct(view.ViewDirection);
-    }
-
-    /// <summary>
-    ///     The crop's pixel rectangle from the two markers' centroids (the pixels that differ between the exports, split at their
-    ///     middle column). Null unless both markers are found, their x and y scales agree within 1%, and the rectangle lies in the
-    ///     image (±2 px).
-    /// </summary>
-    private static System.Windows.Int32Rect? LocateCrop(string plainPath, string markedPath, BoundingBoxXYZ crop, (double X, double Y)[] local) {
-        var (width, height, plain) = Bgra(plainPath);
-        var (markedWidth, markedHeight, marked) = Bgra(markedPath);
-        if (markedWidth != width || markedHeight != height) return null;
-        var diff = new List<(int X, int Y)>();
-        for (var i = 0; i < width * height; i++)
-            if (Math.Abs(plain[i * 4] - marked[i * 4]) + Math.Abs(plain[i * 4 + 1] - marked[i * 4 + 1]) + Math.Abs(plain[i * 4 + 2] - marked[i * 4 + 2]) > 60)
-                diff.Add((i % width, i / width));
-        if (diff.Count == 0) return null;
-        var middle = (diff.Min(p => p.X) + diff.Max(p => p.X)) / 2.0;
-        var low = diff.Where(p => p.X < middle).ToList();
-        var high = diff.Where(p => p.X >= middle).ToList();
-        if (low.Count == 0 || high.Count == 0) return null;
-        // Pixel centers at +0.5. Marker 0 is the crop's lower-left (image left and low); marker 1 its upper-right.
-        (double X, double Y) a = (low.Average(p => p.X) + 0.5, low.Average(p => p.Y) + 0.5);
-        (double X, double Y) b = (high.Average(p => p.X) + 0.5, high.Average(p => p.Y) + 0.5);
-        var sx = (b.X - a.X) / (local[1].X - local[0].X);
-        var sy = (a.Y - b.Y) / (local[1].Y - local[0].Y);
-        if (sx <= 0 || Math.Abs(sx - sy) > sx * 0.01) return null;
-        var left = a.X - (local[0].X - crop.Min.X) * sx;
-        var top = b.Y - (crop.Max.Y - local[1].Y) * sy;
-        var right = left + (crop.Max.X - crop.Min.X) * sx;
-        var bottom = top + (crop.Max.Y - crop.Min.Y) * sy;
-        if (left < -2 || top < -2 || right > width + 2 || bottom > height + 2) return null;
-        int l = Math.Max(0, (int)Math.Round(left)), t = Math.Max(0, (int)Math.Round(top));
-        int r = Math.Min(width, (int)Math.Round(right)), btm = Math.Min(height, (int)Math.Round(bottom));
-        return new System.Windows.Int32Rect(l, t, r - l, btm - t);
-    }
-
-    private static (int Width, int Height, byte[] Pixels) Bgra(string path) {
-        BitmapSource frame;
+        var outline = view.Outline;
+        (double X, double Y) outlineMin = (outline.Min.U, outline.Min.V), outlineMax = (outline.Max.U, outline.Max.V);
+        (double X, double Y) cropMin = (crop.Min.X, crop.Min.Y), cropMax = (crop.Max.X, crop.Max.Y);
+        var path = ExportToTemp(document, view,
+            RevitViewImageRegistration.ExportWidth(pixelSize, outlineMin, outlineMax, view.Scale, cropMin, cropMax), out clampedPixelSize);
+        BitmapFrame frame;
         using (var stream = File.OpenRead(path))
-            frame = new FormatConvertedBitmap(BitmapDecoder.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad).Frames[0],
-                System.Windows.Media.PixelFormats.Bgra32, null, 0);
-        var pixels = new byte[frame.PixelWidth * frame.PixelHeight * 4];
-        frame.CopyPixels(pixels, frame.PixelWidth * 4, 0);
-        return (frame.PixelWidth, frame.PixelHeight, pixels);
+            frame = BitmapDecoder.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad).Frames[0];
+        var (rect, refused) = RevitViewImageRegistration.CropPixels(frame.PixelWidth, frame.PixelHeight, outlineMin, outlineMax, view.Scale, cropMin, cropMax);
+        refusal = refused;
+        return rect is null ? path : CutPng(path, new System.Windows.Int32Rect(rect.Left, rect.Top, rect.Width, rect.Height));
     }
 
     private static string CutPng(string path, System.Windows.Int32Rect rect) {
@@ -139,23 +55,6 @@ public static class RevitViewImageExporter {
         using (var output = File.Create(cutPath)) encoder.Save(output);
         File.Delete(path);
         return cutPath;
-    }
-
-    /// <summary>
-    ///     Annotation and datum elements whose view bounding box misses the model crop. The window is the model crop even with
-    ///     annotation crop on: hold 5d0124e/88746ed showed an annotation-crop view with nothing past the model crop exports exactly
-    ///     the model crop, so anything drawn between the two crops would only widen the image past what registration can place.
-    /// </summary>
-    private static List<ElementId> OutsideExportWindow(Document document, View view) {
-        var crop = view.CropBox;
-        var toCrop = crop.Transform.Inverse;
-        double minX = crop.Min.X, maxX = crop.Max.X, minY = crop.Min.Y, maxY = crop.Max.Y;
-        return new FilteredElementCollector(document, view.Id).WhereElementIsNotElementType()
-            .Where(e => e.Category is { CategoryType: CategoryType.Annotation } category
-                        && category.BuiltInCategory != BuiltInCategory.OST_CropBoundary && e.CanBeHidden(view))
-            .Where(e => e.get_BoundingBox(view) is { } box && Corners(box).Select(toCrop.OfPoint).ToList() is var p
-                        && (p.Max(q => q.X) < minX || p.Min(q => q.X) > maxX || p.Max(q => q.Y) < minY || p.Min(q => q.Y) > maxY))
-            .Select(e => e.Id).ToList();
     }
 
     /// <summary>Focus capture: temporary crop box around <paramref name="modelBox" />, rolled back after export.</summary>
@@ -195,9 +94,10 @@ public static class RevitViewImageExporter {
             ApplyCrop(view, modelBox, marginPercent);
         });
         try {
-            var producedPath = ExportCropped(document, view, pixelSize, out var clamped);
+            var producedPath = ExportCropped(document, view, pixelSize, out var clamped, out var refusal);
             // Read while the temporary crop is still set: it is the crop the image was exported with.
-            return BuildResult(document, view, producedPath, clamped, TryModelRect(view), null, TryRegistration(view, producedPath));
+            return BuildResult(document, view, producedPath, clamped, TryModelRect(view), null,
+                refusal is { } refused ? (null, refused) : TryRegistration(view, producedPath));
         } finally {
             RunCropTransaction(document, "PE restore crop", () => {
                 view.CropBox = originalCrop;

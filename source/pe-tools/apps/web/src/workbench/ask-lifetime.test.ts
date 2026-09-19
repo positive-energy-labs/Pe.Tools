@@ -76,3 +76,37 @@ test("a live ask stays live and is never listed as expired", () => {
   expect(selectExpiredAsks(state)).toEqual([]);
   expect(selectToolCalls(state)[0]?.status).not.toBe("expired");
 });
+
+test("a call whose stored state is result reads completed, whatever the ended turn marked live (F-H6-8)", () => {
+  // The session's turn ended in error while the call ran (agent_end marks it `error`); the
+  // underlying run still stored its result afterwards.
+  const stored = {
+    ...askCall,
+    content: {
+      format: 2,
+      parts: [
+        {
+          type: "tool-invocation",
+          toolInvocation: {
+            state: "result",
+            toolCallId: "plan-1",
+            toolName: "pe_read",
+            args: { key: "op:families.plan" },
+            result: { ok: true, result: { families: [] } },
+          },
+        },
+      ],
+    },
+  } as unknown as MastraDBMessage;
+  const state: ChatState = {
+    ...emptyChatState(),
+    messages: [stored],
+    display: {
+      isRunning: false,
+      activeTools: { "plan-1": { name: "pe_read", args: {}, status: "error" } },
+    } as never,
+  };
+  expect(selectToolCalls(state)).toEqual([
+    expect.objectContaining({ id: "plan-1", status: "completed" }),
+  ]);
+});

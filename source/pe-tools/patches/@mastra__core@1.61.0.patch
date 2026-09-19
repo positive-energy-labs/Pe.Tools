@@ -387,3 +387,33 @@ index d94c0080ca92f99839ebe2c2ab54f3242c8bec9c..c0ff28045b743e8341d26454db9e09a8
  	abortRun(runId, pubsub) {
  		const state = this.#getState(pubsub);
  		const preparedRun = state.preparedRunsById.get(runId);
+diff --git a/dist/tools-CKkdrGLA.cjs b/dist/tools-CKkdrGLA.cjs
+index e1ab254ea370d9afe4a83ff58f96c757c58fb2e7..84a15842a797c25896ae688dbf79fc38bc038e78 100644
+--- a/dist/tools-CKkdrGLA.cjs
++++ b/dist/tools-CKkdrGLA.cjs
+@@ -594,10 +594,6 @@ const askUserTool = require_tool.createTool({
+ 	resumeSchema: zod_v4.z.union([zod_v4.z.string(), zod_v4.z.array(zod_v4.z.string())]),
+ 	execute: async ({ question, options, selectionMode }, context) => {
+ 		try {
+-			if (selectionMode && !options?.length) return {
+-				content: "Failed to ask user: selectionMode requires options.",
+-				isError: true
+-			};
+ 			const resolvedSelectionMode = options?.length ? selectionMode ?? "single_select" : void 0;
+ 			const resumeData = context?.agent?.resumeData;
+ 			if (resumeData !== void 0) return {
+diff --git a/dist/tools-JTnE07Fb.js b/dist/tools-JTnE07Fb.js
+index c0242b99212d6f51a3391950b336e9cedda80d87..ac6e7b44fa391fe62ff3f2459ac86c196e31104b 100644
+--- a/dist/tools-JTnE07Fb.js
++++ b/dist/tools-JTnE07Fb.js
+@@ -590,10 +590,6 @@ const askUserTool = createTool({
+ 	resumeSchema: z.union([z.string(), z.array(z.string())]),
+ 	execute: async ({ question, options, selectionMode }, context) => {
+ 		try {
+-			if (selectionMode && !options?.length) return {
+-				content: "Failed to ask user: selectionMode requires options.",
+-				isError: true
+-			};
+ 			const resolvedSelectionMode = options?.length ? selectionMode ?? "single_select" : void 0;
+ 			const resumeData = context?.agent?.resumeData;
+ 			if (resumeData !== void 0) return {
