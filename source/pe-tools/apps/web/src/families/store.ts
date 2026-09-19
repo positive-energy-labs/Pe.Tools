@@ -153,7 +153,8 @@ export function useFamiliesStore(
   // The draft and the selection are Page: the verbs read them off `ctx.page`.
   const page = handle.page[0] as FamiliesPage & EntityPage;
   const setPage = handle.page[1] as (next: Partial<FamiliesPage & EntityPage>) => void;
-  const pickedIds = useMemo(() => new Set(page.selection.map(Number)), [page.selection]);
+  // The capture picks, by family NAME (ruling): they survive a reload that reissues the ids.
+  const picked = useMemo(() => new Set(page.selection), [page.selection]);
   const draft = page.draft;
 
   const host = useMemo(() => createLiveFamiliesHost(), []);
@@ -254,8 +255,9 @@ export function useFamiliesStore(
   const actions = useMemo(
     () => ({
       setDraft: (value: Setter<FamiliesDraft>) => setPage({ draft: next(value, draft) }),
-      setPickedIds: (value: Setter<Set<number>>) =>
-        setPage({ selection: [...next(value, pickedIds)].map(String) }),
+      setPicked: (value: Setter<Set<string>>) => setPage({ selection: [...next(value, picked)] }),
+      /** The current reading's name → id, which capture's contract still takes (by id). */
+      setLoaded: (loaded: Record<string, number>) => setPage({ loaded }),
       setShowUncommon: (value: Setter<boolean>) =>
         setMemory((current) => ({ ...current, showUncommon: next(value, current.showUncommon) })),
       setTable: (value: Setter<TableState>) =>
@@ -295,7 +297,7 @@ export function useFamiliesStore(
         callHostRpc("host.shell.open", { path }, { bridgeSessionId: target || undefined }),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [handle.work, cells, draft, setPage, pickedIds, excluded, target, documentScope],
+    [handle.work, cells, draft, setPage, picked, excluded, target, documentScope],
   );
 
   return {
@@ -310,7 +312,7 @@ export function useFamiliesStore(
     applyData,
     captured,
     draft,
-    pickedIds,
+    picked,
     demo,
     refreshPods,
     showUncommon: memory.showUncommon,

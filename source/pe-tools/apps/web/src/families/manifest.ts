@@ -37,6 +37,12 @@ import { stagedDrafts } from "./staged";
 export interface FamiliesPage {
   /** The scope being authored: what `scope` writes into Work when pressed. Page, not Work. */
   draft: FamiliesDraft;
+  /**
+   * Each loaded family's element id by name, as the current matrix reading resolves it: a display
+   * fact of that reading, never a key. Capture's contract takes ids, so it resolves the picks here
+   * at the press. ponytail: a mirror of the matrix; drop it when capture takes names.
+   */
+  loaded: Record<string, number>;
 }
 
 export const familiesPageSchema = z.object({
@@ -47,6 +53,7 @@ export const familiesPageSchema = z.object({
       families: z.array(z.string()).default([]),
     })
     .default({ placement: "AllLoaded", categories: [], families: [] }),
+  loaded: z.record(z.string(), z.number()).default({}),
 });
 
 export type FamiliesReadingKey = "receipts" | "inventory";
@@ -79,7 +86,13 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
     schema: [FF_SPEC_SCHEMA, FAMILY_MODEL_SCHEMA],
     capture: "families.capture",
     apply: "families.apply",
-    captureInput: (ctx) => ({ familyIds: ctx.page.selection.map(Number) }),
+    // The picks are names; capture's contract takes ids, resolved against the current reading.
+    captureInput: (ctx) => {
+      const gone = ctx.page.selection.filter((name) => !Object.hasOwn(ctx.page.loaded, name));
+      return gone.length
+        ? `${gone.map((name) => `'${name}'`).join(", ")} ${gone.length === 1 ? "is" : "are"} no longer loaded; pick again`
+        : { familyIds: ctx.page.selection.map((name) => ctx.page.loaded[name]!) };
+    },
     // `families.plan` plans the page's member over the Work's scope; apply sends the included hashes.
     plan: {
       ...admissionPlan<FamiliesRouteDocument, FamiliesReadingKey, FamiliesPage>(

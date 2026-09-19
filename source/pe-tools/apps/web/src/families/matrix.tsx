@@ -4,6 +4,7 @@ import { Table, type TableSelection } from "#/components/master-table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
 import { useContext, useMemo } from "react";
 
+import { nextPicks, pickedRowKeys } from "#/families/picks";
 import { focusedTypes } from "#/families/staged";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 import { ChatFocus } from "#/route/situation";
@@ -19,8 +20,8 @@ export function FamiliesMatrix() {
     totalFamilies,
     totalTypes,
     params,
-    pickedIds,
-    setPickedIds,
+    picked,
+    setPicked,
     connected,
     applied,
     workUnreadable,
@@ -41,34 +42,11 @@ export function FamiliesMatrix() {
   // scope stays drawn and a line says the focus matched nothing.
   const focusMissed = focusKeys !== undefined && focusKeys.length === 0 && rows.length > 0;
   const visibleKeys = focusMissed ? undefined : focusKeys;
-  const selectedKeys = useMemo(
-    () => new Set(rows.filter((row) => pickedIds.has(row.familyId)).map((row) => row.key)),
-    [pickedIds, rows],
-  );
+  const selectedKeys = useMemo(() => pickedRowKeys(rows, picked), [picked, rows]);
   // Picking a type picks its family: the selection is the pick set, drawn per row.
   const selection: TableSelection = {
     selected: selectedKeys,
-    onChange: (keys) => {
-      const next = new Set(pickedIds);
-      const changedFamilies = new Set(
-        rows
-          .filter((row) => keys.has(row.key) !== selectedKeys.has(row.key))
-          .map((row) => row.familyId),
-      );
-      for (const familyId of changedFamilies) {
-        if (
-          rows.some(
-            (row) =>
-              row.familyId === familyId &&
-              keys.has(row.key) !== selectedKeys.has(row.key) &&
-              keys.has(row.key),
-          )
-        )
-          next.add(familyId);
-        else next.delete(familyId);
-      }
-      setPickedIds(next);
-    },
+    onChange: (keys) => setPicked(nextPicks(rows, picked, keys)),
   };
   return (
     <>
@@ -107,7 +85,7 @@ export function FamiliesMatrix() {
               className="hairline-l pl-2 text-ink-2"
               title="Picked families are what capture files into the pod, one spec member each."
             >
-              {pickedIds.size} picked
+              {picked.size} picked
             </span>
           </span>
         }

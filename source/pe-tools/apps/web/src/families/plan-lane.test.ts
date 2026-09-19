@@ -182,3 +182,10 @@ test("plan files nothing in the pod; save draft files one member per family, a c
     $schema: expect.any(String),
   });
 });
+
+test("capture resolves the named picks to this reading's ids at the press; a name gone refuses", () => {
+  const input = (selection: string[]) =>
+    familiesSpec.captureInput!(view({ selection, loaded: { Alpha: 202, Beta: 303 } }) as never);
+  expect(input(["Alpha", "Beta"])).toEqual({ familyIds: [202, 303] });
+  expect(input(["Alpha", "Gamma"])).toBe("'Gamma' is no longer loaded; pick again");
+});

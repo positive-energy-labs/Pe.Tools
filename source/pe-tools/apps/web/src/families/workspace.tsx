@@ -26,11 +26,12 @@ import { FamiliesWorkspaceView } from "#/families/workspace-view";
 import { DEMO_FAMILIES } from "#/families/seeds";
 import { familyCellEntries } from "#/families/staged";
 import { familyVerdicts } from "#/families/verdict";
+import { typeRowKey } from "#/families/picks";
 
 /**
- * Revit reloads every applied family under a new element id (w8-revit trip 12) and the receipt
- * names only the old one, so once an apply settles, whatever its outcome, the audit re-resolves
- * its scope: rows, picks and the next plan read the new ids. The sheet's hashes closed with it.
+ * Revit reloads every applied family under a new element id (w8-revit trip 12), so once an apply
+ * settles, whatever its outcome, the audit re-reads its scope. Rows, picks, receipts and the next
+ * plan key by family name, so they carry across; the sheet's hashes closed with it.
  */
 export function useAfterApply(busy: string | null, reresolve: () => void) {
   const applying = useRef(false);
@@ -67,8 +68,8 @@ function useFamiliesWorkspaceModel(
     [cells],
   );
   const plan = store.plan;
-  const pickedIds = store.pickedIds;
-  const setPickedIds = store.actions.setPickedIds;
+  const picked = store.picked;
+  const setPicked = store.actions.setPicked;
   const applyData = store.applyData;
   const showUncommon = store.showUncommon;
   const setShowUncommon = store.actions.setShowUncommon;
@@ -120,14 +121,16 @@ function useFamiliesWorkspaceModel(
     // The resolved scope survives that gap; a bridge truly gone ends through the read's own wait.
     enabled: !fixture && scope !== undefined && matrixRequest !== undefined,
   });
-  useAfterApply(busy, () => {
-    setPickedIds(new Set());
-    matrix.refresh();
-  });
+  useAfterApply(busy, () => matrix.refresh());
   const families = useMemo(
     () => fixtureFamilies ?? matrix.data?.families ?? [],
     [fixtureFamilies, matrix.data?.families],
   );
+  // Capture's contract takes ids: mirror this reading's name → id for it (see FamiliesPage.loaded).
+  const setLoaded = store.actions.setLoaded;
+  useEffect(() => {
+    setLoaded(Object.fromEntries(families.map((family) => [family.familyName, family.familyId])));
+  }, [families, setLoaded]);
   // Work holds exclusions by family name; so does every verdict and plan row read here.
   const excludedNames = useMemo(() => new Set(Object.keys(store.excluded)), [store.excluded]);
 
@@ -170,7 +173,7 @@ function useFamiliesWorkspaceModel(
           formulas[key] = param.formulaState;
         }
         rows.push({
-          key: `${family.familyUniqueId}::${typeName}`,
+          key: typeRowKey(family, typeName),
           familyId: family.familyId,
           familyName: family.familyName,
           categoryName: family.categoryName ?? "",
@@ -235,10 +238,10 @@ function useFamiliesWorkspaceModel(
         ? { label: `uncommon · ${uncommonCount} hidden`, onClear: () => setShowUncommon(true) }
         : null,
     picked:
-      pickedIds.size > 0
+      picked.size > 0
         ? {
-            label: `capture · ${pickedIds.size} picked · esc`,
-            onClear: () => setPickedIds(new Set()),
+            label: `capture · ${picked.size} picked · esc`,
+            onClear: () => setPicked(new Set()),
           }
         : null,
     // Staged cells are what plan will generate: countable here, removable in one press.
@@ -295,8 +298,8 @@ function useFamiliesWorkspaceModel(
     setPickedFamilies,
     applied,
     plan,
-    pickedIds,
-    setPickedIds,
+    picked,
+    setPicked,
     applyData,
     showUncommon,
     setShowUncommon,
