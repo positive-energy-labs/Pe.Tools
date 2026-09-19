@@ -64,7 +64,7 @@ public sealed class JointFindingsFamilyTests {
     [Test]
     public void Radius_driven_connector_round_trips_across_types_and_a_value_patch_touches_no_connector() {
         var parsed = FamilyModelJson.Parse("""
-            { "family": { "name": "FF radius connector", "category": "AirTerminals", "template": "Generic Model face based", "placement": "WorkPlaneBased" },
+            { "family": { "name": "FF radius connector", "category": "MechanicalEquipment", "template": "Mechanical Equipment", "placement": "OneLevelBased" },
               "parameters": { "D": { "dataType": "Length" }, "R": { "dataType": "Length", "formula": "D / 2" }, "Url": { "dataType": "Text" },
                 "Size": { "dataType": "Length", "value": "2ft" }, "Thick": { "dataType": "Length", "value": "1in" } },
               "types": { "A": { "D": "5in", "Url": "a" }, "B": { "D": "8in", "Url": "b" } },
