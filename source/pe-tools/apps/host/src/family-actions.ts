@@ -43,6 +43,7 @@ import {
   familyCatalogProblem,
   familyCatalogRequest,
   stagedScope,
+  refusalText,
 } from "@pe/agent-contracts";
 import type {
   PodMemberSaveRequest,
@@ -673,7 +674,7 @@ export async function admitFamilyAction(
           process,
         )) as RevitCatalogLoadedFamilies.Res.Response;
         const problem = familyCatalogProblem(catalog);
-        if (problem) throw refused(problem);
+        if (problem) throw refused(problem.message);
         return catalog.families;
       };
       if (prepared.kind === "capture") {
@@ -911,7 +912,7 @@ async function retire(
     if (landed.ok) return { retired, revision: landed.revision };
     if (landed.code !== "stale_revision")
       throw new ActionIncomplete(
-        `Applied; retiring staged cells was refused: ${landed.error}`,
+        `Applied; retiring staged cells was refused: ${refusalText(landed)}`,
         landed,
       );
   }

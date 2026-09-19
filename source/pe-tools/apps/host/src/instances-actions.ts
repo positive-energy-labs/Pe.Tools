@@ -10,6 +10,7 @@ import {
   type InstancesActionKey,
   type InstancesLaunch,
   type WorkKey,
+  refusalText,
 } from "@pe/agent-contracts";
 import type { ActionStep } from "@pe/agent-contracts";
 import type { RouteWorkspace } from "@pe/runtime";
@@ -316,7 +317,7 @@ async function retireLaunch(workspace: RouteWorkspace, key: WorkKey, consumed: I
     if (landed.ok) return { retired: true, revision: landed.revision };
     if (landed.code !== "stale_revision")
       throw new ActionIncomplete(
-        `Launched; retiring the staged launch was refused: ${landed.error}`,
+        `Launched; retiring the staged launch was refused: ${refusalText(landed)}`,
         landed,
       );
   }

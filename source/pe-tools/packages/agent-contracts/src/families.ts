@@ -100,21 +100,57 @@ export const familyCatalogRequest = (scope: AppliedFilter) => ({
   budget: { maxEntries: FAMILY_CATALOG_LIMIT, maxSamplesPerEntry: FAMILY_CATALOG_LIMIT },
 });
 
+/**
+ * Why the Families door refused a write: one code per refusal branch. The web draws the code and
+ * its parts; `agentHint` is prose for Pea and is never parsed.
+ */
+export type FamiliesRefusalCode =
+  | "exclusion-held"
+  | "exclusion-author"
+  | "unknown-family"
+  | "no-scope"
+  | "unknown-family-type"
+  | "scope-truncated"
+  | "scope-unresolved"
+  | "types-truncated"
+  | "document-unavailable"
+  | "catalog-unreachable";
+export type FamiliesRefusal = {
+  ok: false;
+  kind: "refused";
+  code: FamiliesRefusalCode;
+  /** The cell keys refused, on `unknown-family-type`. */
+  cells?: FamilyCellAddress[];
+  /** The family names refused, on scope-name, exclusion and `types-truncated` refusals. */
+  families?: string[];
+  agentHint: string;
+};
+
 /** Why a scope's catalog cannot answer its families and types, or null when it can. */
 export function familyCatalogProblem(catalog: {
   summary: { truncated: boolean };
   families: readonly { familyName: string; typeCount?: number; types: readonly unknown[] }[];
   issues?: readonly { message: string }[];
-}): string | null {
+}): { code: FamiliesRefusalCode; message: string; families?: string[] } | null {
   if (catalog.summary.truncated)
-    return `the scope resolves more than ${FAMILY_CATALOG_LIMIT} families; narrow it`;
+    return {
+      code: "scope-truncated",
+      message: `the scope resolves more than ${FAMILY_CATALOG_LIMIT} families; narrow it`,
+    };
   if (!catalog.families.length)
-    return `scope resolved to no loaded families: ${catalog.issues?.map((issue) => issue.message).join("; ") || "no loaded family matches it"}`;
+    return {
+      code: "scope-unresolved",
+      message: `scope resolved to no loaded families: ${catalog.issues?.map((issue) => issue.message).join("; ") || "no loaded family matches it"}`,
+    };
   const short = catalog.families.find(
     (family) => family.typeCount != null && family.types.length < family.typeCount,
   );
   return short
-    ? `the catalog listed ${short.types.length} of ${short.typeCount} types of "${short.familyName}"`
+    ? {
+        code: "types-truncated",
+        message: `the catalog listed ${short.types.length} of ${short.typeCount} types of "${short.familyName}"`,
+        families: [short.familyName],
+      }
     : null;
 }
 

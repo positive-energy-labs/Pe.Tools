@@ -48,8 +48,10 @@ test("F-J1-7: a proposal naming no loaded family is refused at the door, naming 
   const refused = await work.apply(scope, "families", "agent", [propose("Casework 2")], 0);
   expect(refused).toMatchObject({ ok: false, kind: "refused" });
   if (refused.ok) return;
-  expect(refused.error).toContain('["Casework 2","12 X 4","View Description"]');
-  expect(refused.hint).toContain('["Casework","12 X 4",');
+  expect(refused).toMatchObject({ code: "unknown-family-type" });
+  if (!("agentHint" in refused)) return;
+  expect(refused.agentHint).toContain('["Casework 2","12 X 4","View Description"]');
+  expect(refused.agentHint).toContain('e.g. ["Casework","12 X 4",');
   expect((await work.view(scope, "families"))!.revision).toBe(0);
 });
 
@@ -237,10 +239,11 @@ test("F-J1-12: a scope that resolves to no loaded family refuses with that diagn
   const refused = await work.apply(at, "families", "agent", [propose("Price LBP15A Exhaust")], 1);
   expect(refused).toMatchObject({ ok: false, kind: "refused" });
   if (refused.ok) return;
-  expect(refused.error).toContain(
+  if (!("agentHint" in refused)) return;
+  expect(refused.agentHint).toContain(
     "scope resolved to no loaded families: Loaded-family filter matched zero families out of 1.",
   );
-  expect(refused.hint).not.toContain("A key is");
+  expect(refused.agentHint).not.toContain("A key is");
 });
 
 const casework = (familyNames: string[]) => ({
@@ -298,8 +301,10 @@ test("F-J1-10: a scope write naming an unknown family refuses by name, Pea's or 
     );
     expect(refused).toMatchObject({ ok: false, kind: "refused" });
     if (refused.ok) continue;
-    expect(refused.error).toContain('"Price LBPH15A Exhaust"');
-    expect(refused.error).not.toContain('"Casework"');
+    expect(refused).toMatchObject({ families: ["Price LBPH15A Exhaust"] });
+    if (!("agentHint" in refused)) continue;
+    expect(refused.agentHint).toContain('"Price LBPH15A Exhaust"');
+    expect(refused.agentHint).not.toContain('"Casework"');
   }
   expect((await work.view(scope, "families"))!.revision).toBe(0);
 });
@@ -339,11 +344,10 @@ test("M13-1 (b): a stale proposal does not block the person's corrected staged s
 });
 
 /** project-a Work saved at revision 1 holding `doc`, as it reads after the catalog moved under it. */
-function seededWork(doc: unknown) {
+function seededWork(doc: unknown, host: HostCall = liveHost()) {
   const target = address(projectA);
   const saved = new Map<string, unknown>([["families", { version: 1, revision: 1, doc }]]);
   const calls: any[] = [];
-  const host = liveHost();
   const work = new RouteWorkspace({
     registrations: createRouteRegistrations({
       loadedFamilies: hostLoadedFamilies(undefined, (async (key: any, request: any, on: any) => {
@@ -403,7 +407,143 @@ test("M13-2 (e): cells with no scope on either rung refuse by name, and Revit is
     const refused = await work.apply(at, "families", actor, [propose("Price LBP15A Exhaust")], 1);
     expect(refused).toMatchObject({ ok: false, kind: "refused" });
     if (refused.ok) continue;
-    expect(refused.error).toBe("Propose or stage a scope before proposing cells");
+    expect(refused).toMatchObject({ code: "no-scope" });
+    if (!("agentHint" in refused)) continue;
+    expect(refused.agentHint).toBe(
+      "Propose or stage a scope before proposing cells. Nothing was written.",
+    );
   }
   expect(calls).toHaveLength(0);
+});
+
+// Item 3: the door's refusal is structured. The web draws `code` and its parts; Pea reads `agentHint`.
+const casing = (answer: (key: string, request: any) => unknown): HostCall =>
+  (async (key: string, request: any, on: any) =>
+    (await answer(key, request)) ?? liveHost()(key as any, request, on)) as HostCall;
+const catalogOf = (families: unknown[], truncated = false) =>
+  casing((key) =>
+    key === "revit.catalog.loaded-families" ? { summary: { truncated }, families } : undefined,
+  );
+const exhaustCell = propose("Price LBP15A Exhaust");
+const stagedExhaust = { scope: { staged: { value: exhaustScope } } };
+
+test("item 3: every door refusal names its code and its structured parts, and keeps the prose for Pea", async () => {
+  const cases: [string, () => Promise<unknown>, Record<string, unknown>][] = [
+    [
+      "exclusion-held",
+      async () => {
+        const { work } = workspace();
+        await work.apply(
+          scope,
+          "families",
+          "human",
+          [{ path: ["excluded", "Casework"], value: { by: "person" } }],
+          0,
+        );
+        return work.apply(scope, "families", "agent", [{ path: ["excluded", "Casework"] }], 1);
+      },
+      { families: ["Casework"] },
+    ],
+    [
+      "exclusion-author",
+      () =>
+        workspace().work.apply(
+          scope,
+          "families",
+          "agent",
+          [{ path: ["excluded", "Casework"], value: { by: "person" } }],
+          0,
+        ),
+      { families: ["Casework"] },
+    ],
+    [
+      "unknown-family",
+      () =>
+        workspace().work.apply(
+          scope,
+          "families",
+          "human",
+          [
+            {
+              path: ["scope", "staged"],
+              value: { value: casework(["Casework", "Price LBPH15A Exhaust"]) },
+            },
+          ],
+          0,
+        ),
+      { families: ["Price LBPH15A Exhaust"] },
+    ],
+    [
+      "no-scope",
+      () => seededWork({}).work.apply(seededWork({}).at, "families", "agent", [exhaustCell], 1),
+      {},
+    ],
+    [
+      "unknown-family-type",
+      () => workspace().work.apply(scope, "families", "agent", [propose("Casework 2")], 0),
+      { cells: [{ familyName: "Casework 2", typeName: "12 X 4", parameter: "View Description" }] },
+    ],
+    [
+      "scope-unresolved",
+      () => {
+        const { work, at } = seededWork({
+          scope: {
+            staged: { value: { ...exhaustScope, categoryNames: ["Walls"], familyNames: [] } },
+          },
+        });
+        return work.apply(at, "families", "agent", [exhaustCell], 1);
+      },
+      {},
+    ],
+    [
+      "scope-truncated",
+      () => {
+        const { work, at } = seededWork(stagedExhaust, catalogOf([], true));
+        return work.apply(at, "families", "agent", [exhaustCell], 1);
+      },
+      {},
+    ],
+    [
+      "types-truncated",
+      () => {
+        const { work, at } = seededWork(
+          stagedExhaust,
+          catalogOf([{ ...exhaust, typeCount: 13, types: exhaust.types }]),
+        );
+        return work.apply(at, "families", "agent", [exhaustCell], 1);
+      },
+      { families: ["Price LBP15A Exhaust"] },
+    ],
+    [
+      "document-unavailable",
+      () => {
+        const { work, at } = seededWork(
+          stagedExhaust,
+          casing((key) => (key === "bridge.sessions.list" ? { sessions: [] } : undefined)),
+        );
+        return work.apply(at, "families", "agent", [exhaustCell], 1);
+      },
+      {},
+    ],
+    [
+      "catalog-unreachable",
+      () => {
+        const { work, at } = seededWork(
+          stagedExhaust,
+          casing((key) => {
+            if (key === "revit.catalog.loaded-families") throw Error("socket hang up");
+          }),
+        );
+        return work.apply(at, "families", "agent", [exhaustCell], 1);
+      },
+      {},
+    ],
+  ];
+  for (const [code, write, parts] of cases) {
+    const refused = (await write()) as Record<string, unknown>;
+    expect(refused, code).toMatchObject({ ok: false, code, ...parts });
+    expect(typeof refused.agentHint, code).toBe("string");
+    expect(refused, code).not.toHaveProperty("error");
+    expect(refused, code).not.toHaveProperty("hint");
+  }
 });
