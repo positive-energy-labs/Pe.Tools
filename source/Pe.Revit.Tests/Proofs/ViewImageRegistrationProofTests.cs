@@ -9,9 +9,8 @@ namespace Pe.Revit.Tests;
 ///     D4 (hold 4a, projectA: rotated crop + annotation crop ON refused AspectDisagrees): the registration must place model points
 ///     where the exported PNG draws them. A plan with a crop rotated ~30° and two detail-line crosses; each cross's drawn centroid
 ///     must land within 2 px of its registered position. Annotation crop ON uses asymmetric offsets so a side or axis mix-up shows.
-///     Far annotations (a grid and a note outside the crop; D4 Pool House) must not widen the export. A note that CROSSES the crop
-///     edge (D4 Lower Level: a 249.75 x 110.25 ft crop still exported 1500 x 682 px with the far notes hidden) cannot be hidden
-///     without losing what it draws inside; the image must still be cut to exactly the crop.
+///     Far annotations (a grid and a note outside the crop; D4 Pool House) and a note that CROSSES the crop edge (D4 Lower Level) widen
+///     the plain export to the view's Outline; the view exports unmodified and the image is still cut to exactly the crop from it.
 ///     `[PE_VIEW_IMAGE_EXTENT]` prints the image size against the model crop and the annotation crop, the diagnosis evidence.
 /// </summary>
 [TestFixture]
