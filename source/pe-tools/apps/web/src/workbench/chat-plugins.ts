@@ -82,13 +82,14 @@ export function proposedRecord(
   const request = isRecord(args) ? args : {};
   const input = parsed(request.input);
   const patches = isRecord(input) && Array.isArray(input.patches) ? input.patches : [];
-  // Pea's mask admits only `cells/<key>/proposal…` and `fields/<pointer>/proposal…`.
+  // Pea's mask admits `cells/<key>/proposal…`, `fields/<pointer>/proposal…` and a root cell's
+  // `<cell>/proposal…` (families' `scope`, F-H6-5).
   const cells = new Set(
     patches.flatMap((patch) => {
       const path = isRecord(patch) && Array.isArray(patch.path) ? patch.path : [];
-      return (path[0] === "cells" || path[0] === "fields") && path[1] !== undefined
-        ? [`${path[0]}/${String(path[1])}`]
-        : [];
+      if ((path[0] === "cells" || path[0] === "fields") && path[1] !== undefined)
+        return [`${path[0]}/${String(path[1])}`];
+      return path[1] === "proposal" ? [String(path[0])] : [];
     }),
   );
   const target = isRecord(outer.target) ? outer.target : {};

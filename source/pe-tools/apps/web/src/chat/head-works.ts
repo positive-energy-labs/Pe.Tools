@@ -15,10 +15,13 @@ import {
   takeoffEditAddress,
   takeoffsRouteState,
   type Address,
+  type AppliedFilter,
+  type RouteStatePatch,
   type InstancesLaunch,
   type TrichotomyCellLike,
 } from "@pe/agent-contracts";
 
+import { filterWords } from "#/families/scope-band";
 import { familiesGroupOf } from "#/families/staged";
 import { INSTANCES_WORK } from "#/instances/manifest";
 import { useRouteWork } from "#/route/use-route";
@@ -139,33 +142,49 @@ export function useHeadWorks(
       })
     : [];
   if (!address || !work.doc) return [...launch, ...takeoffWorks];
+  const wire = {
+    revision: work.revision,
+    write: async (patches: RouteStatePatch[], expectedRevision?: number) => {
+      const refusal = await work.write(patches, expectedRevision);
+      setConflict(refusal?.code === "stale-revision");
+      return refusal;
+    },
+  };
+  const exitsOf = {
+    stale: work.stale,
+    conflict,
+    reload: () => {
+      setConflict(false);
+      work.reload();
+    },
+    commit: { word: "plan", run: () => exits.planIn("families") },
+    open: (focus?: readonly string[]) => exits.open("families", focus),
+  };
   return [
     ...launch,
     ...takeoffWorks,
+    // The audited scope is a root cell Pea proposes (F-J1-10): its own group, beside the cells.
+    {
+      id: `families-scope:${address}`,
+      route: familiesRouteState.title,
+      subject,
+      cells: { scope: work.doc.scope as TrichotomyCellLike },
+      wire: { ...wire, segment: null },
+      groupOf: () => ["scope"],
+      show: (value) => filterWords(value as AppliedFilter),
+      ...exitsOf,
+      // The scope band heads the pane; a ["scope"] focus would match no type row.
+      open: () => exits.open("families"),
+    },
     {
       id: `families:${address}`,
       route: familiesRouteState.title,
       subject,
       cells: work.doc.cells as Record<string, TrichotomyCellLike>,
-      wire: {
-        segment: "cells",
-        revision: work.revision,
-        write: async (patches, expectedRevision) => {
-          const refusal = await work.write(patches, expectedRevision);
-          setConflict(refusal?.code === "stale-revision");
-          return refusal;
-        },
-      },
+      wire: { ...wire, segment: "cells" },
       groupOf: familiesGroupOf,
       show: familiesShow,
-      stale: work.stale,
-      conflict,
-      reload: () => {
-        setConflict(false);
-        work.reload();
-      },
-      commit: { word: "plan", run: () => exits.planIn("families") },
-      open: (focus) => exits.open("families", focus),
+      ...exitsOf,
     },
   ];
 }

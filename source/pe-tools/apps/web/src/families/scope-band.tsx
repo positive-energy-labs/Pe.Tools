@@ -49,7 +49,8 @@ export function PeaFilterProposal({
   const proposed = standingFilterProposal(scope);
   if (!proposed) return null;
   const show = (value: unknown) => filterWords(value as AppliedFilter);
-  const scopeWire = { ...wire, segment: null };
+  // The scope is a root cell: the matrix's per-cell lock/baseline read family cell keys (F-H6-7).
+  const scopeWire: CellWire = { segment: null, write: wire.write, revision: wire.revision };
   return (
     <div className="hairline-b flex flex-wrap items-baseline gap-1.5 px-2 py-1">
       <SectionLabel>scope</SectionLabel>

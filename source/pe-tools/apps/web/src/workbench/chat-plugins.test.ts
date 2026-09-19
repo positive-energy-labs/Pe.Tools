@@ -81,3 +81,14 @@ test("an action call names its receipt; its route is the action's entity", () =>
   expect(actionRoute("action.resume")).toBeNull();
   expect(actionWord("schedule.grid.push")).toBe("grid push");
 });
+
+test("F-H6-5: a scope proposal is a change (a root cell, like cells and fields)", () => {
+  const input = {
+    patches: [
+      { path: ["scope", "proposal"], value: { value: { familyNames: ["LBP15A"] } } },
+      { path: ["scope", "proposal", "note"], value: "the three Price LBP15A families" },
+      { path: ["cells", '["LBP15A","A","View Description"]', "proposal"], value: { value: "X" } },
+    ],
+  };
+  expect(proposedRecord("pe_do", { key: "route:families.propose", input }, ok)?.changes).toBe(2);
+});
