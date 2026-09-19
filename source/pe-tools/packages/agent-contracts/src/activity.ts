@@ -67,12 +67,12 @@ function str(args: Record<string, unknown> | null, field: string): string | unde
 /** Derive the activity for a host op key — reuses the catalog's own verb ladder. */
 export function deriveOpActivity(key: string): Activity {
   const tail = key.split(".").slice(1).join(".") || key;
-  if (key === "family.editor.open") return { verb: "navigating", gerund: "opening", target: tail };
+  if (key === "family.open") return { verb: "navigating", gerund: "opening", target: tail };
   if (key.startsWith("scripting.")) return { verb: "scripting", gerund: "scripting", target: tail };
   const family = key.split(".")[1] ?? key.split(".")[0];
   if (READ_OP_FAMILIES.has(family) || key.endsWith(".open") || key.endsWith(".validate"))
     return { verb: "looking", gerund: "looking at", target: tail };
-  // remaining families mutate: revit.apply.*, family.editor.apply, aps.auth.*
+  // remaining families mutate: revit.apply.*, aps.auth.*
   return { verb: "editing", gerund: "editing", target: tail };
 }
 
