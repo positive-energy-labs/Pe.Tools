@@ -14,6 +14,7 @@ import {
   parameterLinksBasis,
   parameterLinksReadingSchema,
   parameterLinksRouteState,
+  transitionPatches,
 } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
 import { ActionJournal } from "../src/action-journal.ts";
@@ -815,17 +816,63 @@ test("two documents keep independent authored scopes", async () => {
 
 /* ── parameter links ─────────────────────────────────────────────────────────────────────── */
 
+/** The person stages a profile on the one cell. */
 async function authorDraft(work: RouteWorkspace, draft: unknown, revision = 0) {
   const landed = await work.apply(
     scope,
     "parameter-links",
     "human",
-    [{ path: ["draft"], value: draft }],
+    transitionPatches([], "profile", {}, { kind: "stage", rung: { value: draft } }),
     revision,
   );
   expect(landed.ok).toBe(true);
   return landed.revision!;
 }
+
+test("a Pea-proposed profile previews labelled and never arms apply; the person's staged one does", async () => {
+  const { work, read, admit, sent, captures } = await setup();
+  const proposed = { ...link, definitions: [{ ...link.definitions[0], reducer: "max" as const }] };
+  const landed = await work.apply(
+    scope,
+    "parameter-links",
+    "agent",
+    transitionPatches([], "profile", {}, { kind: "propose", rung: { value: proposed } }),
+    0,
+  );
+  expect(landed).toMatchObject({ ok: true });
+  // The preview evaluates the proposal, says so, and names it as its basis.
+  const preview = (await read("parameter-links.read", { evaluate: true, subject: "proposal" })) as {
+    id: string;
+  };
+  const reading = parameterLinksReadingSchema.parse(
+    (await captures.familyReadings(scope))[0]!.reading.value,
+  );
+  expect(reading).toMatchObject({ evaluated: true, subject: "proposal" });
+  expect(sent.at(-1)!.input).toMatchObject({ profile: proposed, previewOnly: true });
+  const refused = await admit("parameter-links.apply", { readingId: preview.id }, landed.revision!);
+  expect(refused.state).toBe("failed");
+  expect(String((refused as { error?: string }).error)).toMatch(/Stage a profile/);
+
+  // The person stages their own profile. The proposal preview still cannot arm apply.
+  const revision = await authorDraft(work, link, landed.revision!);
+  const stillRefused = await admit(
+    "parameter-links.apply",
+    { readingId: preview.id },
+    revision,
+    "apply-proposal-preview",
+  );
+  expect(String((stillRefused as { error?: string }).error)).toMatch(/proposal preview/);
+  expect(sent.filter((s) => s.input?.previewOnly === false)).toHaveLength(0);
+
+  // Only the staged evaluation arms apply, with exactly the staged value.
+  const evaluated = (await read("parameter-links.read", { evaluate: true })) as { id: string };
+  const row = await admit("parameter-links.apply", { readingId: evaluated.id }, revision);
+  expect(row.state, JSON.stringify((row as { error?: string }).error)).toBe("succeeded");
+  expect(sent.find((s) => s.input?.previewOnly === false)!.input).toMatchObject({
+    profile: link,
+    reconcile: true,
+  });
+});
 
 test("the approval count and the apply basis are the same evaluated version after a reload", async () => {
   const { work, read, admit, sent, captures } = await setup();
@@ -856,12 +903,15 @@ test("a draft edited after the evaluation refuses before any native write", asyn
     scope,
     "parameter-links",
     "human",
-    [
+    transitionPatches(
+      [],
+      "profile",
+      {},
       {
-        path: ["draft"],
-        value: { ...link, definitions: [{ ...link.definitions[0], reducer: "max" }] },
+        kind: "stage",
+        rung: { value: { ...link, definitions: [{ ...link.definitions[0], reducer: "max" }] } },
       },
-    ],
+    ),
     evaluated,
   );
   const before = sent.filter((s) => s.key === "revit.apply.parameter-links").length;
@@ -891,7 +941,7 @@ test("a native failure leaves the authored draft exactly as the human left it", 
   const after = parameterLinksRouteState.schema.parse(
     (await work.read(scope, "parameter-links"))!.doc,
   );
-  expect(after.draft).toEqual(link);
+  expect(after.profile.staged).toEqual({ value: link });
 });
 
 test("the evaluation is the host readback, stamped to the exact draft it evaluated", async () => {
@@ -904,7 +954,7 @@ test("the evaluation is the host readback, stamped to the exact draft it evaluat
   expect(reading.evaluated).toBe(true);
   expect(reading.appliedWriteCount).toBe(2);
   expect(reading.stored).toEqual(link);
-  expect(reading.basis).toBe(parameterLinksBasis({ draft: link }));
+  expect(reading.basis).toBe(parameterLinksBasis({ profile: { staged: { value: link } } }));
 });
 
 test("neither route advertises a command a server would have to refuse", () => {

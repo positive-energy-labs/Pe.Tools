@@ -40,7 +40,7 @@ function profile(defId = "d1"): ParameterLinkProfile {
 }
 
 function doc(draft: ParameterLinkProfile | null): ParameterLinksDocument {
-  return { draft };
+  return { profile: draft ? { staged: { value: draft } } : {} };
 }
 
 /** A capture-owner reading. It is a separate value, never a field of the document above. */
@@ -54,6 +54,7 @@ function reading(input: {
     basis: input.basis,
     workRevision: 0,
     evaluated: input.evaluated ?? true,
+    subject: "staged",
     stored: input.stored ?? null,
     status: {
       hasStoredProfile: input.stored != null,
@@ -79,7 +80,7 @@ function reading(input: {
     appliedWriteCount: 0,
   };
 }
-const stampOf = (draft: ParameterLinkProfile | null) => parameterLinksBasis({ draft });
+const stampOf = (draft: ParameterLinkProfile | null) => parameterLinksBasis(doc(draft));
 
 test("editingProfile is the authored draft and nothing else", () => {
   expect(editingProfile(doc(profile("draft")))?.definitions[0].id).toBe("draft");

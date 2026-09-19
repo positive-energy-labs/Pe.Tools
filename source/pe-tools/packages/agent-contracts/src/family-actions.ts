@@ -164,7 +164,11 @@ export const familyReads = {
     actor: "any",
     description:
       "Read the stored parameter-link profile and runtime status, and optionally evaluate the authored draft, into a durable reading; writes nothing.",
-    input: z.object({ evaluate: z.boolean().default(false) }),
+    input: z.object({
+      evaluate: z.boolean().default(false),
+      /** A proposal evaluation is a labelled preview; only the staged profile can arm apply. */
+      subject: z.enum(["staged", "proposal"]).default("staged"),
+    }),
   },
   "family.parse-spec": {
     says: "Read parsed spec blocks and image citations into a durable immutable reading.",

@@ -9,6 +9,7 @@ import {
   familiesRouteState,
   familyDraftRouteState,
   instancesRouteState,
+  parameterLinksRouteState,
   START_FRESH_ASIDE,
   UNREADABLE_WORK,
   workKey,
@@ -67,10 +68,18 @@ const oldInstances = {
   doc: { staged: { kind: "start", year: "2025", name: "dev" } },
 };
 
+// The pre-cells Parameter Links shape: a bare authored draft (the census found 0 rows).
+const oldParameterLinks = {
+  version: 1,
+  revision: 1,
+  doc: { draft: { formatVersion: 1, definitions: [], assignments: [] } },
+};
+
 for (const [spec, saved] of [
   [familiesRouteState, oldFamilies],
   [familyDraftRouteState, oldFamily],
   [instancesRouteState, oldInstances],
+  [parameterLinksRouteState, oldParameterLinks],
 ] as const) {
   test(`/${spec.route}: old-shape Work is left byte-for-byte and refused in one sentence`, async () => {
     const scope: WorkKey = { route: spec.route, target };
