@@ -142,6 +142,9 @@ public sealed record FamilyVisitResult(
 ///     cannot serve (gotcha 25) unless the caller supplied a park. No FF dependency: pods call it directly.
 /// </summary>
 public static class FamilyVisit {
+    /// <summary>The diagnostic label for what Revit posted while the family opened (acknowledged by <see cref="FamilyDocumentProcessFamily.OpenFamilyForEdit"/>).</summary>
+    public const string OpenEdit = "EditFamily";
+
     public static FamilyVisitResult Run(Document project, Family family, Action<FamilyVisitScope> visit, FamilyVisitOptions? options = null,
         Action<FamilyDocument>? afterEdits = null) {
         options ??= new FamilyVisitOptions();
@@ -158,8 +161,10 @@ public static class FamilyVisit {
             return Refused(FamilyVisitRefusal.ProjectIsModifiable, "The park did not release the project; it is still modifiable.");
 
         var familyName = family.Name;
-        var famDoc = new FamilyDocument(project.EditFamily(family));
+        var opened = new List<(bool IsError, string Message)>();
+        var famDoc = new FamilyDocument(project.OpenFamilyForEdit(family, opened));
         var scope = new FamilyVisitScope(famDoc, options);
+        scope.Diagnostics.AddRange(opened.Select(d => (OpenEdit, d.IsError, d.Message)));
         try {
             using var projectGroup = new TransactionGroup(project, "Visit family");
             _ = projectGroup.Start();
