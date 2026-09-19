@@ -294,7 +294,7 @@ export function InstancesCluster({
       pickedWorld ? document.openIn.includes(pickedWorld.id) || document.year === pickedYear : true,
     )
     .filter((document) => (yearPick ? document.year === yearPick : true));
-  const stagedScope =
+  const stagedDocument =
     staged?.kind === "open" && staged.doc.openIn.includes(staged.world.id)
       ? documentScope(sessionTarget(staged.world), staged.doc.id)
       : null;
@@ -676,17 +676,17 @@ export function InstancesCluster({
                       {staged.kind === "open" ? (
                         <VerbButton
                           tone="commit"
-                          label={stagedScope && onDocument ? "use" : "open"}
+                          label={stagedDocument && onDocument ? "use" : "open"}
                           reason={
-                            stagedScope && onDocument
+                            stagedDocument && onDocument
                               ? "use the staged document in this route"
                               : (openRefusal ?? "open the staged document in its session")
                           }
-                          disabled={busy !== null || (!stagedScope && openRefusal !== null)}
+                          disabled={busy !== null || (!stagedDocument && openRefusal !== null)}
                           busy={busy === "open"}
                           onClick={() =>
-                            stagedScope && onDocument
-                              ? onDocument(stagedScope)
+                            stagedDocument && onDocument
+                              ? onDocument(stagedDocument)
                               : void runCommand("open")
                           }
                         />
