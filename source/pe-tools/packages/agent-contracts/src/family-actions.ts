@@ -102,13 +102,15 @@ export const familyActions = {
     executors: ["pod.member.compose", "families.plan"],
     description:
       "Plan a saved spec, or a supplied draft's exact bytes (filed nowhere), over the loaded families in the reviewed Families Work scope; returns the plan and the hashes apply would send, and changes nothing.",
-    input: z.object({
-      source: planSourceSchema,
-      /** Plan only these families of the scope (a generated one-family member); absent = the scope. */
-      familyIds: z.array(z.number().int()).nonempty().optional(),
-      excludedIds: z.array(z.number().int()).default([]),
-      executionOptions: familyExecutionOptionsSchema.optional(),
-    }),
+    input: z
+      .object({
+        source: planSourceSchema,
+        /** Plan only these families of the scope (a generated one-family member); absent = the scope. */
+        familyIds: z.array(z.number().int()).nonempty().optional(),
+        executionOptions: familyExecutionOptionsSchema.optional(),
+      })
+      // Exclusions are read from the reviewed Work, never sent; a stale caller sending them refuses.
+      .strict(),
   },
   "families.apply": {
     says: "Apply the exact family plans a succeeded families.plan action returned (named by that action id), from the spec bytes that plan sealed; each family's plan hash gates drift. Staged cells a successful family consumed retire only if unchanged.",

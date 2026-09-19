@@ -63,7 +63,7 @@ const ctx = (workCells: Record<string, FamilyCellState>) => ({
   target: { kind: "document", ref: { session: "s", openId: "o" } },
   work: {
     key: { route: "families", target: null },
-    doc: { scope, excludedIds: [], cells: workCells },
+    doc: { scope, excluded: {}, cells: workCells },
     revision: 2,
   },
   readings: { pods: { state: "ready", observation: [] } },

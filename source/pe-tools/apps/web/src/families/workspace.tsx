@@ -60,7 +60,7 @@ function useFamiliesWorkspaceModel(
     [cells],
   );
   const plan = store.plan;
-  const excludedIds = new Set(store.excludedIds);
+  const excludedIds = new Set(Object.keys(store.excluded).map(Number));
   const pickedIds = store.pickedIds;
   const setPickedIds = store.actions.setPickedIds;
   const applyData = store.applyData;

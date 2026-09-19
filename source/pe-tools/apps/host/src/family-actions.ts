@@ -8,7 +8,9 @@ import {
   familyReads,
   familiesCaptureEvidenceSchema,
   familiesRouteState,
+  familiesExcluded,
   familiesIncluded,
+  type FamilyExclusions,
   familyCellAddress,
   familyDraftRouteState,
   familyStagedPatch,
@@ -326,7 +328,7 @@ type Prepared =
        */
       planned?: {
         scope: AppliedFilter | null;
-        excludedIds: readonly number[];
+        excluded: FamilyExclusions;
         /** A subset of the scope the caller names (one generated member's family); absent = all. */
         familyIds?: readonly number[];
       };
@@ -469,7 +471,7 @@ export async function admitFamilyAction(
           process,
           nativeKey: "family.plan",
           input: { specJson },
-          planned: { scope: null, excludedIds: [] },
+          planned: { scope: null, excluded: {} },
           sealed: { specJson, source, consumed },
         };
       }
@@ -570,7 +572,7 @@ export async function admitFamilyAction(
           },
           planned: {
             scope,
-            excludedIds: input.excludedIds,
+            excluded: doc.excluded,
             ...(input.familyIds ? { familyIds: input.familyIds } : {}),
           },
         };
@@ -749,7 +751,7 @@ export async function admitFamilyAction(
           prepared.process,
         );
         if (prepared.planned) {
-          const { excludedIds } = prepared.planned;
+          const { excluded } = prepared.planned;
           const planned = result as FamilyPlan.Res.Response | FamiliesPlan.Res.Response;
           if (scope) {
             if (planned.diagnostics.length)
@@ -758,7 +760,8 @@ export async function admitFamilyAction(
               id: admission.id,
               executionContext: target,
               plan: planned.families,
-              included: familiesIncluded({ entries: planned.families }, excludedIds),
+              included: familiesIncluded({ entries: planned.families }, excluded),
+              excluded: familiesExcluded({ entries: planned.families }, excluded),
             };
           }
           // One family document plans exactly one family, or it refuses.

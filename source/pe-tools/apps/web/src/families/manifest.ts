@@ -67,13 +67,10 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
       ...admissionPlan<FamiliesRouteDocument, FamiliesReadingKey, FamiliesPage>(
         { plan: "families.plan", apply: "families.apply" },
         (plan) => ffPlanRow(ffPlanEntrySchema.parse(plan)),
-        (work) => ({
-          excludedIds: work.excludedIds,
-          ...(work.executionOptions ? { executionOptions: work.executionOptions } : {}),
-        }),
+        (work) => (work.executionOptions ? { executionOptions: work.executionOptions } : {}),
       ),
       // Held-back rows are authored Work; the sheet toggles them there.
-      excluded: (view) => (view.work.doc?.excludedIds ?? []).map(String),
+      excluded: (view) => Object.keys(view.work.doc?.excluded ?? {}),
     },
     /**
      * The editable table's half. Plan takes staged cells only, generates one patch draft per family
@@ -97,7 +94,6 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
               // The draft selects one family by name; the plan names it by id, so the host plans
               // that family alone and never lays one family's types onto the rest of the scope.
               familyIds: [draft.familyId],
-              excludedIds: doc.excludedIds,
               ...(doc.executionOptions ? { executionOptions: doc.executionOptions } : {}),
             },
             ctx,

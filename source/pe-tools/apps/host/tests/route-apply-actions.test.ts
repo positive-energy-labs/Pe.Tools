@@ -302,7 +302,7 @@ test("neither route document can hold an observation or a receipt", async () => 
   // A native plan was returned, and neither the Work document nor a reading moved.
   expect(plan.plan).toHaveLength(2);
   expect(doc.revision).toBe(revision);
-  expect(Object.keys(doc.doc as object).sort()).toEqual(["cells", "excludedIds", "scope"]);
+  expect(Object.keys(doc.doc as object).sort()).toEqual(["cells", "excluded", "scope"]);
   expect(JSON.stringify(doc.doc)).not.toContain("planHash");
   expect(await captures.familyReadings(scope)).toEqual([]);
 
@@ -368,21 +368,42 @@ test("pea proposes a families cell like a person does, and cannot accept it", as
 test("plan sends the scope's resolved ids, names what apply would send, and refuses without a scope", async () => {
   const { work, admit, entries, sent } = await setup();
   entries([entry(1, "Box", "h1"), entry(2, "Pipe", "h2"), entry(9, "Grille", "h9")]);
-  const bare = await work.apply(
-    scope,
-    "families",
-    "human",
-    [{ path: ["excludedIds"], value: [] }],
-    0,
-  );
+  const bare = await work.apply(scope, "families", "human", [{ path: ["excluded"], value: {} }], 0);
   const refused = await admit("families.plan", { source }, bare.revision!);
   expect(refused.state).toBe("failed");
   expect(String((refused as { error?: string }).error)).toMatch(/Author a scope/);
   const revision = await authorFamilies(work, bare.revision!);
-  const plan = resultOf<Plan>(await admit("families.plan", { source, excludedIds: [2] }, revision));
+  const held = await work.apply(
+    scope,
+    "families",
+    "human",
+    [{ path: ["excluded", "2"], value: { by: "person" } }],
+    revision,
+  );
+  const plan = resultOf<Plan>(await admit("families.plan", { source }, held.revision!));
   expect(sent.find((s) => s.key === "families.plan")!.input.familyIds).toEqual([1, 2]);
   expect(plan.plan.map((row) => row.familyId)).toEqual([1, 2]);
   expect(plan.included).toEqual({ "1": "h1" });
+});
+
+test("plan reads exclusions from the reviewed Work and seals each one with who made it", async () => {
+  const { work, admit, entries } = await setup();
+  entries([entry(1, "Box", "h1"), entry(2, "Pipe", "h2")]);
+  const authored = await authorFamilies(work);
+  const revision = (
+    await work.apply(
+      scope,
+      "families",
+      "agent",
+      [{ path: ["excluded", "2"], value: { by: "pea" } }],
+      authored,
+    )
+  ).revision!;
+  const plan = resultOf<Plan & { excluded: unknown }>(
+    await admit("families.plan", { source }, revision),
+  );
+  expect(plan.included).toEqual({ "1": "h1" });
+  expect(plan.excluded).toEqual([{ familyId: 2, by: "pea" }]);
 });
 
 test("a category-only scope plans exactly its three families and never a fourth", async () => {
@@ -499,7 +520,13 @@ test("apply refuses a plan it cannot name, another document's, or a hash the pla
 test("families plan refuses a reviewed Work revision that is no longer current", async () => {
   const { work, admit, sent } = await setup();
   const planned = await authorFamilies(work);
-  await work.apply(scope, "families", "human", [{ path: ["excludedIds"], value: [2] }], planned);
+  await work.apply(
+    scope,
+    "families",
+    "human",
+    [{ path: ["excluded", "2"], value: { by: "person" } }],
+    planned,
+  );
   const refused = await admit("families.plan", { source }, planned);
   expect(refused.state).toBe("failed");
   expect(String((refused as { error?: string }).error)).toMatch(/Current reviewed Families Work/);
@@ -556,7 +583,7 @@ test("an exclusion written while the native call runs survives, because Work is 
       scope,
       "families",
       "human",
-      [{ path: ["excludedIds"], value: [2] }],
+      [{ path: ["excluded", "2"], value: { by: "person" } }],
       revision,
     );
     expect(landed.ok).toBe(true);
@@ -565,7 +592,7 @@ test("an exclusion written while the native call runs survives, because Work is 
     await admit("families.apply", { plan: plan.id, expectedPlanHashes: plan.included }, revision),
   );
   const after = familiesRouteState.schema.parse((await work.read(scope, "families"))!.doc);
-  expect(after.excludedIds).toEqual([2]);
+  expect(after.excluded).toEqual({ "2": { by: "person" } });
 });
 
 test("the same action id joins the original attempt instead of minting a second native call", async () => {
