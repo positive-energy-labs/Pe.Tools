@@ -2,14 +2,7 @@ import { useMemo } from "react";
 import { Key } from "#/components/anatomy";
 import { EmptyState } from "#/components/lang/empty";
 import { token } from "#/lib/token";
-import {
-  contentViewport,
-  fitFrame,
-  type AffineFrame,
-  type Bounds2,
-  unionBounds,
-} from "#/lib/affine-frame";
-import { planCanvasTransform, type PlanRegistration } from "#/runs/world";
+import { contentViewport, fitFrame, type Bounds2, unionBounds } from "#/lib/affine-frame";
 import { loopBounds, pathD } from "#/takeoff/model";
 import { PLAN_MIN_SQFT, onPlan } from "#/takeoff/room-actions";
 import {
@@ -22,40 +15,7 @@ import {
 } from "#/takeoff/room-state";
 import type { Phase, ModelRoom, ModelZone } from "#/takeoff/world";
 
-/** A level's plan image and where Revit says its pixels sit in the model. */
-export interface TakeoffPlanImage {
-  href: string;
-  registration: PlanRegistration;
-}
-
-/**
- * The plan frame as the registration's viewport. `fitFrame` maps model (x, y) to
- * (tx + s·x, ty − s·y), which is `toPx` with pxPerFt = s, minX = −tx/s, maxY = ty/s: the SVG's
- * own frame, handed to `planCanvasTransform` unchanged. Revit's registration stays the authority.
- */
-export function planViewport(frame: AffineFrame) {
-  const [tx, ty] = frame.toViewport([0, 0]);
-  return { minX: -tx / frame.scale, maxY: ty / frame.scale, pxPerFt: frame.scale };
-}
-
-/** The one plan image layer, under the zones, in the zones' coordinate frame. */
-export function PlanImageLayer({ plan, frame }: { plan: TakeoffPlanImage; frame: AffineFrame }) {
-  const { registration } = plan;
-  return (
-    <image
-      data-layer="plan-image"
-      href={plan.href}
-      width={registration.width}
-      height={registration.height}
-      transform={`matrix(${planCanvasTransform(registration, planViewport(frame)).join(",")})`}
-      preserveAspectRatio="none"
-      pointerEvents="none"
-    />
-  );
-}
-
 export function LevelPlan({
-  plan,
   zones,
   stageFilter,
   selectedKey,
@@ -66,8 +26,6 @@ export function LevelPlan({
   onCursor,
   onClear,
 }: {
-  /** Absent until a plan image reaches the route; the zones draw alone. */
-  plan?: TakeoffPlanImage | null;
   zones: ModelZone[];
   stageFilter: Phase | null;
   selectedKey: string | null;
@@ -133,7 +91,6 @@ export function LevelPlan({
           fill="transparent"
           onClick={onClear}
         />
-        {plan ? <PlanImageLayer plan={plan} frame={frame} /> : null}
 
         {drawn.map((z) => {
           const dimmed = stageFilter !== null && z.stage !== stageFilter;

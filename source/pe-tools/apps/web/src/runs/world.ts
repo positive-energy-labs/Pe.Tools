@@ -588,7 +588,7 @@ export function toPx(vp: ZoneViewport, xFt: number, yFt: number): [number, numbe
 
 export function planCanvasTransform(
   plan: PlanRegistration,
-  vp: Pick<ZoneViewport, "minX" | "maxY" | "pxPerFt">,
+  vp: ZoneViewport,
 ): [number, number, number, number, number, number] {
   return [
     ((plan.topRight[0] - plan.topLeft[0]) * vp.pxPerFt) / plan.width,
