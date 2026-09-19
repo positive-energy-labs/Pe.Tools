@@ -166,7 +166,9 @@ export function LiveScheduleGridWorkspace({
     <div className="flex size-full min-h-0 min-w-0 flex-col">
       {(readingFailure || !target) && (
         <div role="status">
-          {readingFailure ?? "Select an available document and session to read schedules"}
+          {readingFailure ??
+            handle.bindingLost?.sentence ??
+            "Select an available document and session to read schedules"}
         </div>
       )}
       {hasWork && retained && basisId !== retained.id && (

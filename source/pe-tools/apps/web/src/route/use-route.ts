@@ -604,6 +604,7 @@ export interface BindingLost {
   readonly ref: { readonly session: string; readonly openId: string };
   readonly title: string | null;
   readonly sentence: string;
+  readonly reason: "document-closed" | "session-gone";
   readonly reopened: { readonly openId: string; readonly title: string } | null;
 }
 
@@ -790,7 +791,8 @@ export function useRoute<W, R extends string, P, A extends string>(
     if (resolution.reason !== "document-closed" && resolution.reason !== "session-gone")
       return null;
     const chosen = parseTarget(target);
-    const request = chosen?.kind === "request" ? chosen.request : defaultDocument;
+    const pinned = chosen?.kind === "request";
+    const request = pinned ? chosen.request : defaultDocument;
     if (request?.kind !== "open") return null;
     const { ref } = request;
     const title = seenTitles.current.get(`${ref.session}/${ref.openId}`) ?? null;
@@ -806,12 +808,19 @@ export function useRoute<W, R extends string, P, A extends string>(
     return {
       ref,
       title,
-      sentence: `the document this page was bound to closed (${title ?? "untitled"} · ${ref.openId.slice(0, 8)}…); bind it again in the sentence above`,
+      // A `?target` pin is this page's own binding; a Chat head is the thread's (the words the
+      // host's route door uses). Remembered titles only label it; they never rebind.
+      sentence: pinned
+        ? `the document this page was bound to closed (${title ?? "untitled"} · ${ref.openId.slice(0, 8)}…); bind it again in the sentence above`
+        : `the Chat's document is no longer open — pick it again (${title ?? "untitled"} · ${ref.openId.slice(0, 8)}…)`,
+      reason: resolution.reason,
       reopened: reopened
         ? { openId: reopened[0].slice(ref.session.length + 1), title: reopened[1] }
         : null,
     };
   }, [seed, resolution, target, defaultDocument, open]);
+  const bindingLostRef = useRef(bindingLost);
+  bindingLostRef.current = bindingLost;
 
   // The Work key is the resolved document's Address, so a session-key `?target` and an Address
   // `?target` for the same document read and write the same Work.
@@ -966,7 +975,11 @@ export function useRoute<W, R extends string, P, A extends string>(
           if (seed) return refuse("not-ready", "frozen seed is read-only");
           if (expectedRevision === null)
             return refuse("not-ready", "Work has not been read yet; nothing on screen to act on");
-          if (!writer) return notHydrated;
+          // An unresolved target is the reason, never "not hydrated" (F-X-1 item 1).
+          if (!writer) {
+            const lost = bindingLostRef.current;
+            return lost ? refuse("no-target", lost.sentence) : notHydrated;
+          }
           let bound = expectedRevision;
           if (bound !== undefined) while (own.has(bound)) bound = own.get(bound)!;
           return writer.apply(patches, bound ?? landed ?? undefined, (base, revision) => {
@@ -1008,12 +1021,25 @@ export function useRoute<W, R extends string, P, A extends string>(
   const stage = (page as { stage?: unknown }).stage;
   const stageWord = manifest.stages?.find((item) => item.key === stage)?.word;
   const revision = doc?.revision ?? null;
-  const seen = useRef({ target: boundKey, stage: stageWord, revision });
+  const lostKey = bindingLost ? `${bindingLost.ref.session}/${bindingLost.ref.openId}` : null;
+  const seen = useRef({
+    target: boundKey,
+    stage: stageWord,
+    revision,
+    lost: null as string | null,
+  });
   useEffect(() => {
     if (seen.current.target !== boundKey) {
       seen.current.target = boundKey;
       const bound = JSON.parse(boundKey) as { session: string; openId: string } | null;
-      owner.note("target", "target", bound ? `${bound.session} › ${bound.openId}` : "unbound");
+      // A lost binding notes itself below, with its reason, on load as on a transition.
+      if (bound || !bindingLost)
+        owner.note("target", "target", bound ? `${bound.session} › ${bound.openId}` : "unbound");
+    }
+    if (seen.current.lost !== lostKey) {
+      seen.current.lost = lostKey;
+      if (bindingLost)
+        owner.note("target", "target", `unbound (${bindingLost.reason.replace("-", " ")})`);
     }
     if (seen.current.stage !== stageWord) {
       seen.current.stage = stageWord;
@@ -1023,7 +1049,7 @@ export function useRoute<W, R extends string, P, A extends string>(
       seen.current.revision = revision;
       if (revision !== null) owner.note("work", "work", `r${revision} loaded`);
     }
-  }, [owner, boundKey, stageWord, revision]);
+  }, [owner, boundKey, stageWord, revision, lostKey, bindingLost]);
 
   const actions = useMemo(() => {
     const targetRefusal = (needs: NonNullable<typeof manifest.needs> | "host") => {
