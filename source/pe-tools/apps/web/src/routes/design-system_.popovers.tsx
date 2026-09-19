@@ -22,8 +22,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { ThemeToggle } from "#/components/lang/theme-toggle";
 import { FactChip } from "#/components/lang/chip";
-import { Press } from "#/components/lang/press";
 import { ListPopup } from "#/components/lang/list-popup";
+import { Switcher } from "#/components/lang/switcher";
 import { FieldOptionPicker, FieldOptionSelect, type FieldOption } from "#/host/field-options";
 import { CATEGORY_OPTIONS } from "#/design-system/specimens-data";
 import { cn } from "#/lib/utils";
@@ -231,20 +231,17 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
         <ThemeToggle />
       </div>
 
-      <div className="flex flex-wrap gap-1 pt-2">
-        {SPECIMENS.map((s) => (
-          <Press
-            key={s.id}
-            type="button"
-            onClick={() => onPick(s.id)}
-            title={`Mount ${s.name} at all nine positions`}
-            size="caption"
-            tone={s.id === specimen.id ? "neutral" : "quiet"}
-            state={s.id === specimen.id ? "selected" : "rest"}
-          >
-            {s.name}
-          </Press>
-        ))}
+      <div className="pt-2">
+        <Switcher
+          ariaLabel="specimen"
+          value={specimen.id}
+          onChange={onPick}
+          options={SPECIMENS.map((s) => ({
+            value: s.id,
+            label: s.name,
+            title: `Mount ${s.name} at all nine positions`,
+          }))}
+        />
       </div>
 
       <div className="flex flex-col gap-1.5 pt-2.5">

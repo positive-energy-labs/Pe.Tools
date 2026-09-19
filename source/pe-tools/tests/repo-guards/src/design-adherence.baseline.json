@@ -1,15 +1,4 @@
 {
-  "rawTable": {
-    "total": 7,
-    "byArea": {
-      "data-tables": 1,
-      "design-system": 1,
-      "lib": 1,
-      "param-tables": 2,
-      "runs": 1,
-      "workbench": 1
-    }
-  },
   "localChrome": {
     "total": 1,
     "byArea": {
