@@ -344,6 +344,20 @@ test("HTTP authored writes enforce short local revision checks", async () => {
         })
       ).json(),
     ).toMatchObject({ ok: true, revision: 1 });
+    // F-H6-4: a malformed body names the failing field and its shape, read off the schema's issue.
+    const stringPath = await post("/pe/agent/route-state/test-route/apply", {
+      patches: [{ path: "scope.proposal", value: 1 }],
+      expectedRevision: 1,
+    });
+    expect(stringPath.status).toBe(400);
+    expect(await stringPath.json()).toMatchObject({
+      ok: false,
+      kind: "error",
+      error: 'invalid body at patches[0].path: must be a segment array, e.g. ["scope","proposal"]',
+    });
+    expect(
+      await (await post("/pe/agent/route-state/test-route/apply", { patches: [] })).json(),
+    ).toMatchObject({ error: expect.stringMatching(/^invalid body at expectedRevision: /) });
     const command = {
       command: "increment",
       input: {},

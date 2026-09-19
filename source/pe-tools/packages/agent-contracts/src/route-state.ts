@@ -78,7 +78,9 @@ export type RouteDocOf<TSpec> =
 
 /** A single segment-array patch. Omit `value` to delete the key. */
 export const routeStatePatchSchema = z.object({
-  path: z.array(z.union([z.string(), z.number()])),
+  path: z.array(z.union([z.string(), z.number()]), {
+    error: 'must be a segment array, e.g. ["scope","proposal"]',
+  }),
   value: z.unknown().optional(),
 });
 export type RouteStatePatch = z.infer<typeof routeStatePatchSchema>;
