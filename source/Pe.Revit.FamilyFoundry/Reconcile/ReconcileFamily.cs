@@ -60,8 +60,10 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
     public IReadOnlyList<string> ObservedResourceIds { get; private set; } = [];
 
     internal void Complete(bool committed, IReadOnlyList<(string Edit, bool IsError, string Message)>? diagnostics = null) {
-        // Resolutions Revit took under run.failures are geometry the patch never named; they ride the receipt as RunEffects.
-        var resolutions = (diagnostics ?? []).Where(d => d.Message.StartsWith(FamilyFailurePolicy.ResolvedPrefix, StringComparison.Ordinal))
+        // Resolutions Revit took under run.failures are geometry the patch never named, and warnings acknowledged while the family
+        // opened are the user's to see (F-J3-7); both ride the receipt as RunEffects.
+        var resolutions = (diagnostics ?? []).Where(d => d.Message.StartsWith(FamilyFailurePolicy.ResolvedPrefix, StringComparison.Ordinal) ||
+                                                         d.Edit == FamilyVisit.OpenEdit && !d.IsError)
             .Select(d => $"{d.Edit}: {d.Message}").ToList();
         this.LastReceipt = this._candidateReceipt is { } receipt ? receipt with {
             RunEffects = resolutions.Count == 0 ? receipt.RunEffects : receipt.RunEffects.Concat(resolutions).ToList(),
