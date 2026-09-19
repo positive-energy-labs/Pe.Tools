@@ -805,6 +805,7 @@ export namespace HostOpsCatalog {
       callGuidance: string[];
       requestSchemaJson: string;
       responseSchemaJson: string;
+      actor: string;
     }
     export interface HostOperationRequestExample {
       name: string;

@@ -34,6 +34,14 @@ const ops = [
     needs: "document" as const,
     intent: "Mutate" as const,
   },
+  // What the C# catalog serves for a human verb: `[Op(..., Actor = OpActor.Human)]`.
+  ...["families.plan", "families.capture"].map((key) => ({
+    key,
+    description: "Human verb over loaded families.",
+    needs: "project-document" as const,
+    intent: "Read" as const,
+    actor: "human" as const,
+  })),
 ];
 
 const pods = {
@@ -134,6 +142,46 @@ test("no query gives the map; a query ranks across kinds; needs filters replace 
       (row) => row.needs === "project-document",
     ),
   ).toBe(true);
+});
+
+test("F-H6-3: plan and capture over loaded families are human verbs; Pea never finds or runs them", async () => {
+  const rows = catalog().capabilities;
+  const verbs = ["families.plan", "families.capture"].flatMap((key) => [
+    `op:${key}`,
+    `workflow:${key}`,
+  ]);
+  for (const key of verbs) expect(rows.find((row) => row.key === key)?.actor).toBe("human");
+  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
+  vi.stubGlobal("fetch", async () => Response.json(catalog()));
+  try {
+    const found = (await run(peFind, { query: "plan capture loaded families", limit: 50 })) as {
+      matches: Array<{ key: string }>;
+    };
+    expect(found.matches.length).toBeGreaterThan(0);
+    for (const key of verbs) expect(found.matches.map((row) => row.key)).not.toContain(key);
+    const map = (await run(peFind, {})) as { map: { total: number } };
+    expect(map.map.total).toBe(rows.filter((row) => row.actor !== "human").length);
+    for (const key of verbs)
+      for (const tool of [peDo, peRead]) {
+        const refused = (await run(tool, { key, timeoutSeconds: 30 })) as {
+          isError: boolean;
+          content: string;
+        };
+        expect(refused).toMatchObject({ isError: true, key });
+        expect(refused.content).toContain(`'${key}' is human-only`);
+      }
+  } finally {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  }
+});
+
+test("F-H6-2: the Families route tells Pea to propose a scope, then cells against it, without waiting for staging", () => {
+  const read = catalog().capabilities.find((row) => row.key === "route:families")!.description;
+  expect(read).toContain("revit.catalog.loaded-families");
+  expect(read).toMatch(/scope\.proposal first[^]*cells[^]*staged scope, else the proposed one/);
+  expect(read).toMatch(/do not wait for the person to stage/i);
+  expect(read).not.toMatch(/loaded in the staged scope/);
 });
 
 type ExecutableTool = { execute?: (input: never, context: never) => Promise<unknown> };
