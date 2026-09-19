@@ -59,7 +59,7 @@ const options = () => screen.queryAllByRole("option").map((row) => row.textConte
 test("opens on the first unbound rung, binds per rung, and a multi rung stays open", async () => {
   const onViews = vi.fn();
   render(<Head onViews={onViews} />);
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "choose a document" })));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Choose document" })));
   const search = await screen.findByLabelText("Choose document search");
   expect(options()).toEqual(["projectA.rvt", "Demo.rvt"]);
   expect(document.activeElement).toBe(search);
@@ -78,8 +78,26 @@ test("opens on the first unbound rung, binds per rung, and a multi rung stays op
 
 test("a rung that cannot list says why instead of drawing rows", async () => {
   render(<Head onViews={() => {}} />);
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "choose a document" })));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Choose document" })));
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "choose views" })));
   expect(screen.getByRole("status").textContent).toBe("choose a document first");
   expect(options()).toEqual([]);
+});
+
+test("the trigger button carries the ladder's name: 'Choose pod' reaches the DOM", () => {
+  const pod = (label: string | null): Rung[] => [
+    {
+      key: "pod",
+      label,
+      placeholder: "choose a pod",
+      options: [{ id: "rw", label: "rw" }],
+      pick: () => {},
+    },
+  ];
+  render(<Ladder levels={pod(null)} />);
+  expect(screen.getByRole("button", { name: "Choose pod" }).textContent).toContain("choose a pod");
+  cleanup();
+  // Bound, the face is the value; the name still says what the control chooses.
+  render(<Ladder levels={pod("rw")} />);
+  expect(screen.getByRole("button", { name: "Choose pod" }).textContent).toContain("rw");
 });

@@ -73,6 +73,7 @@ export function Ladder({
       .filter((option) => rung.picked?.(option.id))
       .map((option) => `${rung.key}:${option.id}`),
   );
+  const name = `Choose ${levels[complete ? levels.length - 1 : unbound]?.key ?? ""}`;
   return (
     <ListPopup<Hit>
       anchor="trigger"
@@ -82,7 +83,9 @@ export function Ladder({
       disabled={disabled}
       derived={derived || !complete}
       caution={caution || !complete}
-      aria-label={`Choose ${levels[complete ? levels.length - 1 : unbound]?.key ?? ""}`}
+      aria-label={name}
+      // The trigger's face is a value or a placeholder; its name says what it chooses.
+      triggerLabel={name}
       region="situation ladder"
       levels={rungs}
       startLevel={complete ? levels.length - 1 : unbound}
