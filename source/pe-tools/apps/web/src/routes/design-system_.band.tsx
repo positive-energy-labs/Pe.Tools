@@ -1,7 +1,6 @@
 /** /design-system/band — one proposal language over a Families matrix: every verb is the cell's. */
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-
 import { ActionButton } from "#/components/lang/action-button";
 import {
   discardStaged,
@@ -29,6 +28,7 @@ import {
   type Ask,
   type Matrix,
 } from "#/design-system/band-specimen";
+import { StaleSection } from "#/design-system/stale-specimen";
 import { SituationCell } from "#/route/situation";
 
 export const Route = createFileRoute("/design-system_/band")({ component: BandRoute });
@@ -129,7 +129,7 @@ function BandRoute() {
                 <OutcomeLine kind="advisory" label={said} says="the fixture writes nothing" />
               ) : null}
             </Section>
-
+            <StaleSection say={say} />
             <Section label="03 · form field · the same cells at card scale">
               <p className="t-prose text-ink-2">
                 The picked table row as a spec-editor form. Its verbs are the same transitions over

@@ -7,7 +7,7 @@ import { Section } from "#/components/lang/section";
 import { ValueDiff } from "#/components/lang/value-diff";
 import { Press } from "#/components/lang/press";
 import type { ScheduleGridDocument } from "@pe/agent-contracts";
-import { STALE_NOTE, scheduleTransitions } from "./columns";
+import { STALE_NOTE, scheduleTransitions, type StaleCell } from "./columns";
 
 type CellState = NonNullable<ScheduleGridDocument["cells"][string]>;
 
@@ -24,7 +24,7 @@ export function PendingStrip({
 }: {
   pending: [string, CellState][];
   /** Staged keys a re-read moved under (`basis.stale`): the person accepts or drops each. */
-  stale: readonly string[];
+  stale: readonly StaleCell[];
   proposalCount: number;
   stagedCount: number;
   wire: CellWire;
@@ -66,7 +66,7 @@ export function PendingStrip({
             const next =
               cell.staged != null ? cell.staged.value : String(cell.proposal?.value ?? "");
             const lock = wire.lockOf?.(key) ?? null;
-            const isStale = cell.staged != null && stale.includes(key);
+            const staleAt = cell.staged != null ? stale.find((s) => s.key === key) : undefined;
             return (
               <div key={key} role="listitem">
                 <ReviewRow
@@ -87,11 +87,12 @@ export function PendingStrip({
                   transitions={scheduleTransitions(wire, key, cell, stale)}
                   facts={{
                     // Stale: drift against what Revit holds now, answered by the cell's own verbs.
-                    ...(isStale
+                    ...(staleAt
                       ? {
                           value: next,
                           agree: "drift" as const,
                           modelValue: currentText(key) ?? "",
+                          reviewed: staleAt.was,
                           note: STALE_NOTE,
                         }
                       : { value: <ValueDiff from={currentText(key)} to={next} /> }),

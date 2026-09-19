@@ -160,6 +160,7 @@ export const CellHost = createContext<RefObject<HTMLElement | null> | null>(null
 export function StateCell(props: StateCellProps) {
   const { value, modelValue, capReason, grounding, confidence, note, counterValue } = props;
   const read = readCell(props);
+  const reviewed = read.unsettled === "drift" && props.reviewed !== undefined && modelValue != null;
   // An emptied value IS a value (F-J4-1): a staged or proposed "" draws the empty mark, never the
   // caller's placeholder, which would read as the old value still standing.
   const emptied = value === "" && (props.stage === "staged" || props.stage === "proposed");
@@ -400,6 +401,16 @@ export function StateCell(props: StateCellProps) {
       title={hoverFoot ? (cellFactsText(props) ?? undefined) : undefined}
     >
       <span className={slots.line()}>
+        {reviewed ? (
+          <span className="shrink-0 whitespace-nowrap text-ink-2">
+            you reviewed <span className="face-mono text-ink">{props.reviewed ?? "—"}</span> · Revit
+            now{" "}
+            <span className={slots.ghost()} title="the value the model currently holds">
+              {modelValue}
+            </span>{" "}
+            · yours{" "}
+          </span>
+        ) : null}
         <span
           className={slots.base()}
           data-body={read.body ?? undefined}
@@ -417,7 +428,7 @@ export function StateCell(props: StateCellProps) {
             shown
           )}
         </span>
-        {read.unsettled === "drift" && modelValue != null ? (
+        {!reviewed && read.unsettled === "drift" && modelValue != null ? (
           <span className={slots.ghost()} title="the value the model currently holds">
             {modelValue}
           </span>

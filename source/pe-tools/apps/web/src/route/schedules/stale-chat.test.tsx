@@ -85,7 +85,7 @@ test("Chat's schedules pane draws a stale key as drift, answered by the cell's o
     const { captureId } = (await f.view()).doc.basis!;
     expect(
       await f.patch([
-        { path: ["basis"], value: { captureId, stale: [{ key: "1::2", was: "100 VA" }] } },
+        { path: ["basis"], value: { captureId, stale: [{ key: "1::2", was: "90 VA" }] } },
       ]),
     ).toMatchObject({ ok: true });
   };
@@ -116,6 +116,7 @@ test("Chat's schedules pane draws a stale key as drift, answered by the cell's o
 
   // Drift against Revit's value now, with the ruled verbs IN the cell.
   let cell = await staleCell();
+  expect(cell.textContent).toMatch(/you reviewed 90 VA · Revit now 100 VA · yours 150 VA/);
   const accept = within(cell).getByRole("button", { name: "accept" });
   expect(accept.title).toBe("Accept to stage it again over what Revit holds now.");
   expect(within(cell).getByRole("button", { name: "deny" }).title).toBe(

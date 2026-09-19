@@ -23,7 +23,7 @@ import { OutcomeStrip } from "#/components/lang/outcome-strip";
 import { timeAgo } from "#/lib/utils";
 import type { CellWire } from "#/components/lang/band";
 import { PendingStrip } from "./pending-strip";
-import { scheduleLock, useScheduleGridColumns } from "./columns";
+import { cellText, scheduleLock, useScheduleGridColumns } from "./columns";
 import type { Refusal } from "#/route";
 
 export interface ScheduleGridState {
@@ -70,7 +70,7 @@ export function ScheduleGridWorkspace({
   const [tableState, setTableState] = useTableState();
   const document = slice;
   const cells = document?.cells ?? {};
-  const stale = (document?.basis?.stale ?? []).map((cell) => cell.key);
+  const stale = document?.basis?.stale ?? [];
 
   const [activeRow, setActiveRow] = useState<string | null>(null);
   const [railCollapsed, setRailCollapsed] = useState(false);
@@ -114,15 +114,7 @@ export function ScheduleGridWorkspace({
   const columnHeader = (columnNumber: number) =>
     snapshot?.columns.find((column) => column.columnNumber === columnNumber)?.headerText ??
     `col ${columnNumber}`;
-  const currentText = (key: string) => {
-    const { rowNumber, columnNumber } = splitScheduleCellKey(key);
-    const row = snapshot?.rows.find((candidate) => candidate.rowNumber === rowNumber);
-    const columnIndex =
-      snapshot?.columns.findIndex((column) => column.columnNumber === columnNumber) ?? -1;
-    return (
-      bindingAt(key)?.displayValue ?? (columnIndex >= 0 ? (row?.values[columnIndex] ?? null) : null)
-    );
-  };
+  const currentText = (key: string) => cellText(snapshot, key);
 
   const gridColumns = useScheduleGridColumns(snapshot, cells, wire, stageEdit, stale);
 

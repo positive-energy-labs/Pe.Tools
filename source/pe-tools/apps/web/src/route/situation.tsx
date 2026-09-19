@@ -381,6 +381,9 @@ export function LadderPicker({
 
 const DONE_FADE_MS = 5000;
 
+/** Route content a verb's refusal flag draws under its message, by verb name (ask A: push's stale cells). */
+export const ActionFlag = createContext<Readonly<Record<string, ReactNode>>>({});
+
 /** A verb button with its flag: refused persists until Esc or the next press; busy counts; done fades. */
 export function SituationAction({
   handle,
@@ -409,6 +412,7 @@ export function SituationAction({
       (outcome.refusal !== null || faded !== outcome.at));
   const refusedNow = Boolean(outcome?.refusal) && dismissed !== outcome?.at;
   const stopped = action.refusal !== null || (handle.busy !== null && busy === null);
+  const flag = useContext(ActionFlag)[name];
   return (
     <Popover.Root open={shown} onOpenChange={(o) => !o && outcome && setDismissed(outcome.at)}>
       <Popover.Trigger
@@ -462,6 +466,7 @@ export function SituationAction({
                     <span>{outcome.refusal.detail}</span>
                   </details>
                 ) : null}
+                {flag}
               </span>
             ) : outcome?.stopped ? (
               <span className="text-ink-2">{action.label} · stopped waiting; see the log</span>

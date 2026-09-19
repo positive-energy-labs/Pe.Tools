@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // Its own file: the app atom registry is per module, and a sibling test's open-B Work would linger.
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { RegistryContext } from "@effect/atom-react";
 
 import { appAtomRegistry } from "#/route";
@@ -13,7 +13,7 @@ import { ScheduleGridWorkspace, type ScheduleGridState } from "./workspace";
 vi.mock("#/lib/token", () => ({ token: () => "currentColor", dash: () => "none" }));
 afterEach(cleanup);
 
-test("ask A: a push refused on moved evidence draws the cell stale with what Revit holds now, no separate read; accept then push lands it", async () => {
+test("J7: Overwrite 1 changed value re-stages the stale cell over what Revit holds now, then pushes exactly that key", async () => {
   const f = await setup(); // 1::2 staged "150 VA" under the open-B reading of 100 VA
   stubEventSource(f);
   vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => {}, removeItem: () => {} });
@@ -60,24 +60,20 @@ test("ask A: a push refused on moved evidence draws the cell stale with what Rev
   await vi.waitFor(async () =>
     expect((await f.view()).doc.basis).toMatchObject({ stale: [{ key: "1::2", was: "100 VA" }] }),
   );
-  expect((await f.view()).doc.cells["1::2"].staged).toEqual({ value: "150 VA" });
-  // The run line reads the domain's code as a word, never its sentence.
-  expect((await screen.findByText(/^push run ·/)).textContent).toContain("1::2 refused (stale)");
-  expect((await screen.findAllByTitle(/Revit now 120 VA/)).length).toBeGreaterThan(0);
-  const pending = await screen.findByRole("list", { name: "pending cells" });
-  fireEvent.click(await within(pending).findByRole("button", { name: "accept" }));
+  // The aggregate reads the cell in words, then re-stages and pushes in one press.
   await vi.waitFor(async () =>
-    expect((await f.view()).doc.basis).toEqual({ captureId: expect.any(String) }),
+    expect((await screen.findByRole("list", { name: "changed in Revit" })).textContent).toMatch(
+      /you reviewed 100 VA · Revit now 120 VA · yours 150 VA/,
+    ),
   );
   f.setResponse(cellsApplied([[1, 2, true]]));
-  await vi.waitFor(() => expect(state?.blockedBecause).toBeNull());
-  await act(async () => {
-    expect(await state!.execute("push")).toBeNull();
-  });
-  const pushed = f.sent.filter((s) => s.key === "schedule.cells.apply");
-  expect(pushed).toHaveLength(2);
-  expect(pushed[1]!.input.edits[0]).toMatchObject({
-    value: "150 VA",
-    expectedBinding: { rawValue: "120" },
-  });
+  fireEvent.click(await screen.findByRole("button", { name: "Overwrite 1 changed value" }));
+  await vi.waitFor(() =>
+    expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(2),
+  );
+  const edits = f.sent.filter((s) => s.key === "schedule.cells.apply")[1]!.input.edits;
+  // J7 step 5: without the re-stage the key stays stale and this push never carries it.
+  expect(edits).toHaveLength(1);
+  expect(edits[0]).toMatchObject({ value: "150 VA", expectedBinding: { rawValue: "120" } });
+  await vi.waitFor(async () => expect((await f.view()).doc.cells["1::2"]?.staged).toBeUndefined());
 }, 30_000);

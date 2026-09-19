@@ -15,9 +15,12 @@ import { previousOf } from "#/readings";
 import { refuse, useRoute, type EntitySearch } from "#/route";
 import { ActionReceiptView } from "#/actions/receipt";
 import { EntityRouteView } from "#/route/entity";
+import { ActionFlag } from "#/route/situation";
 import { usePodList } from "#/route/pods";
 import { DEMO_SPEC } from "#/route/seeds";
 import { scheduleSpec, schedulesManifest, type ScheduleGridPage } from "./manifest";
+import { cellText } from "./columns";
+import { StaleResolve } from "./stale-resolve";
 import { ScheduleGridWorkspace, type ScheduleGridState } from "./workspace";
 
 const valueOf = <T,>(reading: Reading<unknown>, schema: { parse(value: unknown): T }) => {
@@ -181,6 +184,17 @@ export function LiveScheduleGridWorkspace({
     blockedBecause,
   };
 
+  const resolve = (
+    <StaleResolve
+      doc={work.doc}
+      current={(key) => cellText(shown?.snapshot, key)}
+      write={apply}
+      revision={work.revision}
+      push={() => execute("push")}
+      unread={page.unread}
+      readAgain={() => execute("refresh")}
+    />
+  );
   const audit = (
     <div className="flex size-full min-h-0 min-w-0 flex-col">
       {(readingFailure || !target) && (
@@ -205,20 +219,25 @@ export function LiveScheduleGridWorkspace({
       )}
       {page.pushRun && <div role="status">push run · {page.pushRun}</div>}
       <ScheduleReceipts workspaceId={page.workspaceId} receipts={receipts} />
+      {/* Unframed there is no head: the stale cells and their aggregate stand in the audit. */}
+      {framed ? null : resolve}
       {render ? render(state) : <ScheduleGridWorkspace state={state} />}
     </div>
   );
   if (!framed) return audit;
   return (
-    <EntityRouteView
-      def={scheduleSpec}
-      handle={handle as never}
-      refreshPods={refreshPods}
-      fixture={demo ? DEMO_SPEC : undefined}
-      url={url}
-    >
-      {audit}
-    </EntityRouteView>
+    <ActionFlag.Provider value={{ push: resolve }}>
+      <EntityRouteView
+        def={scheduleSpec}
+        handle={handle as never}
+        refreshPods={refreshPods}
+        fixture={demo ? DEMO_SPEC : undefined}
+        url={url}
+        band={resolve}
+      >
+        {audit}
+      </EntityRouteView>
+    </ActionFlag.Provider>
   );
 }
 

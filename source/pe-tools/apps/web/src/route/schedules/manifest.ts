@@ -37,12 +37,15 @@ export interface ScheduleGridPage {
   captureId: string;
   /** The last push's run, as one line: outcome, where its receipt lives, written cells before → after, refused cells refused. */
   pushRun: string;
+  /** Cells the last push refused as stale while its readback failed: no C to draw, read again. */
+  unread: number;
 }
 
 const scheduleGridPage = z.object({
   workspaceId: z.string().default(""),
   captureId: z.string().default(""),
   pushRun: z.string().default(""),
+  unread: z.number().default(0),
 });
 
 type Ctx = RouteCtx<ScheduleGridDocument, ScheduleGridReading, ScheduleGridPage>;
@@ -220,6 +223,7 @@ export const schedulesManifest = () =>
             ctx.setPage({
               workspaceId: reading.workspaceId,
               captureId: reading.id,
+              unread: 0,
             });
           },
         },
@@ -283,6 +287,13 @@ export const schedulesManifest = () =>
                 captureId: reading.id,
               });
             }
+            // A stale refusal whose readback failed has no C on screen: the flag reads again first.
+            ctx.setPage({
+              unread: result.readbackError
+                ? (result.failures ?? []).filter((f) => REFUSAL_WORD[f.code ?? ""] === "stale")
+                    .length
+                : 0,
+            });
             if (result.readbackError) throw Error(result.readbackError);
             // Some cells landed and some were refused: an outcome, not a failure. Returned, so the
             // verb's dirties re-read the grid; the readback already rebound the basis to what Revit holds.

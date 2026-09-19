@@ -14,6 +14,12 @@ export interface StateCellProps {
    */
   modelValue?: string;
   /**
+   * A stale staged cell's A (ask A, 2026-09-19): the value the person reviewed against before Revit
+   * moved under it (`basis.stale[].was`; null when unread). Present on drift, the cell reads in
+   * words: "you reviewed A · Revit now C · yours B", C being `modelValue` and B the value.
+   */
+  reviewed?: string | null;
+  /**
    * The epistemic ladder — how much do we know about this value (ruled 2026-08-16):
    * `fresh` checked recently · `stale` checked long ago · `unverified` a value exists but was
    * never checked · `never` nothing was ever attempted — no reading, no value. The first three
@@ -286,7 +292,12 @@ export function cellStateLabel(p: StateCellProps): CellStateName {
  */
 export function cellFactsText(p: StateCellProps): string | null {
   const parts: string[] = [];
-  if (p.agree === "drift" && p.modelValue != null) parts.push(`model holds ${p.modelValue}`);
+  if (p.agree === "drift" && p.modelValue != null)
+    parts.push(
+      p.reviewed !== undefined
+        ? `you reviewed ${p.reviewed ?? "—"} · Revit now ${p.modelValue} · yours`
+        : `model holds ${p.modelValue}`,
+    );
   if (p.counterValue != null) parts.push(`pea proposes ${p.counterValue}`);
   if (p.capReason != null) parts.push(p.capReason);
   if (p.note != null)

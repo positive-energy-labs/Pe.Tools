@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { scheduleCellKey, transitionPatches } from "@pe/agent-contracts";
+import { scheduleCellKey, splitScheduleCellKey, transitionPatches } from "@pe/agent-contracts";
 import type { ScheduleGridDocument } from "@pe/agent-contracts";
 import { reviewTransitions, type CellWire } from "#/components/lang/band";
 import type { CellTransition } from "#/components/lang/cell";
@@ -20,10 +20,38 @@ export const scheduleLock = (binding: Binding | undefined): string | null =>
         ? `blocked: ${binding.blocker}`
         : "read-only — this parameter cannot be written from a schedule";
 
+/** What the reading says Revit holds at a cell key: its binding's display value, else the row's. */
+export const cellText = (snapshot: Snapshot | null | undefined, key: string) => {
+  const { rowNumber, columnNumber } = splitScheduleCellKey(key);
+  const row = snapshot?.rows.find((candidate) => candidate.rowNumber === rowNumber);
+  const columnIndex =
+    snapshot?.columns.findIndex((column) => column.columnNumber === columnNumber) ?? -1;
+  return (
+    row?.bindings.find((binding) => binding.columnNumber === columnNumber)?.displayValue ??
+    (columnIndex >= 0 ? (row?.values[columnIndex] ?? null) : null)
+  );
+};
+
 /** A stale key's note (`basis.stale`), in the grid and the pending strip alike. */
 export const STALE_NOTE = "stale: Revit changed under your staged value · accept to stage it again";
 
 type GridCell = NonNullable<ScheduleGridDocument["cells"][string]>;
+
+/** A staged key a re-read moved under, with A, the value the person reviewed against. */
+export type StaleCell = NonNullable<NonNullable<ScheduleGridDocument["basis"]>["stale"]>[number];
+
+/**
+ * A stale key's two answers as patches: accept re-stages B over what Revit holds now ("keep
+ * mine"); deny unstages ("take Revit's"). Neither pushes. The cell's verbs and the aggregate
+ * (`StaleResolve`) both write these, through the same wire.
+ */
+export const staleAnswer = (key: string, cell: GridCell, kind: "accept" | "deny") =>
+  transitionPatches(
+    ["cells"],
+    key,
+    cell,
+    kind === "accept" ? { kind: "stage", rung: cell.staged! } : { kind: "unstage" },
+  );
 
 /**
  * A schedule cell's own verbs. A stale key is answered by accept (the contract's `stage`, again)
@@ -33,21 +61,18 @@ export function scheduleTransitions(
   wire: CellWire,
   key: string,
   cell: GridCell,
-  stale: readonly string[],
+  stale: readonly StaleCell[],
 ): CellTransition[] {
-  if (cell.staged == null || !stale.includes(key)) return reviewTransitions(wire, key, cell);
-  const run = (patches: ReturnType<typeof transitionPatches>) => () =>
-    wire.write(patches, wire.revision ?? undefined);
+  if (cell.staged == null || !stale.some((s) => s.key === key))
+    return reviewTransitions(wire, key, cell);
+  const run = (kind: "accept" | "deny") => () =>
+    wire.write(staleAnswer(key, cell, kind), wire.revision ?? undefined);
   return [
-    {
-      kind: "deny",
-      reason: "Drop your stale value; the Revit value stands.",
-      run: run(transitionPatches(["cells"], key, cell, { kind: "unstage" })),
-    },
+    { kind: "deny", reason: "Drop your stale value; the Revit value stands.", run: run("deny") },
     {
       kind: "accept",
       reason: "Accept to stage it again over what Revit holds now.",
-      run: run(transitionPatches(["cells"], key, cell, { kind: "stage", rung: cell.staged })),
+      run: run("accept"),
     },
   ];
 }
@@ -57,7 +82,7 @@ export function useScheduleGridColumns(
   cells: ScheduleGridDocument["cells"],
   wire: CellWire,
   stageEdit: (key: string, value: string) => string | void,
-  stale: readonly string[] = [],
+  stale: readonly StaleCell[] = [],
 ) {
   return useMemo<Column<ScheduleRow>[]>(() => {
     if (!snapshot) return [];
@@ -111,7 +136,8 @@ export function useScheduleGridColumns(
             const isStaged = cell.staged != null;
             const isProposal = !isStaged && cell.proposal != null;
             // Staged over a value a re-read moved (`basis.stale`): drift against what Revit holds now.
-            const isStale = isStaged && stale.includes(key);
+            const staleAt = isStaged ? stale.find((s) => s.key === key) : undefined;
+            const isStale = staleAt != null;
             const current = binding?.displayValue ?? row.values[columnIndex] ?? "";
             const shown = isStaged
               ? (cell.staged?.value ?? "")
@@ -122,7 +148,9 @@ export function useScheduleGridColumns(
             const note =
               [
                 isStale ? STALE_NOTE : null,
-                (isStaged || isProposal) && shown !== current ? `was ${current || "—"}` : null,
+                !isStale && (isStaged || isProposal) && shown !== current
+                  ? `was ${current || "—"}`
+                  : null,
                 isProposal
                   ? cell.proposal?.note
                     ? `pea: ${cell.proposal.note}`
@@ -141,7 +169,9 @@ export function useScheduleGridColumns(
             return {
               ...cellFromTrichotomy(cell, {
                 value: shown,
-                ...(isStale ? { agree: "drift" as const, modelValue: current } : {}),
+                ...(isStale
+                  ? { agree: "drift" as const, modelValue: current, reviewed: staleAt.was }
+                  : {}),
                 cap: binding == null ? "nohome" : lock ? "locked" : "editable",
                 capReason: lock ?? undefined,
                 note,
@@ -161,5 +191,5 @@ export function useScheduleGridColumns(
       }),
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps -- stageEdit and wire close over `cells` and the revision, listed
-  }, [snapshot, cells, wire.revision, stale.join("|")]);
+  }, [snapshot, cells, wire.revision, stale.map((s) => s.key).join("|")]);
 }
