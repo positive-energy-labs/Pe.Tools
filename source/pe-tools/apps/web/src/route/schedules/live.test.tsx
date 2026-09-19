@@ -9,7 +9,6 @@ import { detailResponse, target } from "../../../../host/tests/schedule-fixture"
 import { LiveScheduleGridWorkspace } from "./live";
 import { REOPENED, schedulesManifest } from "./manifest";
 import { ScheduleGridWorkspace, type ScheduleGridState } from "./workspace";
-import { ScheduleGridReview } from "#/workbench/plugins/schedule-grid-chat-plugin";
 
 vi.mock("#/lib/token", () => ({ token: () => "currentColor", dash: () => "none" }));
 const sources: { close(): void }[] = [];
