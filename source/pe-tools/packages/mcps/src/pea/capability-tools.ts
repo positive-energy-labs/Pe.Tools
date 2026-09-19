@@ -137,7 +137,7 @@ async function routeWorkScope(target: Target): Promise<{ query: string; target: 
 export const peFind = createTool({
   id: "pe_find",
   description:
-    "Find a capability. No query returns the map: connected Revit sessions with their active document and custody, counts per kind, top rows per kind, and which sources answered. A query ranks rows across host operations (op:), the collaborative route documents you co-edit with the user and their commands (route:), pod buttons the user presses in Revit's Do palette (pod:), and skills (skill:). Filter with kind, needs, mutates. Every row is visible; nothing is tiered or hidden. Then pe_read a non-mutating row or pe_do any row.",
+    "Find a capability. No query returns the map: connected Revit sessions with their active document and custody, counts per kind, top rows per kind, and which sources answered. A query ranks rows across host operations (op:), the collaborative route documents you co-edit with the user and their commands (route:), pod buttons the user presses in Revit's Do palette (pod:), and skills (skill:). Filter with kind, needs, mutates. Every row you may run is visible; nothing is tiered, and human-only rows (the person's presses) are not offered. Then pe_read a non-mutating row or pe_do any row.",
   inputSchema: z.object({
     query: z.string().optional().describe("Keywords describing what you need."),
     kind: capabilityKindSchema.optional(),
@@ -153,6 +153,8 @@ export const peFind = createTool({
       target?.kind === "open" ? target.ref.session : undefined,
     );
     if ("isError" in catalog) return catalog;
+    // A human-only row is the person's press, never Pea's move: it is not offered at all.
+    const offered = catalog.capabilities.filter((row) => row.actor !== "human");
     const filtered = input.query || input.kind || input.needs || input.mutates !== undefined;
     if (!filtered)
       return {
@@ -163,10 +165,10 @@ export const peFind = createTool({
         sessions: catalog.sessions,
         defaultDocument: targetDocument(target),
         sources: catalog.sources,
-        map: capabilityMap(catalog.capabilities),
+        map: capabilityMap(offered),
         hint: "Query pe_find for rows. pe_read runs a row that does not mutate; pe_do runs any row and is approval-gated. A session's custody says what the SDK will allow (observed = reads only). defaultDocument is the exact lifetime frozen for this turn. Op target overrides affect one call only. Session work requires an exact session ID; host work needs no document. target_set changes later turns.",
       };
-    const rows = findCapabilities(catalog.capabilities, input);
+    const rows = findCapabilities(offered, input);
     return {
       at: catalog.at,
       sources: catalog.sources,

@@ -428,7 +428,7 @@ internal sealed class RevitDataRequestService {
         return ParameterLinksService.Instance.Detail(document, request.IncludeEvaluation);
     }
 
-    [Op("revit.apply.parameter-links", Does = "Preview or atomically replace the model-owned parameter-link profile and reconcile its changed target values.", Title = "Apply Parameter Links", Finds = ["parameters", "links", "rules", "apply", "reconcile", "electrical", "circuits", "mocp", "mutation"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Example = "{ \"previewOnly\": true }")]
+    [Op("revit.apply.parameter-links", Does = "Preview or atomically replace the model-owned parameter-link profile and reconcile its changed target values.", Title = "Apply Parameter Links", Finds = ["parameters", "links", "rules", "apply", "reconcile", "electrical", "circuits", "mocp", "mutation"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Example = "{ \"previewOnly\": true }", Actor = OpActor.Human)]
     private ParameterLinksData ApplyParameterLinksCore(ParameterLinksApplyRequest request, ProjectDocument activeDocument) {
         var document = activeDocument.Value;
         if (!request.PreviewOnly && document.IsReadOnly) {
