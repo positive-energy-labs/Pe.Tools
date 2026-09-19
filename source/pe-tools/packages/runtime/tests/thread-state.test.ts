@@ -8,6 +8,7 @@ import { buildAgentControllerApp } from "../src/agent-controller-web.ts";
 import { createDeterministicRuntime } from "../src/testing.ts";
 import {
   DEFERRED_TOOL_RESULT_BYTES,
+  endParkedTurn,
   projectThreadMessages,
   readToolResult,
 } from "../src/thread-state.ts";
@@ -177,4 +178,31 @@ test("the HTTP endpoint returns the original deferred result", async () => {
   } finally {
     await runtime.close?.();
   }
+});
+
+test("a new turn that cannot record the expired ask fails visibly, never silently (F-J5-2)", async () => {
+  // A silent skip left the stored call parked, so a reload showed the ask live again.
+  const parked = (threadId: string | null, memory: unknown) =>
+    ({
+      suspensions: {
+        hasPending: () => true,
+        clear: () => [{ toolCallId: "call-1", toolName: "ask" }],
+      },
+      emit: () => undefined,
+      abort: () => undefined,
+      stream: { isOpen: () => false },
+      run: { isRunning: () => false, isAbortRequested: () => false },
+      thread: { getId: () => threadId },
+      machinery: {
+        getAgent: () => ({
+          getMastraInstance: () => ({ getStorage: () => ({ getStore: async () => memory }) }),
+        }),
+      },
+    }) as never;
+  await expect(endParkedTurn(parked("t", undefined))).rejects.toThrow(
+    "Cannot record the expired ask: the runtime has no memory store.",
+  );
+  await expect(endParkedTurn(parked(null, {}))).rejects.toThrow(
+    "Cannot record the expired ask: the session has no thread.",
+  );
 });

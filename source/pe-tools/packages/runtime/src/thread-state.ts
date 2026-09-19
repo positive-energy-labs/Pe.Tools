@@ -210,14 +210,17 @@ async function persistExpiredAsks(
   session: Pick<Session, "thread" | "machinery">,
   toolCallIds: readonly string[],
 ): Promise<void> {
+  if (!toolCallIds.length) return;
+  // Both hold in the product: admission requires the thread, and Pea's storage is LibSQL, whose
+  // memory store holds the transcript. A silent skip would reload the ask live (F-J5-2).
   const threadId = session.thread.getId();
-  if (!threadId || !toolCallIds.length) return;
+  if (!threadId) throw new Error("Cannot record the expired ask: the session has no thread.");
   const memory = await session.machinery
     .getAgent()
     .getMastraInstance()
     ?.getStorage()
     ?.getStore("memory");
-  if (!memory) return;
+  if (!memory) throw new Error("Cannot record the expired ask: the runtime has no memory store.");
   const expired = new Set(toolCallIds);
   const { messages } = await memory.listMessages({ threadId });
   const changed = messages.flatMap((message) => {
