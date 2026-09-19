@@ -1,12 +1,6 @@
 import { useMemo } from "react";
 import { ActionButton } from "#/components/lang/action-button";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from "#/components/lang/combobox";
+import { ListPopup } from "#/components/lang/list-popup";
 import { ReadCell, StateDot, VERDICT_INK, VerdictCell } from "#/components/master-table/cells";
 import type { Column, TableState, Verdict } from "#/components/master-table/model";
 import {
@@ -120,36 +114,29 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
 
     if (open)
       return (
-        <Combobox
-          items={options}
-          defaultOpen
-          value={null}
-          onOpenChange={(next) => !next && setBinding(null)}
-          onValueChange={(option: (typeof options)[number] | null) => {
-            if (option?.value === "#new") bindToNew(slug, property, dataType);
-            else if (option) bindTo(slug, property, option.value);
-          }}
-          itemToStringLabel={(option: (typeof options)[number]) => option.label}
-        >
-          <span className={className}>
-            <ComboboxInput
-              // eslint-disable-next-line jsx-a11y/no-autofocus
-              autoFocus
-              aria-label={`bind ${slug}.${property}`}
-              placeholder="bind to… (Esc cancels)"
-              title={`Give ${slug}.${property} a parameter — an existing one discards the ${literal} literal, a new one keeps ${literal} as its family value.`}
-            />
-          </span>
-          <ComboboxContent>
-            <ComboboxList>
-              {(option: (typeof options)[number]) => (
-                <ComboboxItem key={option.value} value={option}>
-                  {option.label}
-                </ComboboxItem>
-              )}
-            </ComboboxList>
-          </ComboboxContent>
-        </Combobox>
+        <span className={className}>
+          <ListPopup<(typeof options)[number]>
+            anchor="trigger"
+            open
+            onOpenChange={(next) => !next && setBinding(null)}
+            triggerLabel={`bind ${slug}.${property}`}
+            title={`Give ${slug}.${property} a parameter — an existing one discards the ${literal} literal, a new one keeps ${literal} as its family value.`}
+            trigger={<span className="text-ink-2">bind to… (Esc cancels)</span>}
+            aria-label={`bind ${slug}.${property}`}
+            region="bind parameter"
+            items={options}
+            keyOf={(option) => option.value}
+            labelOf={(option) => option.label}
+            filter="substring"
+            searchPlaceholder="bind to…"
+            empty="no parameters"
+            onPick={(option) => {
+              if (option.value === "#new") bindToNew(slug, property, dataType);
+              else bindTo(slug, property, option.value);
+            }}
+            row={(option) => ({ label: option.label })}
+          />
+        </span>
       );
 
     return (

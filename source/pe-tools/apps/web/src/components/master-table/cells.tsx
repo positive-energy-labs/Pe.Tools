@@ -6,20 +6,11 @@
  * silently swallowed refused numeric commits (§3's named defect, in canon). It is deleted.
  * `TextCell`/`NumberCell` now RENDER `StateCell` at row scale — one editor, one refusal
  * mechanism (the visible dismissible note), one focus treatment (the inset hairline, per the
- * focus law). `CellSelect` is the one forced wrapper: it keeps table navigation around the kit
- * Combobox and routes its refusal through the alarm mixes.
+ * focus law). A select-shaped cell is the list grammar's `CellListSelect` (lang/list-popup).
  */
-import { useContext } from "react";
 
 import { useCellNavigation } from "#/components/master-table/cell-navigation";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxItem,
-  ComboboxList,
-  ComboboxTrigger,
-} from "#/components/lang/combobox";
-import { CellHost, StateCell, fmtNum } from "#/components/lang/cell";
+import { StateCell, fmtNum } from "#/components/lang/cell";
 import type { Verdict, VerdictTone } from "#/components/master-table/model";
 import { token } from "#/lib/token";
 import { cn } from "#/lib/utils";
@@ -76,62 +67,6 @@ export function NumberCell({
       onCommit={(text) => onCommit(Number(text))}
       onNavigate={(direction) => move?.(direction) ?? false}
     />
-  );
-}
-
-/** The forced wrapper: a select-shaped editor cannot ride `StateCell`'s input. Focus takes the
- * select fill (the focus law — a fill, never a hue); `invalid` is its refusal mechanism and
- * spends the one alarm as an ink + wash mix, visibly on the surface. */
-export function CellSelect({
-  value,
-  onChange,
-  options,
-  invalid,
-  title,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  options: readonly { value: string; label: string }[];
-  invalid?: boolean;
-  title?: string;
-}) {
-  const move = useCellNavigation();
-  // Closing (Escape or a pick) hands focus back to the td, where the table's keys live.
-  const host = useContext(CellHost);
-  const selected = options.find((option) => option.value === value) ?? null;
-  return (
-    <Combobox
-      items={[...options]}
-      value={selected}
-      onValueChange={(option: { value: string; label: string } | null) =>
-        option && onChange(option.value)
-      }
-      itemToStringLabel={(option: { value: string; label: string }) => option.label}
-    >
-      <ComboboxTrigger
-        fill
-        title={title}
-        tabIndex={-1}
-        data-cell-editor=""
-        onKeyDown={(event) => {
-          if (event.key === "Tab" && move?.(event.shiftKey ? "left" : "right"))
-            event.preventDefault();
-        }}
-        data-tone={invalid ? "alarm" : undefined}
-        data-wash={invalid ? "" : undefined}
-      >
-        {selected?.label ?? value}
-      </ComboboxTrigger>
-      <ComboboxContent finalFocus={host ?? undefined}>
-        <ComboboxList>
-          {(option: { value: string; label: string }) => (
-            <ComboboxItem key={option.value} value={option}>
-              {option.label}
-            </ComboboxItem>
-          )}
-        </ComboboxList>
-      </ComboboxContent>
-    </Combobox>
   );
 }
 

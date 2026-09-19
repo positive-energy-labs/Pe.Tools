@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 
 import { FactChip } from "#/components/lang/chip";
-import { CellListSelect, List, ListPopup } from "#/components/lang/list-popup";
+import { CellListSelect, List, ListInput, ListPopup } from "#/components/lang/list-popup";
 import { Press } from "#/components/lang/press";
 import { Table } from "#/components/master-table/table";
 import { CHAT_SEEDS, CHAT_SEED_STATE, CHAT_SEED_THREADS } from "#/chat/seeds";
@@ -254,7 +254,7 @@ export function FieldOptionsPanel({ say }: { say: (text: string) => void }) {
       aria-label="field options"
       region="field options"
       trigger={
-        <span className="face-mono">{items.find((o) => o.key === value)?.label ?? value} ▾</span>
+        <span className="face-mono">{items.find((o) => o.key === value)?.label ?? value}</span>
       }
       items={items}
       keyOf={(o) => o.key}
@@ -297,7 +297,7 @@ export function SlashPanel({ say }: { say: (text: string) => void }) {
         anchor="caret"
         caret={area}
         open={slash !== null}
-        onOpenChange={(open) => (open ? undefined : setText(text.replace(/\/\w*$/, "")))}
+        onOpenChange={(open) => (open ? undefined : setText((t) => t.replace(/\/\w*$/, "")))}
         owner={area}
         query={slash?.[1] ?? ""}
         aria-label="skills"
@@ -308,7 +308,7 @@ export function SlashPanel({ say }: { say: (text: string) => void }) {
         filter="substring"
         empty="no skills in this session"
         onPick={(c) => {
-          setText(text.replace(/\/\w*$/, `${c.label} `));
+          setText((t) => t.replace(/\/\w*$/, `${c.label} `));
           say(`inserted ${c.label}`);
         }}
         row={(c) => ({ label: <span className="face-mono">{c.label}</span>, meta: c.sub })}
@@ -373,6 +373,24 @@ export function ZonesPanel({ say }: { say: (text: string) => void }) {
           </FactChip>
         ),
       })}
+    />
+  );
+}
+
+/** Free text with suggestions (the settings forms' datalist): the input keeps what was typed. */
+export function FreeTextPanel({ say }: { say: (text: string) => void }) {
+  const [text, setText] = useState("");
+  return (
+    <ListInput
+      mono
+      aria-label="parameter name"
+      placeholder="type a name, or pick one"
+      value={text}
+      onChange={(next) => {
+        setText(next);
+        say(`value “${next}”`);
+      }}
+      suggestions={FIELD_OPTIONS.map((o) => ({ value: o.label, label: o.sub }))}
     />
   );
 }

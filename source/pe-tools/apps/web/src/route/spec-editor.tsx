@@ -57,7 +57,7 @@ import {
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 import { defineRoute, semanticActionFacts, type MemberRef } from "./manifest";
-import { Picker } from "./picker";
+import { Ladder } from "./ladder";
 import { podHost, type Composed } from "./pods";
 import { useRoute, type RouteHandle } from "./use-route";
 
@@ -593,7 +593,7 @@ export function SpecEditor({
                 className="t-small"
                 title="The document this form reads field options from. With none chosen the form offers the schema's own options only."
               >
-                options from <Picker levels={options.levels} />
+                options from <Ladder levels={options.levels} />
               </span>
             ) : (
               <FactChip

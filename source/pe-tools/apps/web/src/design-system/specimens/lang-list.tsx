@@ -3,7 +3,15 @@
  * that draw it — List inline, ListPopup on a trigger, and the in-cell list. The full comparison of
  * every list kind on real data is /design-system/list.
  */
-import { CellListSelect, List, ListPopup } from "#/components/lang/list-popup";
+import { useState } from "react";
+
+import {
+  CellListSelect,
+  List,
+  ListChips,
+  ListInput,
+  ListPopup,
+} from "#/components/lang/list-popup";
 import { Row, RowGroupHead, rowRecipe } from "#/components/lang/row";
 import { Table } from "#/components/master-table/table";
 
@@ -43,11 +51,22 @@ export function LangListSpecimens() {
         importPath="#/components/lang/list-popup"
       >
         <div className="grid w-full grid-cols-3 gap-4">
+          <ListPopup
+            {...common}
+            anchor="trigger"
+            face="field"
+            select="multi"
+            selected={["String", "Double"]}
+            trigger={<ListChips labels={["String", "Double"]} none="any storage" />}
+            aria-label="multi list"
+            region="swatch multi"
+          />
+          <FreeText />
           <List {...common} aria-label="inline list" region="swatch list" filter="substring" />
           <ListPopup
             {...common}
             anchor="trigger"
-            trigger={<span className="face-mono">String ▾</span>}
+            trigger={<span className="face-mono">String</span>}
             aria-label="popup list"
             region="swatch popup"
           />
@@ -73,5 +92,18 @@ export function LangListSpecimens() {
         </div>
       </SpecimenFrame>
     </>
+  );
+}
+
+function FreeText() {
+  const [value, setValue] = useState("");
+  return (
+    <ListInput
+      aria-label="free text"
+      value={value}
+      onChange={setValue}
+      suggestions={KINDS.map((kind) => ({ value: kind }))}
+      placeholder="type or pick"
+    />
   );
 }

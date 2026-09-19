@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { FactChip } from "#/components/lang/chip";
-import { CellSelect, NumberCell, ReadCell, TextCell } from "#/components/master-table/cells";
+import { NumberCell, ReadCell, TextCell } from "#/components/master-table/cells";
+import { CellListSelect } from "#/components/lang/list-popup";
 import { cellStateLabel, type StateCellProps } from "#/components/lang/cell";
 import { fmtNum, type Column } from "#/components/master-table/model";
 import type { AtlasActions } from "#/takeoff/atlas";
@@ -167,10 +168,18 @@ export function useAtlasColumns({
         facet: ATLAS_COLUMN_SEMANTICS.type.facet,
         options: ROOM_TYPES.map((t) => ({ value: t, label: t })),
         cell: (row) => (
-          <CellSelect
+          <CellListSelect<RoomType>
+            aria-label={`${row.room.name} type`}
+            region="atlas table"
             value={row.room.type}
-            onChange={(v) => actions.patch(row.room.guid, { type: v as RoomType })}
-            options={ROOM_TYPES.map((type) => ({ value: type, label: type }))}
+            items={ROOM_TYPES}
+            keyOf={(type) => type}
+            labelOf={(type) => type}
+            empty="no room types"
+            select="single"
+            selected={[row.room.type]}
+            onPick={(type) => actions.patch(row.room.guid, { type })}
+            row={(type) => ({ label: type })}
           />
         ),
       },

@@ -1,12 +1,5 @@
 import { Input } from "#/components/lang/input";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxItem,
-  ComboboxList,
-  ComboboxTrigger,
-  useComboboxAnchor,
-} from "#/components/lang/combobox";
+import { ListInput, ListPopup } from "#/components/lang/list-popup";
 import { Switch } from "#/components/lang/switch";
 import { FieldLabelRow, FieldMessages, FieldOptionsMetadata } from "./field-metadata";
 import {
@@ -25,7 +18,6 @@ export function ScalarField({
   isRequired,
   placeholder,
 }: ResolvedFieldRendererProps) {
-  const selectAnchor = useComboboxAnchor();
   const field = useSettingsField(path);
   const optionsState = useFieldOptions({
     node: effectiveNodeRef,
@@ -37,7 +29,6 @@ export function ScalarField({
   const isBoolean = nodeType === "boolean";
   const isNumber = nodeType === "number" || nodeType === "integer";
   const shouldRenderSelect = options.length > 0 && (!allowsCustomValue || mode === "constraint");
-  const datalistId = `${path.replaceAll(".", "-")}-options`;
   const description = effectiveNodeRef.description();
   const defaultValue = effectiveNodeRef.hasExplicitDefault()
     ? effectiveNodeRef.explicitDefault()
@@ -55,32 +46,27 @@ export function ScalarField({
       />
       <div className="min-w-0">
         {shouldRenderSelect ? (
-          <Combobox
+          <ListPopup<(typeof sanitizedItems)[number]>
+            anchor="trigger"
+            face="field"
+            triggerLabel={label}
+            trigger={
+              sanitizedItems.find((item) => item.value === primitiveInputValue(field.value))
+                ?.label ?? <span className="text-ink-2">Select an option</span>
+            }
+            aria-label={label}
+            region={path}
             items={sanitizedItems}
-            value={
-              sanitizedItems.find((item) => item.value === primitiveInputValue(field.value)) ?? null
-            }
-            onValueChange={(item: (typeof sanitizedItems)[number] | null) =>
-              item && field.change(item.value)
-            }
-            itemToStringLabel={(item: (typeof sanitizedItems)[number]) => item.label}
-          >
-            <div ref={selectAnchor} className="flex">
-              <ComboboxTrigger id={path} fill>
-                {sanitizedItems.find((item) => item.value === primitiveInputValue(field.value))
-                  ?.label ?? "Select an option"}
-              </ComboboxTrigger>
-            </div>
-            <ComboboxContent anchor={selectAnchor}>
-              <ComboboxList>
-                {(item: (typeof sanitizedItems)[number]) => (
-                  <ComboboxItem key={item.value} value={item}>
-                    {item.label}
-                  </ComboboxItem>
-                )}
-              </ComboboxList>
-            </ComboboxContent>
-          </Combobox>
+            keyOf={(item) => item.value}
+            labelOf={(item) => item.label}
+            filter="substring"
+            searchAbove={8}
+            select="single"
+            selected={[primitiveInputValue(field.value)]}
+            empty="no options"
+            onPick={(item) => field.change(item.value)}
+            row={(item) => ({ label: item.label })}
+          />
         ) : isBoolean ? (
           <div className="flex h-7 items-center gap-2">
             <Switch
@@ -92,30 +78,15 @@ export function ScalarField({
             <span className="face-mono text-ink-2">{field.value ? "Enabled" : "Disabled"}</span>
           </div>
         ) : options.length > 0 && allowsCustomValue ? (
-          <>
-            <Input
-              id={path}
-              face="mono"
-              type={isNumber ? "number" : "text"}
-              list={datalistId}
-              value={primitiveInputValue(field.value)}
-              onChange={(event) => {
-                field.change(
-                  isNumber
-                    ? coercePrimitive(event.currentTarget.value, nodeType)
-                    : event.currentTarget.value,
-                );
-              }}
-              placeholder={placeholder}
-            />
-            <datalist id={datalistId}>
-              {sanitizedItems.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </datalist>
-          </>
+          <ListInput
+            id={path}
+            mono
+            aria-label={label}
+            value={primitiveInputValue(field.value)}
+            onChange={(text) => field.change(isNumber ? coercePrimitive(text, nodeType) : text)}
+            suggestions={sanitizedItems}
+            placeholder={placeholder}
+          />
         ) : (
           <Input
             id={path}

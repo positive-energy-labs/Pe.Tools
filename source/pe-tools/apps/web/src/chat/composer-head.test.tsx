@@ -17,8 +17,8 @@ vi.mock("#/chat/scope", () => ({
     refusal: null,
   }),
 }));
-vi.mock("#/route/picker", () => ({
-  Picker: ({ levels, title }: any) => (
+vi.mock("#/route/ladder", () => ({
+  Ladder: ({ levels, title }: any) => (
     <button
       title={title}
       onClick={() => levels[0].pick(levels[0].key === "thread" ? "thread-b" : "document-a")}

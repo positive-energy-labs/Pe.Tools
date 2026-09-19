@@ -93,7 +93,7 @@ test("old-shape saved Work reaches the Situation as the host's sentence, not a b
 
   // F-J6-1: the refusal sentence is the only instruction. The Work-bearing controls are inert,
   // and the empty-Work instruction is not drawn.
-  const placement = screen.getByRole("combobox", { name: "placement filter" });
+  const placement = screen.getByRole("button", { name: "placement filter" });
   expect(
     placement.hasAttribute("disabled") || placement.getAttribute("aria-disabled") === "true",
   ).toBe(true);

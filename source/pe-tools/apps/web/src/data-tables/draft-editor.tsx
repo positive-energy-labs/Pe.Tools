@@ -4,13 +4,7 @@ import { Tag } from "#/components/lang/chip";
 import { ActionButton } from "#/components/lang/action-button";
 import { Input } from "#/components/lang/input";
 import { Press } from "#/components/lang/press";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxItem,
-  ComboboxList,
-  ComboboxTrigger,
-} from "#/components/lang/combobox";
+import { ListPopup } from "#/components/lang/list-popup";
 import type { ColumnKind, Draft } from "#/routes/data-tables";
 import { rowKey } from "#/routes/data-tables";
 
@@ -101,11 +95,22 @@ export function DraftEditor({
                       }
                       title="Column heading — written to the schedule on apply"
                     />
-                    <Combobox
+                    <ListPopup<(typeof COLUMN_KINDS)[number]>
+                      anchor="trigger"
+                      title="Column type: txt = Text, num = Number"
+                      triggerLabel={`${column.heading || "column"} type`}
+                      trigger={
+                        <span className="face-mono">{column.kind === "Text" ? "txt" : "num"}</span>
+                      }
+                      aria-label="column type"
+                      region="draft columns"
                       items={COLUMN_KINDS}
-                      value={COLUMN_KINDS.find((kind) => kind.value === column.kind) ?? null}
-                      onValueChange={(kind: (typeof COLUMN_KINDS)[number] | null) =>
-                        kind &&
+                      keyOf={(kind) => kind.value}
+                      labelOf={(kind) => kind.label}
+                      select="single"
+                      selected={[column.kind]}
+                      empty="no column types"
+                      onPick={(kind) =>
                         patch((d) => ({
                           ...d,
                           columns: d.columns.map((c, i) =>
@@ -113,21 +118,8 @@ export function DraftEditor({
                           ),
                         }))
                       }
-                      itemToStringLabel={(kind: (typeof COLUMN_KINDS)[number]) => kind.label}
-                    >
-                      <ComboboxTrigger title="Column type: txt = Text, num = Number">
-                        {column.kind === "Text" ? "txt" : "num"}
-                      </ComboboxTrigger>
-                      <ComboboxContent>
-                        <ComboboxList>
-                          {(kind: (typeof COLUMN_KINDS)[number]) => (
-                            <ComboboxItem key={kind.value} value={kind}>
-                              {kind.label}
-                            </ComboboxItem>
-                          )}
-                        </ComboboxList>
-                      </ComboboxContent>
-                    </Combobox>
+                      row={(kind) => ({ label: <span className="face-mono">{kind.label}</span> })}
+                    />
                     <Press
                       type="button"
                       title={

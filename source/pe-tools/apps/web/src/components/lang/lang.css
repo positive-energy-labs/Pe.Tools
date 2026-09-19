@@ -92,14 +92,6 @@
   color: var(--pe-nav);
 }
 
-:where([cmdk-group-heading]) {
-  font-size: var(--type-small-size);
-  font-weight: var(--weight-medium);
-  letter-spacing: 0.08em;
-  line-height: var(--type-small-line-height);
-  text-transform: uppercase;
-}
-
 :where([data-pe] [data-slot="input"]::file-selector-button) {
   font-size: var(--type-small-size);
   line-height: var(--type-small-line-height);
@@ -587,6 +579,19 @@ tr.dl-row[data-active]::before {
   gap: 2px;
   padding-right: 2px;
   background: var(--pe-on);
+}
+/* Glyphs sit on the row's type scale, one recipe for every call site: a lead mark, thumbnail or
+   row verb is one text line tall (1.2em of t-small), and a verb's hit box is the row height. */
+.dl-row-lead > svg,
+.dl-row-lead > img,
+.dl-row-actions svg {
+  width: 1.2em;
+  height: 1.2em;
+}
+.dl-row-actions > button,
+.dl-row-actions > a {
+  width: var(--item-h);
+  height: var(--item-h);
 }
 .dl-row:hover > .dl-row-actions,
 .dl-row:focus-within > .dl-row-actions,

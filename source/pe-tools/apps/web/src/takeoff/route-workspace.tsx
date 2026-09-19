@@ -7,7 +7,7 @@ import { previousOf } from "#/readings";
 import { type TakeoffsController } from "#/takeoff/controller";
 import { RouteShell } from "#/route";
 import { Situation, SituationCell, SituationChoice, useDocumentLadder } from "#/route/situation";
-import { Picker } from "#/route/picker";
+import { Ladder } from "#/route/ladder";
 import { manifest } from "#/takeoff/manifest";
 import { takeoffReadingHealth } from "#/takeoff/actions";
 import { AdoptRegions, SyncPanel } from "#/takeoff/adopt-panel";
@@ -25,7 +25,7 @@ function TakeoffHead({ store }: { store: TakeoffsController }) {
   const read = capture ? undefined : "read the document first";
   const scope = (
     <SituationCell io="r" empty={!store.views.length}>
-      <Picker
+      <Ladder
         levels={[
           ...ladder.levels,
           {
@@ -48,7 +48,7 @@ function TakeoffHead({ store }: { store: TakeoffsController }) {
   );
   const zones = (
     <SituationCell io={store.stage === "sync" ? "r" : "rw"} empty={!store.zones.length}>
-      <Picker
+      <Ladder
         levels={[
           {
             key: "zones",

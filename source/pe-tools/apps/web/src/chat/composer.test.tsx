@@ -27,6 +27,32 @@ test("the slash menu offers skills only; built-in commands are gone", () => {
   lane.unmount();
 });
 
+test("the slash menu's keys are the list's: ↓ and Enter pick without sending; Escape closes", async () => {
+  const send = vi.fn(async () => null);
+  const lane = mount({
+    skills: [
+      { name: "audit", description: "Audit the model" },
+      { name: "author", description: "Write a family" },
+    ],
+    send,
+  });
+  const box = screen.getByRole("textbox");
+  await act(async () => box.focus());
+  await act(async () => fireEvent.change(box, { target: { value: "/au" } }));
+  await act(async () => fireEvent.keyDown(box, { key: "ArrowDown" }));
+  await act(async () => fireEvent.keyDown(box, { key: "ArrowDown" }));
+  expect(box.getAttribute("aria-activedescendant")).toBeTruthy();
+  await act(async () => fireEvent.keyDown(box, { key: "Enter" }));
+  expect((box as HTMLTextAreaElement).value).toBe("Use the author skill: ");
+  expect(send).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(box);
+  await act(async () => fireEvent.change(box, { target: { value: "/" } }));
+  expect(screen.getByRole("listbox")).toBeTruthy();
+  await act(async () => fireEvent.keyDown(box, { key: "Escape" }));
+  expect(screen.queryByRole("listbox")).toBe(null);
+  lane.unmount();
+});
+
 const newAction = {
   label: "new",
   says: "starts a new, empty thread and opens it",

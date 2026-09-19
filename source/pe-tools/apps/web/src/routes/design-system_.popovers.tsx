@@ -10,31 +10,20 @@
  * so what you see here is what that consumer ships. The notes distinguish current defects from
  * repairs now owned by the shared language primitives.
  *
- * WHY TWO SPECIMENS ARE COMPOSED HERE RATHER THAN IMPORTED: the facet filter (`master-table`) and
- * the picker chip (`control-chips`) are PRIVATE functions inside their consumers. There is no
- * component to import — the composition is duplicated per consumer, which is itself the finding.
- * `FieldOptionSelect` and `FieldOptionPicker` are real exported components and are mounted
- * directly.
+ * The facet filter and the picker chip are compositions of the one `ListPopup` (the list grammar),
+ * repeated here as their consumers write them. `FieldOptionSelect` and `FieldOptionPicker` are
+ * real exported components and are mounted directly.
  *
  * SPECIMEN DATA, ANNOUNCED: the option lists are `design-system/specimens-data.ts`. No host, no document, no
  * live catalogue call (SHIMS entry 4).
  */
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { ThemeToggle } from "#/components/lang/theme-toggle";
 import { FactChip } from "#/components/lang/chip";
 import { Press } from "#/components/lang/press";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-  ComboboxTrigger,
-  useComboboxAnchor,
-} from "#/components/lang/combobox";
+import { ListPopup } from "#/components/lang/list-popup";
 import { FieldOptionPicker, FieldOptionSelect, type FieldOption } from "#/host/field-options";
 import { CATEGORY_OPTIONS } from "#/design-system/specimens-data";
 import { cn } from "#/lib/utils";
@@ -61,84 +50,64 @@ interface Specimen {
   render: () => React.ReactNode;
 }
 
-/** As `master-table.tsx`'s private `ColFilter` composes it: explicit anchor on the trigger, an
- *  in-popup search input once the option list is long, and the wrapper's bottom/start defaults. */
+type Choice = { value: string; label: string; description?: string };
+const CHOICES: Choice[] = CATEGORY_OPTIONS.map((o) => ({
+  value: o.value,
+  label: o.label,
+  description: o.description ?? undefined,
+}));
+
+/** As `master-table-header.tsx`'s `ColFilter` composes it: a filling trigger, search above 8. */
 function FacetFilterSpecimen() {
-  const [value, setValue] = useState<{ value: string | null; label: string } | null>(null);
-  const choices = useMemo(
-    () => [
-      { value: null as string | null, label: "any" },
-      ...CATEGORY_OPTIONS.map((o) => ({ value: o.value as string | null, label: o.label })),
-    ],
-    [],
-  );
-  const anchorRef = useComboboxAnchor();
-  const selected = value ?? choices[0]!;
+  const [value, setValue] = useState("");
+  const choices = [{ value: "", label: "any" }, ...CHOICES];
   return (
-    <Combobox
+    <ListPopup<Choice>
+      anchor="trigger"
+      face="fill"
+      triggerLabel="category filter"
+      trigger={choices.find((c) => c.value === value)?.label}
+      aria-label="category values"
+      region="facet specimen"
       items={choices}
-      value={selected}
-      onValueChange={(choice: { value: string | null; label: string } | null) =>
-        setValue(choice ?? null)
-      }
-      itemToStringLabel={(choice: { value: string | null; label: string }) => choice.label}
-    >
-      <div ref={anchorRef} className="flex">
-        <ComboboxTrigger aria-label="category filter">
-          <span>{selected.label}</span>
-        </ComboboxTrigger>
-      </div>
-      <ComboboxContent anchor={anchorRef}>
-        <ComboboxInput placeholder="filter values…" />
-        <ComboboxEmpty>No matching values</ComboboxEmpty>
-        <ComboboxList>
-          {(choice: { value: string | null; label: string }) => (
-            <ComboboxItem key={choice.value ?? "all"} value={choice}>
-              <span>{choice.label}</span>
-            </ComboboxItem>
-          )}
-        </ComboboxList>
-      </ComboboxContent>
-    </Combobox>
+      keyOf={(c) => c.value}
+      labelOf={(c) => c.label}
+      filter="substring"
+      searchAbove={8}
+      select="single"
+      selected={[value]}
+      empty="no values"
+      onPick={(c) => setValue(c.value)}
+      row={(c) => ({ label: <span className="face-mono">{c.label}</span> })}
+    />
   );
 }
 
-/** As `control-chips.tsx`'s private `Picker` composes it: a quiet Press as the trigger,
- *  an explicit anchor, and a searchable popup. */
+/** As `control-chips.tsx`'s `ChipList` composes it: an inline trigger, searchable, two-line rows. */
 function PickerChipSpecimen() {
-  const [picked, setPicked] = useState<(typeof CATEGORY_OPTIONS)[number] | null>(null);
-  const anchorRef = useComboboxAnchor();
+  const [picked, setPicked] = useState<string | null>(null);
   return (
-    <Combobox
-      items={CATEGORY_OPTIONS}
-      value={picked}
-      onValueChange={(option: (typeof CATEGORY_OPTIONS)[number] | null) => setPicked(option)}
-      itemToStringLabel={(option: (typeof CATEGORY_OPTIONS)[number]) => option.label}
-    >
-      <div
-        ref={anchorRef}
-        className="inline-flex max-w-40 [&>button]:max-w-full [&>button]:justify-between [&>button]:gap-1"
-      >
-        <ComboboxTrigger
-          title="Category"
-          render={<Press tone="quiet" size="value" state="selected" />}
-        >
-          <span>{picked?.label ?? "category"}</span>
-        </ComboboxTrigger>
-      </div>
-      <ComboboxContent anchor={anchorRef}>
-        <ComboboxInput placeholder="Search category…" />
-        <ComboboxEmpty>No matches</ComboboxEmpty>
-        <ComboboxList>
-          {(option: (typeof CATEGORY_OPTIONS)[number]) => (
-            <ComboboxItem key={option.value} value={option}>
-              <span>{option.label}</span>
-              {option.description ? <span>{option.description}</span> : null}
-            </ComboboxItem>
-          )}
-        </ComboboxList>
-      </ComboboxContent>
-    </Combobox>
+    <ListPopup<Choice>
+      anchor="trigger"
+      triggerLabel="Category"
+      trigger={
+        <span className="face-mono">
+          {CHOICES.find((c) => c.value === picked)?.label ?? "category"}
+        </span>
+      }
+      aria-label="Category"
+      region="chip specimen"
+      items={CHOICES}
+      keyOf={(c) => c.value}
+      labelOf={(c) => c.label}
+      filter="substring"
+      searchPlaceholder="Search category…"
+      select="single"
+      selected={picked ? [picked] : []}
+      empty="no categories"
+      onPick={(c) => setPicked(c.value)}
+      row={(c) => ({ label: c.label, sub: c.description, lines: c.description ? 2 : 1 })}
+    />
   );
 }
 
@@ -168,28 +137,23 @@ function FieldMultiSpecimen() {
 const SPECIMENS: readonly Specimen[] = [
   {
     id: "facet",
-    name: "combobox · facet filter",
+    name: "ListPopup · facet filter",
     consumers:
       "components/master-table/master-table-header.tsx → every Table column header (atlas/takeoffs, families, data-tables)",
-    shape: "explicit trigger anchor · in-popup search · bottom/start with collision fit",
+    shape: "ListPopup face=fill · search above 8 · the trigger is the anchor",
     defects: [
-      "FIXED — single-value Combobox popups keep the anchor as their preferred width with a readable 10rem floor.",
+      "FIXED — the list grammar cutover: the trigger is always the anchor, so no consumer writes an anchor `div`.",
       "OBSERVED — flip works (bottom edge opens upward) but the in-popup search input stays at the popup's top, so after a flip the search box is the FURTHEST thing from the trigger you just clicked.",
-      "no component to import: `ColFilter` is a private function inside master-table.tsx, so this composition is duplicated wherever a facet filter is wanted.",
-      "the anchor is an extra `div` that exists only to stop the in-popup search input from becoming the positioner anchor (a jitter loop). Every consumer has to know that.",
     ],
     render: () => <FacetFilterSpecimen />,
   },
   {
     id: "picker",
-    name: "combobox · picker chip",
+    name: "ListPopup · picker chip",
     consumers: "components/control-chips.tsx → the chat composer, families",
-    shape: "quiet Press trigger · explicit anchor · searchable · collision fit",
+    shape: "ListPopup face=inline · searchable · two-line rows · collision fit",
     defects: [
-      "FIXED — narrow single-value triggers now open a readable 10rem popup instead of collapsing to the trigger width.",
-      "FIXED — the consumer no longer forces end alignment; Base UI starts at the trigger and shifts only to avoid a collision.",
-      "same private-function problem: `Picker` is internal to control-chips.tsx.",
-      "the trigger uses the shared quiet Press while the facet filter is a bare `ComboboxTrigger`: the same control still has two trigger identities.",
+      "FIXED — the list grammar cutover: one trigger recipe with three faces (inline, fill, field); the chip and the facet differ only by face.",
     ],
     render: () => <PickerChipSpecimen />,
   },
@@ -197,11 +161,9 @@ const SPECIMENS: readonly Specimen[] = [
     id: "field",
     name: "FieldOptionSelect",
     consumers: "routes/ops.tsx, ops/views-catalog.tsx, parameter-links/ProfileEditor.tsx",
-    shape: "the INPUT is the trigger · NO explicit anchor · defaults everywhere",
+    shape: "ListPopup face=field · async status · a stale value stays, refused",
     defects: [
-      "FIXED — the single-value width floor keeps long option labels readable without changing the input's anchor ownership.",
-      "no explicit anchor is passed, unlike BOTH other combobox consumers, which each wrote an anchor `div` with a comment explaining that the in-popup input must not be the positioner anchor. Nothing in the API says which shape needs it — the knowledge lives in two ponytail comments.",
-      "OBSERVED — flips at the bottom edge (correct), but the description sub-line is `t-small face-mono text-ink-2` here and `t-small text-ink-2` in the picker chip: the same option list, rendered at two sizes by two consumers.",
+      "FIXED — the list grammar cutover: the description is the Row's `sub` slot, one size in every consumer.",
     ],
     render: () => <FieldSelectSpecimen />,
   },
@@ -209,11 +171,9 @@ const SPECIMENS: readonly Specimen[] = [
     id: "multi",
     name: "FieldOptionPicker",
     consumers: "routes/ops.tsx, ops/views-catalog.tsx, parameter-links/ProfileEditor.tsx",
-    shape: "chips container is the anchor · the anchor GROWS as chips are added",
+    shape: "ListPopup face=field, select=multi · chips are the trigger's face",
     defects: [
-      "the anchor is the chips container, which GROWS every time a chip is added, so an open popup re-positions mid-selection — worst at the bottom edge, where each new chip can force a flip.",
-      "FIXED — the existing `multiple` contract now keeps chip popups anchor-owned without guessing from which element was anchored.",
-      "FIXED — the trailing count line spent `--lichen`, a raw palette hue from the old vocabulary; it now sits on `--pe-ink-2` (and the old cat-lichen identity lives on only as `--viz-4`).",
+      "OBSERVED — the trigger is the chips row, which grows as chips are added, so an open popup can re-position mid-selection at the bottom edge.",
     ],
     render: () => <FieldMultiSpecimen />,
   },

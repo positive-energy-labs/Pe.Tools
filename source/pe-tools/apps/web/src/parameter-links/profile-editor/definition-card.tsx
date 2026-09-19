@@ -124,6 +124,7 @@ export function DefinitionCard({
         <Field label="Source category">
           <FieldOptionSelect
             items={categories.items}
+            status={categories.status}
             value={definition.sourceCategoryId ? String(definition.sourceCategoryId) : undefined}
             fallbackLabel={
               definition.sourceCategoryId ? `Category ${definition.sourceCategoryId}` : undefined
@@ -145,6 +146,7 @@ export function DefinitionCard({
         <Field label="Source parameter">
           <FieldOptionSelect
             items={sourceParameters.items}
+            status={sourceParameters.status}
             value={
               selectedSource?.value ??
               parameterOptionValue(definition.sourceParameter, definition.sourceScope)
@@ -164,6 +166,7 @@ export function DefinitionCard({
         <Field label="Target parameter">
           <FieldOptionSelect
             items={targetParameters.items}
+            status={targetParameters.status}
             value={
               findParameterOption(targetParameters.items, definition.targetParameter)?.value ??
               parameterOptionValue(definition.targetParameter, "instance")
@@ -214,6 +217,7 @@ export function DefinitionCard({
           <>
             <Field label="Override enabled parameter">
               <FieldOptionSelect
+                status={readableTargetParameters.status}
                 items={readableTargetParameters.items.filter((item) =>
                   item.metadata?.dataTypeId?.includes("yesno"),
                 )}
@@ -238,6 +242,7 @@ export function DefinitionCard({
             </Field>
             <Field label="Override value parameter">
               <FieldOptionSelect
+                status={readableTargetParameters.status}
                 items={readableTargetParameters.items.filter(
                   (item) =>
                     !selectedSource?.metadata?.dataTypeId ||
@@ -313,6 +318,7 @@ export function DefinitionCard({
                 <Field label="Source elements">
                   <FieldOptionPicker
                     items={elements.items}
+                    status={elements.status}
                     values={assignment.sourceElementUniqueIds}
                     disabled={disabled}
                     onChange={(sourceElementUniqueIds) =>

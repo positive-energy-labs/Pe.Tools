@@ -33,7 +33,6 @@
     "@tanstack/react-table": "9.1.2",
     "beautiful-mermaid": "catalog:",
     "clsx": "^2.1.1",
-    "cmdk": "catalog:",
     "effect": "4.0.0-beta.92",
     "lucide-react": "1.21.0",
     "react": "^19.2.0",

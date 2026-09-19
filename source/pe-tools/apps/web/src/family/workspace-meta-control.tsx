@@ -1,11 +1,5 @@
 import { Switcher } from "#/components/lang/switcher";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxItem,
-  ComboboxList,
-  ComboboxTrigger,
-} from "#/components/lang/combobox";
+import { ListPopup } from "#/components/lang/list-popup";
 import type { GeomMeta } from "#/family/world";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 
@@ -37,24 +31,22 @@ export function FamilyMetaControl({ slug, meta }: { slug: string; meta: GeomMeta
       />
     );
   return (
-    <Combobox
+    <ListPopup<string>
+      anchor="trigger"
+      face="fill"
+      title={meta.note}
+      triggerLabel={meta.label}
+      trigger={value}
+      aria-label={meta.label}
+      region={meta.label}
       items={meta.options ?? []}
-      value={value}
-      onValueChange={(option: string | null) => option && editMeta(slug, meta.key, option)}
-      itemToStringLabel={(option: string) => option}
-    >
-      <ComboboxTrigger fill title={meta.note} aria-label={meta.label}>
-        {value}
-      </ComboboxTrigger>
-      <ComboboxContent>
-        <ComboboxList>
-          {(option: string) => (
-            <ComboboxItem key={option} value={option}>
-              {option}
-            </ComboboxItem>
-          )}
-        </ComboboxList>
-      </ComboboxContent>
-    </Combobox>
+      keyOf={(option) => option}
+      labelOf={(option) => option}
+      select="single"
+      selected={[value]}
+      empty="no options"
+      onPick={(option) => editMeta(slug, meta.key, option)}
+      row={(option) => ({ label: option })}
+    />
   );
 }

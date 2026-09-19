@@ -44,13 +44,12 @@ test("the hosted saved review lists only the thread document's captures", () => 
   render(<TakeoffsPane thread="thread-1" />);
   fireEvent.click(screen.getByRole("button", { name: "saved review" }));
   // Same document by Address rules (case and separators), the other document absent.
-  expect(screen.getByRole("button", { name: /^A · / })).toBeTruthy();
-  expect(screen.queryByRole("button", { name: /^B · / })).toBeNull();
+  expect(screen.getAllByRole("option").map((row) => row.textContent?.[0])).toEqual(["A"]);
 });
 
 test("a thread with no resolved document lists no captures", () => {
   controller.target = null;
   render(<TakeoffsPane thread="thread-1" />);
   fireEvent.click(screen.getByRole("button", { name: "saved review" }));
-  expect(screen.queryByRole("button", { name: / · 2026/ })).toBeNull();
+  expect(screen.queryAllByRole("option")).toEqual([]);
 });
