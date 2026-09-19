@@ -87,7 +87,7 @@ export const familyActions = {
   "families.capture": {
     says: "Capture loaded families as new spec members in the route's pod, one member per family; returns the members and what the capture saw per family.",
     needs: "project-document",
-    actor: "any",
+    actor: "human",
     dirties: ["pods"],
     executors: ["families.capture", "pod.member.write"],
     description:
@@ -97,7 +97,7 @@ export const familyActions = {
   "families.plan": {
     says: "Plan a saved spec, or a supplied draft's exact bytes (filed nowhere), over the loaded families in the reviewed Families Work scope; returns the plan and the hashes apply would send, and changes nothing.",
     needs: "project-document",
-    actor: "any",
+    actor: "human",
     dirties: [],
     executors: ["pod.member.compose", "families.plan"],
     description:

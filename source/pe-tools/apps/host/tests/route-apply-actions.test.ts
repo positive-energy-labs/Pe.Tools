@@ -532,12 +532,17 @@ test("a scope that resolves no loaded family refuses before the native plan", as
   expect(sent.filter((s) => s.key === "families.plan")).toHaveLength(0);
 });
 
-test("an agent may plan, and only a human may apply", async () => {
+test("plan, capture, and apply over loaded families are human verbs (F-H6-3)", async () => {
   const { work, admit, sent } = await setup();
   const revision = await authorFamilies(work);
-  const plan = resultOf<Plan>(
-    await admit("families.plan", { source }, revision, "agent-plan", "agent"),
-  );
+  for (const [key, input] of [
+    ["families.plan", { source }],
+    ["families.capture", { pod: "global", familyIds: [1] }],
+  ] as const)
+    await expect(admit(key, input, revision, `agent-${key}`, "agent")).rejects.toThrow(
+      "requires human approval",
+    );
+  const plan = resultOf<Plan>(await admit("families.plan", { source }, revision));
   await expect(
     admit(
       "families.apply",
@@ -547,7 +552,9 @@ test("an agent may plan, and only a human may apply", async () => {
       "agent",
     ),
   ).rejects.toThrow("requires human approval");
-  expect(sent.filter((s) => s.key === "families.apply")).toHaveLength(0);
+  expect(sent.map((s) => s.key).filter((key) => key.startsWith("families."))).toEqual([
+    "families.plan",
+  ]);
 });
 
 test("apply sends the bytes its plan sealed, not the member as saved since", async () => {
@@ -1164,13 +1171,7 @@ test("neither route advertises a command a server would have to refuse", () => {
 
 test("families.capture writes one new member per family into the route's pod", async () => {
   const { admit, podsRoot } = await setup();
-  const row = await admit(
-    "families.capture",
-    { pod: "global", familyIds: [1, 2] },
-    0,
-    "capture",
-    "agent",
-  );
+  const row = await admit("families.capture", { pod: "global", familyIds: [1, 2] }, 0, "capture");
   expect(row.state, JSON.stringify(row)).toBe("succeeded");
   const members = (row as { result: { members: { pod: string; path: string; sha256: string }[] } })
     .result.members;
