@@ -528,9 +528,11 @@ export function createPeaSessionAdmission(
       accepted: assertRunAdmitted().then(async () => {
         if (session.thread.getId() !== admission[0] || permissionGeneration !== admission[1])
           throw new Error("Pea permission thread changed during hydration.");
-        // A rapid second turn finds nothing parked and waits out the same teardown.
-        parkedTurnEnding = endParkedTurn(session) ?? parkedTurnEnding;
-        await parkedTurnEnding;
+        // A rapid second turn finds nothing parked and waits out the same teardown. A failed
+        // ending refuses the turn that ended the ask, never the turns after it.
+        const ending = endParkedTurn(session);
+        if (ending) parkedTurnEnding = ending.catch(() => undefined);
+        await (ending ?? parkedTurnEnding);
         return sendSignal(input, options).accepted;
       }),
     };
