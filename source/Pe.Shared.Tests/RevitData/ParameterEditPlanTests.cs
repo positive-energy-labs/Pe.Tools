@@ -33,7 +33,7 @@ public sealed class ParameterEditPlanTests {
 
     /// <summary>A plan as comparable text: refusals per edit, then each write as its answered edit indices.</summary>
     private static (string?[] Refusals, string[] Writes) Shape(Plan plan) =>
-        (plan.Refusals.ToArray(), plan.Writes.Select(write => string.Join(",", write.Edits)).ToArray());
+        (plan.Refusals.Select(refusal => refusal?.Message).ToArray(), plan.Writes.Select(write => string.Join(",", write.Edits)).ToArray());
 
     private static TestCaseData Case(string name, Evidence evidence, Edit[] edits, string?[] refusals, params string[] writes) =>
         new TestCaseData(edits, evidence, refusals, writes).SetName(name);
@@ -99,7 +99,8 @@ public sealed class ParameterEditPlanTests {
     /// <summary>Judges edits in the given order and answers in original-index terms, as sets.</summary>
     private static string Canonical(Edit[] edits, Evidence evidence, int[] order) {
         var plan = Build(order.Select(i => edits[i]).ToList(), evidence);
-        var refusals = order.Select((original, at) => (original, plan.Refusals[at])).OrderBy(pair => pair.original);
+        var refusals = order.Select((original, at) => (original, plan.Refusals[at]?.Code, plan.Refusals[at]?.Cause, plan.Refusals[at]?.Message))
+            .OrderBy(pair => pair.original);
         var writes = plan.Writes.Select(write => string.Join(",", write.Edits.Select(at => order[at]).Order())).Order();
         return string.Join("|", refusals) + " / " + string.Join(" ", writes);
     }
@@ -109,7 +110,7 @@ public sealed class ParameterEditPlanTests {
         var plan = Build([E(0, 1), E(0, 2, ev: Ev.Stale), E(0, 3)], Evidence.Required);
         Assert.Multiple(() => {
             Assert.That(plan.Writes, Is.Empty);
-            foreach (var refusal in plan.Refusals) {
+            foreach (var refusal in plan.Refusals.Select(refusal => refusal?.Message)) {
                 Assert.That(refusal, Does.Contain("stale"));
                 Assert.That(refusal, Does.Contain("element 2"));
                 Assert.That(refusal, Does.Contain("'Mark'"));
@@ -117,6 +118,47 @@ public sealed class ParameterEditPlanTests {
             }
         });
     }
+
+    // Authority ask A: every refusal carries one closed code; the prose stays the `error`.
+    [Test]
+    public void Each_refusal_carries_its_closed_code() {
+        EditRefusalCode? Code(Evidence evidence, params Edit[] edits) => Build(edits, evidence).Refusals[0]?.Code;
+        Assert.Multiple(() => {
+            Assert.That(Code(Evidence.Required, E(0, 1, ev: Ev.Stale)), Is.EqualTo(EditRefusalCode.TargetEvidenceStale));
+            Assert.That(Code(Evidence.Required, E(0, 1, ev: Ev.None)), Is.EqualTo(EditRefusalCode.TargetEvidenceMissing));
+            Assert.That(Code(Evidence.IfGiven, new Edit(0, new ParameterValueEdit(9, -1, Value: "X"), null)), Is.EqualTo(EditRefusalCode.TargetUnresolved));
+            Assert.That(Code(Evidence.Required, new Edit(0, new ParameterValueEdit(9, -1, Value: "X", Expected: Target(9)), null, "Element 9 was not found.")),
+                Is.EqualTo(EditRefusalCode.TargetUnresolved), "a resolver refusal is an unresolved target");
+            Assert.That(Code(Evidence.Required, E(0, 1), E(1, 1, "Y")), Is.EqualTo(EditRefusalCode.AliasConflict));
+            Assert.That(Build([E(0, 1)], Evidence.Required).Refusals[0], Is.Null);
+        });
+    }
+
+    // A sibling's code is admission-group-refused, and it carries its cause's code: the same cause its message names, in any input order.
+    [Test]
+    public void A_refused_group_carries_its_cause_code_on_every_sibling_in_any_order() {
+        // Two causes: stale (element 2) and missing evidence (element 3). The ordinal-first message ("A wet run…") is the named cause.
+        Edit[] edits = [E(0, 1), E(0, 2, ev: Ev.Stale), E(0, 3, ev: Ev.None), E(1, 4)];
+        var plan = Build(edits, Evidence.Required);
+        Assert.Multiple(() => {
+            Assert.That(plan.Refusals.Select(r => (r?.Code, r?.Cause)), Is.EqualTo(new (EditRefusalCode?, EditRefusalCode?)[] {
+                (EditRefusalCode.AdmissionGroupRefused, EditRefusalCode.TargetEvidenceMissing),
+                (EditRefusalCode.TargetEvidenceStale, null),
+                (EditRefusalCode.TargetEvidenceMissing, null),
+                (null, null)
+            }));
+            Assert.That(plan.Refusals[0]?.Message, Is.EqualTo(G(MissingExpected, 1)), "the prose is unchanged");
+        });
+        var expected = Canonical(edits, Evidence.Required, [0, 1, 2, 3]);
+        foreach (var order in new[] { new[] { 3, 2, 1, 0 }, [2, 0, 3, 1], [1, 3, 0, 2] })
+            Assert.That(Canonical(edits, Evidence.Required, order), Is.EqualTo(expected), string.Join(",", order));
+    }
+
+    [Test]
+    public void Codes_serialize_as_their_closed_kebab_names() =>
+        Assert.That(Enum.GetValues<EditRefusalCode>().Select(code => Newtonsoft.Json.JsonConvert.SerializeObject(code)), Is.EqualTo(new[] {
+            "\"target-evidence-stale\"", "\"target-evidence-missing\"", "\"target-unresolved\"", "\"admission-group-refused\"", "\"alias-conflict\""
+        }));
 
     [Test]
     public void A_group_at_the_cap_writes_once_per_target_and_one_stale_target_refuses_all_of_it() {
@@ -133,8 +175,8 @@ public sealed class ParameterEditPlanTests {
         edits[cap - 1] = E(0, cap, ev: Ev.Stale);
         var refused = Build(edits, Evidence.Required);
         Assert.Multiple(() => {
-            Assert.That(refused.Refusals.Take(cap - 1), Is.All.EqualTo(G(S(cap))));
-            Assert.That(refused.Refusals[cap - 1], Is.EqualTo(S(cap)));
+            Assert.That(refused.Refusals.Take(cap - 1).Select(refusal => refusal?.Message), Is.All.EqualTo(G(S(cap))));
+            Assert.That(refused.Refusals[cap - 1]?.Message, Is.EqualTo(S(cap)));
             Assert.That(Shape(refused).Writes, Is.EqualTo(new[] { $"{cap}" }));
         });
     }

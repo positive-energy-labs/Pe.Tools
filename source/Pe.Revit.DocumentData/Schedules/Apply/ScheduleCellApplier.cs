@@ -82,10 +82,11 @@ public static class ScheduleCellApplier {
 
         var results = cells.Select(cell => {
             var leaves = leavesOf[cell.Index] ?? [];
+            var refused = cell.Error == null ? leaves.FirstOrDefault(leaf => !leaf.Ok) : null;
             return new ScheduleCellEditResult(cell.Index, cell.Edit.RowNumber, cell.Edit.ColumnNumber,
                 cell.Error == null && leaves.Count != 0 && leaves.All(leaf => leaf.Ok),
-                cell.Error ?? leaves.FirstOrDefault(leaf => !leaf.Ok)?.Error,
-                cell.Current, leaves);
+                cell.Error ?? refused?.Error,
+                cell.Current, leaves, refused?.Code, refused?.CauseCode);
         }).ToList();
         var appliedWrites = request.DryRun ? 0 : groups.Zip(answers, (edits, leaves) => edits.Zip(leaves, (edit, leaf) => (edit, leaf)))
             .SelectMany(pairs => pairs).Where(pair => pair.leaf.Ok)

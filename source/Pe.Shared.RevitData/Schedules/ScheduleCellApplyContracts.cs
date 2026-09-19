@@ -37,5 +37,8 @@ public sealed record ScheduleCellEditResult(
     ScheduleCellBinding? CurrentBinding,
     // Each nested Index is the corresponding CurrentBinding.Targets position, not the global
     // coalesced native-batch index. Generic ParameterValueApplyData indices remain unchanged.
-    IReadOnlyList<ParameterValueEditResult> ParameterResults
+    IReadOnlyList<ParameterValueEditResult> ParameterResults,
+    // The code of the target refusal Error names (its first refused target); null for a cell-level refusal (ValidateCell) or a native write failure.
+    EditRefusalCode? Code = null,
+    EditRefusalCode? CauseCode = null
 );

@@ -216,6 +216,11 @@ public sealed class ScheduleCellBindingProofTests {
                 Assert.Multiple(() => {
                     Assert.That(result.AppliedParameterWrites, Is.Zero);
                     Assert.That(result.Results.Single().Error, Does.Contain("stale"));
+                    // The cell answers with its first target, a sibling of the stale one: the group refusal, carrying the stale cause's code.
+                    Assert.That((result.Results.Single().Code, result.Results.Single().CauseCode),
+                        Is.EqualTo(((EditRefusalCode?)EditRefusalCode.AdmissionGroupRefused, (EditRefusalCode?)EditRefusalCode.TargetEvidenceStale)));
+                    Assert.That(result.Results.Single().ParameterResults.Select(leaf => leaf.Code),
+                        Is.EqualTo(new EditRefusalCode?[] { EditRefusalCode.AdmissionGroupRefused, EditRefusalCode.TargetEvidenceStale }));
                     Assert.That(current, Is.Not.Null);
                     Assert.That(current!.HasMixedValues, Is.True);
                     Assert.That(current.RawValue, Is.EqualTo(firstRawValue));
