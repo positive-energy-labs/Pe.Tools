@@ -37,6 +37,16 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
 }
 
 /**
+ * A registration's check on a write the schema and mask already admitted, run before it lands, for
+ * truth only the host can read (Families: the family types a cell key names). Null admits.
+ */
+export type RouteWriteAdmission = (
+  doc: unknown,
+  patches: readonly RouteStatePatch[],
+  ctx: { scope: WorkKey; actor: import("./route-doc.ts").RouteActor },
+) => Promise<import("./route-doc.ts").RouteRefusal | null>;
+
+/**
  * The identity a Work document lives under: its route, the Address it is bound to, and an
  * optional named standalone workspace (`?work=<id>`) for Work that is not document-scoped.
  *

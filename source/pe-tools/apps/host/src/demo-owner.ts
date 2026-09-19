@@ -28,6 +28,7 @@ import { RevitBridge, BridgeError } from "./bridge.ts";
 import { makeCallRoute, type CallRouteDispatch } from "./call-route.ts";
 import { assertDemoPath, createDemoSettings } from "./demo-settings.ts";
 import { createSettingsCommandHandlers } from "../../../packages/mcps/src/pea/settings-commands.ts";
+import { familiesAdmission } from "../../../packages/mcps/src/pea/families-admission.ts";
 import { resourceResponse, type ResourceObserver } from "@pe/runtime";
 import { hostResourceObserver } from "./resource-adapters.ts";
 import { readFamily } from "./family-actions.ts";
@@ -157,6 +158,21 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                 },
               })
             : {},
+        // The same door the live host runs, over the simulated catalog.
+        ...(spec.route === familiesRouteState.route
+          ? {
+              admit: familiesAdmission(async () =>
+                seed.route === "families"
+                  ? seed.readings.families.map((familyName, index) => ({
+                      familyId: index + 1,
+                      types: loadedFamily(index + 1, familyName).typeNames.map((typeName) => ({
+                        typeName,
+                      })),
+                    }))
+                  : [],
+              ),
+            }
+          : {}),
       })),
       store: {
         async getState({ targetKey, route }) {
