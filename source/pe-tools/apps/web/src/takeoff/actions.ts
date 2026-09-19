@@ -113,7 +113,7 @@ const snapshotOf = (world: TakeoffModel, observedAt: string): TakeoffSnapshot =>
   reading: { at: FIXTURE_AT, version: null, observedAt },
   carriers: { stage: "Adoption", status: "ready", missingCarrierGuids: [] },
   world,
-  zoneFrs: candidates,
+  zoneFrs: DEMO_CANDIDATES,
   regionsByZone: {},
 });
 
@@ -126,7 +126,8 @@ const adopted = ((): TakeoffModel => {
   return next;
 })();
 
-const candidates: CandidateRegion[] = model.zones.map((zone, index) => ({
+/** The demo lane's `takeoffs.candidates` answer: the seed's drawn regions. */
+export const DEMO_CANDIDATES: CandidateRegion[] = model.zones.map((zone, index) => ({
   elementId: index + 1,
   typeName: zone.name,
   view: zone.zone.lane.view,

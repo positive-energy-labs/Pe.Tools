@@ -16,6 +16,7 @@ import type {
   TakeoffObservation,
 } from "@pe/agent-contracts";
 import {
+  candidateRegionSchema,
   stagedAdoptChoices,
   stagedDecisions,
   stagedReviewFlags,
@@ -29,9 +30,16 @@ import {
 } from "@pe/agent-contracts";
 
 import type { CellWire } from "#/components/lang/band";
-import { previousOf } from "#/readings";
+import { callHostRpc } from "#/host/client";
+import { previousOf, useHostCall } from "#/readings";
+import { NATIVE_READ_WAIT_S } from "#/route/waits";
 import { useRoute } from "#/route/use-route";
-import { snapshotOfObservation, syncPlan, type TakeoffReadingKey } from "#/takeoff/actions";
+import {
+  DEMO_CANDIDATES,
+  snapshotOfObservation,
+  syncPlan,
+  type TakeoffReadingKey,
+} from "#/takeoff/actions";
 import { manifest } from "#/takeoff/manifest";
 import {
   readZoneMeta,
@@ -368,7 +376,42 @@ export function useTakeoffsController(options: {
     [handle.work.doc],
   );
   const world = useMemo(() => stagedModel(authority, staged), [authority, staged]);
-  const candidates = observed<TakeoffSnapshot>(snapshot)?.zoneFrs;
+  /*
+   * The adopt pane's one source: the host's `takeoffs.candidates` (every filled region on each
+   * chosen view, stamped or not). `snapshot.zoneFrs` holds only regions already stamped, so it can
+   * never offer a region to adopt (hold 4a, D4). The demo lane answers the same call from its seed.
+   */
+  const bound =
+    handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
+      ? handle.resolution.target.ref
+      : null;
+  const candidatesCall = useHostCall(
+    async () => {
+      if (handle.demo) return DEMO_CANDIDATES.filter((region) => page.views.includes(region.view));
+      const read = await Promise.all(
+        page.views.map((view) =>
+          callHostRpc(
+            "takeoffs.candidates",
+            { view },
+            { bridgeSessionId: bound!.session, openDocumentId: bound!.openId },
+          ),
+        ),
+      );
+      return candidateRegionSchema.array().parse(
+        read.flatMap(({ regions }) =>
+          regions.map((region) => ({
+            ...region,
+            role: region.role ?? null,
+            guid: region.guid ?? null,
+          })),
+        ),
+      );
+    },
+    ["takeoffs.candidates", bound?.session, bound?.openId, handle.demo, page.views.join("|")],
+    (handle.demo || bound !== null) && page.views.length > 0,
+    NATIVE_READ_WAIT_S,
+  );
+  const candidates = candidatesCall.data;
   const adoptPatches = useMemo(
     () => (handle.work.doc ? stagedAdoptChoices(handle.work.doc) : {}),
     [handle.work.doc],
@@ -583,6 +626,9 @@ export function useTakeoffsController(options: {
     world,
     snapshot,
     adoptRows,
+    /** Why the pane has no rows: the candidates read is in flight or failed (its own words). */
+    candidatesReading: candidatesCall.pending,
+    candidatesIssue: candidatesCall.error ?? null,
     atlasRows: rows,
     syncPlan: plan,
     review,

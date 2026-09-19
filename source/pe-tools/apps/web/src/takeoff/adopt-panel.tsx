@@ -108,18 +108,31 @@ export function AdoptRegions({ store }: { store: TakeoffsController }) {
             </div>
           </Fragment>
         ))}
-        {listed === null && (
+        {!views.length ? (
           <div className="px-2 py-3">
-            <OutcomeLine kind="busy" label="reading regions" says={views.join(", ")} />
-          </div>
-        )}
-        {listed !== null && listed.length === 0 && (
-          <div className="px-2 py-3">
-            <EmptyState story="scope" exit="draw the zones in Revit first, or bind other views">
-              no filled regions — these views carry no designer-drawn regions to adopt
+            <EmptyState story="scope" exit="choose views in the sentence above">
+              no views chosen — candidates are read per plan view
             </EmptyState>
           </div>
-        )}
+        ) : store.candidatesIssue ? (
+          <div className="px-2 py-3">
+            <OutcomeLine
+              kind="error"
+              label="candidates unread"
+              says={store.candidatesIssue.message}
+            />
+          </div>
+        ) : store.candidatesReading || listed === null ? (
+          <div className="px-2 py-3">
+            <OutcomeLine kind="busy" label="reading candidates" says={views.join(", ")} />
+          </div>
+        ) : listed.length === 0 ? (
+          <div className="px-2 py-3">
+            <EmptyState story="scope" exit="or bind other views">
+              no filled regions on this plan: initialize the zoning plan in Revit
+            </EmptyState>
+          </div>
+        ) : null}
       </div>
       <div className="mt-2 flex items-center gap-2">
         <ActionButton
