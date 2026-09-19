@@ -1,7 +1,13 @@
 import { z } from "zod";
 import { addressSchema, documentRefSchema } from "./target.ts";
 import { nativeProcessSchema } from "./action-receipts.ts";
-import { scheduleGridSnapshotSchema } from "./schedule-grid-data.ts";
+import {
+  scheduleGridSnapshotSchema,
+  splitScheduleCellKey,
+  type ScheduleGridDocument,
+} from "./schedule-grid-data.ts";
+import { canonicalRouteInput } from "./route-doc.ts";
+import type { RouteStatePatch } from "./route-state.ts";
 import { podMemberSourceSchema } from "./settings.ts";
 
 export const scheduleReadingSchema = z.object({
@@ -14,6 +20,51 @@ export const scheduleReadingSchema = z.object({
   snapshot: scheduleGridSnapshotSchema,
 });
 export type ScheduleReading = z.infer<typeof scheduleReadingSchema>;
+
+/**
+ * A person's successful read of this Work's schedule rebinds it in ONE write: `basis` moves to
+ * `reading` (its live document lifetime) and names in `basis.stale` every staged cell whose binding
+ * differs between the old basis and `reading` (or whose old basis is unreadable), plus any cell
+ * still stale from before. Cells are untouched; push refuses a stale key per cell, and staging or
+ * unstaging the key drops it (`unstale`).
+ */
+export function rebindScheduleWork(
+  doc: ScheduleGridDocument,
+  basis: ScheduleReading | null,
+  reading: ScheduleReading,
+): RouteStatePatch[] {
+  if (!doc.basis || doc.basis.captureId === reading.id) return [];
+  const binding = (at: ScheduleReading | null, key: string) => {
+    const { rowNumber, columnNumber } = splitScheduleCellKey(key);
+    return at?.snapshot.rows
+      .find((row) => row.rowNumber === rowNumber)
+      ?.bindings.find((b) => b.columnNumber === columnNumber);
+  };
+  const was = new Set(doc.basis.stale ?? []);
+  const stale = Object.entries(doc.cells)
+    .filter(([key, cell]) => {
+      if (!cell.staged) return false;
+      if (was.has(key)) return true;
+      const before = binding(basis, key),
+        after = binding(reading, key);
+      return !before || !after || canonicalRouteInput(before) !== canonicalRouteInput(after);
+    })
+    .map(([key]) => key);
+  return [
+    { path: ["basis"], value: { captureId: reading.id, ...(stale.length ? { stale } : {}) } },
+  ];
+}
+
+/** The patch that drops `keys` from `basis.stale` when a write stages or unstages them. */
+export function unstale(
+  doc: ScheduleGridDocument | null,
+  keys: readonly string[],
+): RouteStatePatch[] {
+  const stale = doc?.basis?.stale ?? [];
+  const rest = stale.filter((key) => !keys.includes(key));
+  if (rest.length === stale.length) return [];
+  return [rest.length ? { path: ["basis", "stale"], value: rest } : { path: ["basis", "stale"] }];
+}
 export const scheduleActions = {
   "schedule.grid.push": {
     says: "Push reviewed staged schedule cells using their frozen bindings. Complete positive native acknowledgments precede conditional Work publication and actual readback. Files a run receipt (values before and after) in the bound pod, or in the action receipt when no pod is bound.",

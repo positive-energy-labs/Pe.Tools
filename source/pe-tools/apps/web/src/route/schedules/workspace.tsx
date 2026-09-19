@@ -70,6 +70,7 @@ export function ScheduleGridWorkspace({
   const [tableState, setTableState] = useTableState();
   const document = slice;
   const cells = document?.cells ?? {};
+  const stale = document?.basis?.stale ?? [];
 
   const [activeRow, setActiveRow] = useState<string | null>(null);
   const [railCollapsed, setRailCollapsed] = useState(false);
@@ -109,6 +110,16 @@ export function ScheduleGridWorkspace({
       ...(cell.proposal != null ? transitionPatches(["cells"], key, cell, { kind: "deny" }) : []),
     ]);
   };
+  // A stale key's answers are the contract's transitions; `apply` drops the key from `basis.stale`.
+  const acceptStale = (key: string) =>
+    void apply(
+      transitionPatches(["cells"], key, cells[key] ?? {}, {
+        kind: "stage",
+        rung: { value: cells[key]?.staged?.value },
+      }),
+    );
+  const dropStale = (key: string) =>
+    void apply(transitionPatches(["cells"], key, cells[key] ?? {}, { kind: "unstage" }));
 
   const columnHeader = (columnNumber: number) =>
     snapshot?.columns.find((column) => column.columnNumber === columnNumber)?.headerText ??
@@ -123,7 +134,7 @@ export function ScheduleGridWorkspace({
     );
   };
 
-  const gridColumns = useScheduleGridColumns(snapshot, cells, wire, stageEdit);
+  const gridColumns = useScheduleGridColumns(snapshot, cells, wire, stageEdit, stale);
 
   const pushReason = blockedBecause
     ? blockedBecause
@@ -356,6 +367,9 @@ export function ScheduleGridWorkspace({
               {pending.length > 0 && snapshot && (
                 <PendingStrip
                   pending={pending}
+                  stale={stale}
+                  acceptStale={acceptStale}
+                  dropStale={dropStale}
                   proposalCount={proposalCount}
                   stagedCount={stagedCount}
                   columnHeader={columnHeader}

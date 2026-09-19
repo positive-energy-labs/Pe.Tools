@@ -24,6 +24,7 @@ export function useScheduleGridColumns(
   cells: ScheduleGridDocument["cells"],
   wire: CellWire,
   stageEdit: (key: string, value: string) => string | void,
+  stale: readonly string[] = [],
 ) {
   return useMemo<Column<ScheduleRow>[]>(() => {
     if (!snapshot) return [];
@@ -76,6 +77,8 @@ export function useScheduleGridColumns(
             const cell = cells[key] ?? {};
             const isStaged = cell.staged != null;
             const isProposal = !isStaged && cell.proposal != null;
+            // Staged over a value a re-read moved (`basis.stale`): drift against what Revit holds now.
+            const isStale = isStaged && stale.includes(key);
             const current = binding?.displayValue ?? row.values[columnIndex] ?? "";
             const shown = isStaged
               ? (cell.staged?.value ?? "")
@@ -85,6 +88,9 @@ export function useScheduleGridColumns(
             const lock = scheduleLock(binding);
             const note =
               [
+                isStale
+                  ? "stale: Revit changed under your staged value · accept to stage it again"
+                  : null,
                 (isStaged || isProposal) && shown !== current ? `was ${current || "—"}` : null,
                 isProposal
                   ? cell.proposal?.note
@@ -104,6 +110,7 @@ export function useScheduleGridColumns(
             return {
               ...cellFromTrichotomy(cell, {
                 value: shown,
+                ...(isStale ? { agree: "drift" as const, modelValue: current } : {}),
                 cap: binding == null ? "nohome" : lock ? "locked" : "editable",
                 capReason: lock ?? undefined,
                 note,
@@ -123,5 +130,5 @@ export function useScheduleGridColumns(
       }),
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps -- stageEdit and wire close over `cells` and the revision, listed
-  }, [snapshot, cells, wire.revision]);
+  }, [snapshot, cells, wire.revision, stale.join("|")]);
 }

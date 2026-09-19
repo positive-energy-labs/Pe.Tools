@@ -6,6 +6,7 @@ import { HelpTip } from "#/components/lang/help";
 import { Section } from "#/components/lang/section";
 import { ValueDiff } from "#/components/lang/value-diff";
 import { Press } from "#/components/lang/press";
+import { ActionButton } from "#/components/lang/action-button";
 import type { ScheduleGridDocument } from "@pe/agent-contracts";
 
 type CellState = NonNullable<ScheduleGridDocument["cells"][string]>;
@@ -13,6 +14,9 @@ type CellState = NonNullable<ScheduleGridDocument["cells"][string]>;
 /** Every open diff on the schedule, one ReviewRow each: the grid cell's own verbs, findable. */
 export function PendingStrip({
   pending,
+  stale,
+  acceptStale,
+  dropStale,
   proposalCount,
   stagedCount,
   wire,
@@ -21,6 +25,10 @@ export function PendingStrip({
   locate,
 }: {
   pending: [string, CellState][];
+  /** Staged keys a re-read moved under (`basis.stale`): the person accepts or drops each. */
+  stale: readonly string[];
+  acceptStale: (key: string) => void;
+  dropStale: (key: string) => void;
   proposalCount: number;
   stagedCount: number;
   wire: CellWire;
@@ -64,6 +72,29 @@ export function PendingStrip({
             const lock = wire.lockOf?.(key) ?? null;
             return (
               <div key={key} role="listitem">
+                {cell.staged != null && stale.includes(key) ? (
+                  <div className="flex items-center gap-3 py-2">
+                    <StateCell
+                      scale="row"
+                      value={next}
+                      stage="staged"
+                      stagedBy="you"
+                      agree="drift"
+                      modelValue={currentText(key) ?? ""}
+                      note="stale: Revit changed under it · accept to stage it again"
+                    />
+                    <ActionButton
+                      label="deny"
+                      reason="Drop your stale value; the Revit value stands."
+                      onClick={() => dropStale(key)}
+                    />
+                    <ActionButton
+                      label="accept"
+                      reason="Accept to stage it again over what Revit holds now."
+                      onClick={() => acceptStale(key)}
+                    />
+                  </div>
+                ) : (
                 <ReviewRow
                   wire={wire}
                   address={key}
@@ -85,6 +116,7 @@ export function PendingStrip({
                     capReason: lock ?? undefined,
                   }}
                 />
+                )}
               </div>
             );
           })}

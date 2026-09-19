@@ -170,6 +170,8 @@ export async function readSchedule(
   return reading;
 }
 
+/** A cell refused before or by Revit; `code` names a refusal the web keys on. */
+type CellFailure = { key: string; error: string; code?: string };
 type Edit = ScheduleCellsApply.Req.ScheduleCellEdit & { key: string };
 type CellResult = ScheduleCellsApply.Res.ScheduleCellEditResult;
 /**
@@ -178,9 +180,20 @@ type CellResult = ScheduleCellsApply.Res.ScheduleCellEditResult;
  */
 function expand(document: ScheduleGridDocument, reading: ScheduleReading) {
   const edits: Edit[] = [];
-  const failures: { key: string; error: string }[] = [];
+  const failures: CellFailure[] = [];
+  const stale = new Set(document.basis?.stale ?? []);
   for (const [key, cell] of Object.entries(document.cells)) {
     if (!cell.staged) continue;
+    // Staged over a value a re-read moved: refused here, never sent, until the person restages it.
+    if (stale.has(key)) {
+      failures.push({
+        key,
+        code: "stale-staged-cell",
+        error:
+          "This staged value is stale: Revit changed under it since it was staged; accept to stage it again",
+      });
+      continue;
+    }
     const { rowNumber, columnNumber } = splitScheduleCellKey(key);
     const binding = reading.snapshot.rows
       .find((r) => r.rowNumber === rowNumber)
@@ -226,7 +239,7 @@ function acknowledge(raw: unknown, edits: Edit[]) {
   }
   if (value?.appliedCells !== [...results.values()].filter((r) => r.ok).length) malformed = true;
   const successes: string[] = [],
-    failures: { key: string; error: string }[] = [];
+    failures: CellFailure[] = [];
   let unresolved = malformed;
   edits.forEach((edit, index) => {
     const result = results.get(index);
@@ -274,8 +287,19 @@ export async function admitScheduleAction(
       const reading = await captures.schedule(document.basis.captureId).catch((error) => {
         throw error instanceof StaleScheduleReading ? refused(error.message) : error;
       });
-      if (base.key.work !== reading.workspaceId || !same(reading.target, target))
-        throw refused("Work binding belongs to another schedule/target lifetime");
+      if (base.key.work !== reading.workspaceId)
+        throw refused("Work binding belongs to another schedule");
+      if (!same(reading.target, target)) {
+        const message =
+          "Work binding belongs to another document lifetime: the schedule was re-opened in Revit; read it again (staged cells are kept)";
+        // The web keys its way out on this code, never on the sentence.
+        throw new BridgeError(message, 409, {
+          notDispatched: true,
+          issues: [
+            { instancePath: "/basis", code: "binding-lifetime-closed", message, severity: "error" },
+          ],
+        });
+      }
       await current(bridge, target, reading.process);
       const { edits, failures } = expand(document, reading);
       if (!edits.length && !failures.length) throw refused("No staged cells");
@@ -295,7 +319,7 @@ export async function admitScheduleAction(
         document: ScheduleGridDocument;
         reading: ScheduleReading;
         edits: Edit[];
-        failures: { key: string; error: string }[];
+        failures: CellFailure[];
         at: string;
       };
       const { edits, reading, document } = prepared;
@@ -431,7 +455,7 @@ function pushReceipt(
   before: ScheduleReading,
   after: ScheduleReading,
   edits: Edit[],
-  failures: { key: string; error: string }[],
+  failures: CellFailure[],
   results: Map<number, CellResult>,
 ) {
   // The text the grid shows for a cell (`route/schedules/workspace.tsx`): binding value, else the column's value.

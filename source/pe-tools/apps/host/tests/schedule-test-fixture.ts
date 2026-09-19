@@ -73,7 +73,7 @@ afterEach(async () => {
 export async function setup() {
   vi.stubEnv("PE_LANE", "dev");
   const dir = await mkdtemp(join(tmpdir(), "pe-schedule-chain-"));
-  cleanup.push(() => rm(dir, { recursive: true, force: true }));
+  cleanup.push(() => rm(dir, { recursive: true, force: true, maxRetries: 5 }));
   const runtime = await createPeaRuntime({ workspaceRoot: dir });
   cleanup.push(async () => {
     await runtime.close?.();
