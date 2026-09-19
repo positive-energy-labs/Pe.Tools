@@ -20,6 +20,7 @@ import {
   scheduleGridRouteState,
   type WorkKey,
   type TakeoffSnapshot,
+  refusalText,
 } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
 import { ActionJournal } from "./action-journal.ts";
@@ -256,7 +257,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       Object.entries(candidate).map(([key, value]) => ({ path: [key], value })),
       0,
     );
-    if (!initial.ok) throw Error(initial.error);
+    if (!initial.ok) throw Error(refusalText(initial));
     // A stale plan and a token conflict are the same fact now: the member changed after review.
     if (
       seed.route === "family" &&

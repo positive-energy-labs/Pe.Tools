@@ -90,7 +90,6 @@ function start(cells: Record<string, FamilyCellState> = {}) {
     version: 1,
     revision: 1,
     doc: familiesRouteState.schema.parse({
-      scope: null,
       cells,
     }) as FamiliesRouteDocument,
   };

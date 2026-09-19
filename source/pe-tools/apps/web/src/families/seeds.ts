@@ -96,7 +96,15 @@ const entry = (
 });
 
 const work: FamiliesRouteDocument = familiesRouteState.schema.parse({
-  scope: { categoryNames: ["Mechanical Equipment"], familyNames: [], placementScope: "AllLoaded" },
+  scope: {
+    staged: {
+      value: {
+        categoryNames: ["Mechanical Equipment"],
+        familyNames: [],
+        placementScope: "AllLoaded",
+      },
+    },
+  },
   excluded: { "Heat Pump - Split": { by: "person" } },
 });
 
@@ -144,7 +152,15 @@ const peaModel = {
   value: "FXMQ20",
 } as const;
 const staged: FamiliesRouteDocument = familiesRouteState.schema.parse({
-  scope: { categoryNames: ["Mechanical Equipment"], familyNames: [], placementScope: "AllLoaded" },
+  scope: {
+    staged: {
+      value: {
+        categoryNames: ["Mechanical Equipment"],
+        familyNames: [],
+        placementScope: "AllLoaded",
+      },
+    },
+  },
   cells: {
     [familyCellKey(peaModel)]: {
       proposal: { value: { value: peaModel.value } },
