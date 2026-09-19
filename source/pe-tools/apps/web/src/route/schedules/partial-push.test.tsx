@@ -128,6 +128,11 @@ test("a partial push reads partly applied, the written cell reads back new, the 
     { timeout: 10_000 },
   );
   expect(document.body.textContent).not.toMatch(/push failed|· Failed ·/);
+  // The run line lists what this push wrote; the refused cell reads refused, never before → after.
+  const run = screen.getByText(/^push run ·/).textContent!;
+  expect(run).toContain("1::2 100 VA → 175 VA");
+  expect(run).toContain("2::2 refused (Expected target evidence is stale.)");
+  expect(run).not.toMatch(/2::2 [^,]*→/);
   const doc = (await f.view()).doc;
   expect(doc.cells["1::2"]?.staged).toBeUndefined();
   expect(doc.cells["2::2"]?.staged?.value).toBe("275 VA");
