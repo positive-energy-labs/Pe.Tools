@@ -1,4 +1,4 @@
-using Autodesk.Revit.DB.Electrical;
+﻿using Autodesk.Revit.DB.Electrical;
 using Pe.Revit.DocumentData.AgentContext;
 using Pe.Revit.DocumentData.Electrical;
 using Pe.Revit.DocumentData.Families.Loaded.Collectors;
@@ -343,12 +343,7 @@ internal sealed class RevitDataRequestService {
         var document = activeDocument.Value;
 
         try {
-            return LoadedFamiliesMatrixCollector.Collect(
-                document,
-                filter,
-                budget: request.Budget,
-                includeTempPlacement: request.IncludeTempPlacement,
-                snapshotCache: DocShadow.For(document));
+            return ReadLoadedFamiliesMatrix(document, filter, request.Budget, request.IncludeTempPlacement, DocShadow.For(document));
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "LoadedFamiliesMatrixException",
@@ -356,6 +351,19 @@ internal sealed class RevitDataRequestService {
                 "Verify the active document is a project document and retry."
             );
         }
+    }
+
+    /// <summary>
+    ///     The matrix read opens every family copy through the EditFamily gate. The gate refuses a destructive copy by name, and
+    ///     Revit may still show that failure as a dialog (project-a hold 4b: 6 min blocked). The read runs in the dialog lane, and each
+    ///     answered dialog is a named matrix issue.
+    /// </summary>
+    internal static LoadedFamiliesMatrixData ReadLoadedFamiliesMatrix(Autodesk.Revit.DB.Document document, LoadedFamiliesFilter? filter,
+        RevitDataOutputBudget? budget, bool includeTempPlacement, Pe.Revit.DocumentData.Families.Extraction.IFamilySnapshotCache? snapshotCache) {
+        var dialogs = new List<(bool IsError, string Message)>();
+        var data = RevitDialogs.NoModal(dialogs, () => LoadedFamiliesMatrixCollector.Collect(document, filter,
+            budget: budget, includeTempPlacement: includeTempPlacement, snapshotCache: snapshotCache));
+        return data with { Issues = [.. data.Issues, .. dialogs.Select(d => new RevitDataIssue("RevitDialogAnswered", RevitDataIssueSeverity.Warning, d.Message))] };
     }
 
     [Op("data-table.apply", Does = "Upsert a synthetic data table in one host-owned transaction: a key schedule whose rows are freely user-editable and whose cells are shared parameters on stable row elements — ideal for arbitrary agent-authored tables like design conditions or install notes. Can also place the table on a sheet. Authored element schedules apply through schedule.apply.", Title = "Apply Data Table", Finds = ["schedules", "data-table", "key-schedule", "table", "apply", "create", "upsert", "rows", "sheet-placement", "mutation"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Example = "{ \"table\": { \"name\": \"ASHRAE Design Conditions\", \"columns\": [{ \"heading\": \"Condition\" }, { \"heading\": \"Value (°F)\", \"kind\": \"Number\" }], \"rows\": [{ \"key\": \"cooling-db\", \"values\": [\"Cooling Design DB\", \"94.1\"] }, { \"key\": \"heating-db\", \"values\": [\"Heating Design DB\", \"12.3\"] }] }, \"placement\": { \"sheet\": \"M-001\" } }")]

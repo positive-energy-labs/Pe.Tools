@@ -31,7 +31,7 @@ public sealed class MatrixReadNoModalProofTests {
             var seen = new List<string>();
             void OnDialog(object? _, DialogBoxShowingEventArgs args) {
                 seen.Add(args.DialogId);
-                // The census answer (EngineEdge.KnownDialogs): DocWarnDialog's Cancel is IDABORT.
+                // The census answer (RevitDialogs.KnownDialogs): DocWarnDialog's Cancel is IDABORT.
                 _ = args.OverrideResult(args.DialogId == "Dialog_Revit_DocWarnDialog" ? 3 : (int)TaskDialogResult.Cancel);
             }
             LoadedFamiliesMatrixData data;
@@ -111,5 +111,5 @@ public sealed class MatrixReadNoModalProofTests {
 
     /// <summary>The matrix read as the host op runs it.</summary>
     private static LoadedFamiliesMatrixData Read(Document project, LoadedFamiliesFilter filter) =>
-        LoadedFamiliesMatrixCollector.Collect(project, filter, includeTempPlacement: false);
+        Pe.Revit.Global.Services.Host.RevitDataRequestService.ReadLoadedFamiliesMatrix(project, filter, null, false, null);
 }
