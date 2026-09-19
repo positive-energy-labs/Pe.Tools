@@ -80,7 +80,7 @@ internal static class ScheduleBridgeOps {
         var handled = new List<(bool IsError, string Message)>();
         ScheduleCreationResult result;
         try {
-            result = EngineEdge.NoModal(handled, () => {
+            result = RevitDialogs.NoModal(handled, () => {
                 using var transaction = new Transaction(document, $"Apply Schedule: {spec.Name}");
                 _ = transaction.Start();
                 // The verdict's other half: warnings are resolved and recorded here, never shown.

@@ -1,4 +1,5 @@
-﻿using Autodesk.Revit.DB;
+﻿using Pe.Revit.Failures;
+using Autodesk.Revit.DB;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.App.Pods;
@@ -75,7 +76,7 @@ internal static class FamilyFoundryBridgeOps {
         var source = request.Source.Root;
         var handled = new List<(bool IsError, string Message)>();
         try {
-            var (receipt, templatePath, reading) = EngineEdge.NoModal(handled, () => FamilyModelBuild.BuildAndSave(application, parsed.Value, outputPath, true,
+            var (receipt, templatePath, reading) = RevitDialogs.NoModal(handled, () => FamilyModelBuild.BuildAndSave(application, parsed.Value, outputPath, true,
                 request.ModelDirectory is null ? null : ResolvePath(request.ModelDirectory, nameof(request.ModelDirectory))));
             var (receiptPath, unsaved) = PodRuns.SettleReceiptIn(run, PodReceipt.ForSource(source, "family.build",
                 receipt.PlanHash, receipt.Converged ? PodRunOutcome.Succeeded : PodRunOutcome.Failed, [.. inputOutputs, outputPath], null), EngineEdge.WarningsOutput(handled));
@@ -123,7 +124,7 @@ internal static class FamilyFoundryBridgeOps {
         var handled = new List<(bool IsError, string Message)>();
         var artifacts = Path.Combine(Path.GetTempPath(), "Pe.Tools", "family-apply", Guid.NewGuid().ToString("N"));
         try {
-            var data = EngineEdge.NoModal(handled, () => ApplyFamilies(specJson, expectedPlanHashes, document, executionOptions, loadAndSave, artifacts, familyNames, cancellationToken));
+            var data = RevitDialogs.NoModal(handled, () => ApplyFamilies(specJson, expectedPlanHashes, document, executionOptions, loadAndSave, artifacts, familyNames, cancellationToken));
             var failures = Failures(data);
             var relative = data with {
                 Reason = Reason(data, failures),
@@ -310,7 +311,7 @@ internal static class FamilyFoundryBridgeOps {
         Func<Document, IReadOnlyList<(bool IsError, string Message)>, T> read) {
         EngineEdge.RequireReachableCentral(project);
         var diagnostics = new List<(bool IsError, string Message)>();
-        return EngineEdge.NoModal(diagnostics, () => project.ReadFamilyCopy(family, famDoc => read(famDoc.Document, diagnostics), diagnostics));
+        return RevitDialogs.NoModal(diagnostics, () => project.ReadFamilyCopy(family, famDoc => read(famDoc.Document, diagnostics), diagnostics));
     }
 
     private static IReadOnlyList<RevitDataIssue> CaptureIssues(FamilyModel model, Family family,
