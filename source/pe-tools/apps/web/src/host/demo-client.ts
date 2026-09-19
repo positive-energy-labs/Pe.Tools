@@ -67,13 +67,16 @@ const projectSeed = (): DemoSeed => ({
     revision: 0,
     candidate: {
       scope: {
-        categoryNames: ["Mechanical Equipment"],
-        familyNames: FAMILIES,
-        placementScope: "AllLoaded",
+        staged: {
+          value: {
+            categoryNames: ["Mechanical Equipment"],
+            familyNames: FAMILIES,
+            placementScope: "AllLoaded",
+          },
+        },
       },
-      excludedIds: [],
-      edits: [],
-      accepted: [],
+      excluded: {},
+      cells: {},
     },
   },
   readings: {

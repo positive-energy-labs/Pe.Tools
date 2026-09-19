@@ -1,13 +1,7 @@
 import { z } from "zod";
 import { addressSchema, documentRefSchema } from "./target.ts";
 import { nativeProcessSchema } from "./action-receipts.ts";
-import {
-  scheduleGridSnapshotSchema,
-  splitScheduleCellKey,
-  type ScheduleGridDocument,
-} from "./schedule-grid-data.ts";
-import { canonicalRouteInput } from "./route-doc.ts";
-import type { RouteStatePatch } from "./route-state.ts";
+import { scheduleGridSnapshotSchema } from "./schedule-grid-data.ts";
 import { podMemberSourceSchema } from "./settings.ts";
 
 export const scheduleReadingSchema = z.object({
@@ -20,47 +14,6 @@ export const scheduleReadingSchema = z.object({
   snapshot: scheduleGridSnapshotSchema,
 });
 export type ScheduleReading = z.infer<typeof scheduleReadingSchema>;
-
-/**
- * A successful read of this Work's schedule rebinds it, in one write: `basis` moves to `reading`
- * (its live document lifetime). A staged cell whose binding differs between the old basis and
- * `reading`, or whose old basis is unreadable (`null`), is stale: its value returns to a human
- * proposal that says so, and approving it stages it again under the new basis. The rest stay staged
- * and push against `reading`. Nothing is dropped and nothing stays under the old binding.
- */
-export function rebindScheduleWork(
-  doc: ScheduleGridDocument,
-  basis: ScheduleReading | null,
-  reading: ScheduleReading,
-): RouteStatePatch[] {
-  if (!doc.basis || doc.basis.captureId === reading.id) return [];
-  const binding = (at: ScheduleReading | null, key: string) => {
-    const { rowNumber, columnNumber } = splitScheduleCellKey(key);
-    return at?.snapshot.rows
-      .find((row) => row.rowNumber === rowNumber)
-      ?.bindings.find((b) => b.columnNumber === columnNumber);
-  };
-  const patches: RouteStatePatch[] = [{ path: ["basis"], value: { captureId: reading.id } }];
-  for (const [key, cell] of Object.entries(doc.cells)) {
-    if (!cell.staged) continue;
-    const before = binding(basis, key),
-      after = binding(reading, key);
-    if (before && after && canonicalRouteInput(before) === canonicalRouteInput(after)) continue;
-    const pea = cell.proposal ? `; replaces pea's proposal "${String(cell.proposal.value)}"` : "";
-    patches.push(
-      { path: ["cells", key, "staged"] },
-      {
-        path: ["cells", key, "proposal"],
-        value: {
-          value: cell.staged.value,
-          by: "human",
-          note: `stale: Revit changed under this cell since you staged it (${before?.displayValue ?? "?"} → ${after ? (after.displayValue ?? "—") : "no binding"}); approve to stage it again${pea}`,
-        },
-      },
-    );
-  }
-  return patches;
-}
 export const scheduleActions = {
   "schedule.grid.push": {
     says: "Push reviewed staged schedule cells using their frozen bindings. Complete positive native acknowledgments precede conditional Work publication and actual readback. Files a run receipt (values before and after) in the bound pod, or in the action receipt when no pod is bound.",

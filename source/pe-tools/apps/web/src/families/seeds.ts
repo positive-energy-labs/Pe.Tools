@@ -6,6 +6,7 @@
  */
 import {
   familiesRouteState,
+  familyCellKey,
   type FamiliesRouteDocument,
   type FfPlanEntry,
   type Seed,
@@ -95,8 +96,16 @@ const entry = (
 });
 
 const work: FamiliesRouteDocument = familiesRouteState.schema.parse({
-  scope: { categoryNames: ["Mechanical Equipment"], familyNames: [], placementScope: "AllLoaded" },
-  excludedIds: [3102],
+  scope: {
+    staged: {
+      value: {
+        categoryNames: ["Mechanical Equipment"],
+        familyNames: [],
+        placementScope: "AllLoaded",
+      },
+    },
+  },
+  excluded: { "Heat Pump - Split": { by: "person" } },
 });
 
 const plan = [
@@ -132,38 +141,45 @@ const seed = (
 });
 
 /**
- * The editable table in the proposal language: Pea proposed one cell and a person accepted it; a
- * person proposed another that nobody has accepted yet. Nothing has reached Revit and no file
- * exists — plan generates one patch member per family from the ACCEPTED cell only.
+ * The editable table in the proposal language: Pea proposed one cell and a person staged it; a
+ * person proposed another that nobody has staged yet. Nothing has reached Revit and no file
+ * exists — plan generates one patch member per family from the staged cell only.
  */
 const peaModel = {
-  familyId: 3101,
   familyName: "Fan Coil Unit - Ducted",
   typeName: "FCU-1",
   parameter: "PE_G___Model",
   value: "FXMQ20",
-  by: "pea",
 } as const;
 const staged: FamiliesRouteDocument = familiesRouteState.schema.parse({
-  scope: { categoryNames: ["Mechanical Equipment"], familyNames: [], placementScope: "AllLoaded" },
-  excludedIds: [],
-  edits: [
-    peaModel,
-    {
-      familyId: 3102,
+  scope: {
+    staged: {
+      value: {
+        categoryNames: ["Mechanical Equipment"],
+        familyNames: [],
+        placementScope: "AllLoaded",
+      },
+    },
+  },
+  cells: {
+    [familyCellKey(peaModel)]: {
+      proposal: { value: { value: peaModel.value } },
+      staged: { value: { value: peaModel.value } },
+    },
+    [familyCellKey({
       familyName: "Heat Pump - Split",
       typeName: "HP-1",
       parameter: "PE_G___Manufacturer",
-      value: "Mitsubishi",
-      by: "human",
+    })]: {
+      proposal: { value: { value: "Mitsubishi" } },
+      staged: null,
     },
-  ],
-  accepted: [peaModel],
+  },
 });
 
 /**
  * `?demo=capture` picks two families; `?demo=apply` opens the confirmation sheet on the plan;
- * `?demo=edit` shows the table with one accepted and one open cell proposal.
+ * `?demo=edit` shows the table with one staged and one open cell proposal.
  */
 export const FAMILIES_SEEDS = {
   capture: seed("two families picked for capture into the demo pod", {
@@ -174,10 +190,10 @@ export const FAMILIES_SEEDS = {
     stage: "apply",
     path: DEMO_FAMILIES_SPEC_PATH,
     confirming: true,
-    sheet: { entries: plan.map(ffPlanRow) },
+    sheet: { entries: plan.map((row) => ({ ...ffPlanRow(row), plan: "demo-plan" })) },
   }),
   edit: seed(
-    "two cell proposals across two families, one accepted; plan generates the spec from the accepted one",
+    "two cell proposals across two families, one staged; plan generates the spec from the staged one",
     { stage: "apply" },
     {},
     staged,

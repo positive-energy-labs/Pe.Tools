@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { ActionButton } from "#/components/lang/action-button";
+import { ListPopup } from "#/components/lang/list-popup";
 import { ReadCell, StateDot, VERDICT_INK, VerdictCell } from "#/components/master-table/cells";
-import type { Column, MasterTableState, Verdict } from "#/components/master-table/model";
+import type { Column, TableState, Verdict } from "#/components/master-table/model";
 import {
   AGREEMENT_TONE,
   MARK,
@@ -52,7 +53,7 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
       note: MARK_TITLE[state],
     };
   };
-  const stateCol = (state: MasterTableState): Column<PRow> => ({
+  const stateCol = (state: TableState): Column<PRow> => ({
     key: "state",
     label: "state",
     title:
@@ -99,40 +100,43 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
     const candidates = [...world.paramRows, ...draft.newParams].filter(
       (param) => param.dataType === dataType,
     );
+    const options = [
+      { value: "#new", label: `＋ new parameter "${newName}", seeded ${literal}` },
+      ...candidates.map((param) => ({
+        value: param.name,
+        label: `${param.name} — inherits ${draft.authored[param.name] ?? "nothing"}${
+          (draft.authored[param.name] ?? "") === literal
+            ? " (same as now)"
+            : `, discards ${literal}`
+        }`,
+      })),
+    ];
 
     if (open)
       return (
-        <select
-          // eslint-disable-next-line jsx-a11y/no-autofocus
-          autoFocus
-          value=""
-          aria-label={`bind ${slug}.${property}`}
-          // The two choices' consequences are stated once, on the table's HelpTip.
-          title={`Give ${slug}.${property} a parameter — an existing one discards the ${literal} literal, a new one keeps ${literal} as its family value.`}
-          onChange={(event) => {
-            const choice = event.target.value;
-            if (choice === "") setBinding(null);
-            else if (choice === "#new") bindToNew(slug, property, dataType);
-            else bindTo(slug, property, choice);
-          }}
-          className={className}
-        >
-          <option value="">bind to… (Esc cancels)</option>
-          <option value="#new">{`＋ new parameter "${newName}", seeded ${literal}`}</option>
-          {/* PREVIEW, not just a name. Binding to an existing parameter DISCARDS the literal and
-              the dim starts reading that row — so the option has to say the number it is about to
-              inherit, and the one it is about to lose. A picker that showed only names would be
-              asking you to approve a value change you cannot see. */}
-          {candidates.map((param) => (
-            <option key={param.name} value={param.name}>
-              {`${param.name} — inherits ${draft.authored[param.name] ?? "nothing"}${
-                (draft.authored[param.name] ?? "") === literal
-                  ? " (same as now)"
-                  : `, discards ${literal}`
-              }`}
-            </option>
-          ))}
-        </select>
+        <span className={className}>
+          <ListPopup<(typeof options)[number]>
+            anchor="trigger"
+            open
+            onOpenChange={(next) => !next && setBinding(null)}
+            triggerLabel={`bind ${slug}.${property}`}
+            title={`Give ${slug}.${property} a parameter — an existing one discards the ${literal} literal, a new one keeps ${literal} as its family value.`}
+            trigger={<span className="text-ink-2">bind to… (Esc cancels)</span>}
+            aria-label={`bind ${slug}.${property}`}
+            region="bind parameter"
+            items={options}
+            keyOf={(option) => option.value}
+            labelOf={(option) => option.label}
+            filter="substring"
+            searchPlaceholder="bind to…"
+            empty="no parameters"
+            onPick={(option) => {
+              if (option.value === "#new") bindToNew(slug, property, dataType);
+              else bindTo(slug, property, option.value);
+            }}
+            row={(option) => ({ label: option.label })}
+          />
+        </span>
       );
 
     return (
@@ -219,7 +223,7 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
   }, [columns, rows, tableState]);
 
   /**
-   * THE DRILL-IN, on the same primitive. Same MasterTable, same identity cell, same editable type
+   * THE DRILL-IN, on the same primitive. Same Table, same identity cell, same editable type
    * cell — narrowed to one type and opened up with the spine. The crossing verbs live ONLY in the
    * pane header (capture <type> / apply <type>): a per-row verb column was tried and retired —
    * the arrows read as claims about direction the cells already carry, and a bulk decision made

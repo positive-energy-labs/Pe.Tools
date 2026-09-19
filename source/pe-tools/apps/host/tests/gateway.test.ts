@@ -8,7 +8,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer, Queue, Fiber } from "effect";
 import { HttpRouter } from "effect/unstable/http";
-import { address, takeoffsRouteState } from "@pe/agent-contracts";
+import {
+  address,
+  takeoffsRouteState,
+  stagedTakeoffEdits,
+  takeoffEditPatches,
+} from "@pe/agent-contracts";
 import { createRuntimeLibSqlStorage } from "../../../packages/runtime/src/storage/profiles.ts";
 import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
 import { ActionJournal } from "../src/action-journal.ts";
@@ -151,16 +156,16 @@ test("real HTTP owner holds an external leaf while Work edits land; same ID reco
     expect((await web.call("/actions", admission("original-id"))).status).toBe(202);
     await vi.waitFor(() => expect(effects).toHaveLength(1));
     const before = (await work.read(scope, "takeoffs"))!;
-    const staged = [{ roomId: "r", base: { name: "old" }, next: { name: "edited while running" } }];
-    expect(
-      await work.apply(
-        scope,
-        "takeoffs",
-        "human",
-        [{ path: ["staged"], value: staged }],
-        before.revision,
-      ),
-    ).toMatchObject({ ok: true, revision: before.revision + 1 });
+    const edit = takeoffEditPatches(
+      takeoffsRouteState.schema.parse(before.doc),
+      "r",
+      { name: "old" },
+      { name: "edited while running" },
+    );
+    expect(await work.apply(scope, "takeoffs", "human", edit, before.revision)).toMatchObject({
+      ok: true,
+      revision: before.revision + 1,
+    });
     expect((await web.call("/actions", admission("original-id"))).status).toBe(202);
     expect(
       (
@@ -175,7 +180,11 @@ test("real HTTP owner holds an external leaf while Work edits land; same ID reco
     expect(effects).toEqual([
       { key: "family.temporary.acquire", session: "B", openId: null, id: expect.any(String) },
     ]);
-    expect((await work.read(scope, "takeoffs"))!.doc).toMatchObject({ staged });
+    expect(
+      stagedTakeoffEdits(
+        takeoffsRouteState.schema.parse((await work.read(scope, "takeoffs"))!.doc),
+      ),
+    ).toMatchObject({ r: { next: { name: "edited while running" } } });
     await web.close();
     const reconstructed = new ActionJournal(f.journalPath);
     web = router(reconstructed, {

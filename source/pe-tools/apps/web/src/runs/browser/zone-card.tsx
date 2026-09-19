@@ -5,9 +5,56 @@ import { type RunIndexEntry, type ZoneRecord } from "../world";
 import { Press } from "#/components/lang/press";
 import { Delta, adaptedKnobs, fmtTime, partialTitle, zoneShort } from "./unknown";
 import { ZonePanel } from "./zone-panel";
-import { MissingPanel, STAT_ROWS, RunPickButton } from "./missing-panel";
+import { MissingPanel, STAT_ROWS, RunPickButton, type StatRow } from "./missing-panel";
+import type { Column } from "#/components/master-table/model";
+import { Table } from "#/components/master-table/table";
 import { PressContent } from "#/components/anatomy/press-content";
 import { Code } from "#/components/lang/code";
+
+const STAT = "block truncate px-(--item-pad-x)";
+
+/** The solver's self-tuned knobs for a zone, as one stat row. */
+const KNOB_ROW: StatRow = {
+  label: "knobs",
+  value: (z) => (
+    <span className="flex flex-wrap gap-1">
+      {adaptedKnobs(z).map(([k, v]) => (
+        <Chip key={k} tone="meta" dashed title={`Solver self-tuned ${k} to ${v} for this zone.`}>
+          {k}={v}
+        </Chip>
+      ))}
+    </span>
+  ),
+};
+
+const statColumn: Column<StatRow> = {
+  key: "stat",
+  label: "stat",
+  width: "w-[76px]",
+  cell: (row) => <span className={STAT}>{row.label}</span>,
+};
+
+const side = (label: string, zone: ZoneRecord | null | undefined): Column<StatRow> => ({
+  key: label,
+  label,
+  cell: (row) => <span className={STAT}>{zone ? row.value(zone) : "—"}</span>,
+});
+
+const compareColumns = (
+  a: ZoneRecord | null | undefined,
+  b: ZoneRecord | null | undefined,
+): Column<StatRow>[] => [
+  statColumn,
+  side("A · baseline", a),
+  side("B · current", b),
+  {
+    key: "delta",
+    label: "Δ",
+    width: "w-[84px]",
+    right: true,
+    cell: (row) => <span className={STAT}>{row.delta && a && b ? row.delta(a, b) : ""}</span>,
+  },
+];
 
 export function ZoneCard(props: {
   name: string;
@@ -186,65 +233,12 @@ export function ZoneCard(props: {
         )}
       </div>
 
-      <table className="w-full table-fixed">
-        <colgroup>
-          <col className="w-[76px]" />
-          {comparing ? (
-            <>
-              <col />
-              <col />
-              <col className="w-[84px]" />
-            </>
-          ) : (
-            <col />
-          )}
-        </colgroup>
-        {comparing ? (
-          <thead>
-            <tr className="">
-              <th aria-label="stat" />
-              <th className="text-left">A · baseline</th>
-              <th className="text-left">B · current</th>
-              <th className="text-right">Δ</th>
-            </tr>
-          </thead>
-        ) : null}
-        <tbody>
-          {STAT_ROWS.map((row) => (
-            <tr key={row.label} className="align-top">
-              <td className="pr-2">{row.label}</td>
-              {comparing ? (
-                <>
-                  <td className="truncate pr-2">{a ? row.value(a) : "—"}</td>
-                  <td className="truncate pr-2">{b ? row.value(b) : "—"}</td>
-                  <td className="text-right">{row.delta && a && b ? row.delta(a, b) : ""}</td>
-                </>
-              ) : (
-                <td className="truncate">{b ? row.value(b) : "—"}</td>
-              )}
-            </tr>
-          ))}
-          {knobs.length > 0 ? (
-            <tr className="align-top">
-              <td className="pr-2">knobs</td>
-              <td colSpan={comparing ? 3 : 1}>
-                <span className="flex flex-wrap gap-1">
-                  {knobs.map(([k, v]) => (
-                    <Chip
-                      key={k}
-                      tone="meta"
-                      dashed
-                      title={`Solver self-tuned ${k} to ${v} for this zone.`}
-                    >
-                      {k}={v}
-                    </Chip>
-                  ))}
-                </span>
-              </td>
-            </tr>
-          ) : null}
-        </tbody>
-      </table>
+      <Table
+        label="zone stats"
+        rows={knobs.length > 0 ? [...STAT_ROWS, KNOB_ROW] : STAT_ROWS}
+        columns={comparing ? compareColumns(a, b) : [statColumn, side("current", b)]}
+        rowKey={(row) => row.label}
+      />
     </div>
   );
 }

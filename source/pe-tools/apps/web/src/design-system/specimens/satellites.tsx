@@ -4,10 +4,10 @@ import { Provenance, Section } from "#/components/lang/section";
 
 const SATELLITES: readonly { to: string; name: string; purpose: string }[] = [
   {
-    to: "/design-system/proposal-flow",
-    name: "proposal flow",
+    to: "/design-system/band",
+    name: "band",
     purpose:
-      "one shared in-memory world behind pea's chat card AND a StateCell table — accept, deny or undo in the card and the same value moves in the table. The proof that one grammar at two scales is a mechanism and not a resemblance. Carries the two-marks crucible and a commit receipt.",
+      "one proposal language over a Families matrix: the table cell, a form field and the Chat head all draw the cell's own contract transitions, and every aggregate is a fanOut of the same kinds.",
   },
   {
     to: "/design-system/arming",

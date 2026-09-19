@@ -10,6 +10,7 @@ export function VariantBodLens({ factCell }: { factCell: (key: FactKey) => React
         <span className="">SXL - M_BOD_MainHouse</span> (sheet M001) · label × value projection of
         the same substrate — authored facts render through the same editor as the lane
       </div>
+      {/* DOMAIN (kept hand table): a sheet-exhibit projection whose printed layout is the point. */}
       <table className="">
         <tbody>
           {BOD_MAIN_HOUSE.map((entry) => (

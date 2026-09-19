@@ -8,8 +8,11 @@ import type {
 } from "@mastra/core/agent-controller";
 import { Buffer } from "node:buffer";
 import {
+  askExpiryOf,
   threadAccess,
+  type CancelledCall,
   type DeferredToolResultRef,
+  type ExpiredAsk,
   type ThreadViewState,
   type ToolResultResponse,
   type ToolResultSummary,
@@ -49,10 +52,13 @@ export async function readThreadState(
     runtime.controller.listAvailableModels(),
   ]);
   const { messages, deferredResults } = projectThreadMessages(storedMessages);
+  const { expiredAsks, cancelledCalls } = await selectEndedCalls(storedMessages, session);
   const permissions = session.permissions.getRules();
   return {
     messages,
     ...(deferredResults.length ? { deferredResults } : {}),
+    ...(expiredAsks.length ? { expiredAsks } : {}),
+    ...(cancelledCalls.length ? { cancelledCalls } : {}),
     models: { currentId: session.model.get() || undefined, available },
     permissions,
     access: threadAccess(permissions),
@@ -62,6 +68,218 @@ export async function readThreadState(
 }
 
 type ThreadMessage = Awaited<ReturnType<AgentController["queryThreadMessages"]>>[number];
+
+const askKey = (toolCallId: string) => `ask:${toolCallId}`;
+const cancelKey = (toolCallId: string) => `cancelled:${toolCallId}`;
+/** Sessions the runtime aborts on its own (host shutdown, a new turn over a parked ask). */
+const systemAborts = new WeakSet<object>();
+
+/** An abort that is not a person's cancel: nothing it ends is recorded as cancelled. */
+export function abortQuietly(session: Pick<Session, "abort" | "run">): void {
+  // Only a running turn ends from an abort; marking an idle one would outlive it.
+  if (session.run.isRunning()) systemAborts.add(session);
+  session.abort();
+}
+/** Each session's in-flight call records, so a read never races the write it depends on. */
+const recording = new WeakMap<object, Promise<unknown>>();
+
+/**
+ * Records each call's lifetime facts on the thread as they happen, so a read never guesses them
+ * from the approval policy or the live state, and a crash loses none of them:
+ * - asked: its gate or suspension was raised;
+ * - answered: its gate cleared with no abort requested, so a person approved it (an abort on an
+ *   armed gate requests the abort first, and that call stays an ask);
+ * - cancelled: a person's cancel ended the turn while it ran. An abort the runtime makes itself
+ *   (`abortQuietly`: shutdown, a new turn over a parked ask) records no cancel, so a host
+ *   restart's calls stay "ended without a terminal result".
+ * Returns the unsubscribe.
+ */
+export function recordCalls(
+  session: Pick<Session, "subscribe" | "thread" | "emit" | "run">,
+): () => void {
+  const running = new Set<string>();
+  let armed: string | null = null;
+  const write = (key: string, value: boolean) => {
+    const threadId = session.thread.getId();
+    if (threadId === null) return;
+    // In order: a call's later fact (answered) lands after its earlier one (asked).
+    const written = (recording.get(session) ?? Promise.resolve()).then(() =>
+      session.thread
+        .setSettingOn({ threadId, key, value })
+        .catch((error: unknown) =>
+          session.emit({ type: "error", errorType: "call-record", error: error as Error }),
+        ),
+    );
+    recording.set(session, written);
+  };
+  return session.subscribe((event) => {
+    if (event.type === "tool_start") running.add(event.toolCallId);
+    if (event.type === "tool_end") running.delete(event.toolCallId);
+    if (event.type === "tool_approval_required") armed = event.toolCallId;
+    if (event.type === "tool_approval_required" || event.type === "tool_suspended")
+      write(askKey(event.toolCallId), true);
+    if (event.type === "display_state_changed" && armed && !event.displayState.pendingApproval) {
+      if (!session.run.isAbortRequested()) write(askKey(armed), false);
+      armed = null;
+    }
+    if (event.type !== "agent_end") return;
+    const stopped = [...running];
+    running.clear();
+    armed = null;
+    const quiet = systemAborts.delete(session);
+    if (event.reason !== "aborted" || quiet) return;
+    for (const toolCallId of stopped) write(cancelKey(toolCallId), true);
+  });
+}
+
+/**
+ * Stored calls that never reached a terminal state and that nothing live awaits. One recorded as an
+ * ask is an expired ask: turn end, cancel (an abort-declined gate stays `call`, only a human denial
+ * is `output-denied`) and host restart all land there. One a person's cancel stopped is a cancelled
+ * call. Anything else ended without a terminal result, and the transcript says so.
+ */
+export async function selectEndedCalls(
+  messages: ThreadMessage[],
+  session: Pick<Session, "displayState" | "thread">,
+): Promise<{ expiredAsks: ExpiredAsk[]; cancelledCalls: CancelledCall[] }> {
+  const display = session.displayState.get();
+  const live = new Set([
+    display.pendingApproval?.toolCallId,
+    ...display.pendingSuspensions.keys(),
+    ...(display.isRunning ? display.activeTools.keys() : []),
+  ]);
+  const unfinished = messages.flatMap((message) =>
+    message.content.parts.flatMap((part) => {
+      if (part.type !== "tool-invocation") return [];
+      const { state, toolCallId, toolName } = part.toolInvocation;
+      // An ask a new turn ended is stored with the unanswered result; it is still an ended ask.
+      const unanswered = state === "result" && isExpiredResult(part.toolInvocation.result);
+      if (state !== "call" && state !== "partial-call" && !unanswered) return [];
+      if (live.has(toolCallId)) return [];
+      return [{ messageId: message.id, toolCallId, toolName }];
+    }),
+  );
+  await recording.get(session);
+  const [asked, cancelled] = await Promise.all([
+    Promise.all(
+      unfinished.map((call) => session.thread.getSetting({ key: askKey(call.toolCallId) })),
+    ),
+    Promise.all(
+      unfinished.map((call) => session.thread.getSetting({ key: cancelKey(call.toolCallId) })),
+    ),
+  ]);
+  return {
+    expiredAsks: unfinished.filter((_, at) => asked[at] === true),
+    // An ask a cancel ended is an expired ask; a cancelled call is one nobody still had to answer.
+    cancelledCalls: unfinished.filter((_, at) => asked[at] !== true && cancelled[at] === true),
+  };
+}
+
+/** Drops parked resume data and its display mirror, so an expired ask cannot be answered. */
+export function expireAsks(
+  session: Pick<Session, "suspensions" | "emit">,
+  reason: Parameters<typeof askExpiryOf>[0],
+): { toolCallId: string; toolName: string }[] | null {
+  const expiry = askExpiryOf(reason);
+  if (expiry === null) return null;
+  const expired = session.suspensions.clear();
+  for (const { toolCallId, toolName } of expired)
+    session.emit({ type: "tool_suspension_cancelled", toolCallId, toolName, reason: expiry });
+  return expired;
+}
+
+/**
+ * What an ask a new turn ended reads as, in the stored transcript and in the next turn's model
+ * context: unanswered, never rejected and never silently dropped (journeys, E2E-J5).
+ */
+export const EXPIRED_UNANSWERED = {
+  expired: "unanswered",
+  note: "The person sent a new message instead of answering.",
+} as const;
+const isExpiredResult = (result: unknown) =>
+  typeof result === "object" &&
+  result !== null &&
+  (result as { expired?: unknown }).expired === EXPIRED_UNANSWERED.expired;
+
+/**
+ * Persists the expiry of asks a new turn ended: each stored call gets the unanswered result and
+ * loses its parked-suspension metadata, so a reload reads it expired and the next turn's model sees
+ * its question went unanswered. The message is re-saved whole; storage upserts it by id.
+ */
+async function persistExpiredAsks(
+  session: Pick<Session, "thread" | "machinery">,
+  toolCallIds: readonly string[],
+): Promise<void> {
+  if (!toolCallIds.length) return;
+  // Both hold in the product: admission requires the thread, and Pea's storage is LibSQL, whose
+  // memory store holds the transcript. A silent skip would reload the ask live (F-J5-2).
+  const threadId = session.thread.getId();
+  if (!threadId) throw new Error("Cannot record the expired ask: the session has no thread.");
+  const memory = await session.machinery
+    .getAgent()
+    .getMastraInstance()
+    ?.getStorage()
+    ?.getStore("memory");
+  if (!memory) throw new Error("Cannot record the expired ask: the runtime has no memory store.");
+  const expired = new Set(toolCallIds);
+  const { messages } = await memory.listMessages({ threadId });
+  const changed = messages.flatMap((message) => {
+    let touched = false;
+    const parts = message.content.parts.map((part) => {
+      if (part.type !== "tool-invocation" || !expired.has(part.toolInvocation.toolCallId))
+        return part;
+      touched = true;
+      return {
+        ...part,
+        toolInvocation: {
+          ...part.toolInvocation,
+          state: "result" as const,
+          result: EXPIRED_UNANSWERED,
+        },
+      };
+    });
+    if (!touched) return [];
+    const metadata = { ...message.content.metadata } as Record<string, unknown>;
+    for (const key of ["suspendedTools", "pendingToolApprovals"]) {
+      const parked = { ...(metadata[key] as Record<string, unknown> | undefined) };
+      for (const toolCallId of expired) delete parked[toolCallId];
+      if (Object.keys(parked).length) metadata[key] = parked;
+      else delete metadata[key];
+    }
+    return [{ ...message, content: { ...message.content, parts, metadata } }];
+  });
+  if (changed.length) await memory.saveMessages({ messages: changed as never });
+}
+
+/**
+ * A new turn over a parked ask expires the ask and cancels the parked run (it ends `aborted`); the
+ * run still owns the thread, so a signal sent before its stream detaches is lost. Returns that
+ * teardown, undefined when nothing is parked. No timer: an `onBeforeAgentEnd` handler may take as
+ * long as it needs, and the run resets before the stream detaches, so only the stream's end counts.
+ */
+export function endParkedTurn(
+  session: Pick<
+    Session,
+    "suspensions" | "emit" | "abort" | "stream" | "run" | "thread" | "machinery"
+  >,
+): Promise<void> | undefined {
+  if (!session.suspensions.hasPending()) return undefined;
+  const expired = expireAsks(session, "new-turn") ?? [];
+  const waiting = new AbortController();
+  const teardown = session.stream.isOpen()
+    ? session.stream.waitForTeardown(waiting.signal).catch(() => undefined)
+    : Promise.resolve();
+  abortQuietly(session);
+  // A parked run that already detached is released at once, with no abort armed (the Mastra
+  // patch): its stream stays, so there is no teardown to wait out.
+  if (!session.run.isAbortRequested()) waiting.abort();
+  return teardown.then(() =>
+    persistExpiredAsks(
+      session,
+      expired.map((ask) => ask.toolCallId),
+    ),
+  );
+}
 
 export function projectThreadMessages(messages: ThreadMessage[]): {
   messages: ThreadMessage[];

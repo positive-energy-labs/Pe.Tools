@@ -139,7 +139,7 @@ test("with a plan, plan opens the sheet and apply sends that hash", async () => 
   expect(planned.apply.ready(c as never, none)).toBe("plan first");
   run
     .mockReset()
-    .mockResolvedValueOnce({ state: "succeeded", result: { plan: { planHash: "ph" } } });
+    .mockResolvedValueOnce({ state: "succeeded", result: { id: "P1", plan: { planHash: "ph" } } });
   await planned.plan.run(c as never, none);
   expect(run.mock.calls).toEqual([["family.plan", { source }, ref, undefined]]);
   expect(state.page).toMatchObject({ stage: "apply", confirming: true });
@@ -154,7 +154,8 @@ test("with a plan, plan opens the sheet and apply sends that hash", async () => 
   await planned.apply.run(c as never, none);
   expect(run.mock.calls[1]).toEqual([
     "family.apply",
-    { source, expectedPlanHashes: { ph: "ph" } },
+    // Apply names the plan action; the host consumes the source and options that plan sealed.
+    { plan: "P1", expectedPlanHashes: { ph: "ph" } },
     ref,
     undefined,
   ]);
@@ -175,7 +176,11 @@ test("a many-row plan applies one hash per included row, with the route's author
   Object.assign(c, { work });
   run.mockReset().mockResolvedValueOnce({
     state: "succeeded",
-    result: { plan: [{ planHash: "a" }, { planHash: "b" }], included: { a: "a", b: "b" } },
+    result: {
+      id: "P2",
+      plan: [{ planHash: "a" }, { planHash: "b" }],
+      included: { a: "a", b: "b" },
+    },
   });
   await many.plan.run(c as never, none);
   const options = { singleTransaction: true };
@@ -190,7 +195,7 @@ test("a many-row plan applies one hash per included row, with the route's author
   await many.apply.run(c as never, none);
   expect(run.mock.calls[1]).toEqual([
     "families.apply",
-    { source, executionOptions: options, expectedPlanHashes: { a: "a", b: "b" } },
+    { plan: "P2", expectedPlanHashes: { a: "a", b: "b" } },
     ref,
     undefined,
   ]);

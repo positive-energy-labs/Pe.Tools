@@ -393,16 +393,19 @@ test("live /families: one catalog read per scope change, none while idle", async
     });
     await openLive(page, "/families", "demo=edit&live=1");
     const count = (key: string) => calls.filter((call) => call === key).length;
-    const input = page.getByRole("combobox", { name: "draft categories" });
-    await expect.poll(() => input.count(), { timeout: 30_000 }).toBe(1);
+    // The categories picker is a ListPopup: its trigger opens a list whose search owns typing.
+    const trigger = page.getByRole("button", { name: "draft categories" });
+    await expect.poll(() => trigger.count(), { timeout: 30_000 }).toBe(1);
     await page.waitForTimeout(3_000);
     const idle = {
       options: count("revit.catalog.field-options"),
       catalog: count("revit.catalog.loaded-families"),
       matrix: count("revit.matrix.loaded-families"),
     };
-    await input.fill("Mech");
-    await input.press("Enter");
+    await trigger.click();
+    const search = page.getByLabel("draft categories search");
+    await search.fill("Mech");
+    await search.press("Enter");
     await expect
       .poll(() => count("revit.catalog.loaded-families"), { timeout: 10_000 })
       .toBe(idle.catalog + 1);
@@ -425,74 +428,81 @@ test("live /families: one catalog read per scope change, none while idle", async
 }, 180_000);
 
 /**
- * THE EDITABLE TABLE, in the proposal language. Two cells are typed across two families: each is a
- * proposal by "you", the same Work shape Pea writes, and it survives a reload. One is accepted and
- * one denied; PLAN takes the accepted one only, generates one patch member for that family, files
- * it in the working pod, and plans exactly that family's id. Apply sends the row's hash back to the
- * member that produced it, and `/pods` shows the run against the generated member.
+ * THE EDITABLE TABLE, on keyed cells. Two cells are typed across two families: a typed value
+ * stages directly, and it survives a reload. Typing one back to Revit's value clears its stage.
+ * PLAN takes the staged cell only, generates one patch draft for that family, files nothing, and
+ * plans exactly that family's id from the draft's bytes. Apply names that plan; after the native
+ * apply succeeds the host retires the unchanged staged cell, and `/pods` shows the run under the
+ * draft's name as a supplied draft, not a saved member.
  */
-test("live /families: proposed cells, one accepted and one denied, plan and apply", async () => {
+test("live /families: typed cells stage, one is typed back, plan and apply retire the other", async () => {
   const { shown, workflows } = await liveLoop("families-table", async (page) => {
     const pod = await openLive(page, "/families", "demo=edit&live=1");
     await page.goto(`${page.url()}&pod=${pod}`, { waitUntil: "domcontentloaded" });
     const body = page.locator("body");
-    const proposals = (open: number, accepted: number) =>
+    const band = (open: number, staged: number) =>
       expect
         .poll(() => page.locator('section[aria-label="proposals"]').innerText(), {
           timeout: 30_000,
         })
-        .toMatch(new RegExp(`${open} open[\\s\\S]*${accepted} accepted`));
+        .toMatch(new RegExp(`${open} open[\\s\\S]*${staged} staged`));
+    const type = async (current: string, next: string) => {
+      const cell = page.locator(`input[value="${current}"]`).first();
+      await expect.poll(() => cell.count(), { timeout: 30_000 }).toBe(1);
+      await cell.fill(next);
+      await cell.press("Enter");
+      // Edit one cell at a time, as a person does: the table rebuilds when Work lands, and text
+      // typed into a cell mid-rebuild is lost with the input (owed, not a Work loss).
+      await expect
+        .poll(() => page.locator(`input[value="${next}"]`).count(), { timeout: 30_000 })
+        .toBe(1);
+    };
     let typed = 0;
     for (const [family, next] of [
       ["Fan Coil Unit - Ducted", "FXMQ20"],
       ["Heat Pump - Split", "RXL30"],
     ]) {
-      const cell = page.locator(`input[value="${family} model"]`).first();
-      await expect.poll(() => cell.count(), { timeout: 30_000 }).toBe(1);
-      await cell.fill(next!);
-      await cell.press("Enter");
-      // One cell at a time, as a person edits: a proposal rebuilds the table, and a value typed
-      // into a second cell before the first lands can be lost with it (owed, `families/store.ts`).
+      await type(`${family} model`, next!);
       typed += 1;
-      await proposals(typed, 0);
+      await band(0, typed);
     }
-    // Proposals are Work, not page memory: a reload still finds them.
+    // Staged cells are Work, not page memory: a reload still finds them.
     await page.reload({ waitUntil: "domcontentloaded" });
-    await proposals(2, 0);
-    const row = (family: string) => page.locator("[data-proposal-row]").filter({ hasText: family });
-    await expect.poll(() => row("Fan Coil Unit - Ducted").innerText()).toContain("by you");
-    await row("Fan Coil Unit - Ducted")
-      .getByRole("button", { name: /^accept/ })
-      .click();
-    await proposals(1, 1);
-    if (SCRATCH)
-      await page.screenshot({ path: join(SCRATCH, "families-table-accepted.png"), fullPage: true });
-    await row("Heat Pump - Split").getByRole("button", { name: /^deny/ }).click();
-    await proposals(0, 1);
-    // A denial leaves nothing behind: the cell shows Revit's value again.
+    await band(0, 2);
+    // Typing a cell back to Revit's value clears its stage: it shows Revit's value again.
+    await type("RXL30", "Heat Pump - Split model");
+    await band(0, 1);
     await expect.poll(() => page.locator('input[value="Heat Pump - Split model"]').count()).toBe(1);
     if (SCRATCH)
-      await page.screenshot({
-        path: join(SCRATCH, "families-table-proposals.png"),
-        fullPage: true,
-      });
+      await page.screenshot({ path: join(SCRATCH, "families-table-staged.png"), fullPage: true });
     await run(page, "plan");
-    // Plan wrote the spec nobody authored, from the accepted cell alone.
-    const path = await landed(page, /^settings\/families\/staged-Fan-Coil-Unit-+Ducted-.*\.json$/);
-    // The sheet names the member the family applies from.
-    await expect.poll(() => body.innerText(), { timeout: 30_000 }).toContain(`from ${path}`);
     if (SCRATCH)
       await page.screenshot({ path: join(SCRATCH, "families-table-plan.png"), fullPage: true });
     await applySheet(page);
+    // Plan filed no spec nobody authored: the page names no member.
+    expect(new URL(page.url()).searchParams.get("path") ?? "").toBe("");
     await expect.poll(() => body.innerText(), { timeout: 30_000 }).toContain("apply families ran");
-    // Applied proposals are spent; the receipt is the record from here.
-    await expect
-      .poll(() => page.locator('section[aria-label="proposals"]').count(), { timeout: 30_000 })
-      .toBe(0);
-    return receiptOnPods(page, pod, path, "families.apply");
+    // The applied, unchanged staged cell retired: the band reads empty (it stays mounted, so the
+    // grid never moves, F-R4-1); the receipt is the record.
+    await band(0, 0);
+    // The run is filed under the draft's name; `/pods` browses members, and none was filed.
+    // A string, so vitest leaves the page's own dynamic import alone.
+    const runs = (await page.evaluate(
+      `import("/src/host/pods.ts").then((m) => m.listRuns(${JSON.stringify(pod)}, "staged/Fan-Coil-Unit---Ducted.json"))`,
+    )) as { receipt: unknown }[];
+    const members = await receiptOnPods(page, pod, "", "MEMBERS");
+    expect(members).not.toContain("staged");
+    return JSON.stringify(runs.map((r) => r.receipt));
   });
-  expect(shown).toContain("Succeeded");
-  // One plan and one apply for the one accepted family: the denied one never reached the wire.
+  expect(JSON.parse(shown)).toEqual([
+    expect.objectContaining({
+      operation: "families.apply",
+      outcome: "Succeeded",
+      origin: "SuppliedDraft",
+      memberSha256: null,
+    }),
+  ]);
+  // One plan and one apply for the one staged family: the cleared one never reached the wire.
   expect(workflows).toEqual(["families.plan", "families.apply"]);
 }, 180_000);
 
@@ -500,7 +510,8 @@ test("live /families: capture, plan, apply files a run receipt", async () => {
   const { shown, workflows } = await liveLoop("families", async (page) => {
     const pod = await openLive(page, "/families", "demo=capture&live=1");
     await page.goto(`${page.url()}&pod=${pod}`, { waitUntil: "domcontentloaded" });
-    await page.getByTitle(/^Add Fan Coil Unit - Ducted to the capture set/).click();
+    // A row click picks it into the capture set (the master table's selection).
+    await page.getByRole("row").filter({ hasText: "Fan Coil Unit - Ducted" }).first().click();
     await run(page, "capture families");
     const path = await landed(page, /^settings\/families\/Fan-Coil-Unit-+Ducted-.*\.json$/);
     // The captured family model is itself a families spec: plan and apply it.

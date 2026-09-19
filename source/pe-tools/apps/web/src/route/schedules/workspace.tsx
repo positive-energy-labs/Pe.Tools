@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   scheduleCellKey,
   splitScheduleCellKey,
+  transitionPatches,
   type RouteStatePatch,
   type ScheduleCatalog,
   type ScheduleGridDocument,
@@ -13,17 +14,22 @@ import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Provenance } from "#/components/lang/section";
 import { ActionButton } from "#/components/lang/action-button";
-import { MasterTable } from "#/components/master-table/master-table";
-import { PickList } from "#/components/lang/pick-list";
+import { Table } from "#/components/master-table/table";
+import { TableFrame } from "#/components/master-table/table-frame";
+import { useTableState } from "#/components/master-table/view";
+import { List } from "#/components/lang/list-popup";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { OutcomeStrip } from "#/components/lang/outcome-strip";
 import { timeAgo } from "#/lib/utils";
+import type { CellWire } from "#/components/lang/band";
 import { PendingStrip } from "./pending-strip";
-import { useScheduleGridColumns } from "./columns";
+import { scheduleLock, useScheduleGridColumns } from "./columns";
 import type { Refusal } from "#/route";
 
 export interface ScheduleGridState {
   slice: ScheduleGridDocument | null;
+  /** The Work revision the slice was read at; `null` before any Work exists. */
+  revision: number | null;
   hydrated: boolean;
   refreshing: boolean;
   apply: (patches: RouteStatePatch[], expectedRevision?: number) => Promise<Refusal | null>;
@@ -45,6 +51,7 @@ export interface ScheduleGridState {
 export function ScheduleGridWorkspace({
   state: {
     slice,
+    revision,
     hydrated,
     refreshing,
     apply,
@@ -60,6 +67,7 @@ export function ScheduleGridWorkspace({
 }: {
   state: ScheduleGridState;
 }) {
+  const [tableState, setTableState] = useTableState();
   const document = slice;
   const cells = document?.cells ?? {};
 
@@ -80,19 +88,27 @@ export function ScheduleGridWorkspace({
   const runCommand = (kind: "catalog" | "refresh" | "push", input: Record<string, unknown> = {}) =>
     void execute(kind, input);
 
-  const stageValue = (key: string, value: string) =>
-    void apply([{ path: ["cells", key, "staged"], value: { value } }]);
-  const stageEdit = (key: string, value: string): string | void => {
-    if (value.length === 0)
-      return "an empty value cannot be staged — type a value, or leave the cell as it was";
-    const patches: { path: (string | number)[]; value?: unknown }[] = [
-      { path: ["cells", key, "staged"], value: { value } },
-    ];
-    if (cells[key]?.proposal != null) patches.push({ path: ["cells", key, "proposal"] });
-    void apply(patches);
+  const bindingAt = (key: string) => {
+    const { rowNumber, columnNumber } = splitScheduleCellKey(key);
+    return snapshot?.rows
+      .find((row) => row.rowNumber === rowNumber)
+      ?.bindings.find((binding) => binding.columnNumber === columnNumber);
   };
-  const deny = (key: string) => void apply([{ path: ["cells", key, "proposal"] }]);
-  const undo = (key: string) => void apply([{ path: ["cells", key, "staged"] }]);
+  /** Every schedule cell's accept, deny and unstage write here, bound to the rendered revision. */
+  const wire: CellWire = {
+    segment: "cells",
+    write: apply,
+    revision,
+    lockOf: (key) => scheduleLock(bindingAt(key)),
+  };
+  /** Typing stages; it also severs a standing proposal, so the typed value is not contested. */
+  const stageEdit = (key: string, value: string): string | void => {
+    const cell = cells[key] ?? {};
+    void apply([
+      ...transitionPatches(["cells"], key, cell, { kind: "stage", rung: { value } }),
+      ...(cell.proposal != null ? transitionPatches(["cells"], key, cell, { kind: "deny" }) : []),
+    ]);
+  };
 
   const columnHeader = (columnNumber: number) =>
     snapshot?.columns.find((column) => column.columnNumber === columnNumber)?.headerText ??
@@ -102,16 +118,17 @@ export function ScheduleGridWorkspace({
     const row = snapshot?.rows.find((candidate) => candidate.rowNumber === rowNumber);
     const columnIndex =
       snapshot?.columns.findIndex((column) => column.columnNumber === columnNumber) ?? -1;
-    const binding = row?.bindings.find((candidate) => candidate.columnNumber === columnNumber);
-    return binding?.displayValue ?? (columnIndex >= 0 ? (row?.values[columnIndex] ?? null) : null);
+    return (
+      bindingAt(key)?.displayValue ?? (columnIndex >= 0 ? (row?.values[columnIndex] ?? null) : null)
+    );
   };
 
-  const gridColumns = useScheduleGridColumns(snapshot, cells, stageEdit);
+  const gridColumns = useScheduleGridColumns(snapshot, cells, wire, stageEdit);
 
   const pushReason = blockedBecause
     ? blockedBecause
     : stagedCount === 0
-      ? "Nothing is staged yet — approve a proposal or type into a cell first. Push writes staged values through the bridge into Revit."
+      ? "Nothing is staged yet — accept a proposal or type into a cell first. Push writes staged values through the bridge into Revit."
       : `Write ${stagedCount} staged cell${stagedCount === 1 ? "" : "s"} through the bridge into Revit — the only verb here that leaves the page.`;
 
   return (
@@ -235,20 +252,25 @@ export function ScheduleGridWorkspace({
                 />
               </div>
             ) : (
-              <PickList
-                items={catalog.schedules.map((entry) => ({
-                  id: String(entry.scheduleId),
+              <List
+                aria-label="schedules"
+                region="schedules"
+                items={catalog.schedules}
+                keyOf={(entry) => String(entry.scheduleId)}
+                labelOf={(entry) => entry.name}
+                groupOf={(entry) => entry.categoryName ?? "Other"}
+                filter="substring"
+                searchPlaceholder="Filter schedules…"
+                empty="No schedules in the document."
+                onPick={(entry) => runCommand("refresh", { scheduleId: entry.scheduleId })}
+                row={(entry) => ({
                   label: entry.name,
-                  group: entry.categoryName ?? "Other",
+                  active: snapshot?.scheduleId === entry.scheduleId,
                   // ponytail: Summary projection reports 0 rows for every schedule — show counts only when computed
                   meta: entry.rowCount > 0 ? entry.rowCount : undefined,
-                  hint: `id ${entry.scheduleId}${entry.isPlacedOnSheet ? " · placed on sheet" : ""}`,
-                }))}
-                activeId={snapshot ? String(snapshot.scheduleId) : null}
-                onPick={(id) => runCommand("refresh", { scheduleId: Number(id) })}
-                placeholder="Filter schedules…"
-                disabled={busy != null}
-                emptyNote="No schedules in the document."
+                  title: `id ${entry.scheduleId}${entry.isPlacedOnSheet ? " · placed on sheet" : ""}`,
+                  refusal: busy != null ? `${busy} is running` : null,
+                })}
               />
             )}
           </Pane>
@@ -264,25 +286,13 @@ export function ScheduleGridWorkspace({
             <section className="flex min-h-0 min-w-0 flex-1 flex-col">
               <div className="flex min-h-0 flex-1 flex-col">
                 {snapshot ? (
-                  <MasterTable
+                  <TableFrame
+                    label="schedule rows"
                     rows={snapshot.rows}
                     columns={gridColumns}
                     rowKey={(row) => String(row.rowNumber)}
-                    gutter={(row) => {
-                      const owed = snapshot.columns.filter(
-                        (column) =>
-                          cells[scheduleCellKey(row.rowNumber, column.columnNumber)]?.proposal !=
-                          null,
-                      ).length;
-                      return owed > 0
-                        ? {
-                            count: owed,
-                            tone: "caution" as const,
-                            title: `${owed} pea proposal${owed === 1 ? "" : "s"} on this row await${owed === 1 ? "s" : ""} a verdict — accept stages, deny clears`,
-                          }
-                        : null;
-                    }}
-                    scopeLabel="schedule rows"
+                    state={tableState}
+                    onStateChange={setTableState}
                     searchPlaceholder="find in cells"
                     filters={<OutcomeStrip busy={busy} failure={failure} />}
                     actions={
@@ -294,16 +304,39 @@ export function ScheduleGridWorkspace({
                         onClick={() => runCommand("refresh", { scheduleId: snapshot.scheduleId })}
                       />
                     }
-                    activeKey={activeRow}
-                    empty={
-                      <EmptyState
-                        story="scope"
-                        exit="re-read the schedule, or pick another from the rail"
-                      >
-                        this schedule has no rows
-                      </EmptyState>
-                    }
-                  />
+                  >
+                    <Table
+                      rows={snapshot.rows}
+                      columns={gridColumns}
+                      rowKey={(row) => String(row.rowNumber)}
+                      label="schedule rows"
+                      state={tableState}
+                      onStateChange={setTableState}
+                      activeKey={activeRow}
+                      gutter={(row) => {
+                        const owed = snapshot.columns.filter(
+                          (column) =>
+                            cells[scheduleCellKey(row.rowNumber, column.columnNumber)]?.proposal !=
+                            null,
+                        ).length;
+                        return owed > 0
+                          ? {
+                              count: owed,
+                              tone: "caution" as const,
+                              title: `${owed} pea proposal${owed === 1 ? "" : "s"} on this row await${owed === 1 ? "s" : ""} a verdict — accept stages, deny clears`,
+                            }
+                          : null;
+                      }}
+                      empty={
+                        <EmptyState
+                          story="scope"
+                          exit="re-read the schedule, or pick another from the rail"
+                        >
+                          this schedule has no rows
+                        </EmptyState>
+                      }
+                    />
+                  </TableFrame>
                 ) : (
                   <div className="grid h-full place-items-center p-6">
                     {hydrated ? (
@@ -326,10 +359,8 @@ export function ScheduleGridWorkspace({
                   proposalCount={proposalCount}
                   stagedCount={stagedCount}
                   columnHeader={columnHeader}
+                  wire={wire}
                   currentText={currentText}
-                  stageValue={stageValue}
-                  deny={deny}
-                  undo={undo}
                   locate={(key) => setActiveRow(String(splitScheduleCellKey(key).rowNumber))}
                 />
               )}

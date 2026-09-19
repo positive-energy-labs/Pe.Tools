@@ -62,6 +62,7 @@ export function ActionDemoCatalogue() {
       consumers="Every route manifest that declares seeds"
       spec="A seed is plain data on the route's manifest. Opening its link mounts it through ?demo= in an isolated owner; nothing here runs an action or touches a host."
     >
+      {/* DOMAIN (kept hand table): a specimen page's plain seed index, not a product surface. */}
       <table aria-label="Route seeds">
         <thead>
           <tr>

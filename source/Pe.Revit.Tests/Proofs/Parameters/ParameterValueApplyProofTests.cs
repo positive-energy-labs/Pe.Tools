@@ -18,6 +18,7 @@ namespace Pe.Revit.Tests;
 public sealed class ParameterValueApplyProofTests {
     private const string FamilyName = "_PE_DA_ApplyMechEquip";
     private const string LengthParameterName = "PE Proof Length";
+    private const string FlagParameterName = "PE Proof Flag";
     private const string MarkA = "PE-A";
     private const string MarkB = "PE-B";
     private const string TypeComment = "TC-1";
@@ -372,6 +373,27 @@ public sealed class ParameterValueApplyProofTests {
     }
 
     // A wet run redeems the evidence a dry run read: each edit carries its Current as Expected.
+    // F-J3-5b: a Yes/No parameter reads through the one Yes/No reader (YesNoValue): true/yes/1 and false/no/0 in any case; any other
+    // integer is not a Yes/No value and refuses, naming the parameter and the value.
+    [Test]
+    public void YesNo_parameter_accepts_true_and_refuses_other_integers(UIApplication uiApplication) {
+        RunWithPlacedInstances(
+            uiApplication,
+            nameof(this.YesNo_parameter_accepts_true_and_refuses_other_integers),
+            (projectDocument, fixture) => {
+                var flagId = projectDocument.GetElement(fixture.InstanceIds[0].ToElementId()).LookupParameter(FlagParameterName)!.Id.Value();
+                var applied = ApplyReviewed(projectDocument, new ParameterValueEdit(fixture.InstanceIds[0], flagId, Value: "TRUE"));
+                Assert.That(applied.Results.Single().Ok, Is.True, applied.Results.Single().Error);
+                Assert.That(projectDocument.GetElement(fixture.InstanceIds[0].ToElementId()).LookupParameter(FlagParameterName)!.AsInteger(), Is.EqualTo(1));
+                foreach (var value in new[] { "2", "-5" }) {
+                    var refused = ParameterValueApplier.Apply(projectDocument, new ParameterValueApplyRequest(
+                        [new ParameterValueEdit(fixture.InstanceIds[1], flagId, Value: value)], DryRun: true)).Results.Single();
+                    Assert.That(refused.Ok, Is.False, value);
+                    Assert.That(refused.Error, Does.Contain($"'{value}'").And.Contain(FlagParameterName).And.Contain("Yes/No"));
+                }
+            });
+    }
+
     private static ParameterValueApplyData ApplyReviewed(Document projectDocument, params ParameterValueEdit[] edits) {
         var read = ParameterValueApplier.Apply(projectDocument, new ParameterValueApplyRequest(edits, DryRun: true));
         return ParameterValueApplier.Apply(projectDocument, new ParameterValueApplyRequest(
@@ -411,6 +433,13 @@ public sealed class ParameterValueApplyProofTests {
                         LengthParameterName,
                         SpecTypeId.Length,
                         GroupTypeId.Geometry,
+                        IsInstance: true));
+                _ = RevitFamilyFixtureHarness.AddFamilyParameter(
+                    familyDocument,
+                    new RevitFamilyFixtureHarness.ParameterDefinitionSpec(
+                        FlagParameterName,
+                        SpecTypeId.Boolean.YesNo,
+                        GroupTypeId.Data,
                         IsInstance: true));
                 _ = transaction.Commit();
             }

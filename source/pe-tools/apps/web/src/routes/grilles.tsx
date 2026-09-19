@@ -7,7 +7,7 @@ import { token } from "#/lib/token";
  * port pinned by `math.test.ts`) and shows the grille while you edit it. PROMOTED 2026-08-25
  * from `/grille-proto` after three find-the-product rounds; the rulings it embodies:
  *
- *   · the table is the product (as /family): one MasterTable row per candidate profile.
+ *   · the table is the product (as /family): one Table row per candidate profile.
  *   · the drawing is the ONLY pane carrying per-slot information — plan + section A-A at 2×,
  *     drawn like a Price submittal, an input on every witness line. Its inputs are the SHARED
  *     dimensions: one edit writes every row; rib auto-spaces to close the middle unless rib
@@ -71,14 +71,6 @@ function GrillesRoute() {
       setActiveId(id);
       return [...rs, { ...src, id }];
     });
-  const pick = (id: string, on: boolean) =>
-    setPicked((s) => {
-      const n = new Set(s);
-      if (on) n.add(id);
-      else n.delete(id);
-      return n;
-    });
-
   const field = useMemo(() => (active ? enumerate(active) : []), [active]);
 
   const drawing = (
@@ -139,7 +131,7 @@ function GrillesRoute() {
         set={set}
         add={add}
         picked={picked}
-        onPick={pick}
+        onPickedChange={setPicked}
       />
     </Pane>
   );

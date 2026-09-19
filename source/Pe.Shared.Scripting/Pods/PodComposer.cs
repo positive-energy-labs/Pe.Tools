@@ -192,8 +192,10 @@ public static class PodComposer {
                     result.Add(child);
                 continue;
             }
-            diagnostics.Add(Error("pod.settings.include", owner,
-                $"Include '{candidate["$include"]}' in an array must resolve to an array or an `Items` fragment; it resolved to {Shape(expanded)}."));
+            // Any other object is one element, inserted as is.
+            if (expanded is not JObject)
+                diagnostics.Add(Error("pod.settings.include", owner,
+                    $"Include '{candidate["$include"]}' in an array must resolve to an object, an array or an `Items` fragment; it resolved to {Shape(expanded)}."));
             result.Add(expanded);
         }
         return result;
@@ -208,10 +210,7 @@ public static class PodComposer {
             _ => null
         };
 
-    private static string Shape(JToken token) =>
-        token is JObject obj
-            ? $"an object with properties {string.Join(", ", obj.Properties().Select(property => property.Name))}"
-            : $"a {token.Type.ToString().ToLowerInvariant()}";
+    private static string Shape(JToken token) => $"a {token.Type.ToString().ToLowerInvariant()}";
 
     private static JObject MergeRightWins(JObject left, JObject right) {
         var result = (JObject)left.DeepClone();

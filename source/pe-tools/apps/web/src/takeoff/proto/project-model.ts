@@ -11,8 +11,8 @@ const room = (r: GeoRoom | MockRoom): ModelRoom => ({
   sqft: r.sqft,
   ceilingFt: r.ceilingFt,
   label: r.label,
+  // The mock's pre-decided flags stay settled; verdicts themselves live only in Work cells.
   flags: r.flags.filter((f) => !r.decisions.some((d) => d.flag === f)),
-  decisions: r.decisions.map((d) => ({ subject: r.guid, ...d })),
   provenance: { ...r.provenance, sourceRoomId: r.guid },
   r10: r.r10 ? { fileIdentity: "seed", ...r.r10 } : null,
   data: r.data,
@@ -54,8 +54,8 @@ const zone = (z: GeoZone | MockZone): ModelZone => ({
     failures: 0,
     declaredSqft: r.declaredSqft,
     roomSqft: r.roomSqft,
-    claimedWallSqft: r.claimedWallSqft,
     excludedSqft: r.excludedSqft,
+    voidSqft: r.voidSqft,
   })),
   driftSqft: z.driftSqft,
 });

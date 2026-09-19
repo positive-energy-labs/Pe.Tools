@@ -137,7 +137,7 @@ const recentRows = [
   },
 ];
 
-const emptyWork: InstancesDocument = { staged: null };
+const emptyWork: InstancesDocument = { launch: {} };
 
 /**
  * One seed per action key, total over them: `refresh` is the only route-level action, so the

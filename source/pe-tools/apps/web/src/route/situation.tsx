@@ -16,12 +16,13 @@
  * The route declares its verbs once (its manifest) and this file only draws them: dotted =
  * operable, dashed = empty slot, caution = the world disagrees, bold = unsaved, mono = measured.
  */
-import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { Fragment, createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { Gauge } from "lucide-react";
 import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
 
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { WorkBand, workBandWord } from "#/components/lang/band";
 import { FactChip } from "#/components/lang/chip";
 import { Kbd } from "#/components/lang/kbd";
 import { Press } from "#/components/lang/press";
@@ -34,7 +35,7 @@ import { RouteHelpButton } from "./help";
 import { FlowMatrix } from "./flow";
 import { RouteInspector } from "./inspector";
 import type { RouteAction } from "./manifest";
-import { Picker } from "./picker";
+import { Ladder } from "./ladder";
 import { useChooseTarget, useHostLamp } from "./shell";
 import type { ActionHandle, LogEntry, RouteHandle } from "./use-route";
 
@@ -221,6 +222,39 @@ export function Cluster({
 /* ── the document ladder ───────────────────────────────────────────────────── */
 
 /**
+ * True inside Chat's plugin pane. The pane's target is the thread head's, and Chat's composer head
+ * is the one place to change it, so a hosted ladder offers no session or document levels.
+ */
+export const ChatHosted = createContext(false);
+
+/**
+ * Chat head's commit verb, handed to the hosted route (K3): the route named here runs its own
+ * commit action once, in the pane, where its real confirmation sheet opens. `take` answers true
+ * exactly once per press, so a remount never re-runs it. One-shot page state, never URL state.
+ */
+/**
+ * Run the route's commit once when Chat's head asked for it and this route's Work is read.
+ * Refusals are the action's own and land in the route's page log, as a pressed button's do.
+ */
+export function useChatPlanIntent(
+  handle: Pick<RouteHandle<any, any, any, any>, "manifest" | "work">,
+  commit: ActionHandle | undefined,
+) {
+  const intent = useContext(ChatPlanIntent);
+  // A route with Work plans what it read; one without has nothing to wait for.
+  const intended =
+    intent?.route === handle.manifest.key && (handle.work.current || !handle.manifest.work);
+  useEffect(() => {
+    if (intended && commit && intent.take()) void commit.run();
+  }, [intended, intent, commit]);
+}
+
+/** The head's group drill-in: the hosted route narrows to the addresses under this path. */
+export const ChatFocus = createContext<readonly string[] | null>(null);
+
+export const ChatPlanIntent = createContext<{ route: string; take: () => boolean } | null>(null);
+
+/**
  * session › document, read from the bridge inventory: titles and pe-revit ids, not GUIDs.
  * A pick moves the thread head (the one target store) and drops a `?target` pin, so the route
  * shows what the thread shows. A route with no thread still binds through `?target`; Chat's
@@ -234,6 +268,7 @@ export function useDocumentLadder(
     bind: (ref: { session: string; openId: string }) => void;
   },
 ) {
+  const hosted = useContext(ChatHosted);
   const [pin, choose] = useChooseTarget();
   // The kernel's own inventory: a route need not declare an `inventory` Reading to show sessions.
   const inventory = handle.inventory;
@@ -247,7 +282,10 @@ export function useDocumentLadder(
       ? handle.resolution.target.ref
       : null;
   const [chosenSession, chooseSession] = useState<string | null>(null);
-  const sessionId = chosenSession ?? bound?.session ?? null;
+  // A binding whose document closed still names its session, so the ladder can offer the same
+  // title reopened there as its first row (F-X-1). Never taken for the person.
+  const lost = binding ? null : handle.bindingLost;
+  const sessionId = chosenSession ?? bound?.session ?? lost?.ref.session ?? null;
   const session = sessions.find((item) => item.sessionId === sessionId) ?? null;
   const doc = session?.openDocuments?.find((item) => item.openId === bound?.openId) ?? null;
   const note =
@@ -272,40 +310,71 @@ export function useDocumentLadder(
   const sessionWord = session ? (session.sdkSessionId ?? session.sessionId) : null;
   return {
     sessionWord,
-    docWord: doc?.title ?? null,
+    docWord: doc?.title ?? lost?.title ?? null,
+    /** The bound document closed: the document word wears the caution tone. */
+    lost: lost != null,
     /** The head's refusal of the last pick (stale head, or a Pea turn holding it). */
     refusal: binding ? null : (head?.refusal ?? null),
-    levels: [
-      {
-        key: "session",
-        label: sessionWord,
-        placeholder: "choose a session",
-        options: sessions.map((item) => ({
-          id: item.sessionId,
-          label: item.sdkSessionId ?? item.sessionId,
-          sub: `${item.openDocumentCount} open${item.lane ? ` · ${item.lane}` : ""}`,
-        })),
-        note: note ?? "no Revit answers the host",
-        picked: (id: string) => id === sessionId,
-        pick: chooseSession,
-      },
-      {
-        key: "document",
-        label: doc?.title ?? null,
-        placeholder: "choose a document",
-        options: session
-          ? (session.openDocuments ?? []).map((item) => ({
-              id: item.openId,
-              label: item.title,
-              sub: item.isFamilyDocument ? "family" : "project",
-            }))
-          : null,
-        note: session ? "nothing open here" : "choose a session first",
-        picked: (id: string) => id === bound?.openId,
-        pick,
-      },
-    ],
+    hosted,
+    levels: hosted
+      ? []
+      : [
+          {
+            key: "session",
+            label: sessionWord,
+            placeholder: "choose a session",
+            options: sessions.map((item) => ({
+              id: item.sessionId,
+              label: item.sdkSessionId ?? item.sessionId,
+              sub: `${item.openDocumentCount} open${item.lane ? ` · ${item.lane}` : ""}`,
+            })),
+            note: note ?? "no Revit answers the host",
+            picked: (id: string) => id === sessionId,
+            pick: chooseSession,
+          },
+          {
+            key: "document",
+            label: doc?.title ?? null,
+            placeholder: "choose a document",
+            options: session
+              ? (session.openDocuments ?? [])
+                  .map((item) => ({
+                    id: item.openId,
+                    label: item.title,
+                    sub:
+                      item.openId === lost?.reopened?.openId
+                        ? "reopened — the document this page was bound to, under a new openId"
+                        : item.isFamilyDocument
+                          ? "family"
+                          : "project",
+                  }))
+                  .sort(
+                    (a, b) =>
+                      Number(b.id === lost?.reopened?.openId) -
+                      Number(a.id === lost?.reopened?.openId),
+                  )
+              : null,
+            note: session ? "nothing open here" : "choose a session first",
+            picked: (id: string) => id === bound?.openId,
+            pick,
+          },
+        ],
   };
+}
+
+/** The ladder's picker; hosted in Chat, only the bound document's word. */
+export function LadderPicker({
+  ladder,
+  disabled,
+}: {
+  ladder: ReturnType<typeof useDocumentLadder>;
+  disabled?: boolean;
+}) {
+  return ladder.hosted ? (
+    <span data-tone={ladder.lost ? "caution" : undefined}>{ladder.docWord ?? "no document"}</span>
+  ) : (
+    <Ladder levels={ladder.levels} disabled={disabled} caution={ladder.lost} />
+  );
 }
 
 /* ── verbs ─────────────────────────────────────────────────────────────────── */
@@ -385,7 +454,15 @@ export function SituationAction({
                 </Press>
               </span>
             ) : outcome?.refusal ? (
-              <span>{outcome.refusal.message}</span>
+              <span>
+                {outcome.refusal.message}
+                {outcome.refusal.detail ? (
+                  <details className="t-small text-ink-2">
+                    <summary>detail</summary>
+                    <span>{outcome.refusal.detail}</span>
+                  </details>
+                ) : null}
+              </span>
             ) : outcome?.stopped ? (
               <span className="text-ink-2">{action.label} · stopped waiting; see the log</span>
             ) : (
@@ -607,6 +684,10 @@ export interface SituationProps {
   };
   /** Free content under the verb row, for routes without a Work frame. Prefer `work`. */
   band?: ReactNode;
+  /** Read-only, in the start-fresh confirm: what the set-aside Work carried (a route's salvage). */
+  startFreshAside?: ReactNode;
+  /** After start fresh landed: the route may offer what the old Work carried. */
+  onStartedFresh?: () => void;
   /** Lines for the ledger behind the state gauge: what is bound, how fresh, which revision. */
   ledger?: readonly (readonly [string, ReactNode])[];
 }
@@ -620,6 +701,8 @@ export function Situation({
   commit,
   work,
   band,
+  startFreshAside,
+  onStartedFresh,
   ledger,
 }: SituationProps) {
   const [page, setPage] = handle.page as [
@@ -635,15 +718,21 @@ export function Situation({
       !(handle.manifest.actions as Record<string, { sheet?: true }> | undefined)?.[name]?.sheet,
   ) as [string, ActionHandle][];
   const staged = work && work.count > 0 ? work : null;
-  const nounOf = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
   const commitAction = commit ? handle.actions[commit] : undefined;
-  const workWord = `${handle.work.revision === null ? "unwritten" : `r${handle.work.revision}`}${
-    staged ? ` · ${nounOf(staged.count, staged.noun)} staged` : ""
-  }${handle.work.conflict ? " · changed elsewhere" : ""}`;
+  useChatPlanIntent(handle, commitAction);
+  const workWord = workBandWord({
+    revision: handle.work.revision,
+    count: staged?.count ?? 0,
+    noun: staged?.noun ?? "edit",
+    conflict: handle.work.conflict,
+    unreadable: handle.work.refusal != null,
+  });
   // The band's own state, beside the verbs: a conflicting writer and the runner's last refusal
   // when no verb flag says it (a Work write and a late result after a stop have no button to grow a flag from).
   const late = handle.failure === (handle.outcome?.refusal ?? null) ? null : handle.failure;
   const unresolved = [
+    handle.bindingLost?.sentence,
+    handle.work.refusal,
     handle.work.conflict ? "another writer changed this Work; your last write did not land" : null,
     late ? `${late.code}: ${late.message}` : null,
   ].filter(Boolean);
@@ -675,7 +764,7 @@ export function Situation({
             <p className="mb-1.5 t-prose text-ink-2 [&_b]:font-semibold [&_b]:text-ink">
               {stages.length ? (
                 <b>
-                  <Picker
+                  <Ladder
                     levels={[
                       {
                         key: "stage",
@@ -694,66 +783,44 @@ export function Situation({
               {sentence}
             </p>
             <ActionBoard handle={handle} verbs={verbs} commit={commit} work={workWord} />
-            {staged ? (
-              <div className="hairline-t flex flex-col gap-1 py-1.5 t-prose">
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                  <span className="w-[9rem]">
-                    <Label>staged</Label>
-                  </span>
-                  <span>
-                    <b className="font-semibold text-ink">{nounOf(staged.count, staged.noun)}</b>
-                    {staged.read ? (
-                      <span className="face-mono text-ink-mute"> · read {staged.read}</span>
-                    ) : null}
-                  </span>
-                  <span className="ml-auto flex items-baseline gap-2">
-                    <Press
-                      frame="line"
-                      tone="quiet"
-                      size="value"
-                      state={handle.busy ? "disabled" : "rest"}
-                      disabled={handle.busy !== null}
-                      onClick={() => void staged.discard()}
-                    >
-                      discard
-                    </Press>
-                    {commitAction ? (
-                      // The same verb as the row's; its flag grows from the row button, not here.
-                      <Press
-                        frame="line"
-                        tone="neutral"
-                        size="value"
-                        state={commitAction.refusal !== null || handle.busy ? "disabled" : "rest"}
-                        disabled={commitAction.refusal !== null || handle.busy !== null}
-                        title={commitAction.refusal ?? commitAction.says}
-                        onClick={() => void commitAction.run()}
-                      >
-                        {commitAction.label}
-                      </Press>
-                    ) : null}
-                  </span>
-                </div>
-                {staged.body}
-              </div>
-            ) : null}
-            {unresolved.length ? (
-              <div
-                className="hairline-t flex flex-wrap items-baseline gap-x-2 gap-y-1 py-1.5 t-prose"
-                data-tone="caution"
-                role="status"
-              >
-                <span className="w-[9rem]">
-                  <Label>unresolved</Label>
-                </span>
-                <span>{unresolved.join(" · ")}</span>
-                {handle.work.conflict ? (
-                  <Press frame="line" tone="quiet" size="value" onClick={handle.work.reload}>
-                    reload
-                  </Press>
-                ) : null}
-              </div>
-            ) : null}
-            {band}
+            {/* F-R4-1: the staged and unresolved lines (and a route's band) share ONE fixed
+                block that scrolls itself, so a first stage or a refusal never grows the head and
+                moves the grid under the person (fixture look 12: a refusal moved it 28px). */}
+            <div data-slot="situation-band" className="h-16 overflow-y-auto">
+              <WorkBand
+                count={staged?.count ?? 0}
+                noun={staged?.noun ?? "edit"}
+                revision={handle.work.revision}
+                read={staged?.read}
+                conflict={handle.work.conflict}
+                busy={handle.busy !== null}
+                discard={() => void staged?.discard()}
+                commit={
+                  commitAction
+                    ? {
+                        label: commitAction.label,
+                        reason: commitAction.refusal ?? commitAction.says,
+                        disabled: commitAction.refusal !== null,
+                        run: () => void commitAction.run(),
+                      }
+                    : undefined
+                }
+                unresolved={unresolved as string[]}
+                reload={handle.work.reload}
+                startFresh={
+                  handle.work.startFresh
+                    ? () =>
+                        void handle.work.startFresh?.().then((refusal) => {
+                          if (!refusal) onStartedFresh?.();
+                        })
+                    : undefined
+                }
+                startFreshAside={startFreshAside}
+                body={staged?.body}
+                showRevision={false}
+              />
+              {band}
+            </div>
           </div>
           <div className="flex min-w-[24rem] flex-[2] flex-col">
             <div className="hairline-t flex flex-col gap-1 py-1.5">

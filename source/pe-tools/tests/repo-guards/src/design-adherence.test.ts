@@ -14,8 +14,7 @@
  * baseline is the honest floor and never a ceiling to grow into.
  *
  * ── METRICS ─────────────────────────────────────────────────────────────────────────────────
- *  rawTable         `<table` outside components/master-table. The canon table is MasterTable;
- *                   every other table is a migration target (ledger, Primitives 2026-08-15).
+ *  (rawTable moved to table-census.test.ts, which names each kept table and its reason.)
  *  localChrome      a route-local Section / SectionHead / SectionLabel / Cap function.
  *                   `lang/section.tsx` exists; three hand-rolled copies were the most visible
  *                   thing lang was missing (ledger, Component repairs).
@@ -95,7 +94,6 @@ const INLINE_COLOR =
   /\b(?:color|borderColor|backgroundColor|background|fill|stroke):\s*(?=\S)(?:"(?!(?:currentColor|none|transparent|inherit)"\s*[,}])[^,}]+|'(?!(?:currentColor|none|transparent|inherit)'\s*[,}])[^,}]+|(?!["'])(?!(?:currentColor|none|transparent|inherit)\s*[,}])[^,}]+)/g;
 
 const METRICS: Metric[] = [
-  { name: "rawTable", re: /<table\b/g, where: (r) => !r.startsWith("components/master-table/") },
   {
     name: "localChrome",
     re: /\bfunction (?:Section|SectionHead|SectionLabel|Cap)\s*\(/g,

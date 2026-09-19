@@ -1,4 +1,8 @@
-import { parameterLinksBasis } from "@pe/agent-contracts";
+import {
+  canonicalRouteInput,
+  parameterLinksBasis,
+  stagedParameterProfile,
+} from "@pe/agent-contracts";
 import type {
   ParameterLinksReading,
   ParameterLinkAssignment,
@@ -16,11 +20,11 @@ export const SOURCE_SCOPES: SourceKind[] = ["instance", "type", "instanceThenTyp
 export const RELATIONSHIPS: Relationship[] = ["sameElement", "electricalEquipmentCircuits"];
 export const REDUCERS: Reducer[] = ["first", "min", "max"];
 
-/** The authored draft is the only editable profile. There is no second copy to reconcile. */
+/** The person's staged profile is the only editable one; Pea's proposal is not drawn here yet. */
 export function editingProfile(
   document: ParameterLinksDocument | null,
 ): ParameterLinkProfile | null {
-  return document?.draft ?? null;
+  return document ? stagedParameterProfile(document) : null;
 }
 
 export function sameProfile(
@@ -38,7 +42,7 @@ export function evaluationIsCurrent(
   document: ParameterLinksDocument | null,
   reading: ParameterLinksReading | null,
 ): boolean {
-  if (!document?.draft || !reading?.evaluated) return false;
+  if (!document || !stagedParameterProfile(document) || !reading?.evaluated) return false;
   return reading.basis === parameterLinksBasis(document);
 }
 
@@ -46,7 +50,7 @@ export function isDraftDirty(
   document: ParameterLinksDocument | null,
   reading: ParameterLinksReading | null,
 ): boolean {
-  const draft = document?.draft;
+  const draft = document ? stagedParameterProfile(document) : null;
   if (draft == null) return false;
   return !sameProfile(draft, reading?.stored);
 }
@@ -56,11 +60,23 @@ export function errorIssueCount(evaluation: ParameterLinkEvaluation | null | und
 }
 
 /** One refusal string, so the strip and the verb can never disagree about why. */
+/** The host's refusal for applying a proposal preview (`family-actions.ts`), word for word. */
+export const PROPOSAL_PREVIEW_REFUSAL =
+  "The reviewed reading is a proposal preview; stage the profile and preview again";
+
+/** A profile said as one line: how much it links. */
+export const profileSummary = (profile: ParameterLinkProfile | null | undefined) =>
+  profile
+    ? `${profile.definitions.length} definition${profile.definitions.length === 1 ? "" : "s"} · ${profile.assignments.length} assignment${profile.assignments.length === 1 ? "" : "s"}`
+    : "no profile";
+
 export function applyRefusal(
   document: ParameterLinksDocument | null,
   reading: ParameterLinksReading | null,
 ): string | null {
-  if (!document?.draft) return "Author a draft profile first.";
+  // A preview of Pea's proposal never arms apply: the host's words, said on the web first.
+  if (reading?.subject === "proposal") return PROPOSAL_PREVIEW_REFUSAL;
+  if (!document || !stagedParameterProfile(document)) return "Author a draft profile first.";
   if (!evaluationIsCurrent(document, reading)) return "Preview this draft before applying.";
   if (errorIssueCount(reading?.evaluation) > 0)
     return "Resolve the evaluation errors before applying.";
@@ -147,4 +163,44 @@ export function updateAssignment(
 
 export function removeAssignment(profile: ParameterLinkProfile, id: string): ParameterLinkProfile {
   return { ...profile, assignments: profile.assignments.filter((asn) => asn.id !== id) };
+}
+
+export interface ProfileChange {
+  kind: "definition" | "assignment";
+  id: string;
+  change: "added" | "removed" | "changed";
+  /** The fields that differ, for `changed`. */
+  fields: string[];
+}
+
+/** What accepting `proposed` would change against `staged`, matched by id; unchanged items are left out. */
+export function profileDiff(
+  staged: ParameterLinkProfile | null | undefined,
+  proposed: ParameterLinkProfile | null | undefined,
+): ProfileChange[] {
+  const side = <T extends { id: string }>(kind: ProfileChange["kind"], from: T[], to: T[]) => {
+    const before = new Map(from.map((item) => [item.id, item]));
+    const after = new Map(to.map((item) => [item.id, item]));
+    const changes: ProfileChange[] = [];
+    for (const [id, item] of after) {
+      const was = before.get(id);
+      if (!was) {
+        changes.push({ kind, id, change: "added", fields: [] });
+        continue;
+      }
+      const fields = [...new Set([...Object.keys(was), ...Object.keys(item)])].filter(
+        (field) =>
+          canonicalRouteInput((was as Record<string, unknown>)[field] ?? null) !==
+          canonicalRouteInput((item as Record<string, unknown>)[field] ?? null),
+      );
+      if (fields.length) changes.push({ kind, id, change: "changed", fields });
+    }
+    for (const id of before.keys())
+      if (!after.has(id)) changes.push({ kind, id, change: "removed", fields: [] });
+    return changes;
+  };
+  return [
+    ...side("definition", staged?.definitions ?? [], proposed?.definitions ?? []),
+    ...side("assignment", staged?.assignments ?? [], proposed?.assignments ?? []),
+  ];
 }

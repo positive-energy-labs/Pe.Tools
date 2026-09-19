@@ -10,7 +10,6 @@ import {
   controlAction,
   readScopedActionStatuses,
 } from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
-import { rebindScheduleWork } from "@pe/agent-contracts";
 import { detailResponse, target } from "./schedule-fixture.ts";
 import { cellsApplied, setup } from "./schedule-test-fixture.ts";
 
@@ -446,77 +445,4 @@ test("an old reading of another schedule does not break this schedule's Work rea
   });
   expect(read.status).toBe(200);
   expect(read.value.id).toBe(f.reading.id);
-});
-
-test("F-H5-1: a dead-lifetime push names its exit; a re-read rebinds, an unchanged cell pushes live, a changed one returns as a stale proposal", async () => {
-  const f = await setup();
-  // Two cells under one basis: Mark (1::1) and Load (1::2, staged by setup).
-  const withMark = (load = "100") => {
-    const d = detailResponse();
-    const row = d.entries[0].rows[0];
-    row.bindings[0] = {
-      ...row.bindings[0],
-      rawValue: load,
-      displayValue: `${load} VA`,
-      targets: [target(7, load), target(8, load)],
-    };
-    row.bindings.unshift({
-      ...row.bindings[0],
-      columnNumber: 1,
-      targetElementIds: [7],
-      parameterName: "Mark",
-      parameterId: 556,
-      storageType: "String",
-      rawValue: "P-1",
-      displayValue: "P-1",
-      isTypeParameter: false,
-      targets: [
-        { ...target(7, "P-1"), parameterId: 556, parameterName: "Mark", storageType: "String" },
-      ],
-    });
-    return d;
-  };
-  f.setDetail(withMark());
-  const old = await f.read();
-  await f.patch([
-    { path: ["basis"], value: { captureId: old.id } },
-    { path: ["cells", "1::1"], value: { staged: { value: "P-9" } } },
-  ]);
-  f.reopen();
-  const live = { session: "B", openId: "reopened-B" };
-  const at = async () => ({
-    ...(await f.admission()),
-    destination: { kind: "document" as const, ref: live },
-  });
-  expect(await f.submit(await at())).toMatchObject({
-    state: "failed",
-    notDispatched: true,
-    error: expect.stringMatching(/re-opened in Revit; read it again/),
-  });
-  // Load changed while the document was closed; Mark did not.
-  f.setDetail(withMark("120"));
-  const fresh = await f.read(live);
-  expect(
-    await f.patch(rebindScheduleWork((await f.view()).doc as never, old, fresh)),
-  ).toMatchObject({ ok: true });
-  const doc = (await f.view()).doc;
-  expect(doc.basis).toEqual({ captureId: fresh.id });
-  expect(doc.cells["1::1"].staged).toEqual({ value: "P-9" });
-  expect(doc.cells["1::2"].staged ?? null).toBeNull();
-  expect(doc.cells["1::2"].proposal).toMatchObject({
-    value: "150 VA",
-    by: "human",
-    note: expect.stringMatching(/^stale: .*100 VA → 120 VA/),
-  });
-  f.setResponse(cellsApplied([[1, 1, true]]));
-  expect(await f.submit(await at())).toMatchObject({
-    state: "succeeded",
-    result: { applied: 1, failures: [] },
-  });
-  const pushed = f.sent.filter((s) => s.key === "schedule.cells.apply");
-  expect(pushed).toHaveLength(1);
-  expect(pushed[0]).toMatchObject({
-    openId: "reopened-B",
-    input: { edits: [{ rowNumber: 1, columnNumber: 1, value: "P-9" }] },
-  });
 });

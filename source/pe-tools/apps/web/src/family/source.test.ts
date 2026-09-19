@@ -32,7 +32,7 @@ test("native fixtures project parameters without inventing fixture content and a
     const param = lane.world.params[0]!.name;
     edited.authored[param] = "42in";
     expect(draftToPatches(lane.document!.model, edited, baseline)[0]!.path).toEqual([
-      "fields",
+      "cells",
       `/parameters/${param.replace(/~/g, "~0").replace(/\//g, "~1")}/value`,
       "staged",
     ]);
@@ -120,7 +120,7 @@ test("native capture without an authored file renders a read-only family lane", 
   expect(lane.seedKey).toContain("capture:");
 });
 
-test("native source geometry resolves macros and authored seeds without solving constraints", () => {
+test("native source geometry resolves macros, seeds and labeled dimensions", () => {
   const source = (name: string): FamilyModel =>
     JSON.parse(
       readFileSync(
@@ -134,25 +134,33 @@ test("native source geometry resolves macros and authored seeds without solving 
     datum.normal = datum.normal.replace(/^(Plus|Minus)/, "");
   box.parameters!.Voltage!.value = "480 V";
 
-  expect(buildSheet(box, "Standard").solids[0]).toMatchObject({ slug: "body", w: 24, d: 8, h: 36 });
+  expect(buildSheet(box, "Standard").solids[0]).toMatchObject({
+    slug: "body",
+    box: { x: [-12, 12], y: [-4, 4], z: [0, 36] },
+  });
   expect(buildSheet(box, "Standard").conns[0]?.pos).toEqual({ x: 0, y: 0, z: 36 });
-  expect(buildSheet(box, "Wide").solids[0]?.w).toBe(36);
+  expect(buildSheet(box, "Wide").solids[0]?.box.x).toEqual([-18, 18]);
   const lane = familySource(snapshot(JSON.stringify(box)), null);
   const baseline = initialDraft(lane.world);
   const edit = structuredClone(baseline);
   edit.geom.body!.dims.width = "48in";
   expect(draftToPatches(box, edit, baseline)).toEqual([
-    { path: ["fields", "/forms/body/width", "staged"], value: { value: "48in" } },
+    { path: ["cells", "/forms/body/width", "staged"], value: { value: "48in" } },
   ]);
   const grille = buildSheet(source("b-grd"), "24x12");
-  expect(grille.solids[0]).toMatchObject({ slug: "flange", w: 24, d: 12, h: 1 });
+  expect(grille.solids[0]).toMatchObject({
+    slug: "flange",
+    box: { x: [-12, 12], y: [-6, 6], z: [0, 1] },
+  });
   expect(grille.conns[0]).toMatchObject({ pos: { x: 0, y: 0, z: 1 }, w: 12, h: 8 });
   const bath = buildSheet(source("c-bath-shower"), "Bathtub Floor Mounted");
   expect(bath.solids).toEqual([]);
+  // `conn top` is seeded at 12.5in, but its labeled dimension `_conn z offset` holds it at 1/2in.
+  // The drain's x chains off a locked 3' plane through `_drain x offset`.
   expect(bath.conns.map((c) => [c.slug, c.pos.x, c.pos.y, c.pos.z])).toEqual([
-    ["cold", -3, 0, 12.5],
-    ["hot", 3, 0, 12.5],
-    ["drain", -0, 24, 12.5],
+    ["cold", -3, 0, 0.5],
+    ["hot", 3, 0, 0.5],
+    ["drain", 0, 24, 0.5],
   ]);
   expect(
     buildSheet(source("d-bath-shower-refline"), "Bathtub Floor Mounted").conns.map((c) => c.pos),
@@ -164,6 +172,32 @@ test("native source geometry resolves macros and authored seeds without solving 
   expect(inches("3ft")).toBe(36);
   expect(inches("1/0in")).toBeNull();
   expect(inches("not a length")).toBeNull();
+});
+
+test("a captured family draws its extrusions from labeled planes, per type", () => {
+  const captured: FamilyModel = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../../../../Pe.Revit.Tests/Fixtures/FamilyModel/w6-revit-air-terminal.captured.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ).replace(/^\uFEFF/, ""),
+  );
+  const box = (typeName: string, slug: string) => {
+    const geo = buildSheet(captured, typeName).solids.find((solid) => solid.slug === slug)!.box;
+    const round = (range: [number, number] | null) => range?.map((n) => Number(n.toFixed(4)));
+    return { x: round(geo.x), y: round(geo.y), z: round(geo.z) };
+  };
+  // Duct Width and Duct Height label the neck's planes, so each type draws its own neck.
+  expect(box("16x10", "extrusion").x).toEqual([-8, 8]);
+  expect(box("16x10", "extrusion").y).toEqual([-5, 5]);
+  expect(box("10x3", "extrusion").x).toEqual([-5, 5]);
+  expect(box("10x3", "extrusion").y).toEqual([-1.5, 1.5]);
+  expect(box("10x3", "extrusion").z).toEqual([0, 1.625]);
+  // Grille Length is a formula the page does not evaluate, so the grille keeps its seeds.
+  expect(box("10x3", "extrusion-2").x).toEqual([-8.6875, 8.6875]);
+  expect(buildSheet(captured, "10x3").ghosts).toHaveLength(4);
 });
 
 test("offline shared declarations survive native projection and unrelated value edits", () => {
@@ -189,7 +223,7 @@ test("offline shared declarations survive native projection and unrelated value 
   const edit = structuredClone(baseline);
   edit.authored.Width = "48in";
   expect(draftToPatches(lane.document!.model, edit, baseline)).toEqual([
-    { path: ["fields", "/parameters/Width/value", "staged"], value: { value: "48in" } },
+    { path: ["cells", "/parameters/Width/value", "staged"], value: { value: "48in" } },
   ]);
   expect(lane.document!.model.parameters!.FF_Route_Proof_Count).toEqual(
     patch.patch.parameters.FF_Route_Proof_Count,

@@ -20,6 +20,12 @@ import {
   type TakeoffObservation,
   type TakeoffsRouteDocument,
 } from "@pe/agent-contracts";
+import {
+  stagedAdoptChoices,
+  stagedDecisions,
+  stagedTakeoffEdits,
+  takeoffDecisionKey,
+} from "@pe/agent-contracts";
 
 import { semanticActionFacts, semanticActionInput, type Ctx as RouteCtx } from "#/route/manifest";
 import {
@@ -107,7 +113,7 @@ const snapshotOf = (world: TakeoffModel, observedAt: string): TakeoffSnapshot =>
   reading: { at: FIXTURE_AT, version: null, observedAt },
   carriers: { stage: "Adoption", status: "ready", missingCarrierGuids: [] },
   world,
-  zoneFrs: candidates,
+  zoneFrs: DEMO_CANDIDATES,
   regionsByZone: {},
 });
 
@@ -120,7 +126,8 @@ const adopted = ((): TakeoffModel => {
   return next;
 })();
 
-const candidates: CandidateRegion[] = model.zones.map((zone, index) => ({
+/** The demo lane's `takeoffs.candidates` answer: the seed's drawn regions. */
+export const DEMO_CANDIDATES: CandidateRegion[] = model.zones.map((zone, index) => ({
   elementId: index + 1,
   typeName: zone.name,
   view: zone.zone.lane.view,
@@ -136,7 +143,7 @@ const candidates: CandidateRegion[] = model.zones.map((zone, index) => ({
   loops: zone.zone.loops.map((loop) => loop.map(([x, y]): [number, number] => [x, y])),
 }));
 
-const emptyWork: TakeoffsRouteDocument = takeoffsRouteState.schema.parse({ staged: [] });
+const emptyWork: TakeoffsRouteDocument = takeoffsRouteState.schema.parse({});
 
 const allViews = model.lanes.map((lane) => lane.view);
 const allZones = model.zones.map((zone) => zone.zone.guid);
@@ -201,7 +208,9 @@ const adoption = (ctx: Ctx) => {
   const grouped = new Map<string, { elementId: number; name: string; systemTag: string }[]>();
   for (const region of currentSnapshot(ctx)?.zoneFrs ?? []) {
     if (!ctx.page.views.includes(region.view)) continue;
-    const patch = ctx.work.doc?.adoptPatches[`${region.view}:${region.elementId}`];
+    const patch = ctx.work.doc
+      ? stagedAdoptChoices(ctx.work.doc)[`${region.view}:${region.elementId}`]
+      : undefined;
     if (!(patch?.checked ?? region.role === "zoning-region")) continue;
     const meta = region.role === "zoning-region" ? readZoneMeta(region.blob) : null;
     const items = grouped.get(region.view) ?? [];
@@ -254,7 +263,7 @@ export function syncPlan(
         (room) => room.analysis?.state !== "current" || room.analysis.hold !== null,
       ) ||
       zone.rooms.some((room) =>
-        room.flags.some((flag) => decisions[`${room.guid}::${flag}`] === undefined),
+        room.flags.some((flag) => decisions[takeoffDecisionKey(room.guid, flag)] === undefined),
       ) ||
       zone.runs.some((run) => run.orphaned > 0 || run.failures > 0),
   );
@@ -307,10 +316,12 @@ const syncRefusal = (ctx: Ctx): string | null => {
   const plan = syncPlan(
     observation.capture.snapshot.world,
     review.zones,
-    Object.fromEntries(ctx.work.doc.staged.map((edit) => [edit.roomId, edit])),
-    ctx.work.doc.decisions,
+    stagedTakeoffEdits(ctx.work.doc),
+    stagedDecisions(ctx.work.doc),
   );
-  if (plan.blockedZones.length) return "Resolve the blocked zones before syncing this scope";
+  // The host's words: a flag with only Pea's proposed verdict is undecided, so its zone blocks.
+  if (plan.blockedZones.length)
+    return `${plan.blockedZones.length} selected zones are not ready to sync`;
   if (plan.untagged) return "Tag the eligible zones before syncing";
   if (!plan.inserts.length && !plan.linkedUpdates)
     return "No eligible inserts or linked staged updates";

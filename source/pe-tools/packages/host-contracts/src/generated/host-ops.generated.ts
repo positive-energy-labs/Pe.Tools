@@ -167,21 +167,28 @@ export namespace DocumentTemporaryStatus {
   }
 }
 
-/** Reconcile explicit loaded families to a saved spec, refusing plan drift per family, and write the run receipt into the source pod. */
+/** Reconcile explicit loaded families to a saved spec, refusing plan drift per family and any family reloaded since the plan (its name now resolves to another id), and write the run receipt into the source pod. */
 export namespace FamiliesApply {
   export namespace Req {
     export type PodSourceOrigin = "SavedMember" | "SuppliedDraft";
 
     /**
-     * Apply a saved spec to explicit loaded families; each family's `expectedPlanHash` from families.plan gates drift.
+     * Apply a saved spec to explicit loaded families; each family's `expectedPlanHash` from families.plan gates drift. Both maps are
+     * keyed by the id resolved at plan; `familyNames` holds each one's plan name, re-resolved at apply: a family whose name now
+     * resolves to another id was reloaded since the plan and is refused by name.
+     *
      */
     export interface Request {
       specJson: string;
       expectedPlanHashes: {
         [k: string]: string;
       };
+      familyNames: {
+        [k: string]: string;
+      };
       source: PodComposedSource;
       executionOptions?: null | ExecutionOptions;
+      plan?: null | string;
     }
     /**
      * The exact bytes one composition consumed, captured at its one read: the root (a saved member or a supplied
@@ -246,13 +253,13 @@ export namespace FamiliesApply {
     /**
      * The receipt: outcomes per change, residue after re-capture, converged = residue 0 and no errors. `familyId` is the
      * id the apply was asked for (its `expectedPlanHashes` key). A reload gives the family a new element id, so
-     * `loadedFamilyId` is the id it has now, null when nothing reloaded; an element id names one load, and only the
-     * family name is stable across applies.
+     * `loadedFamilyId` is the id it has now, null when nothing reloaded; an element id names one load, and only
+     * `familyName` (as re-resolved at apply) is stable across applies.
      *
      */
     export interface FamilyFoundryApplyReceipt {
       familyId: number;
-      familyName?: null | string;
+      familyName: string;
       success: boolean;
       converged: boolean;
       error?: null | string;
@@ -333,15 +340,17 @@ export namespace FamiliesCapture {
   }
 }
 
-/** Diff an inline family spec against exactly the passed `familyIds` (the spec's `select` only when none are passed) and return the plan per family with a deterministic hash. */
+/** Diff an inline family spec against exactly the passed `familyNames` (exact loaded family names; the spec's `select` only when none are passed) and return the plan per family, each with the id its name resolved to and a deterministic hash. A name that resolves to no single editable family is a refused entry with a null id. */
 export namespace FamiliesPlan {
   export namespace Req {
     /**
-     * Plan a spec against exactly the target's resolved family ids; the spec's `select` is the default scope only when none are passed.
+     * Plan a spec against exactly the named loaded families (exact, case-sensitive, no duplicates); the spec's `select` is the
+     * default scope only when none are passed. A name is the stable identity: an id names one load only.
+     *
      */
     export interface Request {
       specJson: string;
-      familyIds?: number[] | null;
+      familyNames?: string[] | null;
       executionOptions?: null | ExecutionOptions;
     }
     /**
@@ -377,8 +386,13 @@ export namespace FamiliesPlan {
       families: FamilyFoundryFamilyPlanData[];
       diagnostics: FamilyFoundryDiagnostic[];
     }
+    /**
+     * One planned family. `familyName` is the requested name byte-exact; `familyId` is the id it resolved to at plan, null when
+     * the name refused (`family-not-found`, `family-name-ambiguous`, `family-not-editable` in `refusals`).
+     *
+     */
     export interface FamilyFoundryFamilyPlanData {
-      familyId: number;
+      familyId?: number | null;
       familyName: string;
       planHash: string;
       changes: FamilyFoundryChangeData[];
@@ -433,6 +447,7 @@ export namespace FamilyApply {
       };
       source: PodComposedSource;
       executionOptions?: null | ExecutionOptions;
+      plan?: null | string;
     }
     /**
      * The exact bytes one composition consumed, captured at its one read: the root (a saved member or a supplied
@@ -497,13 +512,13 @@ export namespace FamilyApply {
     /**
      * The receipt: outcomes per change, residue after re-capture, converged = residue 0 and no errors. `familyId` is the
      * id the apply was asked for (its `expectedPlanHashes` key). A reload gives the family a new element id, so
-     * `loadedFamilyId` is the id it has now, null when nothing reloaded; an element id names one load, and only the
-     * family name is stable across applies.
+     * `loadedFamilyId` is the id it has now, null when nothing reloaded; an element id names one load, and only
+     * `familyName` (as re-resolved at apply) is stable across applies.
      *
      */
     export interface FamilyFoundryApplyReceipt {
       familyId: number;
-      familyName?: null | string;
+      familyName: string;
       success: boolean;
       converged: boolean;
       error?: null | string;
@@ -622,35 +637,8 @@ export namespace FamilyCapture {
   }
 }
 
-/** Apply parameter value and formula edits to the active family editor document in one host-owned transaction. */
-export namespace FamilyEditorApply {
-  export namespace Req {
-    export interface Request {
-      edits: FamilyEditorApplyEdit[];
-      dryRun?: boolean;
-    }
-    export interface FamilyEditorApplyEdit {
-      paramName: string;
-      typeName?: null | string;
-      value?: null | string;
-      formula?: null | string;
-    }
-  }
-  export namespace Res {
-    export interface Response {
-      applied: number;
-      results: FamilyEditorApplyEditResult[];
-    }
-    export interface FamilyEditorApplyEditResult {
-      index: number;
-      ok: boolean;
-      error?: null | string;
-    }
-  }
-}
-
 /** Open a loaded family from the active project in the Revit family editor and activate it (saves to a scratch .rfa to make activation possible). */
-export namespace FamilyEditorOpen {
+export namespace FamilyOpen {
   export namespace Req {
     /**
      * Open a loaded family from the active project in the family editor and activate it.
@@ -668,66 +656,6 @@ export namespace FamilyEditorOpen {
       familyName: string;
       documentTitle: string;
       savedPath?: null | string;
-    }
-  }
-}
-
-/** Read parameters, types, formulas, and display values from the active family editor document. */
-export namespace FamilyEditorSnapshot {
-  export namespace Req {
-    export interface Request {}
-  }
-  export namespace Res {
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-
-    export interface Response {
-      familyName: string;
-      currentTypeName: string;
-      typeNames: string[];
-      parameters: FamilyEditorParameterSnapshot[];
-    }
-    export interface FamilyEditorParameterSnapshot {
-      name: string;
-      isInstance: boolean;
-      isReadOnly: boolean;
-      isDeterminedByFormula: boolean;
-      isShared: boolean;
-      guid?: null | string;
-      storageType: string;
-      dataType?: null | string;
-      group?: null | string;
-      formula?: null | string;
-      valuesPerType: {
-        [k: string]: string;
-      };
-      identity?: null | ParameterIdentity;
-      dependsOn?: string[] | null;
-      dependents?: string[] | null;
-      associations?: null | FamilyParameterAssociationInfo;
-    }
-    export interface ParameterIdentity {
-      key: string;
-      kind: ParameterIdentityKind;
-      name: string;
-      builtInParameterId?: number | null;
-      sharedGuid?: null | string;
-      parameterElementId?: number | null;
-    }
-    /**
-     * Direct (element-based) associations for a family parameter, one level deep. Dimensions and Arrays
-     * are "Name [ID:{id}]" labels; Nested carries element-parameter associations (nested instances,
-     * connectors). Phantom parameters/elements (negative ids, dangling) are filtered out.
-     *
-     */
-    export interface FamilyParameterAssociationInfo {
-      dimensions: string[];
-      arrays: string[];
-      nested: FamilyNestedAssociation[];
-    }
-    export interface FamilyNestedAssociation {
-      elementName: string;
-      elementId: string;
-      paramName: string;
     }
   }
 }
@@ -775,8 +703,13 @@ export namespace FamilyPlan {
       families: FamilyFoundryFamilyPlanData[];
       diagnostics: FamilyFoundryDiagnostic[];
     }
+    /**
+     * One planned family. `familyName` is the requested name byte-exact; `familyId` is the id it resolved to at plan, null when
+     * the name refused (`family-not-found`, `family-name-ambiguous`, `family-not-editable` in `refusals`).
+     *
+     */
     export interface FamilyFoundryFamilyPlanData {
-      familyId: number;
+      familyId?: number | null;
       familyName: string;
       planHash: string;
       changes: FamilyFoundryChangeData[];
@@ -2872,7 +2805,7 @@ export namespace RevitContextSummary {
   }
 }
 
-/** Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. Whole-view capture needs no transaction; focus capture sets a temporary crop box (clearing any scope box) and restores it afterward (editable document only). */
+/** Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. Whole-view capture needs no transaction; focus capture sets a temporary crop box (clearing any scope box) and restores it afterward (editable document only). A cropped view also returns registration: the model XY of the image's top-left, top-right and bottom-left corners plus the image sha256, which places pixels under model geometry even on a rotated crop. A cropped view shows exactly its model crop: annotations outside the model crop are not drawn. */
 export namespace RevitContextViewImage {
   export namespace Req {
     export interface Request {
@@ -2916,6 +2849,10 @@ export namespace RevitContextViewImage {
       | "Schedule"
       | "Category"
       | "Family";
+    /**
+     * Why a view image carries no RevitViewImageRegistration.
+     */
+    export type RevitViewImageRegistrationRefusal = "NoCrop" | "NoImage" | "DegenerateCrop" | "AspectDisagrees";
 
     export interface Response {
       view: RevitAgentContextHandle;
@@ -2925,6 +2862,14 @@ export namespace RevitContextViewImage {
       viewScale?: number | null;
       modelRect?: null | RevitViewImageModelRect;
       sheetNumber?: null | string;
+      registration?: null | RevitViewImageRegistration;
+      registrationRefusal?: null | RevitViewImageRegistrationRefusal;
+      /**
+       * Host route for exactly the registered PNG, keyed by ImageSha256;
+       * null exactly when Registration is. FilePath stays the host-side record.
+       *
+       */
+      imageUrl?: null | string;
     }
     export interface RevitAgentContextHandle {
       kind: RevitAgentContextHandleKind;
@@ -2935,13 +2880,28 @@ export namespace RevitContextViewImage {
       categoryName?: null | string;
     }
     /**
-     * Model-space XY extent covered by the exported image (feet), when known.
+     * Axis-aligned model-space XY bounds (feet) of the view's crop, when known. Not a pixel mapping on a
+     *                 rotated crop; use RevitViewImageRegistration to place pixels.
      */
     export interface RevitViewImageModelRect {
       minX: number;
       minY: number;
       maxX: number;
       maxY: number;
+    }
+    /**
+     * Where the PNG sits in the model: model XY (feet) of the image's top-left, top-right and bottom-left pixel
+     * corners, so a rotated crop stays honest. ImageSha256 binds it to exactly this file.
+     * When absent, RegistrationRefusal says why.
+     *
+     */
+    export interface RevitViewImageRegistration {
+      width: number;
+      height: number;
+      imageSha256: string;
+      topLeft: number[];
+      topRight: number[];
+      bottomLeft: number[];
     }
   }
 }
@@ -5502,10 +5462,11 @@ export namespace TakeoffsPartition {
       orphaned: number;
       promotion: TakeoffPromotionFacts;
       domainSqft: number;
-      claimedWallSqft: number;
-      excludedResidueSqft: number;
+      excludedSqft: number;
+      voidSqft: number;
       totalSqft: number;
-      profile: string;
+      enclosureSource: string;
+      hold?: null | string;
       failures: string[];
       rooms: TakeoffDetectedRoom[];
       residues: TakeoffDetectedResidue[];
@@ -5707,9 +5668,7 @@ export interface HostOps {
   "family.apply": { request: FamilyApply.Req.Request; response: FamilyApply.Res.Response };
   "family.build": { request: FamilyBuild.Req.Request; response: FamilyBuild.Res.Response };
   "family.capture": { request: FamilyCapture.Req.Request; response: FamilyCapture.Res.Response };
-  "family.editor.apply": { request: FamilyEditorApply.Req.Request; response: FamilyEditorApply.Res.Response };
-  "family.editor.open": { request: FamilyEditorOpen.Req.Request; response: FamilyEditorOpen.Res.Response };
-  "family.editor.snapshot": { request: FamilyEditorSnapshot.Req.Request; response: FamilyEditorSnapshot.Res.Response };
+  "family.open": { request: FamilyOpen.Req.Request; response: FamilyOpen.Res.Response };
   "family.plan": { request: FamilyPlan.Req.Request; response: FamilyPlan.Res.Response };
   "family.temporary.acquire": { request: FamilyTemporaryAcquire.Req.Request; response: FamilyTemporaryAcquire.Res.Response };
   "host.ops.catalog": { request: HostOpsCatalog.Req.Request; response: HostOpsCatalog.Res.Response };
@@ -5780,9 +5739,7 @@ export const hostOpKeys = [
   "family.apply",
   "family.build",
   "family.capture",
-  "family.editor.apply",
-  "family.editor.open",
-  "family.editor.snapshot",
+  "family.open",
   "family.plan",
   "family.temporary.acquire",
   "host.ops.catalog",

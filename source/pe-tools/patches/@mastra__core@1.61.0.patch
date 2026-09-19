@@ -1,5 +1,66 @@
+diff --git a/dist/agent-DSxJoGjY.js b/dist/agent-DSxJoGjY.js
+index 6c6adc51097680f703eda42c61963147bca09c5d..8779a6b767dc29ee3ff6d36158414b2f7197ea25 100644
+--- a/dist/agent-DSxJoGjY.js
++++ b/dist/agent-DSxJoGjY.js
+@@ -30994,12 +30994,7 @@ var SaveQueueManager = class SaveQueueManager {
+ 	* @param memoryConfig - Optional memory configuration to use for saving.
+ 	*/
+ 	enqueueSave(threadId, messageList, memoryConfig) {
+-		const next = (this.saveQueues.get(threadId) || Promise.resolve()).then(() => this.persistUnsavedMessages(messageList, memoryConfig)).catch((err) => {
+-			this.logger?.error?.("Error in enqueueSave", {
+-				err,
+-				threadId
+-			});
+-		}).then(() => {
++		const next = (this.saveQueues.get(threadId) || Promise.resolve()).catch(() => {}).then(() => this.persistUnsavedMessages(messageList, memoryConfig)).finally(() => {
+ 			if (this.saveQueues.get(threadId) === next) this.saveQueues.delete(threadId);
+ 		});
+ 		this.saveQueues.set(threadId, next);
+@@ -37034,6 +37029,11 @@ var Agent = class Agent extends MastraBase {
+ 	abortThreadStream(options) {
+ 		return agentThreadStreamRuntime.abortThread(options, this.getPubSub());
+ 	}
++	/** Pe.Tools patch (@mastra/core 1.61.0): release the thread's suspended run if it already detached. */
++	releaseDetachedThreadRun(options) {
++		const runId = agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
++		return runId ? agentThreadStreamRuntime.releaseDetachedRun(runId, this.getPubSub()) : false;
++	}
+ 	abortRunStream(runId) {
+ 		return agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
+ 	}
+diff --git a/dist/agent-NkjbehmN.cjs b/dist/agent-NkjbehmN.cjs
+index be2498255e982bc97e44b59d69166bc8e68d2a30..17fd64d3a5c7708b20f2e02d1a185817f230d04c 100644
+--- a/dist/agent-NkjbehmN.cjs
++++ b/dist/agent-NkjbehmN.cjs
+@@ -30996,12 +30996,7 @@ var SaveQueueManager = class SaveQueueManager {
+ 	* @param memoryConfig - Optional memory configuration to use for saving.
+ 	*/
+ 	enqueueSave(threadId, messageList, memoryConfig) {
+-		const next = (this.saveQueues.get(threadId) || Promise.resolve()).then(() => this.persistUnsavedMessages(messageList, memoryConfig)).catch((err) => {
+-			this.logger?.error?.("Error in enqueueSave", {
+-				err,
+-				threadId
+-			});
+-		}).then(() => {
++		const next = (this.saveQueues.get(threadId) || Promise.resolve()).catch(() => {}).then(() => this.persistUnsavedMessages(messageList, memoryConfig)).finally(() => {
+ 			if (this.saveQueues.get(threadId) === next) this.saveQueues.delete(threadId);
+ 		});
+ 		this.saveQueues.set(threadId, next);
+@@ -37036,6 +37031,12 @@ var Agent = class Agent extends require_base.MastraBase {
+ 	abortThreadStream(options) {
+ 		return require_storage$1.agentThreadStreamRuntime.abortThread(options, this.getPubSub());
+ 	}
++	/** Pe.Tools patch (@mastra/core 1.61.0): release the thread's suspended run if it already detached. */
++	releaseDetachedThreadRun(options) {
++		const runtime = require_storage$1.agentThreadStreamRuntime;
++		const runId = runtime.getActiveThreadRunId(options, this.getPubSub());
++		return runId ? runtime.releaseDetachedRun(runId, this.getPubSub()) : false;
++	}
+ 	abortRunStream(runId) {
+ 		return require_storage$1.agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
+ 	}
 diff --git a/dist/agent-controller/agent-controller.d.ts b/dist/agent-controller/agent-controller.d.ts
-index dbffa46296d9acf356c6c307bb2de2537fb5d42d..ca0f7d1aa2a3820e807e615fa66f855a2049b0bd 100644
+index dbffa46296d9acf356c6c307bb2de2537fb5d42d..58bf3f1a48ae6a114497de22b2e5dd09112a8dc6 100644
 --- a/dist/agent-controller/agent-controller.d.ts
 +++ b/dist/agent-controller/agent-controller.d.ts
 @@ -247,6 +247,13 @@ export declare class AgentController<TState = {}> {
@@ -41,7 +102,7 @@ index c05ae9f4987f57d3d14b5c54f5e7a7a541f6ac64..50e042efde5151a2593b8742a954a7d7
       * Clear the modified-files tally without touching the rest of the snapshot.
       * Used after a clone, which starts the cloned thread with a clean working set
 diff --git a/dist/agent-controller-DnS5KSfl.cjs b/dist/agent-controller-DnS5KSfl.cjs
-index bb70f63aee5dc09492c50dc57c37b41f36f70c0c..3f91cec3bcf79f2dcb06234adfa418bf4cec07d9 100644
+index bb70f63aee5dc09492c50dc57c37b41f36f70c0c..dfbadd372ac84a940905c76b5aa6e93b0e34c31c 100644
 --- a/dist/agent-controller-DnS5KSfl.cjs
 +++ b/dist/agent-controller-DnS5KSfl.cjs
 @@ -1577,13 +1577,12 @@ var SessionThread = class {
@@ -74,7 +135,22 @@ index bb70f63aee5dc09492c50dc57c37b41f36f70c0c..3f91cec3bcf79f2dcb06234adfa418bf
  	/**
  	* Clear the modified-files tally without touching the rest of the snapshot.
  	* Used after a clone, which starts the cloned thread with a clean working set
-@@ -3514,10 +3518,11 @@ var Session = class {
+@@ -3492,6 +3496,14 @@ var Session = class {
+ 			this.run.requestAbort({ deferSignal: true });
+ 			return;
+ 		}
++		// Pe.Tools patch (@mastra/core 1.61.0): a parked run that already detached is out of this
++		// session's reach while the agent keeps it warm, blocking the thread. Release it and stop:
++		// there is no run to abort, and tearing down the stream would drop the thread binding.
++		const threadId = this.thread.getId();
++		if (threadId && !this.run.isRunning() && this.machinery.getAgent().releaseDetachedThreadRun({
++			resourceId: this.identity.getResourceId(),
++			threadId
++		})) return;
+ 		this.stream.abort();
+ 		this.run.requestAbort();
+ 	}
+@@ -3514,10 +3526,11 @@ var Session = class {
  	* notifies subscribers so stale suspension UI doesn't linger.
  	*/
  	abort() {
@@ -88,7 +164,7 @@ index bb70f63aee5dc09492c50dc57c37b41f36f70c0c..3f91cec3bcf79f2dcb06234adfa418bf
  			type: "display_state_changed",
  			displayState: this.displayState.get()
  		});
-@@ -3552,6 +3557,7 @@ var Session = class {
+@@ -3552,6 +3565,7 @@ var Session = class {
  	* the run as-is.
  	*/
  	respondToToolApproval({ decision, toolCallId, requestContext, declineContext }) {
@@ -96,7 +172,7 @@ index bb70f63aee5dc09492c50dc57c37b41f36f70c0c..3f91cec3bcf79f2dcb06234adfa418bf
  		this.approval.respond({
  			decision,
  			toolCallId,
-@@ -3562,6 +3568,10 @@ var Session = class {
+@@ -3562,6 +3576,10 @@ var Session = class {
  				if (category) this.grantCategory(category);
  			}
  		});
@@ -107,7 +183,7 @@ index bb70f63aee5dc09492c50dc57c37b41f36f70c0c..3f91cec3bcf79f2dcb06234adfa418bf
  	}
  	/**
  	* Build the agent message input for a user turn, attaching any files as
-@@ -5278,6 +5288,12 @@ var AgentController = class {
+@@ -5278,6 +5296,12 @@ var AgentController = class {
  			metadata: result.thread.metadata
  		};
  	}
@@ -120,60 +196,16 @@ index bb70f63aee5dc09492c50dc57c37b41f36f70c0c..3f91cec3bcf79f2dcb06234adfa418bf
  	async readThreadMetadataValue({ threadId, key }) {
  		if (!this.#resolveStorage()) return void 0;
  		try {
-diff --git a/dist/agent-controller-DnS5KSfl.cjs b/dist/agent-controller-DnS5KSfl.cjs
---- a/dist/agent-controller-DnS5KSfl.cjs
-+++ b/dist/agent-controller-DnS5KSfl.cjs
-@@ -5828,5 +5828,6 @@ var AgentController = class {
+@@ -5813,6 +5837,7 @@ var AgentController = class {
  		const shared = {
  			maxSteps: CONTROLLER_MAX_STEPS,
  			savePerStep: false,
 +			persistPartialOnAbort: true,
  			requireToolApproval: !isYolo && !channelAutoApprove
  		};
+ 		const fableFallback = buildFableFallbackProviderOptions(session.model.get());
 diff --git a/dist/agent-controller-sWTmXOK3.js b/dist/agent-controller-sWTmXOK3.js
---- a/dist/agent-controller-sWTmXOK3.js
-+++ b/dist/agent-controller-sWTmXOK3.js
-@@ -5828,5 +5828,6 @@ var AgentController = class {
- 		const shared = {
- 			maxSteps: CONTROLLER_MAX_STEPS,
- 			savePerStep: false,
-+			persistPartialOnAbort: true,
- 			requireToolApproval: !isYolo && !channelAutoApprove
- 		};
-diff --git a/dist/agent-DSxJoGjY.js b/dist/agent-DSxJoGjY.js
---- a/dist/agent-DSxJoGjY.js
-+++ b/dist/agent-DSxJoGjY.js
-@@ -30996,11 +30996,6 @@ var SaveQueueManager = class {
- 	*/
- 	enqueueSave(threadId, messageList, memoryConfig) {
--		const next = (this.saveQueues.get(threadId) || Promise.resolve()).then(() => this.persistUnsavedMessages(messageList, memoryConfig)).catch((err) => {
--			this.logger?.error?.("Error in enqueueSave", {
--				err,
--				threadId
--			});
--		}).then(() => {
-+		const next = (this.saveQueues.get(threadId) || Promise.resolve()).catch(() => {}).then(() => this.persistUnsavedMessages(messageList, memoryConfig)).finally(() => {
- 			if (this.saveQueues.get(threadId) === next) this.saveQueues.delete(threadId);
- 		});
- 		this.saveQueues.set(threadId, next);
-diff --git a/dist/agent-NkjbehmN.cjs b/dist/agent-NkjbehmN.cjs
---- a/dist/agent-NkjbehmN.cjs
-+++ b/dist/agent-NkjbehmN.cjs
-@@ -30998,11 +30998,6 @@ var SaveQueueManager = class {
- 	*/
- 	enqueueSave(threadId, messageList, memoryConfig) {
--		const next = (this.saveQueues.get(threadId) || Promise.resolve()).then(() => this.persistUnsavedMessages(messageList, memoryConfig)).catch((err) => {
--			this.logger?.error?.("Error in enqueueSave", {
--				err,
--				threadId
--			});
--		}).then(() => {
-+		const next = (this.saveQueues.get(threadId) || Promise.resolve()).catch(() => {}).then(() => this.persistUnsavedMessages(messageList, memoryConfig)).finally(() => {
- 			if (this.saveQueues.get(threadId) === next) this.saveQueues.delete(threadId);
- 		});
- 		this.saveQueues.set(threadId, next);
-diff --git a/dist/agent-controller-sWTmXOK3.js b/dist/agent-controller-sWTmXOK3.js
-index c3ffac6c49257d0bc21dafa0a93a30307a36f213..a4b410f40d6cdde7ab056fa5a63fb5cfb9872627 100644
+index c3ffac6c49257d0bc21dafa0a93a30307a36f213..d53e285541504ae56bf34e378724bea813f43350 100644
 --- a/dist/agent-controller-sWTmXOK3.js
 +++ b/dist/agent-controller-sWTmXOK3.js
 @@ -1577,13 +1577,12 @@ var SessionThread = class {
@@ -206,7 +238,22 @@ index c3ffac6c49257d0bc21dafa0a93a30307a36f213..a4b410f40d6cdde7ab056fa5a63fb5cf
  	/**
  	* Clear the modified-files tally without touching the rest of the snapshot.
  	* Used after a clone, which starts the cloned thread with a clean working set
-@@ -3514,10 +3518,11 @@ var Session = class {
+@@ -3492,6 +3496,14 @@ var Session = class {
+ 			this.run.requestAbort({ deferSignal: true });
+ 			return;
+ 		}
++		// Pe.Tools patch (@mastra/core 1.61.0): a parked run that already detached is out of this
++		// session's reach while the agent keeps it warm, blocking the thread. Release it and stop:
++		// there is no run to abort, and tearing down the stream would drop the thread binding.
++		const threadId = this.thread.getId();
++		if (threadId && !this.run.isRunning() && this.machinery.getAgent().releaseDetachedThreadRun({
++			resourceId: this.identity.getResourceId(),
++			threadId
++		})) return;
+ 		this.stream.abort();
+ 		this.run.requestAbort();
+ 	}
+@@ -3514,10 +3526,11 @@ var Session = class {
  	* notifies subscribers so stale suspension UI doesn't linger.
  	*/
  	abort() {
@@ -220,7 +267,7 @@ index c3ffac6c49257d0bc21dafa0a93a30307a36f213..a4b410f40d6cdde7ab056fa5a63fb5cf
  			type: "display_state_changed",
  			displayState: this.displayState.get()
  		});
-@@ -3552,6 +3557,7 @@ var Session = class {
+@@ -3552,6 +3565,7 @@ var Session = class {
  	* the run as-is.
  	*/
  	respondToToolApproval({ decision, toolCallId, requestContext, declineContext }) {
@@ -228,7 +275,7 @@ index c3ffac6c49257d0bc21dafa0a93a30307a36f213..a4b410f40d6cdde7ab056fa5a63fb5cf
  		this.approval.respond({
  			decision,
  			toolCallId,
-@@ -3562,6 +3568,10 @@ var Session = class {
+@@ -3562,6 +3576,10 @@ var Session = class {
  				if (category) this.grantCategory(category);
  			}
  		});
@@ -239,7 +286,7 @@ index c3ffac6c49257d0bc21dafa0a93a30307a36f213..a4b410f40d6cdde7ab056fa5a63fb5cf
  	}
  	/**
  	* Build the agent message input for a user turn, attaching any files as
-@@ -5278,6 +5288,12 @@ var AgentController = class {
+@@ -5278,6 +5296,12 @@ var AgentController = class {
  			metadata: result.thread.metadata
  		};
  	}
@@ -252,3 +299,91 @@ index c3ffac6c49257d0bc21dafa0a93a30307a36f213..a4b410f40d6cdde7ab056fa5a63fb5cf
  	async readThreadMetadataValue({ threadId, key }) {
  		if (!this.#resolveStorage()) return void 0;
  		try {
+@@ -5813,6 +5837,7 @@ var AgentController = class {
+ 		const shared = {
+ 			maxSteps: CONTROLLER_MAX_STEPS,
+ 			savePerStep: false,
++			persistPartialOnAbort: true,
+ 			requireToolApproval: !isYolo && !channelAutoApprove
+ 		};
+ 		const fableFallback = buildFableFallbackProviderOptions(session.model.get());
+diff --git a/dist/storage-CQwCzQE9.cjs b/dist/storage-CQwCzQE9.cjs
+index 358287dffc5e0070c0ac8dc84241fd885dd589dc..9d5990e736a021385a45d82ee40002ab8d603819 100644
+--- a/dist/storage-CQwCzQE9.cjs
++++ b/dist/storage-CQwCzQE9.cjs
+@@ -558,6 +558,35 @@ var AgentThreadStreamRuntime = class {
+ 			abortSignal: abortController.signal
+ 		};
+ 	}
++	/**
++	* Pe.Tools patch (@mastra/core 1.61.0): release a suspended run that already detached (no
++	* prepared run left to abort), as the stale sweep would, so the thread is not held
++	* `thread-blocked` until the suspended-run TTL lapses. Returns false for any other run.
++	*/
++	releaseDetachedRun(runId, pubsub) {
++		const state = this.#getState(pubsub);
++		if (state.preparedRunsById.has(runId) || !this.#isSuspendedRun(state, runId)) return false;
++		const record = state.threadRunsById.get(runId);
++		const key = state.threadKeysByRunId.get(runId);
++		if (!record || !key) return false;
++		state.abortedRunIds.add(runId);
++		state.threadRunsByStreamId.delete(record.streamId);
++		state.watchedThreadStreamIds.delete(record.streamId);
++		state.threadRunsById.delete(runId);
++		state.threadKeysByRunId.delete(runId);
++		this.#clearSuspendedRun(state, runId);
++		this.#releaseThreadLease(pubsub, key, runId);
++		if (state.activeThreadRunIds.get(key) === runId) {
++			state.activeThreadRunIds.delete(key);
++			state.activeThreadStreamIds.delete(key);
++		}
++		this.#publish(pubsub, key, {
++			type: "run-aborted",
++			runId,
++			streamId: record.streamId
++		});
++		return true;
++	}
+ 	abortRun(runId, pubsub) {
+ 		const state = this.#getState(pubsub);
+ 		const preparedRun = state.preparedRunsById.get(runId);
+diff --git a/dist/storage-P6lCyZ--.js b/dist/storage-P6lCyZ--.js
+index d94c0080ca92f99839ebe2c2ab54f3242c8bec9c..c0ff28045b743e8341d26454db9e09a85190c39d 100644
+--- a/dist/storage-P6lCyZ--.js
++++ b/dist/storage-P6lCyZ--.js
+@@ -558,6 +558,35 @@ var AgentThreadStreamRuntime = class {
+ 			abortSignal: abortController.signal
+ 		};
+ 	}
++	/**
++	* Pe.Tools patch (@mastra/core 1.61.0): release a suspended run that already detached (no
++	* prepared run left to abort), as the stale sweep would, so the thread is not held
++	* `thread-blocked` until the suspended-run TTL lapses. Returns false for any other run.
++	*/
++	releaseDetachedRun(runId, pubsub) {
++		const state = this.#getState(pubsub);
++		if (state.preparedRunsById.has(runId) || !this.#isSuspendedRun(state, runId)) return false;
++		const record = state.threadRunsById.get(runId);
++		const key = state.threadKeysByRunId.get(runId);
++		if (!record || !key) return false;
++		state.abortedRunIds.add(runId);
++		state.threadRunsByStreamId.delete(record.streamId);
++		state.watchedThreadStreamIds.delete(record.streamId);
++		state.threadRunsById.delete(runId);
++		state.threadKeysByRunId.delete(runId);
++		this.#clearSuspendedRun(state, runId);
++		this.#releaseThreadLease(pubsub, key, runId);
++		if (state.activeThreadRunIds.get(key) === runId) {
++			state.activeThreadRunIds.delete(key);
++			state.activeThreadStreamIds.delete(key);
++		}
++		this.#publish(pubsub, key, {
++			type: "run-aborted",
++			runId,
++			streamId: record.streamId
++		});
++		return true;
++	}
+ 	abortRun(runId, pubsub) {
+ 		const state = this.#getState(pubsub);
+ 		const preparedRun = state.preparedRunsById.get(runId);

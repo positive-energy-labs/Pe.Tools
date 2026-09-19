@@ -113,11 +113,12 @@ describe("validateFormula", () => {
 /* ── the retarget: the authored family.json IS the parameter source ───────── */
 
 describe("authoredFormulaParams", () => {
-  it("flattens family + shared parameters into one name space", () => {
-    const params = authoredFormulaParams(
-      { Width: { formula: undefined }, Height: { formula: "Width * 2" } },
-      { "PE Tag": { isInstance: true } },
-    );
+  it("reads family and shared parameters from one name space", () => {
+    const params = authoredFormulaParams({
+      Width: { formula: undefined },
+      Height: { formula: "Width * 2" },
+      "PE Tag": { isInstance: true },
+    });
     expect(params.map((x) => x.name)).toEqual(["Width", "Height", "PE Tag"]);
     expect(validateFormula({ paramName: "Height", draft: "Width * 2", params })).toEqual([]);
   });
@@ -125,10 +126,7 @@ describe("authoredFormulaParams", () => {
   it("treats an authored parameter with no isInstance as a TYPE parameter", () => {
     // Revit's default, and the authored schema's (`isInstance` is nullable) — so the
     // type-refs-instance law still applies to a plain authored parameter.
-    const params = authoredFormulaParams(
-      { Height: {}, Clearance: { isInstance: true } },
-      undefined,
-    );
+    const params = authoredFormulaParams({ Height: {}, Clearance: { isInstance: true } });
     const problems = validateFormula({ paramName: "Height", draft: "Clearance + 1", params });
     expect(problems.some((x) => x.kind === "type-refs-instance")).toBe(true);
   });

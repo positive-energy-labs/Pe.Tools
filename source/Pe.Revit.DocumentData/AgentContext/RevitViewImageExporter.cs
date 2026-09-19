@@ -1,5 +1,6 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows.Media.Imaging;
+using Pe.Revit.Tasks;
 using Pe.Shared.RevitData;
 
 namespace Pe.Revit.DocumentData.AgentContext;
@@ -14,8 +15,47 @@ namespace Pe.Revit.DocumentData.AgentContext;
 /// </summary>
 public static class RevitViewImageExporter {
     public static RevitViewImageData Export(Document document, View view, int pixelSize) {
-        var producedPath = ExportToTemp(document, view, pixelSize, out var clamped);
-        return BuildResult(document, view, producedPath, clamped, TryModelRect(view), null);
+        var producedPath = ExportCropped(document, view, pixelSize, out var clamped);
+        return BuildResult(document, view, producedPath, clamped, TryModelRect(view), null, TryRegistration(view, producedPath));
+    }
+
+    /// <summary>
+    ///     ExportImage fits the view's whole EXTENT, not its crop: annotations and datums the crop does not clip (a grid or
+    ///     text far outside) widen it, so the PNG no longer covers the crop and cannot be registered (D4, project-a Pool House: an
+    ///     84 x 84 ft crop exported 1500 x 2171 px with the plan in one corner). Those elements draw nothing inside the export
+    ///     window, so they are hidden inside a rollback sandbox for the export and never reach the document. An element that
+    ///     crosses the window still widens it; the registration's aspect gate refuses that honestly.
+    /// </summary>
+    private static string ExportCropped(Document document, View view, int pixelSize, out int clampedPixelSize) {
+        if (view is ViewSheet || !view.CropBoxActive || document.IsReadOnly)
+            return ExportToTemp(document, view, pixelSize, out clampedPixelSize);
+        using var sandbox = DocumentSandbox.BeginRollback(document, "view-image export window");
+        var outside = OutsideExportWindow(document, view);
+        // A view Revit will not let us touch (e.g. owned by another user) exports as is; the aspect gate then decides.
+        try {
+            if (outside.Count > 0) {
+                view.HideElements(outside);
+                document.Regenerate();
+            }
+        } catch (Autodesk.Revit.Exceptions.ApplicationException) { }
+        return ExportToTemp(document, view, pixelSize, out clampedPixelSize);
+    }
+
+    /// <summary>
+    ///     Annotation and datum elements whose view bounding box misses the model crop. The window is the model crop even with
+    ///     annotation crop on: hold 5d0124e/88746ed showed an annotation-crop view with nothing past the model crop exports exactly
+    ///     the model crop, so anything drawn between the two crops would only widen the image past what registration can place.
+    /// </summary>
+    private static List<ElementId> OutsideExportWindow(Document document, View view) {
+        var crop = view.CropBox;
+        var toCrop = crop.Transform.Inverse;
+        double minX = crop.Min.X, maxX = crop.Max.X, minY = crop.Min.Y, maxY = crop.Max.Y;
+        return new FilteredElementCollector(document, view.Id).WhereElementIsNotElementType()
+            .Where(e => e.Category is { CategoryType: CategoryType.Annotation } category
+                        && category.BuiltInCategory != BuiltInCategory.OST_CropBoundary && e.CanBeHidden(view))
+            .Where(e => e.get_BoundingBox(view) is { } box && Corners(box).Select(toCrop.OfPoint).ToList() is var p
+                        && (p.Max(q => q.X) < minX || p.Min(q => q.X) > maxX || p.Max(q => q.Y) < minY || p.Min(q => q.Y) > maxY))
+            .Select(e => e.Id).ToList();
     }
 
     /// <summary>Focus capture: temporary crop box around <paramref name="modelBox" />, rolled back after export.</summary>
@@ -55,9 +95,9 @@ public static class RevitViewImageExporter {
             ApplyCrop(view, modelBox, marginPercent);
         });
         try {
-            var producedPath = ExportToTemp(document, view, pixelSize, out var clamped);
-            var modelRect = TryModelRect(view);
-            return BuildResult(document, view, producedPath, clamped, modelRect, null);
+            var producedPath = ExportCropped(document, view, pixelSize, out var clamped);
+            // Read while the temporary crop is still set: it is the crop the image was exported with.
+            return BuildResult(document, view, producedPath, clamped, TryModelRect(view), null, TryRegistration(view, producedPath));
         } finally {
             RunCropTransaction(document, "PE restore crop", () => {
                 view.CropBox = originalCrop;
@@ -141,7 +181,7 @@ public static class RevitViewImageExporter {
 
         var croppedPath = CropSheetPng(sheetPath, outline, box, marginPercent);
         var schedule = (ViewSchedule)document.GetElement(instance.ScheduleId);
-        return BuildResult(document, schedule, croppedPath, pixelSize, null, sheet.SheetNumber);
+        return BuildResult(document, schedule, croppedPath, pixelSize, null, sheet.SheetNumber, (null, RevitViewImageRegistrationRefusal.NoCrop));
     }
 
     private static void ApplyCrop(View view, BoundingBoxXYZ modelBox, double marginPercent) {
@@ -191,6 +231,26 @@ public static class RevitViewImageExporter {
         }
     }
 
+    /// <summary>Pixel-to-model registration from the crop box transform, so a rotated crop is placed honestly.</summary>
+    private static (RevitViewImageRegistration?, RevitViewImageRegistrationRefusal?) TryRegistration(View view, string imagePath) {
+        if (view is ViewSheet || !view.CropBoxActive) return (null, RevitViewImageRegistrationRefusal.NoCrop);
+        if (!File.Exists(imagePath)) return (null, RevitViewImageRegistrationRefusal.NoImage);
+        var crop = view.CropBox;
+        var transform = crop.Transform;
+        BitmapFrame frame;
+        using (var stream = File.OpenRead(imagePath))
+            frame = BitmapDecoder.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad).Frames[0];
+        string sha;
+        using (var stream = File.OpenRead(imagePath))
+        using (var hash = System.Security.Cryptography.SHA256.Create())
+            sha = BitConverter.ToString(hash.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
+        return RevitViewImageRegistration.FromCrop(frame.PixelWidth, frame.PixelHeight, sha,
+            (crop.Min.X, crop.Min.Y), (crop.Max.X, crop.Max.Y),
+            (transform.Origin.X, transform.Origin.Y), (transform.BasisX.X, transform.BasisX.Y),
+            (transform.BasisY.X, transform.BasisY.Y));
+    }
+
+
     private static string CropSheetPng(string sheetPath, BoundingBoxUV outline, BoundingBoxXYZ box, double marginPercent) {
         BitmapFrame frame;
         using (var stream = File.OpenRead(sheetPath)) {
@@ -236,7 +296,8 @@ public static class RevitViewImageExporter {
         string producedPath,
         int pixelSize,
         RevitViewImageModelRect? modelRect,
-        string? sheetNumber
+        string? sheetNumber,
+        (RevitViewImageRegistration? Registration, RevitViewImageRegistrationRefusal? Refusal) registration
     ) {
         var kind = view switch {
             ViewSheet => RevitAgentContextHandleKind.Sheet,
@@ -264,7 +325,9 @@ public static class RevitViewImageExporter {
             pixelSize,
             scale,
             modelRect,
-            sheetNumber
+            sheetNumber,
+            registration.Registration,
+            registration.Refusal
         );
     }
 

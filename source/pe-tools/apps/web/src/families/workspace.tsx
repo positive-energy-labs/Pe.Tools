@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
-import { FAMILY_SCOPE_LIMIT, type FfReceipt } from "@pe/agent-contracts";
+import { FAMILY_CATALOG_LIMIT } from "@pe/agent-contracts";
 
-import type { Verdict } from "#/components/master-table/model";
+import { runFanOut, type CellWire } from "#/components/lang/band";
 import type { FamiliesStore } from "#/families/store";
 import { toHostIssue } from "#/host/issues";
 import {
@@ -13,16 +13,25 @@ import {
 } from "#/host/loaded-families-view";
 import { useLoadedFamiliesMatrixQuery } from "#/readings";
 import { useTableChips } from "#/components/anatomy";
-import { useFamiliesColumns, type ParamColumn, type TypeRow } from "#/families/matrix-columns";
+import {
+  familiesLockOf,
+  isYesNo,
+  useFamiliesColumns,
+  type ParamColumn,
+  type TypeRow,
+} from "#/families/matrix-columns";
 import type { PlanEntry } from "#/route";
 import { FamiliesWorkspaceProvider } from "#/families/workspace-context";
 import { FamiliesWorkspaceView } from "#/families/workspace-view";
 import { DEMO_FAMILIES } from "#/families/seeds";
+import { familyCellEntries } from "#/families/staged";
+import { familyVerdicts } from "#/families/verdict";
+import { typeRowKey } from "#/families/picks";
 
 /**
- * Revit reloads every applied family under a new element id (w8-revit trip 12) and the receipt
- * names only the old one, so once an apply settles, whatever its outcome, the audit re-resolves
- * its scope: rows, picks and the next plan read the new ids. The sheet's hashes closed with it.
+ * Revit reloads every applied family under a new element id (w8-revit trip 12), so once an apply
+ * settles, whatever its outcome, the audit re-reads its scope. Rows, picks, receipts and the next
+ * plan key by family name, so they carry across; the sheet's hashes closed with it.
  */
 export function useAfterApply(busy: string | null, reresolve: () => void) {
   const applying = useRef(false);
@@ -53,12 +62,14 @@ function useFamiliesWorkspaceModel(
   const setPickedFamilies = (next: string[]) =>
     store.actions.setDraft((previous) => ({ ...previous, families: next }));
   const applied = store.applied;
-  const edits = store.edits;
-  const accepted = store.accepted;
+  const cells = store.cells;
+  const staged = useMemo(
+    () => familyCellEntries(cells).filter((entry) => entry.cell.staged != null),
+    [cells],
+  );
   const plan = store.plan;
-  const excludedIds = new Set(store.excludedIds);
-  const pickedIds = store.pickedIds;
-  const setPickedIds = store.actions.setPickedIds;
+  const picked = store.picked;
+  const setPicked = store.actions.setPicked;
   const applyData = store.applyData;
   const showUncommon = store.showUncommon;
   const setShowUncommon = store.actions.setShowUncommon;
@@ -95,7 +106,7 @@ function useFamiliesWorkspaceModel(
         ? {
             filter: applied,
             budget: {
-              maxEntries: FAMILY_SCOPE_LIMIT,
+              maxEntries: FAMILY_CATALOG_LIMIT,
               maxSamplesPerEntry: 1000,
             },
             includeTempPlacement: true,
@@ -105,31 +116,23 @@ function useFamiliesWorkspaceModel(
   );
   const matrix = useLoadedFamiliesMatrixQuery(matrixRequest, {
     ...scope,
-    enabled: !fixture && connected && scope !== undefined && matrixRequest !== undefined,
+    // Not gated on the inventory's freshness: Revit busy with this very read lets the inventory
+    // go stale, and a gate on it aborted the read it was waiting for, forever (F-J1-4, hold 3).
+    // The resolved scope survives that gap; a bridge truly gone ends through the read's own wait.
+    enabled: !fixture && scope !== undefined && matrixRequest !== undefined,
   });
-  useAfterApply(busy, () => {
-    setPickedIds(new Set());
-    matrix.refresh();
-  });
+  useAfterApply(busy, () => matrix.refresh());
   const families = useMemo(
     () => fixtureFamilies ?? matrix.data?.families ?? [],
     [fixtureFamilies, matrix.data?.families],
   );
-
-  /* Esc drops the table's selection — the one piece of route state a stray click can build up.
-     It is deliberately ONE step and never touches scope, plan, or exclusions: those are
-     commitments, and a commitment should not fall out of the app on a keystroke. */
+  // Capture's contract takes ids: mirror this reading's name → id for it (see FamiliesPage.loaded).
+  const setLoaded = store.actions.setLoaded;
   useEffect(() => {
-    if (pickedIds.size === 0) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      const target = event.target as HTMLElement | null;
-      if (target?.closest("input,select,textarea,[contenteditable=true]")) return;
-      setPickedIds(new Set());
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [pickedIds]);
+    setLoaded(Object.fromEntries(families.map((family) => [family.familyName, family.familyId])));
+  }, [families, setLoaded]);
+  // Work holds exclusions by family name; so does every verdict and plan row read here.
+  const excludedNames = useMemo(() => new Set(Object.keys(store.excluded)), [store.excluded]);
 
   // ── table model ──────────────────────────────────────────────────────────────────────────────
   const { rows, params } = useMemo(() => {
@@ -149,6 +152,7 @@ function useFamiliesWorkspaceModel(
             isBuiltIn: param.definition.identity.kind === "BuiltInParameter",
             isProjectOnly: param.kind === "ProjectParameter",
             familyCount: 0,
+            yesNo: isYesNo(param.definition.dataTypeId),
             seen: new Set<string>(),
           };
           params.set(key, entry);
@@ -169,7 +173,7 @@ function useFamiliesWorkspaceModel(
           formulas[key] = param.formulaState;
         }
         rows.push({
-          key: `${family.familyUniqueId}::${typeName}`,
+          key: typeRowKey(family, typeName),
           familyId: family.familyId,
           familyName: family.familyName,
           categoryName: family.categoryName ?? "",
@@ -185,89 +189,33 @@ function useFamiliesWorkspaceModel(
   }, [families]);
   const totalFamilies = families.length;
 
-  const planByFamilyId = useMemo(() => {
-    const map = new Map<number, PlanEntry>();
-    for (const entry of plan?.entries ?? []) map.set(Number(entry.id), entry);
-    return map;
-  }, [plan]);
-  const receiptByFamilyId = useMemo(() => {
-    const map = new Map<number, FfReceipt>();
-    for (const entry of applyData?.receipts ?? []) map.set(entry.familyId, entry);
-    return map;
-  }, [applyData]);
-
+  const planByName = useMemo(
+    () => new Set((plan?.entries ?? []).map((entry: PlanEntry) => entry.id)),
+    [plan],
+  );
   const familyState = useMemo(
-    () =>
-      (familyId: number): Verdict => {
-        const done = receiptByFamilyId.get(familyId);
-        if (done) {
-          return done.success
-            ? {
-                word: done.converged ? "converged" : "residue",
-                tone: done.converged ? "done" : "alarm",
-                note: `${done.residue.length} change(s) remaining; ${done.errors.length} error(s)`,
-              }
-            : {
-                // A refused write is the one thing on this row asking for a person: the ONE alarm.
-                word: "failed",
-                tone: "alarm",
-                note: done.error ?? "apply failed with no reported reason",
-              };
-        }
-        const entry = planByFamilyId.get(familyId);
-        if (!plan) {
-          return {
-            word: "unplanned",
-            tone: "mute",
-            dim: true,
-            note: "no plan compiled yet — the table is scope, not judgment",
-          };
-        }
-        if (!entry) {
-          return {
-            word: "outside spec",
-            tone: "mute",
-            dim: true,
-            note: "in scope, but the planned spec does not claim this family",
-          };
-        }
-        const flag = entry.flag;
-        // Not a warning about the model and not a refusal — a verdict with nothing behind it.
-        if (flag) return { word: "no actions", tone: "mute", note: flag };
-        return excludedIds.has(familyId)
-          ? {
-              word: "excluded",
-              tone: "mute",
-              dim: true,
-              note: "excluded from apply in the decision queue",
-            }
-          : {
-              /* Queued actions are UNSAVED work: nothing has left the page, and caution is the
-                 language's staged rank. Deliberately NOT the commit blue — that is the verb's,
-                 and a state dot wearing it would spend the one filled blue on a readout. */
-              word: "included",
-              tone: "caution",
-              note: `${entry.actions} action(s) queued`,
-            };
-      },
-    [plan, planByFamilyId, receiptByFamilyId, excludedIds],
+    () => familyVerdicts(plan, applyData?.receipts ?? [], excludedNames),
+    [plan, applyData, excludedNames],
   );
 
+  // The one families cell wire: the store's write, plus the lock facts only the matrix knows.
+  const wire = useMemo(
+    (): CellWire => ({ ...store.wire, lockOf: familiesLockOf(rows, params) }),
+    [store.wire, rows, params],
+  );
   const { columns, uncommonCount } = useFamiliesColumns({
     familyState,
     params,
-    pickedIds,
-    setPickedIds,
     showUncommon,
     totalFamilies,
-    edits,
-    accepted,
+    cells,
     propose: store.actions.propose,
+    wire,
   });
 
-  const acceptedFamilies = useMemo(
-    () => new Set(accepted.map((edit) => edit.familyId)).size,
-    [accepted],
+  const stagedFamilies = useMemo(
+    () => new Set(staged.map((entry) => entry.familyName)).size,
+    [staged],
   );
 
   const chips = useTableChips({
@@ -290,18 +238,24 @@ function useFamiliesWorkspaceModel(
         ? { label: `uncommon · ${uncommonCount} hidden`, onClear: () => setShowUncommon(true) }
         : null,
     picked:
-      pickedIds.size > 0
+      picked.size > 0
         ? {
-            label: `capture · ${pickedIds.size} picked · esc`,
-            onClear: () => setPickedIds(new Set()),
+            label: `capture · ${picked.size} picked · esc`,
+            onClear: () => setPicked(new Set()),
           }
         : null,
-    // Accepted cells are what plan will generate: countable here, denied whole in one press.
+    // Staged cells are what plan will generate: countable here, removable in one press.
     staged:
-      accepted.length > 0
+      staged.length > 0
         ? {
-            label: `accepted · ${accepted.length} cell${accepted.length === 1 ? "" : "s"} · ${acceptedFamilies} famil${acceptedFamilies === 1 ? "y" : "ies"}`,
-            onClear: () => void store.actions.deny(accepted),
+            label: `staged · ${staged.length} cell${staged.length === 1 ? "" : "s"} · ${stagedFamilies} famil${stagedFamilies === 1 ? "y" : "ies"}`,
+            onClear: () =>
+              void runFanOut(
+                wire,
+                cells,
+                staged.map((entry) => entry.key),
+                "unstage",
+              ),
           }
         : null,
   });
@@ -309,31 +263,33 @@ function useFamiliesWorkspaceModel(
   // ── verbs ────────────────────────────────────────────────────────────────────────────────────
   const includedPlanned = useMemo(
     () =>
-      (plan?.entries ?? []).filter(
-        (entry) => !excludedIds.has(Number(entry.id)) && entry.flag === null,
-      ),
-    [plan, excludedIds],
+      (plan?.entries ?? []).filter((entry) => !excludedNames.has(entry.id) && entry.flag === null),
+    [plan, excludedNames],
   );
 
   const matrixIssue = matrix.error
     ? toHostIssue(matrix.error, "Couldn't load the matrix")
     : undefined;
+  /** The matrix read is in flight: an empty table is "reading", never "resolved to none". */
+  const matrixReading = !fixture && matrix.pending;
   const totalTypes = rows.length;
 
   // Families in scope the plan does not claim — surfaced as excluded-with-reason, never hidden.
   const outsideProfile = useMemo(
-    () => (plan ? families.filter((family) => !planByFamilyId.has(family.familyId)) : []),
-    [plan, families, planByFamilyId],
+    () => (plan ? families.filter((family) => !planByName.has(family.familyName)) : []),
+    [plan, families, planByName],
   );
 
   return {
     store,
+    /** The saved Work cannot be read: its refusal and start fresh are the only instruction, so
+     * every Work-bearing control is inert and no empty-Work instruction is drawn (F-J6-1). */
+    workUnreadable: store.handle.work.refusal != null,
     fixture,
     target,
     scope,
     draft,
-    edits,
-    accepted,
+    cells,
     placement,
     draftCategories,
     pickedFamilies,
@@ -342,9 +298,8 @@ function useFamiliesWorkspaceModel(
     setPickedFamilies,
     applied,
     plan,
-    excludedIds,
-    pickedIds,
-    setPickedIds,
+    picked,
+    setPicked,
     applyData,
     showUncommon,
     setShowUncommon,
@@ -361,14 +316,14 @@ function useFamiliesWorkspaceModel(
     rows,
     params,
     totalFamilies,
-    planByFamilyId,
-    receiptByFamilyId,
     familyState,
     columns,
     uncommonCount,
+    wire,
     chips,
     includedPlanned,
     matrixIssue,
+    matrixReading,
     totalTypes,
     outsideProfile,
   };

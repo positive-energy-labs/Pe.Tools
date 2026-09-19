@@ -6,6 +6,7 @@ import { FactChip } from "#/components/lang/chip";
 import { LangCellSpecimens } from "./lang-cells";
 import { LangStatusSpecimens } from "./lang-status";
 import { LangPressSpecimens } from "./lang-verbs";
+import { LangListSpecimens } from "./lang-list";
 import { LangWorkflowSpecimens } from "./lang-workflow";
 import { UiInputSpecimens } from "./ui-inputs";
 import { UiLayoutSpecimens } from "./ui-layout";
@@ -41,6 +42,7 @@ export function SwatchSpecimens() {
           <p className="t-small t-upper text-ink-2">lang · the design language primitives</p>
         </div>
         <LangWorkflowSpecimens />
+        <LangListSpecimens />
         <LangCellSpecimens />
         <LangStatusSpecimens />
         <LangPressSpecimens />

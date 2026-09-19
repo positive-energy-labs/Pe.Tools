@@ -1,9 +1,11 @@
+import { settingsFieldPointer } from "@pe/agent-contracts";
 import type { Column } from "#/components/master-table/model";
 import { ReadCell } from "#/components/master-table/cells";
 import { cellFromTrichotomy, type StateCellProps } from "#/components/lang/cell";
 import { PressContent } from "#/components/anatomy/press-content";
 import { Press } from "#/components/lang/press";
 import { NavStateCell } from "#/family/marks";
+import { parameterText } from "#/family/family-model";
 import {
   MARK_TITLE,
   agreementOf,
@@ -28,6 +30,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
     setStageType,
     proposalsAt,
     locate,
+    transitionsAt,
     editOverride,
     editLiteral,
   } = core;
@@ -64,7 +67,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
     cell: (row) => {
       // ── the ghost's ONE merged cell ─────────────────────────────────────────────────────────
       // A frozen literal has no per-type spread, so it gets no per-type cells: it gets one cell
-      // the width of all of them, left-aligned like every other value. MasterTable cannot express
+      // the width of all of them, left-aligned like every other value. Table cannot express
       // a colspan, so the anchor column renders it and its neighbours are SUPPRESSED — blank, but
       // blank WITH a reason, which is the same discipline every other refusal on this page keeps.
       if (row.kind === "ghost") {
@@ -74,7 +77,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
           return (
             <ReadCell
               value=""
-              reason={`Suppressed — part of the ONE merged value cell for ${row.name}, which begins in the first type column and spans all of them. There is exactly one literal for the whole family, so it is drawn once. (MasterTable has no spanning cell; this is the honest emulation of one.)`}
+              reason={`Suppressed — part of the ONE merged value cell for ${row.name}, which begins in the first type column and spans all of them. There is exactly one literal for the whole family, so it is drawn once. (Table has no spanning cell; this is the honest emulation of one.)`}
             />
           );
         const literal = bindingOf(world, draft, slug, property);
@@ -121,6 +124,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
               // derivation written a second time.
               proposalCell([], isUnsavedAt(world, draft, saved, row, typeName) ? literal : null),
               { value: literal },
+              parameterText,
             )}
             note={`The literal itself, as ONE cell across every type — EDITABLE. Typing here rewrites the number frozen into the geometry; it does not make it reachable. That is what binding is for. Emptying it is refused out loud — a dimension with no number is not a state.${
               isUnsavedAt(world, draft, saved, row, typeName)
@@ -186,8 +190,12 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
           {...cellFromTrichotomy(
             proposalCell(proposals, overlay === "draft" && unsaved ? draftValue : null),
             facts,
+            parameterText,
           )}
           onLocate={proposals[0] ? () => locate(proposals[0]!) : undefined}
+          transitions={transitionsAt(
+            proposals[0]?.id ?? settingsFieldPointer(["types", typeName, row.name]),
+          )}
         />
       );
 
@@ -253,7 +261,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
         placeholder: authored,
         note: `${
           proposals.length > 0
-            ? `Pea proposes ${proposals[0]!.proposed} here — but this cell is ORDINARY. Type your own value and the proposal is CLEARED on the spot: no accept, no deny, and the cell simply shows what you typed. ${override === undefined ? `Until then the type inherits ${authored || "nothing"}.` : `The type currently overrides with ${override}.`}${groundedNote}`
+            ? `Pea proposes ${proposals[0]!.proposed} here. Accept or deny it on the cell, or type your own value and the proposal is CLEARED on the spot. ${override === undefined ? `Until then the type inherits ${authored || "nothing"}.` : `The type currently overrides with ${override}.`}${groundedNote}`
             : override === undefined
               ? `"${typeName}" inherits ${authored || "nothing"} from the family — the grey number is the inheritance showing through, not a value this type holds. Type here to make it differ.${drifted ? ` The alarm underline says Revit disagrees; switch to ⇄ live to read its number in place.` : ""}${groundedNote}`
               : `"${typeName}" overrides the family value ${authored} with ${override}. Clear the cell to go back to inheriting.${drifted ? ` The alarm underline says Revit disagrees; switch to ⇄ live to read its number in place.` : ""}${groundedNote}`

@@ -13,9 +13,13 @@ import {
   actionAdmissionSchema,
   takeoffActions,
   sameAddress,
-  canonicalRouteInput,
   type TakeoffActionKey,
-  type TakeoffsRouteDocument,
+  stagedDecisions,
+  stagedTakeoffEdits,
+  takeoffDecisionKey,
+  takeoffEditKey,
+  takeoffsRouteState,
+  transitionPatches,
   type StagedRoomEdit,
   type ModelRoom,
 } from "@pe/agent-contracts";
@@ -67,7 +71,10 @@ export async function admitTakeoffAction(
     throw refused(`${key} requires an exact DocumentRef`);
   const target = admission.destination.ref;
   const work = deps.workspace ?? workspace;
-  let submitted: Pick<TakeoffsRouteDocument, "staged" | "decisions"> | undefined;
+  // What an admitted action consumes: the person's staged edits and verdicts, never proposals.
+  let submitted:
+    | { edits: Record<string, StagedRoomEdit>; decisions: Record<string, "accept" | "dismiss"> }
+    | undefined;
   let process: NativeProcess | undefined;
   let capture: Awaited<ReturnType<TakeoffCaptures["saved"]>> | undefined;
   const current = async () => {
@@ -119,7 +126,8 @@ export async function admitTakeoffAction(
       const view = await work.read(scope, "takeoffs");
       if (!view || view.revision !== revision)
         throw refused("Authored Work changed before action admission");
-      submitted = structuredClone(view.doc) as TakeoffsRouteDocument;
+      const doc = takeoffsRouteState.schema.parse(view.doc);
+      submitted = { edits: stagedTakeoffEdits(doc), decisions: stagedDecisions(doc) };
     }
     if (key === "takeoffs.sync") {
       if (!capture) throw refused("Sync requires its reviewed captureId");
@@ -130,7 +138,7 @@ export async function admitTakeoffAction(
       )
         throw refused("RHVAC file changed before admission");
     }
-    return { process, staged: submitted?.staged ?? [], decisions: submitted?.decisions ?? {} };
+    return { process, edits: submitted?.edits ?? {}, decisions: submitted?.decisions ?? {} };
   };
   return owner.admit(
     admission,
@@ -138,7 +146,7 @@ export async function admitTakeoffAction(
     async (execution) => {
       const frozen = preparedTakeoffSchema.parse(execution.prepared);
       process = frozen.process;
-      submitted = { staged: frozen.staged, decisions: frozen.decisions };
+      submitted = { edits: frozen.edits, decisions: frozen.decisions };
       if (admission.bases.captureId) {
         capture = await captures.saved(admission.bases.captureId);
         if (
@@ -196,7 +204,7 @@ export async function admitTakeoffAction(
         const zones = capture!.snapshot.world.zones.filter(
           (zone) => !selected.size || selected.has(zone.zone.guid),
         );
-        const edits = new Map((submitted?.staged ?? []).map((edit) => [edit.roomId, edit]));
+        const edits = new Map(Object.entries(submitted?.edits ?? {}));
         const blocked = zones.filter(
           (zone) =>
             zone.driftSqft === null ||
@@ -206,7 +214,7 @@ export async function admitTakeoffAction(
                 room.analysis?.state !== "current" ||
                 room.analysis.hold !== null ||
                 room.flags.some(
-                  (flag) => submitted?.decisions[`${room.guid}::${flag}`] === undefined,
+                  (flag) => submitted?.decisions[takeoffDecisionKey(room.guid, flag)] === undefined,
                 ),
             ) ||
             zone.runs.some((run) => run.orphaned > 0 || run.failures > 0),
@@ -331,21 +339,27 @@ export async function admitTakeoffAction(
           try {
             const current = await work.read(admission.bases.work.key, "takeoffs");
             if (!current) throw Error("Work unavailable after external success");
-            const doc = current.doc as TakeoffsRouteDocument;
-            const staged = doc.staged.filter(
-              (edit) =>
-                canonicalRouteInput(edit) !== canonicalRouteInput(consumed.get(edit.roomId)),
+            const doc = takeoffsRouteState.schema.parse(current.doc);
+            // Retire each consumed edit cell under the unchanged-cell rule: a value edited after
+            // review survives. The host's retirement writes with the person's rights.
+            const patches = [...consumed].flatMap(([roomId, edit]) =>
+              Object.entries(edit.next).flatMap(([field, value]) => {
+                const key = takeoffEditKey(roomId, field as keyof typeof edit.next);
+                const cell = doc.edits[key];
+                return cell
+                  ? transitionPatches(["edits"], key, cell, { kind: "retire", consumed: { value } })
+                  : [];
+              }),
             );
-            const publication =
-              staged.length === doc.staged.length
-                ? { ok: true, unchanged: true }
-                : await work.apply(
-                    admission.bases.work.key,
-                    "takeoffs",
-                    admission.actor,
-                    [{ path: ["staged"], value: staged }],
-                    current.revision,
-                  );
+            const publication = !patches.length
+              ? { ok: true, unchanged: true }
+              : await work.apply(
+                  admission.bases.work.key,
+                  "takeoffs",
+                  "human",
+                  patches,
+                  current.revision,
+                );
             await execution.publish(publication);
           } catch (error) {
             await execution.publish({ ok: false, error: String(error) });

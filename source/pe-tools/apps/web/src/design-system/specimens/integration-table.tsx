@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Upload } from "lucide-react";
 
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
@@ -7,7 +7,9 @@ import { FactChip, Tag } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { Provenance, Section } from "#/components/lang/section";
 import { ActionButton } from "#/components/lang/action-button";
-import { MasterTable } from "#/components/master-table/master-table";
+import { Table } from "#/components/master-table/table";
+import { TableFrame } from "#/components/master-table/table-frame";
+import { useTableState } from "#/components/master-table/view";
 import type { Column } from "#/components/master-table/model";
 import { Gap } from "#/design-system/exhibit";
 import { PARAM_ROWS, ageText, cellProps, type ParamRow } from "#/design-system/specimens-data";
@@ -15,6 +17,8 @@ import { PARAM_ROWS, ageText, cellProps, type ParamRow } from "#/design-system/s
 const noop = () => {};
 
 export function RealTable() {
+  const [tableState, setTableState] = useTableState();
+  const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(() => new Set());
   const columns = useMemo<Column<ParamRow>[]>(
     () => [
       {
@@ -25,7 +29,7 @@ export function RealTable() {
         lock: true,
         sort: (r) => r.param,
         search: (r) => r.param,
-        // GAP (MasterTable): `td` is `p-0` and `Column` has no cell-class hook — only
+        // GAP (Table): `td` is `p-0` and `Column` has no cell-class hook — only
         // `headerClassName`, `width` and `right`. Every renderer must draw its own box model, so
         // cell padding is decided thirteen times per table instead of once by the primitive.
         cell: (r) => <span className="px-1.5 py-1 t-small text-ink">{r.param}</span>,
@@ -78,12 +82,12 @@ export function RealTable() {
     >
       <h3 className="pt-2 t-head text-ink">The real table</h3>
       <Provenance>
-        shipping MasterTable with StateCell as its value renderer · fixture rows are marked in the
+        shipping Table with StateCell as its value renderer · fixture rows are marked in the
         artifact head
       </Provenance>
       <p className="max-w-[80ch] pt-3 t-prose text-ink-2">
-        the actual MasterTable — the primitive atlas, takeoffs and families run on — with StateCell
-        as its cell renderer
+        the actual Table — the primitive atlas, takeoffs and families run on — with StateCell as its
+        cell renderer
       </p>
       <p className="max-w-[80ch] t-prose text-ink-2">
         The design-lang round hand-rolled its table, so the grammar was only ever proven against
@@ -141,31 +145,44 @@ export function RealTable() {
           </>
         }
       >
-        {/* MasterTable is `flex min-h-0 flex-1 flex-col` internally and expects a bounded parent. */}
+        {/* Table is `flex min-h-0 flex-1 flex-col` internally and expects a bounded parent. */}
         <div className="flex h-[26rem] flex-col">
-          <MasterTable
+          <TableFrame
+            label="params in scope"
             rows={PARAM_ROWS}
             columns={columns}
             rowKey={(r) => r.key}
-            scopeLabel="params in scope"
-            searchPlaceholder="search params…"
+            state={tableState}
+            onStateChange={setTableState}
             summary={<>13 params · 3 types</>}
-            // THE OWED MARKER (ruled 2026-08-16, fit reviews): the gutter locates the rows a
-            // person must act on — count in the tone's ink, sentence in the title, no verb.
-            // The locked param column offsets past it, which is the lock interaction the prop
-            // documents, exercised here on purpose.
-            gutter={(r) =>
-              r.agree === "drift"
-                ? {
-                    count: 1,
-                    title: "the model disagrees — a person must pick the real value",
-                    tone: "alarm",
-                  }
-                : r.stage === "staged"
-                  ? { count: 1, title: "staged and unsaved — commit or discard before leaving" }
-                  : null
-            }
-          />
+            searchPlaceholder="search params…"
+            selection={{ selected: selectedKeys, onChange: setSelectedKeys }}
+          >
+            <Table
+              rows={PARAM_ROWS}
+              columns={columns}
+              rowKey={(r) => r.key}
+              label="params in scope"
+              state={tableState}
+              onStateChange={setTableState}
+              selection={{ selected: selectedKeys, onChange: setSelectedKeys }}
+              // THE OWED MARKER (ruled 2026-08-16, fit reviews): the gutter locates the rows a
+              // person must act on — count in the tone's ink, sentence in the title, no verb.
+              // The locked param column offsets past it, which is the lock interaction the prop
+              // documents, exercised here on purpose.
+              gutter={(r) =>
+                r.agree === "drift"
+                  ? {
+                      count: 1,
+                      title: "the model disagrees — a person must pick the real value",
+                      tone: "alarm",
+                    }
+                  : r.stage === "staged"
+                    ? { count: 1, title: "staged and unsaved — commit or discard before leaving" }
+                    : null
+              }
+            />
+          </TableFrame>
         </div>
         {/* GAP (ArtifactFrame): the key belongs "inside the frame of the thing it describes", and
             the only place it fits is last-child-by-authorship. The `foot` slot is a flex control
@@ -174,7 +191,7 @@ export function RealTable() {
       </ArtifactFrame>
 
       <div className="flex flex-col gap-1.5 pt-1">
-        <span className="t-small t-upper text-ink">what MasterTable cannot express</span>
+        <span className="t-small t-upper text-ink">what Table cannot express</span>
         <Gap>
           <strong>the clause&apos;s residue.</strong> The cell-state clause (ruled 2026-08-16)
           discharged renderer identity, selection-as-hue, the hover law and the two-palette chrome —
@@ -189,9 +206,11 @@ export function RealTable() {
           of once by the primitive.
         </Gap>
         <Gap>
-          <strong>two heads.</strong> <code>scopeLabel</code> is required and MasterTable always
-          draws its own scope/search/chip strip, so the artifact frame&apos;s head band and the
-          table&apos;s head band stack. There is no way to hand the frame the scope label instead.
+          <strong>two heads, by composition.</strong> Chrome is a wrapper now (
+          <code>TableFrame</code>
+          ), so this specimen stacks the artifact frame&apos;s head over the table frame&apos;s only
+          because it wraps one in the other; a bare <code>Table</code> inside the artifact frame
+          would lose the search and chips the frame owns. There is no merged head.
         </Gap>
         <Gap>
           <strong>one chip family now.</strong> The strip&apos;s chips ARE <code>NarrowChip</code>{" "}

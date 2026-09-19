@@ -34,6 +34,7 @@ export function LiveScheduleGridWorkspace({
   target: chosen = null,
   thread,
   entry,
+  url = true,
 }: {
   workspaceId?: string;
   render?: (state: ScheduleGridState) => ReactNode;
@@ -45,6 +46,8 @@ export function LiveScheduleGridWorkspace({
   thread?: string;
   /** The route's URL page state (stage, pod, path), read once at mount. */
   entry?: EntitySearch;
+  /** False in a chat pane, which does not own the URL. */
+  url?: boolean;
 }) {
   const workbench = useContext(WorkbenchContext);
   const manifest = useMemo(() => schedulesManifest(), []);
@@ -85,7 +88,7 @@ export function LiveScheduleGridWorkspace({
   // `/schedules` owns its URL: the open schedule rides it, so a reload reopens it.
   const navigate = useNavigate();
   useEffect(() => {
-    if (!framed) return;
+    if (!framed || !url) return;
     void navigate({
       to: ".",
       search: (previous: Record<string, unknown>) => ({
@@ -94,7 +97,7 @@ export function LiveScheduleGridWorkspace({
       }),
       replace: true,
     } as never);
-  }, [framed, navigate, page.workspaceId]);
+  }, [framed, url, navigate, page.workspaceId]);
 
   const work = handle.work;
   const catalog = valueOf(handle.readings.catalog, scheduleCatalogSchema);
@@ -125,7 +128,8 @@ export function LiveScheduleGridWorkspace({
     const writing = patches.some((patch) => patch.value !== undefined);
     return work.write(
       writing && (!hasWork || !work.doc?.basis)
-        ? [{ path: ["basis"], value: { captureId: shown.id } }, ...patches]
+        ? // not a cell: basis
+          [{ path: ["basis"], value: { captureId: shown.id } }, ...patches]
         : patches,
       expectedRevision,
     );
@@ -154,6 +158,7 @@ export function LiveScheduleGridWorkspace({
                 : handle.actions.push.refusal;
   const state: ScheduleGridState = {
     slice: work.doc,
+    revision: work.revision,
     hydrated: work.current || work.revision !== null,
     refreshing: work.revision !== null && !work.current,
     apply,
@@ -171,7 +176,9 @@ export function LiveScheduleGridWorkspace({
     <div className="flex size-full min-h-0 min-w-0 flex-col">
       {(readingFailure || !target) && (
         <div role="status">
-          {readingFailure ?? "Select an available document and session to read schedules"}
+          {readingFailure ??
+            handle.bindingLost?.sentence ??
+            "Select an available document and session to read schedules"}
         </div>
       )}
       {hasWork && retained && basisId !== retained.id && (
@@ -199,6 +206,7 @@ export function LiveScheduleGridWorkspace({
       handle={handle as never}
       refreshPods={refreshPods}
       fixture={demo ? DEMO_SPEC : undefined}
+      url={url}
     >
       {audit}
     </EntityRouteView>

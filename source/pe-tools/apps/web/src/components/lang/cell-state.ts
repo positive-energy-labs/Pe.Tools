@@ -1,4 +1,4 @@
-import type { TrichotomyCellLike } from "@pe/agent-contracts";
+import { sameValue, type TrichotomyCellLike } from "@pe/agent-contracts";
 import type React from "react";
 
 /** The one squiggle slot. Ranked; exactly one may draw. `never` is NOT here on purpose —
@@ -30,8 +30,9 @@ export interface StateCellProps {
    * Who staged it — pea's square is pea's ink, yours is caution and carries the bold.
    * RULED 2026-08-16 (consolidation batch): authorship is a QUALIFIER of staging, not a fifth
    * axis — it only reads when `stage` is not clean. Census tables count four axes + qualifier.
-   * `cellFromTrichotomy` derives it from `proposal.by` and the staged value; hand-written
-   * callers that have no proposal behind the staging pass "you".
+   * Only Pea proposes, so `cellFromTrichotomy` reads a staged value equal to the standing
+   * proposal as Pea's (accepted verbatim) and anything else as yours; hand-written callers
+   * that have no proposal behind the staging pass "you".
    */
   stagedBy?: "pea" | "you";
   /**
@@ -78,8 +79,12 @@ export interface StateCellProps {
    * commit: the cell restores the prior value and shows a dismissible caution note carrying
    * the reason — §3's "restore AND say why, near the cell, without resizing the row". Requires
    * `scale="row"` and a string `value`; `cap` other than editable wins and renders locked.
+   * An async commit (a Work write) may return a promise of that refusal: it restores the same
+   * way when the refusal arrives, so typed text is never left looking accepted.
    */
-  onCommit?: (text: string) => string | void;
+  onCommit?: (
+    text: string,
+  ) => string | void | Promise<string | { message: string; detail?: string } | null | void>;
   /**
    * NUMERIC COMMIT (ruled 2026-08-16, fit reviews #2 — §3's named silent-swallow defect, killed
    * here): present ⇒ the commit path parses per `parseCell` before `onCommit` sees anything. A
@@ -105,7 +110,35 @@ export interface StateCellProps {
   onLocate?: () => void;
   /** Cell-to-cell navigation hook (Enter/Tab/arrows). Return true when the move was taken. */
   onNavigate?: (dir: "up" | "down" | "left" | "right") => boolean;
+  /**
+   * THE CELL'S OWN VERBS (verdict 2026-09-18: approve/deny belong to the cell, as transitions of
+   * the language). The caller decides which kinds are available; the cell draws exactly these,
+   * in this order, and holds NO availability logic. Typing is `stage` and stays `onCommit`.
+   * Card scale draws them inline after the value. Row scale costs zero footprint: they overlay
+   * the trailing edge while the cell is hovered or focused, and a focused table cell takes
+   * `a` / `d` / `u` through the hotkey registry. A run in flight marks the cell busy and inerts
+   * its verbs; a returned refusal shows its message beside the cell (the `onCommit` note).
+   */
+  transitions?: readonly CellTransition[];
+  /**
+   * A refusal this cell did not ask for: an aggregate's one write covered it and was refused.
+   * Drawn in the same note as the cell's own refusal; the caller clears it on its next write.
+   */
+  refused?: string;
 }
+
+export type CellTransitionKind = "accept" | "deny" | "unstage";
+
+export interface CellTransition {
+  kind: CellTransitionKind;
+  /** Resolves to a refusal when the write was refused; nothing or null when it landed. */
+  run: () => Promise<{ code: string; message: string; detail?: string } | null | void>;
+  /** What pressing it does, in this cell's words. Defaults to the kind's plain sentence. */
+  reason?: string;
+}
+
+/** The default counter word: a string as written, anything else as JSON — never `[object Object]`. */
+const showJson = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
 
 /**
  * THE ONE READER (ruled 2026-08-31, proposal-state demiurge). A trichotomy cell —
@@ -117,23 +150,25 @@ export interface StateCellProps {
  * - no `denied`: a denial CLEARS the proposal upstream and the cell shows the real value again.
  * - no `written`: a commit CLEARS `staged`; saved/unsaved and fresh/stale carry that signal.
  */
+
 export function cellFromTrichotomy(
   cell: Pick<TrichotomyCellLike, "proposal" | "staged">,
   facts: StateCellProps,
+  /** The caller's word for a counter-proposed value; domain values are the caller's to format. */
+  show: (value: unknown) => string = showJson,
 ): StateCellProps {
   const { proposal, staged } = cell;
   // Staging is the later rung, so it wins the stage slot; a proposal still standing behind a
   // staged value is authorship evidence, not a second state.
   const stage = staged != null ? "staged" : proposal != null ? "proposed" : "clean";
-  const stagedBy =
-    staged != null && proposal != null && proposal.by === "pea" && staged.value === proposal.value
-      ? "pea"
-      : "you";
+  const stagedBy = sameValue(staged, proposal) ? "pea" : "you";
   // Pea arguing against a staged value: both rungs stand and disagree. The fold draws; see
   // `counterValue` on StateCellProps.
   const contested =
-    staged != null && proposal != null && proposal.value !== staged.value
-      ? String(proposal.value)
+    staged != null && proposal != null && !sameValue(proposal, staged)
+      ? proposal.delete === true
+        ? "delete"
+        : show(proposal.value)
       : undefined;
   return {
     ...facts,

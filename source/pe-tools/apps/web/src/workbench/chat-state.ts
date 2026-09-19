@@ -5,7 +5,7 @@ import type {
   MastraMessagePart,
   PermissionRules,
 } from "@mastra/client-js";
-import { threadAccessPolicies, type ThreadViewState } from "@pe/agent-contracts";
+import { threadAccessPolicies, type ExpiredAsk, type ThreadViewState } from "@pe/agent-contracts";
 import { stringify } from "#/components/lang/code";
 import type { PeInspect } from "#/host/inspect.ts";
 
@@ -65,6 +65,10 @@ export type ToolOutcome = { result?: unknown } & (
   | { status: "in_progress" }
   | { status: "completed" }
   | { status: "failed"; error: string }
+  /** An ask whose turn is gone (turn end, cancel, host restart): a record, never answerable. */
+  | { status: "expired" }
+  /** A non-ask call a person's cancel stopped mid-run (the runtime's record): not a failure. */
+  | { status: "cancelled" }
 );
 
 export type ToolCall = {
@@ -99,6 +103,10 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
   const rows = threadRows(state);
   const calls: ToolCall[] = [];
   const seen = new Set<string>();
+  const expired = new Set(selectExpiredAsks(state).map((ask) => ask.toolCallId));
+  const cancelled = new Set((state.cancelledCalls ?? []).map((call) => call.toolCallId));
+  // A call the live frame holds an approval for is waiting on a person, not interrupted.
+  const waiting = new Set(selectApprovals(state.display).map((approval) => approval.toolCallId));
   for (const [messageAt, message] of rows.entries()) {
     for (const part of message.content.parts) {
       if (part.type !== "tool-invocation") continue;
@@ -109,30 +117,42 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
       const terminal =
         call.state === "result" || call.state === "output-error" || call.state === "output-denied";
       const interrupted =
-        !terminal && !active && (messageAt < rows.length - 1 || state.display.isRunning !== true);
+        !terminal &&
+        !active &&
+        !waiting.has(call.toolCallId) &&
+        (messageAt < rows.length - 1 || state.display.isRunning !== true);
       const args = call.rawInput ?? call.args;
       const result = call.result ?? active?.result;
-      // Mastra keeps a call its input validation refused as a `result` holding the error.
-      const rejected = readRecord(result)?.error === true;
+      // Mastra keeps a call its input validation refused as a `result` holding the error; a tool
+      // that threw is a `result` of `{ isError: true, content }`.
+      const rejected = readRecord(result)?.error === true || readRecord(result)?.isError === true;
+      // A live approval wins: Mastra's `agent_end` (reason "suspended") marks every still-running
+      // active tool `status: "error"`, the suspended ask among them (F-J1-9). It is waiting.
       const failed =
-        call.isError === true ||
-        (terminal && call.state !== "result") ||
-        active?.status === "error" ||
-        rejected ||
-        interrupted;
+        !waiting.has(call.toolCallId) &&
+        (call.isError === true ||
+          (terminal && call.state !== "result") ||
+          active?.status === "error" ||
+          rejected ||
+          interrupted);
       const completed = terminal || active?.status === "completed";
       const images = toolImages(result ?? progressOutput(active?.partialResult));
-      const outcome: ToolOutcome = failed
-        ? {
-            status: "failed",
-            error:
-              call.errorText ||
-              readString(readRecord(result)?.message) ||
-              text(result) ||
-              "Tool call ended without a terminal result.",
-            result,
-          }
-        : { status: completed ? "completed" : "in_progress", result };
+      const outcome: ToolOutcome = expired.has(call.toolCallId)
+        ? { status: "expired", result }
+        : cancelled.has(call.toolCallId)
+          ? { status: "cancelled", result }
+          : failed
+            ? {
+                status: "failed",
+                error:
+                  call.errorText ||
+                  readString(readRecord(result)?.message) ||
+                  readString(readRecord(result)?.content) ||
+                  text(result) ||
+                  "Tool call ended without a terminal result.",
+                result,
+              }
+            : { status: completed ? "completed" : "in_progress", result };
       calls.push({
         id: call.toolCallId,
         title: call.toolName,
@@ -149,7 +169,7 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
     if (seen.has(id)) continue;
     const result = tool.result ?? tool.shellOutput ?? tool.partialResult;
     const outcome: ToolOutcome =
-      tool.status === "error" || tool.isError
+      (tool.status === "error" || tool.isError) && !waiting.has(id)
         ? { status: "failed", error: text(tool.result) || "Tool call failed.", result }
         : { status: tool.status === "completed" ? "completed" : "in_progress", result };
     calls.push({
@@ -392,6 +412,12 @@ export type Approval = { toolCallId: string; toolName: string } & (
   | { kind: "suspension"; payload: unknown }
 );
 
+/** A parked `ask_user`: Pea is waiting on the person, not working. A new turn expires it. */
+export const isParkedAsk = (
+  approval: Approval,
+): approval is Extract<Approval, { kind: "suspension" }> =>
+  approval.kind === "suspension" && approval.toolName === "ask_user";
+
 export function selectApprovals(display: ChatDisplay): Approval[] {
   const approvals: Approval[] = [];
   const pending = display.pendingApproval;
@@ -410,6 +436,12 @@ export function selectApprovals(display: ChatDisplay): Approval[] {
     });
   }
   return approvals;
+}
+
+/** The runtime derives expiry; an ask the live frame still holds wins over a stale body. */
+export function selectExpiredAsks(state: ChatState): ExpiredAsk[] {
+  const live = new Set(selectApprovals(state.display).map((approval) => approval.toolCallId));
+  return (state.expiredAsks ?? []).filter((ask) => !live.has(ask.toolCallId));
 }
 
 export type RunStatus = "idle" | "running" | "waiting";

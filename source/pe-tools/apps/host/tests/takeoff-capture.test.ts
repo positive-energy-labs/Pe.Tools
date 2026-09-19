@@ -4,7 +4,13 @@ import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { expect, test, vi } from "vite-plus/test";
-import { address, takeoffsRouteState, takeoffObservationStatusSchema } from "@pe/agent-contracts";
+import {
+  address,
+  takeoffsRouteState,
+  takeoffObservationStatusSchema,
+  stagedTakeoffEdits,
+  takeoffEditPatches,
+} from "@pe/agent-contracts";
 import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
@@ -91,23 +97,25 @@ test("actual snapshot read leaves real Work revision and a concurrent authored e
       }),
     );
     await entered;
-    const staged = [{ roomId: "room-1", base: { name: "before" }, next: { name: "authored" } }];
-    expect(
-      await work.apply(
-        scope,
-        "takeoffs",
-        "human",
-        [{ path: ["staged"], value: staged }],
-        before.revision,
-      ),
-    ).toMatchObject({ ok: true, revision: before.revision + 1 });
+    const edit = takeoffEditPatches(
+      takeoffsRouteState.schema.parse({}),
+      "room-1",
+      { name: "before" },
+      { name: "authored" },
+    );
+    expect(await work.apply(scope, "takeoffs", "human", edit, before.revision)).toMatchObject({
+      ok: true,
+      revision: before.revision + 1,
+    });
     release();
     const response = await read;
     expect(await response.clone().text()).not.toContain("error");
     expect(response.status, await response.clone().text()).toBe(200);
     const after = (await work.read(scope, "takeoffs"))!;
     expect(after.revision).toBe(before.revision + 1);
-    expect(after.doc).toMatchObject({ staged });
+    expect(stagedTakeoffEdits(takeoffsRouteState.schema.parse(after.doc))).toMatchObject({
+      "room-1": { next: { name: "authored" } },
+    });
     expect(after.doc).not.toHaveProperty("snapshot");
     expect(
       await work.apply(

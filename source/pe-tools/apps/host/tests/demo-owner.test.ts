@@ -300,7 +300,7 @@ test("demo Family capture with no pod reads the live spec and files nothing; wit
   expect(saved.evidence.run).toBeTruthy();
 });
 
-test("demo Family plan returns a hash, apply sends that exact hash, and changed bytes refuse", async () => {
+test("demo Family plan returns a hash, apply sends that exact hash, from the bytes the plan sealed", async () => {
   const seed = family();
   if (seed.route !== "family") throw Error("Family seed expected");
   seed.work.candidate.fields = {};
@@ -316,7 +316,9 @@ test("demo Family plan returns a hash, apply sends that exact hash, and changed 
           key: planHash ? "family.apply" : "family.plan",
           actor: "human",
           destination: { kind: "document", ref: f.owner.target },
-          input: { source, ...(planHash ? { expectedPlanHashes: { "1": planHash } } : {}) },
+          input: planHash
+            ? { plan: `${f.owner.id}:planned`, expectedPlanHashes: { "1": planHash } }
+            : { source },
           bases: {},
         })
       ).status,
@@ -331,8 +333,14 @@ test("demo Family plan returns a hash, apply sends that exact hash, and changed 
   expect(planHash).toMatch(/^[a-f0-9]{64}$/);
   expect((planned as { result: { included: unknown } }).result.included).toEqual({ "1": planHash });
   expect((await apply("wrong-hash", "wrong")).state).toBe("failed");
+  // A member saved after the plan does not change what apply runs: the plan sealed its bytes.
+  await writeFile(await f.owner.settings.memberPath(f.owner.member!), '{"family":{}}');
   const success = await apply("applied", planHash);
   expect(success.state).toBe("succeeded");
+  expect(success.steps[0]!.input).toMatchObject({
+    specJson: (planned.preparation as { value: { sealed: { specJson: string } } }).value.sealed
+      .specJson,
+  });
   // The simulated engine files the run in the source pod, as the real one does (law 10).
   const { receiptPath } = (success as { result: { native: { receiptPath: string } } }).result
     .native;
@@ -350,11 +358,11 @@ test("demo Family plan returns a hash, apply sends that exact hash, and changed 
   expect(
     JSON.parse(await readFile(join(receiptPath, "..", "simulated.json"), "utf8")),
   ).toMatchObject({ simulated: true });
-  await writeFile(await f.owner.settings.memberPath(f.owner.member!), '{"family":{}}');
-  const stale = await apply("stale-member", planHash);
-  expect(stale.state).toBe("failed");
-  expect(stale.steps).toEqual([]);
-  expect(JSON.stringify(stale)).toContain("changed after it was reviewed");
+  // The plan is spent: applying it again refuses before anything reaches Revit.
+  const again = await apply("again", planHash);
+  expect(again.state).toBe("failed");
+  expect(again.steps).toEqual([]);
+  expect(JSON.stringify(again)).toContain("plan again");
 });
 
 test("same HTTP router separates production Work and two demo resource owners; reset cannot retire production", async () => {
@@ -550,8 +558,16 @@ test("the simulated engine refuses captured bytes that disagree with their hash"
     sha256: createHash("sha256").update(bytes).digest("hex"),
     bytesBase64: content.toString("base64"),
   });
-  expect(() => verifyCaptured({ root: file(bytes), dependencies: [file(bytes)] })).not.toThrow();
   expect(() =>
-    verifyCaptured({ root: file(bytes), dependencies: [file(Buffer.from('{"a":2}'))] }),
+    verifyCaptured({
+      root: { ...file(bytes), origin: "SavedMember" },
+      dependencies: [file(bytes)],
+    }),
+  ).not.toThrow();
+  expect(() =>
+    verifyCaptured({
+      root: { ...file(bytes), origin: "SavedMember" },
+      dependencies: [file(Buffer.from('{"a":2}'))],
+    }),
   ).toThrow("captured bytes do not match SHA-256");
 });

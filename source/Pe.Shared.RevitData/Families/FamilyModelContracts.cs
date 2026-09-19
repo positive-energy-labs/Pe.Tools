@@ -286,9 +286,9 @@ public sealed class FamilyModelParameter {
     [JsonProperty("fillBlanksFromSources", NullValueHandling = NullValueHandling.Ignore)]
     public bool? FillBlanksFromSources { get; init; }
 
-    /// <summary>Existing SetValue coercion strategy name; omitted means CoerceByStorageType.</summary>
+    /// <summary>How each source value is carried into this destination; omitted means CoerceByStorageType.</summary>
     [JsonProperty("mappingStrategy", NullValueHandling = NullValueHandling.Ignore)]
-    public string? MappingStrategy { get; init; }
+    public MappingStrategy? MappingStrategy { get; init; }
 
     /// <summary>Exact source string values treated as missing for this mapping; other mappings retain normal coercion.</summary>
     [JsonProperty("sourceValuesTreatedAsMissing", NullValueHandling = NullValueHandling.Ignore)]
@@ -915,9 +915,11 @@ public enum UnmodeledReason {
     ConnectorOnCurvedFace,
     ConnectorFaceNotOnPlane,
     ConnectorOnNestedFace,           // kaitpw 2026-09-06: the connector rides a nested instance's face; the host names no plane for it
+    ConnectorSizeByRadius,           // a round connector sized through its Radius slot; the vocabulary names diameter only
     FormulaNameNotDeclared,
     RefLineStartNotTwoPlanes,        // the start is fixed by `on` crossed with two planes; capture found other than two
     ParameterMetadataUnreadable,
+    AssociationUnreadable,           // Revit says the element parameter can be associated, but reading its association threw
     ParameterValueUnreadable,        // a type row the capture produced no cell for; the value lane cannot claim to have read it
     LookupTableUnreadable,
     PartTypeNotPortable,
@@ -1029,6 +1031,22 @@ public sealed class PortableValueConverter : JsonConverter<PortableValue> {
         };
 
     public override void WriteJson(JsonWriter writer, PortableValue value, JsonSerializer serializer) => writer.WriteValue(value.Text);
+}
+
+/// <summary>
+///     The coercion a `wasNamed` mapping declares; the registered names of Pe.Revit's SetValue strategy registries. A migration carries
+///     values across data type, unit spec and storage type under it, and refuses only a value it cannot carry (ruling-ff-coercion 2026-09-18).
+/// </summary>
+[JsonConverter(typeof(LenientEnumConverter<MappingStrategy>))]
+public enum MappingStrategy {
+    /// <summary>Same storage type only.</summary>
+    Strict,
+    /// <summary>Across storage types. Measurable specs convert through a unit both accept; text into a measurable spec must name its unit.</summary>
+    CoerceByStorageType,
+    /// <summary>A measurable spec into Number, in a fixed explicit unit per spec; otherwise CoerceByStorageType.</summary>
+    CoerceMeasurableToNumber,
+    /// <summary>Any number (text included) into an electrical spec, a bare number read in a fixed unit per spec (volts, amperes, VA, watts).</summary>
+    CoerceElectrical
 }
 
 /// <summary>
@@ -1176,7 +1194,10 @@ public static class FamilyModelJson {
     public static FamilyModelParseResult Parse(string json) {
         try {
             var token = JToken.Parse(json, new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
-            if (token is JObject o) o.Remove("$schema");
+            if (token is JObject o) {
+                o.Remove("$schema");
+                YesNoValue.Canonicalize(o);
+            }
             var model = token.ToObject<FamilyModel>(JsonSerializer.Create(Settings))
                         ?? throw new JsonSerializationException("Family model deserialized to null.");
             var diagnostics = FamilyModelMacros.Expand(model);

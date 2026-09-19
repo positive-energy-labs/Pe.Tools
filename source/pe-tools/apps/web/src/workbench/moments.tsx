@@ -7,14 +7,10 @@ import {
   toolTitle,
   type DiagramSpec,
 } from "@pe/agent-contracts";
-import { Check, ChevronRight } from "lucide-react";
-import { Textarea } from "#/components/lang/textarea";
-import { ActionButton } from "#/components/lang/action-button";
-import { useWorkbench } from "./provider";
+import { ChevronRight } from "lucide-react";
 import { useCurrentThreadView } from "./thread-view";
 import {
   readRecord,
-  readString,
   formatBytes,
   toolImages,
   toolOutputForDisplay,
@@ -25,7 +21,8 @@ import {
 } from "./chat-state";
 import { Markdown } from "./prose";
 import { Code, stringify } from "#/components/lang/code";
-import { RouteChatPluginView } from "./route-chat-plugins";
+import { actionCall, proposedRecord } from "./chat-plugins";
+import { ActionLine, ProposedLine } from "./record-lines";
 import { Press } from "#/components/lang/press";
 import { annotation } from "#/components/anatomy";
 import { PressContent } from "#/components/anatomy/press-content";
@@ -291,7 +288,6 @@ function succeededDiagram(call: ToolCall): DiagramSpec | undefined {
 }
 
 function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval }) {
-  const { resolveApproval } = useWorkbench();
   const view = useCurrentThreadView();
   const pinKey = useAtomValue(view.atoms.lensPinKey);
   // One gesture, two lanes: clicking a marker opens its I/O here AND pins it in the trace lane's
@@ -302,6 +298,11 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
   const running = call.status === "in_progress";
   const diagram = succeededDiagram(call);
   const failed = call.status === "failed";
+  // ponytail: no cause word; `ExpiredAsk` does not carry one and the ruling forbids inventing it.
+  const expired = call.status === "expired";
+  // The runtime's cancel record rides the same record path: a word, no tag, nothing to press.
+  const cancelled = call.status === "cancelled";
+  const record = expired ? " — expired, unanswered" : cancelled ? " — cancelled" : null;
   const tone = failed ? "failed" : running ? "active" : "";
   const result = failed ? (call.result ?? call.error) : deferred.result;
   const images = deferred.ref ? toolImages(result) : call.images;
@@ -310,10 +311,8 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
   const ran = readRecord(result);
   const ranTarget = readRecord(ran?.target);
   const revision = typeof ran?.revision === "number" ? ran.revision : undefined;
-  const question =
-    approval?.kind === "suspension" && call.title === "ask_user"
-      ? readQuestion(approval.payload)
-      : undefined;
+  const proposed = proposedRecord(call.title, call.args, result);
+  const action = proposed ? null : actionCall(call.title, call.args, result);
   return (
     <div className="flex min-w-0 flex-col gap-0.5" data-tool-id={call.id}>
       <div
@@ -337,6 +336,7 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
         className={tone}
       >
         <span>⌗ {toolTitle(call.title)}</span>
+        {record ? <span className="t-small text-ink-2">{record}</span> : null}
         {call.target ? <code>{call.target}</code> : null}
         {revision !== undefined ? (
           <span className="t-small face-mono text-ink-2" data-testid="tool-revision">
@@ -349,12 +349,14 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
           </span>
         ) : null}
 
-        <span
-          className={`ml-auto t-small face-mono tracking-[0.02em] ${running ? "text-ink-2" : ""}`}
-          data-tone={failed ? "caution" : running ? undefined : "done"}
-        >
-          {failed ? "err" : running ? "run" : "ok"}
-        </span>
+        {record ? null : (
+          <span
+            className={`ml-auto t-small face-mono tracking-[0.02em] ${running ? "text-ink-2" : ""}`}
+            data-tone={failed ? "caution" : running ? undefined : "done"}
+          >
+            {failed ? "err" : approval ? "wait" : running ? "run" : "ok"}
+          </span>
+        )}
       </div>
       {deferred.ref ? (
         <span className="t-small text-ink-2" data-testid="deferred-result-summary">
@@ -398,139 +400,10 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
           )}
         </div>
       ) : null}
-      {!deferred.ref || result !== undefined ? (
-        <RouteChatPluginView
-          toolCallId={call.id}
-          toolName={call.title}
-          args={call.args}
-          sessionState={result}
-          running={running}
-        />
-      ) : null}
-      {/* Allow/refuse lives in the composer head's proposals band (`chat/composer-head.tsx`);
-          a question still answers here, beside what it asks about. */}
-      {question ? (
-        <AskUserPrompt toolCallId={call.id} question={question} resolve={resolveApproval} />
-      ) : null}
-    </div>
-  );
-}
-
-type Question = {
-  text: string;
-  options: { label: string; description?: string }[];
-  multiple: boolean;
-};
-
-function readQuestion(payload: unknown): Question | undefined {
-  const value = readRecord(payload);
-  const text = readString(value?.question);
-  if (!text) return undefined;
-  const options = Array.isArray(value?.options)
-    ? value.options.flatMap((option) => {
-        const record = readRecord(option);
-        const label = readString(record?.label);
-        return label
-          ? [
-              {
-                label,
-                ...(readString(record?.description)
-                  ? { description: readString(record?.description) }
-                  : {}),
-              },
-            ]
-          : [];
-      })
-    : [];
-  return { text, options, multiple: value?.selectionMode === "multi_select" };
-}
-
-function AskUserPrompt({
-  toolCallId,
-  question,
-  resolve,
-}: {
-  toolCallId: string;
-  question: Question;
-  resolve: (toolCallId: string, response?: string | string[]) => Promise<void>;
-}) {
-  const [answer, setAnswer] = useState("");
-  const [selected, setSelected] = useState<string[]>([]);
-  return (
-    <div className="flex min-w-0 flex-col gap-2 py-1">
-      <div className="t-prose">{question.text}</div>
-      {question.options.length === 0 ? (
-        <>
-          <Textarea
-            size="compact"
-            aria-label="Answer"
-            value={answer}
-            onChange={(event) => setAnswer(event.target.value)}
-          />
-          <div>
-            <ActionButton
-              tone="commit"
-              icon={Check}
-              label="Answer"
-              reason="Send this answer to Pea"
-              disabled={!answer.trim()}
-              onClick={() => void resolve(toolCallId, answer.trim())}
-            />
-          </div>
-        </>
-      ) : question.multiple ? (
-        <>
-          <div className="flex min-w-0 flex-col gap-1">
-            {question.options.map((option) => (
-              <label key={option.label} className="flex items-start gap-2 t-prose">
-                <input
-                  type="checkbox"
-                  checked={selected.includes(option.label)}
-                  onChange={() =>
-                    setSelected((current) =>
-                      current.includes(option.label)
-                        ? current.filter((label) => label !== option.label)
-                        : [...current, option.label],
-                    )
-                  }
-                />
-                <span>
-                  {option.label}
-                  {option.description ? (
-                    <span className="block t-small text-ink-2">{option.description}</span>
-                  ) : null}
-                </span>
-              </label>
-            ))}
-          </div>
-          <div>
-            <ActionButton
-              tone="commit"
-              icon={Check}
-              label="Answer"
-              reason="Send the selected answers to Pea"
-              disabled={selected.length === 0}
-              onClick={() => void resolve(toolCallId, selected)}
-            />
-          </div>
-        </>
-      ) : (
-        <div className="flex min-w-0 flex-col gap-1">
-          {question.options.map((option) => (
-            <div key={option.label} className="flex items-baseline gap-2">
-              <ActionButton
-                tone="act"
-                label={option.label}
-                reason={option.description ?? `Answer ${option.label}`}
-                onClick={() => void resolve(toolCallId, option.label)}
-              />
-              {option.description ? (
-                <span className="t-small text-ink-2">{option.description}</span>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      )}
+      {proposed ? <ProposedLine record={proposed} /> : null}
+      {action ? <ActionLine call={action} /> : null}
+      {/* A live ask answers in the Chat head (`chat/composer-head.tsx`), never here: the
+          transcript holds its record (F-J1-9). */}
     </div>
   );
 }

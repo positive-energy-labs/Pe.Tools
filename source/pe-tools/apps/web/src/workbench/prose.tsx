@@ -24,7 +24,7 @@ const PROSE_CLASS = [
   "prose-a:underline prose-a:underline-offset-2",
   "prose-code:rounded-none prose-code:border-[0.5px] prose-code:border-line prose-code:px-[5px] prose-code:py-px",
   "prose-code:before:content-none prose-code:after:content-none",
-  // A table wears MasterTable's cell grammar (see master-table-header.tsx / master-table-body.tsx):
+  // A table wears Table's cell grammar (see master-table-header.tsx / master-table-body.tsx):
   // `border-separate` + per-cell `border-l`/`first:border-l-0` so no edge doubles, the recess
   // ground and small-caps under the head, hairline row rules, tabular figures. GFM's own
   // `text-align` lands as an inline style and still wins, so a `---:` column stays right-aligned.
@@ -83,6 +83,7 @@ const MARKDOWN_COMPONENTS: Components = {
   // scrolls inside the message instead of widening the chat column.
   table: ({ node: _node, ...props }) => (
     <div className="my-2 max-w-full overflow-x-auto">
+      {/* DOMAIN (kept hand table): GFM tables in prose; the markdown renderer owns them. */}
       <table {...props} />
     </div>
   ),

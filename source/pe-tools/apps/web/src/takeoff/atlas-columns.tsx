@@ -1,10 +1,12 @@
+import { takeoffEditKey } from "@pe/agent-contracts";
 import { useMemo } from "react";
 import { FactChip } from "#/components/lang/chip";
-import { CellSelect, NumberCell, ReadCell, TextCell } from "#/components/master-table/cells";
+import { ReadCell, TextCell } from "#/components/master-table/cells";
+import { CellListSelect } from "#/components/lang/list-popup";
 import { cellStateLabel, type StateCellProps } from "#/components/lang/cell";
 import { fmtNum, type Column } from "#/components/master-table/model";
 import type { AtlasActions } from "#/takeoff/atlas";
-import { ManualJField } from "#/takeoff/manual-j-field";
+import { TakeoffEditCell } from "#/takeoff/proposals";
 import { MANUAL_J } from "#/takeoff/room-actions";
 import { ROOM_STATES, STATE_META, STAGE_BLURB, stateMeta } from "#/takeoff/room-state";
 import {
@@ -167,16 +169,19 @@ export function useAtlasColumns({
         facet: ATLAS_COLUMN_SEMANTICS.type.facet,
         options: ROOM_TYPES.map((t) => ({ value: t, label: t })),
         cell: (row) => (
-          <CellSelect
+          <CellListSelect<RoomType>
+            aria-label={`${row.room.name} type`}
+            region="atlas table"
             value={row.room.type}
-            onChange={(v) => actions.patch(row.room.guid, { type: v as RoomType })}
-          >
-            {ROOM_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </CellSelect>
+            items={ROOM_TYPES}
+            keyOf={(type) => type}
+            labelOf={(type) => type}
+            empty="no room types"
+            select="single"
+            selected={[row.room.type]}
+            onPick={(type) => actions.patch(row.room.guid, { type })}
+            row={(type) => ({ label: type })}
+          />
         ),
       },
       {
@@ -206,11 +211,14 @@ export function useAtlasColumns({
               width: "w-14",
               sort: ATLAS_COLUMN_SEMANTICS.ceil.sort,
               cell: (row) => (
-                <NumberCell
+                <TakeoffEditCell
+                  roomId={row.room.guid}
+                  field="ceilingFt"
                   value={row.room.ceilingFt}
                   digits={1}
-                  min={0}
-                  onCommit={(v) => actions.patch(row.room.guid, { ceilingFt: v })}
+                  cell={store.cells.edits[takeoffEditKey(row.room.guid, "ceilingFt")]}
+                  wire={store.wires.edits}
+                  onPatch={(v) => actions.patch(row.room.guid, { ceilingFt: v })}
                 />
               ),
             } satisfies Column<Row>,
@@ -222,10 +230,15 @@ export function useAtlasColumns({
                 width: mj.width,
                 sort: ATLAS_COLUMN_SEMANTICS[mj.field].sort,
                 cell: (row) => (
-                  <ManualJField
-                    room={row.room}
+                  <TakeoffEditCell
+                    roomId={row.room.guid}
                     field={mj.field}
-                    onPatch={(patch) => actions.patch(row.room.guid, patch)}
+                    value={row.room.data?.[mj.field] ?? 0}
+                    digits={0}
+                    integer
+                    cell={store.cells.edits[takeoffEditKey(row.room.guid, mj.field)]}
+                    wire={store.wires.edits}
+                    onPatch={(v) => actions.patch(row.room.guid, { [mj.field]: v })}
                   />
                 ),
               }),
@@ -254,14 +267,14 @@ export function useAtlasColumns({
             <span className="px-(--item-pad-x)" title={row.open.join(", ")}>
               {row.open.join(", ")}
             </span>
-          ) : row.room.decisions.length > 0 ? (
-            <span className="px-(--item-pad-x)">{row.room.decisions.length} decided</span>
+          ) : row.room.flags.length > 0 ? (
+            <span className="px-(--item-pad-x)">{row.room.flags.length} decided</span>
           ) : null,
       },
       {
         // THE CELL-STATE CLAUSE, consumer #2. This column is a DIFF — what the .r10 holds against
         // what the model holds — which is exactly what the grammar's `agree` axis is for. The
-        // column declares what it draws; MasterTable renders `StateCell`, and facet/sort fall
+        // column declares what it draws; Table renders `StateCell`, and facet/sort fall
         // through to the grammar's own vocabulary and attention order. The old hand-rolled
         // `sort: identifier` is deliberately dropped: drift now sorts to the top, which is the
         // order the work happens in (SURFACE-PHILOSOPHY §1).
@@ -279,6 +292,7 @@ export function useAtlasColumns({
         word: (row) => (row.room.r10 ? cellStateLabel(r10State(row)) : "not exported"),
       },
     ],
-    [actions, flagVocabulary, fieldsMode],
+    // The cells and their wire change with the Work: a landed stage or proposal redraws its cell.
+    [actions, flagVocabulary, fieldsMode, store.cells.edits, store.wires.edits],
   );
 }

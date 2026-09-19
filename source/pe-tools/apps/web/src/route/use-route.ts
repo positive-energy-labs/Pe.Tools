@@ -4,6 +4,7 @@
  * a resolution, its Work, its Readings, its Page, and one handle per action. Public handles return
  * structured Refusals (`route/refusal.ts`).
  */
+import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
 import { frozenDemo } from "#/host/demo-client";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
@@ -12,6 +13,8 @@ import {
   parseRouteDoc,
   resolveCallTarget,
   sameAddress,
+  START_FRESH,
+  UNREADABLE_WORK,
   threadHeadSchema,
   workKey,
   type Address,
@@ -43,16 +46,17 @@ import {
   dirty,
   readingAtom,
   peReadings,
+  inventoryOf,
   previousOf,
   targetInventory,
   type Readings,
 } from "#/readings";
 import { inspectAtomRegistry, type OwnerReferences } from "#/state/atom-inspect";
 import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
-import type { RouteManifest } from "./manifest";
+import { DEFAULT_WAIT_S, type RouteManifest } from "./manifest";
 import { callHostDynamic } from "#/host/client";
 import { causeRefusal, refuse, writeRefusal, type Refusal } from "./refusal";
-import { postRouteWrite } from "./host";
+import { getRouteSalvage, postRouteWrite } from "./host";
 import { useThreadScope } from "#/chat/scope";
 import { cancelRunningAdmissions } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
@@ -144,6 +148,9 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
     ]);
 
   let stopper: (() => void) | null = null;
+  /** The running verb's button word and start, for a busy refusal to name (and say how long). */
+  let runningLabel = "";
+  let runningSince = 0;
 
   /**
    * Busy is a RUNTIME refusal (ruling Q4): one action at a time, and the second one is told so.
@@ -156,13 +163,20 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
     onStopped?: () => void,
     /** The word on the button. The log says what the user pressed, never the action key. */
     label = key,
+    /** In flight past this, the verb ends as stopped and releases busy; Infinity = unbounded. */
+    waitSeconds = Infinity,
   ): Promise<Refusal | null> => {
     if (inFlight) {
-      const refusal = refuse("busy", `${key} refused; another action is running`);
+      // A busy refusal is a refusal like any other: on the verb, and one line in the page log.
+      const running = Math.floor((Date.now() - runningSince) / 1000);
+      const refusal = refuse("busy", `${runningLabel} still running (${running}s)`);
       write(key, "failure", () => registry.set(failure, refusal));
+      note("verb", label, `refused · ${refusal.message}`, true);
       return refusal;
     }
     inFlight = true;
+    runningLabel = label;
+    runningSince = Date.now();
     write(key, "busy", () => registry.set(busy, { key, seconds: 0 }));
     const started = Date.now();
     busyTimer = setInterval(
@@ -203,9 +217,40 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
         });
       };
     });
+    // The bound: past it the verb ends honestly (never success, never a retry) and busy is
+    // released; the op may still answer, and that late answer is only logged and re-read below.
+    let bound: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<"timeout">((resolve) => {
+      if (Number.isFinite(waitSeconds))
+        bound = setTimeout(() => resolve("timeout"), waitSeconds * 1000);
+    });
     try {
       const running = work();
-      const result = await Promise.race([running, stopped]);
+      const result = await Promise.race([running, stopped, timedOut]);
+      if (result === "timeout") {
+        const refusal = refuse("unknown", `stopped: no answer after ${waitSeconds}s`);
+        write(key, "failure", () => registry.set(failure, refusal));
+        note("verb", label, refusal.message, true);
+        running
+          .then(
+            (late) =>
+              !disposed &&
+              note(
+                "verb",
+                label,
+                `late · ${late ? outcomeSays(late) : "answered"} after the stop; re-reading, nothing retried`,
+                Boolean(late),
+              ),
+            (cause: unknown) =>
+              !disposed && note("verb", label, `late · failed · ${refusalOf(cause).message}`, true),
+          )
+          .finally(() => {
+            // A late answer only refreshes what the verb dirties; it never writes on its own.
+            if (!disposed) invalidateKeys();
+          });
+        onStopped?.();
+        return refusal;
+      }
       if (result === "stopped") {
         note(
           "verb",
@@ -231,8 +276,9 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
         return null;
       }
       write(key, "failure", () => registry.set(failure, result));
-      note("verb", label, result ? `refused · ${result.message}` : "ran", Boolean(result));
-      if (!result) invalidateKeys();
+      note("verb", label, result ? outcomeSays(result) : "ran", Boolean(result));
+      // A partial outcome landed something: what it dirties is stale either way.
+      if (!result || result.code === "partial") invalidateKeys();
       return result;
     } catch (cause) {
       const refusal = refusalOf(cause);
@@ -240,6 +286,7 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
       note("verb", label, `failed · ${refusal.message}`, true);
       return refusal;
     } finally {
+      clearTimeout(bound);
       if (!detached) finish();
     }
   };
@@ -297,6 +344,28 @@ export interface LogEntry {
   readonly says: string;
   readonly refused: boolean;
 }
+
+/** What a bare run lacks: the fields an empty object misses, or "a value" when it is not an object. */
+const missingFields = (schema: {
+  safeParse: (value: unknown) => {
+    success: boolean;
+    error?: { issues: { path: PropertyKey[] }[] };
+  };
+}) => {
+  const issues = schema.safeParse({}).error?.issues ?? [];
+  const names = issues.map((issue) => issue.path.map(String).join(".")).filter(Boolean);
+  return names.length ? names.join(", ") : "a value";
+};
+
+/**
+ * How the page log says a verb's returned outcome. A sentence that already names what happened
+ * ("partly applied — …", "refused — nothing ran: …", "failed in Revit — …") is said as is; any
+ * other refusal is prefixed so a refusal never reads as a failure, nor a failure as a refusal.
+ */
+const outcomeSays = (refusal: Refusal) =>
+  /^(partly applied|refused|failed)/.test(refusal.message)
+    ? refusal.message
+    : `${refusal.code === "failed" ? "failed" : "refused"} · ${refusal.message}`;
 
 /** Mount an owner for the life of a component; StrictMode's double-mount disposes once. */
 export function useRouteOwner<T extends { dispose(): void; registry: AtomRegistry.AtomRegistry }>(
@@ -373,7 +442,11 @@ class RouteAtomKey implements Equal.Equal {
   }
 }
 
-function routeUrl(route: string, operation: "apply" | "command", key: WorkKey) {
+function routeUrl(
+  route: string,
+  operation: "apply" | "command" | typeof START_FRESH | "salvage",
+  key: WorkKey,
+) {
   const url = new URL(peUrl(resolveWorkbenchConfig(), `/route-state/${route}/${operation}`));
   if (key.work !== undefined) url.searchParams.set("work", key.work);
   else if (key.target !== null) url.searchParams.set("target", key.target);
@@ -426,15 +499,16 @@ export function docWriter<S extends RouteStateSpec<any>>(
   conflict: Atom.Writable<boolean> | undefined,
 ) {
   const send = async (
-    operation: "apply" | "command",
-    body: Record<string, unknown>,
-    onAccepted?: (revision: number) => void,
+    operation: "apply" | "command" | typeof START_FRESH,
+    body: Record<string, unknown> & { expectedRevision?: number },
+    onAccepted?: (base: number, revision: number) => void,
   ): Promise<Refusal | null> => {
     try {
       const { status, result } = await postRouteWrite(routeUrl(spec.route, operation, key), body);
       if (!result) return refuse("failed", `${operation} failed (${status})`);
       if (!result.ok && result.code === "stale_revision" && conflict) registry.set(conflict, true);
-      if (result.ok) onAccepted?.(result.revision);
+      if (result.ok && body.expectedRevision !== undefined)
+        onAccepted?.(body.expectedRevision, result.revision);
       return writeRefusal(result);
     } catch (cause) {
       return causeRefusal(cause);
@@ -453,7 +527,7 @@ export function docWriter<S extends RouteStateSpec<any>>(
     apply: (
       patches: RouteStatePatch[],
       expectedRevision?: number,
-      onAccepted?: (revision: number) => void,
+      onAccepted?: (base: number, revision: number) => void,
     ) => {
       const revision = writeRevision(expectedRevision);
       if (revision === null) return Promise.resolve(notHydrated);
@@ -463,7 +537,7 @@ export function docWriter<S extends RouteStateSpec<any>>(
       name: keyof S["commands"] & string,
       input?: unknown,
       expectedRevision?: number,
-      onAccepted?: (revision: number) => void,
+      onAccepted?: (base: number, revision: number) => void,
     ) => {
       const revision = writeRevision(expectedRevision);
       return revision === null
@@ -473,6 +547,42 @@ export function docWriter<S extends RouteStateSpec<any>>(
             { command: name, input: input ?? {}, expectedRevision: revision },
             onAccepted,
           );
+    },
+    /** The human door only; the host refuses Pea's door and readable Work. */
+    startFresh: () => send(START_FRESH, {}),
+    /** The human door only: what the route carries over from Work it can no longer read. */
+    salvage: () => getRouteSalvage(routeUrl(spec.route, "salvage", key)),
+  };
+}
+
+/**
+ * One route's Work read and written by key, with no route owner: the Chat head's summary of Work
+ * the thread's document holds. It reads the same Work atom a mounted route (the plugin pane) reads,
+ * so both re-render from one Work; its writes are foreign to that route's own-write chain, so a
+ * bound write either side refuses truthfully when the other landed first.
+ */
+export function useRouteWork<S extends RouteStateSpec<any>>(spec: S, key: WorkKey | null) {
+  const id = key ? JSON.stringify(key) : null;
+  const slice = useMemo(
+    () => (key ? docAtom(spec, key, peReadings) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the key is identified by its JSON
+    [spec, id],
+  );
+  const reading = useOwned(appAtomRegistry, slice);
+  const writer = useMemo(
+    () => (key && slice ? docWriter(spec, key, appAtomRegistry, slice, undefined) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the key is identified by its JSON
+    [spec, slice],
+  );
+  const current = reading ? previousOf(reading) : undefined;
+  return {
+    doc: (current?.doc ?? null) as RouteDocOf<S> | null,
+    revision: current?.revision ?? null,
+    stale: reading?.state === "stale",
+    write: (patches: RouteStatePatch[], expectedRevision?: number) =>
+      writer ? writer.apply(patches, expectedRevision) : Promise.resolve(notHydrated),
+    reload: () => {
+      if (key) dirty({ ...key, kind: "work" });
     },
   };
 }
@@ -520,17 +630,36 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
     readonly revision: number | null;
     /** Whether the authoritative Work reading is current, including a current absent document. */
     readonly current: boolean;
+    /** `expectedRevision` binds the write; `null` binds it to nothing rendered and refuses. */
     readonly write: (
       patches: RouteStatePatch[],
-      expectedRevision?: number,
+      expectedRevision?: number | null,
     ) => Promise<Refusal | null>;
     /** Another writer landed first; the last write was refused. `reload` reads Work again. */
     readonly conflict: boolean;
+    /** The owner's own sentence when Work cannot be read (e.g. saved in an older shape). */
+    readonly refusal: string | null;
+    /**
+     * Human-only: sets the unreadable Work aside, untouched, and starts an empty Work. A refusal
+     * lands on `failure`; success re-reads Work. Null unless the failure is the host's UNREADABLE_WORK.
+     */
+    readonly startFresh: (() => Promise<Refusal | null>) | null;
+    /**
+     * Human-only, read-only: what the route's declared `salvage` carries over from Work it can no
+     * longer read (the unreadable Work, else the newest aside). Null when there is none.
+     */
+    readonly salvage: (() => Promise<{ from: string; value: unknown } | null>) | null;
     readonly reload: () => void;
   };
   readonly readings: Readonly<Record<R, Reading<unknown>>>;
   /** The bridge inventory the resolution reads; a seed's `inventory` reading when seeded. */
   readonly inventory: Reading<unknown>;
+  /**
+   * The exact document this route was bound to (session › openId) is gone from the live
+   * inventory. Its sentence is every verb's refusal; `reopened` is the same title open under a
+   * new openId in that session, offered first and never taken for the person (F-X-1).
+   */
+  readonly bindingLost: BindingLost | null;
   readonly page: readonly [P, (next: Partial<P>) => void];
   readonly actions: Readonly<Record<A, ActionHandle>>;
   readonly busy: { readonly key: A; readonly seconds: number } | null;
@@ -542,6 +671,28 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
   readonly log: readonly LogEntry[];
   readonly demo: boolean;
 }
+
+export interface BindingLost {
+  readonly ref: { readonly session: string; readonly openId: string };
+  readonly title: string | null;
+  readonly sentence: string;
+  readonly reason: "document-closed" | "session-gone";
+  readonly reopened: { readonly openId: string; readonly title: string } | null;
+}
+
+/** The inventory's open documents, keyed `session/openId`, with their titles. */
+const openTitles = (inventory: Reading<unknown>) => {
+  const observed = previousOf(inventory) as
+    | { sessions?: readonly BridgeSessionListEntry[] }
+    | undefined;
+  return new Map(
+    inventoryOf(observed?.sessions ?? []).flatMap((session) =>
+      (session.openDocuments ?? []).map(
+        (doc) => [`${session.sessionId}/${doc.openId}`, doc.title] as const,
+      ),
+    ),
+  );
+};
 
 /**
  * `?target` accepts a schema-validated JSON DocumentRequest for exact picker selections.
@@ -702,6 +853,47 @@ export function useRoute<W, R extends string, P, A extends string>(
     return resolveCallTarget(needs as never, request, inventory);
   }, [seed, manifest.needs, inventoryResult, defaultDocument, target]);
 
+  // A bound exact document that left the inventory: named, with the title it last had, and the
+  // same title reopened in its session offered. Titles seen are remembered for exactly this.
+  const seenTitles = useRef(new Map<string, string>());
+  const open = useMemo(() => openTitles(inventoryResult), [inventoryResult]);
+  for (const [id, title] of open) seenTitles.current.set(id, title);
+  const bindingLost = useMemo((): BindingLost | null => {
+    if (seed || resolution.kind !== "choose") return null;
+    if (resolution.reason !== "document-closed" && resolution.reason !== "session-gone")
+      return null;
+    const chosen = parseTarget(target);
+    const pinned = chosen?.kind === "request";
+    const request = pinned ? chosen.request : defaultDocument;
+    if (request?.kind !== "open") return null;
+    const { ref } = request;
+    const title = seenTitles.current.get(`${ref.session}/${ref.openId}`) ?? null;
+    const reopened =
+      title === null
+        ? null
+        : ([...open].find(
+            ([id, other]) =>
+              other === title &&
+              id.startsWith(`${ref.session}/`) &&
+              id !== `${ref.session}/${ref.openId}`,
+          ) ?? null);
+    return {
+      ref,
+      title,
+      // A `?target` pin is this page's own binding; a Chat head is the thread's (the words the
+      // host's route door uses). Remembered titles only label it; they never rebind.
+      sentence: pinned
+        ? `the document this page was bound to closed (${title ?? "untitled"} · ${ref.openId.slice(0, 8)}…); bind it again in the sentence above`
+        : `the Chat's document is no longer open — pick it again (${title ?? "untitled"} · ${ref.openId.slice(0, 8)}…)`,
+      reason: resolution.reason,
+      reopened: reopened
+        ? { openId: reopened[0].slice(ref.session.length + 1), title: reopened[1] }
+        : null,
+    };
+  }, [seed, resolution, target, defaultDocument, open]);
+  const bindingLostRef = useRef(bindingLost);
+  bindingLostRef.current = bindingLost;
+
   // The Work key is the resolved document's Address, so a session-key `?target` and an Address
   // `?target` for the same document read and write the same Work.
   const resolvedAddress = useMemo((): Address | null => {
@@ -834,26 +1026,48 @@ export function useRoute<W, R extends string, P, A extends string>(
     [spec, slice, key, owner],
   );
   // Authored patches queue so two same-tick edits carry the first accepted revision into the
-  // second write. An explicit revision remains the caller's conflict boundary.
+  // second write. An explicit revision remains the caller's conflict boundary, rebased only over
+  // this owner's own landed writes: `own` maps each landed write's base to its result, and a bound
+  // write follows that chain, so a revision rendered before the owner's own writes landed still
+  // binds while any foreign write breaks the chain and refuses truthfully. `null` is a bound write
+  // with nothing rendered to bind to.
   const writeWork = useMemo(() => {
     let queue: Promise<void> = Promise.resolve();
     let queued = 0;
     let landed: number | null = null;
-    return (patches: RouteStatePatch[], expectedRevision?: number): Promise<Refusal | null> => {
+    const own = new Map<number, number>();
+    return (
+      patches: RouteStatePatch[],
+      expectedRevision?: number | null,
+    ): Promise<Refusal | null> => {
       queued += 1;
-      let accepted: number | undefined;
+      let accepted: { base: number; revision: number } | undefined;
       const result = queue
         .then(async () => {
           if (seed) return refuse("not-ready", "frozen seed is read-only");
-          return writer
-            ? writer.apply(patches, expectedRevision ?? landed ?? undefined, (revision) => {
-                accepted = revision;
-              })
-            : notHydrated;
+          if (expectedRevision === null)
+            return refuse("not-ready", "Work has not been read yet; nothing on screen to act on");
+          // An unresolved target is the reason, never "not hydrated" (F-X-1 item 1).
+          if (!writer) {
+            const lost = bindingLostRef.current;
+            return lost ? refuse("no-target", lost.sentence) : notHydrated;
+          }
+          let bound = expectedRevision;
+          if (bound !== undefined) while (own.has(bound)) bound = own.get(bound)!;
+          return writer.apply(patches, bound ?? landed ?? undefined, (base, revision) => {
+            accepted = { base, revision };
+          });
         })
         .catch(causeRefusal)
         .then((refusal) => {
-          if (!refusal && accepted !== undefined) landed = accepted;
+          if (!refusal && accepted) {
+            own.set(accepted.base, accepted.revision);
+            // ponytail: bounded by count, not by observation. A caller can hold a revision rendered
+            // before the owner's latest render, and an all-own chain back to it is still truthful;
+            // a caller bound more than 256 own writes back refuses stale.
+            if (own.size > 256) own.delete(own.keys().next().value!);
+            landed = accepted.revision;
+          }
           if (refusal) owner.registry.set(owner.failure, refusal);
           queued -= 1;
           if (queued === 0) landed = null;
@@ -864,10 +1078,11 @@ export function useRoute<W, R extends string, P, A extends string>(
     };
   }, [writer, owner, seed]);
   // Stable: it is `page[1]`, `ctx.setPage`, and a dep of consumer memos (families/store.ts).
-  const setPage = useCallback(
-    (next: Partial<P>) => setPageState((current) => ({ ...current, ...next })),
-    [],
-  );
+  const pageEpoch = useRef(0);
+  const setPage = useCallback((next: Partial<P>) => {
+    pageEpoch.current += 1;
+    setPageState((current) => ({ ...current, ...next }));
+  }, []);
   const scopeKey = JSON.stringify([boundKey, key]);
   const actionScope = useMemo(() => ({}), [scopeKey]);
   const currentActionScope = useRef(actionScope);
@@ -878,12 +1093,25 @@ export function useRoute<W, R extends string, P, A extends string>(
   const stage = (page as { stage?: unknown }).stage;
   const stageWord = manifest.stages?.find((item) => item.key === stage)?.word;
   const revision = doc?.revision ?? null;
-  const seen = useRef({ target: boundKey, stage: stageWord, revision });
+  const lostKey = bindingLost ? `${bindingLost.ref.session}/${bindingLost.ref.openId}` : null;
+  const seen = useRef({
+    target: boundKey,
+    stage: stageWord,
+    revision,
+    lost: null as string | null,
+  });
   useEffect(() => {
     if (seen.current.target !== boundKey) {
       seen.current.target = boundKey;
       const bound = JSON.parse(boundKey) as { session: string; openId: string } | null;
-      owner.note("target", "target", bound ? `${bound.session} › ${bound.openId}` : "unbound");
+      // A lost binding notes itself below, with its reason, on load as on a transition.
+      if (bound || !bindingLost)
+        owner.note("target", "target", bound ? `${bound.session} › ${bound.openId}` : "unbound");
+    }
+    if (seen.current.lost !== lostKey) {
+      seen.current.lost = lostKey;
+      if (bindingLost)
+        owner.note("target", "target", `unbound (${bindingLost.reason.replace("-", " ")})`);
     }
     if (seen.current.stage !== stageWord) {
       seen.current.stage = stageWord;
@@ -893,11 +1121,12 @@ export function useRoute<W, R extends string, P, A extends string>(
       seen.current.revision = revision;
       if (revision !== null) owner.note("work", "work", `r${revision} loaded`);
     }
-  }, [owner, boundKey, stageWord, revision]);
+  }, [owner, boundKey, stageWord, revision, lostKey, bindingLost]);
 
   const actions = useMemo(() => {
     const targetRefusal = (needs: NonNullable<typeof manifest.needs> | "host") => {
       if (needs === "host") return null;
+      if (bindingLost) return bindingLost.sentence;
       if (resolution.kind !== "resolved")
         return resolution.kind === "checking" ? "checking the target" : `pick a ${needs}`;
       if (needs === "session") return resolution.target.kind === "host" ? "pick a session" : null;
@@ -920,31 +1149,51 @@ export function useRoute<W, R extends string, P, A extends string>(
       if (seed) return "frozen seed is read-only";
       const target = targetRefusal(action.needs);
       if (target) return target;
+      // Read and absent is a state of the world, not a loading one: say it (F-X-2). The first
+      // authored write (a selection, a staged cell) initializes the Work.
+      if (action.requires?.work && workCurrent && doc?.doc === null)
+        return "nothing authored here yet";
       if (action.requires?.work && (!doc || doc.doc === null))
         return "route document is not hydrated";
       if (action.requires?.work && !workCurrent) return "route document is not current";
       const missing = action.requires?.readings?.find((name) => readings[name].state !== "ready");
       return missing === undefined ? null : `${missing} is not ready`;
     };
+    // An action's Work is one snapshot. Its late writes must let the host reject that snapshot,
+    // not silently borrow a newer revision observed while the action was computing.
+    const actionRevision = workCurrent ? (doc?.revision ?? 0) : null;
+    const actionPageEpoch = pageEpoch.current;
     const ctx = {
       target: resolution.kind === "resolved" ? resolution.target : ({ kind: "host" } as const),
-      work: { key, doc: doc?.doc ?? null, revision: doc?.revision ?? null },
+      work: {
+        key,
+        doc: doc?.doc ?? null,
+        revision: doc?.revision ?? null,
+        refusal: sliceResult?.state === "failed" ? sliceResult.message : null,
+      },
       readings,
       page,
       call: (operation: string, input?: unknown) =>
         callHostDynamic(operation, input, targetHeaders(ctx.target)),
+      // Bound to the action's snapshot, through the queue: it follows this owner's own landed
+      // writes past that snapshot, and a foreign write still refuses it.
       write: async (patches: RouteStatePatch[]) => {
-        const refusal = writer ? await writer.apply(patches) : notHydrated;
+        const refusal =
+          actionRevision === null ? notHydrated : await writeWork(patches, actionRevision);
         if (refusal) throw new ActionRefusal(refusal);
         return null;
       },
       command: async (name: string, input?: unknown) => {
-        const refusal = writer ? await writer.command(name as never, input) : notHydrated;
+        const refusal =
+          writer && actionRevision !== null
+            ? await writer.command(name as never, input, actionRevision)
+            : notHydrated;
         if (refusal) throw new ActionRefusal(refusal);
         return null;
       },
       setPage: (next: Partial<P>) => {
-        if (currentActionScope.current === actionScope) setPage(next);
+        if (currentActionScope.current === actionScope && pageEpoch.current === actionPageEpoch)
+          setPageState((current) => ({ ...current, ...next }));
       },
     };
     return Object.fromEntries(
@@ -954,7 +1203,7 @@ export function useRoute<W, R extends string, P, A extends string>(
         const health = requirementRefusal(action);
         const handle: ActionHandle = {
           label: action.label,
-          says: action.says,
+          says: action.saysNow?.(ctx as never) ?? action.says,
           ...(typeof action.chord === "string" ? { chord: action.chord } : {}),
           ...(action.stage ? { stage: action.stage } : {}),
           count: health ? null : (action.count?.(ctx as never) ?? null),
@@ -968,13 +1217,27 @@ export function useRoute<W, R extends string, P, A extends string>(
                 if (target) return refuse("no-target", target);
                 const unavailable = requirementRefusal(action);
                 if (unavailable) return refuse("not-ready", unavailable);
-                const parsed = action.input.safeParse(input);
+                // The verb row runs a verb bare. An empty-object input is supplied; a verb that
+                // needs an input it was not given refuses by name, not with a schema message.
+                const given =
+                  input === undefined &&
+                  !action.input.safeParse(undefined).success &&
+                  action.input.safeParse({}).success
+                    ? {}
+                    : input;
+                const parsed = action.input.safeParse(given);
                 if (!parsed.success)
-                  return refuse("not-ready", parsed.error.issues[0]?.message ?? "invalid input");
+                  return refuse(
+                    "not-ready",
+                    input === undefined
+                      ? `${action.label} needs its input (${missingFields(action.input)}); run it from where it is chosen`
+                      : (parsed.error.issues[0]?.message ?? "invalid input"),
+                  );
                 const reason = action.ready(ctx as never, parsed.data as never);
                 if (reason) return refuse("not-ready", reason);
                 const refusal = (await action.run(ctx as never, parsed.data as never)) ?? null;
-                if (!refusal)
+                // A partial outcome landed something: what it dirties is stale either way.
+                if (!refusal || refusal.code === "partial")
                   for (const reading of action.dirties) {
                     const request = readingAtoms.find(([name]) => name === reading)?.[2];
                     if (request) owner.write(name, `dirty/${reading}`, () => dirty(request));
@@ -986,6 +1249,7 @@ export function useRoute<W, R extends string, P, A extends string>(
                 stopped = true;
               },
               action.label,
+              action.waitSeconds ?? DEFAULT_WAIT_S,
             );
             setOutcome({ key: name, label: action.label, refusal, stopped, at: Date.now() });
             return refusal;
@@ -1004,7 +1268,10 @@ export function useRoute<W, R extends string, P, A extends string>(
     page,
     doc,
     workCurrent,
+    sliceResult,
+    bindingLost,
     writer,
+    writeWork,
     owner,
     seed,
     key,
@@ -1019,13 +1286,27 @@ export function useRoute<W, R extends string, P, A extends string>(
       current: workCurrent,
       write: writeWork,
       conflict: conflictNow,
+      refusal: sliceResult?.state === "failed" ? sliceResult.message : null,
+      startFresh:
+        sliceResult?.state === "failed" &&
+        sliceResult.message === UNREADABLE_WORK &&
+        writer &&
+        !seed
+          ? async () => {
+              const refusal = await writer.startFresh();
+              if (refusal) owner.registry.set(owner.failure, refusal);
+              else dirty({ ...key, kind: "work" });
+              return refusal;
+            }
+          : null,
+      salvage: writer && !seed ? () => writer.salvage() : null,
       reload: () => {
         if (seed) return;
         owner.registry.set(owner.conflict, false);
         if (spec) dirty({ ...key, kind: "work" });
       },
     }),
-    [key, doc, workCurrent, writeWork, owner, conflictNow, spec, seed],
+    [key, doc, workCurrent, sliceResult, writer, writeWork, owner, conflictNow, spec, seed],
   );
 
   return {
@@ -1036,6 +1317,7 @@ export function useRoute<W, R extends string, P, A extends string>(
     work: workHandle,
     readings,
     inventory: seededReadings ? (seededReadings.inventory ?? { state: "absent" }) : inventoryResult,
+    bindingLost,
     page: [page, setPage] as const,
     actions,
     busy,

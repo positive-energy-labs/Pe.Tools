@@ -11,6 +11,8 @@ export type FamiliesDraft = {
 export interface FamiliesHost {
   categories(target: DocumentRef): Promise<string[]>;
   families(target: DocumentRef, draft: FamiliesDraft): Promise<string[]>;
+  /** Every loaded family's name by its current element id, whatever the scope. */
+  namesById(target: DocumentRef): Promise<Map<number, string>>;
 }
 
 export function createLiveFamiliesHost(): FamiliesHost {
@@ -43,6 +45,14 @@ export function createLiveFamiliesHost(): FamiliesHost {
           ),
         ),
       ].sort((a, b) => a.localeCompare(b));
+    },
+    async namesById(target) {
+      const result = await callHostRpc(
+        "revit.catalog.loaded-families",
+        { filter: {}, budget: { maxEntries: 5000 } },
+        { bridgeSessionId: target.session, openDocumentId: target.openId },
+      );
+      return new Map(result.families.map((family) => [family.familyId, family.familyName]));
     },
   };
 }

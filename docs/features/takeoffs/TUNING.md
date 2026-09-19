@@ -30,8 +30,9 @@ python eval/rhvac/score-looks-good.py score  .artifacts/takeoff-zone-promotion/r
 python eval/rhvac/score-looks-good.py compare <baseline-report.json> <candidate-report.json>
 ```
 
-Knob overrides without recompiling: `PE_TAKEOFF_KNOBS="Name=Value;Name=Value"` (exact field names
-from `TakeoffOptions`, Contracts.cs). `PE_TAKEOFF_ZONE=<name>` filters to one zone. Knob overrides
+Knob overrides without recompiling were `PE_TAKEOFF_KNOBS="Name=Value;Name=Value"`, named after the
+raster-era `TakeoffOptions` (deleted; the solver's knobs are `Pe.Revit.Partition.Knobs`).
+`PE_TAKEOFF_ZONE=<name>` filtered to one zone. Knob overrides
 land in `optionsHash`; since 2026-08-17 the zone filter does too, AND is persisted explicitly as
 `zoneFilter` in report.json/meta.json (`null` = unfiltered). Before that fix a filtered run's
 package hashed identically to the full baseline's — run `20260817-161144-5973e5c14825` carried 1
@@ -144,7 +145,6 @@ Success = better on every regime, no regime sacrificed.
 - **Stale `ink_*.bin` lane, stronger evidence**: Attic bin missing 51% of replay seed cells in
   the Attic00 crop. Renderer + scorer now bypass it; delete or repair the lane.
 
-- Knob census: ~70 public TakeoffOptions fields; kill the dead, merge the correlated.
 - The stale `ink_*.bin` lane: fix the persistence or delete the lane (one truth for evidence ink).
 - Stage mutual-exclusivity audit: zone-fit vs editability vs ink-backing overlap; Main 10 has
   0 oracle rooms in-zone (zone def or oracle floor-mapping oddity — cheap to resolve).

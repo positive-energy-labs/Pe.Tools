@@ -1,4 +1,4 @@
-using Autodesk.Revit.DB.Electrical;
+﻿using Autodesk.Revit.DB.Electrical;
 using Pe.Revit.DocumentData.AgentContext;
 using Pe.Revit.DocumentData.Electrical;
 using Pe.Revit.DocumentData.Families.Loaded.Collectors;
@@ -356,92 +356,6 @@ internal sealed class RevitDataRequestService {
                 "Verify the active document is a project document and retry."
             );
         }
-    }
-
-    [Op("family.editor.snapshot", Does = "Read parameters, types, formulas, and display values from the active family editor document.", Title = "Get Family Editor Snapshot", Finds = ["family-editor", "family", "parameters", "types", "formulas", "snapshot"])]
-    private FamilyEditorSnapshotData GetFamilyEditorSnapshotCore(NoRequest _, OpFamilyDocument activeDocument) {
-        var document = activeDocument.Value;
-
-        try {
-            var fm = document.FamilyManager;
-            var familyDocument = new FamilyDocument(document);
-            var parameterSet = fm.Parameters;
-            var familyTypes = fm.Types.Cast<FamilyType>().ToList();
-            var typeNames = familyTypes.Select(type => type.Name).ToList();
-            var parameters = fm.Parameters.Cast<FamilyParameter>()
-                .Select(parameter => CreateFamilyEditorParameterSnapshot(familyDocument, parameter, familyTypes, parameterSet))
-                .OrderBy(parameter => parameter.Name, StringComparer.OrdinalIgnoreCase)
-                .ThenByDescending(parameter => parameter.IsInstance)
-                .ToList();
-
-            return new FamilyEditorSnapshotData(
-                document.Title,
-                fm.CurrentType?.Name ?? string.Empty,
-                typeNames,
-                parameters
-            );
-        } catch (BridgeOperationException) {
-            throw;
-        } catch (Exception ex) {
-            throw BridgeOperationExceptions.Unexpected(
-                "FamilyEditorSnapshotException",
-                ex,
-                "Verify the active document is a family document and retry."
-            );
-        }
-    }
-
-    [Op("family.editor.apply", Does = "Apply parameter value and formula edits to the active family editor document in one host-owned transaction.", Title = "Apply Family Editor Edits", Finds = ["family-editor", "family", "parameters", "apply", "formulas", "mutation"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
-    private FamilyEditorApplyData ApplyFamilyEditorEditsCore(FamilyEditorApplyRequest request, OpFamilyDocument activeDocument) {
-        var document = activeDocument.Value;
-        if (!request.DryRun && document.IsReadOnly) {
-            throw BridgeOperationExceptions.Conflict(
-                "Active family document is read-only.",
-                [
-                    BridgeOperationExceptions.Issue(
-                        "$",
-                        "FamilyEditorDocumentReadOnly",
-                        "Active family document is read-only.",
-                        "Open a writable family document and retry, or use dryRun=true to preview."
-                    )
-                ]
-            );
-        }
-
-        var edits = request.Edits ?? [];
-        if (edits.Count == 0)
-            return new FamilyEditorApplyData(0, []);
-
-        var familyDocument = new FamilyDocument(document);
-
-        using var sandbox = DocumentSandbox.BeginCommit(document, "Pe Family Editor Apply");
-        var commitFailures = new List<(bool IsError, string Message)>();
-        var failureOptions = sandbox.Transaction.GetFailureHandlingOptions();
-        _ = failureOptions.SetFailuresPreprocessor(PeToolsFailureHandling.CreatePreprocessor(commitFailures));
-        _ = failureOptions.SetForcedModalHandling(false);
-        sandbox.Transaction.SetFailureHandlingOptions(failureOptions);
-
-        var applied = 0;
-        var results = new List<FamilyEditorApplyEditResult>();
-        for (var i = 0; i < edits.Count; i++) {
-            try {
-                ApplyFamilyEditorEdit(familyDocument, edits[i]);
-                applied++;
-                results.Add(new FamilyEditorApplyEditResult(i, true, null));
-            } catch (Exception ex) {
-                results.Add(new FamilyEditorApplyEditResult(i, false, ex.Message));
-            }
-        }
-
-        // DryRun validates the full edit sequence inside the transaction, then rolls back on dispose
-        // (Complete is skipped) so nothing persists. Applied still reflects the would-apply count.
-        if (!request.DryRun && applied > 0)
-            sandbox.Complete();
-
-        foreach (var (_, message) in commitFailures)
-            results.Add(new FamilyEditorApplyEditResult(edits.Count + results.Count, false, message));
-
-        return new FamilyEditorApplyData(applied, results);
     }
 
     [Op("data-table.apply", Does = "Upsert a synthetic data table in one host-owned transaction: a key schedule whose rows are freely user-editable and whose cells are shared parameters on stable row elements — ideal for arbitrary agent-authored tables like design conditions or install notes. Can also place the table on a sheet. Authored element schedules apply through schedule.apply.", Title = "Apply Data Table", Finds = ["schedules", "data-table", "key-schedule", "table", "apply", "create", "upsert", "rows", "sheet-placement", "mutation"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Example = "{ \"table\": { \"name\": \"ASHRAE Design Conditions\", \"columns\": [{ \"heading\": \"Condition\" }, { \"heading\": \"Value (°F)\", \"kind\": \"Number\" }], \"rows\": [{ \"key\": \"cooling-db\", \"values\": [\"Cooling Design DB\", \"94.1\"] }, { \"key\": \"heating-db\", \"values\": [\"Heating Design DB\", \"12.3\"] }] }, \"placement\": { \"sheet\": \"M-001\" } }")]
@@ -894,8 +808,8 @@ internal sealed class RevitDataRequestService {
         new(receipt.AcquisitionId, receipt.Status, receipt.OpenId is { } openId ? new(session, openId) : null,
             receipt.RecoveryId, receipt.Detail, receipt.RecordedOpenId, receipt.RecordedStatus);
 
-    [Op("family.editor.open", Does = "Open a loaded family from the active project in the Revit family editor and activate it (saves to a scratch .rfa to make activation possible).", Title = "Open Family In Editor", Finds = ["family-editor", "family", "open", "edit-family", "activate"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
-    private FamilyEditorOpenData OpenFamilyEditorCore(FamilyEditorOpenRequest request, ProjectDocument activeDocument) {
+    [Op("family.open", Does = "Open a loaded family from the active project in the Revit family editor and activate it (saves to a scratch .rfa to make activation possible).", Title = "Open Family In Editor", Finds = ["family-editor", "family", "open", "edit-family", "activate"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    private FamilyOpenData OpenFamilyCore(FamilyOpenRequest request, ProjectDocument activeDocument) {
         var document = activeDocument.Value;
         var uiApp = RequireDocumentUi(document);
 
@@ -942,7 +856,7 @@ internal sealed class RevitDataRequestService {
         }
 
         var opened = this.OpenLocalRevitDocument(uiApp, scratchPath);
-        return new FamilyEditorOpenData(family.Name, opened.Title, scratchPath);
+        return new FamilyOpenData(family.Name, opened.Title, scratchPath);
     }
 
     private Autodesk.Revit.DB.Document OpenLocalRevitDocument(UIApplication uiApp, string path) {
@@ -975,7 +889,7 @@ internal sealed class RevitDataRequestService {
                 [
                     BridgeOperationExceptions.Issue(
                         "$.path",
-                        "FamilyEditorDocumentOpenFailed",
+                        "FamilyOpenFailed",
                         ex.Message,
                         "Verify Revit is idle, no modal dialog or transaction is active, and the model can be opened manually."
                     )
@@ -983,7 +897,7 @@ internal sealed class RevitDataRequestService {
             );
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
-                "FamilyEditorDocumentOpenException",
+                "FamilyOpenException",
                 ex,
                 "Verify the path points to a supported local Revit document and retry."
             );
@@ -1114,7 +1028,7 @@ internal sealed class RevitDataRequestService {
         }
     }
 
-    [Op("revit.context.view-image", Does = "Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. Whole-view capture needs no transaction; focus capture sets a temporary crop box (clearing any scope box) and restores it afterward (editable document only).", Title = "Export View Image", Finds = ["view", "sheet", "viewport", "schedule", "image", "capture", "screenshot", "png", "export", "visual", "see", "look", "crop", "focus", "zoom"], Example = "{ \"target\": { \"name\": \"A101\" }, \"pixelSize\": 2000 }")]
+    [Op("revit.context.view-image", Does = "Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. Whole-view capture needs no transaction; focus capture sets a temporary crop box (clearing any scope box) and restores it afterward (editable document only). A cropped view also returns registration: the model XY of the image's top-left, top-right and bottom-left corners plus the image sha256, which places pixels under model geometry even on a rotated crop. A cropped view shows exactly its model crop: annotations outside the model crop are not drawn.", Title = "Export View Image", Finds = ["view", "sheet", "viewport", "schedule", "image", "capture", "screenshot", "png", "export", "visual", "see", "look", "crop", "focus", "zoom", "registration", "underlay", "plan"], Example = "{ \"target\": { \"name\": \"A101\" }, \"pixelSize\": 2000 }")]
     private RevitViewImageData GetRevitViewImageCore(RevitViewImageRequest request, RevitDocument activeDocument) {
         var document = activeDocument.Value;
         // Wire deserialization does not honor record ctor defaults (0 arrives when omitted).
@@ -1312,247 +1226,6 @@ internal sealed class RevitDataRequestService {
             "Cannot resolve focus.",
             [BridgeOperationExceptions.Issue("$.focus", code, detail, "Adjust the focus and retry, or omit focus for the whole view.")]
         );
-
-    private static FamilyEditorParameterSnapshot CreateFamilyEditorParameterSnapshot(
-        FamilyDocument familyDocument,
-        FamilyParameter parameter,
-        IReadOnlyList<FamilyType> familyTypes,
-        FamilyParameterSet parameterSet
-    ) {
-        var definition = parameter.Definition;
-        var formula = string.IsNullOrWhiteSpace(parameter.Formula) ? null : parameter.Formula;
-        var valuesPerType = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var familyType in familyTypes)
-            valuesPerType[familyType.Name] = GetFamilyEditorValue(familyType, parameter);
-
-        return new FamilyEditorParameterSnapshot(
-            definition?.Name ?? string.Empty,
-            parameter.IsInstance,
-            parameter.IsReadOnly,
-            formula != null,
-            parameter.IsShared,
-            GetSharedParameterGuid(parameter),
-            parameter.StorageType.ToString(),
-            NormalizeForgeTypeId(definition?.GetDataType()),
-            GetParameterGroupLabel(definition),
-            formula,
-            valuesPerType,
-            BuildParameterIdentity(parameter),
-            BuildFormulaDependsOn(parameter, parameterSet),
-            BuildFormulaDependents(parameter, parameterSet),
-            BuildParameterAssociations(parameter, familyDocument)
-        );
-    }
-
-    private static ParameterIdentity? BuildParameterIdentity(FamilyParameter parameter) {
-        try {
-            return RevitParameterDefinition.ObservedFamilyParameter(parameter).Identity;
-        } catch {
-            return null;
-        }
-    }
-
-    // Formula graph is name-based and computed per parameter (O(n) per param over the parameter set —
-    // the extensions expose no batch API; n is family-parameter-count, in the low hundreds, so fine).
-    private static IReadOnlyList<string>? BuildFormulaDependsOn(
-        FamilyParameter parameter,
-        FamilyParameterSet parameterSet
-    ) {
-        try {
-            var names = parameter.GetDependencies(parameterSet)
-                .Select(dependency => dependency.Name())
-                .Where(name => !string.IsNullOrEmpty(name))
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
-            return names.Count == 0 ? null : names;
-        } catch {
-            return null;
-        }
-    }
-
-    private static IReadOnlyList<string>? BuildFormulaDependents(
-        FamilyParameter parameter,
-        FamilyParameterSet parameterSet
-    ) {
-        try {
-            var names = parameter.GetDependents(parameterSet)
-                .Select(dependent => dependent.Name())
-                .Where(name => !string.IsNullOrEmpty(name))
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
-            return names.Count == 0 ? null : names;
-        } catch {
-            return null;
-        }
-    }
-
-    private static FamilyParameterAssociationInfo? BuildParameterAssociations(
-        FamilyParameter parameter,
-        FamilyDocument familyDocument
-    ) {
-        var dimensions = CollectAssociationLabels(() => parameter
-            .AssociatedDimensions(familyDocument)
-            .Where(dimension => dimension.Id.Value() >= 0)
-            .Select(FormatElementLabel));
-        var arrays = CollectAssociationLabels(() => parameter
-            .AssociatedArrays(familyDocument)
-            .Where(array => array.Id.Value() >= 0)
-            .Select(FormatElementLabel));
-        var nested = BuildNestedAssociations(parameter);
-
-        if (dimensions.Count == 0 && arrays.Count == 0 && nested.Count == 0)
-            return null;
-
-        return new FamilyParameterAssociationInfo(dimensions, arrays, nested);
-    }
-
-    private static IReadOnlyList<string> CollectAssociationLabels(Func<IEnumerable<string>> selector) {
-        try {
-            return selector().ToList();
-        } catch {
-            return [];
-        }
-    }
-
-    private static IReadOnlyList<FamilyNestedAssociation> BuildNestedAssociations(FamilyParameter parameter) {
-        try {
-            var nested = new List<FamilyNestedAssociation>();
-            foreach (Parameter associated in parameter.AssociatedParameters) {
-                // Gotcha #13: skip phantom parameters (negative ids) and dangling owners.
-                if (associated.Id.Value() < 0)
-                    continue;
-
-                Element? owner;
-                try {
-                    owner = associated.Element;
-                } catch {
-                    continue;
-                }
-
-                if (owner == null || owner.Id.Value() < 0)
-                    continue;
-
-                nested.Add(new FamilyNestedAssociation(
-                    owner.Name ?? string.Empty,
-                    owner.Id.Value().ToString(CultureInfo.InvariantCulture),
-                    associated.Definition?.Name ?? string.Empty
-                ));
-            }
-
-            return nested;
-        } catch {
-            return [];
-        }
-    }
-
-    private static string FormatElementLabel(Element element) =>
-        $"{element.Name} [ID:{element.Id.Value()}]";
-
-    private static string GetFamilyEditorValue(FamilyType familyType, FamilyParameter parameter) {
-        try {
-            var value = familyType.AsValueString(parameter);
-            if (!string.IsNullOrEmpty(value))
-                return value;
-        } catch {
-        }
-
-        try {
-            var value = familyType.AsString(parameter);
-            if (!string.IsNullOrEmpty(value))
-                return value;
-        } catch {
-        }
-
-        try {
-            return parameter.StorageType switch {
-                StorageType.Integer => familyType.AsInteger(parameter)?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
-                StorageType.Double => familyType.AsDouble(parameter)?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
-                StorageType.ElementId => familyType.AsElementId(parameter)?.ToString() ?? string.Empty,
-                _ => string.Empty
-            };
-        } catch {
-            return string.Empty;
-        }
-    }
-
-    private static void ApplyFamilyEditorEdit(FamilyDocument familyDocument, FamilyEditorApplyEdit edit) {
-        var familyManager = familyDocument.FamilyManager;
-        var parameter = familyManager.FindParameter(edit.ParamName)
-            ?? throw new InvalidOperationException($"Parameter not found: {edit.ParamName}");
-
-        if (edit.Formula != null) {
-            // Route through the validating helper (friendly error strings, single SetFormula).
-            // An empty/whitespace formula clears the formula — preserved behavior.
-            if (!familyDocument.TrySetFormula(parameter, edit.Formula, out var formulaError))
-                throw new InvalidOperationException(
-                    formulaError ?? $"Failed to set formula on parameter '{edit.ParamName}'.");
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(edit.TypeName))
-            throw new InvalidOperationException("Value edits require typeName.");
-
-        var value = edit.Value ?? string.Empty;
-        // Gotcha #18: a per-type value that references parameter names is really a formula.
-        if (!string.IsNullOrEmpty(value) && familyManager.Parameters.GetReferencedIn(value).Any())
-            throw new InvalidOperationException("value references parameters — send it as a formula instead");
-
-        var familyType = familyManager.Types.Cast<FamilyType>()
-            .FirstOrDefault(type => string.Equals(type.Name, edit.TypeName, StringComparison.Ordinal))
-            ?? throw new InvalidOperationException($"Type not found: {edit.TypeName}");
-        familyManager.CurrentType = familyType;
-
-        try {
-            familyManager.SetValueString(parameter, value);
-            return;
-        } catch {
-        }
-
-        switch (parameter.StorageType) {
-            case StorageType.String:
-                familyManager.Set(parameter, value);
-                break;
-            case StorageType.Integer:
-                familyManager.Set(parameter, int.Parse(value, CultureInfo.InvariantCulture));
-                break;
-            case StorageType.Double:
-                familyManager.Set(parameter, double.Parse(value, CultureInfo.InvariantCulture));
-                break;
-            default:
-                throw new InvalidOperationException($"Unsupported storage type {parameter.StorageType}.");
-        }
-    }
-
-    private static string? GetSharedParameterGuid(FamilyParameter parameter) {
-        if (!parameter.IsShared)
-            return null;
-
-        try {
-            var guid = parameter.GUID;
-            return guid == Guid.Empty ? null : guid.ToString("D");
-        } catch {
-            return null;
-        }
-    }
-
-    private static string? GetParameterGroupLabel(Definition? definition) {
-        var groupTypeId = definition?.GetGroupTypeId();
-        if (groupTypeId == null || string.IsNullOrWhiteSpace(groupTypeId.TypeId))
-            return null;
-
-        try {
-            return RevitLabelCatalog.GetLabelForPropertyGroup(groupTypeId);
-        } catch {
-            return groupTypeId.TypeId;
-        }
-    }
-
-    private static string? NormalizeForgeTypeId(ForgeTypeId? forgeTypeId) {
-        if (forgeTypeId == null || string.IsNullOrWhiteSpace(forgeTypeId.TypeId))
-            return null;
-
-        return forgeTypeId.TypeId;
-    }
 
     private static LoadedFamiliesFilter ValidateMatrixFilter(LoadedFamiliesMatrixRequest request) {
         var categoryNames = request.Filter?.CategoryNames

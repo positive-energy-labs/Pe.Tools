@@ -6,13 +6,18 @@ import { tv } from "#/lib/tv";
 export const inputRecipe = tv({
   base: "h-(--control-h) w-full min-w-0 rounded-md border border-line bg-line/20 px-2 py-0.5 t-prose transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:font-medium file:text-ink placeholder:text-ink-2 focus-visible:border-line-2 focus-visible:ring-2 focus-visible:ring-line-2/30 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-caution aria-invalid:ring-caution dark:bg-line/30",
   variants: {
+    kind: {
+      field: "",
+      check:
+        "size-4 w-auto shrink-0 rounded-sm border-line bg-transparent p-0 accent-ink focus-visible:ring-2 focus-visible:ring-line-2/30",
+    },
     surface: {
       field: "",
       embedded:
         "flex-1 rounded-none border-0 bg-transparent shadow-none ring-0 focus-visible:ring-0 aria-invalid:ring-0 dark:bg-transparent",
     },
   },
-  defaultVariants: { surface: "field" },
+  defaultVariants: { kind: "field", surface: "field" },
 });
 
 function Input({
@@ -26,7 +31,7 @@ function Input({
     <InputPrimitive
       type={type}
       data-slot="input"
-      className={`${inputRecipe({ surface })}${face === "mono" ? " face-mono" : ""}`}
+      className={`${inputRecipe({ kind: type === "checkbox" ? "check" : "field", surface })}${face === "mono" ? " face-mono" : ""}`}
       {...props}
     />
   );

@@ -1,10 +1,23 @@
 import { describe, expect, it } from "vite-plus/test";
 
+import { applyPatches, type RouteEnvelope } from "./route-doc.ts";
+import type { RouteStateSpec } from "./route-state.ts";
 import {
   partitionReviewSchema,
+  stagedDecisions,
+  stagedReviewFlags,
+  stagedTakeoffEdits,
+  takeoffDecisionKey,
+  takeoffDiscardEdits,
+  takeoffEditKey,
+  takeoffEditPatches,
+  takeoffFlagToggle,
   takeoffRegionAnalysisSchema,
   takeoffsRouteState,
+  type TakeoffsRouteDocument,
 } from "./takeoffs.ts";
+import { transitionPatches } from "./trichotomy.ts";
+import type { z } from "zod";
 import { preparedTakeoffSchema, takeoffActions } from "./semantic-actions.ts";
 
 it("normalizes omitted native analysis nulls without accepting invalid values", () => {
@@ -34,10 +47,10 @@ it("freezes Takeoffs decisions and exposes no competing native decision channels
         processStartUtc: "2026-09-14T00:00:00.000Z",
         executable: "C:\\Program Files\\Autodesk\\Revit 2025\\Revit.exe",
       },
-      staged: [],
-      decisions: { "room::flag": "accept" },
+      edits: {},
+      decisions: { [takeoffDecisionKey("room", "flag")]: "accept" },
     }).decisions,
-  ).toEqual({ "room::flag": "accept" });
+  ).toEqual({ [takeoffDecisionKey("room", "flag")]: "accept" });
   expect(takeoffActions).not.toHaveProperty("takeoffs.decisions");
   expect(takeoffActions).not.toHaveProperty("takeoffs.room-type");
 });
@@ -53,33 +66,135 @@ it("reads accepted review shapes when the transport omits a null reason", () => 
   expect(data.shapes[0]!.reason).toBeNull();
 });
 
+const spec = takeoffsRouteState as unknown as RouteStateSpec<z.ZodType>;
+const empty = (): RouteEnvelope<unknown> => ({
+  version: 1,
+  revision: 0,
+  doc: spec.schema.parse({}),
+});
+/** Apply as the actor and return the landed document. */
+function land(
+  doc: unknown,
+  actor: "agent" | "human",
+  patches: ReturnType<typeof transitionPatches>,
+) {
+  const result = applyPatches(spec, { version: 1, revision: 0, doc }, actor, patches, 0);
+  expect(result, JSON.stringify(result)).toMatchObject({ ok: true });
+  return (result as { envelope: { doc: TakeoffsRouteDocument } }).envelope.doc;
+}
+
 describe("takeoffsRouteState", () => {
-  it("defaults a new route document to no world", () => {
+  it("defaults a new route document to no authored cells", () => {
     expect(takeoffsRouteState.schema.parse({})).toEqual({
-      staged: [],
-      adoptPatches: {},
+      edits: {},
+      bases: {},
+      adopt: {},
       decisions: {},
       reviewFlags: {},
     });
   });
 
-  it("allows staged proposals but rejects snapshot writes", () => {
-    const allows = (path: string[]) =>
-      takeoffsRouteState.agentWriteMask.some((pattern) =>
-        pattern.every((segment, index) => segment === "*" || segment === path[index]),
-      );
-    expect(allows(["staged", "0"])).toBe(true);
-    expect(allows(["snapshot"])).toBe(false);
+  it("refuses the pre-cells shapes strictly: no strip, no silent loss", () => {
+    for (const old of [
+      { staged: [{ roomId: "room", base: {}, next: { name: "Authored" } }] },
+      { adoptPatches: { "v:1": { checked: true } } },
+      { stage: "audit" },
+    ])
+      expect(takeoffsRouteState.schema.safeParse(old).success).toBe(false);
   });
-});
 
-it("discards obsolete persisted page selection while retaining authored Work", () => {
-  const staged = [{ roomId: "room", base: { name: "Before" }, next: { name: "Authored" } }];
-  expect(
-    takeoffsRouteState.schema.parse({
-      bindings: { folder: { id: "old" } },
-      stage: "audit",
-      staged,
-    }),
-  ).toEqual({ staged, adoptPatches: {}, decisions: {}, reviewFlags: {} });
+  it("Pea proposes on every cell family and stages none; the person's edit stages per field", () => {
+    const room = "room-1";
+    const decision = takeoffDecisionKey(room, "seedless");
+    const proposed = land(empty().doc, "agent", [
+      ...transitionPatches(
+        ["decisions"],
+        decision,
+        {},
+        { kind: "propose", rung: { value: "dismiss" } },
+      ),
+      ...transitionPatches(
+        ["adopt"],
+        "v:1",
+        {},
+        { kind: "propose", rung: { value: { checked: true } } },
+      ),
+    ]);
+    expect(stagedDecisions(proposed)).toEqual({});
+    expect(
+      applyPatches(
+        spec,
+        { ...empty(), doc: proposed },
+        "agent",
+        transitionPatches(
+          ["decisions"],
+          decision,
+          {},
+          { kind: "stage", rung: { value: "dismiss" } },
+        ),
+        0,
+      ),
+    ).toMatchObject({ ok: false, kind: "refused" });
+    // A person's edit: a changed field stages, an unchanged one stages nothing, the base sits beside.
+    const edited = land(
+      proposed,
+      "human",
+      takeoffEditPatches(
+        proposed,
+        room,
+        { name: "Before", ceilingFt: 9 },
+        { name: "After", ceilingFt: 9 },
+      ),
+    );
+    expect(stagedTakeoffEdits(edited)).toEqual({
+      [room]: { roomId: room, base: { name: "Before", ceilingFt: 9 }, next: { name: "After" } },
+    });
+    // A field value its schema refuses cannot be written.
+    expect(
+      applyPatches(
+        spec,
+        { ...empty(), doc: edited },
+        "human",
+        takeoffEditPatches(
+          edited,
+          room,
+          { name: "Before" },
+          { name: "After", ceilingFt: "tall" as never },
+        ),
+        0,
+      ),
+    ).toMatchObject({ ok: false });
+  });
+
+  it("discard unstages every staged room edit and leaves Pea's proposals standing", () => {
+    const doc = empty().doc as TakeoffsRouteDocument;
+    const edited = land(doc, "human", takeoffEditPatches(doc, "r", { name: "A" }, { name: "B" }));
+    const proposed = land(
+      edited,
+      "agent",
+      transitionPatches(
+        ["edits"],
+        takeoffEditKey("r", "people"),
+        {},
+        {
+          kind: "propose",
+          rung: { value: 4 },
+        },
+      ),
+    );
+    const discarded = land(proposed, "human", takeoffDiscardEdits(proposed));
+    expect(stagedTakeoffEdits(discarded)).toEqual({});
+    expect(discarded.edits[takeoffEditKey("r", "people")]?.proposal).toMatchObject({ value: 4 });
+  });
+
+  it("unflag clears the staged flag (the old union-only flagReview could never unflag)", () => {
+    const flagged = land(
+      empty().doc,
+      "human",
+      takeoffFlagToggle(empty().doc as TakeoffsRouteDocument, "zone", "room:R01"),
+    );
+    expect(stagedReviewFlags(flagged)).toEqual({ zone: ["room:R01"] });
+    const unflagged = land(flagged, "human", takeoffFlagToggle(flagged, "zone", "room:R01"));
+    expect(stagedReviewFlags(unflagged)).toEqual({});
+  });
 });

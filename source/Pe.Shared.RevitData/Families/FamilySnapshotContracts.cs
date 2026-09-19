@@ -36,66 +36,17 @@ public sealed record FamilySnapshotRecord(
     int PlacedInstanceCount = 0,
     IReadOnlyList<string>? ScheduleNames = null
 );
-public sealed record FamilyEditorSnapshotRequest;
-
-public sealed record FamilyEditorSnapshotData(
-    string FamilyName,
-    string CurrentTypeName,
-    IReadOnlyList<string> TypeNames,
-    IReadOnlyList<FamilyEditorParameterSnapshot> Parameters
-);
-
-public sealed record FamilyEditorParameterSnapshot(
-    string Name,
-    bool IsInstance,
-    bool IsReadOnly,
-    bool IsDeterminedByFormula,
-    bool IsShared,
-    string? Guid,
-    string StorageType,
-    string? DataType,
-    string? Group,
-    string? Formula,
-    IReadOnlyDictionary<string, string> ValuesPerType,
-    // Canonical parameter identity (minted via RevitParameterDefinition.ObservedFamilyParameter — never
-    // hand-rolled key prefixes). Null when identity could not be resolved.
-    ParameterIdentity? Identity = null,
-    // Formula graph, one level deep, by parameter name. DependsOn = params THIS formula references;
-    // Dependents = params whose formulas reference THIS one. Null (not empty) when there is nothing.
-    IReadOnlyList<string>? DependsOn = null,
-    IReadOnlyList<string>? Dependents = null,
-    // Direct element associations (dims/arrays/nested), one level deep. Null when none.
-    FamilyParameterAssociationInfo? Associations = null
-);
-
-/// <summary>
-///     Direct (element-based) associations for a family parameter, one level deep. Dimensions and Arrays
-///     are "Name [ID:{id}]" labels; Nested carries element-parameter associations (nested instances,
-///     connectors). Phantom parameters/elements (negative ids, dangling) are filtered out.
-/// </summary>
-public sealed record FamilyParameterAssociationInfo(
-    IReadOnlyList<string> Dimensions,
-    IReadOnlyList<string> Arrays,
-    IReadOnlyList<FamilyNestedAssociation> Nested
-);
-
-public sealed record FamilyNestedAssociation(
-    string ElementName,
-    string ElementId,
-    string ParamName
-);
-
 /// <summary>
 ///     Open a loaded family from the active project in the family editor and activate it.
 ///     EditFamily documents have no path and cannot be activated directly, so the family is
 ///     saved to a scratch .rfa and reopened by path (the proven activation workaround).
 /// </summary>
-public sealed record FamilyEditorOpenRequest(
+public sealed record FamilyOpenRequest(
     long? FamilyId = null,
     string? FamilyName = null
 );
 
-public sealed record FamilyEditorOpenData(
+public sealed record FamilyOpenData(
     string FamilyName,
     string DocumentTitle,
     string? SavedPath
@@ -111,27 +62,3 @@ public sealed record TemporaryDocumentStatusRequest(string AcquisitionId);
 public sealed record TemporaryDocumentRef(string Session, string OpenId);
 public sealed record TemporaryDocumentData(string AcquisitionId, string Status, TemporaryDocumentRef? Document,
     string RecoveryId, string? Detail, string? RecordedOpenId, string? RecordedStatus);
-
-public sealed record FamilyEditorApplyRequest(
-    IReadOnlyList<FamilyEditorApplyEdit> Edits,
-    // Run the full edit sequence inside a transaction, then roll back — validate without persisting.
-    bool DryRun = false
-);
-
-public sealed record FamilyEditorApplyEdit(
-    string ParamName,
-    string? TypeName,
-    string? Value,
-    string? Formula
-);
-
-public sealed record FamilyEditorApplyData(
-    int Applied,
-    IReadOnlyList<FamilyEditorApplyEditResult> Results
-);
-
-public sealed record FamilyEditorApplyEditResult(
-    int Index,
-    bool Ok,
-    string? Error
-);

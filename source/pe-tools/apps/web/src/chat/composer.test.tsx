@@ -27,6 +27,32 @@ test("the slash menu offers skills only; built-in commands are gone", () => {
   lane.unmount();
 });
 
+test("the slash menu's keys are the list's: ↓ and Enter pick without sending; Escape closes", async () => {
+  const send = vi.fn(async () => null);
+  const lane = mount({
+    skills: [
+      { name: "audit", description: "Audit the model" },
+      { name: "author", description: "Write a family" },
+    ],
+    send,
+  });
+  const box = screen.getByRole("textbox");
+  await act(async () => box.focus());
+  await act(async () => fireEvent.change(box, { target: { value: "/au" } }));
+  await act(async () => fireEvent.keyDown(box, { key: "ArrowDown" }));
+  await act(async () => fireEvent.keyDown(box, { key: "ArrowDown" }));
+  expect(box.getAttribute("aria-activedescendant")).toBeTruthy();
+  await act(async () => fireEvent.keyDown(box, { key: "Enter" }));
+  expect((box as HTMLTextAreaElement).value).toBe("Use the author skill: ");
+  expect(send).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(box);
+  await act(async () => fireEvent.change(box, { target: { value: "/" } }));
+  expect(screen.getByRole("listbox")).toBeTruthy();
+  await act(async () => fireEvent.keyDown(box, { key: "Escape" }));
+  expect(screen.queryByRole("listbox")).toBe(null);
+  lane.unmount();
+});
+
 const newAction = {
   label: "new",
   says: "starts a new, empty thread and opens it",
@@ -37,7 +63,7 @@ const newAction = {
 
 function mount({
   skills = [] as { name: string; description: string }[],
-  send = vi.fn(async () => ({ ok: true })),
+  send = vi.fn(async (): Promise<{ code: "not-ready"; message: string } | null> => null),
 } = {}) {
   workbench.value = {
     chat: { ...emptyChatState(), inspect: { skills } },
@@ -77,7 +103,7 @@ function mount({
 }
 
 test("composer Pane lists its real keys without replacing textarea Enter", () => {
-  const send = vi.fn(async () => ({ ok: true }));
+  const send = vi.fn(async () => null);
   const lane = mount({ send });
   const pane = lane.container.querySelector<HTMLElement>("[data-pane-id='composer']")!;
   const box = screen.getByRole<HTMLTextAreaElement>("textbox");
@@ -121,6 +147,18 @@ test("composer Pane lists its real keys without replacing textarea Enter", () =>
   expect(send).toHaveBeenCalledOnce();
   expect(fireEvent.keyDown(box, { key: "Enter", code: "Enter", shiftKey: true })).toBe(true);
   expect(send).toHaveBeenCalledOnce();
+});
+
+test("refused Enter records the refusal and keeps the draft", async () => {
+  const refusal = { code: "not-ready", message: "Session is not ready" } as const;
+  const send = vi.fn(async () => refusal);
+  mount({ send });
+  const box = screen.getByRole<HTMLTextAreaElement>("textbox");
+  fireEvent.change(box, { target: { value: "keep this" } });
+  fireEvent.keyDown(box, { key: "Enter", code: "Enter" });
+  await settle();
+  expect(send).toHaveBeenCalledWith({ text: "keep this", attachments: undefined });
+  expect(box.value).toBe("keep this");
 });
 
 const png = (name = "shot.png", bytes = 8) =>

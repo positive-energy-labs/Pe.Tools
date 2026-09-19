@@ -1,6 +1,9 @@
 using Autodesk.Revit.DB.Electrical;
 using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.Extensions.FamParameter.Formula;
+using Pe.Revit.Extensions.FamDocument.SetValue;
+using Pe.Revit.Extensions.FamDocument.SetValue.Utils;
+using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.Extensions.FamDocument;
 
@@ -19,8 +22,11 @@ public static class FamilyDocumentNormalizeParameter {
         // Shared replacement cannot create an external definition while another parameter owns its name.
         if (!source.IsShared && shared is not null && source.Definition.Name == shared.Name)
             fm.RenameParameter(source, "FF_Transfer_" + Guid.NewGuid().ToString("N"));
+        // A shared source always leaves through a unique temporary family name: replacing it straight to `name` fails natively when
+        // it already holds that name ("The parameter 'X' is already in use", shared→family same-name). The rename below restores `name`;
+        // any failure rolls this sub-transaction back, so the temporary name never survives.
         else if (source.IsShared)
-            replacement = fm.ReplaceParameter(source, shared is null ? name : "FF_Transfer_" + Guid.NewGuid().ToString("N"), group, instance);
+            replacement = fm.ReplaceParameter(source, "FF_Transfer_" + Guid.NewGuid().ToString("N"), group, instance);
         if (shared is not null) replacement = fm.ReplaceParameter(replacement, shared, group, instance);
         else {
             if (replacement.Definition.Name != name) fm.RenameParameter(replacement, name);
@@ -34,15 +40,23 @@ public static class FamilyDocumentNormalizeParameter {
         }
     }
 
-    /// <summary>Destination values win. Transfer source references, honoring exact connector routes, then remove the source; any failure rolls back.</summary>
-    public static void TransferAndRemoveParameter(this FamilyDocument document, FamilyParameter source, FamilyParameter target,
-        IReadOnlyDictionary<BuiltInParameter, string>? associationRoutes = null) {
+    /// <summary>
+    ///     Destination values win. Transfer source references, honoring exact connector routes, then remove the source; any failure rolls back.
+    ///     Returns the named note when the source formula could not cross and its per-type values were carried by <paramref name="strategy" /> instead.
+    /// </summary>
+    public static string? TransferAndRemoveParameter(this FamilyDocument document, FamilyParameter source, FamilyParameter target,
+        IReadOnlyDictionary<BuiltInParameter, string>? associationRoutes = null, string strategy = "CoerceByStorageType", string? sourceLabel = null) {
         if (source.IsBuiltInParameter()) throw new InvalidOperationException("Revit-owned built-in parameters cannot be removed.");
         if (source.Id == target.Id) throw new InvalidOperationException("Source and destination must be distinct parameters.");
         var fm = document.FamilyManager;
         var dependents = source.GetDependents(fm.Parameters).ToList();
         var targetDependsOnSource = dependents.Any(dependent => dependent.Id == target.Id);
         var targetIsExactAlias = targetDependsOnSource && fm.Parameters.TryGetSingleReference(target.Formula)?.Id == source.Id;
+        // The source reads exactly the destination, directly or through exact aliases (`Mech Equip Model Number = Model` where the built-in
+        // `Model = PE_G___Model`): its value is the destination's in every type, and its dependents are rewritten to the destination below,
+        // so not copying that circular formula loses nothing.
+        var sourceIsExactAlias = FamilyFormulaCopy.IsExactAliasOf(fm.Parameters, source, target);
+        string? note = null;
         if (targetDependsOnSource && !targetIsExactAlias)
             throw new InvalidOperationException(
                 $"Cannot remove source '{source.Definition.Name}': destination '{target.Definition.Name}' formula '{target.Formula}' depends on the source but is not an exact alias. Refusing to discard formula intent.");
@@ -62,7 +76,7 @@ public static class FamilyDocumentNormalizeParameter {
         using var transaction = new SubTransaction(document.Document);
         transaction.Start();
         var originalType = fm.CurrentType;
-        var sourceName = source.Definition.Name;
+        var sourceName = sourceLabel ?? source.Definition.Name;
         try {
             var temporary = "FF_Transfer_" + Guid.NewGuid().ToString("N");
             if (source.IsShared) source = fm.ReplaceParameter(source, temporary, source.Definition.GetGroupTypeId(), source.IsInstance);
@@ -82,10 +96,20 @@ public static class FamilyDocumentNormalizeParameter {
             }
             document.LabelDimensions(dimensions.Select(dimension => (dimension, target)));
             foreach (var array in arrays) array.Label = target;
-            // A source formula is intent the destination keeps (kaitpw 2026-09-08). Revit refuses a spec mismatch; the per-type values already written then stand.
-            if (!targetIsExactAlias && !string.IsNullOrEmpty(source.Formula) && string.IsNullOrEmpty(target.Formula)) {
-                try { fm.SetFormula(target, source.Formula); }
-                catch (Autodesk.Revit.Exceptions.ApplicationException) { /* ponytail: values stand; a Skip log needs a return channel this method lacks */ }
+            // A source formula is intent the destination keeps (kaitpw 2026-09-08). One that cannot cross is dropped with a named note, and each
+            // type's value is carried by the mapping's strategy instead (ruling-ff-coercion 2026-09-18): never across data types (R1), nor where
+            // Revit refuses it. Only a value the strategy cannot carry refuses, by name; the transfer then rolls back whole.
+            if (!targetIsExactAlias && !sourceIsExactAlias && !string.IsNullOrEmpty(source.Formula) && string.IsNullOrEmpty(target.Formula)) {
+                var formula = source.Formula;
+                var blocker = FamilyFormulaCopy.Blocker(fm.Parameters, formula, source.Definition.GetDataType(), target.Definition.GetDataType(), target.IsInstance);
+                if (blocker is null)
+                    try { fm.SetFormula(target, formula); }
+                    catch (Autodesk.Revit.Exceptions.ApplicationException) { blocker = FamilyFormulaCopy.NativeRefusal; }
+                if (blocker is not null) {
+                    if (FamilyFormulaCopy.Carry(document, source, sourceName, target, strategy, keep: true).FirstOrDefault() is { } refusal)
+                        throw new InvalidOperationException(refusal);
+                    note = FamilyFormulaCopy.DroppedNote(formula, sourceName, target.Definition.Name, blocker, strategy);
+                }
             }
             if (targetIsExactAlias) {
                 fm.SetFormula(target, null!);
@@ -111,6 +135,15 @@ public static class FamilyDocumentNormalizeParameter {
             if (originalType is not null && fm.CurrentType != originalType) fm.CurrentType = originalType;
         }
         if (transaction.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Source transfer did not commit.");
+        return note;
+    }
+
+    /// <summary>Renames a parameter out of the way under a unique temporary name, keeping its values and references; returns that name.</summary>
+    public static string StepAside(FamilyManager fm, FamilyParameter parameter) {
+        var temporary = "FF_Retype_" + Guid.NewGuid().ToString("N");
+        if (parameter.IsShared) fm.ReplaceParameter(parameter, temporary, parameter.Definition.GetGroupTypeId(), parameter.IsInstance);
+        else fm.RenameParameter(parameter, temporary);
+        return temporary;
     }
 
     private static string AssociationDiagnostic(FamilyParameter source, FamilyParameter target, Parameter elementParameter, FamilyManager manager) {
@@ -121,5 +154,76 @@ public static class FamilyDocumentNormalizeParameter {
                $"Destination='{target.Definition.Name}' Id={target.Id} Storage={target.StorageType} Spec={Spec(target.Definition)} Instance={target.IsInstance}; " +
                $"Element={element.GetType().Name} Id={element.Id}; ElementParameter='{elementParameter.Definition.Name}' Id={elementParameter.Id} " +
                $"BIP={builtIn} Storage={elementParameter.StorageType} Spec={Spec(elementParameter.Definition)} CanAssociate={manager.CanElementParameterBeAssociated(elementParameter)}.";
+    }
+}
+
+/// <summary>The one rule for carrying a source formula to its destination; preparation (preview) and transfer (apply) both read it.</summary>
+public static class FamilyFormulaCopy {
+    public const string NativeRefusal = "Revit refused it";
+
+    private static string Scope(bool instance) => instance ? "instance" : "type";
+
+    /// <summary>
+    ///     Why a source formula cannot be copied onto the destination, or null when Revit is asked. Scope is its own clause so a scope
+    ///     strategy (the open instance->type question, ruling-ff-coercion) slots in here.
+    /// </summary>
+    public static string? Blocker(FamilyParameterSet parameters, string formula, ForgeTypeId sourceSpec, ForgeTypeId targetSpec, bool targetInstance) {
+        if (sourceSpec != targetSpec) return $"{sourceSpec.TypeId} → {targetSpec.TypeId}: a formula is not copied across data types";
+        if (targetInstance) return null;
+        var reads = parameters.GetReferencedIn(formula).Where(p => p.IsInstance).Select(p => $"'{p.Definition.Name}'").ToList();
+        return reads.Count == 0 ? null : $"a type parameter cannot read instance parameter{(reads.Count > 1 ? "s" : "")} {string.Join(", ", reads)}";
+    }
+
+    public static string DroppedNote(string formula, string source, string target, string blocker, string strategy) =>
+        $"formula `{formula}` on '{source}' not copied to '{target}' ({blocker}); per-type values carried by {strategy}";
+
+    /// <summary>
+    ///     Carries every family type's value of <paramref name="source" /> into <paramref name="target" /> under <paramref name="strategy" />,
+    ///     one sub-transaction per value. Returns one refusal per value the strategy cannot carry, naming value, type and both parameters.
+    ///     <paramref name="keep" /> false rolls every write back (preview).
+    /// </summary>
+    public static List<string> Carry(FamilyDocument document, FamilyParameter source, string sourceName, FamilyParameter target, string strategy, bool keep) {
+        var fm = document.FamilyManager;
+        var coercion = ParamCoercionStrategyRegistry.Get(strategy);
+        var refusals = new List<string>();
+        var originalType = fm.CurrentType;
+        try {
+            foreach (var type in fm.Types.Cast<FamilyType>().ToList()) {
+                if (fm.CurrentType != type) fm.CurrentType = type;
+                var context = CoercionContext.FromParam(document, source, target);
+                if (context.SourceValue is null) continue;
+                using var attempt = new SubTransaction(document.Document);
+                attempt.Start();
+                string? reason = $"{strategy} cannot carry it";
+                try {
+                    if (coercion.CanMap(context)) {
+                        var (_, error) = coercion.Map(context);
+                        reason = error?.Message;
+                    }
+                } catch (Exception exception) { reason = exception.Message; }
+                if (reason is null && keep) attempt.Commit();
+                else attempt.RollBack();
+                if (reason is not null)
+                    refusals.Add($"Family '{document.Document.Title}': cannot carry '{sourceName}' value '{context.SourceValueString ?? context.SourceValue}' " +
+                                 $"({source.Definition.GetDataType().TypeId}, {Scope(source.IsInstance)}) into '{target.Definition.Name}' " +
+                                 $"({target.Definition.GetDataType().TypeId}, {Scope(target.IsInstance)}) in type '{type.Name}' under {strategy}: {reason}");
+            }
+        } finally {
+            if (originalType is not null && fm.CurrentType != originalType) fm.CurrentType = originalType;
+        }
+        return refusals;
+    }
+
+    /// <summary>
+    ///     True when <paramref name="source" />'s formula is exactly <paramref name="target" />'s name, or exactly the name of a parameter whose
+    ///     formula is, and so on (cycle-guarded). Such a source equals the destination in every type.
+    /// </summary>
+    public static bool IsExactAliasOf(FamilyParameterSet parameters, FamilyParameter source, FamilyParameter target) {
+        var seen = new HashSet<long> { source.Id.Value() };
+        for (var next = parameters.TryGetSingleReference(source.Formula); next is not null; next = parameters.TryGetSingleReference(next.Formula)) {
+            if (next.Id == target.Id) return true;
+            if (!seen.Add(next.Id.Value())) return false;
+        }
+        return false;
     }
 }

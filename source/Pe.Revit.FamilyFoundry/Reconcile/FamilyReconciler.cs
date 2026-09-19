@@ -28,6 +28,18 @@ public sealed record FamilyPlan(
     /// <summary>Op type names in queue order; the deterministic tests assert this against the DAG.</summary>
     [JsonIgnore]
     public IReadOnlyList<string> OpOrder => this.Queue.Operations.Select(o => o.GetType().Name).ToList();
+
+    /// <summary>
+    ///     True when source migration only changed parameter identity: every <c>parameters.sources</c> target already existed and
+    ///     named no present source (no <c>wasNamed</c> or built-in donor), and the parameter set is the same before and after.
+    ///     Such a migration moves no value between parameters, so the pre-migration intent stays the residue baseline and a native
+    ///     replacement that drops cells, formulas or associations is residue rather than the new normal. A migration that transfers,
+    ///     creates or removes parameters re-derives its baseline from the migrated capture instead.
+    /// </summary>
+    public bool IsIdentityOnlyMigration(FamilyModel original, FamilyModel migrated) =>
+        this.Changes.Where(change => change.Section == "parameters.sources")
+            .All(change => change.Before is IReadOnlyDictionary<string, FamilyModelParameter> { Count: 1 } sources && sources.ContainsKey(change.Key)) &&
+        migrated.Parameters.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(original.Parameters.Keys);
 }
 
 public sealed record ChangeOutcome(FamilyChange Change, LogStatus Status, string? Message);
@@ -96,7 +108,7 @@ public static class FamilyReconciler {
             changes = changes.Concat(mappings.Select(p => new FamilyChange("parameters.sources", p.Key, ChangeKind.Update, null,
                 current.Parameters.Where(c => c.Key == p.Key || p.Value.WasNamed?.Contains(c.Key) == true).ToDictionary(c => c.Key, c => c.Value), p.Value))).ToList();
         }
-        var sourceEffects = mappings.Select(p => $"normalize.sources: {p.Key}; ranked candidates={JsonConvert.SerializeObject(p.Value.WasNamed ?? [])}; fill existing blanks={p.Value.FillBlanksFromSources == true}; strategy={p.Value.MappingStrategy ?? "CoerceByStorageType"}; native replacement or copy, transfer dependencies, remove user-defined sources even when values differ (built-ins cannot be removed); explicit writes follow");
+        var sourceEffects = mappings.Select(p => $"normalize.sources: {p.Key}; ranked candidates={JsonConvert.SerializeObject(p.Value.WasNamed ?? [])}; fill existing blanks={p.Value.FillBlanksFromSources == true}; strategy={p.Value.MappingStrategy ?? MappingStrategy.CoerceByStorageType}; native replacement or copy, transfer dependencies, remove user-defined sources even when values differ (built-ins cannot be removed); explicit writes follow");
         var definitionEffects = sharedDefinitions is null || mappings.Count == 0 ? [] : new[] { "shared.definitions (tooltip supplied to native creation, readback unobservable): " + JsonConvert.SerializeObject(sharedDefinitions) };
         return new FamilyPlan(changes, queue, [], effects.Concat(sourceEffects).Concat(definitionEffects).ToList(), Hash(changes, current, run, desired, authored, sharedDefinitions, executionOptions));
     }
@@ -191,7 +203,9 @@ public static class FamilyReconciler {
             return Same(a, b, units, null);
         });
         Keyed(changes, "refLines", desired.RefLines, current.RefLines, units);
-        Keyed(changes, "lookupTables", desired.LookupTables, current.LookupTables, units);
+        // Revit exports a size table as CRLF rows with six-decimal numbers; the same table authored any other way is not a change.
+        Keyed(changes, "lookupTables", desired.LookupTables, current.LookupTables, units,
+            same: (_, want, have) => FamilyLookupTableCsv.Same(want.Csv, have.Csv));
         Structural(changes, "dimensions", desired.Dimensions, current.Dimensions, units);
         Structural(changes, "forms", desired.Forms, current.Forms, units);
         Structural(changes, "nested", desired.Nested, current.Nested, units);

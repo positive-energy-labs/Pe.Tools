@@ -18,13 +18,11 @@ test("a parameter on the only scoped family remains visible as common", () => {
           familyCount: 1,
         },
       ],
-      pickedIds: new Set<number>(),
-      setPickedIds: () => {},
       showUncommon: false,
       totalFamilies: 1,
-      edits: [],
-      accepted: [],
+      cells: {},
       propose: () => Promise.resolve(null),
+      wire: { segment: "cells", revision: 1, write: async () => null },
     }),
   );
   expect(result.current.uncommonCount).toBe(0);

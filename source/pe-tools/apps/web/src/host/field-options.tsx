@@ -1,18 +1,6 @@
 import { useMemo } from "react";
 
-import {
-  Combobox,
-  ComboboxChip,
-  ComboboxChips,
-  ComboboxChipsInput,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-  ComboboxTrigger,
-  useComboboxAnchor,
-} from "#/components/lang/combobox";
+import { ListChips, ListPopup } from "#/components/lang/list-popup";
 import { useHostOp } from "#/readings";
 import type { ParameterReference } from "@pe/agent-contracts";
 
@@ -61,8 +49,19 @@ export function useFieldOptions(
   const items = (query.data?.items ?? []).filter(
     (item) => typeof item.value === "string" && typeof item.label === "string",
   );
-  return { ...query, items };
+  // Pending and failed are states of the list, never an empty list (R7).
+  const status = query.pending ? "pending" : query.error ? "failed" : "ready";
+  return { ...query, items, status } as const;
 }
+
+export type FieldOptionStatus = "ready" | "pending" | "failed";
+
+const optionRow = (option: FieldOption & { stale?: boolean }) => ({
+  label: option.label,
+  sub: option.description ?? undefined,
+  lines: option.description ? (2 as const) : (1 as const),
+  refusal: option.stale ? "not in the model now" : null,
+});
 
 export function FieldOptionSelect({
   items,
@@ -70,6 +69,7 @@ export function FieldOptionSelect({
   fallbackLabel,
   placeholder,
   disabled,
+  status,
   onChange,
 }: {
   items: FieldOption[];
@@ -77,38 +77,45 @@ export function FieldOptionSelect({
   fallbackLabel?: string;
   placeholder: string;
   disabled?: boolean;
+  status?: FieldOptionStatus;
   onChange: (option: FieldOption) => void;
 }) {
+  // A value the live document no longer offers stays visible, stated stale, never silently lost.
   const choices = useMemo(() => {
     if (!value || items.some((item) => item.value === value)) return items;
     return [
-      { value, label: fallbackLabel ? `${fallbackLabel} (unavailable)` : `${value} (unavailable)` },
+      {
+        value,
+        label: fallbackLabel ? `${fallbackLabel} (unavailable)` : `${value} (unavailable)`,
+        stale: true,
+      },
       ...items,
     ];
   }, [fallbackLabel, items, value]);
-  const selected = choices.find((item) => item.value === value) ?? null;
+  const selected = choices.find((item) => item.value === value);
 
   return (
-    <Combobox
-      items={choices}
-      value={selected}
+    <ListPopup<FieldOption & { stale?: boolean }>
+      anchor="trigger"
+      face="field"
       disabled={disabled}
-      onValueChange={(option: FieldOption | null) => option && onChange(option)}
-      itemToStringLabel={(option: FieldOption) => option.label}
-    >
-      <ComboboxInput placeholder={placeholder} showClear={false} />
-      <ComboboxContent>
-        <ComboboxEmpty>No matching live document values</ComboboxEmpty>
-        <ComboboxList>
-          {(option: FieldOption) => (
-            <ComboboxItem key={option.value} value={option}>
-              <span>{option.label}</span>
-              {option.description ? <span>{option.description}</span> : null}
-            </ComboboxItem>
-          )}
-        </ComboboxList>
-      </ComboboxContent>
-    </Combobox>
+      triggerLabel={placeholder}
+      trigger={selected?.label ?? <span className="text-ink-2">{placeholder}</span>}
+      aria-label={placeholder}
+      region="field options"
+      items={choices}
+      keyOf={(option) => option.value}
+      labelOf={(option) => option.label}
+      filter="substring"
+      searchAbove={8}
+      status={status}
+      select="single"
+      selected={value ? [value] : []}
+      empty="the live document offers no values"
+      noMatch="no matching live document values"
+      onPick={onChange}
+      row={optionRow}
+    />
   );
 }
 
@@ -116,59 +123,50 @@ export function FieldOptionPicker({
   items,
   values,
   disabled,
+  status,
   onChange,
 }: {
   items: FieldOption[];
   values: string[];
   disabled?: boolean;
+  status?: FieldOptionStatus;
   onChange: (values: string[]) => void;
 }) {
-  const anchor = useComboboxAnchor();
   const choices = useMemo(() => {
     const missing = values
       .filter((value) => !items.some((item) => item.value === value))
-      .map((value) => ({ value, label: `${value} (unavailable)` }));
+      .map((value) => ({ value, label: `${value} (unavailable)`, stale: true }));
     return [...missing, ...items];
   }, [items, values]);
-  const selected = choices.filter((item) => values.includes(item.value));
+  const labels = choices.filter((item) => values.includes(item.value)).map((item) => item.label);
 
   return (
-    <>
-      <Combobox
-        items={choices}
-        multiple
-        value={selected}
-        disabled={disabled}
-        onValueChange={(next: FieldOption[]) => onChange(next.map((option) => option.value))}
-        itemToStringLabel={(option: FieldOption) => option.label}
-      >
-        <ComboboxChips ref={anchor}>
-          {selected.map((option) => (
-            <ComboboxChip key={option.value}>{option.label}</ComboboxChip>
-          ))}
-          <ComboboxChipsInput
-            aria-label="Source elements"
-            placeholder={selected.length === 0 ? "All elements in the category" : "Add elements…"}
-          />
-          <ComboboxTrigger />
-        </ComboboxChips>
-        <ComboboxContent anchor={anchor}>
-          <ComboboxEmpty>No matching live document elements</ComboboxEmpty>
-          <ComboboxList>
-            {(option: FieldOption) => (
-              <ComboboxItem key={option.value} value={option}>
-                <span>{option.label}</span>
-                {option.description ? <span>{option.description}</span> : null}
-              </ComboboxItem>
-            )}
-          </ComboboxList>
-        </ComboboxContent>
-      </Combobox>
-      <span>
-        {values.length === 0
-          ? "All elements in the category"
-          : `${values.length} specific element(s)`}
-      </span>
-    </>
+    <ListPopup<FieldOption & { stale?: boolean }>
+      anchor="trigger"
+      face="field"
+      disabled={disabled}
+      triggerLabel="Source elements"
+      trigger={<ListChips labels={labels} none="All elements in the category" />}
+      aria-label="Source elements"
+      region="field options"
+      items={choices}
+      keyOf={(option) => option.value}
+      labelOf={(option) => option.label}
+      filter="substring"
+      status={status}
+      select="multi"
+      selected={values}
+      onSelectedChange={onChange}
+      empty="the live document has no elements in the category"
+      noMatch="no matching live document elements"
+      footer={
+        <span className="t-small text-ink-2">
+          {values.length === 0
+            ? "All elements in the category"
+            : `${values.length} specific element(s)`}
+        </span>
+      }
+      row={optionRow}
+    />
   );
 }

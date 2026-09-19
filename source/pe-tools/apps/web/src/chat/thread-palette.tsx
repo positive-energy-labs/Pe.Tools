@@ -1,28 +1,10 @@
 import { Pencil, Plus, Search, X } from "lucide-react";
-import {
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "#/components/lang/command";
+import { Dialog, DialogContent } from "#/components/lang/dialog";
+import { List } from "#/components/lang/list-popup";
 import { EmptyState } from "#/components/lang/empty";
 import type { StoredThreadSummary } from "#/workbench/provider";
 import { Press } from "#/components/lang/press";
 import { Kbd } from "#/components/lang/kbd";
-import { threadRowRecipe } from "./appearance";
-
-/** Status dot shared by the sidebar list + palette. */
-function ThreadDot({ active }: { active: boolean }) {
-  return (
-    <span aria-hidden className="flex size-3.5 shrink-0 items-center justify-center">
-      <span
-        className={active ? "size-1.5 rounded-full bg-ink" : "size-1.5 rounded-full bg-line-2"}
-      />
-    </span>
-  );
-}
 
 function ThreadActions({
   thread,
@@ -48,7 +30,7 @@ function ThreadActions({
             onRename(thread.id, title);
         }}
       >
-        <Pencil className="size-3.5" />
+        <Pencil />
       </Press>
       <Press
         type="button"
@@ -61,7 +43,7 @@ function ThreadActions({
           onDelete(thread.id);
         }}
       >
-        <X className="size-3.5" />
+        <X />
       </Press>
     </>
   );
@@ -80,10 +62,10 @@ export function ThreadEmpty() {
 }
 
 /**
- * Always-on sidebar thread list — the `threads` mode body. Shows the 5 most recent by default;
- * everything else lives behind the ⌘K palette (onSearch). New/search live here now, not the header.
+ * Always-on sidebar thread list — the `threads` mode body, on the one list. Shows the 5 most
+ * recent; everything else lives behind the ⌘K palette (onSearch). New/search live here.
  */
-export function ThreadList({
+export function ThreadsSidebar({
   threads,
   currentThreadId,
   onSelect,
@@ -106,31 +88,26 @@ export function ThreadList({
   const rest = threads.length - shown.length;
   return (
     <div className="flex h-full flex-col">
-      <div className="flex flex-col gap-1 p-2">
-        {shown.map((thread) => {
-          const active = thread.id === currentThreadId;
-          const row = threadRowRecipe({ active });
-          return (
-            <div
-              key={thread.id}
-              // The open thread is a SELECTION — the selection fill, never a hue or a frame.
-              data-selected={active ? "" : undefined}
-              className={row.root()}
-              onClick={() => onSelect(thread.id)}
-            >
-              <ThreadDot active={active} />
-              <span className={row.title()}>{thread.title}</span>
-              <ThreadActions thread={thread} onRename={onRename} onDelete={onDelete} />
-            </div>
-          );
-        })}
-        {threads.length === 0 ? (
-          <div className="px-2 py-3">
+      <div className="flex min-h-0 flex-col py-1">
+        <List<StoredThreadSummary>
+          aria-label="threads"
+          region="threads"
+          items={shown}
+          keyOf={(thread) => thread.id}
+          labelOf={(thread) => thread.title}
+          empty={
             <EmptyState story="scope" exit="start one below — the first message names it">
               pick or start a thread
             </EmptyState>
-          </div>
-        ) : null}
+          }
+          onPick={(thread) => onSelect(thread.id)}
+          row={(thread) => ({
+            label: thread.title,
+            // The open thread is the active item: the rail mark, never a hue or a frame.
+            active: thread.id === currentThreadId,
+            actions: <ThreadActions thread={thread} onRename={onRename} onDelete={onDelete} />,
+          })}
+        />
       </div>
 
       <div className="hairline-t-faint mt-auto flex flex-col gap-1 p-2">
@@ -160,8 +137,11 @@ export function ThreadList({
   );
 }
 
-/** Thread picker — shadcn Command palette (Ctrl/Cmd-K). Full search across every thread. */
-export function ThreadPalette({
+type PaletteItem = { kind: "new" } | { kind: "thread"; thread: StoredThreadSummary };
+const NEW: PaletteItem = { kind: "new" };
+
+/** The thread palette (Ctrl/Cmd-K): the one List, fuzzy, in a Dialog. Full search across every thread. */
+export function ThreadDialog({
   threads,
   currentThreadId,
   open,
@@ -180,52 +160,44 @@ export function ThreadPalette({
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
 }) {
+  const items: PaletteItem[] = [
+    NEW,
+    ...threads.map((thread) => ({ kind: "thread" as const, thread })),
+  ];
   return (
-    <CommandDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Threads"
-      description="Search threads"
-    >
-      <CommandInput placeholder="Search threads by title…" />
-      <CommandList>
-        <CommandEmpty>No threads match.</CommandEmpty>
-        <CommandItem
-          value="__new__ new thread"
-          onSelect={() => {
-            onNew();
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent pad="none" showCloseButton={false} aria-label="Threads">
+        <List<PaletteItem>
+          aria-label="Threads"
+          region="thread palette"
+          items={items}
+          keyOf={(item) => (item.kind === "new" ? "__new__" : item.thread.id)}
+          labelOf={(item) => (item.kind === "new" ? "New thread" : item.thread.title)}
+          groupOf={(item) => (item.kind === "new" ? undefined : "Recent")}
+          filter="fuzzy"
+          searchPlaceholder="Search threads by title…"
+          empty="no threads yet"
+          noMatch="No threads match."
+          maxHeight="18rem"
+          onPick={(item) => {
+            if (item.kind === "new") onNew();
+            else onSelect(item.thread.id);
             onOpenChange(false);
           }}
-          // keyboard cursor = selection fill, never a hue
-        >
-          <Plus className="size-3.5" />
-          <span className="flex-1">New thread</span>
-          <Kbd mute>⌘K</Kbd>
-        </CommandItem>
-        <CommandGroup heading="Recent">
-          {threads.map((thread) => {
-            const active = thread.id === currentThreadId;
-            return (
-              <CommandItem
-                key={thread.id}
-                value={`${thread.title} ${thread.id}`}
-                onSelect={() => {
-                  onSelect(thread.id);
-                  onOpenChange(false);
-                }}
-              >
-                <ThreadDot active={active} />
-                <span
-                  className={active ? "flex-1 truncate text-ink" : "flex-1 truncate text-ink-2"}
-                >
-                  {thread.title}
-                </span>
-                <ThreadActions thread={thread} onRename={onRename} onDelete={onDelete} />
-              </CommandItem>
-            );
-          })}
-        </CommandGroup>
-      </CommandList>
-    </CommandDialog>
+          onEscape={() => onOpenChange(false)}
+          row={(item) =>
+            item.kind === "new"
+              ? { lead: <Plus />, label: "New thread", meta: <Kbd mute>⌘K</Kbd> }
+              : {
+                  label: item.thread.title,
+                  active: item.thread.id === currentThreadId,
+                  actions: (
+                    <ThreadActions thread={item.thread} onRename={onRename} onDelete={onDelete} />
+                  ),
+                }
+          }
+        />
+      </DialogContent>
+    </Dialog>
   );
 }

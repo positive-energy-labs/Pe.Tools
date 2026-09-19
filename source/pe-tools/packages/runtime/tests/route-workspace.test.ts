@@ -318,6 +318,14 @@ test("HTTP authored writes enforce short local revision checks", async () => {
       new Request("http://local/pe/route-state/test-route?target=not-an-address"),
     );
     expect(response.status).toBe(400);
+    // E2E-J1: a registered route with no Work at the scope reads the empty document at r0, the
+    // one apply starts from; "unknown route" names only an unregistered route.
+    const absent = await app.fetch(new Request(`http://local/pe/route-state/test-route?${queryA}`));
+    expect(absent.status).toBe(200);
+    expect(await absent.json()).toMatchObject({ route: "test-route", revision: 0, doc: {} });
+    const unknown = await app.fetch(new Request(`http://local/pe/route-state/nope?${queryA}`));
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toEqual({ error: "unknown route 'nope'" });
     expect(await response.json()).toMatchObject({ error: /invalid Target/ });
 
     const post = (path: string, body: unknown) =>
@@ -350,6 +358,21 @@ test("HTTP authored writes enforce short local revision checks", async () => {
         await post("/pe/route-state/test-route/command", { ...command, expectedRevision: 99 })
       ).json(),
     ).toMatchObject({ ok: false, code: "stale_revision" });
+    // Start fresh is a human verb: Pea's door refuses it, and readable Work has nothing to set aside.
+    expect(
+      await (await post("/pe/agent/route-state/test-route/start-fresh", {})).json(),
+    ).toMatchObject({ ok: false, error: "start fresh is human-only" });
+    expect(await (await post("/pe/route-state/test-route/start-fresh", {})).json()).toMatchObject({
+      ok: false,
+      error: "this route's Work is readable",
+    });
+    // Salvage is a human read: a route that declares none has nothing (404); Pea is refused by name.
+    const salvage = (prefix: string) =>
+      app.fetch(new Request(`http://local${prefix}/test-route/salvage?${queryA}`));
+    expect((await salvage("/pe/route-state")).status).toBe(404);
+    const pea = await salvage("/pe/agent/route-state");
+    expect(pea.status).toBe(403);
+    expect(await pea.json()).toMatchObject({ ok: false, error: "salvage is human-only" });
   } finally {
     await runtime.close?.();
     await rm(workspaceRoot, { recursive: true, force: true });

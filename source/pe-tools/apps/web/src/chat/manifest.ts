@@ -4,11 +4,17 @@
  * second copy. `send` and `cancel` run `workbench/actions.ts` over the session the provider holds,
  * because that session IS chat's host caller; `new` and `fork` run the provider's thread verbs.
  */
+import { askLifetime } from "@pe/agent-contracts";
 import { z } from "zod";
 
 import { defineRoute, type RouteManifest } from "#/route";
 import { CHAT_ACTIONS, type ChatActionService, type PromptInput } from "#/workbench/actions";
-import { emptyChatState, selectApprovals, type ChatState } from "#/workbench/chat-state";
+import {
+  emptyChatState,
+  isParkedAsk,
+  selectApprovals,
+  type ChatState,
+} from "#/workbench/chat-state";
 import { CHAT_SEEDS, type ChatPage } from "#/chat/seeds";
 
 export type ChatReading = "head" | "inventory" | "receipts";
@@ -67,8 +73,11 @@ export const chatManifest = (
         ready: (_ctx, input) => {
           if (!context.session) return "Session is not ready";
           if (!deps.displayKnown) return "Thread state is loading";
-          if (context.display.isRunning || selectApprovals(context.display).length)
-            return "Pea is working";
+          const approvals = selectApprovals(context.display);
+          // A parked ask does not hold the composer: the new turn is how the runtime expires it.
+          if (approvals.some((approval) => !isParkedAsk(approval)))
+            return "A tool approval is waiting";
+          if (context.display.isRunning && approvals.length === 0) return "Pea is working";
           return input ? CHAT_ACTIONS.send.ready(context, input as PromptInput) : null;
         },
         run: async (_ctx, input) => {
@@ -79,7 +88,7 @@ export const chatManifest = (
       },
       cancel: {
         label: "cancel",
-        says: "stops the running turn and rejects every approval it is still waiting on",
+        says: `stops the running turn; its open asks expire, unanswered (an ask ${askLifetime})`,
         needs: "host",
         actor: "human",
         input: z.void() as unknown as z.ZodType<never>,

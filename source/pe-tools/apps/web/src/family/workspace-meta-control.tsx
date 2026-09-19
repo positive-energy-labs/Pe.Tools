@@ -1,4 +1,5 @@
 import { Switcher } from "#/components/lang/switcher";
+import { ListPopup } from "#/components/lang/list-popup";
 import type { GeomMeta } from "#/family/world";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 
@@ -30,18 +31,22 @@ export function FamilyMetaControl({ slug, meta }: { slug: string; meta: GeomMeta
       />
     );
   return (
-    <select
-      value={value}
-      onChange={(event) => editMeta(slug, meta.key, event.target.value)}
+    <ListPopup<string>
+      anchor="trigger"
+      face="fill"
       title={meta.note}
+      triggerLabel={meta.label}
+      trigger={value}
       aria-label={meta.label}
-      className="h-(--item-h) w-full px-1"
-    >
-      {(meta.options ?? []).map((option) => (
-        <option key={option} value={option}>
-          {option}
-        </option>
-      ))}
-    </select>
+      region={meta.label}
+      items={meta.options ?? []}
+      keyOf={(option) => option}
+      labelOf={(option) => option}
+      select="single"
+      selected={[value]}
+      empty="no options"
+      onPick={(option) => editMeta(slug, meta.key, option)}
+      row={(option) => ({ label: option })}
+    />
   );
 }

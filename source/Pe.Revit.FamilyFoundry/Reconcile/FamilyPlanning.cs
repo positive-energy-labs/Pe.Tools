@@ -1,5 +1,7 @@
 using Newtonsoft.Json.Linq;
+using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamManager;
+using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.FamilyFoundry.Capture;
 using Pe.Shared.RevitData.Families;
 
@@ -57,7 +59,8 @@ internal static class FamilyPreparation {
             return new PreparedFamily(original, patch, null, null, parsed.Diagnostics);
 
         var desired = ResolveNativeFormulas(source.Resolve(parsed.Value, patch.Patch), document, formulaCache);
-        var diagnostics = SharedTooltipDiagnostics(original, desired, authoredPatch.Patch);
+        IReadOnlyList<FamilyModelDiagnostic> diagnostics = SharedTooltipDiagnostics(original, desired, authoredPatch.Patch)
+            .Concat(GroupedIdentityDiagnostics(document, original, desired, authoredPatch.Patch)).ToList();
         if (diagnostics.Count == 0)
             diagnostics = FamilyModelUnitValidation.Validate(desired, patch.Patch, source.GetDefinition);
         if (diagnostics.Count > 0)
@@ -65,6 +68,10 @@ internal static class FamilyPreparation {
 
         var plan = FamilyReconciler.Reconcile(desired, original, UnitResolvers.Revit(document), authoredPatch.Run,
             source.GetDefinition, patch.Patch, source.ResolvedDefinitions, executionOptions);
+        var (copyEffects, copyRefusals) = SourceFormulaCrossings(document, desired, plan, patch.Patch);
+        if (copyRefusals.Count > 0)
+            return new PreparedFamily(original, patch, desired, null, copyRefusals);
+        if (copyEffects.Count > 0) plan = plan with { RunEffects = plan.RunEffects.Concat(copyEffects).ToList() };
         return new PreparedFamily(original, patch, desired, plan, []);
     }
 
@@ -84,6 +91,95 @@ internal static class FamilyPreparation {
                         : $"Explicit tooltip for existing shared parameter '{parameter.Name}' is '{(string?)tooltip}', but its captured native tooltip is '{existing.Tooltip ?? ""}'. Shared tooltip replacement is unsupported."));
             }
         return diagnostics;
+    }
+
+    /// <summary>
+    ///     A shared parameter changing identity (another GUID, or back to a family parameter) leaves through
+    ///     <c>FamilyManager.ReplaceParameter(shared → family)</c> (NormalizeParameter.cs ReplaceDefinition). When the parameter drives a
+    ///     grouped element (a nested member of an array) or labels an array, Revit refuses that edit at commit: "Changes to groups are allowed
+    ///     only in group edit mode" (native, domains-guid hold 2026-09-18; the same hop converged once the array was removed). Refusing here
+    ///     makes preview and apply agree instead of apply failing after a clean preview.
+    /// </summary>
+    private static IReadOnlyList<FamilyModelDiagnostic> GroupedIdentityDiagnostics(Document document, FamilyModel current, FamilyModel desired, JObject authored) {
+        var diagnostics = new List<FamilyModelDiagnostic>();
+        foreach (var name in (authored["parameters"] as JObject)?.Properties().Where(p => p.Value is JObject).Select(p => p.Name) ?? []) {
+            if (!current.Parameters.TryGetValue(name, out var existing) || existing.Shared != true ||
+                !desired.Parameters.TryGetValue(name, out var target) || target.Shared != false && target.SharedGuid == existing.SharedGuid) continue;
+            if (document.FamilyManager.FindParameter(name) is not { } parameter) continue;
+            var grouped = parameter.AssociatedParameters.Cast<Parameter>()
+                .Where(slot => slot.Element?.GroupId is { } group && group != ElementId.InvalidElementId)
+                .Select(slot => $"{slot.Element.Name}.{slot.Definition.Name}").Distinct(StringComparer.Ordinal).ToList();
+            var arrays = parameter.AssociatedArrays(new FamilyDocument(document)).Count();
+            if (grouped.Count == 0 && arrays == 0) continue;
+            diagnostics.Add(new FamilyModelDiagnostic(FamilyModelDiagnosticCodes.IdentityChangeThroughGroup,
+                $"$.parameters.{name}.{(target.Shared == false ? "shared" : "sharedGuid")}",
+                $"Shared parameter '{name}' cannot change identity natively while it drives grouped array members" +
+                $"{(grouped.Count == 0 ? "" : $" ({string.Join(", ", grouped)})")}{(arrays == 0 ? "" : $" or labels {arrays} array(s)")}; Revit allows that edit only in group edit mode."));
+        }
+        return diagnostics;
+    }
+
+    /// <summary>
+    ///     Source cleanup (NormalizeParamSources → TransferAndRemoveParameter) carries each removed source's formula to its destination. One
+    ///     that cannot cross (<see cref="FamilyFormulaCopy.Blocker" />, or Revit refuses it) is dropped, named here as a run effect, and each
+    ///     type's value is carried by the mapping's strategy instead. It runs as apply would, in one rolled-back transaction, so a value the
+    ///     strategy cannot carry refuses here, naming the value and the type, before any effect.
+    /// </summary>
+    private static (List<string> Effects, List<FamilyModelDiagnostic> Refusals) SourceFormulaCrossings(
+        Document document, FamilyModel desired, FamilyPlan plan, JObject authored) {
+        var effects = new List<string>();
+        var refusals = new List<FamilyModelDiagnostic>();
+        var fm = document.FamilyManager;
+        var authoredNames = (authored["parameters"] as JObject)?.Properties().Select(p => p.Name).ToHashSet(StringComparer.Ordinal) ?? [];
+        ForgeTypeId? Spec(FamilyModelParameter wanted) => wanted.SharedSpecId is { } specId ? new ForgeTypeId(specId)
+            : wanted.DataType is { } dataType ? Operations.SetParamMetadata.Spec(dataType) : null;
+        // A destination of another data type steps aside and is its own first source (NormalizeParamSources), so its formula is judged too.
+        bool Retyped(string key, FamilyModelParameter wanted) => fm.FindParameter(key) is { } have && !have.IsBuiltInParameter() &&
+            Spec(wanted) is { } spec && have.Definition.GetDataType() != spec;
+        var work = plan.Changes.Where(c => c.Section == "parameters.sources" && desired.Parameters.TryGetValue(c.Key, out var wanted) && wanted.Formula is null)
+            .Select(c => (Change: c, Sources: ((c.Before as IReadOnlyDictionary<string, FamilyModelParameter>)?.Keys ?? [])
+                .Where(name => (name != c.Key || Retyped(c.Key, desired.Parameters[c.Key])) && !authoredNames.Contains(name) &&
+                               fm.FindParameter(name) is { } from && !from.IsBuiltInParameter() && !string.IsNullOrEmpty(from.Formula))
+                .OrderBy(name => name == c.Key ? 0 : 1).Select(name => (Name: name, Parameter: fm.FindParameter(name)!)).ToList()))
+            .Where(w => w.Sources.Count > 0).ToList();
+        if (work.Count == 0) return (effects, refusals);
+        Transaction? transaction = null;
+        SubTransaction? subTransaction = null;
+        try {
+            if (document.IsModifiable) { subTransaction = new SubTransaction(document); subTransaction.Start(); }
+            else { transaction = new Transaction(document, "Preview source formulas"); transaction.Start(); }
+            foreach (var (change, sources) in work) {
+                var wanted = desired.Parameters[change.Key];
+                var target = fm.FindParameter(change.Key);
+                if (target is not null && Retyped(change.Key, wanted)) {
+                    FamilyDocumentNormalizeParameter.StepAside(fm, target);
+                    target = null;
+                }
+                var targetSpec = target?.Definition.GetDataType() ?? Spec(wanted);
+                if (targetSpec is null) continue;
+                var strategy = (wanted.MappingStrategy ?? MappingStrategy.CoerceByStorageType).ToString();
+                foreach (var (name, from) in sources) {
+                    if (!string.IsNullOrEmpty(target?.Formula)) break; // the destination's own formula wins; nothing is copied
+                    if (target is not null && FamilyFormulaCopy.IsExactAliasOf(fm.Parameters, from, target)) continue;
+                    target ??= fm.AddParameter(change.Key, GroupTypeId.General, targetSpec, wanted.IsInstance ?? false);
+                    var blocker = FamilyFormulaCopy.Blocker(fm.Parameters, from.Formula, from.Definition.GetDataType(), targetSpec, target.IsInstance);
+                    if (blocker is null)
+                        try { fm.SetFormula(target, from.Formula); continue; }
+                        catch (Autodesk.Revit.Exceptions.ApplicationException) { blocker = FamilyFormulaCopy.NativeRefusal; }
+                    var carried = FamilyFormulaCopy.Carry(new FamilyDocument(document), from, name, target, strategy, keep: true);
+                    if (carried.Count > 0)
+                        refusals.AddRange(carried.Select(refusal => new FamilyModelDiagnostic(FamilyModelDiagnosticCodes.ValueNotCoercible,
+                            $"$.parameters.{change.Key}.wasNamed", refusal)));
+                    else effects.Add(FamilyFormulaCopy.DroppedNote(from.Formula, name, change.Key, blocker, strategy));
+                }
+            }
+        } finally {
+            subTransaction?.RollBack();
+            transaction?.RollBack();
+            subTransaction?.Dispose();
+            transaction?.Dispose();
+        }
+        return (effects, refusals);
     }
 
     /// <summary>Ask Revit to canonicalize formulas without retaining document mutation.</summary>

@@ -20,6 +20,7 @@ import {
   scheduleGridRouteState,
   type WorkKey,
   type TakeoffSnapshot,
+  refusalText,
 } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
 import { ActionJournal } from "./action-journal.ts";
@@ -28,6 +29,7 @@ import { RevitBridge, BridgeError } from "./bridge.ts";
 import { makeCallRoute, type CallRouteDispatch } from "./call-route.ts";
 import { assertDemoPath, createDemoSettings } from "./demo-settings.ts";
 import { createSettingsCommandHandlers } from "../../../packages/mcps/src/pea/settings-commands.ts";
+import { familiesAdmission } from "../../../packages/mcps/src/pea/families-admission.ts";
 import { resourceResponse, type ResourceObserver } from "@pe/runtime";
 import { hostResourceObserver } from "./resource-adapters.ts";
 import { readFamily } from "./family-actions.ts";
@@ -58,7 +60,10 @@ const SIMULATED_READS = [
 
 /** The composed source a native apply receives; the simulated engine reads its root. */
 type Captured = { id: string; path: string; sha256: string; bytesBase64: string };
-type RunSource = { root: Captured; dependencies: Captured[] };
+type RunSource = {
+  root: Captured & { origin: "SavedMember" | "SuppliedDraft" };
+  dependencies: Captured[];
+};
 /**
  * The simulated engine checks captured bytes the way `PodRuns.Decode` does: every root and
  * dependency hash must match its bytes, or the run refuses before anything is filed.
@@ -96,6 +101,8 @@ const loadedFamily = (familyId: number, familyName: string) => ({
   familyName,
   categoryName: "Mechanical Equipment",
   typeNames: ["Type 1"],
+  // The catalog's shape: the plan checks written cells against these.
+  types: [{ typeName: "Type 1" }],
   parameters: [
     {
       definition: {
@@ -154,6 +161,19 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                 },
               })
             : {},
+        // The same door the live host runs, over the simulated catalog.
+        ...(spec.route === familiesRouteState.route
+          ? {
+              admit: familiesAdmission(async () =>
+                seed.route === "families"
+                  ? seed.readings.families.map((familyName, index) => ({
+                      familyName,
+                      types: loadedFamily(index + 1, familyName).types,
+                    }))
+                  : [],
+              ),
+            }
+          : {}),
       })),
       store: {
         async getState({ targetKey, route }) {
@@ -237,7 +257,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       Object.entries(candidate).map(([key, value]) => ({ path: [key], value })),
       0,
     );
-    if (!initial.ok) throw Error(initial.error);
+    if (!initial.ok) throw Error(refusalText(initial));
     // A stale plan and a token conflict are the same fact now: the member changed after review.
     if (
       seed.route === "family" &&
@@ -294,8 +314,10 @@ export async function createDemoOwner(parent: string, raw: unknown) {
           {
             podId: root.id,
             memberPath: root.path,
-            memberSha256: root.sha256,
-            origin: "SavedMember",
+            // As `PodReceipt.ForSource`: a draft never claims a saved member's hash.
+            ...(root.origin === "SuppliedDraft"
+              ? { memberSha256: null, origin: "SuppliedDraft" }
+              : { memberSha256: root.sha256, origin: "SavedMember" }),
             operation,
             planHash,
             outcome: "Succeeded",
@@ -411,11 +433,11 @@ export async function createDemoOwner(parent: string, raw: unknown) {
               simulatedPlan = planned;
               value = {
                 diagnostics: [],
-                // The engine plans exactly the ids the target resolved.
-                families: (input as { familyIds: number[] }).familyIds.map((familyId) => ({
-                  familyId,
-                  familyName: seed.readings.families[familyId - 1],
-                  planHash: `${planned.hash}:${familyId}`,
+                // The engine resolves exactly the names the target resolved to their ids.
+                families: (input as { familyNames: string[] }).familyNames.map((familyName) => ({
+                  familyId: seed.readings.families.indexOf(familyName) + 1,
+                  familyName,
+                  planHash: `${planned.hash}:${familyName}`,
                   changes: [{ section: "types", key: "Width", kind: "set" }],
                   runEffects: [],
                   warnings: [],

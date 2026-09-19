@@ -9,15 +9,36 @@ import { useCallback, useMemo, useState } from "react";
 import type {
   CandidateRegion,
   Reading,
+  RouteStatePatch,
   StagedRoomEdit,
   TakeoffCapture,
   TakeoffSnapshot,
   TakeoffObservation,
 } from "@pe/agent-contracts";
+import {
+  stagedAdoptChoices,
+  stagedDecisions,
+  stagedReviewFlags,
+  stagedTakeoffEdits,
+  takeoffDecisionAddress,
+  takeoffDecisionKey,
+  takeoffEditAddress,
+  takeoffEditPatches,
+  takeoffFlagToggle,
+  transitionPatches,
+} from "@pe/agent-contracts";
 
-import { previousOf } from "#/readings";
+import type { CellWire } from "#/components/lang/band";
+import { previousOf, useHostCall } from "#/readings";
+import { NATIVE_READ_WAIT_S } from "#/route/waits";
 import { useRoute } from "#/route/use-route";
-import { snapshotOfObservation, syncPlan, type TakeoffReadingKey } from "#/takeoff/actions";
+import {
+  DEMO_CANDIDATES,
+  snapshotOfObservation,
+  syncPlan,
+  type TakeoffReadingKey,
+} from "#/takeoff/actions";
+import { readCandidates } from "#/takeoff/host";
 import { manifest } from "#/takeoff/manifest";
 import {
   readZoneMeta,
@@ -85,6 +106,29 @@ export interface AdoptDraft {
 /* ── Pure projections ──────────────────────────────────────────────────────── */
 
 const EMPTY_WORLD: TakeoffModel = { docName: "", r10Path: null, lanes: [], zones: [], systems: [] };
+
+/**
+ * An edit's staged rung needs its room's base (what sync compares against), which only a person
+ * writes. Staging an edit cell — typing, or accepting Pea's proposal — carries the base when the
+ * room has none yet, read from the authoritative world.
+ */
+export function withEditBases(
+  doc: { bases: Readonly<Record<string, unknown>> },
+  world: { zones: readonly { rooms: readonly ModelRoom[] }[] },
+  patches: RouteStatePatch[],
+): RouteStatePatch[] {
+  const rooms = new Set(
+    patches
+      .filter((patch) => patch.path[0] === "edits" && patch.path[2] === "staged")
+      .map((patch) => takeoffEditAddress(String(patch.path[1])).roomId),
+  );
+  const bases = [...rooms].flatMap((roomId) => {
+    const room = world.zones.flatMap((zone) => zone.rooms).find((r) => r.guid === roomId);
+    // not a cell: bases
+    return doc.bases[roomId] || !room ? [] : [{ path: ["bases", roomId], value: roomEdit(room) }];
+  });
+  return [...bases, ...patches];
+}
 
 export const roomEdit = (room: ModelRoom): RoomEdit => ({
   name: room.name,
@@ -206,7 +250,9 @@ export function atlasRows(
     : world.zones.filter((zone) => page.stageFilter === null || zone.stage === page.stageFilter);
   return zones.flatMap((zone) =>
     zone.rooms.map((room) => {
-      const open = room.flags.filter((flag) => decisions[`${room.guid}::${flag}`] === undefined);
+      const open = room.flags.filter(
+        (flag) => decisions[takeoffDecisionKey(room.guid, flag)] === undefined,
+      );
       return { zone, room, open, state: atlasRoomState(room, open.length) };
     }),
   );
@@ -214,7 +260,7 @@ export function atlasRows(
 
 export function visibleRowKeys(
   rows: readonly AtlasRow[],
-  state: import("#/components/master-table/model").MasterTableState,
+  state: import("#/components/master-table/model").TableState,
   fieldsMode: "columns" | "panel",
 ): readonly string[] {
   const query = state.query.trim().toLowerCase();
@@ -272,6 +318,8 @@ const observed = <T>(reading: Reading<unknown> | undefined): T | undefined =>
 
 export function useTakeoffsController(options: {
   target?: string;
+  /** The thread whose head is the target store (a chat pane). */
+  thread?: string;
   work?: string;
   savedCapture?: TakeoffCapture;
   navigation?: {
@@ -282,6 +330,7 @@ export function useTakeoffsController(options: {
   const handle = useRoute(manifest, {
     target: options.target ? (options.target as never) : null,
     ...(options.work !== undefined ? { work: options.work } : {}),
+    ...(options.thread ? { thread: options.thread } : {}),
   });
   const [page, setPage] = handle.page;
   const [localNavigation, setLocalNavigation] = useState<TakeoffNavigation>({
@@ -319,17 +368,40 @@ export function useTakeoffsController(options: {
   const capture = options.savedCapture;
   const authority =
     capture?.snapshot?.world ?? observed<TakeoffSnapshot>(snapshot)?.world ?? EMPTY_WORLD;
+  // The person's staged cells only; Pea's proposals are not drawn here yet (interaction's cutover).
   const staged = useMemo(
-    () =>
-      Object.fromEntries(
-        (handle.work.doc?.staged ?? []).map((edit) => [edit.roomId, edit]),
-      ) as Record<string, StagedRoomEdit>,
+    (): Record<string, StagedRoomEdit> =>
+      handle.work.doc ? stagedTakeoffEdits(handle.work.doc) : {},
     [handle.work.doc],
   );
   const world = useMemo(() => stagedModel(authority, staged), [authority, staged]);
-  const candidates = observed<TakeoffSnapshot>(snapshot)?.zoneFrs;
-  const adoptPatches = handle.work.doc?.adoptPatches ?? {};
-  const decisions = handle.work.doc?.decisions ?? {};
+  /*
+   * The adopt pane's one source: the host's `takeoffs.candidates` (every filled region on each
+   * chosen view, stamped or not). `snapshot.zoneFrs` holds only regions already stamped, so it can
+   * never offer a region to adopt (hold 4a, D4). The demo lane answers the same call from its seed.
+   */
+  const bound =
+    handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
+      ? handle.resolution.target.ref
+      : null;
+  const candidatesCall = useHostCall(
+    async () => {
+      if (handle.demo) return DEMO_CANDIDATES.filter((region) => page.views.includes(region.view));
+      return readCandidates(bound!, page.views);
+    },
+    ["takeoffs.candidates", bound?.session, bound?.openId, handle.demo, page.views.join("|")],
+    (handle.demo || bound !== null) && page.views.length > 0,
+    NATIVE_READ_WAIT_S,
+  );
+  const candidates = candidatesCall.data;
+  const adoptPatches = useMemo(
+    () => (handle.work.doc ? stagedAdoptChoices(handle.work.doc) : {}),
+    [handle.work.doc],
+  );
+  const decisions = useMemo(
+    () => (handle.work.doc ? stagedDecisions(handle.work.doc) : {}),
+    [handle.work.doc],
+  );
   const adoptRows = useMemo(
     () => (candidates ? adoptDrafts(candidates, adoptPatches) : null),
     [candidates, adoptPatches],
@@ -349,7 +421,7 @@ export function useTakeoffsController(options: {
       ? {
           zone: zoneKey,
           data: zone.savedReview,
-          flags: handle.work.doc?.reviewFlags?.[zoneKey] ?? [],
+          flags: handle.work.doc ? (stagedReviewFlags(handle.work.doc)[zoneKey] ?? []) : [],
           source: "saved native" as const,
         }
       : null;
@@ -363,7 +435,7 @@ export function useTakeoffsController(options: {
         hovered: hover === id,
         selected: navigation.room === id || navigation.zone === id,
         bound: room?.elementId !== null && room !== undefined,
-        decided: Object.keys(decisions).some((key) => key.startsWith(`${id}::`)),
+        decided: Object.keys(decisions).some((key) => takeoffDecisionAddress(key).roomGuid === id),
         staged: edit ?? null,
         dirty: edit !== undefined,
         conflict:
@@ -378,11 +450,8 @@ export function useTakeoffsController(options: {
   const stageEdit = useCallback(
     (id: string, next: RoomEdit) => {
       const room = authority.zones.flatMap((zone) => zone.rooms).find((r) => r.guid === id);
-      if (!room) return Promise.resolve(null);
-      const kept = (handle.work.doc?.staged ?? []).filter((edit) => edit.roomId !== id);
-      return handle.work.write([
-        { path: ["staged"], value: [...kept, { roomId: id, base: roomEdit(room), next }] },
-      ]);
+      if (!room || !handle.work.doc) return Promise.resolve(null);
+      return handle.work.write(takeoffEditPatches(handle.work.doc, id, roomEdit(room), next));
     },
     [authority, handle.work],
   );
@@ -454,20 +523,34 @@ export function useTakeoffsController(options: {
         elementId: number,
         next: Partial<Pick<AdoptDraft, "checked" | "name" | "systemTag">>,
       ) =>
-        void handle.work.write([
-          {
-            path: ["adoptPatches", `${view}:${elementId}`],
-            value: { ...adoptPatches[`${view}:${elementId}`], ...next },
-          },
-        ]),
+        void handle.work.write(
+          transitionPatches(
+            ["adopt"],
+            `${view}:${elementId}`,
+            {},
+            {
+              kind: "stage",
+              rung: { value: { ...adoptPatches[`${view}:${elementId}`], ...next } },
+            },
+          ),
+        ),
       patchRoom: (id: string, next: RoomEdit) => void stageEdit(id, next),
       decideRoom: (room: ModelRoom, flag: string, verdict: "accept" | "dismiss") =>
-        void handle.work.write([{ path: ["decisions", `${room.guid}::${flag}`], value: verdict }]),
+        void handle.work.write(
+          transitionPatches(
+            ["decisions"],
+            takeoffDecisionKey(room.guid, flag),
+            {},
+            {
+              kind: "stage",
+              rung: { value: verdict },
+            },
+          ),
+        ),
+      // Flag stages the shape's cell; unflag unstages it (the old union could never unflag).
       flagReview: (key: string) => {
-        if (review)
-          void handle.work.write([
-            { path: ["reviewFlags", review.zone], value: [...new Set([...review.flags, key])] },
-          ]);
+        if (review && handle.work.doc)
+          void handle.work.write(takeoffFlagToggle(handle.work.doc, review.zone, key));
       },
     }),
     [
@@ -484,8 +567,37 @@ export function useTakeoffsController(options: {
     ],
   );
 
+  // THE FOUR CELL FAMILIES (the takeoffs cutover): each a trichotomy cell record, drawn through
+  // the kit with the contract's transitions. An edit's staged rung needs its room's base (what
+  // sync compares against), which only a person writes: a stage of an edit cell (typing, or
+  // accepting Pea's proposal) carries the base when the room has none yet.
+  const doc = handle.work.doc;
+  const cells = {
+    edits: doc?.edits ?? {},
+    adopt: doc?.adopt ?? {},
+    decisions: doc?.decisions ?? {},
+    reviewFlags: doc?.reviewFlags ?? {},
+  };
+  const wire = (segment: keyof typeof cells): CellWire => ({
+    segment,
+    revision: handle.work.revision,
+    write: (patches, expectedRevision) =>
+      handle.work.write(
+        segment === "edits" && doc ? withEditBases(doc, authority, patches) : patches,
+        expectedRevision,
+      ),
+  });
+  const wires = {
+    edits: wire("edits"),
+    adopt: wire("adopt"),
+    decisions: wire("decisions"),
+    reviewFlags: wire("reviewFlags"),
+  };
+
   return {
     handle,
+    cells,
+    wires,
     savedCapture: capture,
     source: capture ? ("saved" as const) : ("live" as const),
     target:
@@ -496,6 +608,9 @@ export function useTakeoffsController(options: {
     world,
     snapshot,
     adoptRows,
+    /** Why the pane has no rows: the candidates read is in flight or failed (its own words). */
+    candidatesReading: candidatesCall.pending,
+    candidatesIssue: candidatesCall.error ?? null,
     atlasRows: rows,
     syncPlan: plan,
     review,

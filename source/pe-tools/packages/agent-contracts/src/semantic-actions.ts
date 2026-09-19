@@ -1,7 +1,7 @@
 import { instancesActions } from "./instances.ts";
 import { scheduleActions } from "./schedule-actions.ts";
 import { familyActions } from "./family-actions.ts";
-import { takeoffsRouteState } from "./takeoffs.ts";
+import { stagedRoomEditSchema } from "./takeoffs.ts";
 import { nativeProcessSchema } from "./action-receipts.ts";
 import { z } from "zod";
 import { executionTargetSchema } from "./target.ts";
@@ -149,8 +149,12 @@ export const actionControls = {
 } as const;
 export type ActionControlKey = keyof typeof actionControls;
 
+/**
+ * What an admitted takeoffs action froze: the person's staged edits (per room) and staged flag
+ * verdicts. Pea's proposals are never frozen here, so they can never reach a sync.
+ */
 export const preparedTakeoffSchema = z.strictObject({
   process: nativeProcessSchema,
-  staged: takeoffsRouteState.schema.shape.staged,
-  decisions: takeoffsRouteState.schema.shape.decisions,
+  edits: z.record(z.string(), stagedRoomEditSchema),
+  decisions: z.record(z.string(), z.enum(["accept", "dismiss"])),
 });

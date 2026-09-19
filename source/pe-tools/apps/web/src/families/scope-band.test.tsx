@@ -6,7 +6,7 @@ import { NamePicker } from "./readout-primitives";
 
 afterEach(cleanup);
 
-test("typing a category prefix and pressing Enter commits the first match as a chip", async () => {
+test("typing a category prefix and pressing Enter picks the first match", async () => {
   const onChange = vi.fn();
   render(
     <NamePicker
@@ -18,15 +18,10 @@ test("typing a category prefix and pressing Enter commits the first match as a c
       title="draft"
     />,
   );
-  const input = screen.getByRole("combobox", { name: "draft categories" });
-  await act(async () => {
-    input.focus();
-    // A real keystroke carries `inputType`; without it the combobox reads autofill and stays shut.
-    fireEvent.input(input, { target: { value: "Sprink" }, inputType: "insertText" });
-  });
-  await act(async () => {
-    fireEvent.keyDown(input, { key: "Enter" });
-  });
-  expect(screen.queryAllByRole("option")).toEqual([]);
+  // The trigger opens the list; its search owns typing, and Enter picks the top hit (R5, R14).
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "draft categories" })));
+  const search = await screen.findByLabelText("draft categories search");
+  await act(async () => fireEvent.change(search, { target: { value: "Sprink" } }));
+  await act(async () => fireEvent.keyDown(search, { key: "Enter" }));
   expect(onChange).toHaveBeenCalledWith(["Sprinkler Tags"]);
 });

@@ -1,3 +1,4 @@
+import { stagedTakeoffEdits, takeoffsRouteState } from "@pe/agent-contracts";
 import { test, expect } from "vite-plus/test";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -91,7 +92,12 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
       expect(nativeLinks).toHaveLength(1);
       const after = await readRhvacFixture(path);
       expect(after.rooms.some((room) => room.name === "Reviewed demo room")).toBe(true);
-      expect((await owner.work.read(owner.scope, "takeoffs"))!.doc).toMatchObject({ staged: [] });
+      // The consumed staged edit retired; nothing staged remains.
+      expect(
+        stagedTakeoffEdits(
+          takeoffsRouteState.schema.parse((await owner.work.read(owner.scope, "takeoffs"))!.doc),
+        ),
+      ).toEqual({});
       const afterHash = await fileVersion(path);
       await admitTakeoffAction(admission, owner.journal, owner.captures, bridge, deps);
       expect(nativeLinks).toHaveLength(1);

@@ -33,7 +33,7 @@ internal static class LookupTableCsvCodec {
         if (csvContent == null)
             throw new ArgumentNullException(nameof(csvContent));
 
-        var rows = ReadCsvRows(csvContent);
+        var rows = FamilyLookupTableCsv.Rows(csvContent);
         if (rows.Count == 0)
             throw new InvalidOperationException($"Lookup table '{tableName}' CSV content is empty.");
 
@@ -153,66 +153,6 @@ internal static class LookupTableCsvCodec {
             LookupTableLogicalType.Percent => "percentage",
             _ => null
         };
-    }
-
-    private static List<List<string>> ReadCsvRows(string csvContent) {
-        var rows = new List<List<string>>();
-        var currentRow = new List<string>();
-        var currentCell = new StringBuilder();
-        var inQuotes = false;
-
-        for (var i = 0; i < csvContent.Length; i++) {
-            var currentChar = csvContent[i];
-            if (inQuotes) {
-                if (currentChar == '"') {
-                    if (i + 1 < csvContent.Length && csvContent[i + 1] == '"') {
-                        currentCell.Append('"');
-                        i++;
-                    } else
-                        inQuotes = false;
-                } else
-                    currentCell.Append(currentChar);
-
-                continue;
-            }
-
-            switch (currentChar) {
-            case '"':
-                inQuotes = true;
-                break;
-            case ',':
-                currentRow.Add(currentCell.ToString());
-                currentCell.Clear();
-                break;
-            case '\r':
-                if (i + 1 < csvContent.Length && csvContent[i + 1] == '\n')
-                    i++;
-                currentRow.Add(currentCell.ToString());
-                currentCell.Clear();
-                rows.Add(currentRow);
-                currentRow = [];
-                break;
-            case '\n':
-                currentRow.Add(currentCell.ToString());
-                currentCell.Clear();
-                rows.Add(currentRow);
-                currentRow = [];
-                break;
-            default:
-                currentCell.Append(currentChar);
-                break;
-            }
-        }
-
-        if (inQuotes)
-            throw new InvalidOperationException("Lookup-table CSV ended with an unterminated quoted field.");
-
-        if (currentCell.Length > 0 || currentRow.Count > 0) {
-            currentRow.Add(currentCell.ToString());
-            rows.Add(currentRow);
-        }
-
-        return rows;
     }
 
     private static void WriteCsvRow(StringBuilder builder, IReadOnlyList<string> cells) {

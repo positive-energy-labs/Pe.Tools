@@ -341,6 +341,26 @@ public sealed class PodTests {
     }
 
     [Test]
+    public void Run_input_names_the_sealed_plan_or_the_explicit_review_gap() {
+        var planned = PodRuns.WithReviewBasis(new JObject { ["operation"] = "family.apply" }, "plan-action-1");
+        var direct = PodRuns.WithReviewBasis(new JObject { ["operation"] = "family.apply" }, null);
+
+        Assert.Multiple(() => {
+            Assert.That(planned["plan"]!["actionId"]!.Value<string>(), Is.EqualTo("plan-action-1"));
+            Assert.That(planned["unavailableEvidence"]!.Values<string>(), Is.Empty);
+            Assert.That(direct["plan"], Is.Null);
+            Assert.That(direct["unavailableEvidence"]!.Values<string>(), Is.EqualTo(new[] { "reviewed Work revision" }));
+        });
+    }
+
+    [Test]
+    public void A_family_apply_request_carries_its_plan_action_id() {
+        var request = Newtonsoft.Json.JsonConvert.DeserializeObject<Pe.Shared.HostContracts.Operations.FamilyApplyRequest>(
+            """{"specJson":"{}","expectedPlanHashes":{},"plan":"plan-action-1","source":{"root":{"id":"p","path":"a.json","sha256":"s","bytesBase64":"e30=","origin":"SavedMember"},"dependencies":[]}}""")!;
+        Assert.That(request.Plan, Is.EqualTo("plan-action-1"));
+    }
+
+    [Test]
     public void Cancelled_has_one_spelling() {
         Assert.That(Enum.GetNames(typeof(ScriptExecutionStatus)), Does.Contain("Cancelled").And.No.Contain("Canceled"));
         Assert.That(Enum.GetNames(typeof(PodRunOutcome)), Is.EqualTo(new[] { "Succeeded", "Failed", "Cancelled" }));
@@ -409,19 +429,36 @@ public sealed class PodTests {
         Assert.That(composed.Dependencies.Select(d => d.Path), Is.EqualTo(new[] { "settings/_fields/X.json", "settings/_fields/Y.json" }));
     }
 
+    // A single object in array position is inserted as one element (the capability before ae9ce8c; ruling-ff-coercion audit #17).
     [Test]
-    public void Array_include_of_any_other_shape_is_a_named_include_error() {
+    public void Array_include_of_a_single_object_inserts_that_object() {
         this.WritePod("Office", "office", new() {
-            ["settings/member.json"] = """{"Fields":[{"$include":"@local/_fields/X"}]}""",
-            ["settings/_fields/X.json"] = """{"Name":"not a fragment"}"""
+            ["settings/member.json"] = """{"Fields":[{"A":1},{"$include":"@local/_fields/X"},{"B":2}]}""",
+            ["settings/_fields/X.json"] = """{"Name":"one field spec"}"""
         });
 
         var composed = this._service.Compose("office", "settings/member.json", null);
 
-        Assert.That(composed.Composed, Is.Null);
-        var error = composed.Diagnostics.Single();
-        Assert.That(error.Stage, Is.EqualTo("pod.settings.include"));
-        Assert.That(error.Message, Does.Contain("@local/_fields/X").And.Contain("Name"));
+        Assert.That(composed.Diagnostics, Is.Empty);
+        Assert.That(JObject.Parse(composed.Composed!)["Fields"]!.ToString(Newtonsoft.Json.Formatting.None),
+            Is.EqualTo("""[{"A":1},{"Name":"one field spec"},{"B":2}]"""));
+    }
+
+    [Test]
+    public void Array_include_of_a_scalar_or_null_is_a_named_include_error() {
+        foreach (var scalar in new[] { "3", "null", "\"text\"" }) {
+            this.WritePod("Office", "office", new() {
+                ["settings/member.json"] = """{"Fields":[{"$include":"@local/_fields/X"}]}""",
+                ["settings/_fields/X.json"] = scalar
+            });
+
+            var composed = this._service.Compose("office", "settings/member.json", null);
+
+            Assert.That(composed.Composed, Is.Null, scalar);
+            var error = composed.Diagnostics.Single();
+            Assert.That(error.Stage, Is.EqualTo("pod.settings.include"), scalar);
+            Assert.That(error.Message, Does.Contain("@local/_fields/X"), scalar);
+        }
     }
 
     // The proof-3a shape: a schedule profile whose Fields include `_fields` fragments.

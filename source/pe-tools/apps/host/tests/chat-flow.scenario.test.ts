@@ -79,7 +79,10 @@ function scenarioRuntime(
               expectedRevision: 0,
               input: {
                 patches: [
-                  { path: ["staged"], value: { kind: "start", year: "2026", name: "scenario" } },
+                  {
+                    path: ["launch", "staged"],
+                    value: { value: { kind: "start", year: "2026", name: "scenario" } },
+                  },
                 ],
               },
             },
@@ -299,13 +302,12 @@ test("the browser walks one durable chat lifecycle", async () => {
 
     await composer.fill("QUESTION_TURN");
     await page.getByRole("button", { name: "send", exact: true }).click();
-    const questionRow = page.getByRole("region", { name: "Assistant message" }).last();
-    // `ask_user` asks for permission in the band first; its question then answers in the stream,
-    // beside what it asks about.
+    // `ask_user` asks for permission in the band first; its live question then answers in the same
+    // Chat head (F-J1-9): asks live in the head, the transcript holds records.
     await proposals.getByRole("button", { name: "Approve" }).click();
-    await waitForRowText(questionText);
-    expect(await questionRow.innerText()).toContain("Use the current session");
-    await questionRow.getByRole("button", { name: questionAnswer }).click();
+    await expect.poll(() => proposals.innerText(), { timeout: 15_000 }).toContain(questionText);
+    expect(await proposals.innerText()).toContain("Use the current session");
+    await proposals.getByRole("button", { name: questionAnswer }).click();
     await waitForRowText(questionFinalText);
     await expect
       .poll(async () => JSON.stringify((await readThread()).messages), { timeout: 15_000 })
@@ -351,37 +353,31 @@ test("the browser walks one durable chat lifecycle", async () => {
     // pe_read route:instances under that Target: the document lands under the Work key.
     await driveTurn("READ_TURN", readFinalText);
     expect(JSON.stringify((await readThread()).messages)).toContain('"key":"route:instances"');
-    // pe_do route:instances.propose stages a start; the card shows r1 and the resolved target.
+    // The staged launch is what start consumes, so it is a person's: Pea's propose door writes
+    // only the launch proposal, so staging refuses by the mask and no Work is written.
     await driveTurn("PROPOSE_TURN", proposeFinalText);
-    await expect
-      .poll(() => page.getByTestId("tool-revision").last().innerText(), { timeout: 15_000 })
-      .toBe("r1");
-    // A workspace write touches no Target at all: Instances Work is `?work=instances` (spec §7),
-    // the same key `instances/cluster.tsx` reads, so the card names neither session nor document.
-    expect(await page.locator("[data-tool-id]").last().getByTestId("tool-target").count()).toBe(0);
-    await expect
-      .poll(async () => (await rows.allTextContents()).join("\n"), { timeout: 15_000 })
-      .toContain("start scenario in Revit 2026");
+    expect(JSON.stringify((await readThread()).messages)).toContain("not agent-writable");
+    // A registered route with no Work reads its empty document at r0: nothing was written.
+    expect(
+      await (await fetch(`${baseUrl}/pe/route-state/instances?work=instances`)).json(),
+    ).toMatchObject({ route: "instances", revision: 0 });
     // pe_do route:instances.stop is human-only: refused with a hint, nothing runs.
     await driveTurn("STOP_TURN", stopFinalText);
     expect(JSON.stringify((await readThread()).messages)).toContain("human-only");
     const routeQuery = `target=${encodeURIComponent(scopeDocument)}`;
-    expect(
-      await (await fetch(`${baseUrl}/pe/route-state/instances?work=instances`)).json(),
-    ).toMatchObject({ revision: 1, doc: { staged: { kind: "start", name: "scenario" } } });
     // `ops` is no longer a route document; `takeoffs` is the Address-keyed one that is left.
     const applied = await fetch(`${baseUrl}/pe/route-state/takeoffs/apply?${routeQuery}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        patches: [{ path: ["staged"], value: [] }],
+        patches: [{ path: ["bases", "room-1"], value: { name: "Scenario" } }],
         expectedRevision: 0,
       }),
     });
     expect(await applied.json()).toMatchObject({ ok: true, revision: 1 });
     expect(
       await (await fetch(`${baseUrl}/pe/route-state/takeoffs?${routeQuery}`)).json(),
-    ).toMatchObject({ revision: 1, doc: { staged: [] } });
+    ).toMatchObject({ revision: 1, doc: { bases: { "room-1": { name: "Scenario" } } } });
     // The Work key is the Address alone: the same Address reads the same document, another
     // Address starts fresh.
     expect(
@@ -391,14 +387,14 @@ test("the browser walks one durable chat lifecycle", async () => {
         )
       ).json(),
     ).toMatchObject({ revision: 1 });
-    // Another Address has no envelope at all yet: the read is a 404, not a shared document.
+    // Another Address has no Work yet: it reads its own empty document at r0, not a shared one.
     expect(
-      (
+      await (
         await fetch(
           `${baseUrl}/pe/route-state/takeoffs?target=${encodeURIComponent("C:\\Models\\Other.rvt")}`,
         )
-      ).status,
-    ).toBe(404);
+      ).json(),
+    ).toMatchObject({ route: "takeoffs", revision: 0 });
 
     await composer.fill("ABORT_TURN");
     await page.getByRole("button", { name: "send", exact: true }).click();
@@ -445,13 +441,13 @@ test("the browser walks one durable chat lifecycle", async () => {
         elements.map((element) => element.getAttribute("data-key")),
       ),
     ).toEqual(beforeRestartKeys);
-    const accessPicker = page.getByRole("combobox", { name: "Access" });
+    const accessPicker = page.getByRole("button", { name: "Access", exact: true });
     await accessPicker.click();
     await page.getByRole("option", { name: /Trusted/ }).click();
     await expect.poll(async () => (await readThread()).access, { timeout: 15_000 }).toBe("trusted");
     rows = page.getByRole("region", { name: /^(User|Assistant) message$/ });
     await waitForRowText(abortedText);
-    const modelPicker = page.getByRole("combobox", { name: "Model" });
+    const modelPicker = page.getByRole("button", { name: "Model", exact: true });
     const alternateOption = page.getByRole("option", { name: /alternate/i });
     await modelPicker.click();
     await alternateOption.click();
@@ -460,10 +456,10 @@ test("the browser walks one durable chat lifecycle", async () => {
       .toBe("scenario/alternate");
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect
-      .poll(() => page.getByRole("combobox", { name: "Model" }).innerText())
+      .poll(() => page.getByRole("button", { name: "Model", exact: true }).innerText())
       .toContain("alternate");
     await expect
-      .poll(() => page.getByRole("combobox", { name: "Access" }).innerText())
+      .poll(() => page.getByRole("button", { name: "Access", exact: true }).innerText())
       .toContain("Trusted");
 
     const finalBody = await readThread();

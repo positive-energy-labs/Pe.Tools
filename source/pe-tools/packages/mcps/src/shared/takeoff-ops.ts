@@ -5,7 +5,6 @@ import {
 } from "@pe/agent-contracts";
 import type {
   LiveRegion,
-  Resolution,
   PartitionReviewData,
   TakeoffSnapshot,
   ViewFacts,
@@ -256,7 +255,6 @@ function room(region: LiveRegion): ModelRoom {
     sourceRoomId?: string;
     SourceSqft?: number;
     sourceSqft?: number;
-    resolutions?: Resolution[];
     flags?: string[];
     r10?: ModelRoom["r10"];
     partition?: { floorZ?: number | null; ceilingZ?: number | null };
@@ -268,9 +266,6 @@ function room(region: LiveRegion): ModelRoom {
     throw Error("Room Region provenance is missing runId, sourceRoomId, or sourceSqft");
   const analysis = region.analysis;
   const current = analysis?.state === "current";
-  const decisions = (value.resolutions ?? []).filter(
-    (decision) => current && decision.runId === analysis.runId,
-  );
   const measurementFlags = !current
     ? [analysis?.state === "stale" ? "geometry-changed" : "remeasure-required"]
     : analysis.hold
@@ -288,14 +283,7 @@ function room(region: LiveRegion): ModelRoom {
         ? analysis.ceilingZ - analysis.floorZ
         : 0,
     label: centroid(region.outer),
-    flags: [
-      ...measurementFlags,
-      ...(value.flags ?? []).filter(
-        (flag) => !decisions.some((item) => item.subject === sourceRoomId && item.flag === flag),
-      ),
-      ...(value.r10 ? ["r10-not-open"] : []),
-    ],
-    decisions,
+    flags: [...measurementFlags, ...(value.flags ?? []), ...(value.r10 ? ["r10-not-open"] : [])],
     provenance: { runId: analysis?.runId ?? runId, sourceRoomId, sourceSqft },
     r10: value.r10 ?? null,
     data: null,

@@ -189,48 +189,12 @@ export function VariantE() {
     );
   };
 
-  const linkedHead = (link: Link) => {
-    const fact = facts[link.factKey];
-    return (
-      // LANG GAP (2): no cell/column mark exists for "linked to an authored fact" — the
-      // linkage is carried by this hand-rolled column head and hover titles only.
-      <th
-        key={link.param.name}
-        className="px-2 py-1 text-left align-top"
-        title={`linked column — every value flows from the authored fact "${fact.label}"; edit it in the design-facts lane`}
-      >
-        <span className="block" style={secondary}>
-          {fact.label} ⟵ authored
-        </span>
-        <span className="block" style={muted}>
-          {link.param.name}
-        </span>
-      </th>
-    );
-  };
-
-  const plainHead = (label: string, sub?: string) => (
-    <th className="px-2 py-1 text-left align-top">
-      <span className="block" style={secondary}>
-        {label}
-      </span>
-      {sub != null ? (
-        <span className="block" style={muted}>
-          {sub}
-        </span>
-      ) : (
-        <span className="block">&nbsp;</span>
-      )}
-    </th>
-  );
-
   const gridLens = (
     <VariantGridLens
       applicable={applicable}
       refusals={refusals}
       linkedCellProps={linkedCellProps}
-      linkedHead={linkedHead}
-      plainHead={plainHead}
+      factLabel={(link) => facts[link.factKey].label}
     />
   );
 

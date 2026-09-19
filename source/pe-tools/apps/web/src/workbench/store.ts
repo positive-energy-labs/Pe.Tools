@@ -1,4 +1,4 @@
-import type { ChatPluginRoute } from "./route-chat-plugins";
+import type { ChatPluginRoute } from "./chat-plugins";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 
@@ -9,6 +9,7 @@ export interface ChatSearch {
   readonly mode: string;
   readonly turn?: number;
   readonly plugin?: ChatPluginRoute;
+  readonly focus?: string;
   readonly prompt?: string;
   patch(partial: Partial<Omit<ChatSearch, "patch">>, replace?: boolean): Promise<void>;
 }
@@ -24,6 +25,11 @@ export function createChatPageStore(deps: {
   const expandedPane = core.owned(
     "widget/expanded-pane",
     Atom.make<"side" | "plugin" | null>(deps.search.plugin ? "plugin" : "side"),
+  );
+  /** The head's commit verb, waiting for its hosted route to run it once (page state, not URL). */
+  const planIntent = core.owned(
+    "widget/plan-intent",
+    Atom.make<{ route: ChatPluginRoute; nonce: number } | null>(null),
   );
   const sideOpen = Atom.map(expandedPane, (pane) => pane === "side");
   const pluginOpen = Atom.map(expandedPane, (pane) => pane === "plugin");
@@ -46,13 +52,38 @@ export function createChatPageStore(deps: {
       paletteOpen,
       sideOpen,
       pluginOpen,
+      planIntent,
     },
     actions: {
       setPaletteOpen: (value: Setter<boolean>) => set("set-palette", paletteOpen, value),
       setSideOpen: (value: Setter<boolean>) => setPaneOpen("side", value),
       setPluginOpen: (value: Setter<boolean>) => setPaneOpen("plugin", value),
       setMode: (mode: string) => void deps.search.patch({ mode }),
-      setPlugin: (plugin?: ChatSearch["plugin"]) => void deps.search.patch({ plugin }),
+      /**
+       * The one way into the plugin pane (head plan, `open ›`, the close button). It patches only
+       * the Chat URL, never navigates, posts nothing to the thread, and sets the focus the head's
+       * group drill-in names; every other entry opens the pane unscoped.
+       */
+      setPlugin: (plugin?: ChatPluginRoute, focus?: readonly string[]) =>
+        void deps.search.patch({
+          plugin,
+          focus: plugin && focus ? JSON.stringify(focus) : undefined,
+        }),
+      /**
+       * The head's commit verb (K3): open the route's pane UNSCOPED (plan consumes the whole staged
+       * set, so no group filter may hide part of it) and ask its Situation to run its own commit
+       * once. Posts nothing to the thread; it is a route action, never a message.
+       */
+      planIn: (plugin: ChatPluginRoute) => {
+        set("plan-in", planIntent, { route: plugin, nonce: Date.now() });
+        void deps.search.patch({ plugin, focus: undefined });
+      },
+      /** The hosted route took the intent; true only for the first taker. */
+      takePlan: (plugin: ChatPluginRoute) => {
+        if (deps.registry.get(planIntent)?.route !== plugin) return false;
+        deps.registry.set(planIntent, null);
+        return true;
+      },
       openThread: (thread: string, replace = false) =>
         deps.search.patch({ thread, prompt: undefined, turn: undefined }, replace),
     },

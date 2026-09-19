@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { Press } from "#/components/lang/press";
+import { Switcher } from "#/components/lang/switcher";
 import { Pane } from "#/components/lang/pane";
 import { LevelPlan } from "#/takeoff/level-plan";
 import { LevelStats } from "#/takeoff/level-stats";
@@ -20,6 +21,7 @@ export function AtlasVisual() {
     planOpen,
     statsOpen,
     level,
+    planImage,
     setLevel,
     setPlanOpen,
     setStatsOpen,
@@ -44,32 +46,31 @@ export function AtlasVisual() {
         shortcuts={scopeShortcuts}
         toolbar={
           <>
-            {world.lanes.map((lane) => {
-              const zs = world.zones.filter((z) => z.zone.lane.label === lane.label);
-              const calls = zs.reduce((n, z) => n + zoneCalls(z), 0);
-              return (
-                <Press
-                  key={lane.label}
-                  type="button"
-                  onClick={() => setLevel(lane.label)}
-                  size="caption"
-                  frame="line"
-                  tone={lane.label === level ? "neutral" : "quiet"}
-                  state={lane.label === level ? "selected" : "rest"}
-                  title={`${lane.view}${lane.replayPath ? " · captured this session" : " · not captured yet"}`}
-                >
-                  <span className="face-mono">
-                    {lane.label}
-                    <span className="ml-1">{zs.length}</span>
-                    {calls > 0 && (
-                      <span className="ml-1" data-tone="alarm">
-                        ·{calls}
-                      </span>
-                    )}
-                  </span>
-                </Press>
-              );
-            })}
+            {/* The lanes are a segmented choose-one in the toolbar, not a list. */}
+            <Switcher
+              ariaLabel="level"
+              value={level}
+              onChange={setLevel}
+              options={world.lanes.map((lane) => {
+                const zs = world.zones.filter((z) => z.zone.lane.label === lane.label);
+                const calls = zs.reduce((n, z) => n + zoneCalls(z), 0);
+                return {
+                  value: lane.label,
+                  label: (
+                    <>
+                      {lane.label}
+                      <span className="ml-1">{zs.length}</span>
+                      {calls > 0 && (
+                        <span className="ml-1" data-tone="alarm">
+                          ·{calls}
+                        </span>
+                      )}
+                    </>
+                  ),
+                  title: `${lane.view}${lane.replayPath ? " · captured this session" : " · not captured yet"}`,
+                };
+              })}
+            />
 
             <span className="hairline-l ml-1 flex items-center gap-1 pl-1">
               <Press
@@ -104,6 +105,11 @@ export function AtlasVisual() {
         }
       >
         <LevelPlan
+          plan={planImage.image && "plan" in planImage.image ? planImage.image.plan : null}
+          planRefusal={
+            planImage.image && "refusal" in planImage.image ? planImage.image.refusal : null
+          }
+          planError={planImage.error}
           zones={levelZones}
           stageFilter={stageFilter}
           selectedKey={zoneKey}

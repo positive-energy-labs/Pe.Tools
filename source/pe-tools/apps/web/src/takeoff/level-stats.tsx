@@ -41,8 +41,7 @@ export function LevelStats({
   for (const z of zones) {
     const run = z.runs[z.runs.length - 1];
     if (!run) continue;
-    residual +=
-      run.declaredSqft - (run.roomSqft + run.claimedWallSqft + z.heldSqft + run.excludedSqft);
+    residual += run.declaredSqft - (run.roomSqft + run.excludedSqft + z.heldSqft + run.voidSqft);
   }
 
   const pct = (n: number) => (zones.length === 0 ? 0 : Math.round((n / zones.length) * 100));

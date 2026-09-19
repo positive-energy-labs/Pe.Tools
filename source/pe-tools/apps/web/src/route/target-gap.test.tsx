@@ -160,6 +160,243 @@ test("same-tick Work writes carry the accepted revision forward", async () => {
   }
 });
 
+test("a late action write keeps the Work revision it computed from", async () => {
+  let acceptWork!: Parameters<typeof peReadings.subscribe>[1];
+  const subscribe = vi.spyOn(peReadings, "subscribe").mockImplementation((request, accept) => {
+    if (request.kind === "work") acceptWork = accept;
+    return () => {};
+  });
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  let revision = 1;
+  let value = "original";
+  let nativeCalls = 0;
+  const bodies: Array<{ expectedRevision: number }> = [];
+  const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    if (typeof input === "string" && input.endsWith("/call")) {
+      nativeCalls += 1;
+      return new Response(JSON.stringify({ outcome: "Succeeded" }));
+    }
+    if (typeof init?.body !== "string") throw Error("expected a JSON request body");
+    const body = JSON.parse(init.body) as {
+      patches: Array<{ value: string }>;
+      expectedRevision: number;
+    };
+    bodies.push(body);
+    if (body.expectedRevision !== revision)
+      return new Response(
+        JSON.stringify({
+          kind: "refused",
+          ok: false,
+          code: "stale_revision",
+          error: "someone wrote first",
+        }),
+        { status: 409 },
+      );
+    value = body.patches[0]!.value;
+    return new Response(JSON.stringify({ ok: true, revision: ++revision }));
+  });
+  const manifest = defineRoute({
+    key: "late-write",
+    name: "Late write",
+    work: {
+      route: "late-write",
+      title: "Late write",
+      description: "proof",
+      schema: z.object({ value: z.string() }),
+      agentWriteMask: [],
+      commands: {},
+    },
+    actions: {
+      compute: {
+        label: "compute",
+        says: "writes from one snapshot",
+        needs: "host",
+        actor: "any",
+        input: z.void() as unknown as z.ZodType<never>,
+        dirties: [],
+        requires: { work: true },
+        ready: () => null,
+        run: async (ctx) => {
+          const computed = `${ctx.work.doc!.value}-computed`;
+          await ctx.call("native.once");
+          await held;
+          await ctx.write([{ path: ["value"], value: computed }]);
+        },
+      },
+    },
+  });
+  try {
+    const { result } = renderHook(() => useRoute(manifest, { work: "shared" }));
+    act(() =>
+      acceptWork({
+        kind: "snapshot",
+        key: "late-write",
+        value: { revision, doc: { value } },
+      } as never),
+    );
+    let pending!: Promise<unknown>;
+    act(() => {
+      pending = result.current.actions.compute.run();
+    });
+    revision = 2;
+    value = "newer";
+    act(() =>
+      acceptWork({
+        kind: "snapshot",
+        key: "late-write",
+        value: { revision, doc: { value } },
+      } as never),
+    );
+    await act(async () => {
+      release();
+      expect(await pending).toMatchObject({ code: "stale-revision" });
+    });
+    expect(bodies.map((body) => body.expectedRevision)).toEqual([1]);
+    expect({ revision, value }).toEqual({ revision: 2, value: "newer" });
+    expect(nativeCalls).toBe(1);
+  } finally {
+    cleanup();
+    fetch.mockRestore();
+    subscribe.mockRestore();
+  }
+});
+
+test("action commands use their snapshot revision on immediate and late runs", async () => {
+  let acceptWork!: Parameters<typeof peReadings.subscribe>[1];
+  const subscribe = vi.spyOn(peReadings, "subscribe").mockImplementation((request, accept) => {
+    if (request.kind === "work") acceptWork = accept;
+    return () => {};
+  });
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  let serverRevision = 4;
+  const revisions: number[] = [];
+  const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+    if (typeof init?.body !== "string") throw Error("expected a JSON request body");
+    const body = JSON.parse(init.body) as { expectedRevision: number };
+    revisions.push(body.expectedRevision);
+    if (body.expectedRevision !== serverRevision)
+      return new Response(
+        JSON.stringify({
+          kind: "refused",
+          ok: false,
+          code: "stale_revision",
+          error: "someone wrote first",
+        }),
+        { status: 409 },
+      );
+    return new Response(JSON.stringify({ ok: true, revision: ++serverRevision }));
+  });
+  const manifest = defineRoute({
+    key: "action-command-revision",
+    name: "Action command revision",
+    work: {
+      route: "action-command-revision",
+      title: "Action command revision",
+      description: "proof",
+      schema: z.object({ value: z.string() }),
+      agentWriteMask: [],
+      commands: {
+        save: { description: "save", input: z.object({}), actor: "human" },
+      },
+    },
+    actions: {
+      save: {
+        label: "save",
+        says: "commands from one snapshot",
+        needs: "host",
+        actor: "human",
+        input: z.boolean() as unknown as z.ZodType<never>,
+        dirties: [],
+        requires: { work: true },
+        ready: () => null,
+        run: async (ctx, wait: boolean) => {
+          if (wait) await held;
+          await ctx.command("save");
+        },
+      },
+    },
+  });
+  try {
+    const { result } = renderHook(() => useRoute(manifest, { work: "shared" }));
+    const publish = (revision: number) =>
+      act(() =>
+        acceptWork({
+          kind: "snapshot",
+          key: "action-command-revision",
+          value: { revision, doc: { value: `r${revision}` } },
+        } as never),
+      );
+    publish(4);
+    await act(async () => expect(await result.current.actions.save.run(false)).toBeNull());
+    publish(5);
+    let pending!: Promise<unknown>;
+    act(() => {
+      pending = result.current.actions.save.run(true);
+    });
+    serverRevision = 6;
+    publish(6);
+    await act(async () => {
+      release();
+      expect(await pending).toMatchObject({ code: "stale-revision" });
+    });
+    expect(revisions).toEqual([4, 5]);
+  } finally {
+    cleanup();
+    fetch.mockRestore();
+    subscribe.mockRestore();
+  }
+});
+
+test("an action initializes current absent Work at revision zero", async () => {
+  let acceptWork!: Parameters<typeof peReadings.subscribe>[1];
+  const subscribe = vi.spyOn(peReadings, "subscribe").mockImplementation((request, accept) => {
+    if (request.kind === "work") acceptWork = accept;
+    return () => {};
+  });
+  let expectedRevision: number | undefined;
+  const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+    if (typeof init?.body !== "string") throw Error("expected a JSON request body");
+    expectedRevision = (JSON.parse(init.body) as { expectedRevision: number }).expectedRevision;
+    return new Response(JSON.stringify({ ok: true, revision: 1 }));
+  });
+  const manifest = defineRoute({
+    key: "initialize-absent",
+    name: "Initialize absent",
+    work: {
+      route: "initialize-absent",
+      title: "Initialize absent",
+      description: "proof",
+      schema: z.object({ value: z.string().optional() }),
+      agentWriteMask: [],
+      commands: {},
+    },
+    actions: {
+      initialize: {
+        label: "initialize",
+        says: "starts Work",
+        needs: "host",
+        actor: "human",
+        input: z.void() as unknown as z.ZodType<never>,
+        dirties: [],
+        ready: () => null,
+        run: (ctx) => ctx.write([{ path: ["value"], value: "first" }]),
+      },
+    },
+  });
+  try {
+    const { result } = renderHook(() => useRoute(manifest, { work: "shared" }));
+    act(() => acceptWork({ kind: "snapshot", key: "initialize-absent", value: null } as never));
+    await act(async () => expect(await result.current.actions.initialize.run()).toBeNull());
+    expect(expectedRevision).toBe(0);
+  } finally {
+    cleanup();
+    fetch.mockRestore();
+    subscribe.mockRestore();
+  }
+});
+
 test("document-owned Work stays unbound until an Address or named workspace exists", () => {
   const requests: unknown[] = [];
   const subscribe = vi.spyOn(peReadings, "subscribe").mockImplementation((request) => {

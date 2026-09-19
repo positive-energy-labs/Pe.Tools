@@ -43,3 +43,25 @@ test("send remains refused until the current thread establishes its display gate
   const ready = chatManifest({ thread: "t1", session, displayKnown: true });
   expect(ready.actions?.send.ready(ctx, { text: "hello" } as never)).toBe(null);
 });
+
+test("a parked ask does not hold send; a tool approval does, with its reason", () => {
+  const session = {} as never;
+  const send = (display: object) =>
+    chatManifest({ thread: "t1", session, displayKnown: true, display }).actions?.send.ready(ctx, {
+      text: "a new turn",
+    } as never);
+  const ask = { toolCallId: "ask-1", toolName: "ask_user", suspendPayload: {} };
+  // The new turn is how the runtime expires the parked ask.
+  expect(send({ isRunning: true, pendingSuspensions: { "ask-1": ask } })).toBe(null);
+  expect(send({ isRunning: false, pendingSuspensions: { "ask-1": ask } })).toBe(null);
+  expect(send({ pendingApproval: { toolCallId: "t-1", toolName: "run_script" } })).toBe(
+    "A tool approval is waiting",
+  );
+  expect(
+    send({
+      pendingApproval: { toolCallId: "t-1", toolName: "run_script" },
+      pendingSuspensions: { "ask-1": ask },
+    }),
+  ).toBe("A tool approval is waiting");
+  expect(send({ isRunning: true })).toBe("Pea is working");
+});

@@ -1,38 +1,54 @@
 /**
  * `/families`, declared once on the route kernel. The audit is the loaded-families matrix over an
  * authored scope, its cells open to proposals; capture files one spec member per picked family;
- * plan reads the page's member, or generates one member per family from accepted proposals, and
- * apply sends the sheet's included hashes. Work holds the scope, the proposals and their accepts,
+ * plan reads the page's member, or sends one draft per family generated from staged cells, and
+ * apply sends the sheet's included hashes. Work holds the scope and keyed cells,
  * and the rows a person held back.
  */
 import { z } from "zod";
 import {
   familiesRouteState,
   ffPlanEntrySchema,
+  type ActionReceipt,
   type FamiliesRouteDocument,
-  type FamilyCellEdit,
 } from "@pe/agent-contracts";
 
 import { FF_SPEC_SCHEMA, ffPlanRow } from "#/host/familyfoundry";
 import { FAMILY_MODEL_SCHEMA } from "#/route/family/manifest";
 import {
   admissionPlan,
+  byPlan,
+  documentOf,
   entityRoute,
   workflow,
   type EntityPage,
+  type HeldRow,
   type EntityRouteDef,
-  type MemberSource,
   type PlanEntry,
 } from "#/route";
-import { podHost } from "#/route/pods";
 
+import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { applyOutcome, type PlanRun } from "./apply-outcome";
 import type { FamiliesDraft } from "./host";
 import { FAMILIES_SEEDS } from "./seeds";
-import { isAccepted, stagedMembers } from "./staged";
+import { podHost } from "#/route/pods";
+import { stagedDrafts } from "./staged";
 
 export interface FamiliesPage {
   /** The scope being authored: what `scope` writes into Work when pressed. Page, not Work. */
   draft: FamiliesDraft;
+  /**
+   * Each loaded family's element id by name, as the current matrix reading resolves it: a display
+   * fact of that reading, never a key. Capture's contract takes ids, so it resolves the picks here
+   * at the press. ponytail: a mirror of the matrix; drop it when capture takes names.
+   */
+  loaded: Record<string, number>;
+  /**
+   * After start fresh: the fresh page offers to hold the old Work's exclusions back again, until
+   * pressed, dismissed, or the next plan (journeys' ruling). ponytail: page memory, so a reload
+   * drops the offer; the old Work stays aside and salvageable.
+   */
+  carryOver: boolean;
 }
 
 export const familiesPageSchema = z.object({
@@ -43,13 +59,27 @@ export const familiesPageSchema = z.object({
       families: z.array(z.string()).default([]),
     })
     .default({ placement: "AllLoaded", categories: [], families: [] }),
+  loaded: z.record(z.string(), z.number()).default({}),
+  carryOver: z.boolean().default(false),
 });
 
 export type FamiliesReadingKey = "receipts" | "inventory";
 
+/**
+ * The plan result's `excluded` ({ familyName, by }): the sheet says who held each family back, by
+ * name. A name the plan did not plan fails loud rather than drawing a row nothing backs.
+ */
+const heldResult = z.array(z.object({ familyName: z.string(), by: z.enum(["person", "pea"]) }));
+const heldOf = (result: Record<string, unknown>, entries: readonly PlanEntry[]): HeldRow[] =>
+  heldResult.parse(result.excluded ?? []).map(({ familyName, by }) => {
+    if (!entries.some((row) => row.id === familyName))
+      throw Error(`the plan held back '${familyName}', which it did not plan`);
+    return { name: familyName, by };
+  });
+
 /* ── The definition ────────────────────────────────────────────────────────── */
 
-/** The generated member's `$schema`: this library, on the host actually serving the page. */
+/** The generated draft's `$schema`: this library, on the host actually serving the page. */
 const stagedSchema = () =>
   typeof location === "undefined" ? FF_SPEC_SCHEMA : new URL(FF_SPEC_SCHEMA, location.origin).href;
 
@@ -63,110 +93,90 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
     schema: [FF_SPEC_SCHEMA, FAMILY_MODEL_SCHEMA],
     capture: "families.capture",
     apply: "families.apply",
-    captureInput: (ctx) => ({ familyIds: ctx.page.selection.map(Number) }),
+    // The picks are names; capture's contract takes ids, resolved against the current reading.
+    captureInput: (ctx) => {
+      const gone = ctx.page.selection.filter((name) => !Object.hasOwn(ctx.page.loaded, name));
+      return gone.length
+        ? `${gone.map((name) => `'${name}'`).join(", ")} ${gone.length === 1 ? "is" : "are"} no longer loaded; pick again`
+        : { familyIds: ctx.page.selection.map((name) => ctx.page.loaded[name]!) };
+    },
     // `families.plan` plans the page's member over the Work's scope; apply sends the included hashes.
     plan: {
       ...admissionPlan<FamiliesRouteDocument, FamiliesReadingKey, FamiliesPage>(
         { plan: "families.plan", apply: "families.apply" },
         (plan) => ffPlanRow(ffPlanEntrySchema.parse(plan)),
-        (work) => ({
-          excludedIds: work.excludedIds,
-          ...(work.executionOptions ? { executionOptions: work.executionOptions } : {}),
-        }),
+        (work) => (work.executionOptions ? { executionOptions: work.executionOptions } : {}),
+        heldOf,
       ),
-      // Held-back rows are authored Work; the sheet toggles them there.
-      excluded: (view) => (view.work.doc?.excludedIds ?? []).map(String),
+      // Held-back families are authored Work, by name; the sheet's rows are this plan's ids.
+      excluded: (view) =>
+        (view.page.sheet?.entries ?? []).flatMap((entry) =>
+          Object.hasOwn(view.work.doc?.excluded ?? {}, entry.name) ? [entry.id] : [],
+        ),
     },
     /**
-     * The editable table's half. Plan takes ACCEPTED proposals only, generates one patch member per
-     * family from them, files each in the page's pod through the same host writer capture uses, and
-     * plans each through `families.plan` over exactly that family's id; apply sends each included
-     * row's hash back to the member that produced it. The person never named, saved, or opened a
-     * file — but one exists, the sheet names it per row, and the receipt names it.
+     * The editable table's half. Plan takes staged cells only, generates one patch draft per family
+     * from them, and plans each through `families.plan` over exactly that family's name, sending the
+     * draft's bytes. Nothing is filed: the plan seals those bytes, and apply's run in the page's pod
+     * keeps them as a supplied draft. Plan never files: capture saves specs, and `save draft to pod`
+     * saves a copy of the draft, both only when pressed.
      */
     staged: {
-      count: (ctx) => (ctx.work.doc?.accepted ?? []).length,
+      cells: (ctx) => ctx.work.doc?.cells ?? {},
       plan: async (ctx) => {
         const doc = ctx.work.doc;
         if (!doc || ctx.work.revision === null) throw Error("author the route's Work first");
-        if (!ctx.page.pod) throw Error("choose the pod the generated spec lands in");
+        if (!ctx.page.pod) throw Error("choose the pod the run is filed in");
         const bases = { work: { key: ctx.work.key, revision: ctx.work.revision } };
         const entries: PlanEntry[] = [];
-        const generated = stagedMembers(doc.accepted, new Date(), stagedSchema());
-        for (const member of generated) {
-          const source = await podHost.write(
-            { pod: ctx.page.pod, path: member.path },
-            member.content,
-          );
-          // The page names the first generated member so the Situation can open what was written;
-          // every member is still addressed per row, and each files its own run. Named only after
-          // it exists: naming a path before the write lands makes the editor read a missing file.
-          if (member === generated[0]) ctx.setPage({ path: member.path });
+        const held: HeldRow[] = [];
+        for (const draft of stagedDrafts(doc.cells, stagedSchema())) {
           const result = await workflow(
             "families.plan",
             {
-              source,
-              // The member selects one family by name; the plan names it by id, so the host plans
-              // that family alone and never lays one family's types onto the rest of the scope.
-              familyIds: [member.familyId],
-              excludedIds: doc.excludedIds,
+              source: { pod: ctx.page.pod, path: draft.path, content: draft.content },
+              // The draft selects one family by name, so the host plans that family alone and
+              // never lays one family's types onto the rest of the scope.
+              familyNames: [draft.familyName],
               ...(doc.executionOptions ? { executionOptions: doc.executionOptions } : {}),
             },
             ctx,
             bases,
           );
-          // The sheet names the member each family applies from.
-          for (const plan of [result.plan].flat()) {
-            const row = ffPlanRow(ffPlanEntrySchema.parse(plan));
-            entries.push({ ...row, detail: `${row.detail} · from ${member.path}`, source });
-          }
+          const rows = [result.plan].flat().map((plan) => ({
+            ...ffPlanRow(ffPlanEntrySchema.parse(plan)),
+            plan: String(result.id),
+          }));
+          entries.push(...rows);
+          held.push(...heldOf(result, rows));
         }
-        return { entries };
+        return held.length ? { entries, held } : { entries };
       },
+      // Each draft's plan sealed its bytes and the staged cells it consumed; the host retires
+      // those cells after proven native success, only where they are still unchanged.
+      // One action per plan; the verb's outcome is every family's receipt, summed (F-J3-3/4).
       apply: async (ctx, included) => {
-        const doc = ctx.work.doc;
-        const byMember = new Map<string, { source: MemberSource; rows: PlanEntry[] }>();
-        for (const row of included) {
-          if (!row.source) throw Error(`the planned row for ${row.name} names no saved member`);
-          const key = `${row.source.pod}:${row.source.path}`;
-          const bucket = byMember.get(key);
-          if (bucket) bucket.rows.push(row);
-          else byMember.set(key, { source: row.source, rows: [row] });
-        }
-        for (const { source, rows } of byMember.values())
-          await workflow(
-            "families.apply",
-            {
-              source,
-              ...(doc?.executionOptions ? { executionOptions: doc.executionOptions } : {}),
-              expectedPlanHashes: Object.fromEntries(rows.map((r) => [r.id, r.planHash])),
-            },
-            ctx,
-          );
-        // Applied proposals are spent: the run receipt is the record from here, and leaving them
-        // standing would offer the same change again over a model that already took it. Proposals
-        // nobody accepted, and families held back from this apply, stay.
-        const applied = new Set(included.map((row) => Number(row.id)));
-        const spent = (edit: FamilyCellEdit) => applied.has(edit.familyId);
-        await ctx.write([
-          {
-            path: ["edits"],
-            value: (doc?.edits ?? []).filter(
-              (edit) => !spent(edit) || !isAccepted(doc!.accepted, edit),
-            ),
-          },
-          { path: ["accepted"], value: (doc?.accepted ?? []).filter((edit) => !spent(edit)) },
-        ]);
+        const runs: PlanRun[] = [];
+        for (const input of byPlan(included))
+          runs.push({
+            families: included.filter((row) => row.plan === input.plan).map((row) => row.name),
+            action: (await runSemanticAction(
+              "families.apply",
+              input,
+              documentOf(ctx),
+            )) as ActionReceipt,
+          });
+        return applyOutcome(runs, included.length);
       },
     },
-    docs: "Audit loaded families over a scope, propose values in the cells a patch can express and accept or deny each, capture picked families into a pod as specs, then plan a spec — saved, or generated from the accepted proposals — and apply exactly the families it changes.",
+    docs: "Audit loaded families over a scope, propose values in keyed cells and stage or deny each proposal, capture picked families into a pod as specs, then plan a saved spec or the staged cells as a draft (filed nowhere) and apply exactly the families it changes.",
   };
 
 export const manifest = entityRoute<
   FamiliesRouteDocument,
   FamiliesReadingKey,
   FamiliesPage,
-  "scope"
+  "scope" | "save-draft"
 >(familiesSpec, {
   work: familiesRouteState,
   readings: {
@@ -184,21 +194,50 @@ export const manifest = entityRoute<
       dirties: [],
       stage: "audit",
       count: (ctx) => ctx.page.draft.categories.length || null,
-      ready: (ctx) => (ctx.page.draft.categories.length ? null : "Pick a category first"),
+      // Unreadable Work takes no scope: its refusal (and start fresh) is the only instruction.
+      ready: (ctx) =>
+        ctx.work.refusal ?? (ctx.page.draft.categories.length ? null : "Pick a category first"),
       run: async (ctx) => {
         const { categories, families, placement } = ctx.page.draft;
         // A plan confirmed over another scope no longer describes what apply would touch.
         (ctx.setPage as (next: Partial<EntityPage>) => void)({ confirming: false, sheet: null });
         await ctx.write([
           {
-            path: ["scope"],
+            // The person's scope is the staged rung; Pea's proposal waits beside it (F-J1-10).
+            path: ["scope", "staged"],
             value: {
-              categoryNames: [...categories],
-              familyNames: [...families],
-              placementScope: placement,
+              value: {
+                categoryNames: [...categories],
+                familyNames: [...families],
+                placementScope: placement,
+              },
             },
           },
         ]);
+      },
+    },
+    "save-draft": {
+      label: "save draft to pod",
+      says: "Saves a copy of the staged draft into the chosen pod, one member per family, for the person to edit later. Optional: plan does not need it and still plans the staged cells' own bytes.",
+      needs: "project",
+      actor: "any",
+      input: z.void() as never,
+      // The pod list is the entity's Reading; saved members show there.
+      dirties: ["pods"] as never,
+      stage: "audit",
+      count: (ctx) => stagedDrafts(ctx.work.doc?.cells ?? {}).length || null,
+      ready: (ctx) =>
+        !stagedDrafts(ctx.work.doc?.cells ?? {}).length
+          ? "nothing is staged to save"
+          : (ctx.page as unknown as EntityPage).pod
+            ? null
+            : "choose the pod the draft is saved in",
+      // ponytail: a create refuses an existing path, so a second save of the same family refuses in
+      // the pod's words; overwrite (pod.member.save with the read sha) if people ask for re-saves.
+      run: async (ctx) => {
+        const { pod } = ctx.page as unknown as EntityPage;
+        for (const draft of stagedDrafts(ctx.work.doc?.cells ?? {}, stagedSchema()))
+          await podHost.write({ pod, path: draft.path }, draft.content);
       },
     },
   },

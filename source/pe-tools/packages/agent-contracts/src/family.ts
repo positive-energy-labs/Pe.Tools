@@ -8,6 +8,30 @@ import {
   revitDataIssueSchema,
 } from "./families.ts";
 import { routeBindingsSchema } from "./route-state.ts";
+import type { RouteStateSpec } from "./route-state.ts";
+import { settingsFieldStateSchema } from "./settings.ts";
+import { trichotomyAgentMask } from "./trichotomy.ts";
+
+/** `/family` Work: an immutable capture baseline plus keyed JSON-pointer cells. */
+export const familyDraftSchema = z
+  .object({
+    /** Immutable draft baseline; it is not a claim about current Revit state. */
+    reading: z.string().nullable().default(null),
+    cells: z.record(z.string(), settingsFieldStateSchema).default({}),
+  })
+  .strict();
+export type FamilyDraft = z.infer<typeof familyDraftSchema>;
+
+export const familyDraftRouteState = {
+  route: "family",
+  title: "Family",
+  description:
+    "A captured family draft baseline with cells keyed by JSON pointer. Propose through cells.*.proposal; a person stages reviewed values before plan or apply.",
+  schema: familyDraftSchema,
+  agentWriteMask: trichotomyAgentMask(),
+  commands: {},
+} satisfies RouteStateSpec<typeof familyDraftSchema>;
+
 export const specDocBlockSchema = z.object({
   id: z.string(),
   page: z.number(),

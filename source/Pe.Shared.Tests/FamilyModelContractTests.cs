@@ -101,6 +101,18 @@ public sealed class FamilyModelContractTests {
     }
 
     [Test]
+    public void Unknown_mapping_strategy_is_refused_at_parse_listing_the_allowed_names() {
+        var current = Doc("""{"parameters":{"W":{"dataType":"Length"}},"types":{"A":{}}}""");
+        var result = FamilyPatch.Apply(current, """{"parameters":{"W":{"wasNamed":["Width"],"mappingStrategy":"CoerceByUnits"}}}""");
+        Assert.That(result.Value, Is.Null);
+        Assert.That(result.Diagnostics.Single().Code, Is.EqualTo(FamilyModelDiagnosticCodes.InvalidJson));
+        Assert.That(result.Diagnostics.Single().Message, Does.Contain("'CoerceByUnits' is not a MappingStrategy")
+            .And.Contain("Legal: Strict, CoerceByStorageType, CoerceMeasurableToNumber, CoerceElectrical"));
+        Assert.Throws<Newtonsoft.Json.JsonSerializationException>(() => FamilyPatch.Parse(
+            """{"patch":{},"run":{"parametersIfSourceExists":{"T":{"dataType":"Text","wasNamed":["S"],"mappingStrategy":"Nope"}}}}"""));
+    }
+
+    [Test]
     public void Shared_mapping_fields_roundtrip_and_local_conversion_clears_identity() {
         var current = Doc("""{"parameters":{"W":{"dataType":"Length","tooltip":"old"}},"types":{"A":{}}}""");
         var result = FamilyPatch.Apply(current, """{"parameters":{"W":{"shared":true,"sharedGuid":"692091cc-1e3d-47e6-a7c5-9336c3149419","wasNamed":["Width"],"fillBlanksFromSources":true,"mappingStrategy":"Strict"}}}""");
@@ -109,7 +121,7 @@ public sealed class FamilyModelContractTests {
         Assert.Multiple(() => {
             Assert.That(parameter.SharedGuid, Is.EqualTo(Guid.Parse("692091cc-1e3d-47e6-a7c5-9336c3149419")));
             Assert.That(parameter.FillBlanksFromSources, Is.True);
-            Assert.That(parameter.MappingStrategy, Is.EqualTo("Strict"));
+            Assert.That(parameter.MappingStrategy, Is.EqualTo(MappingStrategy.Strict));
             Assert.That(parameter.DataType, Is.Null);
             Assert.That(parameter.Tooltip, Is.Null);
         });
@@ -158,71 +170,6 @@ public sealed class FamilyModelContractTests {
         Assert.That(local.Value.Parameters["Offline"].SharedVisible, Is.Null);
     }
 
-    [Test]
-    public void Company_corpus_retains_original_bytes_and_all_saved_equipment() {
-        var root = Path.GetFullPath(Path.Combine(FixtureDir, "..", "Profiles", "company-20260906"));
-        var manifest = JObject.Parse(File.ReadAllText(Path.Combine(root, "manifest.json")));
-        var files = manifest["files"]!.Children<JObject>().ToList();
-        Assert.That(files.Count, Is.EqualTo(52));
-        Assert.That(files.Count(f => ((string)f["path"]!).Contains("/SavedEquip/", StringComparison.Ordinal)), Is.EqualTo(14));
-        foreach (var file in files) {
-            var bytes = File.ReadAllBytes(Path.Combine(root, (string)file["path"]!));
-            Assert.That(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant(), Is.EqualTo((string)file["sha256"]!), (string)file["path"]!);
-        }
-        Assert.That(manifest["unresolved"]!.Count(), Is.EqualTo(2), "The original census remains unchanged after reconstruction and resolver repairs.");
-    }
-
-    [Test]
-    public void Composed_company_corpus_covers_every_original_profile() {
-        var root = Path.GetFullPath(Path.Combine(FixtureDir, "..", "Profiles"));
-        var original = JObject.Parse(File.ReadAllText(Path.Combine(root, "company-20260906", "manifest.json")));
-        var expected = original["files"]!.Select(x => (string)x["path"]!).Where(p => p.Contains("/profiles/"));
-        var composed = JArray.Parse(File.ReadAllText(Path.Combine(root, "company-composed-20260906.json")));
-        Assert.That(composed.Select(x => (string)x["source"]!), Is.EquivalentTo(expected));
-        Assert.That(composed.Count, Is.EqualTo(45));
-        Assert.That(composed.Descendants().OfType<JProperty>().Where(p => p.Name is "$include" or "$preset"), Is.Empty);
-        foreach (var profile in composed) {
-            var source = JObject.Parse(File.ReadAllText(Path.Combine(root, "company-20260906", (string)profile["source"]!)));
-            Assert.That(((JObject)profile["settings"]!).Properties().Select(p => p.Name), Is.EquivalentTo(source.Properties().Select(p => p.Name)), (string)profile["source"]!);
-        }
-    }
-
-    [Test]
-    public void AprilAire_inline_fields_override_preset_and_preserve_other_fields() {
-        var root = Path.GetFullPath(Path.Combine(FixtureDir, "..", "Profiles"));
-        const string path = "CmdFFManager/profiles/SavedEquip/AprilAire E-Series.json";
-        var original = JObject.Parse(File.ReadAllText(Path.Combine(root, "company-20260906", path)))["FilterApsParams"]!;
-        var composed = JArray.Parse(File.ReadAllText(Path.Combine(root, "company-composed-20260906.json")));
-        var actual = composed.Single(p => (string)p["source"]! == path)["settings"]!["FilterApsParams"]!;
-        var preset = composed.Single(p => (string)p["source"]! == "CmdFFMigrator/profiles/MechEquip/DH.json")["settings"]!["FilterApsParams"]!;
-        Assert.Multiple(() => {
-            Assert.That(JToken.DeepEquals(actual["IncludeNames"]!["Equaling"], original["IncludeNames"]!["Equaling"]), Is.True);
-            Assert.That(JToken.DeepEquals(actual["IncludeNames"]!["StartingWith"], preset["IncludeNames"]!["StartingWith"]), Is.True);
-            Assert.That(JToken.DeepEquals(actual["ExcludeNames"], preset["ExcludeNames"]), Is.True);
-        });
-    }
-
-    [Test]
-    public void Reconstructed_dehumidifier_filter_retains_both_profiles_parameter_requirements() {
-        var root = Path.GetFullPath(Path.Combine(FixtureDir, "..", "Profiles"));
-        var composed = JArray.Parse(File.ReadAllText(Path.Combine(root, "company-composed-20260906.json")));
-        var dh = composed.Single(p => (string)p["source"]! == "CmdFFMigrator/profiles/MechEquip/DH.json")["settings"]!;
-        var filter = dh["FilterApsParams"]!;
-        bool Matches(string name, string part) =>
-            filter[part]!["Equaling"]!.Values<string>().Contains(name, StringComparer.Ordinal) ||
-            (filter[part]!["StartingWith"]?.Values<string>() ?? []).Any(prefix => name.StartsWith(prefix!, StringComparison.Ordinal));
-        var saved = JObject.Parse(File.ReadAllText(Path.Combine(root, "company-20260906", "CmdFFManager", "profiles", "SavedEquip", "AprilAire E-Series.json")));
-        var requirements = saved["SetKnownParams"]!["GlobalAssignments"]!.Concat(saved["SetKnownParams"]!["PerTypeAssignmentsTable"]!)
-            .Concat(dh["SetKnownParams"]!["GlobalAssignments"]!).Select(p => (string)p["Parameter"]!)
-            .Concat(["PE_M___DehuPintsPerDayDesign", "PE_M___DehuPintsPerDayRated", "PE_G___RefrigerantType"]);
-        foreach (var name in requirements.Distinct(StringComparer.Ordinal)) {
-            Assert.That(Matches(name, "IncludeNames"), Is.True, name);
-            Assert.That(Matches(name, "ExcludeNames"), Is.False, name);
-        }
-        Assert.That(Matches("PE_E___MainBreakerRating", "ExcludeNames"), Is.True, "Existing panel exclusion include is retained.");
-        Assert.That(Matches("PE_M___HuGallonsPerHour", "ExcludeNames"), Is.True, "Humidifier-only field stays excluded.");
-    }
-
     public static string FixtureDir {
         get {
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -231,7 +178,7 @@ public sealed class FamilyModelContractTests {
         }
     }
 
-    public static IEnumerable<string> Fixtures => Directory.GetFiles(FixtureDir, "*.json").Where(path => !path.EndsWith(".captured.json", StringComparison.Ordinal)).Select(Path.GetFileName)!;
+    public static IEnumerable<string> Fixtures => Directory.GetFiles(FixtureDir, "*.json").Where(path => !path.EndsWith(".captured.json", StringComparison.Ordinal) && !path.EndsWith(".patch.json", StringComparison.Ordinal)).Select(Path.GetFileName)!;
 
     [Test]
     public void Nested_model_resolves_by_schema_and_family_name_not_filename() {
@@ -261,6 +208,27 @@ public sealed class FamilyModelContractTests {
         Assert.That(again.Diagnostics, Is.Empty);
         Assert.That(FamilyModelJson.Serialize(again.Value!), Is.EqualTo(once));
         Assert.That(again.Value!.Forms.Values.Select(f => f.Kind), Has.All.EqualTo(FormKind.Extrusion));
+    }
+
+    // Gotcha 18: a value that names a parameter is a formula; it is refused, never written as a literal. Measured
+    // specs already refuse any text; unit-carrying specs admit text for Revit units, so they need the name check.
+    // A text-like parameter's value is a string, so a name there is literal text, exactly as Revit stores it.
+    [TestCase("AirFlow", "Supply * 2", "value-names-parameter")]
+    [TestCase("AirFlow", "Supply", "value-names-parameter")]
+    [TestCase("Area", "Width * Depth", "value-names-parameter")]
+    [TestCase("Length", "Width * 2", "value-datatype-mismatch")]
+    [TestCase("AirFlow", "280 CFM", null)]
+    [TestCase("Text", "Width", null)]
+    public void A_value_naming_a_parameter_is_refused_as_a_formula(string dataType, string cell, string? code) {
+        var declared = """{"Supply":{"dataType":"AirFlow"},"Width":{"dataType":"Length"},"Depth":{"dataType":"Length"},"V":{"dataType":"DT"}}"""
+            .Replace("DT", dataType);
+        var cellJson = Newtonsoft.Json.JsonConvert.ToString(cell);
+        var perType = FamilyModelJson.Parse(Doc("{\"parameters\":" + declared + ",\"types\":{\"A\":{\"V\":" + cellJson + "}}}"));
+        var single = FamilyModelJson.Parse(Doc("{\"parameters\":" + declared.Replace("\"V\":{", "\"V\":{\"value\":" + cellJson + ",") + "}"));
+        Assert.Multiple(() => {
+            Assert.That(perType.Diagnostics.Select(x => x.Code), code == null ? Is.Empty : Does.Contain(code), "per-type cell");
+            Assert.That(single.Diagnostics.Select(x => x.Code), code == null ? Is.Empty : Does.Contain(code), "parameter value");
+        });
     }
 
     // s-pea §2.4 numbering. Deliberately silent: #7 wasNamed (names the current family), #12 bowtie (plane loops cannot self-intersect).

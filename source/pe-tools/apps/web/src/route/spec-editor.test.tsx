@@ -73,7 +73,7 @@ describe("the editor's Pea lane", () => {
     window.history.replaceState({}, "", "/pods?demo=browse");
     render(<SpecEditor member={member} schema={null} fixture={DEMO_SPEC} />);
     expect(await screen.findByText("1 proposed")).toBeTruthy();
-    expect(screen.getByText("2 staged")).toBeTruthy();
+    expect(screen.getByText("2 fields")).toBeTruthy();
     expect(screen.getByText("/ViewTemplateName")).toBeTruthy();
     expect(screen.getByText("Schedule - PE Standard v2")).toBeTruthy();
     expect(screen.getByRole("button", { name: /save 2 staged/i })).toBeTruthy();

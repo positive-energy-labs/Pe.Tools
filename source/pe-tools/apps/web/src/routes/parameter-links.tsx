@@ -3,7 +3,13 @@ import { Eye, RefreshCw, Save } from "lucide-react";
 import { useCallback, useContext, useMemo, useState } from "react";
 
 import type { ParameterLinkProfile, ParameterLinksDocument } from "@pe/agent-contracts";
-import { familyCaptureSchema, parameterLinksReadingSchema } from "@pe/agent-contracts";
+import {
+  familyCaptureSchema,
+  parameterLinksReadingSchema,
+  sameValue,
+  stagedParameterProfile,
+  transitionPatches,
+} from "@pe/agent-contracts";
 
 import { AddressingBar } from "#/components/lang/addressing-bar";
 import { ArmingStrip } from "#/components/lang/arming-strip";
@@ -17,7 +23,17 @@ import { Surface } from "#/components/lang/surface";
 import { useHostStatusQuery } from "#/readings";
 import { EvaluationView, RuntimeStatusBar } from "#/parameter-links/Evaluation";
 import { ProfileEditor } from "#/parameter-links/ProfileEditor";
-import { applyRefusal, isDraftDirty, sameProfile } from "#/parameter-links/model";
+import { ActivityDisclosure } from "#/components/lang/activity";
+import { Row } from "#/components/lang/row";
+import {
+  applyRefusal,
+  isDraftDirty,
+  profileDiff,
+  profileSummary,
+  sameProfile,
+  type ProfileChange,
+} from "#/parameter-links/model";
+import { ReviewRow, type CellWire } from "#/components/lang/band";
 import { previousOf } from "#/readings";
 import { useRoute, type RouteHandle } from "#/route";
 import type { Reading } from "@pe/agent-contracts";
@@ -69,8 +85,8 @@ function ParameterLinksRoute() {
 }
 
 /** No seeds: `parameter-links` has no demo lane (spec §7). `?demo=` is inert here. */
-export function ParameterLinksRouteContent() {
-  const handle = useRoute(manifest);
+export function ParameterLinksRouteContent({ thread }: { thread?: string } = {}) {
+  const handle = useRoute(manifest, { thread });
   const workbench = useContext(WorkbenchContext);
   const resolved = handle.resolution.kind === "resolved" ? handle.resolution.target : null;
   const ref = resolved?.kind === "document" ? resolved.ref : null;
@@ -132,7 +148,19 @@ export function ParameterLinksWorkspace({
   fieldOptionsEnabled?: boolean;
 }) {
   const document = route.work.doc;
-  const savedDraft = document?.draft ?? null;
+  const savedDraft = document ? stagedParameterProfile(document) : null;
+  // Pea's proposed profile, drawn in the band grammar while it differs from what is staged
+  // (accepted, it stays as authorship evidence of the staged value: nothing left to review).
+  const profileCell = document?.profile ?? {};
+  const reviewingProposal =
+    profileCell.proposal != null && !sameValue(profileCell.proposal, profileCell.staged);
+  const profileWire: CellWire = {
+    segment: null,
+    write: route.work.write,
+    revision: route.work.revision,
+  };
+  /** The evaluation shown is a labelled preview of Pea's proposal, never the staged profile's. */
+  const previewingProposal = reading?.subject === "proposal";
   const evaluation = reading?.evaluated ? (reading.evaluation ?? null) : null;
   const status = reading?.status ?? null;
 
@@ -173,7 +201,7 @@ export function ParameterLinksWorkspace({
   const saveDraft = useCallback(
     async (profile: ParameterLinkProfile): Promise<boolean> => {
       const refusal = await route.work.write(
-        [{ path: ["draft"], value: profile }],
+        transitionPatches([], "profile", {}, { kind: "stage", rung: { value: profile } }),
         draftBasis ?? undefined,
       );
       if (refusal) {
@@ -354,7 +382,51 @@ export function ParameterLinksWorkspace({
                           : "no profile to preview — add a definition first"
                       }
                     />
+                    <ActionButton
+                      label="preview Pea's proposal"
+                      icon={Eye}
+                      busy={busy === "previewProposal"}
+                      disabled={busy != null || profileCell.proposal == null}
+                      onClick={() => void route.actions.previewProposal.run()}
+                      reason={
+                        profileCell.proposal == null
+                          ? "Pea has proposed no profile"
+                          : "Evaluate Pea's proposed profile — a labelled preview that never arms apply"
+                      }
+                    />
                   </ActionGroup>
+                  {reviewingProposal ? (
+                    <ReviewRow
+                      wire={profileWire}
+                      address="profile"
+                      label={<span className="t-small face-mono text-ink-2">pea proposes</span>}
+                      cell={profileCell}
+                      facts={{
+                        value: profileSummary(
+                          (profileCell.staged ?? profileCell.proposal)?.value as
+                            | ParameterLinkProfile
+                            | undefined,
+                        ),
+                        scale: "row",
+                      }}
+                      show={(value) => profileSummary(value as ParameterLinkProfile)}
+                    />
+                  ) : null}
+                  {reviewingProposal ? (
+                    <ProfileChanges
+                      changes={profileDiff(
+                        profileCell.staged?.value as ParameterLinkProfile | undefined,
+                        profileCell.proposal?.value as ParameterLinkProfile | undefined,
+                      )}
+                    />
+                  ) : null}
+                  {previewingProposal ? (
+                    <OutcomeLine
+                      kind="advisory"
+                      label="preview of Pea's proposal — not staged"
+                      says="accept it to stage it, then preview the staged profile before apply"
+                    />
+                  ) : null}
                   {/* The preview→stale→apply gate, ON the surface. Refused = the plan is stale
                   (re-plan runs preview); arming =
                   the reason input is the last gate before the one commit. */}
@@ -399,6 +471,9 @@ export function ParameterLinksWorkspace({
                 appliedWriteCount={reading?.appliedWriteCount ?? 0}
               />
               <div className="min-h-0 flex-1 overflow-y-auto">
+                {previewingProposal ? (
+                  <OutcomeLine kind="advisory" label="preview of Pea's proposal — not staged" />
+                ) : null}
                 <EvaluationView evaluation={evaluation} />
               </div>
             </div>
@@ -406,5 +481,28 @@ export function ParameterLinksWorkspace({
         }
       />
     </Surface>
+  );
+}
+
+/** Pea's proposal against staged, item by item: what accept would change, not just its counts. */
+function ProfileChanges({ changes }: { changes: ProfileChange[] }) {
+  return (
+    <ActivityDisclosure
+      label="changes against staged"
+      summary={`${changes.length} change${changes.length === 1 ? "" : "s"} against staged`}
+    >
+      {changes.length
+        ? changes.map((change) => (
+            <Row
+              key={`${change.kind}:${change.id}`}
+              data-key={`${change.kind}:${change.id}`}
+              label={`${change.kind} ${change.id}`}
+              meta={
+                change.change === "changed" ? `changed: ${change.fields.join(", ")}` : change.change
+              }
+            />
+          ))
+        : null}
+    </ActivityDisclosure>
   );
 }

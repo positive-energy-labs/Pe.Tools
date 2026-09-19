@@ -52,7 +52,7 @@ public sealed class TakeoffTsvTests
     }
 
     [Test]
-    public void Room_disposition_column_round_trips_and_absence_stays_unknown()
+    public void Room_disposition_column_parses_and_absence_stays_unknown()
     {
         string Line(string tail) => string.Join("\n", new[] {
             "META\tlevel\tL1",
@@ -71,22 +71,6 @@ public sealed class TakeoffTsvTests
             Assert.Throws<InvalidDataException>(() => TakeoffTsv.ParseTsv(Line("\tmaybe")),
                 "unknown disposition token must fail fast");
         });
-
-        // The promoted writer emits the column; the raw writer must not.
-        var result = new TakeoffResult {
-            LevelName = "L1",
-            Rooms = {
-                new RoomResult {
-                    Id = "R01", RawSqft = 100, PerimeterFt = 40, LabelX = 1, LabelY = 1,
-                    MeanCeilingFt = 9,
-                    Polygon = { new[] { 0d, 0d }, new[] { 10d, 0d }, new[] { 10d, 10d }, new[] { 0d, 10d } },
-                },
-            },
-        };
-        Assert.That(result.ToTsv(), Does.Contain("ROOM\tR01\t100.0\t40.0")
-            .And.Not.Contain("\taccepted"));
-        result.DispositionsResolved = true;
-        Assert.That(result.ToTsv(), Does.Contain("\t9.00\taccepted"));
     }
 
     [Test]

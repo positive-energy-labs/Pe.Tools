@@ -1,6 +1,7 @@
+import { takeoffDecisionKey } from "@pe/agent-contracts";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 
-import type { MasterTableState } from "#/components/master-table/model";
+import type { TableState } from "#/components/master-table/model";
 import { useTableChips } from "#/components/anatomy";
 import type { PaneShortcut } from "#/components/lang/pane";
 import {
@@ -19,6 +20,7 @@ import {
 import { AtlasProvider } from "#/takeoff/atlas-context";
 import { AtlasWorkspace } from "#/takeoff/atlas-workspace";
 import { useAtlasColumns } from "#/takeoff/atlas-columns";
+import { planView, usePlanImage } from "#/takeoff/plan-image";
 
 export type Verdict = "accept" | "dismiss";
 
@@ -41,8 +43,6 @@ const createAtlasActions = (store: TakeoffsController): AtlasActions => ({
   partition: () => void store.handle.actions.partition.run(),
 });
 
-const flagKey = (guid: string, flag: string) => `${guid}::${flag}`;
-
 function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) {
   const world = store.world;
   const views = store.views;
@@ -60,7 +60,7 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
   const [fieldsMode, setFieldsMode] = useState<"columns" | "panel">("columns");
   const [planOpen, setPlanOpen] = useState(true);
   const [statsOpen, setStatsOpen] = useState(false);
-  const [tableState, setTableState] = useState<MasterTableState>({
+  const [tableState, setTableState] = useState<TableState>({
     filters: {},
     sorts: [],
     query: "",
@@ -74,11 +74,13 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
   // ponytail: one plan pane draws the first bound view; add comparison panes only if demanded.
   const firstBoundLane = world.lanes.find((lane) => lane.view === views[0]);
   const level = pageLevel || firstBoundLane?.label || world.lanes[0]?.label || "";
+  const planImage = usePlanImage(store.handle.resolution, planView(world.lanes, views, level));
   const setStageFilter = (value: Phase | null) => store.actions.filterStage(value);
   const setLevel = useCallback((value: string) => store.actions.chooseLevel(value), [store]);
   const setCursor = useCallback((value: string | null) => store.actions.chooseRoom(value), [store]);
 
-  const openFlags = (room: ModelRoom) => room.flags.filter((f) => !decided[flagKey(room.guid, f)]);
+  const openFlags = (room: ModelRoom) =>
+    room.flags.filter((f) => !decided[takeoffDecisionKey(room.guid, f)]);
 
   const stateOf = (room: ModelRoom) => atlasRoomState(room, openFlags(room).length);
   const zoneStates = (z: ModelZone) => z.rooms.map((r) => stateOf(r));
@@ -223,6 +225,7 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     rows,
     visibleKeys,
     level,
+    planImage,
     setStageFilter,
     setLevel,
     setPlanOpen,

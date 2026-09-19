@@ -6,6 +6,7 @@ import {
 import { Mastra } from "@mastra/core/mastra";
 import { analyticsEnabled, boundedPayload, capture } from "../analytics.ts";
 import { createRuntimeThreadLock } from "../thread-lock.ts";
+import { abortQuietly, recordCalls } from "../thread-state.ts";
 import type { RuntimeMemoryProfile } from "../memory/profiles.ts";
 import type {
   RuntimeCreateRequest,
@@ -120,7 +121,12 @@ export async function createRuntimeController<
     controllerCleanup = typeof configured === "function" ? configured : undefined;
     unsubscribeCreated = built.onSessionCreated(
       (created) => {
-        sessions.set(created, instrumentRuntimeSession(created, request.protocol));
+        const unrecord = recordCalls(created);
+        const uninstrument = instrumentRuntimeSession(created, request.protocol);
+        sessions.set(created, () => {
+          unrecord();
+          uninstrument?.();
+        });
       },
       { blocking: true },
     );
@@ -248,7 +254,8 @@ async function closeRuntimeController<TState extends Record<string, unknown>>(
   await controllerCleanup?.();
   await Promise.all(
     [...sessions].map(async ([session, unsubscribe]) => {
-      session.abort();
+      // Shutdown is not a person's cancel: a restart leaves its calls "ended without a result".
+      abortQuietly(session);
       unsubscribe?.();
       await session.thread.clearAndReleaseLock();
     }),

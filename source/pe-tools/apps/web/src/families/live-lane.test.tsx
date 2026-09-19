@@ -41,7 +41,7 @@ import { FamiliesRouteContent } from "#/routes/families";
 const SESSION = "session-553a4c85413fe3ae";
 const OPEN_ID = "open-1";
 const ADDRESS = "C:\\Models\\projectA.rvt";
-const doc = familiesRouteState.schema.parse({ profilePath: "C:Profiles\review.ffprofile" });
+const doc = familiesRouteState.schema.parse({});
 const APPLY_ID = "families-apply-1";
 const applyStatus = actionStatusSchema.parse({
   kind: "workflow",

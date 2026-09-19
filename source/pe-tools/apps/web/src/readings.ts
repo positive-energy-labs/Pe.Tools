@@ -46,6 +46,7 @@ import type {
   OpKey,
 } from "@pe/host-contracts/operation-types";
 import { callHostRpc } from "#/host/client.ts";
+import { HOST_READ_WAIT_S, NATIVE_READ_WAIT_S } from "#/route/waits";
 import type { LoadedFamiliesMatrixRequest } from "#/host/loaded-families-view.ts";
 import type { HostLane } from "@pe/host-contracts/service-identity";
 import { peUrl, resolveWorkbenchConfig } from "#/workbench/config.ts";
@@ -671,6 +672,8 @@ export function useHostCall<T>(
   run: (signal: AbortSignal) => Promise<T>,
   deps: readonly unknown[],
   enabled = true,
+  /** Unanswered past this, the read ends as an error ("no answer after Ns") and is aborted. */
+  waitSeconds = HOST_READ_WAIT_S,
 ) {
   const identity = useRef({ deps: [...deps], generation: 0 });
   if (!sameDeps(identity.current.deps, deps)) {
@@ -695,16 +698,27 @@ export function useHostCall<T>(
         ? { ...current, pending: true }
         : { pending: true, generation },
     );
-    void run(controller.signal).then(
-      (data) => {
-        if (!controller.signal.aborted) setState({ data, pending: false, generation });
-      },
-      (error: unknown) => {
-        if (!controller.signal.aborted)
-          setState({ error: Error(String(error)), pending: false, generation });
-      },
-    );
-    return () => controller.abort();
+    // A read that never answers ends honestly, never as an endless "reading…" (F-J1-4).
+    const wait = setTimeout(() => {
+      if (controller.signal.aborted) return;
+      controller.abort();
+      setState({ error: Error(`no answer after ${waitSeconds}s`), pending: false, generation });
+    }, waitSeconds * 1000);
+    void run(controller.signal)
+      .finally(() => clearTimeout(wait))
+      .then(
+        (data) => {
+          if (!controller.signal.aborted) setState({ data, pending: false, generation });
+        },
+        (error: unknown) => {
+          if (!controller.signal.aborted)
+            setState({ error: Error(String(error)), pending: false, generation });
+        },
+      );
+    return () => {
+      clearTimeout(wait);
+      controller.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, enabled, nonce]);
   const refresh = useCallback(() => setNonce((n) => n + 1), []);
@@ -766,12 +780,16 @@ export function useAction<I, T>(
 
 export const HOST_QUERY_KEY = ["pe-host"] as const;
 
-type HostQueryOptions = HostSessionScope & { readonly enabled?: boolean };
+type HostQueryOptions = HostSessionScope & {
+  readonly enabled?: boolean;
+  /** How long the read may go unanswered; default `HOST_READ_WAIT_S`. */
+  readonly waitSeconds?: number;
+};
 
 /** Any operation key becomes a one-shot read. A Reading is for a subject the host pushes. */
 export function useHostOp<K extends OpKey>(key: K, ...args: OpCallArgs<K, HostQueryOptions>) {
   const [request, options] = args;
-  const { enabled, bridgeSessionId, openDocumentId } = options ?? {};
+  const { enabled, bridgeSessionId, openDocumentId, waitSeconds } = options ?? {};
   const scope = { bridgeSessionId, openDocumentId };
   return useHostCall(
     // Cast: TS cannot resolve the conditional OpCallArgs tuple while K is open; the public
@@ -785,6 +803,7 @@ export function useHostOp<K extends OpKey>(key: K, ...args: OpCallArgs<K, HostQu
       openDocumentId ?? "",
     ],
     enabled ?? true,
+    waitSeconds,
   );
 }
 
@@ -796,6 +815,8 @@ export const useLoadedFamiliesMatrixQuery = (
   options?: HostQueryOptions,
 ) =>
   useHostOp("revit.matrix.loaded-families", request as LoadedFamiliesMatrixRequest, {
+    // The matrix is the expensive native read: a longer, still finite, wait.
+    waitSeconds: NATIVE_READ_WAIT_S,
     ...options,
     enabled: (options?.enabled ?? true) && Boolean(request),
   });

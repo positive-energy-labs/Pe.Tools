@@ -88,10 +88,11 @@ public sealed record TakeoffPartitionResult(
     int Orphaned,
     TakeoffPromotionFacts Promotion,
     double DomainSqft,
-    double ClaimedWallSqft,
-    double ExcludedResidueSqft,
+    double ExcludedSqft,
+    double VoidSqft,
     double TotalSqft,
-    string Profile,
+    string EnclosureSource,
+    string? Hold,
     IReadOnlyList<string> Failures,
     IReadOnlyList<TakeoffDetectedRoom> Rooms,
     IReadOnlyList<TakeoffDetectedResidue> Residues,
@@ -108,12 +109,6 @@ public sealed record TakeoffReviewShape(
     string Id, string Kind, string? Disposition, string? Reason, double? Sqft,
     double[]? Label, IReadOnlyList<IReadOnlyList<double[]>> Loops);
 
-public sealed record TakeoffResolution(
-    string Subject,
-    string Flag,
-    string Verb,
-    string At,
-    string RunId);
 public sealed record TakeoffWriteResult(long ElementId, Guid ZoneGuid, int Bytes, string Blob);
 
 public sealed record TakeoffRhvacLink(
