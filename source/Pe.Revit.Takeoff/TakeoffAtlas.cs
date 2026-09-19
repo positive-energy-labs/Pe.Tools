@@ -1,5 +1,6 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
+using Pe.Shared.RevitData;
 
 namespace Pe.Revit.Takeoff;
 
@@ -105,7 +106,9 @@ public static class TakeoffAtlas
                 TakeoffJson.Serialize(new TakeoffZoneProvenance(1, request.View, item.Name.Trim(), item.SystemTag.Trim())));
             if (!string.IsNullOrWhiteSpace(item.SystemTag) && registry.FindByTag(item.SystemTag) == null)
                 registry.Register(item.SystemTag);
-            adopted.Add(new TakeoffAdopted(item.ElementId, guid));
+            var loops = Boundaries(fr);
+            adopted.Add(new TakeoffAdopted(item.ElementId, guid,
+                view.CropBoxActive && loops.Count > 0 ? OwnerCrop(view.CropBox, loops) : null));
         }
 
         TakeoffCarriers.WriteRegistry(doc, registry);
@@ -282,7 +285,15 @@ public static class TakeoffAtlas
             role,
             guid,
             TakeoffCarriers.ReadProvenance(fr) ?? "",
-            loops);
+            loops,
+            owner is { CropBoxActive: true } && loops.Count > 0 ? OwnerCrop(owner.CropBox, loops) : null);
+    }
+
+    private static RevitCropCoverage OwnerCrop(BoundingBoxXYZ crop, List<List<double[]>> loops)
+    {
+        var t = crop.Transform;
+        return RevitViewImageRegistration.Coverage(loops.SelectMany(loop => loop), (crop.Min.X, crop.Min.Y), (crop.Max.X, crop.Max.Y),
+            (t.Origin.X, t.Origin.Y), (t.BasisX.X, t.BasisX.Y), (t.BasisY.X, t.BasisY.Y));
     }
 
     private static TakeoffLiveRegion ToLiveRegion(
