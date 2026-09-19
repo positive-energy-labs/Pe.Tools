@@ -625,7 +625,7 @@ export namespace FamilyCapture {
 }
 
 /** Open a loaded family from the active project in the Revit family editor and activate it (saves to a scratch .rfa to make activation possible). */
-export namespace FamilyEditorOpen {
+export namespace FamilyOpen {
   export namespace Req {
     /**
      * Open a loaded family from the active project in the family editor and activate it.
@@ -643,66 +643,6 @@ export namespace FamilyEditorOpen {
       familyName: string;
       documentTitle: string;
       savedPath?: null | string;
-    }
-  }
-}
-
-/** Read parameters, types, formulas, and display values from the active family editor document. */
-export namespace FamilyEditorSnapshot {
-  export namespace Req {
-    export interface Request {}
-  }
-  export namespace Res {
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-
-    export interface Response {
-      familyName: string;
-      currentTypeName: string;
-      typeNames: string[];
-      parameters: FamilyEditorParameterSnapshot[];
-    }
-    export interface FamilyEditorParameterSnapshot {
-      name: string;
-      isInstance: boolean;
-      isReadOnly: boolean;
-      isDeterminedByFormula: boolean;
-      isShared: boolean;
-      guid?: null | string;
-      storageType: string;
-      dataType?: null | string;
-      group?: null | string;
-      formula?: null | string;
-      valuesPerType: {
-        [k: string]: string;
-      };
-      identity?: null | ParameterIdentity;
-      dependsOn?: string[] | null;
-      dependents?: string[] | null;
-      associations?: null | FamilyParameterAssociationInfo;
-    }
-    export interface ParameterIdentity {
-      key: string;
-      kind: ParameterIdentityKind;
-      name: string;
-      builtInParameterId?: number | null;
-      sharedGuid?: null | string;
-      parameterElementId?: number | null;
-    }
-    /**
-     * Direct (element-based) associations for a family parameter, one level deep. Dimensions and Arrays
-     * are "Name [ID:{id}]" labels; Nested carries element-parameter associations (nested instances,
-     * connectors). Phantom parameters/elements (negative ids, dangling) are filtered out.
-     *
-     */
-    export interface FamilyParameterAssociationInfo {
-      dimensions: string[];
-      arrays: string[];
-      nested: FamilyNestedAssociation[];
-    }
-    export interface FamilyNestedAssociation {
-      elementName: string;
-      elementId: string;
-      paramName: string;
     }
   }
 }
@@ -5710,8 +5650,7 @@ export interface HostOps {
   "family.apply": { request: FamilyApply.Req.Request; response: FamilyApply.Res.Response };
   "family.build": { request: FamilyBuild.Req.Request; response: FamilyBuild.Res.Response };
   "family.capture": { request: FamilyCapture.Req.Request; response: FamilyCapture.Res.Response };
-  "family.editor.open": { request: FamilyEditorOpen.Req.Request; response: FamilyEditorOpen.Res.Response };
-  "family.editor.snapshot": { request: FamilyEditorSnapshot.Req.Request; response: FamilyEditorSnapshot.Res.Response };
+  "family.open": { request: FamilyOpen.Req.Request; response: FamilyOpen.Res.Response };
   "family.plan": { request: FamilyPlan.Req.Request; response: FamilyPlan.Res.Response };
   "family.temporary.acquire": { request: FamilyTemporaryAcquire.Req.Request; response: FamilyTemporaryAcquire.Res.Response };
   "host.ops.catalog": { request: HostOpsCatalog.Req.Request; response: HostOpsCatalog.Res.Response };
@@ -5782,8 +5721,7 @@ export const hostOpKeys = [
   "family.apply",
   "family.build",
   "family.capture",
-  "family.editor.open",
-  "family.editor.snapshot",
+  "family.open",
   "family.plan",
   "family.temporary.acquire",
   "host.ops.catalog",
