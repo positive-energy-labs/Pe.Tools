@@ -345,6 +345,18 @@ export interface LogEntry {
   readonly refused: boolean;
 }
 
+/** What a bare run lacks: the fields an empty object misses, or "a value" when it is not an object. */
+const missingFields = (schema: {
+  safeParse: (value: unknown) => {
+    success: boolean;
+    error?: { issues: { path: PropertyKey[] }[] };
+  };
+}) => {
+  const issues = schema.safeParse({}).error?.issues ?? [];
+  const names = issues.map((issue) => issue.path.map(String).join(".")).filter(Boolean);
+  return names.length ? names.join(", ") : "a value";
+};
+
 /**
  * How the page log says a verb's returned outcome. A sentence that already names what happened
  * ("partly applied — …", "refused — nothing ran: …", "failed in Revit — …") is said as is; any
@@ -1198,9 +1210,22 @@ export function useRoute<W, R extends string, P, A extends string>(
                 if (target) return refuse("no-target", target);
                 const unavailable = requirementRefusal(action);
                 if (unavailable) return refuse("not-ready", unavailable);
-                const parsed = action.input.safeParse(input);
+                // The verb row runs a verb bare. An empty-object input is supplied; a verb that
+                // needs an input it was not given refuses by name, not with a schema message.
+                const given =
+                  input === undefined &&
+                  !action.input.safeParse(undefined).success &&
+                  action.input.safeParse({}).success
+                    ? {}
+                    : input;
+                const parsed = action.input.safeParse(given);
                 if (!parsed.success)
-                  return refuse("not-ready", parsed.error.issues[0]?.message ?? "invalid input");
+                  return refuse(
+                    "not-ready",
+                    input === undefined
+                      ? `${action.label} needs its input (${missingFields(action.input)}); run it from where it is chosen`
+                      : (parsed.error.issues[0]?.message ?? "invalid input"),
+                  );
                 const reason = action.ready(ctx as never, parsed.data as never);
                 if (reason) return refuse("not-ready", reason);
                 const refusal = (await action.run(ctx as never, parsed.data as never)) ?? null;
