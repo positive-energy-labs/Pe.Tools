@@ -17,7 +17,7 @@ import { ActionButton } from "#/components/lang/action-button";
 import { Table } from "#/components/master-table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
 import { useTableState } from "#/components/master-table/view";
-import { PickList } from "#/components/lang/pick-list";
+import { List } from "#/components/lang/list-popup";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { OutcomeStrip } from "#/components/lang/outcome-strip";
 import { timeAgo } from "#/lib/utils";
@@ -252,20 +252,25 @@ export function ScheduleGridWorkspace({
                 />
               </div>
             ) : (
-              <PickList
-                items={catalog.schedules.map((entry) => ({
-                  id: String(entry.scheduleId),
+              <List
+                aria-label="schedules"
+                region="schedules"
+                items={catalog.schedules}
+                keyOf={(entry) => String(entry.scheduleId)}
+                labelOf={(entry) => entry.name}
+                groupOf={(entry) => entry.categoryName ?? "Other"}
+                filter="substring"
+                searchPlaceholder="Filter schedules…"
+                empty="No schedules in the document."
+                onPick={(entry) => runCommand("refresh", { scheduleId: entry.scheduleId })}
+                row={(entry) => ({
                   label: entry.name,
-                  group: entry.categoryName ?? "Other",
+                  active: snapshot?.scheduleId === entry.scheduleId,
                   // ponytail: Summary projection reports 0 rows for every schedule — show counts only when computed
                   meta: entry.rowCount > 0 ? entry.rowCount : undefined,
-                  hint: `id ${entry.scheduleId}${entry.isPlacedOnSheet ? " · placed on sheet" : ""}`,
-                }))}
-                activeId={snapshot ? String(snapshot.scheduleId) : null}
-                onPick={(id) => runCommand("refresh", { scheduleId: Number(id) })}
-                placeholder="Filter schedules…"
-                disabled={busy != null}
-                emptyNote="No schedules in the document."
+                  title: `id ${entry.scheduleId}${entry.isPlacedOnSheet ? " · placed on sheet" : ""}`,
+                  refusal: busy != null ? `${busy} is running` : null,
+                })}
               />
             )}
           </Pane>

@@ -5,7 +5,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 
-import { Press } from "#/components/lang/press";
+import { Switcher } from "#/components/lang/switcher";
 import { syntheticOps } from "#/lab/glance";
 import { SyntheticRunner } from "#/lab/synthetic";
 import { RouteShell, emptyManifest, useRoute, type RouteManifest } from "#/route";
@@ -40,17 +40,17 @@ function LabRoute() {
     <RouteShell manifest={manifest} handle={handle}>
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-4">
         <div className="flex flex-wrap items-center gap-2">
-          {syntheticOps.map((entry) => (
-            <Press
-              key={entry.key}
-              size="caption"
-              tone={entry.key === opKey ? "agent" : "neutral"}
-              title={entry.blurb}
-              onClick={() => setOpKey(entry.key)}
-            >
-              {entry.displayName}
-            </Press>
-          ))}
+          {/* The op is a choose-one: the select fill, never a hue (R18). */}
+          <Switcher
+            ariaLabel="synthetic op"
+            value={opKey ?? ""}
+            onChange={setOpKey}
+            options={syntheticOps.map((entry) => ({
+              value: entry.key,
+              label: entry.displayName,
+              title: entry.blurb,
+            }))}
+          />
           <Ladder levels={ladder.levels} />
         </div>
         {op ? <SyntheticRunner op={op} {...(session ? { bridgeSessionId: session } : {})} /> : null}

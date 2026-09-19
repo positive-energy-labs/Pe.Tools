@@ -12,7 +12,7 @@ import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Pane, PaneSplit } from "#/components/lang/pane";
-import { PickList } from "#/components/lang/pick-list";
+import { List } from "#/components/lang/list-popup";
 import { Provenance } from "#/components/lang/section";
 import { Surface } from "#/components/lang/surface";
 import {
@@ -226,28 +226,29 @@ export function PodsRouteContent({
                   says={item.diagnostics.map((d) => d.message).join("; ")}
                 />
               ))}
-            <PickList
-              items={pods.flatMap((item) =>
-                item.members.map((m) => ({
-                  id: `${item.id}${SEP}${m.path}`,
-                  label: m.path,
-                  group: `${item.name} · ${item.version}`,
-                  meta: m.schema
-                    ? m.schema
-                        .split("/")
-                        .at(-1)
-                        ?.replace(/\.json$/, "")
-                    : undefined,
-                  hint: m.schema ?? "no $schema: plain data",
-                })),
-              )}
-              activeId={member ? `${row!.id}${SEP}${member.path}` : null}
-              onPick={(id) => {
-                const [p, m] = id.split(SEP);
-                select({ pod: p!, path: m! });
-              }}
-              placeholder="Filter members…"
-              emptyNote={live.state === "absent" && !demo ? "reading pods…" : "No pods installed."}
+            <List
+              aria-label="pod members"
+              region="pods"
+              items={pods.flatMap((item) => item.members.map((m) => ({ pod: item, member: m })))}
+              keyOf={({ pod, member: m }) => `${pod.id}${SEP}${m.path}`}
+              labelOf={({ member: m }) => m.path}
+              groupOf={({ pod }) => `${pod.name} · ${pod.version}`}
+              filter="substring"
+              searchPlaceholder="Filter members…"
+              status={live.state === "absent" && !demo ? "pending" : "ready"}
+              empty="No pods installed."
+              onPick={({ pod, member: m }) => select({ pod: pod.id, path: m.path })}
+              row={({ pod, member: m }) => ({
+                label: m.path,
+                active: row?.id === pod.id && member?.path === m.path,
+                meta: m.schema
+                  ? m.schema
+                      .split("/")
+                      .at(-1)
+                      ?.replace(/\.json$/, "")
+                  : undefined,
+                title: m.schema ?? "no $schema: plain data",
+              })}
             />
           </Pane>
         }

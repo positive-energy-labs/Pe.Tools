@@ -24,7 +24,6 @@ import { paneSplitRecipe } from "#/components/lang/pane-resize";
 import { switchRecipe } from "#/components/lang/switch";
 import { textareaRecipe } from "#/components/lang/textarea";
 import { valueDiffRecipe } from "#/components/lang/value-diff";
-import { pickListRecipe } from "#/components/lang/pick-list";
 import { tooltipRecipe } from "#/components/lang/tooltip";
 
 import { recipeVariantProps } from "./recipe-grid";
@@ -54,7 +53,6 @@ const RECIPES = {
   switchRecipe,
   textareaRecipe,
   valueDiffRecipe,
-  pickListRecipe,
   tooltipRecipe,
 };
 

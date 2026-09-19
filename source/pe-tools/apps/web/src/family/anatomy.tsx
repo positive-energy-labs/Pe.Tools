@@ -38,11 +38,10 @@
  * an ink stroke, exactly as the table's focused row does.
  */
 import { HelpTip } from "#/components/lang/help";
-import { PressContent } from "#/components/anatomy/press-content";
 import type { FamilyModel } from "#/family/family-model";
 import { bindingOf, type Draft, type Focus, type FamilyPageModel } from "#/family/model";
 import { boundParam } from "#/family/world";
-import { Press } from "#/components/lang/press";
+import { List } from "#/components/lang/list-popup";
 import { AnatomyViews } from "#/family/anatomy-fixture-views";
 import { ModelViews } from "#/family/anatomy-model-views";
 import { Code, stringify } from "#/components/lang/code";
@@ -134,44 +133,43 @@ export function AnatomyDrawing({
             )}
           </div>
         )}
-        {world.constituents.map((part) => {
-          const geom = world.geomBySlug.get(part.slug);
-          const unbound =
-            geom?.dims.filter(
-              (dim) => boundParam(bindingOf(world, draft, part.slug, dim.property)) == null,
-            ).length ?? 0;
-          return (
-            <Press
-              key={part.slug}
-              type="button"
-              onMouseEnter={() => onFocus({ kind: "part", id: part.slug })}
-              onMouseLeave={() => onFocus(null)}
-              onClick={() => onInspect(part.slug)}
-              size="caption"
-              tone="neutral"
-              state={inspecting === part.slug ? "selected" : "rest"}
-              title={`${part.text} — consumes ${part.params.length > 0 ? part.params.join(", ") : "no parameter the profile names, which is worth a second look"}.${
-                geom
-                  ? ` Click to open it: ${geom.kind}, ${geom.dims.length} bindable dims${unbound > 0 ? ` (${unbound} of them UNBOUND — frozen literals, waiting at the bottom of the table)` : " (all bound)"}, and ${geom.meta.length} non-bindable properties that live only in the inspector.`
-                  : ""
-              }`}
-            >
-              <PressContent geometry="baseline">
-                <span className="t-small face-mono text-ink-2">{part.kind}</span>
-                <span className="face-mono min-w-0 flex-1 truncate text-ink">{part.slug}</span>
-                {unbound > 0 && (
+        <List
+          aria-label="constituents"
+          region="anatomy"
+          items={world.constituents}
+          keyOf={(part) => part.slug}
+          labelOf={(part) => part.slug}
+          empty="the profile names no constituents"
+          onPick={(part) => onInspect(part.slug)}
+          row={(part) => {
+            const geom = world.geomBySlug.get(part.slug);
+            const unbound =
+              geom?.dims.filter(
+                (dim) => boundParam(bindingOf(world, draft, part.slug, dim.property)) == null,
+              ).length ?? 0;
+            return {
+              lead: <span className="face-mono text-ink-2">{part.kind}</span>,
+              label: <span className="face-mono">{part.slug}</span>,
+              meta:
+                unbound > 0 ? (
                   <span
-                    className="t-small face-mono ml-auto shrink-0"
                     data-tone="caution"
                     title={`${unbound} of this constituent's dimensions are frozen literals no parameter drives. They are the ghost rows at the bottom of the table.`}
                   >
                     {unbound}⚠
                   </span>
-                )}
-              </PressContent>
-            </Press>
-          );
-        })}
+                ) : undefined,
+              active: inspecting === part.slug,
+              onMouseEnter: () => onFocus({ kind: "part", id: part.slug }),
+              onMouseLeave: () => onFocus(null),
+              title: `${part.text} — consumes ${part.params.length > 0 ? part.params.join(", ") : "no parameter the profile names, which is worth a second look"}.${
+                geom
+                  ? ` Click to open it: ${geom.kind}, ${geom.dims.length} bindable dims${unbound > 0 ? ` (${unbound} of them UNBOUND — frozen literals, waiting at the bottom of the table)` : " (all bound)"}, and ${geom.meta.length} non-bindable properties that live only in the inspector.`
+                  : ""
+              }`,
+            };
+          }}
+        />
       </div>
     </div>
   );

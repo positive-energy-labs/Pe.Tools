@@ -15,6 +15,7 @@ import { EmptyState } from "#/components/lang/empty";
 import { StateCell } from "#/components/lang/cell";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Press } from "#/components/lang/press";
+import { Switcher } from "#/components/lang/switcher";
 import { Input } from "#/components/lang/input";
 import { ActionButton as VerbButton } from "#/components/lang/action-button";
 import { Pane, PaneSplit } from "#/components/lang/pane";
@@ -464,20 +465,19 @@ export function InstancesCluster({
             toolbar={
               <div className="flex items-center gap-2">
                 <span className="t-small face-mono text-ink-2">year</span>
-                {years.map((candidate) => (
-                  <Press
-                    key={candidate}
-                    size="caption"
-                    frame="line"
-                    tone="quiet"
-                    state={yearPick === candidate ? "selected" : "rest"}
-                    onClick={() =>
-                      setYearPick((previous) => (previous === candidate ? null : candidate))
-                    }
-                  >
-                    20{candidate}
-                  </Press>
-                ))}
+                {/* One year or none: picking the held year again clears it. */}
+                <Switcher
+                  ariaLabel="year"
+                  value={yearPick ?? ""}
+                  onChange={(candidate) =>
+                    setYearPick((previous) => (previous === candidate ? null : candidate))
+                  }
+                  options={years.map((candidate) => ({
+                    value: candidate,
+                    label: `20${candidate}`,
+                    title: `Only instances from 20${candidate}; pick it again to show every year.`,
+                  }))}
+                />
               </div>
             }
           >

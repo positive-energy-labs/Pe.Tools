@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { HotkeysProvider, useHotkeys } from "@tanstack/react-hotkeys";
 import { ModeDial } from "#/chat/mode-dial";
-import { ThreadDialog, ThreadList } from "#/chat/thread-palette";
+import { ThreadDialog, ThreadsSidebar } from "#/chat/thread-palette";
 import { useWorkbench } from "#/workbench/provider";
 import { useMode } from "#/workbench/use-mode";
 import { MODES } from "#/workbench/depth";
@@ -247,7 +247,7 @@ function ChatSurface({ plugin, focus }: Plugin) {
                 onCollapsedChange={(collapsed) => store.actions.setSideOpen(!collapsed)}
               >
                 {mode === "threads" ? (
-                  <ThreadList
+                  <ThreadsSidebar
                     threads={threads}
                     currentThreadId={currentThreadId}
                     onSelect={openThread}

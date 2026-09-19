@@ -2,7 +2,7 @@
  * ROW — the one list item, and the one table row (ix-list design; census R2, R3, R8, R10, R11).
  *
  * Every list-shaped thing draws its items with this: sidebar threads, palette hits, the head
- * ladder, combobox options, the slash menu, PickList rails, route lists, and (`as="tr"`) table
+ * ladder, combobox options, the slash menu, member and schedule rails, route lists, and (`as="tr"`) table
  * rows. One recipe, one height (`--item-h`), one type rung (`t-small`, sans; mono comes from a
  * column or the meta slot, never a call site).
  *

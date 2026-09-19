@@ -3,6 +3,7 @@ import { parameterSection, parameterText, paramSpec } from "#/family/family-mode
 import { EmptyState } from "#/components/lang/empty";
 import { FactChip, Tag } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
+import { List } from "#/components/lang/list-popup";
 import { Press } from "#/components/lang/press";
 import { Switcher } from "#/components/lang/switcher";
 import { ActionButton } from "#/components/lang/action-button";
@@ -14,7 +15,6 @@ import { bindingOf, isFormula, proposalCell, type FamilyPageModel } from "#/fami
 import { boundParam, type GeomConstituent } from "#/family/world";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 import { FamilyMetaControl } from "#/family/workspace-meta-control";
-import { PressContent } from "#/components/anatomy/press-content";
 import { Code, stringify } from "#/components/lang/code";
 
 export function FamilyWorkspaceDocPane() {
@@ -205,26 +205,28 @@ export function FamilyWorkspaceDocPane() {
           >
             drives {drives.length} geometry propert{drives.length === 1 ? "y" : "ies"}
           </p>
-          {drives.length === 0 ? (
-            <EmptyState story="scope" exit="bind a ghost row to this parameter to fill this list">
-              no direct form or connector dimension binding; other native declarations may use it
-            </EmptyState>
-          ) : (
-            drives.map((entry) => (
-              <Press
-                key={`${entry.slug}.${entry.property}`}
-                type="button"
-                onClick={() => setInspect({ kind: "part", slug: entry.slug })}
-                title={`Open ${entry.slug} — its kind, its other dims, and the non-bindable metadata no parameter can drive.`}
-                tone="nav"
-                size="caption"
-              >
-                <PressContent geometry="block">
-                  → {entry.slug}.{entry.property}
-                </PressContent>
-              </Press>
-            ))
-          )}
+          <List
+            aria-label="drives"
+            region="doc pane"
+            items={drives}
+            keyOf={(entry) => `${entry.slug}.${entry.property}`}
+            labelOf={(entry) => `${entry.slug}.${entry.property}`}
+            empty={
+              <EmptyState story="scope" exit="bind a ghost row to this parameter to fill this list">
+                no direct form or connector dimension binding; other native declarations may use it
+              </EmptyState>
+            }
+            onPick={(entry) => setInspect({ kind: "part", slug: entry.slug })}
+            row={(entry) => ({
+              lead: "→",
+              label: (
+                <span className="face-mono">
+                  {entry.slug}.{entry.property}
+                </span>
+              ),
+              title: `Open ${entry.slug} — its kind, its other dims, and the non-bindable metadata no parameter can drive.`,
+            })}
+          />
         </div>
 
         <div className="hairline-t pt-1.5">

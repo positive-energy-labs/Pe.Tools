@@ -5,18 +5,6 @@ import { EmptyState } from "#/components/lang/empty";
 import type { StoredThreadSummary } from "#/workbench/provider";
 import { Press } from "#/components/lang/press";
 import { Kbd } from "#/components/lang/kbd";
-import { threadRowRecipe } from "./appearance";
-
-/** Status dot shared by the sidebar list + palette. */
-function ThreadDot({ active }: { active: boolean }) {
-  return (
-    <span aria-hidden className="flex size-3.5 shrink-0 items-center justify-center">
-      <span
-        className={active ? "size-1.5 rounded-full bg-ink" : "size-1.5 rounded-full bg-line-2"}
-      />
-    </span>
-  );
-}
 
 function ThreadActions({
   thread,
@@ -42,7 +30,7 @@ function ThreadActions({
             onRename(thread.id, title);
         }}
       >
-        <Pencil className="size-3.5" />
+        <Pencil />
       </Press>
       <Press
         type="button"
@@ -55,7 +43,7 @@ function ThreadActions({
           onDelete(thread.id);
         }}
       >
-        <X className="size-3.5" />
+        <X />
       </Press>
     </>
   );
@@ -74,10 +62,10 @@ export function ThreadEmpty() {
 }
 
 /**
- * Always-on sidebar thread list — the `threads` mode body. Shows the 5 most recent by default;
- * everything else lives behind the ⌘K palette (onSearch). New/search live here now, not the header.
+ * Always-on sidebar thread list — the `threads` mode body, on the one list. Shows the 5 most
+ * recent; everything else lives behind the ⌘K palette (onSearch). New/search live here.
  */
-export function ThreadList({
+export function ThreadsSidebar({
   threads,
   currentThreadId,
   onSelect,
@@ -100,31 +88,26 @@ export function ThreadList({
   const rest = threads.length - shown.length;
   return (
     <div className="flex h-full flex-col">
-      <div className="flex flex-col gap-1 p-2">
-        {shown.map((thread) => {
-          const active = thread.id === currentThreadId;
-          const row = threadRowRecipe({ active });
-          return (
-            <div
-              key={thread.id}
-              // The open thread is a SELECTION — the selection fill, never a hue or a frame.
-              data-selected={active ? "" : undefined}
-              className={row.root()}
-              onClick={() => onSelect(thread.id)}
-            >
-              <ThreadDot active={active} />
-              <span className={row.title()}>{thread.title}</span>
-              <ThreadActions thread={thread} onRename={onRename} onDelete={onDelete} />
-            </div>
-          );
-        })}
-        {threads.length === 0 ? (
-          <div className="px-2 py-3">
+      <div className="flex min-h-0 flex-col py-1">
+        <List<StoredThreadSummary>
+          aria-label="threads"
+          region="threads"
+          items={shown}
+          keyOf={(thread) => thread.id}
+          labelOf={(thread) => thread.title}
+          empty={
             <EmptyState story="scope" exit="start one below — the first message names it">
               pick or start a thread
             </EmptyState>
-          </div>
-        ) : null}
+          }
+          onPick={(thread) => onSelect(thread.id)}
+          row={(thread) => ({
+            label: thread.title,
+            // The open thread is the active item: the rail mark, never a hue or a frame.
+            active: thread.id === currentThreadId,
+            actions: <ThreadActions thread={thread} onRename={onRename} onDelete={onDelete} />,
+          })}
+        />
       </div>
 
       <div className="hairline-t-faint mt-auto flex flex-col gap-1 p-2">

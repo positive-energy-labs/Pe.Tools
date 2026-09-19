@@ -30,6 +30,11 @@ export type RowParts = Omit<RowState, "cursor" | "selected"> & {
   lines?: 1 | 2;
   meta?: ReactNode;
   actions?: ReactNode;
+  /** A native tooltip: a measured fact too long for the meta slot. */
+  title?: string;
+  /** Hover lights what the row stands for elsewhere (the one-focus law: anatomy parts). */
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 };
 
 export type ListProps<T> = Omit<CollectionOptions<T>, "target"> & {
@@ -39,7 +44,7 @@ export type ListProps<T> = Omit<CollectionOptions<T>, "target"> & {
   searchAbove?: number;
   searchPlaceholder?: string;
   /** Empty and no-match are different stories with different exits (R17). */
-  empty: string;
+  empty: ReactNode;
   noMatch?: string;
   failure?: string;
   createLabel?: (text: string) => string;
@@ -115,7 +120,8 @@ export function List<T>(props: ListProps<T>) {
   };
   return (
     <div
-      className="flex min-h-0 flex-col"
+      // An inline list fills a flex rail; in a popup the frame is a block and this is inert.
+      className="flex min-h-0 flex-1 flex-col"
       data-list=""
       // An input-owned list never takes focus from its owner: a click picks, the caret stays (R14).
       onMouseDown={props.owner !== undefined ? (event) => event.preventDefault() : undefined}
@@ -159,7 +165,7 @@ export function List<T>(props: ListProps<T>) {
         {...collection.listProps}
         aria-label={props["aria-label"]}
         tabIndex={searchable || props.owner !== undefined ? -1 : 0}
-        className="min-h-0 overflow-y-auto outline-none"
+        className="min-h-0 flex-1 overflow-y-auto outline-none"
         style={{ maxHeight: props.maxHeight }}
       >
         {status === "refused" ? (

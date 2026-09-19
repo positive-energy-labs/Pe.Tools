@@ -1101,7 +1101,6 @@ const REQUIRED_SPECIMEN_PATHS = [
   "#/components/lang/input-group",
   "#/components/lang/label",
   "#/components/lang/pane",
-  "#/components/lang/pick-list",
   "#/components/lang/kbd",
   "#/components/lang/switch",
   "#/components/lang/textarea",

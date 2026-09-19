@@ -1,5 +1,5 @@
 /**
- * THE LIST CENSUS (ix-list, rulings-1600 §5d) — REPORT ONLY until the cutover.
+ * THE LIST CENSUS (ix-list, rulings-1600 §5d) — the guard at zero.
  *
  * Counts the old list components' sites in apps/web/src with the census rule (`ix-list-census.md`,
  * "Old-component definition"): old kit imports, list roles written as JSX, native select/datalist,
@@ -7,8 +7,8 @@
  * "binary" (a NUL-bearing source was silently dropped by plain rg — census R20). The three files
  * of the one primitive are the only allowlisted paths.
  *
- * Today this prints and passes. At cutover it becomes `expect(sites).toEqual([])`, and a returning
- * old component fails the build. Tier 2 (hand-rolled selectable `.map` rows) is printed by proxy.
+ * The cutover is done: the count is zero, and a returning old component fails the build. Tier 2
+ * (hand-rolled selectable `.map` rows) is printed by proxy; it is read by eye, not failed.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -33,7 +33,7 @@ const files = (dir: string, rel = ""): string[] =>
     return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [path] : [];
   });
 
-it("list census: old list component sites (report only until cutover)", () => {
+it("list census: no old list component site outside the one primitive", () => {
   // latin1 keeps every byte, NULs included: nothing is ever skipped as binary.
   const text = (rel: string) => readFileSync(join(ROOT, rel), "latin1");
   const all = files(ROOT).filter((rel) => !ALLOWED.has(rel));
@@ -42,6 +42,6 @@ it("list census: old list component sites (report only until cutover)", () => {
   console.info(
     `list census: ${sites.length} old-component files; tier-2 proxy ${tier2.length}\n  ${sites.join("\n  ")}`,
   );
-  // The census at a7e6988 counted 33; the rule must find the old world, not silently nothing.
-  expect(sites.length).toBeGreaterThan(0);
+  // The census at a7e6988 counted 33; the cutover took it to zero.
+  expect(sites).toEqual([]);
 });

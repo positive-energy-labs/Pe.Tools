@@ -29,15 +29,15 @@
     }
   },
   "escHandler": {
-    "total": 2,
+    "total": 1,
     "byArea": {
-      "components": 2
+      "components": 1
     }
   },
   "opacityDim": {
-    "total": 11,
+    "total": 10,
     "byArea": {
-      "components": 9,
+      "components": 8,
       "family": 2
     }
   },

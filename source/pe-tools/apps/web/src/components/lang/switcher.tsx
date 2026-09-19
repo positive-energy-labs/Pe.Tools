@@ -10,6 +10,8 @@
  * the one veil. Each option's `title` is REQUIRED: a mode whose consequence is not stated is
  * a mystery toggle.
  */
+import type { ReactNode } from "react";
+
 import { tv } from "#/lib/tv";
 
 import "./lang.css";
@@ -38,7 +40,8 @@ export function Switcher<T extends string>({
   onChange,
   ariaLabel,
 }: {
-  options: ReadonlyArray<{ value: T; label: string; title: string; disabled?: boolean }>;
+  /** A label may carry a measured count beside its word (a lane's zones and calls). */
+  options: ReadonlyArray<{ value: T; label: ReactNode; title: string; disabled?: boolean }>;
   value: T;
   onChange: (next: T) => void;
   ariaLabel: string;
