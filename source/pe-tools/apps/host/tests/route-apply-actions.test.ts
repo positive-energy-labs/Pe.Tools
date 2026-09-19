@@ -633,7 +633,8 @@ test("an unknown native outcome never re-mints the effect under the same id", as
 
 /* ── consumed-cell retirement (obligation 8) ─────────────────────────────────────────────── */
 
-const cellOf = (parameter: string) => familyCellKey({ familyName: "Box", typeName: "T", parameter });
+const cellOf = (parameter: string) =>
+  familyCellKey({ familyName: "Box", typeName: "T", parameter });
 const W = cellOf("Width");
 const H = cellOf("Height");
 const D = cellOf("Depth");

@@ -140,7 +140,10 @@ test("plan takes the staged cell only; the open proposal never reaches the wire"
   const input = client.runSemanticAction.mock.calls[0]![1] as {
     source: { pod: string; path: string; content: string };
   };
-  expect(input).toMatchObject({ familyNames: ["Fan Coil Unit - Ducted"], source: { pod: "demo-pod" } });
+  expect(input).toMatchObject({
+    familyNames: ["Fan Coil Unit - Ducted"],
+    source: { pod: "demo-pod" },
+  });
   expect(input.source).not.toHaveProperty("sha256");
   expect(JSON.parse(input.source.content)).toMatchObject({
     select: { names: ["Fan Coil Unit - Ducted"] },

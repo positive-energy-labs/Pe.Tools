@@ -25,7 +25,7 @@ const changeSchema = z.object({
 });
 export const ffPlanEntrySchema = z.object({
   /** The id the name resolved to at plan; null when the name refused (no loaded family, ambiguous, not editable). */
-  familyId: z.number().nullable(),
+  familyId: z.number().nullish(),
   familyName: z.string(),
   planHash: z.string(),
   changes: z.array(changeSchema),
@@ -36,7 +36,7 @@ export const ffPlanEntrySchema = z.object({
 export type FfPlanEntry = z.infer<typeof ffPlanEntrySchema>;
 export const ffReceiptSchema = z.object({
   familyId: z.number(),
-  familyName: z.string().nullish(),
+  familyName: z.string(),
   success: z.boolean(),
   converged: z.boolean(),
   error: z.string().nullish(),
@@ -200,7 +200,7 @@ export const familiesIncluded = (
     plan.entries
       .filter(
         (entry) =>
-          entry.familyId !== null &&
+          entry.familyId != null &&
           !Object.hasOwn(excluded, entry.familyName) &&
           entry.refusals.length === 0 &&
           (entry.changes.length > 0 || entry.runEffects.length > 0),

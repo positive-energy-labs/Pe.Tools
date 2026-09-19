@@ -16,13 +16,7 @@ import { transitionPatches, trichotomyCellSchema, type Rung } from "./trichotomy
 const familyKey = familyCellKey({ familyName: "F", typeName: "T", parameter: "P" });
 type Route = [string, RouteStateSpec<z.ZodType>, string, string, Rung];
 const routes: Route[] = [
-  [
-    "families",
-    familiesRouteState as never,
-    "cells",
-    familyKey,
-    { value: { value: "" } },
-  ],
+  ["families", familiesRouteState as never, "cells", familyKey, { value: { value: "" } }],
   ["schedules", scheduleGridRouteState as never, "cells", "1::2", { value: "" }],
   ["pods", settingsRouteState as never, "fields", "/a/b", { value: "" }],
   ["family", familyDraftRouteState as never, "cells", "/a/b", { value: "" }],

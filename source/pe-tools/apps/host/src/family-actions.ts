@@ -540,7 +540,8 @@ export async function admitFamilyAction(
               ? {
                   familyNames: Object.fromEntries(
                     (plan.result as { plan: FfPlanEntry[] }).plan.flatMap((entry) =>
-                      entry.familyId !== null && Object.hasOwn(input.expectedPlanHashes, entry.familyId)
+                      entry.familyId != null &&
+                      Object.hasOwn(input.expectedPlanHashes, entry.familyId)
                         ? [[String(entry.familyId), entry.familyName]]
                         : [],
                     ),
@@ -818,7 +819,7 @@ export async function admitFamilyAction(
           // By name: the apply reloaded the family, so its element id is already a new one.
           const succeeded = new Set(
             (result as FamiliesApply.Res.Response).receipts.flatMap((receipt) =>
-              receipt.success && receipt.familyName ? [receipt.familyName] : [],
+              receipt.success ? [receipt.familyName] : [],
             ),
           );
           // A family document applies its one family; Families retires per proven family only.

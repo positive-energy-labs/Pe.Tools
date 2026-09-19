@@ -201,7 +201,9 @@ export function FamiliesProposalsBand() {
   if (!entries.length) return null;
   const current = (entry: (typeof entries)[number]) => {
     const key = params.find((param) => param.name === entry.parameter)?.key;
-    const row = rows.find((r) => r.familyName === entry.familyName && r.typeName === entry.typeName);
+    const row = rows.find(
+      (r) => r.familyName === entry.familyName && r.typeName === entry.typeName,
+    );
     return key && row ? (row.values[key] ?? "") : null;
   };
   const open = entries.filter(({ cell }) => cell.proposal != null && cell.staged == null);

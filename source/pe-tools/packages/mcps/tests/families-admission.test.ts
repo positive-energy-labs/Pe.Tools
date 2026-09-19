@@ -32,7 +32,11 @@ function workspace() {
   };
 }
 const propose = (familyName: string, typeName = "12 X 4") => ({
-  path: ["cells", familyCellKey({ familyName, typeName, parameter: "View Description" }), "proposal"],
+  path: [
+    "cells",
+    familyCellKey({ familyName, typeName, parameter: "View Description" }),
+    "proposal",
+  ],
   value: { value: { value: "Base" } },
 });
 

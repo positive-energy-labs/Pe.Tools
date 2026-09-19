@@ -75,7 +75,11 @@ describe("familiesRouteState", () => {
   });
 
   it("includes only unexcluded entries that have an effect and no refusal", () => {
-    const entry = (familyId: number | null, planHash: string, over: Record<string, unknown> = {}) => ({
+    const entry = (
+      familyId: number | null,
+      planHash: string,
+      over: Record<string, unknown> = {},
+    ) => ({
       familyId,
       familyName: `f${familyId}`,
       planHash,
@@ -92,7 +96,10 @@ describe("familiesRouteState", () => {
         entry(3, "h3", { refusals: [{ code: "X", path: "/", message: "no" }] }),
         entry(4, "h4", { changes: [], runEffects: [] }),
         // A name the library could not resolve plans nothing.
-        entry(null, "h5", { familyName: "f5", refusals: [{ code: "family-not-found", path: "/", message: "no" }] }),
+        entry(null, "h5", {
+          familyName: "f5",
+          refusals: [{ code: "family-not-found", path: "/", message: "no" }],
+        }),
       ],
     };
     expect(familiesIncluded(plan, { f2: { by: "pea" } })).toEqual({ "1": "h1" });
