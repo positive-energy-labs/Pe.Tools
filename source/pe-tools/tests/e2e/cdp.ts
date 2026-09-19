@@ -313,7 +313,9 @@ export async function journey(
     failed = error;
     const message = error instanceof Error ? error.message : String(error);
     // A missing precondition (no slot, no seed, wrong chips) is BLOCKED, never a product FAIL.
-    log.push(`RESULT: ${/^(PRECONDITION|BLOCKED):/.test(message) ? "BLOCKED" : "FAIL"} — ${message}`);
+    log.push(
+      `RESULT: ${/^(PRECONDITION|BLOCKED):/.test(message) ? "BLOCKED" : "FAIL"} — ${message}`,
+    );
   }
   await page.dump(dir, "final").catch(() => {});
   page.close();
@@ -362,7 +364,9 @@ export async function requireRevit(page: Page, ms = 60_000) {
     );
   };
   await page.until(bound, "the route to bind a Revit session", ms).catch(() => {
-    throw new Error(`PRECONDITION: no Revit bridge after ${ms / 1000}s; this journey runs in the joint-hold slot`);
+    throw new Error(
+      `PRECONDITION: no Revit bridge after ${ms / 1000}s; this journey runs in the joint-hold slot`,
+    );
   });
 }
 
@@ -407,19 +411,31 @@ export async function setPea(page: Page, model = process.env.E2E_MODEL ?? "gpt-5
     if ((await chip(page, name)).startsWith(want)) return;
     await page.clickAt(`[role=combobox][aria-label="${name}"]`);
     await page.click(option);
-    await page.until(async () => (await chip(page, name)).startsWith(want), `${name} = ${want}`, 10_000);
+    await page.until(
+      async () => (await chip(page, name)).startsWith(want),
+      `${name} = ${want}`,
+      10_000,
+    );
   };
   await pick("Model", new RegExp(`^${model.replace(/[.]/g, "\\.")}\\b`), model);
   await pick("Access", /^Trusted\b/, "Trusted");
 }
 
 const COMPOSER = 'textarea[aria-label="Message"]';
-const CREDIT = /quota|credit|billing|insufficient|rate.?limit|not logged in|not supported|model/i;
+/**
+ * A provider's credit, quota or auth refusal: the lane is BLOCKED, not the product. Matches the
+ * phrases providers actually send ("insufficient_quota", "exceeded your current quota", "credit
+ * balance is too low", "rate limit", "Not logged in to Anthropic", "invalid api key", a model
+ * "not supported" for the account). The bare word "model" is NOT one: product failures name it.
+ */
+const CREDIT =
+  /insufficient_quota|exceeded your (?:current )?quota|quota exceeded|credit balance|out of credits|billing|rate.?limit|too many requests|not logged in|unauthori[sz]ed|invalid (?:api|x-api) key|authentication (?:failed|error)|(?:model|account|plan)\b[^.\n]{0,60}\bnot supported|not supported (?:for|by|with|on) (?:this|your|the) (?:account|plan|model)/i;
 
 /**
  * Send one Chat message as a person does, and wait for the turn to settle. Send is refused
  * while a turn runs (intended), so wait for it, then cancel through the real control. A failed
- * turn whose status names credit or model is BLOCKED with that exact message, not a product fail.
+ * turn whose status is a credit, quota or auth refusal (CREDIT) is BLOCKED with that exact message,
+ * not a product fail.
  */
 export async function sendChat(page: Page, text: string, ms = 300_000) {
   const working = () =>

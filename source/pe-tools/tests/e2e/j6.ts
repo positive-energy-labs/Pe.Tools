@@ -27,7 +27,9 @@ await journey(PART === "b" ? "J6b" : "J6", async (page, step) => {
     // data-tone is only the locator of the drawn caution line; the person must see its words.
     const status = await page.textOf('[role="status"][data-tone="caution"]');
     if (!status.trim())
-      throw new Error("ASSERT J6b a failed read renders a caution status with words: none rendered");
+      throw new Error(
+        "ASSERT J6b a failed read renders a caution status with words: none rendered",
+      );
     if (await page.has("start fresh"))
       throw new Error(
         'ASSERT J6b a failed read does not offer "start fresh": the control is rendered',

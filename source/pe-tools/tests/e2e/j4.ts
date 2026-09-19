@@ -50,11 +50,15 @@ await journey("J4", async (page, step) => {
 
 /** Clearing is never deleting: no visible grid or band control says delete/remove in text or aria-label. */
 async function noDelete(page: Page, when: string) {
-  const found = await page.read<string[]>(`[...document.querySelectorAll('table, [role="grid"], section[aria-label="proposals"]')]
+  const found = await page.read<
+    string[]
+  >(`[...document.querySelectorAll('table, [role="grid"], section[aria-label="proposals"]')]
     .flatMap((root) => [...root.querySelectorAll('button, [role="button"], [role="menuitem"]')])
     .filter((e) => e.getClientRects().length)
     .map((e) => [e.innerText, e.getAttribute("aria-label")].filter(Boolean).join(" | "))
     .filter((l) => /\\b(delete|remove)\\b/i.test(l))`);
   if (found.length)
-    throw new Error(`ASSERT ${when}, no delete/remove control in the grid or band: ${JSON.stringify(found)}`);
+    throw new Error(
+      `ASSERT ${when}, no delete/remove control in the grid or band: ${JSON.stringify(found)}`,
+    );
 }
