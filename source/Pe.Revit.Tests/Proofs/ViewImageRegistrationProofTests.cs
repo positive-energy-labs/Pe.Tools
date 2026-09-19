@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Pe.Revit.DocumentData.AgentContext;
@@ -106,9 +106,9 @@ public sealed class ViewImageRegistrationProofTests {
             _ = tx.Commit();
         }
         var shown = new FilteredElementCollector(doc, view.Id).ToElementIds().Except(hidden).ToList();
-        // Hold 88746ed: exactly one element appears, and its category is not OST_CropBoundary.
-        Assert.That(shown, Has.Count.EqualTo(1), $"one crop element appears with the crop shown; appeared: {string.Join(", ", shown.Select(id => id.Value()))}");
-        var cropId = shown[0];
+        var crops = shown.Where(id => doc.GetElement(id).Category?.BuiltInCategory == BuiltInCategory.OST_CropBoundary).ToList();
+        Assert.That(crops, Has.Count.EqualTo(1), $"one crop element appears with the crop shown; appeared: {string.Join(", ", shown.Select(id => $"{id.Value()} {doc.GetElement(id).Category?.Name}"))}");
+        var cropId = crops[0];
         using var rotate = new Transaction(doc, "Rotate crop");
         _ = rotate.Start();
         ElementTransformUtils.RotateElement(doc, cropId, Line.CreateBound(center, center + XYZ.BasisZ), angle);

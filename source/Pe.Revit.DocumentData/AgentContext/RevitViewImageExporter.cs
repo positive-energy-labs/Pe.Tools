@@ -41,15 +41,12 @@ public static class RevitViewImageExporter {
         return ExportToTemp(document, view, pixelSize, out clampedPixelSize);
     }
 
-    /// <summary>
-    ///     Annotation and datum elements whose view bounding box misses the model crop. The window is the model crop even with
-    ///     annotation crop on: hold 5d0124e/88746ed showed an annotation-crop view with nothing past the model crop exports exactly
-    ///     the model crop, so anything drawn between the two crops would only widen the image past what registration can place.
-    /// </summary>
+    /// <summary>Annotation and datum elements whose view bounding box misses the export window (crop grown by the annotation margin).</summary>
     private static List<ElementId> OutsideExportWindow(Document document, View view) {
         var crop = view.CropBox;
         var toCrop = crop.Transform.Inverse;
-        double minX = crop.Min.X, maxX = crop.Max.X, minY = crop.Min.Y, maxY = crop.Max.Y;
+        var (left, right, bottom, top) = AnnotationMargin(view);
+        double minX = crop.Min.X - left, maxX = crop.Max.X + right, minY = crop.Min.Y - bottom, maxY = crop.Max.Y + top;
         return new FilteredElementCollector(document, view.Id).WhereElementIsNotElementType()
             .Where(e => e.Category is { CategoryType: CategoryType.Annotation } category
                         && category.BuiltInCategory != BuiltInCategory.OST_CropBoundary && e.CanBeHidden(view))
@@ -247,9 +244,21 @@ public static class RevitViewImageExporter {
         return RevitViewImageRegistration.FromCrop(frame.PixelWidth, frame.PixelHeight, sha,
             (crop.Min.X, crop.Min.Y), (crop.Max.X, crop.Max.Y),
             (transform.Origin.X, transform.Origin.Y), (transform.BasisX.X, transform.BasisX.Y),
-            (transform.BasisY.X, transform.BasisY.Y));
+            (transform.BasisY.X, transform.BasisY.Y), AnnotationMargin(view));
     }
 
+    /// <summary>
+    ///     With annotation crop on, the PNG covers the annotation crop: the model crop grown by each side's offset. The
+    ///     offsets are paper feet (Revit API remarks), so model feet = offset × view scale, along the crop's own axes.
+    /// </summary>
+    private static (double Left, double Right, double Bottom, double Top) AnnotationMargin(View view) {
+        if (view.get_Parameter(BuiltInParameter.VIEWER_ANNOTATION_CROP_ACTIVE)?.AsInteger() != 1) return default;
+        var shape = view.GetCropRegionShapeManager();
+        if (!shape.CanHaveAnnotationCrop) return default;
+        double scale = view.Scale;
+        return (shape.LeftAnnotationCropOffset * scale, shape.RightAnnotationCropOffset * scale,
+            shape.BottomAnnotationCropOffset * scale, shape.TopAnnotationCropOffset * scale);
+    }
 
     private static string CropSheetPng(string sheetPath, BoundingBoxUV outline, BoundingBoxXYZ box, double marginPercent) {
         BitmapFrame frame;
