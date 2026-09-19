@@ -6,6 +6,13 @@ using UIFrameworkServices;
 namespace Pe.Revit.Extensions.FamDocument;
 
 public static class FamilyDocumentProcessFamily {
+    public static string LoadFailureText(IEnumerable<string> postedMessages) {
+        var messages = postedMessages.Distinct(StringComparer.Ordinal).ToList();
+        return messages.Count == 0
+            ? "Family loading failed."
+            : $"Family loading failed: {string.Join("; ", messages)}";
+    }
+
     /// <summary>
     ///     Opens an independent family copy for a read, handles only failures raised by EditFamily on the
     ///     source document, and always closes the copy. Only the known non-destructive family-constraint warning

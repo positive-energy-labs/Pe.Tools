@@ -178,9 +178,17 @@ public static class FamilyVisit {
                 loaded = RevitFailureScope.Execute(project,
                     accessor => options.Failures.Apply(accessor, loadDiagnostics, options.SuppressWarnings),
                     () => famDoc.LoadFamily(project, options.LoadOptions), famDoc.Document);
+            } catch (Exception) when (loadDiagnostics.Any(diagnostic => diagnostic.IsError)) {
+                return new FamilyVisitResult(FamilyVisitRefusal.None,
+                    FamilyDocumentProcessFamily.LoadFailureText(loadDiagnostics.Where(diagnostic => diagnostic.IsError).Select(diagnostic => diagnostic.Message)),
+                    null, false, scope.Diagnostics.Concat(loadDiagnostics.Select(diagnostic => ("LoadFamily", diagnostic.IsError, diagnostic.Message))).ToList());
             } finally {
                 scope.Diagnostics.AddRange(loadDiagnostics.Select(d => ("LoadFamily", d.IsError, d.Message)));
             }
+            if (loadDiagnostics.Any(diagnostic => diagnostic.IsError))
+                return new FamilyVisitResult(FamilyVisitRefusal.None,
+                    FamilyDocumentProcessFamily.LoadFailureText(loadDiagnostics.Where(diagnostic => diagnostic.IsError).Select(diagnostic => diagnostic.Message)),
+                    null, false, scope.Diagnostics);
             // post-verify: the family is in the project by name and is the element LoadFamily handed back
             var verified = loaded is not null && project.GetElement(loaded.Id) is Family reread && reread.Name == familyName;
             if (verified && !scope.Diagnostics.Any(d => d.IsError))
