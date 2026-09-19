@@ -1,6 +1,11 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { address, takeoffsRouteState, type DocumentRef } from "@pe/agent-contracts";
+import {
+  address,
+  takeoffsRouteState,
+  type DocumentRef,
+  takeoffEditPatches,
+} from "@pe/agent-contracts";
 import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 export async function partitionFixture(dir: string, target: DocumentRef) {
@@ -26,12 +31,12 @@ export async function partitionFixture(dir: string, target: DocumentRef) {
     scope,
     "takeoffs",
     "human",
-    [
-      {
-        path: ["staged"],
-        value: [{ roomId: "room-1", base: { name: "Before" }, next: { name: "Reviewed" } }],
-      },
-    ],
+    takeoffEditPatches(
+      takeoffsRouteState.schema.parse({}),
+      "room-1",
+      { name: "Before" },
+      { name: "Reviewed" },
+    ),
     0,
   );
   const candidate = {

@@ -11,6 +11,7 @@ import {
   instancesRouteState,
   parameterLinksRouteState,
   START_FRESH_ASIDE,
+  takeoffsRouteState,
   UNREADABLE_WORK,
   workKey,
   type RouteStateSpec,
@@ -75,11 +76,24 @@ const oldParameterLinks = {
   doc: { draft: { formatVersion: 1, definitions: [], assignments: [] } },
 };
 
+// The census's 2 pre-cells Takeoffs rows: one staged room edit, one adopt patch.
+const oldTakeoffs = {
+  version: 1,
+  revision: 3,
+  doc: {
+    staged: [{ roomId: "room-2", base: { name: "Study" }, next: { name: "Office" } }],
+    adoptPatches: { "Main:6248837": { checked: true, name: "Main Level 09" } },
+    decisions: {},
+    reviewFlags: {},
+  },
+};
+
 for (const [spec, saved] of [
   [familiesRouteState, oldFamilies],
   [familyDraftRouteState, oldFamily],
   [instancesRouteState, oldInstances],
   [parameterLinksRouteState, oldParameterLinks],
+  [takeoffsRouteState, oldTakeoffs],
 ] as const) {
   test(`/${spec.route}: old-shape Work is left byte-for-byte and refused in one sentence`, async () => {
     const scope: WorkKey = { route: spec.route, target };
