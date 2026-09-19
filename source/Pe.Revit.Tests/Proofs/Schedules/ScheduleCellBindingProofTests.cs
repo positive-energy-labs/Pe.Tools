@@ -130,6 +130,7 @@ public sealed class ScheduleCellBindingProofTests {
                     entry.ScheduleId, entry.ScheduleUniqueId,
                     [new(rows[0].RowNumber, mark.ColumnNumber, missing, "NOPE")]));
                 Assert.That(missingResult.Results.Single().Error, Does.Contain("missing canonical target evidence"));
+                Assert.That(missingResult.Results.Single().Code, Is.Null, "only stale cell evidence carries a cell-level code");
 
                 var wrongParameterId = typeA.Targets.Single().ParameterId;
                 var invalidExactId = mark with {
@@ -140,6 +141,7 @@ public sealed class ScheduleCellBindingProofTests {
                     entry.ScheduleId, entry.ScheduleUniqueId,
                     [new(rows[0].RowNumber, mark.ColumnNumber, invalidExactId, "NO-FUZZY-FALLBACK")]));
                 Assert.That(invalidIdResult.Results.Single().Error, Does.Contain("stale"));
+                Assert.That(invalidIdResult.Results.Single().Code, Is.EqualTo(EditRefusalCode.TargetEvidenceStale), "the web keys stale on the code");
 
                 var beforeCancel = projectDocument.GetElement(mark.Targets.Single().ElementId.ToElementId())
                     .get_Parameter(BuiltInParameter.ALL_MODEL_MARK)!.AsString();
