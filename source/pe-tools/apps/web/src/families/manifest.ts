@@ -9,7 +9,6 @@ import { z } from "zod";
 import {
   familiesRouteState,
   ffPlanEntrySchema,
-  stagedEntries,
   type FamiliesRouteDocument,
 } from "@pe/agent-contracts";
 
@@ -83,7 +82,7 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
      * keeps them as a supplied draft. Saving a spec to the pod is capture's job, never plan's.
      */
     staged: {
-      count: (ctx) => stagedEntries(ctx.work.doc?.cells ?? {}).length,
+      cells: (ctx) => ctx.work.doc?.cells ?? {},
       plan: async (ctx) => {
         const doc = ctx.work.doc;
         if (!doc || ctx.work.revision === null) throw Error("author the route's Work first");
@@ -107,7 +106,7 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
           for (const plan of [result.plan].flat())
             entries.push({ ...ffPlanRow(ffPlanEntrySchema.parse(plan)), plan: String(result.id) });
         }
-        return { entries, staged: true };
+        return { entries };
       },
       // Each draft's plan sealed its bytes and the staged cells it consumed; the host retires
       // those cells after proven native success, only where they are still unchanged.

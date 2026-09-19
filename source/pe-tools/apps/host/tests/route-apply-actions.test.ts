@@ -643,6 +643,14 @@ test("a staged plan files nothing in the pod; apply carries the exact draft byte
   expect((await cellsNow(env.work))[W]?.staged).toBeNull();
 });
 
+test("a source that is both a saved member and a draft refuses; neither arm wins by stripping", async () => {
+  const env = await setup();
+  const revision = await authorFamilies(env.work);
+  const mixed = { ...source, content: '{"patch":{"types":{}}}' };
+  await expect(env.admit("families.plan", { source: mixed }, revision)).rejects.toThrow();
+  expect(env.sent.filter((s) => s.key === "families.plan")).toHaveLength(0);
+});
+
 test("a user who keeps editing during apply loses nothing; unchanged consumed cells retire", async () => {
   const env = await setup();
   const { apply, revision } = await stagedPlan(env, { [W]: staged("10"), [H]: staged("20") });

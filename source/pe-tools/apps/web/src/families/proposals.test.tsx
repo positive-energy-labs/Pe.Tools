@@ -149,6 +149,12 @@ test("plan takes the staged cell only; the open proposal never reaches the wire"
     patch: { types: { "FCU-1": { PE_G___Model: "FXMQ20" } } },
   });
   expect(c.setPage.mock.calls.some(([next]) => "path" in (next as object))).toBe(false);
+  // The plan verb, not the route, stamps the staged cells it read as the sheet's evidence.
+  const sheet = (c.setPage.mock.calls.at(-1)![0] as { sheet: { staged: unknown } }).sheet;
+  expect(sheet.staged).toEqual({ [familyCellKey(fcu)]: staged(fcu).staged });
+  // A staged sheet applies its own plans: no saved member needs to be open.
+  const confirmed = { ...c, page: { ...c.page, confirming: true, sheet } };
+  expect(manifest.actions!.apply.ready(confirmed as never, undefined as never)).toBeNull();
 });
 
 test("a denied proposal is gone from Work, so plan has nothing of it", async () => {

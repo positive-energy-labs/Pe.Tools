@@ -97,8 +97,11 @@ export const familyActions = {
     description:
       "Plan a saved spec, or a supplied draft's exact bytes (filed nowhere), over the loaded families in the reviewed Families Work scope; returns the plan and the hashes apply would send, and changes nothing.",
     input: z.object({
-      /** A saved member, or a draft's bytes; the run apply files captures either exactly. */
-      source: z.union([podMemberSourceSchema, podDraftSourceSchema]),
+      /**
+       * A saved member, or a draft's bytes; the run apply files captures either exactly. Strict
+       * arms: a shape with both `sha256` and `content` refuses instead of losing one to stripping.
+       */
+      source: z.union([podMemberSourceSchema.strict(), podDraftSourceSchema.strict()]),
       /** Plan only these families of the scope (a generated one-family member); absent = the scope. */
       familyIds: z.array(z.number().int()).nonempty().optional(),
       excludedIds: z.array(z.number().int()).default([]),

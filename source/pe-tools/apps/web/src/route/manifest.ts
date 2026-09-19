@@ -10,7 +10,13 @@ import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-
 import type { ReactNode } from "react";
 import { z } from "zod";
 import type { UseHotkeyDefinition } from "@tanstack/react-hotkeys";
-import { semanticActions, type ActionBases, type SemanticActionKey } from "@pe/agent-contracts";
+import {
+  semanticActions,
+  stagedEntries,
+  type ActionBases,
+  type Rung,
+  type SemanticActionKey,
+} from "@pe/agent-contracts";
 import type {
   ExecutionTarget,
   Reading,
@@ -172,8 +178,11 @@ export const byPlan = (included: readonly PlanEntry[]) => {
 /** The plan apply confirms (dogma law 9), as the plan workflow returned it. */
 export interface PlanSheet {
   entries: readonly PlanEntry[];
-  /** Planned from staged cells, not the page's saved member; apply never reads that member. */
-  staged?: true;
+  /**
+   * The staged value at each cell a staged plan read, as it was when planned: the plan's own
+   * evidence. A cell that no longer holds it makes the sheet stale, the host's refusal rule.
+   */
+  staged?: Readonly<Record<string, Rung>>;
 }
 
 export interface EntityPage {
@@ -263,7 +272,10 @@ export interface EntityRouteDef<W, R extends string, P> {
    * both halves of the confirmation; with none it falls back to `plan` over the page's member.
    */
   staged?: {
-    count: (ctx: Ctx<W, R | EntityReading, P & EntityPage>) => number;
+    /** The audit's keyed cells; the staged ones are what plan generates the spec from. */
+    cells: (
+      ctx: Ctx<W, R | EntityReading, P & EntityPage>,
+    ) => Readonly<Record<string, { staged?: Rung | null }>>;
     plan: (ctx: Ctx<W, R | EntityReading, P & EntityPage>) => Promise<PlanSheet>;
     apply: (
       ctx: Ctx<W, R | EntityReading, P & EntityPage>,
@@ -394,7 +406,9 @@ export function entityRoute<W, const R extends string, P extends object, const A
   const plan = def.plan as ApplyPlan<unknown, string, object> | undefined;
   const staged = def.staged as EntityRouteDef<unknown, string, object>["staged"];
   /** How many edits the audit has staged; 0 = the verbs read the page's saved member instead. */
-  const stagedCount = (ctx: EntityCtx) => staged?.count(ctx as never) ?? 0;
+  const stagedCells = (ctx: EntityCtx) =>
+    stagedEntries(staged?.cells(ctx as never) ?? {}) as [string, { staged: Rung }][];
+  const stagedCount = (ctx: EntityCtx) => stagedCells(ctx).length;
   const sheetView = (ctx: EntityCtx) => sheetOf(def as never, ctx as never);
   const sourceOf = (ctx: EntityCtx): MemberSource => {
     const member = memberOf(ctx);
@@ -442,7 +456,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
     needs: semanticActionFacts(def.apply).needs,
     actor: "any",
     input: z.void() as unknown as z.ZodType<never>,
-    dirties: ["pods"],
+    dirties: [],
     count: (ctx) => stagedCount(ctx) || null,
     ready: (ctx) => {
       // Staged work IS the spec; the pod holds the run, not a member.
@@ -450,8 +464,10 @@ export function entityRoute<W, const R extends string, P extends object, const A
       return plan ? savedSpec(ctx) : "nothing is staged to plan";
     },
     run: async (ctx) => {
+      // What the plan reads, taken before it reads it: the sheet's staged evidence.
+      const read = Object.fromEntries(stagedCells(ctx).map(([cell, { staged }]) => [cell, staged]));
       const sheet = stagedCount(ctx)
-        ? await staged!.plan(ctx as never)
+        ? { ...(await staged!.plan(ctx as never)), staged: read }
         : await plan!.read(ctx as never, sourceOf(ctx));
       ctx.setPage({ stage: "apply", confirming: true, sheet });
     },
