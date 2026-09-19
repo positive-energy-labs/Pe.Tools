@@ -86,8 +86,9 @@ public sealed class FamilyProjectIdentityTests {
             var applied = FamilyFoundryBridgeOps.ApplyFamilies(patch, new Dictionary<long, string> { [id] = plan.PlanHash }, project, null, null, Path.Combine(Path.GetTempPath(), "Pe.Tools", "family-apply-test", Guid.NewGuid().ToString("N")), new Dictionary<long, string> { [id] = plan.FamilyName }).Receipts.Single();
             Assert.That(applied.Success && applied.Converged, Is.True, applied.Error + string.Join(";", applied.Errors));
             Assert.That(applied.Residue, Is.Empty);
-            var replacement = project.GetElement(applied.FamilyId.ToElementId()) as Family;
-            Assert.That(replacement, Is.Not.Null, "Receipt must identify the committed replacement, not an invalid pre-load Family.");
+            // An edited reload replaces the Family element (ruled, FamilyReloadIdentityTests): loadedFamilyId names the replacement, by the same name.
+            var replacement = project.GetElement(applied.LoadedFamilyId!.Value.ToElementId()) as Family;
+            Assert.That(replacement?.Name, Is.EqualTo("PE Identity"), "Receipt must identify the committed replacement, not an invalid pre-load Family.");
             Assert.That(applied.FamilyName, Is.EqualTo("PE Identity"));
             var repeat = FamilyFoundryBridgeOps.PlanFamilies(patch, project, [applied.FamilyName]).Families.Single();
             Assert.That(repeat.Changes, Is.Empty);
