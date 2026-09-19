@@ -33,7 +33,7 @@ export type ScheduleGridAction = "catalog" | "refresh" | "push";
 export interface ScheduleGridPage {
   workspaceId: string;
   captureId: string;
-  /** The last push's run, as one line: outcome, where its receipt lives, cells before → after. */
+  /** The last push's run, as one line: outcome, where its receipt lives, written cells before → after, refused cells refused. */
   pushRun: string;
 }
 
@@ -48,8 +48,15 @@ type Ctx = RouteCtx<ScheduleGridDocument, ScheduleGridReading, ScheduleGridPage>
 type PushReceipt = {
   podId: string | null;
   outcome: string;
-  cells: { cell: string; before: string | null; after: string | null; error?: string | null }[];
+  cells: {
+    cell: string;
+    before: string | null;
+    after: string | null;
+    error?: string | null;
+    code?: string | null;
+  }[];
 };
+type PushCell = PushReceipt["cells"][number];
 /**
  * The run's word, from its cells: the host's receipt says "Failed" for any refused cell even when
  * others were written (F-S-1, NEEDS-CONTRACT), so a mixed push reads "Partly applied" here.
@@ -59,13 +66,22 @@ const pushWord = (receipt: PushReceipt) => {
   if (!refused) return receipt.outcome;
   return refused === receipt.cells.length ? "Refused" : "Partly applied";
 };
+const REFUSAL_WORD: Record<string, string> = { "stale-staged-cell": "stale" };
+/**
+ * A refused cell's `after` is what Revit holds, not what this run wrote, so it reads refused with
+ * its code's word, or the error's first clause when the cell carries no code.
+ */
+const cellLine = (c: PushCell) =>
+  c.error
+    ? `${c.cell} refused (${c.code ? (REFUSAL_WORD[c.code] ?? c.code) : c.error.split(": ")[0]})`
+    : `${c.cell} ${c.before ?? "?"} → ${c.after ?? "?"}`;
 export const pushRunLine = (receipt: PushReceipt, run?: string | null) =>
   [
     pushWord(receipt),
     receipt.podId && run
       ? `${receipt.podId} · ${run}/receipt.json`
       : "action receipt (no pod bound)",
-    receipt.cells.map((c) => `${c.cell} ${c.before ?? "?"} → ${c.after ?? "?"}`).join(", "),
+    receipt.cells.map(cellLine).join(", "),
   ].join(" · ");
 
 const targetOf = (ctx: Ctx) => {
