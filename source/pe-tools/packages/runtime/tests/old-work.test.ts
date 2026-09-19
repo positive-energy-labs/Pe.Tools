@@ -8,6 +8,8 @@ import {
   address,
   familiesRouteState,
   familyDraftRouteState,
+  instancesRouteState,
+  parameterLinksRouteState,
   START_FRESH_ASIDE,
   UNREADABLE_WORK,
   workKey,
@@ -59,9 +61,25 @@ const oldFamily = {
   },
 };
 
+// The census's two pre-cells Instances rows: a bare staged start spec.
+const oldInstances = {
+  version: 1,
+  revision: 2,
+  doc: { staged: { kind: "start", year: "2025", name: "dev" } },
+};
+
+// The pre-cells Parameter Links shape: a bare authored draft (the census found 0 rows).
+const oldParameterLinks = {
+  version: 1,
+  revision: 1,
+  doc: { draft: { formatVersion: 1, definitions: [], assignments: [] } },
+};
+
 for (const [spec, saved] of [
   [familiesRouteState, oldFamilies],
   [familyDraftRouteState, oldFamily],
+  [instancesRouteState, oldInstances],
+  [parameterLinksRouteState, oldParameterLinks],
 ] as const) {
   test(`/${spec.route}: old-shape Work is left byte-for-byte and refused in one sentence`, async () => {
     const scope: WorkKey = { route: spec.route, target };
@@ -188,4 +206,26 @@ test("/families: start fresh sets old Work aside byte-for-byte, refuses Pea, nev
   expect(await module.startFresh(scope, "families", "human")).toMatchObject({ ok: true });
   expect(JSON.stringify(state.get(key(`families${START_FRESH_ASIDE}1`)))).toBe(bytes);
   expect(JSON.stringify(state.get(key(`families${START_FRESH_ASIDE}2`)))).toBe(second);
+});
+
+test("/instances: a pre-cells staged start is set aside by start fresh, never launched or kept", async () => {
+  const scope: WorkKey = { route: "instances", target: null, work: "instances" };
+  const key = (route: string) => `${workKey(scope)}\0${route}`;
+  const state = new Map<string, unknown>();
+  const module = new RouteWorkspace({
+    registrations: [
+      { spec: instancesRouteState as unknown as RouteStateSpec<z.ZodType>, handlers: {} },
+    ],
+    store: {
+      getState: async ({ targetKey, route }) =>
+        structuredClone(state.get(`${targetKey}\0${route}`)),
+      setState: async ({ targetKey, route, value }) =>
+        void state.set(`${targetKey}\0${route}`, structuredClone(value)),
+    },
+  });
+  const bytes = JSON.stringify(oldInstances);
+  state.set(key("instances"), JSON.parse(bytes));
+  expect(await module.startFresh(scope, "instances", "human")).toMatchObject({ ok: true });
+  expect(JSON.stringify(state.get(key(`instances${START_FRESH_ASIDE}1`)))).toBe(bytes);
+  expect((await module.read(scope, "instances"))!.doc).toEqual({ launch: {} });
 });

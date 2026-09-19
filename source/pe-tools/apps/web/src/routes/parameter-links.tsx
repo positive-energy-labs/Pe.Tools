@@ -3,7 +3,12 @@ import { Eye, RefreshCw, Save } from "lucide-react";
 import { useCallback, useContext, useMemo, useState } from "react";
 
 import type { ParameterLinkProfile, ParameterLinksDocument } from "@pe/agent-contracts";
-import { familyCaptureSchema, parameterLinksReadingSchema } from "@pe/agent-contracts";
+import {
+  familyCaptureSchema,
+  parameterLinksReadingSchema,
+  stagedParameterLinks,
+  transitionPatches,
+} from "@pe/agent-contracts";
 
 import { AddressingBar } from "#/components/lang/addressing-bar";
 import { ArmingStrip } from "#/components/lang/arming-strip";
@@ -132,7 +137,7 @@ export function ParameterLinksWorkspace({
   fieldOptionsEnabled?: boolean;
 }) {
   const document = route.work.doc;
-  const savedDraft = document?.draft ?? null;
+  const savedDraft = document ? stagedParameterLinks(document) : null;
   const evaluation = reading?.evaluated ? (reading.evaluation ?? null) : null;
   const status = reading?.status ?? null;
 
@@ -173,7 +178,7 @@ export function ParameterLinksWorkspace({
   const saveDraft = useCallback(
     async (profile: ParameterLinkProfile): Promise<boolean> => {
       const refusal = await route.work.write(
-        [{ path: ["draft"], value: profile }],
+        transitionPatches([], "profile", {}, { kind: "stage", rung: { value: profile } }),
         draftBasis ?? undefined,
       );
       if (refusal) {

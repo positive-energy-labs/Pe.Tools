@@ -18,6 +18,7 @@ import {
   transitionPatches,
   parameterLinksRouteState,
   parameterLinksBasis,
+  stagedParameterLinks,
   parameterLinksReadingSchema,
   settingsCandidate,
   settingsRouteState,
@@ -447,7 +448,7 @@ export async function admitFamilyAction(
           familyActions[key].input.parse(admission.input).source,
           pods,
         );
-        // With a reviewed draft, the plan consumes its staged cells only if the member IS that draft.
+        // With a reviewed draft, the plan consumes its staged cells only if the captured bytes ARE that draft.
         const base = admission.bases.work;
         let consumed: Consumed | null = null;
         if (base) {
@@ -582,7 +583,9 @@ export async function admitFamilyAction(
           throw refused("Work changed after review; review the current basis again");
         const input = familyActions["parameter-links.apply"].input.parse(admission.input);
         const document = parameterLinksRouteState.schema.parse(view.doc);
-        if (!document.draft) throw refused("Author a draft profile before applying");
+        // Apply reconciles the person's staged profile only; a Pea proposal never arms it.
+        const staged = stagedParameterLinks(document);
+        if (!staged) throw refused("Stage a profile before applying");
         const capture = await captures.family(input.readingId);
         if (
           capture.reading.kind !== "parameter-links" ||
@@ -592,14 +595,18 @@ export async function admitFamilyAction(
           throw refused("The reviewed evaluation is not live evidence for the selected lifetime");
         const evaluated = parameterLinksReadingSchema.parse(capture.reading.value);
         if (!evaluated.evaluated || !evaluated.evaluation)
-          throw refused("The reviewed reading is a stored-profile read, not a draft evaluation");
+          throw refused("The reviewed reading is a stored-profile read, not a staged evaluation");
+        if (evaluated.subject === "proposal")
+          throw refused(
+            "The reviewed reading is a proposal preview; stage the profile and preview again",
+          );
         if (evaluated.basis !== parameterLinksBasis(document))
-          throw refused("The draft changed after the evaluation; preview again");
+          throw refused("The staged profile changed after the evaluation; preview again");
         return {
           kind: "native",
           process,
           nativeKey: "revit.apply.parameter-links",
-          input: { profile: document.draft, previewOnly: false, reconcile: true },
+          input: { profile: staged, previewOnly: false, reconcile: true },
         };
       }
       const input = familyActions["family.build"].input.parse(admission.input);
@@ -945,11 +952,21 @@ export async function readFamily(
     const view = await deps.workspace.read(scope, "parameter-links");
     if (!view) throw refused("Author this route's Work before reading it");
     const document = parameterLinksRouteState.schema.parse(view.doc);
-    const { evaluate } = familyReads["parameter-links.read"].input.parse(input);
-    if (evaluate && !document.draft) throw refused("Author a draft profile before evaluating it");
+    const { evaluate, subject } = familyReads["parameter-links.read"].input.parse(input);
+    // The staged profile, or a labelled preview of Pea's proposal; nothing else is evaluated.
+    const profile =
+      subject === "proposal"
+        ? (document.profile.proposal?.value ?? null)
+        : stagedParameterLinks(document);
+    if (evaluate && !profile)
+      throw refused(
+        subject === "proposal"
+          ? "Pea has proposed no profile"
+          : "Stage a profile before evaluating it",
+      );
     const data = evaluate
       ? await native("revit.apply.parameter-links", {
-          profile: document.draft,
+          profile,
           previewOnly: true,
           reconcile: false,
         })
@@ -958,13 +975,14 @@ export async function readFamily(
       kind: "parameter-links",
       value: parameterLinksReadingSchema.parse({
         ...(data as object),
-        basis: parameterLinksBasis(document),
+        basis: parameterLinksBasis(document, subject),
         workRevision: view.revision,
         evaluated: evaluate,
+        subject,
         // What Revit holds arrives as `profile`; `stored` names it for what it is.
         stored: (data as { profile?: unknown }).profile ?? null,
-        // A stored-profile read observes Revit, never the authored draft: it carries no
-        // evaluation, so it can never arm an apply of a draft it did not evaluate.
+        // A stored-profile read observes Revit, never the staged profile: it carries no
+        // evaluation, so it can never arm an apply of a profile it did not evaluate.
         evaluation: evaluate ? (data as { evaluation?: unknown }).evaluation : null,
       }),
     };

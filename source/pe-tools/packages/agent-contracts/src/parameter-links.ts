@@ -11,6 +11,7 @@ export const parameterIdentitySchema = z.object({
 export type ParameterIdentity = z.infer<typeof parameterIdentitySchema>;
 import type { RouteStateSpec } from "./route-state.ts";
 import { canonicalRouteInput } from "./route-doc.ts";
+import { trichotomyCellSchema } from "./trichotomy.ts";
 
 const parameterLinkParameterIdentitySchema = parameterIdentitySchema.extend({
   kind: z.enum(["SharedGuid", "BuiltInParameter", "ParameterElement", "NameFallback"]),
@@ -119,22 +120,40 @@ export const parameterLinksDataSchema = z.object({
 });
 export type ParameterLinksData = z.infer<typeof parameterLinksDataSchema>;
 
-/** The Parameter Links document is the authored draft and nothing else. */
-export const parameterLinksDocumentSchema = z.object({
-  draft: parameterLinkProfileSchema.nullish().default(null),
+/**
+ * The Parameter Links document is one authored cell: Pea may propose a profile, a person stages
+ * it, and evaluate/apply consume the staged profile only. Strict, so the old `{ draft }` shape
+ * fails closed rather than lose its value.
+ */
+export const parameterLinksDocumentSchema = z.strictObject({
+  profile: trichotomyCellSchema(parameterLinkProfileSchema).default({}),
 });
 export type ParameterLinksDocument = z.infer<typeof parameterLinksDocumentSchema>;
 
-/** The exact draft an observation was taken against. Identical on the client and the server. */
-export const parameterLinksBasis = (work: ParameterLinksDocument): string =>
-  canonicalRouteInput(work.draft ?? null);
+/** The profile apply would reconcile: the person's staged value, or none. */
+export const stagedParameterLinks = (work: ParameterLinksDocument): ParameterLinkProfile | null =>
+  work.profile.staged?.value ?? null;
+
+/**
+ * The exact profile an observation was taken against. Identical on the client and the server.
+ * A proposal preview names the proposal, so it can never equal a staged basis and arm apply.
+ */
+export const parameterLinksBasis = (
+  work: ParameterLinksDocument,
+  subject: "staged" | "proposal" = "staged",
+): string =>
+  subject === "staged"
+    ? canonicalRouteInput(stagedParameterLinks(work))
+    : `proposal:${canonicalRouteInput(work.profile.proposal?.value ?? null)}`;
 
 /** A host reading, stored by the capture owner: what Revit holds and what the draft would do. */
 export const parameterLinksReadingSchema = z.object({
   basis: z.string().min(1),
   workRevision: z.number().int().nonnegative(),
-  /** `stored` observes Revit; `evaluation` observes the authored draft named by `basis`. */
+  /** `stored` observes Revit; `evaluation` observes the profile named by `basis`. */
   evaluated: z.boolean(),
+  /** What was evaluated: the staged profile, or a labelled preview of Pea's proposal. */
+  subject: z.enum(["staged", "proposal"]).default("staged"),
   stored: parameterLinkProfileSchema.nullish().default(null),
   status: parameterLinksRuntimeStatusSchema,
   evaluation: parameterLinkEvaluationSchema.nullish().default(null),
@@ -147,10 +166,10 @@ export const parameterLinksRouteState = {
   route: "parameter-links",
   title: "Parameter Links",
   description:
-    "A person authors a model-owned parameter linkage profile, evaluates it, and reconciles it; Pea reads the draft and writes none of it.",
+    "A person stages a model-owned parameter linkage profile, evaluates it, and reconciles it. Pea may propose a profile; its preview is labelled and never arms apply.",
   schema: parameterLinksDocumentSchema,
-  // The draft is what apply reconciles; Pea gets a proposal cell at this route's cutover.
-  agentWriteMask: [] as string[][],
+  // Pea proposes; the staged profile is a person's, and it is what evaluate and apply consume.
+  agentWriteMask: [["profile", "proposal"]],
   // Reading and applying are host ports, not route commands: an observation of Revit can
   // never be written into the draft a human is editing.
   commands: {},

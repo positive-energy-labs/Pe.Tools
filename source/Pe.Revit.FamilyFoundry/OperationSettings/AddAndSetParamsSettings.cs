@@ -113,7 +113,8 @@ public sealed class SetKnownParamsSettings : IOperationSettings {
                 // A type can be named " " (Old_Template prioAir fans); trim for matching, never skip it.
                 var typeName = kvp.Key?.Trim();
                 var value = kvp.Value?.ToString();
-                if (typeName is null || string.IsNullOrWhiteSpace(value))
+                // "" is a value (clear to empty, ruling 1530-1), not an absent cell; only null means "no value for this type".
+                if (typeName is null || value is null)
                     continue;
                 if (valuesPerType.ContainsKey(typeName)) {
                     throw new InvalidOperationException(

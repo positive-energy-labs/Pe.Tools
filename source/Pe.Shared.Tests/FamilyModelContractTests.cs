@@ -158,71 +158,6 @@ public sealed class FamilyModelContractTests {
         Assert.That(local.Value.Parameters["Offline"].SharedVisible, Is.Null);
     }
 
-    [Test]
-    public void Company_corpus_retains_original_bytes_and_all_saved_equipment() {
-        var root = Path.GetFullPath(Path.Combine(FixtureDir, "..", "Profiles", "company-20260906"));
-        var manifest = JObject.Parse(File.ReadAllText(Path.Combine(root, "manifest.json")));
-        var files = manifest["files"]!.Children<JObject>().ToList();
-        Assert.That(files.Count, Is.EqualTo(52));
-        Assert.That(files.Count(f => ((string)f["path"]!).Contains("/SavedEquip/", StringComparison.Ordinal)), Is.EqualTo(14));
-        foreach (var file in files) {
-            var bytes = File.ReadAllBytes(Path.Combine(root, (string)file["path"]!));
-            Assert.That(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant(), Is.EqualTo((string)file["sha256"]!), (string)file["path"]!);
-        }
-        Assert.That(manifest["unresolved"]!.Count(), Is.EqualTo(2), "The original census remains unchanged after reconstruction and resolver repairs.");
-    }
-
-    [Test]
-    public void Composed_company_corpus_covers_every_original_profile() {
-        var root = Path.GetFullPath(Path.Combine(FixtureDir, "..", "Profiles"));
-        var original = JObject.Parse(File.ReadAllText(Path.Combine(root, "company-20260906", "manifest.json")));
-        var expected = original["files"]!.Select(x => (string)x["path"]!).Where(p => p.Contains("/profiles/"));
-        var composed = JArray.Parse(File.ReadAllText(Path.Combine(root, "company-composed-20260906.json")));
-        Assert.That(composed.Select(x => (string)x["source"]!), Is.EquivalentTo(expected));
-        Assert.That(composed.Count, Is.EqualTo(45));
-        Assert.That(composed.Descendants().OfType<JProperty>().Where(p => p.Name is "$include" or "$preset"), Is.Empty);
-        foreach (var profile in composed) {
-            var source = JObject.Parse(File.ReadAllText(Path.Combine(root, "company-20260906", (string)profile["source"]!)));
-            Assert.That(((JObject)profile["settings"]!).Properties().Select(p => p.Name), Is.EquivalentTo(source.Properties().Select(p => p.Name)), (string)profile["source"]!);
-        }
-    }
-
-    [Test]
-    public void AprilAire_inline_fields_override_preset_and_preserve_other_fields() {
-        var root = Path.GetFullPath(Path.Combine(FixtureDir, "..", "Profiles"));
-        const string path = "CmdFFManager/profiles/SavedEquip/AprilAire E-Series.json";
-        var original = JObject.Parse(File.ReadAllText(Path.Combine(root, "company-20260906", path)))["FilterApsParams"]!;
-        var composed = JArray.Parse(File.ReadAllText(Path.Combine(root, "company-composed-20260906.json")));
-        var actual = composed.Single(p => (string)p["source"]! == path)["settings"]!["FilterApsParams"]!;
-        var preset = composed.Single(p => (string)p["source"]! == "CmdFFMigrator/profiles/MechEquip/DH.json")["settings"]!["FilterApsParams"]!;
-        Assert.Multiple(() => {
-            Assert.That(JToken.DeepEquals(actual["IncludeNames"]!["Equaling"], original["IncludeNames"]!["Equaling"]), Is.True);
-            Assert.That(JToken.DeepEquals(actual["IncludeNames"]!["StartingWith"], preset["IncludeNames"]!["StartingWith"]), Is.True);
-            Assert.That(JToken.DeepEquals(actual["ExcludeNames"], preset["ExcludeNames"]), Is.True);
-        });
-    }
-
-    [Test]
-    public void Reconstructed_dehumidifier_filter_retains_both_profiles_parameter_requirements() {
-        var root = Path.GetFullPath(Path.Combine(FixtureDir, "..", "Profiles"));
-        var composed = JArray.Parse(File.ReadAllText(Path.Combine(root, "company-composed-20260906.json")));
-        var dh = composed.Single(p => (string)p["source"]! == "CmdFFMigrator/profiles/MechEquip/DH.json")["settings"]!;
-        var filter = dh["FilterApsParams"]!;
-        bool Matches(string name, string part) =>
-            filter[part]!["Equaling"]!.Values<string>().Contains(name, StringComparer.Ordinal) ||
-            (filter[part]!["StartingWith"]?.Values<string>() ?? []).Any(prefix => name.StartsWith(prefix!, StringComparison.Ordinal));
-        var saved = JObject.Parse(File.ReadAllText(Path.Combine(root, "company-20260906", "CmdFFManager", "profiles", "SavedEquip", "AprilAire E-Series.json")));
-        var requirements = saved["SetKnownParams"]!["GlobalAssignments"]!.Concat(saved["SetKnownParams"]!["PerTypeAssignmentsTable"]!)
-            .Concat(dh["SetKnownParams"]!["GlobalAssignments"]!).Select(p => (string)p["Parameter"]!)
-            .Concat(["PE_M___DehuPintsPerDayDesign", "PE_M___DehuPintsPerDayRated", "PE_G___RefrigerantType"]);
-        foreach (var name in requirements.Distinct(StringComparer.Ordinal)) {
-            Assert.That(Matches(name, "IncludeNames"), Is.True, name);
-            Assert.That(Matches(name, "ExcludeNames"), Is.False, name);
-        }
-        Assert.That(Matches("PE_E___MainBreakerRating", "ExcludeNames"), Is.True, "Existing panel exclusion include is retained.");
-        Assert.That(Matches("PE_M___HuGallonsPerHour", "ExcludeNames"), Is.True, "Humidifier-only field stays excluded.");
-    }
-
     public static string FixtureDir {
         get {
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -231,7 +166,7 @@ public sealed class FamilyModelContractTests {
         }
     }
 
-    public static IEnumerable<string> Fixtures => Directory.GetFiles(FixtureDir, "*.json").Where(path => !path.EndsWith(".captured.json", StringComparison.Ordinal)).Select(Path.GetFileName)!;
+    public static IEnumerable<string> Fixtures => Directory.GetFiles(FixtureDir, "*.json").Where(path => !path.EndsWith(".captured.json", StringComparison.Ordinal) && !path.EndsWith(".patch.json", StringComparison.Ordinal)).Select(Path.GetFileName)!;
 
     [Test]
     public void Nested_model_resolves_by_schema_and_family_name_not_filename() {

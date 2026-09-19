@@ -85,7 +85,7 @@ test("the live family reads into a draft with no pod: read needs none, capture a
   );
 });
 
-test("a staged cell plans: save files the draft as a member, the plan names it", async () => {
+test("a staged cell plans the draft's bytes: nothing is saved, and the page names no member", async () => {
   client.runSemanticAction.mockClear();
   const doc: FamilyDraft = {
     reading,
@@ -95,15 +95,19 @@ test("a staged cell plans: save files the draft as a member, the plan names it",
   expect(stagedEntries(familySpec.staged!.cells(c as never))).toHaveLength(1);
   expect(familyManifest().actions!.plan.ready(c, undefined as never)).toBeNull();
   const sheet = await familySpec.staged!.plan(c);
-  const [save, plan] = client.runSemanticAction.mock.calls;
-  // Save is capture with the draft's text into the chosen pod; the host writes the member and run.
-  expect(save![0]).toBe("family.capture");
-  expect(save![1]).toMatchObject({ pod: "p" });
-  expect(JSON.parse((save![1] as { spec: string }).spec).parameters.Width.value).toBe("2in");
-  expect(plan![0]).toBe("family.plan");
-  expect(plan![1]).toEqual({
-    source: { pod: "p", path: "settings/family/box-saved.json", sha256: "b".repeat(64) },
-  });
-  expect(pages).toContainEqual({ path: "settings/family/box-saved.json" });
+  // One call: the plan. No capture saves the draft as a member first.
+  expect(client.runSemanticAction.mock.calls.map(([key]) => key)).toEqual(["family.plan"]);
+  const { source } = client.runSemanticAction.mock.calls[0]![1] as {
+    source: { pod: string; path: string; content: string };
+  };
+  expect(source).toMatchObject({ pod: "p", path: "staged/box.json" });
+  expect(source).not.toHaveProperty("sha256");
+  const sent = JSON.parse(source.content);
+  expect(sent.parameters.Width.value).toBe("2in");
+  expect(sent.$schema).toMatch(/\/schemas\/settings\/FamilyFoundry\/models\.json$/);
+  // The host binds the plan to the draft by these bytes, ignoring the stamp.
+  const { $schema: _, ...rest } = sent;
+  expect(rest).toEqual(JSON.parse(draftSpec(doc)!));
+  expect(pages).toEqual([]);
   expect(sheet.entries[0]).toMatchObject({ planHash: "h" });
 });
