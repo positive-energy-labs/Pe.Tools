@@ -6,7 +6,8 @@
 import type { RevitContextViewImage, TakeoffsCandidates } from "@pe/host-contracts/generated";
 import type { TargetResolution } from "@pe/agent-contracts";
 
-import { callHostRpc, hostUrl } from "#/host/client";
+import { hostUrl } from "#/host/client";
+import { readOwnerCrops } from "#/takeoff/host";
 import { HOST_QUERY_KEY, useHostCall, useHostOp } from "#/readings";
 import type { TakeoffPlanImage } from "#/takeoff/level-plan";
 
@@ -97,19 +98,7 @@ export function useOwnerCrops(resolution: TargetResolution, views: readonly stri
       : undefined;
   const owners = [...new Set(views)].sort();
   const call = useHostCall(
-    async () => {
-      const crops = new Map<string, OwnerCrop | null>();
-      for (const view of owners) {
-        const read = await callHostRpc(
-          "takeoffs.candidates",
-          { view },
-          { bridgeSessionId: document?.session, openDocumentId: document?.openId },
-        );
-        for (const region of read.regions)
-          crops.set(`${view}:${region.elementId}`, region.ownerCrop ?? null);
-      }
-      return crops;
-    },
+    () => readOwnerCrops(document!, owners),
     [...HOST_QUERY_KEY, "owner-crops", document?.session ?? "", document?.openId ?? "", ...owners],
     Boolean(document && owners.length),
   );
