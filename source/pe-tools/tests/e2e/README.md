@@ -9,12 +9,15 @@ Rules (rulings-1640 §1): act only through real controls with trusted input, ass
 - **Cost:** each Pea turn spends the user's OpenAI credit. Run a journey once, when it is ready. Never loop a Pea turn to debug a selector; debug selectors on a non-Pea route.
 - **Failures:** a turn that fails for credit or model reasons reports `BLOCKED: <exact status message>`, not a product failure.
 
-Run: `chrome-agent launch --headless`, then `E2E_WEB=… E2E_LABEL=green node tests/e2e/j<N>.ts` from `source/pe-tools`. Revit journeys also take `E2E_TARGET`, `E2E_ROWS`, `E2E_PARAM` and `E2E_VALUE`.
+Run: `chrome-agent launch --headless --port 924x` (your own instance), then `CDP_PORT=924x E2E_WEB=… E2E_LABEL=green node tests/e2e/j<N>.ts` from `source/pe-tools`. **Ports:** hold operators own 9222, 9223 and 9231; workers pick a free 924x and never launch or drive those three. `CDP_PORT` has no default; unset, the lane stops with `PRECONDITION: CDP_PORT`. Revit journeys also take `E2E_TARGET`, `E2E_ROWS`, `E2E_PARAM` and `E2E_VALUE`; J3 and J4 also take `E2E_POD`.
 
 A missing precondition (no Revit bridge, no seed, wrong chips) ends as `RESULT: BLOCKED — …`, never `FAIL`.
 
 ## Revit data per journey
 
+- **Verbs** are located by their word plus any count badge (`PLAN` matches `plan`, `plan 1`, `re-plan`) inside the Situation, never by exact text.
+- **`E2E_POD` (J3, J4):** draft-first plans staged cells only once the Situation names the pod the run is filed in. `choosePod()` picks it by name through the real ladder (`choose a pod`, then the pod). Plan files nothing in the pod; the pod only holds the run. Unset, the journey stops as `BLOCKED — PRECONDITION: E2E_POD`.
+- **`E2E_ROWS`:** pick types that carry `E2E_PARAM`. A blank cell means the type lacks the parameter and renders no editor; `setCell`/`clickCell` then stop as `PRECONDITION: <row> has no <param>` (J3 on 666a58e lost a run to Balancing Damper this way).
 - **J3 `E2E_ROWS`:** two rows whose apply is natively clean for a plain text write. Not Mechanical Damper (F-J3-2: its connector reconciliation fails a plain text write), and `E2E_PARAM` is not a Yes/No parameter. The stale-refusal check reads the proposals band row: the Revit value struck, then `→ {edited}`.
 - **J4:** one row whose `E2E_PARAM` is a non-empty text parameter. The band row must say `by you`; no visible grid or band control may say delete/remove.
 

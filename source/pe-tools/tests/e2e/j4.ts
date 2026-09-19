@@ -1,7 +1,17 @@
 // E2E-J4 · Clearing a value is a change you can apply. /families, real Revit (joint-hold slot).
-// E2E_ROWS = 1 row whose E2E_PARAM is a non-empty text parameter.
+// E2E_ROWS = 1 row whose E2E_PARAM is a non-empty text parameter; E2E_POD.
 // Red break: restore the old empty→unstage codec → the cleared cell shows its baseline again.
-import { expectText, journey, requireRevit, revit, CTRL, type Page } from "./cdp.ts";
+import {
+  choosePod,
+  CTRL,
+  expectText,
+  journey,
+  PLAN,
+  requireRevit,
+  revit,
+  SITUATION,
+  type Page,
+} from "./cdp.ts";
 
 const SHEET = '[aria-label="Confirmation sheet"]';
 const APPLY = /^apply \d+ rows?$/;
@@ -15,6 +25,10 @@ await journey("J4", async (page, step) => {
   const baseline = (await page.readCell(row, param))?.value;
   if (!baseline)
     throw new Error(`PRECONDITION: ${row.join("/")} × ${param} must hold text to clear`);
+
+  // Draft-first: plan refuses staged cells until the pod the run is filed in is chosen.
+  step(`choose pod ${process.env.E2E_POD ?? "(unset)"}`);
+  await choosePod(page);
 
   step("select the cell, select-all + Delete, Enter");
   await page.clickCell(row, param);
@@ -34,7 +48,7 @@ await journey("J4", async (page, step) => {
   await noDelete(page, "while staged");
 
   step("click plan, apply");
-  await page.click("plan");
+  await page.click(PLAN, SITUATION);
   await page.until(() => page.has(APPLY, SHEET), "the confirmation sheet", 120_000);
   await page.click(APPLY, SHEET);
   await page
