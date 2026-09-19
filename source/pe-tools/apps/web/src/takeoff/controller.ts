@@ -522,7 +522,10 @@ export function useTakeoffsController(options: {
         view: string,
         elementId: number,
         next: Partial<Pick<AdoptDraft, "checked" | "name" | "systemTag">>,
-      ) =>
+      ) => {
+        // The row's whole draft, so `adopt` reads a ticked candidate from Work alone (29).
+        const row = adoptRows?.find((r) => r.view === view && r.region.elementId === elementId);
+        const draft = row && { checked: row.checked, name: row.name, systemTag: row.systemTag };
         void handle.work.write(
           transitionPatches(
             ["adopt"],
@@ -530,10 +533,11 @@ export function useTakeoffsController(options: {
             {},
             {
               kind: "stage",
-              rung: { value: { ...adoptPatches[`${view}:${elementId}`], ...next } },
+              rung: { value: { ...adoptPatches[`${view}:${elementId}`], ...draft, ...next } },
             },
           ),
-        ),
+        );
+      },
       patchRoom: (id: string, next: RoomEdit) => void stageEdit(id, next),
       decideRoom: (room: ModelRoom, flag: string, verdict: "accept" | "dismiss") =>
         void handle.work.write(
@@ -557,6 +561,7 @@ export function useTakeoffsController(options: {
       handle.actions,
       handle.work,
       adoptPatches,
+      adoptRows,
       review,
       stageEdit,
       setPage,

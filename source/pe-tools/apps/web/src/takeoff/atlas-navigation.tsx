@@ -10,6 +10,7 @@ import { onPlan } from "#/takeoff/room-actions";
 import { ZoneStateBar } from "#/takeoff/zone-state-bar";
 import { ZoneThumb } from "#/takeoff/zone-plan";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
+import { levelsOf } from "#/takeoff/plan-image";
 
 export function AtlasNavigation() {
   const {
@@ -82,9 +83,10 @@ export function AtlasNavigation() {
         <List
           aria-label="zones"
           region="zones"
-          // Lanes in the world's order; each lane is a sticky group head with its count.
-          items={world.lanes.flatMap((lane) =>
-            filteredZones.filter((z) => z.zone.lane.label === lane.label),
+          // Levels in the world's order, each once: many view lanes share a level (29). Each level
+          // is a sticky group head with its count.
+          items={levelsOf(world.lanes).flatMap((label) =>
+            filteredZones.filter((z) => z.zone.lane.label === label),
           )}
           keyOf={(z) => z.zone.guid}
           labelOf={(z) => `${z.zone.key} ${z.name}`}

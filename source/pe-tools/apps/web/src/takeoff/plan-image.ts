@@ -63,6 +63,11 @@ export const planView = (
 ): string | undefined =>
   views.find((view) => lanes.some((lane) => lane.view === view && lane.label === level));
 
+/** Each level once, in lane order: a lane is a view, and many views share a level (29). */
+export const levelsOf = (lanes: readonly { label: string }[]): string[] => [
+  ...new Set(lanes.map((lane) => lane.label)),
+];
+
 export function usePlanImage(resolution: TargetResolution, view: string | undefined) {
   const document =
     resolution.kind === "resolved" && resolution.target.kind === "document"

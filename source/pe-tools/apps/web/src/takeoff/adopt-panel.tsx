@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, type ComponentProps } from "react";
 import { showAdopt, TakeoffProposalRows } from "#/takeoff/proposals";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
@@ -16,6 +16,27 @@ export interface AdoptRow {
   checked: boolean;
   name: string;
   systemTag: string;
+}
+
+/** A text field that writes Work once, on blur or Enter, never per keystroke (29). */
+function CommitInput({
+  value,
+  onCommit,
+  ...props
+}: Omit<ComponentProps<typeof Input>, "value" | "defaultValue" | "onChange"> & {
+  value: string;
+  onCommit: (next: string) => void;
+}) {
+  return (
+    <Input
+      {...props}
+      // Remounts on a landed value, so Work stays the one source between edits.
+      key={value}
+      defaultValue={value}
+      onBlur={(e) => e.target.value !== value && onCommit(e.target.value)}
+      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+    />
+  );
 }
 
 export function AdoptRegions({ store }: { store: TakeoffsController }) {
@@ -70,21 +91,19 @@ export function AdoptRegions({ store }: { store: TakeoffsController }) {
               </span>
               <span className="w-16">{fmtNum(r.region.sqft, 0)} sf</span>
               <div className="min-w-0 flex-1">
-                <Input
+                <CommitInput
                   aria-label={`Zone name for region ${r.region.elementId} in ${r.view}`}
                   value={r.name}
                   placeholder="zone name"
-                  onChange={(e) => patchRow(r.view, r.region.elementId, { name: e.target.value })}
+                  onCommit={(name) => patchRow(r.view, r.region.elementId, { name })}
                 />
               </div>
               <div className="w-24">
-                <Input
+                <CommitInput
                   aria-label={`System tag for region ${r.region.elementId} in ${r.view}`}
                   value={r.systemTag}
                   placeholder="system tag"
-                  onChange={(e) =>
-                    patchRow(r.view, r.region.elementId, { systemTag: e.target.value })
-                  }
+                  onCommit={(systemTag) => patchRow(r.view, r.region.elementId, { systemTag })}
                 />
               </div>
               {r.region.role === "zoning-region" && (

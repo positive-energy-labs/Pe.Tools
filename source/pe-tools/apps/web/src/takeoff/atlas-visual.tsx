@@ -6,6 +6,7 @@ import { LevelPlan } from "#/takeoff/level-plan";
 import { LevelStats } from "#/takeoff/level-stats";
 import { ZoneCard } from "#/takeoff/zone-card";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
+import { levelsOf } from "#/takeoff/plan-image";
 
 export function AtlasVisual() {
   const {
@@ -51,14 +52,16 @@ export function AtlasVisual() {
               ariaLabel="level"
               value={level}
               onChange={setLevel}
-              options={world.lanes.map((lane) => {
-                const zs = world.zones.filter((z) => z.zone.lane.label === lane.label);
+              options={levelsOf(world.lanes).map((label) => {
+                const lanes = world.lanes.filter((lane) => lane.label === label);
+                const captured = lanes.filter((lane) => lane.replayPath).length;
+                const zs = world.zones.filter((z) => z.zone.lane.label === label);
                 const calls = zs.reduce((n, z) => n + zoneCalls(z), 0);
                 return {
-                  value: lane.label,
+                  value: label,
                   label: (
                     <>
-                      {lane.label}
+                      {label}
                       <span className="ml-1">{zs.length}</span>
                       {calls > 0 && (
                         <span className="ml-1" data-tone="alarm">
@@ -67,7 +70,7 @@ export function AtlasVisual() {
                       )}
                     </>
                   ),
-                  title: `${lane.view}${lane.replayPath ? " · captured this session" : " · not captured yet"}`,
+                  title: `${lanes.length} view${lanes.length === 1 ? "" : "s"} on this level · ${captured} captured this session`,
                 };
               })}
             />

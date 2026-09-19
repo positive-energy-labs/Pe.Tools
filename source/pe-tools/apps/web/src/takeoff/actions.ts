@@ -204,23 +204,36 @@ export const takeoffReadingHealth = (reading: Reading<TakeoffSnapshot>): string 
     : reading.state === "ready"
       ? takeoffHealth(reading.observation)
       : null;
+/**
+ * What `adopt` stamps: each staged ticked choice on a chosen view (a tick stages the row's whole
+ * draft, so an unstamped candidate needs nothing from `zoneFrs`, which holds only stamped regions),
+ * plus each stamped region nobody touched, re-adopted in place (29).
+ */
 const adoption = (ctx: Ctx) => {
+  const choices = ctx.work.doc ? stagedAdoptChoices(ctx.work.doc) : {};
   const grouped = new Map<string, { elementId: number; name: string; systemTag: string }[]>();
-  for (const region of currentSnapshot(ctx)?.zoneFrs ?? []) {
-    if (!ctx.page.views.includes(region.view)) continue;
-    const patch = ctx.work.doc
-      ? stagedAdoptChoices(ctx.work.doc)[`${region.view}:${region.elementId}`]
-      : undefined;
-    if (!(patch?.checked ?? region.role === "zoning-region")) continue;
-    const meta = region.role === "zoning-region" ? readZoneMeta(region.blob) : null;
-    const items = grouped.get(region.view) ?? [];
-    items.push({
-      elementId: region.elementId,
-      name:
-        patch?.name ?? (meta?.name || region.typeName || `${region.view} ? ${region.elementId}`),
-      systemTag: patch?.systemTag ?? meta?.systemTag ?? "",
+  const add = (view: string, item: { elementId: number; name: string; systemTag: string }) =>
+    grouped.set(view, [...(grouped.get(view) ?? []), item]);
+  for (const [key, choice] of Object.entries(choices)) {
+    const cut = key.lastIndexOf(":");
+    const view = key.slice(0, cut);
+    const elementId = Number(key.slice(cut + 1));
+    if (!choice.checked || !ctx.page.views.includes(view)) continue;
+    add(view, {
+      elementId,
+      name: choice.name || `${view} · ${elementId}`,
+      systemTag: choice.systemTag ?? "",
     });
-    grouped.set(region.view, items);
+  }
+  for (const region of currentSnapshot(ctx)?.zoneFrs ?? []) {
+    if (region.role !== "zoning-region" || !ctx.page.views.includes(region.view)) continue;
+    if (`${region.view}:${region.elementId}` in choices) continue;
+    const meta = readZoneMeta(region.blob);
+    add(region.view, {
+      elementId: region.elementId,
+      name: meta.name || region.typeName || `${region.view} · ${region.elementId}`,
+      systemTag: meta.systemTag,
+    });
   }
   return [...grouped].map(([view, items]) => ({ view, items }));
 };

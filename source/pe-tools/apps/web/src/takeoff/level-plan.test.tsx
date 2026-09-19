@@ -2,7 +2,7 @@
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, expect, test } from "vite-plus/test";
 
-import { fitFrame, type Point2 } from "#/lib/affine-frame";
+import { contentViewport, fitFrame, type Point2 } from "#/lib/affine-frame";
 import { LevelPlan, PlanImageLayer, type TakeoffPlanImage } from "#/takeoff/level-plan";
 import { PLAN_REFUSAL, planOf, planView } from "#/takeoff/plan-image";
 import { mockModel } from "#/takeoff/proto/mock";
@@ -144,4 +144,121 @@ test("two lanes on one level: the plan image follows the chosen view, not the fi
   // A level with no chosen view on it draws no image: a label never picks a view.
   expect(planView(lanes, [], "Level 1/Main Level")).toBeUndefined();
   expect(planView(lanes, ["Other"], "Level 1/Main Level")).toBeUndefined();
+});
+
+/* ── 29: the Guest House crop (45°) on projectA, HOLD 5 leg B, drawn outside the plan ──────── */
+
+// `vi-GuestHouse.out.txt`: the registration Revit returned for "Main Lvl Guest House Controls".
+const GUEST_HOUSE: TakeoffPlanImage["registration"] = {
+  width: 1500,
+  height: 780,
+  topLeft: [494.45282510569484, 799.0979518151169],
+  topRight: [582.1340659728313, 886.7791926822446],
+  bottomLeft: [540.0612124922252, 753.489564428582],
+};
+// `geom-gh-on.json`: the six zone paths' boxes in the page's viewBox (0..217.96 x 0..167.63), and
+// the matrix the page put on the image. The level plan's frame is scale 1 (contentViewport), so the
+// zones' model bounds are the viewBox less its 3% padding: x 232.58..438.20, y 570.90..726.19 ft.
+const DRAWN_MATRIX = [
+  0.058454160578090976, -0.05845416057808514, 0.05847229152119276, 0.058472291521198594,
+  268.0446759374381, -66.73636138527343,
+];
+const ZONE_BOXES_PX = [
+  [57, 102, 107, 161],
+  [64, 50, 120, 116],
+  [144, 6, 212, 67],
+  [153, 57, 184, 84],
+  [6, 114, 42, 148],
+  [101, 9, 163, 68],
+] as const;
+const ZONE_BOUNDS = { minX: 232.5771, minY: 570.9002, maxX: 438.2021, maxY: 726.1925 };
+
+type Box = { minX: number; minY: number; maxX: number; maxY: number };
+const boxOf = (points: readonly Point2[]): Box => ({
+  minX: Math.min(...points.map((p) => p[0])),
+  minY: Math.min(...points.map((p) => p[1])),
+  maxX: Math.max(...points.map((p) => p[0])),
+  maxY: Math.max(...points.map((p) => p[1])),
+});
+const overlaps = (a: Box, b: Box) =>
+  a.minX < b.maxX && b.minX < a.maxX && a.minY < b.maxY && b.minY < a.maxY;
+/** The image's four corners as the layer draws them, in the plan's viewBox. */
+function drawnCorners(registration: TakeoffPlanImage["registration"], bounds: Box) {
+  const { viewport, padding } = contentViewport(bounds, 0.03);
+  const frame = fitFrame(bounds, viewport, { padding, yAxis: "up" });
+  const { container, unmount } = render(
+    <svg>
+      <PlanImageLayer plan={{ href: "x.png", registration }} frame={frame} />
+    </svg>,
+  );
+  const m = container
+    .querySelector("image")!
+    .getAttribute("transform")!
+    .replace(/^matrix\(|\)$/g, "")
+    .split(",")
+    .map(Number);
+  unmount();
+  const at = ([u, v]: Point2): Point2 => [
+    m[0]! * u + m[2]! * v + m[4]!,
+    m[1]! * u + m[3]! * v + m[5]!,
+  ];
+  const { width: w, height: h } = registration;
+  return { matrix: m, frame, viewport, corners: [at([0, 0]), at([w, 0]), at([w, h]), at([0, h])] };
+}
+
+/*
+ * Red first, as asked: "the drawn image overlaps the zone paths" failed on these numbers. It cannot
+ * pass through any faithful transform: the page drew exactly what the registration says, and in
+ * model feet the registration lies wholly apart from every zone. The disagreement is upstream of
+ * the web (NEEDS-CONTRACT to domains, # 29), so the test pins the web's half.
+ */
+test("Guest House: the web draws the registration faithfully; in model XY it misses every zone", () => {
+  const { matrix, frame, corners } = drawnCorners(GUEST_HOUSE, ZONE_BOUNDS);
+  // The page ran this transform on these numbers: same matrix as captured live.
+  matrix.forEach((value, i) => expect(value).toBeCloseTo(DRAWN_MATRIX[i]!, 3));
+  // Each pixel corner lands where the zones' frame draws the corner's model point.
+  const { topLeft, topRight, bottomLeft } = GUEST_HOUSE;
+  for (const [got, want] of [
+    [corners[0]!, topLeft],
+    [corners[1]!, topRight],
+    [corners[3]!, bottomLeft],
+  ] as const) {
+    expect(got[0]).toBeCloseTo(frame.toViewport(want)[0], 6);
+    expect(got[1]).toBeCloseTo(frame.toViewport(want)[1], 6);
+  }
+  const image = boxOf(corners);
+  const zonesPx = ZONE_BOXES_PX.map(([minX, minY, maxX, maxY]) => ({ minX, minY, maxX, maxY }));
+  expect(zonesPx.some((zone) => overlaps(image, zone))).toBe(false);
+  // The same miss in model feet, before any web transform: registration x 494..628, y 753..887.
+  const bottomRight: Point2 = [
+    topRight[0] + bottomLeft[0] - topLeft[0],
+    topRight[1] + bottomLeft[1] - topLeft[1],
+  ];
+  expect(overlaps(boxOf([topLeft, topRight, bottomLeft, bottomRight]), ZONE_BOUNDS)).toBe(false);
+});
+
+test("an axis-aligned crop over a zone draws over that zone, corner for corner", () => {
+  const zone = { minX: 100, minY: 200, maxX: 140, maxY: 230 };
+  // A 60 x 40 ft crop around the zone, exported at 1500 x 1000 px, image up = model +Y.
+  const registration: TakeoffPlanImage["registration"] = {
+    width: 1500,
+    height: 1000,
+    topLeft: [90, 235],
+    topRight: [150, 235],
+    bottomLeft: [90, 195],
+  };
+  const { frame, corners } = drawnCorners(registration, zone);
+  expect(corners[0]![0]).toBeCloseTo(frame.toViewport([90, 235])[0], 6);
+  expect(corners[0]![1]).toBeCloseTo(frame.toViewport([90, 235])[1], 6);
+  expect(corners[2]![0]).toBeCloseTo(frame.toViewport([150, 195])[0], 6);
+  expect(corners[2]![1]).toBeCloseTo(frame.toViewport([150, 195])[1], 6);
+  const drawnZone = boxOf([
+    frame.toViewport([zone.minX, zone.minY]),
+    frame.toViewport([zone.maxX, zone.maxY]),
+  ]);
+  const image = boxOf(corners);
+  expect(image.minX).toBeLessThan(drawnZone.minX);
+  expect(image.minY).toBeLessThan(drawnZone.minY);
+  expect(image.maxX).toBeGreaterThan(drawnZone.maxX);
+  expect(image.maxY).toBeGreaterThan(drawnZone.maxY);
 });
