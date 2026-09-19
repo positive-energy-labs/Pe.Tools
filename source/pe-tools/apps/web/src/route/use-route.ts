@@ -4,6 +4,7 @@
  * a resolution, its Work, its Readings, its Page, and one handle per action. Public handles return
  * structured Refusals (`route/refusal.ts`).
  */
+import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
 import { frozenDemo } from "#/host/demo-client";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
@@ -45,6 +46,7 @@ import {
   dirty,
   readingAtom,
   peReadings,
+  inventoryOf,
   previousOf,
   targetInventory,
   type Readings,
@@ -580,6 +582,12 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
   readonly readings: Readonly<Record<R, Reading<unknown>>>;
   /** The bridge inventory the resolution reads; a seed's `inventory` reading when seeded. */
   readonly inventory: Reading<unknown>;
+  /**
+   * The exact document this route was bound to (session › openId) is gone from the live
+   * inventory. Its sentence is every verb's refusal; `reopened` is the same title open under a
+   * new openId in that session, offered first and never taken for the person (F-X-1).
+   */
+  readonly bindingLost: BindingLost | null;
   readonly page: readonly [P, (next: Partial<P>) => void];
   readonly actions: Readonly<Record<A, ActionHandle>>;
   readonly busy: { readonly key: A; readonly seconds: number } | null;
@@ -591,6 +599,27 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
   readonly log: readonly LogEntry[];
   readonly demo: boolean;
 }
+
+export interface BindingLost {
+  readonly ref: { readonly session: string; readonly openId: string };
+  readonly title: string | null;
+  readonly sentence: string;
+  readonly reopened: { readonly openId: string; readonly title: string } | null;
+}
+
+/** The inventory's open documents, keyed `session/openId`, with their titles. */
+const openTitles = (inventory: Reading<unknown>) => {
+  const observed = previousOf(inventory) as
+    | { sessions?: readonly BridgeSessionListEntry[] }
+    | undefined;
+  return new Map(
+    inventoryOf(observed?.sessions ?? []).flatMap((session) =>
+      (session.openDocuments ?? []).map(
+        (doc) => [`${session.sessionId}/${doc.openId}`, doc.title] as const,
+      ),
+    ),
+  );
+};
 
 /**
  * `?target` accepts a schema-validated JSON DocumentRequest for exact picker selections.
@@ -750,6 +779,39 @@ export function useRoute<W, R extends string, P, A extends string>(
     if (needs.needs === "session" && !needs.target) return { kind: "choose", reason: "missing" };
     return resolveCallTarget(needs as never, request, inventory);
   }, [seed, manifest.needs, inventoryResult, defaultDocument, target]);
+
+  // A bound exact document that left the inventory: named, with the title it last had, and the
+  // same title reopened in its session offered. Titles seen are remembered for exactly this.
+  const seenTitles = useRef(new Map<string, string>());
+  const open = useMemo(() => openTitles(inventoryResult), [inventoryResult]);
+  for (const [id, title] of open) seenTitles.current.set(id, title);
+  const bindingLost = useMemo((): BindingLost | null => {
+    if (seed || resolution.kind !== "choose") return null;
+    if (resolution.reason !== "document-closed" && resolution.reason !== "session-gone")
+      return null;
+    const chosen = parseTarget(target);
+    const request = chosen?.kind === "request" ? chosen.request : defaultDocument;
+    if (request?.kind !== "open") return null;
+    const { ref } = request;
+    const title = seenTitles.current.get(`${ref.session}/${ref.openId}`) ?? null;
+    const reopened =
+      title === null
+        ? null
+        : ([...open].find(
+            ([id, other]) =>
+              other === title &&
+              id.startsWith(`${ref.session}/`) &&
+              id !== `${ref.session}/${ref.openId}`,
+          ) ?? null);
+    return {
+      ref,
+      title,
+      sentence: `the document this page was bound to closed (${title ?? "untitled"} · ${ref.openId.slice(0, 8)}…); bind it again in the sentence above`,
+      reopened: reopened
+        ? { openId: reopened[0].slice(ref.session.length + 1), title: reopened[1] }
+        : null,
+    };
+  }, [seed, resolution, target, defaultDocument, open]);
 
   // The Work key is the resolved document's Address, so a session-key `?target` and an Address
   // `?target` for the same document read and write the same Work.
@@ -966,6 +1028,7 @@ export function useRoute<W, R extends string, P, A extends string>(
   const actions = useMemo(() => {
     const targetRefusal = (needs: NonNullable<typeof manifest.needs> | "host") => {
       if (needs === "host") return null;
+      if (bindingLost) return bindingLost.sentence;
       if (resolution.kind !== "resolved")
         return resolution.kind === "checking" ? "checking the target" : `pick a ${needs}`;
       if (needs === "session") return resolution.target.kind === "host" ? "pick a session" : null;
@@ -1089,6 +1152,7 @@ export function useRoute<W, R extends string, P, A extends string>(
     doc,
     workCurrent,
     sliceResult,
+    bindingLost,
     writer,
     writeWork,
     owner,
@@ -1135,6 +1199,7 @@ export function useRoute<W, R extends string, P, A extends string>(
     work: workHandle,
     readings,
     inventory: seededReadings ? (seededReadings.inventory ?? { state: "absent" }) : inventoryResult,
+    bindingLost,
     page: [page, setPage] as const,
     actions,
     busy,

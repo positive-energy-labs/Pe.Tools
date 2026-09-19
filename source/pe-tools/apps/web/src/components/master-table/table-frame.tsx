@@ -27,7 +27,8 @@ export interface TableFrameProps<Row extends RowData> {
   summary?: ReactNode;
   /** Present, the strip draws a free-text search over the searchable columns. */
   searchPlaceholder?: string;
-  /** Route-owned filters narrowing the rows before the table sees them: one chip each. */
+  /** Route-owned filters narrowing the rows before the table sees them: one chip each. Present
+   * (even empty), the chip row reserves its line, so a chip appearing never moves the grid. */
   chips?: { label: string; onClear: () => void }[];
   filters?: ReactNode;
   modes?: ReactNode;
@@ -46,7 +47,7 @@ export function TableFrame<Row extends RowData>({
   onStateChange,
   summary,
   searchPlaceholder,
-  chips = [],
+  chips,
   filters,
   modes,
   actions,
@@ -64,7 +65,7 @@ export function TableFrame<Row extends RowData>({
     onStateChange({ ...state, filters: next });
   };
   const narrowed =
-    filters != null || chips.length > 0 || Boolean(state.query) || filtered.length > 0;
+    filters != null || chips !== undefined || Boolean(state.query) || filtered.length > 0;
   return (
     <ArtifactFrame
       className="flex min-h-0 flex-1 flex-col"
@@ -115,10 +116,10 @@ export function TableFrame<Row extends RowData>({
       {narrowed && (
         <div
           data-slot="table-filters"
-          className="flex shrink-0 flex-wrap items-center gap-2 px-2 py-1 hairline-b"
+          className="flex min-h-(--item-h) shrink-0 flex-wrap items-center gap-2 px-2 py-1 hairline-b"
         >
           {filters}
-          {chips.map((chip) => (
+          {chips?.map((chip) => (
             <NarrowChip
               key={chip.label}
               label={chip.label}

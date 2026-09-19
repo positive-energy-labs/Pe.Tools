@@ -220,7 +220,6 @@ export function FamiliesProposalsBand() {
   const entries = familyCellEntries(cells).filter(
     (entry) => entry.cell.proposal != null || entry.cell.staged != null,
   );
-  if (!entries.length) return null;
   const current = (entry: (typeof entries)[number]) => {
     const key = params.find((param) => param.name === entry.parameter)?.key;
     const row = rows.find((r) => r.familyId === entry.familyId && r.typeName === entry.typeName);
@@ -266,36 +265,44 @@ export function FamiliesProposalsBand() {
           />
         </span>
       </div>
-      {outcome ? (
-        <OutcomeLine
-          kind={outcome.refusal ? "refused" : "receipt"}
-          label={fanOutWord(outcome)}
-          says={outcome.refusal ? "nothing was written" : undefined}
-        />
-      ) : null}
-      {entries.map((entry) => (
-        <ReviewRow
-          key={entry.key}
-          wire={wire}
-          address={entry.key}
-          label={
-            <span className="face-mono text-ink-2" data-proposal-row={entry.key}>
-              {(entry.cell.proposal ?? entry.cell.staged)?.value.familyName ?? "family"} ·{" "}
-              {entry.typeName} · {entry.parameter}
-            </span>
-          }
-          cell={entry.cell}
-          facts={{
-            value: (
-              <ValueDiff
-                from={current(entry)}
-                to={(entry.cell.staged ?? entry.cell.proposal)?.value.value ?? ""}
-              />
-            ),
-          }}
-          show={(value) => familyCellValueSchema.parse(value).value}
-        />
-      ))}
+      {/* F-R4-1: staging never moves the grid under the person. The band is always drawn and its
+          list is ONE fixed block that scrolls itself, so a staged cell (or a fan-out outcome)
+          adds a line here, never height above the grid. */}
+      <div data-slot="proposals-list" className="h-[calc(var(--item-h)*3)] overflow-y-auto">
+        {outcome ? (
+          <OutcomeLine
+            kind={outcome.refusal ? "refused" : "receipt"}
+            label={fanOutWord(outcome)}
+            says={outcome.refusal ? "nothing was written" : undefined}
+          />
+        ) : null}
+        {entries.length === 0 ? (
+          <span className="t-small text-ink-2">nothing proposed or staged</span>
+        ) : null}
+        {entries.map((entry) => (
+          <ReviewRow
+            key={entry.key}
+            wire={wire}
+            address={entry.key}
+            label={
+              <span className="face-mono text-ink-2" data-proposal-row={entry.key}>
+                {(entry.cell.proposal ?? entry.cell.staged)?.value.familyName ?? "family"} ·{" "}
+                {entry.typeName} · {entry.parameter}
+              </span>
+            }
+            cell={entry.cell}
+            facts={{
+              value: (
+                <ValueDiff
+                  from={current(entry)}
+                  to={(entry.cell.staged ?? entry.cell.proposal)?.value.value ?? ""}
+                />
+              ),
+            }}
+            show={(value) => familyCellValueSchema.parse(value).value}
+          />
+        ))}
+      </div>
     </section>
   );
 }
