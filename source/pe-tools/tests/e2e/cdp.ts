@@ -1,13 +1,16 @@
 // The whole e2e helper: trusted CDP input on a real control, and reads of the rendered DOM.
 // No element.click(), no handlers, no stores, no fetch. Runtime.evaluate only locates and reads.
-// Browser: `chrome-agent launch --headless`; pass its port as CDP_PORT.
+// Browser: your own `chrome-agent launch --headless --port 924x`; pass that port as CDP_PORT.
+// Hold operators own 9222/9223/9231, so there is no default port.
 import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export type Page = Awaited<ReturnType<typeof connect>>;
 
-export async function connect(port = Number(process.env.CDP_PORT ?? 9223)) {
+export async function connect(port = Number(process.env.CDP_PORT)) {
+  if (!port)
+    throw new Error("PRECONDITION: CDP_PORT (your own chrome-agent's port, 924x) is unset");
   const targets = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()) as {
     type: string;
     webSocketDebuggerUrl: string;
@@ -116,14 +119,26 @@ export async function connect(port = Number(process.env.CDP_PORT ?? 9223)) {
           clickCount: 1,
         });
     },
-    /** Click a grid cell's input: the row whose text has every `row` word, under header `column`. */
+    /**
+     * Click a grid cell's editor: the row whose text has every `row` word, under header `column`.
+     * A cell with no editor (blank = the type lacks the parameter) is a PRECONDITION, not a no-op.
+     */
     async clickCell(row: string[], column: string) {
+      const cell = await page.until(
+        () =>
+          read<"editor" | "none" | null>(
+            `(() => { const td = ${cellOf(row, column)}; return td ? (td.querySelector(${JSON.stringify(EDITOR)}) ? "editor" : "none") : null; })()`,
+          ),
+        `cell ${row.join("/")} × ${column}`,
+      );
+      if (cell === "none")
+        throw new Error(`PRECONDITION: ${row.join("/")} has no ${column} (the cell has no editor)`);
       const box = await page.until(
         () =>
           read<{ x: number; y: number } | null>(
-            center(`${cellOf(row, column)}?.querySelector("input") ?? ${cellOf(row, column)}`),
+            center(`${cellOf(row, column)}.querySelector(${JSON.stringify(EDITOR)})`),
           ),
-        `cell ${row.join("/")} × ${column}`,
+        `cell ${row.join("/")} × ${column} editor`,
       );
       for (const type of ["mouseMoved", "mousePressed", "mouseReleased"])
         await send("Input.dispatchMouseEvent", {
@@ -242,6 +257,13 @@ export async function connect(port = Number(process.env.CDP_PORT ?? 9223)) {
   };
   return page;
 }
+
+/** The grid's cell editor, as master-table-state CELL_EDITOR; a read-only cell renders none. */
+const EDITOR = 'input:not([disabled]):not([aria-hidden="true"]),textarea:not([disabled])';
+
+/** A Situation verb by its word, whatever count badge it carries ("plan", "plan 1", "re-plan"). */
+export const PLAN = /^(re-)?plan\s*\d*$/;
+export const SITUATION = 'section[aria-label="Situation"]';
 
 const KEYS = {
   Enter: ["Enter", 13],
@@ -467,4 +489,22 @@ export async function sendChat(page: Page, text: string, ms = 300_000) {
         : `ASSERT the turn completes: FAILED — ${detail || "(no status detail)"}`,
     );
   }
+}
+
+/**
+ * Draft-first: staged cells plan only once the Situation names the pod the run is filed in. Pick
+ * E2E_POD through the real ladder ("choose a pod" → the pod). Plan files nothing in the pod; the
+ * pod only holds the run.
+ */
+export async function choosePod(page: Page) {
+  const pod = process.env.E2E_POD;
+  if (!pod) throw new Error("PRECONDITION: E2E_POD (the pod the run is filed in) is unset");
+  // The ladder's word is the chosen pod's name, or "choose a pod" while none is chosen.
+  if (await page.has(pod, SITUATION)) return;
+  if (!(await page.has("choose a pod", SITUATION)))
+    throw new Error(`PRECONDITION: another pod is chosen; pick ${pod} or reload the route`);
+  await page.click("choose a pod", SITUATION);
+  const name = pod.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  await page.click(new RegExp(`^${name}(\\s|$)`));
+  await page.until(() => page.has(pod, SITUATION), `the Situation to file in pod ${pod}`, 10_000);
 }

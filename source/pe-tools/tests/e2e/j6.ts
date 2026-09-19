@@ -3,7 +3,7 @@
 // Work document seeded for it by exec-proof. E2E_TARGET = that document's Address.
 // J6b: `E2E_PART=b` after the host is stopped: a failed read must not offer `start fresh`.
 // Red break: drop the UNREADABLE_WORK gate on startFresh (route/use-route.ts) → J6b shows it.
-import { expectText, journey, requireRevit, WEB } from "./cdp.ts";
+import { expectText, journey, PLAN, requireRevit, SITUATION, WEB } from "./cdp.ts";
 
 const TARGET = process.env.E2E_TARGET ?? "";
 const PART = process.env.E2E_PART ?? "a";
@@ -56,6 +56,6 @@ await journey(PART === "b" ? "J6b" : "J6", async (page, step) => {
 
   expectText(await page.text(), REFUSAL, "after: the refusal is gone", false);
   if (await page.has("start fresh")) throw new Error('ASSERT after: "start fresh" is gone');
-  if (!(await page.has("plan")))
+  if (!(await page.has(PLAN, SITUATION)))
     throw new Error('ASSERT after: the route shows its normal controls ("plan" verb)');
 });
