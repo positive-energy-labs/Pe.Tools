@@ -4,6 +4,7 @@ import { frozenDemo } from "#/host/demo-client";
 import {
   scheduleCatalogSchema,
   scheduleReadingSchema,
+  type ScheduleReading,
   type ActionStatus,
   type Reading,
   type RouteStatePatch,
@@ -107,7 +108,15 @@ export function LiveScheduleGridWorkspace({
     if (hasWork && basisId && page.captureId !== basisId) setPage({ captureId: basisId });
   }, [basisId, hasWork, page.captureId, setPage]);
 
-  const shown = hasWork && basisId ? saved : (retained ?? saved);
+  // Staged cells are keyed by the basis reading's rows. A later reading (a push's readback) is
+  // drawn only while its rows are the same elements in the same positions: written cells then show
+  // what Revit now holds, and a still-staged cell overlays the row it was staged on (F-S-1).
+  const shown =
+    hasWork && basisId
+      ? retained && saved && retained.id !== basisId && sameRows(saved, retained)
+        ? retained
+        : saved
+      : (retained ?? saved);
   const unresolved = receipts.some((row) =>
     ["running", "unknown", "incomplete"].includes(row.state),
   );
@@ -213,3 +222,13 @@ function ScheduleReceipts({
     </section>
   );
 }
+
+/** The same schedule rows: each row number stands for the same elements in both readings. */
+const sameRows = (a: ScheduleReading, b: ScheduleReading) =>
+  a.snapshot.scheduleUniqueId === b.snapshot.scheduleUniqueId &&
+  a.snapshot.rows.length === b.snapshot.rows.length &&
+  a.snapshot.rows.every(
+    (row, index) =>
+      row.rowNumber === b.snapshot.rows[index]!.rowNumber &&
+      JSON.stringify(row.subjectIds) === JSON.stringify(b.snapshot.rows[index]!.subjectIds),
+  );
