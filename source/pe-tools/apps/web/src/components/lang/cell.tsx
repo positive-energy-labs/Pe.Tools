@@ -148,7 +148,7 @@ export interface CellRefusal {
 }
 
 /** The refusal's words for Pea, folded away under the person's sentence. */
-export const RefusalDetail = ({ detail }: { detail: string }) => (
+const RefusalDetail = ({ detail }: { detail: string }) => (
   <details className="dl-refuse-detail">
     <summary>detail</summary>
     <span>{detail}</span>

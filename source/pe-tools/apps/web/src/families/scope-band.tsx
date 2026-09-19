@@ -27,11 +27,11 @@ const PLACEMENT_OPTIONS = (Object.keys(PLACEMENT_LABELS) as LoadedFamilyPlacemen
 );
 
 /** A scope in words: its categories, its families, its placement. */
-export const scopeWords = (scope: AppliedFilter) =>
+export const filterWords = (scope: AppliedFilter) =>
   `${scope.categoryNames.join(", ") || "every category"} · ${scope.familyNames.join(", ") || "every family"} · ${PLACEMENT_LABELS[scope.placementScope as LoadedFamilyPlacement]}`;
 
 /** Pea's scope proposal while it still stands (present, and not what is staged), else null. */
-export const standingScopeProposal = (scope: FamiliesRouteDocument["scope"]) =>
+export const standingFilterProposal = (scope: FamiliesRouteDocument["scope"]) =>
   scope.proposal && !sameValue(scope.proposal, scope.staged) ? scope.proposal.value : null;
 
 /**
@@ -39,16 +39,16 @@ export const standingScopeProposal = (scope: FamiliesRouteDocument["scope"]) =>
  * its verbs are exactly the contract's (`reviewTransitions`). A person's own apply stages beside
  * it, so a differing proposal stays drawn as the counter-proposal.
  */
-export function ScopeProposal({
+export function PeaFilterProposal({
   scope,
   wire,
 }: {
   scope: FamiliesRouteDocument["scope"];
   wire: CellWire;
 }) {
-  const proposed = standingScopeProposal(scope);
+  const proposed = standingFilterProposal(scope);
   if (!proposed) return null;
-  const show = (value: unknown) => scopeWords(value as AppliedFilter);
+  const show = (value: unknown) => filterWords(value as AppliedFilter);
   const scopeWire = { ...wire, segment: null };
   return (
     <div className="hairline-b flex flex-wrap items-baseline gap-1.5 px-2 py-1">
@@ -82,7 +82,7 @@ export function FamiliesFilterBand() {
   const scope = store.handle.work.doc?.scope;
   return (
     <>
-      {scope && !workUnreadable ? <ScopeProposal scope={scope} wire={wire} /> : null}
+      {scope && !workUnreadable ? <PeaFilterProposal scope={scope} wire={wire} /> : null}
       {/* ── scope: placement → draft categories → picked families, explicit apply ────────── */}
       <div className="hairline-b flex flex-wrap items-center gap-1.5 px-2 py-1">
         <SectionLabel>

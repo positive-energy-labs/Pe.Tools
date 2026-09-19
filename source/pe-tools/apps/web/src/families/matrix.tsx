@@ -5,7 +5,7 @@ import { TableFrame } from "#/components/master-table/table-frame";
 import { useContext, useMemo } from "react";
 
 import { nextPicks, pickedRowKeys } from "#/families/picks";
-import { scopeWords, standingScopeProposal } from "#/families/scope-band";
+import { filterWords, standingFilterProposal } from "#/families/scope-band";
 import { focusedTypes } from "#/families/staged";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 import { ChatFocus } from "#/route/situation";
@@ -31,7 +31,7 @@ export function FamiliesMatrix() {
   } = useFamiliesWorkspace();
   // Chat's group drill-in: only the types holding a pending cell under the focused path.
   const scope = store.handle.work.doc?.scope;
-  const proposed = scope ? standingScopeProposal(scope) : null;
+  const proposed = scope ? standingFilterProposal(scope) : null;
   const focus = useContext(ChatFocus);
   const focused = focus && focusedTypes(store.cells, focus);
   const focusKeys = focused
@@ -130,7 +130,7 @@ export function FamiliesMatrix() {
                   story="scope"
                   exit="accept it in the scope row above, or draft your own and press “apply scope”"
                 >
-                  Pea proposes {scopeWords(proposed)}, accept or deny
+                  Pea proposes {filterWords(proposed)}, accept or deny
                 </EmptyState>
               ) : (
                 <EmptyState
