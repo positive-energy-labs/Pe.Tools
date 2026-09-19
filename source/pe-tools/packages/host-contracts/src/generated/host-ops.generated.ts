@@ -2805,7 +2805,7 @@ export namespace RevitContextSummary {
   }
 }
 
-/** Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. Whole-view capture needs no transaction; focus capture sets a temporary crop box (clearing any scope box) and restores it afterward (editable document only). A cropped view also returns registration: the model XY of the image's top-left, top-right and bottom-left corners plus the image sha256, which places pixels under model geometry even on a rotated crop. A cropped view shows exactly its model crop: annotations outside the model crop are not drawn. */
+/** Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. Whole-view capture needs no transaction; focus capture sets a temporary crop box (clearing any scope box) and restores it afterward (editable document only). */
 export namespace RevitContextViewImage {
   export namespace Req {
     export interface Request {
@@ -2858,7 +2858,6 @@ export namespace RevitContextViewImage {
       viewScale?: number | null;
       modelRect?: null | RevitViewImageModelRect;
       sheetNumber?: null | string;
-      registration?: null | RevitViewImageRegistration;
     }
     export interface RevitAgentContextHandle {
       kind: RevitAgentContextHandleKind;
@@ -2869,28 +2868,13 @@ export namespace RevitContextViewImage {
       categoryName?: null | string;
     }
     /**
-     * Axis-aligned model-space XY bounds (feet) of the view's crop, when known. Not a pixel mapping on a
-     *                 rotated crop; use RevitViewImageRegistration to place pixels.
+     * Model-space XY extent covered by the exported image (feet), when known.
      */
     export interface RevitViewImageModelRect {
       minX: number;
       minY: number;
       maxX: number;
       maxY: number;
-    }
-    /**
-     * Where the PNG sits in the model: model XY (feet) of the image's top-left, top-right and bottom-left pixel
-     * corners, so a rotated crop stays honest. ImageSha256 binds it to exactly this file.
-     * Absent when the view has no active crop or the image's aspect disagrees with the crop's.
-     *
-     */
-    export interface RevitViewImageRegistration {
-      width: number;
-      height: number;
-      imageSha256: string;
-      topLeft: number[];
-      topRight: number[];
-      bottomLeft: number[];
     }
   }
 }
