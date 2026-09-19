@@ -1,5 +1,6 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
+using Pe.Shared.RevitData;
 
 namespace Pe.Revit.Takeoff;
 
@@ -282,7 +283,15 @@ public static class TakeoffAtlas
             role,
             guid,
             TakeoffCarriers.ReadProvenance(fr) ?? "",
-            loops);
+            loops,
+            owner is { CropBoxActive: true } && loops.Count > 0 ? OwnerCrop(owner.CropBox, loops) : null);
+    }
+
+    private static RevitCropCoverage OwnerCrop(BoundingBoxXYZ crop, List<List<double[]>> loops)
+    {
+        var t = crop.Transform;
+        return RevitViewImageRegistration.Coverage(loops.SelectMany(loop => loop), (crop.Min.X, crop.Min.Y), (crop.Max.X, crop.Max.Y),
+            (t.Origin.X, t.Origin.Y), (t.BasisX.X, t.BasisX.Y), (t.BasisY.X, t.BasisY.Y));
     }
 
     private static TakeoffLiveRegion ToLiveRegion(

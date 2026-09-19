@@ -1,4 +1,4 @@
-namespace Pe.Shared.RevitData.Takeoffs;
+﻿namespace Pe.Shared.RevitData.Takeoffs;
 
 public sealed record TakeoffRegistrySystem(Guid Guid, string Tag);
 public enum TakeoffCarrierStage
@@ -27,7 +27,10 @@ public sealed record TakeoffRegionFacts(
     string? Role,
     Guid? Guid,
     string Blob,
-    List<List<double[]>> Loops);
+    List<List<double[]>> Loops,
+    // Where the region lies against its own view's model crop; null when that view has no active crop. Outside: that
+    // view's image can never show it (D4 leg B: project-a zones C-F lie outside the views they are owned by).
+    RevitCropCoverage? OwnerCrop);
 public sealed record TakeoffLiveRegion(
     long ElementId,
     string Role,
