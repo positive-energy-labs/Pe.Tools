@@ -1,4 +1,4 @@
-using Autodesk.Revit.DB.Events;
+﻿using Autodesk.Revit.DB.Events;
 using Pe.Revit.Tasks;
 using Pe.Shared.RevitData.Families;
 
@@ -26,6 +26,40 @@ public static class PeToolsFailureHandling {
         additionalDocuments
     );
 
+    /// <summary>
+    ///     The one way a Pe.Tools policy rolls back. Revit still shows a rolled-back failure to the user unless the handler clears
+    ///     it first (FailureProcessingResult.ProceedWithRollBack remarks): project-a hold 4b, a matrix READ blocked 6 min on "Constraints
+    ///     defined by highlighted Lines and Dimensions can't be satisfied" that the EditFamily gate had already rejected and recorded.
+    /// </summary>
+    public static FailureProcessingResult RollBackSilently(FailuresAccessor accessor) {
+        accessor.SetFailureHandlingOptions(accessor.GetFailureHandlingOptions().SetClearAfterRollback(true));
+        return FailureProcessingResult.ProceedWithRollBack;
+    }
+
+    /// <summary>
+    ///     A throwaway transaction for a READ (temp placements, filter schedules): always rolled back, never shows UI. Every failure
+    ///     is recorded with its failing element ids; warnings are deleted, and an error rolls the evaluation back silently.
+    /// </summary>
+    public static DocumentSandbox BeginReadSandbox(Document document, string name,
+        ICollection<(bool IsError, string Message, IReadOnlyList<long> ElementIds)> failures) {
+        var sandbox = DocumentSandbox.BeginRollback(document, name);
+        var options = sandbox.Transaction.GetFailureHandlingOptions()
+            .SetFailuresPreprocessor(new DelegatingFailuresPreprocessor(accessor => {
+                var error = false;
+                foreach (var failure in accessor.GetFailureMessages()) {
+                    var isError = failure.GetSeverity() != FailureSeverity.Warning;
+                    error |= isError;
+                    failures.Add((isError, DescribeFailure(failure), failure.GetFailingElementIds().Select(id => id.Value()).ToList()));
+                    if (!isError) accessor.DeleteWarning(failure);
+                }
+                return error ? RollBackSilently(accessor) : FailureProcessingResult.Continue;
+            }))
+            .SetClearAfterRollback(true)
+            .SetForcedModalHandling(false);
+        sandbox.Transaction.SetFailureHandlingOptions(options);
+        return sandbox;
+    }
+
     public static IFailuresPreprocessor CreatePreprocessor(
         ICollection<(bool IsError, string Message)> diagnostics
     ) => new DelegatingFailuresPreprocessor(accessor => ResolveFailures(accessor, diagnostics));
@@ -42,7 +76,7 @@ public static class PeToolsFailureHandling {
             if (!isError && suppressWarnings) accessor.DeleteWarning(failure);
         }
         // Normalization must never resolve a failure by deleting or detaching unmentioned content.
-        return error ? FailureProcessingResult.ProceedWithRollBack : FailureProcessingResult.Continue;
+        return error ? RollBackSilently(accessor) : FailureProcessingResult.Continue;
     }
 
     /// <summary>Permit only the non-destructive warning proven for EditFamily; refuse every other failure.</summary>
@@ -57,7 +91,7 @@ public static class PeToolsFailureHandling {
                 $"{(acknowledged ? "Acknowledged warning" : failure.GetSeverity() == FailureSeverity.Warning ? "Rejected warning" : "Rejected error")}: {DescribeFailure(failure)}"));
             if (acknowledged) accessor.DeleteWarning(failure);
         }
-        return reject ? FailureProcessingResult.ProceedWithRollBack : FailureProcessingResult.Continue;
+        return reject ? RollBackSilently(accessor) : FailureProcessingResult.Continue;
     }
 
     /// <summary>Reject the native join-loss warning without broadening warning policy or changing geometry.</summary>
@@ -70,6 +104,7 @@ public static class PeToolsFailureHandling {
         ICollection<(bool IsError, string Message)> diagnostics
     ) {
         var resolvedFailure = false;
+        var unresolvedError = false;
         foreach (var failureMessage in failuresAccessor.GetFailureMessages()) {
             if (failureMessage.GetSeverity() == FailureSeverity.Warning) {
                 resolvedFailure = true;
@@ -82,11 +117,15 @@ public static class PeToolsFailureHandling {
                 resolvedFailure = true;
                 diagnostics.Add((false,
                     $"Resolved failure with {resolutionType}: {DescribeFailure(failureMessage)}"));
+            } else {
+                unresolvedError = true;
+                diagnostics.Add((true, $"Rejected error (no permitted resolution): {DescribeFailure(failureMessage)}"));
             }
         }
 
-        return resolvedFailure
-            ? FailureProcessingResult.ProceedWithCommit
+        // An error nothing may resolve would otherwise fall through to Revit's modal dialog.
+        return unresolvedError ? RollBackSilently(failuresAccessor)
+            : resolvedFailure ? FailureProcessingResult.ProceedWithCommit
             : FailureProcessingResult.Continue;
     }
 
@@ -221,7 +260,7 @@ public sealed class FamilyFailurePolicy {
             diagnostics.Add((isError, text));
             if (!isError && suppressWarnings) accessor.DeleteWarning(failure);
         }
-        return reject ? FailureProcessingResult.ProceedWithRollBack
+        return reject ? PeToolsFailureHandling.RollBackSilently(accessor)
             : resolved ? FailureProcessingResult.ProceedWithCommit
             : FailureProcessingResult.Continue;
     }

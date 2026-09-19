@@ -69,7 +69,13 @@ public sealed class ReadNoModalProofTests {
                 project.Regenerate();
                 context.RollBackTransaction();
             });
-            Assert.That(dialogs, Is.Empty, "no Revit dialog reached the user");
+            var issue = context.EvaluationIssues.SingleOrDefault(i => i.Code == "FamilyEvaluationRolledBack");
+            Console.WriteLine($"[PE_READ_NO_MODAL] evaluation issue: {issue}");
+            Assert.Multiple(() => {
+                Assert.That(dialogs, Is.Empty, "no Revit dialog reached the user");
+                Assert.That((issue?.FamilyName, issue?.TypeName), Is.EqualTo(((string?)FamilyName, (string?)"Standard")), "the rollback is named by family and type");
+                Assert.That(issue?.Message, Does.Contain("3012554f"), "the Revit failure is named");
+            });
         } finally { RevitFamilyFixtureHarness.CloseDocument(project); }
     }
 
