@@ -45,7 +45,7 @@ public static class FamilyDocumentNormalizeParameter {
     ///     Returns the named note when the source formula could not cross and its per-type values were carried by <paramref name="strategy" /> instead.
     /// </summary>
     public static string? TransferAndRemoveParameter(this FamilyDocument document, FamilyParameter source, FamilyParameter target,
-        IReadOnlyDictionary<BuiltInParameter, string>? associationRoutes = null, string strategy = "CoerceByStorageType") {
+        IReadOnlyDictionary<BuiltInParameter, string>? associationRoutes = null, string strategy = "CoerceByStorageType", string? sourceLabel = null) {
         if (source.IsBuiltInParameter()) throw new InvalidOperationException("Revit-owned built-in parameters cannot be removed.");
         if (source.Id == target.Id) throw new InvalidOperationException("Source and destination must be distinct parameters.");
         var fm = document.FamilyManager;
@@ -76,7 +76,7 @@ public static class FamilyDocumentNormalizeParameter {
         using var transaction = new SubTransaction(document.Document);
         transaction.Start();
         var originalType = fm.CurrentType;
-        var sourceName = source.Definition.Name;
+        var sourceName = sourceLabel ?? source.Definition.Name;
         try {
             var temporary = "FF_Transfer_" + Guid.NewGuid().ToString("N");
             if (source.IsShared) source = fm.ReplaceParameter(source, temporary, source.Definition.GetGroupTypeId(), source.IsInstance);
@@ -136,6 +136,14 @@ public static class FamilyDocumentNormalizeParameter {
         }
         if (transaction.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Source transfer did not commit.");
         return note;
+    }
+
+    /// <summary>Renames a parameter out of the way under a unique temporary name, keeping its values and references; returns that name.</summary>
+    public static string StepAside(FamilyManager fm, FamilyParameter parameter) {
+        var temporary = "FF_Retype_" + Guid.NewGuid().ToString("N");
+        if (parameter.IsShared) fm.ReplaceParameter(parameter, temporary, parameter.Definition.GetGroupTypeId(), parameter.IsInstance);
+        else fm.RenameParameter(parameter, temporary);
+        return temporary;
     }
 
     private static string AssociationDiagnostic(FamilyParameter source, FamilyParameter target, Parameter elementParameter, FamilyManager manager) {

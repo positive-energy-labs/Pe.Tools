@@ -118,6 +118,35 @@ public sealed class FormulaTransferAtomicityTests {
         } finally { document.Close(false); }
     }
 
+    // ruling-ff-coercion: an existing destination of another data type is no longer refused ("incompatible destination datatype"). It steps
+    // aside as the first-ranked source, and its values cross under the mapping's strategy.
+    [Test]
+    public void Existing_destination_of_another_data_type_is_retyped_and_its_values_carried() {
+        var document = RevitFamilyFixtureHarness.CreateFamilyDocument(this._application, BuiltInCategory.OST_GenericModel, "FF retype destination");
+        try {
+            using (var transaction = new Transaction(document, "Seed retype")) {
+                transaction.Start();
+                var manager = document.FamilyManager;
+                var seeded = manager.AddParameter("Target", GroupTypeId.General, SpecTypeId.String.Text, false);
+                manager.AddParameter("Source", GroupTypeId.General, SpecTypeId.String.Text, false);
+                foreach (var (typeName, text) in new[] { ("A", "2"), ("B", "3") }) {
+                    manager.CurrentType = manager.NewType(typeName);
+                    manager.Set(seeded, text);
+                }
+                Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            var (error, converged, _, _) = ReconcileWithPreview(document, "Number", null);
+            Assert.That(error, Is.Null, error?.ToString());
+            Assert.That(converged, Is.True);
+            var fm = document.FamilyManager;
+            Assert.That(fm.FindParameter("Source"), Is.Null);
+            var target = fm.FindParameter("Target")!;
+            Assert.That(target.Definition.GetDataType(), Is.EqualTo(SpecTypeId.Number));
+            AssertValues(fm, target, 2d, 3d);
+            Assert.That(fm.Parameters.Cast<FamilyParameter>().Any(p => p.Definition.Name.StartsWith("FF_")), Is.False);
+        } finally { document.Close(false); }
+    }
+
     [Test]
     public void Exact_alias_of_the_destination_transfers_without_copying_its_formula() {
         // Source = `Target`: it reads the destination in every type, so skipping the circular copy is lossless. Its dependent is rewired.

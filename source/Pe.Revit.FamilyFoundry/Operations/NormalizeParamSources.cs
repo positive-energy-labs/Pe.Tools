@@ -17,6 +17,7 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
         var originalType = fm.CurrentType;
         var logs = new List<LogEntry>();
         var cleanup = new List<(string Source, string Target)>();
+        var sourceLabels = new Dictionary<string, string>(StringComparer.Ordinal);
         var ranking = new MapParamsSettings();
         var mappings = desired.Parameters.Where(p => targets?.Contains(p.Key) == true || targets is null &&
             authoredNames.Contains(p.Key) && (p.Value.WasNamed is { Count: > 0 } || p.Value.Shared.HasValue)).ToList();
@@ -36,8 +37,18 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                 var dataType = definition?.GetDataType() ?? (spec.DataType is { } data ? SetParamMetadata.Spec(data) : existing?.Definition.GetDataType());
                 var propertiesGroup = spec.PropertiesGroup is { } pg ? SetParamMetadata.Group(pg) : new ForgeTypeId(string.Empty);
                 var strategy = (spec.MappingStrategy ?? MappingStrategy.CoerceByStorageType).ToString();
+                // A destination of another data type cannot change in place. It steps aside and becomes the first-ranked source, so its values
+                // cross under the mapping's strategy and its references transfer (ruling-ff-coercion 2026-09-18: coerce, don't refuse).
+                string? retyped = null;
+                if (existing is not null && dataType is not null && existing.Definition.GetDataType() != dataType && !existing.IsBuiltInParameter()) {
+                    retyped = FamilyDocumentNormalizeParameter.StepAside(fm, existing);
+                    sourceLabels[retyped] = name;
+                    existing = null;
+                }
                 var first = candidates.Select(fm.FindParameter).FirstOrDefault(p => p is not null);
-                if (existing is null && first is not null && !authoredNames.Contains(first.Definition.Name) && !sharedCandidates.Contains(first.Definition.Name) && !first.IsBuiltInParameter() && first.Definition.GetDataType() == dataType &&
+                if (retyped is not null) {
+                    existing = AddParams.Create(doc, name, spec, sharedSource);
+                } else if (existing is null && first is not null && !authoredNames.Contains(first.Definition.Name) && !sharedCandidates.Contains(first.Definition.Name) && !first.IsBuiltInParameter() && first.Definition.GetDataType() == dataType &&
                     strategy is "Strict" or "CoerceByStorageType") {
                     try {
                         existing = doc.ReplaceDefinition(first, name, definition, propertiesGroup, spec.IsInstance ?? false);
@@ -66,8 +77,11 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                     throw new InvalidOperationException($"'{name}' did not take shared identity {wantedGuid}; it reads {(existing.IsShared ? existing.GUID.ToString() : "family parameter")} after {(needsShared ? "replacement" : "no replacement")}.");
                 // A family-type selector sharing a legacy name (Old_Template VMB 'Voltage') carries no value to move; an ElementId source feeds only an ElementId destination.
                 bool Usable(string source) => fm.FindParameter(source) is { } p && (p.StorageType != StorageType.ElementId || existing.StorageType == StorageType.ElementId);
-                if (!existed || spec.FillBlanksFromSources == true)
+                if (retyped is not null)
+                    transfers.Add((name, [retyped, .. spec.FillBlanksFromSources == true ? candidates.Where(Usable) : []], strategy, false, spec.SourceValuesTreatedAsMissing ?? []));
+                else if (!existed || spec.FillBlanksFromSources == true)
                     transfers.Add((name, candidates.Where(Usable).ToList(), strategy, existed || nativeReplacement, spec.SourceValuesTreatedAsMissing ?? []));
+                if (retyped is not null) cleanup.Add((retyped, name));
                 // Every present source is cleaned up, not only the ranked ones: ranking dedupes equal values, and a leftover source replans forever (rung 5b).
                 cleanup.AddRange((spec.WasNamed ?? []).Where(source => source != name && Usable(source)).Select(source => (source, name)));
                 logs.Add(new LogEntry(name).Success(existed ? "Existing destination preferred; explicit writes follow." : "Destination created from explicit source rules."));
@@ -130,7 +144,7 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                     [BuiltInParameter.RBS_ELEC_VOLTAGE] = connectorRule.Voltage,
                     [BuiltInParameter.RBS_ELEC_NUMBER_OF_POLES] = connectorRule.NumberOfPoles,
                     [BuiltInParameter.RBS_ELEC_APPARENT_LOAD] = connectorRule.ApparentPower
-                }, StrategyOf(targetName));
+                }, StrategyOf(targetName), sourceLabels.GetValueOrDefault(sourceName));
                 if (evaluated is not null) logs.Add(new LogEntry(sourceName).Success(evaluated));
                 // TransferAndRemoveParameter commits its own sub-transaction, and Revit regenerates on commit;
                 // one explicit regeneration after the loop replaces one per removed source.

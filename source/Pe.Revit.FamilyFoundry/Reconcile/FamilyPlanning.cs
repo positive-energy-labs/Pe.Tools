@@ -131,10 +131,16 @@ internal static class FamilyPreparation {
         var refusals = new List<FamilyModelDiagnostic>();
         var fm = document.FamilyManager;
         var authoredNames = (authored["parameters"] as JObject)?.Properties().Select(p => p.Name).ToHashSet(StringComparer.Ordinal) ?? [];
+        ForgeTypeId? Spec(FamilyModelParameter wanted) => wanted.SharedSpecId is { } specId ? new ForgeTypeId(specId)
+            : wanted.DataType is { } dataType ? Operations.SetParamMetadata.Spec(dataType) : null;
+        // A destination of another data type steps aside and is its own first source (NormalizeParamSources), so its formula is judged too.
+        bool Retyped(string key, FamilyModelParameter wanted) => fm.FindParameter(key) is { } have && !have.IsBuiltInParameter() &&
+            Spec(wanted) is { } spec && have.Definition.GetDataType() != spec;
         var work = plan.Changes.Where(c => c.Section == "parameters.sources" && desired.Parameters.TryGetValue(c.Key, out var wanted) && wanted.Formula is null)
             .Select(c => (Change: c, Sources: ((c.Before as IReadOnlyDictionary<string, FamilyModelParameter>)?.Keys ?? [])
-                .Where(name => name != c.Key && !authoredNames.Contains(name) && fm.FindParameter(name) is { } from && !from.IsBuiltInParameter() && !string.IsNullOrEmpty(from.Formula))
-                .ToList()))
+                .Where(name => (name != c.Key || Retyped(c.Key, desired.Parameters[c.Key])) && !authoredNames.Contains(name) &&
+                               fm.FindParameter(name) is { } from && !from.IsBuiltInParameter() && !string.IsNullOrEmpty(from.Formula))
+                .OrderBy(name => name == c.Key ? 0 : 1).Select(name => (Name: name, Parameter: fm.FindParameter(name)!)).ToList()))
             .Where(w => w.Sources.Count > 0).ToList();
         if (work.Count == 0) return (effects, refusals);
         Transaction? transaction = null;
@@ -145,12 +151,14 @@ internal static class FamilyPreparation {
             foreach (var (change, sources) in work) {
                 var wanted = desired.Parameters[change.Key];
                 var target = fm.FindParameter(change.Key);
-                var targetSpec = target?.Definition.GetDataType() ?? (wanted.SharedSpecId is { } specId ? new ForgeTypeId(specId)
-                    : wanted.DataType is { } dataType ? Operations.SetParamMetadata.Spec(dataType) : null);
+                if (target is not null && Retyped(change.Key, wanted)) {
+                    FamilyDocumentNormalizeParameter.StepAside(fm, target);
+                    target = null;
+                }
+                var targetSpec = target?.Definition.GetDataType() ?? Spec(wanted);
                 if (targetSpec is null) continue;
                 var strategy = (wanted.MappingStrategy ?? MappingStrategy.CoerceByStorageType).ToString();
-                foreach (var name in sources) {
-                    var from = fm.FindParameter(name)!;
+                foreach (var (name, from) in sources) {
                     if (!string.IsNullOrEmpty(target?.Formula)) break; // the destination's own formula wins; nothing is copied
                     if (target is not null && FamilyFormulaCopy.IsExactAliasOf(fm.Parameters, from, target)) continue;
                     target ??= fm.AddParameter(change.Key, GroupTypeId.General, targetSpec, wanted.IsInstance ?? false);
