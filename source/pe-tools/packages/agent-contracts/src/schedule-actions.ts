@@ -22,11 +22,12 @@ export const scheduleReadingSchema = z.object({
 export type ScheduleReading = z.infer<typeof scheduleReadingSchema>;
 
 /**
- * A person's successful read of this Work's schedule rebinds it in ONE write: `basis` moves to
- * `reading` (its live document lifetime) and names in `basis.stale` every staged cell whose binding
- * differs between the old basis and `reading` (or whose old basis is unreadable), plus any cell
- * still stale from before. Cells are untouched; push refuses a stale key per cell, and staging or
- * unstaging the key drops it (`unstale`).
+ * A person's read of this Work's schedule, or a push's readback, rebinds it in ONE write: `basis`
+ * moves to `reading` (its live document lifetime) and names in `basis.stale` every staged cell whose
+ * binding differs between the old basis and `reading` (or whose old basis is unreadable), with the
+ * display value it was reviewed against, plus any cell still stale from before (keeping its first
+ * `was`). Cells are untouched; push refuses a stale key per cell, and staging or unstaging the key
+ * drops it (`unstale`).
  */
 export function rebindScheduleWork(
   doc: ScheduleGridDocument,
@@ -40,16 +41,16 @@ export function rebindScheduleWork(
       .find((row) => row.rowNumber === rowNumber)
       ?.bindings.find((b) => b.columnNumber === columnNumber);
   };
-  const was = new Set(doc.basis.stale ?? []);
-  const stale = Object.entries(doc.cells)
-    .filter(([key, cell]) => {
-      if (!cell.staged) return false;
-      if (was.has(key)) return true;
-      const before = binding(basis, key),
-        after = binding(reading, key);
-      return !before || !after || canonicalRouteInput(before) !== canonicalRouteInput(after);
-    })
-    .map(([key]) => key);
+  const already = new Map((doc.basis.stale ?? []).map((cell) => [cell.key, cell.was]));
+  const stale = Object.entries(doc.cells).flatMap(([key, cell]) => {
+    if (!cell.staged) return [];
+    if (already.has(key)) return [{ key, was: already.get(key)! }];
+    const before = binding(basis, key),
+      after = binding(reading, key);
+    return !before || !after || canonicalRouteInput(before) !== canonicalRouteInput(after)
+      ? [{ key, was: before?.displayValue ?? null }]
+      : [];
+  });
   return [
     { path: ["basis"], value: { captureId: reading.id, ...(stale.length ? { stale } : {}) } },
   ];
@@ -61,7 +62,7 @@ export function unstale(
   keys: readonly string[],
 ): RouteStatePatch[] {
   const stale = doc?.basis?.stale ?? [];
-  const rest = stale.filter((key) => !keys.includes(key));
+  const rest = stale.filter((cell) => !keys.includes(cell.key));
   if (rest.length === stale.length) return [];
   return [rest.length ? { path: ["basis", "stale"], value: rest } : { path: ["basis", "stale"] }];
 }

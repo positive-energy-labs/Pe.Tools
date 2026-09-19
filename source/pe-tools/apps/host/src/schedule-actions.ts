@@ -13,6 +13,7 @@ import {
   scheduleCatalogSchema,
   nativeProcessSchema,
   splitScheduleCellKey,
+  rebindScheduleWork,
   type DocumentRef,
   type ScheduleReading,
   type ScheduleReadKey,
@@ -173,7 +174,9 @@ export async function readSchedule(
 /** A cell refused before or by Revit; `code` names a refusal the web keys on. */
 type CellFailure = { key: string; error: string; code?: string };
 type Edit = ScheduleCellsApply.Req.ScheduleCellEdit & { key: string };
-type CellResult = ScheduleCellsApply.Res.ScheduleCellEditResult;
+// ponytail: `code` is domains' closed ParameterEditPlan refusal set, not yet in the generated
+// contract; the host passes it through when present and never parses `error`.
+type CellResult = ScheduleCellsApply.Res.ScheduleCellEditResult & { code?: string | null };
 /**
  * Each staged cell with its reviewed binding, handed back unchanged: the domain compares every
  * target inside its transaction and refuses stale, blocked, or incomplete evidence per cell.
@@ -181,7 +184,7 @@ type CellResult = ScheduleCellsApply.Res.ScheduleCellEditResult;
 function expand(document: ScheduleGridDocument, reading: ScheduleReading) {
   const edits: Edit[] = [];
   const failures: CellFailure[] = [];
-  const stale = new Set(document.basis?.stale ?? []);
+  const stale = new Set((document.basis?.stale ?? []).map((cell) => cell.key));
   for (const [key, cell] of Object.entries(document.cells)) {
     if (!cell.staged) continue;
     // Staged over a value a re-read moved: refused here, never sent, until the person restages it.
@@ -248,6 +251,7 @@ function acknowledge(raw: unknown, edits: Edit[]) {
     else
       failures.push({
         key: edit.key,
+        ...(!malformed && result?.code ? { code: result.code } : {}),
         error: malformed
           ? "Malformed native acknowledgment"
           : (result?.error ?? (result ? "Native refused the cell" : "Missing native cell result")),
@@ -400,6 +404,25 @@ export async function admitScheduleAction(
         )) as ScheduleReading;
       } catch (error) {
         readbackError = String(error);
+      }
+      // The readback rebinds the Work, as the person's re-read does: a cell refused on moved evidence
+      // comes back stale with what was reviewed (`was`) beside what Revit holds now. No readback, no
+      // rebind, nor does an unresolved push (its resume publishes against the original basis); a
+      // person's re-read that moved the basis meanwhile is the newer rebind and stands.
+      for (let attempt = 0; readback && !outcome.unresolved && attempt < 4; attempt++) {
+        const view = await work.read(base.key, scheduleGridRouteState.route);
+        const latest = view && scheduleGridDocumentSchema.parse(view.doc);
+        if (!latest || latest.basis?.captureId !== document.basis!.captureId) break;
+        const patches = rebindScheduleWork(latest, reading, readback);
+        if (!patches.length) break;
+        const rebound = await work.apply(
+          base.key,
+          scheduleGridRouteState.route,
+          "human",
+          patches,
+          view.revision,
+        );
+        if (rebound.ok) break;
       }
       const result = {
         applied: outcome.successes.length,

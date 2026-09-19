@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { RegistryContext } from "@effect/atom-react";
 
 import { appAtomRegistry } from "#/route";
-import { setup } from "../../../../host/tests/schedule-test-fixture";
+import { setup, stubEventSource } from "../../../../host/tests/schedule-test-fixture";
 import { detailResponse, target } from "../../../../host/tests/schedule-fixture";
 import { LiveScheduleGridWorkspace } from "./live";
 import { REOPENED, schedulesManifest } from "./manifest";
@@ -12,11 +12,7 @@ import { ScheduleGridWorkspace, type ScheduleGridState } from "./workspace";
 import { ScheduleGridReview } from "#/workbench/plugins/schedule-grid-chat-plugin";
 
 vi.mock("#/lib/token", () => ({ token: () => "currentColor", dash: () => "none" }));
-const sources: { close(): void }[] = [];
-afterEach(() => {
-  cleanup();
-  for (const source of sources.splice(0)) source.close();
-});
+afterEach(cleanup);
 
 test("real grid edits and shared Chat reviewer apply through HTTP, journal, Work and independent readback", async () => {
   const f = await setup();
@@ -26,41 +22,7 @@ test("real grid edits and shared Chat reviewer apply through HTTP, journal, Work
     setItem: (key: string, value: string) => storage.set(key, value),
     removeItem: (key: string) => storage.delete(key),
   });
-  // Same SSE adapter as resource-consumer.test; the actual runtime owns all frames.
-  class Source {
-    onmessage: EventSource["onmessage"] = null;
-    onerror: EventSource["onerror"] = null;
-    onopen: EventSource["onopen"] = null;
-    closed = false;
-    abort = new AbortController();
-    constructor(url: string) {
-      sources.push(this);
-      void (async () => {
-        const response = await f.app.fetch(
-          new Request(new URL(url, "http://host"), { signal: this.abort.signal }),
-        );
-        const reader = response.body!.getReader();
-        this.onopen?.call(this as unknown as EventSource, new Event("open"));
-        try {
-          while (!this.closed) {
-            const next = await reader.read();
-            if (next.done) break;
-            this.onmessage?.call(
-              this as unknown as EventSource,
-              new MessageEvent("message", { data: new TextDecoder().decode(next.value).slice(6) }),
-            );
-          }
-        } catch {
-          /* closing cancels production stream */
-        }
-      })();
-    }
-    close() {
-      this.closed = true;
-      this.abort.abort();
-    }
-  }
-  vi.stubGlobal("EventSource", Source);
+  stubEventSource(f);
   await f.patch([{ path: ["cells"], value: {} }]);
   const view = (review = false) => (
     <RegistryContext.Provider value={appAtomRegistry}>
@@ -131,40 +93,7 @@ test("F-H5-1..3: a dead-lifetime Work says read again; the bare verb re-reads th
   expect(manifest.actions!.catalog.actor).toBe("any");
 
   const f = await setup(); // 1::2 staged "150 VA" under the open-B reading
-  class Source {
-    onmessage: EventSource["onmessage"] = null;
-    onerror: EventSource["onerror"] = null;
-    onopen: EventSource["onopen"] = null;
-    closed = false;
-    abort = new AbortController();
-    constructor(url: string) {
-      sources.push(this);
-      void (async () => {
-        const response = await f.app.fetch(
-          new Request(new URL(url, "http://host"), { signal: this.abort.signal }),
-        );
-        const reader = response.body!.getReader();
-        this.onopen?.call(this as unknown as EventSource, new Event("open"));
-        try {
-          while (!this.closed) {
-            const next = await reader.read();
-            if (next.done) break;
-            this.onmessage?.call(
-              this as unknown as EventSource,
-              new MessageEvent("message", { data: new TextDecoder().decode(next.value).slice(6) }),
-            );
-          }
-        } catch {
-          /* closing cancels production stream */
-        }
-      })();
-    }
-    close() {
-      this.closed = true;
-      this.abort.abort();
-    }
-  }
-  vi.stubGlobal("EventSource", Source);
+  stubEventSource(f);
   vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => {}, removeItem: () => {} });
   f.reopen();
   const live = { session: "B", openId: "reopened-B" };
@@ -213,7 +142,7 @@ test("F-H5-1..3: a dead-lifetime Work says read again; the bare verb re-reads th
   });
   const fresh = (await f.captures.scheduleWork(f.scope.work)) as { id: string };
   expect((await f.view()).doc).toMatchObject({
-    basis: { captureId: fresh.id, stale: ["1::2"] },
+    basis: { captureId: fresh.id, stale: [{ key: "1::2", was: "100 VA" }] },
     cells: { "1::2": { staged: { value: "150 VA" } } },
   });
   // Drawn as drift against the live value, with the ruled accept/deny.

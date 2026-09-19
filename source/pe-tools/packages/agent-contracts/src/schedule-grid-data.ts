@@ -108,10 +108,11 @@ export const scheduleGridDocumentSchema = z.object({
     .object({
       captureId: z.string().regex(/^[a-f0-9]{64}$/),
       /**
-       * Staged cell keys whose binding moved when a re-read rebound this basis: staged over a value
-       * the person never saw. Push refuses them per cell; staging or unstaging a key drops it.
+       * Staged cells whose binding moved when a re-read or a push readback rebound this basis: staged
+       * over a value the person never saw. `was` is the display value they reviewed against (null
+       * when the old basis can't say). Push refuses them per cell; staging or unstaging a key drops it.
        */
-      stale: z.array(z.string()).optional(),
+      stale: z.array(z.object({ key: z.string(), was: z.string().nullable() })).optional(),
     })
     .nullish(),
   cells: z.record(z.string(), scheduleGridCellSchema).default({}),
