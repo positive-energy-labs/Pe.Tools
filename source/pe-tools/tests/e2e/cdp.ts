@@ -272,6 +272,7 @@ const KEYS = {
   Backspace: ["Backspace", 8],
   Tab: ["Tab", 9],
   a: ["KeyA", 65],
+  r: ["KeyR", 82],
 } as const;
 export const CTRL = 2;
 

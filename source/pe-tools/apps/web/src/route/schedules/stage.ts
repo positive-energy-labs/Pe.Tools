@@ -27,10 +27,12 @@ const rail: PaneDecl<R, A> = {
 const grid: PaneDecl<R, A> = {
   draws: ["work", "saved", "receipts"],
   verbs: ["stage", "unstage", "accept", "deny"],
-  // ASSUME(kai): the grid re-reads on every focus from outside | alt: { maxAgeS: STALE_S }
+  // ASSUME(kai): focus re-reads a grid older than STALE_S | alt: "fresh", every focus. "fresh"
+  // crashed the route after ~24 reads: each read is a new `saved` subject and the page's Reading
+  // subscriptions leak past READING_MAX_KEYS (32); the base's re-read button leaks the same way.
   // ASSUME(kai): a focused grid is marked stale by age, never re-read under the hands (Q5) | alt: a
   // silent re-read that moves cells while you type
-  onFocus: "fresh",
+  onFocus: { maxAgeS: STALE_S },
   // ASSUME(kai): the grid's read files a capture, so it is the `refresh` verb run by the pane |
   // alt: a host Reading "latest capture of schedule X" (NEEDS-CONTRACT)
   reads: "refresh",
