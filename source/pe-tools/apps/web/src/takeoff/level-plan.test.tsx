@@ -138,12 +138,31 @@ test("two lanes on one level: the plan image follows the chosen view, not the fi
     { view: "Mechanical Plan - Lower Level", label: "Level 1/Main Level" },
     { view: "Mechanical Zoning Plan - Lower Level", label: "Level 1/Main Level" },
   ];
-  expect(planView(lanes, ["Mechanical Zoning Plan - Lower Level"], "Level 1/Main Level")).toBe(
+  expect(planView(lanes, ["Mechanical Zoning Plan - Lower Level"], "Level 1/Main Level", [])).toBe(
     "Mechanical Zoning Plan - Lower Level",
   );
   // A level with no chosen view on it draws no image: a label never picks a view.
-  expect(planView(lanes, [], "Level 1/Main Level")).toBeUndefined();
-  expect(planView(lanes, ["Other"], "Level 1/Main Level")).toBeUndefined();
+  expect(planView(lanes, [], "Level 1/Main Level", [])).toBeUndefined();
+  expect(planView(lanes, ["Other"], "Level 1/Main Level", [])).toBeUndefined();
+});
+
+/* ── 31: the image is the drawn zones' own view (zone.lane.view), never a level-label neighbour ── */
+
+test("two views on one level, zones owned by one: the image is the owner's, not the chosen view's", () => {
+  const level = "Level 1/Main Level";
+  const guestHouse = "Mechanical Zoning Plan - Main Lvl Guest House Controls";
+  const poolHouse = "Mechanical Zoning Plan - Main Lvl Pool House Controls";
+  const lanes = [
+    { view: poolHouse, label: level },
+    { view: guestHouse, label: level },
+  ];
+  // E/F are Guest House's own regions; the person chose Pool House, which shares the label.
+  expect(planView(lanes, [poolHouse], level, [guestHouse, guestHouse])).toBe(guestHouse);
+  expect(planView(lanes, [], level, [guestHouse])).toBe(guestHouse);
+  // Zones of two owners: no one view owns them all, and the web cannot know "Inside" yet (ownerCrop).
+  expect(planView(lanes, [poolHouse], level, [guestHouse, poolHouse])).toBeUndefined();
+  // No zones drawn: the chosen view stands.
+  expect(planView(lanes, [poolHouse], level, [])).toBe(poolHouse);
 });
 
 /* ── 29: the Guest House crop (45°) on projectA, HOLD 5 leg B, drawn outside the plan ──────── */

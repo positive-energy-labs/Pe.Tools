@@ -74,7 +74,16 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
   // ponytail: one plan pane draws the first bound view; add comparison panes only if demanded.
   const firstBoundLane = world.lanes.find((lane) => lane.view === views[0]);
   const level = pageLevel || firstBoundLane?.label || world.lanes[0]?.label || "";
-  const planImage = usePlanImage(store.handle.resolution, planView(world.lanes, views, level));
+  const levelZones = world.zones.filter((z) => z.zone.lane.label === level);
+  const planImage = usePlanImage(
+    store.handle.resolution,
+    planView(
+      world.lanes,
+      views,
+      level,
+      levelZones.map((z) => z.zone.lane.view),
+    ),
+  );
   const setStageFilter = (value: Phase | null) => store.actions.filterStage(value);
   const setLevel = useCallback((value: string) => store.actions.chooseLevel(value), [store]);
   const setCursor = useCallback((value: string | null) => store.actions.chooseRoom(value), [store]);
@@ -102,7 +111,6 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     (row: Row | null) => store.actions.hover(row?.room.guid ?? ""),
     [store],
   );
-  const levelZones = world.zones.filter((z) => z.zone.lane.label === level);
 
   const visibleRows = useMemo(() => {
     const byGuid = new Map(rows.map((r) => [r.room.guid, r]));

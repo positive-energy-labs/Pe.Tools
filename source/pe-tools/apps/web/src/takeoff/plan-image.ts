@@ -53,15 +53,21 @@ export function planOf(response: Response): { plan: TakeoffPlanImage } | { refus
 }
 
 /**
- * The view whose plan image the Atlas draws for `level`: a chosen view on that level, in the order
- * the person chose them. Two lanes can share a level label; the label never picks the view (23).
+ * The view whose plan image the Atlas draws for `level`. Drawn zones pick it: their one owner view
+ * (`zone.lane.view`), and none when they have several, since only `ownerCrop` could say one view
+ * holds them all (31). With no zones drawn, a chosen view on that level, in the person's order; a
+ * level label never picks the view (23).
  */
 export const planView = (
   lanes: readonly { view: string; label: string }[],
   views: readonly string[],
   level: string,
-): string | undefined =>
-  views.find((view) => lanes.some((lane) => lane.view === view && lane.label === level));
+  owners: readonly string[],
+): string | undefined => {
+  const owner = new Set(owners);
+  if (owner.size > 0) return owner.size === 1 ? owners[0] : undefined;
+  return views.find((view) => lanes.some((lane) => lane.view === view && lane.label === level));
+};
 
 /** Each level once, in lane order: a lane is a view, and many views share a level (29). */
 export const levelsOf = (lanes: readonly { label: string }[]): string[] => [
