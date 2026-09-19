@@ -357,7 +357,10 @@ test("the browser walks one durable chat lifecycle", async () => {
     expect(JSON.stringify((await readThread()).messages)).toContain(
       "Unknown capability 'route:instances.propose'",
     );
-    expect((await fetch(`${baseUrl}/pe/route-state/instances?work=instances`)).status).toBe(404);
+    // A registered route with no Work reads its empty document at r0: nothing was written.
+    expect(
+      await (await fetch(`${baseUrl}/pe/route-state/instances?work=instances`)).json(),
+    ).toMatchObject({ route: "instances", revision: 0 });
     // pe_do route:instances.stop is human-only: refused with a hint, nothing runs.
     await driveTurn("STOP_TURN", stopFinalText);
     expect(JSON.stringify((await readThread()).messages)).toContain("human-only");
@@ -384,14 +387,14 @@ test("the browser walks one durable chat lifecycle", async () => {
         )
       ).json(),
     ).toMatchObject({ revision: 1 });
-    // Another Address has no envelope at all yet: the read is a 404, not a shared document.
+    // Another Address has no Work yet: it reads its own empty document at r0, not a shared one.
     expect(
-      (
+      await (
         await fetch(
           `${baseUrl}/pe/route-state/takeoffs?target=${encodeURIComponent("C:\\Models\\Other.rvt")}`,
         )
-      ).status,
-    ).toBe(404);
+      ).json(),
+    ).toMatchObject({ route: "takeoffs", revision: 0 });
 
     await composer.fill("ABORT_TURN");
     await page.getByRole("button", { name: "send", exact: true }).click();
