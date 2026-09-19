@@ -154,6 +154,84 @@ public sealed class MappingStrategyCoercionTests {
         Assert.That(receipt!.RunEffects, Has.None.Contains("kept so its values are not lost").And.None.Contains("did not carry"));
     }
 
+    // The plan a person approves names every value that will not cross, exactly as the receipt does: here an existing destination filling
+    // its blank type B from a bare source (type A keeps its own 5000 Btu/h, destination values win).
+    [Test]
+    public void Preview_names_each_uncarried_value_of_an_existing_destinations_blank_types_as_the_receipt_does() {
+        var (error, preview, receipt, kept) = this.PreviewAndReconcile(
+            [("Boiler Output", SpecTypeId.Number, 12000d, 24000d),
+             ("PE_M___BoilerOutput", SpecTypeId.HvacPower, UnitUtils.ConvertToInternalUnits(5000, UnitTypeId.BritishThermalUnitsPerHour), null)],
+            new JObject { ["wasNamed"] = new JArray("Boiler Output"), ["fillBlanksFromSources"] = true }, shared: false);
+        Assert.That(error, Is.Null, error?.ToString());
+        Assert.That(receipt?.Converged, Is.True);
+        var named = Uncarried(receipt!.RunEffects);
+        Assert.That(Uncarried(preview.RunEffects), Is.EqualTo(named), "preview names exactly what the receipt names");
+        Assert.That(named, Has.Count.EqualTo(1));
+        Assert.That(named[0], Does.Contain("did not carry 'Boiler Output' value '24000'").And.Contain("in type 'B'")
+            .And.Contain("; source 'Boiler Output' kept so its values are not lost"));
+        Assert.That(kept, Is.EquivalentTo(new[] { "Boiler Output" }));
+    }
+
+    // Two sources ranked into one new destination, neither carrying a unit: each value left uncarried is named, per source, at preview as at apply.
+    [Test]
+    public void Preview_names_each_uncarried_value_of_every_ranked_source_as_the_receipt_does() {
+        var (error, preview, receipt, kept) = this.PreviewAndReconcile(
+            [("Boiler Output", SpecTypeId.Number, 12000d, 24000d), ("Boiler Rating", SpecTypeId.Number, 11000d, null)],
+            new JObject { ["wasNamed"] = new JArray("Boiler Output", "Boiler Rating") }, shared: true);
+        Assert.That(error, Is.Null, error?.ToString());
+        Assert.That(receipt?.Converged, Is.True);
+        var named = Uncarried(receipt!.RunEffects);
+        Assert.That(Uncarried(preview.RunEffects), Is.EqualTo(named), "preview names exactly what the receipt names");
+        Assert.That(named, Has.Some.Contains("did not carry 'Boiler Output' value '12000'"));
+        Assert.That(named, Has.Some.Contains("did not carry 'Boiler Output' value '24000'"));
+        Assert.That(named, Has.Some.Contains("did not carry 'Boiler Rating' value '11000'"));
+        Assert.That(kept, Is.EquivalentTo(new[] { "Boiler Output", "Boiler Rating" }), "no source whose value did not cross is removed");
+    }
+
+    private static List<string> Uncarried(IEnumerable<string> effects) =>
+        effects.Where(effect => effect.Contains("did not carry", StringComparison.Ordinal)).Order(StringComparer.Ordinal).ToList();
+
+    /// <summary>
+    ///     Seeds <paramref name="parameters" /> (type A and B values in internal units, null = unset), previews and then reconciles one patch for
+    ///     `PE_M___BoilerOutput` (<paramref name="shared" />: the company's shared definition; otherwise the seeded family parameter). Returns which
+    ///     seeded sources are still in the family.
+    /// </summary>
+    private (Exception? Error, FamilyPreview Preview, FamilyReceipt? Receipt, List<string> Kept) PreviewAndReconcile(
+        (string Name, ForgeTypeId Spec, double? A, double? B)[] parameters, JObject mapping, bool shared) {
+        var definitions = JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
+            RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-company-definitions.json")))!.Where(d => d.Name == "PE_M___BoilerOutput").ToList();
+        if (shared) {
+            mapping["shared"] = true;
+            mapping["sharedGuid"] = definitions.Single().DownloadOptions.GetGuid().ToString();
+            mapping["sharedSpecId"] = SpecTypeId.HvacPower.TypeId;
+        }
+        var document = RevitFamilyFixtureHarness.CreateFamilyDocument(this._application, BuiltInCategory.OST_MechanicalEquipment, "FF unit preview " + Guid.NewGuid().ToString("N")[..6]);
+        try {
+            using (var transaction = new Transaction(document, "Seed")) {
+                transaction.Start();
+                var manager = document.FamilyManager;
+                var seeded = parameters.Select(p => (p, Parameter: manager.AddParameter(p.Name, GroupTypeId.General, p.Spec, false))).ToList();
+                foreach (var type in new[] { "A", "B" }) {
+                    manager.CurrentType = manager.NewType(type);
+                    foreach (var (p, parameter) in seeded)
+                        if ((type == "A" ? p.A : p.B) is { } value) manager.Set(parameter, value);
+                }
+                Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            var patch = new FamilyPatch { Patch = new JObject { ["parameters"] = new JObject { ["PE_M___BoilerOutput"] = mapping } } };
+            var preview = document.PreviewFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
+            Assert.That(preview.Diagnostics, Is.Empty, string.Join("; ", preview.Diagnostics.Select(d => d.Message)));
+            var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
+            Exception? error;
+            using (var processor = new OperationProcessor(document)) {
+                var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+                (_, error) = contexts.Single().OperationLogs;
+            }
+            var kept = parameters.Where(p => p.Name != "PE_M___BoilerOutput" && document.FamilyManager.get_Parameter(p.Name) is not null).Select(p => p.Name).ToList();
+            return (error, preview, operation.LastReceipt, kept);
+        } finally { document.Close(false); }
+    }
+
     /// <summary>
     ///     Seeds `Boiler Output` (Number: 12000 in type A, 24000 in B), then reconciles the same family once per entry of
     ///     <paramref name="units" />: a patch mapping it into the company's shared PE_M___BoilerOutput (hvac:power), declaring that unit or none.

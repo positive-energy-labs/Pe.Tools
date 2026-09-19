@@ -24,6 +24,25 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
 
     private readonly Dictionary<string, ForgeTypeId?> units = new(StringComparer.Ordinal);
 
+    private List<KeyValuePair<string, FamilyModelParameter>> Mappings() => desired.Parameters.Where(p => targets?.Contains(p.Key) == true || targets is null &&
+        authoredNames.Contains(p.Key) && (p.Value.WasNamed is { Count: > 0 } || p.Value.Shared.HasValue)).ToList();
+
+    /// <summary>
+    ///     Whether some value could be left uncarried for want of a mappingUnit: a bare present source (Number, Integer, text), or a bare destination
+    ///     stepping aside, into a measured destination that declares none. Preview runs this operation (rolled back) only then, so its Reports are
+    ///     the plan's (FamilyPreparation.UncarriedValues).
+    /// </summary>
+    public bool CouldNeedUnit(FamilyManager fm) => this.Mappings().Any(mapping => {
+        var (name, spec) = (mapping.Key, mapping.Value);
+        if (spec.MappingUnit is not null) return false;
+        var to = spec.SharedSpecId is { } id ? new ForgeTypeId(id) : spec.DataType is { } data ? SetParamMetadata.Spec(data)
+            : spec.Shared == true ? sharedSource(name)?.GetDataType() : fm.FindParameter(name)?.Definition.GetDataType();
+        if (to is null || !UnitUtils.IsMeasurableSpec(to) || to == SpecTypeId.Number) return false;
+        return (spec.WasNamed ?? []).Append(name).Select(fm.FindParameter).OfType<FamilyParameter>()
+            .Any(p => p.StorageType != StorageType.ElementId && p.Definition.GetDataType() is var from && from != to &&
+                      (from == SpecTypeId.Number || !UnitUtils.IsMeasurableSpec(from)));
+    });
+
     public override OperationLog Execute(FamilyDocument doc, FamilyProcessingContext context, OperationContext group) {
         this.Reports.Clear();
         this.units.Clear();
@@ -33,8 +52,7 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
         var cleanup = new List<(string Source, string Target)>();
         var sourceLabels = new Dictionary<string, string>(StringComparer.Ordinal);
         var ranking = new MapParamsSettings();
-        var mappings = desired.Parameters.Where(p => targets?.Contains(p.Key) == true || targets is null &&
-            authoredNames.Contains(p.Key) && (p.Value.WasNamed is { Count: > 0 } || p.Value.Shared.HasValue)).ToList();
+        var mappings = this.Mappings();
         var sharedCandidates = mappings.SelectMany(p => (p.Value.WasNamed ?? []).Distinct()).GroupBy(n => n)
             .Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet(StringComparer.Ordinal);
         var transfers = new List<(string Target, List<string> Sources, string Strategy, bool PreservePopulated, IReadOnlyCollection<string> MissingValues)>();

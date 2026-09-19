@@ -73,7 +73,34 @@ internal static class FamilyPreparation {
         if (copyRefusals.Count > 0)
             return new PreparedFamily(original, patch, desired, null, copyRefusals);
         if (copyEffects.Count > 0) plan = plan with { RunEffects = plan.RunEffects.Concat(copyEffects).ToList() };
+        if (UncarriedValues(document, plan) is { Count: > 0 } uncarried) plan = plan with { RunEffects = plan.RunEffects.Concat(uncarried).ToList() };
         return new PreparedFamily(original, patch, desired, plan, []);
+    }
+
+    /// <summary>
+    ///     Every value apply will leave uncarried for want of a mappingUnit, named as apply names it: the plan's own NormalizeParamSources runs here
+    ///     in one rolled-back transaction and its Reports are the preview's. One judge, so an existing destination's blank types, every ranked source
+    ///     and each kept source come out as the receipt has them (ReconcileFamily de-dupes the two exactly). Only a plan where some mapping could need
+    ///     a unit (NormalizeParamSources.CouldNeedUnit) pays for the dry run.
+    /// </summary>
+    private static IReadOnlyList<string> UncarriedValues(Document document, FamilyPlan plan) {
+        if (plan.Queue.Operations.OfType<Operations.NormalizeParamSources>().SingleOrDefault() is not { } normalization ||
+            !normalization.CouldNeedUnit(document.FamilyManager)) return [];
+        Transaction? transaction = null;
+        SubTransaction? subTransaction = null;
+        try {
+            if (document.IsModifiable) { subTransaction = new SubTransaction(document); subTransaction.Start(); }
+            else { transaction = new Transaction(document, "Preview uncarried values"); transaction.Start(); }
+            _ = normalization.Execute(new FamilyDocument(document), new FamilyProcessingContext { FamilyName = document.Title }, new OperationContext());
+            return normalization.Reports.ToList();
+        } catch (Exception) {
+            return []; // apply meets the same failure and refuses the family by its own message
+        } finally {
+            subTransaction?.RollBack();
+            transaction?.RollBack();
+            subTransaction?.Dispose();
+            transaction?.Dispose();
+        }
     }
 
     private static IReadOnlyList<FamilyModelDiagnostic> SharedTooltipDiagnostics(FamilyModel current, FamilyModel desired, JObject authored) {
@@ -137,18 +164,10 @@ internal static class FamilyPreparation {
         // A destination of another data type steps aside and is its own first source (NormalizeParamSources), so its formula is judged too.
         bool Retyped(string key, FamilyModelParameter wanted) => fm.FindParameter(key) is { } have && !have.IsBuiltInParameter() &&
             Spec(wanted) is { } spec && have.Definition.GetDataType() != spec;
-        // A plain source into a new destination with no mappingUnit, as the only present source: apply carries each of its values as it will
-        // here, so a bare number that needs a unit is named now, not only at apply.
-        // Only a bare source (Number or unitless) into a measured spec can need a unit, so no other mapping pays for the per-type carry.
-        bool Predicted(string key, FamilyModelParameter wanted, FamilyParameter from) => fm.FindParameter(key) is null && wanted.MappingUnit is null &&
-            (wanted.WasNamed ?? []).Count(name => fm.FindParameter(name) is not null) == 1 &&
-            Spec(wanted) is { } to && UnitUtils.IsMeasurableSpec(to) && to != SpecTypeId.Number &&
-            from.Definition.GetDataType() is var spec && (spec == SpecTypeId.Number || !UnitUtils.IsMeasurableSpec(spec));
         var work = plan.Changes.Where(c => c.Section == "parameters.sources" && desired.Parameters.TryGetValue(c.Key, out var wanted) && wanted.Formula is null)
             .Select(c => (Change: c, Sources: ((c.Before as IReadOnlyDictionary<string, FamilyModelParameter>)?.Keys ?? [])
                 .Where(name => (name != c.Key || Retyped(c.Key, desired.Parameters[c.Key])) && !authoredNames.Contains(name) &&
-                               fm.FindParameter(name) is { } from && !from.IsBuiltInParameter() &&
-                               (!string.IsNullOrEmpty(from.Formula) || Predicted(c.Key, desired.Parameters[c.Key], from)))
+                               fm.FindParameter(name) is { } from && !from.IsBuiltInParameter() && !string.IsNullOrEmpty(from.Formula))
                 .OrderBy(name => name == c.Key ? 0 : 1).Select(name => (Name: name, Parameter: fm.FindParameter(name)!)).ToList()))
             .Where(w => w.Sources.Count > 0).ToList();
         if (work.Count == 0) return (effects, refusals);
@@ -173,23 +192,16 @@ internal static class FamilyPreparation {
                     if (!string.IsNullOrEmpty(target?.Formula)) break; // the destination's own formula wins; nothing is copied
                     if (target is not null && FamilyFormulaCopy.IsExactAliasOf(fm.Parameters, from, target)) continue;
                     target ??= fm.AddParameter(change.Key, GroupTypeId.General, targetSpec, wanted.IsInstance ?? false);
-                    if (string.IsNullOrEmpty(from.Formula)) {
-                        effects.AddRange(FamilyFormulaCopy.Carry(new FamilyDocument(document), from, name, target, strategy, keep: true, unit).Reports
-                            .Select(report => report + Operations.NormalizeParamSources.Kept(name)));
-                        continue;
-                    }
                     var blocker = FamilyFormulaCopy.Blocker(fm.Parameters, from.Formula, from.Definition.GetDataType(), targetSpec, target.IsInstance);
                     if (blocker is null)
                         try { fm.SetFormula(target, from.Formula); continue; }
                         catch (Autodesk.Revit.Exceptions.ApplicationException) { blocker = FamilyFormulaCopy.NativeRefusal; }
-                    var (carried, reports) = FamilyFormulaCopy.Carry(new FamilyDocument(document), from, name, target, strategy, keep: true, unit);
+                    // A value needing a unit is named by UncarriedValues, as apply's value transfer names it; only refusals are judged here.
+                    var (carried, _) = FamilyFormulaCopy.Carry(new FamilyDocument(document), from, name, target, strategy, keep: true, unit);
                     if (carried.Count > 0)
                         refusals.AddRange(carried.Select(refusal => new FamilyModelDiagnostic(FamilyModelDiagnosticCodes.ValueNotCoercible,
                             $"$.parameters.{change.Key}.wasNamed", refusal)));
-                    else {
-                        effects.Add(FamilyFormulaCopy.DroppedNote(from.Formula, name, change.Key, blocker, strategy));
-                        effects.AddRange(reports.Select(report => report + Operations.NormalizeParamSources.Kept(name)));
-                    }
+                    else effects.Add(FamilyFormulaCopy.DroppedNote(from.Formula, name, change.Key, blocker, strategy));
                 }
             }
         } finally {
