@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { frozenDemo } from "#/host/demo-client";
 import {
@@ -10,15 +10,17 @@ import {
   type Reading,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
-import { WorkbenchContext } from "#/workbench/provider/thread-summary";
 import { previousOf } from "#/readings";
 import { refuse, useRoute, type EntitySearch } from "#/route";
+import { RouteKeys } from "#/route/keys";
+import { dueOnFocus } from "#/route/stage";
 import { ActionReceiptView } from "#/actions/receipt";
 import { EntityRouteView } from "#/route/entity";
 import { usePodList } from "#/route/pods";
 import { DEMO_SPEC } from "#/route/seeds";
-import { scheduleSpec, schedulesManifest, type ScheduleGridPage } from "./manifest";
+import { scheduleSpec, schedulesManifest } from "./manifest";
 import { ScheduleGridWorkspace, type ScheduleGridState } from "./workspace";
+import { SCHEDULE_STAGES } from "./stage";
 
 const valueOf = <T,>(reading: Reading<unknown>, schema: { parse(value: unknown): T }) => {
   const value = previousOf(reading);
@@ -50,7 +52,6 @@ export function LiveScheduleGridWorkspace({
   /** False in a chat pane, which does not own the URL. */
   url?: boolean;
 }) {
-  const workbench = useContext(WorkbenchContext);
   const manifest = useMemo(() => schedulesManifest(), []);
   const demo = useMemo(() => frozenDemo() !== null, []);
   const [pods, refreshPods] = usePodList(!demo);
@@ -121,7 +122,7 @@ export function LiveScheduleGridWorkspace({
         ? retained
         : saved
       : (retained ?? saved);
-  const unresolved = receipts.some((row) =>
+  const unresolved = receipts.filter((row) =>
     ["running", "unknown", "incomplete"].includes(row.state),
   );
   const apply = async (patches: RouteStatePatch[], expectedRevision?: number) => {
@@ -146,61 +147,36 @@ export function LiveScheduleGridWorkspace({
     readingError(handle.readings.work) ??
     readingError(handle.readings.saved) ??
     readingError(handle.readings.receipts);
-  const blockedBecause = unresolved
-    ? "Recover or resume the original receipt before a new apply"
-    : !target
-      ? "Select an available document and session"
-      : !page.workspaceId
-        ? "Read a schedule before staging or pushing"
-        : work.revision !== null && !work.current
-          ? "The route-state stream is re-establishing — writes are refused until it settles"
-          : !work.current
-            ? "The route-state bridge is not connected"
-            : readingError(handle.readings.saved)
-              ? `The basis reading could not be read: ${readingError(handle.readings.saved)}`
-              : readingError(handle.readings.receipts)
-                ? `Receipts could not be polled: ${readingError(handle.readings.receipts)}`
-                : handle.actions.push.refusal;
+  /** A pane's focus edge, as the stage declares it: re-acquire what it draws, or run its read. */
+  const focusOf = (pane: "rail" | "grid") => () => {
+    const declared = SCHEDULE_STAGES[page.stage].panes[pane];
+    if (!declared || handle.busy) return;
+    const takenAt = pane === "grid" ? shown?.snapshot.takenAt : catalog?.takenAt;
+    if (!dueOnFocus(declared.onFocus, takenAt)) return;
+    if (!declared.reads) return handle.revalidate(declared.draws);
+    if (shown) void handle.actions[declared.reads].run({ scheduleId: shown.snapshot.scheduleId });
+  };
   const state: ScheduleGridState = {
     slice: work.doc,
     revision: work.revision,
     hydrated: work.current || work.revision !== null,
-    refreshing: work.revision !== null && !work.current,
     apply,
-    peaActive: workbench?.isRunning ?? false,
-    connected: work.current ? true : work.revision === null ? null : false,
-    failure: handle.failure,
     execute,
     snapshot: shown?.snapshot ?? null,
     catalog: catalog ?? null,
     busy: handle.busy?.key ?? null,
-    blockedBecause,
+    refused: page.refused,
+    onFocus: { rail: focusOf("rail"), grid: focusOf("grid") },
   };
 
   const audit = (
     <div className="flex size-full min-h-0 min-w-0 flex-col">
-      {(readingFailure || !target) && (
-        <div role="status">
-          {readingFailure ??
-            handle.bindingLost?.sentence ??
-            "Select an available document and session to read schedules"}
-        </div>
-      )}
-      {hasWork && retained && basisId !== retained.id && (
-        <div role="status">
-          Staged cells retain their original binding reading. Apply checks current bindings before
-          writing.
-        </div>
-      )}
-      {receipts.some(
-        (receipt) => Date.parse(receipt.startedAt) >= Date.parse(shown?.capturedAt ?? ""),
-      ) && (
-        <div role="status">
-          An apply occurred after this reading; re-read to observe current values.
-        </div>
-      )}
-      {page.pushRun && <div role="status">push run · {page.pushRun}</div>}
-      <ScheduleReceipts workspaceId={page.workspaceId} receipts={receipts} />
+      {framed && url ? <RouteKeys handle={handle} /> : null}
+      {readingFailure ? <div role="status">{readingFailure}</div> : null}
+      {/* The one non-empty case: a receipt that needs recovery before a new push. */}
+      {unresolved.map((receipt) => (
+        <ActionReceiptView key={receipt.id} id={receipt.id} />
+      ))}
       {render ? render(state) : <ScheduleGridWorkspace state={state} />}
     </div>
   );
@@ -212,27 +188,10 @@ export function LiveScheduleGridWorkspace({
       refreshPods={refreshPods}
       fixture={demo ? DEMO_SPEC : undefined}
       url={url}
+      stages={SCHEDULE_STAGES}
     >
       {audit}
     </EntityRouteView>
-  );
-}
-
-function ScheduleReceipts({
-  workspaceId,
-  receipts,
-}: {
-  workspaceId: ScheduleGridPage["workspaceId"];
-  receipts: ActionStatus[];
-}) {
-  if (!workspaceId) return null;
-  return (
-    <section aria-label="Actions for this selection">
-      {receipts.length === 0 && <div>No unresolved actions for this selection</div>}
-      {receipts.map((receipt) => (
-        <ActionReceiptView key={receipt.id} id={receipt.id} />
-      ))}
-    </section>
   );
 }
 

@@ -103,11 +103,11 @@ test("a route bound to a closed document says so, refuses its verbs, and offers 
   f.reopen();
   dirty({ kind: "inventory" });
   const sentence = /the document this page was bound to closed \(Same · open-B/;
-  await vi.waitFor(() => expect(route.actions.catalog.refusal).toMatch(sentence), {
+  await vi.waitFor(() => expect(route.actions.push.refusal).toMatch(sentence), {
     timeout: 10_000,
   });
-  expect(route.actions.catalog.refusal).toMatch(/bind it again in the sentence above/);
-  expect(route.actions.catalog.refusal).not.toMatch(/hydrated/);
+  expect(route.actions.push.refusal).toMatch(/bind it again in the sentence above/);
+  expect(route.actions.push.refusal).not.toMatch(/hydrated/);
   expect(route.bindingLost?.sentence).toMatch(sentence);
   // Offered first, never taken: the route stays on the closed binding until the person picks.
   const documents = ladder.levels.find((level) => level.key === "document")!;

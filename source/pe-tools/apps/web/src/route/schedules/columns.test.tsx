@@ -55,15 +55,13 @@ test("a grid cell draws the contract's transitions and accept writes at the rend
         slice: { cells },
         revision: 7,
         hydrated: true,
-        refreshing: false,
-        peaActive: false,
-        connected: true,
-        failure: null,
         apply,
         execute: async () => null,
         snapshot,
         catalog: null,
         busy: null,
+        refused: {},
+        onFocus: { rail: () => {}, grid: () => {} },
       }}
     />,
   );
