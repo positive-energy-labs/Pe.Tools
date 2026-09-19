@@ -258,8 +258,8 @@ export function useAtlasColumns({
             <span className="px-(--item-pad-x)" title={row.open.join(", ")}>
               {row.open.join(", ")}
             </span>
-          ) : row.room.decisions.length > 0 ? (
-            <span className="px-(--item-pad-x)">{row.room.decisions.length} decided</span>
+          ) : row.room.flags.length > 0 ? (
+            <span className="px-(--item-pad-x)">{row.room.flags.length} decided</span>
           ) : null,
       },
       {

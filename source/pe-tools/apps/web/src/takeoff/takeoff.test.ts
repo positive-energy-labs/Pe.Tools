@@ -195,9 +195,9 @@ describe("typed snapshot projection", () => {
     expect(stale.zone.lane.view).toBe("Renamed plan");
     expect(stale.rooms[0]).toMatchObject({
       ceilingFt: 0,
-      decisions: [],
       flags: ["geometry-changed", "check"],
     });
+    expect(stale.rooms[0]).not.toHaveProperty("decisions");
     expect(stale.savedReview!.shapes.map((shape) => shape.id)).toEqual([native.guid, "other-guid"]);
     expect(stale.savedReview!.shapes[0]!.loops[0]).toEqual(native.outer);
     expect(stale.savedReview!.shapes[0]!.disposition).toBeNull();
@@ -209,7 +209,7 @@ describe("typed snapshot projection", () => {
       ...native,
       analysis: { state: "current", runId: "new", floorZ: 0, ceilingZ: 9, hold: null },
     };
-    expect(project().rooms[0]).toMatchObject({ ceilingFt: 9, decisions: [], flags: ["check"] });
+    expect(project().rooms[0]).toMatchObject({ ceilingFt: 9, flags: ["check"] });
   });
 
   it("rejects native review provenance with neither supported field spelling", () => {

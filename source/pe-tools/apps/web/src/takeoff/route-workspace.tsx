@@ -1,3 +1,4 @@
+import { takeoffDiscardEdits } from "@pe/agent-contracts";
 import { PartitionReview } from "#/takeoff/partition-review";
 import { useNavigate } from "@tanstack/react-router";
 import { FactChip } from "#/components/lang/chip";
@@ -117,7 +118,10 @@ function TakeoffHead({ store }: { store: TakeoffsController }) {
         read: capture
           ? `${capture.reading.observedAt}${store.snapshot.state === "failed" ? " · stale" : ""}`
           : undefined,
-        discard: () => store.handle.work.write([{ path: ["staged"], value: [] }]),
+        discard: () =>
+          store.handle.work.doc
+            ? store.handle.work.write(takeoffDiscardEdits(store.handle.work.doc))
+            : Promise.resolve(null),
         body: staged ? (
           <span className="flex flex-wrap gap-x-4 text-ink-2">
             {Object.values(store.staged).map((edit) => (

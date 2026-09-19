@@ -180,5 +180,6 @@ test("a carrier blob's old resolutions suppress no flag: decisions come from Wor
   );
   const [room] = snapshot.world.zones[0]!.rooms;
   expect(room!.flags).toContain("seedless");
-  expect(room!.decisions).toEqual([]);
+  // A projected room carries no verdicts at all: they are staged Work cells only.
+  expect(room).not.toHaveProperty("decisions");
 });

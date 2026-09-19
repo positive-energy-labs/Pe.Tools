@@ -284,8 +284,6 @@ function room(region: LiveRegion): ModelRoom {
         : 0,
     label: centroid(region.outer),
     flags: [...measurementFlags, ...(value.flags ?? []), ...(value.r10 ? ["r10-not-open"] : [])],
-    // Flag decisions live in Work `decisions`; the carrier blob's `resolutions` is not read.
-    decisions: [],
     provenance: { runId: analysis?.runId ?? runId, sourceRoomId, sourceSqft },
     r10: value.r10 ?? null,
     data: null,

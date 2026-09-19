@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-import { type RouteStateSpec } from "./route-state.ts";
+import { type RouteStatePatch, type RouteStateSpec } from "./route-state.ts";
+import { transitionPatches, trichotomyCellSchema, type TrichotomyCellLike } from "./trichotomy.ts";
 import { observationSchema } from "./reading.ts";
 import { addressSchema } from "./target.ts";
 import { documentRefSchema } from "./target.ts";
@@ -34,16 +35,6 @@ const roomEditSchema = z.object({
   equipLatent: z.number().optional(),
   ventilationCfm: z.number().optional(),
 });
-
-const resolutionSchema = z.object({
-  subject: z.string(),
-  flag: z.string(),
-  verb: z.enum(["accept", "dismiss"]),
-  at: z.string(),
-  runId: z.string(),
-});
-
-export type Resolution = z.infer<typeof resolutionSchema>;
 
 const modelViewSchema = z.object({
   view: z.string(),
@@ -79,7 +70,6 @@ const modelRoomSchema = z.object({
   ceilingFt: z.number(),
   label: pointSchema,
   flags: z.array(z.string()),
-  decisions: z.array(resolutionSchema),
   provenance: z.object({ runId: z.string(), sourceRoomId: z.string(), sourceSqft: z.number() }),
   r10: z
     .object({
@@ -348,38 +338,193 @@ export const takeoffObservationStatusSchema = z.discriminatedUnion("kind", [
 ]);
 export type TakeoffObservationStatus = z.infer<typeof takeoffObservationStatusSchema>;
 
-const stagedRoomEditSchema = z.object({
+/** A room's staged edit as the host consumes it: the baseline beside, the staged values as `next`. */
+export const stagedRoomEditSchema = z.object({
   roomId: z.string(),
   base: roomEditSchema,
   next: roomEditSchema,
 });
 export type StagedRoomEdit = z.infer<typeof stagedRoomEditSchema>;
+export type RoomEdit = z.infer<typeof roomEditSchema>;
+export type RoomEditField = keyof RoomEdit;
+const ROOM_EDIT_FIELDS = Object.keys(roomEditSchema.shape) as RoomEditField[];
 
-// Parse older Work without retaining its former page fields or discarding authored proposals.
-const takeoffsDocumentSchema = z.object({
-  staged: z.array(stagedRoomEditSchema).default([]),
-  adoptPatches: z
-    .record(
-      z.string(),
-      z.object({
-        checked: z.boolean().optional(),
-        name: z.string().optional(),
-        systemTag: z.string().optional(),
-      }),
-    )
-    .default({}),
-  decisions: z.record(z.string(), z.enum(["accept", "dismiss"])).default({}),
-  reviewFlags: z.record(z.string(), z.array(z.string())).default({}),
+/** One canonical JSON tuple per cell address, the Families encoding rule. */
+const tupleKey = (parts: readonly string[]) => JSON.stringify(parts);
+const tupleOf = (key: string, length: number): string[] | null => {
+  try {
+    const parts = JSON.parse(key) as unknown;
+    return Array.isArray(parts) &&
+      parts.length === length &&
+      parts.every((part) => typeof part === "string") &&
+      tupleKey(parts) === key
+      ? parts
+      : null;
+  } catch {
+    return null;
+  }
+};
+const keyed = (length: number, what: string) =>
+  z.string().refine((key) => tupleOf(key, length) !== null, {
+    error: `a takeoffs ${what} cell key must be a canonical JSON tuple`,
+  });
+
+/** A room field's edit: `[roomId, field]`, its value that field's next value. */
+export const takeoffEditKey = (roomId: string, field: RoomEditField) => tupleKey([roomId, field]);
+export const takeoffEditAddress = (key: string) => {
+  const [roomId, field] = tupleOf(key, 2)!;
+  return { roomId: roomId!, field: field as RoomEditField };
+};
+/** A person's verdict on a solver flag: `[roomGuid, flag]`. */
+export const takeoffDecisionKey = (roomGuid: string, flag: string) => tupleKey([roomGuid, flag]);
+export const takeoffDecisionAddress = (key: string) => {
+  const [roomGuid, flag] = tupleOf(key, 2)!;
+  return { roomGuid: roomGuid!, flag: flag! };
+};
+/** A review flag on one shape of a zone's saved partition review: `[zoneKey, shapeKey]`. */
+export const takeoffFlagKey = (zoneKey: string, shapeKey: string) => tupleKey([zoneKey, shapeKey]);
+
+const editCellSchema = trichotomyCellSchema(z.union([z.string(), z.number()]));
+const adoptChoiceSchema = z.object({
+  checked: z.boolean().optional(),
+  name: z.string().optional(),
+  systemTag: z.string().optional(),
 });
+export type AdoptChoice = z.infer<typeof adoptChoiceSchema>;
+const verdictSchema = z.enum(["accept", "dismiss"]);
+
+/**
+ * Every authored takeoff judgment is a cell (co-sign rules 1-3): Pea proposes, a person stages,
+ * and hosts read `staged` only. `bases` holds each edited room's immutable baseline beside the
+ * cells, never inside a value. Strict, so pre-cells Work fails closed rather than lose its values.
+ */
+const takeoffsDocumentSchema = z
+  .strictObject({
+    edits: z.record(keyed(2, "edit"), editCellSchema).default({}),
+    bases: z.record(z.string(), roomEditSchema).default({}),
+    /** Keyed by candidate (`<view>:<elementId>`). */
+    adopt: z.record(z.string(), trichotomyCellSchema(adoptChoiceSchema)).default({}),
+    decisions: z.record(keyed(2, "decision"), trichotomyCellSchema(verdictSchema)).default({}),
+    /** A flag has no commit verb: the staged set is the durable judgment and the export. */
+    reviewFlags: z
+      .record(keyed(2, "review flag"), trichotomyCellSchema(z.literal(true)))
+      .default({}),
+  })
+  .superRefine((doc, ctx) => {
+    // Each edit's rungs hold a value that field accepts.
+    for (const [key, cell] of Object.entries(doc.edits)) {
+      const { field } = takeoffEditAddress(key);
+      const schema = (roomEditSchema.shape as Record<string, z.ZodOptional<z.ZodType>>)[field];
+      if (!schema) {
+        ctx.addIssue({ code: "custom", path: ["edits", key], message: `no room field '${field}'` });
+        continue;
+      }
+      for (const rung of ["proposal", "staged"] as const) {
+        const value = cell[rung]?.value;
+        if (value !== undefined && !schema.unwrap().safeParse(value).success)
+          ctx.addIssue({
+            code: "custom",
+            path: ["edits", key, rung, "value"],
+            message: `not a ${field} value`,
+          });
+      }
+    }
+  });
 export type TakeoffsRouteDocument = z.infer<typeof takeoffsDocumentSchema>;
+
+const stagedOf = <V>(cells: Record<string, TrichotomyCellLike>) =>
+  Object.entries(cells).flatMap(([key, cell]) =>
+    cell.staged?.value !== undefined ? [[key, cell.staged.value as V] as const] : [],
+  );
+
+/** The person's staged room edits, one per room: what sync consumes. Proposals never appear. */
+export function stagedTakeoffEdits(doc: TakeoffsRouteDocument): Record<string, StagedRoomEdit> {
+  const rooms: Record<string, StagedRoomEdit> = {};
+  for (const [key, value] of stagedOf<string | number>(doc.edits)) {
+    const { roomId, field } = takeoffEditAddress(key);
+    const edit = (rooms[roomId] ??= { roomId, base: doc.bases[roomId] ?? {}, next: {} });
+    (edit.next as Record<string, unknown>)[field] = value;
+  }
+  return rooms;
+}
+export const stagedAdoptChoices = (doc: TakeoffsRouteDocument): Record<string, AdoptChoice> =>
+  Object.fromEntries(stagedOf<AdoptChoice>(doc.adopt));
+/** The person's staged flag verdicts, keyed by `takeoffDecisionKey`. */
+export const stagedDecisions = (doc: TakeoffsRouteDocument): Record<string, "accept" | "dismiss"> =>
+  Object.fromEntries(stagedOf<"accept" | "dismiss">(doc.decisions));
+/** The person's staged review flags per zone. */
+export function stagedReviewFlags(doc: TakeoffsRouteDocument): Record<string, string[]> {
+  const zones: Record<string, string[]> = {};
+  for (const [key] of stagedOf<true>(doc.reviewFlags)) {
+    const [zoneKey, shapeKey] = tupleOf(key, 2)!;
+    (zones[zoneKey!] ??= []).push(shapeKey!);
+  }
+  return zones;
+}
+
+/** A person discards every staged room edit: each staged edit cell unstages; proposals stay. */
+export const takeoffDiscardEdits = (doc: TakeoffsRouteDocument): RouteStatePatch[] =>
+  Object.entries(doc.edits).flatMap(([key, cell]) =>
+    cell.staged ? transitionPatches(["edits"], key, cell, { kind: "unstage" }) : [],
+  );
+
+/** A person flags a review shape, or unflags it: unflag unstages the shape's cell. */
+export function takeoffFlagToggle(
+  doc: TakeoffsRouteDocument,
+  zoneKey: string,
+  shapeKey: string,
+): RouteStatePatch[] {
+  const key = takeoffFlagKey(zoneKey, shapeKey);
+  const cell = doc.reviewFlags[key] ?? {};
+  return transitionPatches(
+    ["reviewFlags"],
+    key,
+    cell,
+    cell.staged ? { kind: "unstage" } : { kind: "stage", rung: { value: true } },
+  );
+}
+
+/**
+ * A person stages a room's next values: each field stages against the room's baseline (equal to
+ * the baseline stages nothing), and a field the edit no longer carries unstages. The baseline is
+ * recorded beside the cells the first time the room is edited.
+ */
+export function takeoffEditPatches(
+  doc: TakeoffsRouteDocument,
+  roomId: string,
+  base: RoomEdit,
+  next: RoomEdit,
+): RouteStatePatch[] {
+  const baseline = doc.bases[roomId] ?? base;
+  return [
+    ...(doc.bases[roomId] ? [] : [{ path: ["bases", roomId], value: base }]),
+    ...ROOM_EDIT_FIELDS.flatMap((field) => {
+      const key = takeoffEditKey(roomId, field);
+      const cell = doc.edits[key] ?? {};
+      const value = next[field];
+      if (value === undefined)
+        return cell.staged ? transitionPatches(["edits"], key, cell, { kind: "unstage" }) : [];
+      return transitionPatches(["edits"], key, cell, {
+        kind: "stage",
+        rung: { value },
+        ...(baseline[field] === undefined ? {} : { baseline: { value: baseline[field] } }),
+      });
+    }),
+  ];
+}
 
 export const takeoffsRouteState = {
   route: "takeoffs",
   title: "Takeoffs",
   description:
-    "A person's staged room values, adoption choices and review judgments; Pea reads this document and writes none of it until the route moves to proposal cells. Model geometry is read from takeoffs.snapshot; durable saved observations are at /takeoffs/observations.",
+    "A person's staged room values, adoption choices, flag verdicts and review flags, each one cell. Pea may propose on any of them; a person stages, and sync reads staged values only. Model geometry is read from takeoffs.snapshot; durable saved observations are at /takeoffs/observations.",
   schema: takeoffsDocumentSchema,
-  // Every field is a to-be-committed value; Pea gets proposal cells at this route's cutover.
-  agentWriteMask: [] as string[][],
+  // Pea proposes; staged values and room baselines are a person's.
+  agentWriteMask: [
+    ["edits", "*", "proposal"],
+    ["adopt", "*", "proposal"],
+    ["decisions", "*", "proposal"],
+    ["reviewFlags", "*", "proposal"],
+  ],
   commands: {},
 } satisfies RouteStateSpec<typeof takeoffsDocumentSchema>;

@@ -1,3 +1,4 @@
+import { takeoffDecisionKey } from "@pe/agent-contracts";
 import { Fragment } from "react";
 import { StatLine } from "#/components/anatomy";
 import { FactChip } from "#/components/lang/chip";
@@ -45,7 +46,7 @@ function RoomPanel({
 }) {
   const { room, zone, state, open } = row;
   const localDecisions = room.flags
-    .map((f) => ({ flag: f, verb: decided[f] }))
+    .map((f) => ({ flag: f, verb: decided[takeoffDecisionKey(room.guid, f)] }))
     .filter((x): x is { flag: string; verb: Verdict } => x.verb !== undefined);
 
   return (
@@ -179,23 +180,15 @@ function RoomPanel({
                 : "never exported"
             }
           />
-          {room.decisions.length === 0 && localDecisions.length === 0 ? (
+          {localDecisions.length === 0 ? (
             <StatLine truncate={false} label="decisions" value="none written on this room" muted />
           ) : (
             <>
-              {room.decisions.map((d, i) => (
-                <StatLine
-                  truncate={false}
-                  key={`w${i}`}
-                  label={i === 0 ? "decisions" : ""}
-                  value={`${d.verb} ${d.flag} · ${d.at.slice(0, 10)} · ${d.runId}`}
-                />
-              ))}
-              {localDecisions.map((d) => (
+              {localDecisions.map((d, i) => (
                 <StatLine
                   truncate={false}
                   key={`l${d.flag}`}
-                  label=""
+                  label={i === 0 ? "decisions" : ""}
                   value={`${d.verb} ${d.flag} · this session`}
                 />
               ))}

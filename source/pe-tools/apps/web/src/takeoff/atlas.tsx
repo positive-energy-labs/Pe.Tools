@@ -1,3 +1,4 @@
+import { takeoffDecisionKey } from "@pe/agent-contracts";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 
 import type { TableState } from "#/components/master-table/model";
@@ -42,8 +43,6 @@ const createAtlasActions = (store: TakeoffsController): AtlasActions => ({
   partition: () => void store.handle.actions.partition.run(),
 });
 
-const flagKey = (guid: string, flag: string) => `${guid}::${flag}`;
-
 function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) {
   const world = store.world;
   const views = store.views;
@@ -83,7 +82,8 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
   const setLevel = useCallback((value: string) => store.actions.chooseLevel(value), [store]);
   const setCursor = useCallback((value: string | null) => store.actions.chooseRoom(value), [store]);
 
-  const openFlags = (room: ModelRoom) => room.flags.filter((f) => !decided[flagKey(room.guid, f)]);
+  const openFlags = (room: ModelRoom) =>
+    room.flags.filter((f) => !decided[takeoffDecisionKey(room.guid, f)]);
 
   const stateOf = (room: ModelRoom) => atlasRoomState(room, openFlags(room).length);
   const zoneStates = (z: ModelZone) => z.rooms.map((r) => stateOf(r));
