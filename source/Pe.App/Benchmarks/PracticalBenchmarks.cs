@@ -759,7 +759,7 @@ internal static class PracticalBenchmarks {
 
         foreach (var (typeName, value) in valuesByType) {
             SetCurrentType(familyDocument, typeName);
-            _ = familyDoc.SetValue(parameter, value, nameof(BuiltInCoercionStrategy.CoerceByStorageType));
+            _ = familyDoc.SetValue(parameter, value, nameof(MappingStrategy.CoerceByStorageType));
         }
 
         SetCurrentType(familyDocument, valuesByType.Keys.First());

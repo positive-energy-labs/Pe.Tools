@@ -124,8 +124,8 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
             ? trimmedUserValue.Substring(1, trimmedUserValue.Length - 2)
             : userValue;
 
-        var details = famDoc.DescribeSetValue(parameter, actualValue, nameof(BuiltInCoercionStrategy.CoerceByStorageType));
-        _ = famDoc.SetValue(parameter, actualValue, nameof(BuiltInCoercionStrategy.CoerceByStorageType));
+        var details = famDoc.DescribeSetValue(parameter, actualValue, nameof(MappingStrategy.CoerceByStorageType));
+        _ = famDoc.SetValue(parameter, actualValue, nameof(MappingStrategy.CoerceByStorageType));
         return details;
     }
 

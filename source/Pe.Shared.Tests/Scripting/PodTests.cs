@@ -429,19 +429,36 @@ public sealed class PodTests {
         Assert.That(composed.Dependencies.Select(d => d.Path), Is.EqualTo(new[] { "settings/_fields/X.json", "settings/_fields/Y.json" }));
     }
 
+    // A single object in array position is inserted as one element (the capability before ae9ce8c; ruling-ff-coercion audit #17).
     [Test]
-    public void Array_include_of_any_other_shape_is_a_named_include_error() {
+    public void Array_include_of_a_single_object_inserts_that_object() {
         this.WritePod("Office", "office", new() {
-            ["settings/member.json"] = """{"Fields":[{"$include":"@local/_fields/X"}]}""",
-            ["settings/_fields/X.json"] = """{"Name":"not a fragment"}"""
+            ["settings/member.json"] = """{"Fields":[{"A":1},{"$include":"@local/_fields/X"},{"B":2}]}""",
+            ["settings/_fields/X.json"] = """{"Name":"one field spec"}"""
         });
 
         var composed = this._service.Compose("office", "settings/member.json", null);
 
-        Assert.That(composed.Composed, Is.Null);
-        var error = composed.Diagnostics.Single();
-        Assert.That(error.Stage, Is.EqualTo("pod.settings.include"));
-        Assert.That(error.Message, Does.Contain("@local/_fields/X").And.Contain("Name"));
+        Assert.That(composed.Diagnostics, Is.Empty);
+        Assert.That(JObject.Parse(composed.Composed!)["Fields"]!.ToString(Newtonsoft.Json.Formatting.None),
+            Is.EqualTo("""[{"A":1},{"Name":"one field spec"},{"B":2}]"""));
+    }
+
+    [Test]
+    public void Array_include_of_a_scalar_or_null_is_a_named_include_error() {
+        foreach (var scalar in new[] { "3", "null", "\"text\"" }) {
+            this.WritePod("Office", "office", new() {
+                ["settings/member.json"] = """{"Fields":[{"$include":"@local/_fields/X"}]}""",
+                ["settings/_fields/X.json"] = scalar
+            });
+
+            var composed = this._service.Compose("office", "settings/member.json", null);
+
+            Assert.That(composed.Composed, Is.Null, scalar);
+            var error = composed.Diagnostics.Single();
+            Assert.That(error.Stage, Is.EqualTo("pod.settings.include"), scalar);
+            Assert.That(error.Message, Does.Contain("@local/_fields/X"), scalar);
+        }
     }
 
     // The proof-3a shape: a schedule profile whose Fields include `_fields` fragments.

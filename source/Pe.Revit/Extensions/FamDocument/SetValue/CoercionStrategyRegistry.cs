@@ -1,12 +1,7 @@
 using Pe.Revit.Extensions.FamDocument.SetValue.CoercionStrategies;
+using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.Extensions.FamDocument.SetValue;
-
-public enum BuiltInCoercionStrategy {
-    Strict,
-    CoerceByStorageType,
-    CoerceMeasurableToNumber
-}
 
 /// <summary>
 ///     Registry for ParamCoercionStrategy implementations.
@@ -18,17 +13,17 @@ public static class ParamCoercionStrategyRegistry {
     private static readonly object _lock = new();
 
     static ParamCoercionStrategyRegistry() {
-        Register(BuiltInCoercionStrategy.Strict.ToString(), new Strict());
-        Register(BuiltInCoercionStrategy.CoerceByStorageType.ToString(), new CoerceByStorageType());
+        Register(MappingStrategy.Strict.ToString(), new Strict());
+        Register(MappingStrategy.CoerceByStorageType.ToString(), new CoerceByStorageType());
 
         // CoerceMeasurableToNumber with fallback to CoerceByStorageType
         // Tries unit conversion first, falls back to raw value copy if no mapping exists
-        Register(BuiltInCoercionStrategy.CoerceMeasurableToNumber.ToString(), new CompositeStrategy(
+        Register(MappingStrategy.CoerceMeasurableToNumber.ToString(), new CompositeStrategy(
             new CoerceMeasurableToNumber(),
             new CoerceByStorageType()
         ));
 
-        Register("CoerceElectrical", new CoerceElectrical());
+        Register(nameof(MappingStrategy.CoerceElectrical), new CoerceElectrical());
     }
 
     /// <summary>
@@ -60,16 +55,6 @@ public static class ParamCoercionStrategyRegistry {
     /// </summary>
     /// <returns>Collection of strategy names</returns>
     public static IEnumerable<string> GetAllNames() => _instances.Keys;
-
-    // Only these convert through explicit units, so only these may carry a value across a data-type change. The registered
-    // CoerceMeasurableToNumber falls back to a raw storage copy; its unit-aware stage alone is honest there.
-    private static readonly Dictionary<string, ICoercionStrategy> UnitAwareInstances = new(StringComparer.Ordinal) {
-        ["CoerceElectrical"] = new CoerceElectrical(),
-        [nameof(BuiltInCoercionStrategy.CoerceMeasurableToNumber)] = new CoerceMeasurableToNumber()
-    };
-
-    /// <summary>The unit-aware stage of a registered strategy, or null when the strategy is unit-blind (Strict, CoerceByStorageType).</summary>
-    public static ICoercionStrategy? UnitAware(string name) => UnitAwareInstances.GetValueOrDefault(name);
 }
 
 /// <summary>
@@ -82,15 +67,17 @@ public static class ValueCoercionStrategyRegistry {
     private static readonly object _lock = new();
 
     static ValueCoercionStrategyRegistry() {
-        Register(BuiltInCoercionStrategy.Strict.ToString(), new Strict());
-        Register(BuiltInCoercionStrategy.CoerceByStorageType.ToString(), new CoerceByStorageType());
+        Register(MappingStrategy.Strict.ToString(), new Strict());
+        Register(MappingStrategy.CoerceByStorageType.ToString(), new CoerceByStorageType());
 
         // CoerceMeasurableToNumber with fallback to CoerceByStorageType
         // Tries unit conversion first, falls back to raw value copy if no mapping exists
-        Register(BuiltInCoercionStrategy.CoerceMeasurableToNumber.ToString(), new CompositeStrategy(
+        Register(MappingStrategy.CoerceMeasurableToNumber.ToString(), new CompositeStrategy(
             new CoerceMeasurableToNumber(),
             new CoerceByStorageType()
         ));
+
+        Register(nameof(MappingStrategy.CoerceElectrical), new CoerceElectrical());
     }
 
     /// <summary>
