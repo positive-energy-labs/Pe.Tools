@@ -66,7 +66,7 @@ public sealed class MappingStrategyCoercionTests {
     // Old_template's class, ruling 2026-09-19: a bare Number into PE_M___BoilerOutput (hvac:power) crosses through the declared unit, exactly.
     [Test]
     public void A_bare_number_into_hvac_power_converts_exactly_through_its_declared_mapping_unit() {
-        var (error, _, receipt, btuh, source) = this.MigrateBoilerOutput("Btu/h");
+        var (error, _, receipt, btuh, source) = this.MigrateBoilerOutput("Btu/h").Single();
         Assert.That(error, Is.Null, error?.ToString());
         Assert.That(receipt?.Converged, Is.True);
         Assert.That(source, Is.Null, "a carried source is removed");
@@ -77,7 +77,7 @@ public sealed class MappingStrategyCoercionTests {
     // type, and the exact declaration that would carry it. Its source stays with its values, so nothing the person never saw is lost.
     [Test]
     public void A_bare_number_into_hvac_power_without_a_mapping_unit_is_reported_by_name_its_source_kept_and_the_family_still_migrates() {
-        var (error, preview, receipt, btuh, source) = this.MigrateBoilerOutput(null);
+        var (error, preview, receipt, btuh, source) = this.MigrateBoilerOutput(null).Single();
         Assert.That(error, Is.Null, error?.ToString());
         Assert.That(receipt?.Converged, Is.True);
         Assert.That(btuh, Is.All.Null, "a value is never guessed");
@@ -140,11 +140,27 @@ public sealed class MappingStrategyCoercionTests {
         } finally { document.Close(false); }
     }
 
+    // The fix the report names: the same family re-run with mappingUnit declared carries the values the kept source still holds, then removes it.
+    [Test]
+    public void A_source_kept_for_want_of_a_unit_is_carried_and_removed_when_the_rerun_declares_one() {
+        var runs = this.MigrateBoilerOutput(null, "Btu/h");
+        Assert.That(runs[0].Error, Is.Null, runs[0].Error?.ToString());
+        Assert.That(runs[0].Source, Is.EqualTo(new double?[] { 12000d, 24000d }), "run 1 keeps the source");
+        var (error, _, receipt, btuh, source) = runs[1];
+        Assert.That(error, Is.Null, error?.ToString());
+        Assert.That(receipt?.Converged, Is.True);
+        Assert.That(btuh, Is.EqualTo(new double?[] { 12000d, 24000d }).Within(1e-6), "run 2 carries exactly through Btu/h");
+        Assert.That(source, Is.Null, "run 2 removes the carried source");
+        Assert.That(receipt!.RunEffects, Has.None.Contains("kept so its values are not lost").And.None.Contains("did not carry"));
+    }
+
     /// <summary>
-    ///     Seeds `Boiler Output` (Number: 12000 in type A, 24000 in B) and reconciles a patch mapping it into the company's shared
-    ///     PE_M___BoilerOutput (hvac:power), declaring <paramref name="unit" /> or none. Returns each type's destination value in Btu/h (null when unset).
+    ///     Seeds `Boiler Output` (Number: 12000 in type A, 24000 in B), then reconciles the same family once per entry of
+    ///     <paramref name="units" />: a patch mapping it into the company's shared PE_M___BoilerOutput (hvac:power), declaring that unit or none.
+    ///     Per run: each type's destination value in Btu/h (null when unset) and the source's values (null when it was removed).
     /// </summary>
-    private (Exception? Error, FamilyPreview Preview, FamilyReceipt? Receipt, List<double?> Btuh, List<double?>? Source) MigrateBoilerOutput(string? unit) {
+    private List<(Exception? Error, FamilyPreview Preview, FamilyReceipt? Receipt, List<double?> Btuh, List<double?>? Source)> MigrateBoilerOutput(
+        params string?[] units) {
         var definitions = JsonConvert.DeserializeObject<List<ParametersApi.Parameters.ParametersResult>>(File.ReadAllText(
             RevitFamilyFixtureHarness.GetProfileFixturePath("normalization-company-definitions.json")))!.Where(d => d.Name == "PE_M___BoilerOutput").ToList();
         Assert.That(definitions, Has.Count.EqualTo(1));
@@ -160,28 +176,32 @@ public sealed class MappingStrategyCoercionTests {
                 }
                 Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
             }
-            var target = new JObject {
-                ["shared"] = true, ["sharedGuid"] = definitions[0].DownloadOptions.GetGuid().ToString(), ["sharedSpecId"] = SpecTypeId.HvacPower.TypeId,
-                ["wasNamed"] = new JArray("Boiler Output")
-            };
-            if (unit is not null) target["mappingUnit"] = unit;
-            var patch = new FamilyPatch { Patch = new JObject { ["parameters"] = new JObject { ["PE_M___BoilerOutput"] = target } } };
-            var preview = document.PreviewFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
-            Assert.That(preview.Diagnostics, Is.Empty, string.Join("; ", preview.Diagnostics.Select(d => d.Message)));
-            var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
-            Exception? error;
-            using (var processor = new OperationProcessor(document)) {
-                var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
-                (_, error) = contexts.Single().OperationLogs;
+            var runs = new List<(Exception?, FamilyPreview, FamilyReceipt?, List<double?>, List<double?>?)>();
+            foreach (var unit in units) {
+                var target = new JObject {
+                    ["shared"] = true, ["sharedGuid"] = definitions[0].DownloadOptions.GetGuid().ToString(), ["sharedSpecId"] = SpecTypeId.HvacPower.TypeId,
+                    ["wasNamed"] = new JArray("Boiler Output")
+                };
+                if (unit is not null) target["mappingUnit"] = unit;
+                var patch = new FamilyPatch { Patch = new JObject { ["parameters"] = new JObject { ["PE_M___BoilerOutput"] = target } } };
+                var preview = document.PreviewFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
+                Assert.That(preview.Diagnostics, Is.Empty, string.Join("; ", preview.Diagnostics.Select(d => d.Message)));
+                var operation = new ReconcileFamily(patch, sharedSource: d => new FamilySharedParameterSource(d, definitions));
+                Exception? error;
+                using (var processor = new OperationProcessor(document)) {
+                    var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
+                    (_, error) = contexts.Single().OperationLogs;
+                }
+                var fm = document.FamilyManager;
+                var output = fm.get_Parameter("PE_M___BoilerOutput");
+                var btuh = fm.Types.Cast<FamilyType>().Where(t => t.Name is "A" or "B").OrderBy(t => t.Name)
+                    .Select(t => output is not null && t.HasValue(output) && t.AsDouble(output) is { } v && v != 0
+                        ? UnitUtils.ConvertFromInternalUnits(v, UnitTypeId.BritishThermalUnitsPerHour) : (double?)null).ToList();
+                var kept = fm.get_Parameter("Boiler Output");
+                var sourceValues = kept is null ? null : fm.Types.Cast<FamilyType>().Where(t => t.Name is "A" or "B").OrderBy(t => t.Name).Select(t => t.AsDouble(kept)).ToList();
+                runs.Add((error, preview, operation.LastReceipt, btuh, sourceValues));
             }
-            var fm = document.FamilyManager;
-            var output = fm.get_Parameter("PE_M___BoilerOutput");
-            var btuh = fm.Types.Cast<FamilyType>().Where(t => t.Name is "A" or "B").OrderBy(t => t.Name)
-                .Select(t => output is not null && t.HasValue(output) && t.AsDouble(output) is { } v && v != 0
-                    ? UnitUtils.ConvertFromInternalUnits(v, UnitTypeId.BritishThermalUnitsPerHour) : (double?)null).ToList();
-            var kept = fm.get_Parameter("Boiler Output");
-            var sourceValues = kept is null ? null : fm.Types.Cast<FamilyType>().Where(t => t.Name is "A" or "B").OrderBy(t => t.Name).Select(t => t.AsDouble(kept)).ToList();
-            return (error, preview, operation.LastReceipt, btuh, sourceValues);
+            return runs;
         } finally { document.Close(false); }
     }
 }
