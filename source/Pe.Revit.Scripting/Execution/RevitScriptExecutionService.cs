@@ -1,4 +1,4 @@
-using Autodesk.Revit.DB;
+﻿using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.UI;
 using Microsoft.CodeAnalysis;
@@ -945,6 +945,8 @@ public sealed class RevitScriptExecutionService(
 
         TransactionGroup? group = null;
         Transaction? transaction = null;
+        // What Revit posted inside the guard reaches the script result; a failure is rolled back silently, never shown.
+        var guardFailures = new List<(bool IsError, string Message)>();
         try {
             group = new TransactionGroup(document, ReadOnlyGuardTransactionName);
             if (group.Start() != TransactionStatus.Started)
@@ -952,7 +954,7 @@ public sealed class RevitScriptExecutionService(
 
             transaction = new Transaction(document, ReadOnlyGuardTransactionName);
             var failureOptions = transaction.GetFailureHandlingOptions();
-            _ = failureOptions.SetFailuresPreprocessor(PeToolsFailureHandling.CreatePreprocessor([]));
+            _ = failureOptions.SetFailuresPreprocessor(PeToolsFailureHandling.CreatePreprocessor(guardFailures));
             _ = failureOptions.SetForcedModalHandling(false);
             transaction.SetFailureHandlingOptions(failureOptions);
             if (transaction.Start() != TransactionStatus.Started)
@@ -990,6 +992,11 @@ public sealed class RevitScriptExecutionService(
                 group?.Dispose();
             }
         }
+
+        foreach (var (isError, message) in guardFailures)
+            diagnostics.Add(isError
+                ? ScriptDiagnosticFactory.Warning("readonly", message)
+                : ScriptDiagnosticFactory.Info("readonly", message));
 
         if (mutationMonitor.HasPersistedChanges)
             throw new RevitScriptMutationException(

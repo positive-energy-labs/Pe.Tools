@@ -1,4 +1,4 @@
-using Autodesk.Revit.DB.Events;
+﻿using Autodesk.Revit.DB.Events;
 using Pe.Revit.Failures;
 
 namespace Pe.Revit.Tests;
@@ -20,7 +20,21 @@ internal static class RevitTestFailureGuard {
         application.FailuresProcessing += OnFailuresProcessing;
     }
 
+    private static bool _suspended;
+
+    /// <summary>Lets a test see what product failure handling does alone: while suspended, this guard does not touch failures.</summary>
+    public static IDisposable Suspend() {
+        _suspended = true;
+        return new Resume();
+    }
+
+    private sealed class Resume : IDisposable {
+        public void Dispose() => _suspended = false;
+    }
+
     private static void OnFailuresProcessing(object? _, FailuresProcessingEventArgs args) {
+        if (_suspended)
+            return;
         var accessor = args.GetFailuresAccessor();
         if (accessor == null)
             return;
