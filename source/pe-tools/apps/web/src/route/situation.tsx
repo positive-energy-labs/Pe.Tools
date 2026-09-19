@@ -769,33 +769,38 @@ export function Situation({
               {sentence}
             </p>
             <ActionBoard handle={handle} verbs={verbs} commit={commit} work={workWord} />
-            <WorkBand
-              count={staged?.count ?? 0}
-              noun={staged?.noun ?? "edit"}
-              revision={handle.work.revision}
-              read={staged?.read}
-              conflict={handle.work.conflict}
-              busy={handle.busy !== null}
-              discard={() => void staged?.discard()}
-              commit={
-                commitAction
-                  ? {
-                      label: commitAction.label,
-                      reason: commitAction.refusal ?? commitAction.says,
-                      disabled: commitAction.refusal !== null,
-                      run: () => void commitAction.run(),
-                    }
-                  : undefined
-              }
-              unresolved={unresolved as string[]}
-              reload={handle.work.reload}
-              startFresh={
-                handle.work.startFresh ? () => void handle.work.startFresh?.() : undefined
-              }
-              body={staged?.body}
-              showRevision={false}
-            />
-            {band}
+            {/* F-R4-1: the staged and unresolved lines (and a route's band) share ONE fixed
+                block that scrolls itself, so a first stage or a refusal never grows the head and
+                moves the grid under the person (fixture look 12: a refusal moved it 28px). */}
+            <div data-slot="situation-band" className="h-16 overflow-y-auto">
+              <WorkBand
+                count={staged?.count ?? 0}
+                noun={staged?.noun ?? "edit"}
+                revision={handle.work.revision}
+                read={staged?.read}
+                conflict={handle.work.conflict}
+                busy={handle.busy !== null}
+                discard={() => void staged?.discard()}
+                commit={
+                  commitAction
+                    ? {
+                        label: commitAction.label,
+                        reason: commitAction.refusal ?? commitAction.says,
+                        disabled: commitAction.refusal !== null,
+                        run: () => void commitAction.run(),
+                      }
+                    : undefined
+                }
+                unresolved={unresolved as string[]}
+                reload={handle.work.reload}
+                startFresh={
+                  handle.work.startFresh ? () => void handle.work.startFresh?.() : undefined
+                }
+                body={staged?.body}
+                showRevision={false}
+              />
+              {band}
+            </div>
           </div>
           <div className="flex min-w-[24rem] flex-[2] flex-col">
             <div className="hairline-t flex flex-col gap-1 py-1.5">
