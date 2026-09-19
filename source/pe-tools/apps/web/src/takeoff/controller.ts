@@ -9,6 +9,7 @@ import { useCallback, useMemo, useState } from "react";
 import type {
   CandidateRegion,
   Reading,
+  RouteStatePatch,
   StagedRoomEdit,
   TakeoffCapture,
   TakeoffSnapshot,
@@ -21,11 +22,13 @@ import {
   stagedTakeoffEdits,
   takeoffDecisionAddress,
   takeoffDecisionKey,
+  takeoffEditAddress,
   takeoffEditPatches,
   takeoffFlagToggle,
   transitionPatches,
 } from "@pe/agent-contracts";
 
+import type { CellWire } from "#/components/lang/band";
 import { previousOf } from "#/readings";
 import { useRoute } from "#/route/use-route";
 import { snapshotOfObservation, syncPlan, type TakeoffReadingKey } from "#/takeoff/actions";
@@ -96,6 +99,28 @@ export interface AdoptDraft {
 /* ── Pure projections ──────────────────────────────────────────────────────── */
 
 const EMPTY_WORLD: TakeoffModel = { docName: "", r10Path: null, lanes: [], zones: [], systems: [] };
+
+/**
+ * An edit's staged rung needs its room's base (what sync compares against), which only a person
+ * writes. Staging an edit cell — typing, or accepting Pea's proposal — carries the base when the
+ * room has none yet, read from the authoritative world.
+ */
+export function withEditBases(
+  doc: { bases: Readonly<Record<string, unknown>> },
+  world: { zones: readonly { rooms: readonly ModelRoom[] }[] },
+  patches: RouteStatePatch[],
+): RouteStatePatch[] {
+  const rooms = new Set(
+    patches
+      .filter((patch) => patch.path[0] === "edits" && patch.path[2] === "staged")
+      .map((patch) => takeoffEditAddress(String(patch.path[1])).roomId),
+  );
+  const bases = [...rooms].flatMap((roomId) => {
+    const room = world.zones.flatMap((zone) => zone.rooms).find((r) => r.guid === roomId);
+    return doc.bases[roomId] || !room ? [] : [{ path: ["bases", roomId], value: roomEdit(room) }];
+  });
+  return [...bases, ...patches];
+}
 
 export const roomEdit = (room: ModelRoom): RoomEdit => ({
   name: room.name,
@@ -516,8 +541,37 @@ export function useTakeoffsController(options: {
     ],
   );
 
+  // THE FOUR CELL FAMILIES (the takeoffs cutover): each a trichotomy cell record, drawn through
+  // the kit with the contract's transitions. An edit's staged rung needs its room's base (what
+  // sync compares against), which only a person writes: a stage of an edit cell (typing, or
+  // accepting Pea's proposal) carries the base when the room has none yet.
+  const doc = handle.work.doc;
+  const cells = {
+    edits: doc?.edits ?? {},
+    adopt: doc?.adopt ?? {},
+    decisions: doc?.decisions ?? {},
+    reviewFlags: doc?.reviewFlags ?? {},
+  };
+  const wire = (segment: keyof typeof cells): CellWire => ({
+    segment,
+    revision: handle.work.revision,
+    write: (patches, expectedRevision) =>
+      handle.work.write(
+        segment === "edits" && doc ? withEditBases(doc, authority, patches) : patches,
+        expectedRevision,
+      ),
+  });
+  const wires = {
+    edits: wire("edits"),
+    adopt: wire("adopt"),
+    decisions: wire("decisions"),
+    reviewFlags: wire("reviewFlags"),
+  };
+
   return {
     handle,
+    cells,
+    wires,
     savedCapture: capture,
     source: capture ? ("saved" as const) : ("live" as const),
     target:

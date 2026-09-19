@@ -11,6 +11,9 @@ import { useState } from "react";
 import {
   familiesRouteState,
   instancesRouteState,
+  takeoffDecisionAddress,
+  takeoffEditAddress,
+  takeoffsRouteState,
   type Address,
   type InstancesLaunch,
   type TrichotomyCellLike,
@@ -28,6 +31,26 @@ export interface HeadExits {
   planIn: (route: ChatPluginRoute) => void;
 }
 
+/** The takeoffs cell families as the head groups them. */
+const TAKEOFF_FAMILIES = [
+  {
+    segment: "edits",
+    noun: "room edits",
+    groupOf: (key: string) => [takeoffEditAddress(key).roomId],
+  },
+  { segment: "adopt", noun: "adoption", groupOf: (key: string) => [key.split(":")[0]!] },
+  {
+    segment: "decisions",
+    noun: "flag verdicts",
+    groupOf: (key: string) => [takeoffDecisionAddress(key).roomGuid],
+  },
+  {
+    segment: "reviewFlags",
+    noun: "review flags",
+    groupOf: (key: string) => [(JSON.parse(key) as string[])[0]!],
+  },
+] as const;
+
 const familiesShow = (value: unknown) =>
   typeof value === "object" && value !== null && "value" in value
     ? String((value as { value: unknown }).value)
@@ -44,6 +67,11 @@ export function useHeadWorks(
   );
   // The host-wide instances Work (a launch Pea may propose) belongs to no document: always read.
   const instances = useRouteWork(instancesRouteState, INSTANCES_WORK);
+  // The document's takeoffs Work: its four cell families, each a head Work while it has pending.
+  const takeoffs = useRouteWork(
+    takeoffsRouteState,
+    address ? { route: "takeoffs", target: address } : null,
+  );
   // A refused bound write is a foreign write landing first: say it, and offer reload.
   const [conflict, setConflict] = useState(false);
   const launch: HeadWork[] = instances.doc
@@ -67,9 +95,53 @@ export function useHeadWorks(
         },
       ]
     : [];
-  if (!address || !work.doc) return launch;
+  const takeoffDoc = takeoffs.doc;
+  const takeoffWorks: HeadWork[] = takeoffDoc
+    ? TAKEOFF_FAMILIES.flatMap(({ segment, noun, groupOf }) => {
+        const cells = takeoffDoc[segment] as Record<string, TrichotomyCellLike>;
+        if (!Object.values(cells).some((cell) => cell.proposal != null || cell.staged != null))
+          return [];
+        return [
+          {
+            id: `takeoffs:${address}:${segment}`,
+            route: takeoffsRouteState.title,
+            subject: noun,
+            cells,
+            wire: {
+              segment,
+              revision: takeoffs.revision,
+              write: async (patches, expectedRevision) => {
+                // A room edit's staged rung needs its room's base, read from the world in the
+                // route: the head counts edits but does not stage one whose room has no base.
+                const unbased = patches.some(
+                  (patch) =>
+                    patch.path[0] === "edits" &&
+                    patch.path[2] === "staged" &&
+                    !takeoffDoc.bases[takeoffEditAddress(String(patch.path[1])).roomId],
+                );
+                if (unbased)
+                  return {
+                    code: "not-ready",
+                    message:
+                      "accept a room's first edit in Takeoffs, where the room's base is read",
+                  };
+                return takeoffs.write(patches, expectedRevision);
+              },
+            },
+            groupOf,
+            show: (value) => (typeof value === "string" ? value : JSON.stringify(value)),
+            stale: takeoffs.stale,
+            reload: takeoffs.reload,
+            commit: { word: "open", run: () => exits.open("takeoffs") },
+            open: (focus) => exits.open("takeoffs", focus),
+          },
+        ];
+      })
+    : [];
+  if (!address || !work.doc) return [...launch, ...takeoffWorks];
   return [
     ...launch,
+    ...takeoffWorks,
     {
       id: `families:${address}`,
       route: familiesRouteState.title,

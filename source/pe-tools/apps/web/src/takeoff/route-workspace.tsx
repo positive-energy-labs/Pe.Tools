@@ -1,5 +1,6 @@
 import { takeoffDiscardEdits } from "@pe/agent-contracts";
 import { PartitionReview } from "#/takeoff/partition-review";
+import { flagShape, flagZone, TakeoffProposalRows } from "#/takeoff/proposals";
 import { useNavigate } from "@tanstack/react-router";
 import { FactChip } from "#/components/lang/chip";
 import { ActionButton } from "#/components/lang/action-button";
@@ -204,11 +205,21 @@ export function TakeoffsView({
     panel === "sync" ? (
       <SyncPanel store={store} />
     ) : review ? (
-      <PartitionReview
-        key={review.data?.source.runId ?? review.zone}
-        review={review}
-        onFlag={!store.readOnly ? (key) => store.actions.flagReview(key) : undefined}
-      />
+      <>
+        <PartitionReview
+          key={review.data?.source.runId ?? review.zone}
+          review={review}
+          onFlag={!store.readOnly ? (key) => store.actions.flagReview(key) : undefined}
+        />
+        {/* Pea's proposed review flags on this zone's shapes, in the band grammar. */}
+        <TakeoffProposalRows
+          cells={store.cells.reviewFlags}
+          wire={store.wires.reviewFlags}
+          keep={(key) => flagZone(key) === review.zone}
+          label={(key) => `flag shape ${flagShape(key)}`}
+          show={() => "flagged for review"}
+        />
+      </>
     ) : null;
   if (store.savedCapture)
     return <Atlas store={store} headRail={savedHead} readoutBand={readoutBand} />;

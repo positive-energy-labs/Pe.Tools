@@ -1,3 +1,5 @@
+import { Fragment } from "react";
+import { showAdopt, TakeoffProposalRows } from "#/takeoff/proposals";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
@@ -49,51 +51,62 @@ export function AdoptRegions({ store }: { store: TakeoffsController }) {
       )}
       <div className="mt-2 max-h-96 overflow-y-auto">
         {(listed ?? []).map((r) => (
-          <div
-            key={`${r.view}:${r.region.elementId}`}
-            className="flex items-center gap-2 px-2 py-1"
-          >
-            <Input
-              type="checkbox"
-              aria-label={`Select ${r.name} in ${r.view}`}
-              checked={r.checked}
-              onChange={(e) => patchRow(r.view, r.region.elementId, { checked: e.target.checked })}
-            />
-            <span className="w-28" title={r.view}>
-              {r.view}
-            </span>
-            <span className="size-2.5" style={{ backgroundColor: `rgb(${r.region.color})` }} />
-            <span className="w-24" title={r.region.typeName}>
-              {r.region.typeName}
-            </span>
-            <span className="w-16">{fmtNum(r.region.sqft, 0)} sf</span>
-            <div className="min-w-0 flex-1">
+          <Fragment key={`${r.view}:${r.region.elementId}`}>
+            <div className="flex items-center gap-2 px-2 py-1">
               <Input
-                aria-label={`Zone name for region ${r.region.elementId} in ${r.view}`}
-                value={r.name}
-                placeholder="zone name"
-                onChange={(e) => patchRow(r.view, r.region.elementId, { name: e.target.value })}
-              />
-            </div>
-            <div className="w-24">
-              <Input
-                aria-label={`System tag for region ${r.region.elementId} in ${r.view}`}
-                value={r.systemTag}
-                placeholder="system tag"
+                type="checkbox"
+                aria-label={`Select ${r.name} in ${r.view}`}
+                checked={r.checked}
                 onChange={(e) =>
-                  patchRow(r.view, r.region.elementId, { systemTag: e.target.value })
+                  patchRow(r.view, r.region.elementId, { checked: e.target.checked })
                 }
               />
+              <span className="w-28" title={r.view}>
+                {r.view}
+              </span>
+              <span className="size-2.5" style={{ backgroundColor: `rgb(${r.region.color})` }} />
+              <span className="w-24" title={r.region.typeName}>
+                {r.region.typeName}
+              </span>
+              <span className="w-16">{fmtNum(r.region.sqft, 0)} sf</span>
+              <div className="min-w-0 flex-1">
+                <Input
+                  aria-label={`Zone name for region ${r.region.elementId} in ${r.view}`}
+                  value={r.name}
+                  placeholder="zone name"
+                  onChange={(e) => patchRow(r.view, r.region.elementId, { name: e.target.value })}
+                />
+              </div>
+              <div className="w-24">
+                <Input
+                  aria-label={`System tag for region ${r.region.elementId} in ${r.view}`}
+                  value={r.systemTag}
+                  placeholder="system tag"
+                  onChange={(e) =>
+                    patchRow(r.view, r.region.elementId, { systemTag: e.target.value })
+                  }
+                />
+              </div>
+              {r.region.role === "zoning-region" && (
+                <FactChip
+                  tone="done"
+                  title="This region is already stamped as a Zoning Region. Re-adopting edits its name and system tag in place."
+                >
+                  stamped
+                </FactChip>
+              )}
             </div>
-            {r.region.role === "zoning-region" && (
-              <FactChip
-                tone="done"
-                title="This region is already stamped as a Zoning Region. Re-adopting edits its name and system tag in place."
-              >
-                stamped
-              </FactChip>
-            )}
-          </div>
+            {/* Pea's proposed choice for this candidate, in the band grammar. */}
+            <div className="px-2">
+              <TakeoffProposalRows
+                cells={store.cells.adopt}
+                wire={store.wires.adopt}
+                keep={(key) => key === `${r.view}:${r.region.elementId}`}
+                label={() => r.name || r.region.typeName}
+                show={showAdopt}
+              />
+            </div>
+          </Fragment>
         ))}
         {listed === null && (
           <div className="px-2 py-3">

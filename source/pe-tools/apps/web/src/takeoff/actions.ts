@@ -318,7 +318,9 @@ const syncRefusal = (ctx: Ctx): string | null => {
     stagedTakeoffEdits(ctx.work.doc),
     stagedDecisions(ctx.work.doc),
   );
-  if (plan.blockedZones.length) return "Resolve the blocked zones before syncing this scope";
+  // The host's words: a flag with only Pea's proposed verdict is undecided, so its zone blocks.
+  if (plan.blockedZones.length)
+    return `${plan.blockedZones.length} selected zones are not ready to sync`;
   if (plan.untagged) return "Tag the eligible zones before syncing";
   if (!plan.inserts.length && !plan.linkedUpdates)
     return "No eligible inserts or linked staged updates";
