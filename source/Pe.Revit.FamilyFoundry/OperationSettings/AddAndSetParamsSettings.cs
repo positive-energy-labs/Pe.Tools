@@ -114,7 +114,6 @@ public sealed class SetKnownParamsSettings : IOperationSettings {
                 var typeName = kvp.Key?.Trim();
                 var value = kvp.Value?.ToString();
                 // "" is a value (clear to empty, ruling 1530-1), not an absent cell; only null means "no value for this type".
-                // Legacy profiles whose blank cells meant "no value" skip them where they are read (FamilyProfileConverter).
                 if (typeName is null || value is null)
                     continue;
                 if (valuesPerType.ContainsKey(typeName)) {

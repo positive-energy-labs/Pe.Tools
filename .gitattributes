@@ -23,4 +23,3 @@
 source/pe-tools/** text=auto eol=lf
 
 # Company acceptance inputs retain their original bytes, including mixed line endings.
-source/Pe.Revit.Tests/Fixtures/Profiles/company-20260906/** -text
