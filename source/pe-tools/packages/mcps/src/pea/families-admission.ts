@@ -8,7 +8,7 @@ import {
   message,
   sameAddress,
   sameValue,
-  stagedScope,
+  stagedFilter,
   type Address,
   type AppliedFilter,
   type FamiliesRefusal,
@@ -131,7 +131,7 @@ export function familiesAdmission(loadedFamilies: LoadedFamilies): RouteWriteAdm
     );
     if (!written.length) return null;
     // M13-2: a cell belongs to a scope someone named: the staged one, else the proposed one.
-    const keyed = stagedScope(parsed) ?? parsed.scope.proposal?.value;
+    const keyed = stagedFilter(parsed) ?? parsed.scope.proposal?.value;
     if (!keyed)
       return refuse(
         "no-scope",

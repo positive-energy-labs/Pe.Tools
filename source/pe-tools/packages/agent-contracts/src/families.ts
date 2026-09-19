@@ -231,8 +231,8 @@ export function familyStagedPatch(
     : { familyName, spec: { select: { names: [familyName] }, patch: { types } }, keys };
 }
 
-export const familyScopeCellSchema = trichotomyCellSchema(appliedScopeSchema).strict();
-export type FamilyScopeCell = z.infer<typeof familyScopeCellSchema>;
+export const familyFilterCellSchema = trichotomyCellSchema(appliedScopeSchema).strict();
+export type FamilyFilterCell = z.infer<typeof familyFilterCellSchema>;
 
 /** Who held a family back. The route door checks it is the writer, so it is never just claimed. */
 export const exclusionAuthorSchema = z.enum(["person", "pea"]);
@@ -250,7 +250,7 @@ const familiesDocumentSchema = z
      * The audited scope is a cell (F-J1-10): Pea proposes one, only the person stages it, and plan
      * reads the staged one. A bare filter is old Work, so it fails closed.
      */
-    scope: familyScopeCellSchema.default({}),
+    scope: familyFilterCellSchema.default({}),
     /**
      * Families held back from plan, keyed by family NAME, each with who held it back. An all-digit
      * key is an old element id, so it fails closed rather than reading as a name.
@@ -268,7 +268,7 @@ const familiesDocumentSchema = z
 export type FamiliesRouteDocument = z.infer<typeof familiesDocumentSchema>;
 
 /** The scope the person staged: the only one the matrix audits and plan resolves. */
-export const stagedScope = (doc: FamiliesRouteDocument): AppliedFilter | null =>
+export const stagedFilter = (doc: FamiliesRouteDocument): AppliedFilter | null =>
   doc.scope.staged?.value ?? null;
 
 /**
