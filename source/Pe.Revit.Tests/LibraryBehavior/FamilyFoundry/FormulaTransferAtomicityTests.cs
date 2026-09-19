@@ -185,7 +185,9 @@ public sealed class FormulaTransferAtomicityTests {
         var document = this.NewFamily("FF formula weight", "if(Base > 1', 20 lbf, 10 lbf)", createTarget: true,
             sourceSpec: SpecTypeId.Force, targetSpec: SpecTypeId.Number);
         try {
-            var note = "formula `if(Base > 1', 20 lbf, 10 lbf)` on 'Source' not copied to 'Target'; per-type values evaluated and coerced by CoerceMeasurableToNumber";
+            // Revit keeps the formula in project units (hold #3 read `20 lbf` back as `0.02 kip`); the note names it as Revit holds it.
+            var held = document.FamilyManager.get_Parameter("Source")!.Formula;
+            var note = $"formula `{held}` on 'Source' not copied to 'Target'; per-type values evaluated and coerced by CoerceMeasurableToNumber";
             var (error, converged, preview, receipt) = ReconcileWithPreview(document, "Number", "CoerceMeasurableToNumber");
             Assert.That(error, Is.Null, error?.Message);
             Assert.That(converged, Is.True);
@@ -198,14 +200,15 @@ public sealed class FormulaTransferAtomicityTests {
         } finally { document.Close(false); }
     }
 
-    // User ruling R3 (2026-09-18): `Source = Model` where cleanup backlinks the built-in `Model = Target`: Source equals Target in every type,
-    // so the circular copy is skipped, not refused (Old_template: 86 of 136 refusals).
+    // User ruling R3 (2026-09-18): Source reads the destination through exact aliases (Old_template: `Mech Equip Model Number = Model` with
+    // `Model = PE_G___Model`, 86 of 136 refusals), so the circular copy is skipped, not refused. Revit refuses a text formula naming the
+    // built-in `Model` in a fresh Generic Model family (hold #3), so the chain here runs through a plain alias parameter `Via = Target`.
     [Test]
-    public void Source_aliasing_the_destination_through_a_backlinked_built_in_transfers_losslessly() {
-        var document = this.NewFamily("FF formula built-in alias", "Model", createTarget: true,
-            sourceSpec: SpecTypeId.String.Text, targetSpec: SpecTypeId.String.Text);
+    public void Source_aliasing_the_destination_through_an_alias_chain_transfers_losslessly() {
+        var document = this.NewFamily("FF formula alias chain", "Via", createTarget: true,
+            sourceSpec: SpecTypeId.String.Text, targetSpec: SpecTypeId.String.Text, via: true);
         try {
-            var patch = Patch("Text", null, "Model", "Source");
+            var patch = Patch("Text", null, "Source");
             var operation = new ReconcileFamily(patch);
             Exception? error;
             using (var processor = new OperationProcessor(document)) {
@@ -220,7 +223,7 @@ public sealed class FormulaTransferAtomicityTests {
             Assert.That(target.Formula, Is.Null.Or.Empty, "the destination keeps its own values, not a circular formula");
             foreach (var type in manager.Types.Cast<FamilyType>().Where(type => type.Name is "A" or "B"))
                 Assert.That(type.AsString(target), Is.EqualTo($"T-{type.Name}"));
-            Assert.That(manager.get_Parameter(BuiltInParameter.ALL_MODEL_MODEL)?.Formula, Is.EqualTo("Target"), "the built-in reads the destination");
+            Assert.That(manager.get_Parameter("Via")?.Formula, Is.EqualTo("Target"), "the alias in the chain still reads the destination");
         } finally { document.Close(false); }
     }
 
@@ -263,7 +266,7 @@ public sealed class FormulaTransferAtomicityTests {
     }
 
     private Document NewFamily(string name, string? sourceFormula, bool createTarget, bool labelSource = false,
-        ForgeTypeId? targetSpec = null, bool sourceInstance = false, bool dependent = false, ForgeTypeId? sourceSpec = null) {
+        ForgeTypeId? targetSpec = null, bool sourceInstance = false, bool dependent = false, ForgeTypeId? sourceSpec = null, bool via = false) {
         var document = RevitFamilyFixtureHarness.CreateFamilyDocument(this._application, BuiltInCategory.OST_GenericModel, name);
         using var transaction = new Transaction(document, "Seed formula transfer");
         transaction.Start();
@@ -279,6 +282,7 @@ public sealed class FormulaTransferAtomicityTests {
             else if (target is not null) manager.Set(target, targetValue);
             if (sourceFormula is null) manager.Set(source, basisValue + 4d);
         }
+        if (via) manager.SetFormula(manager.AddParameter("Via", GroupTypeId.Geometry, sourceSpec ?? SpecTypeId.Length, false), "Target");
         if (sourceFormula is not null) manager.SetFormula(source, sourceFormula);
         if (dependent) manager.SetFormula(manager.AddParameter("Dependent", GroupTypeId.Geometry, SpecTypeId.Length, false), "Source * 2");
         if (labelSource) LabelDimension(document, source);

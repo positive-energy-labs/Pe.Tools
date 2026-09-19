@@ -65,10 +65,11 @@ public sealed class JointFindingsFamilyTests {
     public void Radius_driven_connector_round_trips_across_types_and_a_value_patch_touches_no_connector() {
         var parsed = FamilyModelJson.Parse("""
             { "family": { "name": "FF radius connector", "category": "AirTerminals", "template": "Generic Model face based", "placement": "WorkPlaneBased" },
-              "parameters": { "D": { "dataType": "Length" }, "R": { "dataType": "Length", "formula": "D / 2" }, "Url": { "dataType": "Text" } },
+              "parameters": { "D": { "dataType": "Length" }, "R": { "dataType": "Length", "formula": "D / 2" }, "Url": { "dataType": "Text" },
+                "Size": { "dataType": "Length", "value": "2ft" }, "Thick": { "dataType": "Length", "value": "1in" } },
               "types": { "A": { "D": "5in", "Url": "a" }, "B": { "D": "8in", "Url": "b" } },
               "datums": { "Ref. Level": { "normal": "Z", "isLevel": true }, "Center (Left/Right)": { "normal": "X" }, "Center (Front/Back)": { "normal": "Y" } },
-              "forms": { "flange": { "kind": "Prism", "center": ["Center (Left/Right)", "Center (Front/Back)"], "bottom": "Ref. Level", "width": "2ft", "depth": "2ft", "height": "1in" } },
+              "forms": { "flange": { "kind": "Prism", "center": ["Center (Left/Right)", "Center (Front/Back)"], "bottom": "Ref. Level", "width": "param:Size", "depth": "param:Size", "height": "param:Thick" } },
               "connectors": { "supply": { "domain": "Duct", "systemType": "SupplyAir", "on": "flange.top", "at": ["Center (Left/Right)", "Center (Front/Back)"],
                 "shape": "Round", "diameter": "param:D", "flowDirection": "In" } } }
             """);
