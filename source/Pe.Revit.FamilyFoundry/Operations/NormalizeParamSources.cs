@@ -96,7 +96,7 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                             break;
                         } catch (Exception exception) { failure = exception; }
                     }
-                    if (failure is not null) throw new InvalidOperationException($"All sources failed for '{transfer.Target.Definition.Name}' in '{type.Name}'.", failure);
+                    if (failure is not null) throw new InvalidOperationException($"All sources failed for '{transfer.Target.Definition.Name}' in '{type.Name}': {failure.Message}", failure);
                 }
                 foreach (var target in created)
                     if (SetBlankValues.Fill(doc, type, target, blanks!, created: true) is { } written)
@@ -145,7 +145,7 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
         return new OperationLog(this.Name, logs);
     }
 
-    // The mapping's own coercion also decides a formula copy across data types (FamilyFormulaCopy.AcrossDataTypes).
+    // The mapping's own coercion also carries a source formula's values when the formula cannot cross (FamilyFormulaCopy.Blocker).
     private string StrategyOf(string target) =>
         (desired.Parameters.GetValueOrDefault(target)?.MappingStrategy ?? MappingStrategy.CoerceByStorageType).ToString();
 

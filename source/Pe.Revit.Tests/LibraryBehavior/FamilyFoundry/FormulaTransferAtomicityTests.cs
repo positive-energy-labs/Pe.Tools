@@ -45,9 +45,11 @@ public sealed class FormulaTransferAtomicityTests {
         } finally { document.Close(false); }
     }
 
+    // A transfer that half-writes (labels moved, then a dependent formula cannot be rewired) rolls back whole: nothing is lost silently.
     [Test]
-    public void Refused_formula_copy_rolls_back_source_values_and_dimension_association() {
-        var document = this.NewFamily("FF refused formula", "Target * 2", createTarget: true, labelSource: true);
+    public void Half_written_transfer_rolls_back_source_values_and_dimension_association() {
+        // Dependent (type) = `Source * 2` cannot be rewired to an instance destination: a type formula cannot read an instance parameter.
+        var document = this.NewFamily("FF half-written transfer", null, createTarget: true, labelSource: true, dependent: true, targetInstance: true);
         try {
             var manager = document.FamilyManager;
             var source = manager.FindParameter("Source");
@@ -59,50 +61,60 @@ public sealed class FormulaTransferAtomicityTests {
 
             var (error, converged) = Reconcile(document);
 
-            Assert.That(error?.ToString(), Does.Contain("Formula setting failed").Or.Contain("circular"));
-            AssertNamesCause(error, document, "Target * 2", SpecTypeId.Length, "type", SpecTypeId.Length, "type");
+            Assert.That(error?.ToString(), Does.Contain("Failed to transfer formula on 'Dependent'"), error?.ToString());
             Assert.That(converged, Is.False);
             manager = document.FamilyManager;
             source = manager.FindParameter("Source");
             Assert.That(source, Is.Not.Null);
             Assert.That(source.Id, Is.EqualTo(sourceId));
-            Assert.That(source.Formula, Is.EqualTo("Target * 2"));
             Assert.That(Values(manager, source), Is.EqualTo(sourceValues), "source values");
             Assert.That(Values(manager, manager.FindParameter("Target")), Is.EqualTo(targetValues), "destination values");
+            Assert.That(manager.FindParameter("Dependent").Formula, Is.EqualTo("Source * 2"));
             var dimension = (Dimension)document.GetElement(dimensionId);
             Assert.That(dimension.FamilyLabel?.Id, Is.EqualTo(sourceId));
             Assert.That(manager.Parameters.Cast<FamilyParameter>().Any(p => p.Definition.Name.StartsWith("FF_Transfer_")), Is.False);
         } finally { document.Close(false); }
     }
 
-    // Census repros for the Old_template refusals at NormalizeParameter.cs:87 (exec-guid POST, 136 stacks): each copies a source formula
-    // the destination cannot hold, refuses naming family, formula, both data types and both scopes, and leaves the family unchanged.
+    // ruling-ff-coercion (2026-09-18): coerce, don't refuse. A formula that cannot cross is dropped with a named note (R1: never across
+    // data types), and each type's value is carried by the mapping's declared strategy, any strategy. Old_template: Phase `"Single"` (Text).
     [Test]
-    public void Data_type_mismatch_formula_copy_refuses_and_names_its_cause() {
-        // CoerceByStorageType maps a Length source onto an Area destination (both doubles); the Length formula cannot drive an Area.
-        var document = this.NewFamily("FF formula data type", "Base * 2", createTarget: true, targetSpec: SpecTypeId.Area);
+    public void Text_formula_into_a_number_is_dropped_with_a_note_and_its_values_carried() {
+        var document = this.NewFamily("FF formula text to number", "\"Single\"", createTarget: true,
+            sourceSpec: SpecTypeId.String.Text, targetSpec: SpecTypeId.Number);
         try {
-            var before = Snapshot(document);
-            var (error, converged) = Reconcile(document, "Area");
-            // User ruling R1 (2026-09-18): Revit would accept this as `Base * 2'` (area), silently re-reading the bare 2 in project units.
-            AssertNamesCause(error, document, "Base * 2", SpecTypeId.Length, "type", SpecTypeId.Area, "type");
-            Assert.That(error!.ToString(), Does.Contain(FamilyModelDiagnosticCodes.FormulaCopyDataType)
-                .And.Contain("mapping strategy 'CoerceByStorageType' does not convert through units"));
-            Assert.That(converged, Is.False);
-            Assert.That(Snapshot(document), Is.EqualTo(before), "a refused transfer changes nothing");
+            var note = $"formula `\"Single\"` on 'Source' not copied to 'Target' ({SpecTypeId.String.Text.TypeId} → {SpecTypeId.Number.TypeId}: " +
+                       "a formula is not copied across data types); per-type values carried by CoerceByStorageType";
+            var (error, converged, preview, receipt) = ReconcileWithPreview(document, "Number", null);
+            Assert.That(error, Is.Null, error?.Message);
+            Assert.That(converged, Is.True);
+            AssertNamed(note, preview, receipt);
+            var manager = document.FamilyManager;
+            Assert.That(manager.FindParameter("Source"), Is.Null);
+            var target = manager.FindParameter("Target")!;
+            Assert.That(target.Formula, Is.Null.Or.Empty);
+            AssertValues(manager, target, 1d, 1d);
         } finally { document.Close(false); }
     }
 
+    // ruling-ff-coercion #3: the declaration wins. Revit refuses a type formula reading an instance parameter (GROUNDING-REVIT.md #4), so the
+    // formula is dropped with a note and each family type's value of the instance source is carried. Placed-instance inputs are not read.
     [Test]
-    public void Type_destination_cannot_take_an_instance_formula_and_names_its_cause() {
-        // An instance source may read an instance parameter; a type destination may not (GROUNDING-REVIT.md #4).
+    public void Instance_formula_onto_a_type_destination_is_dropped_with_a_note_and_its_values_carried() {
         var document = this.NewFamily("FF formula scope", "Inst * 2", createTarget: true, sourceInstance: true);
         try {
-            var before = Snapshot(document);
-            var (error, converged) = Reconcile(document);
-            AssertNamesCause(error, document, "Inst * 2", SpecTypeId.Length, "instance", SpecTypeId.Length, "type");
-            Assert.That(converged, Is.False);
-            Assert.That(Snapshot(document), Is.EqualTo(before), "a refused transfer changes nothing");
+            var note = "formula `Inst * 2` on 'Source' not copied to 'Target' (a type parameter cannot read instance parameter 'Inst'); " +
+                       "per-type values carried by CoerceByStorageType";
+            var (error, converged, preview, receipt) = ReconcileWithPreview(document, "Length", null);
+            Assert.That(error, Is.Null, error?.Message);
+            Assert.That(converged, Is.True);
+            AssertNamed(note, preview, receipt);
+            var manager = document.FamilyManager;
+            Assert.That(manager.FindParameter("Source"), Is.Null);
+            var target = manager.FindParameter("Target")!;
+            Assert.That(target.Formula, Is.Null.Or.Empty);
+            Assert.That(target.IsInstance, Is.False);
+            AssertValues(manager, target, 4d, 6d); // Inst is 2 ft in A, 3 ft in B
         } finally { document.Close(false); }
     }
 
@@ -132,14 +144,14 @@ public sealed class FormulaTransferAtomicityTests {
     }
 
     // User ruling R2 (2026-09-18): the mapping's coercion strategy is the door across a data-type change. The formula is not copied; each
-    // type's evaluated value is coerced, and preview, receipt and log all name it.
+    // type's evaluated value is carried, and preview, receipt and log all name it.
     [Test]
     public void Voltage_text_formula_is_evaluated_and_coerced_by_CoerceElectrical() {
         var document = this.NewFamily("FF formula voltage", "\"208/230V\"", createTarget: true,
             sourceSpec: SpecTypeId.String.Text, targetSpec: SpecTypeId.ElectricalPotential);
         try {
-            var unit = LabelUtils.GetLabelForUnit(document.GetUnits().GetFormatOptions(SpecTypeId.ElectricalPotential).GetUnitTypeId());
-            var note = $"formula `\"208/230V\"` on 'Source' not copied to 'Target'; per-type values evaluated and coerced by CoerceElectrical (unitless numbers read as {unit})";
+            var note = $"formula `\"208/230V\"` on 'Source' not copied to 'Target' ({SpecTypeId.String.Text.TypeId} → {SpecTypeId.ElectricalPotential.TypeId}: " +
+                       "a formula is not copied across data types); per-type values carried by CoerceElectrical";
             var (error, converged, preview, receipt) = ReconcileWithPreview(document, "ElectricalPotential", "CoerceElectrical");
             Assert.That(error, Is.Null, error?.Message);
             Assert.That(converged, Is.True);
@@ -153,8 +165,8 @@ public sealed class FormulaTransferAtomicityTests {
         } finally { document.Close(false); }
     }
 
-    // Review 2026-09-18 (preview/apply parity): a value the strategy cannot coerce refuses at PREVIEW, naming the value and the type, and
-    // apply refuses with the same diagnostic before any effect.
+    // ruling-ff-coercion: refuse only a value the declared strategy cannot carry, by name and type. Preview refuses it, and apply refuses
+    // with the same diagnostic before any effect.
     [Test]
     public void Voltage_text_the_strategy_cannot_read_refuses_at_preview_naming_value_and_type() {
         var document = this.NewFamily("FF formula voltage unreadable", "\"N/A\"", createTarget: true,
@@ -163,9 +175,10 @@ public sealed class FormulaTransferAtomicityTests {
             var before = Snapshot(document);
             var patch = Patch("ElectricalPotential", "CoerceElectrical", "Source");
             var preview = document.PreviewFamily(patch);
-            var refusals = preview.Diagnostics.Where(d => d.Code == FamilyModelDiagnosticCodes.FormulaCopyDataType).ToList();
-            Assert.That(refusals.Select(d => d.Message), Has.Some.Contains("CoerceElectrical cannot coerce 'N/A' in type 'A'"));
-            Assert.That(refusals.Select(d => d.Message), Has.Some.Contains("CoerceElectrical cannot coerce 'N/A' in type 'B'"));
+            var refusals = preview.Diagnostics.Where(d => d.Code == FamilyModelDiagnosticCodes.ValueNotCoercible).ToList();
+            foreach (var type in new[] { "A", "B" })
+                Assert.That(refusals.Select(d => d.Message), Has.Some.Contains($"cannot carry 'Source' value 'N/A' ({SpecTypeId.String.Text.TypeId}, type) " +
+                    $"into 'Target' ({SpecTypeId.ElectricalPotential.TypeId}, type) in type '{type}' under CoerceElectrical"));
             var operation = new ReconcileFamily(patch);
             Exception? error;
             using (var processor = new OperationProcessor(document)) {
@@ -187,7 +200,8 @@ public sealed class FormulaTransferAtomicityTests {
         try {
             // Revit keeps the formula in project units (hold #3 read `20 lbf` back as `0.02 kip`); the note names it as Revit holds it.
             var held = document.FamilyManager.get_Parameter("Source")!.Formula;
-            var note = $"formula `{held}` on 'Source' not copied to 'Target'; per-type values evaluated and coerced by CoerceMeasurableToNumber";
+            var note = $"formula `{held}` on 'Source' not copied to 'Target' ({SpecTypeId.Force.TypeId} → {SpecTypeId.Number.TypeId}: " +
+                       "a formula is not copied across data types); per-type values carried by CoerceMeasurableToNumber";
             var (error, converged, preview, receipt) = ReconcileWithPreview(document, "Number", "CoerceMeasurableToNumber");
             Assert.That(error, Is.Null, error?.Message);
             Assert.That(converged, Is.True);
@@ -241,7 +255,7 @@ public sealed class FormulaTransferAtomicityTests {
     }
 
     private static (Exception? Error, bool Converged, FamilyPreview Preview, FamilyReceipt? Receipt) ReconcileWithPreview(
-        Document document, string dataType, string strategy) {
+        Document document, string dataType, string? strategy) {
         var patch = Patch(dataType, strategy, "Source");
         var preview = document.PreviewFamily(patch);
         var operation = new ReconcileFamily(patch, expectedPlanHash: preview.PlanHash);
@@ -249,13 +263,6 @@ public sealed class FormulaTransferAtomicityTests {
         var (contexts, _) = processor.ProcessQueue(new OperationQueue().Add(operation));
         var (_, error) = contexts.Single().OperationLogs;
         return (error, operation.LastReceipt?.Converged == true, preview, operation.LastReceipt);
-    }
-
-    private static void AssertNamesCause(Exception? error, Document document, string formula,
-        ForgeTypeId sourceSpec, string sourceScope, ForgeTypeId targetSpec, string targetScope) {
-        Assert.That(error, Is.Not.Null);
-        Assert.That(error!.ToString(), Does.Contain($"Family '{document.Title}': cannot copy formula '{formula}' from source 'Source' " +
-            $"({sourceSpec.TypeId}, {sourceScope}) to destination 'Target' ({targetSpec.TypeId}, {targetScope})"), error.ToString());
     }
 
     // Everything the refusal must leave alone: parameter names, formulas and per-type values.
@@ -266,18 +273,20 @@ public sealed class FormulaTransferAtomicityTests {
     }
 
     private Document NewFamily(string name, string? sourceFormula, bool createTarget, bool labelSource = false,
-        ForgeTypeId? targetSpec = null, bool sourceInstance = false, bool dependent = false, ForgeTypeId? sourceSpec = null, bool via = false) {
+        ForgeTypeId? targetSpec = null, bool sourceInstance = false, bool dependent = false, ForgeTypeId? sourceSpec = null, bool via = false,
+        bool targetInstance = false) {
         var document = RevitFamilyFixtureHarness.CreateFamilyDocument(this._application, BuiltInCategory.OST_GenericModel, name);
         using var transaction = new Transaction(document, "Seed formula transfer");
         transaction.Start();
         var manager = document.FamilyManager;
         var basis = manager.AddParameter("Base", GroupTypeId.Geometry, SpecTypeId.Length, false);
-        if (sourceInstance) manager.AddParameter("Inst", GroupTypeId.Geometry, SpecTypeId.Length, true);
+        var inst = sourceInstance ? manager.AddParameter("Inst", GroupTypeId.Geometry, SpecTypeId.Length, true) : null;
         var source = manager.AddParameter("Source", GroupTypeId.Geometry, sourceSpec ?? SpecTypeId.Length, sourceInstance);
-        var target = createTarget ? manager.AddParameter("Target", GroupTypeId.Geometry, targetSpec ?? SpecTypeId.Length, false) : null;
+        var target = createTarget ? manager.AddParameter("Target", GroupTypeId.Geometry, targetSpec ?? SpecTypeId.Length, targetInstance) : null;
         foreach (var (typeName, basisValue, targetValue) in new[] { ("A", 1d, 9d), ("B", 2d, 10d) }) {
             manager.CurrentType = manager.NewType(typeName);
             manager.Set(basis, basisValue);
+            if (inst is not null) manager.Set(inst, basisValue + 1d);
             if (target?.StorageType == StorageType.String) manager.Set(target, $"T-{typeName}");
             else if (target is not null) manager.Set(target, targetValue);
             if (sourceFormula is null) manager.Set(source, basisValue + 4d);
