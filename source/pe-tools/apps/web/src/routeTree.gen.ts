@@ -31,6 +31,7 @@ import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.
 import { Route as DesignSystemBandRouteImport } from "./routes/design-system_.band";
 import { Route as DesignSystemListRouteImport } from "./routes/design-system_.list";
 import { Route as DesignSystemPopoversRouteImport } from "./routes/design-system_.popovers";
+import { Route as DesignSystemSignalsRouteImport } from "./routes/design-system_.signals";
 import { Route as DesignSystemSwatchRouteImport } from "./routes/design-system_.swatch";
 import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
 import { Route as ApiRunsDataSplatRouteImport } from "./routes/api/runs-data.$";
@@ -146,6 +147,11 @@ const DesignSystemPopoversRoute = DesignSystemPopoversRouteImport.update({
   path: "/design-system/popovers",
   getParentRoute: () => rootRouteImport,
 } as any);
+const DesignSystemSignalsRoute = DesignSystemSignalsRouteImport.update({
+  id: "/design-system_/signals",
+  path: "/design-system/signals",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const DesignSystemSwatchRoute = DesignSystemSwatchRouteImport.update({
   id: "/design-system_/swatch",
   path: "/design-system/swatch",
@@ -190,6 +196,7 @@ export interface FileRoutesByFullPath {
   "/design-system/band": typeof DesignSystemBandRoute;
   "/design-system/list": typeof DesignSystemListRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
+  "/design-system/signals": typeof DesignSystemSignalsRoute;
   "/design-system/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/runs-data/$": typeof ApiRunsDataSplatRoute;
@@ -218,6 +225,7 @@ export interface FileRoutesByTo {
   "/design-system/band": typeof DesignSystemBandRoute;
   "/design-system/list": typeof DesignSystemListRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
+  "/design-system/signals": typeof DesignSystemSignalsRoute;
   "/design-system/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/runs-data/$": typeof ApiRunsDataSplatRoute;
@@ -247,6 +255,7 @@ export interface FileRoutesById {
   "/design-system_/band": typeof DesignSystemBandRoute;
   "/design-system_/list": typeof DesignSystemListRoute;
   "/design-system_/popovers": typeof DesignSystemPopoversRoute;
+  "/design-system_/signals": typeof DesignSystemSignalsRoute;
   "/design-system_/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/runs-data/$": typeof ApiRunsDataSplatRoute;
@@ -277,6 +286,7 @@ export interface FileRouteTypes {
     | "/design-system/band"
     | "/design-system/list"
     | "/design-system/popovers"
+    | "/design-system/signals"
     | "/design-system/swatch"
     | "/api/pdf-audit/parse"
     | "/api/runs-data/$"
@@ -305,6 +315,7 @@ export interface FileRouteTypes {
     | "/design-system/band"
     | "/design-system/list"
     | "/design-system/popovers"
+    | "/design-system/signals"
     | "/design-system/swatch"
     | "/api/pdf-audit/parse"
     | "/api/runs-data/$"
@@ -333,6 +344,7 @@ export interface FileRouteTypes {
     | "/design-system_/band"
     | "/design-system_/list"
     | "/design-system_/popovers"
+    | "/design-system_/signals"
     | "/design-system_/swatch"
     | "/api/pdf-audit/parse"
     | "/api/runs-data/$"
@@ -362,6 +374,7 @@ export interface RootRouteChildren {
   DesignSystemBandRoute: typeof DesignSystemBandRoute;
   DesignSystemListRoute: typeof DesignSystemListRoute;
   DesignSystemPopoversRoute: typeof DesignSystemPopoversRoute;
+  DesignSystemSignalsRoute: typeof DesignSystemSignalsRoute;
   DesignSystemSwatchRoute: typeof DesignSystemSwatchRoute;
   ApiPdfAuditParseRoute: typeof ApiPdfAuditParseRouteWithChildren;
   ApiRunsDataSplatRoute: typeof ApiRunsDataSplatRoute;
@@ -523,6 +536,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DesignSystemPopoversRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/design-system_/signals": {
+      id: "/design-system_/signals";
+      path: "/design-system/signals";
+      fullPath: "/design-system/signals";
+      preLoaderRoute: typeof DesignSystemSignalsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/design-system_/swatch": {
       id: "/design-system_/swatch";
       path: "/design-system/swatch";
@@ -588,6 +608,7 @@ const rootRouteChildren: RootRouteChildren = {
   DesignSystemBandRoute: DesignSystemBandRoute,
   DesignSystemListRoute: DesignSystemListRoute,
   DesignSystemPopoversRoute: DesignSystemPopoversRoute,
+  DesignSystemSignalsRoute: DesignSystemSignalsRoute,
   DesignSystemSwatchRoute: DesignSystemSwatchRoute,
   ApiPdfAuditParseRoute: ApiPdfAuditParseRouteWithChildren,
   ApiRunsDataSplatRoute: ApiRunsDataSplatRoute,
