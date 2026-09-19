@@ -223,8 +223,10 @@ test("F-H5-1..3: a dead-lifetime Work says read again; the bare verb re-reads th
     cells: { "1::2": { staged: { value: "150 VA" } } },
   });
   // Drawn as drift against the live value, with the ruled accept/deny.
-  const accept = await screen.findByRole("button", { name: "accept" });
-  expect(screen.getByRole("button", { name: "deny" })).toBeTruthy();
+  // The grid cell carries the same verbs; press the pending strip's.
+  const strip = await screen.findByRole("list", { name: "pending cells" });
+  const accept = await within(strip).findByRole("button", { name: "accept" });
+  expect(within(strip).getByRole("button", { name: "deny" })).toBeTruthy();
   // Drift is drawn by the kit StateCell; its note rides the hover title at row scale.
   expect((await screen.findAllByTitle(/accept to stage it again/)).length).toBeGreaterThan(0);
   // Accept re-stages the value and drops the key from stale.

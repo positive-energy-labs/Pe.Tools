@@ -269,6 +269,7 @@ export function ReviewRow({
   cell,
   facts,
   show,
+  transitions,
 }: {
   wire: CellWire;
   address: string;
@@ -277,13 +278,15 @@ export function ReviewRow({
   facts: StateCellProps;
   /** The caller's word for a counter-proposed value. */
   show?: (value: unknown) => string;
+  /** The consumer's own verbs for this address, when the contract's defaults don't say it. */
+  transitions?: readonly CellTransition[];
 }) {
   const props = cellFromTrichotomy(cell, facts, show);
   return (
     <div className="grid grid-cols-[9rem_minmax(0,1fr)] items-baseline gap-3 py-2">
       <span className="truncate">{label}</span>
       <span className="flex min-w-0 flex-wrap items-baseline gap-2">
-        <StateCell {...props} transitions={reviewTransitions(wire, address, cell)} />
+        <StateCell {...props} transitions={transitions ?? reviewTransitions(wire, address, cell)} />
         {props.stagedBy ? (
           <span className="t-small text-ink-2">by {props.stagedBy === "pea" ? "Pea" : "you"}</span>
         ) : null}

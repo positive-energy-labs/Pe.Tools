@@ -1,7 +1,8 @@
 import { useMemo } from "react";
-import { scheduleCellKey } from "@pe/agent-contracts";
+import { scheduleCellKey, transitionPatches } from "@pe/agent-contracts";
 import type { ScheduleGridDocument } from "@pe/agent-contracts";
 import { reviewTransitions, type CellWire } from "#/components/lang/band";
+import type { CellTransition } from "#/components/lang/cell";
 import { cellFromTrichotomy, StateCell } from "#/components/lang/cell";
 import type { Column } from "#/components/master-table/model";
 import type { ScheduleGridSnapshot as Snapshot } from "@pe/agent-contracts";
@@ -18,6 +19,38 @@ export const scheduleLock = (binding: Binding | undefined): string | null =>
       : binding.blocker !== "None"
         ? `blocked: ${binding.blocker}`
         : "read-only — this parameter cannot be written from a schedule";
+
+/** A stale key's note (`basis.stale`), in the grid and the pending strip alike. */
+export const STALE_NOTE = "stale: Revit changed under your staged value · accept to stage it again";
+
+type GridCell = NonNullable<ScheduleGridDocument["cells"][string]>;
+
+/**
+ * A schedule cell's own verbs. A stale key is answered by accept (the contract's `stage`, again)
+ * or deny (`unstage`); the wire's write drops the key from `basis.stale` in the same write.
+ */
+export function scheduleTransitions(
+  wire: CellWire,
+  key: string,
+  cell: GridCell,
+  stale: readonly string[],
+): CellTransition[] {
+  if (cell.staged == null || !stale.includes(key)) return reviewTransitions(wire, key, cell);
+  const run = (patches: ReturnType<typeof transitionPatches>) => () =>
+    wire.write(patches, wire.revision ?? undefined);
+  return [
+    {
+      kind: "deny",
+      reason: "Drop your stale value; the Revit value stands.",
+      run: run(transitionPatches(["cells"], key, cell, { kind: "unstage" })),
+    },
+    {
+      kind: "accept",
+      reason: "Accept to stage it again over what Revit holds now.",
+      run: run(transitionPatches(["cells"], key, cell, { kind: "stage", rung: cell.staged })),
+    },
+  ];
+}
 
 export function useScheduleGridColumns(
   snapshot: Snapshot | null,
@@ -88,9 +121,7 @@ export function useScheduleGridColumns(
             const lock = scheduleLock(binding);
             const note =
               [
-                isStale
-                  ? "stale: Revit changed under your staged value · accept to stage it again"
-                  : null,
+                isStale ? STALE_NOTE : null,
                 (isStaged || isProposal) && shown !== current ? `was ${current || "—"}` : null,
                 isProposal
                   ? cell.proposal?.note
@@ -123,7 +154,7 @@ export function useScheduleGridColumns(
                         ? `a ${binding?.storageType ?? "non-text"} parameter cannot be empty in Revit — type a value`
                         : stageEdit(key, text),
               }),
-              transitions: reviewTransitions(wire, key, cell),
+              transitions: scheduleTransitions(wire, key, cell, stale),
             };
           },
         };

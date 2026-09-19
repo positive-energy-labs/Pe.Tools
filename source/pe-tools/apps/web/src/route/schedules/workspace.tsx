@@ -110,16 +110,6 @@ export function ScheduleGridWorkspace({
       ...(cell.proposal != null ? transitionPatches(["cells"], key, cell, { kind: "deny" }) : []),
     ]);
   };
-  // A stale key's answers are the contract's transitions; `apply` drops the key from `basis.stale`.
-  const acceptStale = (key: string) =>
-    void apply(
-      transitionPatches(["cells"], key, cells[key] ?? {}, {
-        kind: "stage",
-        rung: { value: cells[key]?.staged?.value },
-      }),
-    );
-  const dropStale = (key: string) =>
-    void apply(transitionPatches(["cells"], key, cells[key] ?? {}, { kind: "unstage" }));
 
   const columnHeader = (columnNumber: number) =>
     snapshot?.columns.find((column) => column.columnNumber === columnNumber)?.headerText ??
@@ -368,8 +358,6 @@ export function ScheduleGridWorkspace({
                 <PendingStrip
                   pending={pending}
                   stale={stale}
-                  acceptStale={acceptStale}
-                  dropStale={dropStale}
                   proposalCount={proposalCount}
                   stagedCount={stagedCount}
                   columnHeader={columnHeader}
