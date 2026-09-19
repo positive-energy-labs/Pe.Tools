@@ -271,7 +271,7 @@ internal static class FamilyFoundryBridgeOps {
                 var (logs, error) = context.OperationLogs;
                 var receipt = op.LastReceipt;
                 var errors = logs?.SelectMany(l => l.Entries).Where(e => e.Status == LogStatus.Error).Select(e => $"{e.Name}: {e.Message}").ToList() ?? [];
-                receipts.Add(new FamilyFoundryApplyReceipt(familyId, familyName, error is null && errors.Count == 0 && receipt?.Converged == true, receipt?.Converged ?? false, error?.Message, receipt?.PlanHash,
+                receipts.Add(new FamilyFoundryApplyReceipt(familyId, familyName, error is null && errors.Count == 0 && receipt?.Converged == true, receipt?.Converged ?? false, context.LoadFailureText ?? error?.Message, receipt?.PlanHash,
                     receipt?.Residue.Select(ToChange).ToList() ?? [], errors, context.Artifacts is { } a ? Path.Combine(runOutput.DirectoryPath, a.FamilyDirectory) : null,
                     receipt?.ObservedParametersDigest, context.LoadedFamilyId));
             } catch (Exception exception) {

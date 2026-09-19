@@ -162,6 +162,10 @@ public class OperationProcessor(
                         .Select((d, i) => d.IsError ? new LogEntry($"{d.Edit} {i + 1}").Error(d.Message) : new LogEntry($"{d.Edit} {i + 1}").Skip(d.Message)).ToList()));
                 if (saveOpts.LoadFamily && !result.Verified)
                     logs.Add(new OperationLog("LoadFamily", [new LogEntry("post-verify").Error(result.Message ?? "unverified")]));
+                var loadErrors = result.Diagnostics.Where(diagnostic => diagnostic.Edit == "LoadFamily" && diagnostic.IsError)
+                    .Select(diagnostic => diagnostic.Message).ToList();
+                if (loadErrors.Count > 0)
+                    context.LoadFailureText = FamilyDocumentProcessFamily.LoadFailureText(loadErrors);
                 if (result.Verified) context.LoadedFamilyId = result.Loaded?.Id.Value();
                 context.OperationLogs = logs;
                 CompleteReconciliation(queue, !logs.Any(l => l.ErrorCount > 0), result.Diagnostics);
