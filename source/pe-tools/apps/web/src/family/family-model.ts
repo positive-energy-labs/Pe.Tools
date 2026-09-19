@@ -1,19 +1,9 @@
-import {
-  familyModelFamilyPlane,
-  familyModelPlaneOffset,
-  familyModelPrismFaceCoordinate,
-} from "#/family-model/preview";
+/**
+ * The TS reading of the C# `FamilyModel` (`FamilyModelContracts.cs`): the shape `family.capture`
+ * returns and an authored `family.json` holds. Loosely typed on purpose; the C# model validates.
+ */
 
-/** Every authored construct that reads one parameter, grouped by how it reads it.
- * Inlined here (it used to live on the deleted inspector) because `paramAssociations`
- * below is its only producer — the shape belongs with the derivation. */
-interface ParamAssociations {
-  dimensions: string[];
-  arrays: string[];
-  nested: string[];
-}
-
-// ── authored shape (v1, loosely typed for the projection) ───────────────────────────────────────
+// ── the document shape ──────────────────────────────────────────────────────────────────────────
 
 export interface ParamSpec {
   dataType?: string;
@@ -22,88 +12,54 @@ export interface ParamSpec {
   sharedSpecId?: string;
   sharedVisible?: boolean;
   sharedUserModifiable?: boolean;
-  wasNamed?: string[];
-  fillBlanksFromSources?: boolean;
-  mappingStrategy?: string;
   tooltip?: string;
   propertiesGroup?: string;
-  resolvedValues?: Record<string, string>;
   value?: string | number | boolean;
   formula?: string;
-  /** Authored schema carries a nullable `isInstance`; absent means TYPE (Revit's default). */
+  /** Absent means TYPE (Revit's default). */
   isInstance?: boolean;
-  /** LIVE lane only: Revit reports the parameter read-only, so no cell here may be edited. */
-  readOnly?: boolean;
 }
 
-interface PlaneSpec {
-  from: string;
-  by: string;
-  direction: string;
-}
-
-interface FrameSpec {
-  origin: string[];
-  normal: string;
-  up: string;
-}
-
-export interface SolidSpec {
+interface SketchCurveSpec {
   kind: string;
-  frame?: string;
+  on?: string;
+  center?: string[];
+  diameter?: string;
+}
+
+/** An `Extrusion` (what capture returns), or an authored `Prism`/`Cylinder` macro. */
+export interface FormSpec {
+  kind: string;
+  void?: boolean;
+  sketchPlane?: string;
+  profile?: Array<{ curves: SketchCurveSpec[] }>;
+  start?: string;
+  end?: string;
   center?: string[];
   bottom?: string;
-  void?: boolean;
   width?: string;
   depth?: string;
   height?: string;
   diameter?: string;
 }
 
-interface StubSpec {
-  depth: string;
-  direction: string;
-}
-
 export interface ConnectorSpec {
   domain: string;
-  frame?: string;
+  systemType?: string;
   on?: string;
   at?: string[];
-  associate?: Record<string, string>;
   shape?: string;
   diameter?: string;
   width?: string;
   height?: string;
-  stub?: StubSpec;
-  systemType?: string;
   flowDirection?: string;
-}
-
-interface NestedSpec {
-  family: string;
-  type?: string;
-  frame: string;
-  parameterBindings?: Record<string, string>;
-}
-
-interface ArraySpec {
-  kind: string;
-  member: string;
-  axis: string;
-  halfCount: string;
-  label?: string;
-  limits?: { start: string; end: string };
 }
 
 export interface FamilyModel {
   family: { name: string; category: string; template: string; placement: string };
-  familyParameters: Record<string, ParamSpec>;
-  /** Native name-keyed declarations, including shared:true. Legacy geometry editors remain separate. */
-  parameters?: Record<string, ParamSpec>;
-  sharedParameters?: Record<string, ParamSpec>;
+  /** Exact Revit name → declaration. Family and shared parameters share this map (`shared: true`). */
+  parameters: Record<string, ParamSpec>;
   types: Record<string, Record<string, string>>;
-  forms?: Record<string, SolidSpec>;
   datums?: Record<string, { normal: string; isLevel?: boolean }>;
   refPlanes?: Record<string, { normal: string; at: string }>;
   refLines?: Record<string, unknown>;
@@ -111,33 +67,19 @@ export interface FamilyModel {
     string,
     { between: string[]; label?: string; equality?: boolean; locked?: string }
   >;
+  forms?: Record<string, FormSpec>;
   nested?: Record<
     string,
     { family: string; type?: string; host: string; associate?: Record<string, string> }
   >;
-  coverage?: Record<string, string>;
-  planes?: Record<string, PlaneSpec>;
-  frames?: Record<string, FrameSpec>;
-  solids?: Record<string, SolidSpec>;
-  nestedFamilies?: Record<string, NestedSpec>;
+  arrays?: Record<string, unknown>;
   connectors?: Record<string, ConnectorSpec>;
-  arrays?: Record<string, ArraySpec>;
-  roomCalculationPoint?: { enabled: boolean; offset?: string };
-  /** The closed family-global key set (wave 3). Each key is exactly one named Revit parameter. */
-  settings?: {
-    alwaysVertical?: boolean;
-    shared?: boolean;
-    cutWithVoidsWhenLoaded?: boolean;
-    partType?: string;
-    omniClass?: string;
-  };
+  coverage?: Record<string, string>;
+  settings?: Record<string, unknown>;
   /** Revit's own size-table CSV, verbatim — `LookupTableCsvCodec` is the one codec. */
   lookupTables?: Record<string, { csv: string }>;
   unmodeled?: unknown[];
 }
-
-/** Immutable edit channel: the route diffs before/after into staged JSON Pointer patches. */
-export type Update = (fn: (model: FamilyModel) => FamilyModel) => void;
 
 // ── portable-literal + reference helpers ────────────────────────────────────────────────────────
 
@@ -175,28 +117,17 @@ export function inches(text: string | undefined): number | null {
 export const paramRef = (text: string | undefined) =>
   text?.startsWith("param:") ? text.slice("param:".length) : null;
 
-export function paramSpec(model: FamilyModel, name: string): ParamSpec | undefined {
-  return parameterSpecs(model)[name];
-}
+export const paramSpec = (model: FamilyModel, name: string): ParamSpec | undefined =>
+  model.parameters[name];
 
-export const parameterSpecs = (model: FamilyModel): Record<string, ParamSpec> =>
-  model.parameters ?? { ...model.familyParameters, ...model.sharedParameters };
-
-export const parameterSection = (model: FamilyModel, name: string) =>
-  model.parameters
-    ? "parameters"
-    : model.familyParameters?.[name]
-      ? "familyParameters"
-      : "sharedParameters";
-
-export type ValueSource = "override" | "value" | "formula" | "missing";
+type ValueSource = "override" | "value" | "formula" | "missing";
 
 /** PortableValue's boolean literals use Revit's Yes/No spelling; raw JSON remains untouched. */
 export const parameterText = (value: unknown): string =>
   typeof value === "boolean" ? (value ? "Yes" : "No") : String(value ?? "");
 
 /** THE value trichotomy: type override → formula (resolved) → family value → missing. */
-export function resolveParam(
+function resolveParam(
   model: FamilyModel,
   typeName: string,
   name: string,
@@ -205,8 +136,7 @@ export function resolveParam(
   if (override != null) return { text: parameterText(override), source: "override" };
   const spec = paramSpec(model, name);
   if (!spec) return { text: "—", source: "missing" };
-  if (spec.formula != null)
-    return { text: spec.resolvedValues?.[typeName] ?? `= ${spec.formula}`, source: "formula" };
+  if (spec.formula != null) return { text: `= ${spec.formula}`, source: "formula" };
   return { text: spec.value == null ? "—" : parameterText(spec.value), source: "value" };
 }
 
@@ -219,44 +149,7 @@ function evalLen(model: FamilyModel, typeName: string, raw: string | undefined):
   return resolved.source === "missing" ? null : inches(resolved.text);
 }
 
-// ── immutable edits ─────────────────────────────────────────────────────────────────────────────
-
-export const setParamValue = (model: FamilyModel, name: string, value: string): FamilyModel => {
-  const section = parameterSection(model, name);
-  const specs = model[section] ?? {};
-  const spec = specs[name];
-  if (!spec || spec.formula != null) return model; // value XOR formula — formula params are locked
-  return { ...model, [section]: { ...specs, [name]: { ...spec, value } } };
-};
-
-/** Stage a formula at /familyParameters/<name>/formula. An empty draft removes it.
- * The value-XOR-formula law is the HOST's to enforce: staging a formula over a param that
- * still carries values is allowed here and surfaces as an advisory, never a block. */
-export const setParamFormula = (model: FamilyModel, name: string, formula: string): FamilyModel => {
-  const section = parameterSection(model, name);
-  const specs = model[section] ?? {};
-  const spec = specs[name];
-  if (!spec) return model;
-  const next: ParamSpec = { ...spec };
-  if (formula.trim()) next.formula = formula.trim();
-  else delete next.formula;
-  return { ...model, [section]: { ...specs, [name]: next } };
-};
-
-export const setOverride = (
-  model: FamilyModel,
-  typeName: string,
-  name: string,
-  value: string | null,
-): FamilyModel => {
-  if (paramSpec(model, name)?.formula != null) return model; // schema rule, enforced in the UI too
-  const type = { ...model.types[typeName] };
-  if (value == null) delete type[name];
-  else type[name] = value;
-  return { ...model, types: { ...model.types, [typeName]: type } };
-};
-
-// ── the dumb evaluator: params → arithmetic → plane intersection → face lookup ──────────────────
+// ── the dumb evaluator: planes → dimensions → form boxes → connector points ─────────────────────
 
 export type Axis = "x" | "y" | "z";
 
@@ -266,29 +159,23 @@ export interface Vec3 {
   z: number | null;
 }
 
+/** A form as an axis-aligned box. An axis the document does not pin to two positions is null. */
 export interface SolidGeo {
   slug: string;
   kind: string;
   isVoid: boolean;
   isCyl: boolean;
-  w: number | null;
-  d: number | null;
-  h: number | null;
+  box: Record<Axis, [number, number] | null>;
 }
 
 interface PlaneGeo {
   slug: string;
   axis: Axis | null;
   offset: number | null;
+  /** The parameter whose labeled dimension moved this plane at this type. */
   param: string | null;
   editable: boolean;
   text: string;
-}
-
-interface FrameGeo {
-  slug: string;
-  pos: Vec3;
-  normal: string;
 }
 
 export interface ConnGeo {
@@ -299,234 +186,246 @@ export interface ConnGeo {
   normal: string;
   w: number | null;
   h: number | null;
-  stub: number | null;
-  stubDir: string | undefined;
 }
 
-/** The stock family reference planes, keyed by the reference an authored document writes. */
-const DATUM_AXIS: Record<string, Axis> = Object.fromEntries(
-  ["Bottom", "CenterFB", "CenterLR"].map((member) => [
-    `plane:family.${member}`,
-    familyModelFamilyPlane(member)!.axis,
-  ]),
-);
-
-/** The direction an `Out` offset travels from a stock family plane: right (+X), FRONT (−Y), up (+Z). */
-function datumOutwardSign(reference: string): number {
-  const member = reference.startsWith("plane:family.")
-    ? familyModelFamilyPlane(reference.slice("plane:family.".length))
-    : null;
-  if (!member) return 1;
-  return member.outward[member.axis === "x" ? 0 : member.axis === "y" ? 1 : 2];
+interface DrivenDim {
+  a: string;
+  b: string;
+  value: number;
+  label: string | null;
 }
 
-// ponytail: v1 lowering convention — solids centered on the family center planes, sitting ON
-// family.Bottom. Face names and family-plane directions come from the conformance conventions,
-// which do NOT agree on the Y sign: a solid's Front face is +Y, a family plane's Out is −Y.
-function solidGeos(model: FamilyModel, typeName: string): SolidGeo[] {
-  const planes = model.forms ? planeGeos(model, typeName) : [];
-  return Object.entries(model.forms ?? model.solids ?? {}).map(([slug, solid]) => {
-    // ponytail: native macros draw only at a resolved stock origin; arbitrary constrained placement needs Revit.
-    const centered =
-      !model.forms ||
-      (solid.center?.length === 2 &&
-        ["x", "y"].every((axis) =>
-          solid.center!.some((name) =>
-            planes.some((p) => p.slug === name && p.axis === axis && p.offset === 0),
-          ),
-        ) &&
-        planes.some((p) => p.slug === solid.bottom && p.axis === "z" && p.offset === 0));
-    return {
-      slug,
-      kind: solid.kind,
-      isVoid: solid.void ?? solid.kind.startsWith("Void"),
-      isCyl: solid.kind.endsWith("Cylinder"),
-      w: centered ? evalLen(model, typeName, solid.width ?? solid.diameter) : null,
-      d: centered ? evalLen(model, typeName, solid.depth ?? solid.diameter) : null,
-      h: centered ? evalLen(model, typeName, solid.height) : null,
-    };
-  });
-}
+const NORMAL = /^(Plus|Minus)?(X|Y|Z)$/;
+const axisOf = (normal: string): Axis | null =>
+  (NORMAL.exec(normal)?.[2].toLowerCase() as Axis | undefined) ?? null;
 
+/**
+ * Datums sit at 0 and reference planes start at their `at` seed. A labeled or locked two-plane
+ * dimension then moves one end off a pinned plane, or both ends around the middle plane of its
+ * equality dimension, so each type draws from its own numbers. A formula label does not resolve
+ * here, so its planes keep their seeds.
+ */
 export function planeGeos(model: FamilyModel, typeName: string): PlaneGeo[] {
-  if (model.datums || model.refPlanes)
-    return Object.entries({ ...model.datums, ...model.refPlanes }).map(([slug, plane]) => {
-      const direction = /^(Plus|Minus)?(X|Y|Z)$/.exec(plane.normal);
-      const text = "at" in plane ? plane.at : "0in";
-      const seed = inches(text);
-      return {
-        slug,
-        axis: direction ? (direction[2].toLowerCase() as Axis) : null,
-        offset: seed == null ? null : seed * (direction?.[1] === "Minus" ? -1 : 1),
-        param: null,
-        editable: false,
-        text: `${text} seed`,
-      };
+  const planes = new Map<string, PlaneGeo>();
+  for (const [slug, datum] of Object.entries(model.datums ?? {}))
+    planes.set(slug, {
+      slug,
+      axis: axisOf(datum.normal),
+      offset: 0,
+      param: null,
+      editable: false,
+      text: "datum",
     });
-  return Object.entries(model.planes ?? {}).map(([slug, plane]) => {
-    const param = paramRef(plane.by);
-    const spec = param ? paramSpec(model, param) : undefined;
-    const value = evalLen(model, typeName, plane.by);
+  for (const [slug, plane] of Object.entries(model.refPlanes ?? {})) {
+    const seed = inches(plane.at);
+    planes.set(slug, {
+      slug,
+      axis: axisOf(plane.normal),
+      offset: seed == null ? null : seed * (plane.normal.startsWith("Minus") ? -1 : 1),
+      param: null,
+      editable: false,
+      text: `${plane.at} seed`,
+    });
+  }
+  const seeds = new Map([...planes].map(([slug, plane]) => [slug, plane.offset ?? 0]));
+  const dims = Object.values(model.dimensions ?? {});
+  const middle = (a: string, b: string) =>
+    dims.find(
+      (dim) =>
+        dim.equality &&
+        dim.between.length === 3 &&
+        ((dim.between[0] === a && dim.between[2] === b) ||
+          (dim.between[0] === b && dim.between[2] === a)),
+    )?.between[1];
+  const pinned = new Set(Object.keys(model.datums ?? {}));
+  const move = (slug: string, offset: number, label: string | null) => {
+    const spec = label ? paramSpec(model, label) : undefined;
+    planes.set(slug, {
+      ...planes.get(slug)!,
+      offset,
+      param: label,
+      editable: spec != null && spec.formula == null,
+      text: label ? resolveParam(model, typeName, label).text : `${offset}in locked`,
+    });
+    pinned.add(slug);
+  };
+  /** True when the dimension is spent: placed, over-pinned, or not placeable at all. */
+  const place = ({ a, b, value, label }: DrivenDim) => {
+    const [A, B] = [planes.get(a), planes.get(b)];
+    if (A?.offset == null || B?.offset == null || A.axis !== B.axis) return true;
+    const sign = Math.sign(seeds.get(b)! - seeds.get(a)!) || 1;
+    if (pinned.has(a) && pinned.has(b)) return true;
+    if (pinned.has(a)) move(b, A.offset + sign * value, label);
+    else if (pinned.has(b)) move(a, B.offset - sign * value, label);
+    else {
+      const m = middle(a, b);
+      const center = m && pinned.has(m) ? planes.get(m)?.offset : null;
+      if (center == null) return false;
+      move(a, center - (sign * value) / 2, label);
+      move(b, center + (sign * value) / 2, label);
+    }
+    return true;
+  };
+  let pending = dims.flatMap((dim): DrivenDim[] => {
+    if (dim.equality || dim.between.length !== 2) return [];
+    const value = dim.label ? evalLen(model, typeName, `param:${dim.label}`) : inches(dim.locked);
+    const [a, b] = dim.between as [string, string];
+    return value == null ? [] : [{ a, b, value, label: dim.label ?? null }];
+  });
+  while (pending.length > 0) {
+    const next = pending.filter((dim) => !place(dim));
+    // Nothing placed: no dimension has a pinned end, so hold the first end at its seed.
+    if (next.length === pending.length) pinned.add(next[0]!.a);
+    pending = next;
+  }
+  return [...planes.values()];
+}
+
+function solidGeos(model: FamilyModel, typeName: string, planes: PlaneGeo[]): SolidGeo[] {
+  const at = (name: string | undefined) => planes.find((plane) => plane.slug === name);
+  return Object.entries(model.forms ?? {}).map(([slug, form]) => {
+    const extent: Record<Axis, number[]> = { x: [], y: [], z: [] };
+    const push = (axis: Axis | null | undefined, ...values: Array<number | null | undefined>) => {
+      if (axis) for (const value of values) if (value != null) extent[axis].push(value);
+    };
+    const curves = form.profile?.flatMap((loop) => loop.curves) ?? [];
+    if (form.kind === "Extrusion") {
+      for (const curve of curves) {
+        if (curve.on) {
+          const plane = at(curve.on);
+          push(plane?.axis, plane?.offset);
+          continue;
+        }
+        const diameter = evalLen(model, typeName, curve.diameter);
+        for (const plane of (curve.center ?? []).map(at))
+          if (plane?.offset != null && diameter != null)
+            push(plane.axis, plane.offset - diameter / 2, plane.offset + diameter / 2);
+      }
+      // The extrusion spans two planes, or a length off its sketch plane.
+      const sketch = at(form.sketchPlane);
+      const cap = (ref: string | undefined) => {
+        const plane = at(ref);
+        if (plane) return plane;
+        const length = evalLen(model, typeName, ref);
+        return length == null || sketch?.offset == null
+          ? undefined
+          : { axis: sketch.axis, offset: sketch.offset + length };
+      };
+      const start = form.start ? cap(form.start) : sketch;
+      const end = cap(form.end);
+      if (start?.axis && start.axis === end?.axis) push(start.axis, start.offset, end.offset);
+    } else {
+      const size: Record<Axis, number | null> = {
+        x: evalLen(model, typeName, form.width ?? form.diameter),
+        y: evalLen(model, typeName, form.depth ?? form.diameter),
+        z: null,
+      };
+      for (const plane of (form.center ?? []).map(at)) {
+        const span = plane?.axis ? size[plane.axis] : null;
+        if (plane?.offset != null && span != null)
+          push(plane.axis, plane.offset - span / 2, plane.offset + span / 2);
+      }
+      const bottom = at(form.bottom);
+      const height = evalLen(model, typeName, form.height);
+      if (bottom?.offset != null && height != null)
+        push(bottom.axis, bottom.offset, bottom.offset + height);
+    }
+    const range = (values: number[]): [number, number] | null => {
+      const [lo, hi] = [Math.min(...values), Math.max(...values)];
+      return values.length > 1 && hi > lo ? [lo, hi] : null;
+    };
     return {
       slug,
-      axis: DATUM_AXIS[plane.from] ?? null,
-      offset:
-        value == null
-          ? null
-          : familyModelPlaneOffset(plane.direction === "In" ? "In" : "Out", value) *
-            datumOutwardSign(plane.from),
-      param,
-      editable: spec != null && spec.formula == null,
-      text: param ? resolveParam(model, typeName, param).text : plane.by,
+      kind: form.kind,
+      isVoid: form.void ?? false,
+      isCyl: form.kind === "Cylinder" || curves.some((curve) => curve.kind === "Circle"),
+      box: { x: range(extent.x), y: range(extent.y), z: range(extent.z) },
     };
   });
 }
 
-function faceCoord(solids: SolidGeo[], ref: string): { axis: Axis; value: number | null } | null {
-  const [slug, face] = ref.slice("face:".length).split(".");
-  const solid = solids.find((entry) => entry.slug === slug);
-  if (!solid || solid.w == null || solid.d == null || solid.h == null) return null;
-  const coordinate = familyModelPrismFaceCoordinate(face, solid.w, solid.d, solid.h);
-  return coordinate ? { axis: coordinate.axis, value: coordinate.coordinate } : null;
-}
-
-function frameGeos(model: FamilyModel, solids: SolidGeo[], planes: PlaneGeo[]): FrameGeo[] {
-  return Object.entries(model.frames ?? {}).map(([slug, frame]) => {
-    const pos: Vec3 = { x: null, y: null, z: null };
-    for (const ref of frame.origin) {
-      if (ref.startsWith("face:")) {
-        const coordinate = faceCoord(solids, ref);
-        if (coordinate) pos[coordinate.axis] = coordinate.value;
-      } else if (DATUM_AXIS[ref]) {
-        pos[DATUM_AXIS[ref]] = 0;
-      } else if (ref.startsWith("plane:")) {
-        const plane = planes.find((entry) => entry.slug === ref.slice("plane:".length));
-        if (plane?.axis) pos[plane.axis] = plane.offset;
-      }
-    }
-    return { slug, pos, normal: frame.normal };
-  });
-}
-
+/** A connector sits where its `on` plane (or a form face, `body.top`) crosses its `at` planes. */
 function connGeos(
   model: FamilyModel,
   typeName: string,
-  frames: FrameGeo[],
   planes: PlaneGeo[],
   solids: SolidGeo[],
 ): ConnGeo[] {
   return Object.entries(model.connectors ?? {})
-    .filter(([, connector]) => connector.frame || connector.on)
+    .filter(([, connector]) => connector.on)
     .map(([slug, connector]) => {
-      const native = connector.on ? nativeConnectorFrame(model, connector, planes, solids) : null;
-      const frame =
-        native ??
-        (connector.frame === "frame:family"
-          ? { pos: { x: 0, y: 0, z: 0 }, normal: "+Z" }
-          : (frames.find((entry) => entry.slug === connector.frame?.slice("frame:".length)) ?? {
-              pos: { x: null, y: null, z: null },
-              normal: "+Z",
-            }));
+      const pos: Vec3 = { x: null, y: null, z: null };
+      let normal = "";
+      for (const ref of [connector.on!, ...(connector.at ?? [])]) {
+        const plane = planes.find((p) => p.slug === ref);
+        let axis = plane?.axis;
+        let coordinate = plane?.offset;
+        let direction = (model.refPlanes?.[ref] ?? model.datums?.[ref])?.normal;
+        if (!plane) {
+          const dot = ref.lastIndexOf(".");
+          const box = solids.find((g) => g.slug === ref.slice(0, dot))?.box;
+          const faces: Record<string, [Axis, number | undefined, string]> = {
+            left: ["x", box?.x?.[0], "PlusX"],
+            right: ["x", box?.x?.[1], "PlusX"],
+            front: ["y", box?.y?.[0], "PlusY"],
+            back: ["y", box?.y?.[1], "PlusY"],
+            bottom: ["z", box?.z?.[0], "PlusZ"],
+            top: ["z", box?.z?.[1], "PlusZ"],
+          };
+          [axis, coordinate, direction] = faces[ref.slice(dot + 1)] ?? [null, null, undefined];
+        }
+        if (axis) pos[axis] = coordinate ?? null;
+        if (ref === connector.on)
+          normal = direction?.replace("Plus", "+").replace("Minus", "-") ?? "";
+      }
       const shape = connector.shape ?? (connector.diameter ? "Round" : "Unspecified");
-      const round = shape === "Round";
       const diameter = evalLen(model, typeName, connector.diameter);
       return {
         slug,
         domain: connector.domain,
         shape,
-        pos: frame.pos,
-        normal: frame.normal,
-        w: round ? diameter : evalLen(model, typeName, connector.width),
-        h: round ? diameter : evalLen(model, typeName, connector.height),
-        stub: evalLen(model, typeName, connector.stub?.depth),
-        stubDir: connector.stub?.direction,
+        pos,
+        normal,
+        w: shape === "Round" ? diameter : evalLen(model, typeName, connector.width),
+        h: shape === "Round" ? diameter : evalLen(model, typeName, connector.height),
       };
     });
-}
-
-/** Native `on` + `at` references are intersections, not legacy frames. Ref-plane coordinates are authored seeds. */
-function nativeConnectorFrame(
-  model: FamilyModel,
-  connector: ConnectorSpec,
-  planes: PlaneGeo[],
-  solids: SolidGeo[],
-): FrameGeo {
-  const pos: Vec3 = { x: null, y: null, z: null };
-  let normal = "";
-  for (const ref of [connector.on!, ...(connector.at ?? [])]) {
-    const plane = planes.find((p) => p.slug === ref);
-    let axis = plane?.axis;
-    let coordinate = plane?.offset;
-    let direction = (model.refPlanes?.[ref] ?? model.datums?.[ref])?.normal;
-    if (!plane) {
-      const dot = ref.lastIndexOf(".");
-      const solid = solids.find((g) => g.slug === ref.slice(0, dot));
-      const face = ref.slice(dot + 1);
-      if (solid) {
-        const faces: Record<string, [Axis, number | null, string]> = {
-          left: ["x", solid.w == null ? null : -solid.w / 2, "PlusX"],
-          right: ["x", solid.w == null ? null : solid.w / 2, "PlusX"],
-          front: ["y", solid.d == null ? null : -solid.d / 2, "PlusY"],
-          back: ["y", solid.d == null ? null : solid.d / 2, "PlusY"],
-          top: ["z", solid.h, "PlusZ"],
-        };
-        [axis, coordinate, direction] = faces[face] ?? [undefined, null, undefined];
-      }
-    }
-    if (axis) pos[axis] = coordinate ?? null;
-    if (ref === connector.on) normal = direction?.replace("Plus", "+").replace("Minus", "-") ?? "";
-  }
-  return { slug: connector.on!, pos, normal };
 }
 
 export interface Sheet {
   solids: SolidGeo[];
   planes: PlaneGeo[];
-  frames: FrameGeo[];
   conns: ConnGeo[];
   ghosts: Array<{ typeName: string; solids: SolidGeo[] }>;
-  rcp: Vec3 | null;
 }
 
 /** Everything the triptych draws for ONE type, plus the other types' solids as ghosts. */
 export function buildSheet(model: FamilyModel, typeName: string): Sheet {
-  const solids = solidGeos(model, typeName);
   const planes = planeGeos(model, typeName);
-  const frames = frameGeos(model, solids, planes);
-  const conns = connGeos(model, typeName, frames, planes, solids);
+  const solids = solidGeos(model, typeName, planes);
+  const conns = connGeos(model, typeName, planes, solids);
   const ghosts = Object.keys(model.types)
     .filter((name) => name !== typeName)
-    .map((name) => ({ typeName: name, solids: solidGeos(model, name) }));
-  // ponytail: fixed PE room-point convention — 12in, Unhosted → +Z, hosted → −Y (AddRoomDingler)
-  const rcp =
-    !model.parameters && model.roomCalculationPoint?.enabled
-      ? model.family.placement === "Unhosted"
-        ? { x: 0, y: 0, z: 12 }
-        : { x: 0, y: -12, z: 0 }
-      : null;
-  return { solids, planes, frames, conns, ghosts, rcp };
+    .map((name) => ({ typeName: name, solids: solidGeos(model, name, planeGeos(model, name)) }));
+  return { solids, planes, conns, ghosts };
 }
 
 /** One shared world bbox (incl. ghosts) → one px/in factor → true relative scale everywhere. */
 export function sheetBounds(sheet: Sheet): Record<Axis, [number, number]> {
+  const axes: Axis[] = ["x", "y", "z"];
   const extent: Record<Axis, number[]> = { x: [], y: [], z: [] };
   const solid = (geo: SolidGeo) => {
-    if (geo.w != null) extent.x.push(-geo.w / 2, geo.w / 2);
-    if (geo.d != null) extent.y.push(-geo.d / 2, geo.d / 2);
-    if (geo.h != null) extent.z.push(0, geo.h);
+    for (const axis of axes) extent[axis].push(...(geo.box[axis] ?? []));
   };
   sheet.solids.forEach(solid);
   for (const ghost of sheet.ghosts) ghost.solids.forEach(solid);
   for (const plane of sheet.planes)
     if (plane.axis && plane.offset != null) extent[plane.axis].push(plane.offset);
   for (const conn of sheet.conns)
-    for (const axis of ["x", "y", "z"] as Axis[]) {
+    for (const axis of axes) {
       const p = conn.pos[axis];
-      if (p != null) extent[axis].push(p - (conn.stub ?? 0) - 2, p + (conn.stub ?? 0) + 2);
+      if (p != null) extent[axis].push(p - 4, p + 4);
     }
-  if (sheet.rcp)
-    for (const axis of ["x", "y", "z"] as Axis[])
-      if (sheet.rcp[axis] != null) extent[axis].push(sheet.rcp[axis] as number);
   const range = (values: number[]): [number, number] => {
     if (values.length === 0) return [-12, 12];
     const lo = Math.min(...values);
@@ -535,35 +434,4 @@ export function sheetBounds(sheet: Sheet): Record<Axis, [number, number]> {
     return [lo - pad, hi + pad];
   };
   return { x: range(extent.x), y: range(extent.y), z: range(extent.z) };
-}
-
-// ── reference indices ───────────────────────────────────────────────────────────────────────────
-
-/** Every authored construct that reads this parameter — the inspector's "associates through",
- * derived from the authored model, never from a host GetAssociated call. */
-export function paramAssociations(model: FamilyModel, name: string): ParamAssociations {
-  const reads = (...refs: (string | undefined)[]) => refs.some((ref) => paramRef(ref) === name);
-  const dimensions: string[] = [];
-  for (const [slug, solid] of Object.entries(model.forms ?? model.solids ?? {}))
-    if (reads(solid.width, solid.depth, solid.height, solid.diameter))
-      dimensions.push(`solid ${slug}`);
-  for (const [slug, plane] of Object.entries(model.planes ?? {}))
-    if (reads(plane.by)) dimensions.push(`plane ${slug}`);
-  for (const [slug, connector] of Object.entries(model.connectors ?? {}))
-    if (reads(connector.diameter, connector.width, connector.height, connector.stub?.depth))
-      dimensions.push(`connector ${slug}`);
-  const arrays = Object.entries(model.arrays ?? {})
-    .filter(([, spec]) => reads(spec.halfCount, spec.label))
-    .map(([slug]) => `array ${slug}`);
-  const nested = Object.entries(model.nestedFamilies ?? {}).flatMap(([slug, spec]) =>
-    Object.entries(spec.parameterBindings ?? {})
-      .filter(([, source]) => paramRef(source) === name || source === name)
-      .map(([target]) => `${slug} · ${target}`),
-  );
-  for (const [slug, dim] of Object.entries(model.dimensions ?? {}))
-    if (dim.label === name) dimensions.push(`dimension ${slug}`);
-  for (const [slug, spec] of Object.entries(model.nested ?? {}))
-    for (const [target, source] of Object.entries(spec.associate ?? {}))
-      if (reads(source)) nested.push(`${slug} / ${target}`);
-  return { dimensions, arrays, nested };
 }

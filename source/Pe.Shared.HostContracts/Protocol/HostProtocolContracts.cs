@@ -22,7 +22,9 @@ public static class HostProtocol {
     //     returns it as current); stale/missing evidence, admission groups and aliases judged by ParameterEditPlan
     // 42: family.editor.apply deleted; family writes are FamilyPatch plan/apply
     // 43: revit.context.view-image response gains imageUrl (/view-image/<imageSha256>.png, null iff no registration)
-    public const int ContractVersion = 43;
+    // 44: family.editor.snapshot deleted; family reads are family.capture
+    // 45: family.editor.open renamed family.open (same request/response shape: FamilyOpenRequest/FamilyOpenData)
+    public const int ContractVersion = 45;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
