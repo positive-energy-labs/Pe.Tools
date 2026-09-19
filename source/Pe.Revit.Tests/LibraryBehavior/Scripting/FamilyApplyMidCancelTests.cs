@@ -60,13 +60,15 @@ public sealed class FamilyApplyMidCancelTests {
                 new LoadAndSaveOptions { OpenOutputFilesOnCommandFinish = false, LoadFamily = true, SaveFamilyToInternalPath = false, SaveFamilyToOutputDir = false },
                 cancellationToken: cancellation));
 
+            // Observation, not an assertion: whether the reload keeps the Family element id is a domains question.
+            TestContext.Out.WriteLine($"[PE_MIDCANCEL_FAMILY_IDS] first {first} -> {FamilyIdOf(project, "Mid cancel first")}, second {second} -> {FamilyIdOf(project, "Mid cancel second")}");
             Assert.Multiple(() => {
                 Assert.That(changes, Is.Not.Empty, "The cancel must land inside the first family's edit.");
                 Assert.That(result.Receipts.Select(r => (r.FamilyId, r.Success)), Is.EqualTo(new[] { (first, true) }));
                 Assert.That(result.Diagnostics.Single(d => d.Code == "Cancelled").Message, Does.Contain($"Not started: {second}"));
                 Assert.That(Outcome(result.ReceiptPath!), Is.EqualTo("Cancelled"));
-                Assert.That(ProofValues(project, first), Is.All.EqualTo("kept"), "Cancelled is not rollback.");
-                Assert.That(ProofValues(project, second), Is.Null, "The second family never started.");
+                Assert.That(ProofValues(project, "Mid cancel first"), Is.All.EqualTo("kept"), "Cancelled is not rollback.");
+                Assert.That(ProofValues(project, "Mid cancel second"), Is.Null, "The second family never started.");
             });
         } finally { RevitFamilyFixtureHarness.CloseDocument(project); PodRunInputTests.DeletePod(pod); }
     }
@@ -89,17 +91,26 @@ public sealed class FamilyApplyMidCancelTests {
 
     private static long Load(Autodesk.Revit.ApplicationServices.Application application, Document project, string name) {
         var family = PodRunInputTests.NewTwoTypeFamily(application, name);
-        try { return family.LoadFamily(project, new DefaultFamilyLoadOptions()).Id.Value(); }
+        try {
+            // An unsaved family document loads under its title ("Family1"); saving it as `name` makes the loaded name deterministic.
+            RevitFamilyFixtureHarness.SaveDocumentCopy(family, RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(name), name);
+            return family.LoadFamily(project, new DefaultFamilyLoadOptions()).Id.Value();
+        }
         finally { RevitFamilyFixtureHarness.CloseDocument(family); }
     }
 
-    /// <summary>The Proof value of every type of the loaded family with this id, or null when it has no Proof parameter.</summary>
-    private static List<string>? ProofValues(Document project, long familyId) {
-        if (project.GetElement(new ElementId(familyId)) is not Family family) {
-            var loaded = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>()
-                .Select(f => $"{f.Name} ({f.Id.Value()})");
-            throw new AssertionException($"Family {familyId} is no longer in the project. Loaded families: {string.Join(", ", loaded)}");
-        }
+    /// <summary>The loaded family with this name; a miss lists every loaded family so a product rename stays visible.</summary>
+    private static Family FamilyNamed(Document project, string name) {
+        var families = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>().ToList();
+        return families.SingleOrDefault(f => f.Name == name)
+            ?? throw new AssertionException($"No loaded family is named '{name}'. Loaded families: {string.Join(", ", families.Select(f => $"{f.Name} ({f.Id.Value()})"))}");
+    }
+
+    private static long FamilyIdOf(Document project, string name) => FamilyNamed(project, name).Id.Value();
+
+    /// <summary>The Proof value of every type of the named loaded family, or null when it has no Proof parameter.</summary>
+    private static List<string>? ProofValues(Document project, string name) {
+        var family = FamilyNamed(project, name);
         var edit = project.EditFamily(family);
         try {
             var proof = edit.FamilyManager.get_Parameter("Proof");
