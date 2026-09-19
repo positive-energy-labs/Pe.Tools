@@ -393,16 +393,19 @@ test("live /families: one catalog read per scope change, none while idle", async
     });
     await openLive(page, "/families", "demo=edit&live=1");
     const count = (key: string) => calls.filter((call) => call === key).length;
-    const input = page.getByRole("combobox", { name: "draft categories" });
-    await expect.poll(() => input.count(), { timeout: 30_000 }).toBe(1);
+    // The categories picker is a ListPopup: its trigger opens a list whose search owns typing.
+    const trigger = page.getByRole("button", { name: "draft categories" });
+    await expect.poll(() => trigger.count(), { timeout: 30_000 }).toBe(1);
     await page.waitForTimeout(3_000);
     const idle = {
       options: count("revit.catalog.field-options"),
       catalog: count("revit.catalog.loaded-families"),
       matrix: count("revit.matrix.loaded-families"),
     };
-    await input.fill("Mech");
-    await input.press("Enter");
+    await trigger.click();
+    const search = page.getByLabel("draft categories search");
+    await search.fill("Mech");
+    await search.press("Enter");
     await expect
       .poll(() => count("revit.catalog.loaded-families"), { timeout: 10_000 })
       .toBe(idle.catalog + 1);
@@ -479,10 +482,9 @@ test("live /families: typed cells stage, one is typed back, plan and apply retir
     // Plan filed no spec nobody authored: the page names no member.
     expect(new URL(page.url()).searchParams.get("path") ?? "").toBe("");
     await expect.poll(() => body.innerText(), { timeout: 30_000 }).toContain("apply families ran");
-    // The applied, unchanged staged cell retired: the band empties; the receipt is the record.
-    await expect
-      .poll(() => page.locator('section[aria-label="proposals"]').count(), { timeout: 30_000 })
-      .toBe(0);
+    // The applied, unchanged staged cell retired: the band reads empty (it stays mounted, so the
+    // grid never moves, F-R4-1); the receipt is the record.
+    await band(0, 0);
     // The run is filed under the draft's name; `/pods` browses members, and none was filed.
     // A string, so vitest leaves the page's own dynamic import alone.
     const runs = (await page.evaluate(
@@ -508,7 +510,8 @@ test("live /families: capture, plan, apply files a run receipt", async () => {
   const { shown, workflows } = await liveLoop("families", async (page) => {
     const pod = await openLive(page, "/families", "demo=capture&live=1");
     await page.goto(`${page.url()}&pod=${pod}`, { waitUntil: "domcontentloaded" });
-    await page.getByTitle(/^Add Fan Coil Unit - Ducted to the capture set/).click();
+    // A row click picks it into the capture set (the master table's selection).
+    await page.getByRole("row").filter({ hasText: "Fan Coil Unit - Ducted" }).first().click();
     await run(page, "capture families");
     const path = await landed(page, /^settings\/families\/Fan-Coil-Unit-+Ducted-.*\.json$/);
     // The captured family model is itself a families spec: plan and apply it.
