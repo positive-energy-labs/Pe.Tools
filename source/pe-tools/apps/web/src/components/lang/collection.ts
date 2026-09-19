@@ -45,6 +45,10 @@ export interface CollectionOptions<T> {
   /** Controlled selection by key. */
   selected?: readonly string[];
   onSelectedChange?: (keys: string[]) => void;
+  /** Controlled cursor by key: a focus owned outside the list (a linked pane's hover) is its cursor. */
+  cursor?: string | null;
+  /** The cursor moved (a hover or a key); fires only on a change. */
+  onCursorChange?: (key: string | null) => void;
   /** A pick: Enter or click on a row (a create row calls `onCreate` instead). */
   onPick?: (item: T, path: readonly T[]) => void;
   /** Present, a sentinel row offers the typed text as a new value (R9). */
@@ -138,7 +142,13 @@ export function useCollection<T>(options: CollectionOptions<T>) {
   const [ownQuery, setOwnQuery] = useState(options.initialQuery ?? "");
   const query = options.query ?? ownQuery;
   const setQuery = (next: string) => setOwnQuery(next);
-  const [cursorKey, setCursorKey] = useState<string | null>(null);
+  const [ownCursor, setOwnCursor] = useState<string | null>(null);
+  const cursorKey = options.cursor !== undefined ? options.cursor : ownCursor;
+  const setCursorKey = (key: string | null) => {
+    if (key === cursorKey) return;
+    if (options.cursor === undefined) setOwnCursor(key);
+    options.onCursorChange?.(key);
+  };
   const [anchor, setAnchor] = useState<string | null>(null);
   const [path, setPath] = useState<T[]>([]);
   // The rung is its own state, so a ladder can open below a path it did not walk (startLevel).
