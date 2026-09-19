@@ -116,7 +116,10 @@ function useFamiliesWorkspaceModel(
   );
   const matrix = useLoadedFamiliesMatrixQuery(matrixRequest, {
     ...scope,
-    enabled: !fixture && connected && scope !== undefined && matrixRequest !== undefined,
+    // Not gated on the inventory's freshness: Revit busy with this very read lets the inventory
+    // go stale, and a gate on it aborted the read it was waiting for, forever (F-J1-4, hold 3).
+    // The resolved scope survives that gap; a bridge truly gone ends through the read's own wait.
+    enabled: !fixture && scope !== undefined && matrixRequest !== undefined,
   });
   useAfterApply(busy, () => {
     setPickedIds(new Set());
