@@ -6,7 +6,13 @@ import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { expect, test, vi } from "vite-plus/test";
-import { actionReceiptSchema, actionStepSchema, executionTargetSchema } from "@pe/agent-contracts";
+import {
+  actionReceiptSchema,
+  actionStepSchema,
+  executionTargetSchema,
+  takeoffDecisionKey,
+  transitionPatches,
+} from "@pe/agent-contracts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { RevitBridge } from "../src/bridge.ts";
@@ -104,7 +110,21 @@ test("semantic partition survives lost acceptance; retries join with original re
       ).status,
     ).toBe(409);
     expect((await web.post(web.intent("second-pane"))).status).toBe(409);
-    await web.workspace.apply(web.scope, "takeoffs", "human", [{ path: ["staged"], value: [] }], 1);
+    await web.workspace.apply(
+      web.scope,
+      "takeoffs",
+      "human",
+      transitionPatches(
+        ["decisions"],
+        takeoffDecisionKey("room-1", "seedless"),
+        {},
+        {
+          kind: "stage",
+          rung: { value: "accept" },
+        },
+      ),
+      1,
+    );
     release();
     expect(await owner.wait("held")).toMatchObject({
       state: "succeeded",

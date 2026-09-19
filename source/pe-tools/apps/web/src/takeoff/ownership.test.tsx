@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { takeoffDecisionKey } from "@pe/agent-contracts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { address, type TakeoffObservation, type WorkKey } from "@pe/agent-contracts";
@@ -57,7 +58,7 @@ test("sync review applies staged values and treats Work decisions as resolved", 
         next: { name: "Reviewed room", people: 7 },
       },
     },
-    { [`${room.guid}::check`]: "accept" },
+    { [takeoffDecisionKey(room.guid, "check")]: "accept" },
   );
 
   expect(plan.blockedZones).toEqual([]);

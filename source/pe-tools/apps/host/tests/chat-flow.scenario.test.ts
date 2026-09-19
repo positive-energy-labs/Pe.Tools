@@ -371,14 +371,14 @@ test("the browser walks one durable chat lifecycle", async () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        patches: [{ path: ["staged"], value: [] }],
+        patches: [{ path: ["bases", "room-1"], value: { name: "Scenario" } }],
         expectedRevision: 0,
       }),
     });
     expect(await applied.json()).toMatchObject({ ok: true, revision: 1 });
     expect(
       await (await fetch(`${baseUrl}/pe/route-state/takeoffs?${routeQuery}`)).json(),
-    ).toMatchObject({ revision: 1, doc: { staged: [] } });
+    ).toMatchObject({ revision: 1, doc: { bases: { "room-1": { name: "Scenario" } } } });
     // The Work key is the Address alone: the same Address reads the same document, another
     // Address starts fresh.
     expect(

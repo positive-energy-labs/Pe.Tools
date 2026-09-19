@@ -14,6 +14,17 @@ import type {
   TakeoffSnapshot,
   TakeoffObservation,
 } from "@pe/agent-contracts";
+import {
+  stagedAdoptChoices,
+  stagedDecisions,
+  stagedReviewFlags,
+  stagedTakeoffEdits,
+  takeoffDecisionAddress,
+  takeoffDecisionKey,
+  takeoffEditPatches,
+  takeoffFlagToggle,
+  transitionPatches,
+} from "@pe/agent-contracts";
 
 import { previousOf } from "#/readings";
 import { useRoute } from "#/route/use-route";
@@ -206,7 +217,9 @@ export function atlasRows(
     : world.zones.filter((zone) => page.stageFilter === null || zone.stage === page.stageFilter);
   return zones.flatMap((zone) =>
     zone.rooms.map((room) => {
-      const open = room.flags.filter((flag) => decisions[`${room.guid}::${flag}`] === undefined);
+      const open = room.flags.filter(
+        (flag) => decisions[takeoffDecisionKey(room.guid, flag)] === undefined,
+      );
       return { zone, room, open, state: atlasRoomState(room, open.length) };
     }),
   );
@@ -319,17 +332,22 @@ export function useTakeoffsController(options: {
   const capture = options.savedCapture;
   const authority =
     capture?.snapshot?.world ?? observed<TakeoffSnapshot>(snapshot)?.world ?? EMPTY_WORLD;
+  // The person's staged cells only; Pea's proposals are not drawn here yet (interaction's cutover).
   const staged = useMemo(
-    () =>
-      Object.fromEntries(
-        (handle.work.doc?.staged ?? []).map((edit) => [edit.roomId, edit]),
-      ) as Record<string, StagedRoomEdit>,
+    (): Record<string, StagedRoomEdit> =>
+      handle.work.doc ? stagedTakeoffEdits(handle.work.doc) : {},
     [handle.work.doc],
   );
   const world = useMemo(() => stagedModel(authority, staged), [authority, staged]);
   const candidates = observed<TakeoffSnapshot>(snapshot)?.zoneFrs;
-  const adoptPatches = handle.work.doc?.adoptPatches ?? {};
-  const decisions = handle.work.doc?.decisions ?? {};
+  const adoptPatches = useMemo(
+    () => (handle.work.doc ? stagedAdoptChoices(handle.work.doc) : {}),
+    [handle.work.doc],
+  );
+  const decisions = useMemo(
+    () => (handle.work.doc ? stagedDecisions(handle.work.doc) : {}),
+    [handle.work.doc],
+  );
   const adoptRows = useMemo(
     () => (candidates ? adoptDrafts(candidates, adoptPatches) : null),
     [candidates, adoptPatches],
@@ -349,7 +367,7 @@ export function useTakeoffsController(options: {
       ? {
           zone: zoneKey,
           data: zone.savedReview,
-          flags: handle.work.doc?.reviewFlags?.[zoneKey] ?? [],
+          flags: handle.work.doc ? (stagedReviewFlags(handle.work.doc)[zoneKey] ?? []) : [],
           source: "saved native" as const,
         }
       : null;
@@ -363,7 +381,7 @@ export function useTakeoffsController(options: {
         hovered: hover === id,
         selected: navigation.room === id || navigation.zone === id,
         bound: room?.elementId !== null && room !== undefined,
-        decided: Object.keys(decisions).some((key) => key.startsWith(`${id}::`)),
+        decided: Object.keys(decisions).some((key) => takeoffDecisionAddress(key).roomGuid === id),
         staged: edit ?? null,
         dirty: edit !== undefined,
         conflict:
@@ -378,11 +396,8 @@ export function useTakeoffsController(options: {
   const stageEdit = useCallback(
     (id: string, next: RoomEdit) => {
       const room = authority.zones.flatMap((zone) => zone.rooms).find((r) => r.guid === id);
-      if (!room) return Promise.resolve(null);
-      const kept = (handle.work.doc?.staged ?? []).filter((edit) => edit.roomId !== id);
-      return handle.work.write([
-        { path: ["staged"], value: [...kept, { roomId: id, base: roomEdit(room), next }] },
-      ]);
+      if (!room || !handle.work.doc) return Promise.resolve(null);
+      return handle.work.write(takeoffEditPatches(handle.work.doc, id, roomEdit(room), next));
     },
     [authority, handle.work],
   );
@@ -454,20 +469,34 @@ export function useTakeoffsController(options: {
         elementId: number,
         next: Partial<Pick<AdoptDraft, "checked" | "name" | "systemTag">>,
       ) =>
-        void handle.work.write([
-          {
-            path: ["adoptPatches", `${view}:${elementId}`],
-            value: { ...adoptPatches[`${view}:${elementId}`], ...next },
-          },
-        ]),
+        void handle.work.write(
+          transitionPatches(
+            ["adopt"],
+            `${view}:${elementId}`,
+            {},
+            {
+              kind: "stage",
+              rung: { value: { ...adoptPatches[`${view}:${elementId}`], ...next } },
+            },
+          ),
+        ),
       patchRoom: (id: string, next: RoomEdit) => void stageEdit(id, next),
       decideRoom: (room: ModelRoom, flag: string, verdict: "accept" | "dismiss") =>
-        void handle.work.write([{ path: ["decisions", `${room.guid}::${flag}`], value: verdict }]),
+        void handle.work.write(
+          transitionPatches(
+            ["decisions"],
+            takeoffDecisionKey(room.guid, flag),
+            {},
+            {
+              kind: "stage",
+              rung: { value: verdict },
+            },
+          ),
+        ),
+      // Flag stages the shape's cell; unflag unstages it (the old union could never unflag).
       flagReview: (key: string) => {
-        if (review)
-          void handle.work.write([
-            { path: ["reviewFlags", review.zone], value: [...new Set([...review.flags, key])] },
-          ]);
+        if (review && handle.work.doc)
+          void handle.work.write(takeoffFlagToggle(handle.work.doc, review.zone, key));
       },
     }),
     [
