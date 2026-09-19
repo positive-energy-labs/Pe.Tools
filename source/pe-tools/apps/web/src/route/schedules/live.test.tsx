@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { RegistryContext } from "@effect/atom-react";
 
 import { appAtomRegistry } from "#/route";
-import { setup, stubEventSource } from "../../../../host/tests/schedule-test-fixture";
+import { cellsApplied, setup, stubEventSource } from "../../../../host/tests/schedule-test-fixture";
 import { detailResponse, target } from "../../../../host/tests/schedule-fixture";
 import { LiveScheduleGridWorkspace } from "./live";
 import { REOPENED, schedulesManifest } from "./manifest";
@@ -157,4 +157,78 @@ test("F-H5-1..3: a dead-lifetime Work says read again; the bare verb re-reads th
   // F-H5-3: the grid draws the new reading, not the old basis.
   await screen.findByText("P-2");
   expect(screen.queryByText("P-1")).toBeNull();
+});
+
+test("a push's run line reads a refused cell refused by its code, never before → after", async () => {
+  const f = await setup(); // 1::2 staged "150 VA"
+  // Mark (1::1) and Load (1::2) each behind their own binding, as in the host's rebind test.
+  const withMark = (load: string) => {
+    const d = detailResponse();
+    const row = d.entries[0].rows[0];
+    row.bindings[0] = {
+      ...row.bindings[0],
+      rawValue: load,
+      displayValue: `${load} VA`,
+      targets: [target(7, load), target(8, load)],
+    };
+    row.bindings.unshift({
+      ...row.bindings[0],
+      columnNumber: 1,
+      targetElementIds: [7],
+      parameterName: "Mark",
+      parameterId: 556,
+      storageType: "String",
+      rawValue: "P-1",
+      displayValue: "P-1",
+      isTypeParameter: false,
+      targets: [
+        { ...target(7, "P-1"), parameterId: 556, parameterName: "Mark", storageType: "String" },
+      ],
+    });
+    return d;
+  };
+  f.setDetail(withMark("100"));
+  const old = await f.read();
+  await f.patch([
+    { path: ["basis"], value: { captureId: old.id } },
+    { path: ["cells", "1::1"], value: { staged: { value: "P-9" } } },
+  ]);
+  vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => {}, removeItem: () => {} });
+  stubEventSource(f);
+  f.reopen();
+  const live = { session: "B", openId: "reopened-B" };
+  let state: ScheduleGridState | undefined;
+  render(
+    <RegistryContext.Provider value={appAtomRegistry}>
+      <LiveScheduleGridWorkspace
+        workspaceId={f.scope.work}
+        target={JSON.stringify({ kind: "open", ref: live })}
+        render={(next) => {
+          state = next;
+          return <ScheduleGridWorkspace state={next} />;
+        }}
+      />
+    </RegistryContext.Provider>,
+  );
+  await vi.waitFor(() => expect(state?.blockedBecause).toBe(REOPENED));
+  // Load moved while closed: the rebind marks 1::2 stale; 1::1 (Mark) pushes live.
+  f.setDetail(withMark("120"));
+  await act(async () => {
+    expect(await state!.execute("refresh")).toBeNull();
+  });
+  await vi.waitFor(async () =>
+    expect((await f.view()).doc).toMatchObject({
+      basis: { stale: [{ key: "1::2", was: "100 VA" }] },
+    }),
+  );
+  f.setResponse(cellsApplied([[1, 1, true]]));
+  await vi.waitFor(() =>
+    expect(screen.getByRole("button", { name: "push 2 to Revit" }).hasAttribute("disabled")).toBe(
+      false,
+    ),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "push 2 to Revit" }));
+  const run = (await screen.findByText(/^push run ·/, undefined, { timeout: 10_000 })).textContent!;
+  expect(run).toContain("1::2 refused (stale)");
+  expect(run).not.toMatch(/1::2 [^,]*→/);
 });

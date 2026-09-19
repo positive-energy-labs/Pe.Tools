@@ -49,5 +49,9 @@ public sealed record ParameterValueEditResult(
     // units. Callers should assert this matches intent (ideally on a dry run) before a wet run.
     string? ParsedDisplay = null,
     // The target's evidence as read before any write: what to send back as Expected.
-    ParameterTarget? Current = null
+    ParameterTarget? Current = null,
+    // Why the plan refused this edit (ParameterEditPlan); null when it was written or failed at the native write. Error keeps the prose.
+    EditRefusalCode? Code = null,
+    // For admission-group-refused: the code of the refused member its Error names.
+    EditRefusalCode? CauseCode = null
 );

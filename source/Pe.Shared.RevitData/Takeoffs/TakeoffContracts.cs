@@ -1,4 +1,4 @@
-namespace Pe.Shared.RevitData.Takeoffs;
+﻿namespace Pe.Shared.RevitData.Takeoffs;
 
 public sealed record TakeoffRegistrySystem(Guid Guid, string Tag);
 public enum TakeoffCarrierStage
@@ -27,7 +27,10 @@ public sealed record TakeoffRegionFacts(
     string? Role,
     Guid? Guid,
     string Blob,
-    List<List<double[]>> Loops);
+    List<List<double[]>> Loops,
+    // Where the region lies against its own view's model crop; null when that view has no active crop. Outside: that
+    // view's image can never show it (D4 leg B: project-a zones C-F lie outside the views they are owned by).
+    RevitCropCoverage? OwnerCrop);
 public sealed record TakeoffLiveRegion(
     long ElementId,
     string Role,
@@ -52,7 +55,8 @@ public sealed record TakeoffCandidatesData(IReadOnlyList<TakeoffRegionFacts> Reg
 
 public sealed record TakeoffAdoptItem(long ElementId, string Name, string SystemTag);
 public sealed record TakeoffAdoptRequest(string View, List<TakeoffAdoptItem> Items);
-public sealed record TakeoffAdopted(long ElementId, Guid Guid);
+// OwnerCrop: where the adopted region lies against the view's model crop (null: no active crop). Adoption never refuses on it.
+public sealed record TakeoffAdopted(long ElementId, Guid Guid, RevitCropCoverage? OwnerCrop);
 public sealed record TakeoffAdoptResult(IReadOnlyList<TakeoffAdopted> Adopted);
 
 
