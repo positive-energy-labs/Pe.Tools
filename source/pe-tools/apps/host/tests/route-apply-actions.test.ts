@@ -758,12 +758,15 @@ test("/family retires the draft's consumed cells after a proven apply, and keeps
       0,
     )
   ).revision!;
-  const member = await env.file(
-    "draft.json",
-    `${JSON.stringify({ $schema: "https://ff/model.json", Width: 5, Height: 7 }, null, 2)}\n`,
-  );
+  // The reviewed draft travels as bytes; nothing is filed in the pod.
+  const before = await readdir(join(env.podsRoot, "Global"), { recursive: true });
+  const draft = {
+    pod: "global",
+    path: "staged/Box.json",
+    content: `${JSON.stringify({ $schema: "https://ff/model.json", Width: 5, Height: 7 }, null, 2)}\n`,
+  };
   const plan = resultOf<Plan>(
-    await env.admit("family.plan", { source: member }, revision, "fp", "human", draftKey),
+    await env.admit("family.plan", { source: draft }, revision, "fp", "human", draftKey),
   );
   env.during(async () => {
     const now = (await env.work.read(draftKey, "family"))!.revision;
@@ -790,6 +793,10 @@ test("/family retires the draft's consumed cells after a proven apply, and keeps
   ).cells;
   expect(cells["/Width"]?.staged).toBeNull();
   expect(cells["/Height"]?.staged).toEqual({ value: 8 });
+  expect(await readdir(join(env.podsRoot, "Global"), { recursive: true })).toEqual(before);
+  const root = env.sent.find((s) => s.key === "family.apply")!.input.source.root;
+  expect(root).toMatchObject({ id: "global", path: draft.path, origin: "SuppliedDraft" });
+  expect(Buffer.from(root.bytesBase64, "base64").toString("utf8")).toBe(draft.content);
 });
 
 test("two documents keep independent authored scopes", async () => {
