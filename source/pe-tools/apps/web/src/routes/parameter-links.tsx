@@ -6,6 +6,7 @@ import type { ParameterLinkProfile, ParameterLinksDocument } from "@pe/agent-con
 import {
   familyCaptureSchema,
   parameterLinksReadingSchema,
+  sameValue,
   stagedParameterLinks,
   transitionPatches,
 } from "@pe/agent-contracts";
@@ -22,7 +23,8 @@ import { Surface } from "#/components/lang/surface";
 import { useHostStatusQuery } from "#/readings";
 import { EvaluationView, RuntimeStatusBar } from "#/parameter-links/Evaluation";
 import { ProfileEditor } from "#/parameter-links/ProfileEditor";
-import { applyRefusal, isDraftDirty, sameProfile } from "#/parameter-links/model";
+import { applyRefusal, isDraftDirty, profileSummary, sameProfile } from "#/parameter-links/model";
+import { ReviewRow, type CellWire } from "#/components/lang/band";
 import { previousOf } from "#/readings";
 import { useRoute, type RouteHandle } from "#/route";
 import type { Reading } from "@pe/agent-contracts";
@@ -138,6 +140,18 @@ export function ParameterLinksWorkspace({
 }) {
   const document = route.work.doc;
   const savedDraft = document ? stagedParameterLinks(document) : null;
+  // Pea's proposed profile, drawn in the band grammar while it differs from what is staged
+  // (accepted, it stays as authorship evidence of the staged value: nothing left to review).
+  const profileCell = document?.profile ?? {};
+  const reviewingProposal =
+    profileCell.proposal != null && !sameValue(profileCell.proposal, profileCell.staged);
+  const profileWire: CellWire = {
+    segment: null,
+    write: route.work.write,
+    revision: route.work.revision,
+  };
+  /** The evaluation shown is a labelled preview of Pea's proposal, never the staged profile's. */
+  const previewingProposal = reading?.subject === "proposal";
   const evaluation = reading?.evaluated ? (reading.evaluation ?? null) : null;
   const status = reading?.status ?? null;
 
@@ -359,7 +373,43 @@ export function ParameterLinksWorkspace({
                           : "no profile to preview — add a definition first"
                       }
                     />
+                    <ActionButton
+                      label="preview Pea's proposal"
+                      icon={Eye}
+                      busy={busy === "previewProposal"}
+                      disabled={busy != null || profileCell.proposal == null}
+                      onClick={() => void route.actions.previewProposal.run()}
+                      reason={
+                        profileCell.proposal == null
+                          ? "Pea has proposed no profile"
+                          : "Evaluate Pea's proposed profile — a labelled preview that never arms apply"
+                      }
+                    />
                   </ActionGroup>
+                  {reviewingProposal ? (
+                    <ReviewRow
+                      wire={profileWire}
+                      address="profile"
+                      label={<span className="t-small face-mono text-ink-2">pea proposes</span>}
+                      cell={profileCell}
+                      facts={{
+                        value: profileSummary(
+                          (profileCell.staged ?? profileCell.proposal)?.value as
+                            | ParameterLinkProfile
+                            | undefined,
+                        ),
+                        scale: "row",
+                      }}
+                      show={(value) => profileSummary(value as ParameterLinkProfile)}
+                    />
+                  ) : null}
+                  {previewingProposal ? (
+                    <OutcomeLine
+                      kind="advisory"
+                      label="preview of Pea's proposal — not staged"
+                      says="accept it to stage it, then preview the staged profile before apply"
+                    />
+                  ) : null}
                   {/* The preview→stale→apply gate, ON the surface. Refused = the plan is stale
                   (re-plan runs preview); arming =
                   the reason input is the last gate before the one commit. */}
@@ -404,6 +454,9 @@ export function ParameterLinksWorkspace({
                 appliedWriteCount={reading?.appliedWriteCount ?? 0}
               />
               <div className="min-h-0 flex-1 overflow-y-auto">
+                {previewingProposal ? (
+                  <OutcomeLine kind="advisory" label="preview of Pea's proposal — not staged" />
+                ) : null}
                 <EvaluationView evaluation={evaluation} />
               </div>
             </div>

@@ -56,10 +56,22 @@ export function errorIssueCount(evaluation: ParameterLinkEvaluation | null | und
 }
 
 /** One refusal string, so the strip and the verb can never disagree about why. */
+/** The host's refusal for applying a proposal preview (`family-actions.ts`), word for word. */
+export const PROPOSAL_PREVIEW_REFUSAL =
+  "The reviewed reading is a proposal preview; stage the profile and preview again";
+
+/** A profile said as one line: how much it links. */
+export const profileSummary = (profile: ParameterLinkProfile | null | undefined) =>
+  profile
+    ? `${profile.definitions.length} definition${profile.definitions.length === 1 ? "" : "s"} · ${profile.assignments.length} assignment${profile.assignments.length === 1 ? "" : "s"}`
+    : "no profile";
+
 export function applyRefusal(
   document: ParameterLinksDocument | null,
   reading: ParameterLinksReading | null,
 ): string | null {
+  // A preview of Pea's proposal never arms apply: the host's words, said on the web first.
+  if (reading?.subject === "proposal") return PROPOSAL_PREVIEW_REFUSAL;
   if (!document || !stagedParameterLinks(document)) return "Author a draft profile first.";
   if (!evaluationIsCurrent(document, reading)) return "Preview this draft before applying.";
   if (errorIssueCount(reading?.evaluation) > 0)

@@ -31,7 +31,7 @@ export const parameterLinksPageSchema = z.object({
 });
 
 export type ParameterLinksReadingKey = "links" | "receipts" | "inventory";
-export type ParameterLinksAction = "refresh" | "preview" | "apply";
+export type ParameterLinksAction = "refresh" | "preview" | "previewProposal" | "apply";
 
 type Ctx = RouteCtx<ParameterLinksDocument, ParameterLinksReadingKey, ParameterLinksPage>;
 
@@ -40,8 +40,13 @@ const targetOf = (ctx: Ctx) => {
   return ctx.target.ref;
 };
 
-const read = async (ctx: Ctx, evaluate: boolean) => {
-  await readFamilyCapture("parameter-links.read", { evaluate }, ctx.work.key, targetOf(ctx));
+const read = async (ctx: Ctx, evaluate: boolean, subject: "staged" | "proposal" = "staged") => {
+  await readFamilyCapture(
+    "parameter-links.read",
+    { evaluate, ...(subject === "proposal" ? { subject } : {}) },
+    ctx.work.key,
+    targetOf(ctx),
+  );
 };
 
 export const manifest = defineRoute<
@@ -83,6 +88,17 @@ export const manifest = defineRoute<
       ready: (ctx: Ctx) =>
         ctx.work.doc && stagedParameterLinks(ctx.work.doc) ? null : "save a draft first",
       run: (ctx: Ctx) => read(ctx, true),
+    },
+    previewProposal: {
+      label: "preview Pea's proposal",
+      says: "Evaluate Pea's proposed profile — a labelled preview that never arms apply.",
+      needs: "project",
+      actor: "any",
+      input: z.void(),
+      dirties: ["links"],
+      requires: { work: true },
+      ready: (ctx: Ctx) => (ctx.work.doc?.profile.proposal ? null : "Pea has proposed no profile"),
+      run: (ctx: Ctx) => read(ctx, true, "proposal"),
     },
     apply: {
       label: "apply links",
