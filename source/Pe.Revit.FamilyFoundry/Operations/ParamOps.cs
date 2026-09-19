@@ -168,7 +168,7 @@ public sealed class SetBlankValues(IReadOnlyList<BlankRule> rules) : TypeOperati
         var createdZero = created && p.StorageType switch {
             StorageType.Double => type.AsDouble(p) is null or 0, StorageType.Integer => type.AsInteger(p) is null or 0, _ => false };
         if (doc.HasValue(type, p) && !createdZero) return null;
-        _ = doc.SetValue(p, rule.Value.Text, nameof(BuiltInCoercionStrategy.CoerceByStorageType));
+        _ = doc.SetValue(p, rule.Value.Text, nameof(MappingStrategy.CoerceByStorageType));
         return rule.Value.Text;
     }
 }

@@ -108,7 +108,7 @@ public static class FamilyReconciler {
             changes = changes.Concat(mappings.Select(p => new FamilyChange("parameters.sources", p.Key, ChangeKind.Update, null,
                 current.Parameters.Where(c => c.Key == p.Key || p.Value.WasNamed?.Contains(c.Key) == true).ToDictionary(c => c.Key, c => c.Value), p.Value))).ToList();
         }
-        var sourceEffects = mappings.Select(p => $"normalize.sources: {p.Key}; ranked candidates={JsonConvert.SerializeObject(p.Value.WasNamed ?? [])}; fill existing blanks={p.Value.FillBlanksFromSources == true}; strategy={p.Value.MappingStrategy ?? "CoerceByStorageType"}; native replacement or copy, transfer dependencies, remove user-defined sources even when values differ (built-ins cannot be removed); explicit writes follow");
+        var sourceEffects = mappings.Select(p => $"normalize.sources: {p.Key}; ranked candidates={JsonConvert.SerializeObject(p.Value.WasNamed ?? [])}; fill existing blanks={p.Value.FillBlanksFromSources == true}; strategy={p.Value.MappingStrategy ?? MappingStrategy.CoerceByStorageType}; native replacement or copy, transfer dependencies, remove user-defined sources even when values differ (built-ins cannot be removed); explicit writes follow");
         var definitionEffects = sharedDefinitions is null || mappings.Count == 0 ? [] : new[] { "shared.definitions (tooltip supplied to native creation, readback unobservable): " + JsonConvert.SerializeObject(sharedDefinitions) };
         return new FamilyPlan(changes, queue, [], effects.Concat(sourceEffects).Concat(definitionEffects).ToList(), Hash(changes, current, run, desired, authored, sharedDefinitions, executionOptions));
     }

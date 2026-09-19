@@ -138,7 +138,7 @@ internal static class FamilyPreparation {
             var targetSpec = target?.Definition.GetDataType() ?? (wanted.SharedSpecId is { } specId ? new ForgeTypeId(specId)
                 : wanted.DataType is { } dataType ? Operations.SetParamMetadata.Spec(dataType) : null);
             if (targetSpec is null) continue;
-            var strategy = wanted.MappingStrategy ?? "CoerceByStorageType";
+            var strategy = (wanted.MappingStrategy ?? MappingStrategy.CoerceByStorageType).ToString();
             foreach (var name in (change.Before as IReadOnlyDictionary<string, FamilyModelParameter>)?.Keys ?? []) {
                 if (name == change.Key || authoredNames.Contains(name)) continue;
                 if (fm.FindParameter(name) is not { } from || from.IsBuiltInParameter() || string.IsNullOrEmpty(from.Formula)) continue;

@@ -101,6 +101,18 @@ public sealed class FamilyModelContractTests {
     }
 
     [Test]
+    public void Unknown_mapping_strategy_is_refused_at_parse_listing_the_allowed_names() {
+        var current = Doc("""{"parameters":{"W":{"dataType":"Length"}},"types":{"A":{}}}""");
+        var result = FamilyPatch.Apply(current, """{"parameters":{"W":{"wasNamed":["Width"],"mappingStrategy":"CoerceByUnits"}}}""");
+        Assert.That(result.Value, Is.Null);
+        Assert.That(result.Diagnostics.Single().Code, Is.EqualTo(FamilyModelDiagnosticCodes.InvalidJson));
+        Assert.That(result.Diagnostics.Single().Message, Does.Contain("'CoerceByUnits' is not a MappingStrategy")
+            .And.Contain("Legal: Strict, CoerceByStorageType, CoerceMeasurableToNumber, CoerceElectrical"));
+        Assert.Throws<Newtonsoft.Json.JsonSerializationException>(() => FamilyPatch.Parse(
+            """{"patch":{},"run":{"parametersIfSourceExists":{"T":{"dataType":"Text","wasNamed":["S"],"mappingStrategy":"Nope"}}}}"""));
+    }
+
+    [Test]
     public void Shared_mapping_fields_roundtrip_and_local_conversion_clears_identity() {
         var current = Doc("""{"parameters":{"W":{"dataType":"Length","tooltip":"old"}},"types":{"A":{}}}""");
         var result = FamilyPatch.Apply(current, """{"parameters":{"W":{"shared":true,"sharedGuid":"692091cc-1e3d-47e6-a7c5-9336c3149419","wasNamed":["Width"],"fillBlanksFromSources":true,"mappingStrategy":"Strict"}}}""");
@@ -109,7 +121,7 @@ public sealed class FamilyModelContractTests {
         Assert.Multiple(() => {
             Assert.That(parameter.SharedGuid, Is.EqualTo(Guid.Parse("692091cc-1e3d-47e6-a7c5-9336c3149419")));
             Assert.That(parameter.FillBlanksFromSources, Is.True);
-            Assert.That(parameter.MappingStrategy, Is.EqualTo("Strict"));
+            Assert.That(parameter.MappingStrategy, Is.EqualTo(MappingStrategy.Strict));
             Assert.That(parameter.DataType, Is.Null);
             Assert.That(parameter.Tooltip, Is.Null);
         });

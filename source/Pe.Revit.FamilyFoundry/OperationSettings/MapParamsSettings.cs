@@ -133,7 +133,7 @@ public class MappingData {
 
     [Description(
         "Coercion strategy to use for the remapping. CoerceByStorageType will be used when none is specified.")]
-    public string MappingStrategy { get; init; } = nameof(BuiltInCoercionStrategy.CoerceByStorageType);
+    public string MappingStrategy { get; init; } = nameof(Pe.Shared.RevitData.Families.MappingStrategy.CoerceByStorageType);
 
     [Description("Exact source string values treated as missing for this mapping.")]
     public List<string> SourceValuesTreatedAsMissing { get; init; } = [];

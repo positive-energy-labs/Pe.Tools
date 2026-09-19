@@ -3,6 +3,7 @@ using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.Extensions.FamParameter.Formula;
 using Pe.Revit.Extensions.FamDocument.SetValue;
 using Pe.Revit.Extensions.FamDocument.SetValue.Utils;
+using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.Extensions.FamDocument;
 
@@ -217,7 +218,7 @@ public static class FamilyFormulaCopy {
     public static ICoercionStrategy? AcrossDataTypes(string strategy, ForgeTypeId sourceSpec, ForgeTypeId targetSpec) =>
         ParamCoercionStrategyRegistry.UnitAware(strategy) is { } coercion && strategy switch {
             "CoerceElectrical" => targetSpec.TypeId.Contains(".electrical:"),
-            nameof(BuiltInCoercionStrategy.CoerceMeasurableToNumber) => targetSpec == SpecTypeId.Number && UnitUtils.IsMeasurableSpec(sourceSpec),
+            nameof(MappingStrategy.CoerceMeasurableToNumber) => targetSpec == SpecTypeId.Number && UnitUtils.IsMeasurableSpec(sourceSpec),
             _ => false
         } ? coercion : null;
 

@@ -35,7 +35,7 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                 var definition = needsShared ? sharedSource(name) ?? throw new InvalidOperationException($"No shared definition for '{name}'.") : null;
                 var dataType = definition?.GetDataType() ?? (spec.DataType is { } data ? SetParamMetadata.Spec(data) : existing?.Definition.GetDataType());
                 var propertiesGroup = spec.PropertiesGroup is { } pg ? SetParamMetadata.Group(pg) : new ForgeTypeId(string.Empty);
-                var strategy = spec.MappingStrategy ?? "CoerceByStorageType";
+                var strategy = (spec.MappingStrategy ?? MappingStrategy.CoerceByStorageType).ToString();
                 var first = candidates.Select(fm.FindParameter).FirstOrDefault(p => p is not null);
                 if (existing is null && first is not null && !authoredNames.Contains(first.Definition.Name) && !sharedCandidates.Contains(first.Definition.Name) && !first.IsBuiltInParameter() && first.Definition.GetDataType() == dataType &&
                     strategy is "Strict" or "CoerceByStorageType") {
@@ -130,7 +130,7 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                     [BuiltInParameter.RBS_ELEC_VOLTAGE] = connectorRule.Voltage,
                     [BuiltInParameter.RBS_ELEC_NUMBER_OF_POLES] = connectorRule.NumberOfPoles,
                     [BuiltInParameter.RBS_ELEC_APPARENT_LOAD] = connectorRule.ApparentPower
-                }, MappingStrategy(targetName));
+                }, StrategyOf(targetName));
                 if (evaluated is not null) logs.Add(new LogEntry(sourceName).Success(evaluated));
                 // TransferAndRemoveParameter commits its own sub-transaction, and Revit regenerates on commit;
                 // one explicit regeneration after the loop replaces one per removed source.
@@ -146,8 +146,8 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
     }
 
     // The mapping's own coercion also decides a formula copy across data types (FamilyFormulaCopy.AcrossDataTypes).
-    private string MappingStrategy(string target) =>
-        desired.Parameters.TryGetValue(target, out var spec) ? spec.MappingStrategy ?? "CoerceByStorageType" : "CoerceByStorageType";
+    private string StrategyOf(string target) =>
+        (desired.Parameters.GetValueOrDefault(target)?.MappingStrategy ?? MappingStrategy.CoerceByStorageType).ToString();
 
     private static bool Blank(FamilyDocument doc, FamilyType type, FamilyParameter parameter, IReadOnlyCollection<string>? missingValues = null) =>
         string.IsNullOrWhiteSpace(parameter.Formula) && (!type.HasValue(parameter) || parameter.StorageType == StorageType.String &&
