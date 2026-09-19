@@ -131,7 +131,7 @@ export const parameterLinksDocumentSchema = z.strictObject({
 export type ParameterLinksDocument = z.infer<typeof parameterLinksDocumentSchema>;
 
 /** The profile apply would reconcile: the person's staged value, or none. */
-export const stagedParameterLinks = (work: ParameterLinksDocument): ParameterLinkProfile | null =>
+export const stagedParameterProfile = (work: ParameterLinksDocument): ParameterLinkProfile | null =>
   work.profile.staged?.value ?? null;
 
 /**
@@ -143,7 +143,7 @@ export const parameterLinksBasis = (
   subject: "staged" | "proposal" = "staged",
 ): string =>
   subject === "staged"
-    ? canonicalRouteInput(stagedParameterLinks(work))
+    ? canonicalRouteInput(stagedParameterProfile(work))
     : `proposal:${canonicalRouteInput(work.profile.proposal?.value ?? null)}`;
 
 /** A host reading, stored by the capture owner: what Revit holds and what the draft would do. */

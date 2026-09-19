@@ -1,4 +1,4 @@
-import { parameterLinksBasis, stagedParameterLinks } from "@pe/agent-contracts";
+import { parameterLinksBasis, stagedParameterProfile } from "@pe/agent-contracts";
 import type {
   ParameterLinksReading,
   ParameterLinkAssignment,
@@ -20,7 +20,7 @@ export const REDUCERS: Reducer[] = ["first", "min", "max"];
 export function editingProfile(
   document: ParameterLinksDocument | null,
 ): ParameterLinkProfile | null {
-  return document ? stagedParameterLinks(document) : null;
+  return document ? stagedParameterProfile(document) : null;
 }
 
 export function sameProfile(
@@ -38,7 +38,7 @@ export function evaluationIsCurrent(
   document: ParameterLinksDocument | null,
   reading: ParameterLinksReading | null,
 ): boolean {
-  if (!document || !stagedParameterLinks(document) || !reading?.evaluated) return false;
+  if (!document || !stagedParameterProfile(document) || !reading?.evaluated) return false;
   return reading.basis === parameterLinksBasis(document);
 }
 
@@ -46,7 +46,7 @@ export function isDraftDirty(
   document: ParameterLinksDocument | null,
   reading: ParameterLinksReading | null,
 ): boolean {
-  const draft = document ? stagedParameterLinks(document) : null;
+  const draft = document ? stagedParameterProfile(document) : null;
   if (draft == null) return false;
   return !sameProfile(draft, reading?.stored);
 }
@@ -60,7 +60,7 @@ export function applyRefusal(
   document: ParameterLinksDocument | null,
   reading: ParameterLinksReading | null,
 ): string | null {
-  if (!document || !stagedParameterLinks(document)) return "Author a draft profile first.";
+  if (!document || !stagedParameterProfile(document)) return "Author a draft profile first.";
   if (!evaluationIsCurrent(document, reading)) return "Preview this draft before applying.";
   if (errorIssueCount(reading?.evaluation) > 0)
     return "Resolve the evaluation errors before applying.";
