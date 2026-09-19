@@ -1,5 +1,7 @@
 import { z } from "zod";
 import {
+  canonicalRouteInput,
+  rebindScheduleWork,
   scheduleGridRouteState,
   scheduleReadingSchema,
   scheduleReads,
@@ -10,6 +12,7 @@ import {
 
 import {
   entityRoute,
+  refuse,
   semanticActionFacts,
   semanticActionInputSchema,
   type Ctx as RouteCtx,
@@ -59,6 +62,23 @@ export const pushRunLine = (receipt: PushReceipt, run?: string | null) =>
 const targetOf = (ctx: Ctx) => {
   if (ctx.target.kind !== "document") throw Error("Select an exact available document lifetime");
   return ctx.target.ref;
+};
+
+/** The Work's basis reading, when the Page holds it (`live.tsx` pins `captureId` to the basis). */
+const basisOf = (ctx: Ctx) => {
+  const saved = scheduleReadingSchema.safeParse(previousOf(ctx.readings.saved));
+  return saved.success && saved.data.id === ctx.work.doc?.basis?.captureId ? saved.data : null;
+};
+/** F-H5-1: a Work bound to a closed document lifetime; the way out is a re-read, which rebinds. */
+export const REOPENED =
+  "The schedule was re-opened in Revit; read it again (re-read). Staged cells are kept; any whose value changed come back as stale proposals.";
+const reopened = (ctx: Ctx) => {
+  const basis = basisOf(ctx);
+  return (
+    basis !== null &&
+    ctx.target.kind === "document" &&
+    canonicalRouteInput(basis.target) !== canonicalRouteInput(ctx.target.ref)
+  );
 };
 
 const statuses = (ctx: Ctx): ActionStatus[] =>
@@ -120,7 +140,10 @@ export const schedulesManifest = () =>
           says: "reads the bound document's schedule catalogue again",
           needs: "document",
           actor: "any",
-          input: scheduleReads["schedule.grid.catalog"].input as unknown as z.ZodType<never>,
+          // A Situation verb presses with no input.
+          input: scheduleReads["schedule.grid.catalog"].input.prefault(
+            {},
+          ) as unknown as z.ZodType<never>,
           stage: "audit",
           dirties: ["catalog"],
           ready: () => null,
@@ -131,14 +154,37 @@ export const schedulesManifest = () =>
           says: "reads the selected schedule from Revit into a fresh capture",
           needs: "document",
           actor: "any",
-          input: scheduleReads["schedule.grid.snapshot"].input as unknown as z.ZodType<never>,
+          input: scheduleReads["schedule.grid.snapshot"].input.prefault(
+            {},
+          ) as unknown as z.ZodType<never>,
           stage: "audit",
           dirties: ["work", "saved"],
           ready: () => null,
           run: async (ctx: Ctx, input: Record<string, unknown>) => {
-            const reading = scheduleReadingSchema.parse(
-              await readScheduleCapture("schedule.grid.snapshot", input, targetOf(ctx)),
+            // No subject named: re-read the open schedule, never whatever view Revit has active.
+            const open = scheduleReadingSchema.safeParse(
+              previousOf(ctx.readings.work) ?? previousOf(ctx.readings.saved),
             );
+            const reading = scheduleReadingSchema.parse(
+              await readScheduleCapture(
+                "schedule.grid.snapshot",
+                input.scheduleId == null && input.scheduleName == null && open.success
+                  ? { ...input, scheduleId: open.data.snapshot.scheduleId }
+                  : input,
+                targetOf(ctx),
+              ),
+            );
+            const doc = ctx.work.doc;
+            if (doc?.basis && reading.workspaceId === ctx.page.workspaceId) {
+              const basis =
+                basisOf(ctx) ??
+                (await readScheduleCapture("schedule.grid.saved", { id: doc.basis.captureId }).then(
+                  (value) => scheduleReadingSchema.parse(value),
+                  () => null,
+                ));
+              const patches = rebindScheduleWork(doc, basis, reading);
+              if (patches.length) await ctx.write(patches);
+            }
             ctx.setPage({
               workspaceId: reading.workspaceId,
               captureId: reading.id,
@@ -157,15 +203,21 @@ export const schedulesManifest = () =>
               ? "Recover or resume the original receipt before a new apply"
               : !ctx.page.workspaceId || !ctx.work.doc?.basis || ctx.work.revision === null
                 ? "Review the exact schedule binding first"
-                : null,
+                : reopened(ctx)
+                  ? REOPENED
+                  : null,
           run: async (ctx: Ctx) => {
             // The run lands in the pod the route has bound; with none, in the action receipt.
             const pod = (ctx.page as { pod?: string | null }).pod ?? undefined;
-            const result = actionResult(
-              await runSemanticAction("schedule.grid.push", pod ? { pod } : {}, targetOf(ctx), {
-                work: { key: ctx.work.key as WorkKey, revision: ctx.work.revision! },
-              }),
-            ) as {
+            const row = await runSemanticAction(
+              "schedule.grid.push",
+              pod ? { pod } : {},
+              targetOf(ctx),
+              { work: { key: ctx.work.key as WorkKey, revision: ctx.work.revision! } },
+            );
+            if ("error" in row && /another schedule\/target lifetime/.test(String(row.error)))
+              return refuse("not-ready", REOPENED);
+            const result = actionResult(row) as {
               readback?: unknown;
               failures?: { key: string; error: string }[];
               readbackError?: string;

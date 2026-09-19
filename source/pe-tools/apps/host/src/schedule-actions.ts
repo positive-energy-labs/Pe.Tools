@@ -275,7 +275,9 @@ export async function admitScheduleAction(
         throw error instanceof StaleScheduleReading ? refused(error.message) : error;
       });
       if (base.key.work !== reading.workspaceId || !same(reading.target, target))
-        throw refused("Work binding belongs to another schedule/target lifetime");
+        throw refused(
+          "Work binding belongs to another schedule/target lifetime: the schedule was re-opened in Revit; read it again (staged cells are kept)",
+        );
       await current(bridge, target, reading.process);
       const { edits, failures } = expand(document, reading);
       if (!edits.length && !failures.length) throw refused("No staged cells");

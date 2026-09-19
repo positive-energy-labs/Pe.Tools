@@ -83,7 +83,9 @@ export function useScheduleGridColumns(
                 (isStaged || isProposal) && shown !== current ? `was ${current || "—"}` : null,
                 isProposal
                   ? cell?.proposal?.note
-                    ? `pea: ${cell.proposal.note}`
+                    ? cell.proposal.by === "human"
+                      ? cell.proposal.note
+                      : `pea: ${cell.proposal.note}`
                     : "pea proposed this"
                   : null,
                 binding?.isTypeParameter
