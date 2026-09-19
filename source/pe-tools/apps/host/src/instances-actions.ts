@@ -6,7 +6,10 @@ import {
   instancesActions,
   instancesRouteState,
   sdkSessionTargetOf,
+  transitionPatches,
   type InstancesActionKey,
+  type InstancesLaunch,
+  type WorkKey,
 } from "@pe/agent-contracts";
 import type { ActionStep } from "@pe/agent-contracts";
 import type { RouteWorkspace } from "@pe/runtime";
@@ -27,7 +30,7 @@ import {
   type MutationSessionExpectation,
   type SessionListResult,
 } from "@pe/host-contracts/pe-revit-contract";
-import type { ActionJournal } from "./action-journal.ts";
+import { ActionIncomplete, type ActionJournal } from "./action-journal.ts";
 import { BridgeError } from "./bridge.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";
@@ -263,7 +266,7 @@ export async function admitInstancesAction(
         argv: argv(),
       };
       // The step id IS the SDK request id: one caller-owned identity from admission to receipt.
-      return execution.step("native", key, stepInput, async (requestId) => {
+      const result = await execution.step("native", key, stepInput, async (requestId) => {
         const file = await materialize(requestDir, requestFile(stepInput, requestId));
         const args = stepInput.argv.map((arg) => (arg === REQUEST_FILE ? file : arg));
         const envelope = parsePeRevitEnvelope(await read(args), args, peRevitLauncher());
@@ -277,8 +280,49 @@ export async function admitInstancesAction(
           );
         return envelope.result;
       });
+      // Proven success consumed the staged launch: retire it (journaled once) so a second press
+      // does not launch again. A failure, refusal or unknown outcome threw above and keeps it.
+      if ((key === "instances.start" || key === "instances.open") && staged && workspace) {
+        const base = admission.bases.work!;
+        const retired = await execution.step("publication", "work.retire", staged, () =>
+          retireLaunch(workspace, base.key, staged),
+        );
+        await execution.publish({ native: result, retired });
+      }
+      return result;
     },
     resume,
+  );
+}
+
+/**
+ * Retires the consumed launch under the unchanged-cell rule: `staged` clears only if it still
+ * equals what launched, and a proposal equal to it clears too; a newer edit survives. Retirement
+ * is the host's transition, not Pea's authorship, so it writes with the person's rights (the
+ * agent mask would refuse a Pea-admitted launch's retirement).
+ */
+async function retireLaunch(workspace: RouteWorkspace, key: WorkKey, consumed: InstancesLaunch) {
+  // ponytail: three attempts; a Work that moves three times in one retirement is reported, not chased.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const view = await workspace.read(key, "instances");
+    if (!view) return { retired: false };
+    const { launch } = instancesRouteState.schema.parse(view.doc);
+    const patches = transitionPatches([], "launch", launch, {
+      kind: "retire",
+      consumed: { value: consumed },
+    });
+    if (!patches.length) return { retired: false, revision: view.revision };
+    const landed = await workspace.apply(key, "instances", "human", patches, view.revision);
+    if (landed.ok) return { retired: true, revision: landed.revision };
+    if (landed.code !== "stale_revision")
+      throw new ActionIncomplete(
+        `Launched; retiring the staged launch was refused: ${landed.error}`,
+        landed,
+      );
+  }
+  throw new ActionIncomplete(
+    "Launched; Work kept moving, so the staged launch was not retired",
+    {},
   );
 }
 
