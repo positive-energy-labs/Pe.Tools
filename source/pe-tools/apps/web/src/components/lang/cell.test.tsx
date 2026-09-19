@@ -219,3 +219,14 @@ test("a click selects the cell, typing replaces its value, and F2 or double-clic
   expect(document.activeElement).toBe(input);
   expect(input.value).toBe("No");
 });
+
+test("Enter on the last row commits and hands focus back to the cell, never to the page", async () => {
+  const commit = vi.fn();
+  const { container } = inTable(<StateCell value="" scale="row" onCommit={commit} />);
+  const input = container.querySelector<HTMLInputElement>("input.dl-cell-input")!;
+  await act(async () => input.focus());
+  fireEvent.change(input, { target: { value: "A1" } });
+  await act(async () => fireEvent.keyDown(input, { key: "Enter", code: "Enter" }));
+  expect(commit).toHaveBeenCalledWith("A1");
+  expect(document.activeElement).toBe(gridcell());
+});

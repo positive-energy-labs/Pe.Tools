@@ -274,7 +274,12 @@ export function StateCell(props: StateCellProps) {
               if (e.key === "Enter") {
                 e.preventDefault();
                 commit(e.currentTarget);
-                if (!props.onNavigate?.(e.shiftKey ? "up" : "down")) e.currentTarget.blur();
+                // No row that way: stay on this cell (its host), never drop focus to the page.
+                if (!props.onNavigate?.(e.shiftKey ? "up" : "down")) {
+                  const host = keyHost();
+                  if (host) host.focus();
+                  else e.currentTarget.blur();
+                }
               } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
                 e.preventDefault();
                 commit(e.currentTarget);
