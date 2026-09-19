@@ -117,6 +117,7 @@ export function withEditBases(
   );
   const bases = [...rooms].flatMap((roomId) => {
     const room = world.zones.flatMap((zone) => zone.rooms).find((r) => r.guid === roomId);
+    // not a cell: bases
     return doc.bases[roomId] || !room ? [] : [{ path: ["bases", roomId], value: roomEdit(room) }];
   });
   return [...bases, ...patches];

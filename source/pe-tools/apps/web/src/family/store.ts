@@ -31,7 +31,7 @@ import { projectBuildReceipt, type BuildFacts, type BuildRefusal } from "#/famil
 import type { EvidenceSlice, FamilySnapshot, FieldState } from "#/family/host";
 import { familySource } from "#/family/source";
 import { initialDraft, savedFrom, type Draft, type Focus, type Overlay } from "#/family/model";
-import { draftToPatches } from "#/family/project";
+import { draftToPatches, FAMILY_CELLS } from "#/family/project";
 import { familyEditBuffer } from "./edit-buffer";
 import {
   captureEvidence,
@@ -211,10 +211,8 @@ export function useFamilyStore(options: {
     () =>
       familyEditBuffer(handle.work.key, async (patches, revision) => {
         if (!draftDoc) throw Error("Read the family first.");
-        return handle.work.write(
-          patches.map((patch) => ({ ...patch, path: ["cells", ...patch.path.slice(1)] })),
-          revision,
-        );
+        // The patches come built under the Work's own cell segment (FAMILY_CELLS).
+        return handle.work.write(patches, revision);
       }),
     [handle.work, draftDoc],
   );
@@ -267,7 +265,7 @@ export function useFamilyStore(options: {
   /** Every Family cell's accept, deny and unstage: one wire over the draft Work's `cells`. */
   const wire = useMemo(
     (): CellWire => ({
-      segment: "cells",
+      segment: FAMILY_CELLS,
       revision: draftRevision,
       // Buffered typing lands first; a bound verb rendered before it then refuses as stale.
       write: async (patches, revision) => {
@@ -433,7 +431,9 @@ export function useFamilyStore(options: {
         const patches = draftToPatches(lane.document.model, nextDraft, previous);
         // A cleared proposal is a deny: the edit buffer binds it to the revision it was seen at.
         for (const id of nextDraft.cleared.filter((id) => !previous.cleared.includes(id)))
-          patches.push(...transitionPatches(["fields"], id, fields[id] ?? {}, { kind: "deny" }));
+          patches.push(
+            ...transitionPatches([FAMILY_CELLS], id, fields[id] ?? {}, { kind: "deny" }),
+          );
         if (draftRevision == null) return "Wait for the draft to finish loading.";
         if (patches.length) setPage({ buildReview: null });
         edits.stage(nextDraft, patches, draftRevision);
@@ -479,6 +479,7 @@ export function useFamilyStore(options: {
       async open(next: PodMember) {
         await flush();
         const { rawContent } = await openMember(next);
+        // not a cell: reading
         await handle.work.write([{ path: ["reading"], value: rawContent }]);
         setPage({ pod: next.pod, path: next.path, buildReview: null });
       },

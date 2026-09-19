@@ -119,7 +119,8 @@ export function LiveScheduleGridWorkspace({
     const writing = patches.some((patch) => patch.value !== undefined);
     return work.write(
       writing && (!hasWork || !work.doc?.basis)
-        ? [{ path: ["basis"], value: { captureId: shown.id } }, ...patches]
+        ? // not a cell: basis
+          [{ path: ["basis"], value: { captureId: shown.id } }, ...patches]
         : patches,
       expectedRevision,
     );

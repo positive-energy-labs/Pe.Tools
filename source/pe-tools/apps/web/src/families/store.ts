@@ -279,6 +279,7 @@ export function useFamiliesStore(
       exclude: (id: number) => {
         const set = new Set(excludedIds);
         if (!set.delete(id)) set.add(id);
+        // not a cell: excludedIds
         return handle.work.write([{ path: ["excludedIds"], value: [...set] }]);
       },
       openFamily: (familyId: number) => {

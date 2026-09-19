@@ -403,6 +403,7 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
         ready: () => null,
         run: async (ctx: Ctx) => {
           const read = await workflow("family.capture", {}, ctx);
+          // not a cell: reading
           await ctx.write([{ path: ["reading"], value: read.spec }]);
         },
       },

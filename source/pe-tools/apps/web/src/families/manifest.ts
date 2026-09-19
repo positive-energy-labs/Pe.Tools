@@ -163,6 +163,7 @@ export const manifest = entityRoute<
         (ctx.setPage as (next: Partial<EntityPage>) => void)({ confirming: false, sheet: null });
         await ctx.write([
           {
+            // not a cell: scope
             path: ["scope"],
             value: {
               categoryNames: [...categories],
