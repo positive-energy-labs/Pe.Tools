@@ -302,13 +302,12 @@ test("the browser walks one durable chat lifecycle", async () => {
 
     await composer.fill("QUESTION_TURN");
     await page.getByRole("button", { name: "send", exact: true }).click();
-    const questionRow = page.getByRole("region", { name: "Assistant message" }).last();
-    // `ask_user` asks for permission in the band first; its question then answers in the stream,
-    // beside what it asks about.
+    // `ask_user` asks for permission in the band first; its live question then answers in the same
+    // Chat head (F-J1-9): asks live in the head, the transcript holds records.
     await proposals.getByRole("button", { name: "Approve" }).click();
-    await waitForRowText(questionText);
-    expect(await questionRow.innerText()).toContain("Use the current session");
-    await questionRow.getByRole("button", { name: questionAnswer }).click();
+    await expect.poll(() => proposals.innerText(), { timeout: 15_000 }).toContain(questionText);
+    expect(await proposals.innerText()).toContain("Use the current session");
+    await proposals.getByRole("button", { name: questionAnswer }).click();
     await waitForRowText(questionFinalText);
     await expect
       .poll(async () => JSON.stringify((await readThread()).messages), { timeout: 15_000 })
