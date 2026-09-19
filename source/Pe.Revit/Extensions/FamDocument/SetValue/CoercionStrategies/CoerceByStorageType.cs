@@ -7,6 +7,9 @@ namespace Pe.Revit.Extensions.FamDocument.SetValue.CoercionStrategies;
 /// <summary>
 ///     Storage type coercion strategy - handles cases where storage types differ but data types are compatible.
 ///     Implements comprehensive storage type conversions based on Revit's parameter system.
+///     A mapping (param to param) carries units only through an explicit unit (ruling-ff-coercion 2026-09-18): two measurable specs
+///     convert through a unit both accept, text into a measurable spec must name its own unit, and a value is never copied raw across
+///     dimensions nor read in the project's display units. Such a value is refused, that value only.
 /// </summary>
 public class CoerceByStorageType : ICoercionStrategy {
     public bool CanMap(CoercionContext context) {
@@ -25,16 +28,23 @@ public class CoerceByStorageType : ICoercionStrategy {
     }
 
     public Result<FamilyParameter> Map(CoercionContext context) {
+        if (UnitRefusal(context) is { } refusal) return new ArgumentException(refusal);
         var sourceValueText = context.SourceValue?.ToString() ?? string.Empty;
         var convertedValue = (context.SourceStorageType, context.TargetStorageType) switch {
+            // Two measurable specs of one dimension (hvac:heatingLoad → hvac:power) convert through a unit both accept.
+            (StorageType.Double, StorageType.Double) when context.SourceDataType is { } from && from != context.TargetDataType =>
+                UnitUtils.ConvertToInternalUnits(UnitUtils.ConvertFromInternalUnits((double)context.SourceValue!, SharedUnit(from, context.TargetDataType)!),
+                    SharedUnit(from, context.TargetDataType)!),
+
             // Same type - no conversion needed
             _ when context.SourceStorageType == context.TargetStorageType => context.SourceValue,
 
             // There is only one relevant SpecTypeId that stores as an integer: SpecTypeId.Int.Integer.
             // Int.NumberOfPoles & Boolean.YesNo do too, but we can assume
             // 1) that the user will not attempt this conversion and 2) that these are already "properly" set.
-            (StorageType.Integer, StorageType.Double) => UnitUtils.ConvertToInternalUnits(
-                context.SourceValue as int? ?? 0, context.TargetUnitType),
+            (StorageType.Integer, StorageType.Double) => context.SourceDataType is null
+                ? UnitUtils.ConvertToInternalUnits(context.SourceValue as int? ?? 0, context.TargetUnitType)
+                : context.SourceValue as int? ?? 0,
 
             // Safe to simply .ToString() on the integerParam's value
             (StorageType.Integer, StorageType.String) => sourceValueText,
@@ -84,6 +94,53 @@ public class CoerceByStorageType : ICoercionStrategy {
         }
     }
 
+    /// <summary>Why a mapping cannot carry this value without inventing a unit, or null.</summary>
+    private static string? UnitRefusal(CoercionContext context) {
+        if (context.SourceDataType is not { } from) return null;
+        var to = context.TargetDataType;
+        return (context.SourceStorageType, context.TargetStorageType) switch {
+            (StorageType.Double, StorageType.Double) when from != to && SharedUnit(from, to) is null =>
+                $"{from.TypeId} and {to.TypeId} share no unit; a value is never copied raw across dimensions" +
+                (to == SpecTypeId.Number ? " (declare CoerceMeasurableToNumber to read it in a fixed unit)" : ""),
+            (StorageType.Integer, StorageType.Double) when Dimensioned(to) => $"a bare number names no unit for {to.TypeId}",
+            (StorageType.Double, StorageType.Integer) when Dimensioned(from) => $"{from.TypeId} is measured in a unit an integer cannot name",
+            _ => null
+        };
+    }
+
+    private static bool Dimensioned(ForgeTypeId spec) => UnitUtils.IsMeasurableSpec(spec) && spec != SpecTypeId.Number;
+
+    /// <summary>A unit valid for both specs, or null when they measure different dimensions.</summary>
+    internal static ForgeTypeId? SharedUnit(ForgeTypeId from, ForgeTypeId to) {
+        if (!UnitUtils.IsMeasurableSpec(from) || !UnitUtils.IsMeasurableSpec(to)) return null;
+        var targetUnits = UnitUtils.GetValidUnits(to).Select(unit => unit.TypeId).ToHashSet(StringComparer.Ordinal);
+        return UnitUtils.GetValidUnits(from).FirstOrDefault(unit => targetUnits.Contains(unit.TypeId));
+    }
+
+    /// <summary>
+    ///     Parses measured text only when it names its own unit. The text is read under two different units of the spec: a bare number takes
+    ///     whichever unit is set (as it would the project's hidden display unit) and so reads differently. A spec with one unit is unambiguous.
+    /// </summary>
+    internal static bool TryParseExplicitMeasure(ForgeTypeId spec, string text, out double value) {
+        value = 0;
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        var readings = new List<double>();
+        foreach (var unit in UnitUtils.GetValidUnits(spec)) {
+            Units under;
+            try {
+                under = new Units(UnitSystem.Metric);
+                under.SetFormatOptions(spec, new FormatOptions(unit));
+            } catch (Autodesk.Revit.Exceptions.ApplicationException) { continue; } // a unit whose default format options are invalid
+            if (!ParameterStringIo.TryParseMeasuredValue(under, spec, text, out var read) &&
+                !ParameterStringIo.TryParseMeasuredValue(under, spec, NormalizeForUnitParsing(text), out read)) return false;
+            readings.Add(read);
+            if (readings.Count == 2) break;
+        }
+        if (readings.Count == 0) return false;
+        value = readings[0];
+        return readings.Count == 1 || Math.Abs(readings[1] - value) <= 1e-9 * Math.Max(1d, Math.Abs(value));
+    }
+
     /// <summary>
     ///     Checks if a string value can be parsed to integer.
     ///     Handles both numeric strings and Yes/No boolean values.
@@ -123,7 +180,8 @@ public class CoerceByStorageType : ICoercionStrategy {
         if (isNumberType)
             return regexResult || TryParseNumberWord(stringValue, out _);
 
-        // For measurable specs with actual units, use Revit's parser which understands imperial notation
+        // For measurable specs with actual units, use Revit's parser which understands imperial notation. A mapping's bare number reaches
+        // Map, which refuses it with a reason.
         if (UnitUtils.IsMeasurableSpec(dataType)) {
             var parseResult = ParameterStringIo.TryParseMeasuredValue(
                 context.FamilyDocument.GetUnits(),
@@ -164,6 +222,11 @@ public class CoerceByStorageType : ICoercionStrategy {
             return Regexes.TryExtractDouble(stringValue, out var number) ? number
                 : TryParseNumberWord(stringValue, out var word) ? word
                 : Regexes.ExtractDouble(stringValue);
+
+        // A mapping reads text only in the unit it names (never the project's display unit).
+        if (UnitUtils.IsMeasurableSpec(dataType) && context.SourceDataType is not null)
+            return TryParseExplicitMeasure(dataType!, stringValue, out var named) ? named
+                : throw new ArgumentException($"'{stringValue}' names no unit for {dataType!.TypeId}; a bare number into a measurable spec needs one");
 
         // For measurable specs with actual units, use Revit's parser which understands imperial notation
         if (UnitUtils.IsMeasurableSpec(dataType)) {

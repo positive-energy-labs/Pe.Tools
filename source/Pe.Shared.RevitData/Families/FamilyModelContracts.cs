@@ -1041,11 +1041,11 @@ public sealed class PortableValueConverter : JsonConverter<PortableValue> {
 public enum MappingStrategy {
     /// <summary>Same storage type only.</summary>
     Strict,
-    /// <summary>Across storage types.</summary>
+    /// <summary>Across storage types. Measurable specs convert through a unit both accept; text into a measurable spec must name its unit.</summary>
     CoerceByStorageType,
     /// <summary>A measurable spec into Number, in a fixed explicit unit per spec; otherwise CoerceByStorageType.</summary>
     CoerceMeasurableToNumber,
-    /// <summary>Any number (text included) into an electrical spec.</summary>
+    /// <summary>Any number (text included) into an electrical spec, a bare number read in a fixed unit per spec (volts, amperes, VA, watts).</summary>
     CoerceElectrical
 }
 
