@@ -8,6 +8,7 @@ import {
   message,
   refuse,
   sameAddress,
+  sameValue,
   stagedScope,
   type Address,
   type AppliedFilter,
@@ -22,7 +23,7 @@ import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 /** The families loaded in the Work's document, narrowed by its scope. */
 export type LoadedFamilies = (
   target: Address | null,
-  scope: AppliedFilter | null,
+  scope: AppliedFilter,
 ) => Promise<readonly { familyName: string; types: readonly { typeName: string }[] }[]>;
 
 /**
@@ -53,17 +54,20 @@ export function familiesAdmission(loadedFamilies: LoadedFamilies): RouteWriteAdm
           "Nothing was written.",
         );
     }
-    // F-J1-10: every scope a write leaves proposed or staged names only families loaded under its
-    // own categories and placement; an unknown name refuses by name.
-    const scopes = patches.some((patch) => !patch.path.length || patch.path[0] === "scope")
-      ? [parsed.scope.proposal?.value, parsed.scope.staged?.value].filter(
-          (written) => written?.familyNames.length,
-        )
-      : [];
+    // F-J1-10: every scope rung a write changes names only families loaded under its own
+    // categories and placement; an unknown name refuses by name. M13-1: only the rung(s) this write
+    // changes, so a stale rung never blocks its own correction.
+    const was = familiesRouteState.schema.parse(prior).scope;
+    const scopes = (["proposal", "staged"] as const).flatMap((rung) => {
+      const written = parsed.scope[rung];
+      return written?.value.familyNames.length && !sameValue(written, was[rung])
+        ? [written.value]
+        : [];
+    });
     for (const written of scopes) {
       let known: Set<string>;
       try {
-        const loaded = await loadedFamilies(work.target, { ...written!, familyNames: [] });
+        const loaded = await loadedFamilies(work.target, { ...written, familyNames: [] });
         known = new Set(loaded.map((family) => family.familyName));
       } catch (error) {
         return refuse(
@@ -72,7 +76,7 @@ export function familiesAdmission(loadedFamilies: LoadedFamilies): RouteWriteAdm
           "Nothing was written. Fix what this names, then write again.",
         );
       }
-      const unknown = written!.familyNames.filter((name) => !known.has(name));
+      const unknown = written.familyNames.filter((name) => !known.has(name));
       if (unknown.length)
         return refuse(
           "refused",
@@ -93,9 +97,17 @@ export function familiesAdmission(loadedFamilies: LoadedFamilies): RouteWriteAdm
       (key) => cells[key]?.proposal != null || cells[key]?.staged != null,
     );
     if (!written.length) return null;
+    // M13-2: a cell belongs to a scope someone named: the staged one, else the proposed one.
+    const keyed = stagedScope(parsed) ?? parsed.scope.proposal?.value;
+    if (!keyed)
+      return refuse(
+        "refused",
+        "Propose or stage a scope before proposing cells",
+        "Nothing was written.",
+      );
     let families: Awaited<ReturnType<LoadedFamilies>>;
     try {
-      families = await loadedFamilies(work.target, stagedScope(parsed));
+      families = await loadedFamilies(work.target, keyed);
     } catch (error) {
       return refuse(
         "refused",

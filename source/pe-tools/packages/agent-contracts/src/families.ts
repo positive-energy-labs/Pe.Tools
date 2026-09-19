@@ -91,10 +91,11 @@ export const FAMILY_CATALOG_LIMIT = 5000;
 /**
  * The `revit.catalog.loaded-families` request that answers a scope's family names AND every type.
  * F-J1-12: the collector lists types only for a Rows/Full view, and caps them at 10 per family
- * unless the budget says otherwise; without both, every family reads typeless.
+ * unless the budget says otherwise; without both, every family reads typeless. Always filtered:
+ * a filterless read is the whole document (M13-2).
  */
-export const familyCatalogRequest = (scope: AppliedFilter | null) => ({
-  ...(scope ? { filter: scope } : {}),
+export const familyCatalogRequest = (scope: AppliedFilter) => ({
+  filter: scope,
   projection: { view: "Rows" as const },
   budget: { maxEntries: FAMILY_CATALOG_LIMIT, maxSamplesPerEntry: FAMILY_CATALOG_LIMIT },
 });

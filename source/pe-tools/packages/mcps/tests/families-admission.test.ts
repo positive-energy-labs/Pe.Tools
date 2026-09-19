@@ -10,7 +10,9 @@ const scope = { route: "families", target: at };
 // One loaded family, "Casework", with one type. Its element id changes on every reload; its name does not.
 const loaded = [{ familyId: 3573700, familyName: "Casework", types: [{ typeName: "12 X 4" }] }];
 
+// The person staged the Casework scope; cell keys are checked against it (M13-2).
 function workspace() {
+  const staged = { version: 1, revision: 0, doc: { scope: { staged: { value: casework([]) } } } };
   const saved = new Map<string, unknown>();
   const reads: unknown[] = [];
   return {
@@ -24,7 +26,7 @@ function workspace() {
         },
       }),
       store: {
-        getState: async ({ targetKey, route }) => saved.get(`${targetKey}\0${route}`),
+        getState: async ({ targetKey, route }) => saved.get(`${targetKey}\0${route}`) ?? staged,
         setState: async ({ targetKey, route, value }) => {
           saved.set(`${targetKey}\0${route}`, value);
         },
@@ -75,7 +77,7 @@ test("a valid key lands, and clearing a cell never asks Revit", async () => {
   const { work, reads } = workspace();
   const landed = await work.apply(scope, "families", "agent", [propose("Casework")], 0);
   expect(landed).toMatchObject({ ok: true, revision: 1 });
-  expect(reads).toEqual([{ target: at, filter: null }]);
+  expect(reads).toEqual([{ target: at, filter: casework([]) }]);
   const key = familyCellKey({
     familyName: "Casework",
     typeName: "12 X 4",
@@ -300,4 +302,108 @@ test("F-J1-10: a scope write naming an unknown family refuses by name, Pea's or 
     expect(refused.error).not.toContain('"Casework"');
   }
   expect((await work.view(scope, "families"))!.revision).toBe(0);
+});
+
+// M13-1: a stale rung never blocks its own correction. project-a loads only "Price LBP15A Exhaust";
+// "Price LBP15A Exhaust Old" was renamed away after it was written, so its rung is stale.
+const airTerminals = (familyNames: string[]) => ({
+  value: { categoryNames: ["Air Terminals"], familyNames, placementScope: "AllLoaded" },
+});
+
+test("M13-1 (a): a stale staged scope does not block Pea's corrected proposal", async () => {
+  const { work, at } = seededWork({
+    scope: { staged: airTerminals(["Price LBP15A Exhaust Old"]) },
+  });
+  const landed = await work.apply(
+    at,
+    "families",
+    "agent",
+    [{ path: ["scope", "proposal"], value: airTerminals(["Price LBP15A Exhaust"]) }],
+    1,
+  );
+  expect(landed, JSON.stringify(landed)).toMatchObject({ ok: true, revision: 2 });
+});
+
+test("M13-1 (b): a stale proposal does not block the person's corrected staged scope", async () => {
+  const { work, at } = seededWork({
+    scope: { proposal: airTerminals(["Price LBP15A Exhaust Old"]) },
+  });
+  const landed = await work.apply(
+    at,
+    "families",
+    "human",
+    [{ path: ["scope", "staged"], value: airTerminals(["Price LBP15A Exhaust"]) }],
+    1,
+  );
+  expect(landed, JSON.stringify(landed)).toMatchObject({ ok: true, revision: 2 });
+});
+
+/** project-a Work saved at revision 1 holding `doc`, as it reads after the catalog moved under it. */
+function seededWork(doc: unknown) {
+  const target = address(projectA);
+  const saved = new Map<string, unknown>([["families", { version: 1, revision: 1, doc }]]);
+  const calls: any[] = [];
+  const host = liveHost();
+  const work = new RouteWorkspace({
+    registrations: createRouteRegistrations({
+      loadedFamilies: hostLoadedFamilies(undefined, (async (key: any, request: any, on: any) => {
+        if (key === "revit.catalog.loaded-families") calls.push(request);
+        return host(key, request, on);
+      }) as HostCall),
+    }),
+    store: {
+      getState: async ({ route }) => saved.get(route),
+      setState: async ({ route, value }) => void saved.set(route, value),
+    },
+  });
+  return { work, at: { route: "families", target }, calls };
+}
+
+const exhaustScope = {
+  categoryNames: ["Air Terminals"],
+  familyNames: ["Price LBP15A Exhaust"],
+  placementScope: "AllLoaded",
+};
+
+test("M13-2 (d): Pea proposes a scope, then cells in it, with nothing staged; the catalog read carries the proposed filter", async () => {
+  const { work, at, calls } = seededWork({});
+  const scoped = await work.apply(
+    at,
+    "families",
+    "agent",
+    [{ path: ["scope", "proposal"], value: { value: exhaustScope } }],
+    1,
+  );
+  expect(scoped).toMatchObject({ ok: true, revision: 2 });
+  const cells = await work.apply(at, "families", "agent", [propose("Price LBP15A Exhaust")], 2);
+  expect(cells).toMatchObject({ ok: true, revision: 3 });
+  expect(calls.length).toBeGreaterThan(0);
+  for (const request of calls) expect(request.filter).toBeDefined();
+  expect(calls.at(-1).filter).toEqual(exhaustScope);
+  // The same, as ONE write: the scope proposed by an earlier patch keys the cells.
+  const one = seededWork({});
+  expect(
+    await one.work.apply(
+      one.at,
+      "families",
+      "agent",
+      [
+        { path: ["scope", "proposal"], value: { value: exhaustScope } },
+        propose("Price LBP15A Exhaust"),
+      ],
+      1,
+    ),
+  ).toMatchObject({ ok: true, revision: 2 });
+  expect(one.calls.at(-1).filter).toEqual(exhaustScope);
+});
+
+test("M13-2 (e): cells with no scope on either rung refuse by name, and Revit is never asked", async () => {
+  const { work, at, calls } = seededWork({});
+  for (const actor of ["agent", "human"] as const) {
+    const refused = await work.apply(at, "families", actor, [propose("Price LBP15A Exhaust")], 1);
+    expect(refused).toMatchObject({ ok: false, kind: "refused" });
+    if (refused.ok) continue;
+    expect(refused.error).toBe("Propose or stage a scope before proposing cells");
+  }
+  expect(calls).toHaveLength(0);
 });
