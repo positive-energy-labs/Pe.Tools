@@ -40,7 +40,8 @@ import {
   type AppliedFilter,
   type Rung,
   type WorkKey,
-  FAMILY_CATALOG_LIMIT,
+  familyCatalogProblem,
+  familyCatalogRequest,
 } from "@pe/agent-contracts";
 import type {
   PodMemberSaveRequest,
@@ -667,12 +668,11 @@ export async function admitFamilyAction(
       const resolveScope = async (scope: AppliedFilter, process: NativeProcess) => {
         const catalog = (await native(
           "revit.catalog.loaded-families",
-          { filter: scope, budget: { maxEntries: FAMILY_CATALOG_LIMIT } },
+          familyCatalogRequest(scope),
           process,
         )) as RevitCatalogLoadedFamilies.Res.Response;
-        if (catalog.summary.truncated)
-          throw refused(`The scope resolves more than ${FAMILY_CATALOG_LIMIT} families; narrow it`);
-        if (!catalog.families.length) throw refused("The scope resolves no loaded family");
+        const problem = familyCatalogProblem(catalog);
+        if (problem) throw refused(problem);
         return catalog.families;
       };
       if (prepared.kind === "capture") {

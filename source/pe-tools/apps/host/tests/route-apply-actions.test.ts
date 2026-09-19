@@ -154,7 +154,19 @@ async function setup() {
               (!categoryNames.length || categoryNames.includes(f.categoryName)) &&
               (!familyNames.length || familyNames.includes(f.familyName)),
           );
-          return { value: { summary: { truncated: false }, families, issues: [] } };
+          // As the C# collector: types only for a Rows/Full view, at most maxSamplesPerEntry (10).
+          const full = ["Rows", "Full"].includes(input.projection?.view);
+          return {
+            value: {
+              summary: { truncated: false },
+              families: families.map((f) => ({
+                ...f,
+                typeCount: f.types.length,
+                types: full ? f.types.slice(0, input.budget?.maxSamplesPerEntry ?? 10) : [],
+              })),
+              issues: [],
+            },
+          };
         }
         // The engine resolves exactly the names it is passed to their current ids.
         if (key === "families.plan")
@@ -479,7 +491,9 @@ test("a scope that resolves no loaded family refuses before the native plan", as
     )
   ).revision!;
   const refused = await admit("families.plan", { source }, revision);
-  expect(String((refused as { error?: string }).error)).toMatch(/resolves no loaded family/);
+  expect(String((refused as { error?: string }).error)).toMatch(
+    /scope resolved to no loaded families: /,
+  );
   expect(sent.filter((s) => s.key === "families.plan")).toHaveLength(0);
 });
 

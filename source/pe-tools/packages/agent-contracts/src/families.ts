@@ -89,6 +89,35 @@ export type AppliedFilter = z.infer<typeof appliedScopeSchema>;
 export const FAMILY_CATALOG_LIMIT = 5000;
 
 /**
+ * The `revit.catalog.loaded-families` request that answers a scope's family names AND every type.
+ * F-J1-12: the collector lists types only for a Rows/Full view, and caps them at 10 per family
+ * unless the budget says otherwise; without both, every family reads typeless.
+ */
+export const familyCatalogRequest = (scope: AppliedFilter | null) => ({
+  ...(scope ? { filter: scope } : {}),
+  projection: { view: "Rows" as const },
+  budget: { maxEntries: FAMILY_CATALOG_LIMIT, maxSamplesPerEntry: FAMILY_CATALOG_LIMIT },
+});
+
+/** Why a scope's catalog cannot answer its families and types, or null when it can. */
+export function familyCatalogProblem(catalog: {
+  summary: { truncated: boolean };
+  families: readonly { familyName: string; typeCount?: number; types: readonly unknown[] }[];
+  issues?: readonly { message: string }[];
+}): string | null {
+  if (catalog.summary.truncated)
+    return `the scope resolves more than ${FAMILY_CATALOG_LIMIT} families; narrow it`;
+  if (!catalog.families.length)
+    return `scope resolved to no loaded families: ${catalog.issues?.map((issue) => issue.message).join("; ") || "no loaded family matches it"}`;
+  const short = catalog.families.find(
+    (family) => family.typeCount != null && family.types.length < family.typeCount,
+  );
+  return short
+    ? `the catalog listed ${short.types.length} of ${short.typeCount} types of "${short.familyName}"`
+    : null;
+}
+
+/**
  * One proposed cell value on the `/families` audit: a family type's parameter cell and the value
  * someone proposes for it. Pea and a person write the same shape and are told apart by `by`. It is
  * authored Work, not a result — it survives a reload. The address is a family NAME, a type and the

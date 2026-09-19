@@ -2,6 +2,7 @@ import { expect, test } from "vite-plus/test";
 import { address, familiesRouteState, familyCellKey } from "@pe/agent-contracts";
 
 import { RouteWorkspace } from "../../runtime/src/route-workspace.ts";
+import { hostLoadedFamilies, type HostCall } from "../src/pea/families-admission.ts";
 import { createRouteRegistrations } from "../src/pea/routes.ts";
 
 const at = address("c:\\models\\j1.rvt");
@@ -115,4 +116,114 @@ test("an exclusion carries its writer: Pea cannot write one as the person, nor l
   );
   expect(lifted).toMatchObject({ ok: false, kind: "refused" });
   expect(reads).toHaveLength(0);
+});
+
+// F-J1-12, from hold 4b's recorded shapes (thread 1da7e887): the session list and the catalog as
+// the C# collector answers. It lists types only for a Rows/Full view, at most maxSamplesPerEntry
+// (default 10), and warns when the filter matches nothing.
+const projectA = "f2933e8d-9e16-4bf4-b9ca-484f461e4563";
+const exhaust = {
+  familyId: 3700298,
+  familyUniqueId: "2b3da566-211f-4400-924e-3e29b481ab08-0038764a",
+  familyName: "Price LBP15A Exhaust",
+  categoryName: "Air Terminals",
+  placedInstanceCount: 51,
+  types: ["12 X 4", "12 X 4 W", "12 X 6 W", "16 x 8 clg", "6x6", "8 X 4", "8 X 4 W", "84 X 4 T"]
+    .concat(Array.from({ length: 4 }, (_, i) => `extra ${i}`))
+    .map((typeName) => ({ typeName })),
+};
+const liveHost = (): HostCall =>
+  (async (key: string, request: any) => {
+    if (key === "bridge.sessions.list")
+      return {
+        sessions: [
+          {
+            connected: true,
+            sessionId: "session-0875810ce11c3ab9",
+            openDocuments: [
+              { openId: "4f27e503561449978eab2c0d293ebd38", address: projectA, isActive: true },
+            ],
+          },
+        ],
+      };
+    const names: string[] = request.filter?.familyNames ?? [];
+    const families = [exhaust].filter((f) => !names.length || names.includes(f.familyName));
+    const full = ["Rows", "Full"].includes(request.projection?.view);
+    return {
+      summary: { truncated: false },
+      families: families.map((f) => ({
+        ...f,
+        typeCount: f.types.length,
+        types: full ? f.types.slice(0, request.budget?.maxSamplesPerEntry ?? 10) : [],
+      })),
+      issues: families.length
+        ? []
+        : [
+            {
+              code: "LoadedFamiliesFilterMatchedZeroFamilies",
+              message: "Loaded-family filter matched zero families out of 1.",
+            },
+          ],
+    };
+  }) as HostCall;
+
+function ProjectAWork(familyNames: string[]) {
+  const target = address(projectA);
+  const saved = new Map<string, unknown>();
+  const work = new RouteWorkspace({
+    registrations: createRouteRegistrations({
+      loadedFamilies: hostLoadedFamilies(undefined, liveHost()),
+    }),
+    store: {
+      getState: async ({ route }) => saved.get(route),
+      setState: async ({ route, value }) => void saved.set(route, value),
+    },
+  });
+  const at = { route: "families", target };
+  const scoped = { categoryNames: ["Air Terminals"], familyNames, placementScope: "AllLoaded" };
+  return {
+    work,
+    at,
+    author: () => work.apply(at, "families", "human", [{ path: ["scope"], value: scoped }], 0),
+  };
+}
+
+test("F-J1-12: the live catalog loopback admits a key for a type past the tenth, as Pea and as the person", async () => {
+  const { work, at, author } = ProjectAWork(["Price LBP15A Exhaust"]);
+  expect(await author()).toMatchObject({ ok: true, revision: 1 });
+  const landed = await work.apply(at, "families", "agent", [propose("Price LBP15A Exhaust")], 1);
+  expect(landed).toMatchObject({ ok: true, revision: 2 });
+  const cleared = await work.apply(
+    at,
+    "families",
+    "human",
+    [
+      {
+        path: [
+          "cells",
+          familyCellKey({
+            familyName: "Price LBP15A Exhaust",
+            typeName: "extra 3",
+            parameter: "Mech Equip Model Number",
+          }),
+          "staged",
+        ],
+        value: { value: { value: "" } },
+      },
+    ],
+    2,
+  );
+  expect(cleared).toMatchObject({ ok: true, revision: 3 });
+});
+
+test("F-J1-12: a scope that resolves to no loaded family refuses with that diagnosis, not a key hint", async () => {
+  const { work, at, author } = ProjectAWork(["Price LBPH15A Exhaust"]);
+  await author();
+  const refused = await work.apply(at, "families", "agent", [propose("Price LBP15A Exhaust")], 1);
+  expect(refused).toMatchObject({ ok: false, kind: "refused" });
+  if (refused.ok) return;
+  expect(refused.error).toContain(
+    "scope resolved to no loaded families: Loaded-family filter matched zero families out of 1.",
+  );
+  expect(refused.hint).not.toContain("A key is");
 });

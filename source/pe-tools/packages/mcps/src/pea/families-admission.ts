@@ -3,7 +3,8 @@ import {
   familiesRouteState,
   familyCellAddress,
   familyCellKey,
-  FAMILY_CATALOG_LIMIT,
+  familyCatalogProblem,
+  familyCatalogRequest,
   message,
   refuse,
   sameAddress,
@@ -11,6 +12,8 @@ import {
   type AppliedFilter,
   type RouteWriteAdmission,
 } from "@pe/agent-contracts";
+
+import type { OpRequestOf, OpResponseOf } from "@pe/host-contracts/operation-types";
 
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
@@ -68,7 +71,7 @@ export function familiesAdmission(loadedFamilies: LoadedFamilies): RouteWriteAdm
       return refuse(
         "refused",
         `Family cell keys cannot be checked against Revit: ${message(error)}`,
-        "Nothing was written. Open the Work's document in Revit, then write again.",
+        "Nothing was written. Fix what this names (the Work's scope, or its document open in Revit), then write again.",
       );
     }
     // ponytail: a same-name pair unions its types here; plan refuses that name as ambiguous.
@@ -92,15 +95,27 @@ export function familiesAdmission(loadedFamilies: LoadedFamilies): RouteWriteAdm
   };
 }
 
+/** One host op call, at a document when `at` names one. */
+export type HostCall = <K extends "bridge.sessions.list" | "revit.catalog.loaded-families">(
+  key: K,
+  request?: OpRequestOf<K>,
+  at?: { bridgeSessionId: string; openDocumentId: string },
+) => Promise<OpResponseOf<K>>;
+
+const hostCall =
+  (host?: string): HostCall =>
+  (key, request, at) =>
+    new HostRpcCaller({ hostBaseUrl: resolveHostBaseUrl(host), timeoutMs: 30_000, ...at }).call(
+      key,
+      request,
+    );
+
 /** Loopback to the host: the one Revit session holding the Work's document, then its catalog. */
 export const hostLoadedFamilies =
-  (host?: string): LoadedFamilies =>
+  (host?: string, call: HostCall = hostCall(host)): LoadedFamilies =>
   async (target, scope) => {
     if (!target) throw Error("this Families Work names no document");
-    const hostBaseUrl = resolveHostBaseUrl(host);
-    const { sessions } = await new HostRpcCaller({ hostBaseUrl, timeoutMs: 30_000 }).call(
-      "bridge.sessions.list",
-    );
+    const { sessions } = await call("bridge.sessions.list");
     const open = sessions.flatMap((session) =>
       session.connected
         ? (session.openDocuments ?? []).flatMap((doc) => {
@@ -117,11 +132,12 @@ export const hostLoadedFamilies =
           ? `${target} is open in ${open.length} Revit sessions`
           : `${target} is not open`,
       );
-    const catalog = await new HostRpcCaller({ hostBaseUrl, timeoutMs: 30_000, ...open[0] }).call(
+    const catalog = await call(
       "revit.catalog.loaded-families",
-      { ...(scope ? { filter: scope } : {}), budget: { maxEntries: FAMILY_CATALOG_LIMIT } },
+      familyCatalogRequest(scope),
+      open[0],
     );
-    if (catalog.summary.truncated)
-      throw Error(`the scope resolves more than ${FAMILY_CATALOG_LIMIT} families; narrow it`);
+    const problem = familyCatalogProblem(catalog);
+    if (problem) throw Error(problem);
     return catalog.families;
   };
