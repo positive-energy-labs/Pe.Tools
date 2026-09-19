@@ -70,8 +70,8 @@ public sealed class JointFindingsFamilyTests {
               "types": { "A": { "D": "5in", "Url": "a" }, "B": { "D": "8in", "Url": "b" } },
               "datums": { "Ref. Level": { "normal": "Z", "isLevel": true }, "Center (Left/Right)": { "normal": "X" }, "Center (Front/Back)": { "normal": "Y" } },
               "forms": { "flange": { "kind": "Prism", "center": ["Center (Left/Right)", "Center (Front/Back)"], "bottom": "Ref. Level", "width": "param:Size", "depth": "param:Size", "height": "param:Thick" } },
-              "connectors": { "supply": { "domain": "Duct", "systemType": "SupplyAir", "on": "flange.top", "at": ["Center (Left/Right)", "Center (Front/Back)"],
-                "shape": "Round", "diameter": "param:D", "flowDirection": "In" } } }
+              "connectors": { "supply": { "domain": "Duct", "systemType": "SupplyAir", "on": "flange.top", "at": ["Center (Front/Back)", "Center (Left/Right)"],
+                "shape": "Round", "diameter": "param:D", "flowDirection": "In", "flowConfiguration": "Calculated", "lossMethod": "NotDefined" } } }
             """);
         Assert.That(parsed.Diagnostics, Is.Empty, string.Join("; ", parsed.Diagnostics.Select(d => $"{d.Path} {d.Code}: {d.Message}")));
         Document? document = null;
