@@ -139,3 +139,14 @@ test("every family applied is a plain run", async () => {
   );
   expect(outcome).toBeNull();
 });
+
+test("a family reloaded since its plan reads in the host's words, verbatim; nothing retargets", async () => {
+  const reloaded = "'Mechanical Damper' was reloaded since this plan; plan again.";
+  const outcome = await run(
+    succeeded([receipt("Backdraft Damper", true)]),
+    succeeded([receipt("Mechanical Damper", false, reloaded)]),
+  );
+  expect((outcome as { message: string }).message).toContain(`Mechanical Damper (${reloaded})`);
+  // One apply per plan, each naming only its own sealed plan: no second apply, no new target.
+  expect(client.runSemanticAction).toHaveBeenCalledTimes(2);
+});
