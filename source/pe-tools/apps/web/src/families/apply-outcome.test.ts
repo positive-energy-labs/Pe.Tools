@@ -84,7 +84,7 @@ test("N actions summarize as applied X of N, naming each failed family and its r
   });
   expect(outcome).toMatchObject({ code: "partial" });
   expect((outcome as { message: string }).message).toBe(
-    "partly applied — applied 1 of 2 families; failed: Mechanical Damper (Reconciliation left 2 differences)",
+    "partly applied: 1 written, 1 refused; failed: Mechanical Damper (Reconciliation left 2 differences)",
   );
 });
 
@@ -127,9 +127,7 @@ test("succeeded with a receipt success false reads partly applied", async () => 
     succeeded([receipt("Mechanical Damper", false, "Reconciliation left 2 differences")]),
   );
   expect(outcome).toMatchObject({ code: "partial" });
-  expect((outcome as { message: string }).message).toMatch(
-    /^partly applied — applied 1 of 2 families/,
-  );
+  expect((outcome as { message: string }).message).toMatch(/^partly applied: 1 written, 1 refused/);
 });
 
 test("every family applied is a plain run", async () => {

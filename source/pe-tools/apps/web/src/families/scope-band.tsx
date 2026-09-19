@@ -115,7 +115,8 @@ export function FamiliesFilterBand() {
           <div className="min-w-0 flex-1">
             <OutcomeLine kind="busy" label="reading categories" />
           </div>
-        ) : categories.length === 0 ? (
+        ) : categoryFeed.options === null ? null : categories.length === 0 ? (
+          // Only an answered read says "none"; an unanswered one (no document yet) draws nothing.
           <div className="min-w-0 flex-1">
             <EmptyState story="scope" exit="bind a different world in the sentence above">
               no categories — the category-names read succeeded and reported none

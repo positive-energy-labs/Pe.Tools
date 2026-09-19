@@ -48,17 +48,19 @@ export const Route = createFileRoute("/chat")({
 });
 
 function RouteComponent() {
-  const { plugin, focus, thread } = Route.useSearch();
-  return <ChatRouteContent plugin={plugin} focus={focus} thread={thread} />;
+  // `target` is the root's retained pin (routes/__root.tsx), carried across every Chat link.
+  const { plugin, focus, thread, target } = Route.useSearch();
+  return <ChatRouteContent plugin={plugin} focus={focus} thread={thread} target={target} />;
 }
 
 export function ChatRouteContent({
   plugin,
   focus,
-}: Pick<z.infer<typeof chatSearchSchema>, "plugin" | "focus" | "thread">) {
+  target,
+}: Pick<z.infer<typeof chatSearchSchema>, "plugin" | "focus" | "thread"> & { target?: string }) {
   return (
     <WorkbenchProvider>
-      <ChatShell plugin={plugin} focus={focus} />
+      <ChatShell plugin={plugin} focus={focus} target={target} />
     </WorkbenchProvider>
   );
 }

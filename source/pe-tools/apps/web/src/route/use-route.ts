@@ -359,11 +359,11 @@ const missingFields = (schema: {
 
 /**
  * How the page log says a verb's returned outcome. A sentence that already names what happened
- * ("partly applied — …", "refused — nothing ran: …", "failed in Revit — …") is said as is; any
+ * ("partly applied: …", "refused — nothing ran: …", "failed in Revit — …") is said as is; any
  * other refusal is prefixed so a refusal never reads as a failure, nor a failure as a refusal.
  */
 const outcomeSays = (refusal: Refusal) =>
-  /^(partly applied|refused|failed)/.test(refusal.message)
+  /^(partly applied|refused|failed)/.test(refusal.message)
     ? refusal.message
     : `${refusal.code === "failed" ? "failed" : "refused"} · ${refusal.message}`;
 

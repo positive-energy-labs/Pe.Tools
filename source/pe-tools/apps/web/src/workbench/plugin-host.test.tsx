@@ -147,7 +147,13 @@ test("the head's plan opens the pane unscoped and the hosted route runs its own 
     const host = useChatPluginHost(
       url.plugin,
       "thread-1",
-      pending ? { route: pending.route, take: () => store.actions.takePlan(pending.route) } : null,
+      pending
+        ? {
+            route: pending.route,
+            take: () => store.actions.takePlan(pending.route),
+            refused: () => {},
+          }
+        : null,
     );
     return (
       <>

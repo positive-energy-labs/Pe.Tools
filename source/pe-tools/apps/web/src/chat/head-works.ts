@@ -32,6 +32,8 @@ import type { HeadWork } from "./proposal-head";
 export interface HeadExits {
   open: (route: ChatPluginRoute, focus?: readonly string[]) => void;
   planIn: (route: ChatPluginRoute) => void;
+  /** The head's last plan, refused in its hosted route. */
+  planRefusal?: { route: ChatPluginRoute; message: string } | null;
 }
 
 /** The takeoffs cell families as the head groups them. */
@@ -159,6 +161,8 @@ export function useHeadWorks(
     },
     commit: { word: "plan", run: () => exits.planIn("families") },
     open: (focus?: readonly string[]) => exits.open("families", focus),
+    line: `families:${address}`,
+    ...(exits.planRefusal?.route === "families" ? { refusal: exits.planRefusal.message } : {}),
   };
   return [
     ...launch,

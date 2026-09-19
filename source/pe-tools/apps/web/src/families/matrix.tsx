@@ -116,6 +116,11 @@ export function FamiliesMatrix() {
             workUnreadable ? (
               // The Situation's refusal sentence is the only instruction: this says what is, no exit.
               <p className="t-small text-ink-2">no matrix — the saved Work cannot be read</p>
+            ) : !connected && store.handle.readings.inventory.state === "ready" ? (
+              // The bridge answers; what is missing is the document (e2e finding 8).
+              <EmptyState story="scope" exit="choose a document in the sentence above">
+                nothing to audit — no document chosen
+              </EmptyState>
             ) : !connected ? (
               <EmptyState
                 story="scope"

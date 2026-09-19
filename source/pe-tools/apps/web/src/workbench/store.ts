@@ -31,6 +31,11 @@ export function createChatPageStore(deps: {
     "widget/plan-intent",
     Atom.make<{ route: ChatPluginRoute; nonce: number } | null>(null),
   );
+  /** The head's last plan, refused in its hosted route: said on the head line where it was pressed. */
+  const planRefusal = core.owned(
+    "widget/plan-refusal",
+    Atom.make<{ route: ChatPluginRoute; message: string } | null>(null),
+  );
   const sideOpen = Atom.map(expandedPane, (pane) => pane === "side");
   const pluginOpen = Atom.map(expandedPane, (pane) => pane === "plugin");
 
@@ -53,6 +58,7 @@ export function createChatPageStore(deps: {
       sideOpen,
       pluginOpen,
       planIntent,
+      planRefusal,
     },
     actions: {
       setPaletteOpen: (value: Setter<boolean>) => set("set-palette", paletteOpen, value),
@@ -76,6 +82,7 @@ export function createChatPageStore(deps: {
        */
       planIn: (plugin: ChatPluginRoute) => {
         set("plan-in", planIntent, { route: plugin, nonce: Date.now() });
+        set("plan-in", planRefusal, null);
         void deps.search.patch({ plugin, focus: undefined });
       },
       /** The hosted route took the intent; true only for the first taker. */
@@ -84,6 +91,8 @@ export function createChatPageStore(deps: {
         deps.registry.set(planIntent, null);
         return true;
       },
+      refusePlan: (plugin: ChatPluginRoute, message: string) =>
+        set("plan-refused", planRefusal, { route: plugin, message }),
       openThread: (thread: string, replace = false) =>
         deps.search.patch({ thread, prompt: undefined, turn: undefined }, replace),
     },

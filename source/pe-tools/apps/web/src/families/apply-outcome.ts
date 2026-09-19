@@ -48,6 +48,6 @@ export function applyOutcome(runs: readonly PlanRun[], planned: number): Refusal
   const notRun = refused.length ? `; not run: ${[...new Set(refused)].join("; ")}` : "";
   return refuse(
     "partial",
-    `partly applied — applied ${applied} of ${planned} families${failed.length ? `; failed: ${failed.join("; ")}` : ""}${notRun}`,
+    `partly applied: ${applied} written, ${planned - applied} refused${failed.length ? `; failed: ${failed.join("; ")}` : ""}${notRun}`,
   );
 }

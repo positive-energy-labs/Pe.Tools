@@ -24,7 +24,7 @@ import { Surface as PageSurface } from "#/components/lang/surface";
 import { ThreadBody } from "#/workbench/lens/thread-body";
 import { ComposerBank } from "#/chat/composer-bank";
 
-type Plugin = { plugin?: ChatPluginRoute; focus?: string };
+type Plugin = { plugin?: ChatPluginRoute; focus?: string; target?: string };
 
 export function ChatShell(props: Plugin) {
   return (
@@ -48,7 +48,7 @@ function CurrentThreadChatSurface(props: Plugin) {
   );
 }
 
-function ChatSurface({ plugin, focus }: Plugin) {
+function ChatSurface({ plugin, focus, target }: Plugin) {
   const {
     store,
     chat,
@@ -116,7 +116,11 @@ function ChatSurface({ plugin, focus }: Plugin) {
   const intent = useMemo(
     () =>
       planIntent
-        ? { route: planIntent.route, take: () => store.actions.takePlan(planIntent.route) }
+        ? {
+            route: planIntent.route,
+            take: () => store.actions.takePlan(planIntent.route),
+            refused: (message: string) => store.actions.refusePlan(planIntent.route, message),
+          }
         : null,
     [planIntent, store],
   );
@@ -201,7 +205,7 @@ function ChatSurface({ plugin, focus }: Plugin) {
         handle={handle}
         topBar={
           <>
-            <ComposerHead handle={handle} status={status} />
+            <ComposerHead handle={handle} status={status} urlTarget={target} />
             <ContextRibbon
               breakdown={breakdown}
               cache={cache}

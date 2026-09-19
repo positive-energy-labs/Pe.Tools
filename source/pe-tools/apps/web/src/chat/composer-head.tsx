@@ -1,13 +1,15 @@
 /**
  * THE COMPOSER HEAD — Chat's whole Situation (design-system ledger, 2026-09-13). Chat has no
  * route head: "Pea on project-a" with the document's health, a document-only target bound through
- * the thread head (`PUT /scope/:thread`, not `?target`), Send as the one verb with the
+ * the thread head (`PUT /scope/:thread`; a `?target` pin seeds a document-less thread once), Send as the one verb with the
  * Situation's flag, and Pea's proposals as the Work band under the verb row, so approve and
  * reject have one location and the stream stays a record.
  */
+import { useEffect, useRef } from "react";
 import { AskUserPrompt, readQuestion } from "#/chat/ask-prompt";
 import { resolveCallTarget, toolTitle, type TargetResolution } from "@pe/agent-contracts";
 import { Check, X } from "lucide-react";
+import { useAtomValue } from "@effect/atom-react";
 
 import { ActionButton } from "#/components/lang/action-button";
 import { Rail } from "#/components/lang/rail";
@@ -21,7 +23,7 @@ import {
   SituationCell,
   useDocumentLadder,
 } from "#/route/situation";
-import type { ActionHandle, RouteHandle } from "#/route/use-route";
+import { parseTarget, type ActionHandle, type RouteHandle } from "#/route/use-route";
 import type { ChatReading, ChatActionKey } from "#/chat/manifest";
 import { useThreadScope } from "#/chat/scope";
 import type { ChatPage } from "#/chat/seeds";
@@ -83,6 +85,20 @@ const complaint = (resolution: TargetResolution): string | null =>
             ambiguous: "two Revits hold it — choose the document again",
           }[resolution.reason];
 
+/** The one open document at a `?target` address pin; none when absent or held twice. */
+const pinnedRef = (inventory: ReturnType<typeof targetInventory>, target?: string) => {
+  const parsed = parseTarget(target);
+  if (parsed?.kind !== "address" || inventory.kind !== "ready") return null;
+  const refs = Object.entries(inventory.sessions).flatMap(([session, found]) =>
+    found.kind === "ready"
+      ? found.values
+          .filter((doc) => doc.address === parsed.address)
+          .map((doc) => ({ session, openId: doc.openId }))
+      : [],
+  );
+  return refs.length === 1 ? refs[0]! : null;
+};
+
 /** The bound document's Address, which keys document-owned Work. */
 const documentAddress = (
   inventory: ReturnType<typeof targetInventory>,
@@ -97,7 +113,10 @@ const documentAddress = (
 export function ComposerHead({
   handle,
   status,
+  urlTarget,
 }: {
+  /** The URL's `?target` pin: a thread with no document takes it once (e2e finding 7). */
+  urlTarget?: string;
   handle: ChatHandle;
   /** Thread-level loading/failure. It lives HERE, not in a rail above the transcript: the
    * Situation already answers "what is bound and how is it", and a rail that appears and
@@ -123,6 +142,23 @@ export function ComposerHead({
       void head.set({ kind: "open", ref });
     },
   });
+  // A new thread under a `?target` address pin binds to the one open document at that address,
+  // once per thread: "new" keeps the URL's document. A later clear in the sentence stands.
+  const pinned = useRef<string | null>(null);
+  const pinRef = pinnedRef(inventory, urlTarget);
+  useEffect(() => {
+    if (!pinRef || head.stale || !head.hydrated || head.defaultTarget) return;
+    if (pinned.current === currentThreadId) return;
+    pinned.current = currentThreadId;
+    void head.set({ kind: "open", ref: pinRef });
+  }, [
+    pinRef?.session,
+    pinRef?.openId,
+    head.stale,
+    head.hydrated,
+    head.defaultTarget,
+    currentThreadId,
+  ]);
   const targetDisabled = isRunning || head.stale;
   const levels = ladder.levels.map((level, index) =>
     index === 0
@@ -152,6 +188,7 @@ export function ComposerHead({
   const works = useHeadWorks(documentAddress(inventory, bound), ladder.docWord ?? "document", {
     open: store.actions.setPlugin,
     planIn: store.actions.planIn,
+    planRefusal: useAtomValue(store.atoms.planRefusal),
   });
   // "Do" alone says nothing about what is being asked for. The proposal row names the capability
   // key and the target the call would run against, read off the call itself in the stream.
