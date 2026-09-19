@@ -54,7 +54,8 @@ internal static class CompanyNormalizationFixture {
                     assignment.Kind == ParamAssignmentKind.Formula ? assignment.Value : Literal(assignment.Parameter, assignment.Value, specs, legacyUnits);
             }
             foreach (var (parameter, cells) in assignments.GetPerTypeAssignmentsByParameter())
-                foreach (var (type, value) in cells) {
+                // A blank legacy profile cell meant "no value for this type".
+                foreach (var (type, value) in cells.Where(cell => !string.IsNullOrWhiteSpace(cell.Value))) {
                     types[type] ??= new JObject();
                     types[type]![parameter] = Literal(parameter, value, specs, legacyUnits);
                 }

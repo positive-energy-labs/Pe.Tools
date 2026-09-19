@@ -68,6 +68,10 @@ internal static class FamilyPreparation {
 
         var plan = FamilyReconciler.Reconcile(desired, original, UnitResolvers.Revit(document), authoredPatch.Run,
             source.GetDefinition, patch.Patch, source.ResolvedDefinitions, executionOptions);
+        var (copyEffects, copyRefusals) = FormulaCopyAcrossDataTypes(document, desired, plan, patch.Patch);
+        if (copyRefusals.Count > 0)
+            return new PreparedFamily(original, patch, desired, null, copyRefusals);
+        if (copyEffects.Count > 0) plan = plan with { RunEffects = plan.RunEffects.Concat(copyEffects).ToList() };
         return new PreparedFamily(original, patch, desired, plan, []);
     }
 
@@ -113,6 +117,46 @@ internal static class FamilyPreparation {
                 $"{(grouped.Count == 0 ? "" : $" ({string.Join(", ", grouped)})")}{(arrays == 0 ? "" : $" or labels {arrays} array(s)")}; Revit allows that edit only in group edit mode."));
         }
         return diagnostics;
+    }
+
+    /// <summary>
+    ///     Source cleanup (NormalizeParamSources → TransferAndRemoveParameter) carries each removed source's formula to its destination. Across a
+    ///     data-type change it never copies it (user ruling R1): a unit-aware mapping strategy evaluates it per type instead, named here as a run
+    ///     effect, and any other strategy refuses here, before any effect. FamilyFormulaCopy is the rule both sides read, including the per-type
+    ///     value gate, so a value the strategy cannot coerce refuses here, naming the value and the type.
+    /// </summary>
+    private static (List<string> Effects, List<FamilyModelDiagnostic> Refusals) FormulaCopyAcrossDataTypes(
+        Document document, FamilyModel desired, FamilyPlan plan, JObject authored) {
+        var effects = new List<string>();
+        var refusals = new List<FamilyModelDiagnostic>();
+        var fm = document.FamilyManager;
+        var authoredNames = (authored["parameters"] as JObject)?.Properties().Select(p => p.Name).ToHashSet(StringComparer.Ordinal) ?? [];
+        foreach (var change in plan.Changes.Where(c => c.Section == "parameters.sources")) {
+            if (!desired.Parameters.TryGetValue(change.Key, out var wanted) || wanted.Formula is not null) continue;
+            var target = fm.FindParameter(change.Key);
+            if (!string.IsNullOrEmpty(target?.Formula)) continue; // the destination's own formula wins; nothing is copied
+            var targetSpec = target?.Definition.GetDataType() ?? (wanted.SharedSpecId is { } specId ? new ForgeTypeId(specId)
+                : wanted.DataType is { } dataType ? Operations.SetParamMetadata.Spec(dataType) : null);
+            if (targetSpec is null) continue;
+            var strategy = wanted.MappingStrategy ?? "CoerceByStorageType";
+            foreach (var name in (change.Before as IReadOnlyDictionary<string, FamilyModelParameter>)?.Keys ?? []) {
+                if (name == change.Key || authoredNames.Contains(name)) continue;
+                if (fm.FindParameter(name) is not { } from || from.IsBuiltInParameter() || string.IsNullOrEmpty(from.Formula)) continue;
+                var fromSpec = from.Definition.GetDataType();
+                if (fromSpec == targetSpec || target is not null && FamilyFormulaCopy.IsExactAliasOf(fm.Parameters, from, target)) continue;
+                string Refusal(string reason) => FamilyFormulaCopy.Refusal(document.Title, from.Formula, name, fromSpec, from.IsInstance,
+                    change.Key, targetSpec, target?.IsInstance ?? wanted.IsInstance ?? false, reason);
+                // The same two gates apply reads: data types and strategy, then every type's source value.
+                var reasons = FamilyFormulaCopy.AcrossDataTypes(strategy, fromSpec, targetSpec) is null
+                    ? [FamilyFormulaCopy.NoUnitAwareStrategy(strategy)]
+                    : FamilyFormulaCopy.ValueRefusals(new FamilyDocument(document), from, strategy).ToList();
+                if (reasons.Count > 0)
+                    refusals.AddRange(reasons.Select(reason => new FamilyModelDiagnostic(FamilyModelDiagnosticCodes.FormulaCopyDataType,
+                        $"$.parameters.{change.Key}.wasNamed", Refusal(reason))));
+                else effects.Add(FamilyFormulaCopy.EvaluatedNote(document, from.Formula, name, change.Key, targetSpec, strategy));
+            }
+        }
+        return (effects, refusals);
     }
 
     /// <summary>Ask Revit to canonicalize formulas without retaining document mutation.</summary>

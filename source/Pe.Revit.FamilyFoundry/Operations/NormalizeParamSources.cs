@@ -126,11 +126,12 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
                     }
                     continue;
                 }
-                doc.TransferAndRemoveParameter(source, target, connectorRule is null ? null : new Dictionary<BuiltInParameter, string> {
+                var evaluated = doc.TransferAndRemoveParameter(source, target, connectorRule is null ? null : new Dictionary<BuiltInParameter, string> {
                     [BuiltInParameter.RBS_ELEC_VOLTAGE] = connectorRule.Voltage,
                     [BuiltInParameter.RBS_ELEC_NUMBER_OF_POLES] = connectorRule.NumberOfPoles,
                     [BuiltInParameter.RBS_ELEC_APPARENT_LOAD] = connectorRule.ApparentPower
-                });
+                }, MappingStrategy(targetName));
+                if (evaluated is not null) logs.Add(new LogEntry(sourceName).Success(evaluated));
                 // TransferAndRemoveParameter commits its own sub-transaction, and Revit regenerates on commit;
                 // one explicit regeneration after the loop replaces one per removed source.
                 fm = doc.FamilyManager;
@@ -143,6 +144,10 @@ public sealed class NormalizeParamSources(FamilyModel desired, IReadOnlyCollecti
         } finally { if (originalType is not null && fm.CurrentType != originalType) fm.CurrentType = originalType; }
         return new OperationLog(this.Name, logs);
     }
+
+    // The mapping's own coercion also decides a formula copy across data types (FamilyFormulaCopy.AcrossDataTypes).
+    private string MappingStrategy(string target) =>
+        desired.Parameters.TryGetValue(target, out var spec) ? spec.MappingStrategy ?? "CoerceByStorageType" : "CoerceByStorageType";
 
     private static bool Blank(FamilyDocument doc, FamilyType type, FamilyParameter parameter, IReadOnlyCollection<string>? missingValues = null) =>
         string.IsNullOrWhiteSpace(parameter.Formula) && (!type.HasValue(parameter) || parameter.StorageType == StorageType.String &&

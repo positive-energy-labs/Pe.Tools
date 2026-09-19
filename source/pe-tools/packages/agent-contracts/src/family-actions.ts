@@ -22,6 +22,12 @@ export const familyCaptureSchema = z.object({
 export type FamilyCapture = z.infer<typeof familyCaptureSchema>;
 /** Where a capture lands: the route's current pod, and a new member path the host may choose. */
 const captureInto = { pod: z.string().min(1), path: z.string().min(1).optional() };
+/**
+ * What a plan consumes: a saved member, or a draft's bytes; the run apply files captures either
+ * exactly. Strict arms: a shape with both `sha256` and `content` refuses instead of losing one to
+ * stripping.
+ */
+const planSourceSchema = z.union([podMemberSourceSchema.strict(), podDraftSourceSchema.strict()]);
 export const familyActions = {
   "settings.write": {
     says: "Save reviewed member Work, or create exact raw bytes, through the host pod member writer.",
@@ -52,14 +58,14 @@ export const familyActions = {
       .refine((input) => input.pod || (!input.spec && !input.path), "A draft saves into a pod"),
   },
   "family.plan": {
-    says: "Plan a saved family spec against the open family and return the plan; changes nothing.",
+    says: "Plan a saved family spec, or a supplied draft's exact bytes (filed nowhere), against the open family and return the plan; changes nothing.",
     needs: "family-document",
     actor: "any",
     dirties: [],
     executors: ["pod.member.compose", "family.plan"],
     description:
-      "Plan a saved family spec against the open family and return the plan; changes nothing.",
-    input: z.object({ source: podMemberSourceSchema }),
+      "Plan a saved family spec, or a supplied draft's exact bytes (filed nowhere), against the open family and return the plan; changes nothing.",
+    input: z.object({ source: planSourceSchema }),
   },
   "family.apply": {
     says: "Apply the exact family plan a succeeded family.plan action returned (named by that action id, one included hash), from the spec bytes that plan sealed, and write a run receipt. Staged cells the plan consumed retire only if unchanged after native success.",
@@ -97,11 +103,7 @@ export const familyActions = {
     description:
       "Plan a saved spec, or a supplied draft's exact bytes (filed nowhere), over the loaded families in the reviewed Families Work scope; returns the plan and the hashes apply would send, and changes nothing.",
     input: z.object({
-      /**
-       * A saved member, or a draft's bytes; the run apply files captures either exactly. Strict
-       * arms: a shape with both `sha256` and `content` refuses instead of losing one to stripping.
-       */
-      source: z.union([podMemberSourceSchema.strict(), podDraftSourceSchema.strict()]),
+      source: planSourceSchema,
       /** Plan only these families of the scope (a generated one-family member); absent = the scope. */
       familyIds: z.array(z.number().int()).nonempty().optional(),
       excludedIds: z.array(z.number().int()).default([]),

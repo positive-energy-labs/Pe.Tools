@@ -448,7 +448,7 @@ export async function admitFamilyAction(
           familyActions[key].input.parse(admission.input).source,
           pods,
         );
-        // With a reviewed draft, the plan consumes its staged cells only if the member IS that draft.
+        // With a reviewed draft, the plan consumes its staged cells only if the captured bytes ARE that draft.
         const base = admission.bases.work;
         let consumed: Consumed | null = null;
         if (base) {

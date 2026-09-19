@@ -38,7 +38,6 @@ import {
   type Ctx as RouteCtx,
   type EntityPage,
   type EntityRouteDef,
-  type MemberSource,
   type PodRow,
 } from "#/route";
 import { previousOf } from "#/readings";
@@ -52,6 +51,11 @@ import {
 
 /** The `$schema` path that says a member is a family model: the spec `/family` captures and applies. */
 export const FAMILY_MODEL_SCHEMA = "/schemas/settings/FamilyFoundry/models.json";
+/** A draft's `$schema`: this library, on the host actually serving the page. */
+const modelSchema = () =>
+  typeof location === "undefined"
+    ? FAMILY_MODEL_SCHEMA
+    : new URL(FAMILY_MODEL_SCHEMA, location.origin).href;
 
 /** The route's Work is the family draft: the live reading and the proposals on it. */
 type FamilyRouteDocument = FamilyDraft;
@@ -116,32 +120,37 @@ export const familySpec: EntityRouteDef<FamilyRouteDocument, FamilyReadingKey, F
     ffPlanRow(ffPlanEntrySchema.parse(plan)),
   ),
   /**
-   * Accepted proposals are the spec: plan files the draft as a new member in the page's pod
-   * (capture's own save, run and all), plans it, and apply sends that member's hash.
+   * Accepted proposals are the spec: plan sends the draft's bytes (filed nowhere; the page's pod
+   * only holds the run), and apply names that plan. Saving the draft is capture's job.
    */
   staged: {
     cells: (ctx) => ctx.work.doc?.cells ?? {},
     plan: async (ctx) => {
       const spec = ctx.work.doc ? draftSpec(ctx.work.doc) : null;
       if (!spec) throw Error("read the family first");
-      if (!ctx.page.pod) throw Error("choose the pod the draft is saved in");
-      const saved = await workflow("family.capture", { pod: ctx.page.pod, spec }, ctx);
-      const source = saved.member as MemberSource;
-      ctx.setPage({ path: source.path });
-      // Bound to the reviewed draft: the host consumes its staged cells only if this member is it.
+      if (!ctx.page.pod) throw Error("choose the pod the run is filed in");
+      const { $schema: _, ...model } = JSON.parse(spec) as {
+        $schema?: unknown;
+        family?: { name?: string };
+      };
+      const name = (model.family?.name ?? "family").replace(/[^\w.-]+/g, "-");
+      // Bound to the reviewed draft: the host consumes its staged cells only if these bytes are it.
       const result = await workflow(
         "family.plan",
-        { source },
+        {
+          source: {
+            pod: ctx.page.pod,
+            path: `staged/${name}.json`,
+            content: `${JSON.stringify({ $schema: modelSchema(), ...model }, null, 2)}\n`,
+          },
+        },
         ctx,
         ctx.work.revision === null
           ? undefined
           : { work: { key: ctx.work.key, revision: ctx.work.revision } },
       );
-      const row = ffPlanRow(ffPlanEntrySchema.parse(result.plan));
       return {
-        entries: [
-          { ...row, detail: `${row.detail} · from ${source.path}`, plan: String(result.id) },
-        ],
+        entries: [{ ...ffPlanRow(ffPlanEntrySchema.parse(result.plan)), plan: String(result.id) }],
       };
     },
     apply: async (ctx, included) => {
