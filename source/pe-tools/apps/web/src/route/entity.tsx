@@ -217,7 +217,10 @@ export function EntityRouteView({
                     label: def.key === "families" ? "stop after this family" : "stop",
                     run: handle.stop,
                   }}
-                  replan={() => void handle.actions.plan.run()}
+                  replan={{
+                    says: handle.actions.plan.says,
+                    run: () => void handle.actions.plan.run(),
+                  }}
                   refusal={handle.actions.apply.refusal}
                   stale={view?.stale}
                   busy={handle.busy !== null}

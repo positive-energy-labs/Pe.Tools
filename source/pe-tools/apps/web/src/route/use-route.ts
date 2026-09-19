@@ -1196,7 +1196,7 @@ export function useRoute<W, R extends string, P, A extends string>(
         const health = requirementRefusal(action);
         const handle: ActionHandle = {
           label: action.label,
-          says: action.says,
+          says: action.saysNow?.(ctx as never) ?? action.says,
           ...(typeof action.chord === "string" ? { chord: action.chord } : {}),
           ...(action.stage ? { stage: action.stage } : {}),
           count: health ? null : (action.count?.(ctx as never) ?? null),

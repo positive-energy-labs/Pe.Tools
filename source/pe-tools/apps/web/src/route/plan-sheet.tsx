@@ -75,7 +75,8 @@ export function PlanSheetView({
   cancel: () => void;
   /** Stop the apply that is running now. Absent = this sheet has no running verb to stop. */
   stop?: { readonly label: string; readonly run: () => void };
-  replan: () => void;
+  /** The plan verb, in its words now: the staged draft or the saved spec. */
+  replan: { readonly says: string; readonly run: () => void };
   /** Why apply is refused, in the operator's words; null = it can run. */
   refusal: string | null;
   /** The staged cells moved since this plan: said before the press, in the host's words. */
@@ -112,8 +113,8 @@ export function PlanSheetView({
         <ActionButton
           label="re-plan"
           disabled={busy}
-          reason="Read a fresh plan for the saved spec."
-          onClick={replan}
+          reason={`Read a fresh plan: ${replan.says}.`}
+          onClick={replan.run}
         />
         <ActionButton
           tone="commit"
@@ -134,7 +135,7 @@ export function PlanSheetView({
       <section aria-label="Confirmation sheet" className="flex min-h-0 flex-col">
         {head}
         <div className="px-2 py-1.5">
-          <EmptyState story="scope" exit="re-plan the saved spec">
+          <EmptyState story="scope" exit="re-plan">
             the plan no longer describes this spec
           </EmptyState>
         </div>

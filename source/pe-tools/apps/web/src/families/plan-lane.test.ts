@@ -7,6 +7,15 @@ const client = vi.hoisted(() => ({
   })),
 }));
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => client);
+const pods = vi.hoisted(() => ({
+  write: vi.fn(async (..._args: unknown[]) => ({ pod: "", path: "", sha256: "" })),
+}));
+vi.mock("#/route/pods", async (importOriginal) => {
+  const real = await importOriginal<typeof import("#/route/pods")>();
+  return { ...real, podHost: { ...real.podHost, write: pods.write } };
+});
+
+import { familyCellKey } from "@pe/agent-contracts";
 
 import { FAMILIES_SEEDS } from "./seeds";
 import { familiesSpec, manifest } from "./manifest";
@@ -105,4 +114,67 @@ test("capture evidence is read off the capture's own receipt, failures included"
   ]);
   expect(captureEvidenceOf([{ id: "c", result: { member: {} } }], "c")).toBeNull();
   expect(captureEvidenceOf(undefined, "c")).toBeNull();
+});
+
+/* F-J3-6: plan words what it plans; saving the draft to the pod is its own, optional verb. */
+const staged = (familyId: number, familyName: string, value: string) => [
+  familyCellKey({ familyId, typeName: "T", parameter: "Mark" }),
+  { staged: { value: { familyName, value } } },
+];
+const stagedView = () =>
+  view({
+    stage: "audit",
+    path: null,
+  }) as ReturnType<typeof view> & { work: { doc: Record<string, unknown> } };
+const withCells = (ctx: ReturnType<typeof stagedView>) => {
+  ctx.work.doc = {
+    ...seed.work,
+    cells: Object.fromEntries([staged(1, "Alpha", "a"), staged(2, "Beta", "b")]),
+  };
+  return ctx;
+};
+
+test("plan's words follow the state: the staged draft when cells are staged, the saved spec otherwise", () => {
+  const plan = manifest.actions!.plan;
+  expect(plan.saysNow!(withCells(stagedView()) as never)).toMatch(/staged draft/);
+  expect(plan.saysNow!(view() as never)).toMatch(/saved families spec/);
+  expect(plan.says).toMatch(/staged draft.*saved families spec/);
+});
+
+test("plan files nothing in the pod; save draft files one member per family, a copy plan never needs", async () => {
+  const ctx = withCells(stagedView());
+  client.runSemanticAction.mockResolvedValue({
+    state: "succeeded",
+    result: {
+      id: "plan-x",
+      plan: [
+        {
+          familyId: 1,
+          familyName: "Alpha",
+          planHash: "p",
+          changes: [],
+          runEffects: [],
+          refusals: [],
+          warnings: [],
+        },
+      ],
+    },
+  });
+  await manifest.actions!.plan.run(ctx as never, undefined as never);
+  expect(pods.write).not.toHaveBeenCalled();
+
+  const save = manifest.actions!["save-draft"];
+  expect(save.label).toBe("save draft to pod");
+  expect(save.says).toMatch(/copy/);
+  expect(save.says).toMatch(/plan does not need it/);
+  expect(save.ready(ctx as never, undefined as never)).toBeNull();
+  expect(save.ready(view() as never, undefined as never)).toBe("nothing is staged to save");
+  await save.run(ctx as never, undefined as never);
+  expect(pods.write.mock.calls.map(([ref]) => ref)).toEqual([
+    { pod: seed.page.pod, path: "staged/Alpha.json" },
+    { pod: seed.page.pod, path: "staged/Beta.json" },
+  ]);
+  expect(JSON.parse(pods.write.mock.calls[0]![1] as string)).toMatchObject({
+    $schema: expect.any(String),
+  });
 });

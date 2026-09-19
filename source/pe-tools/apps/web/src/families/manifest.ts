@@ -30,6 +30,7 @@ import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-
 import { applyOutcome, type PlanRun } from "./apply-outcome";
 import type { FamiliesDraft } from "./host";
 import { FAMILIES_SEEDS } from "./seeds";
+import { podHost } from "#/route/pods";
 import { stagedDrafts } from "./staged";
 
 export interface FamiliesPage {
@@ -83,7 +84,8 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
      * The editable table's half. Plan takes staged cells only, generates one patch draft per family
      * from them, and plans each through `families.plan` over exactly that family's id, sending the
      * draft's bytes. Nothing is filed: the plan seals those bytes, and apply's run in the page's pod
-     * keeps them as a supplied draft. Saving a spec to the pod is capture's job, never plan's.
+     * keeps them as a supplied draft. Plan never files: capture saves specs, and `save draft to pod`
+     * saves a copy of the draft, both only when pressed.
      */
     staged: {
       cells: (ctx) => ctx.work.doc?.cells ?? {},
@@ -136,7 +138,7 @@ export const manifest = entityRoute<
   FamiliesRouteDocument,
   FamiliesReadingKey,
   FamiliesPage,
-  "scope"
+  "scope" | "save-draft"
 >(familiesSpec, {
   work: familiesRouteState,
   readings: {
@@ -172,6 +174,30 @@ export const manifest = entityRoute<
             },
           },
         ]);
+      },
+    },
+    "save-draft": {
+      label: "save draft to pod",
+      says: "Saves a copy of the staged draft into the chosen pod, one member per family, for the person to edit later. Optional: plan does not need it and still plans the staged cells' own bytes.",
+      needs: "project",
+      actor: "any",
+      input: z.void() as never,
+      // The pod list is the entity's Reading; saved members show there.
+      dirties: ["pods"] as never,
+      stage: "audit",
+      count: (ctx) => stagedDrafts(ctx.work.doc?.cells ?? {}).length || null,
+      ready: (ctx) =>
+        !stagedDrafts(ctx.work.doc?.cells ?? {}).length
+          ? "nothing is staged to save"
+          : (ctx.page as unknown as EntityPage).pod
+            ? null
+            : "choose the pod the draft is saved in",
+      // ponytail: a create refuses an existing path, so a second save of the same family refuses in
+      // the pod's words; overwrite (pod.member.save with the read sha) if people ask for re-saves.
+      run: async (ctx) => {
+        const { pod } = ctx.page as unknown as EntityPage;
+        for (const draft of stagedDrafts(ctx.work.doc?.cells ?? {}, stagedSchema()))
+          await podHost.write({ pod, path: draft.path }, draft.content);
       },
     },
   },

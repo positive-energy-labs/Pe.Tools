@@ -81,7 +81,7 @@ test("a plan whose staged cells moved is stale before the press, in the host's w
       included={sheet.entries}
       apply={() => {}}
       cancel={() => {}}
-      replan={() => {}}
+      replan={{ says: "plans the saved spec", run: () => {} }}
       refusal={STALE_PLAN}
       stale
       busy={false}

@@ -85,7 +85,10 @@ export { DEFAULT_WAIT_S, HOST_READ_WAIT_S, NATIVE_APPLY_WAIT_S, NATIVE_READ_WAIT
 
 export interface RouteAction<W, R extends string, P, I = void> {
   label: string;
+  /** What the verb does in any state: the catalog's words. */
   says: string;
+  /** What it does now, when that depends on the state (plan: the staged draft or the saved spec). */
+  saysNow?: (ctx: Ctx<W, R, P>) => string;
   needs: "host" | "session" | "document" | "project" | "family";
   actor: "any" | "human";
   input: z.ZodType<I>;
@@ -481,7 +484,17 @@ export function entityRoute<W, const R extends string, P extends object, const A
   const planVerb: RouteAction<unknown, string, EntityPage, never> = {
     waitSeconds: NATIVE_READ_WAIT_S,
     label: "plan",
-    says: `plans the saved ${def.entity} spec and opens the confirmation sheet; changes nothing`,
+    says: staged
+      ? `plans the staged draft, or the saved ${def.entity} spec when nothing is staged, and opens the confirmation sheet; changes nothing`
+      : `plans the saved ${def.entity} spec and opens the confirmation sheet; changes nothing`,
+    ...(staged
+      ? {
+          saysNow: (ctx) =>
+            stagedCount(ctx)
+              ? `plans the staged draft (${stagedCount(ctx)} cells, filed nowhere) and opens the confirmation sheet; changes nothing`
+              : `plans the saved ${def.entity} spec and opens the confirmation sheet; changes nothing`,
+        }
+      : {}),
     needs: semanticActionFacts(def.apply).needs,
     actor: "any",
     input: z.void() as unknown as z.ZodType<never>,
