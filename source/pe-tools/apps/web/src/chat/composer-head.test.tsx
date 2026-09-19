@@ -1,22 +1,28 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
+import * as Atom from "effect/unstable/reactivity/Atom";
 import { emptyChatState } from "#/workbench/chat-state";
+
+const NO_REFUSAL = Atom.make(null);
+const ADDRESS = String.raw`C:\Models\M.rvt`;
 
 const workbench = vi.hoisted(() => ({ value: undefined as any }));
 const targetPick = vi.hoisted(() => vi.fn());
 
 vi.mock("#/workbench/provider", () => ({ useWorkbench: () => workbench.value }));
+const world = vi.hoisted(() => ({ inventory: [] as unknown, set: (() => {}) as unknown }));
 vi.mock("#/readings", async (importOriginal) => ({
   ...(await importOriginal<typeof import("#/readings")>()),
-  targetInventory: () => [],
+  targetInventory: () => world.inventory,
 }));
 vi.mock("#/chat/scope", () => ({
   useThreadScope: () => ({
     defaultTarget: null,
     revision: 0,
     stale: false,
-    set: vi.fn(),
+    hydrated: true,
+    set: world.set,
     refusal: null,
   }),
 }));
@@ -67,7 +73,7 @@ test("the Situation keeps both selectors reachable in its scrolling sentence", (
     chat,
     openThread,
     resolveApproval: vi.fn(),
-    store: { actions: { setPlugin: vi.fn(), planIn: vi.fn() } },
+    store: { actions: { setPlugin: vi.fn(), planIn: vi.fn() }, atoms: { planRefusal: NO_REFUSAL } },
   };
   const view = render(
     <ComposerHead
@@ -109,7 +115,7 @@ test("the head lists live asks only; an expired ask is a transcript record, not 
     chat,
     openThread: vi.fn(),
     resolveApproval: vi.fn(),
-    store: { actions: { setPlugin: vi.fn(), planIn: vi.fn() } },
+    store: { actions: { setPlugin: vi.fn(), planIn: vi.fn() }, atoms: { planRefusal: NO_REFUSAL } },
   };
   const view = render(
     <ComposerHead
@@ -136,7 +142,7 @@ test("F-J1-9: a live ask answers in the head; the head never sends the person to
     chat,
     openThread: vi.fn(),
     resolveApproval,
-    store: { actions: { setPlugin: vi.fn(), planIn: vi.fn() } },
+    store: { actions: { setPlugin: vi.fn(), planIn: vi.fn() }, atoms: { planRefusal: NO_REFUSAL } },
   };
   render(
     <ComposerHead
@@ -149,4 +155,32 @@ test("F-J1-9: a live ask answers in the head; the head never sends the person to
   expect(head.textContent).toContain("Which model?");
   fireEvent.click(within(head).getByRole("button", { name: "Use LBPH15A" }));
   expect(resolveApproval).toHaveBeenCalledWith("ask-1", "Use LBPH15A");
+});
+
+test("e2e 7 · a new thread under a ?target address pin binds that document once", () => {
+  const set = vi.fn(async () => true);
+  world.set = set;
+  world.inventory = {
+    kind: "ready",
+    sessions: { s: { kind: "ready", values: [{ openId: "o", address: ADDRESS }] } },
+  };
+  const bench = (thread: string) => ({
+    currentThreadId: thread,
+    threads: [],
+    chat: emptyChatState(),
+    openThread: vi.fn(),
+    resolveApproval: vi.fn(),
+    store: { actions: { setPlugin: vi.fn(), planIn: vi.fn() }, atoms: { planRefusal: NO_REFUSAL } },
+  });
+  const handle = { demo: false, readings: { head: {}, inventory: {} }, log: [] } as never;
+  workbench.value = bench("t1");
+  const view = render(<ComposerHead handle={handle} urlTarget={ADDRESS} />);
+  expect(set).toHaveBeenCalledTimes(1);
+  expect(set).toHaveBeenCalledWith({ kind: "open", ref: { session: "s", openId: "o" } });
+  // "new": another thread, the same URL pin; it binds the new thread too, once.
+  workbench.value = bench("t2");
+  view.rerender(<ComposerHead handle={handle} urlTarget={ADDRESS} />);
+  view.rerender(<ComposerHead handle={handle} urlTarget={ADDRESS} />);
+  expect(set).toHaveBeenCalledTimes(2);
+  world.inventory = [];
 });

@@ -234,7 +234,8 @@ export const ChatHosted = createContext(false);
  */
 /**
  * Run the route's commit once when Chat's head asked for it and this route's Work is read.
- * Refusals are the action's own and land in the route's page log, as a pressed button's do.
+ * Refusals are the action's own: they land in the route's page log, and go back to the head
+ * where plan was pressed (F-B-5).
  */
 export function useChatPlanIntent(
   handle: Pick<RouteHandle<any, any, any, any>, "manifest" | "work">,
@@ -245,14 +246,19 @@ export function useChatPlanIntent(
   const intended =
     intent?.route === handle.manifest.key && (handle.work.current || !handle.manifest.work);
   useEffect(() => {
-    if (intended && commit && intent.take()) void commit.run();
+    if (intended && commit && intent.take())
+      void commit.run().then((refusal) => refusal && intent.refused(refusal.message));
   }, [intended, intent, commit]);
 }
 
 /** The head's group drill-in: the hosted route narrows to the addresses under this path. */
 export const ChatFocus = createContext<readonly string[] | null>(null);
 
-export const ChatPlanIntent = createContext<{ route: string; take: () => boolean } | null>(null);
+export const ChatPlanIntent = createContext<{
+  route: string;
+  take: () => boolean;
+  refused: (message: string) => void;
+} | null>(null);
 
 /**
  * session › document, read from the bridge inventory: titles and pe-revit ids, not GUIDs.

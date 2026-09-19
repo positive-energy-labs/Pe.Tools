@@ -245,3 +245,71 @@ test("F-J1-8: a group's unstage all clears its N staged cells in one write, aski
   expect(patches.every((patch) => patch.path[2] === "staged")).toBe(true);
   expect(patches.map((patch) => patch.path[1]).sort()).toEqual(["A/1", "A/2", "A/3"]);
 });
+
+test("F-B-4 · a Work's scope and cells are one head line, with both groups and one plan", () => {
+  const line = "families:MEP";
+  render(
+    <ProposalHead
+      asks={[]}
+      works={[
+        work(
+          { scope: staged("all loaded") },
+          {
+            id: "families-scope",
+            wire: { segment: null, write: vi.fn(async () => null), revision: 12 },
+            groupOf: () => ["scope"],
+            line,
+          },
+        ),
+        work({ "View Description/1": open("J1") }, { line }),
+      ]}
+    />,
+  );
+  expect(document.querySelectorAll("[data-work]")).toHaveLength(1);
+  expect(screen.getAllByRole("button", { name: /^plan r12/ })).toHaveLength(1);
+  expect(document.body.textContent).toContain("1 proposed");
+  expect(document.body.textContent).toContain("1 staged");
+  review();
+  expect(rows()).toEqual(["scope", "View Description"]);
+});
+
+test("F-B-5a · a head plan refused in its hosted route is said on the head line where it was pressed", async () => {
+  const { ChatPlanIntent, useChatPlanIntent } = await import("#/route/situation");
+  const { renderHook, waitFor } = await import("@testing-library/react");
+  const refused = vi.fn();
+  const commit = {
+    label: "plan",
+    says: "",
+    refusal: null,
+    count: null,
+    run: async () => ({
+      code: "not-ready" as const,
+      message: "choose the pod the run is filed in",
+    }),
+  };
+  renderHook(
+    () =>
+      useChatPlanIntent(
+        { manifest: { key: "families", work: {} }, work: { current: {} } } as never,
+        commit,
+      ),
+    {
+      wrapper: ({ children }) => (
+        <ChatPlanIntent.Provider value={{ route: "families", take: () => true, refused }}>
+          {children}
+        </ChatPlanIntent.Provider>
+      ),
+    },
+  );
+  await waitFor(() => expect(refused).toHaveBeenCalledWith("choose the pod the run is filed in"));
+
+  render(
+    <ProposalHead
+      asks={[]}
+      works={[work({ "a/1": staged("x") }, { refusal: "choose the pod the run is filed in" })]}
+    />,
+  );
+  const line = document.querySelector("[data-work]")!;
+  expect(line.textContent).toContain("plan refused");
+  expect(line.textContent).toContain("choose the pod the run is filed in");
+});

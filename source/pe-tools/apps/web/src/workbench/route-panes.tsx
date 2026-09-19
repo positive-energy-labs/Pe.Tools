@@ -3,7 +3,7 @@
  * view owns no URL (the pane and its focus live in the Chat URL) and draws no document picker (the
  * target is the thread head's). Opening, switching or closing the pane is not a turn event.
  */
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ContextType, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { LiveScheduleGridWorkspace } from "#/route/schedules/live";
@@ -37,7 +37,7 @@ const views: Record<ChatPluginRoute, View> = {
 export function useChatPluginHost(
   plugin: ChatPluginRoute | undefined,
   thread: string,
-  intent: { route: string; take: () => boolean } | null = null,
+  intent: ContextType<typeof ChatPlanIntent> = null,
   focus: readonly string[] | null = null,
 ) {
   const [homes, setHomes] = useState<ReadonlyMap<ChatPluginRoute, HTMLElement>>(new Map());

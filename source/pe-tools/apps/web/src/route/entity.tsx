@@ -96,6 +96,8 @@ export function EntityRouteView({
     ? sheetOf(def, { work: handle.work, readings: handle.readings, page } as never)
     : null;
   const closed = { confirming: false, sheet: null };
+  // A sheet over no spec (the staged cells') draws no spec absence lines (F-B-6).
+  const specless = confirming && !page.path;
   // Field options come from the document this route acts on, read-only (user verdict, grill 2).
   const optionsFrom =
     handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
@@ -124,7 +126,7 @@ export function EntityRouteView({
             picked: (id) => id === page.pod,
             pick: (id) => setPage({ pod: id, path: "", ...closed }),
           },
-          ...(page.stage === "apply" || def.specPicker === "always"
+          ...((page.stage === "apply" && !specless) || def.specPicker === "always"
             ? [
                 {
                   key: "spec",
@@ -203,7 +205,7 @@ export function EntityRouteView({
         resize={{ target: "end", defaultSize: 520, minSize: 320, persist: `${def.key}:spec` }}
         start={children}
         end={
-          page.stage === "audit" ? null : (
+          page.stage === "audit" && !confirming ? null : (
             <Pane
               kind="inspector"
               title={confirming ? "plan" : "spec"}
@@ -232,19 +234,21 @@ export function EntityRouteView({
                   busy={handle.busy !== null}
                 />
               ) : null}
-              <SpecEditor
-                member={page.pod && page.path ? { pod: page.pod, path: page.path } : null}
-                // A just-captured member is this route's spec before the pod list re-reads.
-                schema={
-                  member ? member.schema : new URL([def.schema].flat()[0]!, location.origin).href
-                }
-                fixture={fixture}
-                optionsFrom={optionsFrom}
-                onSaved={(ref) => {
-                  refreshPods();
-                  setPage({ pod: ref.pod, path: ref.path, ...closed });
-                }}
-              />
+              {specless ? null : (
+                <SpecEditor
+                  member={page.pod && page.path ? { pod: page.pod, path: page.path } : null}
+                  // A just-captured member is this route's spec before the pod list re-reads.
+                  schema={
+                    member ? member.schema : new URL([def.schema].flat()[0]!, location.origin).href
+                  }
+                  fixture={fixture}
+                  optionsFrom={optionsFrom}
+                  onSaved={(ref) => {
+                    refreshPods();
+                    setPage({ pod: ref.pod, path: ref.path, ...closed });
+                  }}
+                />
+              )}
             </Pane>
           )
         }

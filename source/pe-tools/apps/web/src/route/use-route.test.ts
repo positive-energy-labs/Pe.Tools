@@ -184,3 +184,47 @@ test("a verb in flight past its bound ends as stopped, releases busy, and its la
   expect(runs).toBe(1);
   owner.dispose();
 });
+
+test("F-B-7: a partial apply logs as partly applied, never refused", async () => {
+  const { applyOutcome } = await import("#/families/apply-outcome");
+  const registry = AtomRegistry.make();
+  const owner = createRouteOwner("test", registry);
+  const receipt = (familyName: string, success: boolean) => ({
+    familyId: 1,
+    familyName,
+    success,
+    converged: success,
+    error: success ? null : "Family loading failed.",
+    residue: [],
+    errors: [],
+  });
+  const action = {
+    kind: "workflow",
+    id: "a",
+    key: "families.apply",
+    actor: "human",
+    request: {},
+    bases: {},
+    state: "succeeded",
+    result: {},
+    steps: [
+      {
+        key: "families.apply",
+        state: "succeeded",
+        result: { receipts: [receipt("Exhaust", true), receipt("Supply", false)] },
+      },
+    ],
+  };
+  await owner.runAction(
+    "apply",
+    async () => applyOutcome([{ families: ["Exhaust", "Supply"], action } as never], 2),
+    undefined,
+    undefined,
+    "apply families",
+  );
+  const [line] = registry.get(owner.log);
+  expect(`${line!.label} · ${line!.says}`).toBe(
+    "apply families · partly applied: 1 written, 1 refused; failed: Supply (Family loading failed.)",
+  );
+  owner.dispose();
+});

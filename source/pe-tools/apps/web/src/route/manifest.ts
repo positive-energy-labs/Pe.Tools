@@ -526,7 +526,9 @@ export function entityRoute<W, const R extends string, P extends object, const A
       const sheet = stagedCount(ctx)
         ? { ...(await staged!.plan(ctx as never)), staged: read }
         : await plan!.read(ctx as never, sourceOf(ctx));
-      ctx.setPage({ stage: "apply", confirming: true, sheet });
+      // Staged cells are planned where they are edited: the sheet opens over that stage, so
+      // cancel leaves the cells editable and the draft verbs offered (F-B-8).
+      ctx.setPage({ ...(stagedCount(ctx) ? {} : { stage: "apply" }), confirming: true, sheet });
     },
   };
   const apply: RouteAction<unknown, string, EntityPage, never> = {

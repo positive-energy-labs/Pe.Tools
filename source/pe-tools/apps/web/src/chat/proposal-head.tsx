@@ -41,6 +41,10 @@ export interface HeadWork {
   commit: { word: string; run: () => void };
   /** Open the route in the plugin pane, scoped to a group path or unscoped. */
   open: (focus?: readonly string[]) => void;
+  /** Works sharing a line are one Work in two segments: one head line, one commit (F-B-4). */
+  line?: string;
+  /** The head's plan, refused where it ran; said here, where it was pressed (F-B-5). */
+  refusal?: string;
 }
 
 const REST_WORKS = 3;
@@ -105,15 +109,18 @@ function Counts({ proposed, staged, contested }: ReturnType<typeof countWords>) 
 
 export function ProposalHead({ asks, works }: { asks: readonly ReactNode[]; works: HeadWork[] }) {
   const [all, setAll] = useState(false);
-  const live = works.filter((work) => Object.values(work.cells).some(pending));
+  const lines = new Map<string, HeadWork[]>();
+  for (const work of works.filter((one) => Object.values(one.cells).some(pending)))
+    lines.set(work.line ?? work.id, [...(lines.get(work.line ?? work.id) ?? []), work]);
+  const live = [...lines.values()];
   if (!asks.length && !live.length) return null;
   const shown = all || live.length <= REST_WORKS ? live : live.slice(0, REST_WORKS);
-  const rest = live.slice(shown.length).map((work) => countWords(headGroups(work)));
+  const rest = live.slice(shown.length).map((parts) => countWords(parts.flatMap(headGroups)));
   return (
     <div aria-label="Pea proposals" className="hairline-t hairline-b flex flex-col py-1 t-prose">
       {asks}
-      {shown.map((work) => (
-        <WorkLine key={work.id} work={work} />
+      {shown.map((parts) => (
+        <WorkLine key={parts[0]!.id} parts={parts} />
       ))}
       {rest.length ? (
         <Press tone="quiet" size="value" onClick={() => setAll(true)}>
@@ -130,10 +137,11 @@ export function ProposalHead({ asks, works }: { asks: readonly ReactNode[]; work
   );
 }
 
-function WorkLine({ work }: { work: HeadWork }) {
+function WorkLine({ parts }: { parts: HeadWork[] }) {
   const [open, setOpen] = useState(false);
-  const groups = headGroups(work);
-  const counts = countWords(groups);
+  const work = parts[0]!;
+  const groups = parts.map(headGroups);
+  const counts = countWords(groups.flat());
   return (
     <div className="flex flex-col" data-work={work.id}>
       <div className="flex flex-wrap items-baseline gap-x-3 py-0.5">
@@ -163,7 +171,12 @@ function WorkLine({ work }: { work: HeadWork }) {
           />
         </span>
       </div>
-      {open ? <Groups work={work} groups={groups} /> : null}
+      {work.refusal ? (
+        <OutcomeLine kind="refused" label={`${work.commit.word} refused`} says={work.refusal} />
+      ) : null}
+      {open
+        ? parts.map((part, index) => <Groups key={part.id} work={part} groups={groups[index]!} />)
+        : null}
     </div>
   );
 }
