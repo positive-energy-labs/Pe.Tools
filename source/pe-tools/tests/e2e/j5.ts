@@ -1,6 +1,6 @@
 // E2E-J5 · An ask lives exactly as long as its turn. Real host, real Pea; no Revit.
 // Red break: drop the `new-turn` expiry → the old question stays in the head after the new message.
-import { expectText, journey, requirePea, sendChat, WEB } from "./cdp.ts";
+import { expectText, journey, requirePea, setPea, sendChat, WEB } from "./cdp.ts";
 
 const HEAD = '[aria-label="Pea proposals"]';
 const COMPOSER = 'textarea[aria-label="Message"]';
@@ -10,6 +10,7 @@ await journey("J5", async (page, step) => {
   await page.open(`${WEB}/chat`);
   await page.click("new");
   await page.waitText("NO MESSAGES IN THIS THREAD YET");
+  await setPea(page);
   await requirePea(page);
 
   step("type an ask-provoking message + Enter");

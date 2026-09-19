@@ -389,6 +389,30 @@ export async function requirePea(page: Page) {
   if (access !== "Trusted") throw new Error(`BLOCKED: access is "${access}", not "Trusted"`);
 }
 
+/**
+ * Setup, not an assertion (lead-approved): a new thread starts on Pea's default model, so set the
+ * Model chip (E2E_MODEL, default gpt-5.6-terra) and Trusted access through the real pickers.
+ * requirePea then reads the chips back from the DOM.
+ */
+export async function setPea(page: Page, model = process.env.E2E_MODEL ?? "gpt-5.6-terra") {
+  await page.until(
+    async () => {
+      const label = await chip(page, "Model");
+      return label && label !== "model";
+    },
+    "the Model chip to load",
+    30_000,
+  );
+  const pick = async (name: string, option: RegExp, want: string) => {
+    if ((await chip(page, name)).startsWith(want)) return;
+    await page.clickAt(`[role=combobox][aria-label="${name}"]`);
+    await page.click(option);
+    await page.until(async () => (await chip(page, name)).startsWith(want), `${name} = ${want}`, 10_000);
+  };
+  await pick("Model", new RegExp(`^${model.replace(/[.]/g, "\\.")}\\b`), model);
+  await pick("Access", /^Trusted\b/, "Trusted");
+}
+
 const COMPOSER = 'textarea[aria-label="Message"]';
 const CREDIT = /quota|credit|billing|insufficient|rate.?limit|not logged in|not supported|model/i;
 

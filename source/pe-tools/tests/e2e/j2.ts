@@ -1,7 +1,7 @@
 // E2E-J2 · A group accept never overwrites the person. Chat + families pane, real Revit (slot).
 // E2E_ROWS = 3 rows of one group; E2E_PARAM; E2E_VALUE = Pea's value; E2E_MINE = the person's.
 // Red break: remove the `contested` skip from aggregate accept → the cell shows Pea's value staged.
-import { expectText, journey, requirePea, requireRevit, revit, sendChat } from "./cdp.ts";
+import { expectText, journey, requirePea, setPea, requireRevit, revit, sendChat } from "./cdp.ts";
 
 const HEAD = '[aria-label="Pea proposals"]';
 const { rows, param, value: pea } = revit;
@@ -15,6 +15,7 @@ await journey("J2", async (page, step) => {
   await page.open(revit.url("/chat?plugin=families"));
   await page.click("new");
   await requireRevit(page);
+  await setPea(page);
   await requirePea(page);
 
   step(`type "${mine}" in ${rows[0]!.join("/")} × ${param} + Enter`);

@@ -1,7 +1,7 @@
 // E2E-J1 · Pea's bulk proposal reaches Revit through the person. Chat + families pane, real
 // Revit (joint-hold slot). E2E_ROWS = 3 [family, type] rows; E2E_PARAM/E2E_VALUE the change.
 // Red break: revert the plan-plugin wiring so `plan` navigates to /families → (d) fails.
-import { expectText, journey, requirePea, requireRevit, revit, sendChat } from "./cdp.ts";
+import { expectText, journey, requirePea, setPea, requireRevit, revit, sendChat } from "./cdp.ts";
 
 const HEAD = '[aria-label="Pea proposals"]';
 const SHEET = '[aria-label="Confirmation sheet"]';
@@ -14,6 +14,7 @@ await journey("J1", async (page, step) => {
   await page.open(revit.url("/chat?plugin=families"));
   await page.click("new");
   await requireRevit(page);
+  await setPea(page);
   await requirePea(page);
 
   step(`type "${ask}" + Enter; wait for the turn to settle`);

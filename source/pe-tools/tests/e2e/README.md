@@ -4,7 +4,7 @@ Rules (rulings-1640 §1): act only through real controls with trusted input, ass
 
 ## Before any Pea step (user note, 2026-09-18)
 
-- **Preconditions:** the Chat Model chip names an OpenAI model and the Access chip reads `Trusted`. `requirePea()` reads both chips and fails as `BLOCKED` if either is wrong. Fix the setting; it is not a product defect.
+- **Preconditions:** the Chat Model chip names an OpenAI model and the Access chip reads `Trusted`. `requirePea()` reads both chips and fails as `BLOCKED` if either is wrong. Fix the setting; it is not a product defect. A new thread starts on Pea's default model, so J1, J2 and J5 first run `setPea()`: setup (lead-approved), not an assertion. It picks `E2E_MODEL` (default `gpt-5.6-terra`) and `Trusted` through the real pickers with trusted clicks, and `requirePea()` then reads both chips back from the DOM.
 - **Sending:** a send is refused while a turn runs, by design. `sendChat()` waits for the turn to settle, else cancels through the real `cancel` control, then sends and waits for the turn to settle. Only J5 sends over a parked ask on purpose.
 - **Cost:** each Pea turn spends the user's OpenAI credit. Run a journey once, when it is ready. Never loop a Pea turn to debug a selector; debug selectors on a non-Pea route.
 - **Failures:** a turn that fails for credit or model reasons reports `BLOCKED: <exact status message>`, not a product failure.
