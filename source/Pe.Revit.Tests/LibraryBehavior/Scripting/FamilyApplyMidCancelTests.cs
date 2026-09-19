@@ -65,8 +65,8 @@ public sealed class FamilyApplyMidCancelTests {
                 Assert.That(result.Receipts.Select(r => (r.FamilyId, r.Success)), Is.EqualTo(new[] { (first, true) }));
                 Assert.That(result.Diagnostics.Single(d => d.Code == "Cancelled").Message, Does.Contain($"Not started: {second}"));
                 Assert.That(Outcome(result.ReceiptPath!), Is.EqualTo("Cancelled"));
-                Assert.That(ProofValues(project, "Mid cancel first"), Is.All.EqualTo("kept"), "Cancelled is not rollback.");
-                Assert.That(ProofValues(project, "Mid cancel second"), Is.Null, "The second family never started.");
+                Assert.That(ProofValues(project, first), Is.All.EqualTo("kept"), "Cancelled is not rollback.");
+                Assert.That(ProofValues(project, second), Is.Null, "The second family never started.");
             });
         } finally { RevitFamilyFixtureHarness.CloseDocument(project); PodRunInputTests.DeletePod(pod); }
     }
@@ -93,9 +93,13 @@ public sealed class FamilyApplyMidCancelTests {
         finally { RevitFamilyFixtureHarness.CloseDocument(family); }
     }
 
-    /// <summary>The Proof value of every type of the named loaded family, or null when it has no Proof parameter.</summary>
-    private static List<string>? ProofValues(Document project, string name) {
-        var family = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>().Single(f => f.Name == name);
+    /// <summary>The Proof value of every type of the loaded family with this id, or null when it has no Proof parameter.</summary>
+    private static List<string>? ProofValues(Document project, long familyId) {
+        if (project.GetElement(new ElementId(familyId)) is not Family family) {
+            var loaded = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>()
+                .Select(f => $"{f.Name} ({f.Id.Value()})");
+            throw new AssertionException($"Family {familyId} is no longer in the project. Loaded families: {string.Join(", ", loaded)}");
+        }
         var edit = project.EditFamily(family);
         try {
             var proof = edit.FamilyManager.get_Parameter("Proof");
