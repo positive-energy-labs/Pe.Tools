@@ -70,7 +70,8 @@ await journey("J5", async (page, step) => {
   );
   expectText(
     await page.text(),
-    "Ask User — expired, unanswered",
+    // The tool name and its record are separate elements on one visual row; innerText splits them.
+    /Ask User\s+— expired, unanswered/,
     "transcript shows the expired record",
   );
   if (await page.has("red"))
