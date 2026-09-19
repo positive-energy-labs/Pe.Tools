@@ -1130,6 +1130,10 @@ export function useRoute<W, R extends string, P, A extends string>(
       if (seed) return "frozen seed is read-only";
       const target = targetRefusal(action.needs);
       if (target) return target;
+      // Read and absent is a state of the world, not a loading one: say it (F-X-2). The first
+      // authored write (a selection, a staged cell) initializes the Work.
+      if (action.requires?.work && workCurrent && doc?.doc === null)
+        return "nothing authored here yet";
       if (action.requires?.work && (!doc || doc.doc === null))
         return "route document is not hydrated";
       if (action.requires?.work && !workCurrent) return "route document is not current";
