@@ -6,7 +6,13 @@ import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { ActionButton } from "#/components/lang/action-button";
-import { fanOutWord, ReviewRow, runFanOut, type FanOutOutcome } from "#/components/lang/band";
+import {
+  fanOutWord,
+  ReviewRow,
+  runFanOut,
+  UnstageAll,
+  type FanOutOutcome,
+} from "#/components/lang/band";
 import { ValueDiff } from "#/components/lang/value-diff";
 import type { Column } from "#/components/master-table/model";
 import { Table } from "#/components/master-table/table";
@@ -263,6 +269,7 @@ export function FamiliesProposalsBand() {
             reason="Clear every proposal on this table in one write. Staged values stay."
             onClick={() => all("deny")}
           />
+          <UnstageAll wire={wire} cells={cells} keys={keys} done={setOutcome} />
         </span>
       </div>
       {/* F-R4-1: staging never moves the grid under the person. The band is always drawn and its

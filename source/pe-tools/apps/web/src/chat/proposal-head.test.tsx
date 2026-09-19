@@ -206,3 +206,27 @@ test("an ask line sits above the Work lines and is not a cell", () => {
   const region = screen.getByLabelText("Pea proposals");
   expect(region.firstElementChild?.textContent).toBe("⌗ family.capture");
 });
+
+test("F-J1-8: a group's unstage all clears its N staged cells in one write, asking first", async () => {
+  const cells = {
+    "A/1": staged("1"),
+    "A/2": staged("2"),
+    "A/3": contested("pea", "you"),
+    "A/4": open("pea-only"),
+  };
+  const w = work(cells);
+  render(<ProposalHead asks={[]} works={[w]} />);
+  review();
+  const unstage = () => row("A").getByRole("button", { name: /unstage/ });
+  expect(unstage().textContent).toContain("unstage all (3)");
+  // The first press only asks.
+  await act(async () => fireEvent.click(unstage()));
+  expect(unstage().textContent).toContain("unstage 3 staged? press again");
+  expect(w.wire.write).not.toHaveBeenCalled();
+  await act(async () => fireEvent.click(unstage()));
+  expect(w.wire.write).toHaveBeenCalledOnce();
+  const patches = vi.mocked(w.wire.write).mock.calls[0]![0] as { path: string[] }[];
+  // Only staged rungs are written; no proposal is touched.
+  expect(patches.every((patch) => patch.path[2] === "staged")).toBe(true);
+  expect(patches.map((patch) => patch.path[1]).sort()).toEqual(["A/1", "A/2", "A/3"]);
+});

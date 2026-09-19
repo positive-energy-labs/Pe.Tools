@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useHotkeys } from "@tanstack/react-hotkeys";
 import {
   availableTransitions,
   fanOut,
@@ -19,6 +20,8 @@ import {
   type StateCellProps,
 } from "#/components/lang/cell";
 import { Press } from "#/components/lang/press";
+import { ActionButton } from "#/components/lang/action-button";
+import { keyMeta } from "#/route/keys";
 
 export interface WorkBandProps {
   count: number;
@@ -328,3 +331,71 @@ export const reviewCommit = (
       ? "Nothing staged yet — accept a proposal first"
       : "Write every staged value through — this leaves the page"),
 });
+
+/** How long the unstage confirm waits for its second press. */
+const CONFIRM_MS = 4000;
+
+/**
+ * BULK UNSTAGE (F-J1-8): one `unstage` fanOut over the staged cells among `keys`, where the
+ * aggregate accept/deny live. It removes the person's own work, so it asks on the SAME control:
+ * the first press arms it ("unstage N staged? press again") for about 4 s, Escape cancels, and only
+ * the second press writes. The unstage transition's own rule decides what it covers; Pea's
+ * proposals on those cells stay.
+ */
+export function UnstageAll({
+  wire,
+  cells,
+  keys,
+  done,
+}: {
+  wire: CellWire;
+  cells: Record<string, TrichotomyCellLike>;
+  keys: readonly string[];
+  done: (outcome: FanOutOutcome) => void;
+}) {
+  const staged = useMemo(
+    () =>
+      fanOut(cells, keys, "unstage", {
+        cellsPath: cellsPath(wire),
+        actor: "human",
+        lockOf: wire.lockOf,
+      }).covered.length,
+    [cells, keys, wire],
+  );
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const lapse = setTimeout(() => setArmed(false), CONFIRM_MS);
+    return () => clearTimeout(lapse);
+  }, [armed]);
+  useHotkeys([
+    {
+      hotkey: "Escape",
+      callback: () => setArmed(false),
+      options: {
+        enabled: armed,
+        meta: keyMeta({
+          name: "cancel unstage",
+          description: "cancel the armed unstage-all before it writes",
+          tier: "widget",
+        }),
+      },
+    },
+  ]);
+  if (!staged) return null;
+  return (
+    <ActionButton
+      label={armed ? `unstage ${staged} staged? press again` : `unstage all (${staged})`}
+      reason={
+        armed
+          ? `Press again to clear your ${staged} staged values in one write; Escape cancels`
+          : `Clear your ${staged} staged values in one write (asks first); Pea's proposals stay`
+      }
+      onClick={() => {
+        if (!armed) return setArmed(true);
+        setArmed(false);
+        void runFanOut(wire, cells, keys, "unstage").then(done);
+      }}
+    />
+  );
+}

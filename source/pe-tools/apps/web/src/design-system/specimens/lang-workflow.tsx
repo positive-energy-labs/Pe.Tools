@@ -8,6 +8,7 @@ import {
   reviewAddresses,
   reviewCommit,
   ReviewRow,
+  UnstageAll,
   WorkBand,
   type CellWire,
 } from "#/components/lang/band";
@@ -41,7 +42,13 @@ export function LangWorkflowSpecimens() {
           <Kbd mute>Esc</Kbd>
         </div>
       </SpecimenFrame>
-      <SpecimenFrame name="WorkBand · ReviewRow" importPath="#/components/lang/band">
+      <SpecimenFrame name="WorkBand · ReviewRow · UnstageAll" importPath="#/components/lang/band">
+        <UnstageAll
+          wire={wire}
+          cells={REVIEW_SPECIMEN}
+          keys={Object.keys(REVIEW_SPECIMEN)}
+          done={noop}
+        />
         <WorkBand
           count={2}
           noun="edit"

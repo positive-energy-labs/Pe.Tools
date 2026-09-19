@@ -10,7 +10,13 @@ import { Check, X } from "lucide-react";
 import { fanOut, summarize, type CellGroup, type TrichotomyCellLike } from "@pe/agent-contracts";
 
 import { ActionButton } from "#/components/lang/action-button";
-import { fanOutWord, runFanOut, type CellWire, type FanOutOutcome } from "#/components/lang/band";
+import {
+  fanOutWord,
+  runFanOut,
+  UnstageAll,
+  type CellWire,
+  type FanOutOutcome,
+} from "#/components/lang/band";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Press } from "#/components/lang/press";
 
@@ -274,6 +280,7 @@ function GroupRow({
               onClick={() => act("deny")}
             />
           ) : null}
+          <UnstageAll wire={work.wire} cells={work.cells} keys={keys} done={done} />
           <Press
             tone="nav"
             size="value"
