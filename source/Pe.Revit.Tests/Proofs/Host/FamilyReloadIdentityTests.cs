@@ -5,12 +5,12 @@ using Pe.Revit.Extensions.FamDocument;
 namespace Pe.Revit.Tests;
 
 /// <summary>
-///     Family element identity across a value-only reload (mid-cancel run: families.apply replaced Family 1235365 with 1237003;
-///     w8 saw "a family's element id changes on every successful apply"). Settled direction: stable identity. Each arm adds
-///     one layer of our path onto a bare Revit reload, so the first arm that loses an id names the cause:
-///     bare-load (EditFamily → LoadFamily, no edit), bare-edit-load (+ one committed value edit), visit (FamilyVisit.Run:
-///     open gate, transaction group, failure scope), apply (FamilyFoundryBridgeOps.ApplyFamilies: plan, reconcile, receipt).
-///     Ids are printed as [PE_FAMILY_RELOAD_IDS] so a red arm still reports what changed.
+///     Family identity across a value-only reload, the ruled behavior (2026-09-19, hold 4 `guid-native4/run2.json`). Revit itself
+///     gives an EDITED family a new Family element on LoadFamily (new id and UniqueId), while its FamilySymbol ids, placed instances
+///     and name are kept; an unedited reload keeps everything. So a loaded family's stable identity is its name in the document,
+///     symbol and instance ids stay id-keyed, and the receipt pair `familyId` → `loadedFamilyId` is the one old→new map.
+///     Arms: bare-load (EditFamily → LoadFamily, no edit), bare-edit-load (+ one committed value edit, plain API), visit
+///     (FamilyVisit.Run), apply (FamilyFoundryBridgeOps.ApplyFamilies).
 /// </summary>
 [TestFixture]
 public sealed class FamilyReloadIdentityTests {
@@ -24,7 +24,7 @@ public sealed class FamilyReloadIdentityTests {
     [TestCase("bare-edit-load")]
     [TestCase("visit")]
     [TestCase("apply")]
-    public void Family_symbol_and_instance_ids_survive_a_value_only_reload(string arm) {
+    public void A_reload_keeps_name_symbols_and_instances_and_the_receipt_maps_the_family_id(string arm) {
         var app = this._ui.Application;
         var directory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory($"{nameof(FamilyReloadIdentityTests)}-{arm}");
         var familyDocument = RevitFamilyFixtureHarness.CreateFamilyDocument(app, BuiltInCategory.OST_GenericModel, FamilyName);
@@ -50,8 +50,8 @@ public sealed class FamilyReloadIdentityTests {
                 instance = project.Create.NewFamilyInstance(XYZ.Zero, symbol, StructuralType.NonStructural);
                 Assert.That(t.Commit(), Is.EqualTo(TransactionStatus.Committed));
             }
-            var instanceId = instance.Id;
-            var before = Ids(project, instanceId);
+            var before = Ids(project, instance.Id);
+            long? mappedTo = null;
 
             switch (arm) {
                 case "bare-load":
@@ -64,7 +64,7 @@ public sealed class FamilyReloadIdentityTests {
                             edit.FamilyManager.Set(edit.FamilyManager.get_Parameter("Proof"), "x");
                             _ = t.Commit();
                         }
-                        _ = edit.LoadFamily(project, new DefaultFamilyLoadOptions());
+                        mappedTo = edit.LoadFamily(project, new DefaultFamilyLoadOptions()).Id.Value();
                     } finally { _ = edit.Close(false); }
                     break;
                 }
@@ -72,6 +72,7 @@ public sealed class FamilyReloadIdentityTests {
                     var result = FamilyVisit.Run(project, family,
                         scope => scope.Edit("Value", d => d.FamilyManager.Set(d.FamilyManager.get_Parameter("Proof"), "x")));
                     Assert.That(result.Verified, Is.True, result.Message);
+                    mappedTo = result.Loaded!.Id.Value();
                     break;
                 }
                 case "apply": {
@@ -81,21 +82,36 @@ public sealed class FamilyReloadIdentityTests {
                     var receipt = FamilyFoundryBridgeOps.ApplyFamilies(patch, new Dictionary<long, string> { [id] = plan.PlanHash }, project, null, null,
                         Path.Combine(directory, "apply")).Receipts.Single();
                     Assert.That(receipt.Success && receipt.Converged, Is.True, receipt.Error);
+                    Assert.That(receipt.FamilyId, Is.EqualTo(before.Family), "familyId is the id the apply was asked for");
+                    Assert.That(receipt.FamilyName, Is.EqualTo(FamilyName));
+                    mappedTo = receipt.LoadedFamilyId;
                     break;
                 }
             }
 
-            var after = Ids(project, instanceId);
+            var after = Ids(project, instance.Id);
             Console.WriteLine($"[PE_FAMILY_RELOAD_IDS] {arm} before={before} after={after}");
-            Assert.That(after, Is.EqualTo(before), "Family, FamilySymbol and instance identity must survive a value-only reload.");
+            Assert.Multiple(() => {
+                Assert.That(after.Symbols, Is.EqualTo(before.Symbols), "type ids are kept");
+                Assert.That(after.Instance, Is.EqualTo(before.Instance), "the placed instance is kept");
+                Assert.That(after.InstanceSymbol, Is.EqualTo(before.InstanceSymbol), "the instance keeps its type");
+                Assert.That(mappedTo, Is.EqualTo(after.Family), "the load (for apply: the receipt's loadedFamilyId) names the Family element there now");
+                if (arm == "bare-load")
+                    Assert.That(after.Family, Is.EqualTo(before.Family), "an unedited reload keeps the Family element");
+            });
         } finally { RevitFamilyFixtureHarness.CloseDocument(project); }
     }
 
-    /// <summary>Family id and UniqueId, its symbol ids, and the placed instance's id and symbol id, as one comparable line.</summary>
-    private static string Ids(Document project, ElementId instanceId) {
+    private sealed record Identity(long Family, string FamilyUniqueId, string Symbols, long? Instance, long? InstanceSymbol) {
+        public override string ToString() => $"family {this.Family} {this.FamilyUniqueId} symbols [{this.Symbols}] instance {this.Instance} symbol {this.InstanceSymbol}";
+    }
+
+    /// <summary>Found by NAME, the ruled identity; everything else is read off it.</summary>
+    private static Identity Ids(Document project, ElementId instanceId) {
         var family = new FilteredElementCollector(project).OfClass(typeof(Family)).Cast<Family>().Single(f => f.Name == FamilyName);
-        var symbols = string.Join(",", family.GetFamilySymbolIds().Select(i => i.Value()).OrderBy(i => i));
         var instance = project.GetElement(instanceId) as FamilyInstance;
-        return $"family {family.Id.Value()} {family.UniqueId} symbols [{symbols}] instance {(instance is null ? "gone" : $"{instance.Id.Value()} symbol {instance.Symbol.Id.Value()}")}";
+        return new Identity(family.Id.Value(), family.UniqueId,
+            string.Join(",", family.GetFamilySymbolIds().Select(i => i.Value()).OrderBy(i => i)),
+            instance?.Id.Value(), instance?.Symbol.Id.Value());
     }
 }
