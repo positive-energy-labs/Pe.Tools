@@ -11,13 +11,17 @@ import {
 describe("familiesRouteState", () => {
   it("is authored Work and nothing else: no plan, no receipts, no observation keys", () => {
     expect(familiesRouteState.schema.parse({})).toEqual({
-      scope: null,
+      scope: {},
       excluded: {},
       cells: {},
     });
-    // Pea may propose, but only a person stages.
+    // Old Work held a bare filter (or null) as its scope: it fails closed, never reads as unscoped.
+    const filter = { categoryNames: [], familyNames: [], placementScope: "AllLoaded" };
+    for (const scope of [null, filter])
+      expect(familiesRouteState.schema.safeParse({ scope }).success).toBe(false);
+    // Pea may propose, but only a person stages: the scope too (F-J1-10).
     expect(familiesRouteState.agentWriteMask).toEqual([
-      ["scope"],
+      ["scope", "proposal"],
       ["excluded"],
       ["cells", "*", "proposal"],
       ["executionOptions"],

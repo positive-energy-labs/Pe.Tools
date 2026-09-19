@@ -8,6 +8,7 @@ import {
   address,
   familiesRouteState,
   familyCellKey,
+  stagedScope,
   familyDraftRouteState,
   familyStagedPatch,
   type FamilyCellState,
@@ -284,11 +285,13 @@ async function authorFamilies(work: RouteWorkspace, revision = 0, where = scope)
     "human",
     [
       {
-        path: ["scope"],
+        path: ["scope", "staged"],
         value: {
-          categoryNames: ["Ducts"],
-          familyNames: ["Box", "Pipe"],
-          placementScope: "AllLoaded",
+          value: {
+            categoryNames: ["Ducts"],
+            familyNames: ["Box", "Pipe"],
+            placementScope: "AllLoaded",
+          },
         },
       },
     ],
@@ -384,7 +387,7 @@ test("plan sends the scope's resolved names, names what apply would send, and re
   const bare = await work.apply(scope, "families", "human", [{ path: ["excluded"], value: {} }], 0);
   const refused = await admit("families.plan", { source }, bare.revision!);
   expect(refused.state).toBe("failed");
-  expect(String((refused as { error?: string }).error)).toMatch(/Author a scope/);
+  expect(String((refused as { error?: string }).error)).toMatch(/Stage a scope/);
   const revision = await authorFamilies(work, bare.revision!);
   const held = await work.apply(
     scope,
@@ -397,6 +400,28 @@ test("plan sends the scope's resolved names, names what apply would send, and re
   expect(sent.find((s) => s.key === "families.plan")!.input.familyNames).toEqual(["Box", "Pipe"]);
   expect(plan.plan.map((row) => row.familyId)).toEqual([1, 2]);
   expect(plan.included).toEqual({ "1": "h1" });
+});
+
+test("F-J1-10: plan reads the person's staged scope, never Pea's proposed one", async () => {
+  const { work, admit, entries, sent } = await setup();
+  entries([entry(1, "Box", "h1"), entry(2, "Pipe", "h2"), entry(3, "Elbow", "h3")]);
+  const authored = await authorFamilies(work);
+  const elbow = { categoryNames: ["Ducts"], familyNames: ["Elbow"], placementScope: "AllLoaded" };
+  const proposed = await work.apply(
+    scope,
+    "families",
+    "agent",
+    [{ path: ["scope", "proposal"], value: { value: elbow } }],
+    authored,
+  );
+  expect(proposed).toMatchObject({ ok: true });
+  // Pea can never write the person's scope itself.
+  for (const path of [["scope"], ["scope", "staged"]])
+    expect(
+      await work.apply(scope, "families", "agent", [{ path, value: null }], proposed.revision!),
+    ).toMatchObject({ ok: false });
+  resultOf<Plan>(await admit("families.plan", { source }, proposed.revision!));
+  expect(sent.find((s) => s.key === "families.plan")!.input.familyNames).toEqual(["Box", "Pipe"]);
 });
 
 test("plan reads exclusions from the reviewed Work and seals each one with who made it", async () => {
@@ -434,8 +459,10 @@ test("a category-only scope plans exactly its three families and never a fourth"
       "human",
       [
         {
-          path: ["scope"],
-          value: { categoryNames: ["Ducts"], familyNames: [], placementScope: "AllLoaded" },
+          path: ["scope", "staged"],
+          value: {
+            value: { categoryNames: ["Ducts"], familyNames: [], placementScope: "AllLoaded" },
+          },
         },
       ],
       0,
@@ -456,7 +483,13 @@ test("a generated member's plan names its one family and the host plans exactly 
   entries([entry(1, "Box", "h1"), entry(2, "Pipe", "h2"), entry(3, "Elbow", "h3")]);
   const ducts = { categoryNames: ["Ducts"], familyNames: [], placementScope: "AllLoaded" };
   const revision = (
-    await work.apply(scope, "families", "human", [{ path: ["scope"], value: ducts }], 0)
+    await work.apply(
+      scope,
+      "families",
+      "human",
+      [{ path: ["scope", "staged"], value: { value: ducts } }],
+      0,
+    )
   ).revision!;
   const plan = resultOf<Plan>(
     await admit("families.plan", { source, familyNames: ["Pipe"] }, revision),
@@ -483,8 +516,10 @@ test("a scope that resolves no loaded family refuses before the native plan", as
       "human",
       [
         {
-          path: ["scope"],
-          value: { categoryNames: ["Walls"], familyNames: [], placementScope: "AllLoaded" },
+          path: ["scope", "staged"],
+          value: {
+            value: { categoryNames: ["Walls"], familyNames: [], placementScope: "AllLoaded" },
+          },
         },
       ],
       0,
@@ -965,16 +1000,18 @@ test("two documents keep independent authored scopes", async () => {
     "human",
     [
       {
-        path: ["scope"],
-        value: { categoryNames: [], familyNames: ["Grille"], placementScope: "PlacedOnly" },
+        path: ["scope", "staged"],
+        value: {
+          value: { categoryNames: [], familyNames: ["Grille"], placementScope: "PlacedOnly" },
+        },
       },
     ],
     0,
   );
   const here = familiesRouteState.schema.parse((await work.read(scope, "families"))!.doc);
   const there = familiesRouteState.schema.parse((await work.read(otherScope, "families"))!.doc);
-  expect(here.scope?.familyNames).toEqual(["Box", "Pipe"]);
-  expect(there.scope?.familyNames).toEqual(["Grille"]);
+  expect(stagedScope(here)?.familyNames).toEqual(["Box", "Pipe"]);
+  expect(stagedScope(there)?.familyNames).toEqual(["Grille"]);
 });
 
 /* ── parameter links ─────────────────────────────────────────────────────────────────────── */

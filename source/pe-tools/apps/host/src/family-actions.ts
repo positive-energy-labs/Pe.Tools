@@ -42,6 +42,7 @@ import {
   type WorkKey,
   familyCatalogProblem,
   familyCatalogRequest,
+  stagedScope,
 } from "@pe/agent-contracts";
 import type {
   PodMemberSaveRequest,
@@ -563,8 +564,8 @@ export async function admitFamilyAction(
         if (!view || view.revision !== base!.revision)
           throw refused("Current reviewed Families Work is required");
         const doc = familiesRouteState.schema.parse(view.doc);
-        const scope = doc.scope;
-        if (!scope) throw refused("Author a scope before planning");
+        const scope = stagedScope(doc);
+        if (!scope) throw refused("Stage a scope before planning");
         const { specJson, source } = await familySpec(deps, input.source, pods);
         // A generated draft plans one family; it consumes that family's staged cells only if the
         // captured bytes are exactly what those cells generate.

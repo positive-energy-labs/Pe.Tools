@@ -8,6 +8,7 @@ import {
   message,
   refuse,
   sameAddress,
+  stagedScope,
   type Address,
   type AppliedFilter,
   type RouteWriteAdmission,
@@ -32,7 +33,8 @@ export type LoadedFamilies = (
  */
 export function familiesAdmission(loadedFamilies: LoadedFamilies): RouteWriteAdmission {
   return async (doc, patches, { scope: work, actor, prior }) => {
-    const { cells, scope, excluded } = familiesRouteState.schema.parse(doc);
+    const parsed = familiesRouteState.schema.parse(doc);
+    const { cells, excluded } = parsed;
     const before = familiesRouteState.schema.parse(prior).excluded;
     const by = actor === "agent" ? "pea" : "person";
     for (const id of new Set([...Object.keys(before), ...Object.keys(excluded)])) {
@@ -51,6 +53,33 @@ export function familiesAdmission(loadedFamilies: LoadedFamilies): RouteWriteAdm
           "Nothing was written.",
         );
     }
+    // F-J1-10: every scope a write leaves proposed or staged names only families loaded under its
+    // own categories and placement; an unknown name refuses by name.
+    const scopes = patches.some((patch) => !patch.path.length || patch.path[0] === "scope")
+      ? [parsed.scope.proposal?.value, parsed.scope.staged?.value].filter(
+          (written) => written?.familyNames.length,
+        )
+      : [];
+    for (const written of scopes) {
+      let known: Set<string>;
+      try {
+        const loaded = await loadedFamilies(work.target, { ...written!, familyNames: [] });
+        known = new Set(loaded.map((family) => family.familyName));
+      } catch (error) {
+        return refuse(
+          "refused",
+          `The scope's family names cannot be checked against Revit: ${message(error)}`,
+          "Nothing was written. Fix what this names, then write again.",
+        );
+      }
+      const unknown = written!.familyNames.filter((name) => !known.has(name));
+      if (unknown.length)
+        return refuse(
+          "refused",
+          `the scope names ${unknown.length} famil${unknown.length > 1 ? "ies" : "y"} not loaded under its categories and placement: ${unknown.map((name) => JSON.stringify(name)).join(", ")}`,
+          "Nothing was written. A scope names families by their exact loaded name, from revit.catalog.loaded-families.",
+        );
+    }
     const touched = new Set(
       patches.flatMap((patch) =>
         patch.path.length && patch.path[0] !== "cells"
@@ -66,7 +95,7 @@ export function familiesAdmission(loadedFamilies: LoadedFamilies): RouteWriteAdm
     if (!written.length) return null;
     let families: Awaited<ReturnType<LoadedFamilies>>;
     try {
-      families = await loadedFamilies(work.target, scope);
+      families = await loadedFamilies(work.target, stagedScope(parsed));
     } catch (error) {
       return refuse(
         "refused",

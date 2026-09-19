@@ -147,7 +147,12 @@ const liveHost = (): HostCall =>
         ],
       };
     const names: string[] = request.filter?.familyNames ?? [];
-    const families = [exhaust].filter((f) => !names.length || names.includes(f.familyName));
+    const categories: string[] = request.filter?.categoryNames ?? [];
+    const families = [exhaust].filter(
+      (f) =>
+        (!names.length || names.includes(f.familyName)) &&
+        (!categories.length || categories.includes(f.categoryName)),
+    );
     const full = ["Rows", "Full"].includes(request.projection?.view);
     return {
       summary: { truncated: false },
@@ -167,7 +172,7 @@ const liveHost = (): HostCall =>
     };
   }) as HostCall;
 
-function ProjectAWork(familyNames: string[]) {
+function ProjectAWork(familyNames: string[], categoryNames = ["Air Terminals"]) {
   const target = address(projectA);
   const saved = new Map<string, unknown>();
   const work = new RouteWorkspace({
@@ -180,11 +185,18 @@ function ProjectAWork(familyNames: string[]) {
     },
   });
   const at = { route: "families", target };
-  const scoped = { categoryNames: ["Air Terminals"], familyNames, placementScope: "AllLoaded" };
+  const scoped = { categoryNames, familyNames, placementScope: "AllLoaded" };
   return {
     work,
     at,
-    author: () => work.apply(at, "families", "human", [{ path: ["scope"], value: scoped }], 0),
+    author: () =>
+      work.apply(
+        at,
+        "families",
+        "human",
+        [{ path: ["scope", "staged"], value: { value: scoped } }],
+        0,
+      ),
   };
 }
 
@@ -217,8 +229,9 @@ test("F-J1-12: the live catalog loopback admits a key for a type past the tenth,
 });
 
 test("F-J1-12: a scope that resolves to no loaded family refuses with that diagnosis, not a key hint", async () => {
-  const { work, at, author } = ProjectAWork(["Price LBPH15A Exhaust"]);
-  await author();
+  // Nothing is loaded under Walls, e.g. its one family was unloaded after the person staged this.
+  const { work, at, author } = ProjectAWork([], ["Walls"]);
+  expect(await author()).toMatchObject({ ok: true, revision: 1 });
   const refused = await work.apply(at, "families", "agent", [propose("Price LBP15A Exhaust")], 1);
   expect(refused).toMatchObject({ ok: false, kind: "refused" });
   if (refused.ok) return;
@@ -226,4 +239,65 @@ test("F-J1-12: a scope that resolves to no loaded family refuses with that diagn
     "scope resolved to no loaded families: Loaded-family filter matched zero families out of 1.",
   );
   expect(refused.hint).not.toContain("A key is");
+});
+
+const casework = (familyNames: string[]) => ({
+  categoryNames: ["Casework"],
+  familyNames,
+  placementScope: "AllLoaded",
+});
+
+test("F-J1-10: Pea proposes a scope and the person's staged scope is untouched", async () => {
+  const { work } = workspace();
+  const staged = await work.apply(
+    scope,
+    "families",
+    "human",
+    [{ path: ["scope", "staged"], value: { value: casework(["Casework"]) } }],
+    0,
+  );
+  expect(staged).toMatchObject({ ok: true, revision: 1 });
+  const proposed = await work.apply(
+    scope,
+    "families",
+    "agent",
+    [{ path: ["scope", "proposal"], value: { value: casework([]), note: "all casework" } }],
+    1,
+  );
+  expect(proposed).toMatchObject({ ok: true, revision: 2 });
+  for (const path of [["scope"], ["scope", "staged"]])
+    expect(await work.apply(scope, "families", "agent", [{ path, value: null }], 2)).toMatchObject({
+      ok: false,
+    });
+  const { scope: cell } = familiesRouteState.schema.parse(
+    (await work.view(scope, "families"))!.doc,
+  );
+  expect(cell.staged).toEqual({ value: casework(["Casework"]) });
+  expect(cell.proposal).toMatchObject({ value: casework([]) });
+});
+
+test("F-J1-10: a scope write naming an unknown family refuses by name, Pea's or the person's", async () => {
+  const { work } = workspace();
+  for (const [actor, rung] of [
+    ["agent", "proposal"],
+    ["human", "staged"],
+  ] as const) {
+    const refused = await work.apply(
+      scope,
+      "families",
+      actor,
+      [
+        {
+          path: ["scope", rung],
+          value: { value: casework(["Casework", "Price LBPH15A Exhaust"]) },
+        },
+      ],
+      0,
+    );
+    expect(refused).toMatchObject({ ok: false, kind: "refused" });
+    if (refused.ok) continue;
+    expect(refused.error).toContain('"Price LBPH15A Exhaust"');
+    expect(refused.error).not.toContain('"Casework"');
+  }
+  expect((await work.view(scope, "families"))!.revision).toBe(0);
 });

@@ -194,6 +194,9 @@ export function familyStagedPatch(
     : { familyName, spec: { select: { names: [familyName] }, patch: { types } }, keys };
 }
 
+export const familyScopeCellSchema = trichotomyCellSchema(appliedScopeSchema).strict();
+export type FamilyScopeCell = z.infer<typeof familyScopeCellSchema>;
+
 /** Who held a family back. The route door checks it is the writer, so it is never just claimed. */
 export const exclusionAuthorSchema = z.enum(["person", "pea"]);
 export type FamilyExclusions = Record<string, { by: z.infer<typeof exclusionAuthorSchema> }>;
@@ -206,7 +209,11 @@ export type FamilyExclusions = Record<string, { by: z.infer<typeof exclusionAuth
  */
 const familiesDocumentSchema = z
   .object({
-    scope: appliedScopeSchema.nullable().default(null),
+    /**
+     * The audited scope is a cell (F-J1-10): Pea proposes one, only the person stages it, and plan
+     * reads the staged one. A bare filter is old Work, so it fails closed.
+     */
+    scope: familyScopeCellSchema.default({}),
     /**
      * Families held back from plan, keyed by family NAME, each with who held it back. An all-digit
      * key is an old element id, so it fails closed rather than reading as a name.
@@ -222,6 +229,10 @@ const familiesDocumentSchema = z
   })
   .strict();
 export type FamiliesRouteDocument = z.infer<typeof familiesDocumentSchema>;
+
+/** The scope the person staged: the only one the matrix audits and plan resolves. */
+export const stagedScope = (doc: FamiliesRouteDocument): AppliedFilter | null =>
+  doc.scope.staged?.value ?? null;
 
 /**
  * The included plan hashes an apply must reproduce exactly, keyed by the id each name resolved to in
@@ -257,10 +268,15 @@ export const familiesRouteState = {
   route: "families",
   title: "Families",
   description:
-    'Family Foundry: author a scope and propose through cells.<key>.proposal, where <key> is [familyName,typeName,parameter] of a family type loaded in the scope (the family NAME, never an element id). A person stages reviewed cells before plan or apply. Hold a family back with excluded.<familyName> = { by: "pea" }; the plan sheet names who held it back, and only the person lifts their own.',
+    'Family Foundry: propose a scope through scope.proposal = { value: { categoryNames, familyNames, placementScope } } (exact loaded family names); the person stages it, and plan audits only the staged scope. Propose values through cells.<key>.proposal, where <key> is [familyName,typeName,parameter] of a family type loaded in the staged scope (the family NAME, never an element id). A person stages reviewed cells before plan or apply. Hold a family back with excluded.<familyName> = { by: "pea" }; the plan sheet names who held it back, and only the person lifts their own.',
   schema: familiesDocumentSchema,
   // Pea writes proposals only. A staged value reaches plan only through a person's review.
-  agentWriteMask: [["scope"], ["excluded"], ...trichotomyAgentMask(), ["executionOptions"]],
+  agentWriteMask: [
+    ["scope", "proposal"],
+    ["excluded"],
+    ...trichotomyAgentMask(),
+    ["executionOptions"],
+  ],
   // Planning and applying are the `families.plan` and `families.apply` workflows. Neither is
   // a route command, so neither can write into authored Work.
   commands: {},
