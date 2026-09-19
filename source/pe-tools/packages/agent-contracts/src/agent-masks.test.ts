@@ -1,6 +1,6 @@
 /**
- * O-2: until a route's cells cutover, Pea writes nothing a person would commit. Takeoffs,
- * Instances and Parameter Links hold only to-be-committed values, so Pea's mask there is empty.
+ * O-2: until a route's cells cutover, Pea writes nothing a person would commit. Takeoffs and
+ * Parameter Links hold only to-be-committed values, so Pea's mask there is empty.
  */
 import { describe, expect, it } from "vite-plus/test";
 import { scheduleGridRouteState } from "./schedule-grid-data.ts";
@@ -22,7 +22,6 @@ const cases: [RouteStateSpec<z.ZodType>, (string | number)[][]][] = [
       ["reviewFlags", "room-1"],
     ],
   ],
-  [instancesRouteState as never, [["staged"]]],
   [parameterLinksRouteState as never, [["draft"]]],
 ];
 
@@ -67,4 +66,20 @@ it("schedules: Pea proposes a grid cell through the shared contract and cannot s
     ok: false,
     kind: "refused",
   });
+});
+
+it("instances: Pea proposes a launch on the one cell and cannot stage it", () => {
+  const spec = instancesRouteState as unknown as RouteStateSpec<z.ZodType>;
+  const envelope: RouteEnvelope<unknown> = { version: 1, revision: 0, doc: spec.schema.parse({}) };
+  const value = { kind: "start", year: "2025", name: "dev" };
+  const propose = transitionPatches([], "launch", {}, { kind: "propose", rung: { value } });
+  expect(applyPatches(spec, envelope, "agent", propose, 0)).toMatchObject({ ok: true });
+  const stage = transitionPatches([], "launch", {}, { kind: "stage", rung: { value } });
+  expect(applyPatches(spec, envelope, "agent", stage, 0)).toMatchObject({
+    ok: false,
+    kind: "refused",
+  });
+  expect(applyPatches(spec, envelope, "human", stage, 0)).toMatchObject({ ok: true });
+  // The pre-cells shape is not read: strict rejection, never a silent strip.
+  expect(spec.schema.safeParse({ staged: value }).success).toBe(false);
 });
