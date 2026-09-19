@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** F-J3-5b: a Yes/No parameter is a closed choice; free text is refused with its reason. */
+/** F-J3-5b: a Yes/No parameter is a closed choice (CellListSelect); there is no free text. */
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
@@ -44,22 +44,27 @@ function Matrix({ propose }: { propose: (...args: unknown[]) => Promise<void> })
   return <Table rows={[ROW]} columns={columns} rowKey={(r) => r.key} label="families" />;
 }
 
-test("a Yes/No cell refuses free text with a stated reason and stages Yes or No", async () => {
+test("a Yes/No cell is a closed choice: no free-text editor, a pick stages Yes or No", async () => {
   const propose = vi.fn(async () => {});
   const view = render(<Matrix propose={propose} />);
-  const input = view.container.querySelector<HTMLInputElement>("input.dl-cell-input")!;
-  await act(async () => input.focus());
-  fireEvent.change(input, { target: { value: "Noj3-a-1" } });
-  await act(async () => fireEvent.keyDown(input, { key: "Enter" }));
+  const td = view.container.querySelector<HTMLElement>("td[data-master-cell]:last-child")!;
+  // No text editor to type "Noj3-a-1" into: the cell is the in-cell list's button.
+  expect(td.querySelector("input")).toBe(null);
+  expect(td.querySelector("[data-cell-editor]")).not.toBe(null);
+  // A printable key opens the list filtered by it; only the closed choices are offered.
+  await act(async () => td.focus());
+  await act(async () => fireEvent.keyDown(td, { key: "j" }));
   expect(propose).not.toHaveBeenCalled();
-  expect(screen.getByText(/Offset Symbol is Yes\/No/)).toBeTruthy();
-  expect(input.value).toBe("No");
-
-  await act(async () => input.focus());
-  fireEvent.change(input, { target: { value: "yes" } });
-  await act(async () => fireEvent.keyDown(input, { key: "Enter" }));
-  // Enter commits and the blur that follows re-commits the same text; each stages "Yes".
-  expect(propose).toHaveBeenCalled();
-  for (const call of propose.mock.calls as unknown[][])
-    expect(call[1]).toMatchObject({ value: "Yes" });
+  await act(async () => fireEvent.keyDown(td, { key: "Escape" }));
+  await act(async () => fireEvent.keyDown(td, { key: "Enter" }));
+  await vi.waitFor(() => expect(document.querySelector("[data-list-popup]")).not.toBeNull());
+  expect([...document.querySelectorAll('[role="option"]')].map((el) => el.textContent)).toEqual([
+    "Yes",
+    "No",
+  ]);
+  await act(async () =>
+    fireEvent.click(screen.getByText("Yes", { selector: '[role="option"] *, [role="option"]' })),
+  );
+  expect(propose).toHaveBeenCalledOnce();
+  expect((propose.mock.calls[0] as unknown[])[1]).toMatchObject({ value: "Yes" });
 });

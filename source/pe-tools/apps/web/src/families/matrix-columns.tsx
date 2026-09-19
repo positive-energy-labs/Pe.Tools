@@ -9,6 +9,7 @@ import { reviewTransitions, type CellWire } from "#/components/lang/band";
 import { ReadCell } from "#/components/master-table/cells";
 import { useCellNavigation } from "#/components/master-table/cell-navigation";
 import { cellFromTrichotomy, StateCell, type CellTransition } from "#/components/lang/cell";
+import { CellListSelect } from "#/components/lang/list-popup";
 import type { Column, Verdict } from "#/components/master-table/model";
 import type { FamilyParameterSnapshot } from "#/host/loaded-families-view";
 import type { FamiliesStore } from "#/families/store";
@@ -47,14 +48,6 @@ export const isYesNo = (dataTypeId: string | null | undefined) =>
   dataTypeId?.startsWith("autodesk.spec:spec.bool") === true;
 
 const YES_NO = ["Yes", "No"] as const;
-
-/** The typed text as the closed choice it names, or the reason it names none. */
-export function yesNoOf(name: string, text: string): { value: string } | { refusal: string } {
-  const value = YES_NO.find((choice) => choice.toLowerCase() === text.trim().toLowerCase());
-  return value
-    ? { value }
-    : { refusal: `${name} is Yes/No: type Yes or No ("${text}" is neither)` };
-}
 
 type Cluster = "built-in" | "common" | "uncommon" | "project-only";
 
@@ -244,6 +237,39 @@ export function useFamiliesColumns({
           const transitions = cell
             ? reviewTransitions(wire, familyCellKey(address), cell)
             : undefined;
+          if (patchable(row, col.key) && col.yesNo) {
+            // A Yes/No parameter is a closed choice (F-J3-5b): the in-cell list, never free text.
+            // Its face is the cell's own state; accept/deny of a proposal live in the band.
+            const rung = cell?.staged ?? cell?.proposal;
+            const shown = rung ? showFamilyCell(rung.value) : value;
+            return (
+              <CellListSelect<string>
+                aria-label={`${col.name} (Yes/No)`}
+                region="table"
+                value={shown}
+                display={
+                  <StateCell
+                    {...cellFromTrichotomy(
+                      cell ?? { proposal: null, staged: null },
+                      { value: shown, note: reason, scale: "row" },
+                      showFamilyCell,
+                    )}
+                  />
+                }
+                title={`${col.name} is Yes/No: pick Yes or No`}
+                items={[...YES_NO]}
+                keyOf={(choice) => choice}
+                labelOf={(choice) => choice}
+                row={(choice) => ({ label: choice })}
+                select="single"
+                selected={[shown]}
+                empty="no choices"
+                onPick={(choice) =>
+                  void propose(address, { familyName: row.familyName, value: choice }, value)
+                }
+              />
+            );
+          }
           if (patchable(row, col.key)) {
             return (
               <ProposalCell
@@ -251,11 +277,9 @@ export function useFamiliesColumns({
                 reason={reason}
                 cell={cell}
                 transitions={transitions}
-                onCommit={(next) => {
-                  const choice = col.yesNo ? yesNoOf(col.name, next) : { value: next };
-                  if ("refusal" in choice) return choice.refusal;
-                  void propose(address, { familyName: row.familyName, value: choice.value }, value);
-                }}
+                onCommit={(next) =>
+                  void propose(address, { familyName: row.familyName, value: next }, value)
+                }
               />
             );
           }
@@ -321,8 +345,7 @@ export function ProposalCell({
   transitions?: readonly CellTransition[];
   /** Why a patch cannot write this cell; present, the cell draws locked and takes no typing. */
   lock?: string;
-  /** A returned string refuses the edit, said on the cell. */
-  onCommit?: (text: string) => string | void;
+  onCommit?: (text: string) => void;
 }) {
   const move = useCellNavigation();
   const proposal = cell?.proposal;
