@@ -670,6 +670,8 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
   /** The page log, newest first. */
   readonly log: readonly LogEntry[];
   readonly demo: boolean;
+  /** Re-acquire these Readings, as a verb's `dirties` would; a pane's focus edge calls it. */
+  revalidate(keys: readonly R[]): void;
 }
 
 export interface BindingLost {
@@ -1326,5 +1328,9 @@ export function useRoute<W, R extends string, P, A extends string>(
     outcome,
     log,
     demo: seed !== undefined,
+    revalidate: (keys) => {
+      for (const [name, , request] of readingAtoms)
+        if (keys.includes(name as R)) owner.write(name, `dirty/${name}`, () => dirty(request));
+    },
   };
 }

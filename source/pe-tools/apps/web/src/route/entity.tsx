@@ -17,6 +17,7 @@ import { PlanSheetView } from "./plan-sheet";
 import { SpecEditor, type DemoSpec } from "./spec-editor";
 import { LadderPicker, Situation, SituationCell, useDocumentLadder } from "./situation";
 import type { RouteHandle } from "./use-route";
+import type { StageDecl } from "./stage";
 
 type Handle = RouteHandle<any, any, EntityPage, any>;
 
@@ -55,6 +56,7 @@ export function EntityRouteView({
   hold,
   url = true,
   pick,
+  stages,
   children,
 }: {
   def: EntityRouteDef<any, any, any>;
@@ -80,6 +82,12 @@ export function EntityRouteView({
    * open member (`/family`) settles that input first.
    */
   pick?: (member: { pod: string; path: string }) => void;
+  /**
+   * The route's stages, declared (`route/stage.ts`): the row draws each stage's verbs, and the
+   * spec pane shows where the stage names it and takes focus when revealed. Absent = every verb
+   * of the stage, and the spec pane off the audit.
+   */
+  stages?: Readonly<Record<EntityPage["stage"], StageDecl<string, string>>>;
   /** The audit. */
   children: ReactNode;
 }) {
@@ -156,6 +164,7 @@ export function EntityRouteView({
           // With a plan lane the sheet's apply is the one apply button (w8-revit trip 5); the row
           // commits by planning.
           commit={def.plan || def.staged ? "plan" : "apply"}
+          verbs={stages?.[page.stage].verbs}
           band={band}
           startFreshAside={startFreshAside}
           onStartedFresh={onStartedFresh}
@@ -203,9 +212,10 @@ export function EntityRouteView({
         resize={{ target: "end", defaultSize: 520, minSize: 320, persist: `${def.key}:spec` }}
         start={children}
         end={
-          page.stage === "audit" ? null : (
+          (stages ? !stages[page.stage].panes.spec : page.stage === "audit") ? null : (
             <Pane
               kind="inspector"
+              focusOnMount={stages !== undefined}
               title={confirming ? "plan" : "spec"}
               meta={def.entity}
               side="right"
