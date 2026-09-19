@@ -6,6 +6,8 @@ import {
   type ActionControlKey,
   semanticActions,
   familyReads,
+  familiesRouteState,
+  familyCatalogRequest,
   workKeySchema,
   type FamilyReadKey,
   actionBasesSchema,
@@ -56,6 +58,7 @@ import {
   type DocumentRef,
 } from "@pe/agent-contracts";
 import { HostRpcCaller, type ResolvedTarget } from "../shared/host-rpc-caller.ts";
+import type { RevitCatalogLoadedFamilies } from "@pe/host-contracts/generated";
 import { coerceJsonObject } from "../shared/coerce.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
 import { bundledPeaSkills } from "./skills.ts";
@@ -349,6 +352,7 @@ async function runCapability(
       defaultTarget,
       requestIdentity(context),
       turnOf(context)?.id,
+      catalog,
     );
     const turn = turnOf(context);
     const cleanup = !outcome.ok && turn ? await ownedTurnDocuments.releaseCurrent(turn.id) : [];
@@ -374,6 +378,7 @@ async function dispatch(
   defaultTarget: Target,
   requestId: string,
   turnId?: string,
+  catalog?: CapabilityCatalog,
 ): Promise<Outcome> {
   const coerced = coerceJsonObject(input.input);
   const payload: Record<string, unknown> =
@@ -602,7 +607,48 @@ async function dispatch(
         const result = await routeFetch(
           `/pe/route-state/${encodeURIComponent(parsed.route)}?${scope.query}`,
         );
-        return { ok: !("isError" in result), target: scope.target, result };
+        // ponytail: families is the only route keyed by loaded Revit types; generalize when a second route needs it
+        if (parsed.route !== familiesRouteState.route || "isError" in result)
+          return { ok: !("isError" in result), target: scope.target, result };
+        const document = familiesRouteState.schema.safeParse(result.doc).data;
+        const familyScope = document?.scope.staged?.value ?? document?.scope.proposal?.value;
+        if (!familyScope)
+          return {
+            ok: true,
+            target: scope.target,
+            result: { ...result, hint: "Propose scope.proposal first." },
+          };
+        try {
+          const catalogRow = catalog?.capabilities.find(
+            (candidate) => candidate.key === "op:revit.catalog.loaded-families",
+          );
+          if (!catalogRow) throw Error("Loaded-families catalog capability unavailable.");
+          const target = await operationTarget(catalogRow, undefined, defaultTarget);
+          const catalogResult = await new HostRpcCaller({
+            hostBaseUrl: base(),
+            ...target,
+            timeoutMs: input.timeoutSeconds * 1000,
+          }).callOperation("revit.catalog.loaded-families", familyCatalogRequest(familyScope));
+          if (!catalogResult.ok) throw Error(catalogResult.message);
+          const response = catalogResult.response as RevitCatalogLoadedFamilies.Res.Response;
+          return {
+            ok: true,
+            target: scope.target,
+            result: {
+              ...result,
+              scopeTypes: response.families.map((family) => ({
+                familyName: family.familyName,
+                typeNames: family.types.map((type) => type.typeName),
+              })),
+            },
+          };
+        } catch (error) {
+          return {
+            ok: true,
+            target: scope.target,
+            result: { ...result, scopeTypesError: message(error) },
+          };
+        }
       }
       if (row.kind === "route-doc") {
         if (input.expectedRevision === undefined)

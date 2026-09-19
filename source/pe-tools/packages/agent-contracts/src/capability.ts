@@ -24,6 +24,8 @@ export const capabilitySchema = z
     key: z.string().min(1),
     kind: capabilityKindSchema,
     title: z.string(),
+    /** Search words, ranked like capability keys. */
+    finds: z.array(z.string()).optional(),
     /** Routing text — the only place capability prose lives. */
     description: z.string(),
     needs: capabilityNeedsSchema,
@@ -124,11 +126,13 @@ export function findCapabilities(
 function scoreCapability(row: Capability, terms: readonly string[]): number {
   if (terms.length === 0) return 0;
   const key = row.key.toLowerCase();
+  const finds = row.finds?.map((find) => find.toLowerCase()) ?? [];
   const title = row.title.toLowerCase();
   const description = row.description.toLowerCase();
   let score = 0;
   for (const term of terms) {
     if (key.includes(term)) score += 4;
+    if (finds.some((find) => find.includes(term))) score += 4;
     if (title.includes(term)) score += 3;
     if (description.includes(term)) score += 1;
   }
