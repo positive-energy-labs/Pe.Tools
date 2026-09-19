@@ -222,7 +222,7 @@ export async function buildAgentControllerApp(
     const scope = scopeOr400(c, "read");
     if (scope instanceof Response) return scope;
     try {
-      const view = await routeWorkspace.read(scope, c.req.param("route"));
+      const view = await routeWorkspace.view(scope, c.req.param("route"));
       return view
         ? c.json(view)
         : c.json({ error: `unknown route '${c.req.param("route")}'` }, 404);

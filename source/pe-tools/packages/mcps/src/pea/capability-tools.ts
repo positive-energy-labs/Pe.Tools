@@ -110,6 +110,30 @@ const targetQuery = (target: Target): string => {
   return address ? new URLSearchParams({ target: address }).toString() : "";
 };
 
+/**
+ * The route Work a Target keys: its document's Address, as the browser resolves it. Work keys by
+ * Address, so an exact `open` Target is resolved through the live inventory; dropping it read the
+ * Target-less Work instead of the Chat's (E2E-J1). A closed document refuses rather than fall back.
+ */
+async function routeWorkScope(target: Target): Promise<{ query: string; target: ResolvedTarget }> {
+  if (target?.kind !== "open") return { query: targetQuery(target), target: namedTarget(target) };
+  const { sessions } = await new HostRpcCaller({ hostBaseUrl: base(), timeoutMs: 30_000 }).call(
+    "bridge.sessions.list",
+  );
+  const document = sessions
+    .find((session) => session.sessionId === target.ref.session)
+    ?.openDocuments?.find((doc) => doc.openId === target.ref.openId);
+  const address = addressSchema.safeParse(document?.address).data;
+  if (!address)
+    throw Error(
+      "The Chat's document is no longer open, so its route Work has no Address to read; ask the person to pick the document again.",
+    );
+  return {
+    query: new URLSearchParams({ target: address }).toString(),
+    target: { session: target.ref.session, document: address },
+  };
+}
+
 export const peFind = createTool({
   id: "pe_find",
   description:
@@ -567,14 +591,16 @@ async function dispatch(
       const workspaceId =
         parsed.route === "instances" ? (input.workspaceId ?? "instances") : input.workspaceId;
       if (parsed.member === undefined) {
+        const scope = workspaceId
+          ? {
+              query: new URLSearchParams({ work: workspaceId }).toString(),
+              target: { session: null, document: null },
+            }
+          : await routeWorkScope(defaultTarget);
         const result = await routeFetch(
-          `/pe/route-state/${encodeURIComponent(parsed.route)}?${workspaceId ? new URLSearchParams({ work: workspaceId }).toString() : targetQuery(defaultTarget)}`,
+          `/pe/route-state/${encodeURIComponent(parsed.route)}?${scope.query}`,
         );
-        return {
-          ok: !("isError" in result),
-          target: workspaceId ? { session: null, document: null } : scopeTarget,
-          result,
-        };
+        return { ok: !("isError" in result), target: scope.target, result };
       }
       if (row.kind === "route-doc") {
         if (input.expectedRevision === undefined)
@@ -667,9 +693,13 @@ async function routeWrite(
   body: Record<string, unknown>,
   workspaceId?: string,
 ): Promise<Outcome> {
-  const query = workspaceId
-    ? new URLSearchParams({ work: workspaceId }).toString()
-    : targetQuery(defaultTarget);
+  const scope = workspaceId
+    ? {
+        query: new URLSearchParams({ work: workspaceId }).toString(),
+        target: { session: null, document: null },
+      }
+    : await routeWorkScope(defaultTarget);
+  const { query } = scope;
   const encoded = encodeURIComponent(route);
   const revision =
     expectedRevision ??
@@ -685,9 +715,7 @@ async function routeWrite(
   const target = receipt && typeof receipt === "object" ? parseTarget(receipt.target) : null;
   return {
     ok: !("isError" in result),
-    target: workspaceId
-      ? { session: null, document: null }
-      : (target ?? namedTarget(defaultTarget)),
+    target: workspaceId ? scope.target : (target ?? scope.target),
     result,
   };
 }
