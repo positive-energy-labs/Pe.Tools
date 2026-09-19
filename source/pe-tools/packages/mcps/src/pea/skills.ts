@@ -122,7 +122,7 @@ The user asked to learn, not to be told. The master corrects the hand and never 
     name: "write-revit-csharp-script",
     content: String.raw`---
 name: write-revit-csharp-script
-description: Write and run a C# Revit script when code is the clearest way to inspect, mutate, or experiment against the model. Use for one-off probes, gaps in host operations, and durable multi-step work. Covers inline snippets, workspace files, and Pod rules.
+description: Write and run a C# Revit script when code is the clearest way to inspect, mutate, or experiment against the model. Use for one-off probes, gaps in host operations, and durable multi-step work. Covers inline snippets, workspace files, and Pod rules. Not for changing values a route shows (family or type parameters, schedule cells, instances, takeoffs, parameter links); propose those with propose-changes, even under Trusted.
 ---
 
 # Write Revit C# Script
@@ -351,6 +351,7 @@ export const retiredPeaSkillNames: readonly string[] = [
   "author-family-foundry-profile",
   "debug-family-foundry-artifacts",
   "validate-pe-settings-workspace",
+  "author-pe-settings",
 ];
 
 export const peaStandardSkillsRoot = path.join(".agents", "skills");

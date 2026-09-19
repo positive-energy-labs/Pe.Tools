@@ -1,4 +1,4 @@
-using Pe.Shared.RevitData;
+﻿using Pe.Shared.RevitData;
 
 namespace Pe.Revit.Tests;
 
@@ -78,4 +78,6 @@ public sealed class ViewImageRegistrationTests {
 
     [Test]
     public void A_one_pixel_rounding_difference_still_registers() => Register(2000, 1001, (0, 0), (100, 50), (0, 0), 0);
+
+
 }

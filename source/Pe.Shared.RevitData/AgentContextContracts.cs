@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
 namespace Pe.Shared.RevitData;
@@ -412,8 +412,8 @@ public record RevitViewImageRegistration(
     ) {
         double cropW = max.X - min.X, cropH = max.Y - min.Y;
         if (width <= 0 || height <= 0 || cropW <= 0 || cropH <= 0) return (null, RevitViewImageRegistrationRefusal.DegenerateCrop);
-        // ponytail: aspect agreement is the only check that the PNG covers exactly the crop. Annotation crop or
-        // out-of-crop annotations could still shift the extent symmetrically; the native proof owes that.
+        // ponytail: aspect agreement is the only check that the PNG covers exactly this extent; an extent shifted
+        // without changing its aspect (e.g. annotations past a crop with annotation crop off) would slip through.
         var expectedHeight = width * cropH / cropW;
         if (Math.Abs(height - expectedHeight) > Math.Max(2, expectedHeight * 0.005))
             return (null, RevitViewImageRegistrationRefusal.AspectDisagrees);
