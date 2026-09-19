@@ -5,6 +5,7 @@
  * Situation's flag, and Pea's proposals as the Work band under the verb row, so approve and
  * reject have one location and the stream stays a record.
  */
+import { AskUserPrompt, readQuestion } from "#/chat/ask-prompt";
 import { resolveCallTarget, toolTitle, type TargetResolution } from "@pe/agent-contracts";
 import { Check, X } from "lucide-react";
 
@@ -280,29 +281,39 @@ export function ComposerHead({
               ) : null;
             })()}
             <span className="t-small text-ink-2">{approval.kind}</span>
-            {isParkedAsk(approval) ? (
-              <span className="text-ink-2">answer it in the stream</span>
-            ) : (
-              APPROVAL_OPTIONS.map((option) => {
-                const allow = option.kind.startsWith("allow");
-                return (
-                  <ActionButton
-                    key={option.id}
-                    tone={allow ? "commit" : "act"}
-                    icon={allow ? Check : X}
-                    label={option.label}
-                    reason={
-                      allow
-                        ? `Let pea run ${toolTitle(approval.toolName)} — the call executes against the live target`
-                        : `Refuse this ${toolTitle(approval.toolName)} call — pea continues without it`
-                    }
-                    onClick={() => {
-                      void resolveApproval(approval.toolCallId, option.id);
-                    }}
-                  />
-                );
-              })
-            )}
+            {isParkedAsk(approval)
+              ? // A live ask answers HERE: asks live in the head, the transcript holds records.
+                (() => {
+                  const question = readQuestion(approval.payload);
+                  return question ? (
+                    <AskUserPrompt
+                      toolCallId={approval.toolCallId}
+                      question={question}
+                      resolve={resolveApproval}
+                    />
+                  ) : (
+                    <span className="text-ink-2">the ask carries no question to answer</span>
+                  );
+                })()
+              : APPROVAL_OPTIONS.map((option) => {
+                  const allow = option.kind.startsWith("allow");
+                  return (
+                    <ActionButton
+                      key={option.id}
+                      tone={allow ? "commit" : "act"}
+                      icon={allow ? Check : X}
+                      label={option.label}
+                      reason={
+                        allow
+                          ? `Let pea run ${toolTitle(approval.toolName)} — the call executes against the live target`
+                          : `Refuse this ${toolTitle(approval.toolName)} call — pea continues without it`
+                      }
+                      onClick={() => {
+                        void resolveApproval(approval.toolCallId, option.id);
+                      }}
+                    />
+                  );
+                })}
           </div>
         ))}
         works={works}

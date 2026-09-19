@@ -126,12 +126,15 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
       // Mastra keeps a call its input validation refused as a `result` holding the error; a tool
       // that threw is a `result` of `{ isError: true, content }`.
       const rejected = readRecord(result)?.error === true || readRecord(result)?.isError === true;
+      // A live approval wins: Mastra's `agent_end` (reason "suspended") marks every still-running
+      // active tool `status: "error"`, the suspended ask among them (F-J1-9). It is waiting.
       const failed =
-        call.isError === true ||
-        (terminal && call.state !== "result") ||
-        active?.status === "error" ||
-        rejected ||
-        interrupted;
+        !waiting.has(call.toolCallId) &&
+        (call.isError === true ||
+          (terminal && call.state !== "result") ||
+          active?.status === "error" ||
+          rejected ||
+          interrupted);
       const completed = terminal || active?.status === "completed";
       const images = toolImages(result ?? progressOutput(active?.partialResult));
       const outcome: ToolOutcome = expired.has(call.toolCallId)
@@ -166,7 +169,7 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
     if (seen.has(id)) continue;
     const result = tool.result ?? tool.shellOutput ?? tool.partialResult;
     const outcome: ToolOutcome =
-      tool.status === "error" || tool.isError
+      (tool.status === "error" || tool.isError) && !waiting.has(id)
         ? { status: "failed", error: text(tool.result) || "Tool call failed.", result }
         : { status: tool.status === "completed" ? "completed" : "in_progress", result };
     calls.push({
@@ -410,7 +413,9 @@ export type Approval = { toolCallId: string; toolName: string } & (
 );
 
 /** A parked `ask_user`: Pea is waiting on the person, not working. A new turn expires it. */
-export const isParkedAsk = (approval: Approval) =>
+export const isParkedAsk = (
+  approval: Approval,
+): approval is Extract<Approval, { kind: "suspension" }> =>
   approval.kind === "suspension" && approval.toolName === "ask_user";
 
 export function selectApprovals(display: ChatDisplay): Approval[] {
