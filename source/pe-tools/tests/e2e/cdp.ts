@@ -124,6 +124,11 @@ export async function connect(port = Number(process.env.CDP_PORT)) {
      * A cell with no editor (blank = the type lacks the parameter) is a PRECONDITION, not a no-op.
      */
     async clickCell(row: string[], column: string) {
+      await page.until(
+        () => read<boolean>(`(${matrixRows(column)}) > 0`),
+        `the matrix rows under ${column}`,
+        MATRIX_MS,
+      );
       const cell = await page.until(
         () =>
           read<"editor" | "none" | null>(
@@ -258,6 +263,18 @@ export async function connect(port = Number(process.env.CDP_PORT)) {
   return page;
 }
 
+/**
+ * Budget for a Revit matrix to render its rows. project-a /families with 3 Price LBP15A families
+ * (89 types) drew rows ~69 s after open (exec-proof matrix-timing.json, b9c32d7); ~2x headroom.
+ */
+const MATRIX_MS = 150_000;
+
+/** How many body rows the grid under header `column` renders (0 while the Work still loads). */
+const matrixRows = (column: string) => `(() => {
+  const th = [...document.querySelectorAll("thead th")].find((th) => th.getClientRects().length && th.innerText.trim().split(/\\s*\\n/)[0].toLowerCase() === ${JSON.stringify(column.toLowerCase())});
+  return th?.closest("table")?.querySelectorAll("tbody tr").length ?? 0;
+})()`;
+
 /** The grid's cell editor, as master-table-state CELL_EDITOR; a read-only cell renders none. */
 const EDITOR = 'input:not([disabled]):not([aria-hidden="true"]),textarea:not([disabled])';
 
@@ -385,6 +402,9 @@ export async function requireRevit(page: Page, ms = 60_000) {
       (/FAMILIES IN SCOPE/i.test(text) && !/BRIDGE IS DISCONNECTED/i.test(text))
     );
   };
+  // A new thread may drop the URL's ?target: bind it through the Situation sentence instead.
+  if (!(await page.until(bound, "the URL target", 5_000).catch(() => false)))
+    if (/no document selected/i.test(await page.text())) await bindTarget(page);
   await page.until(bound, "the route to bind a Revit session", ms).catch(() => {
     throw new Error(
       `PRECONDITION: no Revit bridge after ${ms / 1000}s; this journey runs in the joint-hold slot`,
@@ -392,10 +412,34 @@ export async function requireRevit(page: Page, ms = 60_000) {
   });
 }
 
-/** A chip's label: the visible combobox named `name` in the composer (Model, Access). */
+/**
+ * Bind the document through the Situation ladder as a person does: "Choose session" → E2E_SESSION
+ * (else the first session) → the document titled E2E_DOC. E2E_DOC unset is a PRECONDITION.
+ */
+async function bindTarget(page: Page) {
+  const doc = process.env.E2E_DOC;
+  if (!doc) throw new Error("PRECONDITION: no document bound and E2E_DOC (its title) is unset");
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const session = process.env.E2E_SESSION;
+  // The ladder's name is its first unbound rung: "Choose session" until a session is chosen.
+  if (await page.has("Choose session", SITUATION)) {
+    await page.click("Choose session", SITUATION);
+    if (session) await page.click(new RegExp(`^${esc(session)}(\\s|$)`));
+    else await page.clickAt('[role="option"]');
+  }
+  const option = new RegExp(`^${esc(doc)}(\\s|$)`);
+  // The ladder may drill in place or close after the session pick; reopen on "Choose document".
+  if (!(await page.until(() => page.has(option), "document option", 3_000).catch(() => false)))
+    await page.click("Choose document", SITUATION);
+  await page.click(option);
+}
+
+/** A chip is a listbox button named `name` in the composer (Model, Access). */
+const CHIP = (name: string) => `button[aria-haspopup="listbox"][aria-label="${name}"]`;
+/** A chip's label: the visible chip's face. */
 const chip = (page: Page, name: string) =>
   page.read<string>(
-    `[...document.querySelectorAll('[role=combobox][aria-label="${name}"]')].find((e) => e.getClientRects().length)?.innerText.trim() ?? ""`,
+    `[...document.querySelectorAll(${JSON.stringify(CHIP(name))})].find((e) => e.getClientRects().length)?.innerText.trim() ?? ""`,
   );
 
 /** Before any Pea step (README): an OpenAI model and Trusted access, read off the chips, else BLOCKED. */
@@ -431,7 +475,7 @@ export async function setPea(page: Page, model = process.env.E2E_MODEL ?? "gpt-5
   );
   const pick = async (name: string, option: RegExp, want: string) => {
     if ((await chip(page, name)).startsWith(want)) return;
-    await page.clickAt(`[role=combobox][aria-label="${name}"]`);
+    await page.clickAt(CHIP(name));
     await page.click(option);
     await page.until(
       async () => (await chip(page, name)).startsWith(want),
