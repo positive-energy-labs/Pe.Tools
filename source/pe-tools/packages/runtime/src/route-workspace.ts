@@ -16,12 +16,17 @@ import {
   type RouteStatePatch,
   type RouteStateWriteResult,
 } from "@pe/agent-contracts";
-import type { RouteStateCommandHandlers, RouteStateSpec } from "@pe/agent-contracts";
+import type {
+  RouteStateCommandHandlers,
+  RouteStateSpec,
+  RouteWriteAdmission,
+} from "@pe/agent-contracts";
 
 export interface RouteWorkspaceRegistration {
   spec: RouteStateSpec<z.ZodType>;
   // biome-ignore lint/suspicious/noExplicitAny: the schema/handler pairing is checked where registrations are built.
   handlers: RouteStateCommandHandlers<any>;
+  admit?: RouteWriteAdmission;
 }
 
 export interface RouteWorkspaceEvent {
@@ -121,7 +126,15 @@ export class RouteWorkspace {
         this.#publish({ type: "route_workspace", scope, route, actor, ...event });
       const envelope = await this.#load(scope, registration.spec).catch(unreadable);
       if ("ok" in envelope) return envelope;
-      const landed = applyPatches(registration.spec, envelope, actor, patches, expectedRevision);
+      const applied = applyPatches(registration.spec, envelope, actor, patches, expectedRevision);
+      const landed =
+        (applied.ok &&
+          (await registration.admit?.(applied.envelope.doc, patches, {
+            scope,
+            actor,
+            prior: envelope.doc,
+          }))) ||
+        applied;
       if (!landed.ok) {
         await emit({
           action: "apply",

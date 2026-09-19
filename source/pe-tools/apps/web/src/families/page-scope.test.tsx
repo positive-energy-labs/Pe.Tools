@@ -87,7 +87,7 @@ class WireSource {
                       placementScope: "AllLoaded",
                     },
                     cells: {},
-                    excludedIds: [],
+                    excluded: {},
                   },
                 }
               : undefined;

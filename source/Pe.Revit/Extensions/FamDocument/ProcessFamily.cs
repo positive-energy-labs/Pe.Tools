@@ -22,12 +22,20 @@ public static class FamilyDocumentProcessFamily {
 
         Document? copy = null;
         try {
-            source.HandleFamilyCopyFailures(family, () => copy = source.EditFamily(family), diagnostics);
-            return read(new FamilyDocument(copy!));
+            copy = source.OpenFamilyForEdit(family, diagnostics);
+            return read(new FamilyDocument(copy));
         } finally {
             if (copy != null) _ = copy.Close(false);
         }
     }
+
+    /// <summary>
+    ///     The one gate for opening a loaded family for edit (F-J3-7): read, preview and apply open under the same
+    ///     failure policy, so a family plan can open, apply can open. `UnstableConstraintInFamily` is acknowledged
+    ///     and recorded; any other open-time failure refuses by name instead of reaching a Revit dialog.
+    /// </summary>
+    public static Document OpenFamilyForEdit(this Document source, Family family, ICollection<(bool IsError, string Message)> diagnostics) =>
+        source.HandleFamilyCopyFailures(family, () => source.EditFamily(family), diagnostics);
 
     /// <summary>Shared EditFamily failure policy. The caller captures ownership inside open;
     /// diagnostics can reject the operation after native creation has returned.</summary>
@@ -56,13 +64,6 @@ public static class FamilyDocumentProcessFamily {
     public static FamilyDocument GetFamilyDocument(this Document doc) {
         if (doc.IsFamilyDocument) return new FamilyDocument(doc);
         throw new InvalidOperationException("Document is not a family document");
-    }
-
-    public static FamilyDocument GetFamilyDocument(this Document doc, Family family) {
-        if (doc.IsFamilyDocument) return new FamilyDocument(doc);
-        if (family == null) throw new ArgumentNullException(nameof(family));
-        var famDoc = doc.EditFamily(family);
-        return new FamilyDocument(famDoc);
     }
 
     /// <summary>

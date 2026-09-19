@@ -103,8 +103,6 @@ public static class FamilyPreviewBuilder {
         var typeCount = family.GetFamilySymbolIds().Count;
         var typeNames = new List<string> { symbol.Name }; // Only this type, not all types
 
-        // CollectParametersFromFamilyDocument(family, doc, typeNames, symbol.Name);
-
         return new FamilyPreviewData {
             Source = FamilyPreviewSource.FamilySymbol,
             FamilyName = family.Name,
@@ -215,91 +213,6 @@ public static class FamilyPreviewBuilder {
         }
 
         return [.. results.Values.OrderBy(p => p.Name).ThenByDescending(p => p.IsInstance)];
-    }
-
-    private static List<FamilyParameterPreview>? CollectParametersFromFamilyDocument(
-        Family family,
-        Document hostDocument,
-        List<string> typeNames,
-        string typeName
-    ) {
-        Document? famDoc = null;
-
-        try {
-            famDoc = hostDocument.EditFamily(family);
-
-            if (famDoc == null || !famDoc.IsFamilyDocument)
-                return null;
-
-            var familyDoc = new FamilyDocument(famDoc);
-            var fm = familyDoc.FamilyManager;
-            var parameters = fm.Parameters.OfType<FamilyParameter>().ToList();
-            if (parameters.Count == 0)
-                return [];
-
-            var targetType = fm.Types.Cast<FamilyType>().FirstOrDefault(t => t.Name == typeName);
-            if (targetType == null)
-                return [];
-
-            var results = new Dictionary<string, FamilyParameterPreview>(StringComparer.Ordinal);
-
-            // Wrap in transaction since fm.CurrentType setter uses a sub-transaction internally
-            using var tx = new Transaction(famDoc, "Collect Family Parameters");
-            _ = tx.Start();
-
-            try {
-                fm.CurrentType = targetType;
-
-                foreach (var param in parameters) {
-                    var key = GetParamKey(param.Definition.Name, param.IsInstance);
-                    var preview = GetOrCreatePreview(results, key, param, typeNames);
-                    preview.ValuesPerType[typeName] = familyDoc.GetValueString(param);
-                }
-            } finally {
-                if (tx.HasStarted())
-                    _ = tx.RollBack();
-            }
-
-            return [.. results.Values.OrderBy(p => p.Name).ThenByDescending(p => p.IsInstance)];
-        } catch {
-            return null;
-        } finally {
-            if (famDoc != null)
-                _ = famDoc.Close(false);
-        }
-    }
-
-    private static FamilyParameterPreview GetOrCreatePreview(
-        Dictionary<string, FamilyParameterPreview> results,
-        string key,
-        FamilyParameter param,
-        List<string> typeNames
-    ) {
-        if (results.TryGetValue(key, out var existing))
-            return existing;
-
-        Guid? sharedGuid = null;
-        if (param.IsShared) {
-            try { sharedGuid = param.GUID; } catch {
-                /* GUID access can throw */
-            }
-        }
-
-        var created = new FamilyParameterPreview {
-            Name = param.Definition.Name,
-            IsInstance = param.IsInstance,
-            DataType = SafeGetLabel(() => param.Definition.GetDataType().ToLabel()),
-            StorageType = param.StorageType.ToString(),
-            Group = SafeGetLabel(() => param.Definition.GetGroupTypeId().ToLabel()),
-            IsBuiltIn = param.IsBuiltInParameter(),
-            IsShared = param.IsShared,
-            SharedGuid = sharedGuid,
-            Formula = string.IsNullOrWhiteSpace(param.Formula) ? null : param.Formula,
-            ValuesPerType = typeNames.ToDictionary(t => t, _ => (string?)null, StringComparer.Ordinal)
-        };
-
-        results[key] = created;
-        return created;
     }
 
     private static FamilyInstance? FindInstanceForSymbol(Document doc, FamilySymbol symbol) =>

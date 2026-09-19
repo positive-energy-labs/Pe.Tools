@@ -97,7 +97,7 @@ const entry = (
 
 const work: FamiliesRouteDocument = familiesRouteState.schema.parse({
   scope: { categoryNames: ["Mechanical Equipment"], familyNames: [], placementScope: "AllLoaded" },
-  excludedIds: [3102],
+  excluded: { "3102": { by: "person" } },
 });
 
 const plan = [
@@ -146,7 +146,6 @@ const peaModel = {
 } as const;
 const staged: FamiliesRouteDocument = familiesRouteState.schema.parse({
   scope: { categoryNames: ["Mechanical Equipment"], familyNames: [], placementScope: "AllLoaded" },
-  excludedIds: [],
   cells: {
     [familyCellKey(peaModel)]: {
       proposal: { value: { familyName: peaModel.familyName, value: peaModel.value } },
