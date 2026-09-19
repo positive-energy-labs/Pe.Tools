@@ -406,7 +406,8 @@ export function SituationAction({
     busy !== null ||
     (outcome !== null &&
       dismissed !== outcome.at &&
-      (outcome.refusal !== null || faded !== outcome.at));
+      // A refusal that names cells draws on those cells; the verb only tints.
+      (outcome.refusal !== null ? !outcome.refusal.cells?.length : faded !== outcome.at));
   const refusedNow = Boolean(outcome?.refusal) && dismissed !== outcome?.at;
   const stopped = action.refusal !== null || (handle.busy !== null && busy === null);
   return (
@@ -511,10 +512,11 @@ function ActionBoard({
   handle: RouteHandle<any, any, any, any>;
   verbs: readonly [string, ActionHandle][];
   commit?: string;
-  /** Where Work stands, beside the verbs that move it ("r3 · 2 room edits staged"). */
-  work: string;
+  /** Where Work stands, beside the verbs ("r3 · 2 room edits staged"); null draws no meter. */
+  work: string | null;
 }) {
   const [open, setOpen] = useState(false);
+  const meter = work ? <span className="t-small face-mono text-ink-mute">{work}</span> : null;
   const declared = (handle.manifest.actions ?? {}) as Record<
     string,
     RouteAction<unknown, string, unknown, never> | undefined
@@ -536,7 +538,6 @@ function ActionBoard({
       </Press>
     </span>
   );
-  const meter = <span className="t-small face-mono text-ink-mute">{work}</span>;
   if (!open)
     return (
       <div className="hairline-t flex flex-wrap items-center gap-x-2 gap-y-1 py-1.5">
@@ -633,8 +634,7 @@ export function Ledger({ rows }: { rows: readonly (readonly [string, ReactNode])
 
 /** The page log, newest first: time and kind in the gutter, then the verb and what it said. */
 export function PageLog({ entries }: { entries: readonly LogEntry[] }) {
-  if (!entries.length)
-    return <span className="t-prose text-ink-mute">nothing has run on this page yet</span>;
+  if (!entries.length) return null;
   return (
     <div className={`${GUTTER} max-h-48 overflow-y-auto`}>
       {entries.map((entry, index) => (
@@ -667,6 +667,8 @@ export interface SituationProps {
   chooseStage?: (stage: string) => void;
   /** The verb that commits Work; drawn bold. */
   commit?: string;
+  /** The stage verbs the row draws, as the route's stage declares them; absent = every verb of the stage. */
+  verbs?: readonly string[];
   /**
    * Staged Work. When `count` is above zero the band under the verb row shows: the frame (count
    * and noun, revision, read freshness, commit, discard, conflict with reload) is drawn here and
@@ -699,6 +701,7 @@ export function Situation({
   target,
   chooseStage,
   commit,
+  verbs: declaredVerbs,
   work,
   band,
   startFreshAside,
@@ -714,7 +717,7 @@ export function Situation({
   const word = stages.find((item) => item.key === stage)?.word ?? handle.manifest.name;
   const verbs = Object.entries(handle.actions).filter(
     ([name, action]) =>
-      (!action.stage || action.stage === stage) &&
+      (declaredVerbs ? declaredVerbs.includes(name) : !action.stage || action.stage === stage) &&
       !(handle.manifest.actions as Record<string, { sheet?: true }> | undefined)?.[name]?.sheet,
   ) as [string, ActionHandle][];
   const staged = work && work.count > 0 ? work : null;
@@ -782,7 +785,13 @@ export function Situation({
               )}{" "}
               {sentence}
             </p>
-            <ActionBoard handle={handle} verbs={verbs} commit={commit} work={workWord} />
+            <ActionBoard
+              handle={handle}
+              verbs={verbs}
+              commit={commit}
+              // A declared stage draws no work meter; the Ledger keeps the revision.
+              work={declaredVerbs ? null : workWord}
+            />
             {/* F-R4-1: the staged and unresolved lines (and a route's band) share ONE fixed
                 block that scrolls itself, so a first stage or a refusal never grows the head and
                 moves the grid under the person (fixture look 12: a refusal moved it 28px). */}
