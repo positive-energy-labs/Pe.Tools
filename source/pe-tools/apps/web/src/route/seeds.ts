@@ -63,6 +63,7 @@ export const DEMO_RUN: Run = {
     podId: "mech-standards",
     memberPath: DEMO_SPEC_PATH,
     memberSha256: hash(2),
+    origin: "SavedMember",
     operation: "schedule.apply",
     planHash: null,
     outcome: "Succeeded",

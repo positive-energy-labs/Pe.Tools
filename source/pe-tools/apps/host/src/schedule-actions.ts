@@ -449,8 +449,8 @@ export async function admitScheduleAction(
   );
 }
 /**
- * The push run's receipt (dogma law 10 shape; a push files no member, so the member fields are
- * empty): per cell, the elements and parameter written and the cell text before and after.
+ * The push run's receipt (dogma law 10 shape; a push is operation input, so it names no member):
+ * per cell, the elements and parameter written and the cell text before and after.
  */
 function pushReceipt(
   pod: string | null,
@@ -473,8 +473,10 @@ function pushReceipt(
   const keys = [...new Set([...edits.map((e) => e.key), ...failures.map((f) => f.key)])];
   return {
     podId: pod,
-    memberPath: "",
-    memberSha256: "",
+    // Reviewed cells are operation input; the push names no member.
+    memberPath: null,
+    memberSha256: null,
+    origin: "Operation",
     operation: "schedule.grid.push",
     planHash: null,
     outcome: failures.length ? "Failed" : "Succeeded",
@@ -526,9 +528,13 @@ function admitScheduleSpec(
             input.path ?? capturePath("schedules", `schedule-${input.scheduleId}`, new Date(at)),
         };
       }
-      const { source } = scheduleActions[key].input.parse(admission.input);
-      const { spec } = await runPods(deps, composedSpec(source, pods));
-      return { process, nativeKey: key, input: { specJson: spec, source } };
+      const member = scheduleActions[key].input.parse(admission.input).source;
+      const { spec, source, dependencies } = await runPods(deps, composedSpec(member, pods));
+      return {
+        process,
+        nativeKey: key,
+        input: { specJson: spec, source: { root: source, dependencies } },
+      };
     },
     async (execution) => {
       const prepared = execution.prepared as {

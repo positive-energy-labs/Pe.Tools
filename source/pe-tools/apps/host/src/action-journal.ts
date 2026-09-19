@@ -1,7 +1,7 @@
 import { BridgeError } from "./bridge.ts";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
-import { randomUUID } from "node:crypto";
+import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { createHash, randomUUID } from "node:crypto";
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
 import {
   canonicalRouteInput,
@@ -37,6 +37,7 @@ type DispatchFailure =
       "state" | "error" | "status" | "nativeOutcome" | "issues" | "evidence"
     >
   | Pick<Extract<ActionReceipt, { state: "cancelled" }>, "state" | "error" | "status">;
+/** One error's step-level answer: refused before dispatch, cancelled, or uncertain. */
 const failure = (error: unknown): DispatchFailure => {
   const problem = error as { message?: string; statusCode?: number } | null;
   const nativeOutcome = error instanceof BridgeError ? error.nativeOutcome : undefined;
@@ -84,6 +85,106 @@ export class ActionIncomplete extends Error {
     super(message);
   }
 }
+
+/** What ended an attempt: its executor returned or threw, recovery read receipts, or the host stopped. */
+export type SettleCause =
+  | { kind: "returned"; result: unknown }
+  | { kind: "threw"; error: unknown }
+  | { kind: "recovered" }
+  | { kind: "interrupted" };
+/** A terminal state and its fields; every caller parses the whole receipt against the schema. */
+type Settled = { state: Exclude<ActionReceipt["state"], "running"> } & Record<string, unknown>;
+
+/**
+ * The one terminal decision for an attempt, from its preparation, its recorded steps, and what ended
+ * it. Every effect is a recorded step, so:
+ * - an uncertain step is never hidden: the attempt is unknown and nothing redispatches it;
+ * - cancelled is a settled answer, never a rollback claim;
+ * - a known succeeded effect is never erased: a later failure makes the attempt incomplete;
+ * - with no effect, a failure is failed and not dispatched.
+ * `null` means recovery proved nothing new and the attempt keeps its state.
+ */
+export function settle(
+  prepared: boolean,
+  steps: readonly ActionStep[],
+  cause: SettleCause,
+): Settled | null {
+  const thrown = cause.kind === "threw" ? failure(cause.error) : undefined;
+  const reason =
+    thrown ??
+    (cause.kind === "interrupted"
+      ? { error: "Host restarted before the executor recorded an outcome", status: 503 }
+      : undefined);
+  if (!prepared)
+    return {
+      state: "failed",
+      error: reason?.error ?? "Preparation did not finish",
+      status: 409,
+      notDispatched: true,
+    };
+  const uncertain = steps.find((step) => step.state === "unknown" || step.state === "running");
+  if (uncertain) {
+    if (cause.kind === "recovered") return null;
+    const detail =
+      thrown?.state === "unknown"
+        ? thrown
+        : {
+            error: `Step '${uncertain.key}' has no proven outcome${reason ? `; ${reason.error}` : ""}`,
+            status: 503,
+          };
+    return { ...detail, state: "unknown" };
+  }
+  if (cause.kind === "returned") return { state: "succeeded", result: cause.result ?? null };
+  const cancelled =
+    thrown?.state === "cancelled"
+      ? thrown
+      : cause.kind !== "threw"
+        ? steps.find((step) => step.state === "cancelled")
+        : undefined;
+  if (cancelled?.state === "cancelled")
+    return { state: "cancelled", error: cancelled.error, status: cancelled.status };
+  const failedStep = steps.findLast((step) => step.state === "failed");
+  const why = reason ?? (failedStep?.state === "failed" ? failedStep : undefined);
+  if (steps.some((step) => step.state === "succeeded" && step.kind !== "publication")) {
+    if (!why) return null;
+    return {
+      state: "incomplete",
+      error: why.error,
+      status: why.status,
+      result:
+        cause.kind === "threw" && cause.error instanceof ActionIncomplete
+          ? cause.error.result
+          : null,
+    };
+  }
+  if (!why) return null;
+  return {
+    state: "failed",
+    error: why.error,
+    status: why.status,
+    notDispatched: true,
+    ...(thrown && "nativeOutcome" in thrown && thrown.nativeOutcome
+      ? { nativeOutcome: thrown.nativeOutcome }
+      : {}),
+    ...(thrown && "issues" in thrown && thrown.issues ? { issues: thrown.issues } : {}),
+  };
+}
+
+/** The attempt without its terminal fields, so a new settlement never inherits a stale one. */
+const unsettled = (row: ActionReceipt) => {
+  const {
+    state: _state,
+    error: _error,
+    status: _status,
+    notDispatched: _notDispatched,
+    result: _result,
+    nativeOutcome: _nativeOutcome,
+    issues: _issues,
+    evidence: _evidence,
+    ...attempt
+  } = row as ActionReceipt & Record<string, unknown>;
+  return attempt;
+};
 
 /** One host journal. Execution never holds the authored Work lock or the journal write tail. */
 export class ActionJournal {
@@ -138,6 +239,42 @@ export class ActionJournal {
     const row = (await this.list(undefined, id))[0];
     if (!row) throw Error(`Action '${id}' has no admitted receipt`);
     return row;
+  }
+  /**
+   * Exported inputs of one action, keyed by its original ID. Structured request evidence the host
+   * serialized before dispatch; never original authored bytes and never a settled outcome.
+   */
+  async outputs(id: string): Promise<{ id: string; home: string; files: Record<string, unknown> }> {
+    const home = this.home(id);
+    const names = await readdir(home, { recursive: true, withFileTypes: true }).catch(
+      (error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return [];
+        throw error;
+      },
+    );
+    const files: Record<string, unknown> = {};
+    for (const entry of names)
+      if (entry.isFile() && entry.name.endsWith(".json")) {
+        const path = join(entry.parentPath, entry.name);
+        files[path.slice(home.length + 1).replaceAll("\\", "/")] = JSON.parse(
+          await readFile(path, "utf8"),
+        );
+      }
+    return { id, home, files };
+  }
+  /** One output home per action ID; hashed because IDs are caller text, not safe path segments. */
+  private home(id: string) {
+    return join(
+      dirname(this.path),
+      "action-outputs",
+      createHash("sha256").update(id).digest("hex"),
+    );
+  }
+  private async export(id: string, name: string, value: unknown) {
+    const file = join(this.home(id), name);
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(`${file}.tmp`, JSON.stringify(value, null, 2), "utf8");
+    await rename(`${file}.tmp`, file);
   }
   async admit(
     raw: ActionAdmission,
@@ -288,6 +425,16 @@ export class ActionJournal {
           cursor = row.steps.length;
           let result;
           try {
+            await this.export(row.id, `steps/${step.id}.json`, {
+              id: step.id,
+              kind,
+              key,
+              input: step.input,
+            }).catch((error) => {
+              throw new BridgeError(`Step input export failed: ${String(error)}`, 503, {
+                notDispatched: true,
+              });
+            });
             result = await effect(step.id);
           } catch (error) {
             await save((row) => ({
@@ -315,8 +462,11 @@ export class ActionJournal {
       let validated = row.preparation.state === "ready";
       const completion = Promise.resolve()
         .then(async () => {
+          // A resumed attempt exported both when it was first admitted and prepared.
+          if (!prior) await this.export(row.id, "admission.json", admission);
           if (row.preparation.state !== "ready") {
             const value = await prepare();
+            await this.export(row.id, "preparation.json", value ?? null);
             await save((row) => ({
               ...row,
               preparation: { state: "ready", value: value ?? null },
@@ -326,48 +476,10 @@ export class ActionJournal {
         })
         .then(() => execute(execution))
         .then(
-          (result) => ({ ...row, state: "succeeded" as const, result: result ?? null }),
-          (error) => {
-            if (!validated)
-              return {
-                ...row,
-                state: "failed" as const,
-                error: failure(error).error,
-                status: 409,
-                notDispatched: true as const,
-              };
-            const failed = failure(error);
-            // A cancel is a settled answer, not an uncertainty: whatever the op finished before
-            // its checkpoint is already in its own receipts, and nothing here needs recovery.
-            if (failed.state === "cancelled") return { ...row, ...failed };
-            if (
-              (error instanceof ActionIncomplete || failed.state === "failed") &&
-              row.steps.some((step) => step.state === "succeeded" && step.kind !== "publication") &&
-              !row.steps.some((step) => step.state === "unknown" || step.state === "running")
-            )
-              return {
-                ...row,
-                state: "incomplete" as const,
-                error: failed.error,
-                status: failed.status,
-                result: error instanceof ActionIncomplete ? error.result : null,
-              };
-            // A later refusal does not roll back a prior completed external step.
-            if (
-              row.steps?.some((step) => step.state === "succeeded" && step.kind !== "publication")
-            ) {
-              const uncertain = {
-                error: failed.error,
-                status: failed.status,
-                nativeOutcome: failed.nativeOutcome,
-                issues: failed.issues,
-                evidence: failed.evidence,
-              };
-              return { ...row, ...uncertain, state: "unknown" as const };
-            }
-            return { ...row, ...failed };
-          },
+          (result) => settle(true, row.steps, { kind: "returned", result }),
+          (error) => settle(validated, row.steps, { kind: "threw", error }),
         )
+        .then((settled) => ({ ...unsettled(row), ...settled! }) as ActionReceipt)
         .then((finished) =>
           this.serial(async () => {
             const index = this.rows.findIndex((current) => current.id === row.id);
@@ -469,17 +581,8 @@ export class ActionJournal {
           })),
         ],
       };
-      if (nextRow.steps.length && nextRow.steps.every((step) => step.state === "failed")) {
-        const last = nextRow.steps.at(-1)!;
-        if (last.state === "failed")
-          nextRow = {
-            ...nextRow,
-            state: "failed",
-            error: last.error,
-            status: last.status,
-            notDispatched: true,
-          };
-      }
+      const settled = settle(true, nextRow.steps, { kind: "recovered" });
+      if (settled) nextRow = { ...unsettled(nextRow), ...settled } as ActionReceipt;
       nextRow = actionReceiptSchema.parse(nextRow);
       const next = this.rows.map((row) => (row.id === id ? nextRow : row));
       await this.persist(next);
@@ -513,12 +616,12 @@ export class ActionJournal {
       let next = row;
       if (row.state === "running") {
         changed = true;
+        const steps = interruptedSteps(row.steps);
         next = {
-          ...row,
-          state: "unknown",
-          error: "Host restarted before the executor recorded an outcome",
-          status: 503,
-        };
+          ...unsettled(row),
+          steps,
+          ...settle(row.preparation.state === "ready", steps, { kind: "interrupted" })!,
+        } as ActionReceipt;
       }
       if (next.steps.some((step) => step.state === "running")) {
         changed = true;

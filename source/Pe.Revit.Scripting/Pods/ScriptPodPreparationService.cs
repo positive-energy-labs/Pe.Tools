@@ -2,6 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.Bcl.Compat;
 using Pe.Revit.Scripting.Storage;
+using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.Scripting.Diagnostics;
 using Pe.Shared.Scripting.Pods;
@@ -42,8 +43,23 @@ public sealed record RefusedPod(
 /// <summary>One member composed on request: its composed JSON (null on error), its own diagnostics, and consumed fragments.</summary>
 public sealed record PodMemberComposition(
     string? Composed,
+    PodCapturedSource Source,
     IReadOnlyList<ScriptDiagnostic> Diagnostics,
     IReadOnlyList<PodConsumedDependency> Dependencies
+) {
+    /// <summary>The consumed bytes as wire data: what a run keeps and what the bridge returns.</summary>
+    public PodComposedSource ToSource() => new(
+        new PodCapturedSourceData(this.Source.Id, this.Source.Path, this.Source.Sha256, Convert.ToBase64String(this.Source.Bytes), this.Source.Origin),
+        [.. this.Dependencies.Select(d => new PodConsumedSourceData(d.PodId, d.Path, d.Sha256, Convert.ToBase64String(d.Bytes)))]);
+}
+
+public sealed record PodCapturedSource(
+    string Id,
+    string Path,
+    string Sha256,
+    byte[] Bytes,
+    string Content,
+    PodSourceOrigin Origin
 );
 
 /// <summary>
@@ -132,22 +148,28 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null) {
             0 => throw new InvalidDataException($"No installed pod has id '{podId}' under {this.PodsRoot}."),
             _ => throw new InvalidDataException($"Pod id '{podId}' is ambiguous between folders: {string.Join(", ", matches)}.")
         };
+    }
 
-        static string? ReadId(string folder) {
-            var path = Path.Combine(folder, "pod.json");
-            if (!File.Exists(path) || new FileInfo(path).Length > MaxFileBytes)
-                return null;
-            try {
-                return JObject.Parse(File.ReadAllText(path))["id"]?.Value<string>();
-            } catch (JsonException) {
-                return null; // ponytail: an unparseable neighbour cannot own an id; pod.list reports it.
-            }
+    /// <summary>The `id` a pod folder's manifest declares; null when it has no readable manifest.</summary>
+    internal static string? ReadId(string folder) {
+        var path = Path.Combine(folder, "pod.json");
+        if (!File.Exists(path) || new FileInfo(path).Length > MaxFileBytes)
+            return null;
+        try {
+            return JObject.Parse(File.ReadAllText(path))["id"]?.Value<string>();
+        } catch (JsonException) {
+            return null; // ponytail: an unparseable neighbour cannot own an id; pod.list reports it.
         }
     }
 
-    public (string Content, string Sha256) ReadMember(string podId, string path) {
-        var bytes = ReadBoundedFile(this.MemberFullPath(podId, path));
-        return (Encoding.UTF8.GetString(bytes), Sha256(bytes));
+    internal static PodCapturedSource CaptureComposeSource(PodMemberComposeRequest request) {
+        var source = request.Source ?? throw new InvalidDataException("Captured compose source is required.");
+        var content = request.Content ?? throw new InvalidDataException("Captured compose source requires content.");
+        var bytes = Convert.FromBase64String(source.BytesBase64);
+        if (source.Id != request.Pod || source.Path != request.Path || source.Sha256 != Sha256(bytes)
+            || !bytes.SequenceEqual(Encoding.UTF8.GetBytes(content)))
+            throw new InvalidDataException("Captured compose source bytes, hash, pod, path, and content disagree.");
+        return new PodCapturedSource(source.Id, source.Path, source.Sha256, bytes, content, source.Origin);
     }
 
     /// <summary>Creates a new member. Never overwrites: capture always creates.</summary>
@@ -163,12 +185,25 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null) {
     }
 
     /// <summary>Composes one member from the draft when given, else from disk. Only this member's diagnostics return.</summary>
-    public PodMemberComposition Compose(string podId, string path, string? draftContent) {
+    public PodMemberComposition Compose(string podId, string path, string? draftContent, PodCapturedSource? capturedSource = null) {
         var folder = this.ResolveFolder(podId);
         path = NormalizeMemberPath(path);
-        var source = draftContent ?? Encoding.UTF8.GetString(ReadBoundedFile(FullPath(folder, path)));
-        var result = PodComposer.Compose(path, source, Resolve);
-        return new PodMemberComposition(result.Document?.Content, result.Diagnostics, result.Document?.Dependencies ?? []);
+        var source = capturedSource ?? CaptureRoot();
+        var result = PodComposer.Compose(path, source.Content, Resolve);
+        return new PodMemberComposition(result.Content, source, result.Diagnostics, result.Dependencies);
+
+        PodCapturedSource CaptureRoot() {
+            var bytes = draftContent is null
+                ? ReadBoundedFile(FullPath(folder, path))
+                : Encoding.UTF8.GetBytes(draftContent);
+            return new PodCapturedSource(
+                podId,
+                path,
+                Sha256(bytes),
+                bytes,
+                draftContent ?? Encoding.UTF8.GetString(bytes),
+                draftContent is null ? PodSourceOrigin.SavedMember : PodSourceOrigin.SuppliedDraft);
+        }
 
         bool Resolve(string reference, out PodConsumedDependency dependency, out string reason) {
             dependency = null!;
@@ -183,7 +218,7 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null) {
                     return false;
                 }
                 var bytes = ReadBoundedFile(fullPath);
-                dependency = new PodConsumedDependency(owner, referencedPath, Sha256(bytes), Encoding.UTF8.GetString(bytes));
+                dependency = new PodConsumedDependency(owner, referencedPath, Sha256(bytes), bytes, Encoding.UTF8.GetString(bytes));
                 return true;
             } catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException) {
                 reason = $"Reference '{reference}': {exception.Message}";

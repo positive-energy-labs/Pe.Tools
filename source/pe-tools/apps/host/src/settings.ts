@@ -14,6 +14,7 @@ import type {
   PodMemberWritten,
   PodReceipt,
   PodRuns,
+  PodRunSource,
   PodRunsRequest,
 } from "@pe/host-contracts/operation-types";
 import type {
@@ -80,29 +81,91 @@ export const listRuns = Effect.fnUntraced(function* (
   const folder = yield* podFolder(request.pod, ctx);
   const entries = yield* readDirectoryEntriesOrEmpty(join(folder, "output"), "pod.runs");
   const runs: PodRuns["runs"][number][] = [];
+  /** The member each run wrote, from its `written-member.json` output (a capture's product). */
+  const wrote = new Map<string, string>();
   for (const entry of entries.sort((a, b) => b.name.localeCompare(a.name))) {
     if (entry.info.type !== "Directory") continue;
     const receiptPath = `output/${entry.name}/receipt.json`;
     const read = yield* readText(join(folder, receiptPath), "pod.runs");
     const receipt = read === null ? null : parseReceipt(read.content);
+    const input = yield* readText(join(folder, "output", entry.name, "input.json"), "pod.runs");
+    const source = input === null ? undefined : parseRunSource(input.content);
+    if (typeof receipt !== "string" && receipt?.outputs.includes("written-member.json")) {
+      const written = yield* readText(
+        join(folder, "output", entry.name, "written-member.json"),
+        "pod.runs",
+      );
+      const path = written === null ? undefined : writtenMemberPath(written.content);
+      if (path) wrote.set(entry.name, path);
+    }
     runs.push({
       runId: entry.name,
       receiptPath,
       receipt: typeof receipt === "string" ? null : receipt,
+      ...(source ? { source } : {}),
       error:
         read === null
-          ? "The run folder holds no receipt.json."
+          ? source
+            ? "The run holds its input but no receipt.json; its outcome is unresolved."
+            : "The run folder holds no receipt.json."
           : typeof receipt === "string"
             ? receipt
             : null,
     });
   }
   return {
-    runs: request.path ? runs.filter((run) => run.receipt?.memberPath === request.path) : runs,
+    runs: request.path
+      ? // A member's runs are the ones that consumed it or wrote it.
+        runs.filter(
+          (run) =>
+            (run.source?.path ?? run.receipt?.memberPath) === request.path ||
+            wrote.get(run.runId) === request.path,
+        )
+      : runs,
   } satisfies PodRuns;
 });
 
 const text = (value: unknown) => (typeof value === "string" ? value : "");
+
+/** The member path a run's `written-member.json` names; undefined when it is unreadable. */
+function writtenMemberPath(content: string): string | undefined {
+  try {
+    const value: unknown = JSON.parse(content.replace(/^﻿/, ""));
+    return isRecord(value) && typeof value.path === "string" ? value.path : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** What `input.json` says the run consumed; undefined when it is unreadable. */
+function parseRunSource(content: string): PodRunSource | undefined {
+  try {
+    const value: unknown = JSON.parse(content.replace(/^﻿/, ""));
+    if (!isRecord(value) || !isRecord(value.source) || typeof value.source.kind !== "string")
+      return undefined;
+    const field = (name: string) => {
+      const item = (value.source as Record<string, unknown>)[name];
+      return typeof item === "string" ? { [name]: item } : {};
+    };
+    return {
+      kind: value.source.kind,
+      ...field("origin"),
+      ...field("pod"),
+      ...field("path"),
+      ...field("sha256"),
+      ...field("name"),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+const outcomes: readonly PodReceipt["outcome"][] = ["Succeeded", "Failed", "Cancelled"];
+const origins: readonly NonNullable<PodReceipt["origin"]>[] = [
+  "SavedMember",
+  "SuppliedDraft",
+  "Operation",
+];
 
 /** The receipt, or the reason it could not be read. A crashed apply leaves that state on disk. */
 function parseReceipt(content: string): PodReceipt | string {
@@ -114,13 +177,32 @@ function parseReceipt(content: string): PodReceipt | string {
       typeof value.outcome !== "string"
     )
       return "receipt.json is not a run receipt.";
+    if (!outcomes.includes(value.outcome as PodReceipt["outcome"]))
+      return `receipt.json outcome '${value.outcome}' is not ${outcomes.join(", ")}.`;
+    const origin = origins.includes(value.origin as never)
+      ? (value.origin as PodReceipt["origin"])
+      : null;
+    // An operation run consumed no member, so it names none: one that does is a writer defect,
+    // refused rather than normalized so it surfaces. Only saved bytes carry a member hash.
+    if (origin === "Operation" && (value.memberPath != null || value.memberSha256 != null))
+      return "receipt.json is an Operation run that names a member; an operation consumed no member, so its memberPath and memberSha256 must be null.";
+    const member =
+      origin === "Operation"
+        ? { origin, memberPath: null, memberSha256: null }
+        : {
+            origin,
+            memberPath: typeof value.memberPath === "string" ? value.memberPath : null,
+            memberSha256:
+              origin !== "SuppliedDraft" && typeof value.memberSha256 === "string"
+                ? value.memberSha256
+                : null,
+          };
     return {
       podId: text(value.podId),
-      memberPath: text(value.memberPath),
-      memberSha256: text(value.memberSha256),
+      ...member,
       operation: value.operation,
       planHash: typeof value.planHash === "string" ? value.planHash : null,
-      outcome: value.outcome,
+      outcome: value.outcome as PodReceipt["outcome"],
       outputs: Array.isArray(value.outputs) ? value.outputs.map(text) : [],
       reason: typeof value.reason === "string" ? value.reason : null,
     };
@@ -145,7 +227,7 @@ export const readMember = Effect.fnUntraced(function* (member: PodMember, ctx: P
     return yield* Effect.fail(
       new LocalOpError("pod.member.read", "The member is not valid UTF-8 text.", 400),
     );
-  return { content: read.content, sha256: read.sha256 };
+  return { content: read.content, sha256: read.sha256, bytesBase64: read.bytesBase64 };
 });
 
 /**
@@ -237,14 +319,26 @@ const written = (request: PodMember & { content: string }): PodMemberWritten => 
 export const composeMember = Effect.fnUntraced(function* (
   request: PodMemberComposeRequest,
   ctx: PodContext = {},
+  capturedSource?: PodMemberComposeResponse["source"],
 ) {
   const saved = request.content == null ? yield* readMember(request, ctx) : null;
   const content = saved?.content ?? request.content!;
+  const bytesBase64 = saved?.bytesBase64 ?? Buffer.from(content, "utf8").toString("base64");
+  let source =
+    capturedSource ??
+    ({
+      id: request.pod,
+      path: request.path,
+      sha256: saved?.sha256 ?? sha256(content),
+      bytesBase64,
+      origin: saved ? "SavedMember" : "SuppliedDraft",
+    } satisfies PodMemberComposeResponse["source"]);
   const base = {
-    sha256: saved?.sha256 ?? sha256(content),
+    sha256: source.sha256,
     schemaUrl: null,
     schemaJson: request.schemaJson ?? null,
     composed: null,
+    source,
     dependencies: [],
   };
   let value: unknown;
@@ -278,6 +372,7 @@ export const composeMember = Effect.fnUntraced(function* (
         pod: request.pod,
         path: request.path,
         content,
+        source,
       })) as PodMemberCompose.Res.Response;
       diagnostics.push(
         ...result.diagnostics.map((d) =>
@@ -285,6 +380,7 @@ export const composeMember = Effect.fnUntraced(function* (
         ),
       );
       dependencies = [...result.dependencies];
+      source = result.source;
       composed = result.composed == null ? undefined : JSON.parse(result.composed);
     }
   }
@@ -322,6 +418,7 @@ export const composeMember = Effect.fnUntraced(function* (
   } else if (schemaValidation === "passed") semanticValidation = "unavailable";
   return {
     ...base,
+    source,
     schemaUrl,
     schemaJson: schemaJson ?? null,
     composed: composed === undefined ? null : `${JSON.stringify(composed, null, 2)}\n`,
@@ -342,7 +439,13 @@ export const composedSpec = Effect.fnUntraced(function* (
     return yield* Effect.fail(
       new LocalOpError("pod.member.compose", "The member changed after it was reviewed.", 409),
     );
-  const result = yield* composeMember({ ...member, content: saved.content }, ctx);
+  const result = yield* composeMember({ ...member, content: saved.content }, ctx, {
+    id: member.pod,
+    path: member.path,
+    sha256: saved.sha256,
+    bytesBase64: saved.bytesBase64,
+    origin: "SavedMember",
+  });
   const errors = result.diagnostics.filter((d) => d.severity === "error");
   if (errors.length || result.composed == null)
     return yield* Effect.fail(
@@ -352,7 +455,12 @@ export const composedSpec = Effect.fnUntraced(function* (
         409,
       ),
     );
-  return { spec: result.composed, schemaUrl: result.schemaUrl, dependencies: result.dependencies };
+  return {
+    spec: result.composed,
+    schemaUrl: result.schemaUrl,
+    source: result.source,
+    dependencies: result.dependencies,
+  };
 });
 
 export const podFolder = Effect.fnUntraced(function* (podId: string, ctx: PodContext = {}) {
@@ -456,6 +564,7 @@ const readText = Effect.fnUntraced(function* (path: string, operationKey: string
     content,
     utf8: isUtf8(result.success),
     sha256: createHash("sha256").update(result.success).digest("hex"),
+    bytesBase64: Buffer.from(result.success).toString("base64"),
   };
 });
 

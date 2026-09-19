@@ -483,7 +483,7 @@ test("families apply refuses an empty include set before dispatch", async () => 
   expect(sent.filter((s) => s.key === "families.apply")).toHaveLength(0);
 });
 
-test("families apply sends exactly the reviewed hashes, composed spec, and member source", async () => {
+test("families apply sends exactly the reviewed hashes, composed spec, and captured source bytes", async () => {
   const { admit, sent } = await setup();
   const options = { singleTransaction: true };
   resultOf(
@@ -496,7 +496,17 @@ test("families apply sends exactly the reviewed hashes, composed spec, and membe
   const native = sent.find((s) => s.key === "families.apply")!;
   expect(native.input.expectedPlanHashes).toEqual({ "1": "h1", "2": "h2" });
   expect(native.input.specJson).toBe(composed);
-  expect(native.input.source).toEqual(source);
+  // The one read's exact root bytes; this member has no dependencies.
+  expect(native.input.source).toEqual({
+    root: {
+      id: source.pod,
+      path: source.path,
+      sha256: source.sha256,
+      bytesBase64: Buffer.from(profileBytes, "utf8").toString("base64"),
+      origin: "SavedMember",
+    },
+    dependencies: [],
+  });
   expect(native.input.executionOptions).toEqual(options);
 });
 

@@ -3,11 +3,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, expect, test } from "vite-plus/test";
 import { address, exportSeed, importSeed, type DemoSeed } from "@pe/agent-contracts";
-import { Context, Layer } from "effect";
+import { Context, Layer, Schema } from "effect";
 import { HttpEffect, HttpRouter } from "effect/unstable/http";
 import { RouteWorkspace, resourceResponse } from "@pe/runtime";
 import { readingKey, scheduleGridRouteState, settingsRouteState } from "@pe/agent-contracts";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
+import { podReceiptSchema } from "@pe/host-contracts/operation-types";
 import { demoRoutes, createDemoOwner } from "../src/demo-owner.ts";
 import { assertDemoPath } from "../src/demo-settings.ts";
 
@@ -234,13 +235,28 @@ test("demo Family capture files a new member and returns what the capture saw", 
   const runFile = (name: string) =>
     f.owner.settings.memberPath({ pod: result.member.pod, path: `${result.evidence.run}/${name}` });
   expect(JSON.parse(await readFile(await runFile("unmodeled.json"), "utf8"))).toHaveLength(2);
-  expect(JSON.parse(await readFile(await runFile("receipt.json"), "utf8"))).toMatchObject({
-    memberPath: result.member.path,
-    memberSha256: result.member.sha256,
+  const receipt = JSON.parse(await readFile(await runFile("receipt.json"), "utf8"));
+  // A native capture runs as an operation: it consumed Revit, so it names no member it read.
+  // The member it wrote is its product, and the run lists it like any other output.
+  expect(Schema.decodeUnknownSync(podReceiptSchema)(receipt)).toMatchObject({
+    origin: "Operation",
+    memberPath: null,
+    memberSha256: null,
     operation: "family.capture",
     outcome: "Succeeded",
-    outputs: ["unmodeled.json"],
   });
+  expect(receipt.outputs).toEqual(
+    expect.arrayContaining(["unmodeled.json", "written-member.json"]),
+  );
+  expect(receipt.outputs).toHaveLength(2);
+  expect(JSON.parse(await readFile(await runFile("written-member.json"), "utf8"))).toEqual({
+    path: result.member.path,
+    sha256: result.member.sha256,
+  });
+  // An Operation receipt cannot borrow the written member's hash.
+  expect(() =>
+    Schema.decodeUnknownSync(podReceiptSchema)({ ...receipt, memberSha256: result.member.sha256 }),
+  ).toThrow();
 });
 
 test("demo Family capture with no pod reads the live spec and files nothing; with a draft it files the draft", async () => {

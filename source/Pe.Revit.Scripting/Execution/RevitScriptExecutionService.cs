@@ -20,6 +20,7 @@ using Pe.Shared.Scripting.Pods;
 using Pe.Shared.Scripting.Policy;
 using Serilog;
 using System.Reflection;
+using System.Text;
 
 namespace Pe.Revit.Scripting.Execution;
 
@@ -105,14 +106,22 @@ public sealed class RevitScriptExecutionService(
             }
 
             var plan = planResult.Plan;
-            outputSink.Attribution = plan.Attribution;
             // A pod run acts from its own pod; an inline snippet acts from no pod, so its run lands
-            // in the default pod beside the inline traces.
-            outputSink.Artifacts = new ScriptArtifactWriter(
-                plan.ExecutionMode == ScriptWorkspaceExecutionMode.Pod
-                    ? plan.WorkspaceRoot
-                    : RevitScriptingStorageLocations.ResolveWorkspaceRoot(ScriptingWorkspaceLayout.DefaultWorkspaceKey));
+            // in the default pod beside the inline traces, as operation input that names no member.
+            var runPod = plan.ExecutionMode == ScriptWorkspaceExecutionMode.Pod
+                ? plan.WorkspaceRoot
+                : RevitScriptingStorageLocations.ResolveWorkspaceRoot(ScriptingWorkspaceLayout.DefaultWorkspaceKey);
+            outputSink.Artifacts = new ScriptArtifactWriter(runPod);
             revitVersion = plan.RevitVersion;
+            try {
+                outputSink.Attribution = plan.Attribution ?? new PodReceipt(
+                    ScriptPodPreparationService.ReadId(runPod) ?? throw new InvalidDataException($"The pod at {runPod} has no manifest id to store the run under."),
+                    null, null, PodRunOrigin.Operation, "scripting.execute", null, PodRunOutcome.Failed, [], null);
+                outputSink.Artifacts.WriteInput(RunInputMetadata(plan, request), RunInputFiles(plan, request));
+            } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException) {
+                AppendDiagnostic(diagnostics, ScriptDiagnosticFactory.Error("run.input", $"The run input could not be saved, so nothing ran: {exception.Message}"));
+                return CreateResult(ScriptExecutionStatus.Rejected, outputSink, diagnostics, revitVersion, plan.TargetFramework, containerTypeName, executionId);
+            }
             targetFramework = plan.TargetFramework;
             Log.Information(
                 "Revit scripting plan ready: ExecutionId={ExecutionId}, RevitVersion={RevitVersion}, TargetFramework={TargetFramework}, SourceFiles={SourceFileCount}, PermissionMode={PermissionMode}",
@@ -361,7 +370,7 @@ public sealed class RevitScriptExecutionService(
                 }
             }
         } catch (OperationCanceledException) {
-            var status = cancellation.IsTimeout ? ScriptExecutionStatus.TimedOut : ScriptExecutionStatus.Canceled;
+            var status = cancellation.IsTimeout ? ScriptExecutionStatus.TimedOut : ScriptExecutionStatus.Cancelled;
             AppendDiagnostic(diagnostics, ScriptDiagnosticFactory.Error(
                 "cancel",
                 cancellation.IsTimeout
@@ -462,8 +471,8 @@ public sealed class RevitScriptExecutionService(
                 projectSeed = captured.ProjectSeed;
                 var entrypoint = podManifest.Entrypoints.Single(item => string.Equals(item.SourcePath, request.SourcePath, StringComparison.OrdinalIgnoreCase));
                 var member = preparation.Members.Single(item => string.Equals(item.Path, entrypoint.SourcePath, StringComparison.OrdinalIgnoreCase));
-                // Outcome and output references are filled when CreateResult observes the final result.
-                preparedAttribution = new PodReceipt(podManifest.Id, member.Path, member.Sha256, "scripting.execute", null, string.Empty, [], null);
+                // Outcome and output references are settled when CreateResult observes the final result.
+                preparedAttribution = new PodReceipt(podManifest.Id, member.Path, member.Sha256, PodRunOrigin.SavedMember, "scripting.execute", null, PodRunOutcome.Failed, [], null);
             }
 
             var canonicalProjectContent = this._projectGenerator.GenerateProjectContent(
@@ -514,6 +523,33 @@ public sealed class RevitScriptExecutionService(
             ));
             return (null, ScriptExecutionStatus.ReferenceResolutionFailed, diagnostics);
         }
+    }
+
+    /// <summary>What the run was asked to do; the consumed source is in `files`. An inline snippet is operation input, never a pod member.</summary>
+    private static object RunInputMetadata(ScriptExecutionPlan plan, ExecuteRevitScriptRequest request) => new {
+        operation = "scripting.execute",
+        plan.ExecutionId,
+        source = plan.Attribution is { } member
+            ? (object)new { kind = "pod-bundle", pod = member.PodId, path = member.MemberPath, sha256 = member.MemberSha256 }
+            : new { kind = "operation", name = request.SourceName },
+        plan.PermissionMode,
+        target = new { document = plan.Document?.Title, plan.RevitVersion, plan.TargetFramework },
+        unavailableEvidence = new[] { "reviewed Work revision" }
+    };
+
+    /// <summary>The authored bytes (the pod bundle, or the inline text), then the normalized sources and project that compiled.</summary>
+    private static List<PodRunInputFile> RunInputFiles(ScriptExecutionPlan plan, ExecuteRevitScriptRequest request) {
+        var pod = plan.Attribution?.PodId;
+        var authored = request.SourceBundle is { } bundle
+            ? bundle.Files.Select((file, index) => new PodRunInputFile("bundle", pod, file.Path,
+                $"source/{index:D2}-{Path.GetFileName(file.Path)}", Convert.FromBase64String(file.BytesBase64)))
+            : [new PodRunInputFile("inline-script", null, request.SourceName ?? "inline", "source/00-inline.csx", Encoding.UTF8.GetBytes(request.ScriptContent!))];
+        return [
+            .. authored,
+            .. plan.SourceSet.Files.Select((file, index) => new PodRunInputFile("effective-source", pod, file.Name,
+                $"effective/{index:D2}-{Path.GetFileName(file.Name)}", Encoding.UTF8.GetBytes(file.Content))),
+            new PodRunInputFile("project", pod, "project.csproj", "effective/project.csproj", Encoding.UTF8.GetBytes(plan.ProjectContent))
+        ];
     }
 
     private ScriptSourceSet MaterializeInlineSnippet(string? scriptContent, string? sourceName, string executionId) {
@@ -1049,9 +1085,13 @@ public sealed class RevitScriptExecutionService(
         object? data = null
     ) {
         var attribution = outputSink.Attribution is null ? null : outputSink.Attribution with {
-            Outcome = status.ToString(),
+            Outcome = status switch {
+                ScriptExecutionStatus.Succeeded => PodRunOutcome.Succeeded,
+                ScriptExecutionStatus.Cancelled => PodRunOutcome.Cancelled,
+                _ => PodRunOutcome.Failed
+            },
             Reason = string.Join("; ", diagnostics.Where(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error).Select(diagnostic => diagnostic.Message)),
-            Outputs = [.. (artifacts ?? []).Select(artifact => artifact.RelativePath)]
+            Outputs = [.. outputSink.Artifacts?.Inputs ?? [], .. (artifacts ?? []).Select(artifact => artifact.RelativePath)]
         };
         var resultArtifacts = artifacts?.ToList() ?? [];
         var resultDiagnostics = diagnostics.ToList();

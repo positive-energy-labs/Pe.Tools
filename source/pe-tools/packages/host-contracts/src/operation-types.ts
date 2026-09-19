@@ -175,18 +175,53 @@ export const podRunsRequestSchema = Schema.Struct({
 });
 export type PodRunsRequest = Schema.Schema.Type<typeof podRunsRequestSchema>;
 
-/** What `PodRuns.WriteReceipt` writes into `output/<runId>/receipt.json`. */
-export const podReceiptSchema = Schema.Struct({
+/** The C# `PodRunOrigin`: a saved member's bytes, a supplied draft, or operation input with no member. */
+export const podRunOriginSchema = Schema.Literals(["SavedMember", "SuppliedDraft", "Operation"]);
+/** The C# `PodRunOutcome`; Cancelled is its own answer, never a rollback claim. */
+export const podRunOutcomeSchema = Schema.Literals(["Succeeded", "Failed", "Cancelled"]);
+
+/**
+ * What `PodRuns.WriteReceipt` writes into `output/<runId>/receipt.json`. `memberSha256` names saved
+ * bytes, so only a SavedMember run carries it. `origin` is null when the writer recorded none. The
+ * member fields name what the run consumed, so an Operation run (it consumed no member) has none.
+ */
+const podReceiptFields = {
   podId: Schema.String,
-  memberPath: Schema.String,
-  memberSha256: Schema.String,
   operation: Schema.String,
   planHash: Schema.NullOr(Schema.String),
-  outcome: Schema.String,
+  outcome: podRunOutcomeSchema,
   outputs: Schema.Array(Schema.String),
   reason: Schema.NullOr(Schema.String),
-});
+};
+export const podReceiptSchema = Schema.Union([
+  Schema.Struct({
+    ...podReceiptFields,
+    origin: Schema.Literal("Operation"),
+    memberPath: Schema.Null,
+    memberSha256: Schema.Null,
+  }),
+  Schema.Struct({
+    ...podReceiptFields,
+    origin: Schema.NullOr(Schema.Literals(["SavedMember", "SuppliedDraft"])),
+    memberPath: Schema.NullOr(Schema.String),
+    memberSha256: Schema.NullOr(Schema.String),
+  }),
+]);
 export type PodReceipt = Schema.Schema.Type<typeof podReceiptSchema>;
+
+/**
+ * What a run consumed, from its `input.json`: a pod composition (saved member or supplied draft), a pod
+ * script bundle, or operation input with no member. The consumed bytes stay in the run folder.
+ */
+export const podRunSourceSchema = Schema.Struct({
+  kind: Schema.String,
+  origin: Schema.optional(Schema.String),
+  pod: Schema.optional(Schema.NullOr(Schema.String)),
+  path: Schema.optional(Schema.NullOr(Schema.String)),
+  sha256: Schema.optional(Schema.NullOr(Schema.String)),
+  name: Schema.optional(Schema.NullOr(Schema.String)),
+});
+export type PodRunSource = Schema.Schema.Type<typeof podRunSourceSchema>;
 
 export const podRunsResponseSchema = Schema.Struct({
   runs: Schema.Array(
@@ -195,6 +230,8 @@ export const podRunsResponseSchema = Schema.Struct({
       receiptPath: Schema.String,
       /** Null exactly when the run folder holds no readable receipt; `error` says why. */
       receipt: Schema.NullOr(podReceiptSchema),
+      /** Absent when the run holds no readable `input.json`. */
+      source: Schema.optional(podRunSourceSchema),
       error: Schema.NullOr(Schema.String),
     }),
   ),
@@ -204,6 +241,7 @@ export type PodRuns = Schema.Schema.Type<typeof podRunsResponseSchema>;
 export const podMemberReadResponseSchema = Schema.Struct({
   content: Schema.String,
   sha256: Schema.String,
+  bytesBase64: Schema.String,
 });
 export type PodMemberRead = Schema.Schema.Type<typeof podMemberReadResponseSchema>;
 
@@ -247,9 +285,21 @@ export const podMemberComposeResponseSchema = Schema.Struct({
   /** The schema the host validated against, so the editor can render its form. */
   schemaJson: Schema.NullOr(Schema.String),
   composed: Schema.NullOr(Schema.String),
+  source: Schema.Struct({
+    id: Schema.String,
+    path: Schema.String,
+    sha256: Schema.String,
+    bytesBase64: Schema.String,
+    origin: Schema.Literals(["SavedMember", "SuppliedDraft"]),
+  }),
   diagnostics: Schema.Array(memberIssueSchema),
   dependencies: Schema.Array(
-    Schema.Struct({ id: Schema.String, path: Schema.String, sha256: Schema.String }),
+    Schema.Struct({
+      id: Schema.String,
+      path: Schema.String,
+      sha256: Schema.String,
+      bytesBase64: Schema.String,
+    }),
   ),
   schemaValidation: Schema.Literals(["passed", "failed", "not-run", "no-schema", "unavailable"]),
   semanticValidation: Schema.Literals(["passed", "failed", "not-run", "unavailable"]),

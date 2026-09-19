@@ -4,22 +4,18 @@ using Pe.Shared.HostContracts.Scripting;
 
 namespace Pe.Shared.Scripting.Pods;
 
-public sealed record PodComposedDocument(
-    string Path,
-    string Content,
-    IReadOnlyList<PodConsumedDependency> Dependencies
-);
-
 /// <summary>One consumed fragment: the pod whose manifest id owns it, its pod-relative path, and its bytes' SHA-256.</summary>
 public sealed record PodConsumedDependency(
     string PodId,
     string Path,
     string Sha256,
+    byte[] Bytes,
     string Content
 );
 
 public sealed record PodCompositionResult(
-    PodComposedDocument? Document,
+    string? Content,
+    IReadOnlyList<PodConsumedDependency> Dependencies,
     IReadOnlyList<ScriptDiagnostic> Diagnostics
 );
 
@@ -37,14 +33,14 @@ public static class PodComposer {
         var dependencies = new List<PodConsumedDependency>();
         JToken root;
         try {
-            root = JToken.Parse(source, new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
+            root = Parse(source);
         } catch (JsonException ex) {
-            return new PodCompositionResult(null, [Error("pod.settings.json", path, ex.Message)]);
+            return new PodCompositionResult(null, dependencies, [Error("pod.settings.json", path, ex.Message)]);
         }
 
         ValidateDirectives(root, path, diagnostics);
         if (diagnostics.Count > 0)
-            return new PodCompositionResult(null, diagnostics);
+            return new PodCompositionResult(null, dependencies, diagnostics);
 
         var visiting = new HashSet<string>(StringComparer.Ordinal);
         var expanded = ExpandPresets(root, path, resolve, visiting, dependencies, diagnostics);
@@ -53,10 +49,11 @@ public static class PodComposer {
         if (ContainsDirective(expanded))
             diagnostics.Add(Error("pod.settings.directive", path, "Composed settings contain an unresolved directive."));
         if (diagnostics.Count > 0)
-            return new PodCompositionResult(null, diagnostics);
+            return new PodCompositionResult(null, dependencies, diagnostics);
 
         return new PodCompositionResult(
-            new PodComposedDocument(path, expanded.ToString(Formatting.Indented).Replace("\r\n", "\n") + "\n", dependencies),
+            expanded.ToString(Formatting.Indented).Replace("\r\n", "\n") + "\n",
+            dependencies,
             []
         );
     }
@@ -103,7 +100,7 @@ public static class PodComposer {
                 out nestedReason
             );
         try {
-            var loaded = JToken.Parse(dependency.Content, new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
+            var loaded = Parse(dependency.Content);
             return ExpandIncludes(
                 ExpandPresets(loaded, dependency.Path, scoped, visiting, dependencies, diagnostics),
                 dependency.Path,
@@ -184,15 +181,37 @@ public static class PodComposer {
 
         var result = new JArray();
         foreach (var item in array) {
+            var before = diagnostics.Count;
             var expanded = ExpandIncludes(item, owner, resolve, visiting, dependencies, diagnostics);
-            if (item is JObject candidate && candidate.ContainsKey("$include") && expanded is JArray splice)
+            if (item is not JObject candidate || candidate["$include"]?.Type != JTokenType.String || diagnostics.Count > before) {
+                result.Add(expanded);
+                continue;
+            }
+            if (Spliced(expanded) is { } splice) {
                 foreach (var child in splice)
                     result.Add(child);
-            else
-                result.Add(expanded);
+                continue;
+            }
+            diagnostics.Add(Error("pod.settings.include", owner,
+                $"Include '{candidate["$include"]}' in an array must resolve to an array or an `Items` fragment; it resolved to {Shape(expanded)}."));
+            result.Add(expanded);
         }
         return result;
     }
+
+    /// <summary>What an array-position include splices: a raw array, or the `Items` of a `{ "$schema"?, "Items": [...] }` fragment.</summary>
+    private static JArray? Spliced(JToken expanded) =>
+        expanded switch {
+            JArray array => array,
+            JObject fragment when fragment["Items"] is JArray items
+                && fragment.Properties().All(property => property.Name is "Items" or "$schema") => items,
+            _ => null
+        };
+
+    private static string Shape(JToken token) =>
+        token is JObject obj
+            ? $"an object with properties {string.Join(", ", obj.Properties().Select(property => property.Name))}"
+            : $"a {token.Type.ToString().ToLowerInvariant()}";
 
     private static JObject MergeRightWins(JObject left, JObject right) {
         var result = (JObject)left.DeepClone();
@@ -202,6 +221,10 @@ public static class PodComposer {
                 : property.Value.DeepClone();
         return result;
     }
+
+    private static JToken Parse(string source) => JToken.Parse(
+        source.Length > 0 && source[0] == '\uFEFF' ? source.Substring(1) : source,
+        new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
 
     private static void ValidateDirectives(JToken token, string owner, ICollection<ScriptDiagnostic> diagnostics) {
         if (token is JObject obj) {
