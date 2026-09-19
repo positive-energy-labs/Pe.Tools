@@ -29,7 +29,8 @@ public static class HostProtocol {
     // 47: TakeoffRegionFacts gains ownerCrop (nullable RevitCropCoverage: Inside | Crossing | Outside)
     // 48: ParameterValueEditResult and ScheduleCellEditResult gain code and causeCode (nullable closed EditRefusalCode)
     // 49: RevitViewImageRegistrationRefusal gains CropOutsideImage
-    public const int ContractVersion = 49;
+    // 50: HostOpsCatalogEntry gains Actor ("human" | "any")
+    public const int ContractVersion = 50;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
