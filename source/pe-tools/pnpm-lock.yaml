@@ -40,7 +40,7 @@ overrides:
 pnpmfileChecksum: sha256-o67yEFBwLUO/jgHp2d9DPtNvgEAEkiWkBOmIRuxfqV0=
 
 patchedDependencies:
-  '@mastra/core@1.61.0': 7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17
+  '@mastra/core@1.61.0': a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee
   '@mastra/server@1.61.0': d41abfdb11ac17341d0c2ad1bc267a64c2c161782462d2c23f7bd1a4e0a44427
   vite-plus@0.2.1: ec4550f35894920e3b7936089232d1d01a00fdf491b57911927884cde8bc5a09
 
@@ -93,7 +93,7 @@ importers:
     dependencies:
       '@mastra/core':
         specifier: 1.61.0
-        version: 1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
+        version: 1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
       '@pe/host-contracts':
         specifier: workspace:*
         version: link:../../packages/host-contracts
@@ -310,10 +310,10 @@ importers:
         version: 4.0.0-beta.92(bufferutil@4.1.0)(effect@4.0.0-beta.92)(ioredis@5.11.1)
       '@mastra/core':
         specifier: 1.61.0
-        version: 1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
+        version: 1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
       '@mastra/mcp':
         specifier: 1.13.1
-        version: 1.13.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.3.6)
+        version: 1.13.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.3.6)
       '@pe/agent-contracts':
         specifier: workspace:*
         version: link:../agent-contracts
@@ -362,16 +362,16 @@ importers:
         version: 1.4.0(@bufbuild/protobuf@2.12.0)(bufferutil@4.1.0)(express@5.2.1)(hono@4.12.8)(playwright-core@1.60.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.1)
       '@mastra/core':
         specifier: 1.61.0
-        version: 1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
+        version: 1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
       '@mastra/hono':
         specifier: 1.7.1
-        version: 1.7.1(@hono/node-server@1.19.14(hono@4.12.8))(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)(hono@4.12.8)(zod@4.3.6)
+        version: 1.7.1(@hono/node-server@1.19.14(hono@4.12.8))(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)(hono@4.12.8)(zod@4.3.6)
       '@mastra/libsql':
         specifier: 1.21.1
-        version: 1.21.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)
+        version: 1.21.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)
       '@mastra/memory':
         specifier: 1.27.0
-        version: 1.27.0(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
+        version: 1.27.0(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
       '@pe/agent-contracts':
         specifier: workspace:*
         version: link:../agent-contracts
@@ -7519,9 +7519,9 @@ snapshots:
     dependencies:
       '@lukeed/csprng': 1.1.0
 
-  '@mastra/agent-browser@0.5.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)(zod@4.3.6)':
+  '@mastra/agent-browser@0.5.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)(zod@4.3.6)':
     dependencies:
-      '@mastra/core': 1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
+      '@mastra/core': 1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
       agent-browser: 0.19.0(bufferutil@4.1.0)
       zod: 4.3.6
     transitivePeerDependencies:
@@ -7537,7 +7537,7 @@ snapshots:
     dependencies:
       '@ai-sdk/ui-utils': 1.2.11
       '@lukeed/uuid': 2.0.1
-      '@mastra/core': 1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
+      '@mastra/core': 1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
       '@mastra/schema-compat': 1.3.7(zod@4.3.6)
       canonicalize: 1.0.8
       jose: 6.2.3
@@ -7563,19 +7563,19 @@ snapshots:
       '@ai-sdk/openai-compatible': 2.0.72(zod@4.3.6)
       '@ast-grep/napi': 0.42.3
       '@aws-sdk/credential-providers': 3.1117.0
-      '@mastra/agent-browser': 0.5.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)(zod@4.3.6)
-      '@mastra/core': 1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
-      '@mastra/duckdb': 1.6.2(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
+      '@mastra/agent-browser': 0.5.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)(zod@4.3.6)
+      '@mastra/core': 1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
+      '@mastra/duckdb': 1.6.2(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
       '@mastra/fastembed': 1.2.0
-      '@mastra/github-signals': 0.2.5(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
-      '@mastra/libsql': 1.21.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)
-      '@mastra/mcp': 1.17.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(express@5.2.1)(hono@4.12.24)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.3.6)
-      '@mastra/memory': 1.27.0(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
-      '@mastra/observability': 1.17.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
-      '@mastra/pg': 1.21.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
+      '@mastra/github-signals': 0.2.5(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
+      '@mastra/libsql': 1.21.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)
+      '@mastra/mcp': 1.17.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(express@5.2.1)(hono@4.12.24)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.3.6)
+      '@mastra/memory': 1.27.0(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
+      '@mastra/observability': 1.17.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
+      '@mastra/pg': 1.21.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
       '@mastra/schema-compat': 1.3.7(zod@4.3.6)
-      '@mastra/stagehand': 0.3.3(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(playwright-core@1.60.0)(zod@4.3.6)
-      '@mastra/tavily': 1.1.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
+      '@mastra/stagehand': 0.3.3(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(playwright-core@1.60.0)(zod@4.3.6)
+      '@mastra/tavily': 1.1.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
       ai: 6.0.266(zod@4.3.6)
       execa: 9.6.1
       libsql: 0.5.29
@@ -7618,19 +7618,19 @@ snapshots:
       '@ai-sdk/openai-compatible': 2.0.72(zod@4.3.6)
       '@ast-grep/napi': 0.42.3
       '@aws-sdk/credential-providers': 3.1117.0
-      '@mastra/agent-browser': 0.5.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)(zod@4.3.6)
-      '@mastra/core': 1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
-      '@mastra/duckdb': 1.6.2(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
+      '@mastra/agent-browser': 0.5.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)(zod@4.3.6)
+      '@mastra/core': 1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
+      '@mastra/duckdb': 1.6.2(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
       '@mastra/fastembed': 1.2.0
-      '@mastra/github-signals': 0.2.5(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
-      '@mastra/libsql': 1.21.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)
-      '@mastra/mcp': 1.17.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(express@5.2.1)(hono@4.12.8)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.3.6)
-      '@mastra/memory': 1.27.0(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
-      '@mastra/observability': 1.17.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
-      '@mastra/pg': 1.21.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
+      '@mastra/github-signals': 0.2.5(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
+      '@mastra/libsql': 1.21.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)
+      '@mastra/mcp': 1.17.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(express@5.2.1)(hono@4.12.8)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.3.6)
+      '@mastra/memory': 1.27.0(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
+      '@mastra/observability': 1.17.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
+      '@mastra/pg': 1.21.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
       '@mastra/schema-compat': 1.3.7(zod@4.3.6)
-      '@mastra/stagehand': 0.3.3(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(playwright-core@1.60.0)(zod@4.3.6)
-      '@mastra/tavily': 1.1.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
+      '@mastra/stagehand': 0.3.3(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(playwright-core@1.60.0)(zod@4.3.6)
+      '@mastra/tavily': 1.1.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
       ai: 6.0.266(zod@4.3.6)
       execa: 9.6.1
       libsql: 0.5.29
@@ -7664,7 +7664,7 @@ snapshots:
       - utf-8-validate
       - workflow
 
-  '@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)':
+  '@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)':
     dependencies:
       '@a2a-js/sdk-v0_3': '@a2a-js/sdk@0.3.14(@bufbuild/protobuf@2.12.0)(express@5.2.1)'
       '@a2a-js/sdk-v1': '@a2a-js/sdk@1.0.1(@bufbuild/protobuf@2.12.0)(express@5.2.1)'
@@ -7710,10 +7710,10 @@ snapshots:
       - utf-8-validate
       - workflow
 
-  '@mastra/duckdb@1.6.2(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))':
+  '@mastra/duckdb@1.6.2(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))':
     dependencies:
       '@duckdb/node-api': 1.5.2-r.2
-      '@mastra/core': 1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
+      '@mastra/core': 1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
 
   '@mastra/fastembed@1.2.0':
     dependencies:
@@ -7723,16 +7723,16 @@ snapshots:
       progress: 2.0.3
       tar: 7.5.16
 
-  '@mastra/github-signals@0.2.5(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)':
+  '@mastra/github-signals@0.2.5(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)':
     dependencies:
-      '@mastra/core': 1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
+      '@mastra/core': 1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
       zod: 4.3.6
 
-  '@mastra/hono@1.7.1(@hono/node-server@1.19.14(hono@4.12.8))(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)(hono@4.12.8)(zod@4.3.6)':
+  '@mastra/hono@1.7.1(@hono/node-server@1.19.14(hono@4.12.8))(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)(hono@4.12.8)(zod@4.3.6)':
     dependencies:
       '@hono/node-ws': 1.3.1(@hono/node-server@1.19.14(hono@4.12.8))(bufferutil@4.1.0)(hono@4.12.8)
-      '@mastra/core': 1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
-      '@mastra/server': 1.61.0(patch_hash=d41abfdb11ac17341d0c2ad1bc267a64c2c161782462d2c23f7bd1a4e0a44427)(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
+      '@mastra/core': 1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
+      '@mastra/server': 1.61.0(patch_hash=d41abfdb11ac17341d0c2ad1bc267a64c2c161782462d2c23f7bd1a4e0a44427)(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
       fetch-to-node: 2.1.0
       hono: 4.12.8
       ws: 8.21.0(bufferutil@4.1.0)
@@ -7742,17 +7742,17 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@mastra/libsql@1.21.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)':
+  '@mastra/libsql@1.21.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)':
     dependencies:
       '@libsql/client': 0.17.4(bufferutil@4.1.0)
-      '@mastra/core': 1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
+      '@mastra/core': 1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@mastra/mcp@1.13.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.3.6)':
+  '@mastra/mcp@1.13.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.3.6)':
     dependencies:
-      '@mastra/core': 1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
+      '@mastra/core': 1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
       '@modelcontextprotocol/ext-apps': 1.7.4(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.3.6)
       '@modelcontextprotocol/sdk': 1.29.0(zod@4.3.6)
       exit-hook: 5.1.0
@@ -7764,9 +7764,9 @@ snapshots:
       - supports-color
       - zod
 
-  '@mastra/mcp@1.17.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(express@5.2.1)(hono@4.12.24)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.3.6)':
+  '@mastra/mcp@1.17.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(express@5.2.1)(hono@4.12.24)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.3.6)':
     dependencies:
-      '@mastra/core': 1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
+      '@mastra/core': 1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
       '@modelcontextprotocol/client': 2.0.0
       '@modelcontextprotocol/core': 2.0.0
       '@modelcontextprotocol/ext-apps': 1.7.4(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.3.6)
@@ -7785,9 +7785,9 @@ snapshots:
       - supports-color
       - zod
 
-  '@mastra/mcp@1.17.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(express@5.2.1)(hono@4.12.8)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.3.6)':
+  '@mastra/mcp@1.17.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(express@5.2.1)(hono@4.12.8)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.3.6)':
     dependencies:
-      '@mastra/core': 1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
+      '@mastra/core': 1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
       '@modelcontextprotocol/client': 2.0.0
       '@modelcontextprotocol/core': 2.0.0
       '@modelcontextprotocol/ext-apps': 1.7.4(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.3.6)
@@ -7806,9 +7806,9 @@ snapshots:
       - supports-color
       - zod
 
-  '@mastra/memory@1.27.0(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))':
+  '@mastra/memory@1.27.0(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))':
     dependencies:
-      '@mastra/core': 1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
+      '@mastra/core': 1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
       '@mastra/schema-compat': 1.3.7(zod@4.4.3)
       async-mutex: 0.5.0
       diff: 8.0.4
@@ -7821,14 +7821,14 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@mastra/observability@1.17.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)':
+  '@mastra/observability@1.17.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)':
     dependencies:
-      '@mastra/core': 1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
+      '@mastra/core': 1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
       zod: 4.3.6
 
-  '@mastra/pg@1.21.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))':
+  '@mastra/pg@1.21.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))':
     dependencies:
-      '@mastra/core': 1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
+      '@mastra/core': 1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
       async-mutex: 0.5.0
       pg: 8.23.0
       pg-connection-string: 2.13.0
@@ -7848,16 +7848,16 @@ snapshots:
       zod: 4.4.3
       zod-from-json-schema: 0.5.2
 
-  '@mastra/server@1.61.0(patch_hash=d41abfdb11ac17341d0c2ad1bc267a64c2c161782462d2c23f7bd1a4e0a44427)(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)':
+  '@mastra/server@1.61.0(patch_hash=d41abfdb11ac17341d0c2ad1bc267a64c2c161782462d2c23f7bd1a4e0a44427)(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)':
     dependencies:
-      '@mastra/core': 1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
+      '@mastra/core': 1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
       hono: 4.12.24
       zod: 4.3.6
 
-  '@mastra/stagehand@0.3.3(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(playwright-core@1.60.0)(zod@4.3.6)':
+  '@mastra/stagehand@0.3.3(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(playwright-core@1.60.0)(zod@4.3.6)':
     dependencies:
       '@browserbasehq/stagehand': 3.5.0(playwright-core@1.60.0)(zod@4.3.6)
-      '@mastra/core': 1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
+      '@mastra/core': 1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
       zod: 4.3.6
     transitivePeerDependencies:
       - '@cfworker/json-schema'
@@ -7868,9 +7868,9 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@mastra/tavily@1.1.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)':
+  '@mastra/tavily@1.1.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)':
     dependencies:
-      '@mastra/core': 1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
+      '@mastra/core': 1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
       '@tavily/core': 0.7.6
       zod: 4.3.6
     transitivePeerDependencies:
@@ -10899,20 +10899,20 @@ snapshots:
       '@ast-grep/napi': 0.42.3
       '@aws-sdk/credential-providers': 3.1117.0
       '@earendil-works/pi-tui': 0.80.6
-      '@mastra/agent-browser': 0.5.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)(zod@4.3.6)
+      '@mastra/agent-browser': 0.5.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)(zod@4.3.6)
       '@mastra/code-sdk': 1.4.0(@bufbuild/protobuf@2.12.0)(bufferutil@4.1.0)(express@5.2.1)(hono@4.12.24)(playwright-core@1.60.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.1)
-      '@mastra/core': 1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
-      '@mastra/duckdb': 1.6.2(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
+      '@mastra/core': 1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
+      '@mastra/duckdb': 1.6.2(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
       '@mastra/fastembed': 1.2.0
-      '@mastra/github-signals': 0.2.5(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
-      '@mastra/libsql': 1.21.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)
-      '@mastra/mcp': 1.17.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(express@5.2.1)(hono@4.12.8)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.3.6)
-      '@mastra/memory': 1.27.0(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
-      '@mastra/observability': 1.17.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
-      '@mastra/pg': 1.21.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
+      '@mastra/github-signals': 0.2.5(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
+      '@mastra/libsql': 1.21.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)
+      '@mastra/mcp': 1.17.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(express@5.2.1)(hono@4.12.8)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.3.6)
+      '@mastra/memory': 1.27.0(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
+      '@mastra/observability': 1.17.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
+      '@mastra/pg': 1.21.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
       '@mastra/schema-compat': 1.3.7(zod@4.3.6)
-      '@mastra/stagehand': 0.3.3(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(playwright-core@1.60.0)(zod@4.3.6)
-      '@mastra/tavily': 1.1.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
+      '@mastra/stagehand': 0.3.3(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(playwright-core@1.60.0)(zod@4.3.6)
+      '@mastra/tavily': 1.1.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
       '@mastra/voice-deepgram': 0.13.0(bufferutil@4.1.0)(zod@4.3.6)
       '@mastra/voice-openai': 0.13.0(ws@8.21.0(bufferutil@4.1.0))(zod@4.3.6)
       ai: 6.0.266(zod@4.3.6)
@@ -10962,20 +10962,20 @@ snapshots:
       '@ast-grep/napi': 0.42.3
       '@aws-sdk/credential-providers': 3.1117.0
       '@earendil-works/pi-tui': 0.80.6
-      '@mastra/agent-browser': 0.5.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)(zod@4.3.6)
+      '@mastra/agent-browser': 0.5.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)(zod@4.3.6)
       '@mastra/code-sdk': 1.4.0(@bufbuild/protobuf@2.12.0)(bufferutil@4.1.0)(express@5.2.1)(hono@4.12.8)(playwright-core@1.60.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.1)
-      '@mastra/core': 1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
-      '@mastra/duckdb': 1.6.2(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
+      '@mastra/core': 1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
+      '@mastra/duckdb': 1.6.2(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
       '@mastra/fastembed': 1.2.0
-      '@mastra/github-signals': 0.2.5(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
-      '@mastra/libsql': 1.21.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)
-      '@mastra/mcp': 1.17.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(express@5.2.1)(hono@4.12.8)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.3.6)
-      '@mastra/memory': 1.27.0(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
-      '@mastra/observability': 1.17.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
-      '@mastra/pg': 1.21.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
+      '@mastra/github-signals': 0.2.5(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
+      '@mastra/libsql': 1.21.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)
+      '@mastra/mcp': 1.17.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(express@5.2.1)(hono@4.12.8)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.3.6)
+      '@mastra/memory': 1.27.0(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
+      '@mastra/observability': 1.17.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
+      '@mastra/pg': 1.21.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
       '@mastra/schema-compat': 1.3.7(zod@4.3.6)
-      '@mastra/stagehand': 0.3.3(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(playwright-core@1.60.0)(zod@4.3.6)
-      '@mastra/tavily': 1.1.1(@mastra/core@1.61.0(patch_hash=7811bfd10a5753f66b8aa6d342256f52d7ac7b8de3b3bcf79b96b7e66395af17)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
+      '@mastra/stagehand': 0.3.3(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(playwright-core@1.60.0)(zod@4.3.6)
+      '@mastra/tavily': 1.1.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
       '@mastra/voice-deepgram': 0.13.0(bufferutil@4.1.0)(zod@4.3.6)
       '@mastra/voice-openai': 0.13.0(ws@8.21.0(bufferutil@4.1.0))(zod@4.3.6)
       ai: 6.0.266(zod@4.3.6)
