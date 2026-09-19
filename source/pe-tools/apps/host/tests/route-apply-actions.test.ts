@@ -8,7 +8,7 @@ import {
   address,
   familiesRouteState,
   familyCellKey,
-  stagedScope,
+  stagedFilter,
   familyDraftRouteState,
   familyStagedPatch,
   type FamilyCellState,
@@ -1010,8 +1010,8 @@ test("two documents keep independent authored scopes", async () => {
   );
   const here = familiesRouteState.schema.parse((await work.read(scope, "families"))!.doc);
   const there = familiesRouteState.schema.parse((await work.read(otherScope, "families"))!.doc);
-  expect(stagedScope(here)?.familyNames).toEqual(["Box", "Pipe"]);
-  expect(stagedScope(there)?.familyNames).toEqual(["Grille"]);
+  expect(stagedFilter(here)?.familyNames).toEqual(["Box", "Pipe"]);
+  expect(stagedFilter(there)?.familyNames).toEqual(["Grille"]);
 });
 
 /* ── parameter links ─────────────────────────────────────────────────────────────────────── */

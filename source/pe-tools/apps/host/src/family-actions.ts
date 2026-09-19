@@ -42,7 +42,7 @@ import {
   type WorkKey,
   familyCatalogProblem,
   familyCatalogRequest,
-  stagedScope,
+  stagedFilter,
   refusalText,
 } from "@pe/agent-contracts";
 import type {
@@ -565,7 +565,7 @@ export async function admitFamilyAction(
         if (!view || view.revision !== base!.revision)
           throw refused("Current reviewed Families Work is required");
         const doc = familiesRouteState.schema.parse(view.doc);
-        const scope = stagedScope(doc);
+        const scope = stagedFilter(doc);
         if (!scope) throw refused("Stage a scope before planning");
         const { specJson, source } = await familySpec(deps, input.source, pods);
         // A generated draft plans one family; it consumes that family's staged cells only if the
