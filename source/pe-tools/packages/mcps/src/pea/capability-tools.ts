@@ -6,6 +6,8 @@ import {
   type ActionControlKey,
   semanticActions,
   familyReads,
+  familiesRouteState,
+  familyCatalogRequest,
   workKeySchema,
   type FamilyReadKey,
   actionBasesSchema,
@@ -349,6 +351,7 @@ async function runCapability(
       defaultTarget,
       requestIdentity(context),
       turnOf(context)?.id,
+      catalog,
     );
     const turn = turnOf(context);
     const cleanup = !outcome.ok && turn ? await ownedTurnDocuments.releaseCurrent(turn.id) : [];
@@ -374,6 +377,7 @@ async function dispatch(
   defaultTarget: Target,
   requestId: string,
   turnId?: string,
+  catalog?: CapabilityCatalog,
 ): Promise<Outcome> {
   const coerced = coerceJsonObject(input.input);
   const payload: Record<string, unknown> =
@@ -602,7 +606,60 @@ async function dispatch(
         const result = await routeFetch(
           `/pe/route-state/${encodeURIComponent(parsed.route)}?${scope.query}`,
         );
-        return { ok: !("isError" in result), target: scope.target, result };
+        if (parsed.route !== familiesRouteState.route || "isError" in result)
+          return { ok: !("isError" in result), target: scope.target, result };
+        const document = familiesRouteState.schema.safeParse(result.doc).data;
+        const familyScope = document?.scope.staged?.value ?? document?.scope.proposal?.value;
+        if (!familyScope)
+          return {
+            ok: true,
+            target: scope.target,
+            result: { ...result, hint: "Propose scope.proposal first." },
+          };
+        try {
+          const catalogRow = catalog?.capabilities.find(
+            (candidate) => candidate.key === "op:revit.catalog.loaded-families",
+          );
+          if (!catalogRow) throw Error("Loaded-families catalog capability unavailable.");
+          const target = await operationTarget(catalogRow, undefined, defaultTarget);
+          const catalogResult = await new HostRpcCaller({
+            hostBaseUrl: base(),
+            ...target,
+            timeoutMs: input.timeoutSeconds * 1000,
+          }).callOperation("revit.catalog.loaded-families", familyCatalogRequest(familyScope));
+          if (!catalogResult.ok) throw Error(catalogResult.message);
+          const families = (catalogResult.response as { families?: unknown[] }).families ?? [];
+          return {
+            ok: true,
+            target: scope.target,
+            result: {
+              ...result,
+              scopeTypes: families.flatMap((family) => {
+                if (!family || typeof family !== "object") return [];
+                const { familyName, types } = family as { familyName?: unknown; types?: unknown };
+                if (typeof familyName !== "string" || !Array.isArray(types)) return [];
+                return [
+                  {
+                    familyName,
+                    typeNames: types.flatMap((type) =>
+                      type &&
+                      typeof type === "object" &&
+                      typeof (type as { typeName?: unknown }).typeName === "string"
+                        ? [(type as { typeName: string }).typeName]
+                        : [],
+                    ),
+                  },
+                ];
+              }),
+            },
+          };
+        } catch (error) {
+          return {
+            ok: true,
+            target: scope.target,
+            result: { ...result, scopeTypesError: message(error) },
+          };
+        }
       }
       if (row.kind === "route-doc") {
         if (input.expectedRevision === undefined)
