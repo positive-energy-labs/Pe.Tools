@@ -33,57 +33,7 @@ public sealed class ViewImageRegistrationProofTests {
     public void Registered_model_points_land_on_their_drawn_pixels(double degrees, bool annotationCrop, bool farAnnotations, bool crossing = false) {
         var doc = RevitFamilyFixtureHarness.CreateProjectDocument(this._ui.Application);
         try {
-            // Far from the template's origin annotations (elevation markers), so the crop holds only the two crosses.
-            var center = new XYZ(1000, 1000, 0);
-            XYZ[] marks = [center + new XYZ(-30, -8, 0), center + new XYZ(25, 12, 0)];
-            ViewPlan view;
-            using (var tx = new Transaction(doc, "Seed registration proof")) {
-                _ = tx.Start();
-                var level = Level.Create(doc, 0);
-                var planType = new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType))
-                    .Cast<ViewFamilyType>().First(t => t.ViewFamily == ViewFamily.FloorPlan);
-                view = ViewPlan.Create(doc, planType.Id, level.Id);
-                view.ViewTemplateId = ElementId.InvalidElementId;
-                view.Scale = Scale;
-                foreach (var mark in marks)
-                foreach (var arm in new[] { new XYZ(3, 0, 0), new XYZ(0, 3, 0) })
-                    _ = doc.Create.NewDetailCurve(view, Line.CreateBound(mark - arm, mark + arm));
-                // D4 Pool House: a grid and a note far outside the crop widened the export; they must not.
-                if (farAnnotations) {
-                    _ = Grid.Create(doc, Line.CreateBound(center + new XYZ(300, -100, 0), center + new XYZ(300, 100, 0)));
-                    _ = TextNote.Create(doc, view.Id, center + new XYZ(0, -400, 0), "FAR", doc.GetDefaultElementTypeId(ElementTypeGroup.TextNoteType));
-                }
-                // Inside the crop at 0° and 45°, running ~70 ft past its right edge (about 0.6 ft per character at 1/8").
-                if (crossing)
-                    _ = TextNote.Create(doc, view.Id, center + new XYZ(20, -30, 0), "CROSSING " + new string('X', 120),
-                        doc.GetDefaultElementTypeId(ElementTypeGroup.TextNoteType));
-                var crop = view.CropBox;
-                var toView = crop.Transform.Inverse;
-                var c = toView.OfPoint(center);
-                var halfWidth = degrees == 0 ? 40 : 60;
-                crop.Min = new XYZ(c.X - halfWidth, c.Y - 40, crop.Min.Z);
-                crop.Max = new XYZ(c.X + halfWidth, c.Y + 40, crop.Max.Z);
-                view.CropBox = crop;
-                view.CropBoxActive = true;
-                view.CropBoxVisible = false;
-                Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
-            }
-            if (degrees != 0) RotateCrop(doc, view, center, degrees * Math.PI / 180);
-            using (var tx = new Transaction(doc, "Annotation crop")) {
-                _ = tx.Start();
-                _ = view.get_Parameter(BuiltInParameter.VIEWER_ANNOTATION_CROP_ACTIVE).Set(annotationCrop ? 1 : 0);
-                if (annotationCrop) {
-                    var shape = view.GetCropRegionShapeManager();
-                    // paper feet: 1", 2", 1.5", 0.5" -> 8, 16, 12, 4 model feet at 1/8" = 1'
-                    shape.LeftAnnotationCropOffset = 1 / 12.0;
-                    shape.RightAnnotationCropOffset = 2 / 12.0;
-                    shape.BottomAnnotationCropOffset = 1.5 / 12.0;
-                    shape.TopAnnotationCropOffset = 0.5 / 12.0;
-                }
-                Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
-            }
-            var basis = view.CropBox.Transform.BasisX;
-            Assert.That(Math.Abs(Math.Atan2(basis.Y, basis.X)) * 180 / Math.PI, Is.EqualTo(degrees).Within(0.5), "precondition: the crop angle");
+            var (view, marks) = Seed(doc, degrees, annotationCrop, farAnnotations, crossing);
 
             var image = RevitViewImageExporter.Export(doc, view, 1600);
             var (width, height, dark) = DarkPixels(image.FilePath);
@@ -103,6 +53,90 @@ public sealed class ViewImageRegistrationProofTests {
                 Assert.That(Distance(drawn, expected), Is.LessThanOrEqualTo(2), $"mark ({mark.X},{mark.Y})");
             }
         } finally { doc.Close(false); }
+    }
+
+    /// <summary>
+    ///     Outline mission hypothesis: ExportImage covers the view's paper-space View.Outline, not its CropBox. On a view whose
+    ///     plain export (nothing hidden) the crop mispredicts, the Outline's aspect must predict the PNG. `[PE_VIEW_IMAGE_OUTLINE]`
+    ///     prints both frames in model feet (Outline x Scale against the crop's own frame) so the mapping can be read off.
+    /// </summary>
+    [TestCase(0, false, true, false)]
+    [TestCase(0, false, false, true)]
+    [TestCase(45, false, true, true)]
+    public void The_outline_predicts_the_plain_export_where_the_crop_does_not(double degrees, bool annotationCrop, bool farAnnotations, bool crossing) {
+        var doc = RevitFamilyFixtureHarness.CreateProjectDocument(this._ui.Application);
+        try {
+            var (view, _) = Seed(doc, degrees, annotationCrop, farAnnotations, crossing);
+            var path = RevitViewImageExporter.ExportPng(doc, view.Id, Path.Combine(Path.GetTempPath(), "pe-view-captures"), $"plain-{Guid.NewGuid():N}", 1600);
+            var (width, height, _) = DarkPixels(path);
+            var crop = view.CropBox;
+            var outline = view.Outline;
+            double byCrop = width * (crop.Max.Y - crop.Min.Y) / (crop.Max.X - crop.Min.X);
+            double byOutline = width * (outline.Max.V - outline.Min.V) / (outline.Max.U - outline.Min.U);
+            Console.WriteLine($"[PE_VIEW_IMAGE_OUTLINE] degrees={degrees} far={farAnnotations} crossing={crossing} png={width}x{height} " +
+                              $"heightByCrop={byCrop:F1} heightByOutline={byOutline:F1} crop=({crop.Min.X:F3},{crop.Min.Y:F3})..({crop.Max.X:F3},{crop.Max.Y:F3}) " +
+                              $"outlineXScale=({outline.Min.U * Scale:F3},{outline.Min.V * Scale:F3})..({outline.Max.U * Scale:F3},{outline.Max.V * Scale:F3}) file={path}");
+            Assert.Multiple(() => {
+                Assert.That(Math.Abs(height - byCrop), Is.GreaterThan(2), "precondition: the crop mispredicts this plain export");
+                Assert.That(height, Is.EqualTo(byOutline).Within(Math.Max(2, byOutline * 0.005)), "the Outline predicts the plain export");
+            });
+        } finally { doc.Close(false); }
+    }
+
+    /// <summary>A plan at 1/8" with two detail-line crosses near (1000, 1000), cropped (rotated by <paramref name="degrees" />).</summary>
+    private static (ViewPlan View, XYZ[] Marks) Seed(Document doc, double degrees, bool annotationCrop, bool farAnnotations, bool crossing) {
+        // Far from the template's origin annotations (elevation markers), so the crop holds only the two crosses.
+        var center = new XYZ(1000, 1000, 0);
+        XYZ[] marks = [center + new XYZ(-30, -8, 0), center + new XYZ(25, 12, 0)];
+        ViewPlan view;
+        using (var tx = new Transaction(doc, "Seed registration proof")) {
+            _ = tx.Start();
+            var level = Level.Create(doc, 0);
+            var planType = new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType))
+                .Cast<ViewFamilyType>().First(t => t.ViewFamily == ViewFamily.FloorPlan);
+            view = ViewPlan.Create(doc, planType.Id, level.Id);
+            view.ViewTemplateId = ElementId.InvalidElementId;
+            view.Scale = Scale;
+            foreach (var mark in marks)
+            foreach (var arm in new[] { new XYZ(3, 0, 0), new XYZ(0, 3, 0) })
+                _ = doc.Create.NewDetailCurve(view, Line.CreateBound(mark - arm, mark + arm));
+            // D4 Pool House: a grid and a note far outside the crop widened the export; they must not.
+            if (farAnnotations) {
+                _ = Grid.Create(doc, Line.CreateBound(center + new XYZ(300, -100, 0), center + new XYZ(300, 100, 0)));
+                _ = TextNote.Create(doc, view.Id, center + new XYZ(0, -400, 0), "FAR", doc.GetDefaultElementTypeId(ElementTypeGroup.TextNoteType));
+            }
+            // Inside the crop at 0° and 45°, running ~70 ft past its right edge (about 0.6 ft per character at 1/8").
+            if (crossing)
+                _ = TextNote.Create(doc, view.Id, center + new XYZ(20, -30, 0), "CROSSING " + new string('X', 120),
+                    doc.GetDefaultElementTypeId(ElementTypeGroup.TextNoteType));
+            var crop = view.CropBox;
+            var toView = crop.Transform.Inverse;
+            var c = toView.OfPoint(center);
+            var halfWidth = degrees == 0 ? 40 : 60;
+            crop.Min = new XYZ(c.X - halfWidth, c.Y - 40, crop.Min.Z);
+            crop.Max = new XYZ(c.X + halfWidth, c.Y + 40, crop.Max.Z);
+            view.CropBox = crop;
+            view.CropBoxActive = true;
+            view.CropBoxVisible = false;
+            Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
+        }
+        if (degrees != 0) RotateCrop(doc, view, center, degrees * Math.PI / 180);
+        using (var tx = new Transaction(doc, "Annotation crop")) {
+            _ = tx.Start();
+            _ = view.get_Parameter(BuiltInParameter.VIEWER_ANNOTATION_CROP_ACTIVE).Set(annotationCrop ? 1 : 0);
+            if (annotationCrop) {
+                var shape = view.GetCropRegionShapeManager();
+                // paper feet: 1", 2", 1.5", 0.5" -> 8, 16, 12, 4 model feet at 1/8" = 1'
+                shape.LeftAnnotationCropOffset = 1 / 12.0;
+                shape.RightAnnotationCropOffset = 2 / 12.0;
+                shape.BottomAnnotationCropOffset = 1.5 / 12.0;
+                shape.TopAnnotationCropOffset = 0.5 / 12.0;
+            }
+            Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
+        }
+        var basis = view.CropBox.Transform.BasisX;
+        Assert.That(Math.Abs(Math.Atan2(basis.Y, basis.X)) * 180 / Math.PI, Is.EqualTo(degrees).Within(0.5), "precondition: the crop angle");
+        return (view, marks);
     }
 
     /// <summary>Rotate the crop region element; the crop element is the one that appears when the crop box is shown.</summary>
