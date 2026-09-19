@@ -40,18 +40,6 @@ const catalog: HostOperationDefinition[] = [
   },
 ];
 
-test("script execution requires an explicit initiating actor before admission", async () => {
-  const client = new HostRpcCaller({
-    hostBaseUrl: "http://127.0.0.1:5180",
-    bridgeSessionId: "source",
-    openDocumentId: "original",
-    catalogOverride: catalog,
-  });
-  await expect(
-    client.callOperation("scripting.execute", { scriptContent: 'WriteLine("ok");' }),
-  ).rejects.toThrow("initiating actor");
-});
-
 test("catalog enrichment preserves the explicit session selector", async () => {
   const originalFetch = globalThis.fetch;
   const calls: Array<{ url: string; init?: RequestInit }> = [];
@@ -67,6 +55,7 @@ test("catalog enrichment preserves the explicit session selector", async () => {
   };
   try {
     const client = new HostRpcCaller({
+      actor: "agent",
       hostBaseUrl: "http://127.0.0.1:5181",
       bridgeSessionId: "session:catalog-e2e",
     });
@@ -91,7 +80,7 @@ test("a transport failure names the URL it tried on the call wire; enrichment ju
     throw new TypeError("fetch failed");
   };
   try {
-    const client = new HostRpcCaller({ hostBaseUrl: "http://127.0.0.1:53999" });
+    const client = new HostRpcCaller({ actor: "agent", hostBaseUrl: "http://127.0.0.1:53999" });
     await expect(client.call("host.status")).rejects.toThrow("POST http://127.0.0.1:53999/call");
     expect(await client.getOperation("revit.context.summary")).toBeUndefined();
   } finally {
@@ -101,6 +90,7 @@ test("a transport failure names the URL it tried on the call wire; enrichment ju
 
 test("a failed call carries the operation's safety label from the catalog", async () => {
   const result = await new HostRpcCaller({
+    actor: "agent",
     hostBaseUrl: "http://127.0.0.1:1",
     timeoutMs: 500,
     catalogOverride: catalog,
@@ -113,6 +103,7 @@ test("a failed call carries the operation's safety label from the catalog", asyn
 
 test("unknown dynamic operation keys fail at transport with catalog enrichment absent", async () => {
   const result = await new HostRpcCaller({
+    actor: "agent",
     hostBaseUrl: "http://127.0.0.1:1",
     timeoutMs: 500,
     catalogOverride: catalog,
@@ -136,6 +127,7 @@ test("a refused call preserves the host's resolved target", async () => {
     );
   try {
     const result = await new HostRpcCaller({
+      actor: "agent",
       hostBaseUrl: "http://host.test",
       catalogOverride: catalog,
     }).callOperation("revit.context.summary");

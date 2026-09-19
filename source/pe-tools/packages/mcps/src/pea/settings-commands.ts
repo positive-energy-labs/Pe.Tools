@@ -4,7 +4,7 @@ import {
   settingsBasisSchema,
   settingsCandidate,
 } from "@pe/agent-contracts";
-import type { RouteStateCommandHandlers } from "@pe/agent-contracts";
+import type { RouteActor, RouteStateCommandHandlers } from "@pe/agent-contracts";
 
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
@@ -34,15 +34,18 @@ export function createSettingsCommandHandlers(
     };
   } = {},
 ): RouteStateCommandHandlers<SettingsRouteDocument> {
-  const caller = () => new HostRpcCaller({ hostBaseUrl: resolveHostBaseUrl(options.hostBaseUrl) });
-  const read = (member: PodMember) =>
-    (options.pods?.read ?? ((request: PodMember) => caller().call("pod.member.read", request)))(
-      member,
+  const caller = (actor: RouteActor) =>
+    new HostRpcCaller({ hostBaseUrl: resolveHostBaseUrl(options.hostBaseUrl), actor });
+  const read = (member: PodMember, actor: RouteActor) =>
+    (
+      options.pods?.read ?? ((request: PodMember) => caller(actor).call("pod.member.read", request))
+    )(member);
+  const compose = (request: PodMemberComposeRequest, actor: RouteActor) =>
+    (options.pods?.compose ?? ((value) => caller(actor).call("pod.member.compose", value)))(
+      request,
     );
-  const compose = (request: PodMemberComposeRequest) =>
-    (options.pods?.compose ?? ((value) => caller().call("pod.member.compose", value)))(request);
-  const basis = async (member: PodMember) => {
-    const reading = await read(member);
+  const basis = async (member: PodMember, actor: RouteActor) => {
+    const reading = await read(member, actor);
     return settingsBasisSchema.parse({
       member,
       rawContent: reading.content,
@@ -64,7 +67,7 @@ export function createSettingsCommandHandlers(
       requireWork(ctx);
       const { member } = input as { member: PodMember };
       const document = ctx.getDoc();
-      const next = await basis(member);
+      const next = await basis(member, ctx.actor);
       if (
         document.basis &&
         sameMember(document.basis.member, member) &&
@@ -84,7 +87,7 @@ export function createSettingsCommandHandlers(
       const bound = ctx.getDoc().basis?.member;
       if (bound && !sameMember(bound, member))
         throw new Error("Adopt re-reads the bound member; open another member in its own Work.");
-      const next = await basis(member);
+      const next = await basis(member, ctx.actor);
       if (next.sha256 !== sha256)
         throw new Error("The member changed after review. Refresh and review again.");
       await ctx.setDoc({ basis: next, fields: {} });
@@ -92,19 +95,22 @@ export function createSettingsCommandHandlers(
     },
     refresh: async (_input, ctx) => {
       requireWork(ctx);
-      return basis(requireBasis(ctx.getDoc()).member);
+      return basis(requireBasis(ctx.getDoc()).member, ctx.actor);
     },
     validate: async (input, ctx) => {
       const document = ctx.getDoc();
       const original = requireBasis(document);
-      return compose({
-        ...original.member,
-        content: settingsCandidate(
-          original.rawContent,
-          document.fields,
-          Boolean((input as { includeProposals?: boolean }).includeProposals),
-        ),
-      });
+      return compose(
+        {
+          ...original.member,
+          content: settingsCandidate(
+            original.rawContent,
+            document.fields,
+            Boolean((input as { includeProposals?: boolean }).includeProposals),
+          ),
+        },
+        ctx.actor,
+      );
     },
   };
 }

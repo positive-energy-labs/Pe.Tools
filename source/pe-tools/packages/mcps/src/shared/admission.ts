@@ -26,8 +26,8 @@ export interface AdmissionContext {
   /** Explicit session selector; omitted means "the session the catalog answered from". */
   bridgeSessionId?: string;
   openDocumentId?: string;
-  /** Required for mutation; never inferred from the transport. */
-  actor?: "human" | "agent";
+  /** Who initiated every hop, read or mutation; never inferred from the transport. */
+  actor: "human" | "agent";
   /** Reuse an original action id to replay its receipt instead of starting a new attempt. */
   actionId?: string;
   timeoutMs?: number;
@@ -135,6 +135,7 @@ const caller = (context: AdmissionContext) =>
     hostBaseUrl: context.hostBaseUrl,
     bridgeSessionId: context.bridgeSessionId,
     openDocumentId: context.openDocumentId,
+    actor: context.actor,
     timeoutMs: context.timeoutMs,
   });
 
@@ -190,8 +191,6 @@ export async function runCapability(
       key as never,
       (Object.keys(input).length ? input : undefined) as never,
     );
-  if (!context.actor)
-    throw new Error(`'${key}' mutates; name the initiating actor (--actor human|agent).`);
   const admission = actionAdmissionSchema.parse({
     id: context.actionId ?? crypto.randomUUID(),
     kind: intent.kind,

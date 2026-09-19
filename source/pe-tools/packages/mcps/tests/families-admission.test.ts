@@ -350,9 +350,14 @@ function seededWork(doc: unknown, host: HostCall = liveHost()) {
   const calls: any[] = [];
   const work = new RouteWorkspace({
     registrations: createRouteRegistrations({
-      loadedFamilies: hostLoadedFamilies(undefined, (async (key: any, request: any, on: any) => {
+      loadedFamilies: hostLoadedFamilies(undefined, (async (
+        key: any,
+        request: any,
+        actor: any,
+        on: any,
+      ) => {
         if (key === "revit.catalog.loaded-families") calls.push(request);
-        return host(key, request, on);
+        return host(key, request, actor, on);
       }) as HostCall),
     }),
     store: {
@@ -418,8 +423,8 @@ test("M13-2 (e): cells with no scope on either rung refuse by name, and Revit is
 
 // Item 3: the door's refusal is structured. The web draws `code` and its parts; Pea reads `agentHint`.
 const casing = (answer: (key: string, request: any) => unknown): HostCall =>
-  (async (key: string, request: any, on: any) =>
-    (await answer(key, request)) ?? liveHost()(key as any, request, on)) as HostCall;
+  (async (key: string, request: any, actor: any, on: any) =>
+    (await answer(key, request)) ?? liveHost()(key as any, request, actor, on)) as HostCall;
 const catalogOf = (families: unknown[], truncated = false) =>
   casing((key) =>
     key === "revit.catalog.loaded-families" ? { summary: { truncated }, families } : undefined,
@@ -546,4 +551,26 @@ test("item 3: every door refusal names its code and its structured parts, and ke
     expect(refused, code).not.toHaveProperty("error");
     expect(refused, code).not.toHaveProperty("hint");
   }
+});
+
+test("M23: the Families admission loopback names the writer on every /call hop", async () => {
+  const seen: Array<[string, string | null]> = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+    const { key, request } = JSON.parse(String(init?.body));
+    seen.push([key, new Headers(init?.headers).get("x-pe-action-actor")]);
+    return Response.json(await liveHost()(key, request, "agent"));
+  }) as typeof fetch;
+  try {
+    for (const actor of ["agent", "human"] as const)
+      await hostLoadedFamilies("http://host.test")(address(projectA), exhaustScope as never, actor);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  expect(seen).toEqual([
+    ["bridge.sessions.list", "agent"],
+    ["revit.catalog.loaded-families", "agent"],
+    ["bridge.sessions.list", "human"],
+    ["revit.catalog.loaded-families", "human"],
+  ]);
 });

@@ -117,9 +117,11 @@ const targetQuery = (target: Target): string => {
  */
 async function routeWorkScope(target: Target): Promise<{ query: string; target: ResolvedTarget }> {
   if (target?.kind !== "open") return { query: targetQuery(target), target: namedTarget(target) };
-  const { sessions } = await new HostRpcCaller({ hostBaseUrl: base(), timeoutMs: 30_000 }).call(
-    "bridge.sessions.list",
-  );
+  const { sessions } = await new HostRpcCaller({
+    hostBaseUrl: base(),
+    actor: "agent",
+    timeoutMs: 30_000,
+  }).call("bridge.sessions.list");
   const document = sessions
     .find((session) => session.sessionId === target.ref.session)
     ?.openDocuments?.find((doc) => doc.openId === target.ref.openId);
@@ -540,6 +542,7 @@ async function dispatch(
             : (input.target?.session ?? targetSession(defaultTarget));
       const definition = await new HostRpcCaller({
         hostBaseUrl: base(),
+        actor: "agent",
         bridgeSessionId: selector,
       }).getOperation("scripting.execute");
       if (!definition) throw Error("Public scripting operation metadata unavailable");
@@ -642,9 +645,11 @@ async function operationTarget(
     if (override !== undefined) throw Error("This capability needs no Revit target.");
     return {};
   }
-  const { sessions } = await new HostRpcCaller({ hostBaseUrl: base(), timeoutMs: 30_000 }).call(
-    "bridge.sessions.list",
-  );
+  const { sessions } = await new HostRpcCaller({
+    hostBaseUrl: base(),
+    actor: "agent",
+    timeoutMs: 30_000,
+  }).call("bridge.sessions.list");
   const inventory: TargetInventory = {
     kind: "ready",
     sessions: Object.fromEntries(

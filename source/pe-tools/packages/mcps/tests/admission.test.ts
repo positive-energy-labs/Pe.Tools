@@ -195,23 +195,13 @@ test("the catalog, not the caller, says whether a key is an operation or a workf
   }
 });
 
-test("a mutation with no session, no actor, or no catalog row refuses before it POSTs", async () => {
+test("a mutation with no session or no catalog row refuses before it POSTs", async () => {
   const host = fakeHost();
   try {
     await expect(tools().bootstrap({})).rejects.toThrow("none is connected to http://host.test");
     await expect(
       runCapability("family.capture", {}, { hostBaseUrl: "http://host.test", actor: "agent" }),
     ).rejects.toThrow("none is connected or named");
-    await expect(
-      new ScriptingTools({
-        hostBaseUrl: "http://host.test",
-        bridgeSessionId: "s",
-        workspaceKey: "demo-pod",
-      }).exportPod({
-        pod: "p",
-        archivePath: "b.zip",
-      }),
-    ).rejects.toThrow("initiating actor");
     await expect(
       runCapability("pod.nonesuch", {}, { hostBaseUrl: "http://host.test", actor: "agent" }),
     ).rejects.toThrow("none is connected");

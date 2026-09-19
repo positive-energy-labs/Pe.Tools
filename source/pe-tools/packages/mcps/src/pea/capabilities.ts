@@ -275,6 +275,7 @@ export function createCapabilityCatalogSource(options: {
       const sources: Record<string, string> = { "route registry": "ok", skills: "ok" };
       const caller = new HostRpcCaller({
         hostBaseUrl: base,
+        actor: "agent",
         bridgeSessionId: bridgeSelector,
         timeoutMs: SOURCE_BUDGET_MS,
       });

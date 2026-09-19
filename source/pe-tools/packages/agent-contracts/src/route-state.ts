@@ -127,6 +127,8 @@ export interface RouteStateCommandContext<TDoc = unknown> {
   target: Address | null;
   /** The named standalone workspace when this Work is not document-scoped. */
   work?: string;
+  /** Who pressed the command; a handler's host hop carries it so the host can refuse by actor. */
+  actor: import("./route-doc.ts").RouteActor;
   /** The current document (schema-parsed; a fresh empty document when absent). */
   getDoc(): TDoc;
   /** Replace the document (schema-validated before it lands). */

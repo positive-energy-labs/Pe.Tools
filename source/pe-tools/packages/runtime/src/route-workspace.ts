@@ -211,6 +211,7 @@ export class RouteWorkspace {
         const result = await handler(guarded.input, {
           target: scope.target,
           work: scope.work,
+          actor,
           getDoc: () => structuredClone(committed?.doc ?? envelope.doc),
           setDoc: async (candidate) => {
             const landed = commitDoc(spec, envelope, candidate);

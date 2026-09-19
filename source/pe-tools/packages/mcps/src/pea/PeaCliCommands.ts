@@ -107,6 +107,7 @@ export class PeaCliCommands {
       description: "Print host/Revit log tails.",
       args: {
         host: commonArgs.host,
+        actor: commonArgs.actor,
         target: {
           type: "string",
           description: "Log target: host, revit, or all.",
@@ -222,10 +223,7 @@ export class PeaCliCommands {
           hostBaseUrl: this.resolveHostBaseUrl(ctx.values.host),
           bridgeSessionId: asOptionalString(ctx.values.bridgeSessionId),
           openDocumentId: asOptionalString(ctx.values.openDocumentId),
-          actor:
-            ctx.values.actor === "human" || ctx.values.actor === "agent"
-              ? ctx.values.actor
-              : undefined,
+          actor: cliActor(ctx.values),
           actionId: asOptionalString(ctx.values.actionId),
         };
         const intent = await readCapabilityIntent(key, context);
@@ -449,7 +447,7 @@ export class PeaCliCommands {
       hostBaseUrl: this.resolveHostBaseUrl(values.host),
       bridgeSessionId: asOptionalString(values.bridgeSessionId),
       openDocumentId: asOptionalString(values.openDocumentId),
-      actor: values.actor === "human" || values.actor === "agent" ? values.actor : undefined,
+      actor: cliActor(values),
       actionId: asOptionalString(values.actionId),
       timeoutMs: scriptClientTimeoutMs(scriptTimeoutSeconds),
       workspaceKey: this.resolveWorkspaceKey(values.workspace),
@@ -465,7 +463,7 @@ export class PeaCliCommands {
       bridgeSessionId: asOptionalString(values.bridgeSessionId),
       openDocumentId: asOptionalString(values.openDocumentId),
       requestId: asOptionalString(values.actionId),
-      actor: values.actor === "human" || values.actor === "agent" ? values.actor : undefined,
+      actor: cliActor(values),
       ...(scriptTimeoutSeconds != null
         ? { timeoutMs: scriptClientTimeoutMs(scriptTimeoutSeconds) }
         : {}),
@@ -481,11 +479,18 @@ export class PeaCliCommands {
   }
 }
 
+/** Every CLI hop names its actor; unflagged is an agent, so a person opts in with --actor human. */
+function cliActor(values: Record<string, unknown>): "human" | "agent" {
+  if (values.actor === undefined || values.actor === "agent") return "agent";
+  if (values.actor === "human") return "human";
+  throw new Error(`--actor must be human or agent, not '${String(values.actor)}'.`);
+}
+
 const commonArgs = {
   actor: {
     type: "string",
     description:
-      "Initiating actor: human or agent. Required for mutation; never inferred from CLI transport.",
+      "Initiating actor: agent (default) or human. A person passes --actor human for human-only operations.",
   },
   actionId: {
     type: "string",

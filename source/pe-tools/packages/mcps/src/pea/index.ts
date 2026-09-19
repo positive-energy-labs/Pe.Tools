@@ -40,6 +40,7 @@ export const captureView = createCaptureViewTool(
   (context) =>
     new HostRpcCaller({
       hostBaseUrl: peaHostBaseUrl(),
+      actor: "agent",
       bridgeSessionId: sessionOf(turnOf(context)?.defaultTarget),
     }),
 );

@@ -43,6 +43,7 @@ const work = (): SettingsRouteDocument => ({
 const context = (document: SettingsRouteDocument) => ({
   target: null,
   work: "pods:a",
+  actor: "human" as const,
   getDoc: () => structuredClone(document),
   setDoc: async (next: SettingsRouteDocument) => {
     Object.assign(document, next);

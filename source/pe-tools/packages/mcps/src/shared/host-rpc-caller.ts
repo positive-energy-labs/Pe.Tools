@@ -30,7 +30,8 @@ type HostRpcCallerOptions = HostSessionScope & {
   hostBaseUrl?: string;
   timeoutMs?: number;
   requestId?: string;
-  actor?: "human" | "agent";
+  /** Who initiated this hop; the host refuses an agent call to a human-only op, so it is never implied. */
+  actor: "human" | "agent";
   /** Persist caller view identity before submitting a mutation; reads never invoke this. */
   beforeAdmission?: (id: string) => Promise<void>;
   /** Test seam: skip the live /ops fetch and use this catalog. */
@@ -155,7 +156,7 @@ export class HostRpcCaller {
   private readonly options: Required<Pick<HostRpcCallerOptions, "hostBaseUrl">> &
     HostRpcCallerOptions;
 
-  constructor(options: HostRpcCallerOptions = {}) {
+  constructor(options: HostRpcCallerOptions) {
     this.options = {
       ...options,
       hostBaseUrl: options.hostBaseUrl ?? hostProcessIdentity.defaultHostBaseUrl,
@@ -193,7 +194,6 @@ export class HostRpcCaller {
     const operation = prior || key === CANCEL_KEY ? undefined : await this.getOperation(key);
     if (prior || operation?.intent === "Mutate") {
       const actor = this.options.actor;
-      if (!actor) throw Error("Mutation caller must supply its initiating actor");
       // One destination builder: the host recomputes this from `needs` and compares it exactly.
       const destination =
         prior?.destination ??
@@ -340,7 +340,7 @@ const runHostRpcEffect = Effect.fnUntraced(function* (
     try: async () => {
       const headers: Record<string, string> = { "content-type": "application/json" };
       if (options.requestId) headers["x-pe-action-id"] = options.requestId;
-      if (options.actor) headers["x-pe-action-actor"] = options.actor;
+      headers["x-pe-action-actor"] = options.actor;
       if (options.bridgeSessionId)
         headers[HOST_RPC_BRIDGE_SESSION_HEADER] = options.bridgeSessionId;
       if (options.openDocumentId) headers[HOST_RPC_DOCUMENT_HEADER] = options.openDocumentId;

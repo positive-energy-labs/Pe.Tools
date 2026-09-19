@@ -13,6 +13,7 @@ import {
   type AppliedFilter,
   type FamiliesRefusal,
   type FamiliesRefusalCode,
+  type RouteActor,
   type RouteWriteAdmission,
 } from "@pe/agent-contracts";
 
@@ -25,6 +26,7 @@ import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 export type LoadedFamilies = (
   target: Address | null,
   scope: AppliedFilter,
+  actor: RouteActor,
 ) => Promise<readonly { familyName: string; types: readonly { typeName: string }[] }[]>;
 
 /** Why the loopback could not answer: a named catalog or document problem. */
@@ -98,7 +100,7 @@ export function familiesAdmission(loadedFamilies: LoadedFamilies): RouteWriteAdm
     for (const written of scopes) {
       let known: Set<string>;
       try {
-        const loaded = await loadedFamilies(work.target, { ...written, familyNames: [] });
+        const loaded = await loadedFamilies(work.target, { ...written, familyNames: [] }, actor);
         known = new Set(loaded.map((family) => family.familyName));
       } catch (error) {
         return refuse(
@@ -140,7 +142,7 @@ export function familiesAdmission(loadedFamilies: LoadedFamilies): RouteWriteAdm
       );
     let families: Awaited<ReturnType<LoadedFamilies>>;
     try {
-      families = await loadedFamilies(work.target, keyed);
+      families = await loadedFamilies(work.target, keyed, actor);
     } catch (error) {
       return refuse(
         catalogCode(error),
@@ -174,25 +176,28 @@ export function familiesAdmission(loadedFamilies: LoadedFamilies): RouteWriteAdm
 /** One host op call, at a document when `at` names one. */
 export type HostCall = <K extends "bridge.sessions.list" | "revit.catalog.loaded-families">(
   key: K,
-  request?: OpRequestOf<K>,
+  request: OpRequestOf<K> | undefined,
+  actor: RouteActor,
   at?: { bridgeSessionId: string; openDocumentId: string },
 ) => Promise<OpResponseOf<K>>;
 
 const hostCall =
   (host?: string): HostCall =>
-  (key, request, at) =>
-    new HostRpcCaller({ hostBaseUrl: resolveHostBaseUrl(host), timeoutMs: 30_000, ...at }).call(
-      key,
-      request,
-    );
+  (key, request, actor, at) =>
+    new HostRpcCaller({
+      hostBaseUrl: resolveHostBaseUrl(host),
+      actor,
+      timeoutMs: 30_000,
+      ...at,
+    }).call(key, request);
 
 /** Loopback to the host: the one Revit session holding the Work's document, then its catalog. */
 export const hostLoadedFamilies =
   (host?: string, call: HostCall = hostCall(host)): LoadedFamilies =>
-  async (target, scope) => {
+  async (target, scope, actor) => {
     if (!target)
       throw new CatalogError("document-unavailable", "this Families Work names no document");
-    const { sessions } = await call("bridge.sessions.list");
+    const { sessions } = await call("bridge.sessions.list", undefined, actor);
     const open = sessions.flatMap((session) =>
       session.connected
         ? (session.openDocuments ?? []).flatMap((doc) => {
@@ -213,6 +218,7 @@ export const hostLoadedFamilies =
     const catalog = await call(
       "revit.catalog.loaded-families",
       familyCatalogRequest(scope),
+      actor,
       open[0],
     );
     const problem = familyCatalogProblem(catalog);

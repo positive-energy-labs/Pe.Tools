@@ -340,6 +340,61 @@ test("an explicit document detour leaves the next call on the frozen turn defaul
   }
 });
 
+test("M23: a Pea read of a human-only op reaches /call as the agent, and the host's 409 is Pea's refusal", async () => {
+  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
+  // Pea's own catalog is stale on the actor, so only the host's declaration stands between them.
+  const stale = catalog();
+  stale.capabilities = stale.capabilities.map((row) =>
+    row.key === "op:families.plan" ? { ...row, actor: "any" } : row,
+  );
+  const actors: Array<string | null> = [];
+  vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
+    const url = new URL(input);
+    if (url.pathname === "/pe/capabilities") return Response.json(stale);
+    if (url.pathname === "/ops") return Response.json({ operations: ops });
+    const body = JSON.parse(typeof init?.body === "string" ? init.body : "{}");
+    if (body.key === "bridge.sessions.list")
+      return Response.json({
+        sessions: [
+          {
+            sessionId: "b1",
+            connected: true,
+            openDocuments: [{ openId: "a", address: "C:\\Models\\A.rvt", isFamily: false }],
+          },
+        ],
+      });
+    const actor = new Headers(init?.headers).get("x-pe-action-actor");
+    actors.push(actor);
+    // The host's /call rule: no header is a human caller.
+    return (actor ?? "human") === "agent"
+      ? Response.json(
+          {
+            kind: "HostFailure",
+            message: "'families.plan' is human-only; agent calls are refused",
+            notDispatched: true,
+          },
+          { status: 409 },
+        )
+      : Response.json({ planned: true });
+  });
+  try {
+    const read = (await run(peRead, { key: "op:families.plan", timeoutSeconds: 30 })) as {
+      ok: boolean;
+      result: { status?: number; message: string; problem?: { notDispatched?: boolean } };
+    };
+    expect(actors, JSON.stringify(read)).toEqual(["agent"]);
+    expect(read.ok).toBe(false);
+    expect(read.result).toMatchObject({
+      status: 409,
+      message: "families.plan: 'families.plan' is human-only; agent calls are refused",
+      problem: { notDispatched: true },
+    });
+  } finally {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  }
+});
+
 test("real turn admission freezes an open lifetime; reopen needs an explicit override and host/session work needs no Work", async () => {
   vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
   let openId = "a";
