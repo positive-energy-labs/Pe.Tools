@@ -448,7 +448,7 @@ test("an old reading of another schedule does not break this schedule's Work rea
   expect(read.value.id).toBe(f.reading.id);
 });
 
-test("F-H5-1: a dead-lifetime push names its exit; a re-read rebinds and an unchanged cell pushes live; a changed staged cell refuses the rebind by name", async () => {
+test("F-H5-1: a dead-lifetime push names its exit; a re-read rebinds and marks a changed staged cell stale; it refuses per cell by code while the rest push live", async () => {
   const f = await setup();
   // Two cells under one basis: Mark (1::1) and Load (1::2, staged by setup).
   const withMark = (load = "100") => {
@@ -500,25 +500,22 @@ test("F-H5-1: a dead-lifetime push names its exit; a re-read rebinds and an unch
   const untouched = await f.view();
   const fresh = await f.read(live);
   expect(await f.view()).toEqual(untouched);
-  // Stale: the rebind refuses and names the cell; nothing moves, nothing is lost.
-  const refused = rebindScheduleWork((await f.view()).doc as never, old, fresh);
-  expect(refused).toEqual({
-    patches: [],
-    stale: ['1::2 staged "150 VA" (was 100 VA, now 120 VA)'],
-  });
-  expect((await f.view()).doc.cells["1::2"].staged).toEqual({ value: "150 VA" });
-  // The person unstages it; the next read rebinds, and the unchanged cell stays staged.
-  await f.patch([{ path: ["cells", "1::2", "staged"], value: null }]);
-  const rebind = rebindScheduleWork((await f.view()).doc as never, old, fresh);
-  expect(rebind.stale).toEqual([]);
-  expect(await f.patch(rebind.patches)).toMatchObject({ ok: true });
+  // One human write: the live basis, with the changed staged cell marked stale. Cells untouched.
+  expect(
+    await f.patch(rebindScheduleWork((await f.view()).doc as never, old, fresh)),
+  ).toMatchObject({ ok: true });
   const doc = (await f.view()).doc;
-  expect(doc.basis).toEqual({ captureId: fresh.id });
+  expect(doc.basis).toEqual({ captureId: fresh.id, stale: ["1::2"] });
   expect(doc.cells["1::1"].staged).toEqual({ value: "P-9" });
+  expect(doc.cells["1::2"].staged).toEqual({ value: "150 VA" });
+  // The stale cell refuses per cell, by code, before dispatch; the other cell pushes live.
   f.setResponse(cellsApplied([[1, 1, true]]));
   expect(await f.submit(await at())).toMatchObject({
     state: "succeeded",
-    result: { applied: 1, failures: [] },
+    result: {
+      applied: 1,
+      failures: [{ key: "1::2", code: "stale-staged-cell", error: expect.stringMatching(/stale/) }],
+    },
   });
   const pushed = f.sent.filter((s) => s.key === "schedule.cells.apply");
   expect(pushed).toHaveLength(1);
@@ -526,4 +523,5 @@ test("F-H5-1: a dead-lifetime push names its exit; a re-read rebinds and an unch
     openId: "reopened-B",
     input: { edits: [{ rowNumber: 1, columnNumber: 1, value: "P-9" }] },
   });
+  expect((await f.view()).doc.cells["1::2"].staged).toEqual({ value: "150 VA" });
 });

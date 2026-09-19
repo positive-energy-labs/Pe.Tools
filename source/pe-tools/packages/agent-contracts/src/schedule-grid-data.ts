@@ -104,7 +104,16 @@ export type ScheduleGridSnapshot = z.infer<typeof scheduleGridSnapshotSchema>;
 
 /** Authored Work for one schedule subject. Readings are immutable references, not editable facts. */
 export const scheduleGridDocumentSchema = z.object({
-  basis: z.object({ captureId: z.string().regex(/^[a-f0-9]{64}$/) }).nullish(),
+  basis: z
+    .object({
+      captureId: z.string().regex(/^[a-f0-9]{64}$/),
+      /**
+       * Staged cell keys whose binding moved when a re-read rebound this basis: staged over a value
+       * the person never saw. Push refuses them per cell; staging or unstaging a key drops it.
+       */
+      stale: z.array(z.string()).optional(),
+    })
+    .nullish(),
   cells: z.record(z.string(), scheduleGridCellSchema).default({}),
 });
 export type ScheduleGridDocument = z.infer<typeof scheduleGridDocumentSchema>;
