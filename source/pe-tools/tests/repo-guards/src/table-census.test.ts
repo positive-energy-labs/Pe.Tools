@@ -27,9 +27,6 @@ const DOMAIN: Record<string, string> = {
   // Re-checked (r3): it IS data, but `Table` is a focusable grid with an entry tab stop; a
   // pointer-events-none peek over the plan must take no focus at all.
   "runs/browser/zone-peek.tsx": "a transient, unfocusable floater laid over the drawing",
-  // ponytail: the two product tables leave this list with their migration (guard item 2).
-  "data-tables/draft-editor.tsx": "PENDING migration onto Table",
-  "lib/schema-to-field-render/table-field.tsx": "PENDING migration onto Table",
   "workbench/prose.tsx": "GFM tables in prose; the markdown renderer owns them",
 };
 
