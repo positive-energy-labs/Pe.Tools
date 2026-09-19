@@ -13,7 +13,7 @@ import type {
 } from "@pe/agent-contracts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import { blankDefinition } from "#/parameter-links/model";
+import { blankAssignment, blankDefinition } from "#/parameter-links/model";
 import { ParameterLinksWorkspace } from "#/routes/parameter-links";
 
 vi.mock("#/lib/token", async (importOriginal) => ({
@@ -147,4 +147,48 @@ test("saving your own profile still stages it", async () => {
   );
   await act(async () => fireEvent.click(screen.getByRole("button", { name: /save draft/ })));
   expect(writes.flat().some((p) => p.path.join(".") === "profile.staged")).toBe(true);
+});
+
+test("the proposal row expands into a per-definition and per-assignment diff against staged", async () => {
+  const stagedProfile = {
+    formatVersion: 1,
+    definitions: [blankDefinition("def-0"), blankDefinition("def-2")],
+    assignments: [blankAssignment("def-0", "a-1")],
+  } as ParameterLinkProfile;
+  const proposed = {
+    formatVersion: 1,
+    definitions: [{ ...blankDefinition("def-0"), reducer: "max" }, blankDefinition("def-1")],
+    assignments: [
+      { ...blankAssignment("def-0", "a-1"), enabled: false },
+      blankAssignment("def-1", "a-2"),
+    ],
+  } as ParameterLinkProfile;
+  render(
+    <Harness
+      initial={
+        {
+          profile: { proposal: { value: proposed }, staged: { value: stagedProfile } },
+        } as ParameterLinksDocument
+      }
+    />,
+  );
+  const disclosure = screen.getByLabelText("changes against staged");
+  expect(disclosure.textContent).toBe("5 changes against staged");
+  await act(async () => fireEvent.click(disclosure));
+  const change = (key: string) =>
+    document.querySelector(`[data-key="${key}"]`)?.textContent ?? `no row ${key}`;
+  expect(change("definition:def-0")).toContain("changed: reducer");
+  expect(change("definition:def-1")).toContain("added");
+  expect(change("definition:def-2")).toContain("removed");
+  expect(change("assignment:a-1")).toContain("changed: enabled");
+  expect(change("assignment:a-2")).toContain("added");
+});
+
+test("with nothing staged every proposed definition and assignment reads added", () => {
+  render(
+    <Harness initial={{ profile: { proposal: { value: PROPOSED } } } as ParameterLinksDocument} />,
+  );
+  expect(screen.getByLabelText("changes against staged").textContent).toBe(
+    "2 changes against staged",
+  );
 });

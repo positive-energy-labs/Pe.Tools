@@ -1,4 +1,8 @@
-import { parameterLinksBasis, stagedParameterProfile } from "@pe/agent-contracts";
+import {
+  canonicalRouteInput,
+  parameterLinksBasis,
+  stagedParameterProfile,
+} from "@pe/agent-contracts";
 import type {
   ParameterLinksReading,
   ParameterLinkAssignment,
@@ -159,4 +163,44 @@ export function updateAssignment(
 
 export function removeAssignment(profile: ParameterLinkProfile, id: string): ParameterLinkProfile {
   return { ...profile, assignments: profile.assignments.filter((asn) => asn.id !== id) };
+}
+
+export interface ProfileChange {
+  kind: "definition" | "assignment";
+  id: string;
+  change: "added" | "removed" | "changed";
+  /** The fields that differ, for `changed`. */
+  fields: string[];
+}
+
+/** What accepting `proposed` would change against `staged`, matched by id; unchanged items are left out. */
+export function profileDiff(
+  staged: ParameterLinkProfile | null | undefined,
+  proposed: ParameterLinkProfile | null | undefined,
+): ProfileChange[] {
+  const side = <T extends { id: string }>(kind: ProfileChange["kind"], from: T[], to: T[]) => {
+    const before = new Map(from.map((item) => [item.id, item]));
+    const after = new Map(to.map((item) => [item.id, item]));
+    const changes: ProfileChange[] = [];
+    for (const [id, item] of after) {
+      const was = before.get(id);
+      if (!was) {
+        changes.push({ kind, id, change: "added", fields: [] });
+        continue;
+      }
+      const fields = [...new Set([...Object.keys(was), ...Object.keys(item)])].filter(
+        (field) =>
+          canonicalRouteInput((was as Record<string, unknown>)[field] ?? null) !==
+          canonicalRouteInput((item as Record<string, unknown>)[field] ?? null),
+      );
+      if (fields.length) changes.push({ kind, id, change: "changed", fields });
+    }
+    for (const id of before.keys())
+      if (!after.has(id)) changes.push({ kind, id, change: "removed", fields: [] });
+    return changes;
+  };
+  return [
+    ...side("definition", staged?.definitions ?? [], proposed?.definitions ?? []),
+    ...side("assignment", staged?.assignments ?? [], proposed?.assignments ?? []),
+  ];
 }

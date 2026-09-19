@@ -23,7 +23,16 @@ import { Surface } from "#/components/lang/surface";
 import { useHostStatusQuery } from "#/readings";
 import { EvaluationView, RuntimeStatusBar } from "#/parameter-links/Evaluation";
 import { ProfileEditor } from "#/parameter-links/ProfileEditor";
-import { applyRefusal, isDraftDirty, profileSummary, sameProfile } from "#/parameter-links/model";
+import { ActivityDisclosure } from "#/components/lang/activity";
+import { Row } from "#/components/lang/row";
+import {
+  applyRefusal,
+  isDraftDirty,
+  profileDiff,
+  profileSummary,
+  sameProfile,
+  type ProfileChange,
+} from "#/parameter-links/model";
 import { ReviewRow, type CellWire } from "#/components/lang/band";
 import { previousOf } from "#/readings";
 import { useRoute, type RouteHandle } from "#/route";
@@ -403,6 +412,14 @@ export function ParameterLinksWorkspace({
                       show={(value) => profileSummary(value as ParameterLinkProfile)}
                     />
                   ) : null}
+                  {reviewingProposal ? (
+                    <ProfileChanges
+                      changes={profileDiff(
+                        profileCell.staged?.value as ParameterLinkProfile | undefined,
+                        profileCell.proposal?.value as ParameterLinkProfile | undefined,
+                      )}
+                    />
+                  ) : null}
                   {previewingProposal ? (
                     <OutcomeLine
                       kind="advisory"
@@ -464,5 +481,28 @@ export function ParameterLinksWorkspace({
         }
       />
     </Surface>
+  );
+}
+
+/** Pea's proposal against staged, item by item: what accept would change, not just its counts. */
+function ProfileChanges({ changes }: { changes: ProfileChange[] }) {
+  return (
+    <ActivityDisclosure
+      label="changes against staged"
+      summary={`${changes.length} change${changes.length === 1 ? "" : "s"} against staged`}
+    >
+      {changes.length
+        ? changes.map((change) => (
+            <Row
+              key={`${change.kind}:${change.id}`}
+              data-key={`${change.kind}:${change.id}`}
+              label={`${change.kind} ${change.id}`}
+              meta={
+                change.change === "changed" ? `changed: ${change.fields.join(", ")}` : change.change
+              }
+            />
+          ))
+        : null}
+    </ActivityDisclosure>
   );
 }
