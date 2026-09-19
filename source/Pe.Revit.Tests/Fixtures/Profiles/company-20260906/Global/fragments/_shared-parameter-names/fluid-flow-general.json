@@ -1,9 +1,0 @@
-{
-  "Items": [
-    "PE_G_Perf_FluidFlowDesign",
-    "PE_G_Perf_FluidFlowMax",
-    "PE_G_Perf_FluidFlowMin",
-    "PE_G_Perf_Horsepower"
-  ],
-  "$schema": "../../schemas/global/fragments/include/_shared-parameter-names/_shared-parameter-names.schema.json"
-}

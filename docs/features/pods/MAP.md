@@ -263,7 +263,7 @@ Wave 3 items from the critic, for reference:
 - Remote field options keyed by `$schema` URL end to end (critic purge row 4 finishes what w2-engines-cleanup starts).
 - `PeToolsBrowser.cs` deep link targets `/pods?pod=&path=` once page state is in the URL.
 - Purge rows 7 to 9: C# fallback pod capture and duplicated bounds, the `{ patch }` wrap in two languages, the duplicate `PodMember` record in `Pe.App/Pods`.
-- OPEN for the user: `FamilyProfileConverter.cs` converts legacy FF profiles inside the product engine (law 13). It is also the only way the 50 legacy profile members in the migration plan become usable. Rule: keep as the one-shot converter invoked by migration, or delete with the members.
+- RESOLVED 2026-09-18 (user: "the company migration HAS landed: FamilyProfileConverter and the company corpus are deletable"; see `docs/features/family/LEDGER.md`). Was: `FamilyProfileConverter.cs` converts legacy FF profiles inside the product engine (law 13). It is also the only way the 50 legacy profile members in the migration plan become usable. Rule: keep as the one-shot converter invoked by migration, or delete with the members.
 
 ### Wave 2 (planned)
 
