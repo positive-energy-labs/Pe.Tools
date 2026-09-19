@@ -43,6 +43,12 @@ export interface FamiliesPage {
    * at the press. ponytail: a mirror of the matrix; drop it when capture takes names.
    */
   loaded: Record<string, number>;
+  /**
+   * After start fresh: the fresh page offers to hold the old Work's exclusions back again, until
+   * pressed, dismissed, or the next plan (journeys' ruling). ponytail: page memory, so a reload
+   * drops the offer; the old Work stays aside and salvageable.
+   */
+  carryOver: boolean;
 }
 
 export const familiesPageSchema = z.object({
@@ -54,6 +60,7 @@ export const familiesPageSchema = z.object({
     })
     .default({ placement: "AllLoaded", categories: [], families: [] }),
   loaded: z.record(z.string(), z.number()).default({}),
+  carryOver: z.boolean().default(false),
 });
 
 export type FamiliesReadingKey = "receipts" | "inventory";

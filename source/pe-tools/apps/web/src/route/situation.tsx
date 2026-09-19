@@ -676,6 +676,10 @@ export interface SituationProps {
   };
   /** Free content under the verb row, for routes without a Work frame. Prefer `work`. */
   band?: ReactNode;
+  /** Read-only, in the start-fresh confirm: what the set-aside Work carried (a route's salvage). */
+  startFreshAside?: ReactNode;
+  /** After start fresh landed: the route may offer what the old Work carried. */
+  onStartedFresh?: () => void;
   /** Lines for the ledger behind the state gauge: what is bound, how fresh, which revision. */
   ledger?: readonly (readonly [string, ReactNode])[];
 }
@@ -689,6 +693,8 @@ export function Situation({
   commit,
   work,
   band,
+  startFreshAside,
+  onStartedFresh,
   ledger,
 }: SituationProps) {
   const [page, setPage] = handle.page as [
@@ -794,8 +800,14 @@ export function Situation({
                 unresolved={unresolved as string[]}
                 reload={handle.work.reload}
                 startFresh={
-                  handle.work.startFresh ? () => void handle.work.startFresh?.() : undefined
+                  handle.work.startFresh
+                    ? () =>
+                        void handle.work.startFresh?.().then((refusal) => {
+                          if (!refusal) onStartedFresh?.();
+                        })
+                    : undefined
                 }
+                startFreshAside={startFreshAside}
                 body={staged?.body}
                 showRevision={false}
               />

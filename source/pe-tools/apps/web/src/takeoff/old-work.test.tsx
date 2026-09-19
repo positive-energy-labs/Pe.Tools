@@ -99,6 +99,8 @@ test("old-shape takeoffs Work fails closed on the shared path: the host's senten
     return new Response(JSON.stringify({ ok: true, revision: 1 }));
   });
   fireEvent.click(screen.getByRole("button", { name: "start fresh" }));
+  // The confirm: the first press asks, the second sets the old Work aside.
+  fireEvent.click(screen.getByRole("button", { name: "start fresh? press again" }));
   await waitFor(() => expect(screen.queryByText("unreadable")).toBeNull(), { timeout: 5_000 });
   expect(posts).toHaveLength(1);
   expect(new URL(posts[0]).pathname).toMatch(/\/route-state\/takeoffs\/start-fresh$/);

@@ -36,6 +36,8 @@ export interface WorkBandProps {
   reload?: () => void;
   /** Offered only on unreadable saved Work: set it aside, untouched, and start an empty one. */
   startFresh?: () => void;
+  /** What the confirm shows, read-only, of the Work start fresh sets aside (a route's salvage). */
+  startFreshAside?: ReactNode;
   body?: ReactNode;
   /** Compact heads may remain present for open proposals or transient asks with nothing staged. */
   visible?: boolean;
@@ -67,6 +69,7 @@ export function WorkBand({
   unresolved = [],
   reload,
   startFresh,
+  startFreshAside,
   body,
   visible = count > 0,
   showRevision = true,
@@ -141,17 +144,7 @@ export function WorkBand({
               reload
             </Press>
           ) : null}
-          {startFresh ? (
-            <Press
-              frame="line"
-              tone="quiet"
-              size="value"
-              title="Sets the saved Work aside, untouched on disk, and starts a new empty Work here. Pea cannot do this."
-              onClick={startFresh}
-            >
-              start fresh
-            </Press>
-          ) : null}
+          {startFresh ? <StartFresh run={startFresh} aside={startFreshAside} /> : null}
         </div>
       ) : null}
     </>
@@ -397,5 +390,56 @@ export function UnstageAll({
         void runFanOut(wire, cells, keys, "unstage").then(done);
       }}
     />
+  );
+}
+
+/**
+ * Start fresh, confirmed: the first press shows what is set aside (read-only), the second sets it
+ * aside. No lapse, so the person can read it; Escape or "keep it" cancels. Pea cannot do this.
+ */
+function StartFresh({ run, aside }: { run: () => void; aside?: ReactNode }) {
+  const [armed, setArmed] = useState(false);
+  useHotkeys([
+    {
+      hotkey: "Escape",
+      callback: () => setArmed(false),
+      options: {
+        enabled: armed,
+        meta: keyMeta({
+          name: "cancel start fresh",
+          description: "keep the saved Work; nothing is set aside",
+          tier: "widget",
+        }),
+      },
+    },
+  ]);
+  return (
+    <span className="flex flex-col gap-1">
+      <span className="flex items-baseline gap-2">
+        <Press
+          frame="line"
+          tone="quiet"
+          size="value"
+          title={
+            armed
+              ? "Press again to set the saved Work aside, untouched on disk, and start an empty one; Escape keeps it"
+              : "Sets the saved Work aside, untouched on disk, and starts a new empty Work here (asks first). Pea cannot do this."
+          }
+          onClick={() => {
+            if (!armed) return setArmed(true);
+            setArmed(false);
+            run();
+          }}
+        >
+          {armed ? "start fresh? press again" : "start fresh"}
+        </Press>
+        {armed ? (
+          <Press frame="line" tone="quiet" size="value" onClick={() => setArmed(false)}>
+            keep it
+          </Press>
+        ) : null}
+      </span>
+      {armed ? aside : null}
+    </span>
   );
 }

@@ -49,6 +49,8 @@ export function EntityRouteView({
   facts,
   subject,
   band,
+  startFreshAside,
+  onStartedFresh,
   health,
   hold,
   url = true,
@@ -65,6 +67,8 @@ export function EntityRouteView({
   subject?: ReactNode;
   /** Route content under the Situation's verb row. */
   band?: ReactNode;
+  startFreshAside?: ReactNode;
+  onStartedFresh?: () => void;
   /** The audit's complaint for the chain lamp; null = healthy. */
   health?: string | null;
   /** Hold a sheet row back from apply (or put it back); absent = rows cannot be held. */
@@ -153,6 +157,8 @@ export function EntityRouteView({
           // commits by planning.
           commit={def.plan || def.staged ? "plan" : "apply"}
           band={band}
+          startFreshAside={startFreshAside}
+          onStartedFresh={onStartedFresh}
           sentence={
             <>
               {subject ?? def.entity}

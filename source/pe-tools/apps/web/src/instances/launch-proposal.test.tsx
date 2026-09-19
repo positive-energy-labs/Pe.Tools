@@ -122,5 +122,8 @@ test("old-shape instances Work fails closed: the host's refusal and start fresh,
   render(<InstancesCluster fleet={fleet} target="" setTarget={() => {}} handle={handle} />);
   expect(document.body.textContent).toContain(refusal);
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "start fresh" })));
+  await act(async () =>
+    fireEvent.click(screen.getByRole("button", { name: "start fresh? press again" })),
+  );
   expect(startFresh).toHaveBeenCalledOnce();
 });

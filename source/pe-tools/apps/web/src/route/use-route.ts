@@ -56,7 +56,7 @@ import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
 import { DEFAULT_WAIT_S, type RouteManifest } from "./manifest";
 import { callHostDynamic } from "#/host/client";
 import { causeRefusal, refuse, writeRefusal, type Refusal } from "./refusal";
-import { postRouteWrite } from "./host";
+import { getRouteSalvage, postRouteWrite } from "./host";
 import { useThreadScope } from "#/chat/scope";
 import { cancelRunningAdmissions } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
@@ -444,7 +444,7 @@ class RouteAtomKey implements Equal.Equal {
 
 function routeUrl(
   route: string,
-  operation: "apply" | "command" | typeof START_FRESH,
+  operation: "apply" | "command" | typeof START_FRESH | "salvage",
   key: WorkKey,
 ) {
   const url = new URL(peUrl(resolveWorkbenchConfig(), `/route-state/${route}/${operation}`));
@@ -550,6 +550,8 @@ export function docWriter<S extends RouteStateSpec<any>>(
     },
     /** The human door only; the host refuses Pea's door and readable Work. */
     startFresh: () => send(START_FRESH, {}),
+    /** The human door only: what the route carries over from Work it can no longer read. */
+    salvage: () => getRouteSalvage(routeUrl(spec.route, "salvage", key)),
   };
 }
 
@@ -642,6 +644,11 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
      * lands on `failure`; success re-reads Work. Null unless the failure is the host's UNREADABLE_WORK.
      */
     readonly startFresh: (() => Promise<Refusal | null>) | null;
+    /**
+     * Human-only, read-only: what the route's declared `salvage` carries over from Work it can no
+     * longer read (the unreadable Work, else the newest aside). Null when there is none.
+     */
+    readonly salvage: (() => Promise<{ from: string; value: unknown } | null>) | null;
     readonly reload: () => void;
   };
   readonly readings: Readonly<Record<R, Reading<unknown>>>;
@@ -1292,6 +1299,7 @@ export function useRoute<W, R extends string, P, A extends string>(
               return refusal;
             }
           : null,
+      salvage: writer && !seed ? () => writer.salvage() : null,
       reload: () => {
         if (seed) return;
         owner.registry.set(owner.conflict, false);

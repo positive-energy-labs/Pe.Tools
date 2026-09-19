@@ -7,7 +7,7 @@
  * receipt said, and which picker is open. Plain values, no atoms.
  */
 import { frozenDemo } from "#/host/demo-client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   actionReceiptSchema,
   actionStatusSchema,
@@ -252,8 +252,53 @@ export function useFamiliesStore(
     ],
   );
 
+  /*
+   * What the old Work held back, as the catalog names each id now (null: no longer loaded). Read
+   * while the Work is unreadable (the start-fresh confirm shows it) and while the fresh page's
+   * offer is open. Human-only on the host; read-only here: nothing carries over without a press.
+   */
+  const unreadable = handle.work.startFresh !== null;
+  const salvage = handle.work.salvage;
+  const salvaged = useHostCall(
+    async (): Promise<SalvagedExclusion[]> => {
+      const got = await salvage!();
+      const familyIds = got ? salvagedIdsSchema.parse(got.value).familyIds : [];
+      if (!familyIds.length) return [];
+      const names = await host.namesById(documentTarget!);
+      return familyIds.map((id) => ({ id, name: names.get(id) ?? null }));
+    },
+    ["salvage", documentTarget?.session, documentTarget?.openId, unreadable, page.carryOver],
+    salvage !== null && documentTarget !== null && (unreadable || page.carryOver),
+  );
+
+  // The offer lasts until pressed, dismissed, or the next plan (journeys' ruling).
+  useEffect(() => {
+    if (page.sheet && page.carryOver) setPage({ carryOver: false });
+  }, [page.sheet, page.carryOver, setPage]);
+
   const actions = useMemo(
     () => ({
+      /** Start fresh landed: the fresh page offers what the old Work held back. */
+      startedFresh: () => setPage({ carryOver: true }),
+      dismissCarryOver: () => setPage({ carryOver: false }),
+      /** The person's one press: hold the old exclusions that still resolve back, as theirs. */
+      holdBackAgain: async (rows: readonly SalvagedExclusion[]) => {
+        const names = [
+          ...new Set(
+            rows.flatMap((row) =>
+              row.name && !Object.hasOwn(excluded, row.name) ? [row.name] : [],
+            ),
+          ),
+        ];
+        const refusal = names.length
+          ? await handle.work.write(
+              // not a cell: excluded
+              names.map((name) => ({ path: ["excluded", name], value: { by: "person" } })),
+            )
+          : null;
+        if (!refusal) setPage({ carryOver: false });
+        return refusal;
+      },
       setDraft: (value: Setter<FamiliesDraft>) => setPage({ draft: next(value, draft) }),
       setPicked: (value: Setter<Set<string>>) => setPage({ selection: [...next(value, picked)] }),
       /** The current reading's name → id, which capture's contract still takes (by id). */
@@ -323,9 +368,19 @@ export function useFamiliesStore(
     busy: handle.busy,
     failure: handle.failure,
     feeds,
+    salvaged,
     actions,
     wire,
   };
 }
+
+/** One exclusion the set-aside Work held, by id, and the name the catalog gives it now. */
+export interface SalvagedExclusion {
+  id: number;
+  /** Null: no loaded family has this id now. */
+  name: string | null;
+}
+
+const salvagedIdsSchema = z.object({ familyIds: z.array(z.number().int()) });
 
 export type FamiliesStore = ReturnType<typeof useFamiliesStore>;

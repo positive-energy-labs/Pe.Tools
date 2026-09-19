@@ -17,6 +17,7 @@ import { ValueDiff } from "#/components/lang/value-diff";
 import type { Column } from "#/components/master-table/model";
 import { Table } from "#/components/master-table/table";
 import { familyCellEntries } from "#/families/staged";
+import type { SalvagedExclusion } from "#/families/store";
 import { Seam, SectionLabel } from "#/families/readout-primitives";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 import { cn } from "#/lib/utils";
@@ -322,5 +323,59 @@ export function FamiliesProposalsBand() {
         ))}
       </div>
     </section>
+  );
+}
+
+/** One salvaged exclusion as the person reads it: its current name, or that it is gone. */
+const heldWord = (row: SalvagedExclusion) => row.name ?? `element ${row.id} · no longer loaded`;
+
+/**
+ * In the start-fresh confirm, read-only: what the Work being set aside held back, by the names the
+ * catalog gives those families now. Nothing carries over from here.
+ */
+export function SalvagedExclusions() {
+  const { store } = useFamiliesWorkspace();
+  const { data, error, pending } = store.salvaged;
+  if (pending) return <OutcomeLine kind="busy" label="reading what it held back" />;
+  if (error) return <OutcomeLine kind="error" label="old exclusions unread" says={error.message} />;
+  if (!data?.length) return <span className="t-small text-ink-2">it held no families back</span>;
+  return (
+    <div className="flex flex-col gap-0.5 t-small" aria-label="held back in the old Work">
+      <span className="text-ink-2">held back in the old Work (read-only; set aside with it):</span>
+      {data.map((row) => (
+        <span key={row.id} className="face-mono">
+          {heldWord(row)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * On the fresh page after start fresh: one line offers to hold the old exclusions back again, as
+ * the person's, until pressed, dismissed, or the next plan. Names the catalog no longer resolves
+ * are said, never written.
+ */
+export function FamiliesCarryOverLine() {
+  const { store } = useFamiliesWorkspace();
+  const rows = store.salvaged.data ?? [];
+  const resolved = rows.filter((row) => row.name !== null);
+  if (!store.page.carryOver || !rows.length) return null;
+  return (
+    <div className="flex flex-wrap items-baseline gap-2 px-4 py-1 t-small" role="status">
+      <span>the old Work held back {rows.map(heldWord).join(", ")}</span>
+      {resolved.length ? (
+        <ActionButton
+          label="hold these back again"
+          reason={`Hold ${resolved.length} famil${resolved.length === 1 ? "y" : "ies"} back from plan again, as yours, in one write`}
+          onClick={() => void store.actions.holdBackAgain(rows)}
+        />
+      ) : null}
+      <ActionButton
+        label="dismiss"
+        reason="Keep the fresh Work as it is; the old one stays set aside"
+        onClick={store.actions.dismissCarryOver}
+      />
+    </div>
   );
 }
