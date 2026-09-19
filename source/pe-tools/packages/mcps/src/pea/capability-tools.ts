@@ -58,6 +58,7 @@ import {
   type DocumentRef,
 } from "@pe/agent-contracts";
 import { HostRpcCaller, type ResolvedTarget } from "../shared/host-rpc-caller.ts";
+import type { RevitCatalogLoadedFamilies } from "@pe/host-contracts/generated";
 import { coerceJsonObject } from "../shared/coerce.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
 import { bundledPeaSkills } from "./skills.ts";
@@ -606,6 +607,7 @@ async function dispatch(
         const result = await routeFetch(
           `/pe/route-state/${encodeURIComponent(parsed.route)}?${scope.query}`,
         );
+        // ponytail: families is the only route keyed by loaded Revit types; generalize when a second route needs it
         if (parsed.route !== familiesRouteState.route || "isError" in result)
           return { ok: !("isError" in result), target: scope.target, result };
         const document = familiesRouteState.schema.safeParse(result.doc).data;
@@ -628,29 +630,16 @@ async function dispatch(
             timeoutMs: input.timeoutSeconds * 1000,
           }).callOperation("revit.catalog.loaded-families", familyCatalogRequest(familyScope));
           if (!catalogResult.ok) throw Error(catalogResult.message);
-          const families = (catalogResult.response as { families?: unknown[] }).families ?? [];
+          const response = catalogResult.response as RevitCatalogLoadedFamilies.Res.Response;
           return {
             ok: true,
             target: scope.target,
             result: {
               ...result,
-              scopeTypes: families.flatMap((family) => {
-                if (!family || typeof family !== "object") return [];
-                const { familyName, types } = family as { familyName?: unknown; types?: unknown };
-                if (typeof familyName !== "string" || !Array.isArray(types)) return [];
-                return [
-                  {
-                    familyName,
-                    typeNames: types.flatMap((type) =>
-                      type &&
-                      typeof type === "object" &&
-                      typeof (type as { typeName?: unknown }).typeName === "string"
-                        ? [(type as { typeName: string }).typeName]
-                        : [],
-                    ),
-                  },
-                ];
-              }),
+              scopeTypes: response.families.map((family) => ({
+                familyName: family.familyName,
+                typeNames: family.types.map((type) => type.typeName),
+              })),
             },
           };
         } catch (error) {

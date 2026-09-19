@@ -321,10 +321,6 @@ export const familiesRouteState = {
     "family",
     "families",
     "propose",
-    "width",
-    "duct",
-    "fitting",
-    "fittings",
   ],
   description:
     'Family Foundry: propose scope.proposal first = { value: { categoryNames, familyNames, placementScope } } (exact family names from op:revit.catalog.loaded-families); the person stages it, and plan audits only the staged scope. Then propose cells.<key>.proposal, where <key> is [familyName,typeName,parameter] of a type listed in the route read\'s scopeTypes (the staged scope, else the proposed one) (the family NAME, never an element id); do not wait for the person to stage the scope. A person stages reviewed cells before plan or apply. Hold a family back with excluded.<familyName> = { by: "pea" }; the plan sheet names who held it back, and only the person lifts their own.',

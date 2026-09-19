@@ -185,7 +185,7 @@ test("F-H6-2: the Families route tells Pea to propose a scope, then cells agains
 });
 
 test.each([
-  "set Width on types of the duct fittings",
+  "set Width on types of the Elbow family",
   "set a parameter value on family types",
   "change type parameters for families",
 ])("F-B-1: family type changes find the Families propose door: %s", async (query) => {
