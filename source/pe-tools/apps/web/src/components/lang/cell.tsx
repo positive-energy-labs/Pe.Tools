@@ -233,13 +233,17 @@ export function StateCell(props: StateCellProps) {
         }
         out = fmtNum(parsed, props.numeric.digits);
       }
+      const settle = (refused: string | null | void) => {
+        if (typeof refused === "string") {
+          el.value = initial.current; // restore the drawn value, visibly
+          setRefusal(refused);
+        } else if (refusal != null) {
+          setRefusal(null);
+        }
+      };
       const refused = props.onCommit?.(out);
-      if (typeof refused === "string") {
-        el.value = initial.current; // restore the prior value, visibly
-        setRefusal(refused);
-      } else if (refusal != null) {
-        setRefusal(null);
-      }
+      if (refused instanceof Promise) void refused.then(settle);
+      else settle(refused);
     };
     return (
       <span

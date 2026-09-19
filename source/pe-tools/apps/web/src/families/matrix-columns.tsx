@@ -281,7 +281,12 @@ export function useFamiliesColumns({
                 reason={reason}
                 cell={cell}
                 transitions={transitions}
-                onCommit={(next) => void propose(address, { value: next }, value)}
+                // A refused write puts the cell back and says why on it (25 item 3).
+                onCommit={(next) =>
+                  propose(address, { value: next }, value).then(
+                    (refusal) => refusal?.message ?? null,
+                  )
+                }
               />
             );
           }
@@ -347,7 +352,8 @@ export function ProposalCell({
   transitions?: readonly CellTransition[];
   /** Why a patch cannot write this cell; present, the cell draws locked and takes no typing. */
   lock?: string;
-  onCommit?: (text: string) => void;
+  /** Resolves to the write's refusal, if any: the kit then restores the drawn value and says it. */
+  onCommit?: (text: string) => Promise<string | null>;
 }) {
   const move = useCellNavigation();
   const proposal = cell?.proposal;

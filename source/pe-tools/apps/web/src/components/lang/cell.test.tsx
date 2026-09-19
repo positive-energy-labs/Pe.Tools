@@ -230,3 +230,23 @@ test("Enter on the last row commits and hands focus back to the cell, never to t
   expect(commit).toHaveBeenCalledWith("A1");
   expect(document.activeElement).toBe(gridcell());
 });
+
+test("25 item 3: a commit refused LATER (an async write) puts the cell back and says why", async () => {
+  // The families edit is a Work write: its refusal arrives after the commit returned.
+  let refuse!: (reason: string) => void;
+  const onCommit = vi.fn(
+    () =>
+      new Promise<string>((resolve) => {
+        refuse = resolve;
+      }),
+  );
+  const { cell } = inTable(<StateCell value="10in" scale="row" onCommit={onCommit} />);
+  const input = cell.getByRole("textbox") as HTMLInputElement;
+  await act(async () => fireEvent.change(input, { target: { value: "12in" } }));
+  await act(async () => fireEvent.keyDown(input, { key: "Enter" }));
+  expect(onCommit).toHaveBeenCalledWith("12in");
+  await act(async () => refuse("that family isn't in this page's scope"));
+  // The typed text is not left looking staged: the drawn value is back, and the refusal is said.
+  expect(input.value).toBe("10in");
+  expect(document.body.textContent).toContain("that family isn't in this page's scope");
+});

@@ -79,8 +79,10 @@ export interface StateCellProps {
    * commit: the cell restores the prior value and shows a dismissible caution note carrying
    * the reason — §3's "restore AND say why, near the cell, without resizing the row". Requires
    * `scale="row"` and a string `value`; `cap` other than editable wins and renders locked.
+   * An async commit (a Work write) may return a promise of that refusal: it restores the same
+   * way when the refusal arrives, so typed text is never left looking accepted.
    */
-  onCommit?: (text: string) => string | void;
+  onCommit?: (text: string) => string | void | Promise<string | null | void>;
   /**
    * NUMERIC COMMIT (ruled 2026-08-16, fit reviews #2 — §3's named silent-swallow defect, killed
    * here): present ⇒ the commit path parses per `parseCell` before `onCommit` sees anything. A
