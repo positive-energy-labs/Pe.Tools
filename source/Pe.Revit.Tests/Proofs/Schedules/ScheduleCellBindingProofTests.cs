@@ -1,4 +1,5 @@
 using Autodesk.Revit.DB.Structure;
+using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.DocumentData.Schedules.Apply;
 using Pe.Revit.DocumentData.Schedules.Collect;
 using Pe.Shared.RevitData;
@@ -346,6 +347,105 @@ public sealed class ScheduleCellBindingProofTests {
                         Is.All.EqualTo("TC-EDITED"));
                 });
             });
+    }
+
+    [Test]
+    public void Schedule_cell_binding_display_unit_is_the_unit_the_column_renders(
+        UIApplication uiApplication
+    ) {
+        const string overrideName = "_PE_Proof_AirFlowOverride";
+        const string defaultName = "_PE_Proof_AirFlowDefault";
+        var application = uiApplication.Application;
+        var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(
+            nameof(this.Schedule_cell_binding_display_unit_is_the_unit_the_column_renders));
+        var projectDocument = RevitFamilyFixtureHarness.CreateProjectDocument(application);
+        var familyDocument = RevitFamilyFixtureHarness.CreateFamilyDocument(
+            application, BuiltInCategory.OST_MechanicalEquipment, FamilyName);
+
+        try {
+            using (var transaction = new Transaction(familyDocument, "Seed mechanical equipment family")) {
+                _ = transaction.Start();
+                _ = RevitFamilyFixtureHarness.EnsureFamilyType(familyDocument, "Primary");
+                _ = transaction.Commit();
+            }
+
+            var familyPath = RevitFamilyFixtureHarness.SaveDocumentCopy(familyDocument, outputDirectory, "bind-display-unit");
+            var loadedFamily = RevitFamilyFixtureHarness.LoadFamilyIntoProject(application, projectDocument, familyPath);
+            foreach (var name in new[] { overrideName, defaultName }) {
+                var definition = RevitFamilyFixtureHarness.CreateSharedParameterDefinition(projectDocument,
+                    new SharedDefinitionSpec(name, SpecTypeId.AirFlow, "Schedules", "Display unit proof.", Guid.NewGuid()));
+                _ = RevitFamilyFixtureHarness.AddOrUpdateProjectParameterBinding(
+                    projectDocument, definition, true, GroupTypeId.Data, BuiltInCategory.OST_MechanicalEquipment);
+            }
+
+            var cfm = WithFirstSymbol(new FormatOptions(UnitTypeId.CubicFeetPerMinute));
+            var litersPerSecond = WithFirstSymbol(new FormatOptions(UnitTypeId.LitersPerSecond));
+            ViewSchedule schedule;
+            using (var transaction = new Transaction(projectDocument, "Create display unit schedule")) {
+                _ = transaction.Start();
+                // The document's own unit for the spec is L/s; one field overrides to CFM.
+                var units = projectDocument.GetUnits();
+                units.SetFormatOptions(SpecTypeId.AirFlow, litersPerSecond);
+                projectDocument.SetUnits(units);
+
+                var symbol = (FamilySymbol)projectDocument.GetElement(loadedFamily!.GetFamilySymbolIds().First());
+                if (!symbol.IsActive)
+                    symbol.Activate();
+                var level = new FilteredElementCollector(projectDocument).OfClass(typeof(Level)).Cast<Level>()
+                    .OrderBy(item => item.Elevation).First();
+                var instance = projectDocument.Create.NewFamilyInstance(XYZ.Zero, symbol, level, StructuralType.NonStructural);
+                _ = instance.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)!.Set(MarkA);
+
+                schedule = ViewSchedule.CreateSchedule(projectDocument, new ElementId(BuiltInCategory.OST_MechanicalEquipment));
+                schedule.Name = "Binding Display Unit Proof";
+                schedule.Definition.IsItemized = true;
+                _ = AddSchedulableField(schedule, "Mark");
+                AddSchedulableField(schedule, overrideName).SetFormatOptions(cfm);
+                _ = AddSchedulableField(schedule, defaultName);
+                _ = transaction.Commit();
+            }
+
+            var entry = CollectEntry(projectDocument, schedule.Id.Value());
+            var row = BoundDataRows(entry).Single();
+            var overridden = BindingFor(entry, row, overrideName);
+            var byDocument = BindingFor(entry, row, defaultName);
+            Assert.Multiple(() => {
+                AssertDisplayUnit(overridden.DisplayUnit, cfm);
+                AssertDisplayUnit(byDocument.DisplayUnit, litersPerSecond);
+                Assert.That(BindingFor(entry, row, "Mark").DisplayUnit, Is.Null, "a text field has no display unit");
+            });
+
+            // The contract is unchanged: the staged {value, unit} goes through as given, a bare number is still refused.
+            var staged = projectDocument.ApplyReviewedScheduleCells(new ScheduleCellApplyRequest(
+                entry.ScheduleId, entry.ScheduleUniqueId,
+                [new(row.RowNumber, overridden.ColumnNumber, overridden, "300", overridden.DisplayUnit!.Symbol)], DryRun: true));
+            var bare = projectDocument.ApplyReviewedScheduleCells(new ScheduleCellApplyRequest(
+                entry.ScheduleId, entry.ScheduleUniqueId,
+                [new(row.RowNumber, overridden.ColumnNumber, overridden, "300")], DryRun: true));
+            Assert.Multiple(() => {
+                Assert.That(staged.Results.Single().Ok, Is.True, staged.Results.Single().Error);
+                Assert.That(bare.Results.Single().Ok, Is.False);
+                Assert.That(bare.Results.Single().Error, Does.Contain("ambiguous"));
+            });
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(familyDocument);
+            RevitFamilyFixtureHarness.CloseDocument(projectDocument);
+        }
+    }
+
+    private static FormatOptions WithFirstSymbol(FormatOptions options) {
+        var symbol = FormatOptions.GetValidSymbols(options.GetUnitTypeId()).First(item => !item.Empty());
+        options.SetSymbolTypeId(symbol);
+        return options;
+    }
+
+    private static void AssertDisplayUnit(ScheduleDisplayUnit? actual, FormatOptions expected) {
+        Assert.That(actual, Is.Not.Null);
+        Assert.That(actual!.TypeId, Is.EqualTo(expected.GetUnitTypeId().TypeId));
+        Assert.That(actual.Symbol, Is.EqualTo(LabelUtils.GetLabelForSymbol(expected.GetSymbolTypeId())));
+        // Every spelling it carries is one the unit door accepts back as the same unit.
+        foreach (var spelling in new[] { actual.TypeId, actual.Label, actual.Symbol! })
+            Assert.That(ParameterUnitResolver.Resolve(spelling, SpecTypeId.AirFlow).TypeId, Is.EqualTo(actual.TypeId), spelling);
     }
 
     private static void SetThroughBinding(Document doc, ScheduleCellBinding binding, string value) {

@@ -16,7 +16,8 @@ internal static class ScheduleBindingResolver {
     public sealed record BindingColumn(
         int ColumnNumber,
         ScheduleField Field,
-        string FieldName
+        string FieldName,
+        ScheduleDisplayUnit? DisplayUnit
     );
 
     public static List<ScheduleCellBinding> ResolveRow(
@@ -77,7 +78,8 @@ internal static class ScheduleBindingResolver {
             !isReadOnly,
             targets,
             isReadOnly ? ScheduleCellBindingBlocker.ReadOnlyParameter : ScheduleCellBindingBlocker.None,
-            HasMixedValues: rawValues.Distinct(StringComparer.Ordinal).Count() > 1
+            HasMixedValues: rawValues.Distinct(StringComparer.Ordinal).Count() > 1,
+            DisplayUnit: column.DisplayUnit
         );
     }
 

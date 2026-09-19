@@ -537,7 +537,20 @@ public record ScheduleCellBinding(
     bool IsEditable,
     [property: JsonProperty(Required = Required.Always)] IReadOnlyList<ParameterTarget> Targets,
     ScheduleCellBindingBlocker Blocker = ScheduleCellBindingBlocker.None,
-    bool HasMixedValues = false
+    bool HasMixedValues = false,
+    ScheduleDisplayUnit? DisplayUnit = null
+);
+
+/// <summary>
+///     The unit a schedule column renders its values in, read from Revit with the binding (effective
+///     cell/field format, else the document's units for the field's spec). Null for non-measurable or
+///     unitless fields. Every spelling is one the parameter unit door accepts, so a human surface can
+///     stage a bare number with it. Evidence only: the push never fills a unit from it.
+/// </summary>
+public record ScheduleDisplayUnit(
+    string TypeId,
+    string Label,
+    string? Symbol
 );
 
 public record ScheduleRenderedRow(

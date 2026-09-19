@@ -556,7 +556,8 @@ public static class ScheduleQueryCollector {
             .Select(context => new ScheduleBindingResolver.BindingColumn(
                 context.Column.ColumnNumber,
                 context.Field,
-                context.FieldName
+                context.FieldName,
+                ScheduleCollectorSupport.ReadDisplayUnit(context.EffectiveUnits, context.SpecTypeId)
             ))
             .ToList();
         var subjectElementsById = subjectElements.ToDictionary(element => element.Id.Value());

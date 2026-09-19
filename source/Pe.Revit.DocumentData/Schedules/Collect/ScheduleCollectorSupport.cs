@@ -1,5 +1,6 @@
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.DocumentData.Schedules.Authored;
+using Pe.Revit.DocumentData.Schedules.Authored.ValueDomains;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 using System.Globalization;
@@ -274,6 +275,21 @@ internal static class ScheduleCollectorSupport {
         } catch {
             return SafeGet(doc.GetUnits);
         }
+    }
+
+    /// <summary>The unit the column renders: the same effective units that format its cells, so it cannot drift from the grid.</summary>
+    public static ScheduleDisplayUnit? ReadDisplayUnit(Units? effectiveUnits, ForgeTypeId? specTypeId) {
+        if (effectiveUnits == null || specTypeId == null)
+            return null;
+        var options = SafeGet(() => effectiveUnits.GetFormatOptions(specTypeId));
+        var unit = options == null ? null : SafeGet(options.GetUnitTypeId);
+        if (unit == null || unit.Empty() || unit == UnitTypeId.General)
+            return null;
+        var symbol = options!.CanHaveSymbol() ? SafeGet(options.GetSymbolTypeId) : null;
+        return new ScheduleDisplayUnit(
+            unit.TypeId,
+            ScheduleFieldFormatValueDomain.GetUnitLabel(unit),
+            symbol == null || symbol.Empty() ? null : ScheduleFieldFormatValueDomain.GetSymbolLabel(symbol));
     }
 
     public static bool IsComparableField(ScheduleField field) =>
