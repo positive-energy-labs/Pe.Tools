@@ -110,6 +110,9 @@ public class FamilyProcessingContext {
     /// <summary>Parameters this run created from scratch; a numeric 0 on one of them is Revit's blank (`run.blanksBecome`).</summary>
     public HashSet<string> CreatedParameters { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>Sources NormalizeParamSources kept because a value was left uncarried for want of a mappingUnit; the replan keeps them too.</summary>
+    public HashSet<string> KeptSources { get; } = new(StringComparer.Ordinal);
+
 
     /// <summary>
     ///     Sketch planes, elements, types and the seconds they predict (proxy swarm 2026-09-08). Read once before the operations run;

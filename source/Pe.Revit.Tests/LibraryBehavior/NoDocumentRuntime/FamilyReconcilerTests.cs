@@ -228,10 +228,11 @@ public sealed class FamilyReconcilerTests {
         }
     }
 
-    // Hand and Pea authors see the mapping strategies only through the served settings schema (families ops carry modelJson opaquely).
+    // Hand and Pea authors see the mapping strategies and the declared unit only through the served settings schema (families ops carry
+    // modelJson opaquely).
     [TestCase(typeof(FamilyModel))]
     [TestCase(typeof(FamilyPatch))]
-    public void Settings_schema_offers_mappingStrategy_as_its_four_names(Type root) {
+    public void Settings_schema_offers_mappingStrategy_as_its_four_names_and_mappingUnit_as_text(Type root) {
         _ = Pe.Revit.FamilyFoundry.FamilyModelSettingsRegistration.RootBindings;
         var schema = Newtonsoft.Json.Linq.JObject.Parse(JsonSchemaFactory.CreateEditorSchemaJson(root, new JsonSchemaBuildOptions(SettingsRuntimeMode.HostOnly)));
         var slot = schema.SelectToken("$.definitions.FamilyModelParameter.properties.mappingStrategy")!;
@@ -240,6 +241,34 @@ public sealed class FamilyReconcilerTests {
         var strategies = schema.SelectToken("$.definitions.MappingStrategy")!;
         Assert.That((string?)strategies["type"], Is.EqualTo("string"));
         Assert.That(strategies["enum"]!.Values<string>(), Is.EqualTo(new[] { "Strict", "CoerceByStorageType", "CoerceMeasurableToNumber", "CoerceElectrical" }));
+        var unit = schema.SelectToken("$.definitions.FamilyModelParameter.properties.mappingUnit")!;
+        Assert.That(unit, Is.Not.Null, "the served schema offers mappingUnit");
+        Assert.That(unit["type"]!.Type == Newtonsoft.Json.Linq.JTokenType.Array ? unit["type"]!.Values<string>() : new[] { (string?)unit["type"] },
+            Does.Contain("string"), unit.ToString());
+    }
+
+    // Every MappingUnits entry names a Revit unit Revit accepts for each spec of its leaf, and each measured dataType keys the leaf of its spec.
+    [Test]
+    public void Mapping_units_resolve_to_units_revit_accepts_for_every_spec_of_their_leaf() {
+        var specs = typeof(SpecTypeId).GetNestedTypes().Prepend(typeof(SpecTypeId))
+            .SelectMany(type => type.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
+            .Where(property => property.PropertyType == typeof(ForgeTypeId)).Select(property => (ForgeTypeId)property.GetValue(null)!).ToList();
+        var failures = new List<string>();
+        foreach (var (leaf, units) in MappingUnits.ByLeaf) {
+            var ofLeaf = specs.Where(spec => MappingUnits.Leaf(spec.TypeId) == leaf && UnitUtils.IsMeasurableSpec(spec)).ToList();
+            if (ofLeaf.Count == 0) failures.Add($"{leaf}: no SpecTypeId");
+            foreach (var spec in ofLeaf)
+                foreach (var unit in units)
+                    try { _ = Pe.Revit.Extensions.FamDocument.SetValue.MappingUnit.Resolve(spec, unit.Symbol); }
+                    catch (Exception exception) { failures.Add($"{spec.TypeId} {unit.Symbol}: {exception.Message}"); }
+        }
+        foreach (var dataType in Enum.GetValues(typeof(DataType)).Cast<DataType>()) {
+            ForgeTypeId spec;
+            try { spec = Pe.Revit.FamilyFoundry.Operations.SetParamMetadata.Spec(dataType); } catch (InvalidOperationException) { continue; }
+            if (MappingUnits.ByLeaf.ContainsKey(MappingUnits.Leaf(dataType)) && MappingUnits.Leaf(spec.TypeId) != MappingUnits.Leaf(dataType))
+                failures.Add($"{dataType}: leaf {MappingUnits.Leaf(dataType)} but spec {spec.TypeId}");
+        }
+        Assert.That(failures, Is.Empty, string.Join(Environment.NewLine, failures));
     }
 
     [Test]
