@@ -16,7 +16,6 @@ import type {
   TakeoffObservation,
 } from "@pe/agent-contracts";
 import {
-  candidateRegionSchema,
   stagedAdoptChoices,
   stagedDecisions,
   stagedReviewFlags,
@@ -30,7 +29,6 @@ import {
 } from "@pe/agent-contracts";
 
 import type { CellWire } from "#/components/lang/band";
-import { callHostRpc } from "#/host/client";
 import { previousOf, useHostCall } from "#/readings";
 import { NATIVE_READ_WAIT_S } from "#/route/waits";
 import { useRoute } from "#/route/use-route";
@@ -40,6 +38,7 @@ import {
   syncPlan,
   type TakeoffReadingKey,
 } from "#/takeoff/actions";
+import { readCandidates } from "#/takeoff/host";
 import { manifest } from "#/takeoff/manifest";
 import {
   readZoneMeta,
@@ -388,24 +387,7 @@ export function useTakeoffsController(options: {
   const candidatesCall = useHostCall(
     async () => {
       if (handle.demo) return DEMO_CANDIDATES.filter((region) => page.views.includes(region.view));
-      const read = await Promise.all(
-        page.views.map((view) =>
-          callHostRpc(
-            "takeoffs.candidates",
-            { view },
-            { bridgeSessionId: bound!.session, openDocumentId: bound!.openId },
-          ),
-        ),
-      );
-      return candidateRegionSchema.array().parse(
-        read.flatMap(({ regions }) =>
-          regions.map((region) => ({
-            ...region,
-            role: region.role ?? null,
-            guid: region.guid ?? null,
-          })),
-        ),
-      );
+      return readCandidates(bound!, page.views);
     },
     ["takeoffs.candidates", bound?.session, bound?.openId, handle.demo, page.views.join("|")],
     (handle.demo || bound !== null) && page.views.length > 0,

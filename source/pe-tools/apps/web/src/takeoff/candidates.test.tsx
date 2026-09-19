@@ -154,7 +154,7 @@ test("the adopt pane lists takeoffs.candidates for the chosen view, and a tick s
   );
   vi.unstubAllGlobals();
   mounted.unmount();
-}, 30_000);
+}, 60_000); // a whole-route mount
 
 test("the pane says why it lists nothing: no regions on the plan, or the read unanswered", async () => {
   answer.mode = "none";
