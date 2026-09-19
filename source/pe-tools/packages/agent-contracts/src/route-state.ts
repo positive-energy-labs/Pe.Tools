@@ -43,7 +43,7 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
 export type RouteWriteAdmission = (
   doc: unknown,
   patches: readonly RouteStatePatch[],
-  ctx: { scope: WorkKey; actor: import("./route-doc.ts").RouteActor },
+  ctx: { scope: WorkKey; actor: import("./route-doc.ts").RouteActor; prior: unknown },
 ) => Promise<import("./route-doc.ts").RouteRefusal | null>;
 
 /**

@@ -71,7 +71,7 @@ const projectSeed = (): DemoSeed => ({
         familyNames: FAMILIES,
         placementScope: "AllLoaded",
       },
-      excludedIds: [],
+      excluded: {},
       cells: {},
     },
   },

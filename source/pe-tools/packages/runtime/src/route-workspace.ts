@@ -129,7 +129,11 @@ export class RouteWorkspace {
       const applied = applyPatches(registration.spec, envelope, actor, patches, expectedRevision);
       const landed =
         (applied.ok &&
-          (await registration.admit?.(applied.envelope.doc, patches, { scope, actor }))) ||
+          (await registration.admit?.(applied.envelope.doc, patches, {
+            scope,
+            actor,
+            prior: envelope.doc,
+          }))) ||
         applied;
       if (!landed.ok) {
         await emit({

@@ -168,6 +168,10 @@ export function familyStagedPatch(
     : { familyName, spec: { select: { names: [familyName] }, patch: { types } }, keys };
 }
 
+/** Who held a family back. The route door checks it is the writer, so it is never just claimed. */
+export const exclusionAuthorSchema = z.enum(["person", "pea"]);
+export type FamilyExclusions = Record<string, { by: z.infer<typeof exclusionAuthorSchema> }>;
+
 /**
  * The Families route document is authored Work and nothing else. The spec is the page's member
  * (one address, sent as `source`) or the members plan generates from staged cells;
@@ -177,7 +181,10 @@ export function familyStagedPatch(
 const familiesDocumentSchema = z
   .object({
     scope: appliedScopeSchema.nullable().default(null),
-    excludedIds: z.array(z.number()).default([]),
+    /** Families held back from plan, keyed by family id, each with who held it back. */
+    excluded: z
+      .record(z.string().regex(/^\d+$/), z.object({ by: exclusionAuthorSchema }).strict())
+      .default({}),
     cells: z.record(familyCellKeySchema, familyCellStateSchema).default({}),
     executionOptions: familyExecutionOptionsSchema.optional(),
   })
@@ -187,27 +194,37 @@ export type FamiliesRouteDocument = z.infer<typeof familiesDocumentSchema>;
 /** The included plan hashes an apply must reproduce exactly. Server and client share this. */
 export const familiesIncluded = (
   plan: { entries: readonly FfPlanEntry[] },
-  excludedIds: readonly number[],
+  excluded: FamilyExclusions,
 ): Record<string, string> =>
   Object.fromEntries(
     plan.entries
       .filter(
         (entry) =>
-          !excludedIds.includes(entry.familyId) &&
+          !Object.hasOwn(excluded, String(entry.familyId)) &&
           entry.refusals.length === 0 &&
           (entry.changes.length > 0 || entry.runEffects.length > 0),
       )
       .map((entry) => [String(entry.familyId), entry.planHash]),
   );
 
+/** The planned families held back, and by whom: what the plan sheet states line by line. */
+export const familiesExcluded = (
+  plan: { entries: readonly FfPlanEntry[] },
+  excluded: FamilyExclusions,
+) =>
+  plan.entries.flatMap((entry) => {
+    const held = excluded[String(entry.familyId)];
+    return held ? [{ familyId: entry.familyId, by: held.by }] : [];
+  });
+
 export const familiesRouteState = {
   route: "families",
   title: "Families",
   description:
-    "Family Foundry: author a scope and propose through cells.*.proposal. A person stages reviewed cells before plan or apply; exclusions and execution options remain separate Work.",
+    'Family Foundry: author a scope and propose through cells.<key>.proposal, where <key> is [familyId,typeName,parameter] of a family type loaded in the scope. A person stages reviewed cells before plan or apply. Hold a family back with excluded.<familyId> = { by: "pea" }; the plan sheet names who held it back, and only the person lifts their own.',
   schema: familiesDocumentSchema,
   // Pea writes proposals only. A staged value reaches plan only through a person's review.
-  agentWriteMask: [["scope"], ["excludedIds"], ...trichotomyAgentMask(), ["executionOptions"]],
+  agentWriteMask: [["scope"], ["excluded"], ...trichotomyAgentMask(), ["executionOptions"]],
   // Planning and applying are the `families.plan` and `families.apply` workflows. Neither is
   // a route command, so neither can write into authored Work.
   commands: {},

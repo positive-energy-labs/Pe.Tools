@@ -75,3 +75,26 @@ test("a valid key lands, and clearing a cell never asks Revit", async () => {
     familiesRouteState.schema.parse((await work.view(scope, "families"))!.doc).cells[key],
   ).toMatchObject({ proposal: null });
 });
+
+test("an exclusion carries its writer: Pea cannot write one as the person, nor lift the person's", async () => {
+  const { work, reads } = workspace();
+  const exclude = (by: string) => [{ path: ["excluded", "3573700"], value: { by } }];
+  expect(await work.apply(scope, "families", "agent", exclude("person"), 0)).toMatchObject({
+    ok: false,
+    kind: "refused",
+  });
+  expect(await work.apply(scope, "families", "human", exclude("pea"), 0)).toMatchObject({
+    ok: false,
+  });
+  const held = await work.apply(scope, "families", "human", exclude("person"), 0);
+  expect(held).toMatchObject({ ok: true, revision: 1 });
+  const lifted = await work.apply(
+    scope,
+    "families",
+    "agent",
+    [{ path: ["excluded", "3573700"] }],
+    1,
+  );
+  expect(lifted).toMatchObject({ ok: false, kind: "refused" });
+  expect(reads).toHaveLength(0);
+});

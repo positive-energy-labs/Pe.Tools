@@ -22,6 +22,7 @@ import {
   type FamilyCellValue,
   type AppliedFilter,
   type FamiliesRouteDocument,
+  type FamilyExclusions,
   type Reading,
   fanOut,
   transitionBinding,
@@ -63,7 +64,7 @@ const EMPTY_MEMORY: FamiliesPageMemory = {
   picker: { open: null, level: null, query: "" },
 };
 
-const NO_EXCLUDED: readonly number[] = [];
+const NO_EXCLUDED: FamilyExclusions = {};
 const NO_CELLS: Record<string, FamilyCellState> = {};
 
 type Setter<A> = A | ((previous: A) => A);
@@ -186,7 +187,7 @@ export function useFamiliesStore(
   const doc = handle.work.doc as FamiliesRouteDocument | null;
   // One shared empty list while Work is null: `actions` memoizes on it, and a fresh `[]` per
   // render would rebuild the controller on every pass.
-  const excludedIds = doc?.excludedIds ?? NO_EXCLUDED;
+  const excluded = doc?.excluded ?? NO_EXCLUDED;
   const cells = doc?.cells ?? NO_CELLS;
   /*
    * Every cell verb is one transition of the shared cell machine, written as one Work write of its
@@ -317,11 +318,13 @@ export function useFamiliesStore(
       /** Deny clears the proposal on screen only; an independently staged value survives. */
       deny: (addresses: readonly FamilyCellAddress[]) => aggregate(addresses, "deny"),
       unstage: (addresses: readonly FamilyCellAddress[]) => aggregate(addresses, "unstage"),
-      exclude: (id: number) => {
-        const set = new Set(excludedIds);
-        if (!set.delete(id)) set.add(id);
-        return handle.work.write([{ path: ["excludedIds"], value: [...set] }]);
-      },
+      // A person's toggle: include again (whoever held it back), or hold back as the person.
+      exclude: (id: number) =>
+        handle.work.write([
+          Object.hasOwn(excluded, String(id))
+            ? { path: ["excluded", String(id)] }
+            : { path: ["excluded", String(id)], value: { by: "person" } },
+        ]),
       openFamily: (familyId: number) => {
         if (!documentScope)
           return Promise.reject(Error("Select an exact available project document"));
@@ -331,7 +334,7 @@ export function useFamiliesStore(
         callHostRpc("host.shell.open", { path }, { bridgeSessionId: target || undefined }),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [handle.work, cells, draft, setPage, pickedIds, excludedIds, target, documentScope],
+    [handle.work, cells, draft, setPage, pickedIds, excluded, target, documentScope],
   );
 
   return {
@@ -339,7 +342,7 @@ export function useFamiliesStore(
     manifest,
     target,
     documentScope,
-    excludedIds,
+    excluded,
     cells,
     applied,
     plan,

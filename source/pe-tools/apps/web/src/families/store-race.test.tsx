@@ -91,7 +91,6 @@ function start(cells: Record<string, FamilyCellState> = {}) {
     revision: 1,
     doc: familiesRouteState.schema.parse({
       scope: null,
-      excludedIds: [],
       cells,
     }) as FamiliesRouteDocument,
   };

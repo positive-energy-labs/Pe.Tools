@@ -13,7 +13,7 @@ import { familiesSpec, manifest } from "./manifest";
 import { captureEvidenceOf } from "./store";
 
 const seed = FAMILIES_SEEDS.apply as unknown as {
-  work: { excludedIds: number[] };
+  work: { excluded: Record<string, { by: string }> };
   readings: { pods: unknown };
   page: { pod: string; path: string; sheet: { entries: unknown[] } };
 };
@@ -50,7 +50,8 @@ test("plan reads the page's member against the reviewed Work, and writes no Work
   await manifest.actions!.plan.run(ctx as never, undefined as never);
   expect(client.runSemanticAction).toHaveBeenLastCalledWith(
     "families.plan",
-    { source, excludedIds: [3102] },
+    // Exclusions are the reviewed Work's; the plan reads them there and is never sent them.
+    { source },
     ref,
     { work: { key: ctx.work.key, revision: 4 } },
   );

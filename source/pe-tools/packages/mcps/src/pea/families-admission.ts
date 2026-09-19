@@ -22,13 +22,31 @@ export type LoadedFamilies = (
 ) => Promise<readonly { familyId: number; types: readonly { typeName: string }[] }[]>;
 
 /**
- * The Families door (F-J1-7): a written cell whose key names no type of a family loaded in the
- * Work's scope is refused, whoever writes it. Clearing a cell never asks Revit, so a bad key can
- * always be withdrawn, denied or unstaged.
+ * The Families door. An exclusion is stamped with its writer: every one a write adds or changes
+ * says `by` the writer, and Pea never changes or lifts the person's. F-J1-7: a written cell whose
+ * key names no type of a family loaded in the Work's scope is refused, whoever writes it. Clearing
+ * a cell never asks Revit, so a bad key can always be withdrawn, denied or unstaged.
  */
 export function familiesAdmission(loadedFamilies: LoadedFamilies): RouteWriteAdmission {
-  return async (doc, patches, { scope: work }) => {
-    const { cells, scope } = familiesRouteState.schema.parse(doc);
+  return async (doc, patches, { scope: work, actor, prior }) => {
+    const { cells, scope, excluded } = familiesRouteState.schema.parse(doc);
+    const before = familiesRouteState.schema.parse(prior).excluded;
+    const by = actor === "agent" ? "pea" : "person";
+    for (const id of new Set([...Object.keys(before), ...Object.keys(excluded)])) {
+      if (before[id]?.by === excluded[id]?.by) continue;
+      if (actor === "agent" && before[id]?.by === "person")
+        return refuse(
+          "refused",
+          `family ${id} was held back by the person; Pea cannot change or lift that exclusion`,
+          "Nothing was written. Ask the person to include it again.",
+        );
+      if (excluded[id] && excluded[id].by !== by)
+        return refuse(
+          "refused",
+          `an exclusion is stamped with its writer: excluded.${id} must be { by: "${by}" }`,
+          "Nothing was written.",
+        );
+    }
     const touched = new Set(
       patches.flatMap((patch) =>
         patch.path.length && patch.path[0] !== "cells"

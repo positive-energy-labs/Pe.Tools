@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   familyCellAddress,
   familyCellKey,
+  familiesExcluded,
   familiesIncluded,
   familiesRouteState,
 } from "./families.ts";
@@ -11,13 +12,13 @@ describe("familiesRouteState", () => {
   it("is authored Work and nothing else: no plan, no receipts, no observation keys", () => {
     expect(familiesRouteState.schema.parse({})).toEqual({
       scope: null,
-      excludedIds: [],
+      excluded: {},
       cells: {},
     });
     // Pea may propose, but only a person stages.
     expect(familiesRouteState.agentWriteMask).toEqual([
       ["scope"],
-      ["excludedIds"],
+      ["excluded"],
       ["cells", "*", "proposal"],
       ["executionOptions"],
     ]);
@@ -91,7 +92,12 @@ describe("familiesRouteState", () => {
         entry(4, "h4", { changes: [], runEffects: [] }),
       ],
     };
-    expect(familiesIncluded(plan, [2])).toEqual({ "1": "h1" });
-    expect(familiesIncluded(plan, [])).toEqual({ "1": "h1", "2": "h2" });
+    expect(familiesIncluded(plan, { "2": { by: "pea" } })).toEqual({ "1": "h1" });
+    expect(familiesIncluded(plan, {})).toEqual({ "1": "h1", "2": "h2" });
+    expect(familiesExcluded(plan, { "2": { by: "pea" }, "9": { by: "person" } })).toEqual([
+      { familyId: 2, by: "pea" },
+    ]);
+    // The pre-attribution array is old Work: it fails closed.
+    expect(familiesRouteState.schema.safeParse({ excludedIds: [2] }).success).toBe(false);
   });
 });
