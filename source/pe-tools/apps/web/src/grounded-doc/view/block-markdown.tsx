@@ -8,7 +8,8 @@ import type { GroundedDocEngine } from "#/grounded-doc/engine";
 import { Markdown } from "#/workbench/prose";
 import { cn } from "#/lib/utils";
 import { Press } from "#/components/lang/press";
-import { ImagesPane, MarkdownBlock, PagePane } from "./images-pane";
+import { ImagesPane, MarkdownBlock } from "./images-pane";
+import { PagePane } from "./page-pane";
 import { PressContent } from "#/components/anatomy/press-content";
 
 export const BlockMarkdown = memo(function BlockMarkdown({ md }: { md: string }) {

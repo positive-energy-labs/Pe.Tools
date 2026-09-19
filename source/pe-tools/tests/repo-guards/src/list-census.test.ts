@@ -8,18 +8,17 @@
  *
  * Tier 2 fails a hand-rolled list: a `.map(` whose RETURNED element is a `<button>`, an `<a>`, the
  * kit's `<Press>`, or a `<div onClick>`, and whose opening tag carries a picked state
- * (`aria-selected|pressed|current`, `data-selected|active`, a `…selected ?` / `…active ?` ternary,
- * or `? "selected"`). Outside `components/lang/`, only files named in TOGGLES (each with its
- * reason) may do that; any other hit is a list to move onto `List`, or a `Switcher` for a
- * segmented one-of-N. The wave-4 toggles (runs header, feedback tray, block-markdown drop target,
+ * (`aria-selected|pressed|current`, `data-selected|active`, a `…selected ?` / `…active ?` /
+ * `…focused ?` / `…pinned ?` ternary, or `? "selected"`). Outside `components/lang/`, only files
+ * named in TOGGLES (each with its reason) may do that; any other hit is a list to move onto
+ * `List`, or a `Switcher` for a segmented one-of-N. The wave-4 toggles (runs header, feedback tray, block-markdown drop target,
  * zone card, ledger dock's A/B cell, plan-dock and atlas key/stats) are single toggles outside any
  * `.map`, so they never trip and need no entry; the popovers harness moved onto `Switcher`.
  *
  * WHAT TIER 2 CANNOT SEE (read these by eye):
  * - selection kept only in a closure or a className helper, with no attribute or ternary in the
  *   returned tag (`className={rowClass(item)}`, `onClick={() => pick(item)}` alone);
- * - a picked state under another word: `isFocused ?`, `pinned ?`, `current === id ?`, `&&` classes
- *   (grounded-doc/view/images-pane.tsx's image list reads `isFocused ? "focused"` today);
+ * - a picked state under another word: `current === id ?`, `hovered ?`, `&&` classes;
  * - a returned element that is not the clickable one: `<li><button aria-pressed>`, a fragment, or
  *   another kit component (`<Row>` outside lang, a card) wrapping the click;
  * - rows built by `for` loops, `Array.from`, `flatMap`, or a helper that returns the JSX;
@@ -43,10 +42,13 @@ const OLD =
   /from "(#\/components\/lang\/(pick-list|combobox|command)|(#\/route|\.)\/picker|cmdk|@base-ui\/react\/(combobox|select|menu|autocomplete))"|role="(listbox|option|menu|menuitem)"|<(datalist|select)[ >]|threadRowRecipe\(|export (function|const) (PickList|Picker|Combobox|Command|CellSelect|ThreadList|ThreadPalette)\b/;
 
 /** Tier 2's allowlist: toggles, not lists (ix-list-result wave 4, "census-excluded toggles"). */
-const TOGGLES: Record<string, string> = {};
+const TOGGLES: Record<string, string> = {
+  "grounded-doc/view/page-pane.tsx":
+    "bbox overlays drawn where each block sits on the page screenshot: spatial, not a list",
+};
 
 const PICKED =
-  /aria-(?:selected|pressed|current)=|data-(?:selected|active)=|\w*(?:selected|active)\s*\?(?![.?])|\?\s*"selected"/i;
+  /aria-(?:selected|pressed|current)=|data-(?:selected|active)=|\w*(?:selected|active|focused|pinned)\s*\?(?![.?])|\?\s*"selected"/i;
 
 /** The opening tag starting at `at` (`<name …>`), braces and quotes balanced: JSX props hold `=>`. */
 function openingTag(text: string, at: number): string {
