@@ -220,8 +220,14 @@ export function FamiliesCaptureBand() {
  * skips contested cells, A7), with the outcome in the kit's words. Plan reads staged cells.
  */
 export function FamiliesProposalsBand() {
-  const { cells, rows, params, wire } = useFamiliesWorkspace();
+  const { cells, rows, params, wire, plan } = useFamiliesWorkspace();
   const [outcome, setOutcome] = useState<FanOutOutcome | null>(null);
+  // A plan row with no resolved id (no `hashKey`) is a name the host refused, in its own words.
+  const orphans = new Map(
+    (plan?.entries ?? []).flatMap((entry) =>
+      entry.hashKey === undefined && entry.flag ? [[entry.id, entry.flag] as const] : [],
+    ),
+  );
   const entries = familyCellEntries(cells).filter(
     (entry) => entry.cell.proposal != null || entry.cell.staged != null,
   );
@@ -288,26 +294,31 @@ export function FamiliesProposalsBand() {
           <span className="t-small text-ink-2">nothing proposed or staged</span>
         ) : null}
         {entries.map((entry) => (
-          <ReviewRow
-            key={entry.key}
-            wire={wire}
-            address={entry.key}
-            label={
-              <span className="face-mono text-ink-2" data-proposal-row={entry.key}>
-                {entry.familyName} · {entry.typeName} · {entry.parameter}
-              </span>
-            }
-            cell={entry.cell}
-            facts={{
-              value: (
-                <ValueDiff
-                  from={current(entry)}
-                  to={(entry.cell.staged ?? entry.cell.proposal)?.value.value ?? ""}
-                />
-              ),
-            }}
-            show={(value) => familyCellValueSchema.parse(value).value}
-          />
+          <div key={entry.key}>
+            <ReviewRow
+              wire={wire}
+              address={entry.key}
+              label={
+                <span className="face-mono text-ink-2" data-proposal-row={entry.key}>
+                  {entry.familyName} · {entry.typeName} · {entry.parameter}
+                </span>
+              }
+              cell={entry.cell}
+              facts={{
+                value: (
+                  <ValueDiff
+                    from={current(entry)}
+                    to={(entry.cell.staged ?? entry.cell.proposal)?.value.value ?? ""}
+                  />
+                ),
+              }}
+              show={(value) => familyCellValueSchema.parse(value).value}
+            />
+            {/* Orphaned: the plan could not resolve this family by name. Clearing stays free. */}
+            {orphans.has(entry.familyName) ? (
+              <OutcomeLine kind="refused" label="orphaned" says={orphans.get(entry.familyName)} />
+            ) : null}
+          </div>
         ))}
       </div>
     </section>
