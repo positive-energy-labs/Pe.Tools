@@ -140,6 +140,21 @@ function CellKeys({
 /** The drawn empty value: a stated blank, as the band draws it. */
 export const EMPTY_MARK = "–";
 
+/** A refusal a cell says: the person's sentence, and optionally words written for Pea. */
+export interface CellRefusal {
+  message: string;
+  /** Pea's words: drawn only behind a disclosure, never as the note. */
+  detail?: string;
+}
+
+/** The refusal's words for Pea, folded away under the person's sentence. */
+export const RefusalDetail = ({ detail }: { detail: string }) => (
+  <details className="dl-refuse-detail">
+    <summary>detail</summary>
+    <span>{detail}</span>
+  </details>
+);
+
 export const CellHost = createContext<RefObject<HTMLElement | null> | null>(null);
 
 export function StateCell(props: StateCellProps) {
@@ -153,12 +168,12 @@ export function StateCell(props: StateCellProps) {
   // editable row-scale cell. A refused edit restores the input's value IMPERATIVELY (the same
   // move Escape makes) rather than re-keying it, so the DOM node — and anything holding a
   // reference to it — survives the refusal.
-  const [refusal, setRefusal] = useState<string | null>(null);
+  const [refusal, setRefusal] = useState<CellRefusal | null>(null);
   const initial = useRef(typeof value === "string" ? value : "");
   initial.current = typeof value === "string" ? value : "";
 
   // A transition in flight inerts every verb on the cell; its refusal rides the same note.
-  const refusalNote = refusal ?? props.refused ?? null;
+  const refusalNote = refusal ?? (props.refused != null ? { message: props.refused } : null);
   const [pending, startRun] = useTransition();
   const transitions = props.transitions ?? [];
   const fire = (t: CellTransition) => {
@@ -168,7 +183,7 @@ export function StateCell(props: StateCellProps) {
         code: "failed",
         message: cause instanceof Error ? cause.message : String(cause),
       }));
-      setRefusal(out ? out.message : null);
+      setRefusal(out ?? null);
     });
   };
   // The cell's keyboard host: whatever hosts the cell provides one (Table its td); a cell
@@ -224,19 +239,20 @@ export function StateCell(props: StateCellProps) {
         const parsed = parseCell(text, props.numeric);
         if (parsed === null) {
           el.value = initial.current; // restore the prior value, visibly
-          setRefusal(
-            text.trim() === ""
-              ? "blank commits nothing — a cleared cell is not zero"
-              : `"${text}" is not a number — nothing committed`,
-          );
+          setRefusal({
+            message:
+              text.trim() === ""
+                ? "blank commits nothing — a cleared cell is not zero"
+                : `"${text}" is not a number — nothing committed`,
+          });
           return;
         }
         out = fmtNum(parsed, props.numeric.digits);
       }
-      const settle = (refused: string | null | void) => {
-        if (typeof refused === "string") {
+      const settle = (refused: string | CellRefusal | null | void) => {
+        if (refused != null) {
           el.value = initial.current; // restore the drawn value, visibly
-          setRefusal(refused);
+          setRefusal(typeof refused === "string" ? { message: refused } : refused);
         } else if (refusal != null) {
           setRefusal(null);
         }
@@ -341,14 +357,15 @@ export function StateCell(props: StateCellProps) {
           <button
             type="button"
             className={slots.refusal()}
-            title={`${refusalNote} — click to dismiss`}
+            title={`${refusalNote.message} — click to dismiss`}
             // "do not steal the caret": the note must never take focus from the input under it.
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => setRefusal(null)}
           >
-            {refusalNote}
+            {refusalNote.message}
           </button>
         ) : null}
+        {refusalNote?.detail ? <RefusalDetail detail={refusalNote.detail} /> : null}
       </span>
     );
   }
@@ -420,12 +437,13 @@ export function StateCell(props: StateCellProps) {
           <button
             type="button"
             className={slots.refusal()}
-            title={`${refusalNote} — click to dismiss`}
+            title={`${refusalNote.message} — click to dismiss`}
             onClick={() => setRefusal(null)}
           >
-            {refusalNote}
+            {refusalNote.message}
           </button>
         ) : null}
+        {refusalNote?.detail ? <RefusalDetail detail={refusalNote.detail} /> : null}
       </span>
       {keys}
       {facts.length > 0 && !hoverFoot ? (

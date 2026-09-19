@@ -8,7 +8,12 @@ import {
 import { reviewTransitions, type CellWire } from "#/components/lang/band";
 import { ReadCell } from "#/components/master-table/cells";
 import { useCellNavigation } from "#/components/master-table/cell-navigation";
-import { cellFromTrichotomy, StateCell, type CellTransition } from "#/components/lang/cell";
+import {
+  cellFromTrichotomy,
+  StateCell,
+  type CellRefusal,
+  type CellTransition,
+} from "#/components/lang/cell";
 import { CellListSelect } from "#/components/lang/list-popup";
 import type { Column, Verdict } from "#/components/master-table/model";
 import type { FamilyParameterSnapshot } from "#/host/loaded-families-view";
@@ -283,9 +288,7 @@ export function useFamiliesColumns({
                 transitions={transitions}
                 // A refused write puts the cell back and says why on it (25 item 3).
                 onCommit={(next) =>
-                  propose(address, { value: next }, value).then(
-                    (refusal) => refusal?.message ?? null,
-                  )
+                  propose(address, { value: next }, value).then((refusal) => refusal ?? null)
                 }
               />
             );
@@ -353,7 +356,7 @@ export function ProposalCell({
   /** Why a patch cannot write this cell; present, the cell draws locked and takes no typing. */
   lock?: string;
   /** Resolves to the write's refusal, if any: the kit then restores the drawn value and says it. */
-  onCommit?: (text: string) => Promise<string | null>;
+  onCommit?: (text: string) => Promise<CellRefusal | null>;
 }) {
   const move = useCellNavigation();
   const proposal = cell?.proposal;

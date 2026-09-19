@@ -454,7 +454,15 @@ export function SituationAction({
                 </Press>
               </span>
             ) : outcome?.refusal ? (
-              <span>{outcome.refusal.message}</span>
+              <span>
+                {outcome.refusal.message}
+                {outcome.refusal.detail ? (
+                  <details className="t-small text-ink-2">
+                    <summary>detail</summary>
+                    <span>{outcome.refusal.detail}</span>
+                  </details>
+                ) : null}
+              </span>
             ) : outcome?.stopped ? (
               <span className="text-ink-2">{action.label} · stopped waiting; see the log</span>
             ) : (

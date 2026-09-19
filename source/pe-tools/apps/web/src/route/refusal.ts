@@ -4,7 +4,7 @@
  * abort to stop an action at a refused mutation, then restores the structured result. Codes are
  * ordered: `no-target` before `not-ready` before `stale-revision`.
  */
-import type { RouteStateWriteResult } from "@pe/agent-contracts";
+import type { FamiliesRefusal, RouteStateWriteResult } from "@pe/agent-contracts";
 
 export type RefusalCode =
   | "not-ready"
@@ -19,9 +19,12 @@ export type RefusalCode =
 export interface Refusal {
   readonly code: RefusalCode;
   readonly message: string;
+  /** Words written for Pea, not the person: drawn only behind a disclosure, never parsed. */
+  readonly detail?: string;
 }
 
-export const refuse = (code: RefusalCode, message: string): Refusal => ({ code, message });
+export const refuse = (code: RefusalCode, message: string, detail?: string): Refusal =>
+  detail === undefined ? { code, message } : { code, message, detail };
 
 /** The order a caller must test in: the first reason that applies is the one it says. */
 export const REFUSAL_ORDER: readonly RefusalCode[] = [
@@ -58,8 +61,7 @@ export function partialRefusal(result: { result?: unknown }, noun: string): Refu
 /** The host's typed write refusal, mapped onto the one vocabulary. */
 export function writeRefusal(result: RouteStateWriteResult): Refusal | null {
   if (result.ok) return null;
-  // ponytail: the Families door's refusal shows its agentHint until interaction draws its parts.
-  if ("agentHint" in result) return refuse("not-ready", result.agentHint);
+  if ("agentHint" in result) return refuse("not-ready", doorSentence(result), result.agentHint);
   const message = [result.error, result.hint].filter(Boolean).join(": ");
   if (result.code === "stale_revision") return refuse("stale-revision", message);
   if (result.kind === "refused") return refuse("not-ready", message);
@@ -69,3 +71,39 @@ export function writeRefusal(result: RouteStateWriteResult): Refusal | null {
 
 export const causeRefusal = (cause: unknown): Refusal =>
   refuse("unknown", cause instanceof Error ? cause.message : String(cause));
+
+const names = (families: readonly string[] = []) => families.join(", ");
+
+/**
+ * The Families door's refusal in the person's words: one sentence per `code`, built from its
+ * structured parts only. `agentHint` is Pea's and is never read here.
+ */
+export function doorSentence(refusal: FamiliesRefusal): string {
+  switch (refusal.code) {
+    case "unknown-family-type":
+      return (refusal.cells ?? [])
+        .map(
+          (cell) =>
+            `${cell.familyName} · ${cell.typeName} · ${cell.parameter}: that family isn't in this page's scope`,
+        )
+        .join("; ");
+    case "unknown-family":
+      return `${names(refusal.families)}: not loaded under this scope's categories and placement`;
+    case "exclusion-held":
+      return `${names(refusal.families)}: you held that back, so only you can change it`;
+    case "exclusion-author":
+      return `${names(refusal.families)}: that hold-back names the wrong writer`;
+    case "no-scope":
+      return "Stage a scope first; cells belong to a scope";
+    case "scope-truncated":
+      return "This scope holds too many families to check; narrow it";
+    case "scope-unresolved":
+      return "This scope matches no loaded family";
+    case "types-truncated":
+      return `${names(refusal.families)}: too many types to check`;
+    case "document-unavailable":
+      return "This page's document isn't open in Revit";
+    case "catalog-unreachable":
+      return "Revit didn't answer the family check; try again";
+  }
+}

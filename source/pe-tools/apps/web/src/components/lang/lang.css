@@ -359,6 +359,21 @@
   cursor: pointer;
 }
 
+/* Pea's words under a refusal: a closed disclosure hanging below the note, so the row never grows. */
+.dl-refuse-detail {
+  position: absolute;
+  top: 100%;
+  right: 1px;
+  z-index: 6;
+  max-width: 60ch;
+  font-size: var(--type-small-size);
+  color: var(--pe-ink-2);
+  background: var(--pe-on);
+}
+.dl-cell-line > .dl-refuse-detail {
+  position: static;
+}
+
 /* at card scale the note sits in the value line, beside the cell; there is no row to protect. */
 .dl-cell-line > .dl-refuse {
   position: static;

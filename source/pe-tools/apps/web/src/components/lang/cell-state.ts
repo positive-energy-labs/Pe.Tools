@@ -82,7 +82,9 @@ export interface StateCellProps {
    * An async commit (a Work write) may return a promise of that refusal: it restores the same
    * way when the refusal arrives, so typed text is never left looking accepted.
    */
-  onCommit?: (text: string) => string | void | Promise<string | null | void>;
+  onCommit?: (
+    text: string,
+  ) => string | void | Promise<string | { message: string; detail?: string } | null | void>;
   /**
    * NUMERIC COMMIT (ruled 2026-08-16, fit reviews #2 — §3's named silent-swallow defect, killed
    * here): present ⇒ the commit path parses per `parseCell` before `onCommit` sees anything. A
@@ -130,7 +132,7 @@ export type CellTransitionKind = "accept" | "deny" | "unstage";
 export interface CellTransition {
   kind: CellTransitionKind;
   /** Resolves to a refusal when the write was refused; nothing or null when it landed. */
-  run: () => Promise<{ code: string; message: string } | null | void>;
+  run: () => Promise<{ code: string; message: string; detail?: string } | null | void>;
   /** What pressing it does, in this cell's words. Defaults to the kind's plain sentence. */
   reason?: string;
 }
