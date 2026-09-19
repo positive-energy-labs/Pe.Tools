@@ -42,6 +42,40 @@ public sealed class FamilyOpenGateTests {
             "the fixture must reproduce the project-a open-time warning");
     }
 
+    // Mission 5 hold (2026-09-19): the labelled face-to-face fixture posts no warning, at base too. Which constructible geometry constraint
+    // does Revit answer with UnstableConstraintInFamily when the loaded family opens? One line per variant; the gate tests move to one that
+    // posts, or become Explicit (proof on project-a J3 row d) if none does.
+    [TestCase("labelled-face-dimension")]
+    [TestCase("labelled-own-width")]
+    [TestCase("locked-face-alignment")]
+    [TestCase("locked-face-dimension")]
+    public void Probe_which_geometry_constraint_posts_the_unstable_constraint_warning(string variant) {
+        var (project, family) = this.LoadedFixture(variant);
+        var posted = new List<string>();
+        void Record(object? _, FailuresProcessingEventArgs args) {
+            var accessor = args.GetFailuresAccessor();
+            if (accessor?.GetDocument()?.IsFamilyDocument == true)
+                posted.AddRange(accessor.GetFailureMessages().Select(f => $"{f.GetFailureDefinitionId().Guid}:{f.GetDescriptionText()}"));
+        }
+        Document? copy = null;
+        string outcome;
+        this._ui.Application.FailuresProcessing += Record;
+        try {
+            copy = project.EditFamily(family);
+            outcome = "opened";
+        } catch (Exception exception) {
+            outcome = $"threw {exception.GetType().Name}: {exception.Message}";
+        } finally {
+            this._ui.Application.FailuresProcessing -= Record;
+            if (copy != null) _ = copy.Close(false);
+            RevitFamilyFixtureHarness.CloseDocument(project);
+        }
+        var unstable = posted.Any(p => p.StartsWith(BuiltInFailures.DimensionFailures.UnstableConstraintInFamily.Guid.ToString(), StringComparison.Ordinal));
+        var line = $"[PE_OPEN_GATE_PROBE] variant={variant} unstable={unstable} outcome={outcome} posted=[{string.Join(" | ", posted)}]";
+        Console.WriteLine(line);
+        Assert.Pass(line);
+    }
+
     [Test]
     public void Apply_through_the_open_gate_acknowledges_the_warning_and_writes_the_value() {
         var (project, family) = this.LoadedFixture();
@@ -59,7 +93,7 @@ public sealed class FamilyOpenGateTests {
         } finally { RevitFamilyFixtureHarness.CloseDocument(project); }
     }
 
-    private (Document Project, Family Family) LoadedFixture() {
+    private (Document Project, Family Family) LoadedFixture(string variant = "labelled-face-dimension") {
         var app = this._ui.Application;
         var directory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(FamilyOpenGateTests));
         var familyDocument = RevitFamilyFixtureHarness.CreateFamilyDocument(app, BuiltInCategory.OST_GenericModel, FamilyName);
@@ -72,16 +106,40 @@ public sealed class FamilyOpenGateTests {
                 _ = fm.AddParameter("Url", GroupTypeId.IdentityData, SpecTypeId.String.Text, false);
                 var gap = fm.AddParameter("Gap", GroupTypeId.Geometry, SpecTypeId.Length, false);
                 var plane = SketchPlane.Create(familyDocument, Plane.CreateByNormalAndOrigin(XYZ.BasisZ, XYZ.Zero));
+                // A locked alignment needs coincident faces: b then starts where a ends.
                 var a = familyDocument.FamilyCreate.NewExtrusion(true, Rectangle(0), plane, 1.0);
-                var b = familyDocument.FamilyCreate.NewExtrusion(true, Rectangle(2), plane, 1.0);
+                var b = familyDocument.FamilyCreate.NewExtrusion(true, Rectangle(variant == "locked-face-alignment" ? 1 : 2), plane, 1.0);
                 familyDocument.Regenerate();
                 var view = new FilteredElementCollector(familyDocument).OfClass(typeof(ViewPlan)).Cast<ViewPlan>().First(v => !v.IsTemplate);
-                var references = new ReferenceArray();
-                references.Append(Face(a, XYZ.BasisX).Reference);
-                references.Append(Face(b, -XYZ.BasisX).Reference);
-                var dimension = familyDocument.FamilyCreate.NewLinearDimension(view, Line.CreateBound(new XYZ(1, 0.5, 0.5), new XYZ(2, 0.5, 0.5)), references);
-                fm.Set(gap, 1.0);
-                dimension.FamilyLabel = gap;
+                ReferenceArray Pair(Reference first, Reference second) {
+                    var references = new ReferenceArray();
+                    references.Append(first);
+                    references.Append(second);
+                    return references;
+                }
+                var across = Line.CreateBound(new XYZ(0, 0.5, 0.5), new XYZ(3, 0.5, 0.5));
+                switch (variant) {
+                case "labelled-face-dimension": {
+                    var dimension = familyDocument.FamilyCreate.NewLinearDimension(view, Line.CreateBound(new XYZ(1, 0.5, 0.5), new XYZ(2, 0.5, 0.5)),
+                        Pair(Face(a, XYZ.BasisX).Reference, Face(b, -XYZ.BasisX).Reference));
+                    fm.Set(gap, 1.0);
+                    dimension.FamilyLabel = gap;
+                    break;
+                }
+                case "labelled-own-width": {
+                    var dimension = familyDocument.FamilyCreate.NewLinearDimension(view, across, Pair(Face(a, -XYZ.BasisX).Reference, Face(a, XYZ.BasisX).Reference));
+                    fm.Set(gap, 1.0);
+                    dimension.FamilyLabel = gap;
+                    break;
+                }
+                case "locked-face-alignment":
+                    familyDocument.FamilyCreate.NewAlignment(view, Face(a, XYZ.BasisX).Reference, Face(b, -XYZ.BasisX).Reference).IsLocked = true;
+                    break;
+                case "locked-face-dimension":
+                    familyDocument.FamilyCreate.NewLinearDimension(view, across, Pair(Face(a, XYZ.BasisX).Reference, Face(b, -XYZ.BasisX).Reference)).IsLocked = true;
+                    break;
+                default: throw new ArgumentOutOfRangeException(nameof(variant), variant, null);
+                }
                 Assert.That(t.Commit(), Is.EqualTo(TransactionStatus.Committed));
             }
             path = RevitFamilyFixtureHarness.SaveDocumentCopy(familyDocument, directory, FamilyName);

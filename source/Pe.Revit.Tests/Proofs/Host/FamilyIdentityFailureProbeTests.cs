@@ -14,6 +14,15 @@ public sealed class FamilyIdentityFailureProbeTests {
     [OneTimeSetUp]
     public void SetUp(UIApplication ui) => this._ui = ui;
 
+    // Each test leaves the session's open documents as it found them (Mission 5 hold: a leftover changed a later test's reading).
+    private Document[] _before = [];
+
+    [SetUp]
+    public void RecordOpenDocuments() => this._before = this._ui.Application.Documents.Cast<Document>().ToArray();
+
+    [TearDown]
+    public void GuardOpenDocuments() => RevitFamilyFixtureHarness.CloseLeftoverDocuments(this._ui.Application, this._before);
+
     /// <summary>`…same_name_external_editor`: does EditFamily hand back the user's open, unsaved editor instead of a copy?</summary>
     [Test]
     public void Probe_EditFamily_with_a_same_name_editor_open() {
