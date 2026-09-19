@@ -60,7 +60,9 @@ async function setup(
   const owner = new ActionJournal(join(dir, "actions.json"));
   const deps = { workspace: work, sdk, requestDir: join(dir, "requests") };
   let workRevision = 0;
+  // A person stages on the Work they see now: a host retirement may have moved it.
   const stage = async (staged: unknown) => {
+    workRevision = (await work.read(scope, "instances"))?.revision ?? 0;
     const landed = await work.apply(
       scope,
       "instances",
@@ -77,13 +79,14 @@ async function setup(
     input: Record<string, unknown>,
     revision: number,
     resume?: string,
+    actor: "human" | "agent" = "human",
   ) => {
     const row = await admitInstancesAction(
       {
         id: resume ?? `${key}-${++serial}`,
         kind: "workflow",
         key,
-        actor: "human",
+        actor,
         destination: "session" in input ? { kind: "session", session: "dev" } : { kind: "host" },
         input: { workspaceId: scope.work, ...input },
         bases: { work: { key: scope, revision } },
@@ -108,7 +111,10 @@ async function setup(
     expect(landed).toMatchObject({ ok: true });
     return (workRevision = landed.revision!);
   };
-  return { calls, owner, deps, stage, propose, admit, requestOf };
+  const launch = async () =>
+    instancesRouteState.schema.parse((await work.read(scope, "instances"))!.doc).launch;
+  const revisionNow = async () => (workRevision = (await work.read(scope, "instances"))!.revision);
+  return { calls, owner, deps, stage, propose, admit, requestOf, launch, revisionNow };
 }
 
 test("a Pea proposal never launches; the launch reads exactly what the person staged", async () => {
@@ -279,10 +285,16 @@ test("open binds the exact recorded incarnation and its receipt path; a foreign 
   const open = f.calls.at(-1)!;
   expect(open[open.indexOf("--conflict-policy") + 1]).toBe("keep");
 
+  // The proven open retired its staged launch; the person stages it again for the foreign attempt.
+  const restaged = await f.stage({
+    kind: "open",
+    session: sdkSessionSelectorOf("dev"),
+    document: "C:/Tower.rvt",
+  });
   const foreign = await f.admit(
     "instances.open",
     { session: { id: "dev", process: { ...originalProcess, pid: 43 } } },
-    revision,
+    restaged,
   );
   expect(foreign).toMatchObject({ state: "failed", notDispatched: true });
   expect(f.calls.at(-1)?.slice(0, 2)).toEqual(["session", "list"]);
@@ -336,4 +348,39 @@ test("a pre-admission SDK refusal is failed and undispatched; recovery settles a
   const resumed = await f.admit("instances.start", {}, revision, lost.id);
   expect(resumed.state).toBe("succeeded");
   expect(f.calls.length).toBe(dispatched); // the recovered step replays; nothing is re-dispatched
+});
+
+test("a proven start retires the consumed staged launch; a second press does not start again", async () => {
+  const f = await setup(() => ({ result: { state: "started", id: "dev" } }), []);
+  const spec = { kind: "start", year: "2025", name: "dev" };
+  const revision = await f.stage(spec);
+  expect((await f.admit("instances.start", {}, revision)).state).toBe("succeeded");
+  expect((await f.launch()).staged).toBeNull();
+  const again = await f.admit("instances.start", {}, await f.revisionNow());
+  expect(again.state).toBe("failed");
+  expect(JSON.stringify(again)).toContain("Stage a start first");
+  expect(f.calls.filter((argv) => argv[1] === "start")).toHaveLength(1);
+});
+
+test("a failed start keeps the staged launch for the person to retry", async () => {
+  const f = await setup(
+    () => ({
+      result: { state: "refused" },
+      diagnostics: [{ code: "op.stale-expectation", detail: "a session 'dev' exists", fix: null }],
+    }),
+    [],
+  );
+  const revision = await f.stage({ kind: "start", year: "2025", name: "dev" });
+  expect((await f.admit("instances.start", {}, revision)).state).toBe("failed");
+  expect((await f.launch()).staged).toEqual({
+    value: { kind: "start", year: "2025", name: "dev" },
+  });
+});
+
+test("a Pea-admitted start of the person's staged launch retires it too", async () => {
+  const f = await setup(() => ({ result: { state: "started", id: "dev" } }), []);
+  const revision = await f.stage({ kind: "start", year: "2025", name: "dev" });
+  const row = await f.admit("instances.start", {}, revision, undefined, "agent");
+  expect(row.state).toBe("succeeded");
+  expect((await f.launch()).staged).toBeNull();
 });

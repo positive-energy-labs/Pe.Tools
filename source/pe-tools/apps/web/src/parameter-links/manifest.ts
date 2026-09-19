@@ -7,6 +7,7 @@ import {
   parameterLinksRouteState,
   type ParameterLinksDocument,
   type WorkKey,
+  stagedParameterLinks,
 } from "@pe/agent-contracts";
 
 import {
@@ -79,7 +80,8 @@ export const manifest = defineRoute<
       input: z.void(),
       dirties: ["links"],
       requires: { work: true },
-      ready: (ctx: Ctx) => (ctx.work.doc?.draft ? null : "save a draft first"),
+      ready: (ctx: Ctx) =>
+        ctx.work.doc && stagedParameterLinks(ctx.work.doc) ? null : "save a draft first",
       run: (ctx: Ctx) => read(ctx, true),
     },
     apply: {

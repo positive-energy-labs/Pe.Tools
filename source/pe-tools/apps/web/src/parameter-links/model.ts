@@ -1,4 +1,4 @@
-import { parameterLinksBasis } from "@pe/agent-contracts";
+import { parameterLinksBasis, stagedParameterLinks } from "@pe/agent-contracts";
 import type {
   ParameterLinksReading,
   ParameterLinkAssignment,
@@ -16,11 +16,11 @@ export const SOURCE_SCOPES: SourceKind[] = ["instance", "type", "instanceThenTyp
 export const RELATIONSHIPS: Relationship[] = ["sameElement", "electricalEquipmentCircuits"];
 export const REDUCERS: Reducer[] = ["first", "min", "max"];
 
-/** The authored draft is the only editable profile. There is no second copy to reconcile. */
+/** The person's staged profile is the only editable one; Pea's proposal is not drawn here yet. */
 export function editingProfile(
   document: ParameterLinksDocument | null,
 ): ParameterLinkProfile | null {
-  return document?.draft ?? null;
+  return document ? stagedParameterLinks(document) : null;
 }
 
 export function sameProfile(
@@ -38,7 +38,7 @@ export function evaluationIsCurrent(
   document: ParameterLinksDocument | null,
   reading: ParameterLinksReading | null,
 ): boolean {
-  if (!document?.draft || !reading?.evaluated) return false;
+  if (!document || !stagedParameterLinks(document) || !reading?.evaluated) return false;
   return reading.basis === parameterLinksBasis(document);
 }
 
@@ -46,7 +46,7 @@ export function isDraftDirty(
   document: ParameterLinksDocument | null,
   reading: ParameterLinksReading | null,
 ): boolean {
-  const draft = document?.draft;
+  const draft = document ? stagedParameterLinks(document) : null;
   if (draft == null) return false;
   return !sameProfile(draft, reading?.stored);
 }
@@ -60,7 +60,7 @@ export function applyRefusal(
   document: ParameterLinksDocument | null,
   reading: ParameterLinksReading | null,
 ): string | null {
-  if (!document?.draft) return "Author a draft profile first.";
+  if (!document || !stagedParameterLinks(document)) return "Author a draft profile first.";
   if (!evaluationIsCurrent(document, reading)) return "Preview this draft before applying.";
   if (errorIssueCount(reading?.evaluation) > 0)
     return "Resolve the evaluation errors before applying.";

@@ -1,6 +1,6 @@
 /**
- * O-2: until a route's cells cutover, Pea writes nothing a person would commit. Takeoffs and
- * Parameter Links hold only to-be-committed values, so Pea's mask there is empty.
+ * O-2: until a route's cells cutover, Pea writes nothing a person would commit. Takeoffs holds
+ * only to-be-committed values, so Pea's mask there is empty.
  */
 import { describe, expect, it } from "vite-plus/test";
 import { scheduleGridRouteState } from "./schedule-grid-data.ts";
@@ -22,7 +22,6 @@ const cases: [RouteStateSpec<z.ZodType>, (string | number)[][]][] = [
       ["reviewFlags", "room-1"],
     ],
   ],
-  [parameterLinksRouteState as never, [["draft"]]],
 ];
 
 describe("Pea cannot write a to-be-committed value before its route's cutover", () => {
@@ -82,4 +81,34 @@ it("instances: Pea proposes a launch on the one cell and cannot stage it", () =>
   expect(applyPatches(spec, envelope, "human", stage, 0)).toMatchObject({ ok: true });
   // The pre-cells shape is not read: strict rejection, never a silent strip.
   expect(spec.schema.safeParse({ staged: value }).success).toBe(false);
+});
+
+it("parameter-links: Pea proposes a profile on the one cell and cannot stage it", () => {
+  const spec = parameterLinksRouteState as unknown as RouteStateSpec<z.ZodType>;
+  const envelope: RouteEnvelope<unknown> = { version: 1, revision: 0, doc: spec.schema.parse({}) };
+  const value = {
+    formatVersion: 1,
+    definitions: [
+      {
+        id: "d1",
+        sourceCategoryId: -2001000,
+        sourceParameter: { name: "MCA" },
+        sourceScope: "instanceThenType",
+        relationship: "sameElement",
+        targetParameter: { name: "Load" },
+        reducer: "first",
+      },
+    ],
+    assignments: [],
+  };
+  const propose = transitionPatches([], "profile", {}, { kind: "propose", rung: { value } });
+  expect(applyPatches(spec, envelope, "agent", propose, 0)).toMatchObject({ ok: true });
+  const stage = transitionPatches([], "profile", {}, { kind: "stage", rung: { value } });
+  expect(applyPatches(spec, envelope, "agent", stage, 0)).toMatchObject({
+    ok: false,
+    kind: "refused",
+  });
+  expect(applyPatches(spec, envelope, "human", stage, 0)).toMatchObject({ ok: true });
+  // The pre-cells `{ draft }` shape is not read: strict rejection, never a silent strip.
+  expect(spec.schema.safeParse({ draft: value }).success).toBe(false);
 });
