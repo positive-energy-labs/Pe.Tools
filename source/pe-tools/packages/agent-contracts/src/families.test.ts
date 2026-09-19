@@ -122,3 +122,34 @@ describe("familiesRouteState", () => {
     expect(familiesRouteState.schema.safeParse({ excludedIds: [2] }).success).toBe(false);
   });
 });
+
+describe("familiesRouteState.salvage", () => {
+  const bare = {
+    categoryNames: ["Air Terminals"],
+    familyNames: ["Alpha"],
+    placementScope: "AllLoaded",
+  };
+
+  it("S-1: keeps name-keyed exclusions as names beside old ids", () => {
+    expect(
+      familiesRouteState.salvage({ scope: bare, excluded: { Alpha: { by: "person" } } }),
+    ).toMatchObject({ familyNames: ["Alpha"], familyIds: [] });
+    expect(
+      familiesRouteState.salvage({ excluded: { "41": { by: "person" }, Beta: { by: "pea" } } }),
+    ).toMatchObject({ familyNames: ["Beta"], familyIds: [41] });
+    expect(familiesRouteState.salvage({ excludedIds: [3102, 7] })).toMatchObject({
+      familyNames: [],
+      familyIds: [3102, 7],
+    });
+  });
+
+  it("S-2: offers the old bare scope, from any shape that held one, and none when there was none", () => {
+    expect(familiesRouteState.salvage({ scope: bare })).toMatchObject({ scope: bare });
+    expect(familiesRouteState.salvage({ plan: { scope: bare } })).toMatchObject({ scope: bare });
+    expect(familiesRouteState.salvage({ scope: { staged: { value: bare } } })).toMatchObject({
+      scope: bare,
+    });
+    for (const doc of [{ scope: null }, {}, { scope: { proposal: { value: bare } } }])
+      expect(familiesRouteState.salvage(doc)).not.toHaveProperty("scope");
+  });
+});
