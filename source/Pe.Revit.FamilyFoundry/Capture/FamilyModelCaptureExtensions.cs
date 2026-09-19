@@ -775,7 +775,7 @@ internal sealed class FamilyModelCapturer {
                     ConnectorProfileType.Oval => ConnectorShape.Oval,
                     _ => null
                 },
-                Diameter = round && (isDuct || isPipe) ? this.LengthOf(c.get_Parameter(BuiltInParameter.CONNECTOR_DIAMETER)) : null,
+                Diameter = round && (isDuct || isPipe) ? this.RoundSize(c, slug) : null,
                 Width = !round && (isDuct || isPipe) ? this.LengthOf(c.get_Parameter(BuiltInParameter.CONNECTOR_WIDTH)) : null,
                 Height = !round && (isDuct || isPipe) ? this.LengthOf(c.get_Parameter(BuiltInParameter.CONNECTOR_HEIGHT)) : null,
                 FlowDirection = isDuct || isPipe ? EnumOf<FlowDirectionType, FlowDirection>(flowDirection) : null,
@@ -916,6 +916,22 @@ internal sealed class FamilyModelCapturer {
     }
 
     private string? Length(Parameter? p) => this.LengthOf(p)?.Text;
+
+    /// <summary>
+    ///     A round connector's diameter: its association, else its literal. A connector sized through its Radius slot (Radius = a type
+    ///     parameter) has no diameter association, and its literal is the CURRENT type's size, so it changed with
+    ///     <c>FamilyManager.CurrentType</c> and a value-only patch left connector residue (F-J3-2, project-a Mechanical Damper). The vocabulary
+    ///     names diameter only, so the radius association is recorded as unmodeled rather than as a type-dependent literal.
+    /// </summary>
+    private PortableLength? RoundSize(ConnectorElement connector, string slug) {
+        var diameter = connector.get_Parameter(BuiltInParameter.CONNECTOR_DIAMETER);
+        if (this.Assoc(diameter) is { } driven) return PortableLength.Parse(driven);
+        if (this.Assoc(connector.get_Parameter(BuiltInParameter.CONNECTOR_RADIUS)) is { } radius) {
+            this.Add(UnmodeledReason.ConnectorSizeByRadius, $"$.connectors.{slug}.diameter", ("radius", radius));
+            return null;
+        }
+        return this.LengthOf(diameter);
+    }
 
     private PortableLength? LengthOf(Parameter? p) {
         if (p == null) return null;
