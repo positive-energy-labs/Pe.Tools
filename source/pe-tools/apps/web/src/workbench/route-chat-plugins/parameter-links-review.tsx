@@ -3,7 +3,7 @@ import {
   type ParameterLinksDocument,
   type ParameterLinksReading,
   actionLabel,
-  stagedParameterLinks,
+  stagedParameterProfile,
 } from "@pe/agent-contracts";
 import { Eye, RefreshCw } from "lucide-react";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
@@ -26,7 +26,7 @@ export function ParameterLinksReview({
   reading: ParameterLinksReading | null;
   onCommand: (name: "refresh" | "preview") => void;
 }) {
-  const profile = document ? stagedParameterLinks(document) : null;
+  const profile = document ? stagedParameterProfile(document) : null;
   const evaluation = reading?.evaluated ? (reading.evaluation ?? null) : null;
   return (
     <div className="mt-1.5 w-full pt-1.5">

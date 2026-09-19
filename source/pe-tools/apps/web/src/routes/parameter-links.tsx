@@ -6,7 +6,7 @@ import type { ParameterLinkProfile, ParameterLinksDocument } from "@pe/agent-con
 import {
   familyCaptureSchema,
   parameterLinksReadingSchema,
-  stagedParameterLinks,
+  stagedParameterProfile,
   transitionPatches,
 } from "@pe/agent-contracts";
 
@@ -137,7 +137,7 @@ export function ParameterLinksWorkspace({
   fieldOptionsEnabled?: boolean;
 }) {
   const document = route.work.doc;
-  const savedDraft = document ? stagedParameterLinks(document) : null;
+  const savedDraft = document ? stagedParameterProfile(document) : null;
   const evaluation = reading?.evaluated ? (reading.evaluation ?? null) : null;
   const status = reading?.status ?? null;
 
