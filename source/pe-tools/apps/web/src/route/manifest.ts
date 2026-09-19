@@ -80,6 +80,15 @@ export interface Ctx<W, R extends string, P> {
   readonly setPage: (next: Partial<P>) => void;
 }
 
+/** A host read (a catalog, a snapshot): an answer this late means something is stuck. */
+export const HOST_READ_BOUND_S = 15;
+/** A plan or capture: a native read of a document, bounded but slower. */
+export const NATIVE_READ_BOUND_S = 120;
+/** A native apply writes a model and may legitimately run for minutes. */
+export const NATIVE_APPLY_BOUND_S = 600;
+/** Any verb that names no bound of its own. */
+export const DEFAULT_BOUND_S = 120;
+
 export interface RouteAction<W, R extends string, P, I = void> {
   label: string;
   says: string;
@@ -88,6 +97,11 @@ export interface RouteAction<W, R extends string, P, I = void> {
   input: z.ZodType<I>;
   /** Browser Reading keys invalidated on success; semantic actions name Host and Pea resources. */
   dirties: readonly R[];
+  /**
+   * How long this verb may stay in flight before it ends as "stopped: no answer after Ns" and
+   * releases busy (a timeout is a diagnostic boundary, never a retry). Default `DEFAULT_BOUND_S`.
+   */
+  boundSeconds?: number;
   /** State that must be current before this action may mutate. Previous values remain display-only. */
   requires?: { readonly work?: true; readonly readings?: readonly R[] };
   chord?: UseHotkeyDefinition["hotkey"];
@@ -442,6 +456,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
     return isSpecOf(member.schema, def.schema) ? null : `the member is not a ${def.entity} spec`;
   };
   const capture: RouteAction<unknown, string, EntityPage, never> = {
+    boundSeconds: NATIVE_READ_BOUND_S,
     label: `capture ${def.entity}`,
     says: `reads the ${def.entity} from Revit into new members of the chosen pod`,
     actor: "any",
@@ -470,6 +485,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
   /** A sheet planned from staged work; apply sends its plans, never the page's member. */
   const stagedSheet = (ctx: EntityCtx) => Boolean(staged && sheetView(ctx)?.sheet.staged);
   const planVerb: RouteAction<unknown, string, EntityPage, never> = {
+    boundSeconds: NATIVE_READ_BOUND_S,
     label: "plan",
     says: `plans the saved ${def.entity} spec and opens the confirmation sheet; changes nothing`,
     needs: semanticActionFacts(def.apply).needs,
@@ -492,6 +508,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
     },
   };
   const apply: RouteAction<unknown, string, EntityPage, never> = {
+    boundSeconds: NATIVE_APPLY_BOUND_S,
     label: `apply ${def.entity}`,
     ...semanticActionFacts(def.apply),
     // The plan sheet gates apply: its button is the only one (w8-revit trip 5).

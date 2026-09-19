@@ -53,7 +53,7 @@ import {
 } from "#/readings";
 import { inspectAtomRegistry, type OwnerReferences } from "#/state/atom-inspect";
 import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
-import type { RouteManifest } from "./manifest";
+import { DEFAULT_BOUND_S, type RouteManifest } from "./manifest";
 import { callHostDynamic } from "#/host/client";
 import { causeRefusal, refuse, writeRefusal, type Refusal } from "./refusal";
 import { postRouteWrite } from "./host";
@@ -148,8 +148,9 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
     ]);
 
   let stopper: (() => void) | null = null;
-  /** The word on the running verb's button, for a busy refusal to name. */
+  /** The running verb's button word and start, for a busy refusal to name (and say how long). */
   let runningLabel = "";
+  let runningSince = 0;
 
   /**
    * Busy is a RUNTIME refusal (ruling Q4): one action at a time, and the second one is told so.
@@ -162,16 +163,20 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
     onStopped?: () => void,
     /** The word on the button. The log says what the user pressed, never the action key. */
     label = key,
+    /** In flight past this, the verb ends as stopped and releases busy; Infinity = unbounded. */
+    boundSeconds = Infinity,
   ): Promise<Refusal | null> => {
     if (inFlight) {
       // A busy refusal is a refusal like any other: on the verb, and one line in the page log.
-      const refusal = refuse("busy", `${runningLabel} is still running`);
+      const running = Math.floor((Date.now() - runningSince) / 1000);
+      const refusal = refuse("busy", `${runningLabel} still running (${running}s)`);
       write(key, "failure", () => registry.set(failure, refusal));
       note("verb", label, `refused · ${refusal.message}`, true);
       return refusal;
     }
     inFlight = true;
     runningLabel = label;
+    runningSince = Date.now();
     write(key, "busy", () => registry.set(busy, { key, seconds: 0 }));
     const started = Date.now();
     busyTimer = setInterval(
@@ -212,9 +217,40 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
         });
       };
     });
+    // The bound: past it the verb ends honestly (never success, never a retry) and busy is
+    // released; the op may still answer, and that late answer is only logged and re-read below.
+    let bound: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<"timeout">((resolve) => {
+      if (Number.isFinite(boundSeconds))
+        bound = setTimeout(() => resolve("timeout"), boundSeconds * 1000);
+    });
     try {
       const running = work();
-      const result = await Promise.race([running, stopped]);
+      const result = await Promise.race([running, stopped, timedOut]);
+      if (result === "timeout") {
+        const refusal = refuse("unknown", `stopped: no answer after ${boundSeconds}s`);
+        write(key, "failure", () => registry.set(failure, refusal));
+        note("verb", label, refusal.message, true);
+        running
+          .then(
+            (late) =>
+              !disposed &&
+              note(
+                "verb",
+                label,
+                `late · ${late ? outcomeSays(late) : "answered"} after the stop; re-reading, nothing retried`,
+                Boolean(late),
+              ),
+            (cause: unknown) =>
+              !disposed && note("verb", label, `late · failed · ${refusalOf(cause).message}`, true),
+          )
+          .finally(() => {
+            // A late answer only refreshes what the verb dirties; it never writes on its own.
+            if (!disposed) invalidateKeys();
+          });
+        onStopped?.();
+        return refusal;
+      }
       if (result === "stopped") {
         note(
           "verb",
@@ -250,6 +286,7 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
       note("verb", label, `failed · ${refusal.message}`, true);
       return refusal;
     } finally {
+      clearTimeout(bound);
       if (!detached) finish();
     }
   };
@@ -1163,7 +1200,8 @@ export function useRoute<W, R extends string, P, A extends string>(
                 const reason = action.ready(ctx as never, parsed.data as never);
                 if (reason) return refuse("not-ready", reason);
                 const refusal = (await action.run(ctx as never, parsed.data as never)) ?? null;
-                if (!refusal)
+                // A partial outcome landed something: what it dirties is stale either way.
+                if (!refusal || refusal.code === "partial")
                   for (const reading of action.dirties) {
                     const request = readingAtoms.find(([name]) => name === reading)?.[2];
                     if (request) owner.write(name, `dirty/${reading}`, () => dirty(request));
@@ -1175,6 +1213,7 @@ export function useRoute<W, R extends string, P, A extends string>(
                 stopped = true;
               },
               action.label,
+              action.boundSeconds ?? DEFAULT_BOUND_S,
             );
             setOutcome({ key: name, label: action.label, refusal, stopped, at: Date.now() });
             return refusal;
