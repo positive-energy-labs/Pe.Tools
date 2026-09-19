@@ -2805,7 +2805,7 @@ export namespace RevitContextSummary {
   }
 }
 
-/** Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. Whole-view capture needs no transaction; focus capture sets a temporary crop box (clearing any scope box) and restores it afterward (editable document only). A cropped view also returns registration: the model XY of the image's top-left, top-right and bottom-left corners plus the image sha256, which places pixels under model geometry even on a rotated crop. */
+/** Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. Whole-view capture needs no transaction; focus capture sets a temporary crop box (clearing any scope box) and restores it afterward (editable document only). A cropped view also returns registration: the model XY of the image's top-left, top-right and bottom-left corners plus the image sha256, which places pixels under model geometry even on a rotated crop. A cropped view shows exactly its model crop: annotations outside the model crop are not drawn. */
 export namespace RevitContextViewImage {
   export namespace Req {
     export interface Request {
