@@ -1,4 +1,4 @@
-using Autodesk.Revit.DB.Structure;
+﻿using Autodesk.Revit.DB.Structure;
 using Pe.App.Host;
 using Pe.Revit.Extensions.FamDocument;
 
@@ -78,9 +78,9 @@ public sealed class FamilyReloadIdentityTests {
                 case "apply": {
                     const string patch = """{"patch":{"types":{"Standard":{"Proof":"x"}}}}""";
                     var id = family.Id.Value();
-                    var plan = FamilyFoundryBridgeOps.PlanFamilies(patch, project, [id]).Families.Single();
+                    var plan = FamilyFoundryBridgeOps.PlanFamilies(patch, project, [FamilyName]).Families.Single();
                     var receipt = FamilyFoundryBridgeOps.ApplyFamilies(patch, new Dictionary<long, string> { [id] = plan.PlanHash }, project, null, null,
-                        Path.Combine(directory, "apply")).Receipts.Single();
+                        Path.Combine(directory, "apply"), new Dictionary<long, string> { [id] = plan.FamilyName }).Receipts.Single();
                     Assert.That(receipt.Success && receipt.Converged, Is.True, receipt.Error);
                     Assert.That(receipt.FamilyId, Is.EqualTo(before.Family), "familyId is the id the apply was asked for");
                     Assert.That(receipt.FamilyName, Is.EqualTo(FamilyName));

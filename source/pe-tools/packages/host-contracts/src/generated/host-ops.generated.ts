@@ -167,17 +167,23 @@ export namespace DocumentTemporaryStatus {
   }
 }
 
-/** Reconcile explicit loaded families to a saved spec, refusing plan drift per family, and write the run receipt into the source pod. */
+/** Reconcile explicit loaded families to a saved spec, refusing plan drift per family and any family reloaded since the plan (its name now resolves to another id), and write the run receipt into the source pod. */
 export namespace FamiliesApply {
   export namespace Req {
     export type PodSourceOrigin = "SavedMember" | "SuppliedDraft";
 
     /**
-     * Apply a saved spec to explicit loaded families; each family's `expectedPlanHash` from families.plan gates drift.
+     * Apply a saved spec to explicit loaded families; each family's `expectedPlanHash` from families.plan gates drift. Both maps are
+     * keyed by the id resolved at plan; `familyNames` holds each one's plan name, re-resolved at apply: a family whose name now
+     * resolves to another id was reloaded since the plan and is refused by name.
+     *
      */
     export interface Request {
       specJson: string;
       expectedPlanHashes: {
+        [k: string]: string;
+      };
+      familyNames: {
         [k: string]: string;
       };
       source: PodComposedSource;
@@ -247,13 +253,13 @@ export namespace FamiliesApply {
     /**
      * The receipt: outcomes per change, residue after re-capture, converged = residue 0 and no errors. `familyId` is the
      * id the apply was asked for (its `expectedPlanHashes` key). A reload gives the family a new element id, so
-     * `loadedFamilyId` is the id it has now, null when nothing reloaded; an element id names one load, and only the
-     * family name is stable across applies.
+     * `loadedFamilyId` is the id it has now, null when nothing reloaded; an element id names one load, and only
+     * `familyName` (as re-resolved at apply) is stable across applies.
      *
      */
     export interface FamilyFoundryApplyReceipt {
       familyId: number;
-      familyName?: null | string;
+      familyName: string;
       success: boolean;
       converged: boolean;
       error?: null | string;
@@ -334,15 +340,17 @@ export namespace FamiliesCapture {
   }
 }
 
-/** Diff an inline family spec against exactly the passed `familyIds` (the spec's `select` only when none are passed) and return the plan per family with a deterministic hash. */
+/** Diff an inline family spec against exactly the passed `familyNames` (exact loaded family names; the spec's `select` only when none are passed) and return the plan per family, each with the id its name resolved to and a deterministic hash. A name that resolves to no single editable family is a refused entry with a null id. */
 export namespace FamiliesPlan {
   export namespace Req {
     /**
-     * Plan a spec against exactly the target's resolved family ids; the spec's `select` is the default scope only when none are passed.
+     * Plan a spec against exactly the named loaded families (exact, case-sensitive, no duplicates); the spec's `select` is the
+     * default scope only when none are passed. A name is the stable identity: an id names one load only.
+     *
      */
     export interface Request {
       specJson: string;
-      familyIds?: number[] | null;
+      familyNames?: string[] | null;
       executionOptions?: null | ExecutionOptions;
     }
     /**
@@ -378,8 +386,13 @@ export namespace FamiliesPlan {
       families: FamilyFoundryFamilyPlanData[];
       diagnostics: FamilyFoundryDiagnostic[];
     }
+    /**
+     * One planned family. `familyName` is the requested name byte-exact; `familyId` is the id it resolved to at plan, null when
+     * the name refused (`family-not-found`, `family-name-ambiguous`, `family-not-editable` in `refusals`).
+     *
+     */
     export interface FamilyFoundryFamilyPlanData {
-      familyId: number;
+      familyId?: number | null;
       familyName: string;
       planHash: string;
       changes: FamilyFoundryChangeData[];
@@ -499,13 +512,13 @@ export namespace FamilyApply {
     /**
      * The receipt: outcomes per change, residue after re-capture, converged = residue 0 and no errors. `familyId` is the
      * id the apply was asked for (its `expectedPlanHashes` key). A reload gives the family a new element id, so
-     * `loadedFamilyId` is the id it has now, null when nothing reloaded; an element id names one load, and only the
-     * family name is stable across applies.
+     * `loadedFamilyId` is the id it has now, null when nothing reloaded; an element id names one load, and only
+     * `familyName` (as re-resolved at apply) is stable across applies.
      *
      */
     export interface FamilyFoundryApplyReceipt {
       familyId: number;
-      familyName?: null | string;
+      familyName: string;
       success: boolean;
       converged: boolean;
       error?: null | string;
@@ -690,8 +703,13 @@ export namespace FamilyPlan {
       families: FamilyFoundryFamilyPlanData[];
       diagnostics: FamilyFoundryDiagnostic[];
     }
+    /**
+     * One planned family. `familyName` is the requested name byte-exact; `familyId` is the id it resolved to at plan, null when
+     * the name refused (`family-not-found`, `family-name-ambiguous`, `family-not-editable` in `refusals`).
+     *
+     */
     export interface FamilyFoundryFamilyPlanData {
-      familyId: number;
+      familyId?: number | null;
       familyName: string;
       planHash: string;
       changes: FamilyFoundryChangeData[];
