@@ -148,6 +148,8 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
     ]);
 
   let stopper: (() => void) | null = null;
+  /** The word on the running verb's button, for a busy refusal to name. */
+  let runningLabel = "";
 
   /**
    * Busy is a RUNTIME refusal (ruling Q4): one action at a time, and the second one is told so.
@@ -162,11 +164,14 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
     label = key,
   ): Promise<Refusal | null> => {
     if (inFlight) {
-      const refusal = refuse("busy", `${key} refused; another action is running`);
+      // A busy refusal is a refusal like any other: on the verb, and one line in the page log.
+      const refusal = refuse("busy", `${runningLabel} is still running`);
       write(key, "failure", () => registry.set(failure, refusal));
+      note("verb", label, `refused · ${refusal.message}`, true);
       return refusal;
     }
     inFlight = true;
+    runningLabel = label;
     write(key, "busy", () => registry.set(busy, { key, seconds: 0 }));
     const started = Date.now();
     busyTimer = setInterval(

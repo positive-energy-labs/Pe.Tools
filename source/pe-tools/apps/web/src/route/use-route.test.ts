@@ -119,3 +119,38 @@ test("a picker target preserves its exact session and open document; malformed i
   expect(parseTarget("ux-revival")).toEqual({ kind: "session", session: "ux-revival" });
   expect(parseTarget("{broken")).toEqual({ kind: "session", session: "{broken" });
 });
+
+test("a verb refused as busy logs one line naming the verb still running, and keeps its refusal", async () => {
+  const registry = AtomRegistry.make();
+  const owner = createRouteOwner("test", registry);
+  let release = () => {};
+  const first = owner.runAction(
+    "plan",
+    async () => {
+      await new Promise<void>((resolve) => (release = resolve));
+      return null;
+    },
+    undefined,
+    undefined,
+    "plan",
+  );
+  const refused = await owner.runAction(
+    "apply",
+    async () => null,
+    undefined,
+    undefined,
+    "apply 2 rows",
+  );
+  expect(refused).toMatchObject({ code: "busy", message: "plan is still running" });
+  expect(registry.get(owner.failure)).toEqual(refused);
+  const [line] = registry.get(owner.log);
+  expect(line).toMatchObject({
+    kind: "verb",
+    label: "apply 2 rows",
+    says: "refused · plan is still running",
+    refused: true,
+  });
+  release();
+  await first;
+  owner.dispose();
+});
