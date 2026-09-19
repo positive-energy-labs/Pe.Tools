@@ -1148,6 +1148,15 @@ export namespace RevitApplyParameterValues {
   }
   export namespace Res {
     export type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
+    /**
+     * The closed set of reasons ParameterEditPlan refuses an edit; the prose stays the refusal's message.
+     */
+    export type EditRefusalCode =
+      | "target-evidence-stale"
+      | "target-evidence-missing"
+      | "target-unresolved"
+      | "admission-group-refused"
+      | "alias-conflict";
 
     export interface Response {
       applied: number;
@@ -1161,6 +1170,8 @@ export namespace RevitApplyParameterValues {
       parsedRaw?: null | string;
       parsedDisplay?: null | string;
       current?: null | ParameterTarget;
+      code?: null | EditRefusalCode;
+      causeCode?: null | EditRefusalCode;
     }
     /**
      * Mutation evidence for one native parameter: what a reviewer saw, and what a writer compares against a fresh
@@ -5060,6 +5071,15 @@ export namespace ScheduleCellsApply {
       | "NonStandardDisplay"
       | "ParameterNotFound"
       | "ReadOnlyParameter";
+    /**
+     * The closed set of reasons ParameterEditPlan refuses an edit; the prose stays the refusal's message.
+     */
+    export type EditRefusalCode =
+      | "target-evidence-stale"
+      | "target-evidence-missing"
+      | "target-unresolved"
+      | "admission-group-refused"
+      | "alias-conflict";
     export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
 
     export interface Response {
@@ -5077,6 +5097,8 @@ export namespace ScheduleCellsApply {
       error?: null | string;
       currentBinding?: null | ScheduleCellBinding;
       parameterResults: ParameterValueEditResult[];
+      code?: null | EditRefusalCode;
+      causeCode?: null | EditRefusalCode;
     }
     /**
      * The write surface behind one rendered schedule cell: which element(s) a cell edit would
@@ -5120,6 +5142,8 @@ export namespace ScheduleCellsApply {
       parsedRaw?: null | string;
       parsedDisplay?: null | string;
       current?: null | ParameterTarget;
+      code?: null | EditRefusalCode;
+      causeCode?: null | EditRefusalCode;
     }
     export interface RevitDataIssue {
       code: string;
