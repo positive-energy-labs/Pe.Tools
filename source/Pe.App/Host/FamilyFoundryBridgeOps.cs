@@ -42,13 +42,13 @@ internal static class FamilyFoundryBridgeOps {
     private static Task<FamiliesCaptureData> CaptureLoaded(FamiliesCaptureRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => CaptureFamilies(request.FamilyIds, document.Value), cancellationToken);
 
-    [Op("families.plan", Does = "Diff an inline family spec against exactly the passed `familyIds` (the spec's `select` only when none are passed) and return the plan per family with a deterministic hash.", Title = "Plan Loaded Families", Finds = ["families", "spec", "plan", "plan-hash", "reconcile", "bulk"], Cost = OpCost.Expensive)]
+    [Op("families.plan", Does = "Diff an inline family spec against exactly the passed `familyNames` (exact loaded family names; the spec's `select` only when none are passed) and return the plan per family, each with the id its name resolved to and a deterministic hash. A name that resolves to no single editable family is a refused entry with a null id.", Title = "Plan Loaded Families", Finds = ["families", "spec", "plan", "plan-hash", "reconcile", "bulk"], Cost = OpCost.Expensive)]
     private static Task<FamilyFoundryPlanData> PlanLoaded(FamiliesPlanRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
-        PaletteThreading.RunRevitAsync(() => PlanFamilies(request.SpecJson, document.Value, request.FamilyIds, request.ExecutionOptions, cancellationToken), cancellationToken);
+        PaletteThreading.RunRevitAsync(() => PlanFamilies(request.SpecJson, document.Value, request.FamilyNames, request.ExecutionOptions, cancellationToken), cancellationToken);
 
-    [Op("families.apply", Does = "Reconcile explicit loaded families to a saved spec, refusing plan drift per family, and write the run receipt into the source pod.", Title = "Apply Loaded Families", Finds = ["families", "spec", "apply", "plan-hash", "receipt", "bulk"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    [Op("families.apply", Does = "Reconcile explicit loaded families to a saved spec, refusing plan drift per family and any family reloaded since the plan (its name now resolves to another id), and write the run receipt into the source pod.", Title = "Apply Loaded Families", Finds = ["families", "spec", "apply", "plan-hash", "receipt", "bulk"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
     private static Task<FamilyFoundryApplyData> ApplyLoaded(FamiliesApplyRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
-        PaletteThreading.RunRevitAsync(() => ApplyWithReceipt("families.apply", request.SpecJson, request.Source, request.ExpectedPlanHashes, document.Value, request.ExecutionOptions, plan: request.Plan, cancellationToken: cancellationToken), cancellationToken);
+        PaletteThreading.RunRevitAsync(() => ApplyWithReceipt("families.apply", request.SpecJson, request.Source, request.ExpectedPlanHashes, document.Value, request.ExecutionOptions, familyNames: request.FamilyNames, plan: request.Plan, cancellationToken: cancellationToken), cancellationToken);
 
     [Op("family.build", Does = "Build a new Revit family from a saved family model spec by reconciling a fresh document from the spec's template. The .rfa lands in a fresh run folder in the source pod beside the run receipt; the operation returns both paths.", Title = "Build Family", Finds = ["family", "family-json", "build", "template", "spec", "receipt"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
     private static Task<FamilyBuildData> BuildFamily(FamilyBuildRequest request, CancellationToken cancellationToken) =>
@@ -108,7 +108,7 @@ internal static class FamilyFoundryBridgeOps {
     /// <summary>The one apply edge: bridge ops and palettes both land here, and both leave a run in the source pod.</summary>
     internal static FamilyFoundryApplyData ApplyWithReceipt(string operation, string specJson, PodComposedSource composed,
         IReadOnlyDictionary<long, string> expectedPlanHashes, Document document, ExecutionOptions? executionOptions, LoadAndSaveOptions? loadAndSave = null,
-        string? plan = null, CancellationToken cancellationToken = default) {
+        IReadOnlyDictionary<long, string>? familyNames = null, string? plan = null, CancellationToken cancellationToken = default) {
         EngineEdge.RequireReachableCentral(document);
         var (run, inputOutputs) = EngineEdge.StartRun(composed, new {
             operation,
@@ -116,13 +116,14 @@ internal static class FamilyFoundryBridgeOps {
             executionOptions,
             selectedFamilyIds = expectedPlanHashes.Keys.OrderBy(id => id).ToList(),
             expectedPlanHashes,
+            familyNames,
             loadAndSave
         }, specJson, plan);
         var source = composed.Root;
         var handled = new List<(bool IsError, string Message)>();
         var artifacts = Path.Combine(Path.GetTempPath(), "Pe.Tools", "family-apply", Guid.NewGuid().ToString("N"));
         try {
-            var data = EngineEdge.NoModal(handled, () => ApplyFamilies(specJson, expectedPlanHashes, document, executionOptions, loadAndSave, artifacts, cancellationToken));
+            var data = EngineEdge.NoModal(handled, () => ApplyFamilies(specJson, expectedPlanHashes, document, executionOptions, loadAndSave, artifacts, familyNames, cancellationToken));
             var failures = Failures(data);
             var relative = data with {
                 Reason = Reason(data, failures),
@@ -159,7 +160,7 @@ internal static class FamilyFoundryBridgeOps {
     private static List<(string Subject, string Message)> Failures(FamilyFoundryApplyData data) =>
         data.Diagnostics.Select(d => (Subject: d.Code, Message: d.Message))
             .Concat(data.Receipts.Where(r => !r.Success).Select(r => (
-                Subject: r.FamilyName ?? r.FamilyId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                Subject: r.FamilyName,
                 Message: string.Join(Environment.NewLine, new[] { r.Error }.Concat(r.Errors).OfType<string>().Where(m => m.Length > 0).DefaultIfEmpty("failed with no message")))))
             .ToList();
 
@@ -179,49 +180,63 @@ internal static class FamilyFoundryBridgeOps {
     /// <summary>Run outputs are flat file names; an artifact's relative path becomes its `--`-joined name prefix.</summary>
     private static string RunPath(string artifacts, string path) => path[(artifacts.Length + 1)..].Replace(Path.DirectorySeparatorChar.ToString(), "--");
 
-    /// <summary>Plans exactly <paramref name="familyIds" /> when passed; the spec's `select` is the default scope, never a post-filter.</summary>
-    internal static FamilyFoundryPlanData PlanFamilies(string specJson, Document document, IReadOnlyList<long>? familyIds = null, ExecutionOptions? executionOptions = null,
+    /// <summary>
+    ///     Plans exactly <paramref name="familyNames" /> when passed, each resolved to its one loaded, editable family or refused by
+    ///     name; the spec's `select` is the default scope, never a post-filter.
+    /// </summary>
+    internal static FamilyFoundryPlanData PlanFamilies(string specJson, Document document, IReadOnlyList<string>? familyNames = null, ExecutionOptions? executionOptions = null,
         CancellationToken cancellationToken = default) {
         var (patch, diagnostics) = ParseSpec(specJson);
         if (patch is null) return new FamilyFoundryPlanData([], diagnostics);
         executionOptions ??= new ExecutionOptions();
+        if (familyNames is not null && ProjectFamilies.RequestRefusals(familyNames) is { Count: > 0 } refused)
+            return new FamilyFoundryPlanData([], refused.Select(r => new FamilyFoundryDiagnostic(r.Code, "$.familyNames", r.Message)).ToList());
 
-        if (familyIds is not null && !document.IsFamilyDocument) {
-            var missing = familyIds.Where(id => document.GetElement(id.ToElementId()) is not Family).Distinct().ToList();
-            if (missing.Count > 0)
-                return new FamilyFoundryPlanData([], missing.Select(id => new FamilyFoundryDiagnostic("FamilyNotFound", "$.familyIds", $"Element id {id} is not a loaded family.")).ToList());
-        }
-        var families = document.IsFamilyDocument
-            ? familyIds is null || familyIds.Contains(document.OwnerFamily.Id.Value()) ? new List<Family> { document.OwnerFamily } : []
-            : familyIds is not null
-            ? familyIds.Distinct().Select(id => (Family)document.GetElement(id.ToElementId())).ToList()
-            : document.FamiliesMatching(patch.Select);
-        if (families.Count == 0)
-            return new FamilyFoundryPlanData([], [new FamilyFoundryDiagnostic("FamilyNotFound", "$.familyIds", familyIds is null ? "The spec selects no loaded family." : "The target resolves no loaded family.")]);
+        List<(string Name, Family? Family, FamilyFoundryDiagnostic? Refusal)> targets = document.IsFamilyDocument
+            ? familyNames is null || familyNames.Contains(document.OwnerFamily.Name, StringComparer.Ordinal)
+                ? [(document.OwnerFamily.Name, document.OwnerFamily, null)] : []
+            : familyNames is not null
+            ? document.ResolveByName(familyNames).Select(r => (r.Name, r.FamilyId is { } id ? (Family?)document.GetElement(id.ToElementId()) : null,
+                r.Code is null ? null : new FamilyFoundryDiagnostic(r.Code, "$.familyNames", r.Message!))).ToList()
+            : document.FamiliesMatching(patch.Select).Select(f => (f.Name, (Family?)f, (FamilyFoundryDiagnostic?)null)).ToList();
+        if (targets.Count == 0)
+            return new FamilyFoundryPlanData([], [new FamilyFoundryDiagnostic("FamilyNotFound", "$.familyNames", familyNames is null ? "The spec selects no loaded family." : "The target resolves no loaded family.")]);
 
-        return new FamilyFoundryPlanData(families.Select(family => {
+        return new FamilyFoundryPlanData(targets.Select(target => {
+            var (name, family, refusal) = target;
+            if (family is null) return new FamilyFoundryFamilyPlanData(null, name, string.Empty, [], [], [refusal!], []);
             // A cancelled plan returns nothing: the confirmation sheet is only worth reading whole.
             cancellationToken.ThrowIfCancellationRequested();
             try { return WithFamilyDocument(document, family, (famDoc, editDiagnostics) => {
             var preview = famDoc.PreviewFamily(patch, executionOptions);
             var warnings = CaptureIssues(preview.Original, family, editDiagnostics);
-            return new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, preview.PlanHash,
+            return new FamilyFoundryFamilyPlanData(family.Id.Value(), name, preview.PlanHash,
                 preview.Changes.Select(ToChange).ToList(), preview.RunEffects, preview.Diagnostics.Select(ToDiagnostic).ToList(), warnings);
             }); } catch (Exception exception) when (exception is Autodesk.Revit.Exceptions.InvalidOperationException or InvalidOperationException) {
-                return new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, string.Empty, [], [],
-                    [new FamilyFoundryDiagnostic("FamilyEditRefused", "$.familyId", exception.Message)], []);
+                return new FamilyFoundryFamilyPlanData(family.Id.Value(), name, string.Empty, [], [],
+                    [new FamilyFoundryDiagnostic("FamilyEditRefused", "$.familyNames", exception.Message)], []);
             }
         }).ToList(), []);
     }
 
-    /// <summary>Run the spec against explicit families, writing engine artifacts under <paramref name="artifactDirectory" />.</summary>
+    /// <summary>
+    ///     Run the spec against explicit families, writing engine artifacts under <paramref name="artifactDirectory" />. In a project each
+    ///     planned id's name (<paramref name="familyNames" />) is re-resolved first: another id there means a reload since the plan.
+    /// </summary>
     internal static FamilyFoundryApplyData ApplyFamilies(string specJson, IReadOnlyDictionary<long, string> expectedPlanHashes, Document document,
-        ExecutionOptions? executionOptions, LoadAndSaveOptions? loadAndSave, string artifactDirectory, CancellationToken cancellationToken = default) {
+        ExecutionOptions? executionOptions, LoadAndSaveOptions? loadAndSave, string artifactDirectory, IReadOnlyDictionary<long, string>? familyNames = null,
+        CancellationToken cancellationToken = default) {
         var (patch, diagnostics) = ParseSpec(specJson);
         if (patch is null) return new FamilyFoundryApplyData([], diagnostics);
         executionOptions ??= new ExecutionOptions();
         if (expectedPlanHashes is not { Count: > 0 })
             return new FamilyFoundryApplyData([], [new FamilyFoundryDiagnostic("ExpectedPlanHashesRequired", "$.expectedPlanHashes", "Plan first and pass each family's planHash.")]);
+        if (!document.IsFamilyDocument && expectedPlanHashes.Keys.Where(id => familyNames?.ContainsKey(id) != true).ToList() is { Count: > 0 } unnamed)
+            return new FamilyFoundryApplyData([], [new FamilyFoundryDiagnostic("FamilyNamesRequired", "$.familyNames",
+                $"Pass each planned family's name (the plan's familyName) for id {string.Join(", ", unnamed)}.")]);
+        // Re-resolved once, before any family reloads: each name's id at apply against the id its plan sealed.
+        var current = document.IsFamilyDocument ? null
+            : document.ResolveByName(expectedPlanHashes.Keys.Select(id => familyNames![id]).ToList()).ToDictionary(r => r.Name, StringComparer.Ordinal);
 
         var runOutput = OutputStorage.ExactDir(artifactDirectory);
         var receipts = new List<FamilyFoundryApplyReceipt>();
@@ -234,14 +249,17 @@ internal static class FamilyFoundryBridgeOps {
                 continue;
             }
 
-            var family = document.IsFamilyDocument
-                ? document.OwnerFamily.Id.Value() == familyId ? document.OwnerFamily : null
-                : document.GetElement(familyId.ToElementId()) as Family;
-            if (family is null) {
-                receipts.Add(Failed(familyId, null, $"Element id {familyId} is not a loaded family."));
+            var resolved = current is null
+                ? new FamilyNameResolution(document.OwnerFamily.Name, document.OwnerFamily.Id.Value())
+                : current[familyNames![familyId]];
+            var familyName = resolved.Name;
+            if (resolved.FamilyId != familyId) {
+                receipts.Add(Failed(familyId, familyName, resolved.Message ?? (current is null
+                    ? $"Element id {familyId} is not this family document's family."
+                    : $"'{familyName}' was reloaded since this plan; plan again.")));
                 continue;
             }
-            var familyName = family.Name;
+            var family = current is null ? document.OwnerFamily : (Family)document.GetElement(familyId.ToElementId());
             try {
                 var op = new ReconcileFamily(patch, expectedPlanHash: expectedHash, executionOptions: executionOptions);
                 var writer = new ProcessingResultBuilder(runOutput).WithProfile(patch, "inline-spec").WithReconcile(op);
@@ -324,5 +342,5 @@ internal static class FamilyFoundryBridgeOps {
 
     private static FamilyFoundryChangeData ToChange(FamilyChange c) => new(c.Section, c.Key, c.Kind.ToString(), c.MappedFrom);
     private static FamilyFoundryDiagnostic ToDiagnostic(FamilyModelDiagnostic d) => new(d.Code, d.Path, d.Message);
-    private static FamilyFoundryApplyReceipt Failed(long id, string? name, string error) => new(id, name, false, false, error, null, [], [error], null, null);
+    private static FamilyFoundryApplyReceipt Failed(long id, string name, string error) => new(id, name, false, false, error, null, [], [error], null, null);
 }
