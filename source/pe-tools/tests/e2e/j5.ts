@@ -31,6 +31,8 @@ await journey("J5", async (page, step) => {
     "Ask User in the head after reload",
     30_000,
   );
+  // Timing gate only: the head draws before the transcript loads ("LOADING THREAD…").
+  await page.waitText("red or blue?", 60_000).catch(() => {});
   expectText(
     await page.textOf(HEAD),
     "Ask User",
