@@ -17,6 +17,7 @@ public static class FamilyModelDiagnosticCodes {
     public const string SharedTooltipUnsupported = "shared-tooltip-unsupported";
     public const string IdentityChangeThroughGroup = "identity-change-through-group";
     public const string ValueNotCoercible = "value-not-coercible";
+    public const string MappingUnitNotOfSpec = "mapping-unit-not-of-spec";
     public const string TypeRefsInstance = "type-refs-instance";
     public const string ValueDataTypeMismatch = "value-datatype-mismatch";
     public const string FormulaUnknownName = "formula-unknown-name";
@@ -79,6 +80,9 @@ public static class FamilyModelValidator {
             if (p.Value != null && p.Formula != null) d.Add(new(FamilyModelDiagnosticCodes.ValueFormulaConflict, path, "value XOR formula."));
             if (p.Shared == true && (p.DataType != null || p.Tooltip != null && p.SharedSpecId is null)) d.Add(new(FamilyModelDiagnosticCodes.SharedOwnsDataType, path, "A shared parameter takes its dataType and tooltip from its definition."));
             if (p.SharedSpecId is not null && (p.Shared != true || p.SharedGuid is null || string.IsNullOrWhiteSpace(p.SharedSpecId))) d.Add(new(FamilyModelDiagnosticCodes.Required, path, "sharedSpecId requires shared=true and sharedGuid."));
+            // A spec only the shared definition knows is judged against Revit's units at plan time (FamilyModelUnitValidation).
+            if (p.MappingUnit is { } unit && MappingUnits.Leaf(p) is { } leaf && MappingUnits.Refusal(leaf, unit) is { } why)
+                d.Add(new(FamilyModelDiagnosticCodes.MappingUnitNotOfSpec, $"{path}.mappingUnit", why));
             if (p.SharedGuid is { } guid && (p.Shared != true || guid == Guid.Empty)) d.Add(new(FamilyModelDiagnosticCodes.Required, path, "sharedGuid requires shared=true and a nonempty GUID."));
             if (p.Shared != true && p.DataType == null) d.Add(new(FamilyModelDiagnosticCodes.Required, $"{path}.dataType", "Family parameters declare dataType. Legal: " + string.Join(", ", Enum.GetNames(typeof(DataType)))));
             if (p.Value is { } v && ValueType(p) is { } dt) CheckValue(v, dt, name, $"{path}.value", nameable, d);

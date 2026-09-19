@@ -12,7 +12,8 @@ public sealed class CoercionContext {
         StorageType sourceStorageType,
         string? sourceValueString = null,
         ForgeTypeId? sourceDataType = null,
-        ForgeTypeId? targetUnitType = null) {
+        ForgeTypeId? targetUnitType = null,
+        ForgeTypeId? sourceUnit = null) {
         this.FamilyDocument = familyDocument;
         this.FamilyManager = familyManager;
         this.TargetParam = targetParam;
@@ -21,7 +22,11 @@ public sealed class CoercionContext {
         this.SourceValueString = sourceValueString;
         this.SourceDataType = sourceDataType;
         this.TargetUnitType = targetUnitType;
+        this.SourceUnit = sourceUnit;
     }
+
+    /// <summary>The mapping's declared unit (<see cref="MappingUnit" />) a bare source number is read in; null when none is declared.</summary>
+    public ForgeTypeId? SourceUnit { get; }
 
     public FamilyDocument FamilyDocument { get; }
 
@@ -95,7 +100,8 @@ public sealed class CoercionContext {
     /// </summary>
     public static CoercionContext FromParam(FamilyDocument doc,
         FamilyParameter sourceParam,
-        FamilyParameter targetParam) =>
+        FamilyParameter targetParam,
+        ForgeTypeId? sourceUnit = null) =>
         new(
             doc,
             doc.FamilyManager,
@@ -104,7 +110,8 @@ public sealed class CoercionContext {
             sourceParam.StorageType,
             doc.FamilyManager.CurrentType.AsValueString(sourceParam),
             sourceParam.Definition.GetDataType(),
-            ComputeTargetUnitType(doc, targetParam));
+            ComputeTargetUnitType(doc, targetParam),
+            sourceUnit);
 
     /// <summary>
     ///     Computes the target unit type for a parameter, handling exceptions gracefully.

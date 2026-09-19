@@ -6,7 +6,7 @@ namespace Pe.Revit.Extensions.FamDocument.SetValue.CoercionStrategies;
 /// <summary>
 ///     Electrical coercion strategy - any number (text included) into an electrical parameter. A bare number is read in this strategy's
 ///     explicit unit per spec (volts, amperes, volt-amperes, watts), never the project's display unit; a measured electrical source converts
-///     exactly through a unit both specs accept.
+///     exactly through a unit both specs accept. A declared mappingUnit replaces the fixed unit.
 /// </summary>
 public class CoerceElectrical : ICoercionStrategy {
     private static readonly Dictionary<string, ForgeTypeId> ExplicitUnits = new(StringComparer.Ordinal) {
@@ -26,8 +26,9 @@ public class CoerceElectrical : ICoercionStrategy {
 
     public Result<FamilyParameter> Map(CoercionContext context) {
         var target = context.TargetDataType;
-        if (!ExplicitUnits.TryGetValue(target.TypeId, out var unit))
-            return new ArgumentException($"CoerceElectrical names no unit for {target.TypeId}");
+        // A declared mappingUnit wins over this strategy's fixed unit (a bare "13.8" written in kV).
+        var unit = context.SourceUnit ?? ExplicitUnits.GetValueOrDefault(target.TypeId);
+        if (unit is null) return new MissingUnitException($"CoerceElectrical names no unit for {target.TypeId}; {MappingUnit.Hint(context.TargetParam)}");
         var currVal = context.SourceValue switch {
             // A measured source of the same dimension converts exactly; its display string may be in any unit.
             double measured when context.SourceDataType is { } from && CoerceByStorageType.SharedUnit(from, target) is not null =>
