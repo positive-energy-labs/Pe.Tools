@@ -108,6 +108,21 @@ test("6 · a diverse group shows its count and two examples through the route fo
   expect(row("A").getByText("4 values (e.g. a!, b!)")).toBeTruthy();
 });
 
+test("6b · F-J1-3: values that read the same across families are one value, not one per family", () => {
+  const cells: Record<string, TrichotomyCellLike> = {};
+  const say = (value: string, familyName: string) => ({
+    proposal: { value: { familyName, value } },
+  });
+  for (let i = 0; i < 89; i += 1) cells[`View Description/${i}`] = say("J1 hold2", `F${i % 3}`);
+  for (let i = 0; i < 4; i += 1) cells[`Mark/${i}`] = say(i % 2 ? "J1" : "J2", `F${i}`);
+  const show = (v: unknown) => (v as { value: string }).value;
+  render(<ProposalHead asks={[]} works={[work(cells, { show })]} />);
+  review();
+  expect(row("View Description").getByText("→ J1 hold2")).toBeTruthy();
+  expect(row("View Description").getByText("89 cells")).toBeTruthy();
+  expect(row("Mark").getByText("2 values (e.g. J2, J1)")).toBeTruthy();
+});
+
 test("7 · accept k skips contested and locked keys, says why, and a foreign write refuses", async () => {
   const cells = {
     "A/1": open("x"),

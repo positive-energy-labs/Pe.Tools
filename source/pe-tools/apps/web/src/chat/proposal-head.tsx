@@ -238,16 +238,32 @@ function GroupRow({
   }, [work.cells, keys, segment, lockOf]);
   const to = (value: unknown) => (value === null ? "delete" : show(value));
   const digest = group.digest;
+  // `summarize` dedupes whole values, and a families value carries its familyName: "J1 hold2" on
+  // three families is three values there. The person reads what `show` draws, so the head counts
+  // distinct values by that, over the same cells the digest tallies (open, unstaged, unlocked).
+  // ponytail: a recount over the group's keys; move into `summarize` if it takes a value projection.
+  const shown = useMemo(() => {
+    const seen = new Set<string>();
+    for (const key of keys) {
+      const cell = work.cells[key];
+      if (!cell?.proposal || cell.staged != null || lockOf?.(key)) continue;
+      seen.add(to(cell.proposal.delete === true ? null : cell.proposal.value));
+    }
+    return [...seen];
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- `to` is `show`, the Work's own formatter
+  }, [work.cells, keys, lockOf, show]);
   const body =
     digest && "single" in digest
       ? `${digest.single.from !== undefined ? `${show(digest.single.from)} ` : ""}→ ${to(digest.single.to)}`
-      : digest
-        ? `${digest.many.count} values (e.g. ${digest.many.examples.slice(0, EXAMPLES).map(to).join(", ")})`
-        : group.proposed
-          ? null
-          : group.contested
-            ? `${group.contested} contested — resolve in ${work.route}`
-            : `${group.staged} staged`;
+      : digest && shown.length === 1
+        ? `→ ${shown[0]}`
+        : digest
+          ? `${shown.length} values (e.g. ${shown.slice(0, EXAMPLES).join(", ")})`
+          : group.proposed
+            ? null
+            : group.contested
+              ? `${group.contested} contested — resolve in ${work.route}`
+              : `${group.staged} staged`;
   const facts = [
     group.proposed ? `${group.span} cells` : null,
     group.proposed && group.contested ? `${group.contested} contested` : null,
