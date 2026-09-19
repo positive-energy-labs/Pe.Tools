@@ -53,7 +53,7 @@ import {
 } from "#/readings";
 import { inspectAtomRegistry, type OwnerReferences } from "#/state/atom-inspect";
 import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
-import { DEFAULT_BOUND_S, type RouteManifest } from "./manifest";
+import { DEFAULT_WAIT_S, type RouteManifest } from "./manifest";
 import { callHostDynamic } from "#/host/client";
 import { causeRefusal, refuse, writeRefusal, type Refusal } from "./refusal";
 import { postRouteWrite } from "./host";
@@ -164,7 +164,7 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
     /** The word on the button. The log says what the user pressed, never the action key. */
     label = key,
     /** In flight past this, the verb ends as stopped and releases busy; Infinity = unbounded. */
-    boundSeconds = Infinity,
+    waitSeconds = Infinity,
   ): Promise<Refusal | null> => {
     if (inFlight) {
       // A busy refusal is a refusal like any other: on the verb, and one line in the page log.
@@ -221,14 +221,14 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
     // released; the op may still answer, and that late answer is only logged and re-read below.
     let bound: ReturnType<typeof setTimeout> | undefined;
     const timedOut = new Promise<"timeout">((resolve) => {
-      if (Number.isFinite(boundSeconds))
-        bound = setTimeout(() => resolve("timeout"), boundSeconds * 1000);
+      if (Number.isFinite(waitSeconds))
+        bound = setTimeout(() => resolve("timeout"), waitSeconds * 1000);
     });
     try {
       const running = work();
       const result = await Promise.race([running, stopped, timedOut]);
       if (result === "timeout") {
-        const refusal = refuse("unknown", `stopped: no answer after ${boundSeconds}s`);
+        const refusal = refuse("unknown", `stopped: no answer after ${waitSeconds}s`);
         write(key, "failure", () => registry.set(failure, refusal));
         note("verb", label, refusal.message, true);
         running
@@ -1217,7 +1217,7 @@ export function useRoute<W, R extends string, P, A extends string>(
                 stopped = true;
               },
               action.label,
-              action.boundSeconds ?? DEFAULT_BOUND_S,
+              action.waitSeconds ?? DEFAULT_WAIT_S,
             );
             setOutcome({ key: name, label: action.label, refusal, stopped, at: Date.now() });
             return refusal;

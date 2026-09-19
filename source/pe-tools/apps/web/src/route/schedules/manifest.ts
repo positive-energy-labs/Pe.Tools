@@ -10,8 +10,8 @@ import {
 
 import {
   entityRoute,
-  HOST_READ_BOUND_S,
-  NATIVE_APPLY_BOUND_S,
+  HOST_READ_WAIT_S,
+  NATIVE_APPLY_WAIT_S,
   semanticActionFacts,
   semanticActionInputSchema,
   type Ctx as RouteCtx,
@@ -120,7 +120,7 @@ export const schedulesManifest = () =>
       actions: {
         catalog: {
           label: "list schedules",
-          boundSeconds: HOST_READ_BOUND_S,
+          waitSeconds: HOST_READ_WAIT_S,
           says: "reads the bound document's schedule catalogue again",
           needs: "document",
           actor: "any",
@@ -132,7 +132,7 @@ export const schedulesManifest = () =>
         },
         refresh: {
           label: "read schedule",
-          boundSeconds: HOST_READ_BOUND_S,
+          waitSeconds: HOST_READ_WAIT_S,
           says: "reads the selected schedule from Revit into a fresh capture",
           needs: "document",
           actor: "any",
@@ -152,7 +152,7 @@ export const schedulesManifest = () =>
         },
         push: {
           label: "push",
-          boundSeconds: NATIVE_APPLY_BOUND_S,
+          waitSeconds: NATIVE_APPLY_WAIT_S,
           ...semanticActionFacts("schedule.grid.push"),
           input: semanticActionInputSchema("schedule.grid.push") as never,
           stage: "audit",
