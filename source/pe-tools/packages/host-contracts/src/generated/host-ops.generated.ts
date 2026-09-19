@@ -2805,7 +2805,7 @@ export namespace RevitContextSummary {
   }
 }
 
-/** Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. Whole-view capture needs no transaction; focus capture sets a temporary crop box (clearing any scope box) and restores it afterward (editable document only). A cropped view also returns registration: the model XY of the image's top-left, top-right and bottom-left corners plus the image sha256, which places pixels under model geometry even on a rotated crop. A cropped view shows exactly its model crop: annotations outside the model crop are not drawn. */
+/** Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. Capture runs in a rolled-back sandbox and never changes the user's view; focus capture sets a temporary crop box (clearing any scope box) and restores it afterward (editable document only). A cropped view's image covers exactly its model crop (annotations outside it are not drawn) and returns registration: the model XY of the image's top-left, top-right and bottom-left corners plus the image sha256, which places pixels under model geometry even on a rotated crop. */
 export namespace RevitContextViewImage {
   export namespace Req {
     export interface Request {
@@ -5388,12 +5388,18 @@ export namespace TakeoffsAdopt {
     }
   }
   export namespace Res {
+    /**
+     * Where a set of model points sits against a view's model crop. Outside means it can never draw under that view's image.
+     */
+    export type RevitCropCoverage = "Inside" | "Crossing" | "Outside";
+
     export interface Response {
       adopted: TakeoffAdopted[];
     }
     export interface TakeoffAdopted {
       elementId: number;
       guid: string;
+      ownerCrop?: null | RevitCropCoverage;
     }
   }
 }
@@ -5406,6 +5412,11 @@ export namespace TakeoffsCandidates {
     }
   }
   export namespace Res {
+    /**
+     * Where a set of model points sits against a view's model crop. Outside means it can never draw under that view's image.
+     */
+    export type RevitCropCoverage = "Inside" | "Crossing" | "Outside";
+
     export interface Response {
       regions: TakeoffRegionFacts[];
     }
@@ -5419,6 +5430,7 @@ export namespace TakeoffsCandidates {
       guid?: null | string;
       blob: string;
       loops: number[][][];
+      ownerCrop?: null | RevitCropCoverage;
     }
   }
 }
@@ -5579,6 +5591,10 @@ export namespace TakeoffsSnapshot {
   }
   export namespace Res {
     export type TakeoffCarrierStage = "Adoption" | "Materialization";
+    /**
+     * Where a set of model points sits against a view's model crop. Outside means it can never draw under that view's image.
+     */
+    export type RevitCropCoverage = "Inside" | "Crossing" | "Outside";
 
     export interface Response {
       reading: Reading;
@@ -5619,6 +5635,7 @@ export namespace TakeoffsSnapshot {
       guid?: null | string;
       blob: string;
       loops: number[][][];
+      ownerCrop?: null | RevitCropCoverage;
     }
     export interface TakeoffLiveRegion {
       elementId: number;
