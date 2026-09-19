@@ -9,7 +9,7 @@ namespace Pe.Revit.DocumentData.AgentContext;
 ///     Exports a graphical view or sheet to a PNG file so agents can visually inspect it.
 ///     Captures views exactly as configured — templates, VG overrides, and temporary
 ///     hide/isolate all apply. Never creates or permanently mutates views.
-///     Whole-view capture needs no transaction (safe on read-only documents); focus capture
+///     A cropped view is captured in a rollback sandbox, cut to exactly its crop (read-only documents export as is); focus capture
 ///     sets a temporary crop box (clearing any scope box) then restores it (editable doc only).
 ///     Sheet-filtered schedules get their filter temporarily lifted the same way (editable doc only).
 /// </summary>
