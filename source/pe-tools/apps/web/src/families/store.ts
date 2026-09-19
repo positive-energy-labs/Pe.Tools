@@ -17,6 +17,7 @@ import {
   ffReceiptSchema,
   podMemberSourceSchema,
   type ActionStatus,
+  type AppliedFilter,
   type FamilyCellAddress,
   type FamilyCellState,
   type FamilyCellValue,
@@ -260,12 +261,17 @@ export function useFamiliesStore(
   const unreadable = handle.work.startFresh !== null;
   const salvage = handle.work.salvage;
   const salvaged = useHostCall(
-    async (): Promise<SalvagedExclusion[]> => {
+    async (): Promise<Salvaged> => {
       const got = await salvage!();
-      const familyIds = got ? salvagedIdsSchema.parse(got.value).familyIds : [];
-      if (!familyIds.length) return [];
-      const names = await host.namesById(documentTarget!);
-      return familyIds.map((id) => ({ id, name: names.get(id) ?? null }));
+      const { familyNames, familyIds, scope } = salvageSchema.parse(got?.value ?? {});
+      const names = familyIds.length ? await host.namesById(documentTarget!) : new Map();
+      return {
+        rows: [
+          ...familyNames.map((name) => ({ id: null, name })),
+          ...familyIds.map((id) => ({ id, name: names.get(id) ?? null })),
+        ],
+        scope: (scope as AppliedFilter | undefined) ?? null,
+      };
     },
     ["salvage", documentTarget?.session, documentTarget?.openId, unreadable, page.carryOver],
     salvage !== null && documentTarget !== null && (unreadable || page.carryOver),
@@ -281,8 +287,11 @@ export function useFamiliesStore(
       /** Start fresh landed: the fresh page offers what the old Work held back. */
       startedFresh: () => setPage({ carryOver: true }),
       dismissCarryOver: () => setPage({ carryOver: false }),
-      /** The person's one press: hold the old exclusions that still resolve back, as theirs. */
-      holdBackAgain: async (rows: readonly SalvagedExclusion[]) => {
+      /**
+       * The person's one press, one human write: the old scope staged again (when it had one), and
+       * the old exclusions that still name a family held back again, as theirs (authority's ruling).
+       */
+      restore: async ({ rows, scope }: Salvaged) => {
         const names = [
           ...new Set(
             rows.flatMap((row) =>
@@ -290,12 +299,12 @@ export function useFamiliesStore(
             ),
           ),
         ];
-        const refusal = names.length
-          ? await handle.work.write(
-              // not a cell: excluded
-              names.map((name) => ({ path: ["excluded", name], value: { by: "person" } })),
-            )
-          : null;
+        const patches = [
+          ...(scope ? [{ path: ["scope", "staged"], value: { value: scope } }] : []),
+          // not a cell: excluded
+          ...names.map((name) => ({ path: ["excluded", name], value: { by: "person" } })),
+        ];
+        const refusal = patches.length ? await handle.work.write(patches) : null;
         if (!refusal) setPage({ carryOver: false });
         return refusal;
       },
@@ -374,13 +383,24 @@ export function useFamiliesStore(
   };
 }
 
-/** One exclusion the set-aside Work held, by id, and the name the catalog gives it now. */
+/** One exclusion the set-aside Work held: by name, or by an id and the name the catalog gives it now. */
 export interface SalvagedExclusion {
-  id: number;
+  id: number | null;
   /** Null: no loaded family has this id now. */
   name: string | null;
 }
 
-const salvagedIdsSchema = z.object({ familyIds: z.array(z.number().int()) });
+/** What the set-aside Work offers back: its exclusions and its scope (S-1/S-2). */
+export interface Salvaged {
+  rows: SalvagedExclusion[];
+  scope: AppliedFilter | null;
+}
+
+// ponytail: the route's own salvage (FamiliesSalvage); the scope is the host's typed AppliedFilter.
+const salvageSchema = z.object({
+  familyNames: z.array(z.string()).default([]),
+  familyIds: z.array(z.number().int()).default([]),
+  scope: z.unknown().optional(),
+});
 
 export type FamiliesStore = ReturnType<typeof useFamiliesStore>;

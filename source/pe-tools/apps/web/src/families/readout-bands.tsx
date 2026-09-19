@@ -18,6 +18,7 @@ import type { Column } from "#/components/master-table/model";
 import { Table } from "#/components/master-table/table";
 import { familyCellEntries } from "#/families/staged";
 import type { SalvagedExclusion } from "#/families/store";
+import { filterWords } from "#/families/scope-band";
 import { Seam, SectionLabel } from "#/families/readout-primitives";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 import { cn } from "#/lib/utils";
@@ -338,12 +339,14 @@ export function SalvagedExclusions() {
   const { data, error, pending } = store.salvaged;
   if (pending) return <OutcomeLine kind="busy" label="reading what it held back" />;
   if (error) return <OutcomeLine kind="error" label="old exclusions unread" says={error.message} />;
-  if (!data?.length) return <span className="t-small text-ink-2">it held no families back</span>;
+  if (!data?.rows.length && !data?.scope)
+    return <span className="t-small text-ink-2">it held no families back</span>;
   return (
     <div className="flex flex-col gap-0.5 t-small" aria-label="held back in the old Work">
       <span className="text-ink-2">held back in the old Work (read-only; set aside with it):</span>
-      {data.map((row) => (
-        <span key={row.id} className="face-mono">
+      {data.scope ? <span className="face-mono">scoped {filterWords(data.scope)}</span> : null}
+      {data.rows.map((row) => (
+        <span key={row.name ?? row.id} className="face-mono">
           {heldWord(row)}
         </span>
       ))}
@@ -352,23 +355,36 @@ export function SalvagedExclusions() {
 }
 
 /**
- * On the fresh page after start fresh: one line offers to hold the old exclusions back again, as
- * the person's, until pressed, dismissed, or the next plan. Names the catalog no longer resolves
- * are said, never written.
+ * On the fresh page after start fresh: one line offers the old scope and exclusions back, until
+ * pressed, dismissed, or the next plan. One press stages the scope and re-excludes as the person;
+ * ids the catalog no longer resolves are said, never written.
  */
 export function FamiliesCarryOverLine() {
   const { store } = useFamiliesWorkspace();
-  const rows = store.salvaged.data ?? [];
-  const resolved = rows.filter((row) => row.name !== null);
-  if (!store.page.carryOver || !rows.length) return null;
+  const salvaged = store.salvaged.data;
+  if (!store.page.carryOver || !salvaged || (!salvaged.rows.length && !salvaged.scope)) return null;
+  const { rows, scope } = salvaged;
+  const resolved = rows.filter((row) => row.name !== null).length;
+  const said = [
+    rows.length ? `held back ${rows.map(heldWord).join(", ")}` : null,
+    scope ? `scoped ${filterWords(scope)}` : null,
+  ];
   return (
     <div className="flex flex-wrap items-baseline gap-2 px-4 py-1 t-small" role="status">
-      <span>the old Work held back {rows.map(heldWord).join(", ")}</span>
-      {resolved.length ? (
+      <span>the old Work {said.filter(Boolean).join("; ")}</span>
+      {resolved || scope ? (
         <ActionButton
-          label="hold these back again"
-          reason={`Hold ${resolved.length} famil${resolved.length === 1 ? "y" : "ies"} back from plan again, as yours, in one write`}
-          onClick={() => void store.actions.holdBackAgain(rows)}
+          label="restore these"
+          reason={[
+            scope ? "Stage the old scope again" : null,
+            resolved
+              ? `hold ${resolved} famil${resolved === 1 ? "y" : "ies"} back from plan again, as yours`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(", and ")
+            .concat(", in one write")}
+          onClick={() => void store.actions.restore(salvaged)}
         />
       ) : null}
       <ActionButton

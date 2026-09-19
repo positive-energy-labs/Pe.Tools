@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 /**
- * 24: start fresh on `/families` never makes the person's exclusion list vanish unseen. The confirm
- * shows the old Work's exclusions read-only, by the names the catalog gives them now; after the
- * press, one line offers to hold them back again, and only that press writes them, as the
- * person's. Its own file: a mount in another test's registry would answer from retained Readings.
+ * 27 (S-1/S-2): old Work `{ scope: <bare>, excluded: { "Alpha": { by: "person" } } }` salvages as
+ * names plus the old scope. The fresh page offers both in the person's words; one press is one
+ * human write (the scope staged, Alpha re-excluded as the person); dismiss writes nothing. Its own
+ * file: a mount in another test's registry would answer from retained Readings.
  */
 import { expect, test, vi } from "vite-plus/test";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -30,7 +30,7 @@ vi.mock("#/lib/token", async (importOriginal) => ({
 
 import { FamiliesRouteContent } from "#/routes/families";
 
-const SESSION = "session-start-fresh-exclusions";
+const SESSION = "session-start-fresh-scope";
 const UNREADABLE =
   "This route's saved Work is in a shape this version cannot read, so it was left untouched; it cannot be opened here.";
 
@@ -77,16 +77,22 @@ class WireSource {
 }
 (globalThis as { EventSource?: unknown }).EventSource = WireSource;
 
-test("start fresh shows the old exclusions by name, and only the person's press holds them back again", async () => {
-  const gets: string[] = [];
+const SCOPE = {
+  categoryNames: ["Air Terminals"],
+  familyNames: ["Price LBP15A Exhaust"],
+  placementScope: "AllLoaded",
+};
+
+test("the fresh page offers the old name-keyed exclusions and scope; one press is one human write", async () => {
   const posts: { url: string; body: { patches?: unknown } }[] = [];
   vi.stubGlobal("fetch", async (url: string, init?: { method?: string; body?: string }) => {
-    if (!init?.method || init.method === "GET") {
-      gets.push(url);
+    if (!init?.method || init.method === "GET")
       return new Response(
-        JSON.stringify({ from: fresh ? "aside:1" : "unreadable", value: { familyIds: [1, 2] } }),
+        JSON.stringify({
+          from: fresh ? "aside:1" : "unreadable",
+          value: { familyNames: ["Alpha"], familyIds: [], scope: SCOPE },
+        }),
       );
-    }
     posts.push({ url, body: JSON.parse(init.body ?? "{}") });
     if (url.includes("/start-fresh")) fresh = true;
     return new Response(JSON.stringify({ ok: true, revision: posts.length }));
@@ -99,41 +105,28 @@ test("start fresh shows the old exclusions by name, and only the person's press 
   render(<RouterProvider router={router} />);
   await screen.findByText("unreadable", undefined, { timeout: 5_000 });
 
-  // The confirm: read-only, by name as the catalog resolves each id now; nothing is written yet.
   fireEvent.click(screen.getByRole("button", { name: "start fresh" }));
   const held = await screen.findByLabelText("held back in the old Work", undefined, {
     timeout: 5_000,
   });
   expect(held.textContent).toContain("Alpha");
-  expect(held.textContent).toContain("element 2 · no longer loaded");
-  expect(posts).toHaveLength(0);
-  expect(gets.every((url) => new URL(url).pathname.endsWith("/route-state/families/salvage"))).toBe(
-    true,
-  );
-  expect(gets.some((url) => url.includes("/agent/"))).toBe(false);
-
+  expect(held.textContent).toContain("Air Terminals · Price LBP15A Exhaust · all loaded");
   fireEvent.click(screen.getByRole("button", { name: "start fresh? press again" }));
   await waitFor(() => expect(screen.queryByText("unreadable")).toBeNull(), { timeout: 5_000 });
-  expect(posts.map((post) => new URL(post.url).pathname)).toEqual([
-    expect.stringMatching(/\/route-state\/families\/start-fresh$/),
-  ]);
+  expect(posts).toHaveLength(1);
 
-  // The fresh page offers it once; only the press writes, and only the names that resolve.
-  const again = await screen.findByRole(
-    "button",
-    { name: "restore these" },
-    {
-      timeout: 5_000,
-    },
-  );
+  const again = await screen.findByRole("button", { name: "restore these" }, { timeout: 5_000 });
+  expect(document.body.textContent).toContain("the old Work held back Alpha");
   expect(document.body.textContent).toContain(
-    "the old Work held back Alpha, element 2 · no longer loaded",
+    "scoped Air Terminals · Price LBP15A Exhaust · all loaded",
   );
+  expect(posts).toHaveLength(1);
   await act(async () => fireEvent.click(again));
   await waitFor(() => expect(posts).toHaveLength(2));
   expect(new URL(posts[1]!.url).pathname).toMatch(/\/route-state\/families\/apply$/);
   expect(posts[1]!.url).not.toContain("/agent/");
   expect(posts[1]!.body.patches).toEqual([
+    { path: ["scope", "staged"], value: { value: SCOPE } },
     { path: ["excluded", "Alpha"], value: { by: "person" } },
   ]);
   await waitFor(() => expect(screen.queryByRole("button", { name: "restore these" })).toBeNull());
