@@ -76,12 +76,12 @@ vi.mock("#/readings", async (original) => ({
 
 import { useFamiliesStore } from "./store";
 
-const x = { familyId: 1, typeName: "T", parameter: "X" };
-const y = { familyId: 1, typeName: "T", parameter: "Y" };
-const z = { familyId: 2, typeName: "T", parameter: "Z" };
-const human = (value: string) => ({ familyName: "F", value });
+const x = { familyName: "F", typeName: "T", parameter: "X" };
+const y = { familyName: "F", typeName: "T", parameter: "Y" };
+const z = { familyName: "G", typeName: "T", parameter: "Z" };
+const human = (value: string) => ({ value });
 const pea = (value: string): FamilyCellState["proposal"] => ({
-  value: { familyName: "F", value },
+  value: { value },
 });
 const cell = (address: typeof x) => server.envelope.doc.cells[familyCellKey(address)];
 
@@ -250,7 +250,7 @@ test("an aggregate accept skips a contested cell and refuses once for every cove
     [familyCellKey(x)]: { proposal: pea("P"), staged: null },
     [familyCellKey(y)]: {
       proposal: pea("Q"),
-      staged: { value: { familyName: "F", value: "mine" } },
+      staged: { value: { value: "mine" } },
     },
     [familyCellKey(z)]: { proposal: pea("R"), staged: null },
   });
@@ -269,7 +269,7 @@ test("an emptied cell stages the empty value; empty equal to the baseline stages
   const { actions } = start();
   // Rulings 2026-09-18 16:00 #3: an empty value is a value, so a person can clear a parameter.
   await act(() => actions().propose(x, human(""), "base"));
-  expect(cell(x)?.staged).toEqual({ value: { familyName: "F", value: "" } });
+  expect(cell(x)?.staged).toEqual({ value: { value: "" } });
   await act(() => actions().propose(y, human(""), ""));
   expect(cell(y)?.staged ?? null).toBeNull();
 });

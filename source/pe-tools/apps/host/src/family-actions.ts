@@ -9,6 +9,7 @@ import {
   familiesCaptureEvidenceSchema,
   familiesRouteState,
   familiesExcluded,
+  type FfPlanEntry,
   familiesIncluded,
   type FamilyExclusions,
   familyCellAddress,
@@ -324,13 +325,16 @@ type Prepared =
       input: unknown;
       /**
        * A plan request reads, returns, and mutates nothing; apply confirms it. A `scope` resolves to
-       * family ids before the native plan; null is one family document, which plans exactly one family.
+       * family NAMES before the native plan, which resolves each name to its current id; null is one
+       * family document, which plans exactly one family.
        */
       planned?: {
         scope: AppliedFilter | null;
         excluded: FamilyExclusions;
         /** A subset of the scope the caller names (one generated member's family); absent = all. */
-        familyIds?: readonly number[];
+        familyNames?: readonly string[];
+        /** The Work's cell keys holding a proposal or staged value, checked for orphans at plan. */
+        written: readonly string[];
       };
       /** A plan seals everything its apply consumes; apply never re-reads the member or Work. */
       sealed?: Sealed;
@@ -471,7 +475,7 @@ export async function admitFamilyAction(
           process,
           nativeKey: "family.plan",
           input: { specJson },
-          planned: { scope: null, excluded: {} },
+          planned: { scope: null, excluded: {}, written: [] },
           sealed: { specJson, source, consumed },
         };
       }
@@ -531,6 +535,18 @@ export async function admitFamilyAction(
             plan: input.plan,
             specJson: sealed.specJson,
             expectedPlanHashes: input.expectedPlanHashes,
+            // The library re-resolves each planned name and refuses one reloaded since the plan.
+            ...(key === "families.apply"
+              ? {
+                  familyNames: Object.fromEntries(
+                    (plan.result as { plan: FfPlanEntry[] }).plan.flatMap((entry) =>
+                      entry.familyId !== null && Object.hasOwn(input.expectedPlanHashes, entry.familyId)
+                        ? [[String(entry.familyId), entry.familyName]]
+                        : [],
+                    ),
+                  ),
+                }
+              : {}),
             source: sealed.source,
             ...(sealed.executionOptions ? { executionOptions: sealed.executionOptions } : {}),
           },
@@ -551,7 +567,9 @@ export async function admitFamilyAction(
         // A generated draft plans one family; it consumes that family's staged cells only if the
         // captured bytes are exactly what those cells generate.
         const generated =
-          input.familyIds?.length === 1 ? familyStagedPatch(doc.cells, input.familyIds[0]!) : null;
+          input.familyNames?.length === 1
+            ? familyStagedPatch(doc.cells, input.familyNames[0]!)
+            : null;
         const consumed =
           generated && canonicalRouteInput(generated.spec) === unstamped(rootText(source))
             ? consumedOf(base!.key, "families", doc.cells, generated.keys)
@@ -573,7 +591,10 @@ export async function admitFamilyAction(
           planned: {
             scope,
             excluded: doc.excluded,
-            ...(input.familyIds ? { familyIds: input.familyIds } : {}),
+            ...(input.familyNames ? { familyNames: input.familyNames } : {}),
+            written: Object.keys(doc.cells).filter(
+              (cell) => doc.cells[cell]!.proposal != null || doc.cells[cell]!.staged != null,
+            ),
           },
         };
       }
@@ -641,7 +662,8 @@ export async function admitFamilyAction(
             appliedSomething(result);
           return result;
         });
-      const resolveFamilyIds = async (scope: AppliedFilter, process: NativeProcess) => {
+      // The scope resolves to names only; name -> current id is the library's, at plan.
+      const resolveScope = async (scope: AppliedFilter, process: NativeProcess) => {
         const catalog = (await native(
           "revit.catalog.loaded-families",
           { filter: scope, budget: { maxEntries: FAMILY_CATALOG_LIMIT } },
@@ -650,7 +672,7 @@ export async function admitFamilyAction(
         if (catalog.summary.truncated)
           throw refused(`The scope resolves more than ${FAMILY_CATALOG_LIMIT} families; narrow it`);
         if (!catalog.families.length) throw refused("The scope resolves no loaded family");
-        return catalog.families.map((family) => family.familyId);
+        return catalog.families;
       };
       if (prepared.kind === "capture") {
         const captured = await native(prepared.nativeKey, prepared.input, prepared.process);
@@ -738,16 +760,19 @@ export async function admitFamilyAction(
       }
       if (prepared.kind === "native") {
         const scope = prepared.planned?.scope;
-        // The target resolves to family ids once, here; the engine plans exactly those ids.
-        const resolved = scope ? await resolveFamilyIds(scope, prepared.process) : undefined;
-        // A caller naming ids narrows the scope; it never widens it.
-        const outside = prepared.planned?.familyIds?.filter((id) => !resolved?.includes(id)) ?? [];
+        // The target resolves to family names once, here; the engine plans exactly those names.
+        const catalog = scope ? await resolveScope(scope, prepared.process) : undefined;
+        // Deduped: a same-name pair reaches the library once and refuses there as ambiguous.
+        const resolved = catalog && [...new Set(catalog.map((family) => family.familyName))];
+        // A caller naming families narrows the scope; it never widens it.
+        const outside =
+          prepared.planned?.familyNames?.filter((name) => !resolved?.includes(name)) ?? [];
         if (outside.length)
           throw refused(`Families ${outside.join(", ")} are outside the reviewed scope`);
-        const familyIds = prepared.planned?.familyIds ?? resolved;
+        const familyNames = prepared.planned?.familyNames ?? resolved;
         const result = await native(
           prepared.nativeKey,
-          familyIds ? { ...(prepared.input as object), familyIds } : prepared.input,
+          familyNames ? { ...(prepared.input as object), familyNames } : prepared.input,
           prepared.process,
         );
         if (prepared.planned) {
@@ -756,12 +781,22 @@ export async function admitFamilyAction(
           if (scope) {
             if (planned.diagnostics.length)
               throw refused(planned.diagnostics.map(diagnosticLine).join(" · "));
+            // A cell whose family or type no longer resolves never re-attaches: plan names it.
+            const loaded = new Set(
+              catalog!.flatMap((family) =>
+                family.types.map((type) => JSON.stringify([family.familyName, type.typeName])),
+              ),
+            );
             return {
               id: admission.id,
               executionContext: target,
               plan: planned.families,
               included: familiesIncluded({ entries: planned.families }, excluded),
               excluded: familiesExcluded({ entries: planned.families }, excluded),
+              orphaned: prepared.planned.written.filter((cell) => {
+                const { familyName, typeName } = familyCellAddress(cell);
+                return !loaded.has(JSON.stringify([familyName, typeName]));
+              }),
             };
           }
           // One family document plans exactly one family, or it refuses.
@@ -780,9 +815,10 @@ export async function admitFamilyAction(
         }
         const consumed = prepared.retire;
         if (consumed) {
+          // By name: the apply reloaded the family, so its element id is already a new one.
           const succeeded = new Set(
             (result as FamiliesApply.Res.Response).receipts.flatMap((receipt) =>
-              receipt.success ? [receipt.familyId] : [],
+              receipt.success && receipt.familyName ? [receipt.familyName] : [],
             ),
           );
           // A family document applies its one family; Families retires per proven family only.
@@ -791,7 +827,7 @@ export async function admitFamilyAction(
             cells: Object.fromEntries(
               Object.entries(consumed.cells).filter(
                 ([cell]) =>
-                  consumed.route === "family" || succeeded.has(familyCellAddress(cell).familyId),
+                  consumed.route === "family" || succeeded.has(familyCellAddress(cell).familyName),
               ),
             ),
           };

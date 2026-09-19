@@ -60,7 +60,6 @@ function useFamiliesWorkspaceModel(
     [cells],
   );
   const plan = store.plan;
-  const excludedIds = new Set(Object.keys(store.excluded).map(Number));
   const pickedIds = store.pickedIds;
   const setPickedIds = store.actions.setPickedIds;
   const applyData = store.applyData;
@@ -118,6 +117,12 @@ function useFamiliesWorkspaceModel(
   const families = useMemo(
     () => fixtureFamilies ?? matrix.data?.families ?? [],
     [fixtureFamilies, matrix.data?.families],
+  );
+  // Work holds exclusions by name; this catalog read names each one's current id.
+  const excludedIds = new Set(
+    families.flatMap((family) =>
+      Object.hasOwn(store.excluded, family.familyName) ? [family.familyId] : [],
+    ),
   );
 
   /* Esc drops the table's selection — the one piece of route state a stray click can build up.
@@ -269,7 +274,7 @@ function useFamiliesWorkspaceModel(
   });
 
   const stagedFamilies = useMemo(
-    () => new Set(staged.map((entry) => entry.familyId)).size,
+    () => new Set(staged.map((entry) => entry.familyName)).size,
     [staged],
   );
 

@@ -100,6 +100,8 @@ const loadedFamily = (familyId: number, familyName: string) => ({
   familyName,
   categoryName: "Mechanical Equipment",
   typeNames: ["Type 1"],
+  // The catalog's shape: the plan checks written cells against these.
+  types: [{ typeName: "Type 1" }],
   parameters: [
     {
       definition: {
@@ -164,10 +166,8 @@ export async function createDemoOwner(parent: string, raw: unknown) {
               admit: familiesAdmission(async () =>
                 seed.route === "families"
                   ? seed.readings.families.map((familyName, index) => ({
-                      familyId: index + 1,
-                      types: loadedFamily(index + 1, familyName).typeNames.map((typeName) => ({
-                        typeName,
-                      })),
+                      familyName,
+                      types: loadedFamily(index + 1, familyName).types,
                     }))
                   : [],
               ),
@@ -432,11 +432,11 @@ export async function createDemoOwner(parent: string, raw: unknown) {
               simulatedPlan = planned;
               value = {
                 diagnostics: [],
-                // The engine plans exactly the ids the target resolved.
-                families: (input as { familyIds: number[] }).familyIds.map((familyId) => ({
-                  familyId,
-                  familyName: seed.readings.families[familyId - 1],
-                  planHash: `${planned.hash}:${familyId}`,
+                // The engine resolves exactly the names the target resolved to their ids.
+                families: (input as { familyNames: string[] }).familyNames.map((familyName) => ({
+                  familyId: seed.readings.families.indexOf(familyName) + 1,
+                  familyName,
+                  planHash: `${planned.hash}:${familyName}`,
                   changes: [{ section: "types", key: "Width", kind: "set" }],
                   runEffects: [],
                   warnings: [],

@@ -69,12 +69,15 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
         (plan) => ffPlanRow(ffPlanEntrySchema.parse(plan)),
         (work) => (work.executionOptions ? { executionOptions: work.executionOptions } : {}),
       ),
-      // Held-back rows are authored Work; the sheet toggles them there.
-      excluded: (view) => Object.keys(view.work.doc?.excluded ?? {}),
+      // Held-back families are authored Work, by name; the sheet's rows are this plan's ids.
+      excluded: (view) =>
+        (view.page.sheet?.entries ?? []).flatMap((entry) =>
+          Object.hasOwn(view.work.doc?.excluded ?? {}, entry.name) ? [entry.id] : [],
+        ),
     },
     /**
      * The editable table's half. Plan takes staged cells only, generates one patch draft per family
-     * from them, and plans each through `families.plan` over exactly that family's id, sending the
+     * from them, and plans each through `families.plan` over exactly that family's name, sending the
      * draft's bytes. Nothing is filed: the plan seals those bytes, and apply's run in the page's pod
      * keeps them as a supplied draft. Saving a spec to the pod is capture's job, never plan's.
      */
@@ -91,9 +94,9 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
             "families.plan",
             {
               source: { pod: ctx.page.pod, path: draft.path, content: draft.content },
-              // The draft selects one family by name; the plan names it by id, so the host plans
-              // that family alone and never lays one family's types onto the rest of the scope.
-              familyIds: [draft.familyId],
+              // The draft selects one family by name, so the host plans that family alone and
+              // never lays one family's types onto the rest of the scope.
+              familyNames: [draft.familyName],
               ...(doc.executionOptions ? { executionOptions: doc.executionOptions } : {}),
             },
             ctx,

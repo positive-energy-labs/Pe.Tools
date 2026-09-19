@@ -63,8 +63,8 @@ test("plan reads the page's member against the reviewed Work, and writes no Work
   });
 });
 
-test("held-back rows are the Work's exclusions", () => {
-  expect(familiesSpec.plan!.excluded!(view() as never)).toEqual(["3102"]);
+test("held-back rows are the Work's exclusions, by name, as this sheet's row ids", () => {
+  expect(familiesSpec.plan!.excluded!(view({ sheet: seed.page.sheet }) as never)).toEqual(["3102"]);
 });
 
 test("apply names its plan with exactly the included hashes", async () => {
