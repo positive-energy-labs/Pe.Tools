@@ -274,8 +274,19 @@ export async function admitScheduleAction(
       const reading = await captures.schedule(document.basis.captureId).catch((error) => {
         throw error instanceof StaleScheduleReading ? refused(error.message) : error;
       });
-      if (base.key.work !== reading.workspaceId || !same(reading.target, target))
-        throw refused("Work binding belongs to another schedule/target lifetime");
+      if (base.key.work !== reading.workspaceId)
+        throw refused("Work binding belongs to another schedule");
+      if (!same(reading.target, target)) {
+        const message =
+          "Work binding belongs to another document lifetime: the schedule was re-opened in Revit; read it again (staged cells are kept)";
+        // The web keys its way out on this code, never on the sentence.
+        throw new BridgeError(message, 409, {
+          notDispatched: true,
+          issues: [
+            { instancePath: "/basis", code: "binding-lifetime-closed", message, severity: "error" },
+          ],
+        });
+      }
       await current(bridge, target, reading.process);
       const { edits, failures } = expand(document, reading);
       if (!edits.length && !failures.length) throw refused("No staged cells");

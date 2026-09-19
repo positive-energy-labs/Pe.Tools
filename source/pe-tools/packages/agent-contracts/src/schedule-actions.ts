@@ -1,7 +1,13 @@
 import { z } from "zod";
 import { addressSchema, documentRefSchema } from "./target.ts";
 import { nativeProcessSchema } from "./action-receipts.ts";
-import { scheduleGridSnapshotSchema } from "./schedule-grid-data.ts";
+import {
+  scheduleGridSnapshotSchema,
+  splitScheduleCellKey,
+  type ScheduleGridDocument,
+} from "./schedule-grid-data.ts";
+import { canonicalRouteInput } from "./route-doc.ts";
+import type { RouteStatePatch } from "./route-state.ts";
 import { podMemberSourceSchema } from "./settings.ts";
 
 export const scheduleReadingSchema = z.object({
@@ -14,6 +20,42 @@ export const scheduleReadingSchema = z.object({
   snapshot: scheduleGridSnapshotSchema,
 });
 export type ScheduleReading = z.infer<typeof scheduleReadingSchema>;
+
+/**
+ * A successful read of this Work's schedule rebinds it, in one write: `basis` moves to `reading`
+ * (its live document lifetime), and every staged cell then pushes against `reading`. A staged cell
+ * whose binding differs between the old basis and `reading` (or whose old basis is unreadable) is
+ * stale: the base has no rung for "staged over a moved baseline" (proposals are Pea's alone), so
+ * the rebind refuses and names each stale cell instead of carrying it under a binding it was never
+ * reviewed against. `stale` empty ⇔ `patches` is the rebind.
+ */
+export function rebindScheduleWork(
+  doc: ScheduleGridDocument,
+  basis: ScheduleReading | null,
+  reading: ScheduleReading,
+): { patches: RouteStatePatch[]; stale: string[] } {
+  if (!doc.basis || doc.basis.captureId === reading.id) return { patches: [], stale: [] };
+  const binding = (at: ScheduleReading | null, key: string) => {
+    const { rowNumber, columnNumber } = splitScheduleCellKey(key);
+    return at?.snapshot.rows
+      .find((row) => row.rowNumber === rowNumber)
+      ?.bindings.find((b) => b.columnNumber === columnNumber);
+  };
+  const stale: string[] = [];
+  for (const [key, cell] of Object.entries(doc.cells)) {
+    if (!cell.staged) continue;
+    const before = binding(basis, key),
+      after = binding(reading, key);
+    if (before && after && canonicalRouteInput(before) === canonicalRouteInput(after)) continue;
+    stale.push(
+      `${key} staged "${String(cell.staged.value)}" (was ${before?.displayValue ?? "?"}, now ${after ? (after.displayValue ?? "—") : "no binding"})`,
+    );
+  }
+  return {
+    patches: stale.length ? [] : [{ path: ["basis"], value: { captureId: reading.id } }],
+    stale,
+  };
+}
 export const scheduleActions = {
   "schedule.grid.push": {
     says: "Push reviewed staged schedule cells using their frozen bindings. Complete positive native acknowledgments precede conditional Work publication and actual readback. Files a run receipt (values before and after) in the bound pod, or in the action receipt when no pod is bound.",
