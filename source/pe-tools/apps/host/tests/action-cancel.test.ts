@@ -7,7 +7,7 @@
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { partitionFixture } from "./partition-fixture.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Fiber, Layer, Queue } from "effect";
