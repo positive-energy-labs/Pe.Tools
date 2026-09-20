@@ -91,16 +91,17 @@ test("a staged cell plans the draft's bytes: nothing is saved, and the page name
     reading,
     cells: { [width]: { proposal: null, staged: { value: "2in" } } },
   };
-  const { ctx: c, pages } = ctx(doc, "p");
+  const { ctx: c, pages } = ctx(doc);
   expect(stagedEntries(familySpec.staged!.cells(c as never))).toHaveLength(1);
   expect(familyManifest().actions!.plan.ready(c, undefined as never)).toBeNull();
   const sheet = await familySpec.staged!.plan(c);
   // One call: the plan. No capture saves the draft as a member first.
   expect(client.runSemanticAction.mock.calls.map(([key]) => key)).toEqual(["family.plan"]);
   const { source } = client.runSemanticAction.mock.calls[0]![1] as {
-    source: { pod: string; path: string; content: string };
+    source: { path: string; content: string };
   };
-  expect(source).toMatchObject({ pod: "p", path: "staged/box.json" });
+  expect(source).toMatchObject({ path: "staged/box.json" });
+  expect(source).not.toHaveProperty("pod");
   expect(source).not.toHaveProperty("sha256");
   const sent = JSON.parse(source.content);
   expect(sent.parameters.Width.value).toBe("2in");

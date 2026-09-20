@@ -1,8 +1,8 @@
 // E2E-J3 · The plan is the review. /families, real Revit (joint-hold slot).
-// E2E_ROWS = 2 rows; E2E_PARAM; E2E_POD; E2E_VALUE = the staged value (a second one is derived for the edit).
+// E2E_ROWS = 2 rows; E2E_PARAM; E2E_VALUE = the staged value (a second one is derived for the edit).
 // Red break: drop the host's stale check (apps/host/src/family-actions.ts:500) → the first apply
 // succeeds and the refusal text is absent.
-import { choosePod, expectText, journey, PLAN, requireRevit, revit, SITUATION } from "./cdp.ts";
+import { expectText, journey, PLAN, requireRevit, revit, SITUATION } from "./cdp.ts";
 
 const SHEET = '[aria-label="Confirmation sheet"]';
 const APPLY = /^apply \d+ rows?$/;
@@ -14,10 +14,6 @@ await journey("J3", async (page, step) => {
   await page.open(revit.url("/families"));
   await requireRevit(page);
   const baseline = (await page.readCell(rows[0]!, param))?.value;
-
-  // Draft-first: plan refuses staged cells until the pod the run is filed in is chosen.
-  step(`choose pod ${process.env.E2E_POD ?? "(unset)"}`);
-  await choosePod(page);
 
   step(`stage ${value} in 2 cells, click plan`);
   for (const row of rows) await page.setCell(row, param, value);

@@ -6,7 +6,8 @@ using Pe.Shared.HostContracts.SettingsStorage;
 namespace Pe.Shared.HostContracts.Bridge;
 
 public static class BridgeProtocol {
-    public const int ContractVersion = 22;
+    // 23: pod-less supplied drafts and Family Foundry before/after change evidence
+    public const int ContractVersion = 23;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]

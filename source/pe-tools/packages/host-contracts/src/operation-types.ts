@@ -270,7 +270,8 @@ export const podMemberWrittenSchema = Schema.Struct({
 export type PodMemberWritten = Schema.Schema.Type<typeof podMemberWrittenSchema>;
 
 export const podMemberComposeRequestSchema = Schema.Struct({
-  pod: Schema.String,
+  /** Real pod context for a saved member or @local composition; drafts may omit it. */
+  pod: Schema.optional(Schema.String),
   path: Schema.String,
   /** The unsaved draft; absent composes the saved bytes. */
   content: Schema.optional(Schema.NullOr(Schema.String)),
@@ -286,7 +287,7 @@ export const podMemberComposeResponseSchema = Schema.Struct({
   schemaJson: Schema.NullOr(Schema.String),
   composed: Schema.NullOr(Schema.String),
   source: Schema.Struct({
-    id: Schema.String,
+    id: Schema.NullOr(Schema.String),
     path: Schema.String,
     sha256: Schema.String,
     bytesBase64: Schema.String,

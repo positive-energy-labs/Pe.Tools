@@ -85,7 +85,7 @@ const planned = (familyId: number) => ({
         familyId,
         familyName: `f${familyId}`,
         planHash: `h${familyId}`,
-        changes: [{ section: "types", key: "T", kind: "set" }],
+        changes: [{ section: "types", key: "T", kind: "set", before: null, after: "T" }],
         runEffects: [],
         refusals: [],
         warnings: [],
@@ -140,12 +140,13 @@ test("plan takes the staged cell only; the open proposal never reaches the wire"
   expect(written).toEqual([]);
   expect(client.runSemanticAction).toHaveBeenCalledTimes(1);
   const input = client.runSemanticAction.mock.calls[0]![1] as {
-    source: { pod: string; path: string; content: string };
+    source: { path: string; content: string };
   };
   expect(input).toMatchObject({
     familyNames: ["Fan Coil Unit - Ducted"],
-    source: { pod: "demo-pod" },
+    source: { path: "staged/Fan-Coil-Unit---Ducted.json" },
   });
+  expect(input.source).not.toHaveProperty("pod");
   expect(input.source).not.toHaveProperty("sha256");
   expect(JSON.parse(input.source.content)).toMatchObject({
     select: { names: ["Fan Coil Unit - Ducted"] },

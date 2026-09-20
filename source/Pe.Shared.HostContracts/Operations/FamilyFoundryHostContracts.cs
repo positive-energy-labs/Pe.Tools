@@ -16,7 +16,7 @@ public sealed record FamilyPlanRequest(string SpecJson, ExecutionOptions? Execut
 public sealed record FamiliesPlanRequest(string SpecJson, IReadOnlyList<string>? FamilyNames = null, ExecutionOptions? ExecutionOptions = null);
 
 /// <summary>One change the reconciler would make: section + key is the address, kind is the verb.</summary>
-public sealed record FamilyFoundryChangeData(string Section, string Key, string Kind, string? MappedFrom);
+public sealed record FamilyFoundryChangeData(string Section, string Key, string Kind, string? MappedFrom, object? Before, object? After);
 
 /// <summary>
 ///     One planned family. `familyName` is the requested name byte-exact; `familyId` is the id it resolved to at plan, null when
@@ -73,7 +73,7 @@ public sealed record FamilyFoundryApplyReceipt(
 );
 
 /// <summary>
-///     `receiptPath` is the pod run's receipt.json; null when the request was refused before running. `reason` is the
+///     `receiptPath` is the run's receipt.json; null when the request was refused before running. `reason` is the
 ///     receipt's: one sentence naming the first failure, null when none failed; the full text is the run's `failures.json`.
 /// </summary>
 public sealed record FamilyFoundryApplyData(

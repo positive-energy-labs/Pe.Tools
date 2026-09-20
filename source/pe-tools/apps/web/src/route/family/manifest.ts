@@ -128,7 +128,6 @@ export const familySpec: EntityRouteDef<FamilyRouteDocument, FamilyReadingKey, F
     plan: async (ctx) => {
       const spec = ctx.work.doc ? draftSpec(ctx.work.doc) : null;
       if (!spec) throw Error("read the family first");
-      if (!ctx.page.pod) throw Error("choose the pod the run is filed in");
       const { $schema: _, ...model } = JSON.parse(spec) as {
         $schema?: unknown;
         family?: { name?: string };
@@ -139,7 +138,6 @@ export const familySpec: EntityRouteDef<FamilyRouteDocument, FamilyReadingKey, F
         "family.plan",
         {
           source: {
-            pod: ctx.page.pod,
             path: `staged/${name}.json`,
             content: `${JSON.stringify({ $schema: modelSchema(), ...model }, null, 2)}\n`,
           },
@@ -157,7 +155,7 @@ export const familySpec: EntityRouteDef<FamilyRouteDocument, FamilyReadingKey, F
       for (const input of byPlan(included)) await workflow("family.apply", input, ctx);
     },
   },
-  docs: "Audit a captured family draft baseline with no pod: propose and stage keyed cells, save the draft into a pod as a member, plan and apply it, open a saved member into the draft, or build a saved member to an .rfa.",
+  docs: "Audit a captured family draft baseline with no pod: propose and stage keyed cells, plan and apply the live draft, save it into a pod as a member, open a saved member into the draft, or build a saved member to an .rfa.",
 };
 
 const latestOf = (rows: ActionStatus[]) =>
@@ -357,8 +355,22 @@ const DEMO_PLAN = ffPlanRow({
   familyName: "grd",
   planHash: "demo-plan-grd",
   changes: [
-    { section: "parameters", key: "PE_G___Width", kind: "set", mappedFrom: null },
-    { section: "parameters", key: "PE_G___Depth", kind: "add", mappedFrom: "Depth" },
+    {
+      section: "parameters",
+      key: "PE_G___Width",
+      kind: "set",
+      mappedFrom: null,
+      before: "1in",
+      after: "2in",
+    },
+    {
+      section: "parameters",
+      key: "PE_G___Depth",
+      kind: "add",
+      mappedFrom: "Depth",
+      before: null,
+      after: {},
+    },
   ],
   runEffects: ["regenerate types"],
   refusals: [],

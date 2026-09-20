@@ -22,6 +22,8 @@ const changeSchema = z.object({
   key: z.string(),
   kind: z.string(),
   mappedFrom: z.string().nullish(),
+  before: z.json(),
+  after: z.json(),
 });
 export const ffPlanEntrySchema = z.object({
   /** The id the name resolved to at plan; null when the name refused (no loaded family, ambiguous, not editable). */
