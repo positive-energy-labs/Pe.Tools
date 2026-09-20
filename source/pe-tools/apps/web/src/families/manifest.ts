@@ -1,8 +1,8 @@
 /**
  * `/families`, declared once on the route kernel. The audit is the loaded-families matrix over an
  * authored scope, its cells open to proposals; capture files one spec member per picked family;
- * plan reads the page's member, or generates one member per family from accepted proposals, and
- * apply sends the sheet's included hashes. Work holds the scope, the proposals and their accepts,
+ * plan reads the page's member, or sends one draft per family generated from staged cells, and
+ * apply sends the sheet's included hashes. Work holds the scope and keyed cells,
  * and the rows a person held back.
  */
 import { z } from "zod";
@@ -10,25 +10,23 @@ import {
   familiesRouteState,
   ffPlanEntrySchema,
   type FamiliesRouteDocument,
-  type FamilyCellEdit,
 } from "@pe/agent-contracts";
 
 import { FF_SPEC_SCHEMA, ffPlanRow } from "#/host/familyfoundry";
 import { FAMILY_MODEL_SCHEMA } from "#/route/family/manifest";
 import {
   admissionPlan,
+  byPlan,
   entityRoute,
   workflow,
   type EntityPage,
   type EntityRouteDef,
-  type MemberSource,
   type PlanEntry,
 } from "#/route";
-import { podHost } from "#/route/pods";
 
 import type { FamiliesDraft } from "./host";
 import { FAMILIES_SEEDS } from "./seeds";
-import { isAccepted, stagedMembers } from "./staged";
+import { stagedDrafts } from "./staged";
 
 export interface FamiliesPage {
   /** The scope being authored: what `scope` writes into Work when pressed. Page, not Work. */
@@ -49,7 +47,7 @@ export type FamiliesReadingKey = "receipts" | "inventory";
 
 /* ── The definition ────────────────────────────────────────────────────────── */
 
-/** The generated member's `$schema`: this library, on the host actually serving the page. */
+/** The generated draft's `$schema`: this library, on the host actually serving the page. */
 const stagedSchema = () =>
   typeof location === "undefined" ? FF_SPEC_SCHEMA : new URL(FF_SPEC_SCHEMA, location.origin).href;
 
@@ -69,97 +67,53 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
       ...admissionPlan<FamiliesRouteDocument, FamiliesReadingKey, FamiliesPage>(
         { plan: "families.plan", apply: "families.apply" },
         (plan) => ffPlanRow(ffPlanEntrySchema.parse(plan)),
-        (work) => ({
-          excludedIds: work.excludedIds,
-          ...(work.executionOptions ? { executionOptions: work.executionOptions } : {}),
-        }),
+        (work) => (work.executionOptions ? { executionOptions: work.executionOptions } : {}),
       ),
-      // Held-back rows are authored Work; the sheet toggles them there.
-      excluded: (view) => (view.work.doc?.excludedIds ?? []).map(String),
+      // Held-back families are authored Work, by name; the sheet's rows are this plan's ids.
+      excluded: (view) =>
+        (view.page.sheet?.entries ?? []).flatMap((entry) =>
+          Object.hasOwn(view.work.doc?.excluded ?? {}, entry.name) ? [entry.id] : [],
+        ),
     },
     /**
-     * The editable table's half. Plan takes ACCEPTED proposals only, generates one patch member per
-     * family from them, files each in the page's pod through the same host writer capture uses, and
-     * plans each through `families.plan` over exactly that family's id; apply sends each included
-     * row's hash back to the member that produced it. The person never named, saved, or opened a
-     * file — but one exists, the sheet names it per row, and the receipt names it.
+     * The editable table's half. Plan takes staged cells only, generates one patch draft per family
+     * from them, and plans each through `families.plan` over exactly that family's name, sending the
+     * draft's bytes. Nothing is filed: the plan seals those bytes, and apply's run in the page's pod
+     * keeps them as a supplied draft. Saving a spec to the pod is capture's job, never plan's.
      */
     staged: {
-      count: (ctx) => (ctx.work.doc?.accepted ?? []).length,
+      cells: (ctx) => ctx.work.doc?.cells ?? {},
       plan: async (ctx) => {
         const doc = ctx.work.doc;
         if (!doc || ctx.work.revision === null) throw Error("author the route's Work first");
-        if (!ctx.page.pod) throw Error("choose the pod the generated spec lands in");
+        if (!ctx.page.pod) throw Error("choose the pod the run is filed in");
         const bases = { work: { key: ctx.work.key, revision: ctx.work.revision } };
         const entries: PlanEntry[] = [];
-        const generated = stagedMembers(doc.accepted, new Date(), stagedSchema());
-        for (const member of generated) {
-          const source = await podHost.write(
-            { pod: ctx.page.pod, path: member.path },
-            member.content,
-          );
-          // The page names the first generated member so the Situation can open what was written;
-          // every member is still addressed per row, and each files its own run. Named only after
-          // it exists: naming a path before the write lands makes the editor read a missing file.
-          if (member === generated[0]) ctx.setPage({ path: member.path });
+        for (const draft of stagedDrafts(doc.cells, stagedSchema())) {
           const result = await workflow(
             "families.plan",
             {
-              source,
-              // The member selects one family by name; the plan names it by id, so the host plans
-              // that family alone and never lays one family's types onto the rest of the scope.
-              familyIds: [member.familyId],
-              excludedIds: doc.excludedIds,
+              source: { pod: ctx.page.pod, path: draft.path, content: draft.content },
+              // The draft selects one family by name, so the host plans that family alone and
+              // never lays one family's types onto the rest of the scope.
+              familyNames: [draft.familyName],
               ...(doc.executionOptions ? { executionOptions: doc.executionOptions } : {}),
             },
             ctx,
             bases,
           );
-          // The sheet names the member each family applies from.
-          for (const plan of [result.plan].flat()) {
-            const row = ffPlanRow(ffPlanEntrySchema.parse(plan));
-            entries.push({ ...row, detail: `${row.detail} · from ${member.path}`, source });
-          }
+          for (const plan of [result.plan].flat())
+            entries.push({ ...ffPlanRow(ffPlanEntrySchema.parse(plan)), plan: String(result.id) });
         }
         return { entries };
       },
+      // Each draft's plan sealed its bytes and the staged cells it consumed; the host retires
+      // those cells after proven native success, only where they are still unchanged.
       apply: async (ctx, included) => {
-        const doc = ctx.work.doc;
-        const byMember = new Map<string, { source: MemberSource; rows: PlanEntry[] }>();
-        for (const row of included) {
-          if (!row.source) throw Error(`the planned row for ${row.name} names no saved member`);
-          const key = `${row.source.pod}:${row.source.path}`;
-          const bucket = byMember.get(key);
-          if (bucket) bucket.rows.push(row);
-          else byMember.set(key, { source: row.source, rows: [row] });
-        }
-        for (const { source, rows } of byMember.values())
-          await workflow(
-            "families.apply",
-            {
-              source,
-              ...(doc?.executionOptions ? { executionOptions: doc.executionOptions } : {}),
-              expectedPlanHashes: Object.fromEntries(rows.map((r) => [r.id, r.planHash])),
-            },
-            ctx,
-          );
-        // Applied proposals are spent: the run receipt is the record from here, and leaving them
-        // standing would offer the same change again over a model that already took it. Proposals
-        // nobody accepted, and families held back from this apply, stay.
-        const applied = new Set(included.map((row) => Number(row.id)));
-        const spent = (edit: FamilyCellEdit) => applied.has(edit.familyId);
-        await ctx.write([
-          {
-            path: ["edits"],
-            value: (doc?.edits ?? []).filter(
-              (edit) => !spent(edit) || !isAccepted(doc!.accepted, edit),
-            ),
-          },
-          { path: ["accepted"], value: (doc?.accepted ?? []).filter((edit) => !spent(edit)) },
-        ]);
+        for (const input of byPlan(included)) await workflow("families.apply", input, ctx);
       },
     },
-    docs: "Audit loaded families over a scope, propose values in the cells a patch can express and accept or deny each, capture picked families into a pod as specs, then plan a spec — saved, or generated from the accepted proposals — and apply exactly the families it changes.",
+    docs: "Audit loaded families over a scope, propose values in keyed cells and stage or deny each proposal, capture picked families into a pod as specs, then plan a saved spec or the staged cells as a draft (filed nowhere) and apply exactly the families it changes.",
   };
 
 export const manifest = entityRoute<

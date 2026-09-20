@@ -10,10 +10,18 @@ import {
 } from "#/family/family-model";
 import type { Draft, Focus, FamilyPageModel } from "#/family/model";
 import { draftedModel } from "#/family/project";
-import { AXES, BOX, M, VIEWS, type Axis, hoverProps } from "#/family/anatomy-model";
+import { AXES, BOX, M, VIEWS, hoverProps } from "#/family/anatomy-model";
 import { ConnectorMark } from "#/family/anatomy-connector-mark";
 
 // ── the LIVE lane: whatever document is open, through the real evaluator ───────────────────────
+
+/** A cylinder seen in plan: its x/y box as a disc. */
+function planDisc(geo: SolidGeo) {
+  const [x, y] = [geo.box.x, geo.box.y];
+  return geo.isCyl && x && y
+    ? { u: (x[0] + x[1]) / 2, v: (y[0] + y[1]) / 2, r: (x[1] - x[0]) / 2 }
+    : null;
+}
 
 export function ModelViews({
   model,
@@ -41,7 +49,7 @@ export function ModelViews({
   const bounds = useMemo(() => sheetBounds(sheet), [sheet]);
 
   const drawable =
-    sheet.solids.some((geo) => geo.h != null && (geo.w != null || geo.d != null)) ||
+    sheet.solids.some((geo) => AXES.filter((axis) => geo.box[axis]).length >= 2) ||
     sheet.planes.some((p) => p.axis && p.offset != null) ||
     sheet.conns.some((c) => Object.values(c.pos).every((v) => v != null));
   if (!drawable)
@@ -49,10 +57,10 @@ export function ModelViews({
       <div className="p-3">
         <EmptyState
           story="scope"
-          exit="give the document's solids values that resolve to numbers at this type, or stage a type where they do"
+          exit="give the document's forms values that resolve to numbers at this type, or stage a type where they do"
         >
-          no shape to draw — no solid&apos;s dimensions resolve to numbers at this type, and nothing
-          here guesses
+          no shape to draw — no form&apos;s planes resolve to numbers at this type, and nothing here
+          guesses
         </EmptyState>
       </div>
     );
@@ -71,18 +79,14 @@ export function ModelViews({
   const unplottablePlanes = sheet.planes.filter(
     (plane) => plane.axis == null || plane.offset == null,
   );
-  const partialSolids = sheet.solids.filter(
-    (geo) => geo.w == null || geo.d == null || geo.h == null,
-  );
+  const partialSolids = sheet.solids.filter((geo) => AXES.some((axis) => !geo.box[axis]));
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
-      {model.parameters && (
-        <p className="px-2 py-1 t-small text-ink-2">
-          Authored geometry: macro dimensions and reference-plane seeds. Constraints, nested
-          geometry and formulas require Revit.
-        </p>
-      )}
+      <p className="px-2 py-1 t-small text-ink-2">
+        Planes move with labeled and locked dimensions; the rest sit at their captured seeds.
+        Formula labels, nested geometry and non-orthogonal forms require Revit.
+      </p>
       <div className="flex min-h-0 flex-1">
         {VIEWS.map((view) => {
           const [uMin, uMax] = bounds[view.u];
@@ -92,15 +96,9 @@ export function ModelViews({
           const X = (u: number) => BOX / 2 + (u - uMid) * scale;
           const Y = (v: number) => BOX / 2 - (v - vMid) * scale;
 
-          const solidRange = (geo: SolidGeo, axis: Axis): [number, number] | null => {
-            if (axis === "x") return geo.w == null ? null : [-geo.w / 2, geo.w / 2];
-            if (axis === "y") return geo.d == null ? null : [-geo.d / 2, geo.d / 2];
-            // v1 lowering convention: solids sit ON the datum, so z runs 0 → height.
-            return geo.h == null ? null : [0, geo.h];
-          };
           const solidRect = (geo: SolidGeo) => {
-            const uRange = solidRange(geo, view.u);
-            const vRange = solidRange(geo, view.v);
+            const uRange = geo.box[view.u];
+            const vRange = geo.box[view.v];
             if (!uRange || !vRange) return null;
             return {
               x: X(uRange[0]),
@@ -179,13 +177,14 @@ export function ModelViews({
                       opacity: 0.5,
                       pointerEvents: "none" as const,
                     };
-                    if (view.depth === "z" && geo.isCyl && geo.w != null)
+                    const disc = planDisc(geo);
+                    if (view.depth === "z" && disc)
                       return (
                         <circle
                           key={`${ghost.typeName}:${geo.slug}`}
-                          cx={X(0)}
-                          cy={Y(0)}
-                          r={(geo.w / 2) * scale}
+                          cx={X(disc.u)}
+                          cy={Y(disc.v)}
+                          r={disc.r * scale}
                           {...shared}
                         />
                       );
@@ -219,9 +218,16 @@ export function ModelViews({
                   strokeWidth: 0.8,
                   className: geo.isVoid ? "dash-void" : undefined,
                 };
-                if (view.depth === "z" && geo.isCyl && geo.w != null)
+                const disc = planDisc(geo);
+                if (view.depth === "z" && disc)
                   return (
-                    <circle key={geo.slug} cx={X(0)} cy={Y(0)} r={(geo.w / 2) * scale} {...shared}>
+                    <circle
+                      key={geo.slug}
+                      cx={X(disc.u)}
+                      cy={Y(disc.v)}
+                      r={disc.r * scale}
+                      {...shared}
+                    >
                       {title}
                     </circle>
                   );
@@ -271,46 +277,7 @@ export function ModelViews({
                 );
               })}
 
-              {/* frame origins — a small cross ONLY where both in-plane axes resolve; a frame
-                  with a null axis is skipped, never guessed. */}
-              {sheet.frames.map((frame) => {
-                const u = frame.pos[view.u];
-                const v = frame.pos[view.v];
-                if (u == null || v == null) return null;
-                return (
-                  <g key={frame.slug} stroke={token("ink-2")} strokeWidth={0.6}>
-                    <title>{`frame ${frame.slug} — its origin, where the document's plane and face references intersect. Facing ${frame.normal}. Whatever sits on this frame is placed here.`}</title>
-                    <line x1={X(u) - 2.5} y1={Y(v)} x2={X(u) + 2.5} y2={Y(v)} />
-                    <line x1={X(u)} y1={Y(v) - 2.5} x2={X(u)} y2={Y(v) + 2.5} />
-                  </g>
-                );
-              })}
-
               {sheet.conns.map(connMark)}
-
-              {/* the room point: a KIND of thing, so it wears a viz rung. Its leader is
-                  annotation, not a part — see the dash note in the header. */}
-              {sheet.rcp && sheet.rcp[view.u] != null && sheet.rcp[view.v] != null && (
-                <g>
-                  <title>
-                    {`roomCalculationPoint — enabled, drawn at the fixed PE convention (12in, ${model.family.placement === "Unhosted" ? "+Z" : "−Y"}). The leader ties it back to the family origin.`}
-                  </title>
-                  <line
-                    x1={X(0)}
-                    y1={Y(0)}
-                    x2={X(sheet.rcp[view.u] as number)}
-                    y2={Y(sheet.rcp[view.v] as number)}
-                    stroke={token("viz-5")}
-                    strokeWidth={0.8}
-                  />
-                  <circle
-                    cx={X(sheet.rcp[view.u] as number)}
-                    cy={Y(sheet.rcp[view.v] as number)}
-                    r={2.5}
-                    fill={token("viz-5")}
-                  />
-                </g>
-              )}
 
               <text
                 x={M}
@@ -342,7 +309,7 @@ export function ModelViews({
               ─ ─ plane {plane.slug} · {plane.text}{" "}
               <span>
                 {plane.offset == null
-                  ? "(formula-driven — no resolvable offset, so it is named rather than drawn at a guess)"
+                  ? "(no resolvable offset, so it is named rather than drawn at a guess)"
                   : "(off a datum this drawing does not recognise)"}
               </span>
             </p>

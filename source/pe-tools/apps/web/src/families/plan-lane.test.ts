@@ -13,7 +13,7 @@ import { familiesSpec, manifest } from "./manifest";
 import { captureEvidenceOf } from "./store";
 
 const seed = FAMILIES_SEEDS.apply as unknown as {
-  work: { excludedIds: number[] };
+  work: { excluded: Record<string, { by: string }> };
   readings: { pods: unknown };
   page: { pod: string; path: string; sheet: { entries: unknown[] } };
 };
@@ -50,7 +50,8 @@ test("plan reads the page's member against the reviewed Work, and writes no Work
   await manifest.actions!.plan.run(ctx as never, undefined as never);
   expect(client.runSemanticAction).toHaveBeenLastCalledWith(
     "families.plan",
-    { source, excludedIds: [3102] },
+    // Exclusions are the reviewed Work's; the plan reads them there and is never sent them.
+    { source },
     ref,
     { work: { key: ctx.work.key, revision: 4 } },
   );
@@ -62,17 +63,17 @@ test("plan reads the page's member against the reviewed Work, and writes no Work
   });
 });
 
-test("held-back rows are the Work's exclusions", () => {
-  expect(familiesSpec.plan!.excluded!(view() as never)).toEqual(["3102"]);
+test("held-back rows are the Work's exclusions, by name, as this sheet's row ids", () => {
+  expect(familiesSpec.plan!.excluded!(view({ sheet: seed.page.sheet }) as never)).toEqual(["3102"]);
 });
 
-test("apply sends the source with exactly the included hashes", async () => {
+test("apply names its plan with exactly the included hashes", async () => {
   const ctx = view({ confirming: true, sheet: seed.page.sheet });
   expect(manifest.actions!.apply.ready(ctx as never, undefined as never)).toBeNull();
   await manifest.actions!.apply.run(ctx as never, undefined as never);
   expect(client.runSemanticAction).toHaveBeenLastCalledWith(
     "families.apply",
-    { source, expectedPlanHashes: { "3101": "plan-3101" } },
+    { plan: "demo-plan", expectedPlanHashes: { "3101": "plan-3101" } },
     ref,
     undefined,
   );

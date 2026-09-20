@@ -535,6 +535,7 @@ public record ScheduleCellBinding(
     string? DisplayValue,
     bool IsTypeParameter,
     bool IsEditable,
+    [property: JsonProperty(Required = Required.Always)] IReadOnlyList<ParameterTarget> Targets,
     ScheduleCellBindingBlocker Blocker = ScheduleCellBindingBlocker.None,
     bool HasMixedValues = false
 );

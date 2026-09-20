@@ -775,7 +775,7 @@ internal sealed class FamilyModelCapturer {
                     ConnectorProfileType.Oval => ConnectorShape.Oval,
                     _ => null
                 },
-                Diameter = round && (isDuct || isPipe) ? this.LengthOf(c.get_Parameter(BuiltInParameter.CONNECTOR_DIAMETER)) : null,
+                Diameter = round && (isDuct || isPipe) ? this.RoundSize(c, slug) : null,
                 Width = !round && (isDuct || isPipe) ? this.LengthOf(c.get_Parameter(BuiltInParameter.CONNECTOR_WIDTH)) : null,
                 Height = !round && (isDuct || isPipe) ? this.LengthOf(c.get_Parameter(BuiltInParameter.CONNECTOR_HEIGHT)) : null,
                 FlowDirection = isDuct || isPipe ? EnumOf<FlowDirectionType, FlowDirection>(flowDirection) : null,
@@ -909,13 +909,43 @@ internal sealed class FamilyModelCapturer {
 
     private string StableOf(Reference r) => Try(() => r.ConvertToStableRepresentation(this._d)) ?? string.Empty;
 
+    /// <summary>
+    ///     The family parameter driving <paramref name="p" />. A read that throws on an associable parameter is an unmodeled fact,
+    ///     not a silent "no association": the caller would fall back to the current type's literal (F-J3-2 candidate).
+    /// </summary>
     private string? Assoc(Parameter? p) {
         if (p == null) return null;
-        var source = Try(() => this._fm.GetAssociatedFamilyParameter(p));
-        return source == null ? null : $"param:{source.Definition.Name}";
+        try {
+            var source = this._fm.GetAssociatedFamilyParameter(p);
+            return source == null ? null : $"param:{source.Definition.Name}";
+        } catch (Exception e) {
+            if (Try(() => this._fm.CanElementParameterBeAssociated(p)))
+                this.Add(UnmodeledReason.AssociationUnreadable, "$", ("element", p.Element?.Id.Value().ToString(CultureInfo.InvariantCulture) ?? "?"),
+                    ("parameter", p.Definition?.Name ?? "?"), ("error", e.Message));
+            return null;
+        }
     }
 
     private string? Length(Parameter? p) => this.LengthOf(p)?.Text;
+
+    /// <summary>
+    ///     A round connector's diameter: its association, else its literal. A connector sized through its Radius slot (Radius = a type
+    ///     parameter) has no diameter association, and its literal is the CURRENT type's size, so it changed with
+    ///     <c>FamilyManager.CurrentType</c> and a value-only patch left connector residue (F-J3-2, project-a Mechanical Damper). The vocabulary
+    ///     names diameter only, so the radius association is recorded as unmodeled rather than as a type-dependent literal.
+    ///     Evidence: project-a joint hold 2 read (`Pe.Tools-crusade-journal/.artifacts/proof/domains/F-J3-2-project-a/`): both round connectors have
+    ///     CONNECTOR_RADIUS associated to "Duct Radius", DIAMETER unassociated. No test fixture exists: Revit 2025 refuses to CREATE a radius
+    ///     association through the API ("This parameter cannot be associated", hold #3), though UI-authored content has one. Proof is session.
+    /// </summary>
+    private PortableLength? RoundSize(ConnectorElement connector, string slug) {
+        var diameter = connector.get_Parameter(BuiltInParameter.CONNECTOR_DIAMETER);
+        if (this.Assoc(diameter) is { } driven) return PortableLength.Parse(driven);
+        if (this.Assoc(connector.get_Parameter(BuiltInParameter.CONNECTOR_RADIUS)) is { } radius) {
+            this.Add(UnmodeledReason.ConnectorSizeByRadius, $"$.connectors.{slug}.diameter", ("radius", radius));
+            return null;
+        }
+        return this.LengthOf(diameter);
+    }
 
     private PortableLength? LengthOf(Parameter? p) {
         if (p == null) return null;

@@ -34,7 +34,22 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
    */
   agentWriteMask: string[][];
   commands: Record<string, RouteStateCommandSpec>;
+  /**
+   * What a person may carry over from Work this schema can no longer read (before or after start
+   * fresh), read tolerantly from the old document. Never throws, never parses into Work.
+   */
+  salvage?: (raw: unknown) => unknown;
 }
+
+/**
+ * A registration's check on a write the schema and mask already admitted, run before it lands, for
+ * truth only the host can read (Families: the family types a cell key names). Null admits.
+ */
+export type RouteWriteAdmission = (
+  doc: unknown,
+  patches: readonly RouteStatePatch[],
+  ctx: { scope: WorkKey; actor: import("./route-doc.ts").RouteActor; prior: unknown },
+) => Promise<import("./route-doc.ts").RouteRefusal | null>;
 
 /**
  * The identity a Work document lives under: its route, the Address it is bound to, and an

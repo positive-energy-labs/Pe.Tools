@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { FamilyCellEdit } from "@pe/agent-contracts";
+import { familyCellValueSchema, type FamilyCellState } from "@pe/agent-contracts";
 import { ReadCell } from "#/components/master-table/cells";
 import { useCellNavigation } from "#/components/master-table/cell-navigation";
 import { cellFromTrichotomy, StateCell } from "#/components/lang/cell";
@@ -7,10 +7,11 @@ import type { Column, Verdict } from "#/components/master-table/model";
 import type { FamilyParameterSnapshot } from "#/host/loaded-families-view";
 import { Press } from "#/components/lang/press";
 import type { FamiliesStore } from "#/families/store";
-import { at } from "#/families/staged";
+import { cellAt } from "#/families/staged";
 import { cn } from "#/lib/utils";
 
 const COMMON_SHARE = 0.3;
+const showFamilyCell = (value: unknown) => familyCellValueSchema.parse(value).value;
 
 export interface TypeRow {
   key: string;
@@ -80,7 +81,7 @@ function cellReason(row: TypeRow, key: string, instance: boolean): string {
     : `this type's authored value`;
   return `Type "${row.typeName}" of ${row.familyName}: ${what}${
     row.values[key] ? ` — currently ${row.values[key]}` : " — currently blank"
-  }. Type to propose a value; yours and Pea's wait for accept or deny in the proposals band. Plan generates the spec from accepted values only.`;
+  }. Type to stage your value; Pea's proposal waits for stage or deny in the proposals band. Plan generates the spec from staged values only.`;
 }
 
 // ── plan lens ───────────────────────────────────────────────────────────────────────────────────
@@ -98,8 +99,7 @@ export function useFamiliesColumns({
   setPickedIds,
   showUncommon,
   totalFamilies,
-  edits,
-  accepted,
+  cells,
   propose,
 }: {
   familyState: (familyId: number) => Verdict;
@@ -108,8 +108,7 @@ export function useFamiliesColumns({
   setPickedIds: FamiliesStore["actions"]["setPickedIds"];
   showUncommon: boolean;
   totalFamilies: number;
-  edits: readonly FamilyCellEdit[];
-  accepted: readonly FamilyCellEdit[];
+  cells: Record<string, FamilyCellState>;
   propose: FamiliesStore["actions"]["propose"];
 }) {
   const columns = useMemo<Column<TypeRow>[]>(() => {
@@ -239,19 +238,17 @@ export function useFamiliesColumns({
           const unresolved = !scopeOf || scopeOf === "Unresolved";
           const reason = cellReason(row, col.key, col.isInstance);
           if (patchable(row, col.key)) {
-            const cell = { familyId: row.familyId, typeName: row.typeName, parameter: col.name };
+            const address = {
+              familyName: row.familyName,
+              typeName: row.typeName,
+              parameter: col.name,
+            };
             return (
               <ProposalCell
                 current={value}
                 reason={reason}
-                proposal={at(edits, cell)}
-                accepted={at(accepted, cell)}
-                onCommit={(next) =>
-                  void propose(
-                    { ...cell, familyName: row.familyName, value: next, by: "human" },
-                    value,
-                  )
-                }
+                cell={cellAt(cells, address)}
+                onCommit={(next) => void propose(address, { value: next }, value)}
               />
             );
           }
@@ -276,7 +273,7 @@ export function useFamiliesColumns({
     });
 
     return [...identity, ...parameterColumns];
-  }, [params, totalFamilies, showUncommon, pickedIds, familyState, edits, accepted, propose]);
+  }, [params, totalFamilies, showUncommon, pickedIds, familyState, cells, propose]);
 
   const uncommonCount = useMemo(
     () => params.filter((col) => clusterOf(col, totalFamilies) === "uncommon").length,
@@ -295,41 +292,38 @@ export function useFamiliesColumns({
 export function ProposalCell({
   current,
   reason,
-  proposal,
-  accepted,
+  cell,
   onCommit,
 }: {
   current: string;
   reason: string;
-  proposal: FamilyCellEdit | undefined;
-  accepted: FamilyCellEdit | undefined;
+  cell: FamilyCellState | undefined;
   onCommit: (text: string) => void;
 }) {
   const move = useCellNavigation();
-  const shown = accepted?.value ?? proposal?.value ?? current;
-  const author = (by: FamilyCellEdit["by"]) => (by === "pea" ? "Pea" : "you");
+  const proposal = cell?.proposal;
+  const staged = cell?.staged;
+  const shown = staged?.value.value ?? proposal?.value.value ?? current;
   const note = proposal
-    ? `${author(proposal.by)} proposed ${current || "(blank)"} → ${proposal.value}${
-        accepted?.value === proposal.value
-          ? "; accepted — plan will include it"
-          : accepted
-            ? `; you accepted ${accepted.value}, so Pea's value is a counter-proposal`
+    ? `Pea proposed ${current || "(blank)"} → ${proposal.value.value}${
+        staged?.value.value === proposal.value.value
+          ? "; staged — plan will include it"
+          : staged
+            ? `; you staged ${staged.value.value}, so Pea's value is a counter-proposal`
             : "; open — accept or deny it in the proposals band"
       }. Nothing has reached Revit.`
-    : accepted
-      ? `You accepted ${current || "(blank)"} → ${accepted.value}. Nothing has reached Revit.`
+    : staged
+      ? `You staged ${current || "(blank)"} → ${staged.value.value}. Nothing has reached Revit.`
       : reason;
   return (
-    <span data-proposal={proposal?.by} data-accepted={accepted ? "" : undefined}>
+    <span data-proposal={proposal ? "pea" : undefined} data-staged={staged ? "" : undefined}>
       <StateCell
         {...cellFromTrichotomy(
-          {
-            proposal: proposal ? { value: proposal.value, by: proposal.by } : null,
-            staged: accepted ? { value: accepted.value } : null,
-          },
+          cell ?? { proposal: null, staged: null },
           { value: shown, note, scale: "row" },
+          showFamilyCell,
         )}
-        placeholder={proposal || accepted ? current : undefined}
+        placeholder={proposal || staged ? current : undefined}
         onCommit={(text) => onCommit(text)}
         onNavigate={(direction) => move?.(direction) ?? false}
       />

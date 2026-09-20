@@ -1,4 +1,4 @@
-import type { TrichotomyCellLike } from "@pe/agent-contracts";
+import { canonicalRouteInput, type TrichotomyCellLike } from "@pe/agent-contracts";
 import type React from "react";
 
 /** The one squiggle slot. Ranked; exactly one may draw. `never` is NOT here on purpose —
@@ -30,8 +30,9 @@ export interface StateCellProps {
    * Who staged it — pea's square is pea's ink, yours is caution and carries the bold.
    * RULED 2026-08-16 (consolidation batch): authorship is a QUALIFIER of staging, not a fifth
    * axis — it only reads when `stage` is not clean. Census tables count four axes + qualifier.
-   * `cellFromTrichotomy` derives it from `proposal.by` and the staged value; hand-written
-   * callers that have no proposal behind the staging pass "you".
+   * Only Pea proposes, so `cellFromTrichotomy` reads a staged value equal to the standing
+   * proposal as Pea's (accepted verbatim) and anything else as yours; hand-written callers
+   * that have no proposal behind the staging pass "you".
    */
   stagedBy?: "pea" | "you";
   /**
@@ -117,23 +118,37 @@ export interface StateCellProps {
  * - no `denied`: a denial CLEARS the proposal upstream and the cell shows the real value again.
  * - no `written`: a commit CLEARS `staged`; saved/unsaved and fresh/stale carry that signal.
  */
+/**
+ * What a rung WRITES: its value and whether it deletes. Rungs are compared as canonical JSON, never
+ * by identity — Work is deserialized, so two equal object values are never the same reference.
+ */
+const rungPayload = (rung: { value?: unknown; delete?: true }) =>
+  canonicalRouteInput({ value: rung.value, delete: rung.delete === true });
+
+/** The default counter word: a string as written, anything else as JSON — never `[object Object]`. */
+const showJson = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
+
 export function cellFromTrichotomy(
   cell: Pick<TrichotomyCellLike, "proposal" | "staged">,
   facts: StateCellProps,
+  /** The caller's word for a counter-proposed value; domain values are the caller's to format. */
+  show: (value: unknown) => string = showJson,
 ): StateCellProps {
   const { proposal, staged } = cell;
   // Staging is the later rung, so it wins the stage slot; a proposal still standing behind a
   // staged value is authorship evidence, not a second state.
   const stage = staged != null ? "staged" : proposal != null ? "proposed" : "clean";
   const stagedBy =
-    staged != null && proposal != null && proposal.by === "pea" && staged.value === proposal.value
+    staged != null && proposal != null && rungPayload(staged) === rungPayload(proposal)
       ? "pea"
       : "you";
   // Pea arguing against a staged value: both rungs stand and disagree. The fold draws; see
   // `counterValue` on StateCellProps.
   const contested =
-    staged != null && proposal != null && proposal.value !== staged.value
-      ? String(proposal.value)
+    staged != null && proposal != null && rungPayload(proposal) !== rungPayload(staged)
+      ? proposal.delete === true
+        ? "delete"
+        : show(proposal.value)
       : undefined;
   return {
     ...facts,

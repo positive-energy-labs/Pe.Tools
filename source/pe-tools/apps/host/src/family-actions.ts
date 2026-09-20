@@ -8,10 +8,20 @@ import {
   familyReads,
   familiesCaptureEvidenceSchema,
   familiesRouteState,
+  familiesExcluded,
+  type FfPlanEntry,
   familiesIncluded,
+  type FamilyExclusions,
+  familyCellAddress,
+  familyDraftRouteState,
+  familyStagedPatch,
   memberWork,
+  sameValue,
+  stagedEntries,
+  transitionPatches,
   parameterLinksRouteState,
   parameterLinksBasis,
+  stagedParameterProfile,
   parameterLinksReadingSchema,
   settingsCandidate,
   settingsRouteState,
@@ -23,11 +33,14 @@ import {
   type FamilyReadKey,
   type DocumentRef,
   type PodMember,
+  type PodDraftSource,
   type PodMemberSource,
   type SettingsRouteDocument,
   type FamilyCapture,
   type AppliedFilter,
-  FAMILY_SCOPE_LIMIT,
+  type Rung,
+  type WorkKey,
+  FAMILY_CATALOG_LIMIT,
 } from "@pe/agent-contracts";
 import type {
   PodMemberSaveRequest,
@@ -101,7 +114,11 @@ const familyModelSchema = () =>
  * The composed member as authored, and the exact root and dependency bytes that one composition read.
  * A native run keeps those bytes; the C# family edge reads the spec's `$schema`.
  */
-const familySpec = async (deps: PodDependencies, member: PodMemberSource, pods: PodContext) => {
+const familySpec = async (
+  deps: PodDependencies,
+  member: PodMemberSource | PodDraftSource,
+  pods: PodContext,
+) => {
   const { spec, source, dependencies } = await runPods(deps, composedSpec(member, pods));
   return { specJson: spec, source: { root: source, dependencies } };
 };
@@ -264,6 +281,37 @@ export async function lifetime(
   return { session: await current(bridge, target, family, process), process };
 }
 
+/** The staged cells a plan provably consumed, at the Work revision the plan was bound to. */
+type Consumed = { key: WorkKey; route: "family" | "families"; cells: Record<string, Rung> };
+type Sealed = {
+  specJson: string;
+  source: { root: { bytesBase64: string } };
+  executionOptions?: unknown;
+  /** Null: no Work basis, or a member the staged cells do not generate. It retires nothing. */
+  consumed: Consumed | null;
+};
+
+/** A member's JSON as authored, ignoring the `$schema` URL its writer stamps. */
+const unstamped = (json: string) => {
+  const { $schema: _, ...rest } = JSON.parse(json.replace(/^\uFEFF/, "")) as { $schema?: unknown };
+  return canonicalRouteInput(rest);
+};
+const rootText = (source: Sealed["source"]) =>
+  Buffer.from(source.root.bytesBase64, "base64").toString("utf8");
+const consumedOf = (
+  key: WorkKey,
+  route: Consumed["route"],
+  cells: Record<string, { staged?: Rung | null }>,
+  keys: string[],
+): Consumed => ({
+  key,
+  route,
+  cells: Object.fromEntries(keys.map((cell) => [cell, cells[cell]!.staged!])),
+});
+
+const workRoute = (consumed: Consumed) =>
+  consumed.route === "family" ? familyDraftRouteState.route : familiesRouteState.route;
+
 type Prepared =
   | {
       kind: "settings";
@@ -277,14 +325,21 @@ type Prepared =
       input: unknown;
       /**
        * A plan request reads, returns, and mutates nothing; apply confirms it. A `scope` resolves to
-       * family ids before the native plan; null is one family document, which plans exactly one family.
+       * family NAMES before the native plan, which resolves each name to its current id; null is one
+       * family document, which plans exactly one family.
        */
       planned?: {
         scope: AppliedFilter | null;
-        excludedIds: readonly number[];
+        excluded: FamilyExclusions;
         /** A subset of the scope the caller names (one generated member's family); absent = all. */
-        familyIds?: readonly number[];
+        familyNames?: readonly string[];
+        /** The Work's cell keys holding a proposal or staged value, checked for orphans at plan. */
+        written: readonly string[];
       };
+      /** A plan seals everything its apply consumes; apply never re-reads the member or Work. */
+      sealed?: Sealed;
+      /** An apply retires these staged cells after proven native success, if still unchanged. */
+      retire?: Consumed | null;
     }
   | {
       kind: "capture";
@@ -393,31 +448,111 @@ export async function admitFamilyAction(
           at: new Date().toISOString(),
         };
       }
-      if (key === "family.plan" || key === "family.apply") {
+      if (key === "family.plan") {
         const { specJson, source } = await familySpec(
           deps,
-          familyActions["family.plan"].input.parse(admission.input).source,
+          familyActions[key].input.parse(admission.input).source,
           pods,
         );
-        return key === "family.apply"
-          ? {
-              kind: "native",
-              process,
-              nativeKey: "family.apply",
-              input: {
-                specJson,
-                expectedPlanHashes: familyActions[key].input.parse(admission.input)
-                  .expectedPlanHashes,
-                source,
-              },
-            }
-          : {
-              kind: "native",
-              process,
-              nativeKey: "family.plan",
-              input: { specJson },
-              planned: { scope: null, excludedIds: [] },
-            };
+        // With a reviewed draft, the plan consumes its staged cells only if the captured bytes ARE that draft.
+        const base = admission.bases.work;
+        let consumed: Consumed | null = null;
+        if (base) {
+          const view = work ? await work.read(base.key, familyDraftRouteState.route) : null;
+          if (!view || view.revision !== base.revision)
+            throw refused("Current reviewed Family Work is required");
+          const draft = familyDraftRouteState.schema.parse(view.doc);
+          const staged = stagedEntries(draft.cells).map(([cell]) => cell);
+          if (
+            draft.reading !== null &&
+            staged.length &&
+            unstamped(settingsCandidate(draft.reading, draft.cells)) === unstamped(rootText(source))
+          )
+            consumed = consumedOf(base.key, "family", draft.cells, staged);
+        }
+        return {
+          kind: "native",
+          process,
+          nativeKey: "family.plan",
+          input: { specJson },
+          planned: { scope: null, excluded: {}, written: [] },
+          sealed: { specJson, source, consumed },
+        };
+      }
+      if (key === "family.apply" || key === "families.apply") {
+        const input = familyActions[key].input.parse(admission.input);
+        if (!Object.keys(input.expectedPlanHashes).length)
+          throw refused("No included family has changes to apply");
+        // The succeeded plan's sealed preparation is the input: never a live member or Work read.
+        const planKey = key === "family.apply" ? "family.plan" : "families.plan";
+        const [plan] = await owner.list(undefined, input.plan);
+        const sealed =
+          plan?.preparation.state === "ready"
+            ? (plan.preparation.value as { sealed?: Sealed }).sealed
+            : undefined;
+        if (!plan || plan.key !== planKey || plan.state !== "succeeded" || !sealed)
+          throw refused(`Apply must name a succeeded ${planKey} action`);
+        if (canonicalRouteInput(plan.destination) !== canonicalRouteInput(admission.destination))
+          throw refused("The plan was made for a different document");
+        // A plan applies once. The journal is the record: an earlier apply of this plan that
+        // reached Revit (succeeded, or incomplete after native success) spends it. An unknown
+        // outcome never gets here: the journal refuses new work on the document until it is
+        // recovered from its receipt.
+        const spent = (await owner.list()).find(
+          (row) =>
+            row.id !== admission.id &&
+            row.key === key &&
+            (row.request as { plan?: unknown }).plan === input.plan &&
+            (row.state === "succeeded" || row.state === "incomplete"),
+        );
+        if (spent) throw refused(`This plan already applied (action ${spent.id}); plan again`);
+        // What the person reviewed must still be what is staged at every consumed address.
+        // Proposals may move freely; a staged change means the review no longer describes Work.
+        const consumed = sealed.consumed;
+        if (consumed) {
+          const view = work ? await work.read(consumed.key, workRoute(consumed)) : null;
+          const now = (
+            view?.doc as { cells?: Record<string, { staged?: Rung | null }> } | undefined
+          )?.cells;
+          if (
+            Object.entries(consumed.cells).some(
+              ([cell, rung]) => !sameValue(now?.[cell]?.staged, rung),
+            )
+          )
+            throw refused("The staged cells changed since this plan; plan again");
+        }
+        const included = (plan.result as { included: Record<string, string> }).included;
+        const stray = Object.keys(input.expectedPlanHashes).filter(
+          (id) => included[id] !== input.expectedPlanHashes[id],
+        );
+        if (stray.length)
+          throw refused(`Families ${stray.join(", ")} are not in the reviewed plan as sent`);
+        return {
+          kind: "native",
+          process,
+          nativeKey: key,
+          input: {
+            plan: input.plan,
+            specJson: sealed.specJson,
+            expectedPlanHashes: input.expectedPlanHashes,
+            // The library re-resolves each planned name and refuses one reloaded since the plan.
+            ...(key === "families.apply"
+              ? {
+                  familyNames: Object.fromEntries(
+                    (plan.result as { plan: FfPlanEntry[] }).plan.flatMap((entry) =>
+                      entry.familyId != null &&
+                      Object.hasOwn(input.expectedPlanHashes, entry.familyId)
+                        ? [[String(entry.familyId), entry.familyName]]
+                        : [],
+                    ),
+                  ),
+                }
+              : {}),
+            source: sealed.source,
+            ...(sealed.executionOptions ? { executionOptions: sealed.executionOptions } : {}),
+          },
+          retire: sealed.consumed,
+        };
       }
       if (key === "families.plan") {
         const input = familyActions[key].input.parse(admission.input);
@@ -426,33 +561,42 @@ export async function admitFamilyAction(
         const view = base && work ? await work.read(base.key, familiesRouteState.route) : null;
         if (!view || view.revision !== base!.revision)
           throw refused("Current reviewed Families Work is required");
-        const { scope } = familiesRouteState.schema.parse(view.doc);
+        const doc = familiesRouteState.schema.parse(view.doc);
+        const scope = doc.scope;
         if (!scope) throw refused("Author a scope before planning");
+        const { specJson, source } = await familySpec(deps, input.source, pods);
+        // A generated draft plans one family; it consumes that family's staged cells only if the
+        // captured bytes are exactly what those cells generate.
+        const generated =
+          input.familyNames?.length === 1
+            ? familyStagedPatch(doc.cells, input.familyNames[0]!)
+            : null;
+        const consumed =
+          generated && canonicalRouteInput(generated.spec) === unstamped(rootText(source))
+            ? consumedOf(base!.key, "families", doc.cells, generated.keys)
+            : null;
         return {
           kind: "native",
           process,
           nativeKey: "families.plan",
           input: {
-            specJson: (await familySpec(deps, input.source, pods)).specJson,
+            specJson,
             ...(input.executionOptions ? { executionOptions: input.executionOptions } : {}),
+          },
+          sealed: {
+            specJson,
+            source,
+            ...(input.executionOptions ? { executionOptions: input.executionOptions } : {}),
+            consumed,
           },
           planned: {
             scope,
-            excludedIds: input.excludedIds,
-            ...(input.familyIds ? { familyIds: input.familyIds } : {}),
+            excluded: doc.excluded,
+            ...(input.familyNames ? { familyNames: input.familyNames } : {}),
+            written: Object.keys(doc.cells).filter(
+              (cell) => doc.cells[cell]!.proposal != null || doc.cells[cell]!.staged != null,
+            ),
           },
-        };
-      }
-      if (key === "families.apply") {
-        const input = familyActions[key].input.parse(admission.input);
-        if (!Object.keys(input.expectedPlanHashes).length)
-          throw refused("No included family has changes to apply");
-        // The saved bytes must still be the ones planned; the engine gates each family's hash.
-        return {
-          kind: "native",
-          process,
-          nativeKey: "families.apply",
-          input: { ...input, ...(await familySpec(deps, input.source, pods)) },
         };
       }
       if (key === "parameter-links.apply") {
@@ -463,7 +607,9 @@ export async function admitFamilyAction(
           throw refused("Work changed after review; review the current basis again");
         const input = familyActions["parameter-links.apply"].input.parse(admission.input);
         const document = parameterLinksRouteState.schema.parse(view.doc);
-        if (!document.draft) throw refused("Author a draft profile before applying");
+        // Apply reconciles the person's staged profile only; a Pea proposal never arms it.
+        const staged = stagedParameterProfile(document);
+        if (!staged) throw refused("Stage a profile before applying");
         const capture = await captures.family(input.readingId);
         if (
           capture.reading.kind !== "parameter-links" ||
@@ -473,14 +619,18 @@ export async function admitFamilyAction(
           throw refused("The reviewed evaluation is not live evidence for the selected lifetime");
         const evaluated = parameterLinksReadingSchema.parse(capture.reading.value);
         if (!evaluated.evaluated || !evaluated.evaluation)
-          throw refused("The reviewed reading is a stored-profile read, not a draft evaluation");
+          throw refused("The reviewed reading is a stored-profile read, not a staged evaluation");
+        if (evaluated.subject === "proposal")
+          throw refused(
+            "The reviewed reading is a proposal preview; stage the profile and preview again",
+          );
         if (evaluated.basis !== parameterLinksBasis(document))
-          throw refused("The draft changed after the evaluation; preview again");
+          throw refused("The staged profile changed after the evaluation; preview again");
         return {
           kind: "native",
           process,
           nativeKey: "revit.apply.parameter-links",
-          input: { profile: document.draft, previewOnly: false, reconcile: true },
+          input: { profile: staged, previewOnly: false, reconcile: true },
         };
       }
       const input = familyActions["family.build"].input.parse(admission.input);
@@ -513,16 +663,17 @@ export async function admitFamilyAction(
             appliedSomething(result);
           return result;
         });
-      const resolveFamilyIds = async (scope: AppliedFilter, process: NativeProcess) => {
+      // The scope resolves to names only; name -> current id is the library's, at plan.
+      const resolveScope = async (scope: AppliedFilter, process: NativeProcess) => {
         const catalog = (await native(
           "revit.catalog.loaded-families",
-          { filter: scope, budget: { maxEntries: FAMILY_SCOPE_LIMIT } },
+          { filter: scope, budget: { maxEntries: FAMILY_CATALOG_LIMIT } },
           process,
         )) as RevitCatalogLoadedFamilies.Res.Response;
         if (catalog.summary.truncated)
-          throw refused(`The scope resolves more than ${FAMILY_SCOPE_LIMIT} families; narrow it`);
+          throw refused(`The scope resolves more than ${FAMILY_CATALOG_LIMIT} families; narrow it`);
         if (!catalog.families.length) throw refused("The scope resolves no loaded family");
-        return catalog.families.map((family) => family.familyId);
+        return catalog.families;
       };
       if (prepared.kind === "capture") {
         const captured = await native(prepared.nativeKey, prepared.input, prepared.process);
@@ -610,28 +761,43 @@ export async function admitFamilyAction(
       }
       if (prepared.kind === "native") {
         const scope = prepared.planned?.scope;
-        // The target resolves to family ids once, here; the engine plans exactly those ids.
-        const resolved = scope ? await resolveFamilyIds(scope, prepared.process) : undefined;
-        // A caller naming ids narrows the scope; it never widens it.
-        const outside = prepared.planned?.familyIds?.filter((id) => !resolved?.includes(id)) ?? [];
+        // The target resolves to family names once, here; the engine plans exactly those names.
+        const catalog = scope ? await resolveScope(scope, prepared.process) : undefined;
+        // Deduped: a same-name pair reaches the library once and refuses there as ambiguous.
+        const resolved = catalog && [...new Set(catalog.map((family) => family.familyName))];
+        // A caller naming families narrows the scope; it never widens it.
+        const outside =
+          prepared.planned?.familyNames?.filter((name) => !resolved?.includes(name)) ?? [];
         if (outside.length)
           throw refused(`Families ${outside.join(", ")} are outside the reviewed scope`);
-        const familyIds = prepared.planned?.familyIds ?? resolved;
+        const familyNames = prepared.planned?.familyNames ?? resolved;
         const result = await native(
           prepared.nativeKey,
-          familyIds ? { ...(prepared.input as object), familyIds } : prepared.input,
+          familyNames ? { ...(prepared.input as object), familyNames } : prepared.input,
           prepared.process,
         );
         if (prepared.planned) {
-          const { excludedIds } = prepared.planned;
+          const { excluded } = prepared.planned;
           const planned = result as FamilyPlan.Res.Response | FamiliesPlan.Res.Response;
           if (scope) {
             if (planned.diagnostics.length)
               throw refused(planned.diagnostics.map(diagnosticLine).join(" · "));
+            // A cell whose family or type no longer resolves never re-attaches: plan names it.
+            const loaded = new Set(
+              catalog!.flatMap((family) =>
+                family.types.map((type) => JSON.stringify([family.familyName, type.typeName])),
+              ),
+            );
             return {
+              id: admission.id,
               executionContext: target,
               plan: planned.families,
-              included: familiesIncluded({ entries: planned.families }, excludedIds),
+              included: familiesIncluded({ entries: planned.families }, excluded),
+              excluded: familiesExcluded({ entries: planned.families }, excluded),
+              orphaned: prepared.planned.written.filter((cell) => {
+                const { familyName, typeName } = familyCellAddress(cell);
+                return !loaded.has(JSON.stringify([familyName, typeName]));
+              }),
             };
           }
           // One family document plans exactly one family, or it refuses.
@@ -642,10 +808,35 @@ export async function admitFamilyAction(
                 "Expected one family plan",
             );
           return {
+            id: admission.id,
             executionContext: target,
             plan,
             included: { [String(plan!.familyId)]: plan!.planHash },
           };
+        }
+        const consumed = prepared.retire;
+        if (consumed) {
+          // By name: the apply reloaded the family, so its element id is already a new one.
+          const succeeded = new Set(
+            (result as FamiliesApply.Res.Response).receipts.flatMap((receipt) =>
+              receipt.success ? [receipt.familyName] : [],
+            ),
+          );
+          // A family document applies its one family; Families retires per proven family only.
+          const retiring: Consumed = {
+            ...consumed,
+            cells: Object.fromEntries(
+              Object.entries(consumed.cells).filter(
+                ([cell]) =>
+                  consumed.route === "family" || succeeded.has(familyCellAddress(cell).familyName),
+              ),
+            ),
+          };
+          const retired = await execution.step("publication", "work.retire", retiring, () =>
+            retire(work, retiring, admission.actor),
+          );
+          await execution.publish(retired);
+          return { executionContext: target, native: result, retired };
         }
         return {
           executionContext: target,
@@ -687,6 +878,43 @@ export async function admitFamilyAction(
     },
     resume,
   );
+}
+
+/**
+ * Retire the consumed cells: each rung clears only while it still equals what the plan consumed,
+ * so edits and proposals made after review survive. It re-reads and retries on a concurrent write
+ * and never touches native work. Journaled as one step, so a replay never runs it twice.
+ */
+async function retire(
+  work: ReturnType<typeof actionWorkspace> | undefined,
+  consumed: Consumed,
+  actor: "human" | "agent",
+) {
+  if (!work) throw new ActionIncomplete("Applied; Work was unavailable to retire staged cells", {});
+  const route = workRoute(consumed);
+  // ponytail: three attempts; a Work that moves three times in one retirement is reported, not chased.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const view = await work.read(consumed.key, route);
+    if (!view) return { retired: [] as string[] };
+    const cells = (
+      view.doc as { cells: Record<string, { proposal?: Rung | null; staged?: Rung | null }> }
+    ).cells;
+    const patches = Object.entries(consumed.cells).flatMap(([cell, rung]) =>
+      cells[cell]
+        ? transitionPatches(["cells"], cell, cells[cell]!, { kind: "retire", consumed: rung })
+        : [],
+    );
+    const retired = [...new Set(patches.map((patch) => String(patch.path[1])))];
+    if (!patches.length) return { retired, revision: view.revision };
+    const landed = await work.apply(consumed.key, route, actor, patches, view.revision);
+    if (landed.ok) return { retired, revision: landed.revision };
+    if (landed.code !== "stale_revision")
+      throw new ActionIncomplete(
+        `Applied; retiring staged cells was refused: ${landed.error}`,
+        landed,
+      );
+  }
+  throw new ActionIncomplete("Applied; Work kept moving, so staged cells were not retired", {});
 }
 
 export const recoverFamilyAction = (
@@ -764,11 +992,21 @@ export async function readFamily(
     const view = await deps.workspace.read(scope, "parameter-links");
     if (!view) throw refused("Author this route's Work before reading it");
     const document = parameterLinksRouteState.schema.parse(view.doc);
-    const { evaluate } = familyReads["parameter-links.read"].input.parse(input);
-    if (evaluate && !document.draft) throw refused("Author a draft profile before evaluating it");
+    const { evaluate, subject } = familyReads["parameter-links.read"].input.parse(input);
+    // The staged profile, or a labelled preview of Pea's proposal; nothing else is evaluated.
+    const profile =
+      subject === "proposal"
+        ? (document.profile.proposal?.value ?? null)
+        : stagedParameterProfile(document);
+    if (evaluate && !profile)
+      throw refused(
+        subject === "proposal"
+          ? "Pea has proposed no profile"
+          : "Stage a profile before evaluating it",
+      );
     const data = evaluate
       ? await native("revit.apply.parameter-links", {
-          profile: document.draft,
+          profile,
           previewOnly: true,
           reconcile: false,
         })
@@ -777,13 +1015,14 @@ export async function readFamily(
       kind: "parameter-links",
       value: parameterLinksReadingSchema.parse({
         ...(data as object),
-        basis: parameterLinksBasis(document),
+        basis: parameterLinksBasis(document, subject),
         workRevision: view.revision,
         evaluated: evaluate,
+        subject,
         // What Revit holds arrives as `profile`; `stored` names it for what it is.
         stored: (data as { profile?: unknown }).profile ?? null,
-        // A stored-profile read observes Revit, never the authored draft: it carries no
-        // evaluation, so it can never arm an apply of a draft it did not evaluate.
+        // A stored-profile read observes Revit, never the staged profile: it carries no
+        // evaluation, so it can never arm an apply of a profile it did not evaluate.
         evaluation: evaluate ? (data as { evaluation?: unknown }).evaluation : null,
       }),
     };

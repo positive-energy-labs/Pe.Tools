@@ -160,7 +160,7 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
     key: `route:${spec.route}.propose`,
     kind: "route-doc",
     title: `${spec.title}: propose`,
-    description: `Patch paths inside the ${spec.title} agent write mask (${spec.agentWriteMask.map((path) => path.join("/")).join(", ") || "none"}); everything else is human-only. Omit value to delete a key. Needs expectedRevision from the read. ${scopeHint}`,
+    description: `Patch paths inside the ${spec.title} agent write mask (${spec.agentWriteMask.map((path) => path.join("/")).join(", ")}); everything else is human-only. Omit value to delete a key. Needs expectedRevision from the read. ${scopeHint}`,
     needs: "nothing",
     mutates: true,
     actor: "any",
@@ -188,7 +188,8 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
       rank: 0,
     }),
   );
-  return [read, propose, ...commands];
+  // A route Pea may not write offers no propose door.
+  return [read, ...(spec.agentWriteMask.length ? [propose] : []), ...commands];
 }
 
 /** Entrypoints only: members are data, reached through route:pods, never executable rows. */

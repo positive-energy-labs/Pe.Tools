@@ -2,6 +2,7 @@ import { z } from "zod";
 import { nativeProcessSchema } from "./action-receipts.ts";
 import { documentRefSchema } from "./target.ts";
 import type { RouteStateSpec } from "./route-state.ts";
+import { trichotomyCellSchema } from "./trichotomy.ts";
 const SDK_SESSION_SELECTOR_PREFIX = "session:";
 export const sdkSessionSelectorSchema = z.templateLiteral([
   SDK_SESSION_SELECTOR_PREFIX,
@@ -14,32 +15,37 @@ export const sdkSessionTargetOf = (selector: SdkSessionSelector): string =>
   selector.slice(SDK_SESSION_SELECTOR_PREFIX.length);
 
 const documentSelector = z.string().trim().min(1);
-export const instancesDocumentSchema = z.object({
-  staged: z
-    .discriminatedUnion("kind", [
-      z.object({
-        kind: z.literal("open"),
-        session: sdkSessionSelectorSchema,
-        document: documentSelector,
-      }),
-      z.object({
-        kind: z.literal("start"),
-        year: z.string().regex(/^20\d{2}$/),
-        name: z.string().max(64),
-        document: documentSelector.optional(),
-      }),
-    ])
-    .nullable()
-    .default(null),
+/** What open/start launches: a document into a session, or a new session. */
+export const instancesLaunchSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("open"),
+    session: sdkSessionSelectorSchema,
+    document: documentSelector,
+  }),
+  z.object({
+    kind: z.literal("start"),
+    year: z.string().regex(/^20\d{2}$/),
+    name: z.string().max(64),
+    document: documentSelector.optional(),
+  }),
+]);
+export type InstancesLaunch = z.infer<typeof instancesLaunchSchema>;
+/**
+ * One authored cell: Pea may propose a launch, a person stages it, and open/start read `staged`
+ * only. Strict, so Work in the old `{ staged }` shape fails closed rather than lose its value.
+ */
+export const instancesDocumentSchema = z.strictObject({
+  launch: trichotomyCellSchema(instancesLaunchSchema).default({}),
 });
 export type InstancesDocument = z.infer<typeof instancesDocumentSchema>;
 export const instancesRouteState = {
   route: "instances",
   title: "Instances",
   description:
-    "Select Revit sessions and stage documents. Refresh to discover installed years, sessions and recents. Stage then open or start. Other lifecycle commands are human-only.",
+    "Select Revit sessions and stage documents. Refresh to discover installed years, sessions and recents. Pea may propose a launch (an open or a start); a person stages it, and open/start launch exactly the staged value, never a proposal. Other lifecycle commands are human-only.",
   schema: instancesDocumentSchema,
-  agentWriteMask: [["staged"]],
+  // Pea proposes; the staged launch is a person's, and it is what open/start consume.
+  agentWriteMask: [["launch", "proposal"]],
   commands: {},
 } satisfies RouteStateSpec<typeof instancesDocumentSchema>;
 

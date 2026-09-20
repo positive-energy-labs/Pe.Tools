@@ -8,7 +8,7 @@ import {
 } from "@pe/agent-contracts";
 import { ActionReceiptView } from "#/actions/receipt";
 import { previousOf } from "#/readings";
-import { instancesRouteState } from "@pe/agent-contracts";
+import { instancesRouteState, stagedParameterProfile } from "@pe/agent-contracts";
 import type { ComponentType } from "react";
 import type { z } from "zod";
 import {
@@ -273,7 +273,7 @@ export function ParameterLinksChatPlugin({
   revision,
 }: RouteChatPluginProps) {
   const document = recordedRouteDoc(sessionState, parameterLinksRouteState);
-  const profile = document?.draft ?? null;
+  const profile = document ? stagedParameterProfile(document) : null;
   return (
     <InlineRoutePlugin
       title={parameterLinksRouteState.title}
@@ -316,7 +316,7 @@ function ParameterLinksLivePlugin({
   const route = useRoute(parameterLinksManifest, { target });
   if (!route.work.current || !route.work.doc) return null;
   const document = route.work.doc;
-  const profile = document?.draft ?? null;
+  const profile = document ? stagedParameterProfile(document) : null;
   // Observations arrive from the capture owner, the same place the route surface reads them.
   const rows = previousOf(route.readings.links);
   const row = rows
@@ -379,7 +379,7 @@ function InstancesChatPlugin({
   revision,
 }: RouteChatPluginProps) {
   const doc = recordedRouteDoc(sessionState, instancesRouteState);
-  const staged = doc?.staged;
+  const staged = doc?.launch.staged?.value;
   return (
     <InlineRoutePlugin
       title="Instances"

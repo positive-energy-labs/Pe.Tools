@@ -44,6 +44,7 @@ import { createPeaProductStateStorageProfile } from "./storage/profiles.ts";
 import { createSystemPromptCapture } from "./system-prompt-capture.ts";
 import { createToolListCapture } from "./tool-list-capture.ts";
 import { admitTurn, ScopeStore, type ScopeStateStore } from "./scope-store.ts";
+import { endParkedTurn, expireAsks } from "./thread-state.ts";
 export { messageContents } from "./message-contents.ts";
 import { peaAgentInstructionsFor } from "./pea-instructions.ts";
 
@@ -86,7 +87,7 @@ const permissionRecordSchema = z
 type PermissionRecord = z.infer<typeof permissionRecordSchema>;
 type RuntimeAccessLevel = NonNullable<PeaRuntimeOptions["accessLevel"]>;
 
-type PeaRuntimeState = Record<string, unknown> & {
+export type PeaRuntimeState = Record<string, unknown> & {
   permissionRules?: unknown;
   yolo?: boolean;
 };
@@ -286,7 +287,8 @@ interface PeaSessionAdmission {
   close(): Promise<void>;
 }
 
-function installPeaControllerPolicy(
+/** Exported for tests: the deterministic harness can run the controller policy the host runs. */
+export function installPeaControllerPolicy(
   controller: AgentController<PeaRuntimeState>,
   options: {
     accessLevel?: RuntimeAccessLevel;
@@ -362,7 +364,8 @@ function installPeaControllerPolicy(
   };
 }
 
-function createPeaSessionAdmission(
+/** Exported for tests: the deterministic harness installs the same admission Pea runs. */
+export function createPeaSessionAdmission(
   session: Session<PeaRuntimeState>,
   requestedAccessLevel: RuntimeAccessLevel | undefined,
   scopedThreadId: string | undefined,
@@ -386,8 +389,9 @@ function createPeaSessionAdmission(
           ),
         });
   };
+  // The ask lifetime and the turn's documents end together, on the one expiry predicate.
   const unsubscribeDocumentCleanup = session.onBeforeAgentEnd(async (event) => {
-    if (event.reason !== "suspended") await finishOwnedDocuments();
+    if (expireAsks(session, event.reason)) await finishOwnedDocuments();
   });
   let restoreScopedThreadLifecycle: (() => void) | undefined;
   let admitted = false;
@@ -484,6 +488,7 @@ function createPeaSessionAdmission(
     }
   };
 
+  let parkedTurnEnding: Promise<void> | undefined;
   const sendSignal = session.sendSignal.bind(session) as typeof session.sendSignal;
   session.sendSignal = ((input, options) => {
     const turn = turnOf(options);
@@ -519,11 +524,17 @@ function createPeaSessionAdmission(
     return {
       id: signal.id,
       type: signal.type,
-      accepted: assertRunAdmitted().then(() =>
-        session.thread.getId() !== admission[0] || permissionGeneration !== admission[1]
-          ? Promise.reject(new Error("Pea permission thread changed during hydration."))
-          : sendSignal(input, options).accepted,
-      ),
+      // Only an admitted turn ends a parked one, so a refused turn expires nothing.
+      accepted: assertRunAdmitted().then(async () => {
+        if (session.thread.getId() !== admission[0] || permissionGeneration !== admission[1])
+          throw new Error("Pea permission thread changed during hydration.");
+        // A rapid second turn finds nothing parked and waits out the same teardown. A failed
+        // ending refuses the turn that ended the ask, never the turns after it.
+        const ending = endParkedTurn(session);
+        if (ending) parkedTurnEnding = ending.catch(() => undefined);
+        await (ending ?? parkedTurnEnding);
+        return sendSignal(input, options).accepted;
+      }),
     };
   }) as typeof session.sendSignal;
 

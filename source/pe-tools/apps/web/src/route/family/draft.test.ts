@@ -20,10 +20,15 @@ const client = vi.hoisted(() => ({
 }));
 vi.mock("../../../../../packages/mcps/src/shared/takeoff-action-client", () => client);
 
-import { settingsFieldPointer, type FamilyDraft } from "@pe/agent-contracts";
+import {
+  familyDraftRouteState,
+  settingsFieldPointer,
+  stagedEntries,
+  type FamilyDraft,
+} from "@pe/agent-contracts";
 
 import { familyFixtures } from "#/family/authored-families";
-import { draftSpec, familyManifest, familySpec, proposeOnDraft } from "./manifest";
+import { draftSpec, familyManifest, familySpec } from "./manifest";
 
 const width = settingsFieldPointer(["parameters", "Width", "value"]);
 const reading = JSON.stringify({
@@ -45,54 +50,64 @@ const ctx = (doc: FamilyDraft, pod = "") => {
   };
 };
 
-test("a person's edit on a family parameter is an accept, and the draft spec carries it", () => {
-  const draft = proposeOnDraft(
-    { reading, edits: [{ pointer: width, value: "3in", by: "pea" }], accepted: [] },
-    [{ path: ["fields", width, "staged"], value: { value: "2in" } }],
-  );
-  expect(draft.edits).toEqual([]);
-  expect(draft.accepted).toEqual([{ pointer: width, value: "2in", by: "human" }]);
+test("a staged family cell preserves the proposal and carries set/delete semantics", () => {
+  const draft: FamilyDraft = {
+    reading,
+    cells: {
+      [width]: {
+        proposal: { value: "3in" },
+        staged: { value: "2in" },
+      },
+    },
+  };
   expect(JSON.parse(draftSpec(draft)!).parameters.Width.value).toBe("2in");
-  // A deny clears the proposal and accepts nothing.
-  const denied = proposeOnDraft(
-    { reading, edits: [{ pointer: width, value: "3in", by: "pea" }], accepted: [] },
-    [{ path: ["fields", width, "proposal"] }],
-  );
-  expect(denied).toMatchObject({ edits: [], accepted: [] });
+  expect(
+    JSON.parse(
+      draftSpec({ reading, cells: { [width]: { proposal: null, staged: { delete: true } } } })!,
+    ).parameters.Width.value,
+  ).toBeUndefined();
+  expect(draft.cells[width]).toMatchObject({
+    proposal: { value: "3in" },
+    staged: { value: "2in" },
+  });
+});
+
+test("family Work rejects legacy persisted arrays", () => {
+  expect(() => familyDraftRouteState.schema.parse({ reading, edits: [], accepted: [] })).toThrow();
 });
 
 test("the live family reads into a draft with no pod: read needs none, capture asks for one", () => {
   const manifest = familyManifest();
-  const { ctx: live } = ctx({ reading: familyFixtures.box, edits: [], accepted: [] });
+  const { ctx: live } = ctx({ reading: familyFixtures.box, cells: {} });
   expect(manifest.actions!.read.ready(live, undefined as never)).toBeNull();
   expect(manifest.actions!.capture.ready(live, undefined as never)).toBe(
     "choose the pod the capture lands in",
   );
 });
 
-test("an accepted proposal plans: save files the draft as a member, the plan names it", async () => {
+test("a staged cell plans the draft's bytes: nothing is saved, and the page names no member", async () => {
   client.runSemanticAction.mockClear();
   const doc: FamilyDraft = {
     reading,
-    edits: [],
-    accepted: [{ pointer: width, value: "2in", by: "human" }],
+    cells: { [width]: { proposal: null, staged: { value: "2in" } } },
   };
   const { ctx: c, pages } = ctx(doc, "p");
-  expect(familySpec.staged!.count(c)).toBe(1);
+  expect(stagedEntries(familySpec.staged!.cells(c as never))).toHaveLength(1);
   expect(familyManifest().actions!.plan.ready(c, undefined as never)).toBeNull();
   const sheet = await familySpec.staged!.plan(c);
-  const [save, plan] = client.runSemanticAction.mock.calls;
-  // Save is capture with the draft's text into the chosen pod; the host writes the member and run.
-  expect(save![0]).toBe("family.capture");
-  expect(save![1]).toMatchObject({ pod: "p" });
-  expect(JSON.parse((save![1] as { spec: string }).spec).parameters.Width.value).toBe("2in");
-  expect(plan![0]).toBe("family.plan");
-  expect(plan![1]).toEqual({
-    source: { pod: "p", path: "settings/family/box-saved.json", sha256: "b".repeat(64) },
-  });
-  expect(pages).toContainEqual({ path: "settings/family/box-saved.json" });
-  expect(sheet.entries[0]).toMatchObject({
-    planHash: "h",
-    source: { path: "settings/family/box-saved.json" },
-  });
+  // One call: the plan. No capture saves the draft as a member first.
+  expect(client.runSemanticAction.mock.calls.map(([key]) => key)).toEqual(["family.plan"]);
+  const { source } = client.runSemanticAction.mock.calls[0]![1] as {
+    source: { pod: string; path: string; content: string };
+  };
+  expect(source).toMatchObject({ pod: "p", path: "staged/box.json" });
+  expect(source).not.toHaveProperty("sha256");
+  const sent = JSON.parse(source.content);
+  expect(sent.parameters.Width.value).toBe("2in");
+  expect(sent.$schema).toMatch(/\/schemas\/settings\/FamilyFoundry\/models\.json$/);
+  // The host binds the plan to the draft by these bytes, ignoring the stamp.
+  const { $schema: _, ...rest } = sent;
+  expect(rest).toEqual(JSON.parse(draftSpec(doc)!));
+  expect(pages).toEqual([]);
+  expect(sheet.entries[0]).toMatchObject({ planHash: "h" });
 });

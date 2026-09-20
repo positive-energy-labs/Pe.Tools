@@ -341,6 +341,26 @@ public sealed class PodTests {
     }
 
     [Test]
+    public void Run_input_names_the_sealed_plan_or_the_explicit_review_gap() {
+        var planned = PodRuns.WithReviewBasis(new JObject { ["operation"] = "family.apply" }, "plan-action-1");
+        var direct = PodRuns.WithReviewBasis(new JObject { ["operation"] = "family.apply" }, null);
+
+        Assert.Multiple(() => {
+            Assert.That(planned["plan"]!["actionId"]!.Value<string>(), Is.EqualTo("plan-action-1"));
+            Assert.That(planned["unavailableEvidence"]!.Values<string>(), Is.Empty);
+            Assert.That(direct["plan"], Is.Null);
+            Assert.That(direct["unavailableEvidence"]!.Values<string>(), Is.EqualTo(new[] { "reviewed Work revision" }));
+        });
+    }
+
+    [Test]
+    public void A_family_apply_request_carries_its_plan_action_id() {
+        var request = Newtonsoft.Json.JsonConvert.DeserializeObject<Pe.Shared.HostContracts.Operations.FamilyApplyRequest>(
+            """{"specJson":"{}","expectedPlanHashes":{},"plan":"plan-action-1","source":{"root":{"id":"p","path":"a.json","sha256":"s","bytesBase64":"e30=","origin":"SavedMember"},"dependencies":[]}}""")!;
+        Assert.That(request.Plan, Is.EqualTo("plan-action-1"));
+    }
+
+    [Test]
     public void Cancelled_has_one_spelling() {
         Assert.That(Enum.GetNames(typeof(ScriptExecutionStatus)), Does.Contain("Cancelled").And.No.Contain("Canceled"));
         Assert.That(Enum.GetNames(typeof(PodRunOutcome)), Is.EqualTo(new[] { "Succeeded", "Failed", "Cancelled" }));

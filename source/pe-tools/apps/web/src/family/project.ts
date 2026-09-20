@@ -21,18 +21,12 @@
  * commands, and a projection that invented them from the fixture would be the one lie these
  * surfaces may not tell.
  */
-import { settingsFieldPointer } from "@pe/agent-contracts";
+import { settingsFieldPointer, transitionPatches } from "@pe/agent-contracts";
 
 import type { RouteStatePatch } from "@pe/agent-contracts";
 import { timeAgo } from "#/lib/utils";
-import type { ConnectorSpec, FamilyModel, ParamSpec, SolidSpec } from "#/family/family-model";
-import {
-  paramRef,
-  paramSpec,
-  parameterSpecs,
-  parameterSection,
-  parameterText,
-} from "#/family/family-model";
+import type { ConnectorSpec, FamilyModel, FormSpec, ParamSpec } from "#/family/family-model";
+import { paramRef, paramSpec, parameterText } from "#/family/family-model";
 import type { EvidenceSlice } from "#/family/host";
 import { bindingOf, isFormula, type Draft, type FamilyPageModel } from "#/family/model";
 import type {
@@ -60,6 +54,9 @@ const SYSTEM_TYPES: Record<string, string[]> = {
   Electrical: ["PowerBalanced", "PowerUnBalanced", "Data", "Communication"],
   Cable: ["Data", "Communication"],
 };
+
+const FORM_DIM_FIELDS = ["width", "depth", "height", "diameter"] as const;
+const CONNECTOR_DIM_FIELDS = ["diameter", "width", "height"] as const;
 
 /* ── forward: document → page world ──────────────────────────────────────── */
 
@@ -92,10 +89,7 @@ export function projectFamilyModel(
         ]),
       ),
       solids: Object.fromEntries(
-        Object.entries(model.forms ?? model.solids ?? {}).map(([slug, solid]) => [
-          slug,
-          solidProse(solid),
-        ]),
+        Object.entries(model.forms ?? {}).map(([slug, form]) => [slug, formProse(form)]),
       ),
       connectors: Object.fromEntries(
         Object.entries(model.connectors ?? {}).map(([slug, connector]) => [
@@ -104,8 +98,8 @@ export function projectFamilyModel(
         ]),
       ),
       geometry: [
-        ...Object.entries(model.forms ?? model.solids ?? {}).map(([slug, solid]) =>
-          projectSolid(model, slug, solid, lengthType),
+        ...Object.entries(model.forms ?? {}).map(([slug, form]) =>
+          projectForm(model, slug, form, lengthType),
         ),
         ...Object.entries(model.connectors ?? {}).map(([slug, connector]) =>
           projectConnector(model, slug, connector, lengthType),
@@ -131,13 +125,13 @@ function projectParams(model: FamilyModel): ProtoParam[] {
     isInstance: spec.isInstance ?? false,
     group: spec.propertiesGroup ?? "other",
   });
-  return Object.entries(parameterSpecs(model)).map(project);
+  return Object.entries(model.parameters).map(project);
 }
 
 /** The spelling this document uses for a length. Read off its own parameters rather than assumed,
  * so a document written in another vocabulary still binds literals to matching candidates. */
 function lengthDataType(model: FamilyModel): string {
-  for (const spec of Object.values(parameterSpecs(model)))
+  for (const spec of Object.values(model.parameters))
     if (spec.dataType?.startsWith("Length")) return spec.dataType;
   return FALLBACK_LENGTH_TYPE;
 }
@@ -152,16 +146,11 @@ function dimDataType(model: FamilyModel, raw: string, lengthType: string): strin
 /** `param:Body Width` → `Body Width`, a literal → itself. What the prose lines read as. */
 const spoken = (raw: string | undefined) => (raw == null ? null : (paramRef(raw) ?? raw));
 
-function solidProse(solid: SolidSpec): string {
-  const size = [
-    spoken(solid.diameter),
-    spoken(solid.width),
-    spoken(solid.depth),
-    spoken(solid.height),
-  ]
+function formProse(form: FormSpec): string {
+  const size = [spoken(form.diameter), spoken(form.width), spoken(form.depth), spoken(form.height)]
     .filter((part): part is string => part != null)
     .join(" × ");
-  return size ? `${solid.kind} · ${size}` : solid.kind;
+  return size ? `${form.kind} · ${size}` : form.kind;
 }
 
 function connectorProse(connector: ConnectorSpec): string {
@@ -182,42 +171,11 @@ function connectorProse(connector: ConnectorSpec): string {
     .join(" · ");
 }
 
-/** The frame a constituent sits on, as the two READ metadata rows the page shows: where its origin
- * is, and which way it faces. Both are computed from the sketch in Revit, so neither is editable
- * here — a text box would be claiming an edit nothing downstream would make. */
-function frameMeta(model: FamilyModel, frameRef: string | undefined): GeomMeta[] {
-  if (!frameRef) return [];
-  const slug = frameRef.startsWith("frame:") ? frameRef.slice("frame:".length) : frameRef;
-  const frame = model.frames?.[slug];
-  const origin = frame
-    ? frame.origin.map((ref) => ref.replace(/^(face|plane|frame):/, "")).join(" · ")
-    : slug === "family"
-      ? "family origin · on the reference level"
-      : `${slug} — the document declares no frame by this name`;
-  return [
-    {
-      key: "origin",
-      label: "frame origin",
-      control: "read",
-      value: origin,
-      note: `Where the constituent's own frame sits, read from ${frameRef} in the document. Read-only here because moving it is a sketch edit in the family editor, not a value — a text box pretending otherwise would be lying about what would happen.`,
-    },
-    {
-      key: "normal",
-      label: "normal",
-      control: "read",
-      value: frame?.normal ?? "—",
-      note: "The direction this constituent's frame faces. Computed from the work plane, so it is reported rather than chosen.",
-    },
-  ];
-}
-
 const DIM_NOTE: Record<string, string> = {
-  width: "X extent, in the constituent's own frame.",
-  depth: "Y extent, in the constituent's own frame.",
-  height: "Extrusion depth along the frame's normal.",
+  width: "X extent, centred on the center planes.",
+  depth: "Y extent, centred on the center planes.",
+  height: "Rise above the bottom plane.",
   diameter: "Outside diameter.",
-  "stub.depth": "How far the stub runs before the connection face.",
 };
 
 function dim(model: FamilyModel, property: string, raw: string, lengthType: string): GeomDim {
@@ -232,33 +190,39 @@ function dim(model: FamilyModel, property: string, raw: string, lengthType: stri
   };
 }
 
-function projectSolid(
+function projectForm(
   model: FamilyModel,
   slug: string,
-  solid: SolidSpec,
+  form: FormSpec,
   lengthType: string,
 ): GeomConstituent {
   const dims: GeomDim[] = [];
-  for (const property of ["width", "depth", "height", "diameter"] as const) {
-    const raw = solid[property];
+  for (const property of FORM_DIM_FIELDS) {
+    const raw = form[property];
     if (raw != null) dims.push(dim(model, property, raw, lengthType));
   }
-  return {
-    slug,
-    kind: solid.kind,
-    dims,
-    meta: solid.center
+  const meta: GeomMeta[] = form.center
+    ? [
+        {
+          key: "center",
+          label: "center / bottom",
+          control: "read",
+          value: [...form.center, form.bottom ?? ""].join(" / "),
+          note: "Native authored plane references.",
+        },
+      ]
+    : form.sketchPlane
       ? [
           {
-            key: "center",
-            label: "center / bottom",
+            key: "sketch",
+            label: "sketch / span",
             control: "read",
-            value: [...solid.center, solid.bottom ?? ""].join(" / "),
-            note: "Native authored plane references.",
+            value: [form.sketchPlane, form.start ?? form.sketchPlane, form.end ?? "—"].join(" / "),
+            note: "The plane the profile is sketched on, then the two planes the extrusion spans. Read-only here because moving them is a sketch edit in the family editor, not a value.",
           },
         ]
-      : frameMeta(model, solid.frame),
-  };
+      : [];
+  return { slug, kind: form.kind, dims, meta };
 }
 
 function projectConnector(
@@ -268,11 +232,10 @@ function projectConnector(
   lengthType: string,
 ): GeomConstituent {
   const dims: GeomDim[] = [];
-  for (const property of ["diameter", "width", "height"] as const) {
+  for (const property of CONNECTOR_DIM_FIELDS) {
     const raw = connector[property];
     if (raw != null) dims.push(dim(model, property, raw, lengthType));
   }
-  if (connector.stub) dims.push(dim(model, "stub.depth", connector.stub.depth, lengthType));
 
   const meta: GeomMeta[] = [];
   // Only what the document actually authors gets a control. A toggle over an absent field would
@@ -294,15 +257,6 @@ function projectConnector(
       value: connector.systemType,
       options: [...new Set([connector.systemType, ...(SYSTEM_TYPES[connector.domain] ?? [])])],
       note: `The ${connector.domain} system classification Revit matches on when it decides what may connect to what. The list is a fixed per-domain set — the document carries no enum of its own, so an unlisted value stays selectable rather than being silently dropped.`,
-    });
-  if (connector.stub)
-    meta.push({
-      key: "stub.direction",
-      label: "stub direction",
-      control: "toggle",
-      value: connector.stub.direction,
-      options: ["In", "Out"],
-      note: "Which side of the connection face the stub runs on. In pulls it back into the family; Out stands it off.",
     });
   meta.push({
     key: "shape",
@@ -327,7 +281,7 @@ function projectConnector(
               note: "Native authored plane intersections; reference-plane positions are seeds until Revit solves constraints.",
             },
           ]
-        : frameMeta(model, connector.frame)),
+        : []),
     ],
   };
 }
@@ -343,7 +297,7 @@ function projectEvidence(
   const values: Record<string, Record<string, ProtoLiveValue>> = {};
   if ("modelJson" in evidence) {
     const captured = JSON.parse(evidence.modelJson) as FamilyModel;
-    const reported = parameterSpecs(captured);
+    const reported = captured.parameters ?? {};
     for (const [typeName, cells] of Object.entries(captured.types ?? {}))
       for (const [name, value] of Object.entries(cells)) {
         if (reported[name]?.formula != null || value == null) continue;
@@ -393,9 +347,6 @@ function projectEvidence(
 
 /* ── forward: draft over document → the model the anatomy draws ──────────── */
 
-const SOLID_DIM_FIELDS = ["width", "depth", "height", "diameter"] as const;
-const CONNECTOR_DIM_FIELDS = ["diameter", "width", "height"] as const;
-
 /**
  * The DRAFT laid over the parsed document — what the anatomy triptych actually draws.
  *
@@ -420,7 +371,7 @@ export function draftedModel(
   // Promoted literals are WHOLE new parameters — seeded first, so their authored value below
   // has a spec to land on and the drawing moves in the same beat as the promotion.
   for (const param of draft.newParams) {
-    (next.parameters ?? next.familyParameters)[param.name] = {
+    next.parameters[param.name] = {
       dataType: param.dataType,
       ...(param.group ? { propertiesGroup: param.group } : {}),
     };
@@ -438,8 +389,6 @@ export function draftedModel(
       delete spec.formula;
     }
     if (isFormula(value)) delete spec.value;
-    // Either way the old resolved values described a value that no longer stands.
-    delete spec.resolvedValues;
   }
 
   // The type matrix is the draft's, wholesale: an override typed and an override cleared are
@@ -447,28 +396,23 @@ export function draftedModel(
   next.types = structuredClone(draft.types);
 
   // Geometry: a dim's drafted value IS its binding, written to exactly the paths the reverse
-  // projection stages — solids' four fields, connectors' three plus the nested stub. Metadata
+  // projection stages — forms' four fields, connectors' three. Metadata
   // lands only on its editable connector homes; `read` rows have no path and get none.
   for (const part of world.geom) {
-    const solid = (next.forms ?? next.solids)?.[part.slug];
+    const form = next.forms?.[part.slug];
     const connector = next.connectors?.[part.slug];
     for (const dim of part.dims) {
       const binding = bindingOf(world, draft, part.slug, dim.property);
       if (binding === "") continue;
-      if (solid && (SOLID_DIM_FIELDS as readonly string[]).includes(dim.property)) {
-        solid[dim.property as (typeof SOLID_DIM_FIELDS)[number]] = binding;
-      } else if (connector) {
-        if (dim.property === "stub.depth") {
-          if (connector.stub) connector.stub.depth = binding;
-        } else if ((CONNECTOR_DIM_FIELDS as readonly string[]).includes(dim.property)) {
-          connector[dim.property as (typeof CONNECTOR_DIM_FIELDS)[number]] = binding;
-        }
+      if (form && (FORM_DIM_FIELDS as readonly string[]).includes(dim.property)) {
+        form[dim.property as (typeof FORM_DIM_FIELDS)[number]] = binding;
+      } else if (connector && (CONNECTOR_DIM_FIELDS as readonly string[]).includes(dim.property)) {
+        connector[dim.property as (typeof CONNECTOR_DIM_FIELDS)[number]] = binding;
       }
     }
     if (!connector) continue;
     for (const [key, value] of Object.entries(draft.geom[part.slug]?.meta ?? {})) {
       if (key === "flowDirection" || key === "systemType") connector[key] = value;
-      else if (key === "stub.direction" && connector.stub) connector.stub.direction = value;
     }
   }
 
@@ -479,11 +423,17 @@ export function draftedModel(
 
 /** Stage a value at one JSON Pointer. `undefined` DELETES the property, which is a different act
  * from writing an empty string and the settings schema keeps them apart. */
+/** A typed edit, as the shared cell machine stages it. The draft diff is this route's baseline. */
 function stage(segments: string[], value: string | undefined): RouteStatePatch {
-  return {
-    path: ["fields", settingsFieldPointer(segments), "staged"],
-    value: value === undefined ? { delete: true } : { value },
-  };
+  return transitionPatches(
+    ["fields"],
+    settingsFieldPointer(segments),
+    {},
+    {
+      kind: "stage",
+      rung: value === undefined ? { delete: true } : { value },
+    },
+  )[0]!;
 }
 
 /**
@@ -509,31 +459,33 @@ export function draftToPatches(
     // document has no line for at all, seeded with the literal so the geometry does not move.
     if (promoted.has(name) && !(name in savedDraft.authored)) {
       const seed = draft.newParams.find((param) => param.name === name);
-      patches.push({
-        path: [
-          "fields",
-          settingsFieldPointer([model.parameters ? "parameters" : "familyParameters", name]),
-          "staged",
-        ],
-        value: {
-          value: {
-            dataType: seed?.dataType ?? FALLBACK_LENGTH_TYPE,
-            ...(seed?.group ? { propertiesGroup: seed.group } : {}),
-            ...(isFormula(value) ? { formula: value.replace(/^\s*=\s*/, "") } : { value }),
+      patches.push(
+        ...transitionPatches(
+          ["fields"],
+          settingsFieldPointer(["parameters", name]),
+          {},
+          {
+            kind: "stage",
+            rung: {
+              value: {
+                dataType: seed?.dataType ?? FALLBACK_LENGTH_TYPE,
+                ...(seed?.group ? { propertiesGroup: seed.group } : {}),
+                ...(isFormula(value) ? { formula: value.replace(/^\s*=\s*/, "") } : { value }),
+              },
+            },
           },
-        },
-      });
+        ),
+      );
       continue;
     }
 
-    const section = parameterSection(model, name);
     const spec = paramSpec(model, name);
     if (isFormula(value)) {
-      patches.push(stage([section, name, "formula"], value.replace(/^\s*=\s*/, "")));
-      if (spec?.value != null) patches.push(stage([section, name, "value"], undefined));
+      patches.push(stage(["parameters", name, "formula"], value.replace(/^\s*=\s*/, "")));
+      if (spec?.value != null) patches.push(stage(["parameters", name, "value"], undefined));
     } else {
-      patches.push(stage([section, name, "value"], value));
-      if (spec?.formula != null) patches.push(stage([section, name, "formula"], undefined));
+      patches.push(stage(["parameters", name, "value"], value));
+      if (spec?.formula != null) patches.push(stage(["parameters", name, "formula"], undefined));
     }
   }
 
@@ -568,16 +520,14 @@ export function draftToPatches(
 /** Where a bindable dim lives in the document. A property the projection did not come from returns
  * null and stages nothing — silence beats inventing a path the schema does not have. */
 function dimSegments(model: FamilyModel, slug: string, property: string): string[] | null {
-  if ((model.forms ?? model.solids)?.[slug])
-    return ["width", "depth", "height", "diameter"].includes(property)
-      ? [model.forms ? "forms" : "solids", slug, property]
+  if (model.forms?.[slug])
+    return (FORM_DIM_FIELDS as readonly string[]).includes(property)
+      ? ["forms", slug, property]
       : null;
-  if (model.connectors?.[slug]) {
-    if (property === "stub.depth") return ["connectors", slug, "stub", "depth"];
-    return ["diameter", "width", "height"].includes(property)
+  if (model.connectors?.[slug])
+    return (CONNECTOR_DIM_FIELDS as readonly string[]).includes(property)
       ? ["connectors", slug, property]
       : null;
-  }
   return null;
 }
 
@@ -586,6 +536,5 @@ function dimSegments(model: FamilyModel, slug: string, property: string): string
 function metaSegments(model: FamilyModel, slug: string, key: string): string[] | null {
   if (!model.connectors?.[slug]) return null;
   if (key === "flowDirection" || key === "systemType") return ["connectors", slug, key];
-  if (key === "stub.direction") return ["connectors", slug, "stub", "direction"];
   return null;
 }

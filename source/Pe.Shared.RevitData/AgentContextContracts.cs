@@ -347,7 +347,8 @@ public record RevitViewImageRequest(
     int PixelSize = 1500
 );
 
-/// <summary>Model-space XY extent covered by the exported image (feet), when known.</summary>
+/// <summary>Axis-aligned model-space XY bounds (feet) of the view's crop, when known. Not a pixel mapping on a
+///     rotated crop; use <see cref="RevitViewImageRegistration" /> to place pixels.</summary>
 public record RevitViewImageModelRect(
     double MinX,
     double MinY,
@@ -362,5 +363,65 @@ public record RevitViewImageData(
     int PixelSize,
     int? ViewScale = null,
     RevitViewImageModelRect? ModelRect = null,
-    string? SheetNumber = null
-);
+    string? SheetNumber = null,
+    RevitViewImageRegistration? Registration = null,
+    // Why Registration is absent; null exactly when it is present.
+    RevitViewImageRegistrationRefusal? RegistrationRefusal = null
+) {
+    /// <summary>
+    ///     Host route for exactly the registered PNG, keyed by <see cref="RevitViewImageRegistration.ImageSha256" />;
+    ///     null exactly when <see cref="Registration" /> is. <see cref="FilePath" /> stays the host-side record.
+    /// </summary>
+    public string? ImageUrl => this.Registration is null ? null : $"/view-image/{this.Registration.ImageSha256}.png";
+}
+
+/// <summary>Why a view image carries no <see cref="RevitViewImageRegistration" />.</summary>
+[JsonConverter(typeof(StringEnumConverter))]
+public enum RevitViewImageRegistrationRefusal {
+    /// <summary>A sheet, a sheeted schedule, or a view without an active crop: nothing to register against.</summary>
+    NoCrop,
+    /// <summary>The exported PNG was not found.</summary>
+    NoImage,
+    /// <summary>The crop or the image has no area.</summary>
+    DegenerateCrop,
+    /// <summary>The image's aspect disagrees with the crop's, so the PNG is not exactly the crop; refused, not stretched.</summary>
+    AspectDisagrees
+}
+
+/// <summary>
+///     Where the PNG sits in the model: model XY (feet) of the image's top-left, top-right and bottom-left pixel
+///     corners, so a rotated crop stays honest. <see cref="ImageSha256" /> binds it to exactly this file.
+///     When absent, <see cref="RevitViewImageData.RegistrationRefusal" /> says why.
+/// </summary>
+public record RevitViewImageRegistration(
+    int Width,
+    int Height,
+    string ImageSha256,
+    double[] TopLeft,
+    double[] TopRight,
+    double[] BottomLeft
+) {
+    /// <summary>
+    ///     Crop min/max are in the crop box's own frame; origin and bases are its transform projected to model XY.
+    ///     The image's X runs along basisX and its up along basisY, so top-left is (min.X, max.Y).
+    /// </summary>
+    public static (RevitViewImageRegistration? Registration, RevitViewImageRegistrationRefusal? Refusal) FromCrop(
+        int width, int height, string imageSha256,
+        (double X, double Y) min, (double X, double Y) max,
+        (double X, double Y) origin, (double X, double Y) basisX, (double X, double Y) basisY
+    ) {
+        double cropW = max.X - min.X, cropH = max.Y - min.Y;
+        if (width <= 0 || height <= 0 || cropW <= 0 || cropH <= 0) return (null, RevitViewImageRegistrationRefusal.DegenerateCrop);
+        // ponytail: aspect agreement is the only check that the PNG covers exactly the crop. Annotation crop or
+        // out-of-crop annotations could still shift the extent symmetrically; the native proof owes that.
+        var expectedHeight = width * cropH / cropW;
+        if (Math.Abs(height - expectedHeight) > Math.Max(2, expectedHeight * 0.005))
+            return (null, RevitViewImageRegistrationRefusal.AspectDisagrees);
+        double[] Model(double x, double y) => [
+            origin.X + x * basisX.X + y * basisY.X,
+            origin.Y + x * basisX.Y + y * basisY.Y
+        ];
+        return (new RevitViewImageRegistration(width, height, imageSha256,
+            Model(min.X, max.Y), Model(max.X, max.Y), Model(min.X, min.Y)), null);
+    }
+}

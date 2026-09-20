@@ -9,6 +9,7 @@ import type { ServableRuntime } from "./agent-controller-web.ts";
 import { createRuntimeController } from "./controller/create-runtime-controller.ts";
 import { createRuntimeMemoryProfile } from "./memory/profiles.ts";
 import { admitTurn, ScopeStore } from "./scope-store.ts";
+import { installPeaControllerPolicy } from "./pea-runtime.ts";
 import { createRuntimeLibSqlStorage } from "./storage/profiles.ts";
 
 type DeterministicResponse =
@@ -83,6 +84,11 @@ export async function createDeterministicRuntime(options: {
   responses: DeterministicResponse[];
   /** Product tools to expose beside the scenario's own (the three doors, for instance). */
   tools?: ToolsInput;
+  /**
+   * Run Pea's real web controller policy (scoped sessions, Pea's admission on every session) as
+   * the host does, instead of the bare scenario admission.
+   */
+  peaWeb?: boolean;
   /** Sees every prompt the model is called with, e.g. to prove a tool error reached the next turn. */
   onPrompt?: (prompt: unknown) => void;
   preseed?: {
@@ -153,12 +159,22 @@ export async function createDeterministicRuntime(options: {
     request: { protocol: "web" },
     memoryProfile: createRuntimeMemoryProfile({ options: { observationalMemory: false } }),
     configureController: (controller) =>
-      controller.onSessionCreated(
-        (session) => {
-          session.sendMessage = (input) => admitTurn(scopes, session, input);
-        },
-        { blocking: true },
-      ),
+      options.peaWeb
+        ? (() => {
+            const policy = installPeaControllerPolicy(controller as never, {
+              accessLevel: "trusted",
+              resourceId: options.resourceId,
+              scopedWeb: true,
+              scopes,
+            });
+            return () => policy.close();
+          })()
+        : controller.onSessionCreated(
+            (session) => {
+              session.sendMessage = (input) => admitTurn(scopes, session, input);
+            },
+            { blocking: true },
+          ),
     config: {
       id: "pea",
       resourceId: options.resourceId,

@@ -15,10 +15,14 @@ public static class FamilyModelDiagnosticCodes {
     public const string ValueWithoutTypes = "value-without-types";
     public const string SharedOwnsDataType = "shared-owns-datatype";
     public const string SharedTooltipUnsupported = "shared-tooltip-unsupported";
+    public const string IdentityChangeThroughGroup = "identity-change-through-group";
+    public const string FormulaCopyDataType = "formula-copy-data-type";
+    public const string TypeRefsInstance = "type-refs-instance";
     public const string ValueDataTypeMismatch = "value-datatype-mismatch";
     public const string FormulaUnknownName = "formula-unknown-name";
     public const string UnknownParameter = "unknown-parameter";
     public const string FormulaTypeOverride = "formula-type-override";
+    public const string ValueNamesParameter = "value-names-parameter";
     public const string SeedIsLiteral = "seed-is-literal";
     public const string DatumNormalUnsigned = "datum-normal-unsigned";
     public const string RefPlaneNormalSigned = "refplane-normal-signed";
@@ -77,17 +81,25 @@ public static class FamilyModelValidator {
             if (p.SharedSpecId is not null && (p.Shared != true || p.SharedGuid is null || string.IsNullOrWhiteSpace(p.SharedSpecId))) d.Add(new(FamilyModelDiagnosticCodes.Required, path, "sharedSpecId requires shared=true and sharedGuid."));
             if (p.SharedGuid is { } guid && (p.Shared != true || guid == Guid.Empty)) d.Add(new(FamilyModelDiagnosticCodes.Required, path, "sharedGuid requires shared=true and a nonempty GUID."));
             if (p.Shared != true && p.DataType == null) d.Add(new(FamilyModelDiagnosticCodes.Required, $"{path}.dataType", "Family parameters declare dataType. Legal: " + string.Join(", ", Enum.GetNames(typeof(DataType)))));
-            if (p.Value is { } v && p.DataType is { } dt) CheckValue(v, dt, $"{path}.value", d);
-            if (p.Formula is { } f)
+            if (p.Value is { } v && ValueType(p) is { } dt) CheckValue(v, dt, name, $"{path}.value", nameable, d);
+            if (p.Formula is { } f) {
                 foreach (var tok in FormulaNames(f).Where(t => !nameable.Contains(t)))
                     d.Add(new(FamilyModelDiagnosticCodes.FormulaUnknownName, $"{path}.formula", $"'{tok}' is neither a declared parameter nor a declared built-in. Nearest: {Nearest(tok, nameable)}"));
+                // Revit forbids a type formula from reading an instance parameter (GROUNDING-REVIT.md #4); the web advisory check
+                // (apps/web/src/family/formula.ts, type-refs-instance) defers to this one. Absent isInstance is type, as in Revit and the
+                // web check, except on a shared parameter, whose scope comes from its APS definition at resolution.
+                if (p.IsInstance == false || p.IsInstance is null && p.Shared != true)
+                    foreach (var tok in FormulaNames(f).Distinct(StringComparer.Ordinal)
+                                 .Where(t => m.Parameters.TryGetValue(t, out var read) && read.IsInstance == true))
+                        d.Add(new(FamilyModelDiagnosticCodes.TypeRefsInstance, $"{path}.formula", $"Type parameter '{name}' can't reference instance parameter '{tok}'."));
+            }
         }
         foreach (var (type, cells) in m.Types)
         foreach (var (name, v) in cells) {
             var path = $"$.types.{type}.{name}";
             if (!m.Parameters.TryGetValue(name, out var p)) { d.Add(new(FamilyModelDiagnosticCodes.UnknownParameter, path, $"Not declared. Nearest: {Nearest(name, m.Parameters.Keys)}")); continue; }
             if (p.Formula != null) d.Add(new(FamilyModelDiagnosticCodes.FormulaTypeOverride, path, "Formula-driven parameters take no per-type value."));
-            if (p.DataType is { } dt) CheckValue(v, dt, path, d);
+            if (ValueType(p) is { } dt) CheckValue(v, dt, name, path, nameable, d);
         }
         // RULING (kaitpw, 2026-09-06): Revit's stored sign for a template plane varies, so a datum normal
         // is unsigned; a refPlane seed runs along its normal, so a refPlane normal stays signed.
@@ -219,7 +231,12 @@ public static class FamilyModelValidator {
         }
     }
 
-    private static void CheckValue(PortableValue v, DataType dt, string path, List<FamilyModelDiagnostic> d) {
+    // A shared parameter carries its spec as sharedSpecId, not dataType (capture: FamilyModelParameterProjection). Judge its values by
+    // that spec too, or a shared Yes/No cell accepts any text (F-J3-5). A spec the vocabulary cannot name stays unjudged.
+    private static DataType? ValueType(FamilyModelParameter p) =>
+        p.DataType ?? (p.SharedSpecId is { } spec && DataTypeConverter.TryParse(spec, out var named) ? named : null);
+
+    private static void CheckValue(PortableValue v, DataType dt, string parameter, string path, HashSet<string> nameable, List<FamilyModelDiagnostic> d) {
         var ok = dt.Measure() switch {
             DataType.Length => v.Kind == PortableValueKind.Length,
             DataType.Angle => v.Kind == PortableValueKind.Angle,
@@ -228,14 +245,20 @@ public static class FamilyModelValidator {
             DataType.Number => v.Kind is PortableValueKind.Integer or PortableValueKind.Number,
             _ => true // Text-like specs, and unit-carrying specs (`208V`, `280 CFM`) the reconciler normalizes through Revit units (F5)
         };
-        if (!ok) d.Add(new(FamilyModelDiagnosticCodes.ValueDataTypeMismatch, path, $"'{v.Text}' reads as {v.Kind}; a {dt} parameter takes {Legal(dt)}."));
+        if (!ok) d.Add(new(FamilyModelDiagnosticCodes.ValueDataTypeMismatch, path, $"'{v.Text}' on '{parameter}' reads as {v.Kind}; a {dt} parameter takes {Legal(dt)}."));
+        // Gotcha 18: text that names a parameter is a formula, not a value. A text-like value is a string, so a name
+        // there is literal text; a unit-carrying spec admits text only for Revit units to read.
+        else if (v.Kind == PortableValueKind.Text && dt is not (DataType.Text or DataType.Url or DataType.Material
+                     or DataType.MultilineText or DataType.LoadClassification)
+                 && FormulaNames(v.Text).FirstOrDefault(nameable.Contains) is { } named)
+            d.Add(new(FamilyModelDiagnosticCodes.ValueNamesParameter, path, $"'{v.Text}' names parameter '{named}'; a value that follows a parameter is a formula."));
     }
 
     private static string Legal(DataType dt) => dt.Measure() switch {
         DataType.Length => "a length literal such as 6in, 1/2in, 150mm, 1' - 6\"",
         DataType.Angle or DataType.Slope => "an angle literal such as 45deg",
         DataType.Integer or DataType.NumberOfPoles => "an integer such as 4",
-        DataType.YesNo => "Yes or No",
+        DataType.YesNo => "Yes or No (also yes/no/true/false in any case, or 1/0)",
         _ => "a number such as 7.5"
     };
 

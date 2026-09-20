@@ -8,7 +8,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer, Queue, Fiber } from "effect";
 import { HttpRouter } from "effect/unstable/http";
-import { address, takeoffsRouteState } from "@pe/agent-contracts";
+import {
+  address,
+  takeoffsRouteState,
+  stagedTakeoffEdits,
+  takeoffEditPatches,
+} from "@pe/agent-contracts";
 import { createRuntimeLibSqlStorage } from "../../../packages/runtime/src/storage/profiles.ts";
 import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
 import { ActionJournal } from "../src/action-journal.ts";
@@ -151,16 +156,16 @@ test("real HTTP owner holds an external leaf while Work edits land; same ID reco
     expect((await web.call("/actions", admission("original-id"))).status).toBe(202);
     await vi.waitFor(() => expect(effects).toHaveLength(1));
     const before = (await work.read(scope, "takeoffs"))!;
-    const staged = [{ roomId: "r", base: { name: "old" }, next: { name: "edited while running" } }];
-    expect(
-      await work.apply(
-        scope,
-        "takeoffs",
-        "human",
-        [{ path: ["staged"], value: staged }],
-        before.revision,
-      ),
-    ).toMatchObject({ ok: true, revision: before.revision + 1 });
+    const edit = takeoffEditPatches(
+      takeoffsRouteState.schema.parse(before.doc),
+      "r",
+      { name: "old" },
+      { name: "edited while running" },
+    );
+    expect(await work.apply(scope, "takeoffs", "human", edit, before.revision)).toMatchObject({
+      ok: true,
+      revision: before.revision + 1,
+    });
     expect((await web.call("/actions", admission("original-id"))).status).toBe(202);
     expect(
       (
@@ -175,7 +180,11 @@ test("real HTTP owner holds an external leaf while Work edits land; same ID reco
     expect(effects).toEqual([
       { key: "family.temporary.acquire", session: "B", openId: null, id: expect.any(String) },
     ]);
-    expect((await work.read(scope, "takeoffs"))!.doc).toMatchObject({ staged });
+    expect(
+      stagedTakeoffEdits(
+        takeoffsRouteState.schema.parse((await work.read(scope, "takeoffs"))!.doc),
+      ),
+    ).toMatchObject({ r: { next: { name: "edited while running" } } });
     await web.close();
     const reconstructed = new ActionJournal(f.journalPath);
     web = router(reconstructed, {
@@ -546,6 +555,17 @@ test("generic operation client and real router preserve partial payload, replay 
       { index: 900, ok: false, message: "transaction diagnostic" },
     ],
   };
+  // A dry run is the evidence read: it names the exact parameter a wet edit must carry as `expected`.
+  const current = {
+    elementId: 1,
+    parameterId: -1001203,
+    parameterName: "Mark",
+    storageType: "String",
+    isReadOnly: false,
+    hasValue: true,
+    rawValue: "open",
+  };
+  const sent: unknown[] = [];
   const bridge = {
     list: Effect.sync(() =>
       present
@@ -559,7 +579,7 @@ test("generic operation client and real router preserve partial payload, replay 
           ]
         : [],
     ),
-    invoke: (key: string, _input: unknown, session?: string, doc?: string) => {
+    invoke: (key: string, input: unknown, session?: string, doc?: string) => {
       if (key === "host.ops.catalog")
         return Effect.succeed({
           value: {
@@ -575,7 +595,12 @@ test("generic operation client and real router preserve partial payload, replay 
           },
         });
       calls++;
+      sent.push(input);
       expect([session, doc]).toEqual(["B", "original"]);
+      if ((input as { dryRun?: boolean }).dryRun)
+        return Effect.succeed({
+          value: { applied: 0, dryRun: true, results: [{ index: 0, ok: true, current }] },
+        });
       return unknown
         ? Effect.fail(new BridgeError("native response lost", 503))
         : Effect.succeed({ value });
@@ -612,11 +637,24 @@ test("generic operation client and real router preserve partial payload, replay 
     openDocumentId: "original",
     requestId: "raw-parameter",
   };
+  const wet = (value: string) => ({
+    edits: [{ elementId: 1, parameterId: current.parameterId, value, expected: current }],
+  });
   try {
-    const caller = new HostRpcCaller(options);
-    const result = await caller.callOperation("revit.apply.parameter-values", {
+    const read = await new HostRpcCaller({
+      ...options,
+      requestId: "raw-parameter-read",
+    }).callOperation("revit.apply.parameter-values", {
+      dryRun: true,
       edits: [{ elementId: 1, parameterName: "Mark", value: "sealed" }],
     });
+    expect(read).toMatchObject({ ok: true, response: { results: [{ current }] } });
+    // The read consumed the lost acceptance; the wet call must meet one of its own.
+    calls = 0;
+    lost = true;
+    const caller = new HostRpcCaller(options);
+    const result = await caller.callOperation("revit.apply.parameter-values", wet("sealed"));
+    expect(sent.at(-1)).toEqual(wet("sealed"));
     expect(result).toMatchObject({
       ok: true,
       response: value,
@@ -625,14 +663,10 @@ test("generic operation client and real router preserve partial payload, replay 
     expect(calls).toBe(1);
     present = false;
     expect(
-      await new HostRpcCaller(options).callOperation("revit.apply.parameter-values", {
-        edits: [{ elementId: 1, parameterName: "Mark", value: "sealed" }],
-      }),
+      await new HostRpcCaller(options).callOperation("revit.apply.parameter-values", wet("sealed")),
     ).toMatchObject({ ok: true, response: value });
     await expect(
-      caller.callOperation("revit.apply.parameter-values", {
-        edits: [{ elementId: 1, parameterName: "Mark", value: "conflicting" }],
-      }),
+      caller.callOperation("revit.apply.parameter-values", wet("conflicting")),
     ).rejects.toThrow("conflicts");
     expect(calls).toBe(1);
     present = true;

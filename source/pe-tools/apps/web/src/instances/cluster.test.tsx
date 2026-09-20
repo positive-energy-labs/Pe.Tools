@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState, type ComponentProps } from "react";
+import type { InstancesDocument } from "@pe/agent-contracts";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
 import type { SessionInventory } from "#/readings";
@@ -29,7 +30,7 @@ vi.mock("#/readings", async (importOriginal) => ({
 }));
 
 function ClusterHarness({ ...props }: Omit<ComponentProps<typeof InstancesCluster>, "handle">) {
-  const [work, setWork] = useState({ doc: { staged: null as unknown }, revision: 0 });
+  const [work, setWork] = useState({ doc: { launch: {} } as InstancesDocument, revision: 0 });
   const handle = {
     manifest: instancesManifest,
     work: {
@@ -40,9 +41,11 @@ function ClusterHarness({ ...props }: Omit<ComponentProps<typeof InstancesCluste
       write: async (patches: { path: (string | number)[]; value?: unknown }[]) => {
         written(patches);
         setWork((current) => {
-          const doc = { ...current.doc } as Record<string, unknown>;
-          for (const patch of patches) doc[String(patch.path[0])] = patch.value;
-          return { doc: doc as { staged: unknown }, revision: current.revision + 1 };
+          // Every Instances write is one rung on the launch cell: ["launch", "proposal" | "staged"].
+          const doc = structuredClone(current.doc) as InstancesDocument;
+          for (const { path, value } of patches)
+            (doc.launch as Record<string, unknown>)[String(path[1])] = value;
+          return { doc, revision: current.revision + 1 };
         });
         return null;
       },
@@ -149,12 +152,14 @@ test("uses the staged document and admits the displayed session name at its writ
   await waitFor(() => expect(admission).toHaveBeenCalled());
   expect(written).toHaveBeenLastCalledWith([
     {
-      path: ["staged"],
+      path: ["launch", "staged"],
       value: {
-        kind: "start",
-        year: "2025",
-        name: "ux-revival",
-        document: "C:\\Models\\Unlisted.rvt",
+        value: {
+          kind: "start",
+          year: "2025",
+          name: "ux-revival",
+          document: "C:\\Models\\Unlisted.rvt",
+        },
       },
     },
   ]);

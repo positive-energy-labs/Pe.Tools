@@ -1,6 +1,6 @@
+using Pe.Revit.DocumentData.Parameters;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
-using System.Globalization;
 
 namespace Pe.Revit.DocumentData.Schedules.Collect;
 
@@ -57,22 +57,25 @@ internal static class ScheduleBindingResolver {
         if (resolved.Count == 0)
             return Blocked(column.ColumnNumber, ScheduleCellBindingBlocker.ParameterNotFound);
 
+        var targets = resolved.Select(item => ParameterTargets.Read(item.Source, item.Parameter, column.FieldName))
+            .Distinct().OrderBy(item => item.ElementId).ThenBy(item => item.ParameterId).ToList();
         var first = resolved[0].Parameter;
-        var rawValues = resolved.Select(item => GetRawValue(item.Parameter)).ToList();
+        var rawValues = targets.Select(item => item.RawValue).ToList();
         // Deliberately NOT gated on Parameter.UserModifiable: Revit reports it false for writable
         // built-ins (Mark, Type Comments) whose Set() succeeds — proven in ScheduleCellBindingProofTests.
-        var isReadOnly = resolved.All(item => item.Parameter.IsReadOnly);
+        var isReadOnly = targets.All(item => item.IsReadOnly);
         return new ScheduleCellBinding(
             column.ColumnNumber,
-            resolved.Select(item => item.Source.Id.Value()).Distinct().ToList(),
+            targets.Select(item => item.ElementId).Distinct().ToList(),
             ScheduleCollectorSupport.SafeGet(() => first.Definition?.Name) ?? column.FieldName,
             first.Id.Value(),
-            ToStorageType(first.StorageType),
+            ParameterTargets.StorageOf(first.StorageType),
             rawValues[0],
             ScheduleCollectorSupport.NullIfWhiteSpace(first.AsValueString())
                 ?? ScheduleCollectorSupport.NullIfWhiteSpace(first.AsString()),
             IsTypeSource(resolved[0].Source, boundElements),
             !isReadOnly,
+            targets,
             isReadOnly ? ScheduleCellBindingBlocker.ReadOnlyParameter : ScheduleCellBindingBlocker.None,
             HasMixedValues: rawValues.Distinct(StringComparer.Ordinal).Count() > 1
         );
@@ -101,27 +104,10 @@ internal static class ScheduleBindingResolver {
             null,
             IsTypeParameter: false,
             IsEditable: false,
+            Targets: [],
             blocker
         );
 
     private static bool IsTypeSource(Element source, IReadOnlyList<Element> boundElements) =>
         boundElements.All(element => element.Id.Value() != source.Id.Value());
-
-    private static string? GetRawValue(Parameter parameter) =>
-        parameter.StorageType switch {
-            StorageType.String => parameter.AsString(),
-            StorageType.Integer => parameter.AsInteger().ToString(CultureInfo.InvariantCulture),
-            StorageType.Double => parameter.AsDouble().ToString("G17", CultureInfo.InvariantCulture),
-            StorageType.ElementId => parameter.AsElementId()?.Value().ToString(CultureInfo.InvariantCulture),
-            _ => null
-        };
-
-    private static RequestedParameterStorageType ToStorageType(StorageType storageType) =>
-        storageType switch {
-            StorageType.String => RequestedParameterStorageType.String,
-            StorageType.Integer => RequestedParameterStorageType.Integer,
-            StorageType.Double => RequestedParameterStorageType.Double,
-            StorageType.ElementId => RequestedParameterStorageType.ElementId,
-            _ => RequestedParameterStorageType.None
-        };
 }

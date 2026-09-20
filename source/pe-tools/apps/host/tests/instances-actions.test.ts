@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "vite-plus/test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { instancesRouteState, sdkSessionSelectorOf } from "@pe/agent-contracts";
+import { instancesRouteState, sdkSessionSelectorOf, transitionPatches } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { admitInstancesAction, recoverInstancesAction } from "../src/instances-actions.ts";
@@ -60,12 +60,14 @@ async function setup(
   const owner = new ActionJournal(join(dir, "actions.json"));
   const deps = { workspace: work, sdk, requestDir: join(dir, "requests") };
   let workRevision = 0;
+  // A person stages on the Work they see now: a host retirement may have moved it.
   const stage = async (staged: unknown) => {
+    workRevision = (await work.read(scope, "instances"))?.revision ?? 0;
     const landed = await work.apply(
       scope,
       "instances",
       "human",
-      [{ path: ["staged"], value: staged }],
+      transitionPatches([], "launch", {}, { kind: "stage", rung: { value: staged } }),
       workRevision,
     );
     expect(landed.ok).toBe(true);
@@ -77,13 +79,14 @@ async function setup(
     input: Record<string, unknown>,
     revision: number,
     resume?: string,
+    actor: "human" | "agent" = "human",
   ) => {
     const row = await admitInstancesAction(
       {
         id: resume ?? `${key}-${++serial}`,
         kind: "workflow",
         key,
-        actor: "human",
+        actor,
         destination: "session" in input ? { kind: "session", session: "dev" } : { kind: "host" },
         input: { workspaceId: scope.work, ...input },
         bases: { work: { key: scope, revision } },
@@ -96,8 +99,58 @@ async function setup(
   };
   const requestOf = async (id: string) =>
     JSON.parse(await readFile(join(deps.requestDir, `${id}.json`), "utf8"));
-  return { calls, owner, deps, stage, admit, requestOf };
+  // Pea's only write: a proposal on the launch cell, under the agent mask.
+  const propose = async (value: unknown) => {
+    const landed = await work.apply(
+      scope,
+      "instances",
+      "agent",
+      transitionPatches([], "launch", {}, { kind: "propose", rung: { value } }),
+      workRevision,
+    );
+    expect(landed).toMatchObject({ ok: true });
+    return (workRevision = landed.revision!);
+  };
+  const launch = async () =>
+    instancesRouteState.schema.parse((await work.read(scope, "instances"))!.doc).launch;
+  const revisionNow = async () => (workRevision = (await work.read(scope, "instances"))!.revision);
+  return { calls, owner, deps, stage, propose, admit, requestOf, launch, revisionNow };
 }
+
+test("a Pea proposal never launches; the launch reads exactly what the person staged", async () => {
+  const f = await setup(() => ({ result: { state: "started", id: "dev" } }), []);
+  let revision = await f.propose({ kind: "start", year: "2026", name: "pea-pick" });
+  const refused = await f.admit("instances.start", {}, revision);
+  expect(refused.state).toBe("failed");
+  expect(JSON.stringify(refused)).toContain("a person stages it first");
+  expect(f.calls.filter((argv) => argv[1] === "start")).toEqual([]);
+
+  // The person stages a different value; the standing proposal is not what launches.
+  revision = await f.stage({ kind: "start", year: "2025", name: "dev" });
+  const started = await f.admit("instances.start", {}, revision);
+  expect(started.state).toBe("succeeded");
+  const argv = f.calls.at(-1)!;
+  expect(argv.slice(0, 2)).toEqual(["session", "start"]);
+  expect(argv).toContain("2025");
+  expect(argv).not.toContain("2026");
+  expect(argv).not.toContain("pea-pick");
+});
+
+test("a Pea-proposed open never dispatches; the person stages it", async () => {
+  const f = await setup(() => ({ result: { state: "opened", openId: "a".repeat(32) } }));
+  const proposed = { kind: "open", session: sdkSessionSelectorOf("dev"), document: "C:/Pea.rvt" };
+  const refused = await f.admit("instances.open", { session }, await f.propose(proposed));
+  expect(refused.state).toBe("failed");
+  expect(JSON.stringify(refused)).toContain("Pea proposed this open; a person stages it first");
+  expect(f.calls.some((argv) => argv[0] === "doc")).toBe(false);
+
+  const revision = await f.stage({ ...proposed, document: "C:/Tower.rvt" });
+  expect((await f.admit("instances.open", { session }, revision)).state).toBe("succeeded");
+  const open = f.calls.at(-1)!;
+  expect(open.slice(0, 2)).toEqual(["doc", "open"]);
+  expect(open).toContain("C:/Tower.rvt");
+  expect(open).not.toContain("C:/Pea.rvt");
+});
 
 test("start dispatches the staged session under the step id with an absent expectation", async () => {
   const f = await setup(() => ({ result: { state: "started", id: "dev" } }), []);
@@ -232,10 +285,16 @@ test("open binds the exact recorded incarnation and its receipt path; a foreign 
   const open = f.calls.at(-1)!;
   expect(open[open.indexOf("--conflict-policy") + 1]).toBe("keep");
 
+  // The proven open retired its staged launch; the person stages it again for the foreign attempt.
+  const restaged = await f.stage({
+    kind: "open",
+    session: sdkSessionSelectorOf("dev"),
+    document: "C:/Tower.rvt",
+  });
   const foreign = await f.admit(
     "instances.open",
     { session: { id: "dev", process: { ...originalProcess, pid: 43 } } },
-    revision,
+    restaged,
   );
   expect(foreign).toMatchObject({ state: "failed", notDispatched: true });
   expect(f.calls.at(-1)?.slice(0, 2)).toEqual(["session", "list"]);
@@ -289,4 +348,39 @@ test("a pre-admission SDK refusal is failed and undispatched; recovery settles a
   const resumed = await f.admit("instances.start", {}, revision, lost.id);
   expect(resumed.state).toBe("succeeded");
   expect(f.calls.length).toBe(dispatched); // the recovered step replays; nothing is re-dispatched
+});
+
+test("a proven start retires the consumed staged launch; a second press does not start again", async () => {
+  const f = await setup(() => ({ result: { state: "started", id: "dev" } }), []);
+  const spec = { kind: "start", year: "2025", name: "dev" };
+  const revision = await f.stage(spec);
+  expect((await f.admit("instances.start", {}, revision)).state).toBe("succeeded");
+  expect((await f.launch()).staged).toBeNull();
+  const again = await f.admit("instances.start", {}, await f.revisionNow());
+  expect(again.state).toBe("failed");
+  expect(JSON.stringify(again)).toContain("Stage a start first");
+  expect(f.calls.filter((argv) => argv[1] === "start")).toHaveLength(1);
+});
+
+test("a failed start keeps the staged launch for the person to retry", async () => {
+  const f = await setup(
+    () => ({
+      result: { state: "refused" },
+      diagnostics: [{ code: "op.stale-expectation", detail: "a session 'dev' exists", fix: null }],
+    }),
+    [],
+  );
+  const revision = await f.stage({ kind: "start", year: "2025", name: "dev" });
+  expect((await f.admit("instances.start", {}, revision)).state).toBe("failed");
+  expect((await f.launch()).staged).toEqual({
+    value: { kind: "start", year: "2025", name: "dev" },
+  });
+});
+
+test("a Pea-admitted start of the person's staged launch retires it too", async () => {
+  const f = await setup(() => ({ result: { state: "started", id: "dev" } }), []);
+  const revision = await f.stage({ kind: "start", year: "2025", name: "dev" });
+  const row = await f.admit("instances.start", {}, revision, undefined, "agent");
+  expect(row.state).toBe("succeeded");
+  expect((await f.launch()).staged).toBeNull();
 });

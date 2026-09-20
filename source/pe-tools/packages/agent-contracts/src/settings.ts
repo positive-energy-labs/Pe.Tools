@@ -12,22 +12,10 @@
  */
 import { z } from "zod";
 import { type RouteStateSpec } from "./route-state.ts";
-import { trichotomyAgentMask } from "./trichotomy.ts";
+import { trichotomyAgentMask, trichotomyCellSchema } from "./trichotomy.ts";
 
-/* ── Field trichotomy — settings keep the shared proposal/staged shape.
+/* ── Field trichotomy — the shared cell over any JSON value.
    A staged `{ value }` assigns JSON; `{ delete: true }` removes the property. ── */
-
-const settingsFieldEditSchema = z
-  .object({
-    value: z.unknown().optional(),
-    delete: z.literal(true).optional(),
-  })
-  .refine((edit) => edit.delete === true || Object.hasOwn(edit, "value"), {
-    error: "a settings edit must set a value or delete the property",
-  })
-  .refine((edit) => !(edit.delete === true && Object.hasOwn(edit, "value")), {
-    error: "a settings edit cannot both set and delete the property",
-  });
 
 /** One document citation for a proposed value, in markdown coordinates — pea never
  * sees a bbox. `blockId` may reference a parsed block OR a parser-extracted image;
@@ -38,18 +26,14 @@ const settingsProposalSourceSchema = z.object({
   colIdx: z.number().int().nonnegative().optional(),
   note: z.string().nullish(),
 });
-export const settingsFieldStateSchema = z.object({
-  proposal: settingsFieldEditSchema
-    .extend({
-      by: z.enum(["pea", "human"]).default("pea"),
-      note: z.string().nullish(),
-      confidence: z.enum(["high", "low"]).nullish(),
-      /** Multi-citation: one value may be grounded by several regions (a table
-       * cell AND a figure). Order is presentation order. */
-      sources: z.array(settingsProposalSourceSchema).nullish(),
-    })
-    .nullish(),
-  staged: settingsFieldEditSchema.nullish(),
+/** The one cell over any JSON value. Deletable: `/family` and the pods reviewer stage deletes. */
+export const settingsFieldStateSchema = trichotomyCellSchema(z.unknown(), {
+  deletable: true,
+  proposal: {
+    /** Multi-citation: one value may be grounded by several regions (a table
+     * cell AND a figure). Order is presentation order. */
+    sources: z.array(settingsProposalSourceSchema).nullish(),
+  },
 });
 export type SettingsFieldState = z.infer<typeof settingsFieldStateSchema>;
 
@@ -63,6 +47,12 @@ export const podMemberSourceSchema = podMemberSchema.extend({
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
 });
 export type PodMemberSource = z.infer<typeof podMemberSourceSchema>;
+/**
+ * An unsaved draft consumed as supplied bytes: nothing is filed. `pod` is where the run lands and
+ * what `$include` resolves against; `path` only names the draft in that run.
+ */
+export const podDraftSourceSchema = podMemberSchema.extend({ content: z.string() });
+export type PodDraftSource = z.infer<typeof podDraftSourceSchema>;
 /** The Work key of an authored member: derived from its address, never stored beside it. */
 export const memberWork = (member: PodMember): string => `member:${member.pod}/${member.path}`;
 

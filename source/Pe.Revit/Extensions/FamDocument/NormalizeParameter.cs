@@ -1,6 +1,8 @@
 using Autodesk.Revit.DB.Electrical;
 using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.Extensions.FamParameter.Formula;
+using Pe.Revit.Extensions.FamDocument.SetValue;
+using Pe.Revit.Extensions.FamDocument.SetValue.Utils;
 
 namespace Pe.Revit.Extensions.FamDocument;
 
@@ -19,8 +21,11 @@ public static class FamilyDocumentNormalizeParameter {
         // Shared replacement cannot create an external definition while another parameter owns its name.
         if (!source.IsShared && shared is not null && source.Definition.Name == shared.Name)
             fm.RenameParameter(source, "FF_Transfer_" + Guid.NewGuid().ToString("N"));
+        // A shared source always leaves through a unique temporary family name: replacing it straight to `name` fails natively when
+        // it already holds that name ("The parameter 'X' is already in use", shared→family same-name). The rename below restores `name`;
+        // any failure rolls this sub-transaction back, so the temporary name never survives.
         else if (source.IsShared)
-            replacement = fm.ReplaceParameter(source, shared is null ? name : "FF_Transfer_" + Guid.NewGuid().ToString("N"), group, instance);
+            replacement = fm.ReplaceParameter(source, "FF_Transfer_" + Guid.NewGuid().ToString("N"), group, instance);
         if (shared is not null) replacement = fm.ReplaceParameter(replacement, shared, group, instance);
         else {
             if (replacement.Definition.Name != name) fm.RenameParameter(replacement, name);
@@ -34,15 +39,23 @@ public static class FamilyDocumentNormalizeParameter {
         }
     }
 
-    /// <summary>Destination values win. Transfer source references, honoring exact connector routes, then remove the source; any failure rolls back.</summary>
-    public static void TransferAndRemoveParameter(this FamilyDocument document, FamilyParameter source, FamilyParameter target,
-        IReadOnlyDictionary<BuiltInParameter, string>? associationRoutes = null) {
+    /// <summary>
+    ///     Destination values win. Transfer source references, honoring exact connector routes, then remove the source; any failure rolls back.
+    ///     Returns the named note when the source formula was not copied but evaluated per type and coerced by <paramref name="strategy" />.
+    /// </summary>
+    public static string? TransferAndRemoveParameter(this FamilyDocument document, FamilyParameter source, FamilyParameter target,
+        IReadOnlyDictionary<BuiltInParameter, string>? associationRoutes = null, string strategy = "CoerceByStorageType") {
         if (source.IsBuiltInParameter()) throw new InvalidOperationException("Revit-owned built-in parameters cannot be removed.");
         if (source.Id == target.Id) throw new InvalidOperationException("Source and destination must be distinct parameters.");
         var fm = document.FamilyManager;
         var dependents = source.GetDependents(fm.Parameters).ToList();
         var targetDependsOnSource = dependents.Any(dependent => dependent.Id == target.Id);
         var targetIsExactAlias = targetDependsOnSource && fm.Parameters.TryGetSingleReference(target.Formula)?.Id == source.Id;
+        // The source reads exactly the destination, directly or through exact aliases (`Mech Equip Model Number = Model` where the built-in
+        // `Model = PE_G___Model`): its value is the destination's in every type, and its dependents are rewritten to the destination below,
+        // so not copying that circular formula loses nothing.
+        var sourceIsExactAlias = FamilyFormulaCopy.IsExactAliasOf(fm.Parameters, source, target);
+        string? note = null;
         if (targetDependsOnSource && !targetIsExactAlias)
             throw new InvalidOperationException(
                 $"Cannot remove source '{source.Definition.Name}': destination '{target.Definition.Name}' formula '{target.Formula}' depends on the source but is not an exact alias. Refusing to discard formula intent.");
@@ -82,10 +95,35 @@ public static class FamilyDocumentNormalizeParameter {
             }
             document.LabelDimensions(dimensions.Select(dimension => (dimension, target)));
             foreach (var array in arrays) array.Label = target;
-            // A source formula is intent the destination keeps (kaitpw 2026-09-08). Revit refuses a spec mismatch; the per-type values already written then stand.
-            if (!targetIsExactAlias && !string.IsNullOrEmpty(source.Formula) && string.IsNullOrEmpty(target.Formula)) {
-                try { fm.SetFormula(target, source.Formula); }
-                catch (Autodesk.Revit.Exceptions.ApplicationException) { /* ponytail: values stand; a Skip log needs a return channel this method lacks */ }
+            // A source formula is intent the destination keeps (kaitpw 2026-09-08). Native refusal rolls back the whole transfer, and names
+            // its cause so a corpus run reads as a census (circular, data type, type/instance). Across a data-type change the formula is never
+            // copied: Revit re-reads bare numbers in project units (user ruling R1, 2026-09-18). A unit-aware mapping strategy evaluates it per
+            // type instead; any other strategy refuses.
+            if (!targetIsExactAlias && !sourceIsExactAlias && !string.IsNullOrEmpty(source.Formula) && string.IsNullOrEmpty(target.Formula)) {
+                var formula = source.Formula;
+                string Refusal(string reason) => FamilyFormulaCopy.Refusal(document.Document.Title, formula, sourceName, source, target, reason);
+                if (source.Definition.GetDataType() != target.Definition.GetDataType()) {
+                    var coercion = FamilyFormulaCopy.AcrossDataTypes(strategy, source.Definition.GetDataType(), target.Definition.GetDataType())
+                                   ?? throw new InvalidOperationException(Refusal(FamilyFormulaCopy.NoUnitAwareStrategy(strategy)));
+                    if (FamilyFormulaCopy.ValueRefusals(document, source, strategy).FirstOrDefault() is { } valueRefusal)
+                        throw new InvalidOperationException(Refusal(valueRefusal));
+                    foreach (var type in fm.Types.Cast<FamilyType>().ToList()) {
+                        if (fm.CurrentType != type) fm.CurrentType = type;
+                        var context = CoercionContext.FromParam(document, source, target);
+                        if (context.SourceValue is null) continue;
+                        if (!coercion.CanMap(context))
+                            throw new InvalidOperationException(Refusal($"{strategy} cannot coerce '{context.SourceValueString ?? context.SourceValue}' in type '{type.Name}'"));
+                        var (_, error) = coercion.Map(context);
+                        if (error is not null) throw new InvalidOperationException(Refusal($"{strategy} failed in type '{type.Name}': {error.Message}"), error);
+                    }
+                    note = FamilyFormulaCopy.EvaluatedNote(document.Document, formula, sourceName, target.Definition.Name, target.Definition.GetDataType(), strategy);
+                } else {
+                    try { fm.SetFormula(target, formula); }
+                    catch (Autodesk.Revit.Exceptions.ApplicationException exception) {
+                        var chain = source.IsInstance && !target.IsInstance ? $"; reads {FamilyFormulaCopy.Chain(fm.Parameters, formula)}" : "";
+                        throw new InvalidOperationException(Refusal(exception.Message + chain), exception);
+                    }
+                }
             }
             if (targetIsExactAlias) {
                 fm.SetFormula(target, null!);
@@ -111,6 +149,7 @@ public static class FamilyDocumentNormalizeParameter {
             if (originalType is not null && fm.CurrentType != originalType) fm.CurrentType = originalType;
         }
         if (transaction.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Source transfer did not commit.");
+        return note;
     }
 
     private static string AssociationDiagnostic(FamilyParameter source, FamilyParameter target, Parameter elementParameter, FamilyManager manager) {
@@ -121,5 +160,77 @@ public static class FamilyDocumentNormalizeParameter {
                $"Destination='{target.Definition.Name}' Id={target.Id} Storage={target.StorageType} Spec={Spec(target.Definition)} Instance={target.IsInstance}; " +
                $"Element={element.GetType().Name} Id={element.Id}; ElementParameter='{elementParameter.Definition.Name}' Id={elementParameter.Id} " +
                $"BIP={builtIn} Storage={elementParameter.StorageType} Spec={Spec(elementParameter.Definition)} CanAssociate={manager.CanElementParameterBeAssociated(elementParameter)}.";
+    }
+}
+
+/// <summary>The one rule for carrying a source formula to its destination; preparation (preview) and transfer (apply) both read it.</summary>
+public static class FamilyFormulaCopy {
+    private static string Scope(bool instance) => instance ? "instance" : "type";
+
+    public static string Refusal(string family, string formula, string source, ForgeTypeId sourceSpec, bool sourceInstance,
+        string target, ForgeTypeId targetSpec, bool targetInstance, string reason) =>
+        $"Family '{family}': cannot copy formula '{formula}' from source '{source}' ({sourceSpec.TypeId}, {Scope(sourceInstance)}) " +
+        $"to destination '{target}' ({targetSpec.TypeId}, {Scope(targetInstance)}): {reason}";
+
+    public static string Refusal(string family, string formula, string sourceName, FamilyParameter source, FamilyParameter target, string reason) =>
+        Refusal(family, formula, sourceName, source.Definition.GetDataType(), source.IsInstance,
+            target.Definition.Name, target.Definition.GetDataType(), target.IsInstance, reason);
+
+    public static string NoUnitAwareStrategy(string strategy) =>
+        $"data types differ and mapping strategy '{strategy}' does not convert through units (Revit would re-read bare numbers in project units)";
+
+    /// <summary>
+    ///     Names an evaluated coercion. CoerceElectrical reads a bare number in the destination's display unit (ComputeTargetUnitType), so the
+    ///     note says which unit it assumed.
+    /// </summary>
+    public static string EvaluatedNote(Document document, string formula, string source, string target, ForgeTypeId targetSpec, string strategy) =>
+        $"formula `{formula}` on '{source}' not copied to '{target}'; per-type values evaluated and coerced by {strategy}" +
+        (strategy == "CoerceElectrical" ? $" (unitless numbers read as {LabelUtils.GetLabelForUnit(document.GetUnits().GetFormatOptions(targetSpec).GetUnitTypeId())})" : "");
+
+    /// <summary>
+    ///     The per-value half of the gate, evaluated on every type's source value (the same read apply's CoercionContext makes). Only
+    ///     CoerceElectrical depends on the value (its CanMap extracts a number); CoerceMeasurableToNumber decides on data types alone.
+    /// </summary>
+    public static IEnumerable<string> ValueRefusals(FamilyDocument document, FamilyParameter source, string strategy) =>
+        strategy != "CoerceElectrical" ? [] :
+        document.FamilyManager.Types.Cast<FamilyType>()
+            .Select(type => (type.Name, Value: document.GetValue(type, source)))
+            .Where(item => item.Value is not null && !Regexes.TryExtractDouble(item.Value.ToString(), out _))
+            .Select(item => $"{strategy} cannot coerce '{item.Value}' in type '{item.Name}'");
+
+    /// <summary>What a formula reads, recursively: `name (instance|type) = formula` or `= value`, cycle-guarded and depth-capped.</summary>
+    public static string Chain(FamilyParameterSet parameters, string formula, int depth = 0, HashSet<long>? seen = null) {
+        seen ??= [];
+        var parts = new List<string>();
+        foreach (var read in parameters.GetReferencedIn(formula)) {
+            var head = $"{read.Definition.Name} ({(read.IsInstance ? "instance" : "type")})";
+            if (!seen.Add(read.Id.Value()) || depth >= 4) { parts.Add(head + " …"); continue; }
+            parts.Add(string.IsNullOrEmpty(read.Formula) ? head + " = value" : $"{head} = `{read.Formula}` [{Chain(parameters, read.Formula, depth + 1, seen)}]");
+        }
+        return parts.Count == 0 ? "nothing" : string.Join("; ", parts);
+    }
+
+    /// <summary>
+    ///     The unit-aware strategy that may carry values from <paramref name="sourceSpec" /> to <paramref name="targetSpec" />, or null.
+    ///     Spec-level gate only; each value still has to pass the strategy's own CanMap at transfer.
+    /// </summary>
+    public static ICoercionStrategy? AcrossDataTypes(string strategy, ForgeTypeId sourceSpec, ForgeTypeId targetSpec) =>
+        ParamCoercionStrategyRegistry.UnitAware(strategy) is { } coercion && strategy switch {
+            "CoerceElectrical" => targetSpec.TypeId.Contains(".electrical:"),
+            nameof(BuiltInCoercionStrategy.CoerceMeasurableToNumber) => targetSpec == SpecTypeId.Number && UnitUtils.IsMeasurableSpec(sourceSpec),
+            _ => false
+        } ? coercion : null;
+
+    /// <summary>
+    ///     True when <paramref name="source" />'s formula is exactly <paramref name="target" />'s name, or exactly the name of a parameter whose
+    ///     formula is, and so on (cycle-guarded). Such a source equals the destination in every type.
+    /// </summary>
+    public static bool IsExactAliasOf(FamilyParameterSet parameters, FamilyParameter source, FamilyParameter target) {
+        var seen = new HashSet<long> { source.Id.Value() };
+        for (var next = parameters.TryGetSingleReference(source.Formula); next is not null; next = parameters.TryGetSingleReference(next.Formula)) {
+            if (next.Id == target.Id) return true;
+            if (!seen.Add(next.Id.Value())) return false;
+        }
+        return false;
     }
 }

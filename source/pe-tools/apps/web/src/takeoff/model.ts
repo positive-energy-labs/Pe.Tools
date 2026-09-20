@@ -1,6 +1,6 @@
 import { ProjectA_ZONES, type DeclaredZone } from "#/takeoff/zones-project-a";
 import { boundsOf, type AffineFrame, type Bounds2 } from "#/lib/affine-frame";
-import type { DetectedRoom, LiveRegion, PartitionRun, Resolution } from "@pe/agent-contracts";
+import type { DetectedRoom, LiveRegion, PartitionRun } from "@pe/agent-contracts";
 
 export type {
   CandidateRegion,
@@ -8,7 +8,6 @@ export type {
   LiveRegion,
   PartitionRun,
   RegistrySystem,
-  Resolution,
   ViewFacts,
 } from "@pe/agent-contracts";
 
@@ -136,19 +135,6 @@ type ZoneStage = "unregistered" | "registered" | "partitioned";
 export const zoneStage = (tags: string[], materializedRooms: number): ZoneStage =>
   materializedRooms > 0 ? "partitioned" : tags.length > 0 ? "registered" : "unregistered";
 
-export function readResolutions(blob: string): Resolution[] {
-  try {
-    const parsed = JSON.parse(blob) as { resolutions?: Resolution[] };
-    return Array.isArray(parsed.resolutions) ? parsed.resolutions : [];
-  } catch {
-    return [];
-  }
-}
-
-export function upsertResolution(existing: Resolution[], next: Resolution): Resolution[] {
-  return [...existing.filter((r) => !(r.subject === next.subject && r.flag === next.flag)), next];
-}
-
 export function regionForRoom(room: DetectedRoom, regions: LiveRegion[]): LiveRegion | undefined {
   return regions.find(
     (region) =>
@@ -165,7 +151,6 @@ interface DecisionRow {
   detail: string;
   sqft: number | null;
   elementId: number | null;
-  resolved: Resolution | null;
 }
 
 export function decisionRows(run: PartitionRun): DecisionRow[] {
@@ -174,7 +159,6 @@ export function decisionRows(run: PartitionRun): DecisionRow[] {
   for (const room of run.rooms) {
     const region = regionForRoom(room, run.regions);
     if (region) claimed.add(region.elementId);
-    const resolutions = region ? readResolutions(region.blob) : [];
     for (const flag of room.flags)
       rows.push({
         key: `flag:${room.id}:${flag}`,
@@ -184,12 +168,10 @@ export function decisionRows(run: PartitionRun): DecisionRow[] {
         detail: FLAG_MEANING[flag] ?? flag,
         sqft: room.rawSqft,
         elementId: region?.elementId ?? null,
-        resolved: resolutions.find((r) => r.subject === room.id && r.flag === flag) ?? null,
       });
   }
   for (const region of run.regions) {
     if (region.role !== "room-region" || claimed.has(region.elementId)) continue;
-    const resolutions = readResolutions(region.blob);
     rows.push({
       key: `orphan:${region.guid}`,
       kind: "orphan",
@@ -198,7 +180,6 @@ export function decisionRows(run: PartitionRun): DecisionRow[] {
       detail: "this rerun claimed no room here — the designer's region stands until accepted",
       sqft: region.sqft,
       elementId: region.elementId,
-      resolved: resolutions.find((r) => r.flag === "orphaned-region") ?? null,
     });
   }
   for (const failure of run.failures)
@@ -210,7 +191,6 @@ export function decisionRows(run: PartitionRun): DecisionRow[] {
       detail: failure,
       sqft: null,
       elementId: null,
-      resolved: null,
     });
   return rows;
 }

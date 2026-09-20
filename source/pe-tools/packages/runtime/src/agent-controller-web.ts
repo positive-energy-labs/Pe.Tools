@@ -6,7 +6,12 @@ import { MastraServer } from "@mastra/hono";
 import { Hono, type Context } from "hono";
 import { observeResources, resourceResponse, type ResourceObserver } from "./resource-stream.ts";
 import { z } from "zod";
-import { putTargetSchema, routeStatePatchSchema, type PutTargetResult } from "@pe/agent-contracts";
+import {
+  putTargetSchema,
+  routeStatePatchSchema,
+  START_FRESH,
+  type PutTargetResult,
+} from "@pe/agent-contracts";
 import type { ScopeStore } from "./scope-store.ts";
 import { readThreadState, readToolResult, toWireDisplayState } from "./thread-state.ts";
 import { RouteWorkspace, type RouteWorkspaceRegistration } from "./route-workspace.ts";
@@ -154,15 +159,18 @@ export async function buildAgentControllerApp(
         400,
       );
     const session = await openSession(threadId);
-    const admitted = runtime.scopes.admittedTurn(threadId);
-    const result: PutTargetResult =
-      session.run.isRunning() && parsed.data.turn !== admitted
-        ? { ok: false, why: "in-turn" }
-        : await runtime.scopes.set(
-            threadId,
-            parsed.data.defaultTarget,
-            parsed.data.expectedRevision,
-          );
+    const result: PutTargetResult = await runtime.scopes.set(
+      threadId,
+      parsed.data.defaultTarget,
+      parsed.data.expectedRevision,
+      () => {
+        const admitted = runtime.scopes.admittedTurn(threadId);
+        return (session.run.isRunning() || runtime.scopes.admissionPending(threadId)) &&
+          (!admitted || parsed.data.turn !== admitted)
+          ? { ok: false, why: "in-turn" }
+          : undefined;
+      },
+    );
     return c.json(result, result.ok ? 200 : 409);
   });
   // The one capability catalog (ops, route docs and commands, pods, skills), keyed by the same
@@ -214,7 +222,7 @@ export async function buildAgentControllerApp(
     const scope = scopeOr400(c, "read");
     if (scope instanceof Response) return scope;
     try {
-      const view = await routeWorkspace.read(scope, c.req.param("route"));
+      const view = await routeWorkspace.view(scope, c.req.param("route"));
       return view
         ? c.json(view)
         : c.json({ error: `unknown route '${c.req.param("route")}'` }, 404);
@@ -222,6 +230,19 @@ export async function buildAgentControllerApp(
       return c.json({ error: errorMessage(error) }, 403);
     }
   });
+  // Human-only and read-only; the agent prefix is mounted so it is refused by name, not 404.
+  for (const [prefix, actor] of [
+    ["/pe/route-state", "human"],
+    ["/pe/agent/route-state", "agent"],
+  ] as const)
+    app.get(`${prefix}/:route/salvage`, async (c) => {
+      const scope = scopeOr400(c, "read");
+      if (scope instanceof Response) return scope;
+      const route = c.req.param("route");
+      const salvaged = await routeWorkspace.salvage(scope, route, actor);
+      if (!salvaged) return c.json({ error: `nothing to salvage on '${route}'` }, 404);
+      return "ok" in salvaged ? c.json(salvaged, 403) : c.json(salvaged);
+    });
   const writes = [
     {
       suffix: "apply",
@@ -247,6 +268,14 @@ export async function buildAgentControllerApp(
           body.expectedRevision,
         );
       },
+    },
+    {
+      // Mounted under both prefixes; the agent door is refused by startFresh itself.
+      suffix: START_FRESH,
+      schema: z.object({}),
+      hint: "expected {}",
+      run: (scope: WorkKey, route: string, actor: "agent" | "human") =>
+        routeWorkspace.startFresh(scope, route, actor),
     },
   ] as const;
   const mountRouteStateWrites = (prefix: string, actor: "agent" | "human") => {

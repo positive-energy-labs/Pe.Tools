@@ -92,8 +92,8 @@ test("real grid edits and shared Chat reviewer apply through HTTP, journal, Work
   fireEvent.click(screen.getByRole("button", { name: "push 1 to Revit" }));
   await vi.waitFor(async () => expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined());
   await screen.findByDisplayValue("100 VA"); // Native read fixture did NOT report the authored 175.
-  expect(f.sent.filter((s) => s.key === "revit.apply.parameter-values")).toHaveLength(1);
-  await f.patch([{ path: ["cells", "1::2", "proposal"], value: { value: "180 VA", by: "pea" } }]);
+  expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
+  await f.patch([{ path: ["cells", "1::2", "proposal"], value: { value: "180 VA" } }]);
   mounted.rerender(view(true));
   await screen.findByRole("button", { name: "Approve" });
   await vi.waitFor(() =>
@@ -111,7 +111,7 @@ test("real grid edits and shared Chat reviewer apply through HTTP, journal, Work
   );
   fireEvent.click(screen.getByRole("button", { name: "Push 1 to Revit" }));
   await vi.waitFor(() =>
-    expect(f.sent.filter((s) => s.key === "revit.apply.parameter-values")).toHaveLength(2),
+    expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(2),
   );
   await vi.waitFor(async () => expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined());
   expect(f.sent.every((s) => s.session === "B" && s.openId === "open-B")).toBe(true);

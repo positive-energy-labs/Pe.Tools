@@ -1,4 +1,4 @@
-using Autodesk.Revit.Attributes;
+﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
 using Pe.App.Commands.Palette.FamilyPalette;
@@ -47,7 +47,7 @@ public class CmdFFMigrator : IExternalCommand {
     private static void Process(FoundryContext ctx, bool apply) {
         var (spec, source) = ctx.SelectedProfile!.LoadSpec();
         var picked = Pickers.GetSelectedFamilies(ctx.UiDoc);
-        var plans = FamilyFoundryBridgeOps.PlanFamilies(spec, ctx.Doc, picked is { Count: > 0 } ? picked.Select(family => family.Id.Value()).ToList() : null).Families.ToList();
+        var plans = FamilyFoundryBridgeOps.PlanFamilies(spec, ctx.Doc, picked is { Count: > 0 } ? picked.Select(family => family.Name).ToList() : null).Families.ToList();
         if (plans.Count == 0) {
             new Ballogger().Add(LogEventLevel.Warning, new StackFrame(), "The spec selects no loaded family.").Show();
             return;
@@ -62,14 +62,14 @@ public class CmdFFMigrator : IExternalCommand {
         }
 
         var result = FamilyFoundryBridgeOps.ApplyWithReceipt("families.apply", spec, source,
-            ready.ToDictionary(plan => plan.FamilyId, plan => plan.PlanHash), ctx.Doc, null,
+            ready.ToDictionary(plan => plan.FamilyId!.Value, plan => plan.PlanHash), ctx.Doc, null,
             new LoadAndSaveOptions {
                 OpenOutputFilesOnCommandFinish = ctx.OnFinishSettings.OpenOutputFilesOnCommandFinish, LoadFamily = true,
                 SaveFamilyToInternalPath = ctx.OnFinishSettings.SaveFamilyToInternalPath, SaveFamilyToOutputDir = ctx.OnFinishSettings.SaveFamilyToOutputDir
-            });
+            }, ready.ToDictionary(plan => plan.FamilyId!.Value, plan => plan.FamilyName));
         var failed = result.Receipts.Count(receipt => !receipt.Success);
         new Ballogger().Add(failed == 0 && refused.Count == 0 ? LogEventLevel.Information : LogEventLevel.Error, new StackFrame(),
             $"Applied {result.Receipts.Count} families, {failed} failed, {refused.Count} refused at plan.\n{refusedText}\nReceipt: {result.ReceiptPath}").Show();
-        FamilyPlacementHelper.PromptAndPlaceFamilies(ctx.UiDoc.Application, result.Receipts.Where(r => r.Success).Select(r => r.FamilyName!).ToList(), DisplayName);
+        FamilyPlacementHelper.PromptAndPlaceFamilies(ctx.UiDoc.Application, result.Receipts.Where(r => r.Success).Select(r => r.FamilyName).ToList(), DisplayName);
     }
 }

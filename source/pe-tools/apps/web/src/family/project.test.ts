@@ -1,10 +1,9 @@
 /**
  * The projection, both directions, against the SHOWCASE model.
  *
- * The fixture below is `source/Pe.Revit.Tests/Fixtures/Profiles/family-model/
- * family-model-showcase.json` transcribed as a typed `FamilyModel`. Transcribed rather than
- * imported because this project does not enable `resolveJsonModule` — and typed rather than `any`,
- * so a schema change that would break the real document breaks this file first.
+ * The fixture below is a showcase family in the current `FamilyModel` shape: datums, a labeled
+ * reference plane, macro forms and connectors on faces and planes. Typed rather than `any`, so a
+ * schema change that would break the real document breaks this file first.
  *
  * WHAT IS ACTUALLY UNDER TEST is the claim phase B rests on: the page's world and the document are
  * the same family, read twice. So the forward direction is checked for the shapes the surface
@@ -23,6 +22,10 @@ import { draftToPatches, draftedModel, projectFamilyModel } from "./project.ts";
 
 const L = "Length (Common)";
 
+const CLR = "Center (Left/Right)";
+const CFB = "Center (Front/Back)";
+const LEVEL = "Ref. Level";
+
 const SHOWCASE: FamilyModel = {
   family: {
     name: "PE Family Model Showcase",
@@ -30,7 +33,7 @@ const SHOWCASE: FamilyModel = {
     template: "Generic Model",
     placement: "Unhosted",
   },
-  familyParameters: {
+  parameters: {
     "Body Width": { dataType: L, value: "24in" },
     "Body Depth": { dataType: L, value: "18in" },
     "Body Height": { dataType: L, value: "30in" },
@@ -42,49 +45,42 @@ const SHOWCASE: FamilyModel = {
     "Round Duct Diameter": { dataType: L, value: "6in" },
     "Rect Duct Width": { dataType: L, value: "10in" },
     "Rect Duct Height": { dataType: L, value: "6in" },
-    "Stub Depth": { dataType: L, value: "2in" },
   },
   types: {
     Compact: { "Body Width": "18in", "Body Depth": "14in", "Body Height": "24in" },
     Standard: {},
     Tall: { "Body Height": "42in", "Return Elevation": "24in" },
   },
-  planes: {
-    "return-elevation": {
-      from: "plane:family.Bottom",
-      by: "param:Return Elevation",
-      direction: "Out",
-    },
+  datums: {
+    [LEVEL]: { normal: "Z", isLevel: true },
+    [CLR]: { normal: "X" },
+    [CFB]: { normal: "Y" },
   },
-  frames: {
-    "supply-air": {
-      origin: ["face:body.Top", "plane:family.CenterLR", "plane:family.CenterFB"],
-      normal: "+Z",
-      up: "+Y",
-    },
-    "return-air": {
-      origin: ["face:body.Back", "plane:family.CenterLR", "plane:return-elevation"],
-      normal: "+Y",
-      up: "+Z",
-    },
+  refPlanes: { "return-elevation": { normal: "PlusZ", at: "15in" } },
+  dimensions: {
+    "return-elevation": { between: [LEVEL, "return-elevation"], label: "Return Elevation" },
   },
-  solids: {
+  forms: {
     body: {
       kind: "Prism",
-      frame: "frame:family",
+      center: [CLR, CFB],
+      bottom: LEVEL,
       width: "param:Body Width",
       depth: "param:Body Depth",
       height: "param:Body Height",
     },
     "top-neck": {
       kind: "Cylinder",
-      frame: "frame:family",
+      center: [CLR, CFB],
+      bottom: LEVEL,
       diameter: "param:Top Diameter",
       height: "param:Top Height",
     },
     "core-bore": {
-      kind: "VoidCylinder",
-      frame: "frame:family",
+      kind: "Cylinder",
+      void: true,
+      center: [CLR, CFB],
+      bottom: LEVEL,
       diameter: "param:Core Diameter",
       height: "param:Core Height",
     },
@@ -92,25 +88,24 @@ const SHOWCASE: FamilyModel = {
   connectors: {
     "supply-air": {
       domain: "Duct",
-      frame: "frame:supply-air",
+      on: "body.top",
+      at: [CLR, CFB],
       shape: "Round",
       diameter: "param:Round Duct Diameter",
-      stub: { depth: "param:Stub Depth", direction: "Out" },
       systemType: "SupplyAir",
       flowDirection: "Out",
     },
     "return-air": {
       domain: "Duct",
-      frame: "frame:return-air",
+      on: "body.back",
+      at: [CLR, "return-elevation"],
       shape: "Rectangular",
       width: "param:Rect Duct Width",
       height: "param:Rect Duct Height",
-      stub: { depth: "param:Stub Depth", direction: "In" },
       systemType: "ReturnAir",
       flowDirection: "In",
     },
   },
-  roomCalculationPoint: { enabled: true },
 };
 
 const world = () =>
@@ -149,7 +144,7 @@ describe("projectFamilyModel — document → page world", () => {
     });
   });
 
-  it("projects each solid's authored dims, keeping the RAW binding as the value", () => {
+  it("projects each form's authored dims, keeping the RAW binding as the value", () => {
     const body = world().geomBySlug.get("body");
     expect(body?.kind).toBe("Prism");
     expect(body?.dims.map((dim) => [dim.property, dim.binding])).toEqual([
@@ -161,21 +156,22 @@ describe("projectFamilyModel — document → page world", () => {
     expect(body?.dims.every((dim) => dim.dataType === L)).toBe(true);
   });
 
-  it("reads the frame it sits on into the two metadata rows nothing can drive", () => {
-    const meta = world().geomBySlug.get("supply-air")?.meta ?? [];
-    const byKey = Object.fromEntries(meta.map((entry) => [entry.key, entry]));
-    expect(byKey.origin?.control).toBe("read");
-    expect(byKey.origin?.value).toBe("body.Top · family.CenterLR · family.CenterFB");
-    expect(byKey.normal?.value).toBe("+Z");
+  it("reads the plane references a constituent sits on into a row nothing can drive", () => {
+    const byKey = (slug: string) =>
+      Object.fromEntries(
+        (world().geomBySlug.get(slug)?.meta ?? []).map((entry) => [entry.key, entry]),
+      );
+    expect(byKey("supply-air").on?.control).toBe("read");
+    expect(byKey("supply-air").on?.value).toBe(`body.top / ${CLR} / ${CFB}`);
+    expect(byKey("body").center?.value).toBe(`${CLR} / ${CFB} / ${LEVEL}`);
   });
 
-  it("gives a connector its dims, its stub, and only the metadata the file authors", () => {
+  it("gives a connector its dims and only the metadata the file authors", () => {
     const supply = world().geomBySlug.get("supply-air");
     expect(supply?.kind).toBe("DuctConnector");
-    expect(supply?.dims.map((dim) => dim.property)).toEqual(["diameter", "stub.depth"]);
-    expect(supply?.dims.find((dim) => dim.property === "stub.depth")?.binding).toBe(
-      "param:Stub Depth",
-    );
+    expect(supply?.dims.map((dim) => [dim.property, dim.binding])).toEqual([
+      ["diameter", "param:Round Duct Diameter"],
+    ]);
 
     const byKey = Object.fromEntries((supply?.meta ?? []).map((entry) => [entry.key, entry]));
     expect(byKey.flowDirection?.control).toBe("toggle");
@@ -183,19 +179,18 @@ describe("projectFamilyModel — document → page world", () => {
     expect(byKey.systemType?.control).toBe("select");
     // The authored value is always selectable, whatever the fixed per-domain list says.
     expect(byKey.systemType?.options).toContain("SupplyAir");
-    expect(byKey["stub.direction"]?.value).toBe("Out");
     // Rectangular connectors carry two dims instead of a diameter.
     expect(
       world()
         .geomBySlug.get("return-air")
         ?.dims.map((dim) => dim.property),
-    ).toEqual(["width", "height", "stub.depth"]);
+    ).toEqual(["width", "height"]);
   });
 
   it("says what each constituent IS in one prose line", () => {
     const profile = projectFamilyModel(SHOWCASE, null).profile;
     expect(profile.solids.body).toBe("Prism · Body Width × Body Depth × Body Height");
-    expect(profile.solids["core-bore"]).toBe("VoidCylinder · Core Diameter × Core Height");
+    expect(profile.solids["core-bore"]).toBe("Cylinder · Core Diameter × Core Height");
     expect(profile.connectors["supply-air"]).toBe(
       "Duct · Round · Round Duct Diameter · SupplyAir · out",
     );
@@ -212,9 +207,9 @@ describe("projectFamilyModel — document → page world", () => {
   it("surfaces a frozen literal as a ghost row the moment the document has one", () => {
     const frozen: FamilyModel = {
       ...SHOWCASE,
-      solids: {
-        ...SHOWCASE.solids,
-        "core-bore": { ...SHOWCASE.solids!["core-bore"]!, diameter: "3in" },
+      forms: {
+        ...SHOWCASE.forms,
+        "core-bore": { ...SHOWCASE.forms!["core-bore"]!, diameter: "3in" },
       },
     };
     const page = buildFamilyPageModel(projectFamilyModel(frozen, null));
@@ -293,13 +288,24 @@ describe("draftToPatches — draft → staged field patches", () => {
     expect(draftToPatches(SHOWCASE, baseline, baseline)).toEqual([]);
   });
 
-  it("writes a family value to /familyParameters/<name>/value", () => {
+  it("an emptied type override is still that override's value: it stages the empty string", () => {
+    const typeName = Object.keys(initialDraft(world()).types)[0]!;
+    const { draft, baseline } = edited((d) => {
+      d.types[typeName] = { ...d.types[typeName], "Body Width": "" };
+    });
+    expect(draftToPatches(SHOWCASE, draft, baseline)).toContainEqual({
+      path: ["fields", `/types/${typeName}/Body Width`, "staged"],
+      value: { value: "" },
+    });
+  });
+
+  it("writes a family value to /parameters/<name>/value", () => {
     const { draft, baseline } = edited((d) => {
       d.authored["Body Width"] = "26in";
     });
     expect(draftToPatches(SHOWCASE, draft, baseline)).toEqual([
       {
-        path: ["fields", "/familyParameters/Body Width/value", "staged"],
+        path: ["fields", "/parameters/Body Width/value", "staged"],
         value: { value: "26in" },
       },
     ]);
@@ -311,7 +317,7 @@ describe("draftToPatches — draft → staged field patches", () => {
     });
     expect(draftToPatches(SHOWCASE, draft, baseline)).toEqual([
       {
-        path: ["fields", "/familyParameters/Core Height/formula", "staged"],
+        path: ["fields", "/parameters/Core Height/formula", "staged"],
         value: { value: "Body Height * 2" },
       },
     ]);
@@ -323,10 +329,10 @@ describe("draftToPatches — draft → staged field patches", () => {
     });
     expect(draftToPatches(SHOWCASE, draft, baseline)).toEqual([
       {
-        path: ["fields", "/familyParameters/Body Width/formula", "staged"],
+        path: ["fields", "/parameters/Body Width/formula", "staged"],
         value: { value: "Body Depth + 6in" },
       },
-      { path: ["fields", "/familyParameters/Body Width/value", "staged"], value: { delete: true } },
+      { path: ["fields", "/parameters/Body Width/value", "staged"], value: { delete: true } },
     ]);
   });
 
@@ -346,28 +352,28 @@ describe("draftToPatches — draft → staged field patches", () => {
     ]);
   });
 
-  it("routes a geometry dim to its own path — a solid's, and a connector's nested stub", () => {
-    const solid = edited((d) => {
+  it("routes a geometry dim to its own path — a form's, and a connector's", () => {
+    const form = edited((d) => {
       d.geom.body!.dims.width = "30in";
     });
-    expect(draftToPatches(SHOWCASE, solid.draft, solid.baseline)).toEqual([
-      { path: ["fields", "/solids/body/width", "staged"], value: { value: "30in" } },
+    expect(draftToPatches(SHOWCASE, form.draft, form.baseline)).toEqual([
+      { path: ["fields", "/forms/body/width", "staged"], value: { value: "30in" } },
     ]);
 
-    const stub = edited((d) => {
-      d.geom["supply-air"]!.dims["stub.depth"] = "3in";
+    const connector = edited((d) => {
+      d.geom["return-air"]!.dims.width = "12in";
     });
-    expect(draftToPatches(SHOWCASE, stub.draft, stub.baseline)).toEqual([
-      { path: ["fields", "/connectors/supply-air/stub/depth", "staged"], value: { value: "3in" } },
+    expect(draftToPatches(SHOWCASE, connector.draft, connector.baseline)).toEqual([
+      { path: ["fields", "/connectors/return-air/width", "staged"], value: { value: "12in" } },
     ]);
   });
 
   it("stages the EDITABLE metadata and silently stages nothing for a reported one", () => {
     const { draft, baseline } = edited((d) => {
       d.geom["supply-air"]!.meta.flowDirection = "In";
-      d.geom["supply-air"]!.meta["stub.direction"] = "In";
-      // `normal` is reported from the sketch — no document path, so no patch may exist for it.
-      d.geom["supply-air"]!.meta.normal = "−X";
+      d.geom["supply-air"]!.meta.systemType = "ExhaustAir";
+      // `on` is reported from the sketch — no document path, so no patch may exist for it.
+      d.geom["supply-air"]!.meta.on = "body.front";
     });
     expect(draftToPatches(SHOWCASE, draft, baseline)).toEqual([
       {
@@ -375,8 +381,8 @@ describe("draftToPatches — draft → staged field patches", () => {
         value: { value: "In" },
       },
       {
-        path: ["fields", "/connectors/supply-air/stub/direction", "staged"],
-        value: { value: "In" },
+        path: ["fields", "/connectors/supply-air/systemType", "staged"],
+        value: { value: "ExhaustAir" },
       },
     ]);
   });
@@ -384,9 +390,9 @@ describe("draftToPatches — draft → staged field patches", () => {
   it("promotes a frozen literal into a whole new parameter AND rebinds the dim to it", () => {
     const frozen: FamilyModel = {
       ...SHOWCASE,
-      solids: {
-        ...SHOWCASE.solids,
-        "core-bore": { ...SHOWCASE.solids!["core-bore"]!, diameter: "3in" },
+      forms: {
+        ...SHOWCASE.forms,
+        "core-bore": { ...SHOWCASE.forms!["core-bore"]!, diameter: "3in" },
       },
     };
     const page = buildFamilyPageModel(projectFamilyModel(frozen, null));
@@ -400,13 +406,13 @@ describe("draftToPatches — draft → staged field patches", () => {
 
     expect(draftToPatches(frozen, draft, baseline)).toEqual([
       {
-        path: ["fields", "/familyParameters/Core Bore Diameter", "staged"],
+        path: ["fields", "/parameters/Core Bore Diameter", "staged"],
         value: {
           value: { dataType: L, propertiesGroup: "geometry", value: "3in" },
         },
       },
       {
-        path: ["fields", "/solids/core-bore/diameter", "staged"],
+        path: ["fields", "/forms/core-bore/diameter", "staged"],
         value: { value: "param:Core Bore Diameter" },
       },
     ]);
@@ -425,39 +431,53 @@ describe("draftedModel — the draft laid over the document, for the drawing", (
       d.authored["Body Width"] = "30in";
     });
     const sheet = buildSheet(draftedModel(SHOWCASE, draft, page), "Standard");
-    expect(sheet.solids.find((solid) => solid.slug === "body")?.w).toBe(30);
+    expect(sheet.solids.find((solid) => solid.slug === "body")?.box).toEqual({
+      x: [-15, 15],
+      y: [-9, 9],
+      z: [0, 30],
+    });
     // The type that OVERRIDES Body Width is unmoved — the family value is what was edited.
     const compact = buildSheet(draftedModel(SHOWCASE, draft, page), "Compact");
-    expect(compact.solids.find((solid) => solid.slug === "body")?.w).toBe(18);
+    expect(compact.solids.find((solid) => solid.slug === "body")?.box.x).toEqual([-9, 9]);
   });
 
-  it("an edited plane param moves the line", () => {
+  it("an edited labeled-dimension param moves the plane", () => {
     const page = world();
     const { draft } = edited((d) => {
       d.types.Standard = { ...d.types.Standard, "Return Elevation": "20in" };
     });
     const planes = planeGeos(draftedModel(SHOWCASE, draft, page), "Standard");
     expect(planes.find((plane) => plane.slug === "return-elevation")?.offset).toBe(20);
-    // And the frame that intersects the plane follows it — the connector's origin moves too.
+    expect(planes.find((plane) => plane.slug === "return-elevation")?.param).toBe(
+      "Return Elevation",
+    );
+    // The connector that sits on the plane follows it, on the body's back face.
     const sheet = buildSheet(draftedModel(SHOWCASE, draft, page), "Standard");
-    expect(sheet.conns.find((conn) => conn.slug === "return-air")?.pos.z).toBe(20);
+    expect(sheet.conns.find((conn) => conn.slug === "return-air")?.pos).toEqual({
+      x: 0,
+      y: 9,
+      z: 20,
+    });
+    // Tall overrides the parameter, so its plane sits at its own number.
+    const tall = planeGeos(SHOWCASE, "Tall");
+    expect(tall.find((plane) => plane.slug === "return-elevation")?.offset).toBe(24);
   });
 
-  it("a retyped geometry literal moves the solid, through the same path a save writes", () => {
+  it("a retyped geometry literal moves the form, through the same path a save writes", () => {
     const page = world();
     const { draft } = edited((d) => {
       d.geom.body!.dims.width = "36in";
     });
     const sheet = buildSheet(draftedModel(SHOWCASE, draft, page), "Standard");
-    expect(sheet.solids.find((solid) => solid.slug === "body")?.w).toBe(36);
+    expect(sheet.solids.find((solid) => solid.slug === "body")?.box.x).toEqual([-18, 18]);
   });
 
   it("a promoted literal resolves through its NEW parameter, geometry unmoved", () => {
     const frozen: FamilyModel = {
       ...SHOWCASE,
-      solids: {
-        ...SHOWCASE.solids,
-        "core-bore": { ...SHOWCASE.solids!["core-bore"]!, diameter: "3in" },
+      forms: {
+        ...SHOWCASE.forms,
+        "core-bore": { ...SHOWCASE.forms!["core-bore"]!, diameter: "3in" },
       },
     };
     const page = buildFamilyPageModel(projectFamilyModel(frozen, null));
@@ -467,45 +487,42 @@ describe("draftedModel — the draft laid over the document, for the drawing", (
     draft.geom["core-bore"]!.dims.diameter = "param:Core Bore Diameter";
 
     const drafted = draftedModel(frozen, draft, page);
-    expect(drafted.familyParameters["Core Bore Diameter"]?.value).toBe("3in");
-    expect(drafted.solids?.["core-bore"]?.diameter).toBe("param:Core Bore Diameter");
+    expect(drafted.parameters["Core Bore Diameter"]?.value).toBe("3in");
+    expect(drafted.forms?.["core-bore"]?.diameter).toBe("param:Core Bore Diameter");
     // Byte-identical geometry: the drawn void is 3in before and after the promotion.
-    expect(buildSheet(drafted, "Standard").solids.find((s) => s.slug === "core-bore")?.w).toBe(3);
+    const bore = buildSheet(drafted, "Standard").solids.find((s) => s.slug === "core-bore");
+    expect(bore).toMatchObject({ isVoid: true, isCyl: true, box: { x: [-1.5, 1.5] } });
   });
 
-  it("keeps value XOR formula, and drops resolved values a changed formula no longer earns", () => {
-    const withResolved: FamilyModel = structuredClone(SHOWCASE);
-    withResolved.familyParameters["Core Height"]!.resolvedValues = { Standard: "34in" };
-    const page = buildFamilyPageModel(projectFamilyModel(withResolved, null));
-
-    // Untouched: the evidence-resolved value survives the composition.
-    const untouched = draftedModel(withResolved, initialDraft(page), page);
-    expect(untouched.familyParameters["Core Height"]?.resolvedValues).toEqual({
-      Standard: "34in",
-    });
-
-    // Retyped as a different formula: the stale resolution must not resurrect the old number.
-    const { draft } = edited((d) => {
+  it("keeps value XOR formula", () => {
+    const page = world();
+    const formula = edited((d) => {
       d.authored["Core Height"] = "= Body Height * 2";
     });
-    const drafted = draftedModel(withResolved, draft, page);
-    expect(drafted.familyParameters["Core Height"]?.formula).toBe("Body Height * 2");
-    expect(drafted.familyParameters["Core Height"]?.value).toBeUndefined();
-    expect(drafted.familyParameters["Core Height"]?.resolvedValues).toBeUndefined();
+    const drafted = draftedModel(SHOWCASE, formula.draft, page);
+    expect(drafted.parameters["Core Height"]?.formula).toBe("Body Height * 2");
+    expect(drafted.parameters["Core Height"]?.value).toBeUndefined();
+
+    const value = edited((d) => {
+      d.authored["Core Height"] = "40in";
+    });
+    const valued = draftedModel(SHOWCASE, value.draft, page);
+    expect(valued.parameters["Core Height"]?.value).toBe("40in");
+    expect(valued.parameters["Core Height"]?.formula).toBeUndefined();
   });
 
   it("lands editable connector metadata and refuses reported rows a home, in silence", () => {
     const page = world();
     const { draft } = edited((d) => {
-      d.geom["supply-air"]!.meta["stub.direction"] = "In";
+      d.geom["supply-air"]!.meta.flowDirection = "In";
       d.geom["supply-air"]!.meta.systemType = "ExhaustAir";
-      // `normal` is reported from the sketch — no document path, so it must land nowhere.
-      d.geom["supply-air"]!.meta.normal = "−X";
+      // `on` is reported from the sketch — no document path, so it must land nowhere.
+      d.geom["supply-air"]!.meta.on = "body.front";
     });
     const drafted = draftedModel(SHOWCASE, draft, page);
-    expect(drafted.connectors?.["supply-air"]?.stub?.direction).toBe("In");
+    expect(drafted.connectors?.["supply-air"]?.flowDirection).toBe("In");
     expect(drafted.connectors?.["supply-air"]?.systemType).toBe("ExhaustAir");
-    expect(drafted.connectors?.["supply-air"]?.frame).toBe("frame:supply-air");
+    expect(drafted.connectors?.["supply-air"]?.on).toBe("body.top");
   });
 });
 

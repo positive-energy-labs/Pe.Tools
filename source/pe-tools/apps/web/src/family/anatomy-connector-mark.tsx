@@ -88,10 +88,9 @@ export function ConnectorMark({
     );
   }
 
-  // In-plane: the stub — a line along the normal with a face tick at the connection
-  // plane. The stub direction is the document's; In pulls it back into the family.
-  const stubLen = conn.stub ?? 2;
-  const dir = sign * (conn.stubDir === "In" ? -1 : 1);
+  // In-plane: a direction line along the normal with a face tick at the connection plane.
+  const stubLen = 2;
+  const dir = sign;
   const girth = conn.w ?? 2;
   const du = axis === view.u ? dir : 0;
   const dv = axis === view.v ? dir : 0;
@@ -102,9 +101,9 @@ export function ConnectorMark({
   return (
     <g key={conn.slug} {...hover(conn.slug)}>
       <title>
-        {`${conn.slug} — ${prose}. The tick is the connection face; the line ${conn.stub != null ? `is the stub, ${conn.stub}in ${conn.stubDir === "In" ? "into the family" : "standing off"}` : "marks direction only (no authored stub)"}.`}
+        {`${conn.slug} — ${prose}. The tick is the connection face; the line marks its direction.`}
       </title>
-      {/* a fat transparent hit line, so a 1px stub is still hoverable */}
+      {/* a fat transparent hit line, so a 1px line is still hoverable */}
       <line x1={x0} y1={y0} x2={x1} y2={y1} stroke="transparent" strokeWidth={9} />
       <line x1={x0} y1={y0} x2={x1} y2={y1} stroke={stroke} strokeWidth={active ? 1.6 : 1} />
       {du !== 0 ? (

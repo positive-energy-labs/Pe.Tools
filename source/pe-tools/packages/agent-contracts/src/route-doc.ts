@@ -17,6 +17,17 @@ export interface RouteEnvelope<D> {
 }
 
 export type RouteActor = "agent" | "human";
+
+/** Every path's answer when saved Work fails the route's schema: fail-closed, never migrated. */
+export const UNREADABLE_WORK =
+  "This route's saved Work is in a shape this version cannot read, so it was left untouched; it cannot be opened here.";
+/**
+ * The human-only verb offered on an UNREADABLE_WORK route: `POST <route-state>/:route/start-fresh`
+ * with `{}`. The old document is kept, unparsed, at `<route>:aside:<n>` (routes never contain ':');
+ * an empty Work takes its place.
+ */
+export const START_FRESH = "start-fresh";
+export const START_FRESH_ASIDE = ":aside:";
 export type RouteRefusal = {
   ok: false;
   kind: RouteWriteKind;

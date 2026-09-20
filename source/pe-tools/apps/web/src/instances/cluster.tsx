@@ -4,6 +4,7 @@ import {
   nativeProcessSchema,
   sdkSessionSelectorOf,
   sdkSessionTargetOf,
+  transitionPatches,
 } from "@pe/agent-contracts";
 import { type InstancesHandle } from "#/instances/manifest";
 import { useMemo, useState } from "react";
@@ -191,7 +192,8 @@ export function InstancesCluster({
       : undefined);
 
   const [yearPick, setYearPick] = useState<string | null>(null);
-  const stored = work.doc?.staged;
+  // The person's staged launch; Pea's proposal is not drawn here yet (interaction's cutover).
+  const stored = work.doc?.launch.staged?.value;
   const storedDoc = stored?.document
     ? (documents.find((d) => d.selector === stored.document) ?? {
         id: stored.document,
@@ -215,26 +217,33 @@ export function InstancesCluster({
         : null
     : null;
   const setStaged = (next: Staged | null) => {
-    void work.write([
-      {
-        path: ["staged"],
-        value:
-          next === null
-            ? null
-            : next.kind === "open"
-              ? {
-                  kind: "open",
-                  session: sdkSessionSelectorOf(sessionTarget(next.world)),
-                  document: next.doc.selector,
-                }
-              : {
-                  kind: "start",
-                  year: `20${next.year}`,
-                  name: sessionName,
-                  document: next.doc?.selector,
-                },
-      },
-    ]);
+    void work.write(
+      transitionPatches(
+        [],
+        "launch",
+        {},
+        next === null
+          ? { kind: "unstage" }
+          : {
+              kind: "stage",
+              rung: {
+                value:
+                  next.kind === "open"
+                    ? {
+                        kind: "open",
+                        session: sdkSessionSelectorOf(sessionTarget(next.world)),
+                        document: next.doc.selector,
+                      }
+                    : {
+                        kind: "start",
+                        year: `20${next.year}`,
+                        name: sessionName,
+                        document: next.doc?.selector,
+                      },
+              },
+            },
+      ),
+    );
   };
   const [localSessionName, setLocalSessionName] = useState<string | null>(null);
   const sessionName = localSessionName ?? (stored?.kind === "start" ? stored.name : "");
@@ -270,7 +279,12 @@ export function InstancesCluster({
       let revision = work.revision;
       if (command === "start" && stored?.kind === "start" && stored.name !== sessionName) {
         const refusal = await work.write(
-          [{ path: ["staged"], value: { ...stored, name: sessionName } }],
+          transitionPatches(
+            [],
+            "launch",
+            {},
+            { kind: "stage", rung: { value: { ...stored, name: sessionName } } },
+          ),
           revision,
         );
         if (refusal) throw Error(refusal.message);

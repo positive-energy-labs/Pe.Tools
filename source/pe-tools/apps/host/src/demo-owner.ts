@@ -28,10 +28,12 @@ import { RevitBridge, BridgeError } from "./bridge.ts";
 import { makeCallRoute, type CallRouteDispatch } from "./call-route.ts";
 import { assertDemoPath, createDemoSettings } from "./demo-settings.ts";
 import { createSettingsCommandHandlers } from "../../../packages/mcps/src/pea/settings-commands.ts";
+import { familiesAdmission } from "../../../packages/mcps/src/pea/families-admission.ts";
 import { resourceResponse, type ResourceObserver } from "@pe/runtime";
 import { hostResourceObserver } from "./resource-adapters.ts";
 import { readFamily } from "./family-actions.ts";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
+import type { ScheduleCellsApply } from "@pe/host-contracts/generated";
 
 const unsupported = (key: string) =>
   new BridgeError(`Unsupported demo scenario: ${key}. No native execution.`, 409, {
@@ -56,7 +58,29 @@ const SIMULATED_READS = [
 ];
 
 /** The composed source a native apply receives; the simulated engine reads its root. */
-type RunSource = { root: { id: string; path: string; sha256: string } };
+type Captured = { id: string; path: string; sha256: string; bytesBase64: string };
+type RunSource = {
+  root: Captured & { origin: "SavedMember" | "SuppliedDraft" };
+  dependencies: Captured[];
+};
+/**
+ * The simulated engine checks captured bytes the way `PodRuns.Decode` does: every root and
+ * dependency hash must match its bytes, or the run refuses before anything is filed.
+ */
+export function verifyCaptured({ root, dependencies }: RunSource) {
+  for (const file of [root, ...dependencies])
+    if (
+      createHash("sha256").update(Buffer.from(file.bytesBase64, "base64")).digest("hex") !==
+      file.sha256
+    )
+      throw new BridgeError(
+        `${file.id}:${file.path} captured bytes do not match SHA-256 ${file.sha256}.`,
+        400,
+        {
+          notDispatched: true,
+        },
+      );
+}
 
 /** The simulated project's schedules: supplied facts, never a read of a real model. */
 const DEMO_SCHEDULES = [
@@ -76,6 +100,8 @@ const loadedFamily = (familyId: number, familyName: string) => ({
   familyName,
   categoryName: "Mechanical Equipment",
   typeNames: ["Type 1"],
+  // The catalog's shape: the plan checks written cells against these.
+  types: [{ typeName: "Type 1" }],
   parameters: [
     {
       definition: {
@@ -134,6 +160,19 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                 },
               })
             : {},
+        // The same door the live host runs, over the simulated catalog.
+        ...(spec.route === familiesRouteState.route
+          ? {
+              admit: familiesAdmission(async () =>
+                seed.route === "families"
+                  ? seed.readings.families.map((familyName, index) => ({
+                      familyName,
+                      types: loadedFamily(index + 1, familyName).types,
+                    }))
+                  : [],
+              ),
+            }
+          : {}),
       })),
       store: {
         async getState({ targetKey, route }) {
@@ -251,7 +290,9 @@ export async function createDemoOwner(parent: string, raw: unknown) {
      * The engine files one run per apply in the source pod (dogma law 10). Only an engine writes
      * `output/`, so the simulated engine writes the receipt itself, inside this instance's root.
      */
-    const fileRun = async (operation: string, { root }: RunSource, planHash: string | null) => {
+    const fileRun = async (operation: string, source: RunSource, planHash: string | null) => {
+      verifyCaptured(source);
+      const { root } = source;
       const runId = `${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}`;
       const file = await settings.memberPath({
         pod: root.id,
@@ -272,8 +313,10 @@ export async function createDemoOwner(parent: string, raw: unknown) {
           {
             podId: root.id,
             memberPath: root.path,
-            memberSha256: root.sha256,
-            origin: "SavedMember",
+            // As `PodReceipt.ForSource`: a draft never claims a saved member's hash.
+            ...(root.origin === "SuppliedDraft"
+              ? { memberSha256: null, origin: "SuppliedDraft" }
+              : { memberSha256: root.sha256, origin: "SavedMember" }),
             operation,
             planHash,
             outcome: "Succeeded",
@@ -389,11 +432,11 @@ export async function createDemoOwner(parent: string, raw: unknown) {
               simulatedPlan = planned;
               value = {
                 diagnostics: [],
-                // The engine plans exactly the ids the target resolved.
-                families: (input as { familyIds: number[] }).familyIds.map((familyId) => ({
-                  familyId,
-                  familyName: seed.readings.families[familyId - 1],
-                  planHash: `${planned.hash}:${familyId}`,
+                // The engine resolves exactly the names the target resolved to their ids.
+                families: (input as { familyNames: string[] }).familyNames.map((familyName) => ({
+                  familyId: seed.readings.families.indexOf(familyName) + 1,
+                  familyName,
+                  planHash: `${planned.hash}:${familyName}`,
                   changes: [{ section: "types", key: "Width", kind: "set" }],
                   runEffects: [],
                   warnings: [],
@@ -566,18 +609,27 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                 }),
                 simulated: true,
               };
-            } else if (key === "revit.apply.parameter-values" && project) {
-              const edits = (
-                input as { edits: { elementId: number; parameterName: string; value: string }[] }
-              ).edits;
-              for (const edit of edits)
-                rows[edit.elementId - 1]![DEMO_COLUMNS.indexOf(edit.parameterName)] = edit.value;
-              value = {
-                applied: edits.length,
+            } else if (key === "schedule.cells.apply" && project) {
+              // Demo-only: writes the grid rows; the answer keeps the domain result shape.
+              const edits = (input as ScheduleCellsApply.Req.Request).edits;
+              for (const edit of edits) rows[edit.rowNumber - 1]![edit.columnNumber] = edit.value!;
+              const answer: ScheduleCellsApply.Res.Response = {
+                appliedCells: edits.length,
+                appliedParameterWrites: edits.length,
                 dryRun: false,
-                results: edits.map((_, index) => ({ index, ok: true })),
-                simulated: true,
+                results: edits.map((edit, index) => ({
+                  index,
+                  rowNumber: edit.rowNumber,
+                  columnNumber: edit.columnNumber,
+                  ok: true,
+                  parameterResults: edit.expectedBinding.targets.map((_, target) => ({
+                    index: target,
+                    ok: true,
+                  })),
+                })),
+                diagnostics: [],
               };
+              value = { ...answer, simulated: true };
             } else if (key === "revit.catalog.schedules" && project) {
               value = {
                 entries: DEMO_SCHEDULES.map((row) => ({
@@ -613,8 +665,22 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                         columnNumber,
                         targetElementIds: [index + 1],
                         parameterName,
+                        // Simulated parameter id = negative column position.
+                        parameterId: -(columnNumber + 1),
                         storageType: "String",
+                        rawValue: values[columnNumber] ?? null,
                         isEditable: true,
+                        targets: [
+                          {
+                            elementId: index + 1,
+                            parameterId: -(columnNumber + 1),
+                            parameterName,
+                            storageType: "String",
+                            isReadOnly: false,
+                            hasValue: values[columnNumber] != null,
+                            rawValue: values[columnNumber] ?? null,
+                          },
+                        ],
                       })),
                     })),
                   },

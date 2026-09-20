@@ -31,14 +31,29 @@ public static class PodRuns {
     ///     The native run edge: validates the captured composition, stores the run in the root's pod, and writes the
     ///     run input before any effect. A failure here throws before the caller acts.
     /// </summary>
-    public static (string Run, List<string> Inputs) StartComposedRun(PodComposedSource source, object metadata, string effectiveInput) {
+    public static (string Run, List<string> Inputs) StartComposedRun(PodComposedSource source, object metadata, string effectiveInput, string? planActionId = null) {
         var files = ComposedInput(source, effectiveInput);
         var run = NewRunFolder(new ScriptPodPreparationService().ResolveFolder(source.Root.Id));
-        var input = JObject.FromObject(metadata, Serializer);
+        var input = WithReviewBasis(metadata, planActionId);
         input["source"] = JObject.FromObject(new {
             kind = "pod-composition", origin = source.Root.Origin.ToString(), pod = source.Root.Id, path = source.Root.Path, sha256 = source.Root.Sha256
         }, Serializer);
         return (run, WriteInputIn(run, input, files));
+    }
+
+    /// <summary>
+    ///     The reviewed basis a run names: the host plan action whose journal preparation sealed this input, or,
+    ///     for a direct call with no plan, the explicit gap. Never both.
+    /// </summary>
+    public static JObject WithReviewBasis(object metadata, string? planActionId) {
+        var input = metadata as JObject ?? JObject.FromObject(metadata, Serializer);
+        if (planActionId is null) {
+            input["unavailableEvidence"] = new JArray("reviewed Work revision");
+            return input;
+        }
+        input["plan"] = new JObject { ["actionId"] = planActionId, ["sealedIn"] = "host action journal preparation" };
+        input["unavailableEvidence"] = new JArray();
+        return input;
     }
 
     /// <summary>The exact effective input, then the root, then each dependency in consumed order; every hash is checked against its bytes.</summary>
