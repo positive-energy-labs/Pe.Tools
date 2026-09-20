@@ -44,6 +44,13 @@ test("send remains refused until the current thread establishes its display gate
   expect(ready.actions?.send.ready(ctx, { text: "hello" } as never)).toBe(null);
 });
 
+test("cancel uses the provider's post-abort refresh path", async () => {
+  const cancel = vi.fn(async () => undefined);
+  const route = chatManifest({ thread: "t1", session: {} as never, cancel });
+  await route.actions?.cancel.run(ctx, undefined as never);
+  expect(cancel).toHaveBeenCalledOnce();
+});
+
 test("a parked ask does not hold send; a tool approval does, with its reason", () => {
   const session = {} as never;
   const send = (display: object) =>
