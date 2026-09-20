@@ -47,7 +47,7 @@ const entry = (familyId: number, familyName: string, planHash: string) => ({
   familyId,
   familyName,
   planHash,
-  changes: [{ section: "types", key: "Width", kind: "set" }],
+  changes: [{ section: "types", key: "Width", kind: "set", before: "1in", after: "2in" }],
   runEffects: [],
   refusals: [],
   warnings: [],

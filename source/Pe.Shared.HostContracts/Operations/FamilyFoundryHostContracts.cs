@@ -1,5 +1,6 @@
 ﻿using Pe.Shared.RevitData.Families;
 using Pe.Shared.RevitData;
+using Newtonsoft.Json;
 
 namespace Pe.Shared.HostContracts.Operations;
 
@@ -16,7 +17,13 @@ public sealed record FamilyPlanRequest(string SpecJson, ExecutionOptions? Execut
 public sealed record FamiliesPlanRequest(string SpecJson, IReadOnlyList<string>? FamilyNames = null, ExecutionOptions? ExecutionOptions = null);
 
 /// <summary>One change the reconciler would make: section + key is the address, kind is the verb.</summary>
-public sealed record FamilyFoundryChangeData(string Section, string Key, string Kind, string? MappedFrom, object? Before, object? After);
+public sealed record FamilyFoundryChangeData(
+    string Section,
+    string Key,
+    string Kind,
+    string? MappedFrom,
+    [property: JsonProperty(Required = Required.AllowNull, NullValueHandling = NullValueHandling.Include)] object? Before,
+    [property: JsonProperty(Required = Required.AllowNull, NullValueHandling = NullValueHandling.Include)] object? After);
 
 /// <summary>
 ///     One planned family. `familyName` is the requested name byte-exact; `familyId` is the id it resolved to at plan, null when

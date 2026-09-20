@@ -10,7 +10,16 @@ const client = vi.hoisted(() => ({
             familyId: 7,
             familyName: "box",
             planHash: "h",
-            changes: [{ section: "parameters", key: "Width", kind: "set", mappedFrom: null }],
+            changes: [
+              {
+                section: "parameters",
+                key: "Width",
+                kind: "set",
+                mappedFrom: null,
+                before: "1in",
+                after: "2in",
+              },
+            ],
             runEffects: [],
             refusals: [],
             warnings: [],
