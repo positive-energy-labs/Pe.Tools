@@ -199,8 +199,8 @@ test("a draft run is listed under its member only with its draft label and no sa
   await writeFile(
     join(root, "Drafts", "output", "draft-run", "receipt.json"),
     JSON.stringify({
-      podId: "drafts",
-      memberPath: "settings/file.json",
+      podId: null,
+      memberPath: null,
       memberSha256: "draft-bytes-hash",
       origin: "SuppliedDraft",
       operation: "family.apply",
@@ -208,6 +208,19 @@ test("a draft run is listed under its member only with its draft label and no sa
       outcome: "Cancelled",
       outputs: [],
       reason: null,
+    }),
+  );
+  await writeFile(
+    join(root, "Drafts", "output", "draft-run", "input.json"),
+    JSON.stringify({
+      operation: "family.apply",
+      source: {
+        kind: "pod-composition",
+        origin: "SuppliedDraft",
+        path: "settings/file.json",
+        sha256: "draft-bytes-hash",
+      },
+      files: [],
     }),
   );
   await writeFile(
@@ -224,7 +237,9 @@ test("a draft run is listed under its member only with its draft label and no sa
   const { runs } = await run(listRuns({ pod: "drafts", path: "settings/file.json" }, ctx()));
   const draft = runs.find((r) => r.runId === "draft-run")!;
   expect(draft.receipt).toMatchObject({
+    podId: null,
     origin: "SuppliedDraft",
+    memberPath: null,
     memberSha256: null,
     outcome: "Cancelled",
   });
