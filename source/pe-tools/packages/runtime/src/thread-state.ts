@@ -150,12 +150,14 @@ export function recordCalls(
  */
 export async function selectEndedCalls(
   messages: ThreadMessage[],
-  session: Pick<Session, "displayState" | "thread">,
+  session: Pick<Session, "displayState" | "suspensions" | "thread">,
 ): Promise<{ expiredAsks: ExpiredAsk[]; cancelledCalls: CancelledCall[] }> {
   const display = session.displayState.get();
   const live = new Set([
     display.pendingApproval?.toolCallId,
-    ...display.pendingSuspensions.keys(),
+    ...[...display.pendingSuspensions.keys()].filter((toolCallId) =>
+      session.suspensions.has({ toolCallId }),
+    ),
     ...(display.isRunning ? display.activeTools.keys() : []),
   ]);
   const unfinished = messages.flatMap((message) =>
