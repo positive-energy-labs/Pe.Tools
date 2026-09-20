@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   scheduleCellKey,
   splitScheduleCellKey,
@@ -19,51 +19,43 @@ import { TableFrame } from "#/components/master-table/table-frame";
 import { useTableState } from "#/components/master-table/view";
 import { List } from "#/components/lang/list-popup";
 import { Pane, PaneSplit } from "#/components/lang/pane";
-import { OutcomeStrip } from "#/components/lang/outcome-strip";
 import { timeAgo } from "#/lib/utils";
 import type { CellWire } from "#/components/lang/band";
 import { PendingStrip } from "./pending-strip";
 import { cellText, scheduleLock, useScheduleGridColumns } from "./columns";
 import type { Refusal } from "#/route";
+import { STALE_S } from "./stage";
 
 export interface ScheduleGridState {
   slice: ScheduleGridDocument | null;
   /** The Work revision the slice was read at; `null` before any Work exists. */
   revision: number | null;
   hydrated: boolean;
-  refreshing: boolean;
   apply: (patches: RouteStatePatch[], expectedRevision?: number) => Promise<Refusal | null>;
-  peaActive: boolean;
-  connected: boolean | null;
   /** The running verb; capture and apply run from the Situation and lock the grid too. */
   busy: string | null;
-  failure: Refusal | null;
   snapshot: ScheduleGridSnapshot | null;
   catalog: ScheduleCatalog | null;
-  execute: (
-    kind: "catalog" | "refresh" | "push",
-    input?: Record<string, unknown>,
-  ) => Promise<Refusal | null>;
-  /** Why Push is disabled, in the operator's words. `null` means nothing blocks it. */
-  blockedBecause?: string | null;
+  /** The verbs the panes reach the world through: the grid's read, and the stage's push. */
+  execute: (kind: "refresh" | "push", input?: Record<string, unknown>) => Promise<Refusal | null>;
+  /** The last push's refused cells, by key; each draws on its own cell. */
+  refused: Readonly<Record<string, string>>;
+  /** Each pane's focus edge, as the stage declares it (`stage.ts`). */
+  onFocus: { rail: () => void; grid: () => void };
+}
+
+/** Now, every 15 s: an age that crosses the stale line shows without a re-render from elsewhere. */
+function useNow() {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(timer);
+  }, []);
+  return now;
 }
 
 export function ScheduleGridWorkspace({
-  state: {
-    slice,
-    revision,
-    hydrated,
-    refreshing,
-    apply,
-    execute,
-    peaActive,
-    connected,
-    busy,
-    failure,
-    snapshot,
-    catalog,
-    blockedBecause,
-  },
+  state: { slice, revision, hydrated, apply, execute, busy, snapshot, catalog, refused, onFocus },
 }: {
   state: ScheduleGridState;
 }) {
@@ -74,6 +66,7 @@ export function ScheduleGridWorkspace({
 
   const [activeRow, setActiveRow] = useState<string | null>(null);
   const [railCollapsed, setRailCollapsed] = useState(false);
+  const now = useNow();
 
   const staged = Object.entries(cells).filter(([, cell]) => cell.staged != null);
   const stagedCount = staged.length;
@@ -83,11 +76,14 @@ export function ScheduleGridWorkspace({
   const pending = Object.entries(cells).filter(
     ([, cell]) => cell.proposal != null || cell.staged != null,
   );
-  // Staging IS the approval (ruled 2026-08-31): no review gate stands before push.
-  const pushable = stagedCount > 0 && !blockedBecause;
-
-  const runCommand = (kind: "catalog" | "refresh" | "push", input: Record<string, unknown> = {}) =>
-    void execute(kind, input);
+  const readAgain = () => {
+    if (snapshot && busy == null) void execute("refresh", { scheduleId: snapshot.scheduleId });
+  };
+  // ASSUME(kai): age only when stale | alt: never, focus revalidates
+  const staleSince =
+    snapshot?.takenAt != null && now - Date.parse(snapshot.takenAt) > STALE_S * 1000
+      ? snapshot.takenAt
+      : null;
 
   const bindingAt = (key: string) => {
     const { rowNumber, columnNumber } = splitScheduleCellKey(key);
@@ -116,13 +112,7 @@ export function ScheduleGridWorkspace({
     `col ${columnNumber}`;
   const currentText = (key: string) => cellText(snapshot, key);
 
-  const gridColumns = useScheduleGridColumns(snapshot, cells, wire, stageEdit, stale);
-
-  const pushReason = blockedBecause
-    ? blockedBecause
-    : stagedCount === 0
-      ? "Nothing is staged yet — accept a proposal or type into a cell first. Push writes staged values through the bridge into Revit."
-      : `Write ${stagedCount} staged cell${stagedCount === 1 ? "" : "s"} through the bridge into Revit — the only verb here that leaves the page.`;
+  const gridColumns = useScheduleGridColumns(snapshot, cells, wire, stageEdit, stale, refused);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -136,62 +126,36 @@ export function ScheduleGridWorkspace({
           )
         }
         facts={
-          <>
-            <FactChip
-              tone={connected === true ? "meta" : "caution"}
-              title={
-                connected === true
-                  ? "The route-state bridge is connected — pea's proposals arrive live over SSE."
-                  : refreshing
-                    ? "The route-state stream is re-establishing over the slice already held. Writes are refused until it settles — this is a reconnect, not a lost session."
-                    : connected === null
-                      ? "No Work slice has arrived yet. Read a schedule to open one."
-                      : "The route-state bridge is not connected. Nothing arrives and nothing can be pushed; a busy bridge is not the model disagreeing."
-              }
-            >
-              {/* A re-establishing stream is NOT a dead bridge, and must not be worded as one. */}
-              bridge{" "}
-              {connected === true
-                ? "connected"
-                : refreshing
-                  ? "refreshing"
-                  : connected === null
-                    ? "connecting"
-                    : "disconnected"}
-            </FactChip>
-            {snapshot ? (
-              <>
-                <FactChip title="Columns × rows in this snapshot, as read from Revit.">
-                  {snapshot.columns.length}×{snapshot.rows.length}
+          snapshot?.truncated || staleSince ? (
+            <>
+              {snapshot?.truncated ? (
+                <FactChip
+                  tone="caution"
+                  title="The read hit its row cap — rows beyond it are not shown and cannot be edited here. Narrow the schedule in Revit or push what is visible."
+                >
+                  truncated
                 </FactChip>
-                {snapshot.truncated ? (
+              ) : null}
+              {staleSince ? (
+                <>
                   <FactChip
                     tone="caution"
-                    title="The read hit its row cap — rows beyond it are not shown and cannot be edited here. Narrow the schedule in Revit or push what is visible."
+                    title="The model may have moved since this read. Clicking into the grid reads it again."
                   >
-                    truncated
+                    read {timeAgo(staleSince)}
                   </FactChip>
-                ) : null}
-                {snapshot.takenAt ? (
-                  <FactChip title="When this snapshot was read from Revit. The model may have moved since — re-read to check.">
-                    read {timeAgo(snapshot.takenAt)}
-                  </FactChip>
-                ) : null}
-              </>
-            ) : null}
-          </>
+                  <ActionButton
+                    label="read again (r)"
+                    busy={busy === "refresh"}
+                    disabled={busy != null}
+                    reason={`Read “${snapshot!.scheduleName}” from Revit again — proposals and staged cells stay.`}
+                    onClick={readAgain}
+                  />
+                </>
+              ) : null}
+            </>
+          ) : undefined
         }
-        verb={
-          <ActionButton
-            tone="commit"
-            label={`push ${stagedCount} to Revit`}
-            busy={busy === "push"}
-            disabled={!pushable || busy != null}
-            reason={pushReason}
-            onClick={() => runCommand("push")}
-          />
-        }
-        advisory={peaActive ? <OutcomeLine kind="busy" label="pea is working" /> : undefined}
       />
 
       <PaneSplit
@@ -218,31 +182,13 @@ export function ScheduleGridWorkspace({
             side="left"
             collapsed={railCollapsed}
             onCollapsedChange={setRailCollapsed}
-            actions={
-              <ActionButton
-                label="re-list"
-                busy={busy === "catalog"}
-                disabled={busy != null}
-                reason="Read the document's schedule list from Revit again. A read — nothing is written."
-                onClick={() => runCommand("catalog")}
-              />
-            }
+            onActivate={onFocus.rail}
           >
             {catalog == null ? (
-              <div className="space-y-2 px-3 py-3">
-                <EmptyState
-                  story="scope"
-                  exit="list schedules to fill this rail — a read, nothing is changed"
-                >
+              <div className="px-3 py-3">
+                <EmptyState story="scope" exit="the list reads when the rail takes focus">
                   no schedule list yet
                 </EmptyState>
-                <ActionButton
-                  label="list schedules"
-                  busy={busy === "catalog"}
-                  disabled={busy != null}
-                  reason="Reads every schedule in the document so you (or pea) can open any of them. A read — nothing is written."
-                  onClick={() => runCommand("catalog")}
-                />
               </div>
             ) : (
               <List
@@ -255,7 +201,7 @@ export function ScheduleGridWorkspace({
                 filter="substring"
                 searchPlaceholder="Filter schedules…"
                 empty="No schedules in the document."
-                onPick={(entry) => runCommand("refresh", { scheduleId: entry.scheduleId })}
+                onPick={(entry) => void execute("refresh", { scheduleId: entry.scheduleId })}
                 row={(entry) => ({
                   label: entry.name,
                   active: snapshot?.scheduleId === entry.scheduleId,
@@ -275,6 +221,21 @@ export function ScheduleGridWorkspace({
             title={snapshot?.scheduleName ?? "schedule"}
             headerless
             scroll="clip"
+            onActivate={onFocus.grid}
+            shortcuts={
+              snapshot
+                ? [
+                    {
+                      hotkey: "R",
+                      label: "read again",
+                      says: "Read this schedule from Revit again; proposals and staged cells stay.",
+                      refusal: busy != null ? `${busy} is running` : null,
+                      callback: readAgain,
+                      options: { ignoreInputs: true },
+                    },
+                  ]
+                : []
+            }
           >
             <section className="flex min-h-0 min-w-0 flex-1 flex-col">
               <div className="flex min-h-0 flex-1 flex-col">
@@ -287,16 +248,6 @@ export function ScheduleGridWorkspace({
                     state={tableState}
                     onStateChange={setTableState}
                     searchPlaceholder="find in cells"
-                    filters={<OutcomeStrip busy={busy} failure={failure} />}
-                    actions={
-                      <ActionButton
-                        label="re-read"
-                        busy={busy === "refresh"}
-                        disabled={!snapshot || busy != null}
-                        reason={`Read “${snapshot.scheduleName}” from Revit again — replaces this snapshot; proposals and staged cells stay.`}
-                        onClick={() => runCommand("refresh", { scheduleId: snapshot.scheduleId })}
-                      />
-                    }
                   >
                     <Table
                       rows={snapshot.rows}
@@ -323,7 +274,7 @@ export function ScheduleGridWorkspace({
                       empty={
                         <EmptyState
                           story="scope"
-                          exit="re-read the schedule, or pick another from the rail"
+                          exit="press r to read it again, or pick another from the rail"
                         >
                           this schedule has no rows
                         </EmptyState>

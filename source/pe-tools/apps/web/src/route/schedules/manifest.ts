@@ -5,6 +5,8 @@ import {
   scheduleGridRouteState,
   scheduleReadingSchema,
   scheduleReads,
+  splitScheduleCellKey,
+  stagedEntries,
   type ActionStatus,
   type ScheduleGridDocument,
   type WorkKey,
@@ -22,6 +24,7 @@ import {
 } from "#/route";
 import { previousOf } from "#/readings";
 import { DEMO_PODS, DEMO_SPEC_PATH } from "#/route/seeds";
+import { SCHEDULE_STAGES } from "./stage";
 import { readScheduleCapture } from "../../../../../packages/mcps/src/shared/schedule-client";
 import {
   actionResult,
@@ -29,65 +32,44 @@ import {
 } from "../../../../../packages/mcps/src/shared/takeoff-action-client";
 
 export type ScheduleGridReading = "catalog" | "work" | "saved" | "receipts";
-export type ScheduleGridAction = "catalog" | "refresh" | "push";
+export type ScheduleGridAction = "refresh" | "push";
 
 /** Route-owned identity discovered by a schedule read. */
 export interface ScheduleGridPage {
   workspaceId: string;
   captureId: string;
-  /** The last push's run, as one line: outcome, where its receipt lives, written cells before → after, refused cells refused. */
-  pushRun: string;
   /** Cells the last push refused as stale while its readback failed: no C to draw, read again. */
   unread: number;
+  /** The last push's refused cells, by key, in the host's words; each draws on its cell. */
+  refused: Record<string, string>;
 }
 
 const scheduleGridPage = z.object({
   workspaceId: z.string().default(""),
   captureId: z.string().default(""),
-  pushRun: z.string().default(""),
   unread: z.number().default(0),
+  refused: z.record(z.string(), z.string()).default({}),
 });
 
 type Ctx = RouteCtx<ScheduleGridDocument, ScheduleGridReading, ScheduleGridPage>;
 
-type PushReceipt = {
-  podId: string | null;
-  outcome: string;
-  cells: {
-    cell: string;
-    before: string | null;
-    after: string | null;
-    error?: string | null;
-    code?: string | null;
-  }[];
-};
-type PushCell = PushReceipt["cells"][number];
 const REFUSAL_WORD: Record<string, string> = {
   "stale-staged-cell": "stale",
   "target-evidence-stale": "stale",
 };
-/**
- * A refused cell's `after` is what Revit holds, not what this run wrote, so it reads refused with
- * its code's word, or the error's first clause when the cell carries no code.
- */
-const cellLine = (c: PushCell) =>
-  c.error
-    ? `${c.cell} refused (${c.code ? (REFUSAL_WORD[c.code] ?? c.code) : c.error.split(": ")[0]})`
-    : `${c.cell} ${c.before ?? "?"} → ${c.after ?? "?"}`;
-/** The run's word, from its cells: a push that wrote some cells and refused others is partly applied. */
-const pushWord = (receipt: PushReceipt) => {
-  const refused = receipt.cells.filter((cell) => cell.error).length;
-  if (!refused) return receipt.outcome;
-  return refused === receipt.cells.length ? "Refused" : "Partly applied";
+/** A refused cell's note: its code's word, or the error's first clause when it carries no code. */
+const refusalNote = (f: { error: string; code?: string }) =>
+  f.code ? (REFUSAL_WORD[f.code] ?? f.code) : f.error.split(": ")[0]!;
+
+/** A cell as the person reads it: its column header and row. */
+const cellLabel = (ctx: Ctx, key: string) => {
+  const { rowNumber, columnNumber } = splitScheduleCellKey(key);
+  const shown = scheduleReadingSchema.safeParse(previousOf(ctx.readings.saved));
+  const header = shown.success
+    ? shown.data.snapshot.columns.find((c) => c.columnNumber === columnNumber)?.headerText
+    : undefined;
+  return `${header ?? `col ${columnNumber}`} · row ${rowNumber}`;
 };
-export const pushRunLine = (receipt: PushReceipt, run?: string | null) =>
-  [
-    pushWord(receipt),
-    receipt.podId && run
-      ? `${receipt.podId} · ${run}/receipt.json`
-      : "action receipt (no pod bound)",
-    receipt.cells.map(cellLine).join(", "),
-  ].join(" · ");
 
 const targetOf = (ctx: Ctx) => {
   if (ctx.target.kind !== "document") throw Error("Select an exact available document lifetime");
@@ -166,21 +148,6 @@ export const schedulesManifest = () =>
       },
       page: scheduleGridPage,
       actions: {
-        catalog: {
-          label: "list schedules",
-          waitSeconds: HOST_READ_WAIT_S,
-          says: "reads the bound document's schedule catalogue again",
-          needs: "document",
-          actor: "any",
-          // A Situation verb presses with no input.
-          input: scheduleReads["schedule.grid.catalog"].input.prefault(
-            {},
-          ) as unknown as z.ZodType<never>,
-          stage: "audit",
-          dirties: ["catalog"],
-          ready: () => null,
-          run: async () => {},
-        },
         refresh: {
           label: "read schedule",
           waitSeconds: HOST_READ_WAIT_S,
@@ -190,7 +157,6 @@ export const schedulesManifest = () =>
           input: scheduleReads["schedule.grid.snapshot"].input.prefault(
             {},
           ) as unknown as z.ZodType<never>,
-          stage: "audit",
           dirties: ["work", "saved"],
           ready: () => null,
           run: async (ctx: Ctx, input: Record<string, unknown>) => {
@@ -232,18 +198,23 @@ export const schedulesManifest = () =>
           waitSeconds: NATIVE_APPLY_WAIT_S,
           ...semanticActionFacts("schedule.grid.push"),
           input: semanticActionInputSchema("schedule.grid.push") as never,
-          stage: "audit",
+          chord: SCHEDULE_STAGES.audit.keys.push,
           dirties: ["work", "saved", "receipts"],
           requires: { work: true, readings: ["saved", "receipts"] },
+          // The verb carries its operand: how many staged cells it writes.
+          count: (ctx: Ctx) => stagedEntries(ctx.work.doc?.cells ?? {}).length || null,
           ready: (ctx: Ctx) =>
             statuses(ctx).some((row) => ["running", "unknown", "incomplete"].includes(row.state))
               ? "Recover or resume the original receipt before a new apply"
               : !ctx.page.workspaceId || !ctx.work.doc?.basis || ctx.work.revision === null
                 ? "Review the exact schedule binding first"
-                : reopened(ctx)
-                  ? REOPENED
-                  : null,
+                : !stagedEntries(ctx.work.doc.cells).length
+                  ? "Stage a cell first: accept a proposal or type into a cell"
+                  : reopened(ctx)
+                    ? REOPENED
+                    : null,
           run: async (ctx: Ctx) => {
+            ctx.setPage({ refused: {} });
             // The run lands in the pod the route has bound; with none, in the action receipt.
             const pod = (ctx.page as { pod?: string | null }).pod ?? undefined;
             const row = await runSemanticAction(
@@ -263,23 +234,7 @@ export const schedulesManifest = () =>
               applied?: number;
               failures?: { key: string; error: string; code?: string }[];
               readbackError?: string;
-              run?: string | null;
-              receipt?: PushReceipt;
             };
-            // The receipt's cells carry the error; the refusal's code rides `failures`, by key.
-            if (result.receipt)
-              ctx.setPage({
-                pushRun: pushRunLine(
-                  {
-                    ...result.receipt,
-                    cells: result.receipt.cells.map((c) => ({
-                      ...c,
-                      code: result.failures?.find((f) => f.key === c.cell)?.code,
-                    })),
-                  },
-                  result.run,
-                ),
-              });
             if (result.readback) {
               const reading = scheduleReadingSchema.parse(result.readback);
               ctx.setPage({
@@ -297,16 +252,19 @@ export const schedulesManifest = () =>
             if (result.readbackError) throw Error(result.readbackError);
             // Some cells landed and some were refused: an outcome, not a failure. Returned, so the
             // verb's dirties re-read the grid; the readback already rebound the basis to what Revit holds.
+            // Each refusal draws on its cell; the log says the count and the first cell.
             const failures = result.failures ?? [];
             if (!failures.length) return null;
-            const first = `${failures[0]!.key}: ${failures[0]!.error}`;
-            const written = result.applied ?? 0;
-            return written
-              ? refuse(
-                  "partial",
-                  `partly applied: ${written} written, ${failures.length} refused: ${first}`,
-                )
-              : refuse("not-ready", `refused — nothing ran: ${first}`);
+            ctx.setPage({
+              refused: Object.fromEntries(failures.map((f) => [f.key, refusalNote(f)])),
+            });
+            return {
+              ...refuse(
+                result.applied ? "partial" : "not-ready",
+                `${failures.length} refused · ${cellLabel(ctx, failures[0]!.key)}`,
+              ),
+              cells: failures.map((f) => f.key),
+            };
           },
         },
       },

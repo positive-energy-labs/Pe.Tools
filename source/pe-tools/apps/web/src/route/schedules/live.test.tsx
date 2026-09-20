@@ -8,10 +8,26 @@ import { cellsApplied, setup, stubEventSource } from "../../../../host/tests/sch
 import { detailResponse, target } from "../../../../host/tests/schedule-fixture";
 import { LiveScheduleGridWorkspace } from "./live";
 import { REOPENED, schedulesManifest } from "./manifest";
+import type { Refusal } from "#/route";
 import { ScheduleGridWorkspace, type ScheduleGridState } from "./workspace";
 
 vi.mock("#/lib/token", () => ({ token: () => "currentColor", dash: () => "none" }));
 afterEach(cleanup);
+
+/** Press push once `ready` lets it run: a bare not-ready refusal is `ready` speaking, nothing ran. */
+const pushWhenReady = async (state: () => ScheduleGridState | undefined) => {
+  let result: Refusal | null = null;
+  await vi.waitFor(
+    async () => {
+      await act(async () => {
+        result = await state()!.execute("push");
+      });
+      expect(result?.code === "not-ready" && !result.cells).toBe(false);
+    },
+    { timeout: 10_000 },
+  );
+  return result as Refusal | null;
+};
 
 test("real grid edits and route-approved proposals apply through HTTP, journal, Work and independent readback", async () => {
   const f = await setup();
@@ -23,6 +39,7 @@ test("real grid edits and route-approved proposals apply through HTTP, journal, 
   });
   stubEventSource(f);
   await f.patch([{ path: ["cells"], value: {} }]);
+  let state: ScheduleGridState | undefined;
   const view = () => (
     <RegistryContext.Provider value={appAtomRegistry}>
       <LiveScheduleGridWorkspace
@@ -30,11 +47,14 @@ test("real grid edits and route-approved proposals apply through HTTP, journal, 
         // The document is the thread's; this test pins it instead of standing up a head.
 
         target={JSON.stringify({ kind: "open", ref: f.b })}
+        render={(next) => {
+          state = next;
+          return <ScheduleGridWorkspace state={next} />;
+        }}
       />
     </RegistryContext.Provider>
   );
   const mounted = render(view());
-  await screen.findByText("bridge connected");
   await screen.findByDisplayValue("100 VA");
   const cell = screen.getByDisplayValue("100 VA");
   await act(async () => {
@@ -47,12 +67,7 @@ test("real grid edits and route-approved proposals apply through HTTP, journal, 
       JSON.stringify(f.requests.filter((r) => r.body)),
     ).toBe("175 VA"),
   );
-  await vi.waitFor(() =>
-    expect(screen.getByRole("button", { name: "push 1 to Revit" }).hasAttribute("disabled")).toBe(
-      false,
-    ),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "push 1 to Revit" }));
+  expect(await pushWhenReady(() => state)).toBeNull();
   // The same host lane as the second push below: native apply, journal and Work publication take
   // seconds when SSE and jsdom share one event loop under a full suite.
   await vi.waitFor(async () => expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined(), {
@@ -75,15 +90,8 @@ test("real grid edits and route-approved proposals apply through HTTP, journal, 
   // Work clears before the push ends: the host still reads back and persists the receipt, and the
   // button is busy until that receipt reads settled. In this lane host, SSE and jsdom share one
   // event loop, which stretches those steps to seconds (measured: a one-row journal persist
-  // ~3.8 s), hence the long wait and the test's 30 s budget.
-  await vi.waitFor(
-    () =>
-      expect(screen.getByRole("button", { name: "push 1 to Revit" }).hasAttribute("disabled")).toBe(
-        false,
-      ),
-    { timeout: 10_000 },
-  );
-  fireEvent.click(screen.getByRole("button", { name: "push 1 to Revit" }));
+  // ~3.8 s), hence the long wait and the test's 20 s budget.
+  expect(await pushWhenReady(() => state)).toBeNull();
   await vi.waitFor(() =>
     expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(2),
   );
@@ -96,10 +104,8 @@ test("F-H5-1..3: a dead-lifetime Work says read again; the bare verb re-reads th
   // F-H5-2: the Situation presses a verb with no input.
   const manifest = schedulesManifest();
   expect(manifest.actions!.refresh.input.safeParse(undefined)).toMatchObject({ success: true });
-  expect(manifest.actions!.catalog.input.safeParse(undefined)).toMatchObject({ success: true });
-  // Q4, the contract: the read that rebinds is the person's; listing writes nothing.
+  // Q4, the contract: the read that rebinds is the person's.
   expect(manifest.actions!.refresh.actor).toBe("human");
-  expect(manifest.actions!.catalog.actor).toBe("any");
 
   const f = await setup(); // 1::2 staged "150 VA" under the open-B reading
   stubEventSource(f);
@@ -119,10 +125,9 @@ test("F-H5-1..3: a dead-lifetime Work says read again; the bare verb re-reads th
       />
     </RegistryContext.Provider>,
   );
-  await screen.findByText("bridge connected");
   await screen.findByText("P-1");
   // F-H5-1: the dead binding refuses before dispatch, by a reason that names the way out.
-  await vi.waitFor(() => expect(state?.blockedBecause).toBe(REOPENED));
+  await vi.waitFor(async () => expect((await state!.execute("push"))?.message).toBe(REOPENED));
   expect(REOPENED).toBe(
     "Re-opened in Revit since this was staged: read the schedule again. Changed cells come back marked stale.",
   );
@@ -170,7 +175,7 @@ test("F-H5-1..3: a dead-lifetime Work says read again; the bare verb re-reads th
   expect(screen.queryByText("P-1")).toBeNull();
 });
 
-test("a push's run line reads a refused cell refused by its code, never before → after", async () => {
+test("a push's refused cell draws refused by its code on the cell, and the log line counts it", async () => {
   const f = await setup(); // 1::2 staged "150 VA"
   // Mark (1::1) and Load (1::2) each behind their own binding, as in the host's rebind test.
   const withMark = (load: string) => {
@@ -221,7 +226,7 @@ test("a push's run line reads a refused cell refused by its code, never before �
       />
     </RegistryContext.Provider>,
   );
-  await vi.waitFor(() => expect(state?.blockedBecause).toBe(REOPENED));
+  await vi.waitFor(async () => expect((await state!.execute("push"))?.message).toBe(REOPENED));
   // Load moved while closed: the rebind marks 1::2 stale; 1::1 (Mark) pushes live.
   f.setDetail(withMark("120"));
   await act(async () => {
@@ -233,13 +238,8 @@ test("a push's run line reads a refused cell refused by its code, never before �
     }),
   );
   f.setResponse(cellsApplied([[1, 1, true]]));
-  await vi.waitFor(() =>
-    expect(screen.getByRole("button", { name: "push 2 to Revit" }).hasAttribute("disabled")).toBe(
-      false,
-    ),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "push 2 to Revit" }));
-  const run = (await screen.findByText(/^push run ·/, undefined, { timeout: 10_000 })).textContent!;
-  expect(run).toContain("1::2 refused (stale)");
-  expect(run).not.toMatch(/1::2 [^,]*→/);
+  const refusal = await pushWhenReady(() => state);
+  expect(refusal).toMatchObject({ code: "partial", cells: ["1::2"] });
+  expect(refusal!.message).toMatch(/^1 refused · /);
+  await vi.waitFor(() => expect(state!.refused).toEqual({ "1::2": "stale" }));
 });

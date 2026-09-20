@@ -83,6 +83,8 @@ export function useScheduleGridColumns(
   wire: CellWire,
   stageEdit: (key: string, value: string) => string | void,
   stale: readonly StaleCell[] = [],
+  /** The last push's refusals, by key: each draws on its own cell. */
+  refused: Readonly<Record<string, string>> = {},
 ) {
   return useMemo<Column<ScheduleRow>[]>(() => {
     if (!snapshot) return [];
@@ -184,6 +186,7 @@ export function useScheduleGridColumns(
                         ? `a ${binding?.storageType ?? "non-text"} parameter cannot be empty in Revit — type a value`
                         : stageEdit(key, text),
               }),
+              ...(refused[key] ? { refused: refused[key] } : {}),
               transitions: scheduleTransitions(wire, key, cell, stale),
             };
           },
@@ -191,5 +194,5 @@ export function useScheduleGridColumns(
       }),
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps -- stageEdit and wire close over `cells` and the revision, listed
-  }, [snapshot, cells, wire.revision, stale.map((s) => s.key).join("|")]);
+  }, [snapshot, cells, wire.revision, stale.map((s) => s.key).join("|"), refused]);
 }
