@@ -287,10 +287,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
     let simulatedPlan: { hash: string; spec: string } | undefined;
     // Every owner but `family` holds a project document, so the project engines answer there.
     const project = seed.route !== "family";
-    /**
-     * The engine files one run per apply in the source pod (dogma law 10). Only an engine writes
-     * `output/`, so the simulated engine writes the receipt itself, inside this instance's root.
-     */
+    /** The simulated engine files saved-member runs in their pod and podless draft runs in the demo owner's pod. */
     const fileRun = async (operation: string, source: RunSource, planHash: string | null) => {
       verifyCaptured(source);
       const { root } = source;
@@ -309,15 +306,31 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         }),
       );
       await writeFile(
+        join(file, "..", "input.json"),
+        JSON.stringify({
+          operation,
+          source: {
+            kind: "pod-composition",
+            origin: root.origin,
+            ...(root.id ? { pod: root.id } : {}),
+            path: root.path,
+            sha256: root.sha256,
+          },
+          files: [],
+        }),
+      );
+      await writeFile(
         file,
         JSON.stringify(
           {
             podId: root.id,
-            memberPath: root.path,
-            // As `PodReceipt.ForSource`: a draft never claims a saved member's hash.
             ...(root.origin === "SuppliedDraft"
-              ? { memberSha256: null, origin: "SuppliedDraft" }
-              : { memberSha256: root.sha256, origin: "SavedMember" }),
+              ? { memberPath: null, memberSha256: null, origin: "SuppliedDraft" }
+              : {
+                  memberPath: root.path,
+                  memberSha256: root.sha256,
+                  origin: "SavedMember",
+                }),
             operation,
             planHash,
             outcome: "Succeeded",
