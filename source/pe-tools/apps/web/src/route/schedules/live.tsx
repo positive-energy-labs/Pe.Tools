@@ -108,6 +108,9 @@ export function LiveScheduleGridWorkspace({
   const catalog = valueOf(handle.readings.catalog, scheduleCatalogSchema);
   const retained = valueOf(handle.readings.work, scheduleReadingSchema);
   const saved = valueOf(handle.readings.saved, scheduleReadingSchema);
+  useEffect(() => {
+    if (!page.workspaceId && retained?.workspaceId) setPage({ workspaceId: retained.workspaceId });
+  }, [page.workspaceId, retained?.workspaceId, setPage]);
   const receipts = (previousOf(handle.readings.receipts) as ActionStatus[] | undefined) ?? [];
   const hasWork = Object.values(work.doc?.cells ?? {}).some((cell) => cell.staged || cell.proposal);
   const basisId = work.doc?.basis?.captureId;
