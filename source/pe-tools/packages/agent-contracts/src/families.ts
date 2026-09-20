@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { RouteStateSpec } from "./route-state.ts";
+import { isRecord, type RouteStateSpec } from "./route-state.ts";
 import { trichotomyAgentMask, trichotomyCellSchema } from "./trichotomy.ts";
 
 export const diagnosticSchema = z.object({
@@ -89,6 +89,72 @@ export type AppliedFilter = z.infer<typeof appliedScopeSchema>;
 export const FAMILY_CATALOG_LIMIT = 5000;
 
 /**
+ * The `revit.catalog.loaded-families` request that answers a scope's family names AND every type.
+ * F-J1-12: the collector lists types only for a Rows/Full view, and caps them at 10 per family
+ * unless the budget says otherwise; without both, every family reads typeless. Always filtered:
+ * a filterless read is the whole document (M13-2).
+ */
+export const familyCatalogRequest = (scope: AppliedFilter) => ({
+  filter: scope,
+  projection: { view: "Rows" as const },
+  budget: { maxEntries: FAMILY_CATALOG_LIMIT, maxSamplesPerEntry: FAMILY_CATALOG_LIMIT },
+});
+
+/**
+ * Why the Families door refused a write: one code per refusal branch. The web draws the code and
+ * its parts; `agentHint` is prose for Pea and is never parsed.
+ */
+export type FamiliesRefusalCode =
+  | "exclusion-held"
+  | "exclusion-author"
+  | "unknown-family"
+  | "no-scope"
+  | "unknown-family-type"
+  | "scope-truncated"
+  | "scope-unresolved"
+  | "types-truncated"
+  | "document-unavailable"
+  | "catalog-unreachable";
+export type FamiliesRefusal = {
+  ok: false;
+  kind: "refused";
+  code: FamiliesRefusalCode;
+  /** The cell keys refused, on `unknown-family-type`. */
+  cells?: FamilyCellAddress[];
+  /** The family names refused, on scope-name, exclusion and `types-truncated` refusals. */
+  families?: string[];
+  agentHint: string;
+};
+
+/** Why a scope's catalog cannot answer its families and types, or null when it can. */
+export function familyCatalogProblem(catalog: {
+  summary: { truncated: boolean };
+  families: readonly { familyName: string; typeCount?: number; types: readonly unknown[] }[];
+  issues?: readonly { message: string }[];
+}): { code: FamiliesRefusalCode; message: string; families?: string[] } | null {
+  if (catalog.summary.truncated)
+    return {
+      code: "scope-truncated",
+      message: `the scope resolves more than ${FAMILY_CATALOG_LIMIT} families; narrow it`,
+    };
+  if (!catalog.families.length)
+    return {
+      code: "scope-unresolved",
+      message: `scope resolved to no loaded families: ${catalog.issues?.map((issue) => issue.message).join("; ") || "no loaded family matches it"}`,
+    };
+  const short = catalog.families.find(
+    (family) => family.typeCount != null && family.types.length < family.typeCount,
+  );
+  return short
+    ? {
+        code: "types-truncated",
+        message: `the catalog listed ${short.types.length} of ${short.typeCount} types of "${short.familyName}"`,
+        families: [short.familyName],
+      }
+    : null;
+}
+
+/**
  * One proposed cell value on the `/families` audit: a family type's parameter cell and the value
  * someone proposes for it. Pea and a person write the same shape and are told apart by `by`. It is
  * authored Work, not a result — it survives a reload. The address is a family NAME, a type and the
@@ -165,6 +231,9 @@ export function familyStagedPatch(
     : { familyName, spec: { select: { names: [familyName] }, patch: { types } }, keys };
 }
 
+export const familyFilterCellSchema = trichotomyCellSchema(appliedScopeSchema).strict();
+export type FamilyFilterCell = z.infer<typeof familyFilterCellSchema>;
+
 /** Who held a family back. The route door checks it is the writer, so it is never just claimed. */
 export const exclusionAuthorSchema = z.enum(["person", "pea"]);
 export type FamilyExclusions = Record<string, { by: z.infer<typeof exclusionAuthorSchema> }>;
@@ -177,7 +246,11 @@ export type FamilyExclusions = Record<string, { by: z.infer<typeof exclusionAuth
  */
 const familiesDocumentSchema = z
   .object({
-    scope: appliedScopeSchema.nullable().default(null),
+    /**
+     * The audited scope is a cell (F-J1-10): Pea proposes one, only the person stages it, and plan
+     * reads the staged one. A bare filter is old Work, so it fails closed.
+     */
+    scope: familyFilterCellSchema.default({}),
     /**
      * Families held back from plan, keyed by family NAME, each with who held it back. An all-digit
      * key is an old element id, so it fails closed rather than reading as a name.
@@ -193,6 +266,10 @@ const familiesDocumentSchema = z
   })
   .strict();
 export type FamiliesRouteDocument = z.infer<typeof familiesDocumentSchema>;
+
+/** The scope the person staged: the only one the matrix audits and plan resolves. */
+export const stagedFilter = (doc: FamiliesRouteDocument): AppliedFilter | null =>
+  doc.scope.staged?.value ?? null;
 
 /**
  * The included plan hashes an apply must reproduce exactly, keyed by the id each name resolved to in
@@ -224,26 +301,47 @@ export const familiesExcluded = (
     return held ? [{ familyName: entry.familyName, by: held.by }] : [];
   });
 
+/** What start fresh can carry over from unreadable Work, each piece only on the person's press. */
+export type FamiliesSalvage = { familyNames: string[]; familyIds: number[]; scope?: AppliedFilter };
+
 export const familiesRouteState = {
   route: "families",
   title: "Families",
   description:
-    'Family Foundry: author a scope and propose through cells.<key>.proposal, where <key> is [familyName,typeName,parameter] of a family type loaded in the scope (the family NAME, never an element id). A person stages reviewed cells before plan or apply. Hold a family back with excluded.<familyName> = { by: "pea" }; the plan sheet names who held it back, and only the person lifts their own.',
+    'Family Foundry: propose scope.proposal first = { value: { categoryNames, familyNames, placementScope } } (exact names from op:revit.catalog.loaded-families); the person stages it, and plan audits only the staged scope. Then propose cells.<key>.proposal, where <key> is [familyName,typeName,parameter] of a family type in the staged scope, else the proposed one (the family NAME, never an element id); do not wait for the person to stage the scope. A person stages reviewed cells before plan or apply. Hold a family back with excluded.<familyName> = { by: "pea" }; the plan sheet names who held it back, and only the person lifts their own.',
   schema: familiesDocumentSchema,
   // Pea writes proposals only. A staged value reaches plan only through a person's review.
-  agentWriteMask: [["scope"], ["excluded"], ...trichotomyAgentMask(), ["executionOptions"]],
+  agentWriteMask: [
+    ["scope", "proposal"],
+    ["excluded"],
+    ...trichotomyAgentMask(),
+    ["executionOptions"],
+  ],
   // Planning and applying are the `families.plan` and `families.apply` workflows. Neither is
   // a route command, so neither can write into authored Work.
   commands: {},
-  // Old Work held exclusions by element id (`excludedIds`, then id-keyed `excluded`); the page
-  // resolves them to current names and re-excludes by name.
-  salvage: (raw) => {
-    const doc = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-    const ids = Array.isArray(doc.excludedIds)
-      ? doc.excludedIds
-      : doc.excluded && typeof doc.excluded === "object"
-        ? Object.keys(doc.excluded).map((key) => (/^\d+$/.test(key) ? Number(key) : NaN))
-        : [];
-    return { familyIds: ids.filter((id): id is number => Number.isSafeInteger(id)) };
+  // Old Work held exclusions by element id (`excludedIds`, then id-keyed `excluded`), then by name;
+  // the page resolves ids to current names and re-excludes by name. Its scope was a bare filter
+  // (or `plan.scope` before that): offered back, it is staged only by the person's press.
+  salvage: (raw): FamiliesSalvage => {
+    const doc = isRecord(raw) ? raw : {};
+    const keys = isRecord(doc.excluded) ? Object.keys(doc.excluded) : [];
+    const ids = [
+      ...(Array.isArray(doc.excludedIds) ? doc.excludedIds : []),
+      ...keys.filter((key) => /^\d+$/.test(key)).map(Number),
+    ];
+    const scopeCell = isRecord(doc.scope) ? doc.scope : {};
+    const scope = [
+      doc.scope,
+      isRecord(scopeCell.staged) ? scopeCell.staged.value : undefined,
+      isRecord(doc.plan) ? doc.plan.scope : undefined,
+    ]
+      .map((candidate) => appliedScopeSchema.safeParse(candidate))
+      .find((parsed) => parsed.success)?.data;
+    return {
+      familyNames: keys.filter((key) => !/^\d+$/.test(key)),
+      familyIds: ids.filter((id): id is number => Number.isSafeInteger(id)),
+      ...(scope ? { scope } : {}),
+    };
   },
 } satisfies RouteStateSpec<typeof familiesDocumentSchema>;

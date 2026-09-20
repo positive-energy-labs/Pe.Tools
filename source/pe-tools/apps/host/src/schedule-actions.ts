@@ -13,6 +13,7 @@ import {
   scheduleCatalogSchema,
   nativeProcessSchema,
   splitScheduleCellKey,
+  rebindScheduleWork,
   type DocumentRef,
   type ScheduleReading,
   type ScheduleReadKey,
@@ -170,6 +171,11 @@ export async function readSchedule(
   return reading;
 }
 
+/**
+ * A cell refused before or by Revit; `code` names a refusal the web keys on: the host's own
+ * (`stale-staged-cell`) or the domain's `EditRefusalCode`, with `causeCode` for a group refusal.
+ */
+type CellFailure = { key: string; error: string; code?: string; causeCode?: string };
 type Edit = ScheduleCellsApply.Req.ScheduleCellEdit & { key: string };
 type CellResult = ScheduleCellsApply.Res.ScheduleCellEditResult;
 /**
@@ -178,9 +184,20 @@ type CellResult = ScheduleCellsApply.Res.ScheduleCellEditResult;
  */
 function expand(document: ScheduleGridDocument, reading: ScheduleReading) {
   const edits: Edit[] = [];
-  const failures: { key: string; error: string }[] = [];
+  const failures: CellFailure[] = [];
+  const stale = new Set((document.basis?.stale ?? []).map((cell) => cell.key));
   for (const [key, cell] of Object.entries(document.cells)) {
     if (!cell.staged) continue;
+    // Staged over a value a re-read moved: refused here, never sent, until the person restages it.
+    if (stale.has(key)) {
+      failures.push({
+        key,
+        code: "stale-staged-cell",
+        error:
+          "This staged value is stale: Revit changed under it since it was staged; accept to stage it again",
+      });
+      continue;
+    }
     const { rowNumber, columnNumber } = splitScheduleCellKey(key);
     const binding = reading.snapshot.rows
       .find((r) => r.rowNumber === rowNumber)
@@ -226,7 +243,7 @@ function acknowledge(raw: unknown, edits: Edit[]) {
   }
   if (value?.appliedCells !== [...results.values()].filter((r) => r.ok).length) malformed = true;
   const successes: string[] = [],
-    failures: { key: string; error: string }[] = [];
+    failures: CellFailure[] = [];
   let unresolved = malformed;
   edits.forEach((edit, index) => {
     const result = results.get(index);
@@ -235,6 +252,9 @@ function acknowledge(raw: unknown, edits: Edit[]) {
     else
       failures.push({
         key: edit.key,
+        // The domain's code, never a parse of its sentence.
+        ...(!malformed && result?.code ? { code: result.code } : {}),
+        ...(!malformed && result?.causeCode ? { causeCode: result.causeCode } : {}),
         error: malformed
           ? "Malformed native acknowledgment"
           : (result?.error ?? (result ? "Native refused the cell" : "Missing native cell result")),
@@ -274,8 +294,19 @@ export async function admitScheduleAction(
       const reading = await captures.schedule(document.basis.captureId).catch((error) => {
         throw error instanceof StaleScheduleReading ? refused(error.message) : error;
       });
-      if (base.key.work !== reading.workspaceId || !same(reading.target, target))
-        throw refused("Work binding belongs to another schedule/target lifetime");
+      if (base.key.work !== reading.workspaceId)
+        throw refused("Work binding belongs to another schedule");
+      if (!same(reading.target, target)) {
+        const message =
+          "Work binding belongs to another document lifetime: the schedule was re-opened in Revit; read it again (staged cells are kept)";
+        // The web keys its way out on this code, never on the sentence.
+        throw new BridgeError(message, 409, {
+          notDispatched: true,
+          issues: [
+            { instancePath: "/basis", code: "binding-lifetime-closed", message, severity: "error" },
+          ],
+        });
+      }
       await current(bridge, target, reading.process);
       const { edits, failures } = expand(document, reading);
       if (!edits.length && !failures.length) throw refused("No staged cells");
@@ -295,7 +326,7 @@ export async function admitScheduleAction(
         document: ScheduleGridDocument;
         reading: ScheduleReading;
         edits: Edit[];
-        failures: { key: string; error: string }[];
+        failures: CellFailure[];
         at: string;
       };
       const { edits, reading, document } = prepared;
@@ -377,6 +408,44 @@ export async function admitScheduleAction(
       } catch (error) {
         readbackError = String(error);
       }
+      // The readback rebinds the Work, as the person's re-read does: a cell refused on moved evidence
+      // comes back stale with what was reviewed (`was`) beside what Revit holds now. No readback, no
+      // rebind, nor does an unresolved push (its resume publishes against the original basis); a
+      // person's re-read that moved the basis meanwhile is the newer rebind and stands. A
+      // post-publication convenience: nothing it throws changes the push's outcome (`rebindError`).
+      let rebind: "rebound" | "contended" | `skipped:${string}` = !readback
+          ? "skipped:no-readback"
+          : outcome.unresolved
+            ? "skipped:unresolved"
+            : "contended",
+        rebindError: string | undefined;
+      try {
+        for (let attempt = 0; rebind === "contended" && attempt < 4; attempt++) {
+          const view = await work.read(base.key, scheduleGridRouteState.route);
+          const latest = view && scheduleGridDocumentSchema.parse(view.doc);
+          if (!latest || latest.basis?.captureId !== document.basis!.captureId) {
+            rebind = "skipped:basis-moved";
+            break;
+          }
+          const patches = rebindScheduleWork(latest, reading, readback!);
+          if (!patches.length) rebind = "skipped:unchanged";
+          else if (
+            (
+              await work.apply(
+                base.key,
+                scheduleGridRouteState.route,
+                "human",
+                patches,
+                view.revision,
+              )
+            ).ok
+          )
+            rebind = "rebound";
+        }
+      } catch (error) {
+        rebind = "skipped:error";
+        rebindError = String(error);
+      }
       const result = {
         applied: outcome.successes.length,
         failures,
@@ -385,6 +454,8 @@ export async function admitScheduleAction(
         publication,
         readback,
         readbackError,
+        rebind,
+        rebindError,
       };
       if (outcome.unresolved)
         throw new ActionIncomplete(
@@ -431,7 +502,7 @@ function pushReceipt(
   before: ScheduleReading,
   after: ScheduleReading,
   edits: Edit[],
-  failures: { key: string; error: string }[],
+  failures: CellFailure[],
   results: Map<number, CellResult>,
 ) {
   // The text the grid shows for a cell (`route/schedules/workspace.tsx`): binding value, else the column's value.

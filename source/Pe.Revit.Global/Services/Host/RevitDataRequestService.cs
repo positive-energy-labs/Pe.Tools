@@ -1,4 +1,4 @@
-using Autodesk.Revit.DB.Electrical;
+﻿using Autodesk.Revit.DB.Electrical;
 using Pe.Revit.DocumentData.AgentContext;
 using Pe.Revit.DocumentData.Electrical;
 using Pe.Revit.DocumentData.Families.Loaded.Collectors;
@@ -343,12 +343,7 @@ internal sealed class RevitDataRequestService {
         var document = activeDocument.Value;
 
         try {
-            return LoadedFamiliesMatrixCollector.Collect(
-                document,
-                filter,
-                budget: request.Budget,
-                includeTempPlacement: request.IncludeTempPlacement,
-                snapshotCache: DocShadow.For(document));
+            return ReadLoadedFamiliesMatrix(document, filter, request.Budget, request.IncludeTempPlacement, DocShadow.For(document));
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "LoadedFamiliesMatrixException",
@@ -356,6 +351,19 @@ internal sealed class RevitDataRequestService {
                 "Verify the active document is a project document and retry."
             );
         }
+    }
+
+    /// <summary>
+    ///     The matrix read opens every family copy through the EditFamily gate. The gate refuses a destructive copy by name, and
+    ///     Revit may still show that failure as a dialog (project-a hold 4b: 6 min blocked). The read runs in the dialog lane, and each
+    ///     answered dialog is a named matrix issue.
+    /// </summary>
+    internal static LoadedFamiliesMatrixData ReadLoadedFamiliesMatrix(Autodesk.Revit.DB.Document document, LoadedFamiliesFilter? filter,
+        RevitDataOutputBudget? budget, bool includeTempPlacement, Pe.Revit.DocumentData.Families.Extraction.IFamilySnapshotCache? snapshotCache) {
+        var dialogs = new List<(bool IsError, string Message)>();
+        var data = RevitDialogs.NoModal(dialogs, () => LoadedFamiliesMatrixCollector.Collect(document, filter,
+            budget: budget, includeTempPlacement: includeTempPlacement, snapshotCache: snapshotCache));
+        return data with { Issues = [.. data.Issues, .. dialogs.Select(d => new RevitDataIssue("RevitDialogAnswered", RevitDataIssueSeverity.Warning, d.Message))] };
     }
 
     [Op("data-table.apply", Does = "Upsert a synthetic data table in one host-owned transaction: a key schedule whose rows are freely user-editable and whose cells are shared parameters on stable row elements — ideal for arbitrary agent-authored tables like design conditions or install notes. Can also place the table on a sheet. Authored element schedules apply through schedule.apply.", Title = "Apply Data Table", Finds = ["schedules", "data-table", "key-schedule", "table", "apply", "create", "upsert", "rows", "sheet-placement", "mutation"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Example = "{ \"table\": { \"name\": \"ASHRAE Design Conditions\", \"columns\": [{ \"heading\": \"Condition\" }, { \"heading\": \"Value (°F)\", \"kind\": \"Number\" }], \"rows\": [{ \"key\": \"cooling-db\", \"values\": [\"Cooling Design DB\", \"94.1\"] }, { \"key\": \"heating-db\", \"values\": [\"Heating Design DB\", \"12.3\"] }] }, \"placement\": { \"sheet\": \"M-001\" } }")]
@@ -420,7 +428,7 @@ internal sealed class RevitDataRequestService {
         return ParameterLinksService.Instance.Detail(document, request.IncludeEvaluation);
     }
 
-    [Op("revit.apply.parameter-links", Does = "Preview or atomically replace the model-owned parameter-link profile and reconcile its changed target values.", Title = "Apply Parameter Links", Finds = ["parameters", "links", "rules", "apply", "reconcile", "electrical", "circuits", "mocp", "mutation"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Example = "{ \"previewOnly\": true }")]
+    [Op("revit.apply.parameter-links", Does = "Preview or atomically replace the model-owned parameter-link profile and reconcile its changed target values.", Title = "Apply Parameter Links", Finds = ["parameters", "links", "rules", "apply", "reconcile", "electrical", "circuits", "mocp", "mutation"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Example = "{ \"previewOnly\": true }", Actor = OpActor.Human)]
     private ParameterLinksData ApplyParameterLinksCore(ParameterLinksApplyRequest request, ProjectDocument activeDocument) {
         var document = activeDocument.Value;
         if (!request.PreviewOnly && document.IsReadOnly) {
@@ -1028,7 +1036,7 @@ internal sealed class RevitDataRequestService {
         }
     }
 
-    [Op("revit.context.view-image", Does = "Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. Whole-view capture needs no transaction; focus capture sets a temporary crop box (clearing any scope box) and restores it afterward (editable document only). A cropped view also returns registration: the model XY of the image's top-left, top-right and bottom-left corners plus the image sha256, which places pixels under model geometry even on a rotated crop.", Title = "Export View Image", Finds = ["view", "sheet", "viewport", "schedule", "image", "capture", "screenshot", "png", "export", "visual", "see", "look", "crop", "focus", "zoom", "registration", "underlay", "plan"], Example = "{ \"target\": { \"name\": \"A101\" }, \"pixelSize\": 2000 }")]
+    [Op("revit.context.view-image", Does = "Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. The view exports unmodified, with all the user's settings; focus capture sets a temporary crop box (clearing any scope box) and restores it afterward (editable document only). A cropped view's image is exactly its model crop, cut from the export (which covers the view's whole outline) at the requested width, and returns registration: the model XY of the image's top-left, top-right and bottom-left corners plus the image sha256, which places pixels under model geometry even on a rotated crop.", Title = "Export View Image", Finds = ["view", "sheet", "viewport", "schedule", "image", "capture", "screenshot", "png", "export", "visual", "see", "look", "crop", "focus", "zoom", "registration", "underlay", "plan"], Example = "{ \"target\": { \"name\": \"A101\" }, \"pixelSize\": 2000 }")]
     private RevitViewImageData GetRevitViewImageCore(RevitViewImageRequest request, RevitDocument activeDocument) {
         var document = activeDocument.Value;
         // Wire deserialization does not honor record ctor defaults (0 arrives when omitted).

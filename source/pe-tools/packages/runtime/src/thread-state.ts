@@ -71,6 +71,8 @@ type ThreadMessage = Awaited<ReturnType<AgentController["queryThreadMessages"]>>
 
 const askKey = (toolCallId: string) => `ask:${toolCallId}`;
 const cancelKey = (toolCallId: string) => `cancelled:${toolCallId}`;
+/** Why a run ended in error, and the calls it left running; keyed by run. */
+export const turnEndKey = (runId: string) => `turn-end:${runId}`;
 /** Sessions the runtime aborts on its own (host shutdown, a new turn over a parked ask). */
 const systemAborts = new WeakSet<object>();
 
@@ -92,6 +94,8 @@ const recording = new WeakMap<object, Promise<unknown>>();
  * - cancelled: a person's cancel ended the turn while it ran. An abort the runtime makes itself
  *   (`abortQuietly`: shutdown, a new turn over a parked ask) records no cancel, so a host
  *   restart's calls stay "ended without a terminal result".
+ * - turn end: a run that ends in error records its last error and the calls it left running
+ *   (`turnEndKey`), so a turn that failed around a live call says why (F-H6-8).
  * Returns the unsubscribe.
  */
 export function recordCalls(
@@ -99,7 +103,8 @@ export function recordCalls(
 ): () => void {
   const running = new Set<string>();
   let armed: string | null = null;
-  const write = (key: string, value: boolean) => {
+  let lastError: string | null = null;
+  const write = (key: string, value: unknown) => {
     const threadId = session.thread.getId();
     if (threadId === null) return;
     // In order: a call's later fact (answered) lands after its earlier one (asked).
@@ -113,6 +118,8 @@ export function recordCalls(
     recording.set(session, written);
   };
   return session.subscribe((event) => {
+    if (event.type === "agent_start") lastError = null;
+    if (event.type === "error") lastError = event.error.message;
     if (event.type === "tool_start") running.add(event.toolCallId);
     if (event.type === "tool_end") running.delete(event.toolCallId);
     if (event.type === "tool_approval_required") armed = event.toolCallId;
@@ -127,6 +134,9 @@ export function recordCalls(
     running.clear();
     armed = null;
     const quiet = systemAborts.delete(session);
+    const runId = session.run.getRunId();
+    if (event.reason === "error" && runId)
+      write(turnEndKey(runId), { reason: "error", error: lastError, running: stopped });
     if (event.reason !== "aborted" || quiet) return;
     for (const toolCallId of stopped) write(cancelKey(toolCallId), true);
   });

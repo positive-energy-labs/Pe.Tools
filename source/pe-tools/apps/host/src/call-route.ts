@@ -9,6 +9,7 @@ import {
   recoverGatewayAction,
   operationDefinition,
   gatewayTarget,
+  requireEligibleActor,
 } from "./gateway-actions.ts";
 import { actionBasesSchema, actionListFilterSchema } from "@pe/agent-contracts";
 import {
@@ -111,6 +112,7 @@ export type CallRouteDispatch = (
   Effect.Services<ReturnType<typeof dispatchTsOnlyOperation>>
 >;
 
+const ACTOR_HEADER = "x-pe-action-actor";
 export function makeCallRoute(
   operations?: ActionJournal,
   captures?: TakeoffCaptures,
@@ -183,6 +185,7 @@ export function makeCallRoute(
                 ...(sessionHeader ? { [HOST_RPC_BRIDGE_SESSION_HEADER]: sessionHeader } : {}),
                 ...(documentHeader ? { [HOST_RPC_DOCUMENT_HEADER]: documentHeader } : {}),
                 [HOST_RPC_ORIGIN_HEADER]: origin, // provenance survives the dev proxy hop
+                ...(req.headers[ACTOR_HEADER] ? { [ACTOR_HEADER]: req.headers[ACTOR_HEADER] } : {}),
               },
               body: JSON.stringify(body),
             });
@@ -268,6 +271,11 @@ export function makeCallRoute(
           return yield* Effect.fail(
             new BridgeError("Unknown operation intent", 409, { notDispatched: true }),
           );
+        // No actor header is a human caller (browser/CLI); agents are stamped by host-rpc-caller.
+        yield* Effect.try({
+          try: () => requireEligibleActor(definition, req.headers[ACTOR_HEADER] ?? "human"),
+          catch: (error) => error,
+        });
         if (!isTsOnlyOperationKey(key)) {
           const target = yield* Effect.tryPromise({
             try: () =>

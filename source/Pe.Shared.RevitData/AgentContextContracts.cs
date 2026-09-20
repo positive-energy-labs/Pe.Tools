@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
 namespace Pe.Shared.RevitData;
@@ -375,6 +375,14 @@ public record RevitViewImageData(
     public string? ImageUrl => this.Registration is null ? null : $"/view-image/{this.Registration.ImageSha256}.png";
 }
 
+/// <summary>Where a set of model points sits against a view's model crop. Outside means it can never draw under that view's image.</summary>
+[JsonConverter(typeof(StringEnumConverter))]
+public enum RevitCropCoverage {
+    Inside,
+    Crossing,
+    Outside
+}
+
 /// <summary>Why a view image carries no <see cref="RevitViewImageRegistration" />.</summary>
 [JsonConverter(typeof(StringEnumConverter))]
 public enum RevitViewImageRegistrationRefusal {
@@ -385,8 +393,13 @@ public enum RevitViewImageRegistrationRefusal {
     /// <summary>The crop or the image has no area.</summary>
     DegenerateCrop,
     /// <summary>The image's aspect disagrees with the crop's, so the PNG is not exactly the crop; refused, not stretched.</summary>
-    AspectDisagrees
+    AspectDisagrees,
+    /// <summary>The crop does not lie inside the exported extent (View.Outline x Scale), so the image cannot hold it.</summary>
+    CropOutsideImage
 }
+
+/// <summary>A pixel rectangle of an exported image; <see cref="Left" />/<see cref="Top" /> from the image's top-left.</summary>
+public sealed record RevitViewImagePixelRect(int Left, int Top, int Width, int Height);
 
 /// <summary>
 ///     Where the PNG sits in the model: model XY (feet) of the image's top-left, top-right and bottom-left pixel
@@ -405,6 +418,52 @@ public record RevitViewImageRegistration(
     ///     Crop min/max are in the crop box's own frame; origin and bases are its transform projected to model XY.
     ///     The image's X runs along basisX and its up along basisY, so top-left is (min.X, max.Y).
     /// </summary>
+    /// <summary>
+    ///     Where model XY points sit against a crop, read in the crop's own frame (same inputs as <see cref="FromCrop" />; a crop
+    ///     transform's bases are orthonormal, so the frame coordinate is a dot product).
+    /// </summary>
+    public static RevitCropCoverage Coverage(
+        IEnumerable<double[]> points,
+        (double X, double Y) min, (double X, double Y) max,
+        (double X, double Y) origin, (double X, double Y) basisX, (double X, double Y) basisY
+    ) {
+        var local = points.Select(p => (X: (p[0] - origin.X) * basisX.X + (p[1] - origin.Y) * basisX.Y,
+            Y: (p[0] - origin.X) * basisY.X + (p[1] - origin.Y) * basisY.Y)).ToList();
+        if (local.Count == 0) throw new ArgumentException("no points to place against the crop", nameof(points));
+        const double tolerance = 1e-6;
+        if (local.All(p => p.X >= min.X - tolerance && p.X <= max.X + tolerance && p.Y >= min.Y - tolerance && p.Y <= max.Y + tolerance))
+            return RevitCropCoverage.Inside;
+        return local.All(p => p.X < min.X) || local.All(p => p.X > max.X) || local.All(p => p.Y < min.Y) || local.All(p => p.Y > max.Y)
+            ? RevitCropCoverage.Outside
+            : RevitCropCoverage.Crossing;
+    }
+
+    /// <summary>
+    ///     Where the crop lies in a plain export of its view. ExportImage (FitToPage) covers R = View.Outline (paper, feet) x Scale, which lies in
+    ///     the crop box's own frame (PROVEN[session, projectA]: Guest House R == CropBox Min..Max; Lower Level R reaches past the crop). Pixel (u, v)
+    ///     is crop-frame (R.minX + u/W * R.w, R.maxY - v/H * R.h). Refuses when the image is not R's aspect (the gate of <see cref="FromCrop" />)
+    ///     or the crop does not lie inside R (±2 px).
+    /// </summary>
+    public static (RevitViewImagePixelRect? Rect, RevitViewImageRegistrationRefusal? Refusal) CropPixels(int width, int height,
+        (double X, double Y) outlineMin, (double X, double Y) outlineMax, double scale, (double X, double Y) cropMin, (double X, double Y) cropMax) {
+        double minX = outlineMin.X * scale, maxY = outlineMax.Y * scale, w = (outlineMax.X - outlineMin.X) * scale, h = (outlineMax.Y - outlineMin.Y) * scale;
+        if (width <= 0 || height <= 0 || w <= 0 || h <= 0 || cropMax.X <= cropMin.X || cropMax.Y <= cropMin.Y)
+            return (null, RevitViewImageRegistrationRefusal.DegenerateCrop);
+        var expectedHeight = width * h / w;
+        if (Math.Abs(height - expectedHeight) > Math.Max(2, expectedHeight * 0.005)) return (null, RevitViewImageRegistrationRefusal.AspectDisagrees);
+        double left = (cropMin.X - minX) / w * width, right = (cropMax.X - minX) / w * width;
+        double top = (maxY - cropMax.Y) / h * height, bottom = (maxY - cropMin.Y) / h * height;
+        if (left < -2 || top < -2 || right > width + 2 || bottom > height + 2) return (null, RevitViewImageRegistrationRefusal.CropOutsideImage);
+        int l = Math.Max(0, (int)Math.Round(left)), t = Math.Max(0, (int)Math.Round(top));
+        int r = Math.Min(width, (int)Math.Round(right)), b = Math.Min(height, (int)Math.Round(bottom));
+        return r - l < 1 || b - t < 1 ? (null, RevitViewImageRegistrationRefusal.DegenerateCrop) : (new RevitViewImagePixelRect(l, t, r - l, b - t), null);
+    }
+
+    /// <summary>The export width that gives the crop <paramref name="requested" /> pixels across, up to ExportImage's 8000 px cap.</summary>
+    public static int ExportWidth(int requested, (double X, double Y) outlineMin, (double X, double Y) outlineMax, double scale,
+        (double X, double Y) cropMin, (double X, double Y) cropMax) =>
+        (int)Math.Min(8000, Math.Round(requested * Math.Max(1, (outlineMax.X - outlineMin.X) * scale / (cropMax.X - cropMin.X))));
+
     public static (RevitViewImageRegistration? Registration, RevitViewImageRegistrationRefusal? Refusal) FromCrop(
         int width, int height, string imageSha256,
         (double X, double Y) min, (double X, double Y) max,
@@ -412,8 +471,8 @@ public record RevitViewImageRegistration(
     ) {
         double cropW = max.X - min.X, cropH = max.Y - min.Y;
         if (width <= 0 || height <= 0 || cropW <= 0 || cropH <= 0) return (null, RevitViewImageRegistrationRefusal.DegenerateCrop);
-        // ponytail: aspect agreement is the only check that the PNG covers exactly the crop. Annotation crop or
-        // out-of-crop annotations could still shift the extent symmetrically; the native proof owes that.
+        // ponytail: aspect agreement is the only check that the PNG covers exactly this extent; an extent shifted
+        // without changing its aspect (e.g. annotations past a crop with annotation crop off) would slip through.
         var expectedHeight = width * cropH / cropW;
         if (Math.Abs(height - expectedHeight) > Math.Max(2, expectedHeight * 0.005))
             return (null, RevitViewImageRegistrationRefusal.AspectDisagrees);

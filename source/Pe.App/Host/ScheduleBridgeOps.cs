@@ -37,7 +37,7 @@ internal static class ScheduleBridgeOps {
     ///     transaction and answers per cell; a refused cell is an answer, never a reason to retry by parameter name.
     ///     The host journal seals this exact request as the step input before dispatch.
     /// </summary>
-    [Op("schedule.cells.apply", Does = "Write reviewed schedule cells by their exact reviewed bindings (target element id, parameter id, storage, read-only, hasValue, raw value) in one transaction. Stale, missing, blocked, or conflicting evidence refuses per cell; results keep the request cell index and each cell's own target index.", Title = "Apply Schedule Cells", Finds = ["schedule", "cells", "apply", "binding", "reviewed", "write"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    [Op("schedule.cells.apply", Does = "Write reviewed schedule cells by their exact reviewed bindings (target element id, parameter id, storage, read-only, hasValue, raw value) in one transaction. Stale, missing, blocked, or conflicting evidence refuses per cell; results keep the request cell index and each cell's own target index.", Title = "Apply Schedule Cells", Finds = ["schedule", "cells", "apply", "binding", "reviewed", "write"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Actor = OpActor.Human)]
     private static Task<ScheduleCellApplyData> ApplyCells(ScheduleCellApplyRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => {
             if (!request.DryRun && document.Value.IsReadOnly)
@@ -47,7 +47,7 @@ internal static class ScheduleBridgeOps {
             catch (ArgumentException exception) { throw BridgeOperationExceptions.BadRequest(exception.Message); }
         }, cancellationToken);
 
-    [Op("schedule.apply", Does = "Create a new schedule from a saved schedule spec and write the run receipt into the source pod. Never edits an existing schedule.", Title = "Apply Schedule", Finds = ["schedule", "apply", "spec", "create", "receipt"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    [Op("schedule.apply", Does = "Create a new schedule from a saved schedule spec and write the run receipt into the source pod. Never edits an existing schedule.", Title = "Apply Schedule", Finds = ["schedule", "apply", "spec", "create", "receipt"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Actor = OpActor.Human)]
     private static Task<ScheduleSpecApplyData> Apply(ScheduleSpecApplyRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => {
             try {
@@ -80,7 +80,7 @@ internal static class ScheduleBridgeOps {
         var handled = new List<(bool IsError, string Message)>();
         ScheduleCreationResult result;
         try {
-            result = EngineEdge.NoModal(handled, () => {
+            result = RevitDialogs.NoModal(handled, () => {
                 using var transaction = new Transaction(document, $"Apply Schedule: {spec.Name}");
                 _ = transaction.Start();
                 // The verdict's other half: warnings are resolved and recorded here, never shown.

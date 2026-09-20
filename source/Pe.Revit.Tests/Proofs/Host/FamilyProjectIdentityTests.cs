@@ -12,6 +12,15 @@ public sealed class FamilyProjectIdentityTests {
     [OneTimeSetUp]
     public void SetUp(UIApplication ui) => this._ui = ui;
 
+    // Each test leaves the session's open documents as it found them (Mission 5 hold: a leftover changed a later test's reading).
+    private Document[] _before = [];
+
+    [SetUp]
+    public void RecordOpenDocuments() => this._before = this._ui.Application.Documents.Cast<Document>().ToArray();
+
+    [TearDown]
+    public void GuardOpenDocuments() => RevitFamilyFixtureHarness.CloseLeftoverDocuments(this._ui.Application, this._before);
+
     [Test]
     public void Project_plan_and_capture_ignore_modified_same_name_external_editor() {
         const string parameterName = "Identity Probe";
@@ -54,7 +63,11 @@ public sealed class FamilyProjectIdentityTests {
             var open = application.Documents.Cast<Document>().ToArray();
             var plan = FamilyFoundryBridgeOps.PlanFamilies(patch, project, [family.Name]).Families.Single();
             Assert.That(plan.Refusals, Is.Empty);
-            Assert.That(plan.Changes.Any(c => c.Key == parameterName), Is.True, "Project baseline is 3; the unsaved editor's 7 must not produce a no-op.");
+            // A value-only patch is a per-type cell change (`types.cell`, key `<type>/<parameter>`, FamilyReconciler.Diff), never a change keyed by
+            // the parameter name: the copy EditFamily returns holds 3, so planning 7 is exactly one cell update. Reading the editor's 7 would plan none.
+            var planned = plan.Changes.Select(c => $"{c.Section}:{c.Key}:{c.Kind}").ToList();
+            Assert.That(planned, Has.Member($"types.cell:Standard/{parameterName}:Update"), "Project baseline is 3; the unsaved editor's 7 must not produce a no-op.");
+            Assert.That(planned, Is.All.Match($"^types\\.cell:[^/]+/{parameterName}:Update$"), "only the value cells change");
             var capture = FamilyFoundryBridgeOps.CaptureFamilies([id], project).Families.Single();
             Assert.That(capture.Success, Is.True, capture.Error);
             Assert.That(capture.ModelJson, Is.EqualTo(baseline.ModelJson));
@@ -174,8 +187,14 @@ public sealed class FamilyProjectIdentityTests {
             Assert.That(plan.Changes.Single(change => change.Key == "FF Coverage Probe").Kind, Is.EqualTo("Add"));
             var tablePatch = """{"patch":{"lookupTables":{"Coverage Probe":{"csv":",Key##number##general,Value##number##general\nrow,1,2\n"}}}}""";
             var tablePlan = FamilyFoundryBridgeOps.PlanFamilies(tablePatch, project, [family.Name]).Families.Single();
-            Assert.That(tablePlan.Changes.Single(change => change.Key == "Coverage Probe").Kind, Is.EqualTo("Unverifiable"));
-            Assert.That(tablePlan.Refusals.Single().Code, Is.EqualTo(FamilyModelDiagnosticCodes.Unverifiable), "An unverifiable row refuses at plan, not at apply.");
+            // 2026-09-06 ruling (FamilyReconciler.WhyUnverifiable): in a Partial section only the keys an unmodeled fact names are unverifiable,
+            // never the whole section. This family's only table is named (`$.lookupTables.NEC TABLE 430`, unreadable: duplicate key rows), so a
+            // new key is an Add, and a write to the named table is what refuses at plan.
+            Assert.That(tablePlan.Changes.Single(change => change.Key == "Coverage Probe").Kind, Is.EqualTo("Add"));
+            Assert.That(tablePlan.Refusals, Is.Empty);
+            var namedPlan = FamilyFoundryBridgeOps.PlanFamilies(tablePatch.Replace("Coverage Probe", "NEC TABLE 430"), project, [family.Name]).Families.Single();
+            Assert.That(namedPlan.Changes.Single(change => change.Key == "NEC TABLE 430").Kind, Is.EqualTo("Unverifiable"));
+            Assert.That(namedPlan.Refusals.Single().Code, Is.EqualTo(FamilyModelDiagnosticCodes.Unverifiable), "An unverifiable row refuses at plan, not at apply.");
             var repeat = FamilyFoundryBridgeOps.PlanFamilies(patch, project, [family.Name]).Families.Single();
             Assert.That(repeat.PlanHash, Is.EqualTo(plan.PlanHash), "Transient EditFamily reference GUIDs must not change the reviewed intent.");
             var applied = FamilyFoundryBridgeOps.ApplyFamilies(patch, new Dictionary<long, string> { [family.Id.Value()] = plan.PlanHash }, project, null, null, Path.Combine(Path.GetTempPath(), "Pe.Tools", "family-apply-test", Guid.NewGuid().ToString("N")), new Dictionary<long, string> { [family.Id.Value()] = plan.FamilyName }).Receipts.Single();

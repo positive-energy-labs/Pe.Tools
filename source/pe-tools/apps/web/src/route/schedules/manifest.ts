@@ -1,5 +1,7 @@
 import { z } from "zod";
 import {
+  canonicalRouteInput,
+  rebindScheduleWork,
   scheduleGridRouteState,
   scheduleReadingSchema,
   scheduleReads,
@@ -10,6 +12,7 @@ import {
 
 import {
   entityRoute,
+  refuse,
   semanticActionFacts,
   semanticActionInputSchema,
   type Ctx as RouteCtx,
@@ -30,7 +33,7 @@ export type ScheduleGridAction = "catalog" | "refresh" | "push";
 export interface ScheduleGridPage {
   workspaceId: string;
   captureId: string;
-  /** The last push's run, as one line: outcome, where its receipt lives, cells before → after. */
+  /** The last push's run, as one line: outcome, where its receipt lives, written cells before → after, refused cells refused. */
   pushRun: string;
 }
 
@@ -45,20 +48,62 @@ type Ctx = RouteCtx<ScheduleGridDocument, ScheduleGridReading, ScheduleGridPage>
 type PushReceipt = {
   podId: string | null;
   outcome: string;
-  cells: { cell: string; before: string | null; after: string | null }[];
+  cells: {
+    cell: string;
+    before: string | null;
+    after: string | null;
+    error?: string | null;
+    code?: string | null;
+  }[];
+};
+type PushCell = PushReceipt["cells"][number];
+const REFUSAL_WORD: Record<string, string> = {
+  "stale-staged-cell": "stale",
+  "target-evidence-stale": "stale",
+};
+/**
+ * A refused cell's `after` is what Revit holds, not what this run wrote, so it reads refused with
+ * its code's word, or the error's first clause when the cell carries no code.
+ */
+const cellLine = (c: PushCell) =>
+  c.error
+    ? `${c.cell} refused (${c.code ? (REFUSAL_WORD[c.code] ?? c.code) : c.error.split(": ")[0]})`
+    : `${c.cell} ${c.before ?? "?"} → ${c.after ?? "?"}`;
+/** The run's word, from its cells: a push that wrote some cells and refused others is partly applied. */
+const pushWord = (receipt: PushReceipt) => {
+  const refused = receipt.cells.filter((cell) => cell.error).length;
+  if (!refused) return receipt.outcome;
+  return refused === receipt.cells.length ? "Refused" : "Partly applied";
 };
 export const pushRunLine = (receipt: PushReceipt, run?: string | null) =>
   [
-    receipt.outcome,
+    pushWord(receipt),
     receipt.podId && run
       ? `${receipt.podId} · ${run}/receipt.json`
       : "action receipt (no pod bound)",
-    receipt.cells.map((c) => `${c.cell} ${c.before ?? "?"} → ${c.after ?? "?"}`).join(", "),
+    receipt.cells.map(cellLine).join(", "),
   ].join(" · ");
 
 const targetOf = (ctx: Ctx) => {
   if (ctx.target.kind !== "document") throw Error("Select an exact available document lifetime");
   return ctx.target.ref;
+};
+
+/** The Work's basis reading, when the Page holds it (`live.tsx` pins `captureId` to the basis). */
+const basisOf = (ctx: Ctx) => {
+  const saved = scheduleReadingSchema.safeParse(previousOf(ctx.readings.saved));
+  return saved.success && saved.data.id === ctx.work.doc?.basis?.captureId ? saved.data : null;
+};
+/** F-H5-1: a Work bound to a closed document lifetime; the way out is a re-read, which rebinds. */
+export const REOPENED =
+  "Re-opened in Revit since this was staged: read the schedule again. Changed cells come back marked stale.";
+const reopened = (ctx: Ctx) => {
+  const basis = basisOf(ctx);
+  return (
+    basis !== null &&
+    ctx.target.kind === "document" &&
+    canonicalRouteInput(basis.target) !== canonicalRouteInput(ctx.target.ref)
+  );
 };
 
 const statuses = (ctx: Ctx): ActionStatus[] =>
@@ -120,7 +165,10 @@ export const schedulesManifest = () =>
           says: "reads the bound document's schedule catalogue again",
           needs: "document",
           actor: "any",
-          input: scheduleReads["schedule.grid.catalog"].input as unknown as z.ZodType<never>,
+          // A Situation verb presses with no input.
+          input: scheduleReads["schedule.grid.catalog"].input.prefault(
+            {},
+          ) as unknown as z.ZodType<never>,
           stage: "audit",
           dirties: ["catalog"],
           ready: () => null,
@@ -130,15 +178,40 @@ export const schedulesManifest = () =>
           label: "read schedule",
           says: "reads the selected schedule from Revit into a fresh capture",
           needs: "document",
-          actor: "any",
-          input: scheduleReads["schedule.grid.snapshot"].input as unknown as z.ZodType<never>,
+          actor: "human",
+          input: scheduleReads["schedule.grid.snapshot"].input.prefault(
+            {},
+          ) as unknown as z.ZodType<never>,
           stage: "audit",
           dirties: ["work", "saved"],
           ready: () => null,
           run: async (ctx: Ctx, input: Record<string, unknown>) => {
-            const reading = scheduleReadingSchema.parse(
-              await readScheduleCapture("schedule.grid.snapshot", input, targetOf(ctx)),
+            // No subject named: re-read the open schedule, never whatever view Revit has active.
+            const open = scheduleReadingSchema.safeParse(
+              previousOf(ctx.readings.work) ?? previousOf(ctx.readings.saved),
             );
+            const reading = scheduleReadingSchema.parse(
+              await readScheduleCapture(
+                "schedule.grid.snapshot",
+                input.scheduleId == null && input.scheduleName == null && open.success
+                  ? { ...input, scheduleId: open.data.snapshot.scheduleId }
+                  : input,
+                targetOf(ctx),
+              ),
+            );
+            // Only the person runs route actions; Pea reads through op:schedule.grid.snapshot, which
+            // never writes Work. So the rebind below is always the person's (ruling Q4).
+            const doc = ctx.work.doc;
+            if (doc?.basis && reading.workspaceId === ctx.page.workspaceId) {
+              const basis =
+                basisOf(ctx) ??
+                (await readScheduleCapture("schedule.grid.saved", { id: doc.basis.captureId }).then(
+                  (value) => scheduleReadingSchema.parse(value),
+                  () => null,
+                ));
+              const patches = rebindScheduleWork(doc, basis, reading);
+              if (patches.length) await ctx.write(patches);
+            }
             ctx.setPage({
               workspaceId: reading.workspaceId,
               captureId: reading.id,
@@ -157,22 +230,46 @@ export const schedulesManifest = () =>
               ? "Recover or resume the original receipt before a new apply"
               : !ctx.page.workspaceId || !ctx.work.doc?.basis || ctx.work.revision === null
                 ? "Review the exact schedule binding first"
-                : null,
+                : reopened(ctx)
+                  ? REOPENED
+                  : null,
           run: async (ctx: Ctx) => {
             // The run lands in the pod the route has bound; with none, in the action receipt.
             const pod = (ctx.page as { pod?: string | null }).pod ?? undefined;
-            const result = actionResult(
-              await runSemanticAction("schedule.grid.push", pod ? { pod } : {}, targetOf(ctx), {
-                work: { key: ctx.work.key as WorkKey, revision: ctx.work.revision! },
-              }),
-            ) as {
+            const row = await runSemanticAction(
+              "schedule.grid.push",
+              pod ? { pod } : {},
+              targetOf(ctx),
+              { work: { key: ctx.work.key as WorkKey, revision: ctx.work.revision! } },
+            );
+            // The host's lifetime refusal, by its code (a race past `ready`).
+            if (
+              row.state === "failed" &&
+              row.issues?.some((issue) => issue.code === "binding-lifetime-closed")
+            )
+              return refuse("not-ready", REOPENED);
+            const result = actionResult(row) as {
               readback?: unknown;
-              failures?: { key: string; error: string }[];
+              applied?: number;
+              failures?: { key: string; error: string; code?: string }[];
               readbackError?: string;
               run?: string | null;
               receipt?: PushReceipt;
             };
-            if (result.receipt) ctx.setPage({ pushRun: pushRunLine(result.receipt, result.run) });
+            // The receipt's cells carry the error; the refusal's code rides `failures`, by key.
+            if (result.receipt)
+              ctx.setPage({
+                pushRun: pushRunLine(
+                  {
+                    ...result.receipt,
+                    cells: result.receipt.cells.map((c) => ({
+                      ...c,
+                      code: result.failures?.find((f) => f.key === c.cell)?.code,
+                    })),
+                  },
+                  result.run,
+                ),
+              });
             if (result.readback) {
               const reading = scheduleReadingSchema.parse(result.readback);
               ctx.setPage({
@@ -180,15 +277,19 @@ export const schedulesManifest = () =>
                 captureId: reading.id,
               });
             }
-            if (result.failures?.length || result.readbackError)
-              throw Error(
-                [
-                  ...(result.failures ?? []).map((failure) => `${failure.key}: ${failure.error}`),
-                  result.readbackError,
-                ]
-                  .filter(Boolean)
-                  .join("; "),
-              );
+            if (result.readbackError) throw Error(result.readbackError);
+            // Some cells landed and some were refused: an outcome, not a failure. Returned, so the
+            // verb's dirties re-read the grid; the readback already rebound the basis to what Revit holds.
+            const failures = result.failures ?? [];
+            if (!failures.length) return null;
+            const first = `${failures[0]!.key}: ${failures[0]!.error}`;
+            const written = result.applied ?? 0;
+            return written
+              ? refuse(
+                  "partial",
+                  `partly applied: ${written} written, ${failures.length} refused: ${first}`,
+                )
+              : refuse("not-ready", `refused — nothing ran: ${first}`);
           },
         },
       },

@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows.Media.Imaging;
 using Pe.Shared.RevitData;
 
@@ -8,14 +8,53 @@ namespace Pe.Revit.DocumentData.AgentContext;
 ///     Exports a graphical view or sheet to a PNG file so agents can visually inspect it.
 ///     Captures views exactly as configured — templates, VG overrides, and temporary
 ///     hide/isolate all apply. Never creates or permanently mutates views.
-///     Whole-view capture needs no transaction (safe on read-only documents); focus capture
+///     A cropped view exports unmodified and is cut to exactly its crop arithmetically; focus capture
 ///     sets a temporary crop box (clearing any scope box) then restores it (editable doc only).
 ///     Sheet-filtered schedules get their filter temporarily lifted the same way (editable doc only).
 /// </summary>
 public static class RevitViewImageExporter {
     public static RevitViewImageData Export(Document document, View view, int pixelSize) {
-        var producedPath = ExportToTemp(document, view, pixelSize, out var clamped);
-        return BuildResult(document, view, producedPath, clamped, TryModelRect(view), null, TryRegistration(view, producedPath));
+        var producedPath = ExportCropped(document, view, pixelSize, out var clamped, out var refusal);
+        return BuildResult(document, view, producedPath, clamped, TryModelRect(view), null,
+            refusal is { } refused ? (null, refused) : TryRegistration(view, producedPath));
+    }
+
+    /// <summary>
+    ///     The user's view exports unmodified (user policy: "render exactly one of the views of the user (so u get all their settings)").
+    ///     ExportImage fits the view's whole extent, View.Outline (paper) x Scale in the crop box's own frame, not its crop
+    ///     (PROVEN[session, project-a 4/4 views + 3 fixtures]: Pool House 84 x 84 ft crop exports 1500 x 2171 px, the outline's aspect).
+    ///     So the export is sized for the crop (<see cref="RevitViewImageRegistration.ExportWidth" />) and cut to the crop's pixel rectangle
+    ///     inside the outline (<see cref="RevitViewImageRegistration.CropPixels" />); <paramref name="refusal" /> says why it could not be.
+    /// </summary>
+    private static string ExportCropped(Document document, View view, int pixelSize, out int clampedPixelSize,
+        out RevitViewImageRegistrationRefusal? refusal) {
+        refusal = null;
+        if (view is ViewSheet || !view.CropBoxActive)
+            return ExportToTemp(document, view, pixelSize, out clampedPixelSize);
+        var crop = view.CropBox;
+        var outline = view.Outline;
+        (double X, double Y) outlineMin = (outline.Min.U, outline.Min.V), outlineMax = (outline.Max.U, outline.Max.V);
+        (double X, double Y) cropMin = (crop.Min.X, crop.Min.Y), cropMax = (crop.Max.X, crop.Max.Y);
+        var path = ExportToTemp(document, view,
+            RevitViewImageRegistration.ExportWidth(pixelSize, outlineMin, outlineMax, view.Scale, cropMin, cropMax), out clampedPixelSize);
+        BitmapFrame frame;
+        using (var stream = File.OpenRead(path))
+            frame = BitmapDecoder.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad).Frames[0];
+        var (rect, refused) = RevitViewImageRegistration.CropPixels(frame.PixelWidth, frame.PixelHeight, outlineMin, outlineMax, view.Scale, cropMin, cropMax);
+        refusal = refused;
+        return rect is null ? path : CutPng(path, new System.Windows.Int32Rect(rect.Left, rect.Top, rect.Width, rect.Height));
+    }
+
+    private static string CutPng(string path, System.Windows.Int32Rect rect) {
+        BitmapFrame frame;
+        using (var stream = File.OpenRead(path))
+            frame = BitmapDecoder.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad).Frames[0];
+        var cutPath = Path.Combine(Path.GetDirectoryName(path)!, Path.GetFileNameWithoutExtension(path) + "-crop.png");
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(new CroppedBitmap(frame, rect)));
+        using (var output = File.Create(cutPath)) encoder.Save(output);
+        File.Delete(path);
+        return cutPath;
     }
 
     /// <summary>Focus capture: temporary crop box around <paramref name="modelBox" />, rolled back after export.</summary>
@@ -55,9 +94,10 @@ public static class RevitViewImageExporter {
             ApplyCrop(view, modelBox, marginPercent);
         });
         try {
-            var producedPath = ExportToTemp(document, view, pixelSize, out var clamped);
+            var producedPath = ExportCropped(document, view, pixelSize, out var clamped, out var refusal);
             // Read while the temporary crop is still set: it is the crop the image was exported with.
-            return BuildResult(document, view, producedPath, clamped, TryModelRect(view), null, TryRegistration(view, producedPath));
+            return BuildResult(document, view, producedPath, clamped, TryModelRect(view), null,
+                refusal is { } refused ? (null, refused) : TryRegistration(view, producedPath));
         } finally {
             RunCropTransaction(document, "PE restore crop", () => {
                 view.CropBox = originalCrop;
@@ -209,6 +249,7 @@ public static class RevitViewImageExporter {
             (transform.Origin.X, transform.Origin.Y), (transform.BasisX.X, transform.BasisX.Y),
             (transform.BasisY.X, transform.BasisY.Y));
     }
+
 
     private static string CropSheetPng(string sheetPath, BoundingBoxUV outline, BoundingBoxXYZ box, double marginPercent) {
         BitmapFrame frame;

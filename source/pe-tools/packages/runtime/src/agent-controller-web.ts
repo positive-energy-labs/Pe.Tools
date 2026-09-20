@@ -284,8 +284,16 @@ export async function buildAgentControllerApp(
         const scope = scopeOr400(c, "write");
         if (scope instanceof Response) return scope;
         const parsed = write.schema.safeParse(await c.req.json().catch(() => null));
-        if (!parsed.success)
-          return c.json({ ok: false, kind: "error", error: "invalid body", hint: write.hint }, 400);
+        if (!parsed.success) {
+          // Name the first failing field and the schema's word for its shape.
+          const issue = parsed.error.issues[0]!;
+          const field = issue.path
+            .map((key) => (typeof key === "number" ? `[${key}]` : `.${String(key)}`))
+            .join("")
+            .replace(/^\./, "");
+          const error = `invalid body at ${field || "the body"}: ${issue.message}`;
+          return c.json({ ok: false, kind: "error", error, hint: write.hint }, 400);
+        }
         try {
           return c.json(await write.run(scope, c.req.param("route"), actor, parsed.data));
         } catch (error) {

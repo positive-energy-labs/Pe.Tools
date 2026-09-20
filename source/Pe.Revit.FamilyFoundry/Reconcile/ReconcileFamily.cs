@@ -104,9 +104,11 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
 
         var logs = new List<OperationLog>();
         var applyPlan = plan;
+        var unitReports = new List<string>();
         if (plan.Queue.Operations.OfType<NormalizeParamSources>().SingleOrDefault() is { } normalization) {
             logs.Add(normalization.Execute(doc, ctx, groupContext));
             OperationProcessor.ThrowOnErrors(logs);
+            unitReports.AddRange(normalization.Reports);
             current = this._capture(doc.Document);
             var afterMigration = FamilyReconciler.Desired(current, patch);
             if (afterMigration.Value is null || afterMigration.Diagnostics.Count > 0)
@@ -148,7 +150,9 @@ public sealed class ReconcileFamily : DocOperation<DefaultOperationSettings> {
         var outcomes = scored.Select(c => new ChangeOutcome(c,
             residue.Any(r => r.Section == c.Section && r.Key == c.Key) ? LogStatus.Error : LogStatus.Success,
             c.Section == "parameters.sources" ? string.Join("; ", logs.SelectMany(l => l.Entries).Select(e => $"{e.Name}: {e.Message}")) : null)).ToList();
-        this._candidateReceipt = new FamilyReceipt(ctx.FamilyName, plan.PlanHash, applyPlan.PlanHash, outcomes, plan.RunEffects, residue, observed.Unmodeled,
+        // A value left uncarried for want of a declared unit rides the receipt by name (ruling 2026-09-19); preview may already name it.
+        this._candidateReceipt = new FamilyReceipt(ctx.FamilyName, plan.PlanHash, applyPlan.PlanHash, outcomes,
+            plan.RunEffects.Concat(unitReports).Distinct(StringComparer.Ordinal).ToList(), residue, observed.Unmodeled,
             residue.Count == 0 && logs.All(l => l.PendingCount == 0), this.ObservedParametersDigest, this.ObservedResourceIds);
         if (!this._candidateReceipt.Converged)
             throw new InvalidOperationException($"Reconciliation left {residue.Count} differences and {logs.Sum(l => l.PendingCount)} pending entries ({string.Join(", ", logs.SelectMany(l => l.Entries).Where(e => e.HasPendingWork).Select(e => e.Name))}): {string.Join("; ", residue.Select(r => $"{r.Section}:{r.Key} ({r.Kind}), expected {JsonConvert.SerializeObject(r.After)}, observed {JsonConvert.SerializeObject(r.Before)}"))}. Unmodeled: {JsonConvert.SerializeObject(observed.Unmodeled)}");

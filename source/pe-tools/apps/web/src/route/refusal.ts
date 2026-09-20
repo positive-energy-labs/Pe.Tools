@@ -58,6 +58,8 @@ export function partialRefusal(result: { result?: unknown }, noun: string): Refu
 /** The host's typed write refusal, mapped onto the one vocabulary. */
 export function writeRefusal(result: RouteStateWriteResult): Refusal | null {
   if (result.ok) return null;
+  // ponytail: the Families door's refusal shows its agentHint until interaction draws its parts.
+  if ("agentHint" in result) return refuse("not-ready", result.agentHint);
   const message = [result.error, result.hint].filter(Boolean).join(": ");
   if (result.code === "stale_revision") return refuse("stale-revision", message);
   if (result.kind === "refused") return refuse("not-ready", message);

@@ -8,6 +8,7 @@ import {
   address,
   familiesRouteState,
   familyCellKey,
+  stagedFilter,
   familyDraftRouteState,
   familyStagedPatch,
   type FamilyCellState,
@@ -154,7 +155,19 @@ async function setup() {
               (!categoryNames.length || categoryNames.includes(f.categoryName)) &&
               (!familyNames.length || familyNames.includes(f.familyName)),
           );
-          return { value: { summary: { truncated: false }, families, issues: [] } };
+          // As the C# collector: types only for a Rows/Full view, at most maxSamplesPerEntry (10).
+          const full = ["Rows", "Full"].includes(input.projection?.view);
+          return {
+            value: {
+              summary: { truncated: false },
+              families: families.map((f) => ({
+                ...f,
+                typeCount: f.types.length,
+                types: full ? f.types.slice(0, input.budget?.maxSamplesPerEntry ?? 10) : [],
+              })),
+              issues: [],
+            },
+          };
         }
         // The engine resolves exactly the names it is passed to their current ids.
         if (key === "families.plan")
@@ -272,11 +285,13 @@ async function authorFamilies(work: RouteWorkspace, revision = 0, where = scope)
     "human",
     [
       {
-        path: ["scope"],
+        path: ["scope", "staged"],
         value: {
-          categoryNames: ["Ducts"],
-          familyNames: ["Box", "Pipe"],
-          placementScope: "AllLoaded",
+          value: {
+            categoryNames: ["Ducts"],
+            familyNames: ["Box", "Pipe"],
+            placementScope: "AllLoaded",
+          },
         },
       },
     ],
@@ -372,7 +387,7 @@ test("plan sends the scope's resolved names, names what apply would send, and re
   const bare = await work.apply(scope, "families", "human", [{ path: ["excluded"], value: {} }], 0);
   const refused = await admit("families.plan", { source }, bare.revision!);
   expect(refused.state).toBe("failed");
-  expect(String((refused as { error?: string }).error)).toMatch(/Author a scope/);
+  expect(String((refused as { error?: string }).error)).toMatch(/Stage a scope/);
   const revision = await authorFamilies(work, bare.revision!);
   const held = await work.apply(
     scope,
@@ -385,6 +400,28 @@ test("plan sends the scope's resolved names, names what apply would send, and re
   expect(sent.find((s) => s.key === "families.plan")!.input.familyNames).toEqual(["Box", "Pipe"]);
   expect(plan.plan.map((row) => row.familyId)).toEqual([1, 2]);
   expect(plan.included).toEqual({ "1": "h1" });
+});
+
+test("F-J1-10: plan reads the person's staged scope, never Pea's proposed one", async () => {
+  const { work, admit, entries, sent } = await setup();
+  entries([entry(1, "Box", "h1"), entry(2, "Pipe", "h2"), entry(3, "Elbow", "h3")]);
+  const authored = await authorFamilies(work);
+  const elbow = { categoryNames: ["Ducts"], familyNames: ["Elbow"], placementScope: "AllLoaded" };
+  const proposed = await work.apply(
+    scope,
+    "families",
+    "agent",
+    [{ path: ["scope", "proposal"], value: { value: elbow } }],
+    authored,
+  );
+  expect(proposed).toMatchObject({ ok: true });
+  // Pea can never write the person's scope itself.
+  for (const path of [["scope"], ["scope", "staged"]])
+    expect(
+      await work.apply(scope, "families", "agent", [{ path, value: null }], proposed.revision!),
+    ).toMatchObject({ ok: false });
+  resultOf<Plan>(await admit("families.plan", { source }, proposed.revision!));
+  expect(sent.find((s) => s.key === "families.plan")!.input.familyNames).toEqual(["Box", "Pipe"]);
 });
 
 test("plan reads exclusions from the reviewed Work and seals each one with who made it", async () => {
@@ -422,8 +459,10 @@ test("a category-only scope plans exactly its three families and never a fourth"
       "human",
       [
         {
-          path: ["scope"],
-          value: { categoryNames: ["Ducts"], familyNames: [], placementScope: "AllLoaded" },
+          path: ["scope", "staged"],
+          value: {
+            value: { categoryNames: ["Ducts"], familyNames: [], placementScope: "AllLoaded" },
+          },
         },
       ],
       0,
@@ -444,7 +483,13 @@ test("a generated member's plan names its one family and the host plans exactly 
   entries([entry(1, "Box", "h1"), entry(2, "Pipe", "h2"), entry(3, "Elbow", "h3")]);
   const ducts = { categoryNames: ["Ducts"], familyNames: [], placementScope: "AllLoaded" };
   const revision = (
-    await work.apply(scope, "families", "human", [{ path: ["scope"], value: ducts }], 0)
+    await work.apply(
+      scope,
+      "families",
+      "human",
+      [{ path: ["scope", "staged"], value: { value: ducts } }],
+      0,
+    )
   ).revision!;
   const plan = resultOf<Plan>(
     await admit("families.plan", { source, familyNames: ["Pipe"] }, revision),
@@ -471,24 +516,33 @@ test("a scope that resolves no loaded family refuses before the native plan", as
       "human",
       [
         {
-          path: ["scope"],
-          value: { categoryNames: ["Walls"], familyNames: [], placementScope: "AllLoaded" },
+          path: ["scope", "staged"],
+          value: {
+            value: { categoryNames: ["Walls"], familyNames: [], placementScope: "AllLoaded" },
+          },
         },
       ],
       0,
     )
   ).revision!;
   const refused = await admit("families.plan", { source }, revision);
-  expect(String((refused as { error?: string }).error)).toMatch(/resolves no loaded family/);
+  expect(String((refused as { error?: string }).error)).toMatch(
+    /scope resolved to no loaded families: /,
+  );
   expect(sent.filter((s) => s.key === "families.plan")).toHaveLength(0);
 });
 
-test("an agent may plan, and only a human may apply", async () => {
+test("plan, capture, and apply over loaded families are human verbs (F-H6-3)", async () => {
   const { work, admit, sent } = await setup();
   const revision = await authorFamilies(work);
-  const plan = resultOf<Plan>(
-    await admit("families.plan", { source }, revision, "agent-plan", "agent"),
-  );
+  for (const [key, input] of [
+    ["families.plan", { source }],
+    ["families.capture", { pod: "global", familyIds: [1] }],
+  ] as const)
+    await expect(admit(key, input, revision, `agent-${key}`, "agent")).rejects.toThrow(
+      "requires human approval",
+    );
+  const plan = resultOf<Plan>(await admit("families.plan", { source }, revision));
   await expect(
     admit(
       "families.apply",
@@ -498,7 +552,9 @@ test("an agent may plan, and only a human may apply", async () => {
       "agent",
     ),
   ).rejects.toThrow("requires human approval");
-  expect(sent.filter((s) => s.key === "families.apply")).toHaveLength(0);
+  expect(sent.map((s) => s.key).filter((key) => key.startsWith("families."))).toEqual([
+    "families.plan",
+  ]);
 });
 
 test("apply sends the bytes its plan sealed, not the member as saved since", async () => {
@@ -951,16 +1007,18 @@ test("two documents keep independent authored scopes", async () => {
     "human",
     [
       {
-        path: ["scope"],
-        value: { categoryNames: [], familyNames: ["Grille"], placementScope: "PlacedOnly" },
+        path: ["scope", "staged"],
+        value: {
+          value: { categoryNames: [], familyNames: ["Grille"], placementScope: "PlacedOnly" },
+        },
       },
     ],
     0,
   );
   const here = familiesRouteState.schema.parse((await work.read(scope, "families"))!.doc);
   const there = familiesRouteState.schema.parse((await work.read(otherScope, "families"))!.doc);
-  expect(here.scope?.familyNames).toEqual(["Box", "Pipe"]);
-  expect(there.scope?.familyNames).toEqual(["Grille"]);
+  expect(stagedFilter(here)?.familyNames).toEqual(["Box", "Pipe"]);
+  expect(stagedFilter(there)?.familyNames).toEqual(["Grille"]);
 });
 
 /* ── parameter links ─────────────────────────────────────────────────────────────────────── */
@@ -1113,13 +1171,7 @@ test("neither route advertises a command a server would have to refuse", () => {
 
 test("families.capture writes one new member per family into the route's pod", async () => {
   const { admit, podsRoot } = await setup();
-  const row = await admit(
-    "families.capture",
-    { pod: "global", familyIds: [1, 2] },
-    0,
-    "capture",
-    "agent",
-  );
+  const row = await admit("families.capture", { pod: "global", familyIds: [1, 2] }, 0, "capture");
   expect(row.state, JSON.stringify(row)).toBe("succeeded");
   const members = (row as { result: { members: { pod: string; path: string; sha256: string }[] } })
     .result.members;

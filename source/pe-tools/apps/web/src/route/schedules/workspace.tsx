@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  transitionPatches,
   scheduleCellKey,
   splitScheduleCellKey,
   type RouteStatePatch,
@@ -62,6 +63,7 @@ export function ScheduleGridWorkspace({
 }) {
   const document = slice;
   const cells = document?.cells ?? {};
+  const stale = (document?.basis?.stale ?? []).map((cell) => cell.key);
 
   const [activeRow, setActiveRow] = useState<string | null>(null);
   const [railCollapsed, setRailCollapsed] = useState(false);
@@ -93,6 +95,16 @@ export function ScheduleGridWorkspace({
   };
   const deny = (key: string) => void apply([{ path: ["cells", key, "proposal"] }]);
   const undo = (key: string) => void apply([{ path: ["cells", key, "staged"] }]);
+  // A stale key's answers are the contract's transitions; `apply` drops the key from `basis.stale`.
+  const acceptStale = (key: string) =>
+    void apply(
+      transitionPatches(["cells"], key, cells[key] ?? {}, {
+        kind: "stage",
+        rung: { value: cells[key]?.staged?.value },
+      }),
+    );
+  const dropStale = (key: string) =>
+    void apply(transitionPatches(["cells"], key, cells[key] ?? {}, { kind: "unstage" }));
 
   const columnHeader = (columnNumber: number) =>
     snapshot?.columns.find((column) => column.columnNumber === columnNumber)?.headerText ??
@@ -106,7 +118,7 @@ export function ScheduleGridWorkspace({
     return binding?.displayValue ?? (columnIndex >= 0 ? (row?.values[columnIndex] ?? null) : null);
   };
 
-  const gridColumns = useScheduleGridColumns(snapshot, cells, stageEdit);
+  const gridColumns = useScheduleGridColumns(snapshot, cells, stageEdit, stale);
 
   const pushReason = blockedBecause
     ? blockedBecause
@@ -323,6 +335,9 @@ export function ScheduleGridWorkspace({
               {pending.length > 0 && snapshot && (
                 <PendingStrip
                   pending={pending}
+                  stale={stale}
+                  acceptStale={acceptStale}
+                  dropStale={dropStale}
                   proposalCount={proposalCount}
                   stagedCount={stagedCount}
                   columnHeader={columnHeader}

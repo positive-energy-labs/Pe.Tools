@@ -82,10 +82,11 @@ public static class ScheduleCellApplier {
 
         var results = cells.Select(cell => {
             var leaves = leavesOf[cell.Index] ?? [];
+            var refused = cell.Error == null ? leaves.FirstOrDefault(leaf => !leaf.Ok) : null;
             return new ScheduleCellEditResult(cell.Index, cell.Edit.RowNumber, cell.Edit.ColumnNumber,
                 cell.Error == null && leaves.Count != 0 && leaves.All(leaf => leaf.Ok),
-                cell.Error ?? leaves.FirstOrDefault(leaf => !leaf.Ok)?.Error,
-                cell.Current, leaves);
+                cell.Error ?? refused?.Error,
+                cell.Current, leaves, cell.Error == StaleCell ? EditRefusalCode.TargetEvidenceStale : refused?.Code, refused?.CauseCode);
         }).ToList();
         var appliedWrites = request.DryRun ? 0 : groups.Zip(answers, (edits, leaves) => edits.Zip(leaves, (edit, leaf) => (edit, leaf)))
             .SelectMany(pairs => pairs).Where(pair => pair.leaf.Ok)
@@ -94,6 +95,9 @@ public static class ScheduleCellApplier {
         return new ScheduleCellApplyData(appliedCells, appliedWrites, request.DryRun, results, issues);
     }
 
+    /// <summary>The one cell-level refusal with a code (target-evidence-stale): the web keys staleness on the code.</summary>
+    private const string StaleCell = "Reviewed schedule cell evidence is stale.";
+
     /// <summary>Cell-level evidence only; each target's own evidence is judged by the parameter door.</summary>
     private static string? ValidateCell(ScheduleCellBinding expected, ScheduleCellBinding? current) {
         if (current == null)
@@ -101,11 +105,11 @@ public static class ScheduleCellApplier {
         if (expected.Blocker != ScheduleCellBindingBlocker.None)
             return SameCell(expected, current)
                 ? $"Schedule cell is unavailable for mutation ({current.Blocker})."
-                : "Reviewed schedule cell evidence is stale.";
+                : StaleCell;
         if (expected.Targets == null || expected.Targets.Count == 0)
             return "Reviewed binding is missing canonical target evidence.";
         if (!SameCell(expected, current))
-            return "Reviewed schedule cell evidence is stale.";
+            return StaleCell;
         if (current.Blocker != ScheduleCellBindingBlocker.None || current.Targets.Count == 0)
             return $"Schedule cell is unavailable for mutation ({current.Blocker}).";
         return null;

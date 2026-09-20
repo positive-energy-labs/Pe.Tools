@@ -29,6 +29,18 @@ public sealed class OpRegistryTests {
     [Op("test.family-document", Does = "Prove presence-based family document needs.", IsPublic = false)]
     private static SchemaData HandleFamilyDocument(NoRequest _, FamilyDocument document) => null!;
 
+    [Op("test.human-verb", Does = "Prove a human-only verb is declared on the catalog.", Actor = OpActor.Human, IsPublic = false)]
+    private static SchemaData HandleHumanVerb(NoRequest _) => null!;
+
+    [Test]
+    public void The_catalog_names_who_may_run_an_op() {
+        OpRegistry.RegisterFrom(typeof(OpRegistryTests).Assembly);
+        Assert.That(OpRegistry.TryGet("test.human-verb", out var human), Is.True);
+        Assert.That(OpRegistry.TryGet("test.registry.probe", out var any), Is.True);
+        Assert.That(HostOpsCatalogEntry.FromOp(human).Actor, Is.EqualTo("human"));
+        Assert.That(HostOpsCatalogEntry.FromOp(any).Actor, Is.EqualTo("any"));
+    }
+
     [Test]
     public void Discovers_attributed_handlers_and_registration_is_idempotent() {
         var assembly = typeof(OpRegistryTests).Assembly;

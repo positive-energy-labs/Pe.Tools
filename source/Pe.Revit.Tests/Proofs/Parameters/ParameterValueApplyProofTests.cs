@@ -314,7 +314,10 @@ public sealed class ParameterValueApplyProofTests {
                 ]));
 
                 Assert.Multiple(() => {
-                    Assert.That(stale.Results[0].Error, Is.EqualTo(ParameterEditPlan.Stale));
+                    Assert.That(stale.Results[0].Error, Is.EqualTo(ParameterEditPlan.Stale(read.Results[0].Current!, stale.Results[0].Current!)));
+                    Assert.That(stale.Results[0].Error, Does.Contain($"value expected '{read.Results[0].Current!.RawValue}', now 'PE-OTHER'"));
+                    Assert.That(stale.Results[0].Code, Is.EqualTo(EditRefusalCode.TargetEvidenceStale));
+                    Assert.That(missing.Results[0].Code, Is.EqualTo(EditRefusalCode.TargetEvidenceMissing));
                     Assert.That(stale.Results[0].Current!.RawValue, Is.EqualTo("PE-OTHER"));
                     Assert.That(missing.Results[0].Error, Is.EqualTo(ParameterEditPlan.MissingExpected));
                     Assert.That(byName.Results[0].Error, Does.Contain("dry-run discovery only"));

@@ -121,6 +121,7 @@ export function settle(
       error: reason?.error ?? "Preparation did not finish",
       status: 409,
       notDispatched: true,
+      ...(thrown && "issues" in thrown && thrown.issues ? { issues: thrown.issues } : {}),
     };
   const uncertain = steps.find((step) => step.state === "unknown" || step.state === "running");
   if (uncertain) {

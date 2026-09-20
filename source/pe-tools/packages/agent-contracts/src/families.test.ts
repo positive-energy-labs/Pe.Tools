@@ -11,13 +11,17 @@ import {
 describe("familiesRouteState", () => {
   it("is authored Work and nothing else: no plan, no receipts, no observation keys", () => {
     expect(familiesRouteState.schema.parse({})).toEqual({
-      scope: null,
+      scope: {},
       excluded: {},
       cells: {},
     });
-    // Pea may propose, but only a person stages.
+    // Old Work held a bare filter (or null) as its scope: it fails closed, never reads as unscoped.
+    const filter = { categoryNames: [], familyNames: [], placementScope: "AllLoaded" };
+    for (const scope of [null, filter])
+      expect(familiesRouteState.schema.safeParse({ scope }).success).toBe(false);
+    // Pea may propose, but only a person stages: the scope too (F-J1-10).
     expect(familiesRouteState.agentWriteMask).toEqual([
-      ["scope"],
+      ["scope", "proposal"],
       ["excluded"],
       ["cells", "*", "proposal"],
       ["executionOptions"],
@@ -116,5 +120,36 @@ describe("familiesRouteState", () => {
     );
     // The pre-attribution array is old Work: it fails closed.
     expect(familiesRouteState.schema.safeParse({ excludedIds: [2] }).success).toBe(false);
+  });
+});
+
+describe("familiesRouteState.salvage", () => {
+  const bare = {
+    categoryNames: ["Air Terminals"],
+    familyNames: ["Alpha"],
+    placementScope: "AllLoaded",
+  };
+
+  it("S-1: keeps name-keyed exclusions as names beside old ids", () => {
+    expect(
+      familiesRouteState.salvage({ scope: bare, excluded: { Alpha: { by: "person" } } }),
+    ).toMatchObject({ familyNames: ["Alpha"], familyIds: [] });
+    expect(
+      familiesRouteState.salvage({ excluded: { "41": { by: "person" }, Beta: { by: "pea" } } }),
+    ).toMatchObject({ familyNames: ["Beta"], familyIds: [41] });
+    expect(familiesRouteState.salvage({ excludedIds: [3102, 7] })).toMatchObject({
+      familyNames: [],
+      familyIds: [3102, 7],
+    });
+  });
+
+  it("S-2: offers the old bare scope, from any shape that held one, and none when there was none", () => {
+    expect(familiesRouteState.salvage({ scope: bare })).toMatchObject({ scope: bare });
+    expect(familiesRouteState.salvage({ plan: { scope: bare } })).toMatchObject({ scope: bare });
+    expect(familiesRouteState.salvage({ scope: { staged: { value: bare } } })).toMatchObject({
+      scope: bare,
+    });
+    for (const doc of [{ scope: null }, {}, { scope: { proposal: { value: bare } } }])
+      expect(familiesRouteState.salvage(doc)).not.toHaveProperty("scope");
   });
 });

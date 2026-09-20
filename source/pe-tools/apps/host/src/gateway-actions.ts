@@ -22,6 +22,14 @@ import {
 } from "./native-receipts.ts";
 
 const refused = (message: string) => new BridgeError(message, 409, { notDispatched: true });
+/** One rule for /call and /actions: a declared human- or agent-only op refuses the other actor. */
+export function requireEligibleActor(
+  definition: { key: string; actor?: "human" | "agent" | "any" },
+  actor: string,
+) {
+  if (definition.actor !== undefined && definition.actor !== "any" && definition.actor !== actor)
+    throw refused(`'${definition.key}' is ${definition.actor}-only; ${actor} calls are refused`);
+}
 export async function operationDefinition(
   key: string,
   bridge: RevitBridge["Service"],
@@ -128,9 +136,8 @@ export async function admitGatewayAction(
     async () => {
       const session = await validate();
       const definition = await operationDefinition(admission.key, bridge, session?.sessionId);
+      requireEligibleActor(definition, admission.actor);
       const actor = "actor" in definition ? definition.actor : undefined;
-      if (actor !== undefined && actor !== "any" && actor !== admission.actor)
-        throw refused("Operation actor is not eligible");
       if (definition.intent !== "Mutate")
         throw refused("Only catalogued mutations enter external admission");
       let nativeCheck: ValidateFunction | undefined;

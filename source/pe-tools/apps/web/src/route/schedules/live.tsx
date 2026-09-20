@@ -2,6 +2,7 @@ import { useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { frozenDemo } from "#/host/demo-client";
 import {
+  unstale,
   scheduleCatalogSchema,
   scheduleReadingSchema,
   type ActionStatus,
@@ -103,9 +104,13 @@ export function LiveScheduleGridWorkspace({
   const hasWork = Object.values(work.doc?.cells ?? {}).some((cell) => cell.staged || cell.proposal);
   const basisId = work.doc?.basis?.captureId;
 
+  // Held while an action runs: a push's readback rebinds the basis mid-action, and a page move here
+  // would void that action's own page writes (its run line); it lands on the same capture anyway.
+  const acting = handle.busy !== null;
   useEffect(() => {
-    if (hasWork && basisId && page.captureId !== basisId) setPage({ captureId: basisId });
-  }, [basisId, hasWork, page.captureId, setPage]);
+    if (!acting && hasWork && basisId && page.captureId !== basisId)
+      setPage({ captureId: basisId });
+  }, [acting, basisId, hasWork, page.captureId, setPage]);
 
   const shown = hasWork && basisId ? saved : (retained ?? saved);
   const unresolved = receipts.some((row) =>
@@ -114,10 +119,14 @@ export function LiveScheduleGridWorkspace({
   const apply = async (patches: RouteStatePatch[], expectedRevision?: number) => {
     if (!shown) return refuse("not-ready", "Read the schedule before editing: Select a schedule");
     const writing = patches.some((patch) => patch.value !== undefined);
+    // Staging or unstaging a stale key is the person's answer to it: the key leaves `basis.stale`.
+    const restaged = patches.flatMap(({ path: [cells, key, rung] }) =>
+      cells === "cells" && rung === "staged" ? [String(key)] : [],
+    );
     return work.write(
       writing && (!hasWork || !work.doc?.basis)
         ? [{ path: ["basis"], value: { captureId: shown.id } }, ...patches]
-        : patches,
+        : [...patches, ...unstale(work.doc, restaged)],
       expectedRevision,
     );
   };

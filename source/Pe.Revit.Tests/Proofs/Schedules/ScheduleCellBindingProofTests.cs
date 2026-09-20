@@ -130,6 +130,7 @@ public sealed class ScheduleCellBindingProofTests {
                     entry.ScheduleId, entry.ScheduleUniqueId,
                     [new(rows[0].RowNumber, mark.ColumnNumber, missing, "NOPE")]));
                 Assert.That(missingResult.Results.Single().Error, Does.Contain("missing canonical target evidence"));
+                Assert.That(missingResult.Results.Single().Code, Is.Null, "only stale cell evidence carries a cell-level code");
 
                 var wrongParameterId = typeA.Targets.Single().ParameterId;
                 var invalidExactId = mark with {
@@ -140,6 +141,7 @@ public sealed class ScheduleCellBindingProofTests {
                     entry.ScheduleId, entry.ScheduleUniqueId,
                     [new(rows[0].RowNumber, mark.ColumnNumber, invalidExactId, "NO-FUZZY-FALLBACK")]));
                 Assert.That(invalidIdResult.Results.Single().Error, Does.Contain("stale"));
+                Assert.That(invalidIdResult.Results.Single().Code, Is.EqualTo(EditRefusalCode.TargetEvidenceStale), "the web keys stale on the code");
 
                 var beforeCancel = projectDocument.GetElement(mark.Targets.Single().ElementId.ToElementId())
                     .get_Parameter(BuiltInParameter.ALL_MODEL_MARK)!.AsString();
@@ -216,6 +218,11 @@ public sealed class ScheduleCellBindingProofTests {
                 Assert.Multiple(() => {
                     Assert.That(result.AppliedParameterWrites, Is.Zero);
                     Assert.That(result.Results.Single().Error, Does.Contain("stale"));
+                    // The cell answers with its first target, a sibling of the stale one: the group refusal, carrying the stale cause's code.
+                    Assert.That((result.Results.Single().Code, result.Results.Single().CauseCode),
+                        Is.EqualTo(((EditRefusalCode?)EditRefusalCode.AdmissionGroupRefused, (EditRefusalCode?)EditRefusalCode.TargetEvidenceStale)));
+                    Assert.That(result.Results.Single().ParameterResults.Select(leaf => leaf.Code),
+                        Is.EqualTo(new EditRefusalCode?[] { EditRefusalCode.AdmissionGroupRefused, EditRefusalCode.TargetEvidenceStale }));
                     Assert.That(current, Is.Not.Null);
                     Assert.That(current!.HasMixedValues, Is.True);
                     Assert.That(current.RawValue, Is.EqualTo(firstRawValue));

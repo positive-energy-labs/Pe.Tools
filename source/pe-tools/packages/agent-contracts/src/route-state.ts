@@ -49,7 +49,7 @@ export type RouteWriteAdmission = (
   doc: unknown,
   patches: readonly RouteStatePatch[],
   ctx: { scope: WorkKey; actor: import("./route-doc.ts").RouteActor; prior: unknown },
-) => Promise<import("./route-doc.ts").RouteRefusal | null>;
+) => Promise<import("./families.ts").FamiliesRefusal | null>;
 
 /**
  * The identity a Work document lives under: its route, the Address it is bound to, and an
@@ -78,7 +78,9 @@ export type RouteDocOf<TSpec> =
 
 /** A single segment-array patch. Omit `value` to delete the key. */
 export const routeStatePatchSchema = z.object({
-  path: z.array(z.union([z.string(), z.number()])),
+  path: z.array(z.union([z.string(), z.number()]), {
+    error: 'must be a segment array, e.g. ["scope","proposal"]',
+  }),
   value: z.unknown().optional(),
 });
 export type RouteStatePatch = z.infer<typeof routeStatePatchSchema>;
@@ -94,7 +96,12 @@ export type RouteStateWriteResult =
       hint: string;
       code?: import("./route-doc.ts").RouteRefusalCode;
       revision?: number;
-    };
+    }
+  | (import("./families.ts").FamiliesRefusal & { revision?: number });
+
+/** A refused write's prose: the route's error, or the Families door's `agentHint`. */
+export const refusalText = (refused: Extract<RouteStateWriteResult, { ok: false }>): string =>
+  "agentHint" in refused ? refused.agentHint : refused.error;
 
 /* ── Bindings (substrate-owned doc segment) ────────────────────────────────── */
 

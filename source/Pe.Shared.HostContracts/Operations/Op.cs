@@ -25,6 +25,12 @@ public enum OpTier {
     Expert
 }
 
+/// <summary>Who may run an op: anyone, or only the person. Pea neither finds nor runs a Human op.</summary>
+public enum OpActor {
+    Any,
+    Human
+}
+
 public enum OpThread {
     Any,
     Revit
@@ -42,6 +48,7 @@ public sealed class OpAttribute(string key) : Attribute {
     public string? Example { get; init; }
     public bool IsPublic { get; init; } = true;
     public OpThread Thread { get; init; } = OpThread.Any;
+    public OpActor Actor { get; init; } = OpActor.Any;
 }
 
 public sealed class Op {
@@ -206,7 +213,8 @@ public static class OpRegistry {
             Tier = (OpTier)EnumValue(nameof(OpAttribute.Tier), (int)OpTier.Escalation),
             Example = Named(nameof(OpAttribute.Example)) as string,
             IsPublic = Named(nameof(OpAttribute.IsPublic)) as bool? ?? true,
-            Thread = (OpThread)EnumValue(nameof(OpAttribute.Thread), (int)OpThread.Any)
+            Thread = (OpThread)EnumValue(nameof(OpAttribute.Thread), (int)OpThread.Any),
+            Actor = (OpActor)EnumValue(nameof(OpAttribute.Actor), (int)OpActor.Any)
         };
     }
 
@@ -282,7 +290,8 @@ public static class OpRegistry {
             attribute.IsPublic,
             attribute.Title,
             metadata,
-            needs
+            needs,
+            attribute.Actor
         );
         Validate(definition);
         return definition;
@@ -365,7 +374,8 @@ public sealed record HostOpsCatalogEntry(
     string? SafeDefaultRequestJson,
     IReadOnlyList<string> CallGuidance,
     string RequestSchemaJson,
-    string ResponseSchemaJson
+    string ResponseSchemaJson,
+    string Actor
 ) {
     public static HostOpsCatalogEntry FromOp(Op op) {
         return FromDefinition(op.Definition);
@@ -391,7 +401,8 @@ public sealed record HostOpsCatalogEntry(
             metadata.SafeDefaultRequestJson,
             metadata.CallGuidance,
             BridgeOpSchemaGenerator.GetRequestSchemaJson(definition.RequestType),
-            BridgeOpSchemaGenerator.GetResponseSchemaJson(definition.ResponseType)
+            BridgeOpSchemaGenerator.GetResponseSchemaJson(definition.ResponseType),
+            definition.Actor == OpActor.Human ? "human" : "any"
         );
     }
 }

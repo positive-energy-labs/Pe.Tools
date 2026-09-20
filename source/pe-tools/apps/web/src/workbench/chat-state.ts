@@ -120,7 +120,9 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
       const failed =
         call.isError === true ||
         (terminal && call.state !== "result") ||
-        active?.status === "error" ||
+        // A stored terminal state wins: a turn that ended in error marks its live calls `error`,
+        // and the run can still store their results afterwards (F-H6-8).
+        (!terminal && active?.status === "error") ||
         rejected ||
         interrupted;
       const completed = terminal || active?.status === "completed";

@@ -805,6 +805,7 @@ export namespace HostOpsCatalog {
       callGuidance: string[];
       requestSchemaJson: string;
       responseSchemaJson: string;
+      actor: string;
     }
     export interface HostOperationRequestExample {
       name: string;
@@ -1148,6 +1149,15 @@ export namespace RevitApplyParameterValues {
   }
   export namespace Res {
     export type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
+    /**
+     * The closed set of reasons ParameterEditPlan refuses an edit; the prose stays the refusal's message.
+     */
+    export type EditRefusalCode =
+      | "target-evidence-stale"
+      | "target-evidence-missing"
+      | "target-unresolved"
+      | "admission-group-refused"
+      | "alias-conflict";
 
     export interface Response {
       applied: number;
@@ -1161,6 +1171,8 @@ export namespace RevitApplyParameterValues {
       parsedRaw?: null | string;
       parsedDisplay?: null | string;
       current?: null | ParameterTarget;
+      code?: null | EditRefusalCode;
+      causeCode?: null | EditRefusalCode;
     }
     /**
      * Mutation evidence for one native parameter: what a reviewer saw, and what a writer compares against a fresh
@@ -2805,7 +2817,7 @@ export namespace RevitContextSummary {
   }
 }
 
-/** Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. Whole-view capture needs no transaction; focus capture sets a temporary crop box (clearing any scope box) and restores it afterward (editable document only). A cropped view also returns registration: the model XY of the image's top-left, top-right and bottom-left corners plus the image sha256, which places pixels under model geometry even on a rotated crop. */
+/** Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. The view exports unmodified, with all the user's settings; focus capture sets a temporary crop box (clearing any scope box) and restores it afterward (editable document only). A cropped view's image is exactly its model crop, cut from the export (which covers the view's whole outline) at the requested width, and returns registration: the model XY of the image's top-left, top-right and bottom-left corners plus the image sha256, which places pixels under model geometry even on a rotated crop. */
 export namespace RevitContextViewImage {
   export namespace Req {
     export interface Request {
@@ -2852,7 +2864,12 @@ export namespace RevitContextViewImage {
     /**
      * Why a view image carries no RevitViewImageRegistration.
      */
-    export type RevitViewImageRegistrationRefusal = "NoCrop" | "NoImage" | "DegenerateCrop" | "AspectDisagrees";
+    export type RevitViewImageRegistrationRefusal =
+      | "NoCrop"
+      | "NoImage"
+      | "DegenerateCrop"
+      | "AspectDisagrees"
+      | "CropOutsideImage";
 
     export interface Response {
       view: RevitAgentContextHandle;
@@ -5060,6 +5077,15 @@ export namespace ScheduleCellsApply {
       | "NonStandardDisplay"
       | "ParameterNotFound"
       | "ReadOnlyParameter";
+    /**
+     * The closed set of reasons ParameterEditPlan refuses an edit; the prose stays the refusal's message.
+     */
+    export type EditRefusalCode =
+      | "target-evidence-stale"
+      | "target-evidence-missing"
+      | "target-unresolved"
+      | "admission-group-refused"
+      | "alias-conflict";
     export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
 
     export interface Response {
@@ -5077,6 +5103,8 @@ export namespace ScheduleCellsApply {
       error?: null | string;
       currentBinding?: null | ScheduleCellBinding;
       parameterResults: ParameterValueEditResult[];
+      code?: null | EditRefusalCode;
+      causeCode?: null | EditRefusalCode;
     }
     /**
      * The write surface behind one rendered schedule cell: which element(s) a cell edit would
@@ -5120,6 +5148,8 @@ export namespace ScheduleCellsApply {
       parsedRaw?: null | string;
       parsedDisplay?: null | string;
       current?: null | ParameterTarget;
+      code?: null | EditRefusalCode;
+      causeCode?: null | EditRefusalCode;
     }
     export interface RevitDataIssue {
       code: string;
@@ -5388,12 +5418,18 @@ export namespace TakeoffsAdopt {
     }
   }
   export namespace Res {
+    /**
+     * Where a set of model points sits against a view's model crop. Outside means it can never draw under that view's image.
+     */
+    export type RevitCropCoverage = "Inside" | "Crossing" | "Outside";
+
     export interface Response {
       adopted: TakeoffAdopted[];
     }
     export interface TakeoffAdopted {
       elementId: number;
       guid: string;
+      ownerCrop?: null | RevitCropCoverage;
     }
   }
 }
@@ -5406,6 +5442,11 @@ export namespace TakeoffsCandidates {
     }
   }
   export namespace Res {
+    /**
+     * Where a set of model points sits against a view's model crop. Outside means it can never draw under that view's image.
+     */
+    export type RevitCropCoverage = "Inside" | "Crossing" | "Outside";
+
     export interface Response {
       regions: TakeoffRegionFacts[];
     }
@@ -5419,6 +5460,7 @@ export namespace TakeoffsCandidates {
       guid?: null | string;
       blob: string;
       loops: number[][][];
+      ownerCrop?: null | RevitCropCoverage;
     }
   }
 }
@@ -5579,6 +5621,10 @@ export namespace TakeoffsSnapshot {
   }
   export namespace Res {
     export type TakeoffCarrierStage = "Adoption" | "Materialization";
+    /**
+     * Where a set of model points sits against a view's model crop. Outside means it can never draw under that view's image.
+     */
+    export type RevitCropCoverage = "Inside" | "Crossing" | "Outside";
 
     export interface Response {
       reading: Reading;
@@ -5619,6 +5665,7 @@ export namespace TakeoffsSnapshot {
       guid?: null | string;
       blob: string;
       loops: number[][][];
+      ownerCrop?: null | RevitCropCoverage;
     }
     export interface TakeoffLiveRegion {
       elementId: number;

@@ -305,6 +305,18 @@ internal static class RevitFamilyFixtureHarness {
         _ = document.Close(false);
     }
 
+    /// <summary>
+    ///     A test's documents stay the test's: closes, unsaved, every document open now that was not open in <paramref name="before" />, then
+    ///     fails naming them. A document left open changes what the next test in the session reads (Mission 5 hold: the Alternator
+    ///     title-block refusal vanished after the identity probes ran first).
+    /// </summary>
+    public static void CloseLeftoverDocuments(Autodesk.Revit.ApplicationServices.Application application, IReadOnlyCollection<Document> before) {
+        var leftovers = application.Documents.Cast<Document>().Where(document => !before.Any(document.Equals)).ToList();
+        var names = leftovers.Select(document => $"'{document.Title}' ({(string.IsNullOrEmpty(document.PathName) ? "unsaved" : document.PathName)})").ToList();
+        foreach (var document in leftovers) CloseDocument(document);
+        Assert.That(names, Is.Empty, "the test left documents open; closed them unsaved");
+    }
+
     public static IReadOnlyList<(string TypeName, T Result)> EvaluateLengthDrivenStates<T>(
         Document familyDocument,
         IReadOnlyList<FamilyTypeState> states,

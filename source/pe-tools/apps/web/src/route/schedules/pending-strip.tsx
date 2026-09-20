@@ -12,6 +12,9 @@ type CellState = NonNullable<ScheduleGridDocument["cells"][string]>;
 
 export function PendingStrip({
   pending,
+  stale,
+  acceptStale,
+  dropStale,
   proposalCount,
   stagedCount,
   columnHeader,
@@ -22,6 +25,10 @@ export function PendingStrip({
   locate,
 }: {
   pending: [string, CellState][];
+  /** Staged keys a re-read moved under (`basis.stale`): the person accepts or drops each. */
+  stale: readonly string[];
+  acceptStale: (key: string) => void;
+  dropStale: (key: string) => void;
   proposalCount: number;
   stagedCount: number;
   columnHeader: (columnNumber: number) => string;
@@ -75,7 +82,19 @@ export function PendingStrip({
                   <StateCell scale="row" value={`r${rowNumber}`} />
                 </Press>
                 <span className="min-w-0 flex-1 truncate">
-                  <ValueDiff from={currentText(key)} to={next} />
+                  {isStaged && stale.includes(key) ? (
+                    <StateCell
+                      scale="row"
+                      value={next}
+                      stage="staged"
+                      stagedBy="you"
+                      agree="drift"
+                      modelValue={currentText(key) ?? ""}
+                      note="stale: Revit changed under it · accept to stage it again"
+                    />
+                  ) : (
+                    <ValueDiff from={currentText(key)} to={next} />
+                  )}
                 </span>
                 {!isStaged && cell.proposal?.note && (
                   <span className="hidden max-w-56 truncate sm:block">
@@ -83,7 +102,20 @@ export function PendingStrip({
                   </span>
                 )}
                 <span className="flex shrink-0 items-center gap-1.5">
-                  {isStaged ? (
+                  {isStaged && stale.includes(key) ? (
+                    <>
+                      <ActionButton
+                        label="deny"
+                        reason="Drop your stale value; the Revit value stands."
+                        onClick={() => dropStale(key)}
+                      />
+                      <ActionButton
+                        label="accept"
+                        reason="Accept to stage it again over what Revit holds now."
+                        onClick={() => acceptStale(key)}
+                      />
+                    </>
+                  ) : isStaged ? (
                     <ActionButton
                       label="unstage"
                       reason="Return this cell to its snapshot value. A proposal it was approved from is restored to the open list."

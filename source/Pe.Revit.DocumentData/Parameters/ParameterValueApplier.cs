@@ -101,7 +101,8 @@ public static class ParameterValueApplier {
         var results = groups.Select(group => new ParameterValueEditResult[group.Count]).ToArray();
         for (var i = 0; i < flat.Count; i++) {
             var (group, slot, _) = flat[i];
-            var answer = answers[i] ?? new ParameterValueEditResult(slot, false, plan.Refusals[i]);
+            var answer = answers[i] ?? new ParameterValueEditResult(slot, false, plan.Refusals[i]?.Message,
+                Code: plan.Refusals[i]?.Code, CauseCode: plan.Refusals[i]?.Cause);
             results[group][slot] = answer with { Index = slot, Current = resolved[i].Current };
         }
         return results;

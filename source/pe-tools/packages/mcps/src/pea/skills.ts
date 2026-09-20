@@ -122,7 +122,7 @@ The user asked to learn, not to be told. The master corrects the hand and never 
     name: "write-revit-csharp-script",
     content: String.raw`---
 name: write-revit-csharp-script
-description: Write and run a C# Revit script when code is the clearest way to inspect, mutate, or experiment against the model. Use for one-off probes, gaps in host operations, and durable multi-step work. Covers inline snippets, workspace files, and Pod rules.
+description: Write and run a C# Revit script when code is the clearest way to inspect, mutate, or experiment against the model. Use for one-off probes, gaps in host operations, and durable multi-step work. Covers inline snippets, workspace files, and Pod rules. Not for changing values a route shows (family or type parameters, schedule cells, instances, takeoffs, parameter links); propose those with propose-changes, even under Trusted.
 ---
 
 # Write Revit C# Script
@@ -206,7 +206,7 @@ When more than a sentence is needed, report what the Pod does in the user's word
     name: "propose-changes",
     content: String.raw`---
 name: propose-changes
-description: Propose value changes on a route. Use when the user asks to change, set, fill in, fix, rename, or adjust values on something a route shows - family parameters, bulk families, schedule cells, a pod member or spec, instances, takeoff rooms, parameter links - or has such a route open. You propose; the person stages and commits.
+description: Propose value changes on a route. Use when the user asks to change, set, fill in, fix, rename, or adjust values on something a route shows - "set <parameter> on every type of <families>", family parameters, bulk families, schedule cells, a pod member or spec, instances, takeoff rooms, parameter links - or has such a route open. You propose; the person stages and commits.
 ---
 
 # Propose Changes
@@ -216,12 +216,16 @@ Every route works the same way. You write proposals; the person stages them, and
 ## Method
 
 1. Read first: pe_read key=route:<route>. It returns the document, its revision, the schema, the agent write mask, and the commands. The mask is the truth about what you may write: only the proposal rungs it names.
-2. Copy cell keys from the read, never compose them from other ids. A key names what the route shows (for families, [family name, type name, parameter] exactly as the read spells them). If you cannot find the key in the read or the schema, ask rather than guess.
-3. Write only proposals: pe_do key=route:<route>.propose with patches to proposal rungs and expectedRevision from your read. Never write staged. If a route has no proposal rung, describe the change in chat and let the person make it.
+2. Keys come from the route read. On a route keyed by what Revit has loaded (families), a new key comes from the catalog read the route description names (revit.catalog.loaded-families). Copy names exactly; never compose them from ids. The door refuses an unknown key by name.
+3. Write only proposals: pe_do key=route:<route>.propose with patches to proposal rungs and expectedRevision from your read. A patch path is an array of segments, e.g. ["cells","<key>","proposal"] or ["scope","proposal"], never pointer strings. Never write staged. If a route has no proposal rung, describe the change in chat and let the person make it.
 4. Propose even when access is Trusted. A change the person could review on a route goes through that route; do not reach the same values through a script, an op, or a file edit. Trusted runs tools; it does not skip the person's review.
 5. What the person sees: each proposal sits on its own cell next to the current value, with accept and deny on that cell. The Chat head shows a compact summary and opens the route inside Chat. A staged value beside a different proposal of yours is a counter-proposal; do not overwrite it.
 6. Commit is the person's. Plan, apply, save, push, and sync are human verbs; do not press them or ask to. Say which verb to press and what it consumes: the staged values at the current revision, never open proposals. Instances is the one exception: open or start runs exactly what the person staged, so you may run it when they ask.
 7. A proposal is not a permission request. Do not use ask_user to get a proposal approved; it waits in the route as Work and survives reload. Use ask_user only for a decision only the person can make. An ask lives only as long as your turn.
+
+## Families
+
+Propose scope.proposal first (exact loaded family names), then the cells in the next propose call against that proposed scope. Do not wait for the person to stage the scope. A cell key is the JSON string of [family name, type name, parameter] as the catalog spells them; values are {"value": ...}.
 
 ## Pod members
 
@@ -351,6 +355,7 @@ export const retiredPeaSkillNames: readonly string[] = [
   "author-family-foundry-profile",
   "debug-family-foundry-artifacts",
   "validate-pe-settings-workspace",
+  "author-pe-settings",
 ];
 
 export const peaStandardSkillsRoot = path.join(".agents", "skills");
