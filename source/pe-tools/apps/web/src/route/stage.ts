@@ -3,6 +3,10 @@
  * and the panes it shows. A pane declares what it draws, its own verbs, and what its focus edge
  * does. Panes reach the world only through these Readings and verbs (Shape B,
  * stage-pane-verb-exploration.md §4).
+ * ASSUME(kai): the Reading is the cache, shared by every pane that draws it (Chat's too) (Q4) |
+ * alt: each pane holds its own snapshot
+ * ASSUME(kai): the /families matrix takes { maxAgeS: 300 } (Q2; not built, /families untouched) |
+ * alt: "fresh" or "as-is"
  */
 import type { UseHotkeyDefinition } from "@tanstack/react-hotkeys";
 

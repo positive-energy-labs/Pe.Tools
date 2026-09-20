@@ -27,7 +27,7 @@ const rail: PaneDecl<R, A> = {
 const grid: PaneDecl<R, A> = {
   draws: ["work", "saved", "receipts"],
   verbs: ["stage", "unstage", "accept", "deny"],
-  // ASSUME(kai): the grid re-reads on every focus from outside | alt: { maxAgeS: STALE_S }
+  // ASSUME(kai): focus re-reads from Revit every time it enters the grid | alt: maxAgeS: STALE_S
   // ASSUME(kai): a focused grid is marked stale by age, never re-read under the hands (Q5) | alt: a
   // silent re-read that moves cells while you type
   onFocus: "fresh",
