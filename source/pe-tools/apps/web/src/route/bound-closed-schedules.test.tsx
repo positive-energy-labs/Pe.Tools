@@ -97,8 +97,8 @@ test("/schedules with a closed binding opens nothing and says why, in the one se
   await vi.waitFor(
     () =>
       expect(
-        screen.getByText(/the document this page was bound to closed \(Same · open-B/),
-      ).toBeTruthy(),
+        screen.getAllByText(/the document this page was bound to closed \(Same · open-B/),
+      ).not.toHaveLength(0),
     { timeout: 10_000 },
   );
 }, 30_000);

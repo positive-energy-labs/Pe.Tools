@@ -282,7 +282,7 @@ const makeAtoms = (source: Readings) => {
         }),
       );
       return reading;
-    }).pipe(Atom.autoDispose),
+    }).pipe(Atom.setIdleTTL(0)),
   );
   return (key: string) => family(key);
 };

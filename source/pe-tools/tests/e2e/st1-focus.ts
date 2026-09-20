@@ -25,9 +25,18 @@ await journey("ST1", async (page, step) => {
   if (after <= before)
     throw new Error(`ASSERT focus re-reads the grid: log has ${after} reads, was ${before}`);
   step("cross the 32-subject cap through the actual pane focus path");
+  const churnStart = after;
   for (let i = 0; i < 40; i++) {
     await page.clickAt('input[placeholder="Filter schedules…"]');
+    const previous = await reads(page);
     await page.clickAt("tbody tr:nth-child(2) td:first-child");
+    await page.until(async () => (await reads(page)) > previous, `completed read ${i + 1}`, 20_000);
   }
-  await page.until(() => page.readCell(["2"], "REFRIGERANT"), "the grid after focus churn");
+  const completed = (await reads(page)) - churnStart;
+  if (completed < 40) throw new Error(`ASSERT 40 distinct completed reads: log added ${completed}`);
+  const text = await page.text();
+  if (text.includes("Too many Pe reading subscriptions"))
+    throw new Error("ASSERT focus churn stays below the Reading key cap");
+  if (!(await page.readCell(["2"], "REFRIGERANT")))
+    throw new Error("ASSERT the current grid remains rendered after focus churn");
 });

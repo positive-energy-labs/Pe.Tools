@@ -184,12 +184,21 @@ test("save refuses a draft the host just called invalid, in raw mode too, and cl
       "The host called this draft invalid: 1 error, first $.datums: must be object.",
     ),
   );
-  expect(save.disabled).toBe(true);
+  expect(save.getAttribute("aria-disabled")).toBe("true");
   expect(saveAsNew.disabled).toBe(true);
   expect(saveAsNew.title).toBe(save.title);
+  const saves = disk.saves;
+  fireEvent.click(save);
+  expect(disk.saves).toBe(saves);
 
   diagnostics = [];
   fireEvent.change(editor, { target: { value: '{ "datums": { "Ref Level": {} } }' } });
-  await waitFor(() => expect(save.disabled).toBe(false));
-  expect(saveAsNew.disabled).toBe(false);
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: /^save$/i }).hasAttribute("aria-disabled")).toBe(
+      false,
+    ),
+  );
+  expect((screen.getByRole("button", { name: /save as new/i }) as HTMLButtonElement).disabled).toBe(
+    false,
+  );
 });
