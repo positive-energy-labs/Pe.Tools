@@ -2,6 +2,7 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { cleanup, render } from "@testing-library/react";
 import { RegistryContext } from "@effect/atom-react";
+import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -9,7 +10,6 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 
-import { appAtomRegistry } from "#/route";
 import { LiveScheduleGridWorkspace } from "./live";
 import type { ScheduleGridState } from "./workspace";
 
@@ -20,9 +20,12 @@ class DeadSource {
   addEventListener() {}
   removeEventListener() {}
 }
+let registry: AtomRegistry.AtomRegistry | undefined;
 
 afterEach(() => {
   cleanup();
+  registry?.dispose();
+  registry = undefined;
   vi.unstubAllGlobals();
   window.history.replaceState({}, "", "/");
 });
@@ -30,11 +33,12 @@ afterEach(() => {
 test("a retained schedule reading adopts its workspace before the first cell edit", async () => {
   window.history.replaceState({}, "", "/schedules?demo=push");
   vi.stubGlobal("EventSource", DeadSource);
+  registry = AtomRegistry.make();
   let state: ScheduleGridState | undefined;
   const router = createRouter({
     routeTree: createRootRoute({
       component: () => (
-        <RegistryContext.Provider value={appAtomRegistry}>
+        <RegistryContext.Provider value={registry!}>
           <LiveScheduleGridWorkspace
             framed
             workspaceId=""
