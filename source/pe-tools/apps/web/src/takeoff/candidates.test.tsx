@@ -290,12 +290,13 @@ test("ticking a candidate enables the stamp, and pressing it posts takeoffs.adop
     timeout: 5_000,
   });
   const stamp = () => screen.getByRole("button", { name: /^stamp \d+ as zoning regions$/ });
-  expect(stamp()).toHaveProperty("disabled", true);
+  // A disabled commit stays focusable (its reason shows on hover and focus): aria-disabled.
+  expect(stamp().getAttribute("aria-disabled")).toBe("true");
   await act(async () => fireEvent.click(tick));
   const tag = screen.getByLabelText(`System tag for region 5852816 in ${VIEW}`);
   await act(async () => fireEvent.change(tag, { target: { value: "HP-1" } }));
   await act(async () => fireEvent.blur(tag));
-  await waitFor(() => expect(stamp()).toHaveProperty("disabled", false), { timeout: 5_000 });
+  await waitFor(() => expect(stamp().getAttribute("aria-disabled")).toBeNull(), { timeout: 5_000 });
   expect(stamp().textContent).toBe("stamp 1 as zoning regions");
   await act(async () => fireEvent.click(stamp()));
   const admission = () => host.posts.find((post) => post.url.endsWith("/actions"))?.body;
