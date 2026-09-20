@@ -1195,7 +1195,7 @@ test("families.capture writes one new member per family into the route's pod", a
 });
 
 test("an apply where no family succeeded settles failed with the receipt's reason; one success settles succeeded", async () => {
-  const { work, admit, applied, box } = await setup();
+  const { work, admit, applied, box, sent } = await setup();
   const revision = await authorFamilies(work);
   const plan = resultOf<Plan>(await admit("families.plan", { source }, revision));
   const failedBox = { ...box, success: false, error: "trace", errors: ["trace"] };
@@ -1211,13 +1211,27 @@ test("an apply where no family succeeded settles failed with the receipt's reaso
   );
   expect(none.state).toBe("failed");
   expect((none as { error?: string }).error).toBe(reason);
+  expect(none).not.toHaveProperty("notDispatched");
   // The per-family receipts stay on the settled row as evidence.
   expect(JSON.stringify(none)).toContain("Pipe");
 
-  applied({ receipts: [box, failedPipe], reason: "1 of 2 families failed; the first, Pipe: x." });
-  const partial = await admit(
+  const replay = await admit(
     "families.apply",
     { plan: plan.id, expectedPlanHashes: plan.included },
+    revision,
+    "replay-none",
+  );
+  expect(replay).toMatchObject({ state: "failed", notDispatched: true });
+  expect((replay as { error?: string }).error).toMatch(/already applied .*; plan again/);
+  expect(sent.filter((entry) => entry.key === "families.apply")).toHaveLength(1);
+
+  applied({ receipts: [box, failedPipe], reason: "1 of 2 families failed; the first, Pipe: x." });
+  const nextPlan = resultOf<Plan>(
+    await admit("families.plan", { source }, revision, "plan-after-failure"),
+  );
+  const partial = await admit(
+    "families.apply",
+    { plan: nextPlan.id, expectedPlanHashes: nextPlan.included },
     revision,
     "partial",
   );

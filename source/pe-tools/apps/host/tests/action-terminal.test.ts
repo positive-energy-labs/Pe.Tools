@@ -13,7 +13,7 @@ import type { ActionReceipt, ActionStep } from "@pe/agent-contracts";
 import { ActionIncomplete, ActionJournal } from "../src/action-journal.ts";
 import { BridgeError } from "../src/bridge.ts";
 
-type Outcome = "succeeded" | "failed" | "cancelled" | "unknown";
+type Outcome = "succeeded" | "failed" | "dispatchedFailure" | "cancelled" | "unknown";
 type End = "return" | "rethrow" | "incomplete" | "hostError";
 type Terminal = { state: ActionReceipt["state"]; notDispatched: boolean };
 
@@ -38,6 +38,8 @@ const admission = (id: string) => ({
 const answer = (outcome: Outcome) => {
   if (outcome === "succeeded") return { ok: true };
   if (outcome === "failed") throw new BridgeError("refused", 409, { notDispatched: true });
+  if (outcome === "dispatchedFailure")
+    throw new BridgeError("native failed", 422, { dispatched: true, result: { receipt: "kept" } });
   if (outcome === "cancelled") throw new BridgeError("cancelled", 499);
   throw new BridgeError("reply lost", 503);
 };
@@ -88,6 +90,7 @@ const completion: [Outcome[], End, Terminal][] = [
   [["succeeded"], "return", { state: "succeeded", notDispatched: false }],
   [["failed"], "return", { state: "succeeded", notDispatched: false }],
   [["failed"], "rethrow", { state: "failed", notDispatched: true }],
+  [["dispatchedFailure"], "rethrow", { state: "failed", notDispatched: false }],
   [["cancelled"], "rethrow", { state: "cancelled", notDispatched: false }],
   [["unknown"], "rethrow", { state: "unknown", notDispatched: false }],
   [["succeeded", "failed"], "rethrow", { state: "incomplete", notDispatched: false }],
@@ -113,6 +116,16 @@ test("completion: a preparation that throws is failed and not dispatched", async
     state: "failed",
     notDispatched: true,
   });
+});
+
+test("completion: a dispatched native failure keeps its authoritative result", async () => {
+  const row = await complete(["dispatchedFailure"], "rethrow");
+  expect(row).toMatchObject({
+    state: "failed",
+    evidence: { result: { receipt: "kept" } },
+    steps: [{ state: "failed", evidence: { result: { receipt: "kept" } } }],
+  });
+  expect(row).not.toHaveProperty("notDispatched");
 });
 
 // Recovery: an unknown row whose unknown steps the native receipt settles, in order.

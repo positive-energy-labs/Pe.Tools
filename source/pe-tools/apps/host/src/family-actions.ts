@@ -360,14 +360,14 @@ type Prepared =
 /**
  * An apply where no family succeeded changed nothing (each failure rolls back whole), so it settles `failed` with the
  * receipt's one-sentence reason; one success is a run that changed Revit and settles `succeeded` with per-family receipts.
- * `notDispatched` is the journal's only settled-failure shape; here it means "no effect", not "never sent".
+ * The native response proves dispatch, so the failed receipt retains it as authoritative evidence.
  */
 const appliedSomething = (result: unknown) => {
   const applied = result as FamiliesApply.Res.Response;
   if (applied.receipts.some((receipt) => receipt.success)) return;
   if (applied.diagnostics.some((diagnostic) => diagnostic.code === "Cancelled")) return;
   throw new BridgeError(applied.reason ?? "No family was applied", 422, {
-    notDispatched: true,
+    dispatched: true,
     result,
   });
 };
@@ -506,7 +506,9 @@ export async function admitFamilyAction(
             row.id !== admission.id &&
             row.key === key &&
             (row.request as { plan?: unknown }).plan === input.plan &&
-            (row.state === "succeeded" || row.state === "incomplete"),
+            (row.state === "succeeded" ||
+              row.state === "incomplete" ||
+              (row.state === "failed" && row.notDispatched !== true)),
         );
         if (spent) throw refused(`This plan already applied (action ${spent.id}); plan again`);
         // What the person reviewed must still be what is staged at every consumed address.
