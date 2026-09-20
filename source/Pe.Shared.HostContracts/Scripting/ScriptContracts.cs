@@ -76,13 +76,14 @@ public enum PodRunOutcome {
 }
 
 /// <summary>
-///     One run's receipt: its source origin, outcome, and outputs. `PodId` is the pod that stores the run.
+///     One run's receipt: its source origin, outcome, and outputs. `PodId` is null when an unfiled draft stores the run
+///     in operation output.
 ///     `MemberSha256` names saved bytes, so only a <see cref="PodRunOrigin.SavedMember" /> run carries it; a
 ///     supplied draft keeps the path it drafts and its own bytes and hash stay in `input.json`; operation input
 ///     names no member.
 /// </summary>
 public record PodReceipt(
-    string PodId,
+    string? PodId,
     string? MemberPath,
     string? MemberSha256,
     PodRunOrigin Origin,
@@ -101,15 +102,15 @@ public record PodReceipt(
     public static PodReceipt ForSource(PodCapturedSourceData root, string operation, string? planHash, PodRunOutcome outcome, List<string> outputs, string? reason) =>
         root.Origin == PodSourceOrigin.SavedMember
             ? new(root.Id, root.Path, root.Sha256, PodRunOrigin.SavedMember, operation, planHash, outcome, outputs, reason)
-            : new(root.Id, root.Path, null, PodRunOrigin.SuppliedDraft, operation, planHash, outcome, outputs, reason);
+            : new(root.Id, null, null, PodRunOrigin.SuppliedDraft, operation, planHash, outcome, outputs, reason);
 }
 
-public record PodMemberComposeRequest(string Pod, string Path, string? Content = null, PodCapturedSourceData? Source = null);
+public record PodMemberComposeRequest(string? Pod, string Path, string? Content = null, PodCapturedSourceData? Source = null);
 
 public record PodMemberComposeData(string? Composed, PodCapturedSourceData Source, List<ScriptDiagnostic> Diagnostics, List<PodConsumedSourceData> Dependencies);
 
 public record PodCapturedSourceData(
-    [property: JsonProperty(Required = Required.Always)] string Id,
+    string? Id,
     [property: JsonProperty(Required = Required.Always)] string Path,
     [property: JsonProperty(Required = Required.Always)] string Sha256,
     [property: JsonProperty(Required = Required.Always)] string BytesBase64,

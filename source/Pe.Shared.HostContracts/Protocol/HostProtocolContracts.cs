@@ -30,7 +30,8 @@ public static class HostProtocol {
     // 48: ParameterValueEditResult and ScheduleCellEditResult gain code and causeCode (nullable closed EditRefusalCode)
     // 49: RevitViewImageRegistrationRefusal gains CropOutsideImage
     // 50: HostOpsCatalogEntry gains Actor ("human" | "any")
-    public const int ContractVersion = 50;
+    // 51: family draft sources may omit pod context; run receipts may have no pod; Family Foundry changes carry before/after
+    public const int ContractVersion = 51;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]

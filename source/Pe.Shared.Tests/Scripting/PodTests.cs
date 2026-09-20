@@ -172,6 +172,23 @@ public sealed class PodTests {
         });
     }
 
+    [Test]
+    public void Podless_draft_composes_explicit_pod_dependencies_and_refuses_local_references() {
+        this.WritePod("Global", "global", new() { ["settings/Header.json"] = "{ \"title\": \"global\" }" });
+
+        var explicitDependency = this._service.Compose(null, "staged/family.json", "{ \"$include\": \"@global/Header\" }");
+        var localDependency = this._service.Compose(null, "staged/family.json", "{ \"$include\": \"@local/Header\" }");
+
+        Assert.Multiple(() => {
+            Assert.That(explicitDependency.Source.Id, Is.Null);
+            Assert.That(explicitDependency.Source.Origin, Is.EqualTo(PodSourceOrigin.SuppliedDraft));
+            Assert.That(explicitDependency.Dependencies.Single().PodId, Is.EqualTo("global"));
+            Assert.That(explicitDependency.Composed, Does.Contain("global"));
+            Assert.That(localDependency.Composed, Is.Null);
+            Assert.That(localDependency.Diagnostics.Single().Message, Does.Contain("needs a pod context"));
+        });
+    }
+
     private static byte[] WithBom(string content) => new UTF8Encoding(true).GetPreamble()
         .Concat(Encoding.UTF8.GetBytes(content)).ToArray();
 
@@ -320,7 +337,7 @@ public sealed class PodTests {
     }
 
     [Test]
-    public void A_draft_run_receipt_never_claims_the_saved_member_hash() {
+    public void A_draft_run_receipt_never_claims_a_saved_member() {
         var office = this.WritePod("Office", "office", new() { ["settings/family.json"] = "{\"saved\":1}" });
         var draftBytes = Encoding.UTF8.GetBytes("{\"draft\":1}");
         var draft = new PodCapturedSourceData("office", "settings/family.json", ScriptPodPreparationService.Sha256(draftBytes),
@@ -333,10 +350,27 @@ public sealed class PodTests {
 
         Assert.Multiple(() => {
             Assert.That(draftReceipt["origin"]!.Value<string>(), Is.EqualTo("SuppliedDraft"));
-            Assert.That(draftReceipt["memberPath"]!.Value<string>(), Is.EqualTo("settings/family.json"));
+            Assert.That(draftReceipt["memberPath"]!.Type, Is.EqualTo(JTokenType.Null));
             Assert.That(draftReceipt["memberSha256"]!.Type, Is.EqualTo(JTokenType.Null));
             Assert.That(draftReceipt["outcome"]!.Value<string>(), Is.EqualTo("Cancelled"));
             Assert.That((savedReceipt.Origin, savedReceipt.MemberSha256), Is.EqualTo((PodRunOrigin.SavedMember, saved.Sha256)));
+        });
+    }
+
+    [Test]
+    public void Podless_draft_input_keeps_its_logical_path_bytes_and_hash() {
+        const string content = "{ \"draft\": true }";
+        var composition = this._service.Compose(null, "staged/family.json", content);
+        var files = PodRuns.ComposedInput(composition.ToSource(), composition.Composed!);
+
+        Assert.Multiple(() => {
+            Assert.That(files[1].Role, Is.EqualTo("supplied-draft"));
+            Assert.That(files[1].Pod, Is.Null);
+            Assert.That(files[1].Address, Is.EqualTo("staged/family.json"));
+            Assert.That(files[1].Bytes, Is.EqualTo(Encoding.UTF8.GetBytes(content)));
+            var receipt = PodReceipt.ForSource(composition.ToSource().Root, "family.apply", null, PodRunOutcome.Succeeded, [], null);
+            Assert.That((receipt.PodId, receipt.MemberPath, receipt.MemberSha256, receipt.Origin),
+                Is.EqualTo(((string?)null, (string?)null, (string?)null, PodRunOrigin.SuppliedDraft)));
         });
     }
 

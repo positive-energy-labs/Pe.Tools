@@ -126,7 +126,6 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
       plan: async (ctx) => {
         const doc = ctx.work.doc;
         if (!doc || ctx.work.revision === null) throw Error("author the route's Work first");
-        if (!ctx.page.pod) throw Error("choose the pod the run is filed in");
         const bases = { work: { key: ctx.work.key, revision: ctx.work.revision } };
         const entries: PlanEntry[] = [];
         const held: HeldRow[] = [];
@@ -134,7 +133,7 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
           const result = await workflow(
             "families.plan",
             {
-              source: { pod: ctx.page.pod, path: draft.path, content: draft.content },
+              source: { path: draft.path, content: draft.content },
               // The draft selects one family by name, so the host plans that family alone and
               // never lays one family's types onto the rest of the scope.
               familyNames: [draft.familyName],

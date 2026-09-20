@@ -713,7 +713,6 @@ async function stagedPlan(
   const generated = familyStagedPatch(cells, "Box")!;
   // The reviewed draft travels as bytes; nothing is filed in the pod.
   const draft = {
-    pod: "global",
     path: "staged/Box.json",
     content:
       content ??
@@ -734,7 +733,7 @@ test("a staged plan files nothing in the pod; apply carries the exact draft byte
   resultOf(await env.admit("families.apply", apply, revision));
   expect(await readdir(join(env.podsRoot, "Global"), { recursive: true })).toEqual(before);
   const root = env.sent.find((s) => s.key === "families.apply")!.input.source.root;
-  expect(root).toMatchObject({ id: "global", path: draft.path, origin: "SuppliedDraft" });
+  expect(root).toMatchObject({ id: null, path: draft.path, origin: "SuppliedDraft" });
   expect(Buffer.from(root.bytesBase64, "base64").toString("utf8")).toBe(draft.content);
   expect(root.sha256).toBe(createHash("sha256").update(draft.content).digest("hex"));
   expect((await cellsNow(env.work))[W]?.staged).toBeNull();

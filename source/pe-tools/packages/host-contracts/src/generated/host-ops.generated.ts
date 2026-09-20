@@ -167,7 +167,7 @@ export namespace DocumentTemporaryStatus {
   }
 }
 
-/** Reconcile explicit loaded families to a saved spec, refusing plan drift per family and any family reloaded since the plan (its name now resolves to another id), and write the run receipt into the source pod. */
+/** Reconcile explicit loaded families to a saved spec or supplied draft, refusing plan drift per family and any family reloaded since the plan (its name now resolves to another id), and write the run receipt beside its operation output. */
 export namespace FamiliesApply {
   export namespace Req {
     export type PodSourceOrigin = "SavedMember" | "SuppliedDraft";
@@ -192,7 +192,7 @@ export namespace FamiliesApply {
     }
     /**
      * The exact bytes one composition consumed, captured at its one read: the root (a saved member or a supplied
-     * draft, always under its actual pod id) and its ordered dependencies. A run stores these bytes; it never rereads them.
+     * draft, with a pod id only when composition has actual pod context) and its ordered dependencies. A run stores these bytes; it never rereads them.
      *
      */
     export interface PodComposedSource {
@@ -200,7 +200,7 @@ export namespace FamiliesApply {
       dependencies: PodConsumedSourceData[];
     }
     export interface PodCapturedSourceData {
-      id: string;
+      id?: null | string;
       path: string;
       sha256: string;
       bytesBase64: string;
@@ -240,7 +240,7 @@ export namespace FamiliesApply {
   }
   export namespace Res {
     /**
-     * `receiptPath` is the pod run's receipt.json; null when the request was refused before running. `reason` is the
+     * `receiptPath` is the run's receipt.json; null when the request was refused before running. `reason` is the
      * receipt's: one sentence naming the first failure, null when none failed; the full text is the run's `failures.json`.
      *
      */
@@ -278,6 +278,8 @@ export namespace FamiliesApply {
       key: string;
       kind: string;
       mappedFrom?: null | string;
+      before?: unknown;
+      after?: unknown;
     }
     /**
      * Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.
@@ -408,6 +410,8 @@ export namespace FamiliesPlan {
       key: string;
       kind: string;
       mappedFrom?: null | string;
+      before?: unknown;
+      after?: unknown;
     }
     /**
      * Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.
@@ -429,7 +433,7 @@ export namespace FamiliesPlan {
   }
 }
 
-/** Reconcile the active family document to a saved spec, refusing plan drift, and write the run receipt into the source pod. */
+/** Reconcile the active family document to a saved spec or supplied draft, refusing plan drift, and write the run receipt beside its operation output. */
 export namespace FamilyApply {
   export namespace Req {
     export type PodSourceOrigin = "SavedMember" | "SuppliedDraft";
@@ -451,7 +455,7 @@ export namespace FamilyApply {
     }
     /**
      * The exact bytes one composition consumed, captured at its one read: the root (a saved member or a supplied
-     * draft, always under its actual pod id) and its ordered dependencies. A run stores these bytes; it never rereads them.
+     * draft, with a pod id only when composition has actual pod context) and its ordered dependencies. A run stores these bytes; it never rereads them.
      *
      */
     export interface PodComposedSource {
@@ -459,7 +463,7 @@ export namespace FamilyApply {
       dependencies: PodConsumedSourceData[];
     }
     export interface PodCapturedSourceData {
-      id: string;
+      id?: null | string;
       path: string;
       sha256: string;
       bytesBase64: string;
@@ -499,7 +503,7 @@ export namespace FamilyApply {
   }
   export namespace Res {
     /**
-     * `receiptPath` is the pod run's receipt.json; null when the request was refused before running. `reason` is the
+     * `receiptPath` is the run's receipt.json; null when the request was refused before running. `reason` is the
      * receipt's: one sentence naming the first failure, null when none failed; the full text is the run's `failures.json`.
      *
      */
@@ -537,6 +541,8 @@ export namespace FamilyApply {
       key: string;
       kind: string;
       mappedFrom?: null | string;
+      before?: unknown;
+      after?: unknown;
     }
     /**
      * Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.
@@ -568,7 +574,7 @@ export namespace FamilyBuild {
     }
     /**
      * The exact bytes one composition consumed, captured at its one read: the root (a saved member or a supplied
-     * draft, always under its actual pod id) and its ordered dependencies. A run stores these bytes; it never rereads them.
+     * draft, with a pod id only when composition has actual pod context) and its ordered dependencies. A run stores these bytes; it never rereads them.
      *
      */
     export interface PodComposedSource {
@@ -576,7 +582,7 @@ export namespace FamilyBuild {
       dependencies: PodConsumedSourceData[];
     }
     export interface PodCapturedSourceData {
-      id: string;
+      id?: null | string;
       path: string;
       sha256: string;
       bytesBase64: string;
@@ -725,6 +731,8 @@ export namespace FamilyPlan {
       key: string;
       kind: string;
       mappedFrom?: null | string;
+      before?: unknown;
+      after?: unknown;
     }
     /**
      * Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.
@@ -877,13 +885,13 @@ export namespace PodMemberCompose {
     export type PodSourceOrigin = "SavedMember" | "SuppliedDraft";
 
     export interface Request {
-      pod: string;
+      pod?: null | string;
       path: string;
       content?: null | string;
       source?: null | PodCapturedSourceData;
     }
     export interface PodCapturedSourceData {
-      id: string;
+      id?: null | string;
       path: string;
       sha256: string;
       bytesBase64: string;
@@ -901,7 +909,7 @@ export namespace PodMemberCompose {
       dependencies: PodConsumedSourceData[];
     }
     export interface PodCapturedSourceData {
-      id: string;
+      id?: null | string;
       path: string;
       sha256: string;
       bytesBase64: string;
@@ -4948,7 +4956,7 @@ export namespace ScheduleApply {
     }
     /**
      * The exact bytes one composition consumed, captured at its one read: the root (a saved member or a supplied
-     * draft, always under its actual pod id) and its ordered dependencies. A run stores these bytes; it never rereads them.
+     * draft, with a pod id only when composition has actual pod context) and its ordered dependencies. A run stores these bytes; it never rereads them.
      *
      */
     export interface PodComposedSource {
@@ -4956,7 +4964,7 @@ export namespace ScheduleApply {
       dependencies: PodConsumedSourceData[];
     }
     export interface PodCapturedSourceData {
-      id: string;
+      id?: null | string;
       path: string;
       sha256: string;
       bytesBase64: string;
@@ -5230,14 +5238,15 @@ export namespace ScriptingExecute {
       sizeBytes: number;
     }
     /**
-     * One run's receipt: its source origin, outcome, and outputs. `PodId` is the pod that stores the run.
+     * One run's receipt: its source origin, outcome, and outputs. `PodId` is null when an unfiled draft stores the run
+     * in operation output.
      * `MemberSha256` names saved bytes, so only a SavedMember run carries it; a
      * supplied draft keeps the path it drafts and its own bytes and hash stay in `input.json`; operation input
      * names no member.
      *
      */
     export interface PodReceipt {
-      podId: string;
+      podId?: null | string;
       memberPath?: null | string;
       memberSha256?: null | string;
       origin: PodRunOrigin;
