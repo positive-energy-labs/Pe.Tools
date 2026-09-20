@@ -65,12 +65,15 @@ test("plan reads the page's member against the reviewed Work, and writes no Work
     { work: { key: ctx.work.key, revision: 4 } },
   );
   expect(ctx.write).not.toHaveBeenCalled();
-  expect(ctx.setPage).toHaveBeenCalledWith({
-    stage: "apply",
-    confirming: true,
-    // The row is its family, by name; the id the plan resolved is apply's hash key only.
-    sheet: { entries: [expect.objectContaining({ id: "A", hashKey: "3101", planHash: "p" })] },
-  });
+  expect(ctx.setPage).toHaveBeenCalledWith(
+    {
+      stage: "apply",
+      confirming: true,
+      // The row is its family, by name; the id the plan resolved is apply's hash key only.
+      sheet: { entries: [expect.objectContaining({ id: "A", hashKey: "3101", planHash: "p" })] },
+    },
+    ["stage", "pod", "path", "selection"],
+  );
 });
 
 test("held-back rows are the Work's exclusions, by name, as this sheet's row ids", () => {

@@ -438,7 +438,9 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                   familyId: seed.readings.families.indexOf(familyName) + 1,
                   familyName,
                   planHash: `${planned.hash}:${familyName}`,
-                  changes: [{ section: "types", key: "Width", kind: "set" }],
+                  changes: [
+                    { section: "types", key: "Width", kind: "set", before: "1in", after: "2in" },
+                  ],
                   runEffects: [],
                   warnings: [],
                   refusals:

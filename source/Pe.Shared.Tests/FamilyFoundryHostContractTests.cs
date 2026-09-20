@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.RevitData.Families;
 
@@ -40,6 +41,20 @@ public sealed class FamilyFoundryHostContractTests {
             Assert.That(back.Receipts[0].Residue[0].Key, Is.EqualTo("Wide/Width"));
             Assert.That(back.Receipts[0].Residue[0].After, Is.EqualTo(""));
         });
+    }
+
+    [Test]
+    public void Plan_wire_keeps_null_before_and_after_values() {
+        var data = new FamilyFoundryPlanData(
+            [new FamilyFoundryFamilyPlanData(12, "PE Box", "ABCDEF0123456789",
+                [new FamilyFoundryChangeData("parameters", "Width", "Add", null, null, null)], [], [], [])], []);
+
+        var json = JsonConvert.SerializeObject(data, new JsonSerializerSettings {
+            NullValueHandling = NullValueHandling.Ignore,
+            ContractResolver = new CamelCasePropertyNamesContractResolver()
+        });
+
+        Assert.That(json, Does.Contain("\"before\":null").And.Contain("\"after\":null"));
     }
 
     [Test]
