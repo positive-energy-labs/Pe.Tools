@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from "@mastra/client-js";
 import { expect, test, vi } from "vite-plus/test";
-import { CHAT_ACTIONS } from "./actions";
+import { cancelAndRefresh, CHAT_ACTIONS } from "./actions";
 import {
   emptyChatState,
   selectApprovals,
@@ -48,6 +48,37 @@ test("cancel expires open asks; it never answers them", async () => {
   expect(session.abort).toHaveBeenCalledTimes(1);
   expect(session.approveTool).not.toHaveBeenCalled();
   expect(session.respondToToolSuspension).not.toHaveBeenCalled();
+});
+
+test("cancel refreshes the expired ask projection only after abort settles", async () => {
+  let settleAbort!: () => void;
+  const abort = vi.fn(() => new Promise<void>((resolve) => (settleAbort = resolve)));
+  let state: ChatState = {
+    ...emptyChatState(),
+    messages: [askCall],
+    display: { isRunning: true, pendingSuspensions: { [ask.toolCallId]: ask } } as never,
+  };
+  const refresh = vi.fn(() => {
+    state = {
+      ...state,
+      display: emptyChatState().display,
+      expiredAsks: [{ messageId: "a1", toolCallId: "ask-1", toolName: "ask_user" }],
+    };
+  });
+
+  const cancelling = cancelAndRefresh(
+    { session: { abort } as never, display: state.display },
+    refresh,
+  );
+  await Promise.resolve();
+  expect(refresh).not.toHaveBeenCalled();
+  expect(selectApprovals(state.display)).toHaveLength(1);
+
+  settleAbort();
+  await cancelling;
+  expect(refresh).toHaveBeenCalledOnce();
+  expect(selectApprovals(state.display)).toEqual([]);
+  expect(selectToolCalls(state)[0]).toEqual(expect.objectContaining({ status: "expired" }));
 });
 
 test("an expired ask is a record with no live approval, not a failed call", () => {
