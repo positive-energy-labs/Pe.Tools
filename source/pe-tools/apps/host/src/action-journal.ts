@@ -163,7 +163,9 @@ export function settle(
     state: "failed",
     error: why.error,
     status: why.status,
-    notDispatched: true,
+    ...(steps.length === 0 || ("notDispatched" in why && why.notDispatched === true)
+      ? { notDispatched: true }
+      : {}),
     ...(thrown && "nativeOutcome" in thrown && thrown.nativeOutcome
       ? { nativeOutcome: thrown.nativeOutcome }
       : {}),

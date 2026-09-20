@@ -81,15 +81,27 @@ test("production SDK reader uses exact generated selector; mismatched or unresol
         ...result,
         state,
       })),
-      {
-        ...result,
-        receipt: { ...receipt, verdict: "failed" },
-        response: { error: "untyped native failure", statusCode: 500 },
-      },
     ]) {
       await writeFile(file, sdkEnvelope(altered));
       expect((await readNativeReceipt(step, originalProcess, read)).step).toEqual(step);
     }
+    await writeFile(
+      file,
+      sdkEnvelope({
+        ...result,
+        receipt: { ...receipt, verdict: "failed" },
+        response: { error: "central unreachable", statusCode: 409 },
+      }),
+    );
+    expect((await readNativeReceipt(step, originalProcess, read)).step).toEqual({
+      id: step.id,
+      key: step.key,
+      kind: step.kind,
+      input: step.input,
+      state: "failed",
+      error: "central unreachable",
+      status: 409,
+    });
     await writeFile(
       file,
       sdkEnvelope({

@@ -99,5 +99,16 @@ export async function readNativeReceipt(
       step: { ...intent, state: "failed", error, status, nativeOutcome, notDispatched: true },
       evidence,
     };
+  if (receipt.data.verdict === "failed")
+    return {
+      step: {
+        ...intent,
+        state: "failed",
+        error,
+        status,
+        ...(nativeOutcome ? { nativeOutcome } : {}),
+      },
+      evidence,
+    };
   return unchanged();
 }
