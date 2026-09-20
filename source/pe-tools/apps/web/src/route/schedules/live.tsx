@@ -19,7 +19,7 @@ import { EntityRouteView } from "#/route/entity";
 import { ActionFlag } from "#/route/situation";
 import { usePodList } from "#/route/pods";
 import { DEMO_SPEC } from "#/route/seeds";
-import { scheduleSpec, schedulesManifest, type ScheduleGridPage } from "./manifest";
+import { scheduleSpec, schedulesManifest } from "./manifest";
 import { cellText } from "./columns";
 import { StaleResolve } from "./stale-resolve";
 import { ScheduleGridWorkspace, type ScheduleGridState } from "./workspace";
@@ -172,6 +172,7 @@ export function LiveScheduleGridWorkspace({
     snapshot: shown?.snapshot ?? null,
     catalog: catalog ?? null,
     busy: handle.busy?.key ?? null,
+    blockedBecause: handle.actions.push.refusal,
     refused: page.refused,
     onFocus: { rail: focusOf("rail"), grid: focusOf("grid") },
   };

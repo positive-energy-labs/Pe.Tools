@@ -34,6 +34,8 @@ export interface ScheduleGridState {
   apply: (patches: RouteStatePatch[], expectedRevision?: number) => Promise<Refusal | null>;
   /** The running verb; capture and apply run from the Situation and lock the grid too. */
   busy: string | null;
+  /** Why push is unavailable; retained for route seams that inspect readiness. */
+  blockedBecause?: string | null;
   snapshot: ScheduleGridSnapshot | null;
   catalog: ScheduleCatalog | null;
   /** The verbs the panes reach the world through: the grid's read, and the stage's push. */

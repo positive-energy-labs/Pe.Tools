@@ -31,10 +31,17 @@ export function warningLine(warning: FamiliesPlan.Res.RevitDataIssue): string {
 export function provenanceSummary(plan: FfPlanEntry): string {
   return (
     [
-      ...plan.changes.map(
-        (change) =>
-          `${change.section}.${change.key}: ${change.kind}${change.mappedFrom ? ` from ${change.mappedFrom}` : ""}`,
-      ),
+      ...plan.changes.map((change) => {
+        const { after } = change as typeof change & { after?: unknown };
+        const kind =
+          change.kind === "Update" &&
+          (after === "" ||
+            (Array.isArray(after) && after.length === 0) ||
+            (after !== null && typeof after === "object" && Object.keys(after).length === 0))
+            ? "set to empty"
+            : change.kind;
+        return `${change.section}.${change.key}: ${kind}${change.mappedFrom ? ` from ${change.mappedFrom}` : ""}`;
+      }),
       ...plan.runEffects,
     ].join(" · ") || "no changes"
   );

@@ -214,7 +214,11 @@ export function EntityRouteView({
         resize={{ target: "end", defaultSize: 520, minSize: 320, persist: `${def.key}:spec` }}
         start={children}
         end={
-          (stages ? !stages[page.stage].panes.spec && !confirming : page.stage === "audit" && !confirming) ? null : (
+          (
+            stages
+              ? !stages[page.stage].panes.spec && !confirming
+              : page.stage === "audit" && !confirming
+          ) ? null : (
             <Pane
               kind="inspector"
               focusOnMount={stages !== undefined}

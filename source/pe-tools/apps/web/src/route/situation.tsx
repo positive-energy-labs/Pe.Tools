@@ -420,71 +420,88 @@ export function SituationAction({
   const refusedNow = Boolean(outcome?.refusal) && dismissed !== outcome?.at;
   const stopped = action.refusal !== null || (handle.busy !== null && busy === null);
   const flag = useContext(ActionFlag)[name];
+  const reason = `${action.refusal ?? action.says}${action.chord ? ` · ${action.chord}` : ""}`;
   return (
-    <Popover.Root open={shown} onOpenChange={(o) => !o && outcome && setDismissed(outcome.at)}>
-      <Popover.Trigger
-        render={
-          <Press
-            frame="line"
-            tone={commit ? "neutral" : "quiet"}
-            size="value"
-            state={stopped ? "disabled" : "rest"}
-            aria-disabled={stopped}
-            data-tone={refusedNow ? "caution" : undefined}
-            title={`${action.refusal ?? action.says}${action.chord ? ` · ${action.chord}` : ""}`}
-            onClick={() => void action.run()}
-            style={{ fontWeight: commit ? 600 : undefined }}
+    <span className="group relative inline-flex">
+      <Popover.Root open={shown} onOpenChange={(o) => !o && outcome && setDismissed(outcome.at)}>
+        <Popover.Trigger
+          render={
+            <Press
+              frame="line"
+              tone={commit ? "neutral" : "quiet"}
+              size="value"
+              state={stopped ? "disabled" : "rest"}
+              aria-disabled={stopped}
+              data-tone={refusedNow ? "caution" : undefined}
+              title={reason}
+              onClick={() => void action.run()}
+              style={{ fontWeight: commit ? 600 : undefined }}
+            >
+              {action.label}
+              {action.count !== null ? (
+                <span className="face-mono text-ink-2">{action.count}</span>
+              ) : null}
+            </Press>
+          }
+        />
+        <Popover.Portal>
+          <Popover.Positioner
+            side="bottom"
+            align="start"
+            sideOffset={6}
+            className="isolate z-popup"
           >
-            {action.label}
-            {action.count !== null ? (
-              <span className="face-mono text-ink-2">{action.count}</span>
-            ) : null}
-          </Press>
-        }
-      />
-      <Popover.Portal>
-        <Popover.Positioner side="bottom" align="start" sideOffset={6} className="isolate z-popup">
-          <Popover.Popup
-            data-surface="artifact"
-            data-tone={outcome?.refusal ? "caution" : undefined}
-            className="max-w-[60ch] rounded-lg px-3 py-1.5 t-prose ring-1 ring-line outline-none"
-          >
-            {busy ? (
-              <span className="flex items-baseline gap-3">
-                <span>
-                  running <span className="face-mono">{busy.seconds} s</span>
+            <Popover.Popup
+              data-surface="artifact"
+              data-tone={outcome?.refusal ? "caution" : undefined}
+              className="max-w-[60ch] rounded-lg px-3 py-1.5 t-prose ring-1 ring-line outline-none"
+            >
+              {busy ? (
+                <span className="flex items-baseline gap-3">
+                  <span>
+                    running <span className="face-mono">{busy.seconds} s</span>
+                  </span>
+                  <Press
+                    frame="line"
+                    tone="quiet"
+                    size="value"
+                    title="Signal the running operation. It stops at its next checkpoint; what it already wrote stands."
+                    onClick={handle.stop}
+                  >
+                    stop
+                  </Press>
                 </span>
-                <Press
-                  frame="line"
-                  tone="quiet"
-                  size="value"
-                  title="Signal the running operation. It stops at its next checkpoint; what it already wrote stands."
-                  onClick={handle.stop}
-                >
-                  stop
-                </Press>
-              </span>
-            ) : outcome?.refusal ? (
-              <span>
-                {outcome.refusal.message}
-                {outcome.refusal.detail ? (
-                  <details className="t-small text-ink-2">
-                    <summary>detail</summary>
-                    <span>{outcome.refusal.detail}</span>
-                  </details>
-                ) : null}
-                {flag}
-              </span>
-            ) : outcome?.stopped ? (
-              <span className="text-ink-2">{action.label} · stopped waiting; see the log</span>
-            ) : (
-              <span className="text-ink-2">{action.label} · ran</span>
-            )}
-            {!busy ? <span className="ml-3 face-mono text-ink-mute">Esc</span> : null}
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
+              ) : outcome?.refusal ? (
+                <span>
+                  {outcome.refusal.message}
+                  {outcome.refusal.detail ? (
+                    <details className="t-small text-ink-2">
+                      <summary>detail</summary>
+                      <span>{outcome.refusal.detail}</span>
+                    </details>
+                  ) : null}
+                  {flag}
+                </span>
+              ) : outcome?.stopped ? (
+                <span className="text-ink-2">{action.label} · stopped waiting; see the log</span>
+              ) : (
+                <span className="text-ink-2">{action.label} · ran</span>
+              )}
+              {!busy ? <span className="ml-3 face-mono text-ink-mute">Esc</span> : null}
+            </Popover.Popup>
+          </Popover.Positioner>
+        </Popover.Portal>
+      </Popover.Root>
+      {stopped ? (
+        <span
+          role="tooltip"
+          data-surface="artifact"
+          className="absolute top-full left-0 z-popup mt-1 hidden w-max max-w-[36ch] border border-line-2 px-2 py-1 t-small face-mono text-ink-2 italic shadow-float group-hover:block group-focus-within:block"
+        >
+          {reason}
+        </span>
+      ) : null}
+    </span>
   );
 }
 
