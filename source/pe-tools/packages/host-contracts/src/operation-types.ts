@@ -182,11 +182,12 @@ export const podRunOutcomeSchema = Schema.Literals(["Succeeded", "Failed", "Canc
 
 /**
  * What `PodRuns.WriteReceipt` writes into `output/<runId>/receipt.json`. `memberSha256` names saved
- * bytes, so only a SavedMember run carries it. `origin` is null when the writer recorded none. The
- * member fields name what the run consumed, so an Operation run (it consumed no member) has none.
+ * bytes, so only a SavedMember run carries it. `podId` is null when a supplied draft was not filed
+ * in a pod. `origin` is null when the writer recorded none. The member fields name what the run
+ * consumed, so an Operation run (it consumed no member) has none.
  */
 const podReceiptFields = {
-  podId: Schema.String,
+  podId: Schema.NullOr(Schema.String),
   operation: Schema.String,
   planHash: Schema.NullOr(Schema.String),
   outcome: podRunOutcomeSchema,

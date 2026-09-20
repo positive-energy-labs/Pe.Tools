@@ -198,7 +198,7 @@ function parseReceipt(content: string): PodReceipt | string {
                 : null,
           };
     return {
-      podId: text(value.podId),
+      podId: typeof value.podId === "string" ? value.podId : null,
       ...member,
       operation: value.operation,
       planHash: typeof value.planHash === "string" ? value.planHash : null,
