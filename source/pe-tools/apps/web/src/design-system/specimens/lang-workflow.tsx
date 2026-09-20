@@ -1,8 +1,17 @@
+import type { TrichotomyCellLike } from "@pe/agent-contracts";
 import { Save } from "lucide-react";
 
 import { AddressingBar, addressingBarRecipe } from "#/components/lang/addressing-bar";
 import { ArmingStrip, armingStripRecipe } from "#/components/lang/arming-strip";
 import { ArtifactFrame, artifactFrameRecipe } from "#/components/lang/artifact-frame";
+import {
+  reviewAddresses,
+  reviewCommit,
+  ReviewRow,
+  UnstageAll,
+  WorkBand,
+  type CellWire,
+} from "#/components/lang/band";
 import { StateCell } from "#/components/lang/cell";
 import { FactChip, Tag } from "#/components/lang/chip";
 import { Kbd } from "#/components/lang/kbd";
@@ -13,6 +22,17 @@ import { RecipeGrid, SpecimenFrame, type GridVariantProps } from "./recipe-grid"
 
 const noop = () => {};
 
+/** Open, contested and Pea-agreed staged: the three verb sets the reviewer draws. */
+const REVIEW_SPECIMEN: Record<string, TrichotomyCellLike> = {
+  "Neck Width": { proposal: { value: "10in", confidence: "high" }, staged: null },
+  "Face Width": {
+    proposal: { value: "Neck Width + 5in" },
+    staged: { value: "Neck Width + 6in" },
+  },
+  "Neck Height": { proposal: { value: "10in" }, staged: { value: "10in" } },
+};
+const wire: CellWire = { segment: "fields", write: async () => null, revision: 4 };
+
 export function LangWorkflowSpecimens() {
   return (
     <>
@@ -21,6 +41,32 @@ export function LangWorkflowSpecimens() {
           <Kbd>⌘K</Kbd>
           <Kbd mute>Esc</Kbd>
         </div>
+      </SpecimenFrame>
+      <SpecimenFrame name="WorkBand · ReviewRow · UnstageAll" importPath="#/components/lang/band">
+        <UnstageAll
+          wire={wire}
+          cells={REVIEW_SPECIMEN}
+          keys={Object.keys(REVIEW_SPECIMEN)}
+          done={noop}
+        />
+        <WorkBand
+          count={2}
+          noun="edit"
+          revision={4}
+          discard={noop}
+          commit={reviewCommit("save 2 staged", 2, noop)}
+          visible
+          body={reviewAddresses(REVIEW_SPECIMEN).map(([address, cell]) => (
+            <ReviewRow
+              key={address}
+              wire={wire}
+              address={address}
+              label={address}
+              cell={cell}
+              facts={{ value: String((cell.staged ?? cell.proposal)?.value) }}
+            />
+          ))}
+        />
       </SpecimenFrame>
       <RecipeGrid
         name="AddressingBar"

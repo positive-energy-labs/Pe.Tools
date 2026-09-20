@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { RegistryContext } from "@effect/atom-react";
 
 import { appAtomRegistry } from "#/route";
@@ -9,12 +9,11 @@ import { detailResponse, target } from "../../../../host/tests/schedule-fixture"
 import { LiveScheduleGridWorkspace } from "./live";
 import { REOPENED, schedulesManifest } from "./manifest";
 import { ScheduleGridWorkspace, type ScheduleGridState } from "./workspace";
-import { ScheduleGridReview } from "#/workbench/plugins/schedule-grid-chat-plugin";
 
 vi.mock("#/lib/token", () => ({ token: () => "currentColor", dash: () => "none" }));
 afterEach(cleanup);
 
-test("real grid edits and shared Chat reviewer apply through HTTP, journal, Work and independent readback", async () => {
+test("real grid edits and route-approved proposals apply through HTTP, journal, Work and independent readback", async () => {
   const f = await setup();
   const storage = new Map<string, string>();
   vi.stubGlobal("localStorage", {
@@ -24,14 +23,13 @@ test("real grid edits and shared Chat reviewer apply through HTTP, journal, Work
   });
   stubEventSource(f);
   await f.patch([{ path: ["cells"], value: {} }]);
-  const view = (review = false) => (
+  const view = () => (
     <RegistryContext.Provider value={appAtomRegistry}>
       <LiveScheduleGridWorkspace
         workspaceId={f.scope.work}
         // The document is the thread's; this test pins it instead of standing up a head.
 
         target={JSON.stringify({ kind: "open", ref: f.b })}
-        render={review ? (state) => <ScheduleGridReview state={state} /> : undefined}
       />
     </RegistryContext.Provider>
   );
@@ -55,29 +53,37 @@ test("real grid edits and shared Chat reviewer apply through HTTP, journal, Work
     ),
   );
   fireEvent.click(screen.getByRole("button", { name: "push 1 to Revit" }));
-  await vi.waitFor(async () => expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined());
+  // The same host lane as the second push below: native apply, journal and Work publication take
+  // seconds when SSE and jsdom share one event loop under a full suite.
+  await vi.waitFor(async () => expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined(), {
+    timeout: 10_000,
+  });
   await screen.findByDisplayValue("100 VA"); // Native read fixture did NOT report the authored 175.
   expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
   await f.patch([{ path: ["cells", "1::2", "proposal"], value: { value: "180 VA" } }]);
-  mounted.rerender(view(true));
-  await screen.findByRole("button", { name: "Approve" });
-  await vi.waitFor(() =>
-    expect(screen.getByRole("button", { name: "Approve" }).hasAttribute("disabled")).toBe(false),
-  );
-  // The push's readback is now the basis; until that capture loads, apply refuses "read the
-  // schedule". Approve is idempotent, so press until it lands rather than racing the load.
+  // The proposal is accepted where it lives: the grid cell's own contract transition. The push's
+  // readback is now the basis; until that capture loads, apply refuses "read the schedule". Accept
+  // is idempotent, so press until it lands rather than racing the load.
   await vi.waitFor(async () => {
-    const approve = screen.queryByRole("button", { name: "Approve" });
-    if (approve) fireEvent.click(approve);
+    const proposed = screen
+      .queryByDisplayValue("180 VA")
+      ?.closest<HTMLElement>("[data-master-cell]");
+    const accept = proposed && within(proposed).queryByRole("button", { name: "accept" });
+    if (accept) fireEvent.click(accept);
     expect((await f.view()).doc.cells["1::2"].staged?.value).toBe("180 VA");
   });
-  await screen.findByRole("button", { name: "Push 1 to Revit" });
-  await vi.waitFor(() =>
-    expect(screen.getByRole("button", { name: "Push 1 to Revit" }).hasAttribute("disabled")).toBe(
-      false,
-    ),
+  // Work clears before the push ends: the host still reads back and persists the receipt, and the
+  // button is busy until that receipt reads settled. In this lane host, SSE and jsdom share one
+  // event loop, which stretches those steps to seconds (measured: a one-row journal persist
+  // ~3.8 s), hence the long wait and the test's 30 s budget.
+  await vi.waitFor(
+    () =>
+      expect(screen.getByRole("button", { name: "push 1 to Revit" }).hasAttribute("disabled")).toBe(
+        false,
+      ),
+    { timeout: 10_000 },
   );
-  fireEvent.click(screen.getByRole("button", { name: "Push 1 to Revit" }));
+  fireEvent.click(screen.getByRole("button", { name: "push 1 to Revit" }));
   await vi.waitFor(() =>
     expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(2),
   );
@@ -149,8 +155,10 @@ test("F-H5-1..3: a dead-lifetime Work says read again; the bare verb re-reads th
     cells: { "1::2": { staged: { value: "150 VA" } } },
   });
   // Drawn as drift against the live value, with the ruled accept/deny.
-  const accept = await screen.findByRole("button", { name: "accept" });
-  expect(screen.getByRole("button", { name: "deny" })).toBeTruthy();
+  // The grid cell carries the same verbs; press the pending strip's.
+  const strip = await screen.findByRole("list", { name: "pending cells" });
+  const accept = await within(strip).findByRole("button", { name: "accept" });
+  expect(within(strip).getByRole("button", { name: "deny" })).toBeTruthy();
   // Drift is drawn by the kit StateCell; its note rides the hover title at row scale.
   expect((await screen.findAllByTitle(/accept to stage it again/)).length).toBeGreaterThan(0);
   // Accept re-stages the value and drops the key from stale.

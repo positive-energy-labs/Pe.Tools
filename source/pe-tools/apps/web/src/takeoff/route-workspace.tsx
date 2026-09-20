@@ -1,5 +1,6 @@
 import { takeoffDiscardEdits } from "@pe/agent-contracts";
 import { PartitionReview } from "#/takeoff/partition-review";
+import { flagShape, flagZone, TakeoffProposalRows } from "#/takeoff/proposals";
 import { useNavigate } from "@tanstack/react-router";
 import { FactChip } from "#/components/lang/chip";
 import { ActionButton } from "#/components/lang/action-button";
@@ -8,10 +9,11 @@ import { previousOf } from "#/readings";
 import { type TakeoffsController } from "#/takeoff/controller";
 import { RouteShell } from "#/route";
 import { Situation, SituationCell, SituationChoice, useDocumentLadder } from "#/route/situation";
-import { Picker } from "#/route/picker";
+import { Ladder } from "#/route/ladder";
 import { manifest } from "#/takeoff/manifest";
 import { takeoffReadingHealth } from "#/takeoff/actions";
 import { AdoptRegions, SyncPanel } from "#/takeoff/adopt-panel";
+import { Input } from "#/components/lang/input";
 
 function TakeoffHead({ store }: { store: TakeoffsController }) {
   const ladder = useDocumentLadder(store.handle, store.actions.resetTarget);
@@ -25,7 +27,7 @@ function TakeoffHead({ store }: { store: TakeoffsController }) {
   const read = capture ? undefined : "read the document first";
   const scope = (
     <SituationCell io="r" empty={!store.views.length}>
-      <Picker
+      <Ladder
         levels={[
           ...ladder.levels,
           {
@@ -48,7 +50,7 @@ function TakeoffHead({ store }: { store: TakeoffsController }) {
   );
   const zones = (
     <SituationCell io={store.stage === "sync" ? "r" : "rw"} empty={!store.zones.length}>
-      <Picker
+      <Ladder
         levels={[
           {
             key: "zones",
@@ -80,9 +82,8 @@ function TakeoffHead({ store }: { store: TakeoffsController }) {
       >
         <label className="grid gap-2">
           RHVAC file path
-          <input
+          <Input
             aria-label="RHVAC file path"
-            className="w-full border border-line bg-transparent p-2"
             value={store.r10Path}
             onChange={(event) => store.actions.chooseR10(event.target.value)}
             placeholder="Full path to an .r10 file"
@@ -204,11 +205,21 @@ export function TakeoffsView({
     panel === "sync" ? (
       <SyncPanel store={store} />
     ) : review ? (
-      <PartitionReview
-        key={review.data?.source.runId ?? review.zone}
-        review={review}
-        onFlag={!store.readOnly ? (key) => store.actions.flagReview(key) : undefined}
-      />
+      <>
+        <PartitionReview
+          key={review.data?.source.runId ?? review.zone}
+          review={review}
+          onFlag={!store.readOnly ? (key) => store.actions.flagReview(key) : undefined}
+        />
+        {/* Pea's proposed review flags on this zone's shapes, in the band grammar. */}
+        <TakeoffProposalRows
+          cells={store.cells.reviewFlags}
+          wire={store.wires.reviewFlags}
+          keep={(key) => flagZone(key) === review.zone}
+          label={(key) => `flag shape ${flagShape(key)}`}
+          show={() => "flagged for review"}
+        />
+      </>
     ) : null;
   if (store.savedCapture)
     return <Atlas store={store} headRail={savedHead} readoutBand={readoutBand} />;

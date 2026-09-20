@@ -1,17 +1,20 @@
 /**
  * THE COMPOSER HEAD — Chat's whole Situation (design-system ledger, 2026-09-13). Chat has no
  * route head: "Pea on project-a" with the document's health, a document-only target bound through
- * the thread head (`PUT /scope/:thread`, not `?target`), Send as the one verb with the
+ * the thread head (`PUT /scope/:thread`; a `?target` pin seeds a document-less thread once), Send as the one verb with the
  * Situation's flag, and Pea's proposals as the Work band under the verb row, so approve and
  * reject have one location and the stream stays a record.
  */
+import { useEffect, useRef } from "react";
+import { AskUserPrompt, readQuestion } from "#/chat/ask-prompt";
 import { resolveCallTarget, toolTitle, type TargetResolution } from "@pe/agent-contracts";
 import { Check, X } from "lucide-react";
+import { useAtomValue } from "@effect/atom-react";
 
 import { ActionButton } from "#/components/lang/action-button";
 import { Rail } from "#/components/lang/rail";
 import { targetInventory } from "#/readings";
-import { Picker } from "#/route/picker";
+import { Ladder } from "#/route/ladder";
 import {
   ChainLamp,
   Cluster,
@@ -20,12 +23,13 @@ import {
   SituationCell,
   useDocumentLadder,
 } from "#/route/situation";
-import type { ActionHandle, RouteHandle } from "#/route/use-route";
+import { parseTarget, type ActionHandle, type RouteHandle } from "#/route/use-route";
 import type { ChatReading, ChatActionKey } from "#/chat/manifest";
 import { useThreadScope } from "#/chat/scope";
 import type { ChatPage } from "#/chat/seeds";
 import {
   APPROVAL_OPTIONS,
+  isParkedAsk,
   selectApprovals,
   selectRunStatus,
   selectToolCalls,
@@ -33,6 +37,9 @@ import {
   type ChatState,
 } from "#/workbench/chat-state";
 import { useWorkbench } from "#/workbench/provider";
+
+import { useHeadWorks } from "./head-works";
+import { ProposalHead } from "./proposal-head";
 import type { ChatDraft } from "#/workbench/prompt";
 
 export type ChatHandle = RouteHandle<ChatState, ChatReading, ChatPage, ChatActionKey>;
@@ -78,19 +85,49 @@ const complaint = (resolution: TargetResolution): string | null =>
             ambiguous: "two Revits hold it — choose the document again",
           }[resolution.reason];
 
+/** The one open document at a `?target` address pin; none when absent or held twice. */
+const pinnedRef = (inventory: ReturnType<typeof targetInventory>, target?: string) => {
+  const parsed = parseTarget(target);
+  if (parsed?.kind !== "address" || inventory.kind !== "ready") return null;
+  const refs = Object.entries(inventory.sessions).flatMap(([session, found]) =>
+    found.kind === "ready"
+      ? found.values
+          .filter((doc) => doc.address === parsed.address)
+          .map((doc) => ({ session, openId: doc.openId }))
+      : [],
+  );
+  return refs.length === 1 ? refs[0]! : null;
+};
+
+/** The bound document's Address, which keys document-owned Work. */
+const documentAddress = (
+  inventory: ReturnType<typeof targetInventory>,
+  ref: { session: string; openId: string } | null,
+) => {
+  const found = ref && inventory.kind === "ready" ? inventory.sessions[ref.session] : undefined;
+  return found?.kind === "ready"
+    ? (found.values.find((doc) => doc.openId === ref!.openId)?.address ?? null)
+    : null;
+};
+
 export function ComposerHead({
   handle,
   status,
+  urlTarget,
 }: {
+  /** The URL's `?target` pin: a thread with no document takes it once (e2e finding 7). */
+  urlTarget?: string;
   handle: ChatHandle;
   /** Thread-level loading/failure. It lives HERE, not in a rail above the transcript: the
    * Situation already answers "what is bound and how is it", and a rail that appears and
    * disappears over the chat shifted the whole lane every time it spoke. */
   status?: { text: string; caution: boolean; detail?: string };
 }) {
-  const { currentThreadId, threads, chat, openThread, resolveApproval } = useWorkbench();
+  const { currentThreadId, threads, chat, openThread, resolveApproval, store } = useWorkbench();
   const isRunning = selectRunStatus(chat) !== "idle";
   const head = useThreadScope(currentThreadId, !handle.demo, handle.readings.head);
+  const refusal =
+    head.refusal ?? (handle.outcome?.key === "send" ? handle.outcome.refusal?.message : null);
   const inventory = targetInventory(
     handle.readings.inventory as Parameters<typeof targetInventory>[0],
   );
@@ -105,6 +142,23 @@ export function ComposerHead({
       void head.set({ kind: "open", ref });
     },
   });
+  // A new thread under a `?target` address pin binds to the one open document at that address,
+  // once per thread: "new" keeps the URL's document. A later clear in the sentence stands.
+  const pinned = useRef<string | null>(null);
+  const pinRef = pinnedRef(inventory, urlTarget);
+  useEffect(() => {
+    if (!pinRef || head.stale || !head.hydrated || head.defaultTarget) return;
+    if (pinned.current === currentThreadId) return;
+    pinned.current = currentThreadId;
+    void head.set({ kind: "open", ref: pinRef });
+  }, [
+    pinRef?.session,
+    pinRef?.openId,
+    head.stale,
+    head.hydrated,
+    head.defaultTarget,
+    currentThreadId,
+  ]);
   const targetDisabled = isRunning || head.stale;
   const levels = ladder.levels.map((level, index) =>
     index === 0
@@ -129,7 +183,13 @@ export function ComposerHead({
       : level,
   );
   const health = head.defaultTarget ? complaint(resolution) : null;
+  // Live asks only: an expired ask is a transcript record, never a head row.
   const approvals = selectApprovals(chat.display);
+  const works = useHeadWorks(documentAddress(inventory, bound), ladder.docWord ?? "document", {
+    open: store.actions.setPlugin,
+    planIn: store.actions.planIn,
+    planRefusal: useAtomValue(store.atoms.planRefusal),
+  });
   // "Do" alone says nothing about what is being asked for. The proposal row names the capability
   // key and the target the call would run against, read off the call itself in the stream.
   const callsById = new Map(selectToolCalls(chat).map((call) => [call.id, call]));
@@ -146,7 +206,7 @@ export function ComposerHead({
           <p className="t-prose text-ink-2 [&_b]:font-semibold [&_b]:text-ink">
             <b>Pea</b> in{" "}
             <SituationCell io="rw">
-              <Picker
+              <Ladder
                 levels={[
                   {
                     key: "thread",
@@ -166,7 +226,7 @@ export function ComposerHead({
             </SituationCell>{" "}
             on{" "}
             <SituationCell io="rw" empty={!head.defaultTarget}>
-              <Picker
+              <Ladder
                 levels={levels}
                 caution={Boolean(health)}
                 disabled={targetDisabled}
@@ -177,9 +237,9 @@ export function ComposerHead({
                 }
               />
             </SituationCell>
-            {head.refusal ? (
+            {refusal ? (
               <span className="ml-3 t-small" data-tone="caution">
-                {head.refusal}
+                {refusal}
               </span>
             ) : null}
             {status ? (
@@ -234,44 +294,45 @@ export function ComposerHead({
           {status.detail}
         </div>
       ) : null}
-      {approvals.length ? (
-        <div
-          aria-label="Pea proposals"
-          className="hairline-t hairline-b flex flex-col gap-1 py-2 t-prose"
-        >
-          <span>
-            <b>
-              {approvals.length} proposal{approvals.length === 1 ? "" : "s"}
-            </b>{" "}
-            waiting on you
-          </span>
-          {approvals.map((approval) => (
-            <div
-              key={approval.toolCallId}
-              className="flex flex-wrap items-baseline gap-3"
-              data-tool-id={approval.toolCallId}
-            >
-              <span className="face-mono text-ink">⌗ {toolTitle(approval.toolName)}</span>
-              {(() => {
-                const call = callsById.get(approval.toolCallId);
-                const target = call ? toolTarget(call.args) : undefined;
-                return target ? (
-                  <code className="face-mono t-small text-ink" data-testid="approval-target">
-                    {target}
-                  </code>
-                ) : null;
-              })()}
-              {(() => {
-                const call = callsById.get(approval.toolCallId);
-                return call?.target && call.target !== toolTarget(call.args) ? (
-                  <span className="t-small truncate text-ink-2">{call.target}</span>
-                ) : null;
-              })()}
-              <span className="t-small text-ink-2">{approval.kind}</span>
-              {approval.kind === "suspension" && approval.toolName === "ask_user" ? (
-                <span className="text-ink-2">answer it in the stream</span>
-              ) : (
-                APPROVAL_OPTIONS.map((option) => {
+      <ProposalHead
+        asks={approvals.map((approval) => (
+          <div
+            key={approval.toolCallId}
+            className="flex flex-wrap items-baseline gap-3 py-0.5"
+            data-tool-id={approval.toolCallId}
+          >
+            <span className="face-mono text-ink">⌗ {toolTitle(approval.toolName)}</span>
+            {(() => {
+              const call = callsById.get(approval.toolCallId);
+              const target = call ? toolTarget(call.args) : undefined;
+              return target ? (
+                <code className="face-mono t-small text-ink" data-testid="approval-target">
+                  {target}
+                </code>
+              ) : null;
+            })()}
+            {(() => {
+              const call = callsById.get(approval.toolCallId);
+              return call?.target && call.target !== toolTarget(call.args) ? (
+                <span className="t-small truncate text-ink-2">{call.target}</span>
+              ) : null;
+            })()}
+            <span className="t-small text-ink-2">{approval.kind}</span>
+            {isParkedAsk(approval)
+              ? // A live ask answers HERE: asks live in the head, the transcript holds records.
+                (() => {
+                  const question = readQuestion(approval.payload);
+                  return question ? (
+                    <AskUserPrompt
+                      toolCallId={approval.toolCallId}
+                      question={question}
+                      resolve={resolveApproval}
+                    />
+                  ) : (
+                    <span className="text-ink-2">the ask carries no question to answer</span>
+                  );
+                })()
+              : APPROVAL_OPTIONS.map((option) => {
                   const allow = option.kind.startsWith("allow");
                   return (
                     <ActionButton
@@ -289,12 +350,11 @@ export function ComposerHead({
                       }}
                     />
                   );
-                })
-              )}
-            </div>
-          ))}
-        </div>
-      ) : null}
+                })}
+          </div>
+        ))}
+        works={works}
+      />
     </section>
   );
 }

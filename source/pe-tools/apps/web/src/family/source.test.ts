@@ -32,7 +32,7 @@ test("native fixtures project parameters without inventing fixture content and a
     const param = lane.world.params[0]!.name;
     edited.authored[param] = "42in";
     expect(draftToPatches(lane.document!.model, edited, baseline)[0]!.path).toEqual([
-      "fields",
+      "cells",
       `/parameters/${param.replace(/~/g, "~0").replace(/\//g, "~1")}/value`,
       "staged",
     ]);
@@ -145,7 +145,7 @@ test("native source geometry resolves macros, seeds and labeled dimensions", () 
   const edit = structuredClone(baseline);
   edit.geom.body!.dims.width = "48in";
   expect(draftToPatches(box, edit, baseline)).toEqual([
-    { path: ["fields", "/forms/body/width", "staged"], value: { value: "48in" } },
+    { path: ["cells", "/forms/body/width", "staged"], value: { value: "48in" } },
   ]);
   const grille = buildSheet(source("b-grd"), "24x12");
   expect(grille.solids[0]).toMatchObject({
@@ -223,7 +223,7 @@ test("offline shared declarations survive native projection and unrelated value 
   const edit = structuredClone(baseline);
   edit.authored.Width = "48in";
   expect(draftToPatches(lane.document!.model, edit, baseline)).toEqual([
-    { path: ["fields", "/parameters/Width/value", "staged"], value: { value: "48in" } },
+    { path: ["cells", "/parameters/Width/value", "staged"], value: { value: "48in" } },
   ]);
   expect(lane.document!.model.parameters!.FF_Route_Proof_Count).toEqual(
     patch.patch.parameters.FF_Route_Proof_Count,

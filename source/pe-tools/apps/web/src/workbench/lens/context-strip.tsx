@@ -190,6 +190,8 @@ export const TOOL_STATUS_COLOR: Record<string, string> = {
   completed: token("done"),
   failed: token("caution"),
   in_progress: token("ink-2"),
+  expired: token("ink-2"),
+  cancelled: token("ink-2"),
 };
 
 export function statusColor(status: string): string {

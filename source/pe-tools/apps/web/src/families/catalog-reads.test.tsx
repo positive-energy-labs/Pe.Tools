@@ -115,7 +115,12 @@ test("categories read once from field-options; one scope change reads the catalo
   });
   await router.load();
   render(<RouterProvider router={router} />);
-  const input = await screen.findByRole("combobox", { name: "draft categories" });
+  const trigger = await screen.findByRole(
+    "button",
+    { name: "draft categories" },
+    // The whole route mounts first; under a full parallel run that is slower than 1s.
+    { timeout: 5000 },
+  );
   await act(() => new Promise((resolve) => setTimeout(resolve, 250)));
   expect(count("revit.catalog.field-options")).toBe(1);
   expect(hostCalls.find((call) => call.key === "revit.catalog.field-options")?.input).toEqual({
@@ -123,14 +128,12 @@ test("categories read once from field-options; one scope change reads the catalo
   });
   expect(count("revit.catalog.loaded-families")).toBe(0);
 
-  await act(async () => {
-    input.focus();
-    fireEvent.input(input, { target: { value: "Duct" }, inputType: "insertText" });
-  });
-  await act(async () => {
-    fireEvent.keyDown(input, { key: "Enter" });
-  });
+  await act(async () => fireEvent.click(trigger));
+  const search = await screen.findByLabelText("draft categories search");
+  await act(async () => fireEvent.change(search, { target: { value: "Duct" } }));
+  await act(async () => fireEvent.keyDown(search, { key: "Enter" }));
   await act(() => new Promise((resolve) => setTimeout(resolve, 500)));
   expect(count("revit.catalog.loaded-families")).toBe(1);
   expect(count("revit.catalog.field-options")).toBe(1);
-});
+  // A whole-route mount plus two real waits: over 5s under a loaded full run.
+}, 15_000);

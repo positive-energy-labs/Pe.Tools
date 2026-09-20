@@ -6,9 +6,9 @@
  * silently swallowed refused numeric commits (§3's named defect, in canon). It is deleted.
  * `TextCell`/`NumberCell` now RENDER `StateCell` at row scale — one editor, one refusal
  * mechanism (the visible dismissible note), one focus treatment (the inset hairline, per the
- * focus law). `CellSelect` is the one forced wrapper: a `<select>` cannot be an input, so it
- * keeps its own element and routes its refusal through the alarm mixes instead.
+ * focus law). A select-shaped cell is the list grammar's `CellListSelect` (lang/list-popup).
  */
+
 import { useCellNavigation } from "#/components/master-table/cell-navigation";
 import { StateCell, fmtNum } from "#/components/lang/cell";
 import type { Verdict, VerdictTone } from "#/components/master-table/model";
@@ -67,46 +67,6 @@ export function NumberCell({
       onCommit={(text) => onCommit(Number(text))}
       onNavigate={(direction) => move?.(direction) ?? false}
     />
-  );
-}
-
-/** The forced wrapper: a select-shaped editor cannot ride `StateCell`'s input. Focus takes the
- * select fill (the focus law — a fill, never a hue); `invalid` is its refusal mechanism and
- * spends the one alarm as an ink + wash mix, visibly on the surface. */
-export function CellSelect({
-  value,
-  onChange,
-  children,
-  invalid,
-  className,
-  title,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  children: React.ReactNode;
-  invalid?: boolean;
-  className?: string;
-  title?: string;
-}) {
-  const move = useCellNavigation();
-  return (
-    <select
-      value={value}
-      title={title}
-      tabIndex={-1}
-      onChange={(e) => onChange(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === "Tab" && move?.(e.shiftKey ? "left" : "right")) e.preventDefault();
-      }}
-      data-tone={invalid ? "alarm" : undefined}
-      data-wash={invalid ? "" : undefined}
-      className={cn(
-        "face-mono h-(--item-h) w-full min-w-0 truncate rounded-none border-0 bg-transparent px-(--item-pad-x) outline-none focus:outline focus:outline-line-2",
-        className,
-      )}
-    >
-      {children}
-    </select>
   );
 }
 

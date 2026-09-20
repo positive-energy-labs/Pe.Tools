@@ -12,10 +12,10 @@ import { Surface } from "#/components/lang/surface";
 import { previousOf } from "#/readings";
 
 import { isSpecOf, sheetOf, type EntityPage, type EntityRouteDef, type PodRow } from "./manifest";
-import { Picker } from "./picker";
+import { Ladder } from "./ladder";
 import { PlanSheetView } from "./plan-sheet";
 import { SpecEditor, type DemoSpec } from "./spec-editor";
-import { Situation, SituationCell, useDocumentLadder } from "./situation";
+import { LadderPicker, Situation, SituationCell, useDocumentLadder } from "./situation";
 import type { RouteHandle } from "./use-route";
 
 type Handle = RouteHandle<any, any, EntityPage, any>;
@@ -49,6 +49,8 @@ export function EntityRouteView({
   facts,
   subject,
   band,
+  startFreshAside,
+  onStartedFresh,
   health,
   hold,
   url = true,
@@ -65,6 +67,8 @@ export function EntityRouteView({
   subject?: ReactNode;
   /** Route content under the Situation's verb row. */
   band?: ReactNode;
+  startFreshAside?: ReactNode;
+  onStartedFresh?: () => void;
   /** The audit's complaint for the chain lamp; null = healthy. */
   health?: string | null;
   /** Hold a sheet row back from apply (or put it back); absent = rows cannot be held. */
@@ -92,6 +96,8 @@ export function EntityRouteView({
     ? sheetOf(def, { work: handle.work, readings: handle.readings, page } as never)
     : null;
   const closed = { confirming: false, sheet: null };
+  // A sheet over no spec (the staged cells') draws no spec absence lines (F-B-6).
+  const specless = confirming && !page.path;
   // Field options come from the document this route acts on, read-only (user verdict, grill 2).
   const optionsFrom =
     handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
@@ -105,7 +111,7 @@ export function EntityRouteView({
 
   const podCell = (
     <SituationCell io="rw" empty={!pod}>
-      <Picker
+      <Ladder
         title={pod ? `${pod.folder}; pick to change` : "choose a pod"}
         levels={[
           {
@@ -120,7 +126,7 @@ export function EntityRouteView({
             picked: (id) => id === page.pod,
             pick: (id) => setPage({ pod: id, path: "", ...closed }),
           },
-          ...(page.stage === "apply" || def.specPicker === "always"
+          ...((page.stage === "apply" && !specless) || def.specPicker === "always"
             ? [
                 {
                   key: "spec",
@@ -153,11 +159,13 @@ export function EntityRouteView({
           // commits by planning.
           commit={def.plan || def.staged ? "plan" : "apply"}
           band={band}
+          startFreshAside={startFreshAside}
+          onStartedFresh={onStartedFresh}
           sentence={
             <>
               {subject ?? def.entity}
               {def.target === "selection" ? ` (${page.selection.length} picked)` : ""} in{" "}
-              <Picker levels={ladder.levels} disabled={handle.busy !== null} />
+              <LadderPicker ladder={ladder} disabled={handle.busy !== null} />
               {ladder.refusal ? (
                 <span role="status" data-tone="caution">
                   {" "}
@@ -197,7 +205,7 @@ export function EntityRouteView({
         resize={{ target: "end", defaultSize: 520, minSize: 320, persist: `${def.key}:spec` }}
         start={children}
         end={
-          page.stage === "audit" ? null : (
+          page.stage === "audit" && !confirming ? null : (
             <Pane
               kind="inspector"
               title={confirming ? "plan" : "spec"}
@@ -217,24 +225,30 @@ export function EntityRouteView({
                     label: def.key === "families" ? "stop after this family" : "stop",
                     run: handle.stop,
                   }}
-                  replan={() => void handle.actions.plan.run()}
+                  replan={{
+                    says: handle.actions.plan.says,
+                    run: () => void handle.actions.plan.run(),
+                  }}
                   refusal={handle.actions.apply.refusal}
+                  stale={view?.stale}
                   busy={handle.busy !== null}
                 />
               ) : null}
-              <SpecEditor
-                member={page.pod && page.path ? { pod: page.pod, path: page.path } : null}
-                // A just-captured member is this route's spec before the pod list re-reads.
-                schema={
-                  member ? member.schema : new URL([def.schema].flat()[0]!, location.origin).href
-                }
-                fixture={fixture}
-                optionsFrom={optionsFrom}
-                onSaved={(ref) => {
-                  refreshPods();
-                  setPage({ pod: ref.pod, path: ref.path, ...closed });
-                }}
-              />
+              {specless ? null : (
+                <SpecEditor
+                  member={page.pod && page.path ? { pod: page.pod, path: page.path } : null}
+                  // A just-captured member is this route's spec before the pod list re-reads.
+                  schema={
+                    member ? member.schema : new URL([def.schema].flat()[0]!, location.origin).href
+                  }
+                  fixture={fixture}
+                  optionsFrom={optionsFrom}
+                  onSaved={(ref) => {
+                    refreshPods();
+                    setPage({ pod: ref.pod, path: ref.path, ...closed });
+                  }}
+                />
+              )}
             </Pane>
           )
         }

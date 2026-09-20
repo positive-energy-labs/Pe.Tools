@@ -1,5 +1,6 @@
 import type { PartitionReviewData } from "@pe/agent-contracts";
 import { useId } from "react";
+import { List } from "#/components/lang/list-popup";
 import { Press } from "#/components/lang/press";
 import { token } from "#/lib/token";
 import { candidateTone, HELD_HATCH, LABEL, LABEL_SIZE, RESIDUE_TREATMENT } from "./palette";
@@ -172,29 +173,26 @@ export function ReviewList({
   onFlag?: (key: string) => void;
 }) {
   return (
-    <div className="max-h-48 overflow-auto" aria-label="shape review">
-      {shapes.map((shape) => (
-        <div key={shape.key} className="flex items-baseline gap-2 hairline-b-faint">
-          <Press
-            tone="quiet"
-            size="caption"
-            state={selected === shape.key ? "selected" : "rest"}
-            onClick={() => onSelect(shape.key)}
-          >
-            {reviewLabel(shape)}
+    <List
+      aria-label="shape review"
+      region="shape review"
+      items={shapes}
+      keyOf={(shape) => shape.key}
+      labelOf={reviewLabel}
+      maxHeight="12rem"
+      empty="no shapes to review"
+      onPick={(shape) => onSelect(shape.key)}
+      row={(shape) => ({
+        // The flag is a mark on the row; the verb that sets it is a row action.
+        lead: flags.includes(shape.key) ? "⚑" : undefined,
+        label: reviewLabel(shape),
+        active: selected === shape.key,
+        actions: onFlag ? (
+          <Press tone="quiet" size="caption" onClick={() => onFlag(shape.key)}>
+            {flags.includes(shape.key) ? "unflag" : "flag"} {shape.id}
           </Press>
-          {onFlag && (
-            <Press
-              tone="quiet"
-              size="caption"
-              state={flags.includes(shape.key) ? "selected" : "rest"}
-              onClick={() => onFlag(shape.key)}
-            >
-              {flags.includes(shape.key) ? "unflag" : "flag"} {shape.id}
-            </Press>
-          )}
-        </div>
-      ))}
-    </div>
+        ) : undefined,
+      })}
+    />
   );
 }

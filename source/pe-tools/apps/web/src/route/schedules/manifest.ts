@@ -13,6 +13,8 @@ import {
 import {
   entityRoute,
   refuse,
+  HOST_READ_WAIT_S,
+  NATIVE_APPLY_WAIT_S,
   semanticActionFacts,
   semanticActionInputSchema,
   type Ctx as RouteCtx,
@@ -35,12 +37,15 @@ export interface ScheduleGridPage {
   captureId: string;
   /** The last push's run, as one line: outcome, where its receipt lives, written cells before → after, refused cells refused. */
   pushRun: string;
+  /** Cells the last push refused as stale while its readback failed: no C to draw, read again. */
+  unread: number;
 }
 
 const scheduleGridPage = z.object({
   workspaceId: z.string().default(""),
   captureId: z.string().default(""),
   pushRun: z.string().default(""),
+  unread: z.number().default(0),
 });
 
 type Ctx = RouteCtx<ScheduleGridDocument, ScheduleGridReading, ScheduleGridPage>;
@@ -122,6 +127,7 @@ export const scheduleSpec: EntityRouteDef<
   schema: "/schemas/settings/CmdScheduleManager/schedules.json",
   capture: "schedule.capture",
   apply: "schedule.apply",
+  applies: ["catalog"],
   captureInput: (ctx) => {
     const reading = previousOf(ctx.readings.work);
     return reading === undefined
@@ -162,6 +168,7 @@ export const schedulesManifest = () =>
       actions: {
         catalog: {
           label: "list schedules",
+          waitSeconds: HOST_READ_WAIT_S,
           says: "reads the bound document's schedule catalogue again",
           needs: "document",
           actor: "any",
@@ -176,6 +183,7 @@ export const schedulesManifest = () =>
         },
         refresh: {
           label: "read schedule",
+          waitSeconds: HOST_READ_WAIT_S,
           says: "reads the selected schedule from Revit into a fresh capture",
           needs: "document",
           actor: "human",
@@ -215,11 +223,13 @@ export const schedulesManifest = () =>
             ctx.setPage({
               workspaceId: reading.workspaceId,
               captureId: reading.id,
+              unread: 0,
             });
           },
         },
         push: {
           label: "push",
+          waitSeconds: NATIVE_APPLY_WAIT_S,
           ...semanticActionFacts("schedule.grid.push"),
           input: semanticActionInputSchema("schedule.grid.push") as never,
           stage: "audit",
@@ -277,6 +287,13 @@ export const schedulesManifest = () =>
                 captureId: reading.id,
               });
             }
+            // A stale refusal whose readback failed has no C on screen: the flag reads again first.
+            ctx.setPage({
+              unread: result.readbackError
+                ? (result.failures ?? []).filter((f) => REFUSAL_WORD[f.code ?? ""] === "stale")
+                    .length
+                : 0,
+            });
             if (result.readbackError) throw Error(result.readbackError);
             // Some cells landed and some were refused: an outcome, not a failure. Returned, so the
             // verb's dirties re-read the grid; the readback already rebound the basis to what Revit holds.

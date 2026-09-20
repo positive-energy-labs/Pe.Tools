@@ -16,10 +16,7 @@ import { switcherRecipe } from "#/components/lang/switcher";
 import { actionRecipe } from "#/components/lang/action-button";
 import { dialogRecipe } from "#/components/lang/dialog";
 import { inputGroupRecipe } from "#/components/lang/input-group";
-import { selectRecipe } from "#/components/lang/select";
 import { cardRecipe } from "#/components/lang/card";
-import { comboboxRecipe } from "#/components/lang/combobox";
-import { commandRecipe } from "#/components/lang/command";
 import { inputRecipe } from "#/components/lang/input";
 import { labelRecipe } from "#/components/lang/label";
 import { paneRecipe } from "#/components/lang/pane";
@@ -27,7 +24,6 @@ import { paneSplitRecipe } from "#/components/lang/pane-resize";
 import { switchRecipe } from "#/components/lang/switch";
 import { textareaRecipe } from "#/components/lang/textarea";
 import { valueDiffRecipe } from "#/components/lang/value-diff";
-import { pickListRecipe } from "#/components/lang/pick-list";
 import { tooltipRecipe } from "#/components/lang/tooltip";
 
 import { recipeVariantProps } from "./recipe-grid";
@@ -49,10 +45,7 @@ const RECIPES = {
   actionRecipe,
   dialogRecipe,
   inputGroupRecipe,
-  selectRecipe,
   cardRecipe,
-  comboboxRecipe,
-  commandRecipe,
   inputRecipe,
   labelRecipe,
   paneRecipe,
@@ -60,7 +53,6 @@ const RECIPES = {
   switchRecipe,
   textareaRecipe,
   valueDiffRecipe,
-  pickListRecipe,
   tooltipRecipe,
 };
 

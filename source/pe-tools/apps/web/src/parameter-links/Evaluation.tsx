@@ -4,10 +4,86 @@ import type {
   ParameterLinksRuntimeStatus,
 } from "@pe/agent-contracts";
 
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
+import type { Column } from "#/components/master-table/model";
+import { Table } from "#/components/master-table/table";
+import { TableFrame } from "#/components/master-table/table-frame";
+import { useTableState } from "#/components/master-table/view";
+
+type Write = ParameterLinkEvaluation["writes"][number];
+const CELL = "block truncate px-(--item-pad-x)";
+const parameterName = (write: Write) => write.targetParameter.name ?? write.targetParameter.kind;
+const targetName = (write: Write) => String(write.targetElementName ?? write.targetElementId);
+
+const WRITE_COLUMNS: Column<Write>[] = [
+  {
+    key: "target",
+    label: "target",
+    width: "w-56",
+    sort: targetName,
+    search: targetName,
+    cell: (write) => <span className={CELL}>{targetName(write)}</span>,
+  },
+  {
+    key: "parameter",
+    label: "parameter",
+    sort: parameterName,
+    facet: parameterName,
+    search: parameterName,
+    cell: (write) => <span className={CELL}>{parameterName(write)}</span>,
+  },
+  {
+    key: "current",
+    label: "current",
+    cell: (write) => <span className={CELL}>{displayParameterLinkValue(write.currentValue)}</span>,
+  },
+  {
+    key: "linked",
+    label: "linked",
+    cell: (write) => <span className={CELL}>{displayParameterLinkValue(write.linkedValue)}</span>,
+  },
+  {
+    key: "result",
+    label: "result",
+    title: "The value apply would write; `changed` rows differ from the current value.",
+    facet: (write) => (write.changed ? "changed" : "same"),
+    cell: (write) => (
+      <span className={CELL}>
+        {displayParameterLinkValue(write.proposedValue)}
+        {write.overrideApplied ? " (override)" : ""}
+      </span>
+    ),
+  },
+];
+
+const writeKey = (write: Write) =>
+  `${write.assignmentId}:${write.targetElementUniqueId}:${parameterName(write)}`;
+
+function WritesTable({ writes }: { writes: Write[] }) {
+  const [state, setState] = useTableState();
+  return (
+    <TableFrame
+      label="projected writes"
+      rows={writes}
+      columns={WRITE_COLUMNS}
+      rowKey={writeKey}
+      state={state}
+      onStateChange={setState}
+      searchPlaceholder="search targets"
+    >
+      <Table
+        rows={writes}
+        columns={WRITE_COLUMNS}
+        rowKey={writeKey}
+        label="projected writes"
+        state={state}
+        onStateChange={setState}
+      />
+    </TableFrame>
+  );
+}
 
 export function displayParameterLinkValue(value: ParameterLinkValue): string {
   if (value.displayValue) return value.displayValue;
@@ -114,46 +190,7 @@ export function EvaluationView({
           the evaluation produced no target writes
         </EmptyState>
       ) : (
-        <ArtifactFrame>
-          <table className="w-full text-left">
-            <thead>
-              <tr className="">
-                <th className="px-2 py-1.5">Target</th>
-                <th className="px-2 py-1.5">Parameter</th>
-                <th className="px-2 py-1.5">Current</th>
-                <th className="px-2 py-1.5">Linked</th>
-                <th className="px-2 py-1.5">Result</th>
-              </tr>
-            </thead>
-            <tbody>
-              {writes.map((write) => (
-                <tr
-                  key={`${write.assignmentId}:${write.targetElementUniqueId}:${write.targetParameter.name ?? write.targetParameter.kind}`}
-                >
-                  <td
-                    className={
-                      write.changed
-                        ? "max-w-[14rem] truncate px-2 py-1"
-                        : "max-w-[14rem] truncate px-2 py-1"
-                    }
-                  >
-                    {write.targetElementName ?? write.targetElementId}
-                  </td>
-                  <td className={write.changed ? "px-2 py-1" : "px-2 py-1"}>
-                    {write.targetParameter.name ?? write.targetParameter.kind}
-                  </td>
-                  <td className="px-2 py-1">{displayParameterLinkValue(write.currentValue)}</td>
-                  <td className="px-2 py-1">{displayParameterLinkValue(write.linkedValue)}</td>
-
-                  <td className={write.changed ? "px-2 py-1" : "px-2 py-1"}>
-                    {displayParameterLinkValue(write.proposedValue)}
-                    {write.overrideApplied ? " (override)" : ""}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </ArtifactFrame>
+        <WritesTable writes={writes} />
       )}
 
       {changed.length === 0 && writes.length > 0 ? (

@@ -1,103 +1,81 @@
 /**
- * Chat's in-realm panes: the same route bodies, drawn inside a thread. Each pane keys on the
- * thread head's default Target, so a pane and its route always read the same Work.
+ * Chat's plugin pane: every plugin route mounts its real route view, bound to the thread. A hosted
+ * view owns no URL (the pane and its focus live in the Chat URL) and draws no document picker (the
+ * target is the thread head's). Opening, switching or closing the pane is not a turn event.
  */
+import { useEffect, useState, type ContextType, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+
 import { LiveScheduleGridWorkspace } from "#/route/schedules/live";
-import { PodsRouteContent } from "#/routes/pods";
 import { FamilyRouteView } from "#/route/family/live";
+import { ChatFocus, ChatHosted, ChatPlanIntent } from "#/route/situation";
+import { PodsRouteContent } from "#/routes/pods";
 import { FamiliesRouteContent } from "#/routes/families";
 import { ParameterLinksRouteContent } from "#/routes/parameter-links";
 import { TakeoffsPane } from "#/takeoff/pane";
-import { takeoffsRouteState, workKey, type WorkKey } from "@pe/agent-contracts";
-import { useThreadScope } from "#/chat/scope";
-import { useWorkbench } from "./provider";
 import { InstancesPage } from "#/instances/route";
-import { useState, type ReactNode } from "react";
-import {
-  familiesRouteState,
-  instancesRouteState,
-  parameterLinksRouteState,
-  scheduleGridRouteState,
-  settingsRouteState,
-  type RouteStateSpec,
-} from "@pe/agent-contracts";
-import type { z } from "zod";
+import type { ChatPluginRoute } from "./chat-plugins";
 
-import { EmptyState } from "#/components/lang/empty";
-import { useTargetInventory } from "#/readings";
-import type { ChatPluginRoute } from "./route-chat-plugins";
+type View = (props: { thread: string }) => ReactNode;
 
-type PaneProps = { store: import("./store").ChatPageStore };
-type Pane = (props: PaneProps) => ReactNode;
+const views: Record<ChatPluginRoute, View> = {
+  instances: () => <HostedInstances />,
+  takeoffs: ({ thread }) => <TakeoffsPane thread={thread} />,
+  family: ({ thread }) => <FamilyRouteView thread={thread} url={false} />,
+  families: ({ thread }) => <FamiliesRouteContent thread={thread} />,
+  pods: ({ thread }) => <HostedPods thread={thread} />,
+  "parameter-links": ({ thread }) => <ParameterLinksRouteContent thread={thread} />,
+  schedules: ({ thread }) => <LiveScheduleGridWorkspace framed url={false} thread={thread} />,
+};
 
-const routePaneSpecs = {
-  instances: instancesRouteState,
-  takeoffs: takeoffsRouteState,
-  families: familiesRouteState,
-  pods: settingsRouteState,
-  "parameter-links": parameterLinksRouteState,
-  schedules: scheduleGridRouteState,
-} satisfies Partial<Record<ChatPluginRoute, RouteStateSpec<z.ZodType>>>;
-
-const routePanes = {
-  ...Object.fromEntries(
-    Object.entries(routePaneSpecs).map(([route, spec]) => [
-      route,
-      ((_: PaneProps) => <RoutePaneOwner spec={spec} />) satisfies Pane,
-    ]),
-  ),
-  family: ((_: PaneProps) => <FamilyPane />) satisfies Pane,
-} as Record<ChatPluginRoute, Pane>;
-export const ROUTE_PANE_ROUTES = Object.keys(routePanes) as ChatPluginRoute[];
-
-export function selectRoutePane(route: ChatPluginRoute): Pane {
-  return routePanes[route];
-}
-
-function FamilyPane() {
-  const { currentThreadId } = useWorkbench();
-  return <FamilyRouteView thread={currentThreadId} url={false} />;
-}
-
-function RoutePaneOwner({ spec }: { spec: RouteStateSpec<z.ZodType> }) {
-  const { currentThreadId } = useWorkbench();
-  const threadScope = useThreadScope(currentThreadId);
-  const inventory = useTargetInventory();
-  const target = threadScope.defaultTarget;
-  const session =
-    target?.kind === "open" && inventory.kind === "ready"
-      ? inventory.sessions[target.ref.session]
-      : undefined;
-  const address =
-    target?.kind === "named"
-      ? target.address
-      : target?.kind === "open" && session?.kind === "ready"
-        ? (session.values.find((document) => document.openId === target.ref.openId)?.address ??
-          null)
-        : null;
-  const work: WorkKey = {
-    route: spec.route,
-    target: address,
+/**
+ * Every route opened on this page stays mounted; the pane only moves the open one into view.
+ * Closing the pane is therefore not unmount: an action in flight keeps its owner, finishes into
+ * the same page log, and reopening shows it (K3 lifetime; only the route's own stop cancels).
+ * ponytail: every opened route stays live until Chat unmounts; evict idle ones if readings cost.
+ */
+export function useChatPluginHost(
+  plugin: ChatPluginRoute | undefined,
+  thread: string,
+  intent: ContextType<typeof ChatPlanIntent> = null,
+  focus: readonly string[] | null = null,
+) {
+  const [homes, setHomes] = useState<ReadonlyMap<ChatPluginRoute, HTMLElement>>(new Map());
+  // Created after mount: the server renders no portals, and a portal's home must outlive the pane.
+  useEffect(() => {
+    if (plugin && !homes.has(plugin)) {
+      const home = document.createElement("div");
+      home.className = "flex size-full min-h-0 min-w-0 flex-col";
+      setHomes(new Map(homes).set(plugin, home));
+    }
+  }, [plugin, homes]);
+  const home = plugin ? homes.get(plugin) : undefined;
+  const slot = (element: HTMLElement | null) => {
+    if (element && home && element.firstChild !== home) element.replaceChildren(home);
   };
-  if (!threadScope.hydrated)
-    return (
-      <EmptyState story="scope" exit="wait for the thread head">
-        opening {spec.title}
-      </EmptyState>
+  const kept = [...homes].map(([route, element]) => {
+    const View = views[route];
+    return createPortal(
+      <ChatHosted.Provider value>
+        <ChatPlanIntent.Provider value={intent?.route === route ? intent : null}>
+          <ChatFocus.Provider value={route === plugin ? focus : null}>
+            <View thread={thread} />
+          </ChatFocus.Provider>
+        </ChatPlanIntent.Provider>
+      </ChatHosted.Provider>,
+      element,
+      route,
     );
-  // The settings pane is the pods browser: the same member editor /pods draws.
-  if (spec.route === settingsRouteState.route) return <PodsPane />;
-  if (spec.route === "families") return <FamiliesRouteContent thread={currentThreadId} />;
-  if (spec.route === "takeoffs") return <TakeoffsPane key={workKey(work)} scope={work} />;
-  if (spec.route === scheduleGridRouteState.route)
-    return <LiveScheduleGridWorkspace key={workKey(work)} thread={currentThreadId} />;
-  if (spec.route === "instances")
-    return <InstancesPage target={work.target ?? ""} setTarget={() => {}} />;
-  return <ParameterLinksRouteContent />;
+  });
+  return { slot, kept };
 }
 
-function PodsPane() {
-  const { currentThreadId } = useWorkbench();
+function HostedInstances() {
+  const [target, setTarget] = useState("");
+  return <InstancesPage target={target} setTarget={setTarget} />;
+}
+
+function HostedPods({ thread }: { thread: string }) {
   const [ref, select] = useState<{ pod?: string; path?: string }>({});
-  return <PodsRouteContent {...ref} thread={currentThreadId} select={select} />;
+  return <PodsRouteContent {...ref} thread={thread} select={select} />;
 }

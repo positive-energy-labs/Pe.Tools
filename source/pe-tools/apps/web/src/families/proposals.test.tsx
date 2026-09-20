@@ -95,7 +95,9 @@ const planned = (familyId: number) => ({
 });
 
 test("a proposal renders its author and both values", () => {
-  render(<ProposalCell current="FXMQ12" reason="" cell={proposal(fcu)} onCommit={() => {}} />);
+  render(
+    <ProposalCell current="FXMQ12" reason="" cell={proposal(fcu)} onCommit={async () => null} />,
+  );
   const input = screen.getByDisplayValue("FXMQ20");
   const cell = input.closest("[data-proposal]")!;
   expect(cell.getAttribute("data-proposal")).toBe("pea");
@@ -111,7 +113,7 @@ test("a counter-proposal renders beside the staged human value", () => {
         proposal: { value: { value: "FXMQ24" } },
         staged: { value: { value: "FXMQ20" } },
       }}
-      onCommit={() => {}}
+      onCommit={async () => null}
     />,
   );
   const rendered = screen.getAllByDisplayValue("FXMQ20").at(-1)?.closest("[data-proposal]");

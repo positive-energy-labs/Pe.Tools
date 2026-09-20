@@ -2,12 +2,12 @@
 /** Obligation 12 on `/family`: old-shape saved Work surfaces the host's sentence on the handle. */
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
+import { UNREADABLE_WORK } from "@pe/agent-contracts";
 import { peReadings } from "#/readings";
 import { familyManifest } from "./family/manifest";
 import { useRoute } from "./use-route";
 
-const UNREADABLE =
-  "This route's saved Work is in a shape this version cannot read, so it was left untouched; it cannot be opened here.";
+const UNREADABLE = UNREADABLE_WORK;
 const inventory = {
   sessions: [
     {
@@ -42,4 +42,5 @@ test("/family: a refused Work Reading is the handle's refusal sentence and never
   act(() => accept.get("work")?.({ kind: "failure", key: "work", error: UNREADABLE } as never));
   expect(result.current.work.current).toBe(false);
   expect(result.current.work.refusal).toBe(UNREADABLE);
+  expect(result.current.work.startFresh).not.toBeNull();
 });

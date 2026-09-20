@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
+import { useHotkeys } from "@tanstack/react-hotkeys";
+import { reviewTransitions } from "#/components/lang/band";
 import type { FamilyStore } from "#/family/store";
 import {
   consumersOf,
@@ -14,6 +16,7 @@ import {
   type PRow,
 } from "#/family/model";
 import type { ProtoProposal } from "#/family/world";
+import { keyMeta } from "#/route/keys";
 
 export function useFamilyWorkspaceCore(store: FamilyStore) {
   const profile = store.profile;
@@ -78,17 +81,30 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   // Esc unwinds ONE thing, innermost first: the bind picker, then the inspector, then the
   // drill-in. Each is a mode of a pane rather than a place, so leaving one must never feel like
   // navigating — and collapsing them all at once would throw away context you did not ask to lose.
-  useEffect(() => {
-    if (drillType == null && inspect == null && binding == null) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      if (binding != null) setBinding(null);
-      else if (inspect != null) setInspect(null);
-      else setDrillType(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [drillType, inspect, binding]);
+  const unwindKey = useMemo(
+    () => [
+      {
+        hotkey: "Escape" as const,
+        callback: () => {
+          if (binding != null) setBinding(null);
+          else if (inspect != null) setInspect(null);
+          else setDrillType(null);
+        },
+        options: {
+          enabled: drillType != null || inspect != null || binding != null,
+          ignoreInputs: true,
+          meta: keyMeta({
+            name: "close current mode",
+            description: "close the bind picker, inspector, or drill-in",
+            tier: "pane",
+            region: "family workspace",
+          }),
+        },
+      },
+    ],
+    [drillType, inspect, binding, setBinding, setInspect, setDrillType],
+  );
+  useHotkeys(unwindKey);
 
   // Locating scrolls the card into the sidebar. That is the whole payoff of the rail and the
   // corner folds: the table points, the sidebar decides, and nothing covers the table.
@@ -100,24 +116,6 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   /** A proposal STANDS until it is cleared. Accepting does not clear it: the reader wants it
    * behind the staged value, because that is the only evidence that the square is pea's ink. */
   const stands = (entry: ProtoProposal): boolean => !draft.cleared.includes(entry.id);
-
-  /**
-   * WHAT BECAME OF PEA'S READING — derived from the draft, never remembered.
-   *   cleared — denied, or beaten by your own edit. Gone; the cell shows the real value.
-   *   taken   — the draft now STAGES exactly what it argued for. That is what accept does, and
-   *             typing the same number yourself is indistinguishable, which is honest.
-   *   open    — still owed a decision.
-   */
-  const proposalState = (entry: ProtoProposal): "open" | "taken" | "cleared" => {
-    if (!stands(entry)) return "cleared";
-    const value = entry.typeName
-      ? draft.types[entry.typeName]?.[entry.param]
-      : draft.authored[entry.param];
-    const disk = entry.typeName
-      ? saved.types[entry.typeName]?.[entry.param]
-      : saved.authored[entry.param];
-    return value === entry.proposed && value !== disk ? "taken" : "open";
-  };
 
   /** Every standing proposal aimed at exactly one cell: a type override, or the family-level
    * value. A list, not a single one — a cell may be argued about twice, and hiding the second
@@ -194,39 +192,12 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
 
   // ── verbs ─────────────────────────────────────────────────────────────────────────────────────
 
-  const accept = (proposal: ProtoProposal) => {
-    setDraft((previous) => {
-      const next = structuredClone(previous);
-      if (proposal.typeName) {
-        next.types[proposal.typeName] = {
-          ...next.types[proposal.typeName],
-          [proposal.param]: proposal.proposed,
-        };
-      } else {
-        next.authored[proposal.param] = proposal.proposed;
-      }
-      next.dirty = true;
-      return next;
-    });
-    say(`accepted ${proposal.param} = ${proposal.proposed}`);
-  };
-
-  /** DENY CLEARS. There is no denied state to draw: the proposal stops standing, so the cell goes
-   * back to showing the real value and draws nothing. The card keeps a one-line record with a
-   * re-open verb, which is the whole undo — the proposal itself never left this page. */
-  const deny = (proposal: ProtoProposal) => {
-    setDraft((previous) => ({ ...previous, cleared: [...previous.cleared, proposal.id] }));
-    say(`denied — the proposal is gone and ${proposal.param} shows its real value again`);
-  };
-
-  /** Put a cleared proposal back. Page-scoped view state, not a cell state. */
-  const reopen = (proposal: ProtoProposal) => {
-    setDraft((previous) => ({
-      ...previous,
-      cleared: previous.cleared.filter((id) => id !== proposal.id),
-    }));
-    say(`re-opened pea's reading of ${proposal.param}`);
-  };
+  /**
+   * A drawn cell's verbs: exactly the contract's transitions on the Work field it stands on. Accept
+   * and deny are the cell's own; nothing on this page assembles them.
+   */
+  const transitionsAt = (key: string) =>
+    reviewTransitions(store.wire, key, store.fields[key] ?? {});
 
   /**
    * TYPING BEATS PROPOSING. Committing your own value into a cell CLEARS every proposal aimed at
@@ -454,7 +425,7 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   // ── grounding highlight — independent of proposals, so it survives acceptance ──────────────────
 
   // MEMOISED, and that is load-bearing rather than tidy: `columns` depends on nothing that hover
-  // touches, but a fresh Set identity on every render would still churn the array, and MasterTable
+  // touches, but a fresh Set identity on every render would still churn the array, and Table
   // hands each column's `cell` to FlexRender as a COMPONENT TYPE. A new function identity there is
   // a new type, which unmounts and remounts every cell — including the input you are typing in.
   // Stable focus sets keep the table's inputs alive while the pointer moves.
@@ -491,7 +462,7 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
 
   // ── columns ───────────────────────────────────────────────────────────────────────────────────
   //
-  // Built by shared factories, because the DRILL-IN uses the same MasterTable and must therefore
+  // Built by shared factories, because the DRILL-IN uses the same Table and must therefore
   // use literally the same cells: the identity column and a type column are the two pieces both
   // modes need, and a per-type view that merely LOOKED like the cross-type table would drift away
   // from it the first time either changed.
@@ -534,7 +505,6 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
     setBinding,
     cardRefs,
     say,
-    proposalState,
     proposalsAt,
     proposalsOn,
     openProposals,
@@ -544,9 +514,9 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
     ghostCount,
     driftCells,
     unsavedCount,
-    accept,
-    deny,
-    reopen,
+    transitionsAt,
+    wire: store.wire,
+    fields: store.fields,
     sever,
     editAuthored,
     editOverride,

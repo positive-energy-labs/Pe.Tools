@@ -184,6 +184,131 @@ test("F-H6-2: the Families route tells Pea to propose a scope, then cells agains
   expect(read).not.toMatch(/loaded in the staged scope/);
 });
 
+test.each([
+  "set Width on types of the Elbow family",
+  "set a parameter value on family types",
+  "change type parameters for families",
+])("F-B-1: family type changes find the Families propose door: %s", async (query) => {
+  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
+  vi.stubGlobal("fetch", async () => Response.json(catalog()));
+  try {
+    const found = (await run(peFind, { query, limit: 50 })) as {
+      matches: Array<{ key: string }>;
+    };
+    expect(found.matches[0]?.key).toBe("route:families.propose");
+    expect(found.matches.map((row) => row.key)).not.toContain("op:families.plan");
+    expect(found.matches.map((row) => row.key)).not.toContain("op:families.capture");
+    expect(found.matches.map((row) => row.key)).not.toContain("op:families.apply");
+  } finally {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  }
+});
+
+test("F-B-2: a Families route read carries its proposed scope types", async () => {
+  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
+  const calls: Array<{ url: URL; body?: Record<string, unknown> }> = [];
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
+    calls.push({ url, body });
+    if (url.pathname === "/pe/capabilities") return Response.json(catalog());
+    if (url.pathname === "/pe/route-state/families")
+      return Response.json({
+        revision: 1,
+        doc: {
+          scope: {
+            proposal: {
+              value: { categoryNames: [], familyNames: ["A"], placementScope: "AllLoaded" },
+            },
+          },
+        },
+      });
+    if (url.pathname === "/ops") return Response.json({ operations: ops });
+    if (body?.key === "bridge.sessions.list")
+      return Response.json({
+        sessions: [
+          {
+            sessionId: "b1",
+            connected: true,
+            openDocuments: [{ openId: "a", address: "C:\\Models\\A.rvt", isFamilyDocument: false }],
+          },
+        ],
+      });
+    if (body?.key === "revit.catalog.loaded-families")
+      return Response.json({
+        families: [{ familyName: "A", types: [{ typeName: "T1" }, { typeName: "T2" }] }],
+      });
+    throw Error(`unexpected ${url.pathname}`);
+  });
+  try {
+    const read = await run(peRead, { key: "route:families", timeoutSeconds: 30 });
+    expect(read).toMatchObject({
+      result: { scopeTypes: [{ familyName: "A", typeNames: ["T1", "T2"] }] },
+    });
+    expect(
+      calls.find((call) => call.body?.key === "revit.catalog.loaded-families")?.body,
+    ).toMatchObject({ request: { projection: { view: "Rows" } } });
+  } finally {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  }
+});
+
+test("F-B-2: a Families route read names a missing scope and preserves a catalog failure", async () => {
+  for (const [port, document, fails] of [
+    ["10", {}, false],
+    [
+      "11",
+      {
+        scope: {
+          proposal: {
+            value: { categoryNames: [], familyNames: ["A"], placementScope: "AllLoaded" },
+          },
+        },
+      },
+      true,
+    ],
+  ] as const) {
+    vi.stubEnv("PE_TOOLS_HOST_BASE_URL", `http://127.0.0.1:${port}`);
+    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
+      if (url.pathname === "/pe/capabilities") return Response.json(catalog());
+      if (url.pathname === "/pe/route-state/families")
+        return Response.json({ revision: 1, doc: document });
+      if (url.pathname === "/ops") return Response.json({ operations: ops });
+      if (body?.key === "bridge.sessions.list")
+        return Response.json({
+          sessions: [
+            {
+              sessionId: "b1",
+              connected: true,
+              openDocuments: [
+                { openId: "a", address: "C:\\Models\\A.rvt", isFamilyDocument: false },
+              ],
+            },
+          ],
+        });
+      if (body?.key === "revit.catalog.loaded-families" && fails) throw Error("catalog down");
+      throw Error(`unexpected ${url.pathname}`);
+    });
+    try {
+      const read = (await run(peRead, { key: "route:families", timeoutSeconds: 30 })) as {
+        result: Record<string, unknown>;
+      };
+      if (fails) expect(read.result.scopeTypesError).toContain("catalog down");
+      else {
+        expect(read.result.scopeTypes).toBeUndefined();
+        expect(read.result.hint).toContain("scope.proposal");
+      }
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  }
+});
+
 type ExecutableTool = { execute?: (input: never, context: never) => Promise<unknown> };
 const turn: Turn = {
   id: "11111111-1111-4111-8111-111111111111",

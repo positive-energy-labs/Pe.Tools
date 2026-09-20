@@ -12,6 +12,7 @@ import {
   toPx,
 } from "../world";
 import { Press } from "#/components/lang/press";
+import { Switcher } from "#/components/lang/switcher";
 import type { View } from "./frame";
 import type { FocusRequest } from "./zone-peek";
 import { frameCache, levelFrame, levelViewport, useLevelData } from "./frame";
@@ -115,21 +116,18 @@ export function PlanDock(props: {
         className="flex shrink-0 items-center gap-2 px-2 py-1"
         style={{ borderColor: token("line-2") }}
       >
-        <div className="flex gap-0.5">
-          {levels.map((l) => (
-            <Press
-              key={l}
-              type="button"
-              tone="quiet"
-              size="caption"
-              state={l === level ? "selected" : "rest"}
-              onClick={() => props.onPickLevel(l)}
-              title="Show this level on the plan — the sheet scrolls to its section (and scrolling the sheet moves this tab)."
-            >
-              {l.replace(" Level", "")}
-            </Press>
-          ))}
-        </div>
+        {/* A handful of levels side by side: a segmented choose-one, not a list. */}
+        <Switcher
+          ariaLabel="level"
+          value={level ?? ""}
+          onChange={props.onPickLevel}
+          options={levels.map((l) => ({
+            value: l,
+            label: l.replace(" Level", ""),
+            title:
+              "Show this level on the plan — the sheet scrolls to its section (and scrolling the sheet moves this tab).",
+          }))}
+        />
         <span className="ml-auto flex items-center gap-1.5">
           <Press
             type="button"

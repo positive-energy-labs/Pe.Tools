@@ -3,6 +3,7 @@ import type { ParameterLinkDefinition, ParameterLinkProfile } from "@pe/agent-co
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { EmptyState } from "#/components/lang/empty";
 import { ActionButton } from "#/components/lang/action-button";
+import { Input } from "#/components/lang/input";
 import {
   FieldOptionPicker,
   FieldOptionSelect,
@@ -102,7 +103,7 @@ export function DefinitionCard({
     <ArtifactFrame
       head={
         <>
-          <input
+          <Input
             value={definition.id}
             disabled={disabled}
             onChange={(event) => patch({ id: event.target.value })}
@@ -123,6 +124,7 @@ export function DefinitionCard({
         <Field label="Source category">
           <FieldOptionSelect
             items={categories.items}
+            status={categories.status}
             value={definition.sourceCategoryId ? String(definition.sourceCategoryId) : undefined}
             fallbackLabel={
               definition.sourceCategoryId ? `Category ${definition.sourceCategoryId}` : undefined
@@ -144,6 +146,7 @@ export function DefinitionCard({
         <Field label="Source parameter">
           <FieldOptionSelect
             items={sourceParameters.items}
+            status={sourceParameters.status}
             value={
               selectedSource?.value ??
               parameterOptionValue(definition.sourceParameter, definition.sourceScope)
@@ -163,6 +166,7 @@ export function DefinitionCard({
         <Field label="Target parameter">
           <FieldOptionSelect
             items={targetParameters.items}
+            status={targetParameters.status}
             value={
               findParameterOption(targetParameters.items, definition.targetParameter)?.value ??
               parameterOptionValue(definition.targetParameter, "instance")
@@ -195,7 +199,7 @@ export function DefinitionCard({
           />
         </Field>
         <label className="flex items-center gap-1.5 sm:col-span-2">
-          <input
+          <Input
             type="checkbox"
             checked={definition.targetOverride != null}
             disabled={disabled}
@@ -213,6 +217,7 @@ export function DefinitionCard({
           <>
             <Field label="Override enabled parameter">
               <FieldOptionSelect
+                status={readableTargetParameters.status}
                 items={readableTargetParameters.items.filter((item) =>
                   item.metadata?.dataTypeId?.includes("yesno"),
                 )}
@@ -237,6 +242,7 @@ export function DefinitionCard({
             </Field>
             <Field label="Override value parameter">
               <FieldOptionSelect
+                status={readableTargetParameters.status}
                 items={readableTargetParameters.items.filter(
                   (item) =>
                     !selectedSource?.metadata?.dataTypeId ||
@@ -286,7 +292,7 @@ export function DefinitionCard({
               <div key={assignment.id} className="py-1.5">
                 <div className="mb-1 flex items-center justify-between gap-2">
                   <label className="flex items-center gap-1.5">
-                    <input
+                    <Input
                       type="checkbox"
                       checked={assignment.enabled}
                       disabled={disabled}
@@ -312,6 +318,7 @@ export function DefinitionCard({
                 <Field label="Source elements">
                   <FieldOptionPicker
                     items={elements.items}
+                    status={elements.status}
                     values={assignment.sourceElementUniqueIds}
                     disabled={disabled}
                     onChange={(sourceElementUniqueIds) =>

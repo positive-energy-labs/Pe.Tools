@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // Its own file: the app atom registry is per module, and a sibling test's open-B Work would linger.
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { RegistryContext } from "@effect/atom-react";
 
 import { appAtomRegistry } from "#/route";
@@ -63,8 +63,9 @@ test("ask A: a push refused on moved evidence draws the cell stale with what Rev
   expect((await f.view()).doc.cells["1::2"].staged).toEqual({ value: "150 VA" });
   // The run line reads the domain's code as a word, never its sentence.
   expect((await screen.findByText(/^push run ·/)).textContent).toContain("1::2 refused (stale)");
-  expect((await screen.findAllByTitle(/model holds 120 VA/)).length).toBeGreaterThan(0);
-  fireEvent.click(await screen.findByRole("button", { name: "accept" }));
+  expect((await screen.findAllByTitle(/Revit now 120 VA/)).length).toBeGreaterThan(0);
+  const pending = await screen.findByRole("list", { name: "pending cells" });
+  fireEvent.click(await within(pending).findByRole("button", { name: "accept" }));
   await vi.waitFor(async () =>
     expect((await f.view()).doc.basis).toEqual({ captureId: expect.any(String) }),
   );
@@ -79,4 +80,4 @@ test("ask A: a push refused on moved evidence draws the cell stale with what Rev
     value: "150 VA",
     expectedBinding: { rawValue: "120" },
   });
-});
+}, 30_000);

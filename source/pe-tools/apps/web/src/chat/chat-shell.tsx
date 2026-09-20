@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { HotkeysProvider, useHotkeys } from "@tanstack/react-hotkeys";
 import { ModeDial } from "#/chat/mode-dial";
-import { ThreadList, ThreadPalette } from "#/chat/thread-palette";
+import { ThreadDialog, ThreadsSidebar } from "#/chat/thread-palette";
 import { useWorkbench } from "#/workbench/provider";
 import { useMode } from "#/workbench/use-mode";
 import { MODES } from "#/workbench/depth";
@@ -12,8 +12,8 @@ import { selectBreakdown, selectRunStatus } from "#/workbench/chat-state";
 import { buildTraceCells, ToolCellBody, TraceCellView } from "#/workbench/lens/context-strip";
 import { Press } from "#/components/lang/press";
 import { X } from "lucide-react";
-import { chatPluginTitle } from "#/workbench/route-chat-plugins";
-import { selectRoutePane } from "#/workbench/route-panes";
+import { chatPluginTitle, type ChatPluginRoute } from "#/workbench/chat-plugins";
+import { useChatPluginHost } from "#/workbench/route-panes";
 import { ComposerHead } from "#/chat/composer-head";
 import { appAtomRegistry, RouteShell, keyMeta, useRoute } from "#/route";
 import { chatManifest } from "#/chat/manifest";
@@ -24,20 +24,17 @@ import { Surface as PageSurface } from "#/components/lang/surface";
 import { ThreadBody } from "#/workbench/lens/thread-body";
 import { ComposerBank } from "#/chat/composer-bank";
 
-/** Routes hostable as in-realm chat workspace panes.
- * Route names and titles come from the plugin registry — one registration per route. */
-export type { ChatPluginRoute } from "#/workbench/route-chat-plugins";
-import type { ChatPluginRoute } from "#/workbench/route-chat-plugins";
+type Plugin = { plugin?: ChatPluginRoute; focus?: string; target?: string };
 
-export function ChatShell({ plugin }: { plugin?: ChatPluginRoute }) {
+export function ChatShell(props: Plugin) {
   return (
     <HotkeysProvider>
-      <CurrentThreadChatSurface plugin={plugin} />
+      <CurrentThreadChatSurface {...props} />
     </HotkeysProvider>
   );
 }
 
-function CurrentThreadChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
+function CurrentThreadChatSurface(props: Plugin) {
   const { currentThreadId, turn, patchThreadView } = useWorkbench();
   return (
     <CurrentThreadViewOwner
@@ -46,12 +43,12 @@ function CurrentThreadChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
       turn={turn}
       patch={patchThreadView}
     >
-      <ChatSurface plugin={plugin} />
+      <ChatSurface {...props} />
     </CurrentThreadViewOwner>
   );
 }
 
-function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
+function ChatSurface({ plugin, focus, target }: Plugin) {
   const {
     store,
     chat,
@@ -115,7 +112,20 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
   useEffect(() => {
     if (plugin) store.actions.setPluginOpen(true);
   }, [plugin, store]);
-  const PluginPane = plugin ? selectRoutePane(plugin) : null;
+  const planIntent = useAtomValue(store.atoms.planIntent);
+  const intent = useMemo(
+    () =>
+      planIntent
+        ? {
+            route: planIntent.route,
+            take: () => store.actions.takePlan(planIntent.route),
+            refused: (message: string) => store.actions.refusePlan(planIntent.route, message),
+          }
+        : null,
+    [planIntent, store],
+  );
+  const focusPath = parseFocus(focus);
+  const host = useChatPluginHost(plugin, currentThreadId, intent, focusPath);
 
   // Context gauges (cap + OM meters) ride beside the composer now, so the cache view is derived
   // here instead of inside the Lens. userTurns gates the diff baseline (advances on each send).
@@ -195,7 +205,7 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
         handle={handle}
         topBar={
           <>
-            <ComposerHead handle={handle} status={status} />
+            <ComposerHead handle={handle} status={status} urlTarget={target} />
             <ContextRibbon
               breakdown={breakdown}
               cache={cache}
@@ -241,7 +251,7 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
                 onCollapsedChange={(collapsed) => store.actions.setSideOpen(!collapsed)}
               >
                 {mode === "threads" ? (
-                  <ThreadList
+                  <ThreadsSidebar
                     threads={threads}
                     currentThreadId={currentThreadId}
                     onSelect={openThread}
@@ -299,17 +309,29 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
                       collapsed={!pluginOpen}
                       onCollapsedChange={(collapsed) => store.actions.setPluginOpen(!collapsed)}
                       actions={
-                        <Press
-                          tone="quiet"
-                          size="icon"
-                          title="Close workspace"
-                          onClick={() => store.actions.setPlugin(undefined)}
-                        >
-                          <X />
-                        </Press>
+                        <>
+                          {focusPath ? (
+                            <Press
+                              tone="quiet"
+                              size="caption"
+                              title="Show the whole Work"
+                              onClick={() => store.actions.setPlugin(plugin)}
+                            >
+                              {focusPath.join(" › ")} <X />
+                            </Press>
+                          ) : null}
+                          <Press
+                            tone="quiet"
+                            size="icon"
+                            title="Close workspace"
+                            onClick={() => store.actions.setPlugin(undefined)}
+                          >
+                            <X />
+                          </Press>
+                        </>
                       }
                     >
-                      {PluginPane ? <PluginPane store={store} /> : null}
+                      <div ref={host.slot} className="contents" />
                     </Pane>
                   ) : null
                 }
@@ -319,7 +341,8 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
         </PageSurface>
       </RouteShell>
 
-      <ThreadPalette
+      {host.kept}
+      <ThreadDialog
         threads={threads}
         currentThreadId={currentThreadId}
         open={paletteOpen}
@@ -331,4 +354,17 @@ function ChatSurface({ plugin }: { plugin?: ChatPluginRoute }) {
       />
     </main>
   );
+}
+
+/** The group path the drill-in scoped the pane to: canonical JSON of the path, in the Chat URL. */
+function parseFocus(focus: string | undefined): string[] | null {
+  if (!focus) return null;
+  try {
+    const path: unknown = JSON.parse(focus);
+    return Array.isArray(path) && path.length && path.every((part) => typeof part === "string")
+      ? path
+      : null;
+  } catch {
+    return null;
+  }
 }

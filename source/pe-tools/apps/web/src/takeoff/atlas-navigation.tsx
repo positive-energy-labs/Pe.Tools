@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { FactChip } from "#/components/lang/chip";
-import { PressContent } from "#/components/anatomy/press-content";
+import { List } from "#/components/lang/list-popup";
 import { Press } from "#/components/lang/press";
 import { StateDot } from "#/components/master-table/cells";
 import { Pane } from "#/components/lang/pane";
@@ -10,6 +10,7 @@ import { onPlan } from "#/takeoff/room-actions";
 import { ZoneStateBar } from "#/takeoff/zone-state-bar";
 import { ZoneThumb } from "#/takeoff/zone-plan";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
+import { levelsOf } from "#/takeoff/plan-image";
 
 export function AtlasNavigation() {
   const {
@@ -51,30 +52,27 @@ export function AtlasNavigation() {
 
         <div className="hairline-b px-2 py-1.5">
           <div className="t-small t-upper mb-1">zone pipeline — global filter</div>
-          <div className="flex flex-col">
-            {stageCounts.map(({ stage, n }, i) => {
-              const on = stageFilter === stage;
-              return (
-                <Press
-                  key={stage}
-                  type="button"
-                  title={STAGE_BLURB[stage]}
-                  onClick={() => {
-                    setStageFilter(on ? null : stage);
-                  }}
-                  tone="quiet"
-                  size="caption"
-                  state={on ? "selected" : "rest"}
-                >
-                  <PressContent geometry="baseline">
-                    <span className="face-mono w-3">{i + 1}</span>
-                    <span className="face-mono flex-1">{stage}</span>
-                    <span className="face-mono">{n}</span>
-                  </PressContent>
-                </Press>
-              );
+          <List
+            aria-label="zone pipeline"
+            region="zones"
+            items={stageCounts}
+            keyOf={({ stage }) => stage}
+            labelOf={({ stage }) => stage}
+            empty="no stages"
+            // One stage filters the plan; picking it again shows all.
+            onPick={({ stage }) => setStageFilter(stageFilter === stage ? null : stage)}
+            row={({ stage, n }) => ({
+              lead: (
+                <span className="face-mono w-3">
+                  {stageCounts.findIndex((c) => c.stage === stage) + 1}
+                </span>
+              ),
+              label: <span className="face-mono">{stage}</span>,
+              meta: n,
+              active: stageFilter === stage,
+              title: STAGE_BLURB[stage],
             })}
-          </div>
+          />
           {stageFilter && (
             <Press type="button" tone="quiet" size="caption" onClick={() => setStageFilter(null)}>
               clear filter — show all {world.zones.length}
@@ -82,68 +80,51 @@ export function AtlasNavigation() {
           )}
         </div>
 
-        <div>
-          {world.lanes.map((lane) => {
-            const zs = filteredZones.filter((z) => z.zone.lane.label === lane.label);
-            if (zs.length === 0) return null;
-            return (
-              <div key={lane.label}>
-                <div
-                  className="hairline-b t-small t-upper sticky top-0 z-sticky px-2 py-0.5"
-                  data-surface="recess"
-                >
-                  {lane.label} · {zs.length}
-                </div>
-                <ul>
-                  {zs.map((z) => {
-                    const states = zoneStates(z);
-                    const calls = states.filter((s) => s === "call").length;
-                    const on = z.zone.guid === zoneKey;
-                    const off = !onPlan(z);
-                    return (
-                      // A grid item stretches: an inline-block button in a block list item is
-                      // only as wide as its text, which is why the zone bar never reached the
-                      // right edge (annotation round, 2026-08-31).
-                      <li key={z.zone.guid} className="grid">
-                        <Press
-                          type="button"
-                          onClick={() => selectZone(on ? null : z)}
-                          title={
-                            off
-                              ? `off-plan scribble — ${fmtNum(z.zone.declaredSqft, 0)} sf, drawn far from the level cluster; kept in the list, excluded from the plan`
-                              : `${z.name} · ${z.zone.lane.label} · ${fmtNum(z.zone.declaredSqft, 0)} sf declared`
-                          }
-                          tone="quiet"
-                          size="caption"
-                          state={on ? "selected" : "rest"}
-                        >
-                          <PressContent geometry="baseline">
-                            <ZoneThumb zone={z.zone} className="size-4" />
-                            <span className="face-mono shrink-0">{z.zone.key}</span>
-                            <span className="min-w-0 flex-1 truncate">
-                              {off ? "off-plan scribble" : z.name}
-                            </span>
-                            {calls > 0 && (
-                              <span>
-                                <FactChip
-                                  tone="alarm"
-                                  title={`${calls} room${calls === 1 ? "" : "s"} in this zone need a human call — an open detector flag or .r10 drift`}
-                                >
-                                  {calls} call{calls === 1 ? "" : "s"}
-                                </FactChip>
-                              </span>
-                            )}
-                            <ZoneStateBar zone={z} states={states} className="w-16 shrink-0" />
-                          </PressContent>
-                        </Press>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            );
-          })}
-        </div>
+        <List
+          aria-label="zones"
+          region="zones"
+          // Levels in the world's order, each once: many view lanes share a level (29). Each level
+          // is a sticky group head with its count.
+          items={levelsOf(world.lanes).flatMap((label) =>
+            filteredZones.filter((z) => z.zone.lane.label === label),
+          )}
+          keyOf={(z) => z.zone.guid}
+          labelOf={(z) => `${z.zone.key} ${z.name}`}
+          groupOf={(z) => z.zone.lane.label}
+          empty="no zones match the stage filter"
+          onPick={(z) => selectZone(z.zone.guid === zoneKey ? null : z)}
+          row={(z) => {
+            const states = zoneStates(z);
+            const calls = states.filter((s) => s === "call").length;
+            const off = !onPlan(z);
+            return {
+              lead: <ZoneThumb zone={z.zone} />,
+              label: (
+                <span className="truncate">
+                  <span className="face-mono">{z.zone.key}</span>{" "}
+                  {off ? "off-plan scribble" : z.name}
+                </span>
+              ),
+              meta: (
+                <span className="flex items-center gap-1">
+                  {calls > 0 && (
+                    <FactChip
+                      tone="alarm"
+                      title={`${calls} room${calls === 1 ? "" : "s"} in this zone need a human call — an open detector flag or .r10 drift`}
+                    >
+                      {calls} call{calls === 1 ? "" : "s"}
+                    </FactChip>
+                  )}
+                  <ZoneStateBar zone={z} states={states} className="w-16 shrink-0" />
+                </span>
+              ),
+              active: z.zone.guid === zoneKey,
+              title: off
+                ? `off-plan scribble — ${fmtNum(z.zone.declaredSqft, 0)} sf, drawn far from the level cluster; kept in the list, excluded from the plan`
+                : `${z.name} · ${z.zone.lane.label} · ${fmtNum(z.zone.declaredSqft, 0)} sf declared`,
+            };
+          }}
+        />
       </Pane>
     </Suspense>
   );

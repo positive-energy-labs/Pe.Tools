@@ -1,4 +1,4 @@
-/** MasterTable's public product model. TanStack's types stay behind the component boundary. */
+/** Table's public product model. TanStack's types stay behind the component boundary. */
 import type { ReactNode } from "react";
 
 import type { StateCellProps } from "#/components/lang/cell";
@@ -117,7 +117,7 @@ export interface SortKey {
 export type Filters = Record<string, string>;
 
 /** Route-ownable table state. Supplying it lets Pea read and drive the exact visible model. */
-export interface MasterTableState {
+export interface TableState {
   filters: Filters;
   sorts: SortKey[];
   query: string;

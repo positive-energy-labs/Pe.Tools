@@ -74,6 +74,8 @@ vi.mock("#/readings", async (original) => ({
   previousOf: () => undefined,
 }));
 
+import { reviewTransitions, runFanOut } from "#/components/lang/band";
+
 import { useFamiliesStore } from "./store";
 
 const x = { familyName: "F", typeName: "T", parameter: "X" };
@@ -102,7 +104,37 @@ function start(cells: Record<string, FamilyCellState> = {}) {
     server.shown = server.envelope;
     hook.rerender();
   };
-  return { hook, observe, actions: () => hook.result.current.actions };
+  return { hook, observe, actions: () => verbs(hook.result.current) };
+}
+
+/**
+ * The store's verbs as the matrix and the band press them: one address is the cell's own
+ * transition, many is one `runFanOut`; every outcome is `{ refused? }` over the covered keys.
+ */
+function verbs(store: ReturnType<typeof useFamiliesStore>) {
+  const cellVerb = async (kind: "accept" | "deny" | "unstage", addresses: (typeof x)[]) => {
+    const keys = addresses.map(familyCellKey);
+    if (keys.length === 1) {
+      const own = reviewTransitions(store.wire, keys[0]!, store.cells[keys[0]!] ?? {}).find(
+        (t) => t.kind === kind,
+      );
+      const refusal = own ? await own.run() : null;
+      return { skipped: [], refused: refusal ? { ...refusal, addresses: keys } : undefined };
+    }
+    const out = await runFanOut(store.wire, store.cells, keys, kind);
+    return {
+      skipped: out.skipped,
+      refused: out.refusal ? { ...out.refusal, addresses: out.covered } : undefined,
+    };
+  };
+  return {
+    propose: async (...args: Parameters<typeof store.actions.propose>) => ({
+      refused: (await store.actions.propose(...args)) ?? undefined,
+    }),
+    accept: (addresses: (typeof x)[]) => cellVerb("accept", addresses),
+    deny: (addresses: (typeof x)[]) => cellVerb("deny", addresses),
+    unstage: (addresses: (typeof x)[]) => cellVerb("unstage", addresses),
+  };
 }
 
 /** Another writer (Pea, another tab) lands directly on the server. */

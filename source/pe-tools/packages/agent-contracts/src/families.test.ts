@@ -7,6 +7,7 @@ import {
   familiesIncluded,
   familiesRouteState,
 } from "./families.ts";
+import { applyPatches } from "./route-doc.ts";
 
 describe("familiesRouteState", () => {
   it("is authored Work and nothing else: no plan, no receipts, no observation keys", () => {
@@ -76,6 +77,20 @@ describe("familiesRouteState", () => {
 
   it("advertises no route command at all: reading and applying are host ports", () => {
     expect(Object.keys(familiesRouteState.commands)).toEqual([]);
+  });
+
+  it("keeps the person's pod choice and refuses an agent patch", () => {
+    expect(familiesRouteState.schema.parse({ pod: "company" })).toMatchObject({ pod: "company" });
+    expect(familiesRouteState.schema.safeParse({ pod: "" }).success).toBe(false);
+    expect(
+      applyPatches(
+        familiesRouteState,
+        { version: 1, revision: 0, doc: familiesRouteState.schema.parse({}) },
+        "agent",
+        [{ path: ["pod"], value: "x" }],
+        0,
+      ),
+    ).toMatchObject({ ok: false, error: expect.stringContaining("not agent-writable") });
   });
 
   it("includes only unexcluded entries that have an effect and no refusal", () => {

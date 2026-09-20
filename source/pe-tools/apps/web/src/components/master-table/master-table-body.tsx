@@ -1,9 +1,22 @@
-import { memo, useCallback, useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
+import {
+  createRef,
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import type { ReactTable, RowData } from "@tanstack/react-table";
 
+import { CellHost } from "#/components/lang/cell";
+import { Row } from "#/components/lang/row";
 import { CellNavigationProvider, type CellMove } from "#/components/master-table/cell-navigation";
 import type { ResolvedColumn } from "#/components/master-table/master-table-columns";
 import {
+  CELL_EDITOR,
   editCell,
   isInteractive,
   isTypingKey,
@@ -24,36 +37,50 @@ type Gutter<Row> = (row: Row) => {
 interface MasterRowProps<Row extends RowData> {
   row: Row;
   active: boolean;
+  selected?: boolean;
+  /** Present, the row refuses selection and says why. */
+  refusal?: string | null;
   activeRowRef: React.RefObject<HTMLTableRowElement | null>;
   className: string;
   onRowClick?: (row: Row) => void;
+  onSelect?: (event: MouseEvent<HTMLTableRowElement>) => void;
   onRowHover?: (row: Row | null) => void;
+  /** The columns the children were drawn from: a row's cells redraw when the columns do. */
+  columns: unknown;
   children: ReactNode;
 }
 
 function MasterRowView<Row extends RowData>({
   row,
   active,
+  selected,
+  refusal,
   activeRowRef,
   className,
   onRowClick,
+  onSelect,
   onRowHover,
   children,
 }: MasterRowProps<Row>) {
   return (
-    <tr
+    <Row
+      as="tr"
       ref={active ? activeRowRef : undefined}
+      active={active}
+      selected={selected}
+      refusal={refusal}
       className={className}
       onMouseEnter={onRowHover ? () => onRowHover(row) : undefined}
       onMouseLeave={onRowHover ? () => onRowHover(null) : undefined}
       onClick={(event) => {
         if ((event.target as HTMLElement).closest("button,input,select,textarea,a,[role=button]"))
           return;
+        onSelect?.(event as MouseEvent<HTMLTableRowElement>);
         onRowClick?.(row);
       }}
     >
       {children}
-    </tr>
+    </Row>
   );
 }
 
@@ -62,9 +89,15 @@ const MasterRow = memo(
   (previous, next) =>
     previous.row === next.row &&
     previous.active === next.active &&
+    previous.selected === next.selected &&
+    previous.refusal === next.refusal &&
     previous.className === next.className &&
     previous.onRowClick === next.onRowClick &&
-    previous.onRowHover === next.onRowHover,
+    previous.onSelect === next.onSelect &&
+    previous.onRowHover === next.onRowHover &&
+    // Cell state often lives in the columns (a route's Work), not the row: without this, a
+    // stable row skipped every Work change and a staged cell never showed its mark.
+    previous.columns === next.columns,
 ) as typeof MasterRowView;
 
 export function MasterTableBody<Row extends RowData>({
@@ -74,6 +107,9 @@ export function MasterTableBody<Row extends RowData>({
   activeKey,
   rowClassName,
   onRowClick,
+  selectedKeys,
+  refusalOf,
+  onSelect,
   onRowHover,
   gutter,
   gutterWidth,
@@ -84,11 +120,22 @@ export function MasterTableBody<Row extends RowData>({
   activeKey?: string | null;
   rowClassName?: (row: Row) => string | undefined;
   onRowClick?: (row: Row) => void;
+  selectedKeys?: ReadonlySet<string>;
+  refusalOf?: (key: string) => string | null | undefined;
+  onSelect?: (key: string, range: boolean) => void;
   onRowHover?: (row: Row | null) => void;
   gutter?: Gutter<Row>;
   gutterWidth: number;
 }) {
   const activeRowRef = useRef<HTMLTableRowElement | null>(null);
+  // The td is each cell's keyboard host: one stable ref per cell id, handed to whatever the column
+  // draws (a StateCell registers its verbs on it). ponytail: never pruned; ids are bounded by rows.
+  const hosts = useRef(new Map<string, RefObject<HTMLTableCellElement | null>>());
+  const hostOf = (id: string) => {
+    let ref = hosts.current.get(id);
+    if (!ref) hosts.current.set(id, (ref = createRef<HTMLTableCellElement>()));
+    return ref;
+  };
   useEffect(() => {
     activeRowRef.current?.scrollIntoView({ block: "nearest" });
   }, [activeKey]);
@@ -117,7 +164,8 @@ export function MasterTableBody<Row extends RowData>({
   );
   const handleGridKey = useCallback(
     (event: KeyboardEvent<HTMLTableCellElement>) => {
-      if (event.key === "Enter" && editCell(event.currentTarget)) return event.preventDefault();
+      if ((event.key === "Enter" || event.key === "F2") && editCell(event.currentTarget))
+        return event.preventDefault();
       if (isTypingKey(event) && editCell(event.currentTarget, event.key))
         return event.preventDefault();
       const direction = keyDirection(event.key, event.shiftKey);
@@ -143,14 +191,14 @@ export function MasterTableBody<Row extends RowData>({
             key={key}
             row={tableRow.original}
             active={activeKey === key}
+            selected={selectedKeys ? selectedKeys.has(key) : undefined}
+            refusal={refusalOf?.(key)}
             activeRowRef={activeRowRef}
-            className={cn(
-              "veil h-(--item-h) scroll-mt-12",
-              activeKey === key && "on-select",
-              rowClassName?.(tableRow.original),
-            )}
+            className={cn("veil h-(--item-h) scroll-mt-12", rowClassName?.(tableRow.original))}
             onRowClick={onRowClick}
+            onSelect={onSelect ? (event) => onSelect(key, event.shiftKey) : undefined}
             onRowHover={onRowHover}
+            columns={columnByKey}
           >
             {gutter && <GutterCell row={tableRow.original} gutter={gutter} width={gutterWidth} />}
             {cells.map((cell, columnIndex) => {
@@ -166,6 +214,7 @@ export function MasterTableBody<Row extends RowData>({
                 >
                   {(selection) => (
                     <td
+                      ref={hostOf(cell.id)}
                       role="gridcell"
                       tabIndex={
                         selection & 1 || (isEntryCell && table.getFocusedCell() === undefined)
@@ -182,8 +231,21 @@ export function MasterTableBody<Row extends RowData>({
                         if (event.target === event.currentTarget) handleGridKey(event);
                       }}
                       onMouseDown={(event) => {
+                        // A click SELECTS the cell (F-J3-5a): an idle editor under the pointer
+                        // would take the caret and make typing append. The td takes focus; the
+                        // first printable key then replaces the value, and a double-click, F2 or
+                        // Enter edits in place.
+                        const target = event.target as HTMLElement;
+                        if (target.matches(CELL_EDITOR) && document.activeElement !== target) {
+                          event.preventDefault();
+                          event.currentTarget.focus();
+                        }
                         if (!isInteractive(event.target))
                           cell.getSelectionStartHandler(document)(event);
+                      }}
+                      onDoubleClick={(event) => {
+                        if (document.activeElement === event.currentTarget)
+                          editCell(event.currentTarget);
                       }}
                       onMouseEnter={cell.getSelectionExtendHandler()}
                       style={column.lock ? { left: gutter ? gutterWidth : 0 } : undefined}
@@ -203,7 +265,13 @@ export function MasterTableBody<Row extends RowData>({
                           moveFrom(document.activeElement, direction, true)
                         }
                       >
-                        <table.FlexRender cell={cell} />
+                        <CellHost.Provider value={hostOf(cell.id)}>
+                          {/* The column's own renderer, called, never `FlexRender`: TanStack
+                            renders a def's `cell` as a component TYPE, and the def is rebuilt
+                            whenever the columns are, so every cell remounted on each Work change
+                            and a half-typed value (and focus) vanished with its input (O8-c). */}
+                          {column.cell(tableRow.original)}
+                        </CellHost.Provider>
                       </CellNavigationProvider>
                     </td>
                   )}

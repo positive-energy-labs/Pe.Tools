@@ -1,7 +1,7 @@
 import { takeoffDecisionKey } from "@pe/agent-contracts";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 
-import type { MasterTableState } from "#/components/master-table/model";
+import type { TableState } from "#/components/master-table/model";
 import { useTableChips } from "#/components/anatomy";
 import type { PaneShortcut } from "#/components/lang/pane";
 import {
@@ -20,6 +20,7 @@ import {
 import { AtlasProvider } from "#/takeoff/atlas-context";
 import { AtlasWorkspace } from "#/takeoff/atlas-workspace";
 import { useAtlasColumns } from "#/takeoff/atlas-columns";
+import { planView, useOwnerCrops, usePlanImage } from "#/takeoff/plan-image";
 
 export type Verdict = "accept" | "dismiss";
 
@@ -59,7 +60,7 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
   const [fieldsMode, setFieldsMode] = useState<"columns" | "panel">("columns");
   const [planOpen, setPlanOpen] = useState(true);
   const [statsOpen, setStatsOpen] = useState(false);
-  const [tableState, setTableState] = useState<MasterTableState>({
+  const [tableState, setTableState] = useState<TableState>({
     filters: {},
     sorts: [],
     query: "",
@@ -73,6 +74,25 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
   // ponytail: one plan pane draws the first bound view; add comparison panes only if demanded.
   const firstBoundLane = world.lanes.find((lane) => lane.view === views[0]);
   const level = pageLevel || firstBoundLane?.label || world.lanes[0]?.label || "";
+  const levelZones = world.zones.filter((z) => z.zone.lane.label === level);
+  const ownerCrops = useOwnerCrops(
+    store.handle.resolution,
+    levelZones.map((z) => z.zone.lane.view),
+  );
+  const pick = planView(
+    world.lanes,
+    views,
+    level,
+    levelZones.map((z) => ({
+      view: z.zone.lane.view,
+      name: z.name,
+      ownerCrop: ownerCrops.crops
+        ? (ownerCrops.crops.get(`${z.zone.lane.view}:${z.zone.elementId}`) ?? null)
+        : undefined,
+    })),
+  );
+  const image = usePlanImage(store.handle.resolution, pick.view);
+  const planImage = { ...image, error: image.error ?? ownerCrops.error, note: pick.note ?? null };
   const setStageFilter = (value: Phase | null) => store.actions.filterStage(value);
   const setLevel = useCallback((value: string) => store.actions.chooseLevel(value), [store]);
   const setCursor = useCallback((value: string | null) => store.actions.chooseRoom(value), [store]);
@@ -100,7 +120,6 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     (row: Row | null) => store.actions.hover(row?.room.guid ?? ""),
     [store],
   );
-  const levelZones = world.zones.filter((z) => z.zone.lane.label === level);
 
   const visibleRows = useMemo(() => {
     const byGuid = new Map(rows.map((r) => [r.room.guid, r]));
@@ -223,6 +242,7 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     rows,
     visibleKeys,
     level,
+    planImage,
     setStageFilter,
     setLevel,
     setPlanOpen,

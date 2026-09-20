@@ -4,8 +4,10 @@ import { familiesSpec } from "#/families/manifest";
 import { DEMO_FAMILIES_SPEC } from "#/families/seeds";
 import {
   FamiliesCaptureBand,
+  FamiliesCarryOverLine,
   FamiliesProposalsBand,
   FamiliesReceiptsBand,
+  SalvagedExclusions,
 } from "#/families/readout-bands";
 import { FamiliesFilterBand } from "#/families/scope-band";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
@@ -31,10 +33,10 @@ export function FamiliesWorkspaceView({ url }: { url?: boolean }) {
         title={
           applied
             ? `${applied.placementScope} · ${applied.categoryNames.join(", ") || "every category"}; the scope draft changes it`
-            : "no scope applied; draft one in the audit and apply it"
+            : "no scope staged; draft one in the audit and apply it, or accept Pea's"
         }
       >
-        {applied ? noun(scoped, "family") : "no scope"}
+        {applied ? noun(scoped, "family") : "no staged scope"}
       </span>
     </SituationCell>
   );
@@ -47,6 +49,8 @@ export function FamiliesWorkspaceView({ url }: { url?: boolean }) {
       url={url}
       subject={<>families over {scope}</>}
       health={matrixIssue ? `${matrixIssue.title} · ${matrixIssue.message}` : null}
+      startFreshAside={<SalvagedExclusions />}
+      onStartedFresh={store.actions.startedFresh}
       hold={(id) => {
         const row = store.plan?.entries.find((entry) => entry.id === id);
         if (row) void store.actions.exclude(row.name);
@@ -56,7 +60,7 @@ export function FamiliesWorkspaceView({ url }: { url?: boolean }) {
           "scope",
           applied
             ? `${applied.placementScope} · ${applied.categoryNames.join(", ") || "every category"} · ${noun(scoped, "family")}`
-            : "none applied",
+            : "none staged",
         ],
         [
           "plan",
@@ -69,6 +73,7 @@ export function FamiliesWorkspaceView({ url }: { url?: boolean }) {
     >
       <div className="flex size-full min-h-0 min-w-0 flex-col">
         <div data-slot="readout-band" className="shrink-0 py-1.5">
+          <FamiliesCarryOverLine />
           <FamiliesFilterBand />
           <FamiliesProposalsBand />
           <FamiliesCaptureBand />

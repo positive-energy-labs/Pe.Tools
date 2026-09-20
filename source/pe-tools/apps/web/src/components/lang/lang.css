@@ -28,14 +28,19 @@
   background: color-mix(in srgb, currentColor 10%, var(--pe-on));
 }
 
+/* THE ONE SELECTION PAINT (census R18). The attribute states and the `on-select` class were two
+   mechanisms for one meaning; they are one rule now. Selection is a fill, never a hue, and it
+   re-grounds what sits on it (`--pe-on`), which the class did and the attributes did not. */
 :where(
   [aria-selected="true"],
   [aria-expanded="true"],
   [aria-pressed="true"],
   [data-selected],
-  [data-highlighted]
+  [data-highlighted],
+  .on-select
 ) {
   background-color: var(--pe-select);
+  --pe-on: var(--pe-select);
 }
 
 :where(svg [aria-selected="true"], svg [data-selected]) {
@@ -85,14 +90,6 @@
 
 .prose-pe a {
   color: var(--pe-nav);
-}
-
-:where([cmdk-group-heading]) {
-  font-size: var(--type-small-size);
-  font-weight: var(--weight-medium);
-  letter-spacing: 0.08em;
-  line-height: var(--type-small-line-height);
-  text-transform: uppercase;
 }
 
 :where([data-pe] [data-slot="input"]::file-selector-button) {
@@ -215,6 +212,25 @@
   border-top: 9px solid var(--pe-pea-ink);
   border-left: 9px solid transparent;
 }
+/* At row scale the counter value rides the same line, after the value: one row, no height. */
+.dl-cell[data-scale="row"][data-contest] {
+  display: flex;
+  align-items: center;
+  gap: var(--item-pad-x);
+}
+.dl-cell[data-scale="row"][data-contest] > .dl-cell-input {
+  flex: 1 1 0;
+}
+.dl-counter {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: var(--type-small-size);
+  font-style: normal;
+  color: var(--pe-pea-ink);
+}
 
 /* 1 · uneditable/disabled owns the body — declared AFTER the proposal so the CASCADE, not
       discipline, enforces precedence. Greyed italic is the settled "look but don't touch". */
@@ -300,6 +316,12 @@
   /* numeric cells right-align on the WRAPPER; the input must follow, not reset to start. */
   text-align: inherit;
 }
+/* An emptied value is a value: its mark draws in the cell's own ink, not placeholder grey. */
+.dl-cell-input[data-empty]::placeholder {
+  color: inherit;
+  font-style: inherit;
+  opacity: 1;
+}
 .dl-cell-input::placeholder {
   color: var(--pe-ink-mute);
   font-style: italic;
@@ -335,6 +357,74 @@
   border: 0;
   border-left: 2px solid var(--pe-caution);
   cursor: pointer;
+}
+
+/* Pea's words under a refusal: a closed disclosure hanging below the note, so the row never grows. */
+.dl-refuse-detail {
+  position: absolute;
+  top: 100%;
+  right: 1px;
+  z-index: 6;
+  max-width: 60ch;
+  font-size: var(--type-small-size);
+  color: var(--pe-ink-2);
+  background: var(--pe-on);
+}
+.dl-cell-line > .dl-refuse-detail {
+  position: static;
+}
+
+/* at card scale the note sits in the value line, beside the cell; there is no row to protect. */
+.dl-cell-line > .dl-refuse {
+  position: static;
+  max-width: 36ch;
+}
+
+/* THE CELL'S VERBS (verdict 2026-09-18). Row scale: ZERO footprint — an overlay on the trailing
+   edge, drawn only while the cell is hovered, focused or in flight, so the row never widens or
+   grows. The overlay takes the cell's own ground so the value under it does not show through. */
+.dl-acts {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  z-index: 4;
+  display: none;
+  align-items: center;
+  background: var(--dl-cell-fill, var(--pe-on));
+}
+.dl-cell:hover > .dl-acts,
+.dl-cell:focus-within > .dl-acts,
+.dl-cell[data-focus] > .dl-acts,
+.dl-cell[aria-busy="true"] > .dl-acts {
+  display: inline-flex;
+}
+.dl-act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--item-h) - 2px);
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pe-ink);
+  cursor: pointer;
+}
+.dl-act:hover {
+  background-image: var(--fill-veil);
+}
+.dl-act:disabled {
+  color: var(--pe-ink-2);
+  cursor: progress;
+}
+.dl-act > svg {
+  width: 12px;
+  height: 12px;
+}
+/* in flight: the cell says it is being written, and nothing else about it changes. */
+.dl-cell[aria-busy="true"] {
+  cursor: progress;
 }
 
 /* 3 · THE SQUIGGLE FAMILY — one decoration family, ranked by colour. The decoration says
@@ -404,4 +494,136 @@
   text-decoration: underline solid var(--pe-line-2);
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
+}
+
+/* ── ROW · row.tsx — the one list item and table row (ix-list design). States are data:
+   cursor = the veil (the hover law, never a hue) · selected = the one select fill (above) ·
+   active = the left rail · pending = quiet italic · failed = the caution squiggle on the label ·
+   refused = aria-disabled, italic, with its reason in the meta slot. */
+.dl-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--item-h);
+  padding: 0 var(--item-mark-pad-x);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line-height);
+  color: var(--pe-ink);
+  cursor: default;
+  user-select: none;
+}
+tr.dl-row {
+  display: table-row;
+  height: var(--item-h);
+  padding: 0;
+  /* a table's values stay copyable */
+  user-select: auto;
+}
+/* In a table the active row is the one a side pane shows: the select fill, as tables drew it
+   before the one row; a rail on a table row would have no cell to sit in. */
+tr.dl-row[data-active] {
+  background-color: var(--pe-select);
+  --pe-on: var(--pe-select);
+}
+tr.dl-row[data-active]::before {
+  content: none;
+}
+.dl-row[data-lines="2"] {
+  min-height: calc(var(--item-h) * 2);
+}
+.dl-row[data-cursor] {
+  background-image: var(--fill-veil);
+}
+.dl-row[data-active]::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 0;
+  width: 2px;
+  background: var(--pe-ink);
+}
+.dl-row[data-pending] {
+  color: var(--pe-ink-2);
+  font-style: italic;
+}
+.dl-row[data-failed] .dl-row-label {
+  text-decoration: underline wavy var(--pe-caution);
+  text-underline-offset: 3px;
+}
+.dl-row[aria-disabled="true"] {
+  color: var(--pe-ink-2);
+  font-style: italic;
+}
+.dl-row-lead {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+}
+.dl-row-label {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dl-row-sub {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  color: var(--pe-ink-2);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dl-row-meta {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  color: var(--pe-ink-2);
+  white-space: nowrap;
+}
+/* row verbs: zero footprint until the row is hovered or holds focus (the StateCell overlay idiom) */
+.dl-row-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding-right: 2px;
+  background: var(--pe-on);
+}
+/* Glyphs sit on the row's type scale, one recipe for every call site: a lead mark, thumbnail or
+   row verb is one text line tall (1.2em of t-small), and a verb's hit box is the row height. */
+.dl-row-lead > svg,
+.dl-row-lead > img,
+.dl-row-actions svg {
+  width: 1.2em;
+  height: 1.2em;
+}
+.dl-row-actions > button,
+.dl-row-actions > a {
+  width: var(--item-h);
+  height: var(--item-h);
+}
+.dl-row:hover > .dl-row-actions,
+.dl-row:focus-within > .dl-row-actions,
+.dl-row[data-cursor] > .dl-row-actions {
+  display: inline-flex;
+}
+.dl-row-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--item-h);
+  padding: 0 var(--item-mark-pad-x);
+  font-size: var(--type-small-size);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pe-ink-2);
 }

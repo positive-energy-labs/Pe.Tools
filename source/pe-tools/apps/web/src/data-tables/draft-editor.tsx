@@ -3,9 +3,21 @@ import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { Tag } from "#/components/lang/chip";
 import { ActionButton } from "#/components/lang/action-button";
 import { Input } from "#/components/lang/input";
+import { EmptyState } from "#/components/lang/empty";
 import { Press } from "#/components/lang/press";
+import { ListPopup } from "#/components/lang/list-popup";
+import { TextCell } from "#/components/master-table/cells";
+import type { Column } from "#/components/master-table/model";
+import { Table } from "#/components/master-table/table";
 import type { ColumnKind, Draft } from "#/routes/data-tables";
 import { rowKey } from "#/routes/data-tables";
+
+type Line = { row: Draft["rows"][number]; index: number };
+
+const COLUMN_KINDS: { value: ColumnKind; label: string }[] = [
+  { value: "Text", label: "txt" },
+  { value: "Number", label: "num" },
+];
 
 export function DraftEditor({
   draft,
@@ -69,13 +81,36 @@ export function DraftEditor({
       </div>
 
       <ArtifactFrame>
-        <table className="border-collapse">
-          <thead>
-            <tr>
-              <th />
-              {draft.columns.map((column, columnIndex) => (
-                <th key={columnIndex} className="min-w-36 px-1.5 py-1 text-left">
-                  <div className="flex items-center gap-1">
+        <Table<Line>
+          label={draft.name || "Draft table"}
+          rows={draft.rows.map((row, index) => ({ row, index }))}
+          rowKey={(line) => line.row.key}
+          maxHeight="32rem"
+          empty={
+            <EmptyState story="scope" exit="add row below">
+              no rows yet
+            </EmptyState>
+          }
+          columns={[
+            {
+              key: "row",
+              label: "row",
+              header: <span />,
+              right: true,
+              width: "w-10",
+              cell: ({ row, index }) => (
+                <span title={`row key: ${row.key} — the stable address apply upserts by`}>
+                  <Tag>{index + 1}</Tag>
+                </span>
+              ),
+            },
+            ...draft.columns.map(
+              (column, columnIndex): Column<Line> => ({
+                key: `column:${columnIndex}`,
+                label: column.heading || `column ${columnIndex + 1}`,
+                width: "min-w-36",
+                header: (
+                  <span className="flex items-center gap-1 normal-case">
                     <Input
                       value={column.heading}
                       onChange={(e) =>
@@ -88,22 +123,31 @@ export function DraftEditor({
                       }
                       title="Column heading — written to the schedule on apply"
                     />
-                    <select
-                      value={column.kind}
+                    <ListPopup<(typeof COLUMN_KINDS)[number]>
+                      anchor="trigger"
                       title="Column type: txt = Text, num = Number"
-                      className="h-6"
-                      onChange={(e) =>
+                      triggerLabel={`${column.heading || "column"} type`}
+                      trigger={
+                        <span className="face-mono">{column.kind === "Text" ? "txt" : "num"}</span>
+                      }
+                      aria-label="column type"
+                      region="draft columns"
+                      items={COLUMN_KINDS}
+                      keyOf={(kind) => kind.value}
+                      labelOf={(kind) => kind.label}
+                      select="single"
+                      selected={[column.kind]}
+                      empty="no column types"
+                      onPick={(kind) =>
                         patch((d) => ({
                           ...d,
                           columns: d.columns.map((c, i) =>
-                            i === columnIndex ? { ...c, kind: e.target.value as ColumnKind } : c,
+                            i === columnIndex ? { ...c, kind: kind.value } : c,
                           ),
                         }))
                       }
-                    >
-                      <option value="Text">txt</option>
-                      <option value="Number">num</option>
-                    </select>
+                      row={(kind) => ({ label: <span className="face-mono">{kind.label}</span> })}
+                    />
                     <Press
                       type="button"
                       title={
@@ -118,62 +162,50 @@ export function DraftEditor({
                     >
                       <Trash2 className="size-3" />
                     </Press>
-                  </div>
-                </th>
-              ))}
-              <th className="px-1">
+                  </span>
+                ),
+                cell: ({ row, index }) => (
+                  <TextCell
+                    value={row.values[columnIndex] ?? ""}
+                    placeholder={column.kind === "Number" ? "0" : undefined}
+                    onCommit={(value) => setCell(index, columnIndex, value)}
+                  />
+                ),
+              }),
+            ),
+            {
+              key: "verbs",
+              label: "verbs",
+              header: (
                 <ActionButton
                   label="col"
                   icon={Plus}
                   onClick={addColumn}
                   reason="Add a column to the draft"
                 />
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {draft.rows.map((row, rowIndex) => (
-              <tr key={row.key}>
-                <td
-                  className="whitespace-nowrap px-2 py-1 text-right"
-                  title={`row key: ${row.key} — the stable address apply upserts by`}
+              ),
+              width: "w-16",
+              cell: ({ index }) => (
+                <Press
+                  type="button"
+                  title="Remove this row — it is deleted in Revit on apply"
+                  tone="quiet"
+                  onClick={() => removeRow(index)}
                 >
-                  <Tag>{rowIndex + 1}</Tag>
-                </td>
-                {draft.columns.map((column, columnIndex) => (
-                  <td key={columnIndex} className="min-w-36 p-0">
-                    <Input
-                      value={row.values[columnIndex] ?? ""}
-                      placeholder={column.kind === "Number" ? "0" : ""}
-                      inputMode={column.kind === "Number" ? "decimal" : undefined}
-                      onChange={(e) => setCell(rowIndex, columnIndex, e.target.value)}
-                    />
-                  </td>
-                ))}
-                <td className="px-1 text-center">
-                  <Press
-                    type="button"
-                    title="Remove this row — it is deleted in Revit on apply"
-                    tone="quiet"
-                    onClick={() => removeRow(rowIndex)}
-                  >
-                    <Trash2 className="size-3" />
-                  </Press>
-                </td>
-              </tr>
-            ))}
-            <tr>
-              <td colSpan={draft.columns.length + 2} className="px-1 py-0.5">
-                <ActionButton
-                  label="add row"
-                  icon={Plus}
-                  onClick={addRow}
-                  reason="Add a row with a fresh stable key"
-                />
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                  <Trash2 className="size-3" />
+                </Press>
+              ),
+            },
+          ]}
+        />
+        <div className="px-1 py-0.5">
+          <ActionButton
+            label="add row"
+            icon={Plus}
+            onClick={addRow}
+            reason="Add a row with a fresh stable key"
+          />
+        </div>
       </ArtifactFrame>
     </div>
   );

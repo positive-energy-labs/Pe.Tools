@@ -18,7 +18,7 @@ export function CatalogueWorkflow() {
     <>
       <Demo
         label="ArtifactFrame"
-        consumers="MasterTable, proposal cards, and ArmingStrip"
+        consumers="Table, proposal cards, and ArmingStrip"
         spec="The language's one enclosure is a ground shift and quiet inset hairline. Head and foot bands carry the object's identity, facts, receipts, and commit verb."
       >
         <div className="max-w-lg">

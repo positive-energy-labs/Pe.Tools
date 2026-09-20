@@ -263,6 +263,8 @@ const familiesDocumentSchema = z
       .default({}),
     cells: z.record(familyCellKeySchema, familyCellStateSchema).default({}),
     executionOptions: familyExecutionOptionsSchema.optional(),
+    /** The pod the person plans the draft in and saves it to (F-B-5b). The person's choice; Pea never writes it. */
+    pod: z.string().min(1).optional(),
   })
   .strict();
 export type FamiliesRouteDocument = z.infer<typeof familiesDocumentSchema>;
@@ -307,8 +309,21 @@ export type FamiliesSalvage = { familyNames: string[]; familyIds: number[]; scop
 export const familiesRouteState = {
   route: "families",
   title: "Families",
+  finds: [
+    "set",
+    "change",
+    "parameter",
+    "parameters",
+    "value",
+    "values",
+    "type",
+    "types",
+    "family",
+    "families",
+    "propose",
+  ],
   description:
-    'Family Foundry: propose scope.proposal first = { value: { categoryNames, familyNames, placementScope } } (exact names from op:revit.catalog.loaded-families); the person stages it, and plan audits only the staged scope. Then propose cells.<key>.proposal, where <key> is [familyName,typeName,parameter] of a family type in the staged scope, else the proposed one (the family NAME, never an element id); do not wait for the person to stage the scope. A person stages reviewed cells before plan or apply. Hold a family back with excluded.<familyName> = { by: "pea" }; the plan sheet names who held it back, and only the person lifts their own.',
+    'Family Foundry: propose scope.proposal first = { value: { categoryNames, familyNames, placementScope } } (exact family names from op:revit.catalog.loaded-families); the person stages it, and plan audits only the staged scope. Then propose cells.<key>.proposal, where <key> is [familyName,typeName,parameter] of a type listed in the route read\'s scopeTypes (the staged scope, else the proposed one) (the family NAME, never an element id); do not wait for the person to stage the scope. A person stages reviewed cells before plan or apply. Hold a family back with excluded.<familyName> = { by: "pea" }; the plan sheet names who held it back, and only the person lifts their own.',
   schema: familiesDocumentSchema,
   // Pea writes proposals only. A staged value reaches plan only through a person's review.
   agentWriteMask: [

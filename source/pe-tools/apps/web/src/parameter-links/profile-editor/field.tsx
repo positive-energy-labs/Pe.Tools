@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { ParameterReference } from "@pe/agent-contracts";
 import { type FieldOption } from "#/host/field-options";
+import { ListPopup } from "#/components/lang/list-popup";
 
 export function findParameterOption(items: FieldOption[], reference: ParameterReference) {
   return items.find(
@@ -46,17 +47,21 @@ export function Enum<T extends string>({
   onChange: (value: T) => void;
 }) {
   return (
-    <select
-      value={value}
+    <ListPopup<T>
+      anchor="trigger"
+      face="fill"
       disabled={disabled}
-      onChange={(event) => onChange(event.target.value as T)}
-      className="h-7 w-full px-2"
-    >
-      {options.map((option) => (
-        <option key={option} value={option}>
-          {option}
-        </option>
-      ))}
-    </select>
+      trigger={value}
+      aria-label="options"
+      region="profile field"
+      items={options}
+      keyOf={(option) => option}
+      labelOf={(option) => option}
+      select="single"
+      selected={[value]}
+      empty="no options"
+      onPick={onChange}
+      row={(option) => ({ label: option })}
+    />
   );
 }

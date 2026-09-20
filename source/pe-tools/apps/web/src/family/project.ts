@@ -421,12 +421,15 @@ export function draftedModel(
 
 /* ── reverse: draft → staged field patches ───────────────────────────────── */
 
+/** The `/family` Work's cell segment: every draft patch is built under it by the contract. */
+export const FAMILY_CELLS = "cells";
+
 /** Stage a value at one JSON Pointer. `undefined` DELETES the property, which is a different act
  * from writing an empty string and the settings schema keeps them apart. */
 /** A typed edit, as the shared cell machine stages it. The draft diff is this route's baseline. */
 function stage(segments: string[], value: string | undefined): RouteStatePatch {
   return transitionPatches(
-    ["fields"],
+    [FAMILY_CELLS],
     settingsFieldPointer(segments),
     {},
     {
@@ -461,7 +464,7 @@ export function draftToPatches(
       const seed = draft.newParams.find((param) => param.name === name);
       patches.push(
         ...transitionPatches(
-          ["fields"],
+          [FAMILY_CELLS],
           settingsFieldPointer(["parameters", name]),
           {},
           {

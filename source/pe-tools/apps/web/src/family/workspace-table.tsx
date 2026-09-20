@@ -3,7 +3,8 @@ import { FactChip } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { Switcher } from "#/components/lang/switcher";
 import { ActionButton } from "#/components/lang/action-button";
-import { MasterTable } from "#/components/master-table/master-table";
+import { Table } from "#/components/master-table/table";
+import { TableFrame } from "#/components/master-table/table-frame";
 import { Pane } from "#/components/lang/pane";
 import { BuildStrip, BUILD_ACTION, buildOutputPath } from "#/family/build";
 import { OVERLAY_LABEL, OVERLAY_TITLE, type PRow } from "#/family/model";
@@ -146,30 +147,13 @@ export function FamilyWorkspaceTable() {
   );
 
   const crossType = (
-    <MasterTable
+    <TableFrame
+      label="parameters"
       rows={rows}
       columns={columns}
       rowKey={(row) => row.key}
-      // THE OWED MARKER (fit reviews, ruled 2026-08-16): a ghost row owes exactly one human
-      // decision — its bind crossing. Count is always 1; the caution ink matches the band the
-      // ghost section already wears.
-      gutter={(row) =>
-        row.kind === "ghost"
-          ? {
-              count: 1,
-              tone: "caution" as const,
-              title: `${row.slug ?? ""}.${row.property ?? ""} is unbound — a bind decision is owed: give it a parameter (its one crossing) or it stays a number nothing can reach`,
-            }
-          : null
-      }
-      scopeLabel="parameters"
-      searchPlaceholder="parameter"
-      onRowHover={hoverRow}
-      rowClassName={rowTint}
-      tableState={tableState}
-      onTableStateChange={setTableState}
-      modes={tableModes}
-      actions={tableActions}
+      state={tableState}
+      onStateChange={setTableState}
       summary={
         <span className="inline-flex flex-wrap items-center gap-1">
           <span className="t-small face-mono text-ink-2">
@@ -220,39 +204,58 @@ export function FamilyWorkspaceTable() {
           </HelpTip>
         </span>
       }
-      empty={
-        // §4's two kinds of empty, told apart: the fixture profile always has rows, so a bare
-        // table is almost always the table's OWN narrowing — but the claim is derived, not
-        // assumed, so each story renders only when it is true.
-        rows.length === 0 ? (
-          <EmptyState story="scope" exit="author a parameter, or promote a geometry literal">
-            no parameters in this profile — nothing to audit
-          </EmptyState>
-        ) : (
-          <EmptyState story="filter" exit="clear a column filter or the search">
-            the narrowing hid all {rows.length} rows
-          </EmptyState>
-        )
-      }
-    />
+      searchPlaceholder="parameter"
+      modes={tableModes}
+      actions={tableActions}
+    >
+      <Table
+        rows={rows}
+        columns={columns}
+        rowKey={(row) => row.key}
+        label="parameters"
+        state={tableState}
+        onStateChange={setTableState}
+        onRowHover={hoverRow}
+        rowClassName={rowTint}
+        // THE OWED MARKER (fit reviews, ruled 2026-08-16): a ghost row owes exactly one human
+        // decision — its bind crossing. Count is always 1; the caution ink matches the band the
+        // ghost section already wears.
+        gutter={(row) =>
+          row.kind === "ghost"
+            ? {
+                count: 1,
+                tone: "caution" as const,
+                title: `${row.slug ?? ""}.${row.property ?? ""} is unbound — a bind decision is owed: give it a parameter (its one crossing) or it stays a number nothing can reach`,
+              }
+            : null
+        }
+        empty={
+          // §4's two kinds of empty, told apart: the fixture profile always has rows, so a bare
+          // table is almost always the table's OWN narrowing — but the claim is derived, not
+          // assumed, so each story renders only when it is true.
+          rows.length === 0 ? (
+            <EmptyState story="scope" exit="author a parameter, or promote a geometry literal">
+              no parameters in this profile — nothing to audit
+            </EmptyState>
+          ) : (
+            <EmptyState story="filter" exit="clear a column filter or the search">
+              the narrowing hid all {rows.length} rows
+            </EmptyState>
+          )
+        }
+      />
+    </TableFrame>
   );
 
   /** The drill-in is the SAME primitive with a narrower column set — that is the whole claim. */
   const drillIn = drillType ? (
-    <MasterTable
-      // Ghosts and live-only rows stay OUT of the drill-in: it is a view of one type's profile
-      // against Revit, and neither of those rows has a per-type value to reconcile. A ghost here
-      // would be three refusals wide in a table two columns narrow.
+    <TableFrame
+      label={`${drillType} · parameters`}
       rows={rows.filter((row) => row.kind === "profile")}
       columns={drillColumns}
       rowKey={(row) => row.key}
-      scopeLabel={`${drillType} · parameters`}
-      searchPlaceholder="parameter"
-      onRowHover={hoverRow}
-      rowClassName={rowTint}
-      tableState={drillState}
-      onTableStateChange={setDrillState}
-      actions={tableActions}
+      state={drillState}
+      onStateChange={setDrillState}
       summary={
         <span title="What this one type is asking of you. The same counts as the cross-type table, narrowed to this column of it.">
           {openProposals.filter((entry) => (entry.typeName ?? null) === drillType).length} open ·{" "}
@@ -264,19 +267,35 @@ export function FamilyWorkspaceTable() {
           </FactChip>
         </span>
       }
-      empty={
-        rows.some((row) => row.kind === "profile") ? (
-          <EmptyState story="filter" exit="clear a column filter or the search">
-            the narrowing hid every parameter at this type
-          </EmptyState>
-        ) : (
-          <EmptyState story="scope" exit="author a parameter in the profile first">
-            no parameters to reconcile at this type — the profile authors none, so there is nothing
-            for Revit to agree or disagree with
-          </EmptyState>
-        )
-      }
-    />
+      searchPlaceholder="parameter"
+      actions={tableActions}
+    >
+      <Table
+        // Ghosts and live-only rows stay OUT of the drill-in: it is a view of one type's profile
+        // against Revit, and neither of those rows has a per-type value to reconcile. A ghost here
+        // would be three refusals wide in a table two columns narrow.
+        rows={rows.filter((row) => row.kind === "profile")}
+        columns={drillColumns}
+        rowKey={(row) => row.key}
+        label={`${drillType} · parameters`}
+        state={drillState}
+        onStateChange={setDrillState}
+        onRowHover={hoverRow}
+        rowClassName={rowTint}
+        empty={
+          rows.some((row) => row.kind === "profile") ? (
+            <EmptyState story="filter" exit="clear a column filter or the search">
+              the narrowing hid every parameter at this type
+            </EmptyState>
+          ) : (
+            <EmptyState story="scope" exit="author a parameter in the profile first">
+              no parameters to reconcile at this type — the profile authors none, so there is
+              nothing for Revit to agree or disagree with
+            </EmptyState>
+          )
+        }
+      />
+    </TableFrame>
   ) : null;
 
   const tablePane = (

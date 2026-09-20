@@ -26,6 +26,8 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
   /** Human-facing discovery metadata; adapters should not duplicate this. */
   title: string;
   description: string;
+  /** Search words for this route's propose door. */
+  finds?: readonly string[];
   schema: TSchema;
   /**
    * Segment-array patterns authorizing agent writes. `"*"` matches exactly one segment;

@@ -1,41 +1,35 @@
 import { splitScheduleCellKey } from "@pe/agent-contracts";
+import { ReviewRow, type CellWire } from "#/components/lang/band";
 import { FactChip } from "#/components/lang/chip";
 import { StateCell } from "#/components/lang/cell";
 import { HelpTip } from "#/components/lang/help";
-import { Provenance, Section } from "#/components/lang/section";
-import { ActionButton } from "#/components/lang/action-button";
+import { Section } from "#/components/lang/section";
 import { ValueDiff } from "#/components/lang/value-diff";
 import { Press } from "#/components/lang/press";
 import type { ScheduleGridDocument } from "@pe/agent-contracts";
+import { STALE_NOTE, scheduleTransitions, type StaleCell } from "./columns";
 
 type CellState = NonNullable<ScheduleGridDocument["cells"][string]>;
 
+/** Every open diff on the schedule, one ReviewRow each: the grid cell's own verbs, findable. */
 export function PendingStrip({
   pending,
   stale,
-  acceptStale,
-  dropStale,
   proposalCount,
   stagedCount,
+  wire,
   columnHeader,
   currentText,
-  stageValue,
-  deny,
-  undo,
   locate,
 }: {
   pending: [string, CellState][];
   /** Staged keys a re-read moved under (`basis.stale`): the person accepts or drops each. */
-  stale: readonly string[];
-  acceptStale: (key: string) => void;
-  dropStale: (key: string) => void;
+  stale: readonly StaleCell[];
   proposalCount: number;
   stagedCount: number;
+  wire: CellWire;
   columnHeader: (columnNumber: number) => string;
   currentText: (key: string) => string | null;
-  stageValue: (key: string, value: string) => void;
-  deny: (key: string) => void;
-  undo: (key: string) => void;
   locate: (key: string) => void;
 }) {
   return (
@@ -44,8 +38,9 @@ export function PendingStrip({
         label="pending"
         help={
           <HelpTip>
-            Every open diff on this schedule, one line each. Pea proposes; approving stages; typing
-            over a proposed cell severs the proposal and stages your value instead.
+            Every open diff on this schedule, one line each, with the same verbs as its grid cell.
+            Pea proposes; accepting stages; typing over a proposed cell severs the proposal and
+            stages your value instead.
           </HelpTip>
         }
         aside={
@@ -65,77 +60,46 @@ export function PendingStrip({
           </>
         }
       >
-        <div className="max-h-36 overflow-y-auto">
+        <div className="max-h-36 overflow-y-auto px-3" aria-label="pending cells" role="list">
           {pending.map(([key, cell]) => {
             const { rowNumber, columnNumber } = splitScheduleCellKey(key);
-            const isStaged = cell.staged != null;
-            const next = isStaged ? (cell.staged?.value ?? "") : String(cell.proposal?.value ?? "");
+            const next =
+              cell.staged != null ? cell.staged.value : String(cell.proposal?.value ?? "");
+            const lock = wire.lockOf?.(key) ?? null;
+            const staleAt = cell.staged != null ? stale.find((s) => s.key === key) : undefined;
             return (
-              <div key={key} className="flex items-center gap-3 px-3 py-1">
-                <Press
-                  type="button"
-                  tone="quiet"
-                  title="Highlight this cell's row in the grid and scroll it into view."
-                  onClick={() => locate(key)}
-                >
-                  <StateCell scale="row" value={columnHeader(columnNumber)} />
-                  <StateCell scale="row" value={`r${rowNumber}`} />
-                </Press>
-                <span className="min-w-0 flex-1 truncate">
-                  {isStaged && stale.includes(key) ? (
-                    <StateCell
-                      scale="row"
-                      value={next}
-                      stage="staged"
-                      stagedBy="you"
-                      agree="drift"
-                      modelValue={currentText(key) ?? ""}
-                      note="stale: Revit changed under it · accept to stage it again"
-                    />
-                  ) : (
-                    <ValueDiff from={currentText(key)} to={next} />
-                  )}
-                </span>
-                {!isStaged && cell.proposal?.note && (
-                  <span className="hidden max-w-56 truncate sm:block">
-                    <Provenance>{cell.proposal.note}</Provenance>
-                  </span>
-                )}
-                <span className="flex shrink-0 items-center gap-1.5">
-                  {isStaged && stale.includes(key) ? (
-                    <>
-                      <ActionButton
-                        label="deny"
-                        reason="Drop your stale value; the Revit value stands."
-                        onClick={() => dropStale(key)}
-                      />
-                      <ActionButton
-                        label="accept"
-                        reason="Accept to stage it again over what Revit holds now."
-                        onClick={() => acceptStale(key)}
-                      />
-                    </>
-                  ) : isStaged ? (
-                    <ActionButton
-                      label="unstage"
-                      reason="Return this cell to its snapshot value. A proposal it was approved from is restored to the open list."
-                      onClick={() => undo(key)}
-                    />
-                  ) : (
-                    <>
-                      <ActionButton
-                        label="deny"
-                        reason="Clear pea's proposal for this cell — the snapshot value stands."
-                        onClick={() => deny(key)}
-                      />
-                      <ActionButton
-                        label="approve"
-                        reason={`Approve and stage "${String(cell.proposal?.value ?? "")}" for the next push.`}
-                        onClick={() => stageValue(key, String(cell.proposal?.value ?? ""))}
-                      />
-                    </>
-                  )}
-                </span>
+              <div key={key} role="listitem">
+                <ReviewRow
+                  wire={wire}
+                  address={key}
+                  cell={cell}
+                  label={
+                    <Press
+                      type="button"
+                      tone="quiet"
+                      title="Highlight this cell's row in the grid and scroll it into view."
+                      onClick={() => locate(key)}
+                    >
+                      <StateCell scale="row" value={columnHeader(columnNumber)} />
+                      <StateCell scale="row" value={`r${rowNumber}`} />
+                    </Press>
+                  }
+                  transitions={scheduleTransitions(wire, key, cell, stale)}
+                  facts={{
+                    // Stale: drift against what Revit holds now, answered by the cell's own verbs.
+                    ...(staleAt
+                      ? {
+                          value: next,
+                          agree: "drift" as const,
+                          modelValue: currentText(key) ?? "",
+                          reviewed: staleAt.was,
+                          note: STALE_NOTE,
+                        }
+                      : { value: <ValueDiff from={currentText(key)} to={next} /> }),
+                    cap: lock ? "locked" : "editable",
+                    capReason: lock ?? undefined,
+                  }}
+                />
               </div>
             );
           })}

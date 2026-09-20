@@ -1,13 +1,18 @@
-import { takeoffDecisionKey } from "@pe/agent-contracts";
+import {
+  takeoffDecisionAddress,
+  takeoffDecisionKey,
+  takeoffEditAddress,
+  takeoffEditKey,
+} from "@pe/agent-contracts";
 import { Fragment } from "react";
 import { StatLine } from "#/components/anatomy";
 import { FactChip } from "#/components/lang/chip";
-import { NumberCell, StateDot } from "#/components/master-table/cells";
+import { StateDot } from "#/components/master-table/cells";
 import { fmtNum } from "#/components/master-table/model";
 import { ActionButton } from "#/components/lang/action-button";
 import { Pane } from "#/components/lang/pane";
 import type { PaneShortcut } from "#/components/lang/pane";
-import { ManualJField } from "#/takeoff/manual-j-field";
+import { TakeoffEditCell, TakeoffProposalRows } from "#/takeoff/proposals";
 import type { Verdict } from "#/takeoff/atlas";
 import { FLAG_MEANING } from "#/takeoff/model";
 import { MANUAL_J, decideReason, decisionRefusal } from "#/takeoff/room-actions";
@@ -19,15 +24,25 @@ export function RoomPanelFromStore({
   store,
   row,
   ...props
-}: Omit<Parameters<typeof RoomPanel>[0], "decided"> & {
+}: Omit<Parameters<typeof RoomPanel>[0], "decided" | "cells" | "wires"> & {
   store: TakeoffsController;
 }) {
-  return <RoomPanel {...props} row={row} decided={store.decisions} />;
+  return (
+    <RoomPanel
+      {...props}
+      row={row}
+      decided={store.decisions}
+      cells={store.cells}
+      wires={store.wires}
+    />
+  );
 }
 
 function RoomPanel({
   row,
   decided,
+  cells,
+  wires,
   live,
   fieldsMode,
   shortcuts,
@@ -37,6 +52,8 @@ function RoomPanel({
 }: {
   row: Row;
   decided: Readonly<Record<string, Verdict>>;
+  cells: TakeoffsController["cells"];
+  wires: TakeoffsController["wires"];
   live: boolean;
   fieldsMode: "columns" | "panel";
   shortcuts: readonly PaneShortcut[];
@@ -77,24 +94,54 @@ function RoomPanel({
             <div className="grid grid-cols-[4rem_1fr] items-center gap-y-1">
               <span className="face-mono pr-1.5 text-right text-ink-2">ceil ft</span>
               <span>
-                <NumberCell
+                <TakeoffEditCell
+                  roomId={room.guid}
+                  field="ceilingFt"
                   value={room.ceilingFt}
                   digits={1}
-                  min={0}
-                  onCommit={(v) => onPatch({ ceilingFt: v })}
+                  cell={cells.edits[takeoffEditKey(room.guid, "ceilingFt")]}
+                  wire={wires.edits}
+                  onPatch={(v) => onPatch({ ceilingFt: v })}
                 />
               </span>
               {MANUAL_J.map((mj) => (
                 <Fragment key={mj.field}>
                   <span className="face-mono pr-1.5 text-right text-ink-2">{mj.label}</span>
                   <span>
-                    <ManualJField room={room} field={mj.field} onPatch={onPatch} />
+                    <TakeoffEditCell
+                      roomId={room.guid}
+                      field={mj.field}
+                      value={room.data?.[mj.field] ?? 0}
+                      digits={0}
+                      integer
+                      cell={cells.edits[takeoffEditKey(room.guid, mj.field)]}
+                      wire={wires.edits}
+                      onPatch={(v) => onPatch({ [mj.field]: v })}
+                    />
                   </span>
                 </Fragment>
               ))}
             </div>
           </div>
         )}
+
+        {/* Pea's proposals on this room, in the band grammar: its field edits and flag verdicts. */}
+        <div className="px-2.5 empty:hidden">
+          <TakeoffProposalRows
+            cells={cells.edits}
+            wire={wires.edits}
+            keep={(key) => takeoffEditAddress(key).roomId === room.guid}
+            label={(key) => takeoffEditAddress(key).field}
+            show={(value) => String(value)}
+          />
+          <TakeoffProposalRows
+            cells={cells.decisions}
+            wire={wires.decisions}
+            keep={(key) => takeoffDecisionAddress(key).roomGuid === room.guid}
+            label={(key) => `flag ${takeoffDecisionAddress(key).flag}`}
+            show={(value) => String(value)}
+          />
+        </div>
 
         {open.length > 0 && (
           <div className="px-2.5 py-2">

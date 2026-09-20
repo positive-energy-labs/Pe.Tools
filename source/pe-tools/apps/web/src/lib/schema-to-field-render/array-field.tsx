@@ -1,17 +1,7 @@
 import { useState } from "react";
 
 import { ActionButton } from "#/components/lang/action-button";
-import {
-  Combobox,
-  ComboboxChip,
-  ComboboxChips,
-  ComboboxChipsInput,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxItem,
-  ComboboxList,
-  ComboboxValue,
-} from "#/components/lang/combobox";
+import { ListChips, ListPopup } from "#/components/lang/list-popup";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { JsonEditor, stringify } from "#/components/lang/code";
 import { FieldRenderer } from "./field-renderer";
@@ -54,7 +44,11 @@ export function ArrayField({
     fieldPath: path,
   });
   const { items } = optionsState;
-  const comboboxItems = items.map((item) => item.value);
+  const values = Array.isArray(field.value)
+    ? field.value.map((entry: unknown) => String(entry).trim()).filter(Boolean)
+    : [];
+  // A typed value is kept beside the suggestions, so it stays a row the list can toggle off.
+  const choices = [...new Set([...values, ...items.map((item) => item.value)])];
 
   return (
     <div className="flex flex-col gap-1">
@@ -66,39 +60,38 @@ export function ArrayField({
         path={path}
       />
       {isPrimitiveArray ? (
-        <Combobox
-          items={comboboxItems}
-          multiple
-          value={
-            Array.isArray(field.value)
-              ? field.value.map((entry: unknown) => String(entry).trim()).filter(Boolean)
-              : []
-          }
-          onValueChange={(next) => {
-            field.change(next.map((value) => coercePrimitive(value, itemType)));
-          }}
-        >
-          <ComboboxChips>
-            <ComboboxValue>
-              {(Array.isArray(field.value) ? field.value : []).map((item: unknown) => (
-                <ComboboxChip key={String(item)} face="mono">
-                  {String(item)}
-                </ComboboxChip>
+        <ListPopup<string>
+          anchor="trigger"
+          face="field"
+          triggerLabel={label}
+          trigger={
+            <ListChips
+              labels={values.map((value) => (
+                <span className="face-mono">{value}</span>
               ))}
-            </ComboboxValue>
-            <ComboboxChipsInput face="mono" placeholder={placeholder || "Search or type a value"} />
-          </ComboboxChips>
-          <ComboboxContent>
-            <ComboboxEmpty>No matching suggestions.</ComboboxEmpty>
-            <ComboboxList>
-              {(item) => (
-                <ComboboxItem key={item} value={item}>
-                  {item}
-                </ComboboxItem>
-              )}
-            </ComboboxList>
-          </ComboboxContent>
-        </Combobox>
+              none={placeholder || "Search or type a value"}
+            />
+          }
+          aria-label={label}
+          region={path}
+          items={choices}
+          keyOf={(value) => value}
+          labelOf={(value) => value}
+          filter="substring"
+          searchPlaceholder="search or type a value…"
+          select="multi"
+          selected={values}
+          onSelectedChange={(next) =>
+            field.change(next.map((value) => coercePrimitive(value, itemType)))
+          }
+          onCreate={(text) =>
+            field.change([...values, text].map((value) => coercePrimitive(value, itemType)))
+          }
+          createLabel={(text) => `add “${text}”`}
+          empty="no suggestions — type a value"
+          noMatch="no matching suggestions"
+          row={(value) => ({ label: <span className="face-mono">{value}</span> })}
+        />
       ) : isObjectArray && itemNode?.properties ? (
         <div className="hairline-t">
           <div className="flex items-center justify-between px-2 py-1" data-surface="artifact">
