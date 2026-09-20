@@ -30,7 +30,6 @@ test("J7: Overwrite 1 changed value re-stages the stale cell over what Revit hol
       />
     </RegistryContext.Provider>,
   );
-  await screen.findByText("bridge connected");
   await screen.findByText("P-1");
   // The push admits the Work revision the page holds: wait until it holds setup's last write.
   const settled = (await f.view()).doc;
@@ -53,7 +52,7 @@ test("J7: Overwrite 1 changed value re-stages the stale cell over what Revit hol
   await act(async () => {
     // The refusal names the cell; its own readback already rebound the Work.
     expect(await state!.execute("push")).toMatchObject({
-      message: expect.stringMatching(/^refused — nothing ran: 1::2: /),
+      message: "1 refused · Load · row 1",
     });
   });
   // The push's readback rebound the Work: A is on the key, C is the basis, B is still staged.

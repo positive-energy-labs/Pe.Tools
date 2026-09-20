@@ -985,7 +985,7 @@ export function useRoute<W, R extends string, P, A extends string>(
           Object.keys(manifest.readings ?? {}).map((name) => [name, { state: "absent" }]),
         ),
         ...Object.fromEntries(readingAtoms.map(([name, atom]) => [name, get(atom)])),
-      })).pipe(Atom.withLabel(`${manifest.key}/readings`)),
+      })).pipe(Atom.withLabel(`${manifest.key}/readings`), Atom.setIdleTTL(0)),
     [manifest.readings, readingAtoms],
   );
   const liveReadings = useOwned(owner.registry, readingsAtom) as Record<string, Reading<unknown>>;
