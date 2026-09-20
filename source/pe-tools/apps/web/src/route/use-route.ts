@@ -1193,9 +1193,19 @@ export function useRoute<W, R extends string, P, A extends string>(
         if (refusal) throw new ActionRefusal(refusal);
         return null;
       },
-      setPage: (next: Partial<P>) => {
-        if (currentActionScope.current === actionScope && pageEpoch.current === actionPageEpoch)
-          setPageState((current) => ({ ...current, ...next }));
+      setPage: (next: Partial<P>, guard?: readonly (keyof P)[]) => {
+        if (currentActionScope.current !== actionScope) return;
+        setPageState((current) => {
+          const currentPage = current as Record<keyof P, unknown>;
+          const actionPage = page as Record<keyof P, unknown>;
+          if (
+            guard
+              ? guard.some((field) => !Object.is(currentPage[field], actionPage[field]))
+              : pageEpoch.current !== actionPageEpoch
+          )
+            return current;
+          return { ...current, ...next };
+        });
       },
     };
     return Object.fromEntries(

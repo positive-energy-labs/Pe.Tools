@@ -37,7 +37,7 @@
  *   hairline so the shape has an edge, italic secondary ink so it is plainly not for pressing.
  *   A refusal a newcomer cannot decipher is indistinguishable from a rendering bug.
  */
-import { createContext, useContext } from "react";
+import { createContext, useState } from "react";
 import { ArrowLeft, ArrowRight, ExternalLink, type LucideIcon } from "lucide-react";
 
 import { tv } from "#/lib/tv";
@@ -127,11 +127,11 @@ export function ActionButton(props: ActionButtonProps) {
   const Icon = props.tone === "nav" ? NAV_ICON[props.direction] : props.icon;
   const tone = props.tone ?? "act";
   const inert = disabled === true || busy === true;
-  const chrome = useContext(VerbChromeContext);
   const slots = actionRecipe({ tone });
+  const [reasonOpen, setReasonOpen] = useState(false);
 
   // A disabled commit keeps focus, so its reason can show there too; every other refusal is inert.
-  const explained = tone === "commit" && disabled === true && busy !== true && !chrome;
+  const explained = tone === "commit" && disabled === true && busy !== true;
   const button = (
     <button
       type="button"
@@ -153,9 +153,22 @@ export function ActionButton(props: ActionButtonProps) {
   );
   if (!explained) return button;
   return (
-    <span className="group relative inline-flex">
+    <span
+      className="group relative inline-flex"
+      onMouseEnter={() => setReasonOpen(true)}
+      onMouseLeave={() => setReasonOpen(false)}
+      onPointerEnter={() => setReasonOpen(true)}
+      onPointerLeave={() => setReasonOpen(false)}
+      onFocus={() => setReasonOpen(true)}
+      onBlur={() => setReasonOpen(false)}
+    >
       {button}
-      <span role="tooltip" data-surface="artifact" className={slots.reason()}>
+      <span
+        role="tooltip"
+        data-surface="artifact"
+        className={slots.reason({ className: reasonOpen ? "block" : undefined })}
+        style={{ display: reasonOpen ? "block" : "none" }}
+      >
         {reason}
       </span>
     </span>
