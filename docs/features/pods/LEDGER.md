@@ -4,6 +4,8 @@ Rewritten 2026-09-16 after the pod/product boundary grill. Git holds the earlier
 
 ## Decided
 
+- 2026-09-19, Live Family and Families drafts plan/apply without Pod selection, following the resource-relevance rule in `docs/features/design-system/LEDGER.md`. Internal run storage preserves exact consumed input and honest source attribution; saving a portable member remains a separate user purpose. This supersedes mandatory saved-content or Pod selection for live draft execution.
+
 - 2026-09-16: A pod is one folder of plain source: scripts with declared entrypoints, JSON members, assets. Typed JSON is reusable data. A library owns the operation and the domain validation; storage knows no domain rules.
 - 2026-09-16: Composition (`$include`, `$preset`) stays. The user's own standards use 271 directives across 76 files, and fragments are the only way to manage a standard. `$schema` is the only member-level selector; typed filename suffixes are removed because 142 of 150 real members have none.
 - 2026-09-16: Publish vendors, it does not precompose. Every consumed foreign fragment is copied under `settings/_vendor/<pod-id>/...` and the reference is rewritten to `@local/_vendor/...`. A published pod composes from its own bytes only, so it never needs a sibling pod. Vendored files are the inspection copies.
