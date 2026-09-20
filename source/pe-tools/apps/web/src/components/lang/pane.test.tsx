@@ -380,6 +380,25 @@ test("artifact rail keeps disabled commit refusals in the button title", () => {
   expect(screen.queryByText(reason)).toBeNull();
 });
 
+test("a disabled commit remains keyboard reachable and shows its reason on focus", () => {
+  const reason = "Stage a cell first.";
+  render(
+    <ActionButton
+      tone="commit"
+      label="push"
+      reason={reason}
+      disabled
+      onClick={() => undefined}
+    />,
+  );
+
+  const button = screen.getByRole("button", { name: "push" });
+  expect(button.getAttribute("aria-disabled")).toBe("true");
+  expect(button.hasAttribute("disabled")).toBe(false);
+  act(() => button.focus());
+  expect(screen.getByRole("tooltip").textContent).toBe(reason);
+});
+
 test("a collapsed flank keeps its shortcut registration and hides its body", () => {
   const run = vi.fn();
   const { container } = render(
