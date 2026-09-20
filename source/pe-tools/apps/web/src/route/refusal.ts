@@ -21,6 +21,8 @@ export interface Refusal {
   readonly message: string;
   /** Words written for Pea, not the person: drawn only behind a disclosure, never parsed. */
   readonly detail?: string;
+  /** The cells it names; each draws the refusal itself, so the verb only tints (a cell-scope refusal). */
+  readonly cells?: readonly string[];
 }
 
 export const refuse = (code: RefusalCode, message: string, detail?: string): Refusal =>

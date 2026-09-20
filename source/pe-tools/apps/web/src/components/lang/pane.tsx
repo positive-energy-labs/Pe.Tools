@@ -87,6 +87,10 @@ export interface PaneProps extends Pick<VariantProps<typeof paneRecipe>, "flush"
   /** Change this when the child changes target so an old error cannot mask the new target. */
   boundaryKey?: Key;
   onRetry?: () => void;
+  /** The focus edge: the pane gained focus from outside. A stage revalidates what it draws here. */
+  onActivate?: () => void;
+  /** Take focus when revealed, so a pane a stage verb opened owns the keys at once. */
+  focusOnMount?: boolean;
   children: ReactNode;
 }
 
@@ -169,6 +173,8 @@ export function Pane({
   boundary = true,
   boundaryKey,
   onRetry,
+  onActivate,
+  focusOnMount = false,
   children,
 }: PaneProps) {
   const collapsedFlank = kind === "flank" && collapsed;
@@ -236,9 +242,15 @@ export function Pane({
     }
     if (!active || !event.currentTarget.contains(event.relatedTarget as Node | null)) {
       setActive(true);
+      onActivate?.();
       if (shortcuts.length > 0) revealShortcuts();
     }
   };
+
+  useEffect(() => {
+    if (focusOnMount) rootRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on reveal
+  }, []);
 
   const deactivate = (event: FocusEvent<HTMLElement>) => {
     if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
