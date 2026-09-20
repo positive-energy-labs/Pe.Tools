@@ -112,12 +112,7 @@ test("a pointer click on a fresh page's rail row opens that schedule", async () 
       </RegistryContext.Provider>
     </StrictMode>,
   );
-  // The rail needs the catalog: list it through its real button, as a person does.
-  await act(async () =>
-    fireEvent.click(
-      await screen.findByRole("button", { name: /list schedules/ }, { timeout: 10_000 }),
-    ),
-  );
+  // The rail's catalog is a Reading: it lists on mount, with no button to press.
   const row = await screen.findByRole("option", { name: /^Panel/ }, { timeout: 10_000 });
   const reads = () => f.sent.filter((s) => s.key === "revit.detail.schedules").length;
   const before = reads();

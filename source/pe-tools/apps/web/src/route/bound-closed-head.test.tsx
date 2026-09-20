@@ -52,7 +52,7 @@ test("a Chat head whose document closed refuses verbs and Work writes with the C
   // Closed and reopened: the same title under a new openId.
   answer("inventory", session([{ openId: "doc-tower-2", title: "Tower" }]));
   expect(result.current.bindingLost?.sentence).toMatch(CHAT);
-  expect(result.current.actions.catalog.refusal).toMatch(CHAT);
+  expect(result.current.actions.push.refusal).toMatch(CHAT);
   let refusal: unknown;
   await act(async () => {
     refusal = await result.current.work.write([{ path: ["cells"], value: {} }]);
