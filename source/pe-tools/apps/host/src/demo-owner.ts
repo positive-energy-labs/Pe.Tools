@@ -59,7 +59,7 @@ const SIMULATED_READS = [
 ];
 
 /** The composed source a native apply receives; the simulated engine reads its root. */
-type Captured = { id: string; path: string; sha256: string; bytesBase64: string };
+type Captured = { id: string | null; path: string; sha256: string; bytesBase64: string };
 type RunSource = {
   root: Captured & { origin: "SavedMember" | "SuppliedDraft" };
   dependencies: Captured[];
@@ -296,7 +296,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       const { root } = source;
       const runId = `${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}`;
       const file = await settings.memberPath({
-        pod: root.id,
+        pod: root.id ?? id,
         path: `output/${runId}/receipt.json`,
       });
       await mkdir(join(file, ".."), { recursive: true });
