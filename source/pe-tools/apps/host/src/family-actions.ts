@@ -782,8 +782,8 @@ export async function admitFamilyAction(
         );
         if (prepared.planned) {
           const { excluded } = prepared.planned;
-          const planned = result as FamilyPlan.Res.Response | FamiliesPlan.Res.Response;
           if (scope) {
+            const planned = result as FamiliesPlan.Res.Response;
             if (planned.diagnostics.length)
               throw refused(planned.diagnostics.map(diagnosticLine).join(" · "));
             // A cell whose family or type no longer resolves never re-attaches: plan names it.
@@ -804,6 +804,7 @@ export async function admitFamilyAction(
               }),
             };
           }
+          const planned = result as FamilyPlan.Res.Response;
           // One family document plans exactly one family, or it refuses.
           const plan = planned.families[0];
           if (planned.diagnostics.length || planned.families.length !== 1 || plan!.refusals.length)

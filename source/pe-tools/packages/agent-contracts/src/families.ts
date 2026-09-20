@@ -36,6 +36,14 @@ export const ffPlanEntrySchema = z.object({
   warnings: z.array(revitDataIssueSchema),
 });
 export type FfPlanEntry = z.infer<typeof ffPlanEntrySchema>;
+type FamilyPlanDecisionEntry = {
+  familyId?: number | null;
+  familyName: string;
+  planHash: string;
+  changes: readonly unknown[];
+  runEffects: readonly unknown[];
+  refusals: readonly unknown[];
+};
 export const ffReceiptSchema = z.object({
   familyId: z.number(),
   familyName: z.string(),
@@ -280,7 +288,7 @@ export const stagedFilter = (doc: FamiliesRouteDocument): AppliedFilter | null =
  * that sealed plan. Server and client share this.
  */
 export const familiesIncluded = (
-  plan: { entries: readonly FfPlanEntry[] },
+  plan: { entries: readonly FamilyPlanDecisionEntry[] },
   excluded: FamilyExclusions,
 ): Record<string, string> =>
   Object.fromEntries(
@@ -297,7 +305,7 @@ export const familiesIncluded = (
 
 /** The planned families held back, and by whom: what the plan sheet states line by line. */
 export const familiesExcluded = (
-  plan: { entries: readonly FfPlanEntry[] },
+  plan: { entries: readonly FamilyPlanDecisionEntry[] },
   excluded: FamilyExclusions,
 ) =>
   plan.entries.flatMap((entry) => {

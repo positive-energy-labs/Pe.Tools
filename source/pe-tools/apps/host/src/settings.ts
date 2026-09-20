@@ -22,6 +22,7 @@ import type {
   SettingsSchema,
   SettingsValidate,
 } from "@pe/host-contracts/generated";
+import type { PodDraftSource, PodMemberSource } from "@pe/agent-contracts";
 import { LocalOpError } from "./local-error.ts";
 import { productPodsRootPath } from "./product-paths.ts";
 import {
@@ -438,7 +439,7 @@ export const composeMember = Effect.fnUntraced(function* (
 
 /** The composed spec an engine consumes; refuses anything that did not compose cleanly. */
 export const composedSpec = Effect.fnUntraced(function* (
-  member: PodMember & ({ sha256: string } | { content: string }),
+  member: PodMemberSource | PodDraftSource,
   ctx: PodContext,
 ) {
   let result: PodMemberComposeResponse;
