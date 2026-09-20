@@ -482,17 +482,18 @@ test("demo schedule push files a run in the bound pod with values before and aft
   const reading = (await read.json()) as { id: string; workspaceId: string };
   const key = { route: "schedules", target: null, work: reading.workspaceId };
   const route = scheduleGridRouteState.route;
-  const staged = await f.owner.work.apply(
-    key,
-    route,
-    "human",
-    [
-      { path: ["basis"], value: { captureId: reading.id } },
-      { path: ["cells", "2::1"], value: { staged: { value: "R-454B" } } },
-    ],
-    (await f.owner.work.read(key, route))?.revision ?? 0,
+  const stage = await f.fetch(
+    `/pe/route-state/schedules/apply?work=${encodeURIComponent(reading.workspaceId)}`,
+    {
+      patches: [
+        { path: ["basis"], value: { captureId: reading.id } },
+        { path: ["cells", "2::1"], value: { staged: { value: "R-454B" } } },
+      ],
+      expectedRevision: 0,
+    },
   );
-  expect(staged.ok).toBe(true);
+  expect(stage.status, await stage.clone().text()).toBe(200);
+  expect(await stage.json()).toMatchObject({ ok: true });
   const pod = f.owner.member!.pod;
   const push = async (id: string, input: Record<string, unknown>) => {
     await f.fetch("/actions", {

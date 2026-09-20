@@ -284,6 +284,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
     let nativeModel = opened?.content ?? "{}";
     // The simulated schedule's cells; a push edits them so the readback shows the new value.
     const rows = DEMO_ROWS.map((row) => [...row]);
+    const scheduleWork = new Set<string>();
     let simulatedPlan: { hash: string; spec: string } | undefined;
     // Every owner but `family` holds a project document, so the project engines answer there.
     const project = seed.route !== "family";
@@ -661,6 +662,11 @@ export async function createDemoOwner(parent: string, raw: unknown) {
               const schedule =
                 DEMO_SCHEDULES.find((row) => row.scheduleId === query.scheduleIds?.[0]) ??
                 DEMO_SCHEDULES[0]!;
+              scheduleWork.add(
+                `schedule:${createHash("sha256")
+                  .update(canonicalRouteInput([at, `demo-schedule-${schedule.scheduleId}`]))
+                  .digest("hex")}`,
+              );
               value = {
                 documentTitle: "Isolated demo (simulated)",
                 entries: [
@@ -905,7 +911,11 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       work === undefined ? { route, target } : { route, target, work };
     const localScope = (value: WorkKey) =>
       canonicalRouteInput(workKeyOf(value)) === canonicalRouteInput(workKeyOf(scope)) ||
-      value.target === at;
+      value.target === at ||
+      (value.route === scheduleGridRouteState.route &&
+        value.target === null &&
+        value.work !== undefined &&
+        scheduleWork.has(value.work));
     const routes = new Set([route, scheduleGridRouteState.route]);
     const observe: ResourceObserver = (request, publish) => {
       const targetMatches = (ref: typeof target) =>
