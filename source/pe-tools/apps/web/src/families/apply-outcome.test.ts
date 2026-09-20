@@ -121,6 +121,22 @@ test("failed with a native step reads failed in Revit — nothing changed", asyn
   });
 });
 
+test("a dispatched native failure does not claim that nothing changed", async () => {
+  const failed = {
+    ...base,
+    state: "failed",
+    error: "central unreachable",
+    status: 409,
+    steps: [{ key: "families.apply", state: "failed", error: "central unreachable" }],
+  };
+  const outcome = await run(failed, failed);
+  expect(outcome).toMatchObject({
+    code: "failed",
+    message:
+      "failed in Revit — effects unproven: Backdraft Damper (central unreachable); Mechanical Damper (central unreachable)",
+  });
+});
+
 test("succeeded with a receipt success false reads partly applied", async () => {
   const outcome = await run(
     succeeded([receipt("Backdraft Damper", true)]),

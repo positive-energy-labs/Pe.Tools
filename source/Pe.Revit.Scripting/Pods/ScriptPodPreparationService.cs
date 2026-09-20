@@ -6,6 +6,7 @@ using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.Scripting.Diagnostics;
 using Pe.Shared.Scripting.Pods;
+using Pe.Shared.StorageRuntime;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -54,7 +55,7 @@ public sealed record PodMemberComposition(
 }
 
 public sealed record PodCapturedSource(
-    string Id,
+    string? Id,
     string Path,
     string Sha256,
     byte[] Bytes,
@@ -185,16 +186,22 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null) {
     }
 
     /// <summary>Composes one member from the draft when given, else from disk. Only this member's diagnostics return.</summary>
-    public PodMemberComposition Compose(string podId, string path, string? draftContent, PodCapturedSource? capturedSource = null) {
-        var folder = this.ResolveFolder(podId);
-        path = NormalizeMemberPath(path);
+    public PodMemberComposition Compose(string? podId, string path, string? draftContent, PodCapturedSource? capturedSource = null) {
+        if (podId is null && draftContent is null)
+            throw new InvalidDataException("A saved member requires a pod id.");
+        var folder = podId is null ? null : this.ResolveFolder(podId);
+        path = podId is null
+            ? SettingsPathing.NormalizeRelativePath(path, nameof(path))
+            : NormalizeMemberPath(path);
+        if (path.Length == 0)
+            throw new InvalidDataException("A draft path is required.");
         var source = capturedSource ?? CaptureRoot();
         var result = PodComposer.Compose(path, source.Content, Resolve);
         return new PodMemberComposition(result.Content, source, result.Diagnostics, result.Dependencies);
 
         PodCapturedSource CaptureRoot() {
             var bytes = draftContent is null
-                ? ReadBoundedFile(FullPath(folder, path))
+                ? ReadBoundedFile(FullPath(folder!, path))
                 : Encoding.UTF8.GetBytes(draftContent);
             return new PodCapturedSource(
                 podId,
@@ -210,8 +217,12 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null) {
             if (!TryParseReference(reference, out var referencedId, out var referencedPath, out reason))
                 return false;
             try {
-                var owner = referencedId == "local" ? podId : referencedId;
-                var ownerFolder = referencedId == "local" ? folder : this.ResolveFolder(referencedId);
+                if (referencedId == "local" && folder is null) {
+                    reason = $"Reference '{reference}' needs a pod context; choose a pod or use an explicit @<id>/ reference.";
+                    return false;
+                }
+                var owner = referencedId == "local" ? podId! : referencedId;
+                var ownerFolder = referencedId == "local" ? folder! : this.ResolveFolder(referencedId);
                 var fullPath = FullPath(ownerFolder, referencedPath);
                 if (!File.Exists(fullPath)) {
                     reason = $"Reference '{reference}' names no member '{referencedPath}' in pod '{owner}' ({ownerFolder}).";

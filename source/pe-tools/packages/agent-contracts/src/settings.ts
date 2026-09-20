@@ -48,10 +48,14 @@ export const podMemberSourceSchema = podMemberSchema.extend({
 });
 export type PodMemberSource = z.infer<typeof podMemberSourceSchema>;
 /**
- * An unsaved draft consumed as supplied bytes: nothing is filed. `pod` is where the run lands and
- * what `$include` resolves against; `path` only names the draft in that run.
+ * An unsaved draft consumed as supplied bytes: nothing is filed. `pod`, when present, is real
+ * composition context for `@local`; `path` names the draft in the run evidence.
  */
-export const podDraftSourceSchema = podMemberSchema.extend({ content: z.string() });
+export const podDraftSourceSchema = z.object({
+  pod: z.string().min(1).optional(),
+  path: z.string().min(1),
+  content: z.string(),
+});
 export type PodDraftSource = z.infer<typeof podDraftSourceSchema>;
 /** The Work key of an authored member: derived from its address, never stored beside it. */
 export const memberWork = (member: PodMember): string => `member:${member.pod}/${member.path}`;

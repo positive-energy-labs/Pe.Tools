@@ -102,7 +102,7 @@ describe("familiesRouteState", () => {
       familyId,
       familyName: `f${familyId}`,
       planHash,
-      changes: [{ section: "types", key: "W", kind: "set" }],
+      changes: [{ section: "types", key: "W", kind: "set", before: "1in", after: "2in" }],
       runEffects: [],
       refusals: [],
       warnings: [],

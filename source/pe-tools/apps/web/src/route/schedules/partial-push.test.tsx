@@ -12,6 +12,8 @@ import { appAtomRegistry } from "#/route";
 import { cellsApplied, setup, stubEventSource } from "../../../../host/tests/schedule-test-fixture";
 import { detailResponse, target } from "../../../../host/tests/schedule-fixture";
 import { LiveScheduleGridWorkspace } from "./live";
+import { ScheduleGridWorkspace, type ScheduleGridState } from "./workspace";
+import type { Refusal } from "#/route";
 
 vi.mock("#/lib/token", () => ({ token: () => "currentColor", dash: () => "none" }));
 afterEach(cleanup);
@@ -48,15 +50,19 @@ test("a partial push reads partly applied, the written cell reads back new, the 
     { path: ["basis"], value: { captureId: reading.id } },
     { path: ["cells"], value: {} },
   ]);
+  let state: ScheduleGridState | undefined;
   const mounted = render(
     <RegistryContext.Provider value={appAtomRegistry}>
       <LiveScheduleGridWorkspace
         workspaceId={f.scope.work}
         target={JSON.stringify({ kind: "open", ref: f.b })}
+        render={(next) => {
+          state = next;
+          return <ScheduleGridWorkspace state={next} />;
+        }}
       />
     </RegistryContext.Provider>,
   );
-  await screen.findByText("bridge connected");
   for (const [from, to] of [
     ["100 VA", "175 VA"],
     ["200 VA", "275 VA"],
@@ -76,20 +82,21 @@ test("a partial push reads partly applied, the written cell reads back new, the 
     ]),
   );
   f.setDetail(twoRows("175 VA"));
-  await vi.waitFor(() =>
-    expect(screen.getByRole("button", { name: "push 2 to Revit" }).hasAttribute("disabled")).toBe(
-      false,
-    ),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "push 2 to Revit" }));
+  let refusal: Refusal | null = null;
   await vi.waitFor(
-    () =>
-      expect(document.body.textContent).toContain(
-        "partly applied: 1 written, 1 refused: 2::2: Expected target evidence is stale.",
-      ),
+    async () => {
+      await act(async () => {
+        refusal = await state!.execute("push");
+      });
+      expect(refusal?.code).toBe("partial");
+    },
     { timeout: 10_000 },
   );
-  expect(document.body.textContent).not.toMatch(/push failed|· Failed ·/);
+  // The refusal draws on its cell; the log line counts it and names the first cell.
+  expect(refusal).toMatchObject({ message: "1 refused · Load · row 2", cells: ["2::2"] });
+  await vi.waitFor(() =>
+    expect(state!.refused).toEqual({ "2::2": "Expected target evidence is stale." }),
+  );
   const doc = (await f.view()).doc;
   expect(doc.cells["1::2"]?.staged).toBeUndefined();
   expect(doc.cells["2::2"]?.staged?.value).toBe("275 VA");

@@ -242,3 +242,42 @@ test("action page progress continues until a user selection or review change sup
     cleanup();
   }
 });
+
+test("an action can guard its source fields while an unrelated page projection changes", async () => {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const manifest = defineRoute({
+    key: "guarded-page-result",
+    name: "Guarded page result",
+    page: z.object({ member: z.string(), loaded: z.number(), sheet: z.string().nullable() }),
+    actions: {
+      plan: {
+        label: "plan",
+        says: "opens a sheet",
+        needs: "host",
+        actor: "any",
+        input: z.void() as unknown as z.ZodType<never>,
+        dirties: [],
+        ready: () => null,
+        run: async (ctx) => {
+          await held;
+          ctx.setPage({ sheet: "planned" }, ["member"]);
+        },
+      },
+    },
+  });
+  const { result } = renderHook(() =>
+    useRoute(manifest, { work: "shared", page: { member: "A", loaded: 1, sheet: null } }),
+  );
+  let pending!: Promise<unknown>;
+  act(() => {
+    pending = result.current.actions.plan.run();
+  });
+  act(() => result.current.page[1]({ loaded: 2 }));
+  await act(async () => {
+    release();
+    await pending;
+  });
+  expect(result.current.page[0]).toEqual({ member: "A", loaded: 2, sheet: "planned" });
+  cleanup();
+});

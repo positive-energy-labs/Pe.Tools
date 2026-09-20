@@ -70,6 +70,19 @@ describe("PeReadings topology swap", () => {
     expect(streams[0]!.closed).toBe(true);
     expect(seen).toEqual(["stale", "stale"]);
   });
+
+  it("releases each subject when its last listener leaves, so focus reads can churn past the key cap", async () => {
+    const { readings, flush } = owner();
+    for (let i = 0; i < 40; i++) {
+      const release = readings.subscribe(
+        { kind: "member", member: { pod: "proof", path: `${i}.json` } },
+        () => {},
+      );
+      await flush();
+      release();
+      await flush();
+    }
+  });
 });
 
 describe("advance snapshot identity", () => {

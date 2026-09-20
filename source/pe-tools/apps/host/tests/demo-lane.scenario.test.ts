@@ -498,7 +498,9 @@ test("live /families: typed cells stage, one is typed back, plan and apply retir
     expect.objectContaining({
       operation: "families.apply",
       outcome: "Succeeded",
+      podId: null,
       origin: "SuppliedDraft",
+      memberPath: null,
       memberSha256: null,
     }),
   ]);

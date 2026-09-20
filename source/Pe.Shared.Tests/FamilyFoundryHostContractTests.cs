@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.RevitData.Families;
 
@@ -10,7 +11,7 @@ public sealed class FamilyFoundryHostContractTests {
     public void Plan_contract_round_trips_changes_run_effects_and_refusals() {
         var data = new FamilyFoundryPlanData(
             [new FamilyFoundryFamilyPlanData(12, "PE Box", "ABCDEF0123456789",
-                [new FamilyFoundryChangeData("parameters", "PE_M_Equip_Tag", "Rename", "Tag")],
+                [new FamilyFoundryChangeData("parameters", "PE_M_Equip_Tag", "Rename", "Tag", "Tag", "PE_M_Equip_Tag")],
                 ["run.sort"],
                 [],
                 [new("FamilyEditWarning", Pe.Shared.RevitData.RevitDataIssueSeverity.Warning, "observed")])],
@@ -19,6 +20,8 @@ public sealed class FamilyFoundryHostContractTests {
         var back = JsonConvert.DeserializeObject<FamilyFoundryPlanData>(JsonConvert.SerializeObject(data))!;
         Assert.Multiple(() => {
             Assert.That(back.Families[0].Changes[0].MappedFrom, Is.EqualTo("Tag"));
+            Assert.That(back.Families[0].Changes[0].Before, Is.EqualTo("Tag"));
+            Assert.That(back.Families[0].Changes[0].After, Is.EqualTo("PE_M_Equip_Tag"));
             Assert.That(back.Families[0].RunEffects, Is.EqualTo(new[] { "run.sort" }));
             Assert.That(back.Families[0].Warnings[0].Code, Is.EqualTo("FamilyEditWarning"));
             Assert.That(back.Diagnostics[0].Code, Is.EqualTo("FamilyNotFound"));
@@ -29,14 +32,29 @@ public sealed class FamilyFoundryHostContractTests {
     public void Apply_contract_round_trips_receipts_with_residue() {
         var data = new FamilyFoundryApplyData(
             [new FamilyFoundryApplyReceipt(12, "PE Box", true, false, null, "ABCDEF0123456789",
-                [new FamilyFoundryChangeData("types.cell", "Wide/Width", "Update", null)], [], "out/PE Box")],
+                [new FamilyFoundryChangeData("types.cell", "Wide/Width", "Update", null, "2in", "")], [], "out/PE Box")],
             []);
 
         var back = JsonConvert.DeserializeObject<FamilyFoundryApplyData>(JsonConvert.SerializeObject(data))!;
         Assert.Multiple(() => {
             Assert.That(back.Receipts[0].Converged, Is.False);
             Assert.That(back.Receipts[0].Residue[0].Key, Is.EqualTo("Wide/Width"));
+            Assert.That(back.Receipts[0].Residue[0].After, Is.EqualTo(""));
         });
+    }
+
+    [Test]
+    public void Plan_wire_keeps_null_before_and_after_values() {
+        var data = new FamilyFoundryPlanData(
+            [new FamilyFoundryFamilyPlanData(12, "PE Box", "ABCDEF0123456789",
+                [new FamilyFoundryChangeData("parameters", "Width", "Add", null, null, null)], [], [], [])], []);
+
+        var json = JsonConvert.SerializeObject(data, new JsonSerializerSettings {
+            NullValueHandling = NullValueHandling.Ignore,
+            ContractResolver = new CamelCasePropertyNamesContractResolver()
+        });
+
+        Assert.That(json, Does.Contain("\"before\":null").And.Contain("\"after\":null"));
     }
 
     [Test]

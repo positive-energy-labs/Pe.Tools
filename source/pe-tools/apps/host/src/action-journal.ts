@@ -47,6 +47,7 @@ const failure = (error: unknown): DispatchFailure => {
       nativeOutcome === "CancelledBeforeDispatch" ||
       nativeOutcome === "RefusedQueueUnresponsive" ||
       nativeOutcome === "RefusedQueueDisposed");
+  const dispatched = error instanceof BridgeError && error.evidence.dispatched === true;
   const detail = {
     ...(error instanceof BridgeError && error.evidence.result !== undefined
       ? { evidence: { result: error.evidence.result } }
@@ -62,7 +63,9 @@ const failure = (error: unknown): DispatchFailure => {
     ? { ...detail, state: "failed", notDispatched: true }
     : detail.status === CANCELLED_STATUS
       ? { state: "cancelled", error: detail.error, status: detail.status }
-      : { ...detail, state: "unknown" };
+      : dispatched
+        ? { ...detail, state: "failed" }
+        : { ...detail, state: "unknown" };
 };
 
 const interruptedSteps = (steps: readonly ActionStep[]): ActionStep[] =>
@@ -163,11 +166,14 @@ export function settle(
     state: "failed",
     error: why.error,
     status: why.status,
-    notDispatched: true,
+    ...(steps.length === 0 || ("notDispatched" in why && why.notDispatched === true)
+      ? { notDispatched: true }
+      : {}),
     ...(thrown && "nativeOutcome" in thrown && thrown.nativeOutcome
       ? { nativeOutcome: thrown.nativeOutcome }
       : {}),
     ...(thrown && "issues" in thrown && thrown.issues ? { issues: thrown.issues } : {}),
+    ...(why && "evidence" in why && why.evidence ? { evidence: why.evidence } : {}),
   };
 }
 

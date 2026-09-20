@@ -53,3 +53,9 @@ export const CHAT_ACTIONS = {
     },
   } satisfies ChatAction<void>,
 } as const;
+
+/** Re-read only after abort has finished clearing the runtime's live suspension set. */
+export async function cancelAndRefresh(context: ChatActionContext, refresh: () => void) {
+  await CHAT_ACTIONS.cancel.run(context);
+  refresh();
+}

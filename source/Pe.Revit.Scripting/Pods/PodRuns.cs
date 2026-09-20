@@ -3,6 +3,7 @@ using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Scripting;
+using Pe.Shared.StorageRuntime;
 using System.Text;
 
 namespace Pe.Revit.Scripting.Pods;
@@ -10,7 +11,7 @@ namespace Pe.Revit.Scripting.Pods;
 /// <summary>One file a run consumed: its role, owning pod when it has one, logical address, run-relative path, and exact bytes.</summary>
 public sealed record PodRunInputFile(string Role, string? Pod, string Address, string File, byte[] Bytes);
 
-/// <summary>One run per apply: `output/&lt;runId&gt;/receipt.json` plus its output files, inside the pod the apply came from.</summary>
+/// <summary>One run per apply: `output/&lt;runId&gt;/receipt.json` plus its output files, in its pod or operation output.</summary>
 public static class PodRuns {
     private static readonly JsonSerializerSettings Json = new() {
         Formatting = Formatting.Indented,
@@ -21,8 +22,7 @@ public static class PodRuns {
 
     /// <summary>A new empty run folder in the pod, for a caller that must write its output before the receipt exists.</summary>
     public static string NewRunFolder(string podFolder) {
-        var runId = $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}";
-        var runFolder = Path.Combine(podFolder, "output", runId);
+        var runFolder = Path.Combine(podFolder, "output", RunId());
         _ = Directory.CreateDirectory(runFolder);
         return runFolder;
     }
@@ -33,7 +33,9 @@ public static class PodRuns {
     /// </summary>
     public static (string Run, List<string> Inputs) StartComposedRun(PodComposedSource source, object metadata, string effectiveInput, string? planActionId = null) {
         var files = ComposedInput(source, effectiveInput);
-        var run = NewRunFolder(new ScriptPodPreparationService().ResolveFolder(source.Root.Id));
+        var run = source.Root.Id is { } pod
+            ? NewRunFolder(new ScriptPodPreparationService().ResolveFolder(pod))
+            : new ModuleStorage("operations").Output().SubDir(RunId()).DirectoryPath;
         var input = WithReviewBasis(metadata, planActionId);
         input["source"] = JObject.FromObject(new {
             kind = "pod-composition", origin = source.Root.Origin.ToString(), pod = source.Root.Id, path = source.Root.Path, sha256 = source.Root.Sha256
@@ -59,6 +61,8 @@ public static class PodRuns {
     /// <summary>The exact effective input, then the root, then each dependency in consumed order; every hash is checked against its bytes.</summary>
     public static List<PodRunInputFile> ComposedInput(PodComposedSource source, string effectiveInput) {
         var root = source.Root;
+        if (root.Origin == PodSourceOrigin.SavedMember && root.Id is null)
+            throw new InvalidDataException("A saved composition root requires its pod id.");
         return [
             new("effective", null, "effective-input.json", "effective-input.json", Encoding.UTF8.GetBytes(effectiveInput)),
             new(root.Origin == PodSourceOrigin.SavedMember ? "saved-member" : "supplied-draft", root.Id, root.Path,
@@ -68,14 +72,18 @@ public static class PodRuns {
         ];
     }
 
-    private static byte[] Decode(string pod, string path, string sha256, string bytesBase64) {
+    private static byte[] Decode(string? pod, string path, string sha256, string bytesBase64) {
         byte[] bytes;
         try { bytes = Convert.FromBase64String(bytesBase64); }
-        catch (FormatException) { throw new InvalidDataException($"{pod}:{path} captured bytes are not base64."); }
+        catch (FormatException) { throw new InvalidDataException($"{Address(pod, path)} captured bytes are not base64."); }
         return string.Equals(ScriptPodPreparationService.Sha256(bytes), sha256, StringComparison.OrdinalIgnoreCase)
             ? bytes
-            : throw new InvalidDataException($"{pod}:{path} captured bytes do not match SHA-256 {sha256}.");
+            : throw new InvalidDataException($"{Address(pod, path)} captured bytes do not match SHA-256 {sha256}.");
     }
+
+    private static string Address(string? pod, string path) => pod is null ? path : $"{pod}:{path}";
+
+    private static string RunId() => $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}";
 
     /// <summary>
     ///     Writes each consumed file, then `input.json` listing role, address, SHA-256, and run path for each. All or

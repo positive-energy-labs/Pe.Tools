@@ -415,75 +415,93 @@ export function SituationAction({
     busy !== null ||
     (outcome !== null &&
       dismissed !== outcome.at &&
-      (outcome.refusal !== null || faded !== outcome.at));
+      // A refusal that names cells draws on those cells; the verb only tints.
+      (outcome.refusal !== null ? !outcome.refusal.cells?.length : faded !== outcome.at));
   const refusedNow = Boolean(outcome?.refusal) && dismissed !== outcome?.at;
   const stopped = action.refusal !== null || (handle.busy !== null && busy === null);
   const flag = useContext(ActionFlag)[name];
+  const reason = `${action.refusal ?? action.says}${action.chord ? ` · ${action.chord}` : ""}`;
   return (
-    <Popover.Root open={shown} onOpenChange={(o) => !o && outcome && setDismissed(outcome.at)}>
-      <Popover.Trigger
-        render={
-          <Press
-            frame="line"
-            tone={commit ? "neutral" : "quiet"}
-            size="value"
-            state={stopped ? "disabled" : "rest"}
-            aria-disabled={stopped}
-            data-tone={refusedNow ? "caution" : undefined}
-            title={`${action.refusal ?? action.says}${action.chord ? ` · ${action.chord}` : ""}`}
-            onClick={() => void action.run()}
-            style={{ fontWeight: commit ? 600 : undefined }}
+    <span className="group relative inline-flex">
+      <Popover.Root open={shown} onOpenChange={(o) => !o && outcome && setDismissed(outcome.at)}>
+        <Popover.Trigger
+          render={
+            <Press
+              frame="line"
+              tone={commit ? "neutral" : "quiet"}
+              size="value"
+              state={stopped ? "disabled" : "rest"}
+              aria-disabled={stopped}
+              data-tone={refusedNow ? "caution" : undefined}
+              title={reason}
+              onClick={() => void action.run()}
+              style={{ fontWeight: commit ? 600 : undefined }}
+            >
+              {action.label}
+              {action.count !== null ? (
+                <span className="face-mono text-ink-2">{action.count}</span>
+              ) : null}
+            </Press>
+          }
+        />
+        <Popover.Portal>
+          <Popover.Positioner
+            side="bottom"
+            align="start"
+            sideOffset={6}
+            className="isolate z-popup"
           >
-            {action.label}
-            {action.count !== null ? (
-              <span className="face-mono text-ink-2">{action.count}</span>
-            ) : null}
-          </Press>
-        }
-      />
-      <Popover.Portal>
-        <Popover.Positioner side="bottom" align="start" sideOffset={6} className="isolate z-popup">
-          <Popover.Popup
-            data-surface="artifact"
-            data-tone={outcome?.refusal ? "caution" : undefined}
-            className="max-w-[60ch] rounded-lg px-3 py-1.5 t-prose ring-1 ring-line outline-none"
-          >
-            {busy ? (
-              <span className="flex items-baseline gap-3">
-                <span>
-                  running <span className="face-mono">{busy.seconds} s</span>
+            <Popover.Popup
+              data-surface="artifact"
+              data-tone={outcome?.refusal ? "caution" : undefined}
+              className="max-w-[60ch] rounded-lg px-3 py-1.5 t-prose ring-1 ring-line outline-none"
+            >
+              {busy ? (
+                <span className="flex items-baseline gap-3">
+                  <span>
+                    running <span className="face-mono">{busy.seconds} s</span>
+                  </span>
+                  <Press
+                    frame="line"
+                    tone="quiet"
+                    size="value"
+                    title="Signal the running operation. It stops at its next checkpoint; what it already wrote stands."
+                    onClick={handle.stop}
+                  >
+                    stop
+                  </Press>
                 </span>
-                <Press
-                  frame="line"
-                  tone="quiet"
-                  size="value"
-                  title="Signal the running operation. It stops at its next checkpoint; what it already wrote stands."
-                  onClick={handle.stop}
-                >
-                  stop
-                </Press>
-              </span>
-            ) : outcome?.refusal ? (
-              <span>
-                {outcome.refusal.message}
-                {outcome.refusal.detail ? (
-                  <details className="t-small text-ink-2">
-                    <summary>detail</summary>
-                    <span>{outcome.refusal.detail}</span>
-                  </details>
-                ) : null}
-                {flag}
-              </span>
-            ) : outcome?.stopped ? (
-              <span className="text-ink-2">{action.label} · stopped waiting; see the log</span>
-            ) : (
-              <span className="text-ink-2">{action.label} · ran</span>
-            )}
-            {!busy ? <span className="ml-3 face-mono text-ink-mute">Esc</span> : null}
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
+              ) : outcome?.refusal ? (
+                <span>
+                  {outcome.refusal.message}
+                  {outcome.refusal.detail ? (
+                    <details className="t-small text-ink-2">
+                      <summary>detail</summary>
+                      <span>{outcome.refusal.detail}</span>
+                    </details>
+                  ) : null}
+                  {flag}
+                </span>
+              ) : outcome?.stopped ? (
+                <span className="text-ink-2">{action.label} · stopped waiting; see the log</span>
+              ) : (
+                <span className="text-ink-2">{action.label} · ran</span>
+              )}
+              {!busy ? <span className="ml-3 face-mono text-ink-mute">Esc</span> : null}
+            </Popover.Popup>
+          </Popover.Positioner>
+        </Popover.Portal>
+      </Popover.Root>
+      {stopped ? (
+        <span
+          role="tooltip"
+          data-surface="artifact"
+          className="absolute top-full left-0 z-popup mt-1 hidden w-max max-w-[36ch] border border-line-2 px-2 py-1 t-small face-mono text-ink-2 italic shadow-float group-hover:block group-focus-within:block"
+        >
+          {reason}
+        </span>
+      ) : null}
+    </span>
   );
 }
 
@@ -522,10 +540,11 @@ function ActionBoard({
   handle: RouteHandle<any, any, any, any>;
   verbs: readonly [string, ActionHandle][];
   commit?: string;
-  /** Where Work stands, beside the verbs that move it ("r3 · 2 room edits staged"). */
-  work: string;
+  /** Where Work stands, beside the verbs ("r3 · 2 room edits staged"); null draws no meter. */
+  work: string | null;
 }) {
   const [open, setOpen] = useState(false);
+  const meter = work ? <span className="t-small face-mono text-ink-mute">{work}</span> : null;
   const declared = (handle.manifest.actions ?? {}) as Record<
     string,
     RouteAction<unknown, string, unknown, never> | undefined
@@ -547,7 +566,6 @@ function ActionBoard({
       </Press>
     </span>
   );
-  const meter = <span className="t-small face-mono text-ink-mute">{work}</span>;
   if (!open)
     return (
       <div className="hairline-t flex flex-wrap items-center gap-x-2 gap-y-1 py-1.5">
@@ -644,8 +662,7 @@ export function Ledger({ rows }: { rows: readonly (readonly [string, ReactNode])
 
 /** The page log, newest first: time and kind in the gutter, then the verb and what it said. */
 export function PageLog({ entries }: { entries: readonly LogEntry[] }) {
-  if (!entries.length)
-    return <span className="t-prose text-ink-mute">nothing has run on this page yet</span>;
+  if (!entries.length) return null;
   return (
     <div className={`${GUTTER} max-h-48 overflow-y-auto`}>
       {entries.map((entry, index) => (
@@ -678,6 +695,8 @@ export interface SituationProps {
   chooseStage?: (stage: string) => void;
   /** The verb that commits Work; drawn bold. */
   commit?: string;
+  /** The stage verbs the row draws, as the route's stage declares them; absent = every verb of the stage. */
+  verbs?: readonly string[];
   /**
    * Staged Work. When `count` is above zero the band under the verb row shows: the frame (count
    * and noun, revision, read freshness, commit, discard, conflict with reload) is drawn here and
@@ -710,6 +729,7 @@ export function Situation({
   target,
   chooseStage,
   commit,
+  verbs: declaredVerbs,
   work,
   band,
   startFreshAside,
@@ -725,7 +745,7 @@ export function Situation({
   const word = stages.find((item) => item.key === stage)?.word ?? handle.manifest.name;
   const verbs = Object.entries(handle.actions).filter(
     ([name, action]) =>
-      (!action.stage || action.stage === stage) &&
+      (declaredVerbs ? declaredVerbs.includes(name) : !action.stage || action.stage === stage) &&
       !(handle.manifest.actions as Record<string, { sheet?: true }> | undefined)?.[name]?.sheet,
   ) as [string, ActionHandle][];
   const staged = work && work.count > 0 ? work : null;
@@ -793,7 +813,13 @@ export function Situation({
               )}{" "}
               {sentence}
             </p>
-            <ActionBoard handle={handle} verbs={verbs} commit={commit} work={workWord} />
+            <ActionBoard
+              handle={handle}
+              verbs={verbs}
+              commit={commit}
+              // A declared stage draws no work meter; the Ledger keeps the revision.
+              work={declaredVerbs ? null : workWord}
+            />
             {/* F-R4-1: the staged and unresolved lines (and a route's band) share ONE fixed
                 block that scrolls itself, so a first stage or a refusal never grows the head and
                 moves the grid under the person (fixture look 12: a refusal moved it 28px). */}

@@ -18,10 +18,11 @@
  *       takeoffs header): the reason's home is the TITLE — dense chrome never pays a second
  *       line for it, and four near-identical refusal sentences under one verb lane read as
  *       noise, not honesty. AMENDED at the fit-review sitting (2026-08-16): a DISABLED `commit`
- *       verb is the one exception — its reason renders visibly as a small quiet line beside the
- *       verb (no new slot, no new component), because the highest-stakes refusal on a page must
- *       pass §0's "why is that one disabled, without tooltips" bar and the lane-spam problem
- *       never applied to the lone page-blast verb. All other tones stay title-only.
+ *       verb is the one exception — it stays focusable and its reason shows on hover AND focus, so a
+ *       keyboard reaches the highest-stakes refusal on a page. It no longer renders as an inline
+ *       line (signals, 2026-09-19: the inline "nothing…" text read as noise). All other tones stay
+ *       title-only.
+ *       ASSUME(kai): reason on hover+focus | alt: 2026-08-16 inline reason for commit
  *     · mono type collided with "mono means the machine measured this". Verbs are sans now.
  * - BLAST RADIUS IS NOT A TONE. It groups the lane and buys no hue: all three writes wear the
  *   same single blue however far they reach. That is `ActionGroup`, below.
@@ -36,7 +37,7 @@
  *   hairline so the shape has an edge, italic secondary ink so it is plainly not for pressing.
  *   A refusal a newcomer cannot decipher is indistinguishable from a rendering bug.
  */
-import { createContext, useContext } from "react";
+import { createContext, useState } from "react";
 import { ArrowLeft, ArrowRight, ExternalLink, type LucideIcon } from "lucide-react";
 
 import { tv } from "#/lib/tv";
@@ -45,8 +46,9 @@ import "./lang.css";
 
 export const actionRecipe = tv({
   slots: {
-    base: "veil inline-flex h-(--item-h) cursor-pointer items-center gap-[5px] whitespace-nowrap border border-transparent bg-transparent px-2 t-small font-medium text-ink focus-visible:outline focus-visible:outline-line-2 disabled:cursor-not-allowed disabled:border-line-2 disabled:text-ink-2 disabled:italic [&>svg]:size-[13px] [&>svg]:shrink-0",
-    reason: "max-w-[36ch] self-center t-small face-mono text-ink-2 italic",
+    base: "veil inline-flex h-(--item-h) cursor-pointer items-center gap-[5px] whitespace-nowrap border border-transparent bg-transparent px-2 t-small font-medium text-ink focus-visible:outline focus-visible:outline-line-2 disabled:cursor-not-allowed disabled:border-line-2 disabled:text-ink-2 disabled:italic aria-disabled:cursor-not-allowed aria-disabled:border-line-2 aria-disabled:text-ink-2 aria-disabled:italic [&>svg]:size-[13px] [&>svg]:shrink-0",
+    reason:
+      "absolute top-full left-0 z-popup mt-1 hidden w-max max-w-[36ch] border border-line-2 px-2 py-1 t-small face-mono text-ink-2 italic shadow-float group-hover:block group-focus-within:block",
     group: "",
     groupHead: "mb-1.5 flex items-baseline gap-1.5 border-b border-line pb-[3px]",
     groupTitle: "t-small t-upper text-ink",
@@ -84,8 +86,7 @@ interface VerbBase {
    * Always required — the constructor argument is what guarantees every refusal has an
    * explanation — and carried as the control's title (ruled 2026-08-16: hover is the reason's
    * home; a visible line under every refused verb made dense chrome wrap and repeat itself).
-   * EXCEPTION (fit reviews, 2026-08-16): a disabled `commit` verb ALSO renders it visibly,
-   * as a small quiet line beside the verb.
+   * EXCEPTION: a disabled `commit` verb stays focusable and shows it on hover and focus.
    */
   reason: string;
   disabled?: boolean;
@@ -126,33 +127,51 @@ export function ActionButton(props: ActionButtonProps) {
   const Icon = props.tone === "nav" ? NAV_ICON[props.direction] : props.icon;
   const tone = props.tone ?? "act";
   const inert = disabled === true || busy === true;
-  const chrome = useContext(VerbChromeContext);
   const slots = actionRecipe({ tone });
+  const [reasonOpen, setReasonOpen] = useState(false);
 
+  // A disabled commit keeps focus, so its reason can show there too; every other refusal is inert.
+  const explained = tone === "commit" && disabled === true && busy !== true;
+  const button = (
+    <button
+      type="button"
+      className={slots.base()}
+      data-tone={
+        !inert && tone === "commit" ? "commit" : !inert && tone === "agent" ? "pea" : undefined
+      }
+      data-fill={!inert && tone === "commit" ? "solid" : undefined}
+      data-wash={!inert && tone === "agent" ? "" : undefined}
+      data-surface={inert ? "recess" : undefined}
+      disabled={inert && !explained}
+      aria-disabled={explained || undefined}
+      onClick={explained ? undefined : onClick}
+      title={reason}
+    >
+      {Icon != null ? <Icon /> : null}
+      {busy === true ? `${label}…` : label}
+    </button>
+  );
+  if (!explained) return button;
   return (
-    <>
-      <button
-        type="button"
-        className={slots.base()}
-        data-tone={
-          !inert && tone === "commit" ? "commit" : !inert && tone === "agent" ? "pea" : undefined
-        }
-        data-fill={!inert && tone === "commit" ? "solid" : undefined}
-        data-wash={!inert && tone === "agent" ? "" : undefined}
-        data-surface={inert ? "recess" : undefined}
-        disabled={inert}
-        onClick={onClick}
-        title={reason}
+    <span
+      className="group relative inline-flex"
+      onMouseEnter={() => setReasonOpen(true)}
+      onMouseLeave={() => setReasonOpen(false)}
+      onPointerEnter={() => setReasonOpen(true)}
+      onPointerLeave={() => setReasonOpen(false)}
+      onFocus={() => setReasonOpen(true)}
+      onBlur={() => setReasonOpen(false)}
+    >
+      {button}
+      <span
+        role="tooltip"
+        data-surface="artifact"
+        className={slots.reason({ className: reasonOpen ? "block" : undefined })}
+        style={{ display: reasonOpen ? "block" : "none" }}
       >
-        {Icon != null ? <Icon /> : null}
-        {busy === true ? `${label}…` : label}
-      </button>
-      {/* THE UN-GAGGED COMMIT (fit reviews, ruled 2026-08-16): only a disabled commit verb says
-          its reason on the surface; busy is not a refusal and every other tone keeps the title. */}
-      {tone === "commit" && disabled === true && !chrome ? (
-        <span className={slots.reason()}>{reason}</span>
-      ) : null}
-    </>
+        {reason}
+      </span>
+    </span>
   );
 }
 

@@ -34,7 +34,7 @@ internal static class FamilyFoundryBridgeOps {
     private static Task<FamilyFoundryPlanData> PlanFamily(FamilyPlanRequest request, FamilyDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => PlanFamilies(request.SpecJson, document.Value, null, request.ExecutionOptions), cancellationToken);
 
-    [Op("family.apply", Does = "Reconcile the active family document to a saved spec, refusing plan drift, and write the run receipt into the source pod.", Title = "Apply Family", Finds = ["family", "spec", "apply", "plan-hash", "receipt"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Actor = OpActor.Human)]
+    [Op("family.apply", Does = "Reconcile the active family document to a saved spec or supplied draft, refusing plan drift, and write the run receipt beside its operation output.", Title = "Apply Family", Finds = ["family", "spec", "apply", "plan-hash", "receipt"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Actor = OpActor.Human)]
     private static Task<FamilyFoundryApplyData> ApplyFamily(FamilyApplyRequest request, FamilyDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => ApplyWithReceipt("family.apply", request.SpecJson, request.Source,
             request.ExpectedPlanHashes, document.Value, request.ExecutionOptions, plan: request.Plan, cancellationToken: cancellationToken), cancellationToken);
@@ -47,7 +47,7 @@ internal static class FamilyFoundryBridgeOps {
     private static Task<FamilyFoundryPlanData> PlanLoaded(FamiliesPlanRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => PlanFamilies(request.SpecJson, document.Value, request.FamilyNames, request.ExecutionOptions, cancellationToken), cancellationToken);
 
-    [Op("families.apply", Does = "Reconcile explicit loaded families to a saved spec, refusing plan drift per family and any family reloaded since the plan (its name now resolves to another id), and write the run receipt into the source pod.", Title = "Apply Loaded Families", Finds = ["families", "spec", "apply", "plan-hash", "receipt", "bulk"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Actor = OpActor.Human)]
+    [Op("families.apply", Does = "Reconcile explicit loaded families to a saved spec or supplied draft, refusing plan drift per family and any family reloaded since the plan (its name now resolves to another id), and write the run receipt beside its operation output.", Title = "Apply Loaded Families", Finds = ["families", "spec", "apply", "plan-hash", "receipt", "bulk"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Actor = OpActor.Human)]
     private static Task<FamilyFoundryApplyData> ApplyLoaded(FamiliesApplyRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => ApplyWithReceipt("families.apply", request.SpecJson, request.Source, request.ExpectedPlanHashes, document.Value, request.ExecutionOptions, familyNames: request.FamilyNames, plan: request.Plan, cancellationToken: cancellationToken), cancellationToken);
 
@@ -271,7 +271,7 @@ internal static class FamilyFoundryBridgeOps {
                 var (logs, error) = context.OperationLogs;
                 var receipt = op.LastReceipt;
                 var errors = logs?.SelectMany(l => l.Entries).Where(e => e.Status == LogStatus.Error).Select(e => $"{e.Name}: {e.Message}").ToList() ?? [];
-                receipts.Add(new FamilyFoundryApplyReceipt(familyId, familyName, error is null && errors.Count == 0 && receipt?.Converged == true, receipt?.Converged ?? false, error?.Message, receipt?.PlanHash,
+                receipts.Add(new FamilyFoundryApplyReceipt(familyId, familyName, error is null && errors.Count == 0 && receipt?.Converged == true, receipt?.Converged ?? false, context.LoadFailureText ?? error?.Message, receipt?.PlanHash,
                     receipt?.Residue.Select(ToChange).ToList() ?? [], errors, context.Artifacts is { } a ? Path.Combine(runOutput.DirectoryPath, a.FamilyDirectory) : null,
                     receipt?.ObservedParametersDigest, context.LoadedFamilyId));
             } catch (Exception exception) {
@@ -341,7 +341,7 @@ internal static class FamilyFoundryBridgeOps {
         }
     }
 
-    private static FamilyFoundryChangeData ToChange(FamilyChange c) => new(c.Section, c.Key, c.Kind.ToString(), c.MappedFrom);
+    private static FamilyFoundryChangeData ToChange(FamilyChange c) => new(c.Section, c.Key, c.Kind.ToString(), c.MappedFrom, c.Before, c.After);
     private static FamilyFoundryDiagnostic ToDiagnostic(FamilyModelDiagnostic d) => new(d.Code, d.Path, d.Message);
     private static FamilyFoundryApplyReceipt Failed(long id, string name, string error) => new(id, name, false, false, error, null, [], [error], null, null);
 }

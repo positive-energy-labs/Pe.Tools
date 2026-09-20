@@ -13,10 +13,10 @@ public sealed class BridgeOpRequestDeserializationTests {
     private static ProbeResponse Handle(ProbeRequest request) => new(request.ScriptContent);
 
     [Op("revit.detail.schedule-source-probe", Does = "Bind the real schedule.apply request.")]
-    private static ProbeResponse HandleSchedule(ScheduleSpecApplyRequest request) => new(request.Source.Root.Id);
+    private static ProbeResponse HandleSchedule(ScheduleSpecApplyRequest request) => new(request.Source.Root.Id ?? "unfiled");
 
     [Op("revit.detail.family-source-probe", Does = "Bind the real family.apply request.")]
-    private static ProbeResponse HandleFamily(FamilyApplyRequest request) => new(request.Source.Root.Id);
+    private static ProbeResponse HandleFamily(FamilyApplyRequest request) => new(request.Source.Root.Id ?? "unfiled");
 
     [Op("revit.detail.schedule-cells-probe", Does = "Bind the real schedule.cells.apply request.")]
     private static ProbeResponse HandleCells(ScheduleCellApplyRequest request) =>

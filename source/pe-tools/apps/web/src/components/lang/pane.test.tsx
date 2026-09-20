@@ -357,7 +357,7 @@ test("artifact feet keep their top separator", () => {
   expect(rails[1]?.classList.contains("hairline-b")).toBe(false);
 });
 
-test("artifact rail keeps disabled commit refusals in the button title", () => {
+test("artifact rail keeps disabled commit refusals focusable without an inline reason", () => {
   const reason = "Resolve validation errors before committing.";
   render(
     <ArtifactFrame
@@ -376,8 +376,26 @@ test("artifact rail keeps disabled commit refusals in the button title", () => {
     </ArtifactFrame>,
   );
 
-  expect(screen.getByRole("button", { name: "Commit" }).getAttribute("title")).toBe(reason);
-  expect(screen.queryByText(reason)).toBeNull();
+  const commit = screen.getByRole("button", { name: "Commit" });
+  expect(commit.getAttribute("title")).toBe(reason);
+  const scroll = HTMLElement.prototype.scrollIntoView;
+  HTMLElement.prototype.scrollIntoView = vi.fn();
+  act(() => commit.focus());
+  expect(screen.getByRole("tooltip").textContent).toBe(reason);
+  HTMLElement.prototype.scrollIntoView = scroll;
+});
+
+test("a disabled commit remains keyboard reachable and shows its reason on focus", () => {
+  const reason = "Stage a cell first.";
+  render(
+    <ActionButton tone="commit" label="push" reason={reason} disabled onClick={() => undefined} />,
+  );
+
+  const button = screen.getByRole("button", { name: "push" });
+  expect(button.getAttribute("aria-disabled")).toBe("true");
+  expect(button.hasAttribute("disabled")).toBe(false);
+  act(() => button.focus());
+  expect(screen.getByRole("tooltip").textContent).toBe(reason);
 });
 
 test("a collapsed flank keeps its shortcut registration and hides its body", () => {

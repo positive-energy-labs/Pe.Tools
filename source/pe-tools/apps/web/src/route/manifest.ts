@@ -77,7 +77,7 @@ export interface Ctx<W, R extends string, P> {
   /** The command lane on the Work document, one of the Work spec's own commands. */
   readonly command: (name: string, input?: unknown) => Promise<Refusal | null>;
   /** Publishes action progress only while its original Target, Work, and user Page remain current. */
-  readonly setPage: (next: Partial<P>) => void;
+  readonly setPage: (next: Partial<P>, guard?: readonly (keyof P)[]) => void;
 }
 
 import { DEFAULT_WAIT_S, HOST_READ_WAIT_S, NATIVE_APPLY_WAIT_S, NATIVE_READ_WAIT_S } from "./waits";
@@ -516,8 +516,8 @@ export function entityRoute<W, const R extends string, P extends object, const A
     dirties: [],
     count: (ctx) => stagedCount(ctx) || null,
     ready: (ctx) => {
-      // Staged work IS the spec; the pod holds the run, not a member.
-      if (stagedCount(ctx)) return ctx.page.pod ? null : "choose the pod the run is filed in";
+      // Staged work is a supplied draft. It can plan without filing a member or choosing a Pod.
+      if (stagedCount(ctx)) return null;
       return plan ? savedSpec(ctx) : "nothing is staged to plan";
     },
     run: async (ctx) => {
@@ -528,7 +528,12 @@ export function entityRoute<W, const R extends string, P extends object, const A
         : await plan!.read(ctx as never, sourceOf(ctx));
       // Staged cells are planned where they are edited: the sheet opens over that stage, so
       // cancel leaves the cells editable and the draft verbs offered (F-B-8).
-      ctx.setPage({ ...(stagedCount(ctx) ? {} : { stage: "apply" }), confirming: true, sheet });
+      ctx.setPage({ ...(stagedCount(ctx) ? {} : { stage: "apply" }), confirming: true, sheet }, [
+        "stage",
+        "pod",
+        "path",
+        "selection",
+      ]);
     },
   };
   const apply: RouteAction<unknown, string, EntityPage, never> = {

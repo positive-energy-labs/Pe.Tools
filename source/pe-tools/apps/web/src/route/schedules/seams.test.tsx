@@ -92,20 +92,17 @@ test("no Work is subscribed and no bridge is claimed before a reading gives the 
       <LiveScheduleGridWorkspace />
     </RegistryContext.Provider>,
   );
-  await screen.findByText("bridge connecting");
-  // The document-scoped slice used to open here and report "bridge connected" over Work that
-  // schedule.grid.push refuses for having no workspaceId.
-  expect(screen.queryByText("bridge connected")).toBeNull();
+  await screen.findByText("connecting");
+  // The document-scoped slice used to open here over Work that schedule.grid.push refuses for
+  // having no workspaceId.
   expect(opened.filter((url) => decodeURIComponent(url).includes("schedules"))).toEqual([]);
   mounted.unmount();
 });
 
-test("two authored patches fired without awaiting both land, and a refetch is not a disconnection", async () => {
+test("two authored patches fired without awaiting both land", async () => {
   const f = await setup();
   stubBrowser(f.app);
   await f.patch([{ path: ["cells"], value: {} }]);
-  const connected: (boolean | null)[] = [];
-  const refreshing: boolean[] = [];
   let handle!: ScheduleGridState;
   const mounted = render(
     <RegistryContext.Provider value={appAtomRegistry}>
@@ -116,17 +113,12 @@ test("two authored patches fired without awaiting both land, and a refetch is no
         target={JSON.stringify({ kind: "open", ref: f.b })}
         render={(state) => {
           handle = state;
-          connected.push(state.connected);
-          refreshing.push(state.refreshing);
           return <ScheduleGridWorkspace state={state} />;
         }}
       />
     </RegistryContext.Provider>,
   );
-  await screen.findByText("bridge connected");
   await screen.findByDisplayValue("100 VA");
-  connected.length = 0;
-  refreshing.length = 0;
 
   // Two gestures in one tick, exactly as the grid fires them: neither awaits the other.
   let both!: Awaited<ReturnType<typeof Promise.all<ReturnType<ScheduleGridState["apply"]>[]>>>;
@@ -141,43 +133,7 @@ test("two authored patches fired without awaiting both land, and a refetch is no
   expect(doc.cells["1::2"]?.staged?.value).toBe("175 VA");
   expect(doc.cells["1::1"]?.staged?.value).toBe("P-2");
 
-  // Subscription changes can briefly re-establish the shared Reading stream, but the Work does
-  // not become a dead bridge and settles current without another gesture.
-  await vi.waitFor(() => expect(handle.refreshing).toBe(false));
-  expect(connected).toContain(true);
-
   mounted.unmount();
-});
-
-test("a re-establishing stream reads as refreshing, not as a dead bridge", () => {
-  vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => undefined });
-  // The refusal is real — an undeclared write is refused while the resource is stale — but the
-  // operator was told "nothing arrives and nothing can be pushed", which reads as a lost session.
-  render(
-    <ScheduleGridWorkspace
-      state={{
-        slice: null,
-        revision: null,
-        hydrated: true,
-        refreshing: true,
-        peaActive: false,
-        connected: false,
-        failure: null,
-        apply: async () => ({ code: "not-ready", message: "stale" }),
-        execute: async () => null,
-        snapshot: null,
-        catalog: null,
-        busy: null,
-        blockedBecause:
-          "The route-state stream is re-establishing — writes are refused until it settles",
-      }}
-    />,
-  );
-  expect(screen.getByText("bridge refreshing")).toBeTruthy();
-  expect(screen.queryByText("bridge disconnected")).toBeNull();
-  const push = screen.getByRole("button", { name: /push 0 to Revit/i });
-  expect(push.hasAttribute("disabled")).toBe(true);
-  expect(push.getAttribute("title")).toContain("re-establishing");
 });
 
 test("the original unresolved receipt still blocks apply after the address changes and returns", async () => {
@@ -199,7 +155,8 @@ test("the original unresolved receipt still blocks apply after the address chang
       />
     </RegistryContext.Provider>
   );
-  const recover = "Recover or resume the original receipt before a new apply";
+  // The unresolved receipt is the one status the audit draws: "Action <id> / running".
+  const receipt = () => screen.queryByText(/^Action .+ \//);
   const mounted = render(view(f.scope.work));
   let pushed: Promise<unknown> | undefined;
   try {
@@ -207,24 +164,32 @@ test("the original unresolved receipt still blocks apply after the address chang
     await act(async () => {
       await handle.apply([{ path: ["cells", "1::2", "staged"], value: { value: "175 VA" } }]);
     });
-    await vi.waitFor(() => expect(handle.blockedBecause).toBeNull());
+    expect(receipt()).toBeNull();
     f.hold();
-    pushed = handle.execute("push");
-    await vi.waitFor(() => expect(handle.blockedBecause).toBe(recover), { timeout: 10_000 });
+    // Press until `ready` lets it run; the held run is the one that does not answer.
+    await vi.waitFor(
+      async () => {
+        pushed = handle.execute("push");
+        const early = await Promise.race([pushed, new Promise((r) => setTimeout(r, 200, "held"))]);
+        expect(early).toBe("held");
+      },
+      { timeout: 10_000 },
+    );
+    await vi.waitFor(() => expect(receipt()).not.toBeNull(), { timeout: 10_000 });
 
     // A different schedule is a different Work store; it must not inherit this one's receipt…
     mounted.rerender(view("schedule:elsewhere"));
-    await vi.waitFor(() => expect(handle.blockedBecause).not.toBe(recover));
+    await vi.waitFor(() => expect(receipt()).toBeNull());
     // …and coming back must not have erased it.
     mounted.rerender(view(f.scope.work));
-    await vi.waitFor(() => expect(handle.blockedBecause).toBe(recover), { timeout: 10_000 });
+    await vi.waitFor(() => expect(receipt()).not.toBeNull(), { timeout: 10_000 });
   } finally {
     f.release();
     // Let the held native call finish before the fixture removes its temp workspace.
     await pushed?.catch(() => undefined);
     mounted.unmount();
   }
-});
+}, 30_000);
 
 test("the apply queue keeps an explicit expectedRevision explicit and does not poison the next write", async () => {
   const f = await setup();
@@ -407,38 +372,4 @@ test("an action's write follows the owner's own writes past its snapshot, and a 
     }
     mounted.unmount();
   }
-});
-
-test("a push run line says where its receipt lives and each cell before → after", async () => {
-  const { pushRunLine } = await import("./manifest");
-  const cells = [{ cell: "2::1", before: "R-32", after: "R-454B" }];
-  expect(pushRunLine({ podId: "demo", outcome: "Succeeded", cells }, "output/run-1")).toBe(
-    "Succeeded · demo · output/run-1/receipt.json · 2::1 R-32 → R-454B",
-  );
-  expect(pushRunLine({ podId: null, outcome: "Succeeded", cells }, null)).toBe(
-    "Succeeded · action receipt (no pod bound) · 2::1 R-32 → R-454B",
-  );
-});
-
-test("a refused cell reads refused with its reason, keyed on its code when it carries one", async () => {
-  const { pushRunLine } = await import("./manifest");
-  const cells = [
-    { cell: "7::1", before: "Main", after: "R7" },
-    {
-      cell: "8::1",
-      before: "Main",
-      after: "oob",
-      error: "Expected target evidence is stale: element 1 changed",
-      code: "stale-staged-cell",
-    },
-    {
-      cell: "9::1",
-      before: "Main",
-      after: "oob",
-      error: "Expected target evidence is stale: element 2 changed",
-    },
-  ];
-  expect(pushRunLine({ podId: null, outcome: "Succeeded", cells }, null)).toBe(
-    "Partly applied · action receipt (no pod bound) · 7::1 Main → R7, 8::1 refused (stale), 9::1 refused (Expected target evidence is stale)",
-  );
 });

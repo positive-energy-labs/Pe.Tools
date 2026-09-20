@@ -22,6 +22,7 @@ import type {
   SettingsSchema,
   SettingsValidate,
 } from "@pe/host-contracts/generated";
+import type { PodDraftSource, PodMemberSource } from "@pe/agent-contracts";
 import { LocalOpError } from "./local-error.ts";
 import { productPodsRootPath } from "./product-paths.ts";
 import {
@@ -198,7 +199,7 @@ function parseReceipt(content: string): PodReceipt | string {
                 : null,
           };
     return {
-      podId: text(value.podId),
+      podId: typeof value.podId === "string" ? value.podId : null,
       ...member,
       operation: value.operation,
       planHash: typeof value.planHash === "string" ? value.planHash : null,
@@ -321,13 +322,20 @@ export const composeMember = Effect.fnUntraced(function* (
   ctx: PodContext = {},
   capturedSource?: PodMemberComposeResponse["source"],
 ) {
-  const saved = request.content == null ? yield* readMember(request, ctx) : null;
+  const saved =
+    request.content == null
+      ? request.pod
+        ? yield* readMember({ pod: request.pod, path: request.path }, ctx)
+        : yield* Effect.fail(
+            new LocalOpError("pod.member.compose", "A saved member requires its pod id.", 400),
+          )
+      : null;
   const content = saved?.content ?? request.content!;
   const bytesBase64 = saved?.bytesBase64 ?? Buffer.from(content, "utf8").toString("base64");
   let source =
     capturedSource ??
     ({
-      id: request.pod,
+      id: request.pod ?? null,
       path: request.path,
       sha256: saved?.sha256 ?? sha256(content),
       bytesBase64,
@@ -380,7 +388,7 @@ export const composeMember = Effect.fnUntraced(function* (
         ),
       );
       dependencies = [...result.dependencies];
-      source = result.source;
+      source = { ...result.source, id: result.source.id ?? null };
       composed = result.composed == null ? undefined : JSON.parse(result.composed);
     }
   }
@@ -431,13 +439,13 @@ export const composeMember = Effect.fnUntraced(function* (
 
 /** The composed spec an engine consumes; refuses anything that did not compose cleanly. */
 export const composedSpec = Effect.fnUntraced(function* (
-  member: PodMember & ({ sha256: string } | { content: string }),
+  member: PodMemberSource | PodDraftSource,
   ctx: PodContext,
 ) {
   let result: PodMemberComposeResponse;
   if ("content" in member) {
-    // A supplied draft: its bytes are the input, captured as SuppliedDraft; the pod must exist to hold the run.
-    yield* podFolder(member.pod, ctx);
+    // A supplied draft may carry real pod context for @local; otherwise its run is operation-owned.
+    if (member.pod) yield* podFolder(member.pod, ctx);
     result = yield* composeMember(member, ctx);
   } else {
     const saved = yield* readMember(member, ctx);

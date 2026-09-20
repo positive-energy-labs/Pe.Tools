@@ -79,6 +79,9 @@ public class FamilyProcessingContext {
 
     public long? LoadedFamilyId { get; internal set; }
 
+    /// <summary>Failure text from LoadFamily when Revit posted errors.</summary>
+    public string? LoadFailureText { get; internal set; }
+
     /// <summary>Artifact manifest generated for this family run, when output writing is enabled.</summary>
     public FamilyArtifactManifest? Artifacts { get; internal set; }
 

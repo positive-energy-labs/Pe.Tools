@@ -59,7 +59,7 @@ const SIMULATED_READS = [
 ];
 
 /** The composed source a native apply receives; the simulated engine reads its root. */
-type Captured = { id: string; path: string; sha256: string; bytesBase64: string };
+type Captured = { id: string | null; path: string; sha256: string; bytesBase64: string };
 type RunSource = {
   root: Captured & { origin: "SavedMember" | "SuppliedDraft" };
   dependencies: Captured[];
@@ -284,19 +284,17 @@ export async function createDemoOwner(parent: string, raw: unknown) {
     let nativeModel = opened?.content ?? "{}";
     // The simulated schedule's cells; a push edits them so the readback shows the new value.
     const rows = DEMO_ROWS.map((row) => [...row]);
+    const scheduleWork = new Set<string>();
     let simulatedPlan: { hash: string; spec: string } | undefined;
     // Every owner but `family` holds a project document, so the project engines answer there.
     const project = seed.route !== "family";
-    /**
-     * The engine files one run per apply in the source pod (dogma law 10). Only an engine writes
-     * `output/`, so the simulated engine writes the receipt itself, inside this instance's root.
-     */
+    /** The simulated engine files saved-member runs in their pod and podless draft runs in the demo owner's pod. */
     const fileRun = async (operation: string, source: RunSource, planHash: string | null) => {
       verifyCaptured(source);
       const { root } = source;
       const runId = `${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}`;
       const file = await settings.memberPath({
-        pod: root.id,
+        pod: root.id ?? id,
         path: `output/${runId}/receipt.json`,
       });
       await mkdir(join(file, ".."), { recursive: true });
@@ -309,15 +307,31 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         }),
       );
       await writeFile(
+        join(file, "..", "input.json"),
+        JSON.stringify({
+          operation,
+          source: {
+            kind: "pod-composition",
+            origin: root.origin,
+            ...(root.id ? { pod: root.id } : {}),
+            path: root.path,
+            sha256: root.sha256,
+          },
+          files: [],
+        }),
+      );
+      await writeFile(
         file,
         JSON.stringify(
           {
             podId: root.id,
-            memberPath: root.path,
-            // As `PodReceipt.ForSource`: a draft never claims a saved member's hash.
             ...(root.origin === "SuppliedDraft"
-              ? { memberSha256: null, origin: "SuppliedDraft" }
-              : { memberSha256: root.sha256, origin: "SavedMember" }),
+              ? { memberPath: null, memberSha256: null, origin: "SuppliedDraft" }
+              : {
+                  memberPath: root.path,
+                  memberSha256: root.sha256,
+                  origin: "SavedMember",
+                }),
             operation,
             planHash,
             outcome: "Succeeded",
@@ -438,7 +452,9 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                   familyId: seed.readings.families.indexOf(familyName) + 1,
                   familyName,
                   planHash: `${planned.hash}:${familyName}`,
-                  changes: [{ section: "types", key: "Width", kind: "set" }],
+                  changes: [
+                    { section: "types", key: "Width", kind: "set", before: "1in", after: "2in" },
+                  ],
                   runEffects: [],
                   warnings: [],
                   refusals:
@@ -646,6 +662,11 @@ export async function createDemoOwner(parent: string, raw: unknown) {
               const schedule =
                 DEMO_SCHEDULES.find((row) => row.scheduleId === query.scheduleIds?.[0]) ??
                 DEMO_SCHEDULES[0]!;
+              scheduleWork.add(
+                `schedule:${createHash("sha256")
+                  .update(canonicalRouteInput([at, `demo-schedule-${schedule.scheduleId}`]))
+                  .digest("hex")}`,
+              );
               value = {
                 documentTitle: "Isolated demo (simulated)",
                 entries: [
@@ -890,7 +911,11 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       work === undefined ? { route, target } : { route, target, work };
     const localScope = (value: WorkKey) =>
       canonicalRouteInput(workKeyOf(value)) === canonicalRouteInput(workKeyOf(scope)) ||
-      value.target === at;
+      value.target === at ||
+      (value.route === scheduleGridRouteState.route &&
+        value.target === null &&
+        value.work !== undefined &&
+        scheduleWork.has(value.work));
     const routes = new Set([route, scheduleGridRouteState.route]);
     const observe: ResourceObserver = (request, publish) => {
       const targetMatches = (ref: typeof target) =>

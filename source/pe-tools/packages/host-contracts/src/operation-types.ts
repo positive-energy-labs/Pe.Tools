@@ -182,11 +182,12 @@ export const podRunOutcomeSchema = Schema.Literals(["Succeeded", "Failed", "Canc
 
 /**
  * What `PodRuns.WriteReceipt` writes into `output/<runId>/receipt.json`. `memberSha256` names saved
- * bytes, so only a SavedMember run carries it. `origin` is null when the writer recorded none. The
- * member fields name what the run consumed, so an Operation run (it consumed no member) has none.
+ * bytes, so only a SavedMember run carries it. `podId` is null when a supplied draft was not filed
+ * in a pod. `origin` is null when the writer recorded none. The member fields name what the run
+ * consumed, so an Operation run (it consumed no member) has none.
  */
 const podReceiptFields = {
-  podId: Schema.String,
+  podId: Schema.NullOr(Schema.String),
   operation: Schema.String,
   planHash: Schema.NullOr(Schema.String),
   outcome: podRunOutcomeSchema,
@@ -270,7 +271,8 @@ export const podMemberWrittenSchema = Schema.Struct({
 export type PodMemberWritten = Schema.Schema.Type<typeof podMemberWrittenSchema>;
 
 export const podMemberComposeRequestSchema = Schema.Struct({
-  pod: Schema.String,
+  /** Real pod context for a saved member or @local composition; drafts may omit it. */
+  pod: Schema.optional(Schema.String),
   path: Schema.String,
   /** The unsaved draft; absent composes the saved bytes. */
   content: Schema.optional(Schema.NullOr(Schema.String)),
@@ -286,7 +288,7 @@ export const podMemberComposeResponseSchema = Schema.Struct({
   schemaJson: Schema.NullOr(Schema.String),
   composed: Schema.NullOr(Schema.String),
   source: Schema.Struct({
-    id: Schema.String,
+    id: Schema.NullOr(Schema.String),
     path: Schema.String,
     sha256: Schema.String,
     bytesBase64: Schema.String,

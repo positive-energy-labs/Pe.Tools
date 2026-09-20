@@ -32,6 +32,8 @@ export interface ChatRouteDeps {
    * action runs the session directly.
    */
   send?: (input: PromptInput) => Promise<void>;
+  /** The provider's cancel, which re-reads the thread after runtime abort settles. */
+  cancel?: () => void | Promise<void>;
   /** Whether the thread holds any message; an empty thread has nothing to fork. */
   hasMessages?: boolean;
   /** The provider's thread verbs; absent on the static registration. */
@@ -95,7 +97,8 @@ export const chatManifest = (
         dirties: ["receipts"],
         ready: () => CHAT_ACTIONS.cancel.ready(context),
         run: async () => {
-          await CHAT_ACTIONS.cancel.run(context);
+          if (deps.cancel) await deps.cancel();
+          else await CHAT_ACTIONS.cancel.run(context);
         },
       },
       new: {

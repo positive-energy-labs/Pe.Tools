@@ -11,6 +11,7 @@ import {
   endParkedTurn,
   projectThreadMessages,
   readToolResult,
+  selectEndedCalls,
 } from "../src/thread-state.ts";
 
 type ThreadMessage = Awaited<ReturnType<AgentController["queryThreadMessages"]>>[number];
@@ -68,6 +69,54 @@ test("threshold results and failures stay inline", () => {
   expect(projected.deferredResults).toEqual([]);
   for (const message of projected.messages)
     expect(message.content.parts[0]).toHaveProperty("toolInvocation.result");
+});
+
+test("a stored suspension remains an expired ask when its setting record is missing", async () => {
+  const message = invocation("message", "ask", undefined, "call");
+  const part = message.content.parts[0];
+  if (part?.type === "tool-invocation") part.toolInvocation.toolName = "ask_user";
+  message.content.metadata = { suspendedTools: { ask: { toolName: "ask_user" } } };
+  const session = {
+    displayState: {
+      get: () => ({
+        isRunning: false,
+        activeTools: new Map(),
+        pendingSuspensions: new Map(),
+      }),
+    },
+    suspensions: { has: () => false },
+    thread: {
+      getSetting: () => Promise.resolve(undefined),
+    },
+  } as never;
+
+  await expect(selectEndedCalls([message], session)).resolves.toEqual({
+    expiredAsks: [{ messageId: "message", toolCallId: "ask", toolName: "ask_user" }],
+    cancelledCalls: [],
+  });
+});
+
+test("a stale display suspension cannot keep a cancelled stored ask live", async () => {
+  const message = invocation("message", "ask", undefined, "call");
+  const part = message.content.parts[0];
+  if (part?.type === "tool-invocation") part.toolInvocation.toolName = "ask_user";
+  message.content.metadata = { suspendedTools: { ask: { toolName: "ask_user" } } };
+  const session = {
+    displayState: {
+      get: () => ({
+        isRunning: false,
+        activeTools: new Map(),
+        pendingSuspensions: new Map([["ask", {}]]),
+      }),
+    },
+    suspensions: { has: () => false },
+    thread: { getSetting: () => Promise.resolve(undefined) },
+  } as never;
+
+  await expect(selectEndedCalls([message], session)).resolves.toEqual({
+    expiredAsks: [{ messageId: "message", toolCallId: "ask", toolName: "ask_user" }],
+    cancelledCalls: [],
+  });
 });
 
 test("large strings report characters without copying a preview", () => {

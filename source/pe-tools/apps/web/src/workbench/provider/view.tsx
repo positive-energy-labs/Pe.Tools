@@ -1,4 +1,4 @@
-import { CHAT_ACTIONS } from "../actions";
+import { cancelAndRefresh, CHAT_ACTIONS } from "../actions";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { MastraClient, type PermissionPolicy, type ToolCategory } from "@mastra/client-js";
@@ -144,12 +144,14 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [displayKnown, invalidate, session, store, threadPending, chat.display],
   );
 
-  const cancel = useCallback(() => {
+  const cancel = useCallback(async () => {
     if (!session) return;
-    void CHAT_ACTIONS.cancel
-      .run({ session, display: chat.display })
-      .catch((caught: unknown) => setError(errorMessage(caught)));
-  }, [chat.display, session]);
+    try {
+      await cancelAndRefresh({ session, display: chat.display }, invalidate);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }, [chat.display, invalidate, session]);
 
   const newThread = useCallback(() => {
     void gotoThread(crypto.randomUUID());

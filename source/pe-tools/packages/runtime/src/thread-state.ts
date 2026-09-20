@@ -150,12 +150,14 @@ export function recordCalls(
  */
 export async function selectEndedCalls(
   messages: ThreadMessage[],
-  session: Pick<Session, "displayState" | "thread">,
+  session: Pick<Session, "displayState" | "suspensions" | "thread">,
 ): Promise<{ expiredAsks: ExpiredAsk[]; cancelledCalls: CancelledCall[] }> {
   const display = session.displayState.get();
   const live = new Set([
     display.pendingApproval?.toolCallId,
-    ...display.pendingSuspensions.keys(),
+    ...[...display.pendingSuspensions.keys()].filter((toolCallId) =>
+      session.suspensions.has({ toolCallId }),
+    ),
     ...(display.isRunning ? display.activeTools.keys() : []),
   ]);
   const unfinished = messages.flatMap((message) =>
@@ -166,7 +168,12 @@ export async function selectEndedCalls(
       const unanswered = state === "result" && isExpiredResult(part.toolInvocation.result);
       if (state !== "call" && state !== "partial-call" && !unanswered) return [];
       if (live.has(toolCallId)) return [];
-      return [{ messageId: message.id, toolCallId, toolName }];
+      const suspended = message.content.metadata?.suspendedTools as
+        | Record<string, unknown>
+        | undefined;
+      return [
+        { messageId: message.id, toolCallId, toolName, suspended: toolCallId in (suspended ?? {}) },
+      ];
     }),
   );
   await recording.get(session);
@@ -179,9 +186,13 @@ export async function selectEndedCalls(
     ),
   ]);
   return {
-    expiredAsks: unfinished.filter((_, at) => asked[at] === true),
+    expiredAsks: unfinished
+      .filter((call, at) => call.suspended || asked[at] === true)
+      .map(({ suspended: _, ...call }) => call),
     // An ask a cancel ended is an expired ask; a cancelled call is one nobody still had to answer.
-    cancelledCalls: unfinished.filter((_, at) => asked[at] !== true && cancelled[at] === true),
+    cancelledCalls: unfinished
+      .filter((call, at) => !call.suspended && asked[at] !== true && cancelled[at] === true)
+      .map(({ suspended: _, ...call }) => call),
   };
 }
 

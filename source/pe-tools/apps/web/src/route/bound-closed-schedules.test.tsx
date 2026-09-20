@@ -6,6 +6,12 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { cleanup, render, screen } from "@testing-library/react";
 import { RegistryContext } from "@effect/atom-react";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRouter,
+  RouterProvider,
+} from "@tanstack/react-router";
 
 import { appAtomRegistry } from "#/route";
 import { dirty } from "#/readings";
@@ -71,22 +77,28 @@ function stubBrowser(app: { fetch: (request: Request) => Response | Promise<Resp
 test("/schedules with a closed binding opens nothing and says why, in the one sentence", async () => {
   const f = await setup();
   stubBrowser(f.app);
+  // The real /schedules page: the Situation says the binding, inside a router.
+  const target = JSON.stringify({ kind: "open", ref: f.b });
+  const router = createRouter({
+    routeTree: createRootRoute({
+      component: () => <LiveScheduleGridWorkspace framed url={false} target={target} />,
+    }),
+    history: createMemoryHistory({ initialEntries: ["/schedules"] }),
+  });
+  await router.load();
   render(
     <RegistryContext.Provider value={appAtomRegistry}>
-      <LiveScheduleGridWorkspace target={JSON.stringify({ kind: "open", ref: f.b })} />
+      <RouterProvider router={router} />
     </RegistryContext.Provider>,
   );
-  await screen.findByText("bridge connecting", undefined, { timeout: 10_000 });
-  await vi.waitFor(() => expect(screen.queryByText(/Select an available document/)).toBeNull(), {
-    timeout: 10_000,
-  });
+  await screen.findAllByText("no schedule open", undefined, { timeout: 10_000 });
   f.reopen();
   dirty({ kind: "inventory" });
   await vi.waitFor(
     () =>
       expect(
-        screen.getByText(/the document this page was bound to closed \(Same · open-B/),
-      ).toBeTruthy(),
+        screen.getAllByText(/the document this page was bound to closed \(Same · open-B/),
+      ).not.toHaveLength(0),
     { timeout: 10_000 },
   );
 }, 30_000);

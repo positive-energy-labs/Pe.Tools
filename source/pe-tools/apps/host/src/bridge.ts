@@ -66,6 +66,7 @@ export class BridgeError {
       readonly issues?: BridgeResponse["issues"];
       readonly nativeOutcome?: string;
       readonly notDispatched?: true;
+      readonly dispatched?: true;
       readonly result?: unknown;
       readonly resolvedTarget?: { readonly session: string; readonly document: string | null };
     } = {},
