@@ -2,7 +2,7 @@
  * THE STAGED APPLY'S OUTCOME (F-J3-3 / F-J3-4, exec-draft's web meaning). A staged sheet applies
  * as one `families.apply` action per plan. The verb's outcome counts per-family receipts across
  * all of them and names each failed family with its reason; one action's reason never stands for
- * the verb. A refusal (failed with no steps: nothing ran) is not a failure.
+ * the verb. A proven non-dispatch is a refusal, not a failure.
  */
 import { ffReceiptSchema, type ActionReceipt } from "@pe/agent-contracts";
 
@@ -18,6 +18,7 @@ export function applyOutcome(runs: readonly PlanRun[], planned: number): Refusal
   let applied = 0;
   const failed: string[] = [];
   const refused: string[] = [];
+  let effectsUnproven = false;
   for (const { families, action } of runs) {
     if (action.state === "succeeded") {
       const step = action.steps.find(
@@ -33,9 +34,14 @@ export function applyOutcome(runs: readonly PlanRun[], planned: number): Refusal
             `${receipt.familyName} (${receipt.error ?? receipt.errors.join(", ") ?? "no reason given"})`,
           );
       }
-    } else if (action.state === "failed" && action.steps.length === 0) {
+    } else if (
+      action.state === "failed" &&
+      action.notDispatched === true &&
+      action.steps.length === 0
+    ) {
       refused.push(action.error);
     } else {
+      if (!(action.state === "failed" && action.notDispatched === true)) effectsUnproven = true;
       const reason = "error" in action ? action.error : `families.apply ${action.state}`;
       for (const name of families) failed.push(`${name} (${reason})`);
     }
@@ -44,7 +50,10 @@ export function applyOutcome(runs: readonly PlanRun[], planned: number): Refusal
   if (!applied && !failed.length)
     return refuse("not-ready", `refused — nothing ran: ${[...new Set(refused)].join("; ")}`);
   if (!applied && !refused.length)
-    return refuse("failed", `failed in Revit — nothing changed: ${failed.join("; ")}`);
+    return refuse(
+      "failed",
+      `failed in Revit — ${effectsUnproven ? "effects unproven" : "nothing changed"}: ${failed.join("; ")}`,
+    );
   const notRun = refused.length ? `; not run: ${[...new Set(refused)].join("; ")}` : "";
   return refuse(
     "partial",

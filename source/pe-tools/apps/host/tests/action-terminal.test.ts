@@ -41,6 +41,16 @@ const answer = (outcome: Outcome) => {
   if (outcome === "cancelled") throw new BridgeError("cancelled", 499);
   throw new BridgeError("reply lost", 503);
 };
+
+const failedStep = (step: ActionStep): ActionStep => ({
+  id: step.id,
+  kind: step.kind,
+  key: step.key,
+  input: step.input,
+  state: "failed",
+  error: "native failed",
+  status: 409,
+});
 const terminal = (row: ActionReceipt): Terminal => ({
   state: row.state,
   notDispatched: "notDispatched" in row && row.notDispatched === true,
@@ -155,6 +165,28 @@ test.each(recovery)("recovery %j settled as %j", async (steps, settled, expected
   });
   if (expected === "throws") await expect(recovering).rejects.toThrow();
   else expect(terminal(await recovering)).toEqual(expected);
+});
+
+test("recovery keeps an authoritative native failure without inventing non-dispatch", async () => {
+  const path = await journalPath();
+  const journal = new ActionJournal(path);
+  const id = randomUUID();
+  await journal.admit(
+    admission(id),
+    async () => ({}),
+    async (execution) => {
+      await execution.step("native", "step-0", {}, async () => answer("unknown"));
+    },
+  );
+  await journal.wait(id);
+
+  const recovered = await journal.recover(id, async (step) => ({
+    step: failedStep(step),
+    evidence: { verdict: "failed" },
+  }));
+
+  expect(recovered).toMatchObject({ state: "failed", error: "native failed", status: 409 });
+  expect(recovered).not.toHaveProperty("notDispatched");
 });
 
 // Restart: a row still running when the host stops, reloaded from disk.
