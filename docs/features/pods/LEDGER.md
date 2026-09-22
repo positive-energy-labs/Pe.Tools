@@ -68,3 +68,4 @@ Rewritten 2026-09-16 after the pod/product boundary grill. Git holds the earlier
 - Migrate the user's local `OneDrive/Documents/Pe.Tools` to `Pods/<folder>` shape by a one-shot destructive script after committing; the old tree is deleted.
 - Prove actual Family Foundry and Schedules operations with current APS resolution in a controlled checkout session; constructor, deterministic, and compile checks do not prove this workflow.
 - Add Git/cloud transport only when its concrete workflow is selected; archive transport is the present carrier.
+- 2026-09-21: the `member` Reading kind in `source/pe-tools/packages/agent-contracts/src/reading.ts:79` has no server. Pod reads stay host-local with no Reading; delete the kind at the next contracts sweep. Promoted from the deleted campaign map.
