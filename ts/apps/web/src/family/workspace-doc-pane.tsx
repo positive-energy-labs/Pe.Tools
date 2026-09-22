@@ -1,4 +1,4 @@
-import { settingsFieldPointer } from "@pe/agent-contracts";
+import { settingsFieldPointer, showScheduleCellValue } from "@pe/agent-contracts";
 import { parameterText, paramSpec } from "#/family/family-model";
 import { EmptyState } from "#/components/lang/empty";
 import { FactChip, Tag } from "#/components/lang/chip";
@@ -10,7 +10,7 @@ import { ActionButton } from "#/components/lang/action-button";
 import { Pane } from "#/components/lang/pane";
 import { SpecSheet, SpecText, ProposalCard } from "#/family/doc-pane";
 import { NavStateCell } from "#/family/marks";
-import { cellFromTrichotomy, stagedText } from "#/components/lang/cell";
+import { cellFromTrichotomy } from "#/components/lang/cell";
 import { bindingOf, isFormula, proposalCell, type FamilyPageModel } from "#/family/model";
 import { boundParam, type GeomConstituent } from "#/family/world";
 import { useFamilyWorkspace } from "#/family/workspace-context";
@@ -97,7 +97,7 @@ export function FamilyWorkspaceDocPane() {
                     <NavStateCell
                       value={bindingOf(world, draft, part.slug, dim.property)}
                       note={`UNBOUND — the literal frozen into ${part.slug}. Editable, exactly as it is on its ghost row at the bottom of the table; editing it changes the number, not who can reach it.`}
-                      onCommit={(next) => editLiteral(part.slug, dim.property, stagedText(next))}
+                      onCommit={(next) => editLiteral(part.slug, dim.property, next)}
                     />
                   </span>
                   {bindPicker(part.slug, dim.property, dim.dataType)}
@@ -191,10 +191,13 @@ export function FamilyWorkspaceDocPane() {
                 ? {
                     displayUnit: world.live.units[name]!,
                     parse: (text: string) => parse(world.live!.units![name]!, text),
+                    // The family authors its value as a literal, so Revit's answer is written in
+                    // this document's own unit grammar — the same door typed text takes.
+                    stage: (staged) => editAuthored(name, showScheduleCellValue(staged)),
                   }
                 : undefined
             }
-            onCommit={(next) => editAuthored(name, stagedText(next))}
+            onCommit={(next) => editAuthored(name, next)}
           />
           {family.length > 0 && (
             <p className="t-small face-mono mt-1" data-tone="pea">

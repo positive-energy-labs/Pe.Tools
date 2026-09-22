@@ -189,10 +189,10 @@ export function useScheduleGridColumns(
                 // text parameter can be empty, a number or an element id cannot.
                 onCommit: lock
                   ? undefined
-                  : (staged) =>
-                      staged === "" && binding?.storageType !== "String"
+                  : (text) =>
+                      text === "" && binding?.storageType !== "String"
                         ? `a ${binding?.storageType ?? "non-text"} parameter cannot be empty in Revit — type a value`
-                        : stageEdit(key, staged),
+                        : stageEdit(key, text),
                 // A column Revit measures is a measured cell, display unit or not: with none, the
                 // cell asks for a unit rather than letting the push refuse the number later.
                 ...(binding?.displayUnit
@@ -200,6 +200,9 @@ export function useScheduleGridColumns(
                       measured: {
                         displayUnit: binding?.displayUnit ?? null,
                         parse: (text: string) => parseMeasured(key, text),
+                        // The schedule stages `{ value, unit }` itself: Revit's number and the
+                        // unit it was read in go to the apply apart, never as one string.
+                        stage: (staged: MeasuredValue) => stageEdit(key, staged),
                       },
                     }
                   : {}),

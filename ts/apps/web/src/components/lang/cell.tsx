@@ -73,6 +73,8 @@ import {
   parseCell,
   readCell,
   readMeasuredText,
+  type CellCommit,
+  type CellRefusal,
   type CellTransition,
   type CellTransitionKind,
   type StateCellProps,
@@ -86,10 +88,11 @@ export {
   fmtNum,
   parseCell,
   readMeasuredText,
-  stagedText,
   unitWord,
 } from "./cell-state";
 export type {
+  CellCommit,
+  CellRefusal,
   CellStateName,
   CellTransition,
   CellTransitionKind,
@@ -138,13 +141,6 @@ function CellKeys({
  */
 /** The drawn empty value: a stated blank, as the band draws it. */
 export const EMPTY_MARK = "–";
-
-/** A refusal a cell says: the person's sentence, and optionally words written for Pea. */
-export interface CellRefusal {
-  message: string;
-  /** Pea's words: drawn only behind a disclosure, never as the note. */
-  detail?: string;
-}
 
 /** The refusal's words for Pea, folded away under the person's sentence. */
 const RefusalDetail = ({ detail }: { detail: string }) => (
@@ -216,7 +212,10 @@ export function StateCell(props: StateCellProps) {
       <CellKeys target={focusHost} transitions={transitions} fire={fire} />
     ) : null;
 
-  const editable = props.onCommit != null && read.body !== "locked" && typeof value === "string";
+  const editable =
+    (props.onCommit != null || props.measured != null) &&
+    read.body !== "locked" &&
+    typeof value === "string";
   // Locate is a click on the cell BODY when not editing; an editable cell's input swallows its
   // own clicks (the caret owns them), so the handler can sit on the wrapper unconditionally.
   const locate =
@@ -257,30 +256,30 @@ export function StateCell(props: StateCellProps) {
           setRefusal(null);
         }
       };
-      const stage = (staged: string | { value: string; unit: string }) => {
-        const refused = props.onCommit?.(staged);
+      const send = (refused: ReturnType<CellCommit>) => {
         if (refused instanceof Promise) void refused.then(settle);
         else settle(refused);
       };
       // The measured kind: a bare number stages with the column's unit and calls nothing; anything
       // else is Revit's to read, and the typed text stays on screen until it answers.
-      if (props.measured != null) {
-        const decided = readMeasuredText(out, props.measured.displayUnit);
+      const measured = props.measured;
+      if (measured != null) {
+        const decided = readMeasuredText(out, measured.displayUnit);
         if (decided.kind === "refuse") {
           el.value = initial.current;
           setRefusal({ message: decided.reason });
-        } else if (decided.kind === "stage") stage(decided.staged);
+        } else if (decided.kind === "stage") send(measured.stage(decided.staged));
         else
-          void props.measured.parse(decided.text).then((answer) => {
+          void measured.parse(decided.text).then((answer) => {
             if (answer == null) return; // a re-read cancelled it; the cell keeps what it had
             if ("refusal" in answer) {
               el.value = initial.current;
               setRefusal({ message: answer.refusal });
-            } else stage(answer);
+            } else send(measured.stage(answer));
           });
         return;
       }
-      stage(out);
+      send(props.onCommit?.(out));
     };
     return (
       <span

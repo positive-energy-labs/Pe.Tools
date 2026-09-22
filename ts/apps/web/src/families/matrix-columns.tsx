@@ -3,6 +3,7 @@ import {
   familyCellAddress,
   familyCellKey,
   familyCellValueSchema,
+  showScheduleCellValue,
   type FamilyCellState,
 } from "@pe/agent-contracts";
 import { reviewTransitions, type CellWire } from "#/components/lang/band";
@@ -12,7 +13,6 @@ import {
   cellFromTrichotomy,
   StateCell,
   type CellRefusal,
-  stagedText,
   type CellTransition,
   type DisplayUnit,
 } from "#/components/lang/cell";
@@ -377,8 +377,9 @@ export function ProposalCell({
   /** Resolves to the write's refusal, if any: the kit then restores the drawn value and says it. */
   onCommit?: (text: string) => Promise<CellRefusal | null>;
   /**
-   * The measured kind. A family value is written in the unit grammar ("300 CFM"), so what this cell
-   * stages is exactly `stagedText` of what the kind settled on — no second value shape is needed.
+   * The measured kind, minus its staging door: a family value is WRITTEN in the unit grammar
+   * ("300 CFM"), so this cell formats what Revit answered into that literal and writes it through
+   * the same `onCommit` as typed text. No second value shape reaches the store.
    */
   measured?: { displayUnit: DisplayUnit; parse: (text: string) => Promise<MeasuredAnswer> };
 }) {
@@ -409,8 +410,12 @@ export function ProposalCell({
         capReason={lock}
         transitions={transitions}
         placeholder={proposal || staged ? current : undefined}
-        measured={measured}
-        onCommit={lock || !onCommit ? undefined : (text) => onCommit(stagedText(text))}
+        measured={
+          measured && onCommit && !lock
+            ? { ...measured, stage: (staged) => onCommit(showScheduleCellValue(staged)) }
+            : undefined
+        }
+        onCommit={lock || !onCommit ? undefined : onCommit}
         onNavigate={(direction) => move?.(direction) ?? false}
       />
     </span>

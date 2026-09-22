@@ -9,7 +9,6 @@
  * focus law). A select-shaped cell is the list grammar's `CellListSelect` (lang/list-popup).
  */
 
-import { stagedText } from "#/components/lang/cell-state";
 import { useCellNavigation } from "#/components/master-table/cell-navigation";
 import { StateCell, fmtNum } from "#/components/lang/cell";
 import type { Verdict, VerdictTone } from "#/components/master-table/model";
@@ -35,7 +34,7 @@ export function TextCell({
       value={value}
       placeholder={placeholder}
       note={title}
-      onCommit={(text) => onCommit(stagedText(text))}
+      onCommit={onCommit}
       onNavigate={(direction) => move?.(direction) ?? false}
     />
   );

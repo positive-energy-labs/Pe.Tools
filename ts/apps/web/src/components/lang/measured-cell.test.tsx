@@ -66,81 +66,78 @@ test("blank commits nothing", () => {
 
 /* ── the cell ───────────────────────────────────────────────────────────────── */
 
-test("a bare number reaches onCommit as { value, unit } with no parse call", () => {
+test("a bare number reaches measured.stage as { value, unit }, never onCommit", () => {
   const parse = vi.fn(async () => null);
-  const onCommit = vi.fn();
-  const { container } = inTable(
-    <StateCell scale="row" value="" onCommit={onCommit} measured={{ displayUnit: CFM, parse }} />,
-  );
-  type(inputOf(container), "300");
-  expect(parse).not.toHaveBeenCalled();
-  expect(onCommit).toHaveBeenCalledWith({ value: "300", unit: "CFM" });
-});
-
-test("typed text shows as typed until Revit answers, then Revit's value is what is staged", async () => {
-  const answer: MeasuredValue = { value: "635.7", unit: "CFM" };
-  const parse = vi.fn(async () => answer);
-  const onCommit = vi.fn();
-  const { container } = inTable(
-    <StateCell scale="row" value="" onCommit={onCommit} measured={{ displayUnit: CFM, parse }} />,
-  );
-  const input = inputOf(container);
-  type(input, "300 L/s");
-  expect(input.value).toBe("300 L/s"); // as typed, until the answer arrives
-  expect(onCommit).not.toHaveBeenCalled();
-  await act(async () => {});
-  expect(parse).toHaveBeenCalledWith("300 L/s");
-  expect(onCommit).toHaveBeenCalledWith(answer);
-});
-
-test("a refusal is cell-local, carries Revit's reason and stages nothing", async () => {
-  const parse = vi.fn(async () => ({ refusal: "Revit could not read 'aaa' here." }));
-  const onCommit = vi.fn();
-  const { container } = inTable(
-    <StateCell
-      scale="row"
-      value="12 CFM"
-      onCommit={onCommit}
-      measured={{ displayUnit: CFM, parse }}
-    />,
-  );
-  const input = inputOf(container);
-  type(input, "aaa");
-  await act(async () => {});
-  expect(onCommit).not.toHaveBeenCalled();
-  expect(input.value).toBe("12 CFM"); // restored, visibly
-  expect(container.textContent).toContain("Revit could not read 'aaa' here.");
-});
-
-test("a bare number in a column with no display unit refuses at the cell", () => {
+  const stage = vi.fn();
   const onCommit = vi.fn();
   const { container } = inTable(
     <StateCell
       scale="row"
       value=""
       onCommit={onCommit}
-      measured={{ displayUnit: UNITLESS, parse: vi.fn(async () => null) }}
+      measured={{ displayUnit: CFM, parse, stage }}
+    />,
+  );
+  type(inputOf(container), "300");
+  expect(parse).not.toHaveBeenCalled();
+  expect(stage).toHaveBeenCalledWith({ value: "300", unit: "CFM" });
+  // The union never reaches the plain door: a measured cell stages through its own.
+  expect(onCommit).not.toHaveBeenCalled();
+});
+
+test("typed text shows as typed until Revit answers, then Revit's value is what is staged", async () => {
+  const answer: MeasuredValue = { value: "635.7", unit: "CFM" };
+  const parse = vi.fn(async () => answer);
+  const stage = vi.fn();
+  const { container } = inTable(
+    <StateCell scale="row" value="" measured={{ displayUnit: CFM, parse, stage }} />,
+  );
+  const input = inputOf(container);
+  type(input, "300 L/s");
+  expect(input.value).toBe("300 L/s"); // as typed, until the answer arrives
+  expect(stage).not.toHaveBeenCalled();
+  await act(async () => {});
+  expect(parse).toHaveBeenCalledWith("300 L/s");
+  expect(stage).toHaveBeenCalledWith(answer);
+});
+
+test("a refusal is cell-local, carries Revit's reason and stages nothing", async () => {
+  const parse = vi.fn(async () => ({ refusal: "Revit could not read 'aaa' here." }));
+  const stage = vi.fn();
+  const { container } = inTable(
+    <StateCell scale="row" value="12 CFM" measured={{ displayUnit: CFM, parse, stage }} />,
+  );
+  const input = inputOf(container);
+  type(input, "aaa");
+  await act(async () => {});
+  expect(stage).not.toHaveBeenCalled();
+  expect(input.value).toBe("12 CFM"); // restored, visibly
+  expect(container.textContent).toContain("Revit could not read 'aaa' here.");
+});
+
+test("a bare number in a column with no display unit refuses at the cell", () => {
+  const stage = vi.fn();
+  const { container } = inTable(
+    <StateCell
+      scale="row"
+      value=""
+      measured={{ displayUnit: UNITLESS, parse: vi.fn(async () => null), stage }}
     />,
   );
   const input = inputOf(container);
   type(input, "300");
-  expect(onCommit).not.toHaveBeenCalled();
+  expect(stage).not.toHaveBeenCalled();
   expect(container.textContent).toContain("type a unit");
 });
 
 test("a re-read cancels an in-flight parse: nothing is staged and the cell keeps what it had", async () => {
   const parse = vi.fn(async () => null); // cancelled
-  const onCommit = vi.fn();
+  const stage = vi.fn();
   const { container } = inTable(
-    <StateCell
-      scale="row"
-      value="12 CFM"
-      onCommit={onCommit}
-      measured={{ displayUnit: CFM, parse }}
-    />,
+    <StateCell scale="row" value="12 CFM" measured={{ displayUnit: CFM, parse, stage }} />,
   );
   type(inputOf(container), "300 L/s");
   await act(async () => {});
-  expect(onCommit).not.toHaveBeenCalled();
+  expect(stage).not.toHaveBeenCalled();
   expect(container.textContent).not.toContain("could not");
 });

@@ -5,6 +5,18 @@ import type React from "react";
  * nothing exists to distrust, so it draws no squiggle (ruled 2026-08-16, consolidation batch). */
 export type Unsettled = "drift" | "stale" | "unverified";
 
+/** A refusal a cell says: the person's sentence, and optionally words written for Pea. */
+export interface CellRefusal {
+  message: string;
+  /** Pea's words: drawn only behind a disclosure, never as the note. */
+  detail?: string;
+}
+
+/** What typing into an editable cell commits: the text, and a refusal back or nothing. */
+export type CellCommit = (
+  text: string,
+) => string | void | Promise<string | CellRefusal | null | void>;
+
 export interface StateCellProps {
   /** The value as shown. Long values are expected — the grammar is built around them. */
   value: React.ReactNode;
@@ -88,11 +100,10 @@ export interface StateCellProps {
    * An async commit (a Work write) may return a promise of that refusal: it restores the same
    * way when the refusal arrives, so typed text is never left looking accepted.
    *
-   * A measured cell hands it `{ value, unit }` instead of the typed text — see `measured`.
+   * A measured cell never calls this — its staged value is an object, so it has its own
+   * `measured.stage`; the union stays inside the cell.
    */
-  onCommit?: (
-    staged: string | MeasuredValue,
-  ) => string | void | Promise<string | { message: string; detail?: string } | null | void>;
+  onCommit?: CellCommit;
   /**
    * THE MEASURED CELL (ruled 2026-09-22), one kind beside `numeric`. A bare number stages at once
    * with the column's display unit and never calls Revit, so the cell reads "300 CFM" the moment
@@ -107,6 +118,8 @@ export interface StateCellProps {
     displayUnit?: DisplayUnit | null;
     /** Effect-owned; null means the call was cancelled and the cell keeps what it had. */
     parse: (text: string) => Promise<MeasuredValue | { refusal: string } | null>;
+    /** Where `{ value, unit }` goes — this kind's `onCommit`, and the only door the object takes. */
+    stage: (staged: MeasuredValue) => string | void | Promise<string | CellRefusal | null | void>;
   };
   /**
    * NUMERIC COMMIT (ruled 2026-08-16, fit reviews #2 — §3's named silent-swallow defect, killed
@@ -163,13 +176,6 @@ export interface DisplayUnit {
 
 /** What a measured cell stages: `@pe/agent-contracts` `MeasuredValue`, the schedule rung itself. */
 export type { MeasuredValue };
-
-/**
- * A staged value as one line of text. The measured kind is the only one that stages an object, so
- * a cell that is not measured passes its own text straight through.
- */
-export const stagedText = (staged: string | MeasuredValue): string =>
-  typeof staged === "string" ? staged : `${staged.value} ${staged.unit}`;
 
 /** The word a display unit is drawn and staged under: its symbol when it has one, else its label. */
 export const unitWord = (unit: DisplayUnit): string | null => unit.symbol || unit.label || null;

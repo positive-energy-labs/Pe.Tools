@@ -1,5 +1,5 @@
 import { ActionButton } from "#/components/lang/action-button";
-import { StateCell, stagedText } from "#/components/lang/cell";
+import { StateCell } from "#/components/lang/cell";
 import { EmptyState } from "#/components/lang/empty";
 import { Input } from "#/components/lang/input";
 import { CellListSelect } from "#/components/lang/list-popup";
@@ -134,10 +134,7 @@ function SchemaCell({
     stagedBy: "you" as const,
     scale: "row" as const,
   };
-  if (!suggestions)
-    return (
-      <StateCell {...facts} refused={issues} onCommit={(next) => onChange(stagedText(next))} />
-    );
+  if (!suggestions) return <StateCell {...facts} refused={issues} onCommit={onChange} />;
   return (
     <CellListSelect<string>
       aria-label={path}
