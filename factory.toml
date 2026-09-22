@@ -1,0 +1,45 @@
+# The factory. Meaning lives here; measurement lives beside what it measures.
+# Design record: docs/features/factory/LEDGER.md
+
+[factory]
+ref = "main"
+poll_seconds = 5
+port = 4747
+host = "127.0.0.1"
+db = ".artifacts/factory/events.sqlite"
+
+# ---- sensors: pure reads of the tree at a commit. A command that prints one flat JSON object of numbers.
+# The command runs with cwd = a clean checkout of the sha being measured; FACTORY_SHA and FACTORY_ROOT are set.
+
+[sensor.loc]
+run = "node {root}/source/pe-tools/packages/factory/sensors/loc.ts"
+scope = ["source/**"]
+
+[sensor.markers]
+run = "node {root}/source/pe-tools/packages/factory/sensors/markers.ts"
+scope = ["source/**", "docs/**", ".agents/**", ".claude/**"]
+
+[actuator.fmt]
+run = "node {root}/source/pe-tools/node_modules/.pnpm/node_modules/oxfmt/dist/cli.js source/pe-tools/packages/factory"
+
+[actuator.echo]
+run = "node {root}/source/pe-tools/packages/factory/actuators/echo.ts"
+
+# ---- loops: trigger, sensors, setpoints. Round 1 has no actuators; a loop with no `act` only measures.
+
+[loop.watch]
+on = "merge:main"
+sense = ["loc", "markers"]
+setpoint = { "loc.total" = "down", "markers.shim" = "down", "markers.todo" = "any" }
+
+[loop.format]
+on = "merge:main"
+act = "fmt"
+gate = "auto"
+
+[loop.echo]
+on = "merge:main"
+sense = ["markers"]
+setpoint = { "markers.todo" = "<= 0" }
+act = "echo"
+gate = "human"

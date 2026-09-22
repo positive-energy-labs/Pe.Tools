@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The factory</title>
+<style>
+  :root{
+    --bg:#f6f5f1; --ink:#1d1d1b; --mute:#6b6a64; --line:#c9c7be; --rule:#9a988f;
+    --meas:#2f6fd6; --err:#c43d3d; --mat:#138a8a;
+    --mono:Consolas,"Cascadia Code",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,"Segoe UI",sans-serif}
+  .wrap{max-width:1120px;margin:0 auto;padding:28px 32px 96px}
+  header{border-bottom:2px solid var(--ink);padding-bottom:12px;margin-bottom:28px}
+  h1{margin:0 0 6px;font-size:26px;letter-spacing:-.01em}
+  .thesis{font-size:18px;font-weight:600;max-width:64ch;margin:0 0 6px}
+  .meta{font:12px var(--mono);color:var(--mute)}
+  nav{font:12px var(--mono);display:flex;gap:14px;flex-wrap:wrap;margin:12px 0 0}
+  nav a{color:var(--meas);text-decoration:none}
+  section{margin:0 0 48px;scroll-margin-top:12px}
+  h2{font:600 12px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--mute);margin:0 0 4px;border-bottom:1px solid var(--line);padding-bottom:4px}
+  h2 .n{color:var(--rule);margin-right:8px}
+  .lede{font-size:19px;font-weight:600;margin:6px 0 10px;max-width:58ch;letter-spacing:-.01em}
+  p{max-width:88ch;margin:6px 0}
+  table{border-collapse:collapse;width:100%;font-size:13px;margin:10px 0 14px}
+  th{font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mute);text-align:left;padding:6px 8px;border-bottom:1px solid var(--ink)}
+  td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  td.k,th.k{font-family:var(--mono);font-size:12.5px;white-space:nowrap}
+  .m{font-family:var(--mono);font-size:12.5px;background:#eeede8;padding:0 4px;border-radius:2px}
+  .mat{font-family:var(--mono);font-size:11.5px;color:var(--mat);white-space:nowrap}
+  .fig{background:#fff;border:1px solid var(--line);padding:12px 14px;margin:12px 0}
+  .fig figcaption{font:12px var(--mono);color:var(--mute);margin-bottom:6px}
+  .mermaid{display:flex;justify-content:center}
+  .laws{display:grid;grid-template-columns:1fr 1fr;gap:10px 24px}
+  @media (max-width:860px){.laws{grid-template-columns:1fr}}
+  .law{border-top:1px solid var(--line);padding:8px 0 4px}
+  .law b{display:block;font-size:14px}
+  .law p{font-size:13px;color:#3c3b37;margin:3px 0}
+  .law .mat{display:block;margin-top:2px}
+  pre.code{font:12.5px/1.4 var(--mono);background:#fff;border:1px solid var(--line);border-left:4px solid var(--mat);padding:12px 14px;overflow:auto;margin:10px 0}
+  pre.code i{color:var(--mute);font-style:normal}
+  .reserved{border:1px dashed var(--rule);padding:12px 14px;color:var(--mute);background:transparent}
+  .owed{color:var(--err)}
+</style>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad:true, theme:'neutral', flowchart:{curve:'basis', htmlLabels:true}, themeVariables:{fontFamily:'Consolas, ui-monospace, monospace', fontSize:'12px'} });
+</script>
+</head>
+<body><div class="wrap">
+<header>
+  <h1>The factory</h1>
+  <p class="thesis">One process measures every commit on main, spends tokens only on findings above a bar, and asks you through a pull request. It stores nothing that git or a recompute cannot give back.</p>
+  <div class="meta">Pe.Tools · 2026-09-18 · the chosen shape only · <span class="mat">teal mono</span> = the material thing behind the word · verdicts and rejected shapes: <a href="LEDGER.md">LEDGER.md</a> · sensor evidence: <a href="../../research/2026-09-17-sensor-poc-verdicts.md">sensor PoC verdicts</a></div>
+  <nav><a href="#loop">01 the loop</a><a href="#you">02 your side</a><a href="#system">03 the system</a><a href="#decl">04 declaration</a><a href="#laws">05 laws</a><a href="#stack">06 stack</a><a href="#not">07 why not the others</a><a href="#sensors">08 sensors</a></nav>
+</header>
+
+<section id="loop"><h2><span class="n">01</span>The loop</h2>
+<p class="lede">Judgment lives in two places: inside the actuator, and at the pull request. Everything else is deterministic code.</p>
+<figure class="fig"><figcaption>one run of one loop · dashed = judgment</figcaption>
+<pre class="mermaid">
+flowchart LR
+  T["trigger<br/>origin/main moved · churn · cron"] --> S["sense<br/>sensor(sha) returns findings"]
+  S --> C[("cache<br/>local jsonl · re-derivable")]
+  S --> W{"when(finding)<br/>a typed function"}
+  W -- under the bar --> L["listed on the page<br/>zero tokens · recomputed next tick"]
+  W -- over the bar · budget left --> A["actuate<br/>worktree · claude -p / codex exec / formatter"]
+  A -. model inside .-> P["proposal<br/>branch factory/loop/sha7 · gh pr create"]
+  P -. you .-> G{"pull request"}
+  G -- close + comment --> A
+  G -- squash --> M["origin/main moves"]
+  M --> T
+  style A stroke-dasharray:4 3
+  style G stroke-dasharray:4 3
+</pre></figure>
+<p>The feedback path is not a second mechanism. A squashed pull request moves main, main moving is the trigger, and the trigger runs the sensors.</p>
+</section>
+
+<section id="you"><h2><span class="n">02</span>Your side</h2>
+<p class="lede">Four verbs. Nothing else in the factory waits on you.</p>
+<table>
+<tr><th>when</th><th>you do</th><th>material</th></tr>
+<tr><td>always</td><td>Work on any number of branches. Squash each into main with a written message.</td><td class="mat">branch.main.mergeoptions --squash</td></tr>
+<tr><td>a factory pull request appears</td><td>Squash it, or close it with one sentence. Either machine, or the phone. The sentence reaches the next run of that loop.</td><td class="mat">github.com · label factory</td></tr>
+<tr><td>you want to see the repo</td><td>Open the page over the tailnet: LOC by directory and file, findings under the bar, loop state, open pull requests, history.</td><td class="mat">http://daemon:4747 · read-only</td></tr>
+<tr><td>a loop is too eager or too quiet</td><td>Edit its <span class="m">when</span>, <span class="m">on</span>, or <span class="m">budget</span>.</td><td class="mat">factory.config.ts</td></tr>
+</table>
+</section>
+
+<section id="system"><h2><span class="n">03</span>The system</h2>
+<p class="lede">Two channels share everything between machines: origin for what is durable, HTTP for what is live.</p>
+<figure class="fig"><figcaption>what reads what · the daemon writes to a local cache and to origin, nowhere else</figcaption>
+<pre class="mermaid">
+flowchart LR
+  subgraph declared["declared · on main"]
+    F["factory.config.ts<br/>typed loops and sensors"]
+  end
+  subgraph daemon["one process · @pe/factory · own clone"]
+    I["tick<br/>fetch · sense · act"]
+    H["node:http<br/>read-only page and json"]
+    C[("cache.jsonl<br/>.artifacts/factory")]
+  end
+  O[("origin<br/>main · factory/* branches · pull requests")]
+  subgraph views["views"]
+    U["page over the tailnet"]
+    GH["github.com · phone"]
+    AG["agents · /ground reads the json"]
+  end
+  F --> I
+  O -->|fetch| I
+  I -->|append| C
+  I -->|push · gh pr create| O
+  C --> H
+  H --> U
+  H --> AG
+  O --> GH
+</pre></figure>
+<p>The running factory is never the code it mutates. The daemon runs from its own clone; sensors and actuators run in a clean worktree of the measured sha.</p>
+</section>
+
+<section id="decl"><h2><span class="n">04</span>Declaration</h2>
+<p class="lede">One typed file. Adding a capability is adding an object.</p>
+<pre class="code"><i>// factory.config.ts · the whole factory</i>
+export default {
+  ref: "origin/main",
+  port: 4747,
+  sensors: { loc, hotspots },              <i>// (sha) =&gt; Finding[] · {mechanism, path, evidence}</i>
+  loops: [
+    { name: "format", on: "merge", act: fmt, gate: "auto" },
+    { name: "purge",
+      on: { churn: 500 },                  <i>// lines changed since this loop last ran</i>
+      sense: "hotspots",
+      when: f =&gt; f.evidence.churn &gt; 200 &amp;&amp; f.evidence.shims &gt; 0,   <i>// the bar</i>
+      act: purge,                          <i>// claude -p /purge &lt;path&gt;, env scrubbed of API keys</i>
+      budget: { perDay: 1 },
+      gate: "pr" },
+  ],
+} satisfies Factory</pre>
+<p>Not declared: retries (the next trigger retries by construction), branch and worktree names (derived from loop and sha), prompt text (a prompt is a skill call).</p>
+</section>
+
+<section id="laws"><h2><span class="n">05</span>Laws</h2>
+<div class="laws">
+<div class="law"><b>Store only what cannot be recomputed.</b><p>Readings and findings are a cache. Proposals are branches. Verdicts are pull request outcomes. Losing the daemon box loses nothing.</p><span class="mat">cache.jsonl · origin</span></div>
+<div class="law"><b>No model in the tick.</b><p>Triggers, bars, budgets, and dispatch are code. Your quota buys diffs, not orchestration.</p><span class="mat">src/main.ts imports nothing that talks to a model</span></div>
+<div class="law"><b>A sensor is a pure function of the sha, and it does not judge.</b><p>It returns evidence. The loop holds the bar in <span class="m">when</span>.</p><span class="mat">(sha) =&gt; Finding[]</span></div>
+<div class="law"><b>Counts are gauges, never gates.</b><p>A gate fails for the behavior you want to prevent, not for a number that is easy to move.</p><span class="mat">no setpoint · no error term</span></div>
+<div class="law"><b>Act only above the bar.</b><p>Under the bar a finding is listed and costs nothing. Over it, one actuator run within budget.</p><span class="mat">when · budget.perDay</span></div>
+<div class="law"><b>Identity is derived, never minted.</b><p>Runs, branches, and worktrees are named by loop and sha. Two machines compute the same name.</p><span class="mat">factory/loop/sha7</span></div>
+<div class="law"><b>Agents propose; you approve.</b><p>Deterministic actuators may gate themselves. Anything with a model inside waits at a pull request.</p><span class="mat">gate: "auto" | "pr"</span></div>
+<div class="law"><b>Subscriptions only, by subprocess.</b><p>Every spawned agent has API key variables removed from its environment, so billing lands on the subscription.</p><span class="mat">unset ANTHROPIC_API_KEY · ANTHROPIC_AUTH_TOKEN · OPENAI_API_KEY</span></div>
+<div class="law"><b>Cross-review is directional.</b><p>Codex drafts, Claude reviews. The inverted pair measured worse than no review.</p><span class="mat">arXiv 2607.21656</span></div>
+<div class="law"><b>One ref, squashed.</b><p>Every branch lands on main as one commit with a written message. Packages touched per merge is a reading.</p><span class="mat">git log main --stat · /history</span></div>
+</div>
+</section>
+
+<section id="stack"><h2><span class="n">06</span>Stack</h2>
+<table>
+<tr><th>noun</th><th>material</th><th>state</th></tr>
+<tr><td class="k">declaration</td><td class="mat">factory.config.ts · Node type stripping</td><td class="owed">owed · replaces factory.toml</td></tr>
+<tr><td class="k">tick</td><td class="mat">node src/main.ts · git fetch + setInterval · lock file</td><td class="owed">owed · rewrite, about 300 lines</td></tr>
+<tr><td class="k">cache</td><td class="mat">.artifacts/factory/cache.jsonl</td><td class="owed">owed · replaces events.sqlite</td></tr>
+<tr><td class="k">sensors</td><td class="mat">sensors/*.ts · git ls-files · git log --numstat</td><td>loc, markers built on factory-dev · hotspots owed</td></tr>
+<tr><td class="k">actuator</td><td class="mat">git worktree add · a command · claude -p / codex exec</td><td>fmt proven · purge owed</td></tr>
+<tr><td class="k">gate</td><td class="mat">git push · gh pr create --label factory · gh pr view --comments</td><td class="owed">owed</td></tr>
+<tr><td class="k">page</td><td class="mat">node:http · src/ui/index.html · vanilla · read-only</td><td>built on factory-dev · loses verdict verbs, gains LOC by dir and /history</td></tr>
+</table>
+</section>
+
+<section id="not"><h2><span class="n">07</span>Why not the others</h2>
+<table>
+<tr><th>shape</th><th>epitaph</th></tr>
+<tr><td class="k">SQLite event log, git notes, orphan log branch</td><td>Three answers to sharing data that is re-derivable. Notes do not fetch by default. The HTTP page already shares the live view.</td></tr>
+<tr><td class="k">own verdict buttons</td><td>Open-in-IDE runs on the daemon box and breaks from the laptop. Proposals must reach origin anyway, and a pull request has the buttons.</td></tr>
+<tr><td class="k">factory.toml</td><td>Needs a parser, path templating, and an expression evaluator for the bar. A typed object needs none.</td></tr>
+<tr><td class="k">setpoints and an error term</td><td>The sensor PoCs killed count gates. The sensors worth having are predicates.</td></tr>
+<tr><td class="k">dev, distill, release branch</td><td>All solve unreadable history. Squash to main solves it with one ref.</td></tr>
+<tr><td class="k">owed as a log</td><td>Machine findings re-derive. Human owed lines are dated bullets, and their log is <span class="m">git log -p</span>.</td></tr>
+<tr><td class="k">Temporal, Mastra, platform pile</td><td>Each adds a state owner to buy waiting that a pull request already does. The Mastra agent layer needs API keys.</td></tr>
+<tr><td class="k">GitHub Actions as the tick</td><td><span class="m">claude -p</span> needs the local subscription, and Revit needs Windows.</td></tr>
+</table>
+</section>
+
+<section id="sensors"><h2><span class="n">08</span>Sensors</h2>
+<p class="lede">Each sensor names the failure mechanism it can see. The evidence for this list is the sensor PoC verdicts.</p>
+<table>
+<tr><th>sensor</th><th>mechanism</th><th>role</th></tr>
+<tr><td class="k">loc</td><td>none; structure at a glance, by directory and file</td><td>gauge</td></tr>
+<tr><td class="k">hotspots</td><td>a large, shim-marked file that keeps changing</td><td>bar for the purge loop</td></tr>
+<tr><td class="k">radius</td><td>one merge touching many packages</td><td>gauge</td></tr>
+<tr><td class="k">repo-guards, analyzers, oxlint react rule, portable boundary</td><td>the named contract of each rule</td><td>red or green; a red is over the bar by definition</td></tr>
+<tr><td class="k">invariants plus targeted mutation</td><td>a test suite that passes bad mutants</td><td>scheduled, heavy</td></tr>
+</table>
+<p class="reserved">Deferred: a model triage score, the mining loop over closed factory pull requests, a Revit round-trip sensor with named custody.</p>
+</section>
+</div></body></html>

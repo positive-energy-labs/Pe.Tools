@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Factory</title>
+    <style>
+      :root {
+        color: #1d1d1b;
+        background: #f6f5f1;
+        font:
+          15px/1.45 system-ui,
+          sans-serif;
+      }
+      body {
+        margin: 0 auto;
+        max-width: 1100px;
+        padding: 32px;
+      }
+      h1,
+      h2 {
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      section {
+        margin-block: 32px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+      th,
+      td {
+        border-bottom: 1px solid rgb(29 29 27 / 20%);
+        padding: 8px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        font-size: 12px;
+        text-transform: uppercase;
+      }
+      .mono,
+      .number,
+      #feed {
+        font-family: ui-monospace, monospace;
+        font-variant-numeric: tabular-nums;
+      }
+      .error {
+        color: #c43d3d;
+      }
+      .stale {
+        opacity: 0.55;
+      }
+      .measured {
+        display: block;
+        font-size: 10px;
+        margin-top: 3px;
+      }
+      .path {
+        display: block;
+        font-size: 11px;
+        margin-top: 5px;
+        word-break: break-all;
+      }
+      button,
+      input {
+        background: transparent;
+        border: 1px solid rgb(29 29 27 / 35%);
+        color: inherit;
+        font: inherit;
+        padding: 5px 8px;
+      }
+      button {
+        cursor: pointer;
+      }
+      .chart {
+        border-bottom: 1px solid rgb(29 29 27 / 20%);
+        margin-block: 20px;
+      }
+      svg {
+        display: block;
+        height: 180px;
+        overflow: visible;
+        width: 100%;
+      }
+      #feed {
+        list-style: none;
+        padding: 0;
+      }
+      #feed li {
+        border-bottom: 1px solid rgb(29 29 27 / 12%);
+        padding: 6px 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Factory</h1>
+    <section>
+      <h2>Declaration</h2>
+      <div id="declaration">no declaration</div>
+    </section>
+    <section>
+      <h2>Loops</h2>
+      <div id="loops">no events yet</div>
+    </section>
+    <section>
+      <h2>Proposals</h2>
+      <div id="proposals">nothing waiting on you</div>
+    </section>
+    <section>
+      <h2>Control charts</h2>
+      <div id="charts">no events yet</div>
+    </section>
+    <section>
+      <h2>Events</h2>
+      <div id="events">no events yet</div>
+    </section>
+    <script>
+      const events = [];
+      const esc = (value) =>
+        String(value).replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
+      const payload = (event) => JSON.parse(event.payload);
+      const relative = (ts) => {
+        const seconds = Math.max(0, Math.floor((Date.now() - new Date(ts)) / 1000));
+        if (seconds < 60) return `${seconds}s ago`;
+        if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+        if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+        return `${Math.floor(seconds / 86400)}d ago`;
+      };
+      const runKinds = new Set(["acting", "proposed", "gated", "verdict", "merged", "failed"]);
+      const staleClass = (reading, tip) => (reading?.sha === tip ? "" : "stale");
+      const latestReading = (key, seq) => {
+        const [sensor, field] = key.split(".");
+        return events
+          .filter(
+            (event) =>
+              event.kind === "reading" && event.seq < seq && payload(event).sensor === sensor,
+          )
+          .map((event) => ({ event, value: payload(event).values[field] }))
+          .filter(({ value }) => value !== undefined)
+          .at(-1);
+      };
+      const latestValue = (key, seq) => latestReading(key, seq)?.value;
+      const chartProjection = (setpoints, sourceEvents) => {
+        const triggers = [
+          ...new Map(
+            sourceEvents
+              .filter((event) => event.kind === "reading")
+              .map((event) => [event.sha, { sha: event.sha }]),
+          ).values(),
+        ];
+        return Object.entries(setpoints).map(([key, rule]) => ({ key, rule, triggers }));
+      };
+      const chart = (key, rule, triggers, tip) => {
+        const [sensor, field] = key.split(".");
+        let last;
+        let lastSource;
+        const sources = [];
+        const carried = [];
+        const points = triggers.map((trigger) => {
+          const reading = events.find(
+            (event) =>
+              event.kind === "reading" &&
+              event.sha === trigger.sha &&
+              payload(event).sensor === sensor,
+          );
+          if (reading) {
+            last = payload(reading).values[field];
+            lastSource = reading;
+          }
+          sources.push(lastSource);
+          carried.push(!reading);
+          return last;
+        });
+        const setpoints = points.map((value, index) =>
+          rule === "down" ? points[index - 1] : rule === "any" ? undefined : Number(rule.slice(2)),
+        );
+        const numbers = [...points, ...setpoints].filter((value) => Number.isFinite(value));
+        const min = Math.min(...numbers, 0),
+          max = Math.max(...numbers, 1),
+          span = max - min || 1;
+        const x = (index) => 44 + index * (720 / Math.max(1, triggers.length - 1));
+        const y = (value) => 145 - ((value - min) / span) * 115;
+        const line = points
+          .map((value, index) => (Number.isFinite(value) ? `${x(index)},${y(value)}` : ""))
+          .filter(Boolean)
+          .join(" ");
+        const limit = setpoints
+          .map((value, index) => (Number.isFinite(value) ? `${x(index)},${y(value)}` : ""))
+          .filter(Boolean)
+          .join(" ");
+        const violations = new Set(
+          events
+            .filter((event) => event.kind === "error" && payload(event).values[key] > 0)
+            .map((event) => event.sha),
+        );
+        return `<div class="chart"><strong>${esc(key)}</strong> <span class="mono">${esc(rule)}</span><svg viewBox="0 0 800 170" role="img" aria-label="${esc(key)} control chart">
+          <line x1="44" y1="145" x2="764" y2="145" stroke="#1d1d1b" opacity=".35"/>
+          ${triggers.map((trigger, index) => `<line x1="${x(index)}" y1="145" x2="${x(index)}" y2="151" stroke="#1d1d1b"/><text class="${staleClass(sources[index], tip)}" x="${x(index)}" y="165" text-anchor="middle" font-family="monospace" font-size="9">${trigger.sha.slice(0, 7)}</text>`).join("")}
+          ${limit ? `<polyline points="${limit}" fill="none" stroke="#1d1d1b" stroke-dasharray="4 4" opacity=".55"/>` : ""}
+          <polyline points="${line}" fill="none" stroke="#1d1d1b" stroke-width="2"/>
+          ${points.map((value, index) => (Number.isFinite(value) ? `<circle class="${staleClass(sources[index], tip)}" cx="${x(index)}" cy="${y(value)}" r="4" fill="${violations.has(triggers[index].sha) ? "#c43d3d" : "#1d1d1b"}"><title>${sources[index] ? `${carried[index] ? "carried from " : ""}measured ${relative(sources[index].ts)} at ${sources[index].sha.slice(0, 7)}` : "no source reading"}</title></circle>` : "")).join("")}
+        </svg></div>`;
+      };
+      const renderDeclaration = (declaration) => {
+        const rows = [
+          ...Object.entries(declaration.sensor || {}).map(
+            ([name, value]) =>
+              `<tr><td>sensor</td><td>${esc(name)}</td><td>${esc((value.scope || []).join(", "))}</td><td>${esc(value.run)}</td></tr>`,
+          ),
+          ...Object.entries(declaration.actuator || {}).map(
+            ([name, value]) =>
+              `<tr><td>actuator</td><td>${esc(name)}</td><td>${value.review ? `review ${esc(value.review)}` : "-"}</td><td>${esc(value.run)}</td></tr>`,
+          ),
+          ...Object.entries(declaration.loop || {}).map(
+            ([name, value]) =>
+              `<tr><td>loop</td><td>${esc(name)}</td><td>${esc(value.on || "-")} · sense ${esc((value.sense || []).join(", ") || "-")} · setpoints ${esc(JSON.stringify(value.setpoint || {}))} · act ${esc(value.act || "-")} · gate ${esc(value.gate || "-")}</td><td>-</td></tr>`,
+          ),
+        ];
+        document.querySelector("#declaration").innerHTML = rows.length
+          ? `<table class="mono"><thead><tr><th>kind</th><th>name</th><th>declaration</th><th>run</th></tr></thead><tbody>${rows.join("")}</tbody></table>`
+          : "no declaration";
+      };
+      function render(state) {
+        const setpoints = state.setpoints;
+        document.querySelector("#loops").innerHTML = state.loops.length
+          ? `<table><thead><tr><th>loop</th><th>state</th><th>last run</th><th>next</th><th>setpoints</th></tr></thead><tbody>${state.loops
+              .map((loop) => {
+                const errorEvent = [...events]
+                  .reverse()
+                  .find((event) => event.kind === "error" && event.loop === loop.loop);
+                return `<tr><td>${esc(loop.loop)}</td><td>${esc(loop.state)}${loop.stderr ? `<br><span>${esc(loop.stderr)}</span>` : ""}</td><td class="mono">${loop.lastRun ? `<span title="${esc(loop.lastRun.ts)}">${relative(loop.lastRun.ts)}</span><br>${loop.lastRun.sha.slice(0, 7)}` : "-"}</td><td>${esc(loop.next)}</td><td class="mono">${
+                  Object.entries(loop.values)
+                    .map(([key, error]) => {
+                      const reading = errorEvent ? latestReading(key, errorEvent.seq) : undefined;
+                      const delta = loop.deltas[key];
+                      return `<span class="${staleClass(reading?.event, state.tip)}">${esc(key)} ${esc(reading?.value ?? "-")} <span class="${error > 0 ? "error" : ""}">${esc(error)}</span> · Δ <span class="${delta?.wrong ? "error" : ""}">${esc(delta?.value ?? "-")}</span>${reading ? `<span class="measured" title="${esc(reading.event.ts)}">measured ${relative(reading.event.ts)} at ${reading.event.sha.slice(0, 7)}</span>` : ""}</span>`;
+                    })
+                    .join("<br>") || "no setpoints"
+                }</td></tr>`;
+              })
+              .join("")}</tbody></table>`
+          : "no events yet";
+        const runs = new Map();
+        for (const event of events.filter((event) => event.loop && runKinds.has(event.kind))) {
+          const run = `${event.loop}@${event.sha}`;
+          const data = payload(event);
+          runs.set(run, {
+            ...(runs.get(run) || { run, loop: event.loop, sha: event.sha }),
+            kind: event.kind,
+            ...(data.branch ? { branch: data.branch } : {}),
+            ...(data.worktree ? { worktree: data.worktree } : {}),
+            ...(data.shortstat ? { shortstat: data.shortstat } : {}),
+          });
+        }
+        const proposals = [...runs.values()].filter((run) => run.kind === "gated");
+        document.querySelector("#proposals").innerHTML = proposals.length
+          ? `<table><thead><tr><th>loop</th><th>sha</th><th>motivation</th><th>change</th><th>verdict</th></tr></thead><tbody>${proposals
+              .map((run) => {
+                const error = events.find(
+                  (event) =>
+                    event.kind === "error" && event.loop === run.loop && event.sha === run.sha,
+                );
+                const values = error ? payload(error).values : {};
+                return `<tr data-run="${esc(run.run)}"><td>${esc(run.loop)}</td><td class="mono">${run.sha.slice(0, 7)}</td><td class="mono">${Object.entries(
+                  values,
+                )
+                  .map(
+                    ([key, value]) =>
+                      `<span class="${value > 0 ? "error" : ""}">${esc(key)} ${esc(value)}</span>`,
+                  )
+                  .join(
+                    "<br>",
+                  )}</td><td>${esc(run.shortstat)}<br><button data-open>open</button><span class="mono path">${esc(run.worktree)}</span></td><td><button data-decision="accept">accept</button> <input aria-label="Rejection reason" placeholder="rejection reason" required /> <button data-decision="reject">reject</button></td></tr>`;
+              })
+              .join("")}</tbody></table>`
+          : "nothing waiting on you";
+        document.querySelectorAll("#proposals button").forEach((button) => {
+          button.onclick = async () => {
+            const row = button.closest("tr");
+            if (button.hasAttribute("data-open")) {
+              const response = await fetch(`/runs/${encodeURIComponent(row.dataset.run)}/open`, {
+                method: "POST",
+              });
+              row.querySelector(".path").textContent = await response.text();
+              return;
+            }
+            const decision = button.dataset.decision;
+            const input = row.querySelector("input");
+            if (decision === "reject" && !input.reportValidity()) return;
+            const response = await fetch("/verdict", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ run: row.dataset.run, decision, text: input.value }),
+            });
+            if (!response.ok) input.setCustomValidity((await response.json()).error);
+          };
+        });
+        const charts = chartProjection(setpoints, events);
+        document.querySelector("#charts").innerHTML = charts.length
+          ? charts.map(({ key, rule, triggers }) => chart(key, rule, triggers, state.tip)).join("")
+          : "no events yet";
+        document.querySelector("#events").innerHTML = events.length
+          ? `<ol id="feed">${[...events]
+              .reverse()
+              .map(
+                (event) =>
+                  `<li>${event.seq} ${esc(event.ts)} ${esc(event.kind)} ${event.sha.slice(0, 7)} ${esc(event.payload)}</li>`,
+              )
+              .join("")}</ol>`
+          : "no events yet";
+      }
+      async function start() {
+        const [state, declaration] = await Promise.all(
+          ["/state", "/declaration"].map((url) => fetch(url).then((response) => response.json())),
+        );
+        renderDeclaration(declaration);
+        render(state);
+        const stream = new EventSource("/events?since=0");
+        stream.onmessage = async (message) => {
+          events.push(JSON.parse(message.data));
+          Object.assign(state, await fetch("/state").then((response) => response.json()));
+          render(state);
+        };
+      }
+      start();
+    </script>
+  </body>
+</html>
