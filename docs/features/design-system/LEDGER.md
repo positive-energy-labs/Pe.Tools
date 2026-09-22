@@ -615,7 +615,7 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 ## Owed
 - Revit-backed proof of the change mark: in a dev session on `/schedules`, two model edits under 750 ms apart must draw "changed in Revit" after the second (the deleted `st2-stale` journey's successor; no no-Revit lane can raise a mark).
 - Revit-backed proof of ephemeral Work: stage in an unsaved project, Save As, the lifetime line goes and the cell survives; close a second unsaved project, the receipt draws with its count. Premise test: `OpenDocumentIdentityTests.Open_identity_survives_saveas_but_not_close_and_reopen`.
-- Ephemeral Work orphaned when no tab watches the close: `route/open:<session>/<openId>` stays in the store, unreachable. Fix is a host sweep on the bridge's document-close edge; `RouteDocumentStore` has no enumeration, so it is a seam, not a line.
+- Ephemeral Work orphaned across a host restart: `RouteWorkspace.#openWork` is in memory, so a lifetime written by a previous host life is never swept. Fix is a liveness check on the lazy read in `#load`, or store enumeration. The host wiring `sweepClosedDocuments` in `mastra-runtime.ts` is typechecked only; prove it with a bridge frame that drops an openId while the session stays connected.
 - The `/schedules` spec pane still unmounts instead of hiding (`TODO:` at `route/entity.tsx`): `SpecEditor` does work while rendering and never settles hidden.
 - Add deterministic fixtures for Data Tables, Ops, Parameter Links, Runs and Schedule Grid. Review URLs alone do not prove their pane geometry or states.
 - Chat prompt suggestions wait until kaitpw has example prompts that are proven to work.
