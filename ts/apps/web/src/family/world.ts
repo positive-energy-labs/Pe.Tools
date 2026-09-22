@@ -118,6 +118,15 @@ export interface ProtoLive {
   extraParams: string[];
   /** params in the profile that Revit does not have */
   missingParams: string[];
+  /**
+   * paramName -> the unit the READING'S OWN DOCUMENT renders it in, so a measured cell can stage a
+   * bare number in the unit grammar a family value is written in ("300 CFM"). Absent for anything
+   * unmeasurable, and for a source that reports no units.
+   */
+  units?: Record<
+    string,
+    { specTypeId: string; typeId?: string | null; label?: string | null; symbol?: string | null }
+  >;
 }
 
 export interface SpecBlock {

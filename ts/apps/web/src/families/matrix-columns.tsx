@@ -12,8 +12,11 @@ import {
   cellFromTrichotomy,
   StateCell,
   type CellRefusal,
+  stagedText,
   type CellTransition,
+  type DisplayUnit,
 } from "#/components/lang/cell";
+import type { MeasuredAnswer } from "#/host/measured-parse";
 import { CellListSelect } from "#/components/lang/list-popup";
 import type { Column, Verdict } from "#/components/master-table/model";
 import type { FamilyParameterSnapshot } from "#/host/loaded-families-view";
@@ -46,6 +49,11 @@ export interface ParamColumn {
   familyCount: number;
   /** A Yes/No parameter: a closed choice, never free text. */
   yesNo?: boolean;
+  /**
+   * That the parameter measures something, and the unit the PROJECT renders it in (the matrix reads
+   * the project, so the project's units are what these cells show and stage).
+   */
+  displayUnit?: DisplayUnit | null;
 }
 
 /** Revit's Yes/No spec (`autodesk.spec:spec.bool-1.0.0`), read off the definition's data type. */
@@ -133,6 +141,7 @@ export function useFamiliesColumns({
   cells,
   propose,
   wire,
+  parse,
 }: {
   familyState: (row: { familyName: string }) => Verdict;
   params: ParamColumn[];
@@ -142,6 +151,8 @@ export function useFamiliesColumns({
   propose: FamiliesStore["actions"]["propose"];
   /** The families cell wire, with the matrix's lock facts. */
   wire: CellWire;
+  /** One read-only host parse for a measured cell; a re-read of the matrix cancels it. */
+  parse?: (unit: DisplayUnit | null | undefined, text: string) => Promise<MeasuredAnswer>;
 }) {
   const columns = useMemo<Column<TypeRow>[]>(() => {
     const ordered = [...params].sort((a, b) => {
@@ -286,6 +297,14 @@ export function useFamiliesColumns({
                 cell={cell}
                 transitions={transitions}
                 // A refused write puts the cell back and says why on it (25 item 3).
+                measured={
+                  col.displayUnit && parse
+                    ? {
+                        displayUnit: col.displayUnit,
+                        parse: (text) => parse(col.displayUnit, text),
+                      }
+                    : undefined
+                }
                 onCommit={(next) =>
                   propose(address, { value: next }, value).then((refusal) => refusal ?? null)
                 }
@@ -346,6 +365,7 @@ export function ProposalCell({
   transitions,
   lock,
   onCommit,
+  measured,
 }: {
   current: string;
   reason: string;
@@ -356,6 +376,11 @@ export function ProposalCell({
   lock?: string;
   /** Resolves to the write's refusal, if any: the kit then restores the drawn value and says it. */
   onCommit?: (text: string) => Promise<CellRefusal | null>;
+  /**
+   * The measured kind. A family value is written in the unit grammar ("300 CFM"), so what this cell
+   * stages is exactly `stagedText` of what the kind settled on — no second value shape is needed.
+   */
+  measured?: { displayUnit: DisplayUnit; parse: (text: string) => Promise<MeasuredAnswer> };
 }) {
   const move = useCellNavigation();
   const proposal = cell?.proposal;
@@ -384,7 +409,8 @@ export function ProposalCell({
         capReason={lock}
         transitions={transitions}
         placeholder={proposal || staged ? current : undefined}
-        onCommit={lock || !onCommit ? undefined : (text) => onCommit(text)}
+        measured={measured}
+        onCommit={lock || !onCommit ? undefined : (text) => onCommit(stagedText(text))}
         onNavigate={(direction) => move?.(direction) ?? false}
       />
     </span>

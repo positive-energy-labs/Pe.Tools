@@ -73,6 +73,20 @@ test("actual HTTP Work + journal consumes fanout only after positive acknowledgm
   expect(step).toMatchObject({ state: "succeeded", input: request, result: { appliedCells: 1 } });
 });
 
+test("a measured cell's staged unit reaches the native edit beside its value", async () => {
+  const f = await setup();
+  // The measured kind stages { value, unit }; the domain still refuses a bare number, so the unit
+  // the person reviewed is the one that travels — nothing here fills one in.
+  expect(
+    await f.patch([
+      { path: ["cells", "1::2"], value: { staged: { value: { value: "150", unit: "VA" } } } },
+    ]),
+  ).toMatchObject({ ok: true });
+  await f.submit();
+  const request = f.sent.find((s) => s.key === "schedule.cells.apply")!.input;
+  expect(request.edits[0]).toMatchObject({ value: "150", unit: "VA" });
+});
+
 test("a pathless document refuses its schedule reading in one sentence", async () => {
   const f = await setup();
   f.unsave();

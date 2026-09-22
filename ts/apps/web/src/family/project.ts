@@ -314,6 +314,7 @@ function projectEvidence(
         evidence.coverage.parameters === "Read"
           ? [...authored].filter((name) => !(name in reported))
           : [],
+      units: evidence.parameterUnits,
     };
   }
   for (const parameter of evidence.parameters) {

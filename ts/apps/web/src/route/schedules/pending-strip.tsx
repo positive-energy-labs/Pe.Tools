@@ -1,4 +1,4 @@
-import { splitScheduleCellKey } from "@pe/agent-contracts";
+import { showScheduleCellValue, splitScheduleCellKey } from "@pe/agent-contracts";
 import { ReviewRow, type CellWire } from "#/components/lang/band";
 import { FactChip } from "#/components/lang/chip";
 import { StateCell } from "#/components/lang/cell";
@@ -63,8 +63,9 @@ export function PendingStrip({
         <div className="max-h-36 overflow-y-auto px-3" aria-label="pending cells" role="list">
           {pending.map(([key, cell]) => {
             const { rowNumber, columnNumber } = splitScheduleCellKey(key);
-            const next =
-              cell.staged != null ? cell.staged.value : String(cell.proposal?.value ?? "");
+            const next = showScheduleCellValue(
+              cell.staged != null ? cell.staged.value : cell.proposal?.value,
+            );
             const lock = wire.lockOf?.(key) ?? null;
             const staleAt = cell.staged != null ? stale.find((s) => s.key === key) : undefined;
             return (

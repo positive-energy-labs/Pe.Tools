@@ -18,7 +18,12 @@ public sealed record FamilyParameterSnapshot(
     string? Formula,
     // TypeName -> value string. null = no value; "" = empty string value (String params). Preserved as-is.
     IReadOnlyDictionary<string, string?> ValuesPerType,
-    ExcludedParameterReason? ExcludedReason = null
+    ExcludedParameterReason? ExcludedReason = null,
+    /// <summary>
+    ///     That this parameter measures something, and the unit the READING'S OWN DOCUMENT renders it
+    ///     in, so a human surface can stage a bare number with it. Null for anything unmeasurable.
+    /// </summary>
+    MeasuredDisplayUnit? DisplayUnit = null
 );
 
 public sealed record FamilySnapshotRecord(

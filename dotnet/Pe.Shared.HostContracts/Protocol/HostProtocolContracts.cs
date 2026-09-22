@@ -33,7 +33,11 @@ public static class HostProtocol {
     // 51: family draft sources may omit pod context; run receipts may have no pod; Family Foundry changes carry before/after
     // 52: DocumentInvalidationEvent gains ChangedOpenIds (the documents that changed since the
     //     last publish, by open id) — the per-document change mark
-    public const int ContractVersion = 52;
+    // 53: ScheduleCellBinding gains DisplayUnit (MeasuredDisplayUnit: spec, unit typeId, label, symbol);
+    //     new read-only op revit.resolve.unit-value parses typed text against a document's units
+    // 54: FamilyParameterSnapshot gains DisplayUnit (the project's unit for the parameter's spec) and
+    //     FamilyCaptureData gains ParameterUnits (the open family document's own units, by parameter)
+    public const int ContractVersion = 54;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]

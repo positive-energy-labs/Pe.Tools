@@ -1,5 +1,11 @@
 import { useMemo } from "react";
-import { scheduleCellKey, splitScheduleCellKey, transitionPatches } from "@pe/agent-contracts";
+import {
+  scheduleCellKey,
+  showScheduleCellValue,
+  splitScheduleCellKey,
+  transitionPatches,
+  type MeasuredValue,
+} from "@pe/agent-contracts";
 import type { ScheduleGridDocument } from "@pe/agent-contracts";
 import { reviewTransitions, type CellWire } from "#/components/lang/band";
 import type { CellTransition } from "#/components/lang/cell";
@@ -81,7 +87,9 @@ export function useScheduleGridColumns(
   snapshot: Snapshot | null,
   cells: ScheduleGridDocument["cells"],
   wire: CellWire,
-  stageEdit: (key: string, value: string) => string | void,
+  stageEdit: (key: string, value: string | MeasuredValue) => string | void,
+  /** One read-only host parse for a measured cell; a re-read cancels it (resolves null). */
+  parseMeasured: (key: string, text: string) => Promise<MeasuredValue | { refusal: string } | null>,
   stale: readonly StaleCell[] = [],
   /** The last push's refusals, by key: each draws on its own cell. */
   refused: Readonly<Record<string, string>> = {},
@@ -142,9 +150,9 @@ export function useScheduleGridColumns(
             const isStale = staleAt != null;
             const current = binding?.displayValue ?? row.values[columnIndex] ?? "";
             const shown = isStaged
-              ? (cell.staged?.value ?? "")
+              ? showScheduleCellValue(cell.staged?.value)
               : isProposal
-                ? String(cell.proposal?.value ?? "")
+                ? showScheduleCellValue(cell.proposal?.value)
                 : current;
             const lock = scheduleLock(binding);
             const note =
@@ -181,10 +189,20 @@ export function useScheduleGridColumns(
                 // text parameter can be empty, a number or an element id cannot.
                 onCommit: lock
                   ? undefined
-                  : (text) =>
-                      text === "" && binding?.storageType !== "String"
+                  : (staged) =>
+                      staged === "" && binding?.storageType !== "String"
                         ? `a ${binding?.storageType ?? "non-text"} parameter cannot be empty in Revit — type a value`
-                        : stageEdit(key, text),
+                        : stageEdit(key, staged),
+                // A column Revit measures is a measured cell, display unit or not: with none, the
+                // cell asks for a unit rather than letting the push refuse the number later.
+                ...(binding?.displayUnit
+                  ? {
+                      measured: {
+                        displayUnit: binding?.displayUnit ?? null,
+                        parse: (text: string) => parseMeasured(key, text),
+                      },
+                    }
+                  : {}),
               }),
               ...(refused[key] ? { refused: refused[key] } : {}),
               transitions: scheduleTransitions(wire, key, cell, stale),

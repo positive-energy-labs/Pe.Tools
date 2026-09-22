@@ -1,5 +1,6 @@
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.DocumentData.Schedules.Authored;
+using Pe.Revit.DocumentData.Schedules.Authored.ValueDomains;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 using System.Globalization;

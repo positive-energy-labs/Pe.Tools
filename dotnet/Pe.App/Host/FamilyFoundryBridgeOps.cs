@@ -1,4 +1,5 @@
-﻿using Pe.Revit.Failures;
+﻿using Pe.Revit.DocumentData.Parameters;
+using Pe.Revit.Failures;
 using Autodesk.Revit.DB;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -21,6 +22,8 @@ using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Modules;
 using FamilyDocument = Pe.Revit.Operations.FamilyDocument;
 using System.IO;
+
+
 
 namespace Pe.App.Host;
 
@@ -103,7 +106,27 @@ internal static class FamilyFoundryBridgeOps {
     internal static FamilyCaptureData CaptureActiveFamily(Document document) {
         var model = document.CaptureFamilyModel();
         return new FamilyCaptureData(DateTime.UtcNow.ToString("O"), model.Family.Name, FamilyModelJson.Serialize(model),
-            model.Unmodeled.Count, model.Coverage.ToDictionary(p => p.Key, p => p.Value.ToString()), model.CaptureIssues);
+            model.Unmodeled.Count, model.Coverage.ToDictionary(p => p.Key, p => p.Value.ToString()), model.CaptureIssues,
+            ReadParameterUnits(document));
+    }
+
+    /// <summary>
+    ///     What each family parameter measures, in the unit THIS document renders it in — an open .rfa
+    ///     has its own project units, and a measured cell here shows and stages those. Evidence beside
+    ///     the spec; family.json is not touched.
+    /// </summary>
+    private static Dictionary<string, MeasuredDisplayUnit> ReadParameterUnits(Document document) {
+        var units = document.GetUnits();
+        var read = new Dictionary<string, MeasuredDisplayUnit>(StringComparer.Ordinal);
+        foreach (var parameter in document.FamilyManager.Parameters.Cast<FamilyParameter>()) {
+            var name = parameter.Definition?.Name;
+            if (string.IsNullOrEmpty(name) || read.ContainsKey(name!))
+                continue;
+            var displayUnit = MeasuredUnitReader.Read(units, parameter.Definition!.GetDataType());
+            if (displayUnit != null)
+                read[name!] = displayUnit;
+        }
+        return read;
     }
 
     /// <summary>The one apply edge: bridge ops and palettes both land here, and both leave a run in the source pod.</summary>

@@ -278,8 +278,8 @@ export namespace FamiliesApply {
       key: string;
       kind: string;
       mappedFrom?: null | string;
-      before?: unknown;
-      after?: unknown;
+      before: unknown;
+      after: unknown;
     }
     /**
      * Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.
@@ -410,8 +410,8 @@ export namespace FamiliesPlan {
       key: string;
       kind: string;
       mappedFrom?: null | string;
-      before?: unknown;
-      after?: unknown;
+      before: unknown;
+      after: unknown;
     }
     /**
      * Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.
@@ -541,8 +541,8 @@ export namespace FamilyApply {
       key: string;
       kind: string;
       mappedFrom?: null | string;
-      before?: unknown;
-      after?: unknown;
+      before: unknown;
+      after: unknown;
     }
     /**
      * Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.
@@ -631,6 +631,9 @@ export namespace FamilyCapture {
         [k: string]: string;
       };
       issues: RevitDataIssue[];
+      parameterUnits: {
+        [k: string]: MeasuredDisplayUnit;
+      };
     }
     export interface RevitDataIssue {
       code: string;
@@ -639,6 +642,21 @@ export namespace FamilyCapture {
       familyName?: null | string;
       typeName?: null | string;
       parameterName?: null | string;
+    }
+    /**
+     * That a surface measures this value, and the unit it renders it in, read from the Reading's own
+     * document (a schedule field's effective format options, else that document's units for the
+     * spec). Every spelling is one the parameter unit door accepts, so a human surface can stage a
+     * bare number with it. Null where nothing is measurable at all; TypeId null where it measures
+     * but this document shows no unit — the surface asks for one instead of letting a push refuse a
+     * bare number later. Evidence only: no write path fills a unit from it.
+     *
+     */
+    export interface MeasuredDisplayUnit {
+      specTypeId: string;
+      typeId?: null | string;
+      label?: null | string;
+      symbol?: null | string;
     }
   }
 }
@@ -731,8 +749,8 @@ export namespace FamilyPlan {
       key: string;
       kind: string;
       mappedFrom?: null | string;
-      before?: unknown;
-      after?: unknown;
+      before: unknown;
+      after: unknown;
     }
     /**
      * Diagnostic for the Family Foundry host operations: a closed code, a JSON path, a message, an optional fix.
@@ -3847,6 +3865,7 @@ export namespace RevitDetailSchedules {
       targets: ParameterTarget[];
       blocker: ScheduleCellBindingBlocker;
       hasMixedValues: boolean;
+      displayUnit?: null | MeasuredDisplayUnit;
     }
     /**
      * Mutation evidence for one native parameter: what a reviewer saw, and what a writer compares against a fresh
@@ -3861,6 +3880,21 @@ export namespace RevitDetailSchedules {
       isReadOnly: boolean;
       hasValue: boolean;
       rawValue: null | string;
+    }
+    /**
+     * That a surface measures this value, and the unit it renders it in, read from the Reading's own
+     * document (a schedule field's effective format options, else that document's units for the
+     * spec). Every spelling is one the parameter unit door accepts, so a human surface can stage a
+     * bare number with it. Null where nothing is measurable at all; TypeId null where it measures
+     * but this document shows no unit — the surface asks for one instead of letting a push refuse a
+     * bare number later. Evidence only: no write path fills a unit from it.
+     *
+     */
+    export interface MeasuredDisplayUnit {
+      specTypeId: string;
+      typeId?: null | string;
+      label?: null | string;
+      symbol?: null | string;
     }
     export interface RevitDataIssue {
       code: string;
@@ -4388,6 +4422,7 @@ export namespace RevitMatrixLoadedFamilies {
         [k: string]: null | string;
       };
       excludedReason?: null | ExcludedParameterReason;
+      displayUnit?: null | MeasuredDisplayUnit;
     }
     export interface ParameterDefinitionDescriptor {
       identity: ParameterIdentity;
@@ -4407,6 +4442,21 @@ export namespace RevitMatrixLoadedFamilies {
       builtInParameterId?: number | null;
       sharedGuid?: null | string;
       parameterElementId?: number | null;
+    }
+    /**
+     * That a surface measures this value, and the unit it renders it in, read from the Reading's own
+     * document (a schedule field's effective format options, else that document's units for the
+     * spec). Every spelling is one the parameter unit door accepts, so a human surface can stage a
+     * bare number with it. Null where nothing is measurable at all; TypeId null where it measures
+     * but this document shows no unit — the surface asks for one instead of letting a push refuse a
+     * bare number later. Evidence only: no write path fills a unit from it.
+     *
+     */
+    export interface MeasuredDisplayUnit {
+      specTypeId: string;
+      typeId?: null | string;
+      label?: null | string;
+      symbol?: null | string;
     }
     export interface RevitDataIssue {
       code: string;
@@ -4942,6 +4992,37 @@ export namespace RevitResolveReferences {
   }
 }
 
+/** Read what typed text means as a measured value in this document: Revit parses it for the given spec with the document's own units and answers with the value converted into the given display unit plus Revit's own rendering of it in that unit (no symbol). Read-only, no transaction. A surface stages { text, unit }; a refusal carries Revit's reason and stages nothing. */
+export namespace RevitResolveUnitValue {
+  export namespace Req {
+    /**
+     * Read-only: hand Revit the text a person typed into a measured cell and let Revit say what it
+     * means. The document is the op's target; no transaction, nothing written.
+     *
+     */
+    export interface Request {
+      spec: string;
+      unit: string;
+      text: string;
+    }
+  }
+  export namespace Res {
+    /**
+     * What Revit made of the text. Value is converted into the requested display unit
+     * and Text is Revit's own rendering of it in that unit WITHOUT the symbol, so the
+     * surface renders "Text Unit" and stages { Text, Unit } — one rendering rule, and
+     * nothing kept that Revit did not say. A refusal carries Revit's reason and stages nothing.
+     *
+     */
+    export interface Response {
+      ok: boolean;
+      value?: null | number;
+      text?: null | string;
+      refusal?: null | string;
+    }
+  }
+}
+
 /** Create a new schedule from a saved schedule spec and write the run receipt into the source pod. Never edits an existing schedule. */
 export namespace ScheduleApply {
   export namespace Req {
@@ -5057,6 +5138,7 @@ export namespace ScheduleCellsApply {
       targets: ParameterTarget[];
       blocker?: ScheduleCellBindingBlocker;
       hasMixedValues?: boolean;
+      displayUnit?: null | MeasuredDisplayUnit;
     }
     /**
      * Mutation evidence for one native parameter: what a reviewer saw, and what a writer compares against a fresh
@@ -5071,6 +5153,21 @@ export namespace ScheduleCellsApply {
       isReadOnly: boolean;
       hasValue: boolean;
       rawValue: null | string;
+    }
+    /**
+     * That a surface measures this value, and the unit it renders it in, read from the Reading's own
+     * document (a schedule field's effective format options, else that document's units for the
+     * spec). Every spelling is one the parameter unit door accepts, so a human surface can stage a
+     * bare number with it. Null where nothing is measurable at all; TypeId null where it measures
+     * but this document shows no unit — the surface asks for one instead of letting a push refuse a
+     * bare number later. Evidence only: no write path fills a unit from it.
+     *
+     */
+    export interface MeasuredDisplayUnit {
+      specTypeId: string;
+      typeId?: null | string;
+      label?: null | string;
+      symbol?: null | string;
     }
   }
   export namespace Res {
@@ -5134,6 +5231,7 @@ export namespace ScheduleCellsApply {
       targets: ParameterTarget[];
       blocker: ScheduleCellBindingBlocker;
       hasMixedValues: boolean;
+      displayUnit?: null | MeasuredDisplayUnit;
     }
     /**
      * Mutation evidence for one native parameter: what a reviewer saw, and what a writer compares against a fresh
@@ -5148,6 +5246,21 @@ export namespace ScheduleCellsApply {
       isReadOnly: boolean;
       hasValue: boolean;
       rawValue: null | string;
+    }
+    /**
+     * That a surface measures this value, and the unit it renders it in, read from the Reading's own
+     * document (a schedule field's effective format options, else that document's units for the
+     * spec). Every spelling is one the parameter unit door accepts, so a human surface can stage a
+     * bare number with it. Null where nothing is measurable at all; TypeId null where it measures
+     * but this document shows no unit — the surface asks for one instead of letting a push refuse a
+     * bare number later. Evidence only: no write path fills a unit from it.
+     *
+     */
+    export interface MeasuredDisplayUnit {
+      specTypeId: string;
+      typeId?: null | string;
+      label?: null | string;
+      symbol?: null | string;
     }
     export interface ParameterValueEditResult {
       index: number;
@@ -5767,6 +5880,7 @@ export interface HostOps {
   "revit.matrix.schedule-coverage": { request: RevitMatrixScheduleCoverage.Req.Request; response: RevitMatrixScheduleCoverage.Res.Response };
   "revit.matrix.schedule-profiles": { request: RevitMatrixScheduleProfiles.Req.Request; response: RevitMatrixScheduleProfiles.Res.Response };
   "revit.resolve.references": { request: RevitResolveReferences.Req.Request; response: RevitResolveReferences.Res.Response };
+  "revit.resolve.unit-value": { request: RevitResolveUnitValue.Req.Request; response: RevitResolveUnitValue.Res.Response };
   "schedule.apply": { request: ScheduleApply.Req.Request; response: ScheduleApply.Res.Response };
   "schedule.capture": { request: ScheduleCapture.Req.Request; response: ScheduleCapture.Res.Response };
   "schedule.cells.apply": { request: ScheduleCellsApply.Req.Request; response: ScheduleCellsApply.Res.Response };
@@ -5838,6 +5952,7 @@ export const hostOpKeys = [
   "revit.matrix.schedule-coverage",
   "revit.matrix.schedule-profiles",
   "revit.resolve.references",
+  "revit.resolve.unit-value",
   "schedule.apply",
   "schedule.capture",
   "schedule.cells.apply",

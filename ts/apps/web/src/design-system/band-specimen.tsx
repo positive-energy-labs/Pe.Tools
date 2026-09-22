@@ -12,7 +12,12 @@ import {
   type CellWire,
   type FanOutOutcome,
 } from "#/components/lang/band";
-import { cellFromTrichotomy, StateCell, type StateCellProps } from "#/components/lang/cell";
+import {
+  cellFromTrichotomy,
+  StateCell,
+  type StateCellProps,
+  stagedText,
+} from "#/components/lang/cell";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { Section } from "#/components/lang/section";
 import { ReadCell } from "#/components/master-table/cells";
@@ -59,7 +64,9 @@ export function cellState({ cells, wire, outcome }: Matrix, key: string): StateC
       cap: lock ? "locked" : "editable",
       capReason: lock ?? undefined,
     }),
-    onCommit: lock ? undefined : (text) => void wire.write(stagePatches(cells, key, text)),
+    onCommit: lock
+      ? undefined
+      : (text) => void wire.write(stagePatches(cells, key, stagedText(text))),
     transitions: reviewTransitions(wire, key, cell),
     refused:
       outcome?.refusal && outcome.covered.includes(key) ? outcome.refusal.message : undefined,

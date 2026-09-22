@@ -72,6 +72,7 @@ import {
   fmtNum,
   parseCell,
   readCell,
+  readMeasuredText,
   type CellTransition,
   type CellTransitionKind,
   type StateCellProps,
@@ -84,11 +85,16 @@ export {
   cellStateLabel,
   fmtNum,
   parseCell,
+  readMeasuredText,
+  stagedText,
+  unitWord,
 } from "./cell-state";
 export type {
   CellStateName,
   CellTransition,
   CellTransitionKind,
+  DisplayUnit,
+  MeasuredValue,
   StateCellProps,
   Unsettled,
 } from "./cell-state";
@@ -251,9 +257,30 @@ export function StateCell(props: StateCellProps) {
           setRefusal(null);
         }
       };
-      const refused = props.onCommit?.(out);
-      if (refused instanceof Promise) void refused.then(settle);
-      else settle(refused);
+      const stage = (staged: string | { value: string; unit: string }) => {
+        const refused = props.onCommit?.(staged);
+        if (refused instanceof Promise) void refused.then(settle);
+        else settle(refused);
+      };
+      // The measured kind: a bare number stages with the column's unit and calls nothing; anything
+      // else is Revit's to read, and the typed text stays on screen until it answers.
+      if (props.measured != null) {
+        const decided = readMeasuredText(out, props.measured.displayUnit);
+        if (decided.kind === "refuse") {
+          el.value = initial.current;
+          setRefusal({ message: decided.reason });
+        } else if (decided.kind === "stage") stage(decided.staged);
+        else
+          void props.measured.parse(decided.text).then((answer) => {
+            if (answer == null) return; // a re-read cancelled it; the cell keeps what it had
+            if ("refusal" in answer) {
+              el.value = initial.current;
+              setRefusal({ message: answer.refusal });
+            } else stage(answer);
+          });
+        return;
+      }
+      stage(out);
     };
     return (
       <span

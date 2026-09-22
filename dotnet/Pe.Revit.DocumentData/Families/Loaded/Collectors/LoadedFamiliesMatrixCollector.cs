@@ -17,6 +17,9 @@ public static class LoadedFamiliesMatrixCollector {
         IFamilySnapshotCache? snapshotCache = null
     ) {
         var effectiveBudget = RevitDataOutputBudgets.WithDefaults(budget, maxEntries: 10, maxSamplesPerEntry: 25);
+        // The matrix reads the PROJECT: its values are rendered in the project's units, so that is the
+        // unit a measured cell here shows and stages (a loaded family's own document is not what is drawn).
+        var projectUnits = doc.GetUnits();
         var totalStopwatch = Stopwatch.StartNew();
 
         var catalogStopwatch = Stopwatch.StartNew();
@@ -193,7 +196,7 @@ public static class LoadedFamiliesMatrixCollector {
         }
 
         return new LoadedFamiliesMatrixData(
-            matrixFamilies.Select(family => ToSnapshotRecord(family, effectiveBudget.MaxSamplesPerEntry)).ToList(),
+            matrixFamilies.Select(family => ToSnapshotRecord(family, effectiveBudget.MaxSamplesPerEntry, projectUnits)).ToList(),
             RevitDataOutputBudgets.ProjectIssues(issues, effectiveBudget),
             new RevitDataResultPage(supplementedFamilies.Count, matrixFamilies.Count, maxFamilies is > 0 && supplementedFamilies.Count > maxFamilies.Value)
         );
@@ -214,7 +217,7 @@ public static class LoadedFamiliesMatrixCollector {
     ///     entries carry ExcludedReason (visible = ExcludedReason == null), per-type values in
     ///     ValuesPerType with null (no value) vs "" (empty) preserved.
     /// </summary>
-    private static FamilySnapshotRecord ToSnapshotRecord(CollectedLoadedFamilyRecord family, int? maxSamplesPerEntry) {
+    private static FamilySnapshotRecord ToSnapshotRecord(CollectedLoadedFamilyRecord family, int? maxSamplesPerEntry, Units projectUnits) {
         var visibleParameters = family.Parameters
             .Where(LoadedFamiliesCollectorSupport.IsVisibleInMatrix)
             .OrderBy(parameter => parameter.Identity.Name, StringComparer.OrdinalIgnoreCase)
@@ -242,7 +245,7 @@ public static class LoadedFamiliesMatrixCollector {
             VersionGuid: null,
             typeNames.ToList(),
             visibleParameters.Concat(excludedParameters)
-                .Select(parameter => ToParameterSnapshot(parameter, maxSamplesPerEntry))
+                .Select(parameter => ToParameterSnapshot(parameter, maxSamplesPerEntry, projectUnits))
                 .ToList(),
             family.Issues.Select(LoadedFamiliesCollectorSupport.ToContractIssue).ToList(),
             IsPartial: false,
@@ -251,7 +254,7 @@ public static class LoadedFamiliesMatrixCollector {
         );
     }
 
-    private static FamilyParameterSnapshot ToParameterSnapshot(CollectedFamilyParameterRecord parameter, int? maxSamplesPerEntry) =>
+    private static FamilyParameterSnapshot ToParameterSnapshot(CollectedFamilyParameterRecord parameter, int? maxSamplesPerEntry, Units projectUnits) =>
         new(
             ToDefinition(parameter),
             LoadedFamiliesCollectorSupport.ToContractParameterKind(parameter.Kind),
@@ -265,7 +268,8 @@ public static class LoadedFamiliesMatrixCollector {
             .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal),
             parameter.ExcludedReason == null
                 ? null
-                : LoadedFamiliesCollectorSupport.ToContractExcludedReason(parameter.ExcludedReason.Value)
+                : LoadedFamiliesCollectorSupport.ToContractExcludedReason(parameter.ExcludedReason.Value),
+            MeasuredUnitReader.Read(projectUnits, parameter.DataTypeId)
         );
 
     private static ParameterDefinitionDescriptor ToDefinition(CollectedFamilyParameterRecord parameter) =>

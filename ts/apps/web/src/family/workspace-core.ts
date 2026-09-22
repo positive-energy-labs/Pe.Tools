@@ -15,6 +15,7 @@ import {
   type PRow,
 } from "#/family/model";
 import type { ProtoProposal } from "#/family/world";
+import { useMeasuredParse } from "#/host/measured-parse";
 import { useScopeKeys } from "#/route/keys";
 
 export function useFamilyWorkspaceCore(store: FamilyStore) {
@@ -22,6 +23,8 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   /** WHICH SOURCE — the one question that separates them, asked once (see `#/family/source`). */
   const lane = store.lane;
   const world = lane.world;
+  /** A measured cell's one call, owned by this reading: re-reading the family aborts what is in flight. */
+  const parse = useMeasuredParse(lane.world.live, store.documentScope);
   /**
    * The last-read document, as a draft. It is the page's record of the DISK and the baseline the
    * reverse projection diffs against — so a save writes what moved and nothing else, and a draft
@@ -458,6 +461,7 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   /** The verdict rail: scannable, countable, and carrying no verdict of its own. */
   return {
     store,
+    parse,
     profile,
     lane,
     world,

@@ -4,6 +4,7 @@ import { FAMILY_CATALOG_LIMIT } from "@pe/agent-contracts";
 import { runFanOut, type CellWire } from "#/components/lang/band";
 import type { FamiliesStore } from "#/families/store";
 import { toHostIssue } from "#/host/issues";
+import { useMeasuredParse } from "#/host/measured-parse";
 import {
   cellText,
   visibleParameters,
@@ -153,6 +154,7 @@ function useFamiliesWorkspaceModel(
             isProjectOnly: param.kind === "ProjectParameter",
             familyCount: 0,
             yesNo: isYesNo(param.definition.dataTypeId),
+            displayUnit: param.displayUnit ?? null,
             seen: new Set<string>(),
           };
           params.set(key, entry);
@@ -203,6 +205,8 @@ function useFamiliesWorkspaceModel(
     (): CellWire => ({ ...store.wire, lockOf: familiesLockOf(rows, params) }),
     [store.wire, rows, params],
   );
+  // A measured cell's one call, owned by this matrix Reading: a re-read aborts what is in flight.
+  const parse = useMeasuredParse(families, store.documentScope);
   const { columns, uncommonCount } = useFamiliesColumns({
     familyState,
     params,
@@ -211,6 +215,7 @@ function useFamiliesWorkspaceModel(
     cells,
     propose: store.actions.propose,
     wire,
+    parse,
   });
 
   const stagedFamilies = useMemo(

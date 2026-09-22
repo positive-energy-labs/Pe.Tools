@@ -209,7 +209,11 @@ function expand(document: ScheduleGridDocument, reading: ScheduleReading) {
         rowNumber,
         columnNumber,
         expectedBinding: binding as ScheduleCellsApply.Req.ScheduleCellBinding,
-        value: cell.staged.value,
+        // A measured cell staged its unit with its value; the domain still refuses a bare number,
+        // and nothing here ever fills a unit the person did not review.
+        ...(typeof cell.staged.value === "string"
+          ? { value: cell.staged.value }
+          : { value: cell.staged.value.value, unit: cell.staged.value.unit }),
       });
   }
   return { edits, failures };

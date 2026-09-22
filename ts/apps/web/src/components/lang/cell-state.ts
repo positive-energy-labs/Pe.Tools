@@ -88,17 +88,26 @@ export interface StateCellProps {
    * An async commit (a Work write) may return a promise of that refusal: it restores the same
    * way when the refusal arrives, so typed text is never left looking accepted.
    *
-   * UNITS AT STAGE TIME (user ruling 2026-09-19, `ruling-units-at-human-surfaces.md`): a human
-   * surface attaches the column's display unit to a bare number when it is STAGED, so the staged
-   * cell reads "300 CFM" at once and what is reviewed is what is applied. A typed unit ("300 L/s")
-   * wins. A measured field with no display unit asks at the cell before the push, never as a
-   * push-time refusal. The unit is the binding's own `DisplayUnit` evidence read from Revit, never a
-   * web guess or a project-units assumption; the host contract keeps refusing bare numbers.
-   * Not built: waits on `ScheduleCellBinding.DisplayUnit` (domains).
+   * A measured cell hands it `{ value, unit }` instead of the typed text — see `measured`.
    */
   onCommit?: (
-    text: string,
+    staged: string | MeasuredValue,
   ) => string | void | Promise<string | { message: string; detail?: string } | null | void>;
+  /**
+   * THE MEASURED CELL (ruled 2026-09-22), one kind beside `numeric`. A bare number stages at once
+   * with the column's display unit and never calls Revit, so the cell reads "300 CFM" the moment
+   * it is staged and what is reviewed is what is applied. Text carrying a unit shows as typed
+   * until commit, then ONE read-only host parse answers with Revit's own value and rendering,
+   * which is what gets staged; a re-read of the Reading cancels it (`parse` resolves null). A
+   * refusal is cell-local, carries Revit's reason, and stages nothing. A measured column with no
+   * display unit refuses a bare number at the cell — the ask is "type a unit", never a push-time
+   * surprise. The unit is always the Reading's own evidence, never a web guess.
+   */
+  measured?: {
+    displayUnit?: DisplayUnit | null;
+    /** Effect-owned; null means the call was cancelled and the cell keeps what it had. */
+    parse: (text: string) => Promise<MeasuredValue | { refusal: string } | null>;
+  };
   /**
    * NUMERIC COMMIT (ruled 2026-08-16, fit reviews #2 — §3's named silent-swallow defect, killed
    * here): present ⇒ the commit path parses per `parseCell` before `onCommit` sees anything. A
@@ -139,6 +148,60 @@ export interface StateCellProps {
    * Drawn in the same note as the cell's own refusal; the caller clears it on its next write.
    */
   refused?: string;
+}
+
+/**
+ * That a cell measures something, and the unit it renders, as the Reading read it from that
+ * document. A null `typeId` is the document showing no unit for the spec: the cell asks for one.
+ */
+export interface DisplayUnit {
+  specTypeId: string;
+  typeId?: string | null;
+  label?: string | null;
+  symbol?: string | null;
+}
+
+/** What a measured cell stages: Revit's number in the display unit, and that unit's spelling. */
+export interface MeasuredValue {
+  value: string;
+  unit: string;
+}
+
+/**
+ * A staged value as one line of text. The measured kind is the only one that stages an object, so
+ * a cell that is not measured passes its own text straight through.
+ */
+export const stagedText = (staged: string | MeasuredValue): string =>
+  typeof staged === "string" ? staged : `${staged.value} ${staged.unit}`;
+
+/** The word a display unit is drawn and staged under: its symbol when it has one, else its label. */
+export const unitWord = (unit: DisplayUnit): string | null => unit.symbol || unit.label || null;
+
+/** What one commit into a measured cell does — decided before anything is called. */
+export type MeasuredCommit =
+  | { kind: "stage"; staged: MeasuredValue }
+  | { kind: "parse"; text: string }
+  | { kind: "refuse"; reason: string };
+
+const BARE_NUMBER = /^[+-]?(\d+\.?\d*|\.\d+)$/;
+
+/**
+ * The measured cell's one decision, pure: a bare number stages with the column's unit (or asks for
+ * one when the column has none), anything else goes to Revit. Blank is refused like `parseCell`'s —
+ * an emptied cell is not zero.
+ */
+export function readMeasuredText(
+  text: string,
+  displayUnit: DisplayUnit | null | undefined,
+): MeasuredCommit {
+  const typed = text.trim();
+  if (typed === "")
+    return { kind: "refuse", reason: "blank commits nothing — a cleared cell is not zero" };
+  if (!BARE_NUMBER.test(typed)) return { kind: "parse", text: typed };
+  const unit = displayUnit ? unitWord(displayUnit) : null;
+  return unit
+    ? { kind: "stage", staged: { value: typed, unit } }
+    : { kind: "refuse", reason: "type a unit — this column shows no unit of its own" };
 }
 
 export type CellTransitionKind = "accept" | "deny" | "unstage";

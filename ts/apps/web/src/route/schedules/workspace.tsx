@@ -6,6 +6,7 @@ import {
   type RouteStatePatch,
   type ScheduleCatalog,
   type ScheduleGridDocument,
+  type MeasuredValue,
   type ScheduleGridSnapshot,
 } from "@pe/agent-contracts";
 import { AddressingBar } from "#/components/lang/addressing-bar";
@@ -19,6 +20,7 @@ import { TableFrame } from "#/components/master-table/table-frame";
 import { useTableState } from "#/components/master-table/view";
 import { List } from "#/components/lang/list-popup";
 import { Pane, PaneSplit } from "#/components/lang/pane";
+import { useMeasuredParse } from "#/host/measured-parse";
 import type { CellWire } from "#/components/lang/band";
 import { PendingStrip } from "./pending-strip";
 import { cellText, scheduleLock, useScheduleGridColumns } from "./columns";
@@ -99,8 +101,12 @@ export function ScheduleGridWorkspace({
     revision,
     lockOf: (key) => scheduleLock(bindingAt(key)),
   };
+  /** The measured cell's one call, owned by this snapshot: a re-read aborts what is in flight. */
+  const parse = useMeasuredParse(snapshot);
+  const parseMeasured = (key: string, text: string) => parse(bindingAt(key)?.displayUnit, text);
+
   /** Typing stages; it also severs a standing proposal, so the typed value is not contested. */
-  const stageEdit = (key: string, value: string): string | void => {
+  const stageEdit = (key: string, value: string | MeasuredValue): string | void => {
     const cell = cells[key] ?? {};
     void apply([
       ...transitionPatches(["cells"], key, cell, { kind: "stage", rung: { value } }),
@@ -113,7 +119,15 @@ export function ScheduleGridWorkspace({
     `col ${columnNumber}`;
   const currentText = (key: string) => cellText(snapshot, key);
 
-  const gridColumns = useScheduleGridColumns(snapshot, cells, wire, stageEdit, stale, refused);
+  const gridColumns = useScheduleGridColumns(
+    snapshot,
+    cells,
+    wire,
+    stageEdit,
+    parseMeasured,
+    stale,
+    refused,
+  );
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">

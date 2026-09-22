@@ -515,6 +515,10 @@ export function useFamilyStore(options: {
     readings,
     profile,
     target: targetLabel,
+    /** The exact document a read-only host call from this page must name. */
+    documentScope: target
+      ? { bridgeSessionId: target.session, openDocumentId: target.openId }
+      : undefined,
     evidence,
     captured,
     reconciliation: { apply: familyDoc.apply },

@@ -10,7 +10,14 @@ public sealed record FamilyCaptureData(
     string ModelJson,
     int UnmodeledCount,
     IReadOnlyDictionary<string, string> Coverage,
-    IReadOnlyList<RevitDataIssue> Issues
+    IReadOnlyList<RevitDataIssue> Issues,
+    /// <summary>
+    ///     Measured evidence beside the spec, by parameter name: that the parameter measures something,
+    ///     and the unit THIS family document renders it in (an open .rfa has its own project units). It
+    ///     is deliberately not in <see cref="ModelJson" />: family.json is an authored, portable document
+    ///     and an observation of one document's display settings is not part of what it authors.
+    /// </summary>
+    IReadOnlyDictionary<string, MeasuredDisplayUnit> ParameterUnits
 );
 
 /// <summary>

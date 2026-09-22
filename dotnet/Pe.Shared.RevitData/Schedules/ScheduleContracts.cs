@@ -537,7 +537,8 @@ public record ScheduleCellBinding(
     bool IsEditable,
     [property: JsonProperty(Required = Required.Always)] IReadOnlyList<ParameterTarget> Targets,
     ScheduleCellBindingBlocker Blocker = ScheduleCellBindingBlocker.None,
-    bool HasMixedValues = false
+    bool HasMixedValues = false,
+    MeasuredDisplayUnit? DisplayUnit = null
 );
 
 public record ScheduleRenderedRow(

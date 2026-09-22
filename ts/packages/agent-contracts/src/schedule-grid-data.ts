@@ -12,8 +12,28 @@ import { z } from "zod";
 import type { RouteStateSpec } from "./route-state.ts";
 import { trichotomyAgentMask, trichotomyCellSchema } from "./trichotomy.ts";
 
-/** String-valued trichotomy cell — no provenance extension (schedule cells have no PDF source). */
-export const scheduleGridCellSchema = trichotomyCellSchema(z.string());
+/**
+ * A measured cell's staged rung: the number as Revit rendered it in the column's display unit, and
+ * that unit's own spelling. Both go to `schedule.cells.apply` as its `value` and `unit`, and the
+ * cell draws "`value` `unit`" — one rendering rule, so what is reviewed is what is applied. The
+ * text the person typed is not kept (ruling 2026-09-22).
+ */
+export const measuredValueSchema = z.object({ value: z.string(), unit: z.string() });
+export type MeasuredValue = z.infer<typeof measuredValueSchema>;
+
+/** A cell holds text, or — on a measured column — a number with the unit it was staged in. */
+export const scheduleCellValueSchema = z.union([z.string(), measuredValueSchema]);
+export type ScheduleCellValue = z.infer<typeof scheduleCellValueSchema>;
+
+/** The one word for a cell value, wherever it is drawn: a measured value reads with its unit. */
+export const showScheduleCellValue = (value: unknown): string => {
+  if (typeof value === "string") return value;
+  const measured = measuredValueSchema.safeParse(value);
+  return measured.success ? `${measured.data.value} ${measured.data.unit}` : "";
+};
+
+/** Trichotomy cell — no provenance extension (schedule cells have no PDF source). */
+export const scheduleGridCellSchema = trichotomyCellSchema(scheduleCellValueSchema);
 export type ScheduleGridCell = z.infer<typeof scheduleGridCellSchema>;
 
 /* ── Catalog (revit.catalog.schedules, Summary) — every schedule in the document ── */
@@ -60,6 +80,21 @@ export const scheduleCellBindingTargetSchema = z.object({
 });
 export type ScheduleCellBindingTarget = z.infer<typeof scheduleCellBindingTargetSchema>;
 
+/**
+ * That the column measures something, and the unit it renders, read from Revit with the binding
+ * (`MeasuredDisplayUnit`): the schedule field's effective format, else the document's units for its
+ * spec. Absent wherever nothing is measurable; present with a null `typeId` where it measures but
+ * this document shows no unit — then the cell asks for one. `specTypeId` is what a parse must be
+ * told; `symbol ?? label` is what the cell draws and stages.
+ */
+export const measuredDisplayUnitSchema = z.object({
+  specTypeId: z.string(),
+  typeId: z.string().nullish(),
+  label: z.string().nullish(),
+  symbol: z.string().nullish(),
+});
+export type MeasuredDisplayUnit = z.infer<typeof measuredDisplayUnitSchema>;
+
 /** The write surface behind one rendered cell — the reviewed binding push hands back unchanged. */
 export const scheduleCellBindingSchema = z.object({
   columnNumber: z.number().int(),
@@ -76,6 +111,8 @@ export const scheduleCellBindingSchema = z.object({
   hasMixedValues: z.boolean().default(false),
   /** Required: a capture without per-target evidence cannot arm a push. */
   targets: z.array(scheduleCellBindingTargetSchema),
+  /** The unit this column renders, when it measures anything. */
+  displayUnit: measuredDisplayUnitSchema.nullish(),
 });
 export type ScheduleCellBinding = z.infer<typeof scheduleCellBindingSchema>;
 

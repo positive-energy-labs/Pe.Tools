@@ -10,7 +10,7 @@ import { ActionButton } from "#/components/lang/action-button";
 import { Pane } from "#/components/lang/pane";
 import { SpecSheet, SpecText, ProposalCard } from "#/family/doc-pane";
 import { NavStateCell } from "#/family/marks";
-import { cellFromTrichotomy } from "#/components/lang/cell";
+import { cellFromTrichotomy, stagedText } from "#/components/lang/cell";
 import { bindingOf, isFormula, proposalCell, type FamilyPageModel } from "#/family/model";
 import { boundParam, type GeomConstituent } from "#/family/world";
 import { useFamilyWorkspace } from "#/family/workspace-context";
@@ -20,6 +20,7 @@ import { Code, stringify } from "#/components/lang/code";
 export function FamilyWorkspaceDocPane() {
   const {
     world,
+    parse,
     lane,
     draft,
     saved,
@@ -96,7 +97,7 @@ export function FamilyWorkspaceDocPane() {
                     <NavStateCell
                       value={bindingOf(world, draft, part.slug, dim.property)}
                       note={`UNBOUND — the literal frozen into ${part.slug}. Editable, exactly as it is on its ghost row at the bottom of the table; editing it changes the number, not who can reach it.`}
-                      onCommit={(next) => editLiteral(part.slug, dim.property, next)}
+                      onCommit={(next) => editLiteral(part.slug, dim.property, stagedText(next))}
                     />
                   </span>
                   {bindPicker(part.slug, dim.property, dim.dataType)}
@@ -184,7 +185,16 @@ export function FamilyWorkspaceDocPane() {
                 ? `A FORMULA — ${authored}. Its result is derived, so no type may override it and Revit's number for it is an output rather than a competing value. Edit the expression here; change what feeds it to change the result.`
                 : `The value every type inherits unless it authors its own. Editing it moves all ${world.typeNames.filter((typeName) => draft.types[typeName]?.[name] === undefined).length} inheriting type${world.typeNames.filter((typeName) => draft.types[typeName]?.[name] === undefined).length === 1 ? "" : "s"} at once — watch the grey placeholders in the table change. Begin with = to make it a formula.`
             }
-            onCommit={(next) => editAuthored(name, next)}
+            // A formula is not a measured value; a measurable parameter is, in this document's unit.
+            measured={
+              !isFormula(authored) && world.live?.units?.[name]
+                ? {
+                    displayUnit: world.live.units[name]!,
+                    parse: (text: string) => parse(world.live!.units![name]!, text),
+                  }
+                : undefined
+            }
+            onCommit={(next) => editAuthored(name, stagedText(next))}
           />
           {family.length > 0 && (
             <p className="t-small face-mono mt-1" data-tone="pea">

@@ -1,3 +1,4 @@
+import { showScheduleCellValue } from "@pe/agent-contracts";
 import { useEffect, useState } from "react";
 import type { RouteStatePatch, ScheduleGridDocument } from "@pe/agent-contracts";
 import type { CellWire } from "#/components/lang/band";
@@ -80,7 +81,7 @@ export function StaleResolve({
               <span className="face-mono text-ink-mute">{s.key}</span>
               <StateCell
                 {...cellFromTrichotomy(cell, {
-                  value: cell.staged!.value,
+                  value: showScheduleCellValue(cell.staged!.value),
                   agree: "drift",
                   modelValue: current(s.key) ?? "",
                   reviewed: s.was,

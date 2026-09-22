@@ -104,6 +104,22 @@ export const familyEvidenceSchema = z.union([
     unmodeledCount: z.number(),
     coverage: z.record(z.string(), z.string()),
     issues: z.array(revitDataIssueSchema),
+    /**
+     * By parameter name: that it measures something, and the unit THIS family document renders it
+     * in (an open .rfa has its own project units). Evidence beside the spec — `modelJson` authors a
+     * portable family and does not carry one document's display settings.
+     */
+    parameterUnits: z
+      .record(
+        z.string(),
+        z.object({
+          specTypeId: z.string(),
+          typeId: z.string().nullish(),
+          label: z.string().nullish(),
+          symbol: z.string().nullish(),
+        }),
+      )
+      .optional(),
     origin: z.literal("capture"),
     rfaPath: z.string().nullish(),
     /** The capture's run folder (`output/<runId>`); its `unmodeled.json` holds the facts. */

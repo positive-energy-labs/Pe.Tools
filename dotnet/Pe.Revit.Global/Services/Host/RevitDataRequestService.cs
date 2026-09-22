@@ -994,6 +994,13 @@ internal sealed class RevitDataRequestService {
         }
     }
 
+    [Op("revit.resolve.unit-value", Does = "Read what typed text means as a measured value in this document: Revit parses it for the given spec with the document's own units and answers with the value converted into the given display unit plus Revit's own rendering of it in that unit (no symbol). Read-only, no transaction. A surface stages { text, unit }; a refusal carries Revit's reason and stages nothing.", Title = "Resolve Measured Value", Finds = ["unit", "units", "parse", "measured", "value", "display-unit", "cell"], Cost = OpCost.Bounded, Example = "{ \"spec\": \"autodesk.spec.aec:airFlow-2.0.0\", \"unit\": \"CFM\", \"text\": \"300 L/s\" }")]
+    private UnitValueResolveData ResolveUnitValueCore(
+        UnitValueResolveRequest request,
+        RevitDocument document
+    ) =>
+        UnitValueResolver.Resolve(document.Value, request);
+
     [Op("revit.context.visible-summary", Does = "Read compact category counts and bounded visible element handles for the active view or explicit view references.", Title = "Get Revit Agent Visible Context Summary", Finds = ["agent-context", "visible", "active-view", "view-references", "categories", "handles", "printed-views", "visible-equipment"], Example = "{ \"scope\": \"ActiveViewVisible\", \"categoryNames\": [\"Mechanical Equipment\"], \"maxCategories\": 5, \"maxElementHandlesPerCategory\": 250 }")]
     private RevitAgentVisibleContextData GetRevitAgentVisibleContextCore(
         RevitAgentVisibleContextRequest request,

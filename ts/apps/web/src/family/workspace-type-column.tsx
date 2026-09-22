@@ -1,7 +1,7 @@
 import { settingsFieldPointer } from "@pe/agent-contracts";
 import type { Column } from "#/components/master-table/model";
 import { ReadCell } from "#/components/master-table/cells";
-import { cellFromTrichotomy, type StateCellProps } from "#/components/lang/cell";
+import { cellFromTrichotomy, type StateCellProps, stagedText } from "#/components/lang/cell";
 import { PressContent } from "#/components/anatomy/press-content";
 import { Press } from "#/components/lang/press";
 import { NavStateCell } from "#/family/marks";
@@ -33,6 +33,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
     transitionsAt,
     editOverride,
     editLiteral,
+    parse,
   } = core;
   const typeColumn = (
     typeName: string,
@@ -131,7 +132,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
                 ? ` UNSAVED — the file ${diskLiteral === null ? "does not carry this dimension at all" : `carries ${diskLiteral}`}; saving writes ${literal}.`
                 : ""
             }`}
-            onCommit={(next) => editLiteral(slug, property, next)}
+            onCommit={(next) => editLiteral(slug, property, stagedText(next))}
           />
         );
       }
@@ -256,6 +257,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
           />
         );
       const override = draft.types[typeName]?.[row.name];
+      const displayUnit = world.live?.units?.[row.name];
       return cell({
         value: override ?? "",
         placeholder: authored,
@@ -266,7 +268,12 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
               ? `"${typeName}" inherits ${authored || "nothing"} from the family — the grey number is the inheritance showing through, not a value this type holds. Type here to make it differ.${drifted ? ` The alarm underline says Revit disagrees; switch to ⇄ live to read its number in place.` : ""}${groundedNote}`
               : `"${typeName}" overrides the family value ${authored} with ${override}. Clear the cell to go back to inheriting.${drifted ? ` The alarm underline says Revit disagrees; switch to ⇄ live to read its number in place.` : ""}${groundedNote}`
         }${unsavedNote}`,
-        onCommit: (next) => editOverride(row.name, typeName, next),
+        // A family value is written in the unit grammar ("300 CFM"), so the measured kind's answer
+        // IS the override: a bare number takes this document's own unit, typed text goes to Revit.
+        ...(displayUnit
+          ? { measured: { displayUnit, parse: (text: string) => parse(displayUnit, text) } }
+          : {}),
+        onCommit: (next) => editOverride(row.name, typeName, stagedText(next)),
       });
     },
   });

@@ -1,3 +1,4 @@
+using Pe.Revit.DocumentData.Parameters;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 using Serilog;
@@ -556,7 +557,8 @@ public static class ScheduleQueryCollector {
             .Select(context => new ScheduleBindingResolver.BindingColumn(
                 context.Column.ColumnNumber,
                 context.Field,
-                context.FieldName
+                context.FieldName,
+                MeasuredUnitReader.Read(context.EffectiveUnits, context.SpecTypeId)
             ))
             .ToList();
         var subjectElementsById = subjectElements.ToDictionary(element => element.Id.Value());
