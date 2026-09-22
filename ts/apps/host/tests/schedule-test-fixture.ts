@@ -21,7 +21,7 @@ import type { RouteWorkspace } from "../../../packages/runtime/src/route-workspa
 import { buildCapabilities } from "../../../packages/mcps/src/pea/capabilities.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
-import { RevitBridge, BridgeError } from "../src/bridge.ts";
+import { RevitBridge, BridgeError, type HostBridgeEvent } from "../src/bridge.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { sdkSessions, sdkEnvelope, originalProcess } from "./native-receipt-fixture.ts";
@@ -96,12 +96,7 @@ export async function setup() {
         }),
       }),
     },
-    observeHostResource: (request, publish) =>
-      hostResourceObserver(
-        bridge,
-        () => owner,
-        () => captures,
-      )(request, publish),
+    observeHostResource: (request, publish) => observeHost(request, publish),
     routeRegistrations: [
       {
         spec: scheduleGridRouteState,
@@ -154,9 +149,31 @@ export async function setup() {
         ],
       },
     }));
+  const bridgeListeners = new Set<(event: HostBridgeEvent) => void>();
+  /** Revit changed these open documents of one session, as the bridge reports it. */
+  const revitChanged = (...refs: DocumentRef[]) => {
+    for (const listener of bridgeListeners)
+      for (const session of new Set(refs.map((ref) => ref.session)))
+        listener({
+          sessionId: session,
+          kind: "event",
+          eventName: "document-changed",
+          payloadJson: JSON.stringify({
+            changedOpenIds: refs.filter((ref) => ref.session === session).map((ref) => ref.openId),
+          }),
+        });
+  };
+  /** The bridge went away: the host is blind to every document of that session. */
+  const bridgeDetached = (session: string) => {
+    for (const listener of bridgeListeners) listener({ sessionId: session, kind: "disconnected" });
+  };
   const bridge = {
     list: Effect.sync(sessions),
-    subscribe: () => () => {},
+    snapshot: (id?: string) => Effect.sync(() => ({ connected: true, sessionId: id })),
+    subscribe: (listener: (event: HostBridgeEvent) => void) => {
+      bridgeListeners.add(listener);
+      return () => bridgeListeners.delete(listener);
+    },
     invoke: (key: string, input: unknown, session: string, openId: string, id?: string) =>
       Effect.tryPromise({
         try: async () => {
@@ -177,6 +194,12 @@ export async function setup() {
         catch: (error) => error,
       }),
   } as unknown as RevitBridge["Service"];
+  // One observer for the whole fixture, as the host builds it: one mark holder, one bridge tap.
+  const observeHost = hostResourceObserver(
+    bridge,
+    () => owner,
+    () => captures,
+  );
   const sdk = async (args: readonly string[]) => {
     if (args[0] === "session") return sdkSessions();
     const id = args[2];
@@ -314,6 +337,8 @@ export async function setup() {
       detail = value;
     },
     reads: () => readCount,
+    revitChanged,
+    bridgeDetached,
     addSchedule: (scheduleId: number, name: string) =>
       catalog.push({
         scheduleId,

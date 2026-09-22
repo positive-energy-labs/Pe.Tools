@@ -11,6 +11,7 @@ import {
 } from "#/families/readout-bands";
 import { FamiliesFilterBand } from "#/families/scope-band";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
+import { ChangedInRevit } from "#/route/changed";
 import { EntityRouteView } from "#/route/entity";
 import { SituationCell } from "#/route/situation";
 
@@ -22,8 +23,18 @@ const noun = (n: number, word: string) =>
  * the audit is the scope draft, the last apply's receipts and the matrix with its pick column.
  */
 export function FamiliesWorkspaceView({ url }: { url?: boolean }) {
-  const { store, applied, plan, includedPlanned, outsideProfile, matrixIssue, totalFamilies } =
-    useFamiliesWorkspace();
+  const {
+    store,
+    applied,
+    plan,
+    includedPlanned,
+    outsideProfile,
+    matrixIssue,
+    totalFamilies,
+    changed,
+    readAgain,
+    matrixReading,
+  } = useFamiliesWorkspace();
   // An empty familyNames list means every family the categories resolve to: read the resolved count.
   const scoped = applied ? applied.familyNames.length || totalFamilies : 0;
   const scope = (
@@ -73,6 +84,15 @@ export function FamiliesWorkspaceView({ url }: { url?: boolean }) {
     >
       <div className="flex size-full min-h-0 min-w-0 flex-col">
         <div data-slot="readout-band" className="shrink-0 py-1.5">
+          {changed ? (
+            <div className="flex items-center gap-2">
+              <ChangedInRevit
+                what="the loaded families"
+                busy={matrixReading}
+                onReadAgain={readAgain}
+              />
+            </div>
+          ) : null}
           <FamiliesCarryOverLine />
           <FamiliesFilterBand />
           <FamiliesProposalsBand />

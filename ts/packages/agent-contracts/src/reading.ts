@@ -39,7 +39,7 @@ export const superseded = (older: Observation, newer: Observation): boolean =>
 export type Reading<T> =
   | { state: "absent" }
   | { state: "loading"; requestId: string; deadline: number; previous?: T }
-  | { state: "ready"; observation: T }
+  | { state: "ready"; observation: T; changed?: boolean }
   | { state: "stale"; previous: T; reason: "dirtied" | "gap" | "target-changed" | "disconnected" }
   | { state: "failed"; message: string; previous?: T };
 
@@ -73,6 +73,13 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
     /** A workspace-scoped receipt list, the same subject `readScopedActionStatuses` reads. */
     scope: actionListFilterSchema.optional(),
   }),
+  /**
+   * One open document's change mark, for a surface whose read is not a Reading (the `/families`
+   * matrix is a one-shot op). The value is empty: the fact is the envelope's `changed`, which the
+   * host derives from when it served this Reading. Re-read the surface, `dirty` this, and the
+   * host serves it again unchanged.
+   */
+  z.strictObject({ kind: z.literal("document-mark"), target: documentRefSchema }),
   z.strictObject({ kind: z.literal("inventory") }),
   z.strictObject({ kind: z.literal("world") }),
   /** The host's own liveness. Polled by the host on its own 5s timer, never by a client. */
@@ -113,7 +120,16 @@ export const readingKey = (request: ReadingRequest): string =>
 /* ── Frames: how a Reading moves on the one stream ────────────────────────────────────────── */
 
 export const readingFrameSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("snapshot"), key: z.string(), value: z.unknown() }),
+  z.strictObject({
+    kind: z.literal("snapshot"),
+    key: z.string(),
+    value: z.unknown(),
+    /**
+     * Document-bound Readings only: Revit changed this Reading's document after the host served
+     * it. The host owns the mark and the comparison; a surface draws what the envelope says.
+     */
+    changed: z.boolean().optional(),
+  }),
   z.strictObject({ kind: z.literal("failure"), key: z.string(), error: z.string() }),
   z.strictObject({ kind: z.literal("event"), key: z.string(), value: z.unknown() }),
   // null means the connection has no history for the disconnected interval.

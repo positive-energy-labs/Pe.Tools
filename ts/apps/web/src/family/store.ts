@@ -43,7 +43,7 @@ import {
   type FamilyAuthoringFacts,
   type FamilyPage,
 } from "#/route/family/manifest";
-import { previousOf, useReading } from "#/readings";
+import { previousOf, useDocumentMark, useReading } from "#/readings";
 import { useRoute, type EntityPage } from "#/route";
 import { openMember } from "#/route/spec-editor";
 
@@ -315,6 +315,7 @@ export function useFamilyStore(options: {
       ? handle.resolution.target.ref
       : null;
   const targetLabel = target?.session ?? "";
+  const { changed: documentChanged, read: markRead } = useDocumentMark(target);
 
   /* ── Family Readings ────────────────────────────────────────────────────── */
   const familyReading = handle.readings.family as Reading<unknown>;
@@ -484,7 +485,11 @@ export function useFamilyStore(options: {
         setPage({ pod: next.pod, path: next.path, buildReview: null });
       },
       /** Capture files a new member (the kernel lands the page on it) and returns its evidence. */
-      capture: () => handle.actions.capture.run(),
+      capture: async () => {
+        const result = await handle.actions.capture.run();
+        markRead();
+        return result;
+      },
       async build() {
         const result = await handle.actions.build.run();
         return result?.message ?? null;
@@ -494,6 +499,7 @@ export function useFamilyStore(options: {
     [
       handle.actions,
       handle.work,
+      markRead,
       draft,
       lane,
       snapshot,
@@ -515,6 +521,11 @@ export function useFamilyStore(options: {
     readings,
     profile,
     target: targetLabel,
+    /**
+     * Revit changed the open family document after this page last read it, as the host's mark
+     * says. Capturing again is the re-read; `readAgain` runs it and re-serves the mark.
+     */
+    changed: documentChanged,
     /** The exact document a read-only host call from this page must name. */
     documentScope: target
       ? { bridgeSessionId: target.session, openDocumentId: target.openId }

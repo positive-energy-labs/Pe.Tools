@@ -12,7 +12,7 @@ import {
   type FamilySnapshotRecord,
   type LoadedFamiliesMatrixRequest,
 } from "#/host/loaded-families-view";
-import { useLoadedFamiliesMatrixQuery } from "#/readings";
+import { useDocumentMark, useLoadedFamiliesMatrixQuery } from "#/readings";
 import { useTableChips } from "#/components/anatomy";
 import {
   familiesLockOf,
@@ -123,6 +123,20 @@ function useFamiliesWorkspaceModel(
     enabled: !fixture && scope !== undefined && matrixRequest !== undefined,
   });
   useAfterApply(busy, () => matrix.refresh());
+  /*
+   * Freshness is the host's per-document change mark, drawn from its envelope. The matrix is a
+   * one-shot op, not a Reading, so this surface tells the host when it has read the document
+   * again and the host answers whether Revit has changed it since.
+   */
+  const { changed: documentChanged, read: markRead } = useDocumentMark(store.documentTarget);
+  const matrixRead = matrix.data;
+  useEffect(() => {
+    if (matrixRead) markRead();
+  }, [matrixRead, markRead]);
+  const readAgain = () => {
+    matrix.refresh();
+    markRead();
+  };
   const families = useMemo(
     () => fixtureFamilies ?? matrix.data?.families ?? [],
     [fixtureFamilies, matrix.data?.families],
@@ -329,6 +343,8 @@ function useFamiliesWorkspaceModel(
     includedPlanned,
     matrixIssue,
     matrixReading,
+    changed: documentChanged && !fixture,
+    readAgain,
     totalTypes,
     outsideProfile,
   };

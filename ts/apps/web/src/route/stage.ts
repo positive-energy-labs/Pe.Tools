@@ -1,7 +1,7 @@
 /**
  * A stage, declared in one place: the stage verbs its Situation row draws, the chords they bind,
  * and the panes it shows. A pane declares what it draws and its own verbs — never a focus policy:
- * focus re-reads exactly when the document carries a change mark (`host/changed.ts`). Panes reach
+ * focus re-reads exactly when the Reading envelope carries the host's change mark. Panes reach
  * the world only through these Readings and verbs (Shape B, stage-pane-verb-exploration.md §4).
  * ASSUME(kai): the Reading is the cache, shared by every pane that draws it (Chat's too) (Q4) |
  * alt: each pane holds its own snapshot

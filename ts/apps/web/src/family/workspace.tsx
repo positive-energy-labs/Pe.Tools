@@ -119,6 +119,7 @@ import { FamilyWorkspaceTable } from "#/family/workspace-table";
 import { FamilyWorkspaceProvider, useFamilyWorkspace } from "#/family/workspace-context";
 import { useFamilyWorkspaceCore } from "#/family/workspace-core";
 import { useFamilyColumns } from "#/family/workspace-columns";
+import { ChangedInRevit } from "#/route/changed";
 
 function useFamilyWorkspaceModel(store: FamilyStore) {
   const core = useFamilyWorkspaceCore(store);
@@ -147,6 +148,16 @@ export function FamilyWorkspace({ store }: { store: FamilyStore }) {
             />
           </div>
         )}
+        {store.changed ? (
+          <div className="hairline-b flex flex-wrap items-center gap-2 px-3 py-1.5 t-small">
+            <ChangedInRevit
+              what="the open family"
+              busy={store.handle.busy?.key === "capture"}
+              disabled={store.handle.busy !== null}
+              onReadAgain={() => void store.actions.capture().catch(() => undefined)}
+            />
+          </div>
+        ) : null}
         <DraftBand />
         <CaptureEvidence />
         {readings.length > 0 && (

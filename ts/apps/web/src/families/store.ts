@@ -358,6 +358,7 @@ export function useFamiliesStore(
     handle,
     manifest,
     target,
+    documentTarget,
     documentScope,
     excluded,
     cells,

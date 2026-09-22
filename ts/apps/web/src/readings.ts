@@ -227,6 +227,14 @@ export type Readings = Pick<PeReadings, "subscribe" | "dirty">;
 const absent: Reading<never> = { state: "absent" };
 const absentAtom = Atom.make<Reading<never>>(absent);
 
+/**
+ * Revit changed this Reading's document after the host served it. The host owns the mark; a
+ * surface draws this and offers a re-read. A Reading that is not ready is not "changed": its own
+ * lifecycle (loading, stale, failed) already says what is known.
+ */
+export const changedInRevit = (reading: Reading<unknown>): boolean =>
+  reading.state === "ready" && reading.changed === true;
+
 export const previousOf = <T>(reading: Reading<T>): T | undefined =>
   reading.state === "ready"
     ? reading.observation
@@ -237,7 +245,7 @@ export const previousOf = <T>(reading: Reading<T>): T | undefined =>
 /** Re-types one Reading's observation without changing its lifecycle or its retained evidence. */
 export const mapReading = <A, B>(reading: Reading<A>, project: (value: A) => B): Reading<B> =>
   reading.state === "ready"
-    ? { state: "ready", observation: project(reading.observation) }
+    ? { ...reading, observation: project(reading.observation) }
     : reading.state === "stale"
       ? { ...reading, previous: project(reading.previous) }
       : reading.state === "absent"
@@ -251,10 +259,15 @@ export function advance<T>(reading: Reading<T>, frame: Frame): Reading<T> {
     case "snapshot":
       if (
         reading.state === "ready" &&
+        (reading.changed ?? false) === (frame.changed ?? false) &&
         JSON.stringify(reading.observation) === JSON.stringify(frame.value)
       )
         return reading;
-      return { state: "ready", observation: frame.value as T };
+      return {
+        state: "ready",
+        observation: frame.value as T,
+        ...(frame.changed === undefined ? {} : { changed: frame.changed }),
+      };
     case "failure":
       return { state: "failed", message: frame.error, ...(previous !== undefined && { previous }) };
     case "gap":
@@ -312,6 +325,25 @@ export function useReading<T = unknown>(
     [key, source],
   );
   return useAtomValue(atom);
+}
+
+/**
+ * One open document's change mark, for a surface whose read is not a Reading (the `/families`
+ * matrix is a one-shot op). `changed` is the host's answer, on the host's clock; `read` tells the
+ * host this surface has just read the document again, which serves the mark afresh.
+ */
+export function useDocumentMark(target: { session: string; openId: string } | null): {
+  changed: boolean;
+  read: () => void;
+} {
+  const request: ReadingRequest | null = target ? { kind: "document-mark", target } : null;
+  const changed = changedInRevit(useReading(request));
+  const key = target ? `${target.session}:${target.openId}` : "";
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the ref's strings are its identity
+  const read = useCallback(() => {
+    if (request) dirty(request);
+  }, [key]);
+  return { changed, read };
 }
 
 /** An Action succeeded; this subject's snapshot is reacquired from the host. */

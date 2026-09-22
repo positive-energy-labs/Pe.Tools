@@ -14,7 +14,6 @@ import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Provenance } from "#/components/lang/section";
-import { ActionButton } from "#/components/lang/action-button";
 import { Table } from "#/components/master-table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
 import { useTableState } from "#/components/master-table/view";
@@ -25,6 +24,7 @@ import type { CellWire } from "#/components/lang/band";
 import { PendingStrip } from "./pending-strip";
 import { cellText, scheduleLock, useScheduleGridColumns } from "./columns";
 import type { Refusal } from "#/route";
+import { ChangedInRevit } from "#/route/changed";
 
 export interface ScheduleGridState {
   slice: ScheduleGridDocument | null;
@@ -160,21 +160,12 @@ export function ScheduleGridWorkspace({
                 </FactChip>
               ) : null}
               {freshness === "changed" ? (
-                <>
-                  <FactChip
-                    tone="caution"
-                    title="Revit changed this document after this read was taken. Reading again brings the grid back to what Revit holds."
-                  >
-                    changed in Revit
-                  </FactChip>
-                  <ActionButton
-                    label="read again (r)"
-                    busy={busy === "refresh"}
-                    disabled={busy != null}
-                    reason={`Read “${snapshot!.scheduleName}” from Revit again — proposals and staged cells stay.`}
-                    onClick={readAgain}
-                  />
-                </>
+                <ChangedInRevit
+                  what={`“${snapshot!.scheduleName}”`}
+                  busy={busy === "refresh"}
+                  disabled={busy != null}
+                  onReadAgain={readAgain}
+                />
               ) : null}
             </>
           ) : undefined
