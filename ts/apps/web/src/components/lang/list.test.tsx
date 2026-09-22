@@ -101,7 +101,7 @@ test("multi: click toggles, shift-click extends over the visible order", async (
 test("a ladder advances on Enter, shows a breadcrumb, and finds hits one level down", async () => {
   const onPick = vi.fn();
   const docs: Record<string, string[]> = {
-    "pe.app-26": ["projectA.rvt", "Ops.rvt"],
+    "pe.app-26": ["project-a.rvt", "Ops.rvt"],
     "pe.app-25": [],
   };
   render(
@@ -127,11 +127,11 @@ test("a ladder advances on Enter, shows a breadcrumb, and finds hits one level d
   await act(async () => search.focus());
   await act(async () => fireEvent.keyDown(search, { key: "ArrowDown" }));
   await act(async () => fireEvent.keyDown(search, { key: "Enter" }));
-  expect(rows()).toEqual(["projectA.rvt", "Ops.rvt"]);
+  expect(rows()).toEqual(["project-a.rvt", "Ops.rvt"]);
   expect(screen.getByRole("button", { name: "pe.app-26" })).toBeTruthy();
   await act(async () => fireEvent.keyDown(search, { key: "ArrowDown" }));
   await act(async () => fireEvent.keyDown(search, { key: "Enter" }));
-  expect(onPick).toHaveBeenCalledWith("projectA.rvt", ["pe.app-26"]);
+  expect(onPick).toHaveBeenCalledWith("project-a.rvt", ["pe.app-26"]);
 });
 
 test("empty, no-match, pending and failed are four different lines", () => {

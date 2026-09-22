@@ -48,7 +48,8 @@ test("the catalogue renders one link per seed", () => {
   const { container } = render(<ActionDemoCatalogue />);
   const links = [...container.querySelectorAll('table[aria-label="Route seeds"] a')];
   expect(links).toHaveLength(SEED_CATALOGUE.length);
-  expect(links.map((link) => link.getAttribute("href")).sort()).toEqual(
-    SEED_CATALOGUE.map((row) => row.href).sort(),
+  const byHref = (a: string, b: string) => a.localeCompare(b);
+  expect(links.map((link) => link.getAttribute("href") ?? "").sort(byHref)).toEqual(
+    SEED_CATALOGUE.map((row) => row.href).sort(byHref),
   );
 });

@@ -408,7 +408,7 @@ export function useFamilyStore(options: {
   const actions = useMemo(
     () => ({
       /** Authored edits are staged into the settings Work; a pointer field refuses locally. */
-      setDraft(value: Setter<Draft>): string | void {
+      setDraft: (value: Setter<Draft>): string | void => {
         const previous = edits.getSnapshot().draft ?? draft;
         const nextDraft = next(value, previous);
         const raw = snapshot?.rawContent;

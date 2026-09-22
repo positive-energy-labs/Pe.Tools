@@ -89,6 +89,9 @@ const entry = (
     key: `PE_G___Param${i}`,
     kind: "add",
     mappedFrom: i ? null : "Manufacturer",
+    // An add: the parameter did not exist, so there is no before.
+    before: null,
+    after: `value ${i}`,
   })),
   runEffects: [],
   refusals,

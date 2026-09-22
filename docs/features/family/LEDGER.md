@@ -1,6 +1,6 @@
 # Family Foundry ledger
 
-Recentered 2026-09-08 from the operator stories, source history, and native tests. Git before this rewrite retains the old run narratives. Current investigation: [MAP.md](MAP.md).
+Recentered 2026-09-08 from the operator stories, source history, and native tests. Git before this rewrite retains the old run narratives.
 
 ## Decided
 - 2026-09-22, `/family` operates only on the family document Revit already has open; selecting a project family never opens its editor, and no route-owned opener is built. Its measured cells show the open `.rfa` document's own units (design-system ledger 2026-09-22).

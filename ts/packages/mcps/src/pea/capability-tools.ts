@@ -402,7 +402,7 @@ async function dispatch(
             .filter(([, value]) => value !== undefined)
             .map(([key, value]) => [key, String(value)]),
         );
-        const response = await fetch(`${base()}/instances/readings?${query}`, {
+        const response = await fetch(`${base()}/instances/readings?${query.toString()}`, {
           signal: AbortSignal.timeout(input.timeoutSeconds * 1000),
         });
         if (!response.ok) throw Error(await response.text());

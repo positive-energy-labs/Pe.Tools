@@ -275,10 +275,11 @@ export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise
   });
 }
 
+/** Every member is implemented as an arrow and handed around unbound, so each is a PROPERTY. */
 interface PeaControllerPolicy {
-  isAdmitted(session: Session<PeaRuntimeState>): boolean;
-  requireAdmitted(session: Session<PeaRuntimeState>): Promise<void>;
-  close(): Promise<void>;
+  isAdmitted: (session: Session<PeaRuntimeState>) => boolean;
+  requireAdmitted: (session: Session<PeaRuntimeState>) => Promise<void>;
+  close: () => Promise<void>;
 }
 
 interface PeaSessionAdmission {

@@ -5,7 +5,7 @@
  * same title reopened is offered, never taken.
  */
 import { act, cleanup, renderHook } from "@testing-library/react";
-import { afterEach, expect, test, vi } from "vite-plus/test";
+import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { peReadings } from "#/readings";
 import { schedulesManifest } from "./schedules/manifest";
 import { useRoute } from "./use-route";
@@ -30,6 +30,12 @@ function stream() {
   return (kind: string, value: unknown) =>
     act(() => accept.get(kind)?.({ kind: "snapshot", key: kind, value } as never));
 }
+
+beforeEach(() => {
+  // A lost binding salvages Work over the host door. Unstubbed it reaches a real port and its
+  // rejection escapes the file, so every later file runs beside an unhandled error.
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 404 }));
+});
 
 afterEach(() => {
   cleanup();

@@ -33,7 +33,7 @@ function ListRoute() {
             <span>one row, one collection, every list kind</span>
             <FactChip
               dashed
-              title="Chat seeds, demo pods, the project-a zones and the families demo parameters; the product lists compose these same pieces."
+              title="Chat seeds, demo pods, project-a zones, families demo parameters — the product lists compose these same pieces."
             >
               fixture
             </FactChip>

@@ -164,8 +164,29 @@ export const ServiceFileLive = Layer.effectDiscard(
     const address = server.address;
     const port = address._tag === "TcpAddress" ? address.port : 0;
     const appBase = productRoot();
-    process.env[hostProcessIdentity.hostBaseUrlVariable] = `http://127.0.0.1:${port}`;
-    process.env[hostProcessIdentity.serviceNameVariable] = hostOwnership.serviceName;
+    // Both variables describe a host that is RUNNING — a spawned child reads them to call back
+    // into this process. They become lies the moment the claim releases, so they are scoped to it
+    // and restored on the way out. (Unrestored, an in-process host inside a test run leaves its
+    // dead port in `PE_TOOLS_HOST_BASE_URL` for every later file.)
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const previous = {
+          [hostProcessIdentity.hostBaseUrlVariable]:
+            process.env[hostProcessIdentity.hostBaseUrlVariable],
+          [hostProcessIdentity.serviceNameVariable]:
+            process.env[hostProcessIdentity.serviceNameVariable],
+        };
+        process.env[hostProcessIdentity.hostBaseUrlVariable] = `http://127.0.0.1:${port}`;
+        process.env[hostProcessIdentity.serviceNameVariable] = hostOwnership.serviceName;
+        return previous;
+      }),
+      (previous) =>
+        Effect.sync(() => {
+          for (const [name, value] of Object.entries(previous))
+            if (value === undefined) delete process.env[name];
+            else process.env[name] = value;
+        }),
+    );
     console.log(
       `pe-host service claim requested name=${hostOwnership.serviceName} leaseHandoff=${Boolean(process.env.PE_SERVICE_LEASE_PATH)}`,
     );

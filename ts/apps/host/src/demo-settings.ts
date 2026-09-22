@@ -101,7 +101,9 @@ export async function createDemoSettings(root: string) {
       return run(readMember(member, ctx));
     },
     async composeMember(request: PodMemberComposeRequest) {
-      await memberPath(request);
+      // A draft composes its own bytes and names no pod, so there is no pod-relative path to
+      // fence; only a request that names its pod reads one off disk.
+      if (request.pod !== undefined) await memberPath({ pod: request.pod, path: request.path });
       return run(composeMember(request, ctx));
     },
     async writeMember(request: PodMemberWriteRequest) {

@@ -20,6 +20,8 @@ import { bundledPeaSkills } from "../src/pea/skills.ts";
 import { peDo, peFind, peRead } from "../src/pea/capability-tools.ts";
 import { ScopeStore, admitTurn } from "../../runtime/src/scope-store.ts";
 
+import { bodyText } from "./body-text.ts";
+
 const ops = [
   {
     key: "revit.catalog.loaded-families",
@@ -617,7 +619,7 @@ test("the doors ride the host under the turn Target and name the revision and re
       });
     if (url.pathname === "/actions") {
       if (!init?.body) return Response.json([]);
-      const body = JSON.parse(String(init.body));
+      const body = JSON.parse(await bodyText(init));
       return Response.json({
         id: body.id,
         kind: body.kind,

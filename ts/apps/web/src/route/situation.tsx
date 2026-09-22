@@ -29,6 +29,7 @@ import { Popover } from "@base-ui/react/popover";
 import { Gauge } from "lucide-react";
 import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
 
+import { actionRecipe } from "#/components/lang/action-button";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { WorkBand, workBandWord } from "#/components/lang/band";
 import { FactChip } from "#/components/lang/chip";
@@ -504,11 +505,7 @@ export function SituationAction({
         </Popover.Portal>
       </Popover.Root>
       {stopped ? (
-        <span
-          role="tooltip"
-          data-surface="artifact"
-          className="absolute top-full left-0 z-popup mt-1 hidden w-max max-w-[36ch] border border-line-2 px-2 py-1 t-small face-mono text-ink-2 italic shadow-float group-hover:block group-focus-within:block"
-        >
+        <span role="tooltip" data-surface="artifact" className={actionRecipe().reason()}>
           {reason}
         </span>
       ) : null}

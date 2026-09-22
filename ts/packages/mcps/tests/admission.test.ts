@@ -4,6 +4,8 @@ import { ScriptingTools } from "../src/shared/scripting.ts";
 import { cli } from "gunshi";
 import { PeaCliCommands } from "../src/pea/PeaCliCommands.ts";
 
+import { bodyText } from "./body-text.ts";
+
 /**
  * A fake host serving exactly the two endpoints a mutation needs: the generated operation
  * catalog and `/actions`. `/call` is left unrouted, so any surviving raw-mutation dispatch fails
@@ -47,14 +49,14 @@ function fakeHost(
       return Response.json({ operations });
     }
     if (url.endsWith("/call")) {
-      const { key } = JSON.parse(String(init?.body)) as { key: string };
+      const { key } = JSON.parse(await bodyText(init)) as { key: string };
       if (key !== "bridge.sessions.summary")
         throw new Error(`fake host refuses raw dispatch of '${key}' on /call`);
       if (options.summaryDown) return new Response("boom", { status: 500 });
       return Response.json({ sessionId: options.session ?? null, openDocumentCount: 0 });
     }
     if (url.endsWith("/actions") && init?.method === "POST") {
-      const { input: request, ...attempt } = JSON.parse(String(init.body)) as Record<
+      const { input: request, ...attempt } = JSON.parse(await bodyText(init)) as Record<
         string,
         unknown
       >;
@@ -145,7 +147,7 @@ test("pea script cancel reaches /call with no catalog read and no session lookup
     const url = String(input instanceof Request ? input.url : input);
     seen.push(`${init?.method ?? "GET"} ${new URL(url).pathname}`);
     if (!url.endsWith("/call")) throw new Error(`cancel must not touch ${url}`);
-    expect(JSON.parse(String(init?.body))).toMatchObject({
+    expect(JSON.parse(await bodyText(init))).toMatchObject({
       key: "op.cancel",
       request: { requestId: "running-script" },
     });

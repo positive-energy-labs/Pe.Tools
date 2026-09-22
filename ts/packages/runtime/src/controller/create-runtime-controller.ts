@@ -117,7 +117,7 @@ export async function createRuntimeController<
     memory = resolvedConfig.memory;
     ownedMemory = typeof memory === "function" ? undefined : memory;
     const built = new AgentController<TState>(resolvedConfig);
-    const configured = await options.configureController?.(built);
+    const configured = options.configureController?.(built);
     controllerCleanup = typeof configured === "function" ? configured : undefined;
     unsubscribeCreated = built.onSessionCreated(
       (created) => {

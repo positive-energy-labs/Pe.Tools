@@ -113,7 +113,7 @@ const verb = (label: string) =>
 test("plan then cancel: not Applying, save draft to pod is back, a typed cell stages", async () => {
   const writes: unknown[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
-    writes.push(JSON.parse(String(init?.body)));
+    writes.push(await new Request("http://host.test", init).json());
     return new Response(JSON.stringify({ ok: true, revision: 4 }));
   });
   client.runSemanticAction.mockResolvedValue({

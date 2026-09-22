@@ -10,6 +10,8 @@ import {
   runSemanticAction,
 } from "../src/shared/takeoff-action-client.ts";
 
+import { bodyText } from "./body-text.ts";
+
 const target = { session: "S", openId: "open-1" };
 const receipt = (id: string, state: string, extra: Record<string, unknown> = {}) => ({
   id,
@@ -36,7 +38,7 @@ function host(rows: Map<string, unknown>, onPost?: (path: string, body: unknown)
   vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
     const path = new URL(url, "http://host").pathname;
     if (init?.method === "POST") {
-      const body = JSON.parse(String(init.body)) as { id: string; input?: unknown };
+      const body = JSON.parse(await bodyText(init)) as { id: string; input?: unknown };
       posted.push({ path, body });
       onPost?.(path, body);
       // The client verifies the receipt echoes the exact admitted intent, so the stub must too.

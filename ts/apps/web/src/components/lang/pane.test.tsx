@@ -378,11 +378,11 @@ test("artifact rail keeps disabled commit refusals focusable without an inline r
 
   const commit = screen.getByRole("button", { name: "Commit" });
   expect(commit.getAttribute("title")).toBe(reason);
-  const scroll = HTMLElement.prototype.scrollIntoView;
+  // jsdom implements no scrollIntoView, so focus() throws unless the test installs one.
   HTMLElement.prototype.scrollIntoView = vi.fn();
   act(() => commit.focus());
   expect(screen.getByRole("tooltip").textContent).toBe(reason);
-  HTMLElement.prototype.scrollIntoView = scroll;
+  Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
 });
 
 test("a disabled commit remains keyboard reachable and shows its reason on focus", () => {

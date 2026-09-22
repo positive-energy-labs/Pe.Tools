@@ -122,9 +122,18 @@ export const paramSpec = (model: FamilyModel, name: string): ParamSpec | undefin
 
 type ValueSource = "override" | "value" | "formula" | "missing";
 
-/** PortableValue's boolean literals use Revit's Yes/No spelling; raw JSON remains untouched. */
+/** PortableValue's boolean literals use Revit's Yes/No spelling; raw JSON remains untouched —
+ *  a structured value is written back as JSON, never as `[object Object]`. */
 export const parameterText = (value: unknown): string =>
-  typeof value === "boolean" ? (value ? "Yes" : "No") : String(value ?? "");
+  typeof value === "boolean"
+    ? value
+      ? "Yes"
+      : "No"
+    : typeof value === "string"
+      ? value
+      : value == null
+        ? ""
+        : JSON.stringify(value);
 
 /** THE value trichotomy: type override → formula (resolved) → family value → missing. */
 function resolveParam(
