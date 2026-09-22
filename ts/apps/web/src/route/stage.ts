@@ -3,8 +3,8 @@
  * and the panes it shows. A pane declares what it draws and its own verbs — never a focus policy:
  * focus re-reads exactly when the Reading envelope carries the host's change mark. Panes reach
  * the world only through these Readings and verbs (Shape B, stage-pane-verb-exploration.md §4).
- * ASSUME(kai): the Reading is the cache, shared by every pane that draws it (Chat's too) (Q4) |
- * alt: each pane holds its own snapshot
+ * The Reading is the cache, shared by every pane that draws it, Chat's too; the host stamps its
+ * taken-at and its change mark once for all of them (ruled 2026-09-22).
  */
 import type { Chord } from "#/route/keys";
 

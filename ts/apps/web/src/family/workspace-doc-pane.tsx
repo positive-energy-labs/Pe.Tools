@@ -1,4 +1,4 @@
-import { settingsFieldPointer, showScheduleCellValue } from "@pe/agent-contracts";
+import { settingsFieldPointer, showCellValue } from "@pe/agent-contracts";
 import { parameterText, paramSpec } from "#/family/family-model";
 import { EmptyState } from "#/components/lang/empty";
 import { FactChip, Tag } from "#/components/lang/chip";
@@ -193,7 +193,7 @@ export function FamilyWorkspaceDocPane() {
                     parse: (text: string) => parse(world.live!.units![name]!, text),
                     // The family authors its value as a literal, so Revit's answer is written in
                     // this document's own unit grammar — the same door typed text takes.
-                    stage: (staged) => editAuthored(name, showScheduleCellValue(staged)),
+                    stage: (staged) => editAuthored(name, showCellValue(staged)),
                   }
                 : undefined
             }

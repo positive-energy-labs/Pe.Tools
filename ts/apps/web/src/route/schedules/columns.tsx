@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import {
   scheduleCellKey,
-  showScheduleCellValue,
+  showCellValue,
   splitScheduleCellKey,
   transitionPatches,
   type MeasuredValue,
@@ -150,9 +150,9 @@ export function useScheduleGridColumns(
             const isStale = staleAt != null;
             const current = binding?.displayValue ?? row.values[columnIndex] ?? "";
             const shown = isStaged
-              ? showScheduleCellValue(cell.staged?.value)
+              ? showCellValue(cell.staged?.value)
               : isProposal
-                ? showScheduleCellValue(cell.proposal?.value)
+                ? showCellValue(cell.proposal?.value)
                 : current;
             const lock = scheduleLock(binding);
             const note =

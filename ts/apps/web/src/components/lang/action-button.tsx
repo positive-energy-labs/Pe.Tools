@@ -22,7 +22,7 @@
  *       keyboard reaches the highest-stakes refusal on a page. It no longer renders as an inline
  *       line (signals, 2026-09-19: the inline "nothing…" text read as noise). All other tones stay
  *       title-only.
- *       ASSUME(kai): reason on hover+focus | alt: 2026-08-16 inline reason for commit
+ *       Reason on hover and focus (ruled 2026-09-22; the 2026-08-16 inline reason is retired)
  *     · mono type collided with "mono means the machine measured this". Verbs are sans now.
  * - BLAST RADIUS IS NOT A TONE. It groups the lane and buys no hue: all three writes wear the
  *   same single blue however far they reach. That is `ActionGroup`, below.

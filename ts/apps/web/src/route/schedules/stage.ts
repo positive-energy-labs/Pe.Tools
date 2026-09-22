@@ -18,8 +18,7 @@ const rail: PaneDecl<R, A> = {
 const grid: PaneDecl<R, A> = {
   draws: ["work", "saved", "receipts"],
   verbs: ["stage", "unstage", "accept", "deny"],
-  // ASSUME(kai): the grid's read files a capture, so it is the `refresh` verb run by the pane |
-  // alt: a host Reading "latest capture of schedule X" (NEEDS-CONTRACT)
+  // The grid's read files a capture, so it is the `refresh` verb run by the pane (ruled 2026-09-22).
   reads: "refresh",
 };
 // Revealing this pane moves no focus (ledger 2026-09-22).

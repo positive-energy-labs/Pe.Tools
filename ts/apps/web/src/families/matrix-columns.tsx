@@ -3,7 +3,7 @@ import {
   familyCellAddress,
   familyCellKey,
   familyCellValueSchema,
-  showScheduleCellValue,
+  showCellValue,
   type FamilyCellState,
 } from "@pe/agent-contracts";
 import { reviewTransitions, type CellWire } from "#/components/lang/band";
@@ -412,7 +412,7 @@ export function ProposalCell({
         placeholder={proposal || staged ? current : undefined}
         measured={
           measured && onCommit && !lock
-            ? { ...measured, stage: (staged) => onCommit(showScheduleCellValue(staged)) }
+            ? { ...measured, stage: (staged) => onCommit(showCellValue(staged)) }
             : undefined
         }
         onCommit={lock || !onCommit ? undefined : onCommit}

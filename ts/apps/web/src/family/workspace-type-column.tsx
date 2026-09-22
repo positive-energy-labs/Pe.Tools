@@ -1,4 +1,4 @@
-import { settingsFieldPointer, showScheduleCellValue } from "@pe/agent-contracts";
+import { settingsFieldPointer, showCellValue } from "@pe/agent-contracts";
 import type { Column } from "#/components/master-table/model";
 import { ReadCell } from "#/components/master-table/cells";
 import { cellFromTrichotomy, type StateCellProps } from "#/components/lang/cell";
@@ -275,7 +275,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
               measured: {
                 displayUnit,
                 parse: (text: string) => parse(displayUnit, text),
-                stage: (staged) => editOverride(row.name, typeName, showScheduleCellValue(staged)),
+                stage: (staged) => editOverride(row.name, typeName, showCellValue(staged)),
               },
             }
           : {}),

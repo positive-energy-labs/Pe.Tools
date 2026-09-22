@@ -26,7 +26,7 @@ export const scheduleCellValueSchema = z.union([z.string(), measuredValueSchema]
 export type ScheduleCellValue = z.infer<typeof scheduleCellValueSchema>;
 
 /** The one word for a cell value, wherever it is drawn: a measured value reads with its unit. */
-export const showScheduleCellValue = (value: unknown): string => {
+export const showCellValue = (value: unknown): string => {
   if (typeof value === "string") return value;
   const measured = measuredValueSchema.safeParse(value);
   return measured.success ? `${measured.data.value} ${measured.data.unit}` : "";
