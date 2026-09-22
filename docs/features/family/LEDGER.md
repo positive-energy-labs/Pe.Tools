@@ -45,6 +45,7 @@ Recentered 2026-09-08 from the operator stories, source history, and native test
 - 2026-08-16 — An absent per-type override is not an empty resolved value; family-table cells must retain that distinction.
 
 ## Owed
+- Revit-backed proof that `FamilyParameterSnapshot.DisplayUnit` is the PROJECT's unit for a loaded family's measured parameter, and `FamilyCaptureData.ParameterUnits` is the open `.rfa`'s own unit for the same spec when the two documents disagree (design-system ledger 2026-09-22). The file/fixture lane reports no `parameterUnits`, so `/family` measured cells stay plain text there; intentional, untested.
 
 - At Family engine acceptance, port focused parameter plan capture with `DecisionFingerprint` (`7cc0706`) and exact electrical-connector plan identity that refuses approximate references (`881d393`, `a6ce060`) onto the `ba200ee` model. The behavior is preserved at local ref `refs/archive/wt-sweep-20260915/branch/family/electrical-connector-plan-capture`; compile passed there, but its prepared native tests never ran.
 - Prove natively that an `EditFamily` copy has an empty `PathName` and a `Title` equal to `{family.Name}.rfa`; the `HandleFamilyCopyFailures` document predicate depends on this identity.
