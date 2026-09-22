@@ -1,7 +1,7 @@
 import { previousOf, useHostCall } from "#/readings";
 import type { Reading } from "@pe/agent-contracts";
 import type { AgentControllerEvent, MastraClient, MastraDBMessage } from "@mastra/client-js";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { emptyChatState, isUserTurn, type ChatDisplay, type ChatState } from "../chat-state";
 
 type ControllerClient = ReturnType<MastraClient["getAgentController"]>;
@@ -73,8 +73,13 @@ export function useThreadStream(options: {
   }, [refresh]);
   const hydrated = query.data !== undefined;
 
+  // ponytail: DISPOSABLE SPIKE (runtime review) — a subscription that runs again for the same thread
+  // (Activity reveal) re-reads the body once, so a run that finished while hidden reconciles now.
+  const subscribedRef = useRef<string | null>(null);
   useEffect(() => {
     if (!session || !hydrated) return;
+    if (subscribedRef.current === threadId) void invalidate();
+    subscribedRef.current = threadId;
     let stopped = false;
     const accept = (event: AgentControllerEvent) => {
       if (stopped) return;

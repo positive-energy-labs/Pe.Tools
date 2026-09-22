@@ -51,6 +51,8 @@ const config = defineConfig(({ mode }) => {
       }) as never,
     ],
     server: {
+      // ponytail: disposable — lets the JS Self-Profiling API run in the benchmark tab (runtime review).
+      headers: { "Document-Policy": "js-profiling" },
       fs: {
         allow: [
           searchForWorkspaceRoot(import.meta.dirname),

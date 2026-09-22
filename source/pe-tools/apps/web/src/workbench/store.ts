@@ -165,7 +165,9 @@ export function createChatPageStore(deps: {
       setMode: (mode: string) => void deps.search.patch({ mode }),
       setLensIntent,
       setPlugin: (plugin?: ChatSearch["plugin"]) => void deps.search.patch({ plugin }),
-      openThread: (thread: string, replace = false) => deps.search.patch({ thread }, replace),
+      // ponytail: DISPOSABLE SPIKE — a chosen thread never inherits the previous thread's draft or turn.
+      openThread: (thread: string, replace = false) =>
+        deps.search.patch({ thread, prompt: undefined, turn: undefined }, replace),
     },
     runAction: core.runAction,
     dispose() {

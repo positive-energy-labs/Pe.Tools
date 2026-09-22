@@ -25,12 +25,13 @@ import {
   toSummaries,
 } from "./use-workbench";
 
-export function WorkbenchProvider({ children }: { children: ReactNode }) {
+export function WorkbenchProvider({ children, thread }: { children: ReactNode; thread?: string }) {
   const config = useMemo(() => resolveWorkbenchConfig(), []);
   const navigate = useNavigate({ from: "/chat" });
   const search = useSearch({ from: "/chat" });
-  const [initialThreadId] = useState(() => search.thread ?? crypto.randomUUID());
-  const currentThreadId = search.thread ?? initialThreadId;
+  const [initialThreadId] = useState(() => thread ?? search.thread ?? crypto.randomUUID());
+  // ponytail: DISPOSABLE SPIKE — the thread is a prop so a hidden Activity instance keeps its own.
+  const currentThreadId = thread ?? search.thread ?? initialThreadId;
   useEffect(() => {
     if (!search.thread)
       void navigate({

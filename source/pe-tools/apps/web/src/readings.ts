@@ -248,6 +248,10 @@ export function advance<T>(reading: Reading<T>, frame: Frame): Reading<T> {
   const previous = previousOf(reading);
   switch (frame.kind) {
     case "snapshot":
+      // ponytail: DISPOSABLE SPIKE — an unchanged snapshot keeps the ready object, so equal data
+      // does not render; stale/failed/gap transitions below still allocate, so liveness is unchanged.
+      if (reading.state === "ready" && JSON.stringify(reading.observation) === JSON.stringify(frame.value))
+        return reading;
       return { state: "ready", observation: frame.value as T };
     case "failure":
       return { state: "failed", message: frame.error, ...(previous !== undefined && { previous }) };

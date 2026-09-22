@@ -35,6 +35,14 @@ try {
       port: await chooseServicePort(productRoot(), name, 0),
     },
   });
+  // ponytail: disposable runtime-review instrumentation — JS Self-Profiling needs this on every response.
+  vite.middlewares.stack.unshift({
+    route: "",
+    handle: (_req: unknown, res: { setHeader(k: string, v: string): void }, next: () => void) => {
+      res.setHeader("Document-Policy", "js-profiling");
+      next();
+    },
+  });
   await vite.listen();
   const address = vite.httpServer!.address();
   if (!address || typeof address === "string") throw new Error("Vite did not bind TCP");

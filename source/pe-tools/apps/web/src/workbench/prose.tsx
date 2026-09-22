@@ -11,7 +11,7 @@
  */
 import ReactMarkdown, { type Components, type ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { createContext, isValidElement, useContext, type ReactNode } from "react";
+import { createContext, isValidElement, memo, useContext, type ReactNode } from "react";
 
 import { Code } from "#/components/lang/code";
 import { cn } from "#/lib/utils";
@@ -92,7 +92,8 @@ const MARKDOWN_COMPONENTS: Components = {
 // and bare autolinks.
 const REMARK_PLUGINS = [remarkGfm];
 
-export function Markdown({ text, className }: { text: string; className?: string }) {
+// ponytail: DISPOSABLE SPIKE (runtime review) — memoised on text so an unrelated commit does not re-parse.
+export const Markdown = memo(function Markdown({ text, className }: { text: string; className?: string }) {
   return (
     <div className={cn(PROSE_CLASS, className)}>
       <MarkdownSource.Provider value={text}>
@@ -102,4 +103,4 @@ export function Markdown({ text, className }: { text: string; className?: string
       </MarkdownSource.Provider>
     </div>
   );
-}
+});

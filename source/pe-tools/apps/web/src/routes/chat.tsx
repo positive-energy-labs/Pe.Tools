@@ -1,4 +1,5 @@
 import { createFileRoute, retainSearchParams, stripSearchParams } from "@tanstack/react-router";
+import { Activity, useRef } from "react";
 import { z } from "zod";
 import { MODES } from "#/workbench/depth";
 import { WorkbenchProvider } from "#/workbench/provider";
@@ -59,9 +60,20 @@ export function ChatRouteContent({
   plugin,
   thread,
 }: Pick<z.infer<typeof chatSearchSchema>, "plugin" | "thread">) {
+  // ponytail: DISPOSABLE SPIKE (runtime review) — every visited thread stays mounted inside an
+  // Activity so hidden-thread cost and draft survival can be measured. Not a design.
+  const visited = useRef<string[]>([]);
+  const key = thread ?? "draft";
+  if (!visited.current.includes(key)) visited.current = [...visited.current, key];
   return (
-    <WorkbenchProvider key={thread ?? "draft"}>
-      <ChatShell plugin={plugin} />
-    </WorkbenchProvider>
+    <>
+      {visited.current.map((id) => (
+        <Activity key={id} mode={id === key ? "visible" : "hidden"}>
+          <WorkbenchProvider thread={id === "draft" ? undefined : id}>
+            <ChatShell plugin={plugin} />
+          </WorkbenchProvider>
+        </Activity>
+      ))}
+    </>
   );
 }
