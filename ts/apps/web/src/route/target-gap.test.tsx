@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { act, cleanup, renderHook } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook } from "@testing-library/react";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { peReadings, useHostStatus, useInventory } from "#/readings";
 import { inspectAtomRegistry } from "#/state/atom-inspect";
 import { defineRoute } from "./manifest";
+import { Situation } from "./situation";
 import { appAtomRegistry, useRoute } from "./use-route";
 
 test("a stream reconnect retains the target and dirties the bound Reading", async () => {
@@ -532,51 +533,60 @@ test("Save As moves the Work key to the Address and carries the open lifetime wi
   }
 });
 
-test("the unsaved document closes: its Work is discarded once and the receipt is drawn", async () => {
+test("the unsaved document closes: the host's discard draws the receipt, the web asks for nothing", async () => {
   await settle();
-  const requests: unknown[] = [];
   let inventory!: Parameters<typeof peReadings.subscribe>[1];
+  let world!: Parameters<typeof peReadings.subscribe>[1];
   const subscribe = vi.spyOn(peReadings, "subscribe").mockImplementation((request, accept) => {
-    requests.push(request);
     if (request.kind === "inventory") inventory = accept;
+    if (request.kind === "world") world = accept;
     return () => {};
   });
-  const discards: string[] = [];
+  const posts: string[] = [];
   const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-    discards.push(input as string);
+    posts.push(input as string);
     return new Response(JSON.stringify({ ok: true, revision: 0 }));
   });
   const manifest = gateManifest();
+  const Harness = () => {
+    const handle = useRoute(manifest, { target: PIN });
+    return <Situation handle={handle} sentence={null} target={{ session: null, document: null }} />;
+  };
   try {
-    const { result } = renderHook(() => useRoute(manifest, { target: PIN }));
+    const view = render(<Harness />);
     act(() => inventory(openInventory(null) as never));
-    expect(result.current.work.discarded).toBe(false);
+    expect(view.queryByText(/unsaved document closed/)).toBeNull();
 
+    // The host swept the Work when the document closed and says what it removed. The web never
+    // asked for it: no discard is posted, before or after the inventory catches up.
     await act(async () => {
-      inventory({
-        kind: "snapshot",
-        key: "inventory",
+      world({
+        kind: "event",
+        key: "world",
         value: {
-          sessions: [
-            {
-              connected: true,
-              sessionId: "revit",
-              sdkSessionId: "friendly-recovery-name",
-              openDocumentCount: 0,
-              openDocuments: [],
-            },
-          ],
+          type: "route_workspace",
+          action: "discard",
+          route: "document-work-gate",
+          scope: {
+            route: "document-work-gate",
+            target: null,
+            open: { session: "revit", openId: "doc" },
+          },
+          removed: 1,
+          ok: true,
         },
       } as never);
     });
-    expect(result.current.bindingLost?.reason).toBe("document-closed");
-    expect(discards).toEqual([
-      expect.stringContaining("/route-state/document-work-gate/discard?open=revit%2Fdoc"),
-    ]);
-    expect(result.current.work.discarded).toBe(true);
+    expect(
+      view.getByText("unsaved document closed — the Work staged on it was discarded"),
+    ).toBeTruthy();
+    expect(posts.filter((url) => url.includes("/discard"))).toEqual([]);
+
     // No confirm dialog: the receipt is dismissable and nothing is asked of the person.
-    act(() => result.current.work.dismissDiscarded());
-    expect(result.current.work.discarded).toBe(false);
+    await act(async () => {
+      fireEvent.click(view.getByRole("button", { name: /dismiss/i }));
+    });
+    expect(view.queryByText(/unsaved document closed/)).toBeNull();
   } finally {
     cleanup();
     fetch.mockRestore();

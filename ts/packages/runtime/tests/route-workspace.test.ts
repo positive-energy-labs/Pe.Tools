@@ -491,16 +491,63 @@ test("an addressed document's own Work is never replaced by a stale addressless 
   expect((await bind(module, savedAs).read())?.doc).toMatchObject({ values: { a: "addressed" } });
 });
 
-test("the document lifetime ends and its Work is discarded; saved Work refuses", async () => {
+test("the sweep discards an addressless Work when its lifetime leaves the session inventory", async () => {
   const { store } = memoryStore();
   const module = workspace(store);
+  const events: RouteWorkspaceEvent[] = [];
   await bind(module, unsaved).apply("human", [{ path: ["values", "a"], value: "A" }], 0);
+  await bind(module, documentA).apply("human", [{ path: ["values", "a"], value: "A" }], 0);
+  module.subscribe((event) => events.push(event));
 
-  expect(await module.discard(documentA, "test-route", "human")).toMatchObject({ ok: false });
-  expect(
-    await module.discard({ route: "test-route", target: null, work: "named" }, "test-route", "human"),
-  ).toMatchObject({ ok: false });
-  expect(await module.discard(unsaved, "test-route", "agent")).toMatchObject({ ok: false });
-  expect(await module.discard(unsaved, "test-route", "human")).toMatchObject({ ok: true });
+  // The lifetime is still listed: nothing is swept.
+  expect(await module.sweepOpen([{ session: "revit", openId: "doc-1" }])).toBe(0);
+  // The session is gone, not the document: a detached bridge is not a closed document.
+  expect(await module.sweepOpen([])).toBe(0);
+  // The session is there and no longer lists the document: that Work ended with it.
+  expect(await module.sweepOpen([{ session: "revit", openId: "doc-2" }])).toBe(1);
+
   expect(await bind(module, unsaved).read()).toBeNull();
+  // Addressed Work is never discarded from under a person.
+  expect((await bind(module, documentA).read())?.doc).toMatchObject({ values: { a: "A" } });
+  expect(events).toEqual([
+    {
+      type: "route_workspace",
+      scope: unsaved,
+      route: "test-route",
+      actor: "human",
+      action: "discard",
+      revision: 0,
+      ok: true,
+      removed: 1,
+    },
+  ]);
+  // Swept once: the lifetime is forgotten with its Work.
+  expect(await module.sweepOpen([{ session: "revit", openId: "doc-2" }])).toBe(0);
+});
+
+test("the sweep says how many Works one closed lifetime took with it", async () => {
+  const { store } = memoryStore();
+  const module = new RouteWorkspace({
+    registrations: [
+      registration(),
+      { ...registration(), spec: { ...registration().spec, route: "other-route" } },
+    ],
+    store,
+  });
+  await bind(module, unsaved).apply("human", [{ path: ["values", "a"], value: "A" }], 0);
+  await module.apply(
+    { ...unsaved, route: "other-route" },
+    "other-route",
+    "human",
+    [{ path: ["values", "a"], value: "A" }],
+    0,
+  );
+  const events: RouteWorkspaceEvent[] = [];
+  module.subscribe((event) => events.push(event));
+
+  expect(await module.sweepOpen([{ session: "revit", openId: "doc-2" }])).toBe(2);
+  expect(events.map((event) => [event.route, event.removed])).toEqual([
+    ["test-route", 2],
+    ["other-route", 2],
+  ]);
 });

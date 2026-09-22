@@ -41,6 +41,8 @@ export interface RouteWorkspaceEvent {
   patchCount?: number;
   ok: boolean;
   error?: string;
+  /** `discard` only: how many Work documents that sweep removed for the closed lifetime. */
+  removed?: number;
 }
 
 export interface RouteDocumentStore {
@@ -61,6 +63,8 @@ export class RouteWorkspace {
   readonly #tails = new Map<string, Promise<void>>();
   readonly #listeners = new Set<(event: RouteWorkspaceEvent) => void>();
   readonly #reads = new OwnerReads();
+  /** Every `open:`-keyed Work this workspace wrote: lifetime id -> route -> the key it wrote. */
+  readonly #openWork = new Map<string, { open: OpenRef; routes: Map<string, WorkKey> }>();
 
   constructor(private readonly options: RouteWorkspaceOptions) {
     for (const registration of options.registrations) {
@@ -366,39 +370,49 @@ export class RouteWorkspace {
   }
 
   /**
-   * The document lifetime this addressless Work belonged to ended, so the Work is gone. Only ever
-   * an `open`-keyed scope: addressed and named Work is never discarded from under a person.
+   * The open document lifetimes the connected sessions still hold. Every addressless Work this
+   * workspace wrote for a lifetime its own session no longer lists ended with its document, so it
+   * is removed and its `discard` published with the count the sweep removed. A session missing
+   * from `live` is left alone: a detached bridge is not a closed document.
    */
-  async discard(scope: WorkKey, route: string, actor: RouteActor): Promise<RouteStateWriteResult> {
-    if (!this.#registry.has(route)) return unknownRoute(route);
-    if (actor !== "human")
-      return refuse(
-        "refused",
-        "discard is human-only",
-        "Only the person whose document closed discards its Work.",
-      );
-    if (scope.work !== undefined || scope.target !== null || scope.open === undefined)
-      return refuse(
-        "refused",
-        "only an unsaved document's Work is discarded",
-        "Saved Work is kept; nothing was discarded.",
-      );
-    return this.#serialized(scope, route, async () => {
-      await this.options.store.setState({ targetKey: workKey(scope), route, value: null });
-      await this.#publish({
-        type: "route_workspace",
-        scope,
-        route,
-        actor: "human",
-        action: "discard",
-        revision: 0,
-        ok: true,
-      });
-      return { ok: true, revision: 0 };
-    });
+  async sweepOpen(live: readonly OpenRef[]): Promise<number> {
+    const sessions = new Set(live.map((open) => open.session));
+    const alive = new Set(live.map(lifetime));
+    let removed = 0;
+    for (const [id, held] of this.#openWork) {
+      if (alive.has(id) || !sessions.has(held.open.session)) continue;
+      this.#openWork.delete(id);
+      const entries = [...held.routes];
+      for (const [route, scope] of entries) {
+        await this.#serialized(scope, route, () =>
+          this.options.store.setState({ targetKey: workKey(scope), route, value: null }),
+        );
+        await this.#publish({
+          type: "route_workspace",
+          scope,
+          route,
+          actor: "human",
+          action: "discard",
+          revision: 0,
+          ok: true,
+          removed: entries.length,
+        });
+      }
+      removed += entries.length;
+    }
+    return removed;
   }
 
   async #persist(scope: WorkKey, route: string, envelope: RouteEnvelope<unknown>): Promise<void> {
+    if (scope.work === undefined && scope.target === null && scope.open !== undefined) {
+      const id = lifetime(scope.open);
+      const held = this.#openWork.get(id) ?? {
+        open: scope.open,
+        routes: new Map<string, WorkKey>(),
+      };
+      held.routes.set(route, scope);
+      this.#openWork.set(id, held);
+    }
     await this.options.store.setState({
       targetKey: workKey(scope),
       route,
@@ -443,6 +457,11 @@ function readable(raw: unknown, spec: RouteStateSpec<z.ZodType>): boolean {
     return false;
   }
 }
+
+/** One open document lifetime, the scope an addressless Work is keyed by. */
+type OpenRef = { readonly session: string; readonly openId: string };
+
+const lifetime = (open: OpenRef) => `${open.session}/${open.openId}`;
 
 const aside = (route: string, slot: number) => `${route}${START_FRESH_ASIDE}${slot}`;
 

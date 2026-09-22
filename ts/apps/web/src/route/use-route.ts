@@ -444,7 +444,7 @@ class RouteAtomKey implements Equal.Equal {
 
 function routeUrl(
   route: string,
-  operation: "apply" | "command" | typeof START_FRESH | "salvage" | "discard",
+  operation: "apply" | "command" | typeof START_FRESH | "salvage",
   key: WorkKey,
 ) {
   const url = new URL(peUrl(resolveWorkbenchConfig(), `/route-state/${route}/${operation}`));
@@ -502,7 +502,7 @@ export function docWriter<S extends RouteStateSpec<any>>(
   conflict: Atom.Writable<boolean> | undefined,
 ) {
   const send = async (
-    operation: "apply" | "command" | typeof START_FRESH | "discard",
+    operation: "apply" | "command" | typeof START_FRESH,
     body: Record<string, unknown> & { expectedRevision?: number },
     onAccepted?: (base: number, revision: number) => void,
   ): Promise<Refusal | null> => {
@@ -555,8 +555,6 @@ export function docWriter<S extends RouteStateSpec<any>>(
     startFresh: () => send(START_FRESH, {}),
     /** The human door only: what the route carries over from Work it can no longer read. */
     salvage: () => getRouteSalvage(routeUrl(spec.route, "salvage", key)),
-    /** The unsaved document this Work belonged to closed; the host refuses any addressed scope. */
-    discard: () => send("discard", {}),
   };
 }
 
@@ -633,9 +631,6 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
     readonly key: WorkKey;
     /** Addressless: this Work belongs to one unsaved document's lifetime and dies with it. */
     readonly ephemeral: boolean;
-    /** That lifetime ended and the Work was discarded; the route draws the receipt until dismissed. */
-    readonly discarded: boolean;
-    readonly dismissDiscarded: () => void;
     readonly doc: W | null;
     readonly revision: number | null;
     /** Whether the authoritative Work reading is current, including a current absent document. */
@@ -1308,32 +1303,10 @@ export function useRoute<W, R extends string, P, A extends string>(
     actionScope,
   ]);
 
-  // An unsaved document's Work lives exactly as long as that document. The key stays in hand
-  // across the close (the resolution no longer names it), so the Work is discarded at the host
-  // once, and the route draws its receipt from `discarded`.
-  const ephemeralKey = useRef<WorkKey | null>(null);
-  const [discarded, setDiscarded] = useState(false);
-  useEffect(() => {
-    if (ephemeral) ephemeralKey.current = key;
-  }, [ephemeral, key]);
-  useEffect(() => {
-    const gone = ephemeralKey.current;
-    if (seed || !spec || !bindingLost || !gone?.open) return;
-    if (
-      gone.open.session !== bindingLost.ref.session ||
-      gone.open.openId !== bindingLost.ref.openId
-    )
-      return;
-    ephemeralKey.current = null;
-    void postRouteWrite(routeUrl(spec.route, "discard", gone), {}).then(() => setDiscarded(true));
-  }, [seed, spec, bindingLost]);
-
   const workHandle = useMemo(
     () => ({
       key,
       ephemeral,
-      discarded,
-      dismissDiscarded: () => setDiscarded(false),
       doc: (doc?.doc ?? null) as W | null,
       revision: doc?.revision ?? null,
       current: workCurrent,
@@ -1362,7 +1335,6 @@ export function useRoute<W, R extends string, P, A extends string>(
     [
       key,
       ephemeral,
-      discarded,
       doc,
       workCurrent,
       sliceResult,

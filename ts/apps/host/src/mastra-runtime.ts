@@ -6,7 +6,7 @@ import { RevitBridge } from "./bridge.ts";
 import { HttpEffect, HttpRouter, HttpServer } from "effect/unstable/http";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { createCapabilityCatalogSource, createRouteRegistrations } from "@pe/mcps";
-import { buildAgentControllerApp, type ServableRuntime } from "@pe/runtime";
+import { buildAgentControllerApp, type RouteWorkspace, type ServableRuntime } from "@pe/runtime";
 import { hostResourceObserver } from "./resource-adapters.ts";
 import {
   createPeaRuntime,
@@ -147,7 +147,10 @@ export function makeMastraRuntimeLive(
             runtime,
             label: "pea",
             observeHostResource,
-            onRouteWorkspace: bindActionWorkspace,
+            onRouteWorkspace: (workspace) => {
+              bindActionWorkspace(workspace);
+              sweepClosedDocuments(Option.getOrUndefined(bridge), workspace);
+            },
             routeRegistrations: registrations,
             capabilityCatalog: catalog,
           });
@@ -190,6 +193,32 @@ export function makeMastraRuntimeLive(
       return { fetch: handle.fetch };
     }),
   );
+}
+
+/**
+ * The document-close edge, owned where the fact is: every bridge frame restates which open
+ * lifetimes the connected sessions hold, so an addressless Work whose lifetime is no longer listed
+ * is swept. The first sweep runs at wiring time, for lifetimes that ended while the host was down.
+ */
+function sweepClosedDocuments(bridge: RevitBridge["Service"] | undefined, work: RouteWorkspace) {
+  if (!bridge) return;
+  const sweep = () =>
+    void Effect.runPromise(bridge.list)
+      .then((sessions) =>
+        work.sweepOpen(
+          sessions.flatMap((session) =>
+            session.connected && session.sessionId
+              ? (session.state?.openDocuments ?? []).map((document) => ({
+                  session: session.sessionId as string,
+                  openId: document.openId,
+                }))
+              : [],
+          ),
+        ),
+      )
+      .catch(() => undefined);
+  bridge.subscribe(sweep);
+  sweep();
 }
 
 /**

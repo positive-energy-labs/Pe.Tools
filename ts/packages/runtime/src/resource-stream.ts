@@ -29,6 +29,19 @@ export function observeResources(
     const accept = (value: OwnerValue<unknown>) => publish(resourceSnapshot(key, value));
     if (request.kind === "work") return work.observe(request, request.route, accept);
     if (request.kind === "thread-head") return scopes.observe(request.thread, accept);
+    // The host owns the document-close edge, so the receipt for an addressless Work it swept rides
+    // the same World stream the tab already reads; the Work itself is gone before the tab asks.
+    if (request.kind === "world") {
+      const releaseWork = work.subscribe((event) => {
+        if (event.action === "discard")
+          publish({ kind: "event", key, value: { ...event, atMs: Date.now() } });
+      });
+      const releaseHost = host?.(request, publish);
+      return () => {
+        releaseWork();
+        releaseHost?.();
+      };
+    }
     if (host) return host(request, publish);
     publish({ kind: "failure", key, error: `Resource '${request.kind}' is unavailable` });
     return () => {};

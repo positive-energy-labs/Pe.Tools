@@ -19,9 +19,9 @@
 import {
   Fragment,
   createContext,
+  useCallback,
   useContext,
   useEffect,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -37,7 +37,7 @@ import { Press } from "#/components/lang/press";
 import { StateDot } from "#/components/master-table/cells";
 import { ThemeToggle } from "#/components/lang/theme-toggle";
 
-import { inventoryOf, previousOf } from "#/readings";
+import { inventoryOf, previousOf, useHostEvents } from "#/readings";
 
 import { RouteHelpButton } from "./help";
 import { FlowMatrix } from "./flow";
@@ -730,6 +730,47 @@ export interface SituationProps {
   ledger?: readonly (readonly [string, ReactNode])[];
 }
 
+/**
+ * The receipt for an addressless Work the host swept when its document closed: the host owns that
+ * edge and says on the World stream how many Work documents it removed, so the route reports what
+ * was deleted rather than the count it last saw staged (2026-09-22, addressless Work is ephemeral).
+ */
+function useDiscardReceipt(handle: RouteHandle<any, any, any, any>) {
+  const route = handle.manifest.work?.route ?? null;
+  const open = handle.work.key.open ?? handle.bindingLost?.ref ?? null;
+  const session = open?.session ?? null;
+  const openId = open?.openId ?? null;
+  const [removed, setRemoved] = useState(0);
+  useHostEvents<DiscardEvent>(
+    !handle.demo && route !== null && session !== null,
+    useCallback(
+      (event) => {
+        if (event.type !== "route_workspace" || event.action !== "discard") return;
+        if (event.route !== route) return;
+        if (event.scope.open?.session !== session || event.scope.open?.openId !== openId) return;
+        setRemoved(event.removed ?? 1);
+      },
+      [route, session, openId],
+    ),
+  );
+  if (removed === 0) return false;
+  return {
+    text:
+      removed === 1
+        ? "unsaved document closed — the Work staged on it was discarded"
+        : `unsaved document closed — the Work staged on it was discarded from ${removed} routes`,
+    dismiss: () => setRemoved(0),
+  };
+}
+
+type DiscardEvent = {
+  type?: string;
+  action?: string;
+  route?: string;
+  removed?: number;
+  scope: { open?: { session: string; openId: string } };
+};
+
 export function Situation({
   handle,
   sentence,
@@ -757,18 +798,7 @@ export function Situation({
       !(handle.manifest.actions as Record<string, { sheet?: true }> | undefined)?.[name]?.sheet,
   ) as [string, ActionHandle][];
   const staged = work && work.count > 0 ? work : null;
-  // An unsaved document's Work says its own lifetime from the first staged item, and after the
-  // document closes the receipt names what went with it. The count is the last one seen staged:
-  // the Work itself is gone by then (2026-09-22, addressless Work is ephemeral).
-  const discardable = useRef(0);
-  useEffect(() => {
-    if (handle.work.ephemeral && staged) discardable.current = staged.count;
-  }, [handle.work.ephemeral, staged]);
-  const receipt = handle.work.discarded &&
-    discardable.current > 0 && {
-      text: `unsaved document closed — ${discardable.current} ${staged?.noun ?? work?.noun ?? "edit"}${discardable.current === 1 ? "" : "s"} discarded with it`,
-      dismiss: handle.work.dismissDiscarded,
-    };
+  const receipt = useDiscardReceipt(handle);
   const commitAction = commit ? handle.actions[commit] : undefined;
   useChatPlanIntent(handle, commitAction);
   const workWord = workBandWord({
