@@ -86,7 +86,6 @@ export function Ladder({
       aria-label={name}
       // The trigger's face is a value or a placeholder; its name says what it chooses.
       triggerLabel={name}
-      region="situation ladder"
       levels={rungs}
       startLevel={complete ? levels.length - 1 : unbound}
       keyOf={(hit) => `${hit.rung}:${hit.id}`}

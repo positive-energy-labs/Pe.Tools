@@ -88,7 +88,6 @@ function ChipList({
       title={title}
       trigger={<span className="face-mono truncate">{label}</span>}
       aria-label={title}
-      region={`${title.toLowerCase()} chip`}
       items={options}
       keyOf={(option) => option.id}
       labelOf={(option) => option.name}

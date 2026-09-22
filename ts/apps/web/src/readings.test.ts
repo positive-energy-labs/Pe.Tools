@@ -74,10 +74,7 @@ describe("PeReadings topology swap", () => {
   it("releases each subject when its last listener leaves, so focus reads can churn past the key cap", async () => {
     const { readings, flush } = owner();
     for (let i = 0; i < 40; i++) {
-      const release = readings.subscribe(
-        { kind: "member", member: { pod: "proof", path: `${i}.json` } },
-        () => {},
-      );
+      const release = readings.subscribe({ kind: "thread-head", thread: `proof-${i}` }, () => {});
       await flush();
       release();
       await flush();

@@ -102,7 +102,6 @@ export function FieldOptionSelect({
       triggerLabel={placeholder}
       trigger={selected?.label ?? <span className="text-ink-2">{placeholder}</span>}
       aria-label={placeholder}
-      region="field options"
       items={choices}
       keyOf={(option) => option.value}
       labelOf={(option) => option.label}
@@ -148,7 +147,6 @@ export function FieldOptionPicker({
       triggerLabel="Source elements"
       trigger={<ListChips labels={labels} none="All elements in the category" />}
       aria-label="Source elements"
-      region="field options"
       items={choices}
       keyOf={(option) => option.value}
       labelOf={(option) => option.label}

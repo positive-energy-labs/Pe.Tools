@@ -256,7 +256,6 @@ export function useFamiliesColumns({
             return (
               <CellListSelect<string>
                 aria-label={`${col.name} (Yes/No)`}
-                region="table"
                 value={shown}
                 display={
                   <StateCell

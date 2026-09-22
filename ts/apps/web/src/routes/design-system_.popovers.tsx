@@ -68,7 +68,6 @@ function FacetFilterSpecimen() {
       triggerLabel="category filter"
       trigger={choices.find((c) => c.value === value)?.label}
       aria-label="category values"
-      region="facet specimen"
       items={choices}
       keyOf={(c) => c.value}
       labelOf={(c) => c.label}
@@ -96,7 +95,6 @@ function PickerChipSpecimen() {
         </span>
       }
       aria-label="Category"
-      region="chip specimen"
       items={CHOICES}
       keyOf={(c) => c.value}
       labelOf={(c) => c.label}

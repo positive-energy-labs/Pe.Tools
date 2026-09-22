@@ -82,7 +82,6 @@ export function SavedTakeoffsView({
         // Pending, failed and empty are the list's own states (R7, R17), never a blank.
         <List
           aria-label="saved captures"
-          region="saved captures"
           items={rows}
           keyOf={(row) => row.id}
           labelOf={(row) => row.title || row.id}

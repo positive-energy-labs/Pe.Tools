@@ -134,7 +134,6 @@ export function AnatomyDrawing({
         )}
         <List
           aria-label="constituents"
-          region="anatomy"
           items={world.constituents}
           keyOf={(part) => part.slug}
           labelOf={(part) => part.slug}

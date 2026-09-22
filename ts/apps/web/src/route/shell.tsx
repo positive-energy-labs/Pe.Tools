@@ -233,21 +233,22 @@ function BaselineShell<W, R extends string, P, A extends string>({
       aria-label={`${manifest.name} route`}
       className={`flex ${children ? "h-full" : ""} min-h-0 min-w-0 flex-col gap-2`}
     >
-      <RouteKeys handle={handle} />
-      {situation ?? (
-        <>
-          <div className="flex min-w-0 items-center justify-between gap-4">
-            <h1 className="t-head face-display text-ink">{name ?? manifest.name}</h1>
-            <span className="flex shrink-0 items-center gap-3">
-              {aside}
-              <RouteHelpButton name={manifest.name} docs={manifest.docs} />
-              <HostLamp live={live} />
-            </span>
-          </div>
-          {head ?? <ShellVerbs handle={handle} />}
-        </>
-      )}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
+      <RouteKeys handle={handle}>
+        {situation ?? (
+          <>
+            <div className="flex min-w-0 items-center justify-between gap-4">
+              <h1 className="t-head face-display text-ink">{name ?? manifest.name}</h1>
+              <span className="flex shrink-0 items-center gap-3">
+                {aside}
+                <RouteHelpButton name={manifest.name} docs={manifest.docs} />
+                <HostLamp live={live} />
+              </span>
+            </div>
+            {head ?? <ShellVerbs handle={handle} />}
+          </>
+        )}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
+      </RouteKeys>
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { useEffect, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { Pane, PaneSplit } from "#/components/lang/pane";
+import { KeyScope } from "#/route/keys";
 import { Surface } from "#/components/lang/surface";
 import { previousOf } from "#/readings";
 
@@ -106,6 +107,11 @@ export function EntityRouteView({
   const closed = { confirming: false, sheet: null };
   // A sheet over no spec (the staged cells') draws no spec absence lines (F-B-6).
   const specless = confirming && !page.path;
+  // TODO: hide this pane (Pane `hidden`) instead of unmounting it, so it keeps what was typed —
+  // SpecEditor works while it renders, and a hidden pre-render of it never settles.
+  const specHidden = stages
+    ? !stages[page.stage].panes.spec && !confirming
+    : page.stage === "audit" && !confirming;
   // Field options come from the document this route acts on, read-only (user verdict, grill 2).
   const optionsFrom =
     handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
@@ -156,7 +162,7 @@ export function EntityRouteView({
     </SituationCell>
   );
 
-  return (
+  const board = (
     <Surface
       head={
         <Situation
@@ -214,14 +220,9 @@ export function EntityRouteView({
         resize={{ target: "end", defaultSize: 520, minSize: 320, persist: `${def.key}:spec` }}
         start={children}
         end={
-          (
-            stages
-              ? !stages[page.stage].panes.spec && !confirming
-              : page.stage === "audit" && !confirming
-          ) ? null : (
+          specHidden ? null : (
             <Pane
               kind="inspector"
-              focusOnMount={stages !== undefined}
               title={confirming ? "plan" : "spec"}
               meta={def.entity}
               side="right"
@@ -269,4 +270,7 @@ export function EntityRouteView({
       />
     </Surface>
   );
+  // The optional stage node: panes nest under the stage that shows them, so a chord bound in one
+  // stage cannot fire from another.
+  return stages ? <KeyScope id={`${def.key}:${page.stage}`}>{board}</KeyScope> : board;
 }

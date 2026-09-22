@@ -67,7 +67,6 @@ test("plan reads the page's member against the reviewed Work, and writes no Work
   expect(ctx.write).not.toHaveBeenCalled();
   expect(ctx.setPage).toHaveBeenCalledWith(
     {
-      stage: "apply",
       confirming: true,
       // The row is its family, by name; the id the plan resolved is apply's hash key only.
       sheet: { entries: [expect.objectContaining({ id: "A", hashKey: "3101", planHash: "p" })] },

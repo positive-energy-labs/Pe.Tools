@@ -32,7 +32,6 @@ function mount() {
           cell: () => (
             <CellListSelect
               aria-label="kind"
-              region="cells"
               value="Text"
               items={OPTIONS}
               keyOf={(o) => o.value}

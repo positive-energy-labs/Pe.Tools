@@ -386,7 +386,6 @@ export function ListInput({
         query={value}
         autoCursor={false}
         aria-label={`${label} suggestions`}
-        region={label}
         items={suggestions}
         keyOf={(s) => s.value}
         labelOf={(s) => s.value}

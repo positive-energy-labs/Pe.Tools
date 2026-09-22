@@ -59,16 +59,14 @@ export function LangListSpecimens() {
             selected={["String", "Double"]}
             trigger={<ListChips labels={["String", "Double"]} none="any storage" />}
             aria-label="multi list"
-            region="swatch multi"
           />
           <FreeText />
-          <List {...common} aria-label="inline list" region="swatch list" filter="substring" />
+          <List {...common} aria-label="inline list" filter="substring" />
           <ListPopup
             {...common}
             anchor="trigger"
             trigger={<span className="face-mono">String</span>}
             aria-label="popup list"
-            region="swatch popup"
           />
           <Table<{ key: string }>
             label="cell list"
@@ -78,14 +76,7 @@ export function LangListSpecimens() {
               {
                 key: "storage",
                 label: "storage",
-                cell: () => (
-                  <CellListSelect
-                    {...common}
-                    value="String"
-                    aria-label="storage"
-                    region="swatch table"
-                  />
-                ),
+                cell: () => <CellListSelect {...common} value="String" aria-label="storage" />,
               },
             ]}
           />

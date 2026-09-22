@@ -53,7 +53,6 @@ export function Enum<T extends string>({
       disabled={disabled}
       trigger={value}
       aria-label="options"
-      region="profile field"
       items={options}
       keyOf={(option) => option}
       labelOf={(option) => option}

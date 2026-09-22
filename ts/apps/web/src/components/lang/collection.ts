@@ -2,15 +2,14 @@
  * useCollection — the one headless list behaviour and the ONE key owner for every list
  * (ix-list design; census R3–R9, R12, R14–R17). It knows nothing about pixels: it turns items
  * into visible rows (filtered, grouped, laddered), holds the cursor, the selection and the query,
- * says the list's status, and registers its keys through the hotkey registry with `keyMeta`
- * (widget tier, a region), so help lists them beside the route's own chords.
+ * says the list's status, and binds its keys on the scope node it sits in (`useScopeKeys`), so
+ * help hangs them off that pane.
  *
  * Identity is by key, never by object (R16): rebuilt item arrays are fine.
  */
 import { useId, useMemo, useState } from "react";
-import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys";
 
-import { keyMeta } from "#/route/keys";
+import { useScopeKeys, type ScopeKey } from "#/route/keys";
 
 export type FilterMode = "none" | "substring" | "fuzzy";
 export type SelectMode = "none" | "single" | "multi";
@@ -71,8 +70,6 @@ export interface CollectionOptions<T> {
   autoCursor?: boolean;
   /** The query the list opens with (a cell opened by a printable key, R13). */
   initialQuery?: string;
-  /** The hotkey registry region these keys belong to (a pane id or a widget name). */
-  region: string;
   /** The element the keys listen on: the list itself, or the input that owns it (R14). */
   target: HTMLElement | null;
 }
@@ -293,89 +290,100 @@ export function useCollection<T>(options: CollectionOptions<T>) {
     options.onEscape?.();
   };
 
-  // Every key is a registration with the one meta shape, so the help page lists them.
-  const meta = (name: string, description: string) =>
-    keyMeta({ name, description, tier: "widget", region: options.region });
-  const keys: UseHotkeyDefinition[] = [
-    {
-      hotkey: "ArrowDown",
-      callback: () => moveBy(1),
-      options: { meta: meta("next", "move the cursor down") },
-    },
-    {
-      hotkey: "ArrowUp",
-      callback: () => moveBy(-1),
-      options: { meta: meta("previous", "move the cursor up") },
-    },
-    {
-      hotkey: "Home",
-      callback: () => moveBy(-Infinity),
-      options: { meta: meta("first", "the first row") },
-    },
-    {
-      hotkey: "End",
-      callback: () => moveBy(Infinity),
-      options: { meta: meta("last", "the last row") },
-    },
-    {
-      hotkey: "Enter",
-      callback: () => pick(cursor),
-      options: { meta: meta("pick", "pick the row under the cursor") },
-    },
-    {
-      hotkey: "Escape",
-      callback: escape,
-      options: { meta: meta("back", "clear the query, go up a level, or close") },
-    },
-    ...(options.onTab
-      ? [
-          {
-            hotkey: "Tab" as const,
-            callback: () => options.onTab?.(false),
-            options: { meta: meta("next cell", "leave the list for the next cell") },
-          },
-          {
-            hotkey: "Shift+Tab" as const,
-            callback: () => options.onTab?.(true),
-            options: { meta: meta("previous cell", "leave the list for the previous cell") },
-          },
-        ]
-      : []),
-    ...(select === "multi"
-      ? [
-          {
-            hotkey: "Space" as const,
-            callback: () => pick(cursor),
-            options: { meta: meta("toggle", "add or remove the row") },
-          },
-          {
-            hotkey: "Shift+ArrowDown" as const,
-            callback: () => {
-              const next = moveBy(1);
-              if (next) range(next.key);
+  const keys: ScopeKey[] = (
+    [
+      {
+        hotkey: "ArrowDown",
+        callback: () => moveBy(1),
+        label: "next",
+        says: "move the cursor down",
+      },
+      {
+        hotkey: "ArrowUp",
+        callback: () => moveBy(-1),
+        label: "previous",
+        says: "move the cursor up",
+      },
+      {
+        hotkey: "Home",
+        callback: () => moveBy(-Infinity),
+        label: "first",
+        says: "the first row",
+      },
+      {
+        hotkey: "End",
+        callback: () => moveBy(Infinity),
+        label: "last",
+        says: "the last row",
+      },
+      {
+        hotkey: "Enter",
+        callback: () => pick(cursor),
+        label: "pick",
+        says: "pick the row under the cursor",
+      },
+      {
+        hotkey: "Escape",
+        callback: escape,
+        label: "back",
+        says: "clear the query, go up a level, or close",
+      },
+      ...(options.onTab
+        ? [
+            {
+              hotkey: "Tab" as const,
+              callback: () => options.onTab?.(false),
+              label: "next cell",
+              says: "leave the list for the next cell",
             },
-            options: { meta: meta("extend down", "extend the selection over the visible rows") },
-          },
-          {
-            hotkey: "Shift+ArrowUp" as const,
-            callback: () => {
-              const next = moveBy(-1);
-              if (next) range(next.key);
+            {
+              hotkey: "Shift+Tab" as const,
+              callback: () => options.onTab?.(true),
+              label: "previous cell",
+              says: "leave the list for the previous cell",
             },
-            options: { meta: meta("extend up", "extend the selection over the visible rows") },
-          },
-        ]
-      : []),
-  ].map((definition) => ({
-    ...definition,
-    options: {
-      ...definition.options,
-      // The list's own input owns typing; these keys still reach the list from it (R14).
-      ignoreInputs: false,
-      enabled: options.target !== null,
-    },
-  })) as UseHotkeyDefinition[];
-  useHotkeys(keys, { target: options.target });
+          ]
+        : []),
+      ...(select === "multi"
+        ? [
+            {
+              hotkey: "Space" as const,
+              callback: () => pick(cursor),
+              label: "toggle",
+              says: "add or remove the row",
+            },
+            {
+              hotkey: "Shift+ArrowDown" as const,
+              callback: () => {
+                const next = moveBy(1);
+                if (next) range(next.key);
+              },
+              label: "extend down",
+              says: "extend the selection over the visible rows",
+            },
+            {
+              hotkey: "Shift+ArrowUp" as const,
+              callback: () => {
+                const next = moveBy(-1);
+                if (next) range(next.key);
+              },
+              label: "extend up",
+              says: "extend the selection over the visible rows",
+            },
+          ]
+        : []),
+    ] satisfies ScopeKey[]
+  ).map(
+    (definition): ScopeKey => ({
+      ...definition,
+      options: {
+        // The list's own input owns typing; these keys still reach the list from it (R14).
+        ignoreInputs: false,
+        enabled: options.target !== null,
+      },
+    }),
+  );
+  useScopeKeys(keys, options.target);
 
   const optionId = (key: string) => `${listId}-${key.replace(/[^\w-]/g, "_")}`;
   return {

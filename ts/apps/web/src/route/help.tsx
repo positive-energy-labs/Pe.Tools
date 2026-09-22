@@ -9,16 +9,11 @@
  */
 import { Fragment, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
-import {
-  useHotkeyRegistrations,
-  useHotkeys,
-  type UseHotkeyDefinition,
-} from "@tanstack/react-hotkeys";
 import { Keyboard } from "lucide-react";
 
 import { Kbd } from "#/components/lang/kbd";
 import { Press } from "#/components/lang/press";
-import { readKeyMeta, type KeyMeta } from "./keys";
+import { readKeyMeta, useHotkeyRegistrations, useScopeKeys, type KeyMeta } from "./keys";
 
 interface Region {
   id: string;
@@ -200,10 +195,12 @@ function HelpBody({ docs, name }: { docs: ReactNode; name: string }) {
     const meta = readKeyMeta(reg.options.meta);
     return meta ? [{ ...meta, hotkey: reg.hotkey }] : [];
   });
-  const band = bound.filter((k) => !k.region);
+  // The chart's cards are the measured panes; every other scope node's keys read as the route's.
+  const drawn = new Set((layout?.regions ?? []).map((region) => region.id));
+  const band = bound.filter((k) => !drawn.has(k.scope));
   const byRegion = new Map<string, Bound[]>();
   for (const k of bound)
-    if (k.region) byRegion.set(k.region, [...(byRegion.get(k.region) ?? []), k]);
+    if (drawn.has(k.scope)) byRegion.set(k.scope, [...(byRegion.get(k.scope) ?? []), k]);
 
   return (
     <div className="absolute inset-0 flex flex-col">
@@ -231,13 +228,14 @@ function HelpBody({ docs, name }: { docs: ReactNode; name: string }) {
 
 export function RouteHelpButton({ docs, name }: { docs?: ReactNode; name: string }) {
   const [open, setOpen] = useState(false);
-  const help = useMemo(
-    (): UseHotkeyDefinition[] => [
-      { hotkey: "Alt+/", callback: () => setOpen(true), options: { ignoreInputs: true } },
-    ],
-    [],
-  );
-  useHotkeys(help);
+  useScopeKeys([
+    {
+      hotkey: "Alt+/",
+      callback: () => setOpen(true),
+      label: "help",
+      says: "how this route works — its regions and every key bound right now",
+    },
+  ]);
   return (
     <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
       <DialogPrimitive.Trigger

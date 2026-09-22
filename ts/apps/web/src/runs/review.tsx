@@ -175,7 +175,6 @@ export function ReviewList({
   return (
     <List
       aria-label="shape review"
-      region="shape review"
       items={shapes}
       keyOf={(shape) => shape.key}
       labelOf={reviewLabel}

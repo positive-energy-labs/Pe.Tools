@@ -91,7 +91,6 @@ export function ThreadsSidebar({
       <div className="flex min-h-0 flex-col py-1">
         <List<StoredThreadSummary>
           aria-label="threads"
-          region="threads"
           items={shown}
           keyOf={(thread) => thread.id}
           labelOf={(thread) => thread.title}
@@ -169,7 +168,6 @@ export function ThreadDialog({
       <DialogContent pad="none" showCloseButton={false} aria-label="Threads">
         <List<PaletteItem>
           aria-label="Threads"
-          region="thread palette"
           items={items}
           keyOf={(item) => (item.kind === "new" ? "__new__" : item.thread.id)}
           labelOf={(item) => (item.kind === "new" ? "New thread" : item.thread.title)}

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import { HotkeysProvider, useHotkeys } from "@tanstack/react-hotkeys";
 import { ModeDial } from "#/chat/mode-dial";
 import { ThreadDialog, ThreadsSidebar } from "#/chat/thread-palette";
 import { useWorkbench } from "#/workbench/provider";
@@ -15,7 +14,8 @@ import { X } from "lucide-react";
 import { chatPluginTitle, type ChatPluginRoute } from "#/workbench/chat-plugins";
 import { useChatPluginHost } from "#/workbench/route-panes";
 import { ComposerHead } from "#/chat/composer-head";
-import { appAtomRegistry, RouteShell, keyMeta, useRoute } from "#/route";
+import { appAtomRegistry, RouteShell, useRoute } from "#/route";
+import { useScopeKeys } from "#/route/keys";
 import { chatManifest } from "#/chat/manifest";
 import "#/workbench/lens.css";
 import { CurrentThreadViewOwner, useCurrentThreadView } from "#/workbench/thread-view";
@@ -27,11 +27,7 @@ import { ComposerBank } from "#/chat/composer-bank";
 type Plugin = { plugin?: ChatPluginRoute; focus?: string; target?: string };
 
 export function ChatShell(props: Plugin) {
-  return (
-    <HotkeysProvider>
-      <CurrentThreadChatSurface {...props} />
-    </HotkeysProvider>
-  );
+  return <CurrentThreadChatSurface {...props} />;
 }
 
 function CurrentThreadChatSurface(props: Plugin) {
@@ -142,30 +138,20 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
   const traceCell = traceCells.find((cell) => cell.key === pinKey) ?? null;
   const retryBody = useAtomRefresh(bodyAtom);
 
-  useHotkeys([
-    // Surface chords, not manifest actions: they move Page state and never refuse. Tagged so the
-    // help page lists them beside the route's chords.
+  // Surface chords, not manifest actions: they move Page state and never refuse. They bind on
+  // whatever scope node the chat surface sits in, so help lists them beside the route's chords.
+  useScopeKeys([
     {
       hotkey: "Mod+K",
       callback: () => store.actions.setPaletteOpen((open) => !open),
-      options: {
-        meta: keyMeta({
-          name: "palette",
-          description: "open or close the Do palette",
-          tier: "route",
-        }),
-      },
+      label: "palette",
+      says: "open or close the Do palette",
     },
     ...(["Mod+1", "Mod+2", "Mod+3"] as const).map((hotkey, i) => ({
       hotkey,
       callback: () => setMode(MODES[i]!),
-      options: {
-        meta: keyMeta({
-          name: `${MODES[i]} mode`,
-          description: `switch the chat to ${MODES[i]}`,
-          tier: "route",
-        }),
-      },
+      label: `${MODES[i]} mode`,
+      says: `switch the chat to ${MODES[i]}`,
     })),
   ]);
 

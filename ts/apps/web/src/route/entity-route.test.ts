@@ -99,7 +99,7 @@ test("capture is the host workflow into the chosen pod; the page lands on the ne
   });
   await planless.capture.run(c as never, none);
   expect(run).toHaveBeenCalledWith("family.capture", { pod: "p" }, ref, undefined);
-  expect(state.page).toMatchObject({ stage: "capture", path: "settings/family/x.json" });
+  expect(state.page).toMatchObject({ stage: "audit", path: "settings/family/x.json" });
 });
 
 test("a selection route refuses capture until audit rows are picked, and clears them after", async () => {
@@ -117,7 +117,7 @@ test("a selection route refuses capture until audit rows are picked, and clears 
   });
   await actions.capture.run(c as never, none);
   expect(run).toHaveBeenCalledWith("family.capture", { pod: "p", ids: ["7", "9"] }, ref, undefined);
-  expect(state.page).toMatchObject({ stage: "capture", path: "settings/x/7.json", selection: [] });
+  expect(state.page).toMatchObject({ stage: "audit", path: "settings/x/7.json", selection: [] });
 });
 
 test("apply refuses unsaved or foreign members; without a plan it applies the saved source", async () => {
@@ -142,7 +142,7 @@ test("with a plan, plan opens the sheet and apply sends that hash", async () => 
     .mockResolvedValueOnce({ state: "succeeded", result: { id: "P1", plan: { planHash: "ph" } } });
   await planned.plan.run(c as never, none);
   expect(run.mock.calls).toEqual([["family.plan", { source }, ref, undefined]]);
-  expect(state.page).toMatchObject({ stage: "apply", confirming: true });
+  expect(state.page).toMatchObject({ stage: "audit", confirming: true });
   expect(state.page.sheet?.entries.map((entry) => entry.planHash)).toEqual(["ph"]);
   expect(planned.apply.ready(c as never, none)).toBeNull();
   // A pod list that is re-reading still answers with what it last saw, so apply stays offered.

@@ -64,7 +64,6 @@ export function NamePicker({
           />
         }
         aria-label={ariaLabel}
-        region={ariaLabel}
         items={options}
         keyOf={(name) => name}
         labelOf={(name) => name}

@@ -7,7 +7,6 @@ import { z } from "zod";
 import { actionListFilterSchema } from "./action-receipts.ts";
 import { canonicalRouteInput } from "./route-doc.ts";
 import { workKey, workKeySchema } from "./route-state.ts";
-import { podMemberSchema } from "./settings.ts";
 import { addressSchema, documentRefSchema, sameAddress } from "./target.ts";
 
 export { address, addressSchema, sameAddress, type Address } from "./target.ts";
@@ -75,8 +74,6 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
     scope: actionListFilterSchema.optional(),
   }),
   z.strictObject({ kind: z.literal("inventory") }),
-  /** A pod member on disk; the member never receives route state. */
-  z.strictObject({ kind: z.literal("member"), member: podMemberSchema }),
   z.strictObject({ kind: z.literal("world") }),
   /** The host's own liveness. Polled by the host on its own 5s timer, never by a client. */
   z.strictObject({ kind: z.literal("host-status") }),

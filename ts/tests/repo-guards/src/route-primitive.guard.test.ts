@@ -18,13 +18,18 @@
  *                                 design-system_*) exports exactly one `export const manifest`.
  *  5. one stream, one registry    exactly one `new EventSource(` and one `AtomRegistry.make(`
  *                                 in apps/web/src production files.
- *  6. dead-word grep           exported identifiers carrying a dead word (Scope/World/Verb/
- *                                 Feed/Lane/Bound/Multi/Slot/Store/Resource/Link/Document/
- *                                 Fixture) as a PascalCase or camelCase segment, in apps/web/src
- *                                 and packages/agent-contracts/src. `Stage` is a Situation word,
- *                                 not dead. Allowlist holds only the Revit Document/Link senses.
+ *  6. dead-word grep              exported identifiers carrying a dead word (World/Verb/Feed/
+ *                                 Lane/Bound/Multi/Slot/Store/Resource/Link/Document/Fixture)
+ *                                 as a PascalCase or camelCase segment, in apps/web/src and
+ *                                 packages/agent-contracts/src. `Stage` is a Situation word and
+ *                                 `Scope` is the hotkey tree's node, so neither is dead.
+ *                                 Allowlist holds only the Revit Document/Link senses.
  *  7. no hand-written keymap      no `Alt+${` / `Ctrl+${` / `Mod+${` / `Cmd+${` template
  *                                 outside route/keys.tsx.
+ *  8. one hotkey door             nothing under apps/web names @tanstack/react-hotkeys except
+ *                                 route/keys.tsx: every chord is bound by `useScopeKeys` on a
+ *                                 scope node, so help can say which region owns it and a hidden
+ *                                 node can switch it off (ledger 2026-09-22).
  * =============================================================================================
  */
 import { execFileSync } from "node:child_process";
@@ -260,18 +265,16 @@ const DEAD_WORD_ALLOWLIST: readonly RegExp[] = [
   /^(?:create)?(?:Ops|Family|Families|ChatPage)Store(?:Owner)?$/,
   /^use(?:Families|Family)Store$/,
   /^RoomPanelFromStore$/,
-  // Chat's thread default-target store; rename owed.
-  /^useThreadScope$/,
   // The chat "world" pane (workbench/world) is a product name the user may keep.
   /^WORLD_ROW$/,
 ];
 
 /**
- * `Stage` is NOT here: today's ruling makes it a Situation word. Store/Resource/Link/Document/
- * Fixture are named dead by the same "six nouns" ruling.
+ * `Stage` is NOT here: the 2026-09-10 ruling makes it a Situation word. `Scope` left the list on
+ * 2026-09-22, when hotkeys became a scope tree and a scope node became a named primitive.
+ * Store/Resource/Link/Document/Fixture are named dead by the "six nouns" ruling.
  */
 const DEAD_WORDS = [
-  "scope",
   "world",
   "verb",
   "feed",
@@ -322,6 +325,22 @@ describe("route primitive guard — dead-word grep", () => {
 });
 
 // ── 7. no hand-written keymap ────────────────────────────────────────────────────────────────
+
+// ── 8. one hotkey door ───────────────────────────────────────────────────────────────────────
+
+describe("route primitive guard — one hotkey door", () => {
+  it("only route/keys.tsx names @tanstack/react-hotkeys; every other chord goes through useScopeKeys", () => {
+    const offences = hits(
+      WEB_FILES.filter((f) => f.rel !== "route/keys.tsx"),
+      /@tanstack\/react-hotkeys/g,
+    );
+    expect(
+      offences.length,
+      `A hotkey bound outside the scope tree — import \`useScopeKeys\` from \`#/route/keys\` instead (ledger 2026-09-22):
+${list(offences)}`,
+    ).toBe(0);
+  });
+});
 
 describe("route primitive guard — no hand-written keymap", () => {
   it("no Alt+${ / Ctrl+${ / Mod+${ / Cmd+${ template outside route/keys.tsx", () => {

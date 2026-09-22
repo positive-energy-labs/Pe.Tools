@@ -131,7 +131,6 @@ export function DraftEditor({
                         <span className="face-mono">{column.kind === "Text" ? "txt" : "num"}</span>
                       }
                       aria-label="column type"
-                      region="draft columns"
                       items={COLUMN_KINDS}
                       keyOf={(kind) => kind.value}
                       labelOf={(kind) => kind.label}

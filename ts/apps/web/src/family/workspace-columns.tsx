@@ -123,7 +123,6 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
             title={`Give ${slug}.${property} a parameter — an existing one discards the ${literal} literal, a new one keeps ${literal} as its family value.`}
             trigger={<span className="text-ink-2">bind to… (Esc cancels)</span>}
             aria-label={`bind ${slug}.${property}`}
-            region="bind parameter"
             items={options}
             keyOf={(option) => option.value}
             labelOf={(option) => option.label}

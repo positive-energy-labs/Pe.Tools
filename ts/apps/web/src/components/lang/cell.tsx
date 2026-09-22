@@ -38,11 +38,10 @@ import {
   useTransition,
   type RefObject,
 } from "react";
-import { useHotkeys } from "@tanstack/react-hotkeys";
 import { Check, Undo2, X, type LucideIcon } from "lucide-react";
 
 import { tv } from "#/lib/tv";
-import { keyMeta } from "#/route/keys";
+import { useScopeKeys } from "#/route/keys";
 
 import { ActionButton } from "./action-button";
 import "./lang.css";
@@ -115,20 +114,14 @@ function CellKeys({
   transitions: readonly CellTransition[];
   fire: (t: CellTransition) => void;
 }) {
-  useHotkeys(
+  useScopeKeys(
     transitions.map((t) => ({
       hotkey: TRANSITION[t.kind].key as "A",
       callback: () => fire(t),
-      options: {
-        meta: keyMeta({
-          name: t.kind,
-          description: t.reason ?? TRANSITION[t.kind].says,
-          tier: "widget",
-          region: "table",
-        }),
-      },
+      label: t.kind,
+      says: t.reason ?? TRANSITION[t.kind].says,
     })),
-    { target },
+    target,
   );
   return null;
 }

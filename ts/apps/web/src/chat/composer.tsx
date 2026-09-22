@@ -188,7 +188,6 @@ export function Composer({
           query={slash ?? ""}
           onCollection={(collection) => (menu.current = collection)}
           aria-label="Commands"
-          region="composer"
           items={commands}
           keyOf={(command) => command.name}
           labelOf={(command) => command.name}

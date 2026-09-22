@@ -256,6 +256,8 @@ export interface PaneSplitProps {
   start: ReactNode;
   end: ReactNode;
   resize?: PaneSizeSpec & { target: "start" | "end" };
+  /** A side that stays mounted and takes no track: its pane keeps its state while it is not drawn. */
+  hide?: "start" | "end";
   grow?: boolean;
 }
 
@@ -270,11 +272,11 @@ export const paneSplitRecipe = tv({
 });
 
 /** Binary compositional escape hatch. Null sides retain their wrappers but consume no track. */
-export function PaneSplit({ axis, start, end, resize, grow }: PaneSplitProps) {
+export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const state = usePaneSize(resize ?? NO_RESIZE);
   const horizontal = axis === "horizontal";
-  const bothSides = start != null && end != null;
+  const bothSides = start != null && end != null && hide == null;
   const target = resize?.target ?? "start";
   const tracks = !bothSides
     ? "minmax(0, 1fr)"
@@ -297,7 +299,11 @@ export function PaneSplit({ axis, start, end, resize, grow }: PaneSplitProps) {
   const renderSide = (side: "start" | "end", child: ReactNode) => {
     return (
       <div
-        className={child == null ? "hidden" : "flex min-h-0 min-w-0 flex-col overflow-visible"}
+        className={
+          child == null || hide === side
+            ? "hidden"
+            : "flex min-h-0 min-w-0 flex-col overflow-visible"
+        }
         style={
           horizontal
             ? { gridColumn: bothSides ? (side === "start" ? 1 : 3) : 1, gridRow: 1 }

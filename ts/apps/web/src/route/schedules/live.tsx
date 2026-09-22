@@ -207,7 +207,6 @@ export function LiveScheduleGridWorkspace({
   );
   const audit = (
     <div className="flex size-full min-h-0 min-w-0 flex-col">
-      {framed && url ? <RouteKeys handle={handle} /> : null}
       {readingFailure ? <div role="status">{readingFailure}</div> : null}
       {/* The one non-empty case: a receipt that needs recovery before a new push. */}
       {unresolved.map((receipt) => (
@@ -217,8 +216,7 @@ export function LiveScheduleGridWorkspace({
       {render ? render(state) : <ScheduleGridWorkspace state={state} />}
     </div>
   );
-  if (!framed) return audit;
-  return (
+  const framedView = (
     <ActionFlag.Provider value={{ push: resolve }}>
       <EntityRouteView
         def={scheduleSpec}
@@ -232,6 +230,11 @@ export function LiveScheduleGridWorkspace({
         {audit}
       </EntityRouteView>
     </ActionFlag.Provider>
+  );
+  return (
+    <RouteKeys handle={handle} chords={framed && url}>
+      {framed ? framedView : audit}
+    </RouteKeys>
   );
 }
 

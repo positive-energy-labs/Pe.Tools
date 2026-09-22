@@ -793,7 +793,8 @@ export function Situation({
         <div className="flex flex-wrap gap-x-10 gap-y-1 px-3 pt-2 pb-1">
           <div className="flex min-w-[32rem] flex-[3] flex-col">
             <p className="mb-1.5 t-prose text-ink-2 [&_b]:font-semibold [&_b]:text-ink">
-              {stages.length ? (
+              {/* Stages are an optional layer: one stage draws no switcher (ledger 2026-09-22). */}
+              {stages.length > 1 ? (
                 <b>
                   <Ladder
                     levels={[

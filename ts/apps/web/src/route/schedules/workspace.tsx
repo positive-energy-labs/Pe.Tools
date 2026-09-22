@@ -202,7 +202,6 @@ export function ScheduleGridWorkspace({
             ) : (
               <List
                 aria-label="schedules"
-                region="schedules"
                 items={catalog.schedules}
                 keyOf={(entry) => String(entry.scheduleId)}
                 labelOf={(entry) => entry.name}

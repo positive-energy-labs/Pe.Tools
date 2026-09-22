@@ -30,7 +30,6 @@ export function RunsList({
   return (
     <List<Run>
       aria-label={scope === "pod" ? "the pod's runs" : "this member's runs"}
-      region="runs"
       items={runs}
       keyOf={(run) => run.runId}
       labelOf={(run) => run.runId}

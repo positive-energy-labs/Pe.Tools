@@ -55,7 +55,6 @@ export function ScalarField({
                 ?.label ?? <span className="text-ink-2">Select an option</span>
             }
             aria-label={label}
-            region={path}
             items={sanitizedItems}
             keyOf={(item) => item.value}
             labelOf={(item) => item.label}

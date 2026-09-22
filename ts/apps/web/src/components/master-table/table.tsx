@@ -11,7 +11,6 @@
  * it is good at here: the column tree, pinning, the focused cell, and the header's sort handlers.
  */
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useHotkeys } from "@tanstack/react-hotkeys";
 import { useTable, type RowData } from "@tanstack/react-table";
 
 import { cellFactsText, cellStateLabel } from "#/components/lang/cell";
@@ -29,7 +28,7 @@ import {
 import type { Column, TableState } from "#/components/master-table/model";
 import { masterTableFeatures, toColumnDefs } from "#/components/master-table/tanstack-adapter";
 import { emptyTableState, visibleRows } from "#/components/master-table/view";
-import { keyMeta } from "#/route/keys";
+import { useScopeKeys } from "#/route/keys";
 
 const GUTTER_PX = 18;
 
@@ -58,30 +57,18 @@ export function useTableSelection(selection: TableSelection | undefined, shown: 
     selected: selection ? [...selection.selected] : [],
     onSelectedChange: (keys) => selection?.onChange(new Set(keys)),
     refusalOf: selection?.refusal,
-    region: "table",
     // The cells own the keyboard in a table; the collection owns the selection only.
     target: null,
   });
-  const clear = useMemo(
-    () => [
-      {
-        hotkey: "Escape" as const,
-        callback: () => selection?.onChange(new Set()),
-        options: {
-          enabled: (selection?.selected.size ?? 0) > 0,
-          ignoreInputs: true,
-          meta: keyMeta({
-            name: "clear selection",
-            description: "drop the selected table rows",
-            tier: "widget",
-            region: "table",
-          }),
-        },
-      },
-    ],
-    [selection],
-  );
-  useHotkeys(clear);
+  useScopeKeys([
+    {
+      hotkey: "Escape",
+      callback: () => selection?.onChange(new Set()),
+      label: "clear selection",
+      says: "drop the selected table rows",
+      options: { enabled: (selection?.selected.size ?? 0) > 0 },
+    },
+  ]);
   if (!selection) return null;
   return { toggle: (key: string, range: boolean) => collection.pick(key, range) };
 }

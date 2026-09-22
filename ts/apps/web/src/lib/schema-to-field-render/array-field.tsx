@@ -73,7 +73,6 @@ export function ArrayField({
             />
           }
           aria-label={label}
-          region={path}
           items={choices}
           keyOf={(value) => value}
           labelOf={(value) => value}

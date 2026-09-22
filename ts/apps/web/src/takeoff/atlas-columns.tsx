@@ -171,7 +171,6 @@ export function useAtlasColumns({
         cell: (row) => (
           <CellListSelect<RoomType>
             aria-label={`${row.room.name} type`}
-            region="atlas table"
             value={row.room.type}
             items={ROOM_TYPES}
             keyOf={(type) => type}

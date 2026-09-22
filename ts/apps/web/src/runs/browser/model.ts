@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useHotkeys } from "@tanstack/react-hotkeys";
-import { keyMeta } from "#/route/keys";
+import { useScopeKeys } from "#/route/keys";
 import { type StagedItem, useFb } from "../feedback/staging";
 import { type Lens } from "../feedback/tray";
 import {
@@ -184,45 +183,27 @@ export function useRunBrowserModel() {
     },
     [runs],
   );
-  const browserKeys = useMemo(
-    () => [
-      {
-        hotkey: "Escape" as const,
-        callback: () => setHighlight(null),
-        options: {
-          enabled: highlight !== null,
-          ignoreInputs: true,
-          meta: keyMeta({
-            name: "clear highlight",
-            description: "clear the highlighted zone",
-            tier: "pane",
-            region: "run browser",
-          }),
-        },
-      },
-      ...(
-        [
-          [-1, "ArrowUp", "previous run"],
-          [1, "ArrowDown", "next run"],
-        ] as const
-      ).map(([delta, hotkey, name]) => ({
-        hotkey,
-        callback: () => moveRun(delta),
-        options: {
-          enabled: Boolean(runs?.length),
-          ignoreInputs: true,
-          meta: keyMeta({
-            name,
-            description: `select the ${name}`,
-            tier: "pane",
-            region: "run browser",
-          }),
-        },
-      })),
-    ],
-    [highlight, moveRun, runs?.length],
-  );
-  useHotkeys(browserKeys);
+  useScopeKeys([
+    {
+      hotkey: "Escape",
+      callback: () => setHighlight(null),
+      label: "clear highlight",
+      says: "clear the highlighted zone",
+      options: { enabled: highlight !== null },
+    },
+    ...(
+      [
+        [-1, "ArrowUp", "previous run"],
+        [1, "ArrowDown", "next run"],
+      ] as const
+    ).map(([delta, hotkey, name]) => ({
+      hotkey,
+      callback: () => moveRun(delta),
+      label: name,
+      says: `select the ${name}`,
+      options: { enabled: Boolean(runs?.length) },
+    })),
+  ]);
 
   const pickCur = useCallback((id: string) => {
     setCurId(id);

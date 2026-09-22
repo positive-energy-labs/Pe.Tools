@@ -6,7 +6,7 @@
  * ASSUME(kai): the Reading is the cache, shared by every pane that draws it (Chat's too) (Q4) |
  * alt: each pane holds its own snapshot
  */
-import type { UseHotkeyDefinition } from "@tanstack/react-hotkeys";
+import type { Chord } from "#/route/keys";
 
 export interface PaneDecl<R extends string, A extends string> {
   /** The Readings this pane draws. */
@@ -18,15 +18,13 @@ export interface PaneDecl<R extends string, A extends string> {
    * (a schedule read files a capture, so it is a verb the pane runs, never a button).
    */
   readonly reads?: A;
-  /** Pane-tier keys: chord → the pane's read or verb. */
-  readonly keys?: Readonly<Record<string, string>>;
 }
 
 export interface StageDecl<R extends string, A extends string, N extends string = string> {
   /** The stage verbs: effects that belong to the stage (push, plan, commit), drawn on the row. */
   readonly verbs: readonly A[];
-  /** Stage-tier chords, by verb. */
-  readonly keys: Partial<Readonly<Record<A, UseHotkeyDefinition["hotkey"]>>>;
+  /** The stage node's chords, by verb. */
+  readonly keys: Partial<Readonly<Record<A, Chord>>>;
   /** The panes this stage shows; a pane it omits is hidden. */
   readonly panes: Partial<Readonly<Record<N, PaneDecl<R, A>>>>;
 }

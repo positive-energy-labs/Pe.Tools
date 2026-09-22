@@ -240,7 +240,6 @@ function DataTablesWorkspace({
           >
             <List
               aria-label="data tables"
-              region="data tables"
               items={tables}
               keyOf={(t) => t.name}
               labelOf={(t) => t.name}

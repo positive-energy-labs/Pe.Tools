@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /** The one row and the one collection (ix-list step c): states, filters, selection, ladder, keys. */
 import { useState } from "react";
-import { useHotkeyRegistrations } from "@tanstack/react-hotkeys";
+import { KeyScope, useHotkeyRegistrations } from "#/route/keys";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
@@ -37,7 +37,6 @@ function Words(props: Partial<Parameters<typeof List<string>>[0]>) {
   return (
     <List<string>
       aria-label="words"
-      region="words"
       items={WORDS}
       keyOf={(w) => w}
       labelOf={(w) => w}
@@ -108,7 +107,6 @@ test("a ladder advances on Enter, shows a breadcrumb, and finds hits one level d
   render(
     <List<string>
       aria-label="ladder"
-      region="ladder"
       filter="substring"
       levels={[
         { label: "session", items: () => Object.keys(docs) },
@@ -149,8 +147,8 @@ test("empty, no-match, pending and failed are four different lines", () => {
   expect(status()).toBe("field options failed: host offline");
 });
 
-test("the list's keys are registrations with meta in their region, as help reads them", () => {
-  let seen: { name: string; tier: string; region?: string }[] = [];
+test("the list's keys are registrations on the scope node it sits in, as help reads them", () => {
+  let seen: { name: string; scope: string; depth: number }[] = [];
   function Help() {
     const { hotkeys } = useHotkeyRegistrations();
     seen = hotkeys.flatMap((reg) => {
@@ -160,13 +158,13 @@ test("the list's keys are registrations with meta in their region, as help reads
     return null;
   }
   render(
-    <>
+    <KeyScope id="words">
       <Words select="multi" />
       <Help />
-    </>,
+    </KeyScope>,
   );
-  const words = seen.filter((meta) => meta.region === "words");
-  expect(words.every((meta) => meta.tier === "widget")).toBe(true);
+  const words = seen.filter((meta) => meta.scope === "words");
+  expect(words.every((meta) => meta.depth === 0)).toBe(true);
   expect(words.map((meta) => meta.name)).toEqual(
     expect.arrayContaining(["next", "previous", "pick", "back", "toggle", "extend down"]),
   );
@@ -188,7 +186,6 @@ function Cells({ count }: { count: number }) {
           cell: ({ key: r }) => (
             <CellListSelect<string>
               aria-label={`${r} storage`}
-              region="table"
               value={value[r] ?? "String"}
               items={STORAGE}
               keyOf={(s) => s}

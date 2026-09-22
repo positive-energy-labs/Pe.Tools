@@ -13,6 +13,7 @@ type Pane = "rail" | "grid" | "spec";
 const rail: PaneDecl<R, A> = {
   draws: ["catalog"],
   verbs: [],
+  // A read is never a verb button: the rail re-lists on focus (ledger 2026-09-22).
 };
 const grid: PaneDecl<R, A> = {
   draws: ["work", "saved", "receipts"],
@@ -20,14 +21,13 @@ const grid: PaneDecl<R, A> = {
   // ASSUME(kai): the grid's read files a capture, so it is the `refresh` verb run by the pane |
   // alt: a host Reading "latest capture of schedule X" (NEEDS-CONTRACT)
   reads: "refresh",
-  keys: { r: "refresh" },
 };
-// ASSUME(kai): focus jumps to a revealed sheet (Q3) | alt: focus stays on the verb row
+// Revealing this pane moves no focus (ledger 2026-09-22).
 const spec: PaneDecl<R, A> = { draws: ["pods"], verbs: ["save"] };
 
 /** ASSUME(kai): push is a stage verb (Q6) | alt: a grid pane verb */
 const verbs: readonly A[] = ["push", "capture", "apply"];
-// ASSUME(kai): push binds Mod+Enter | alt: no chord for a write to Revit
+// Push binds Mod+Enter — the one chord that writes to Revit (ledger 2026-09-22).
 const keys = { push: "Mod+Enter" } as const;
 
 export const SCHEDULE_STAGES: Readonly<Record<EntityStage, StageDecl<R, A, Pane>>> = {

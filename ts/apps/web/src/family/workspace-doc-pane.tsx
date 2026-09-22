@@ -203,7 +203,6 @@ export function FamilyWorkspaceDocPane() {
           </p>
           <List
             aria-label="drives"
-            region="doc pane"
             items={drives}
             keyOf={(entry) => `${entry.slug}.${entry.property}`}
             labelOf={(entry) => `${entry.slug}.${entry.property}`}

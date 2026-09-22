@@ -188,7 +188,6 @@ function ColFilter<Row>({
         title="Narrow the table to one value of this column. The choices are every value present across ALL rows, so they stay put as other filters move."
         trigger={<span className="truncate">{selected.label}</span>}
         aria-label={`${label} values`}
-        region={`${label} filter`}
         items={choices}
         keyOf={(choice) => choice.value ?? ""}
         labelOf={(choice) => choice.label}

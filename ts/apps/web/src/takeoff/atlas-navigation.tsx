@@ -54,7 +54,6 @@ export function AtlasNavigation() {
           <div className="t-small t-upper mb-1">zone pipeline — global filter</div>
           <List
             aria-label="zone pipeline"
-            region="zones"
             items={stageCounts}
             keyOf={({ stage }) => stage}
             labelOf={({ stage }) => stage}
@@ -82,7 +81,6 @@ export function AtlasNavigation() {
 
         <List
           aria-label="zones"
-          region="zones"
           // Levels in the world's order, each once: many view lanes share a level (29). Each level
           // is a sticky group head with its count.
           items={levelsOf(world.lanes).flatMap((label) =>

@@ -38,7 +38,6 @@ export function FamilyMetaControl({ slug, meta }: { slug: string; meta: GeomMeta
       triggerLabel={meta.label}
       trigger={value}
       aria-label={meta.label}
-      region={meta.label}
       items={meta.options ?? []}
       keyOf={(option) => option}
       labelOf={(option) => option}

@@ -29,7 +29,6 @@ export function ImagesPane({
     >
       <List<DocImage>
         aria-label="figures"
-        region="figures"
         items={images}
         keyOf={(image) => image.id}
         labelOf={(image) => image.category}

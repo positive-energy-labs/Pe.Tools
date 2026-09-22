@@ -164,7 +164,6 @@ export function SidebarPanel({ say }: { say: (text: string) => void }) {
   return (
     <List
       aria-label="threads"
-      region="thread list"
       items={THREADS}
       keyOf={(t) => t.id}
       labelOf={(t) => t.title}
@@ -202,7 +201,6 @@ export function PalettePanel({ say }: { say: (text: string) => void }) {
   return (
     <List
       aria-label="thread palette"
-      region="thread palette"
       items={THREADS}
       keyOf={(t) => t.id}
       labelOf={(t) => t.title}
@@ -221,7 +219,6 @@ export function LadderPanel({ say }: { say: (text: string) => void }) {
   return (
     <List
       aria-label="session and document"
-      region="head picker"
       levels={LADDER}
       keyOf={(i) => i.key}
       labelOf={(i) => i.label}
@@ -275,7 +272,6 @@ export function FieldOptionsPanel({ say }: { say: (text: string) => void }) {
     <ListPopup
       anchor="trigger"
       aria-label="field options"
-      region="field options"
       trigger={
         <span className="face-mono">{items.find((o) => o.key === value)?.label ?? value}</span>
       }
@@ -324,7 +320,6 @@ export function SlashPanel({ say }: { say: (text: string) => void }) {
         owner={area}
         query={slash?.[1] ?? ""}
         aria-label="skills"
-        region="composer"
         items={COMMANDS}
         keyOf={(c) => c.key}
         labelOf={(c) => c.key}
@@ -345,7 +340,6 @@ export function PickListPanel({ say }: { say: (text: string) => void }) {
   return (
     <List
       aria-label="pod members"
-      region="pods"
       items={MEMBERS}
       keyOf={(m) => m.key}
       labelOf={(m) => m.label}
@@ -370,7 +364,6 @@ export function ZonesPanel({ say }: { say: (text: string) => void }) {
   return (
     <List
       aria-label="zones"
-      region="zones"
       items={ZONES}
       keyOf={(z) => z.key}
       labelOf={(z) => z.label}
@@ -446,7 +439,6 @@ export function TablePanel({ say }: { say: (text: string) => void }) {
             cell: (o) => (
               <CellListSelect
                 aria-label={`${o.label} storage`}
-                region="table"
                 value={storage[o.key] ?? "String"}
                 items={STORAGE}
                 keyOf={(s) => s.key}

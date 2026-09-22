@@ -99,7 +99,6 @@ export function FamiliesFilterBand() {
             title="Whether to include families that are loaded but never placed. It filters BOTH pickers beside it, so narrowing here changes which families the draft resolves to."
             trigger={PLACEMENT_LABELS[placement]}
             aria-label="placement"
-            region="placement filter"
             items={PLACEMENT_OPTIONS}
             keyOf={(option) => option.value}
             labelOf={(option) => option.label}

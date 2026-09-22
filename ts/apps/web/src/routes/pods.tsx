@@ -237,7 +237,6 @@ export function PodsRouteContent({
               ))}
             <List
               aria-label="pod members"
-              region="pods"
               items={pods.flatMap((item) => item.members.map((m) => ({ pod: item, member: m })))}
               keyOf={({ pod, member: m }) => `${pod.id}${SEP}${m.path}`}
               labelOf={({ member: m }) => m.path}

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { useHotkeys } from "@tanstack/react-hotkeys";
 import {
   availableTransitions,
   fanOut,
@@ -21,7 +20,7 @@ import {
 } from "#/components/lang/cell";
 import { Press } from "#/components/lang/press";
 import { ActionButton } from "#/components/lang/action-button";
-import { keyMeta } from "#/route/keys";
+import { useScopeKeys } from "#/route/keys";
 
 export interface WorkBandProps {
   count: number;
@@ -364,18 +363,13 @@ export function UnstageAll({
     const lapse = setTimeout(() => setArmed(false), CONFIRM_MS);
     return () => clearTimeout(lapse);
   }, [armed]);
-  useHotkeys([
+  useScopeKeys([
     {
       hotkey: "Escape",
       callback: () => setArmed(false),
-      options: {
-        enabled: armed,
-        meta: keyMeta({
-          name: "cancel unstage",
-          description: "cancel the armed unstage-all before it writes",
-          tier: "widget",
-        }),
-      },
+      label: "cancel unstage",
+      says: "cancel the armed unstage-all before it writes",
+      options: { enabled: armed },
     },
   ]);
   if (!staged) return null;
@@ -402,18 +396,13 @@ export function UnstageAll({
  */
 function StartFresh({ run, aside }: { run: () => void; aside?: ReactNode }) {
   const [armed, setArmed] = useState(false);
-  useHotkeys([
+  useScopeKeys([
     {
       hotkey: "Escape",
       callback: () => setArmed(false),
-      options: {
-        enabled: armed,
-        meta: keyMeta({
-          name: "cancel start fresh",
-          description: "keep the saved Work; nothing is set aside",
-          tier: "widget",
-        }),
-      },
+      label: "cancel start fresh",
+      says: "keep the saved Work; nothing is set aside",
+      options: { enabled: armed },
     },
   ]);
   return (

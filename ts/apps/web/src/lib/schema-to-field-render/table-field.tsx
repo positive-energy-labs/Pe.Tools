@@ -139,7 +139,6 @@ function SchemaCell({
   return (
     <CellListSelect<string>
       aria-label={path}
-      region="table"
       value={text}
       display={<StateCell {...facts} />}
       invalid={issues !== undefined}

@@ -9,7 +9,7 @@ import { previousOf } from "#/readings";
 import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type { ReactNode } from "react";
 import { z } from "zod";
-import type { UseHotkeyDefinition } from "@tanstack/react-hotkeys";
+import type { Chord } from "./keys";
 import {
   sameValue,
   semanticActions,
@@ -101,7 +101,7 @@ export interface RouteAction<W, R extends string, P, I = void> {
   waitSeconds?: number;
   /** State that must be current before this action may mutate. Previous values remain display-only. */
   requires?: { readonly work?: true; readonly readings?: readonly R[] };
-  chord?: UseHotkeyDefinition["hotkey"];
+  chord?: Chord;
   /** The stage this verb belongs to; absent = every stage. The Situation scopes its verb row by it. */
   stage?: string;
   /** Runs only from its confirmation sheet; the verb row draws no second button for it. */
@@ -489,8 +489,8 @@ export function entityRoute<W, const R extends string, P extends object, const A
       // The host captures and files the new members; the page lands on the first it wrote.
       const result = await workflow(def.capture, { pod: ctx.page.pod, ...extra }, ctx);
       const members = (result.members ?? [result.member]) as MemberRef[];
-      // The verb moves the page to the stage it produced; the stage never gates the verb.
-      if (members[0]) ctx.setPage({ stage: "capture", path: members[0].path, selection: [] });
+      // The page lands on what the capture wrote; only the person changes the stage.
+      if (members[0]) ctx.setPage({ path: members[0].path, selection: [] });
       def.onCaptured?.(result, ctx as never);
     },
   };
@@ -526,14 +526,9 @@ export function entityRoute<W, const R extends string, P extends object, const A
       const sheet = stagedCount(ctx)
         ? { ...(await staged!.plan(ctx as never)), staged: read }
         : await plan!.read(ctx as never, sourceOf(ctx));
-      // Staged cells are planned where they are edited: the sheet opens over that stage, so
-      // cancel leaves the cells editable and the draft verbs offered (F-B-8).
-      ctx.setPage({ ...(stagedCount(ctx) ? {} : { stage: "apply" }), confirming: true, sheet }, [
-        "stage",
-        "pod",
-        "path",
-        "selection",
-      ]);
+      // The sheet opens over whatever stage the person is in, so cancel leaves the cells
+      // editable and the draft verbs offered (F-B-8); nothing derives a stage from Work.
+      ctx.setPage({ confirming: true, sheet }, ["stage", "pod", "path", "selection"]);
     },
   };
   const apply: RouteAction<unknown, string, EntityPage, never> = {

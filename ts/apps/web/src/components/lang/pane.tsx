@@ -1,4 +1,5 @@
 import {
+  Activity,
   Component,
   Suspense,
   useCallback,
@@ -11,12 +12,11 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { HelpTip } from "#/components/lang/help";
 import { Kbd } from "#/components/lang/kbd";
-import { keyMeta } from "#/route/keys";
+import { KeyScope, useScopeKeys, type ScopeKey } from "#/route/keys";
 import { Press } from "#/components/lang/press";
 import { tv, type VariantProps } from "#/lib/tv";
 
@@ -24,13 +24,8 @@ import { Rail } from "./rail";
 
 export type PaneKind = "navigation" | "visual" | "content" | "inspector" | "flank";
 
-export type PaneShortcut = UseHotkeyDefinition & {
-  label: string;
-  /** One sentence for the help page. Defaults to the label. */
-  says?: string;
-  /** The sentence the key refuses with right now; the key fires, the card speaks, nothing runs. */
-  refusal?: string | null;
-};
+/** A pane chord, bound on the pane's own scope node. */
+export type PaneShortcut = ScopeKey;
 
 export const paneRecipe = tv({
   slots: {
@@ -89,8 +84,8 @@ export interface PaneProps extends Pick<VariantProps<typeof paneRecipe>, "flush"
   onRetry?: () => void;
   /** The focus edge: the pane gained focus from outside. A stage revalidates what it draws here. */
   onActivate?: () => void;
-  /** Take focus when revealed, so a pane a stage verb opened owns the keys at once. */
-  focusOnMount?: boolean;
+  /** Mounted but not drawn: the pane keeps its state and its scope node is inactive. */
+  hidden?: boolean;
   children: ReactNode;
 }
 
@@ -174,7 +169,7 @@ export function Pane({
   boundaryKey,
   onRetry,
   onActivate,
-  focusOnMount = false,
+  hidden = false,
   children,
 }: PaneProps) {
   const collapsedFlank = kind === "flank" && collapsed;
@@ -188,25 +183,6 @@ export function Pane({
   const revealShortcuts = useCallback(() => {
     setCardVisible(true);
   }, []);
-
-  // Every pane key is a registration with the shared meta, so the help page can hang it off this
-  // region. A refused key fires and reveals the card instead of running — the same posture as a
-  // refused route chord, never a silent ignore.
-  const bound: UseHotkeyDefinition[] = shortcuts.map((s) => ({
-    ...s,
-    callback: s.refusal ? () => revealShortcuts() : s.callback,
-    options: {
-      ...s.options,
-      meta: keyMeta({
-        name: s.label,
-        description: s.says ?? s.label,
-        tier: "pane",
-        region: id ?? kind,
-        refusal: s.refusal ?? null,
-      }),
-    },
-  }));
-  useHotkeys(bound, { target: rootRef });
 
   useEffect(() => {
     if (!cardVisible) return;
@@ -247,11 +223,6 @@ export function Pane({
     }
   };
 
-  useEffect(() => {
-    if (focusOnMount) rootRef.current?.focus();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on reveal
-  }, []);
-
   const deactivate = (event: FocusEvent<HTMLElement>) => {
     if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
     setActive(false);
@@ -267,156 +238,183 @@ export function Pane({
   );
 
   return (
-    <section
-      ref={rootRef}
-      data-slot="pane"
-      data-kind={kind}
-      data-pane-id={id}
-      data-has-shortcuts={shortcuts.length > 0 || undefined}
-      data-active={active}
-      data-help-visible={cardVisible || undefined}
-      data-surface={kind === "visual" ? "artifact" : "page"}
-      aria-label={typeof title === "string" ? title : undefined}
-      tabIndex={-1}
-      onFocusCapture={activate}
-      onBlurCapture={deactivate}
-      onPointerDownCapture={(event) => {
-        const target = event.target as HTMLElement;
-        const focusable = target.closest<HTMLElement>(
-          "a,button,input,select,textarea,[contenteditable='true'],[tabindex]",
-        );
-        if (!focusable || focusable === event.currentTarget) event.currentTarget.focus();
-      }}
-      className={`${root()} ${collapsedFlank ? "w-10 shrink-0" : ""} ${active ? "z-sticky outline outline-line-2" : "outline outline-transparent"} ${cardVisible ? "outline-2 outline-ink-mute" : ""} outline-offset-2 transition-[outline-color] duration-control motion-reduce:transition-none`}
-    >
-      {collapsedFlank ? (
-        <div className="flex min-h-0 flex-1 flex-col items-center gap-2 py-2">
-          <Press
-            size="icon"
-            aria-label={`Expand ${typeof title === "string" ? title : "pane"}`}
-            onClick={() => onCollapsedChange?.(false)}
-          >
-            {side === "left" ? <ChevronRight /> : <ChevronLeft />}
-          </Press>
-          {title != null ? (
-            <span data-slot="pane-title" className="t-small t-upper [writing-mode:vertical-rl]">
-              {title}
-            </span>
-          ) : null}
-        </div>
-      ) : (
-        <>
-          {!headerless && (
-            <div data-slot="pane-header" className="shrink-0">
-              <Rail
-                ground={headerSurface ?? "page"}
-                lead={
-                  <>
-                    {title != null && <h2 className="t-small t-upper min-w-0 truncate">{title}</h2>}
-                    {meta != null && (
-                      <span
-                        title={typeof meta === "string" ? meta : undefined}
-                        className="face-mono min-w-0 truncate text-ink-2"
-                      >
-                        {meta}
-                      </span>
-                    )}
-                    {help != null && (
-                      <span className="shrink-0 self-center">
-                        <HelpTip>{help}</HelpTip>
-                      </span>
-                    )}
-                  </>
-                }
-                trail={
-                  actions != null ? (
-                    <div data-slot="pane-actions" className="flex shrink-0 items-center gap-0.5">
-                      {actions}
-                    </div>
-                  ) : undefined
-                }
-              />
+    <KeyScope id={id ?? kind} element={rootRef} hidden={hidden}>
+      {/* A hidden pane keeps its state and its DOM; Activity tears its effects down, so its
+          registrations leave the tree and its scope node binds nothing. */}
+      <Activity mode={hidden ? "hidden" : "visible"}>
+        <PaneChords shortcuts={shortcuts} reveal={revealShortcuts} />
+        <section
+          ref={rootRef}
+          data-slot="pane"
+          data-kind={kind}
+          data-pane-id={id}
+          data-has-shortcuts={shortcuts.length > 0 || undefined}
+          data-active={active}
+          data-help-visible={cardVisible || undefined}
+          data-surface={kind === "visual" ? "artifact" : "page"}
+          aria-label={typeof title === "string" ? title : undefined}
+          tabIndex={-1}
+          onFocusCapture={activate}
+          onBlurCapture={deactivate}
+          onPointerDownCapture={(event) => {
+            const target = event.target as HTMLElement;
+            const focusable = target.closest<HTMLElement>(
+              "a,button,input,select,textarea,[contenteditable='true'],[tabindex]",
+            );
+            if (!focusable || focusable === event.currentTarget) event.currentTarget.focus();
+          }}
+          className={`${root()} ${collapsedFlank ? "w-10 shrink-0" : ""} ${active ? "z-sticky outline outline-line-2" : "outline outline-transparent"} ${cardVisible ? "outline-2 outline-ink-mute" : ""} outline-offset-2 transition-[outline-color] duration-control motion-reduce:transition-none`}
+        >
+          {collapsedFlank ? (
+            <div className="flex min-h-0 flex-1 flex-col items-center gap-2 py-2">
+              <Press
+                size="icon"
+                aria-label={`Expand ${typeof title === "string" ? title : "pane"}`}
+                onClick={() => onCollapsedChange?.(false)}
+              >
+                {side === "left" ? <ChevronRight /> : <ChevronLeft />}
+              </Press>
+              {title != null ? (
+                <span data-slot="pane-title" className="t-small t-upper [writing-mode:vertical-rl]">
+                  {title}
+                </span>
+              ) : null}
             </div>
-          )}
-          {toolbar != null && (
-            <div
-              data-slot="pane-toolbar"
-              className="flex min-w-0 shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-1"
-            >
-              {toolbar}
-            </div>
-          )}
-          <div data-slot="pane-body" className={body()}>
-            {content}
-          </div>
-        </>
-      )}
-
-      {active && shortcuts.length > 0 && typeof document !== "undefined"
-        ? createPortal(
+          ) : (
             <>
-              <aside
-                ref={cardRef}
-                data-slot="pane-shortcuts"
-                data-visible={cardVisible}
-                data-surface="artifact"
-                aria-label={`${id ?? kind} keyboard shortcuts`}
-                style={{ top: cardPosition.top, left: cardPosition.left }}
-                className={`fixed z-popup w-56 border border-line-2 text-ink shadow-float transition-[opacity,transform] duration-control motion-reduce:transition-none ${
-                  cardVisible
-                    ? "translate-y-0 opacity-100"
-                    : "pointer-events-none -translate-y-1 opacity-0"
-                }`}
-              >
-                <div className="t-small t-upper flex items-center justify-between border-b border-line px-2.5 py-2 text-ink-2">
-                  <span>{id ?? kind} keys</span>
-                  <span>4s</span>
+              {!headerless && (
+                <div data-slot="pane-header" className="shrink-0">
+                  <Rail
+                    ground={headerSurface ?? "page"}
+                    lead={
+                      <>
+                        {title != null && (
+                          <h2 className="t-small t-upper min-w-0 truncate">{title}</h2>
+                        )}
+                        {meta != null && (
+                          <span
+                            title={typeof meta === "string" ? meta : undefined}
+                            className="face-mono min-w-0 truncate text-ink-2"
+                          >
+                            {meta}
+                          </span>
+                        )}
+                        {help != null && (
+                          <span className="shrink-0 self-center">
+                            <HelpTip>{help}</HelpTip>
+                          </span>
+                        )}
+                      </>
+                    }
+                    trail={
+                      actions != null ? (
+                        <div
+                          data-slot="pane-actions"
+                          className="flex shrink-0 items-center gap-0.5"
+                        >
+                          {actions}
+                        </div>
+                      ) : undefined
+                    }
+                  />
                 </div>
-                <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1.5 p-2.5">
-                  {shortcuts.map((shortcut, index) => {
-                    const enabled = shortcut.options?.enabled !== false;
-                    return (
-                      <div
-                        key={`${index}:${shortcut.label}`}
-                        data-slot="pane-shortcut"
-                        data-enabled={enabled}
-                        className={enabled ? "contents" : "contents text-ink-mute"}
-                      >
-                        <Kbd mute={!enabled}>
-                          {typeof shortcut.hotkey === "string" ? shortcut.hotkey : "custom"}
-                        </Kbd>
-                        <span className="whitespace-nowrap">
-                          {shortcut.label}
-                          {shortcut.refusal ? (
-                            <span className="text-ink-mute"> — {shortcut.refusal}</span>
-                          ) : null}
-                        </span>
-                      </div>
-                    );
-                  })}
+              )}
+              {toolbar != null && (
+                <div
+                  data-slot="pane-toolbar"
+                  className="flex min-w-0 shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-1"
+                >
+                  {toolbar}
                 </div>
-              </aside>
-              <button
-                type="button"
-                data-slot="pane-shortcuts-tab"
-                data-surface="artifact"
-                aria-label={`Show ${id ?? kind} keyboard shortcuts`}
-                onPointerDown={(event) => event.preventDefault()}
-                onClick={revealShortcuts}
-                title={`${id ?? kind} keyboard shortcuts`}
-                style={{ top: Math.max(8, cardPosition.top + 4), left: cardPosition.tabLeft }}
-                className={`fixed z-popup h-8 w-1.5 border border-line-2 p-0 ${
-                  cardVisible ? "hidden" : "block"
-                }`}
-              >
-                <span className="sr-only">keys</span>
-              </button>
-            </>,
-            document.body,
-          )
-        : null}
-    </section>
+              )}
+              <div data-slot="pane-body" className={body()}>
+                {content}
+              </div>
+            </>
+          )}
+
+          {active && shortcuts.length > 0 && typeof document !== "undefined"
+            ? createPortal(
+                <>
+                  <aside
+                    ref={cardRef}
+                    data-slot="pane-shortcuts"
+                    data-visible={cardVisible}
+                    data-surface="artifact"
+                    aria-label={`${id ?? kind} keyboard shortcuts`}
+                    style={{ top: cardPosition.top, left: cardPosition.left }}
+                    className={`fixed z-popup w-56 border border-line-2 text-ink shadow-float transition-[opacity,transform] duration-control motion-reduce:transition-none ${
+                      cardVisible
+                        ? "translate-y-0 opacity-100"
+                        : "pointer-events-none -translate-y-1 opacity-0"
+                    }`}
+                  >
+                    <div className="t-small t-upper flex items-center justify-between border-b border-line px-2.5 py-2 text-ink-2">
+                      <span>{id ?? kind} keys</span>
+                      <span>4s</span>
+                    </div>
+                    <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1.5 p-2.5">
+                      {shortcuts.map((shortcut, index) => {
+                        const enabled = shortcut.options?.enabled !== false;
+                        return (
+                          <div
+                            key={`${index}:${shortcut.label}`}
+                            data-slot="pane-shortcut"
+                            data-enabled={enabled}
+                            className={enabled ? "contents" : "contents text-ink-mute"}
+                          >
+                            <Kbd mute={!enabled}>
+                              {typeof shortcut.hotkey === "string" ? shortcut.hotkey : "custom"}
+                            </Kbd>
+                            <span className="whitespace-nowrap">
+                              {shortcut.label}
+                              {shortcut.refusal ? (
+                                <span className="text-ink-mute"> — {shortcut.refusal}</span>
+                              ) : null}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </aside>
+                  <button
+                    type="button"
+                    data-slot="pane-shortcuts-tab"
+                    data-surface="artifact"
+                    aria-label={`Show ${id ?? kind} keyboard shortcuts`}
+                    onPointerDown={(event) => event.preventDefault()}
+                    onClick={revealShortcuts}
+                    title={`${id ?? kind} keyboard shortcuts`}
+                    style={{ top: Math.max(8, cardPosition.top + 4), left: cardPosition.tabLeft }}
+                    className={`fixed z-popup h-8 w-1.5 border border-line-2 p-0 ${
+                      cardVisible ? "hidden" : "block"
+                    }`}
+                  >
+                    <span className="sr-only">keys</span>
+                  </button>
+                </>,
+                document.body,
+              )
+            : null}
+        </section>
+      </Activity>
+    </KeyScope>
   );
+}
+
+/**
+ * The pane's chords, bound inside its own scope node. A refused key fires and reveals the card
+ * instead of running — the same posture as a refused route chord, never a silent ignore.
+ */
+function PaneChords({
+  shortcuts,
+  reveal,
+}: {
+  shortcuts: readonly PaneShortcut[];
+  reveal: () => void;
+}) {
+  useScopeKeys(shortcuts.map((s) => (s.refusal ? { ...s, callback: () => reveal() } : s)));
+  return null;
 }
 
 export { PaneSplit } from "./pane-resize";
