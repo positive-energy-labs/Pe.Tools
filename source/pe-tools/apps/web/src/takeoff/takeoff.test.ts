@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   buildZones,
@@ -8,6 +8,7 @@ import {
   shoelace,
   zoneGuid,
   zoneStage,
+  type DeclaredZone,
   type LiveRegion,
   type PartitionRun,
 } from "#/takeoff/model";
@@ -15,6 +16,17 @@ import { projectTakeoffSnapshot } from "../../../../packages/mcps/src/shared/tak
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ZonePeek } from "#/takeoff/zone-peek";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
+const ZONES_JSON = join(
+  process.env.PE_PRIVATE_FIXTURES ??
+    join(import.meta.dirname, "../../../../../../.private/fixtures"),
+  "project-a/web/zones.json",
+);
+const declared = existsSync(ZONES_JSON)
+  ? (JSON.parse(readFileSync(ZONES_JSON, "utf8")) as DeclaredZone[])
+  : [];
 
 const square = (x: number, y: number, size: number): [number, number][] => [
   [x, y],
@@ -23,9 +35,9 @@ const square = (x: number, y: number, size: number): [number, number][] => [
   [x, y + size],
 ];
 
-describe("declared zones", () => {
+describe.skipIf(declared.length === 0)("declared zones", () => {
   it("groups all 45 project-a zones onto the four zoning views", () => {
-    const zones = buildZones();
+    const zones = buildZones(declared);
     expect(zones).toHaveLength(45);
     expect(new Set(zones.map((z) => z.lane.label))).toEqual(
       new Set(["Lower", "Main", "Upper", "Attic"]),
@@ -33,11 +45,11 @@ describe("declared zones", () => {
   });
 
   it("mints a stable GUID per (level, ordinal) so reruns address the same regions", () => {
-    const a = buildZones().find((z) => z.key === "Main#06")!;
-    const b = buildZones().find((z) => z.key === "Main#06")!;
+    const a = buildZones(declared).find((z) => z.key === "Main#06")!;
+    const b = buildZones(declared).find((z) => z.key === "Main#06")!;
     expect(a.guid).toBe(b.guid);
     expect(a.guid).toBe(zoneGuid(1, 6));
-    expect(new Set(buildZones().map((z) => z.guid)).size).toBe(45);
+    expect(new Set(buildZones(declared).map((z) => z.guid)).size).toBe(45);
   });
 
   it("measures declared area by shoelace over the even-odd loops", () => {

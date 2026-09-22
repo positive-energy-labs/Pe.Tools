@@ -18,17 +18,19 @@ import { rhvacScriptDirectory } from "../src/rhvac-ops.ts";
 /**
  * End-to-end smoke for the rhvac.* local ops through the real dispatch path
  * (dispatchTsOnlyOperation — exactly what POST /call runs after envelope
- * parsing), against the real gitignored project-a copy in the 32-bit Jet
+ * parsing), against the private projectA .r10 copy in the 32-bit Jet
  * lane. No Revit session involved; the bridge stub proves that.
  *
  * Skips (does not fail) when the machine lacks the lane or the local fixture:
- * CI has neither eval/rhvac/project-a/projectA.local.r10 nor SysWOW64 PowerShell.
+ * CI has neither .private/fixtures/project-a/rhvac/local.r10 nor SysWOW64 PowerShell.
  */
 
 const PS32_EXE = "C:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe";
 const scriptDir = rhvacScriptDirectory();
 const repoRoot = scriptDir ? resolve(scriptDir, "..", "..", "..") : null;
-const ProjectAR10 = repoRoot ? join(repoRoot, "eval", "rhvac", "project-a", "projectA.local.r10") : null;
+const ProjectAR10 = repoRoot
+  ? join(process.env.PE_PRIVATE_FIXTURES ?? join(repoRoot, ".private", "fixtures"), "project-a", "rhvac", "local.r10")
+  : null;
 const laneAvailable =
   process.platform === "win32" &&
   existsSync(PS32_EXE) &&

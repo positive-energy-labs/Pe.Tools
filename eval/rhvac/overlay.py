@@ -359,7 +359,7 @@ if __name__ == "__main__":
     ap.add_argument("--thumb", type=int, default=2000)
     ap.add_argument("--tsv-dir", default=None, help="score any TSV dir (e.g. an offline replay dump)")
     a = ap.parse_args()
-    tsv_dir = a.tsv_dir or (a.ink_dir if a.live else os.path.join(REPO, "eval", "rhvac", a.project, "takeoff"))
+    tsv_dir = a.tsv_dir or (a.ink_dir if a.live else os.path.join(os.environ.get("PE_PRIVATE_FIXTURES") or os.path.join(REPO, ".private", "fixtures"), a.project, "rhvac", "takeoff"))
     replay = os.path.join(a.ink_dir, f"replay_{a.slug}.bin")
     if not os.path.isfile(replay):
         raise SystemExit(

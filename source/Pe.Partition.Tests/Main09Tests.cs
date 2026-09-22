@@ -8,7 +8,7 @@ namespace Pe.Partition.Tests;
 
 /// <summary>
 ///     The deterministic lane. A zone fixture is three files and a test is a solve; no Revit runs
-///     here. Fixture: <c>fixtures/project-a-main-09</c>, project-a Main Level#09, epoch 0.
+///     here. Fixture: <c>project-a/partition/main-09</c>, Main Level#09, epoch 0.
 /// </summary>
 [TestFixture]
 public sealed class Main09Tests {
@@ -23,18 +23,7 @@ public sealed class Main09Tests {
     // stage-4 floor, so our face list is longer; the comparable subset is the one at this floor.
     private const double ReferenceFaceFloorSqft = 15.0;
 
-    private static string FixtureDir {
-        get {
-            var d = TestContext.CurrentContext.TestDirectory;
-            for (var i = 0; i < 8 && d is not null; i++) {
-                var p = Path.Combine(d, "fixtures", "project-a-main-09");
-                if (Directory.Exists(p)) return p;
-                d = Path.GetDirectoryName(d);
-            }
-
-            throw new DirectoryNotFoundException("fixtures/project-a-main-09 not found from the test directory");
-        }
-    }
+    private static string FixtureDir => PrivateFixtures.Dir("project-a/partition/main-09");
 
     private static SliceAnswer Load(string name) {
         using var fs = File.OpenRead(Path.Combine(FixtureDir, name));

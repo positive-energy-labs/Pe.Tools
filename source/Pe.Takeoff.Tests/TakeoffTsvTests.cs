@@ -74,7 +74,7 @@ public sealed class TakeoffTsvTests
     }
 
     [Test]
-    public void Checked_in_ProjectA_takeoffs_are_valid_shared_coverages()
+    public void Private_takeoffs_are_valid_shared_coverages()
     {
         var factory = new GeometryFactory(new PrecisionModel(1_000_000));
         var levels = TakeoffTsv.ParseTsvDirectory(Path.Combine(RhvacEvalTests.FindFixtureDir(), "takeoff"));

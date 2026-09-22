@@ -11,7 +11,7 @@ namespace Pe.Partition.Tests;
 
 public sealed class BoundaryShapeTests {
     private static T Load<T>(string fixture, string name) {
-        using var file = File.OpenRead(Path.Combine(TestContext.CurrentContext.TestDirectory, "fixtures", fixture, name + ".json.gz"));
+        using var file = File.OpenRead(Path.Combine(PrivateFixtures.Dir(fixture), name + ".json.gz"));
         using var gzip = new GZipStream(file, CompressionMode.Decompress);
         using var reader = new StreamReader(gzip);
         return JsonConvert.DeserializeObject<T>(reader.ReadToEnd())!;
@@ -24,7 +24,7 @@ public sealed class BoundaryShapeTests {
     [TestCase(0)]
     [TestCase(27)]
     public void Supported_corner_is_orthogonal_in_its_local_wing_and_hole_is_fixed(double degrees) {
-        var captured = Load<PartitionInput>("project-a-live", "partition-input");
+        var captured = Load<PartitionInput>("project-a/partition/live", "partition-input");
         double[] Rotate(double[] xy) => Enumerable.Range(0, xy.Length / 2).SelectMany(i => new[] {
             xy[2*i] * Math.Cos(degrees*Math.PI/180) - xy[2*i+1] * Math.Sin(degrees*Math.PI/180),
             xy[2*i] * Math.Sin(degrees*Math.PI/180) + xy[2*i+1] * Math.Cos(degrees*Math.PI/180)
@@ -49,12 +49,12 @@ public sealed class BoundaryShapeTests {
         Assert.That(unsupported.Zip(before).All(pair => pair.First.EqualsExact(pair.Second)), Is.True, "no wall support must leave shapes alone");
     }
 
-    [TestCase("project-a-live")]
-    [TestCase("project-c-live")]
+    [TestCase("project-a/partition/live")]
+    [TestCase("project-c/partition/live")]
     public void Saved_geometry_regularizes_without_replaying_moved_probes(string fixture) {
         var input = Load<PartitionInput>(fixture, "partition-input");
         // Keep the unregularized control fixed as live probe fixtures are recaptured.
-        var saved = Load<PartitionAnswer>(fixture, fixture == "project-a-live" ? "shape-before" : "answer");
+        var saved = Load<PartitionAnswer>(fixture, fixture == "project-a/partition/live" ? "shape-before" : "answer");
         var before = saved.Rooms.Select(Polygon).ToArray();
         var indices = Enumerable.Range(0, before.Length).Where(i => saved.Rooms[i].Proposal is null
             && saved.Rooms[i].Disposition != Disposition.Excluded && saved.Rooms[i].Reason != "native-overlap").ToArray();
@@ -77,15 +77,15 @@ public sealed class BoundaryShapeTests {
         var newUnion = OverlayNGRobust.Union(after);
         Assert.That(oldUnion.Boundary.SymmetricDifference(newUnion.Boundary).Length, Is.LessThanOrEqualTo(1e-6), "exterior or hole boundary moved");
         Assert.That(after.Sum(p => p.NumPoints), Is.LessThanOrEqualTo(before.Sum(p => p.NumPoints)));
-        if (fixture == "project-a-live") {
+        if (fixture == "project-a/partition/live") {
             Assert.That(after.Sum(p => p.NumPoints), Is.LessThan(0.98 * before.Sum(p => p.NumPoints)), "regularization did not remove corners");
             Assert.That(after.Sum(p => Corners((Polygon)p)), Is.GreaterThan(before.Sum(p => Corners((Polygon)p))), "local orthogonality did not improve");
         }
         Write(fixture + "-stage", before, after);
     }
 
-    [TestCase("project-a-live")]
-    [TestCase("project-c-live")]
+    [TestCase("project-a/partition/live")]
+    [TestCase("project-c/partition/live")]
     public void Full_solve_geometry_has_coverage_without_invented_floor_or_ceiling_hits(string fixture) {
         var input = Load<PartitionInput>(fixture, "partition-input");
         // Geometry witness only. No captured hit is reassigned and no height is fabricated.
@@ -105,7 +105,7 @@ public sealed class BoundaryShapeTests {
 
     [Test]
     public void ProjectC_level2_clipping_keeps_area_without_mixed_dimension_overlay_failure() {
-        var input = Load<PartitionInput>("project-c-level2", "partition-input");
+        var input = Load<PartitionInput>("project-c/partition/level2", "partition-input");
         var answer = Solve.Run(input, (_, _) => new ProbeAnswer(input.Knee.Stamp, input.Knee.Searched, null, null, 0, 0));
         Assert.That(answer.Rooms, Is.Not.Empty);
         Validate(answer.Rooms.Select(Polygon).ToArray(), input);

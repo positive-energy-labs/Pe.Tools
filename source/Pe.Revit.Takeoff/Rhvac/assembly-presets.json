@@ -1,4 +1,4 @@
-﻿{
+{
     "header":  [
                    "SHIM. Cloneable Manual-J code fields per assembly, used ONLY when the target .r10 does not",
                    "already contain a row using that assembly name. The real design â€” per-project custom",
@@ -8,9 +8,9 @@
                    "those come from the takeoff, per room.",
                    "Regenerate with mine-assembly-presets.ps1; never hand-edit a value you cannot source."
                ],
-    "generatedFrom":  "projectA.scratch.r10",
+    "generatedFrom":  "projectA.r10",
     "generatedUtc":  "2026-08-15T03:01:34Z",
-    "note":  "Mined from the firm\u0027s project-a project (150 rooms), the most complex real file available.",
+    "note":  "Mined from one real 150-room project, the most complex file available.",
     "floors":  [
                    {
                        "name":  "shortest side of floor slab is 20\u0027 wide",

@@ -202,32 +202,8 @@ public sealed class RhvacEvalTests
         new List<RoomMapSkip>()
     );
 
-    internal static string FindFixtureDir(
-        [System.Runtime.CompilerServices.CallerFilePath] string sourcePath = ""
-    )
-    {
-        // Not AppContext.BaseDirectory: the R25 harness bases that on the Revit install dir and
-        // copies the whole test payload to temp, so no runtime path lands inside the repo. Walk
-        // up from the assembly dir and cwd first (repo idiom), then from this file's compile-time
-        // path, which always points into the repo on the machine that built the tests.
-        var anchors = new[] {
-            Path.GetDirectoryName(typeof(RhvacEvalTests).Assembly.Location),
-            Directory.GetCurrentDirectory(),
-            Path.GetDirectoryName(sourcePath),
-        };
-        foreach (var anchor in anchors)
-        {
-            var dir = string.IsNullOrWhiteSpace(anchor) ? null : new DirectoryInfo(anchor);
-            while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Pe.Tools.slnx")))
-                dir = dir.Parent;
-            if (dir is not null)
-                return Path.Combine(dir.FullName, "eval", "rhvac", "project-a");
-        }
-
-        throw new InvalidOperationException(
-            $"Pe.Tools.slnx not found above {string.Join(" or ", anchors)}."
-        );
-    }
+    /// <summary>The project-a RHVAC eval set; ignored when the private fixture is absent.</summary>
+    internal static string FindFixtureDir() => PrivateFixtures.Dir("project-a/rhvac");
 
     /// <summary>Rebuilds candidate rooms from the oracle inputs (a perfect takeoff by definition).</summary>
     private static List<RhvacRoom> ToCandidates(OracleExtract oracle)

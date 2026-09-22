@@ -5,7 +5,7 @@
 #   python eval/rhvac/score-looks-good.py audit-registration <report.json>
 #   python eval/rhvac/score-looks-good.py compare <reportA.json> <reportB.json>
 #
-# The oracle (eval/rhvac/project-a/oracle-geometry.json) is UNTRUSTED: registration/vintage
+# The oracle (.private/fixtures/project-a/rhvac/oracle-geometry.json) is UNTRUSTED: registration/vintage
 # drift is inherent. Oracle-derived numbers are diagnostic-only; boundary-distance uses
 # confidence=high rooms only; when oracle metrics disagree with ink metrics, suspect the
 # oracle first. audit-registration exists to put evidence behind that suspicion.
@@ -61,7 +61,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import overlay  # noqa: E402  (INKP + TSV parsing, polygon repair)
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-FIXTURES = os.path.join(REPO, "eval", "rhvac", "project-a")
+FIXTURES = os.path.join(os.environ.get("PE_PRIVATE_FIXTURES") or os.path.join(REPO, ".private", "fixtures"), "project-a", "rhvac")
 
 # report Level name -> (bin token, oracle floor); mirrors ZoneBoundedDetectTests.LevelMap
 LEVELS = {

@@ -1,11 +1,11 @@
-﻿/**
- * Smoke the /rhvac fixture lane against the real project-a data checked into
- * public/rhvac-fixture: the TSV parser must accept every committed takeoff
+/**
+ * Smoke the /rhvac fixture lane against the private project-a data in
+ * .private/fixtures/project-a/web (skipped when absent): the TSV parser must accept every committed takeoff
  * snapshot, the room map's candidate keys must resolve to parsed polygons, and
  * the extract must normalize into identifiable rooms with a usable assembly
  * catalog.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -18,14 +18,23 @@ import {
 } from "./takeoff";
 import { candidateKey, normalizeExtract, type RhvacExtract, type RoomMap } from "./types";
 
-const FIXTURE_DIR = join(import.meta.dirname, "../../public/rhvac-fixture");
+const FIXTURE_DIR = join(
+  process.env.PE_PRIVATE_FIXTURES ??
+    join(import.meta.dirname, "../../../../../../.private/fixtures"),
+  "project-a/web",
+);
+const fixturePresent = existsSync(join(FIXTURE_DIR, "manifest.json"));
 
 const readFixture = (name: string) => {
   const text = readFileSync(join(FIXTURE_DIR, name), "utf8");
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 };
 
-const manifest = JSON.parse(readFixture("manifest.json")) as {
+const manifest = (
+  fixturePresent
+    ? JSON.parse(readFixture("manifest.json"))
+    : { extract: "", roomMap: "", takeoff: [] }
+) as {
   extract: string;
   roomMap: string;
   takeoff: string[];
@@ -49,12 +58,17 @@ const parseMergeUnitTakeoff = (
     ].join("\n"),
   );
 
-describe("rhvac fixture lane", () => {
-  const levels = mergeTakeoffLevels(
-    manifest.takeoff.map((name) => parseTakeoffTsv(readFixture(name))),
-  );
-  const extract = normalizeExtract(JSON.parse(readFixture(manifest.extract)) as RhvacExtract);
-  const roomMap = JSON.parse(readFixture(manifest.roomMap)) as RoomMap;
+const loadLane = () => ({
+  levels: mergeTakeoffLevels(manifest.takeoff.map((name) => parseTakeoffTsv(readFixture(name)))),
+  extract: normalizeExtract(JSON.parse(readFixture(manifest.extract)) as RhvacExtract),
+  roomMap: JSON.parse(readFixture(manifest.roomMap)) as RoomMap,
+});
+
+describe.skipIf(!fixturePresent)("rhvac fixture lane", () => {
+  // Skipped suites still run their body; only read the private data when it is there.
+  const { levels, extract, roomMap } = fixturePresent
+    ? loadLane()
+    : ({} as ReturnType<typeof loadLane>);
 
   it("parses every committed takeoff TSV into named levels with polygons", () => {
     expect(levels).toHaveLength(5);

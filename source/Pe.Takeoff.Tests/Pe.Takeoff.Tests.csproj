@@ -18,4 +18,8 @@
         <ProjectReference Include="..\Pe.Revit.Takeoff\Pe.Revit.Takeoff.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+        <Compile Include="..\..\eng\PrivateFixtures.cs" Link="PrivateFixtures.cs" />
+    </ItemGroup>
+
 </Project>

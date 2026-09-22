@@ -1,11 +1,11 @@
 # Mine Bluebeam takeoff markups (area polygons, length lines, polylength polylines) out of the
 # engineer's plan PDFs into per-sheet JSON, in PDF points AND real-world feet.
 #
-#   python eval/rhvac/mine-bluebeam.py                # mine every PDF in project-a/bluebeam (+ archive/)
-#   python eval/rhvac/mine-bluebeam.py --project eval/rhvac/projectB
+#   python eval/rhvac/mine-bluebeam.py                # mine every PDF in project-a/rhvac/bluebeam (+ archive/)
+#   python eval/rhvac/mine-bluebeam.py --project .private/fixtures/project-b/rhvac
 #   python eval/rhvac/mine-bluebeam.py --pdf <path>   # mine one PDF
 #
-# Facts this encodes (probed 2026-08, see project-a/manual-takeoff-mining.md):
+# Facts this encodes (probed 2026-08, see the project-a manual-takeoff-mining notes):
 # - Measurements are standard PDF annots with Bluebeam extensions: /Polygon + /IT /PolygonDimension
 #   (area), /Line + /LineDimension (length), /PolyLine + /PolyLineDimension (polylength).
 # - The calibration lives PER ANNOTATION in /Measure; pages also carry a /VP viewport measure but
@@ -176,8 +176,8 @@ def slugify(name):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--project", default=os.path.join(HERE, "project-a"),
-                    help="project directory containing bluebeam/ (default: eval/rhvac/projectA)")
+    ap.add_argument("--project", default=os.path.join(os.environ.get("PE_PRIVATE_FIXTURES") or os.path.join(HERE, "..", "..", ".private", "fixtures"), "project-a", "rhvac"),
+                    help="project directory containing bluebeam/ (default: .private/fixtures/project-a/rhvac)")
     ap.add_argument("--pdf", default=None, help="mine a single PDF (default: all PDFs under PROJECT/bluebeam)")
     ap.add_argument("--no-tags", action="store_true", help="skip text-layer room tagging (faster)")
     a = ap.parse_args()

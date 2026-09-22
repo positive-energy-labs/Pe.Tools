@@ -10,10 +10,10 @@ using Pe.Revit.Space;
 namespace Pe.Partition.Tests;
 
 public sealed class LiveCaptureTests {
-    [TestCase("project-a-live")]
-    [TestCase("project-c-live")]
+    [TestCase("project-a/partition/live")]
+    [TestCase("project-c/partition/live")]
     public void Captured_inputs_replay_with_real_probes_and_conserve_geometry(string fixture) {
-        var directory = Path.Combine(TestContext.CurrentContext.TestDirectory, "fixtures", fixture);
+        var directory = PrivateFixtures.Dir(fixture);
         JToken Load(string name) {
             using var file = File.OpenRead(Path.Combine(directory, name + ".json.gz"));
             using var gzip = new GZipStream(file, CompressionMode.Decompress);

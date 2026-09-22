@@ -61,3 +61,7 @@ eng/sdk-feed/*.nupkg
 __pycache__/
 .claude/skills/
 .explore/
+
+# machine-local data that must never be committed or bundled: client fixtures, the SDK feed. See .private/README.md
+.private/*
+!.private/README.md

@@ -1,4 +1,4 @@
-import { buildZones, containsEvenOdd, type Zone } from "#/takeoff/model";
+import { buildZones, containsEvenOdd, type DeclaredZone, type Zone } from "#/takeoff/model";
 
 const hash = (s: string) => {
   let h = 2166136261;
@@ -185,8 +185,35 @@ const ZONE_NAMES = [
   "Attic Suite",
 ];
 
-export function mockModel(): MockModel {
-  const zones = buildZones();
+/** Synthetic declared zones for the seed world: three per zoning view, sized to hit every mock stage.
+ * Loops are sheet inches. Real declared zones come from the private fixture (zones.json) via mock-geo. */
+export const SEED_ZONES: DeclaredZone[] = ["Lower", "Main", "Upper", "Attic"].flatMap((level, li) =>
+  [
+    [12, 20, "Transparent Cyan 4", "0,210,210"],
+    [40, 30, "Transparent Magenta 2", "210,0,210"],
+    [6, 6, "Transparent Yellow 1", null],
+  ].map(([w, h, typeName, color], i) => {
+    const x = 100 + i * 60;
+    const y = 100 + li * 60;
+    return {
+      view: `Mechanical Zoning Plan - ${level} Level`,
+      typeName: typeName as string,
+      color: color as string | null,
+      comments: null,
+      loops: [
+        [
+          [x, y],
+          [x + (w as number), y],
+          [x + (w as number), y + (h as number)],
+          [x, y + (h as number)],
+        ],
+      ],
+    };
+  }),
+);
+
+export function mockModel(declared: DeclaredZone[] = SEED_ZONES): MockModel {
+  const zones = buildZones(declared);
   let sysCounter = 0;
   let identifier = 100;
   let parityRoomPending = true;

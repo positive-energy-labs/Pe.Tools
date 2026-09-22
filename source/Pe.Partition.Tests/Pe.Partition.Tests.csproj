@@ -22,8 +22,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <None Include="fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
-        <None Include="fixtures\**\*.json.gz" CopyToOutputDirectory="PreserveNewest" />
+        <Compile Include="..\..\eng\PrivateFixtures.cs" Link="PrivateFixtures.cs" />
     </ItemGroup>
 
 </Project>

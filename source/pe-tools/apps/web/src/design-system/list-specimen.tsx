@@ -1,6 +1,6 @@
 /**
  * The /design-system/list specimen: every list KIND the app draws, side by side on the one `Row`
- * and the one `useCollection`, over real fixtures (chat seeds, demo pods, the project-a zones, the
+ * and the one `useCollection`, over real fixtures (chat seeds, demo pods, three synthetic zones, the
  * families demo parameters). Nothing here is cut over; this page is the question for Kai.
  */
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -13,7 +13,6 @@ import { Table } from "#/components/master-table/table";
 import { CHAT_SEEDS, CHAT_SEED_STATE, CHAT_SEED_THREADS } from "#/chat/seeds";
 import { DEMO_FAMILIES } from "#/families/seeds";
 import { DEMO_PODS } from "#/route/seeds";
-import { ProjectA_ZONES } from "#/takeoff/zones-project-a";
 import { ZoneThumb } from "#/takeoff/zone-plan";
 import { selectSkillCommands } from "#/workbench/chat-state";
 
@@ -89,13 +88,37 @@ interface Zone {
   loops: [number, number][][];
   color: string | null;
 }
-export const ZONES: Zone[] = ProjectA_ZONES.map((z, i) => ({
-  key: `zone-${i}`,
-  label: z.typeName,
-  lane: z.view,
-  loops: z.loops,
-  color: z.color,
-}));
+const box = (x: number, y: number, w: number, h: number): [number, number][][] => [
+  [
+    [x, y],
+    [x + w, y],
+    [x + w, y + h],
+    [x, y + h],
+  ],
+];
+export const ZONES: Zone[] = [
+  {
+    key: "zone-0",
+    label: "Transparent Cyan 4",
+    lane: "Mechanical Zoning Plan - Main Level",
+    loops: box(10, 10, 40, 30),
+    color: "0,210,210",
+  },
+  {
+    key: "zone-1",
+    label: "Transparent Magenta 2",
+    lane: "Mechanical Zoning Plan - Main Level",
+    loops: box(55, 10, 25, 30),
+    color: "210,0,210",
+  },
+  {
+    key: "zone-2",
+    label: "Transparent Yellow 1",
+    lane: "Mechanical Zoning Plan - Upper Level",
+    loops: box(10, 45, 70, 20),
+    color: null,
+  },
+];
 const bounds = (loops: [number, number][][]) => {
   const points = loops.flat();
   const xs = points.map((p) => p[0]);

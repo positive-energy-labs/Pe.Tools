@@ -5,10 +5,11 @@
 #
 # Runs from any PowerShell (it spawns the 32-bit Jet lane itself):
 #   powershell -File eval/rhvac/edit-check.ps1
-# Default source is the gitignored local project-a copy; outputs land next to it (also gitignored).
+# Default source is the private project-a copy; outputs land next to it (also gitignored).
 param(
-    [string]$SourceR10 = (Join-Path $PSScriptRoot 'project-a\projectA.local.r10'),
-    [string]$WorkDir = (Join-Path $PSScriptRoot 'project-a')
+    [string]$Project = (Join-Path ($env:PE_PRIVATE_FIXTURES ?? (Join-Path $PSScriptRoot '..\..\.privateixtures')) 'project-ahvac'),
+    [string]$SourceR10 = (Join-Path $Project 'local.r10'),
+    [string]$WorkDir = $Project
 )
 
 $ErrorActionPreference = 'Stop'

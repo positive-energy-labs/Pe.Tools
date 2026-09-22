@@ -16,8 +16,10 @@ import {
   type MockZone,
   type RoomType,
 } from "./mock";
+import type { DeclaredZone } from "#/takeoff/model";
 
-/* project-a dev fixture — extract/map + Partition replay TSVs from public/rhvac-fixture.
+/* Private dev fixture (projectA): extract/map, declared zones, and Partition replay TSVs served
+   at /rhvac-fixture by the vite dev server only (see vite.config.ts and .private/README.md).
    The extract JSON is UTF-8 with BOM; strip it before parsing. Inlined from the deleted
    `rhvac/fixture.ts` (fold 4): this is the only caller. */
 const BASE = "/rhvac-fixture";
@@ -186,5 +188,10 @@ function joinGeometry(world: MockModel, takeoff: RhvacTakeoffData): GeoWorld {
   return { ...world, zones };
 }
 
-export const loadMockGeo = async (): Promise<GeoWorld> =>
-  joinGeometry(mockModel(), await loadFixtureTakeoff());
+export const loadMockGeo = async (): Promise<GeoWorld> => {
+  const [zones, takeoff] = await Promise.all([
+    fetchJson<DeclaredZone[]>("zones.json"),
+    loadFixtureTakeoff(),
+  ]);
+  return joinGeometry(mockModel(zones), takeoff);
+};

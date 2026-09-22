@@ -1,4 +1,11 @@
-import { ProjectA_ZONES, type DeclaredZone } from "#/takeoff/zones-project-a";
+/** A zone as drawn on a zoning view: loops in sheet inches, even-odd. Lives in a private fixture (zones.json), never in the bundle. */
+export interface DeclaredZone {
+  view: string;
+  typeName: string;
+  color: string | null;
+  comments: string | null;
+  loops: [number, number][][];
+}
 import { boundsOf, type AffineFrame, type Bounds2 } from "#/lib/affine-frame";
 import type { DetectedRoom, LiveRegion, PartitionRun } from "@pe/agent-contracts";
 
@@ -108,7 +115,7 @@ export function pathD(
     .join("");
 }
 
-export function buildZones(declared: DeclaredZone[] = ProjectA_ZONES): Zone[] {
+export function buildZones(declared: DeclaredZone[]): Zone[] {
   const zones: Zone[] = [];
   LEVEL_LANES.forEach((lane, levelIndex) => {
     declared

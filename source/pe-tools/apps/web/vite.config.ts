@@ -1,3 +1,5 @@
+import { createReadStream, existsSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { devHostProxy } from "./dev-proxy.ts";
 import react from "@vitejs/plugin-react";
@@ -7,6 +9,29 @@ import type { Plugin } from "vite-plus";
 import { defineConfig, loadEnv, searchForWorkspaceRoot } from "vite-plus";
 
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
+
+/** Dev-only: serve the private project-a web fixture at /rhvac-fixture. Never part of the build. */
+function privateFixtures(): Plugin {
+  const dir = join(
+    process.env.PE_PRIVATE_FIXTURES ?? join(import.meta.dirname, "../../../../.private/fixtures"),
+    "project-a/web",
+  );
+  return {
+    name: "pe-private-fixtures",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use("/rhvac-fixture", (req, res, next) => {
+        const file = join(dir, (req.url ?? "/").split("?")[0]!);
+        if (!file.startsWith(dir) || !existsSync(file)) return next();
+        res.setHeader(
+          "Content-Type",
+          file.endsWith(".json") ? "application/json" : "text/plain; charset=utf-8",
+        );
+        createReadStream(file).pipe(res);
+      });
+    },
+  };
+}
 
 const config = defineConfig(({ mode }) => {
   // Server-only secrets (LLAMA_CLOUD_API_KEY, ANTHROPIC_API_KEY) live in the
@@ -45,6 +70,7 @@ const config = defineConfig(({ mode }) => {
       tanstackStartVite8DevMiddleware() as never,
       react() as never,
       tailwindcss() as never,
+      privateFixtures() as never,
       devtools({
         injectSource: { enabled: false },
         consolePiping: { enabled: false },
