@@ -32,9 +32,11 @@ await journey("SIG-REASON", async (page, step) => {
     throw new Error("ASSERT hovering push shows its reason");
   });
   await move(1, 1);
-  await page.until(async () => !(await shown()), "the reason to hide", 3000).catch(() => {
-    throw new Error("ASSERT the reason hides when the pointer leaves");
-  });
+  await page
+    .until(async () => !(await shown()), "the reason to hide", 3000)
+    .catch(() => {
+      throw new Error("ASSERT the reason hides when the pointer leaves");
+    });
 
   step("Tab to push");
   const focused = () => page.read<boolean>(`document.activeElement === (${PUSH})`);

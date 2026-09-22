@@ -29,7 +29,12 @@ const PS32_EXE = "C:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe
 const scriptDir = rhvacScriptDirectory();
 const repoRoot = scriptDir ? resolve(scriptDir, "..", "..", "..") : null;
 const ProjectAR10 = repoRoot
-  ? join(process.env.PE_PRIVATE_FIXTURES ?? join(repoRoot, ".private", "fixtures"), "project-a", "rhvac", "local.r10")
+  ? join(
+      process.env.PE_PRIVATE_FIXTURES ?? join(repoRoot, ".private", "fixtures"),
+      "project-a",
+      "rhvac",
+      "local.r10",
+    )
   : null;
 const laneAvailable =
   process.platform === "win32" &&

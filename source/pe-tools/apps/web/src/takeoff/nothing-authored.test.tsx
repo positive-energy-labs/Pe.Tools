@@ -32,7 +32,12 @@ test("absent Work at a bound document reads 'nothing authored here yet', never '
         sessionId: "A",
         openDocumentCount: 1,
         openDocuments: [
-          { openId: "doc-1", title: "project-a", address: "C:/m/projectA.rvt", isFamilyDocument: false },
+          {
+            openId: "doc-1",
+            title: "project-a",
+            address: "C:/m/projectA.rvt",
+            isFamilyDocument: false,
+          },
         ],
       },
     ],

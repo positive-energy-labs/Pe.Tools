@@ -19,7 +19,11 @@ await journey("SIG-REFUSAL", async (page, step) => {
   await page.setCell(rows[0], param, value);
   await page.until(async () => (await page.readCell(rows[0]!, param))?.staged, "the cell staged");
   await page.click(/^push\b/, SITUATION);
-  await page.until(async () => /\brefused\b/.test(await page.text()), "the push to settle", 120_000);
+  await page.until(
+    async () => /\brefused\b/.test(await page.text()),
+    "the push to settle",
+    120_000,
+  );
 
   const cell = await page.read<string>(`(() => {
     const th = [...document.querySelectorAll("thead th")].find((th) => th.innerText.trim().split(/\\s*\\n/)[0].toLowerCase() === ${JSON.stringify(param.toLowerCase())});
@@ -35,7 +39,8 @@ await journey("SIG-REFUSAL", async (page, step) => {
   const text = await page.text();
   const logLines = text.split("\n").filter((l) => /\bpush\b.*\brefused\b/i.test(l));
   step(`log lines: ${JSON.stringify(logLines)}`);
-  if (logLines.length !== 1) throw new Error(`ASSERT one log line for the refusal: got ${logLines.length}`);
+  if (logLines.length !== 1)
+    throw new Error(`ASSERT one log line for the refusal: got ${logLines.length}`);
   for (const re of [/nothing ran/i, /push run ·/i, /Bare numeric value/])
     if (re.test(text) && !cell.includes(text.match(re)![0]))
       throw new Error(`ASSERT no second copy of the refusal outside its cell: found ${re}`);
