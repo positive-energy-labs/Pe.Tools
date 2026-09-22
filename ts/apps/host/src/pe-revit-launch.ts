@@ -21,9 +21,9 @@ export function peRevitLauncher(
   return peRevitLaunch(
     {
       lane: ownership.lane,
-      // sourceRoot is <repo>/source/pe-tools; the dotnet tool manifest + product.payloads.json
-      // live at the repo root two levels up.
-      devWorkingDirectory: ownership.sourceRoot ? join(ownership.sourceRoot, "..", "..") : null,
+      // sourceRoot is <repo>/ts; the dotnet tool manifest + product.payloads.json
+      // live at the repo root one level up.
+      devWorkingDirectory: ownership.sourceRoot ? join(ownership.sourceRoot, "..") : null,
       vendorName: productIdentity.vendorName,
       productName: productIdentity.productName,
     },

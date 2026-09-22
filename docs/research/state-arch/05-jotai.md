@@ -2,7 +2,7 @@
 
 ## 1. Library facts
 
-Snapshot: 2026-08-24. The prototype installs Jotai `^2.20.2`, `jotai-tanstack-query` `^0.11.0`, `jotai-effect` `^2.4.1`, and `jotai-devtools` `^0.14.0` (`source/pe-tools/apps/web/package.json:42`). The registry already lists Jotai 2.20.3 and a 3.0 alpha; the workspace's minimum-release-age policy resolved 2.20.2.
+Snapshot: 2026-08-24. The prototype installs Jotai `^2.20.2`, `jotai-tanstack-query` `^0.11.0`, `jotai-effect` `^2.4.1`, and `jotai-devtools` `^0.14.0` (`ts/apps/web/package.json:42`). The registry already lists Jotai 2.20.3 and a 3.0 alpha; the workspace's minimum-release-age policy resolved 2.20.2.
 
 | Package | Maintainer / activity signal | Version, last publish | Weekly downloads | Unpacked |
 | --- | --- | --- | ---: | ---: |
@@ -156,7 +156,7 @@ Activity result: hiding the plan ran the plan effect cleanup and stopped the pro
 
 - LOC: store/model 778; React view 490; route adapter 60; no-React test 126. The required MockHost is inside the store count. This is not a small prototype: explicit feed/basis/freshness semantics and query orchestration dominate.
 - Type inference: atom value and action inference is excellent locally. The centralized `BenchState` surface requires `typeof atoms`/`typeof actions` plumbing, query results expose large TanStack unions, and family values lose meaningful debug labels.
-- Devtools screenshot: `source/pe-tools/apps/web/src/state-bench/jotai/devtools.png`. Browser proof showed the route, 500-zone plan, Atom Viewer, named root atoms, and thousands of unlabeled family-generated atoms. `Invoke-WebRequest` independently returned HTTP 200; the visible client route was proven in Chrome.
+- Devtools screenshot: `ts/apps/web/src/state-bench/jotai/devtools.png`. Browser proof showed the route, 500-zone plan, Atom Viewer, named root atoms, and thousands of unlabeled family-generated atoms. `Invoke-WebRequest` independently returned HTTP 200; the visible client route was proven in Chrome.
 
 Worst three papercuts:
 

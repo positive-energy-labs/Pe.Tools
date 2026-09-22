@@ -51,7 +51,7 @@ const schema = takeoffsRouteState.schema.extend({
 });
 
 async function owners() {
-  const base = resolve("../../../../.artifacts/tmp");
+  const base = resolve("../../../.artifacts/tmp");
   await mkdir(base, { recursive: true });
   const directory = await mkdtemp(join(base, "resource-proof-"));
   const rows = new Map<string, unknown>();

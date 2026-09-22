@@ -3,7 +3,7 @@
 Adversarial review. Read-only. Judged 2026-08-24 against `SCENARIO.md`,
 `00-baseline-census.md` §10 (R1–R20) and `01-qr-repo-pattern.md` §6 (R1–R16).
 
-Proto: worktree `Pe.Tools-sb-xstate`, `source/pe-tools/apps/web/src/state-bench/xstate/`
+Proto: worktree `Pe.Tools-sb-xstate`, `ts/apps/web/src/state-bench/xstate/`
 (`store.ts` 775, `panes.tsx` 443, `host.ts` 137, `bench.test.ts` 145) and
 `src/routes/state-bench.xstate.tsx` (53). Total 1553 lines.
 
@@ -11,7 +11,7 @@ Proto: worktree `Pe.Tools-sb-xstate`, `source/pe-tools/apps/web/src/state-bench/
 
 | Command | Result |
 |---|---|
-| `vp run @pe/web#test -- state-bench` (from `source/pe-tools`) | **FAILS to plan.** `error: Failed to plan tasks from 'vp run' in task @pe/web#test / * Task "state-bench" not found`. Exit 0. The `test` script is bare `vp run`, so the filter is read as a task name. Command defect, not candidate defect. |
+| `vp run @pe/web#test -- state-bench` (from `ts`) | **FAILS to plan.** `error: Failed to plan tasks from 'vp run' in task @pe/web#test / * Task "state-bench" not found`. Exit 0. The `test` script is bare `vp run`, so the filter is read as a task name. Command defect, not candidate defect. |
 | `vp test src/state-bench/xstate/bench.test.ts` (from `apps/web`) | **PASS. 1 file, 5 tests, 484 ms.** Report claims 1.45 s; the count and the names match. |
 | `vp check src/state-bench/xstate src/routes/state-bench.xstate.tsx` | **PASS.** "All 5 files are correctly formatted"; "Found no warnings, lint errors, or type errors in 5 files". |
 | Route registration | Present in `routeTree.gen.ts:32,138-139`. |

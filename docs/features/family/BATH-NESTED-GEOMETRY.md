@@ -13,4 +13,4 @@ No capture code changed; b-grd array/capture ownership remains untouched. No met
 
 `Bath_nested_instances_follow_authored_host_geometry` independently checks the authored consequences: three puck locations on the left/right/drain planes with X-oriented hand axes, two stubs at the two reference-line endpoints, and exactly one hot-stub visibility association.
 
-Validation: `dotnet build source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests --no-restore` completed with 0 errors and 20 warnings after restore. No Revit test was run. Native confirmation is still required because the local compile cannot prove Revit accepts a Level reference for the work-plane overload or that its resulting named references align.
+Validation: `dotnet build dotnet/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests --no-restore` completed with 0 errors and 20 warnings after restore. No Revit test was run. Native confirmation is still required because the local compile cannot prove Revit accepts a Level reference for the work-plane overload or that its resulting named references align.

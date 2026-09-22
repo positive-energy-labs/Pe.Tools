@@ -26,42 +26,42 @@
         <File Path="Changelog.md" />
         <File Path="Readme.md" />
     </Folder>
-    <Folder Name="/source/">
+    <Folder Name="/dotnet/">
         <!-- Legacy .Tests->Debug.R23 remap removed with the SDK migration: the SDK parses the
              year straight from Debug.R##.Tests, so the remap only produced net48/net8 conflicts. -->
-        <Project Path="source/Pe.Revit.DocumentData/Pe.Revit.DocumentData.csproj" />
+        <Project Path="dotnet/Pe.Revit.DocumentData/Pe.Revit.DocumentData.csproj" />
     </Folder>
-    <Project Path="source/Pe.App/Pe.App.csproj" />
-    <Project Path="source/Pe.Aps/Pe.Aps.csproj" />
+    <Project Path="dotnet/Pe.App/Pe.App.csproj" />
+    <Project Path="dotnet/Pe.Aps/Pe.Aps.csproj" />
     <!-- Design Automation supports 2024+ only (no Forge DA package for R23), so the DA projects
          simply do NOT build in R23 lanes. Never fix this with a config remap (the old
          Debug.R23->Debug.R24 mapping): a remapped project's ProjectReferences drag its whole
          closure into a second configuration identity, and NuGet restore dedupes each project to
          ONE identity per solution restore — whichever loses has no assets file (NETSDK1004,
          CI 2026-07-06). -->
-    <Project Path="source/Pe.Dev.RevitAutomation/Pe.Dev.RevitAutomation.csproj" />
-    <Project Path="source/Pe.Dev.RevitAutomation.Worker/Pe.Dev.RevitAutomation.Worker.csproj">
+    <Project Path="dotnet/Pe.Dev.RevitAutomation/Pe.Dev.RevitAutomation.csproj" />
+    <Project Path="dotnet/Pe.Dev.RevitAutomation.Worker/Pe.Dev.RevitAutomation.Worker.csproj">
         <Build Solution="Debug.R23|*" Project="false" />
         <Build Solution="Release.R23|*" Project="false" />
     </Project>
-    <!-- Pe.Host retired: replaced by the Effectified TS host at source/pe-tools/apps/host
+    <!-- Pe.Host retired: replaced by the Effectified TS host at ts/apps/host
     (@pe/host). -->
-    <Project Path="source/Pe.Dev.Cli/Pe.Dev.Cli.csproj" />
-    <Project Path="source/Pe.Revit/Pe.Revit.csproj" />
-    <Project Path="source/Pe.Revit.FamilyFoundry/Pe.Revit.FamilyFoundry.csproj" />
-    <Project Path="source/Pe.Revit.Global/Pe.Revit.Global.csproj" />
-    <Project Path="source/Pe.Revit.Placement/Pe.Revit.Placement.csproj" />
-    <Project Path="source/Pe.Revit.Scripting/Pe.Revit.Scripting.csproj" />
-    <Project Path="source/Pe.Revit.Space/Pe.Revit.Space.csproj" />
-    <Project Path="source/Pe.Partition.Tests/Pe.Partition.Tests.csproj" />
-    <Project Path="source/Pe.Revit.Partition/Pe.Revit.Partition.csproj" />
-    <Project Path="source/Pe.Revit.SettingsRuntime/Pe.Revit.SettingsRuntime.csproj" />
+    <Project Path="dotnet/Pe.Dev.Cli/Pe.Dev.Cli.csproj" />
+    <Project Path="dotnet/Pe.Revit/Pe.Revit.csproj" />
+    <Project Path="dotnet/Pe.Revit.FamilyFoundry/Pe.Revit.FamilyFoundry.csproj" />
+    <Project Path="dotnet/Pe.Revit.Global/Pe.Revit.Global.csproj" />
+    <Project Path="dotnet/Pe.Revit.Placement/Pe.Revit.Placement.csproj" />
+    <Project Path="dotnet/Pe.Revit.Scripting/Pe.Revit.Scripting.csproj" />
+    <Project Path="dotnet/Pe.Revit.Space/Pe.Revit.Space.csproj" />
+    <Project Path="dotnet/Pe.Partition.Tests/Pe.Partition.Tests.csproj" />
+    <Project Path="dotnet/Pe.Revit.Partition/Pe.Revit.Partition.csproj" />
+    <Project Path="dotnet/Pe.Revit.SettingsRuntime/Pe.Revit.SettingsRuntime.csproj" />
     <!-- Default `pe-revit test fresh` discovery is solution-scoped. Keep the Revit test host in
          the root solution so agents do not need a product-specific project-path escape hatch. -->
-    <Project Path="source/Pe.Revit.Tests/Pe.Revit.Tests.csproj" />
-    <Project Path="source/Pe.Revit.Takeoff/Pe.Revit.Takeoff.csproj" />
-    <Project Path="source/Pe.Revit.Ui/Pe.Revit.Ui.csproj" />
-    <Project Path="source/Pe.Takeoff.Tests/Pe.Takeoff.Tests.csproj">
+    <Project Path="dotnet/Pe.Revit.Tests/Pe.Revit.Tests.csproj" />
+    <Project Path="dotnet/Pe.Revit.Takeoff/Pe.Revit.Takeoff.csproj" />
+    <Project Path="dotnet/Pe.Revit.Ui/Pe.Revit.Ui.csproj" />
+    <Project Path="dotnet/Pe.Takeoff.Tests/Pe.Takeoff.Tests.csproj">
         <!-- This ordinary net8 test surface references the current Takeoff library. The 2023/2024
              product lanes remain source-compile proof only; they cannot host a net8 test runner. -->
         <Build Solution="Debug.R23|*" Project="false" />
@@ -73,14 +73,14 @@
         <Build Solution="Release.R24|*" Project="false" />
         <Build Solution="Release.R24.Tests|*" Project="false" />
     </Project>
-    <Project Path="source/Pe.Shared.HostContracts/Pe.Shared.HostContracts.csproj" />
-    <Project Path="source/Pe.Shared.Product/Pe.Shared.Product.csproj" />
-    <Project Path="source/Pe.Shared.ApsAuth/Pe.Shared.ApsAuth.csproj" />
-    <Project Path="source/Pe.Shared.Tests/Pe.Shared.Tests.csproj" />
-    <Project Path="source/Pe.Shared.RevitAutomation/Pe.Shared.RevitAutomation.csproj" />
-    <Project Path="source/Pe.Shared.RevitData/Pe.Shared.RevitData.csproj" />
-    <Project Path="source/Pe.Shared.Scripting/Pe.Shared.Scripting.csproj" />
+    <Project Path="dotnet/Pe.Shared.HostContracts/Pe.Shared.HostContracts.csproj" />
+    <Project Path="dotnet/Pe.Shared.Product/Pe.Shared.Product.csproj" />
+    <Project Path="dotnet/Pe.Shared.ApsAuth/Pe.Shared.ApsAuth.csproj" />
+    <Project Path="dotnet/Pe.Shared.Tests/Pe.Shared.Tests.csproj" />
+    <Project Path="dotnet/Pe.Shared.RevitAutomation/Pe.Shared.RevitAutomation.csproj" />
+    <Project Path="dotnet/Pe.Shared.RevitData/Pe.Shared.RevitData.csproj" />
+    <Project Path="dotnet/Pe.Shared.Scripting/Pe.Shared.Scripting.csproj" />
 
-    <Project Path="source/Pe.Shared.StorageRuntime/Pe.Shared.StorageRuntime.csproj" />
-    <Project Path="source/Toon/Toon.csproj" />
+    <Project Path="dotnet/Pe.Shared.StorageRuntime/Pe.Shared.StorageRuntime.csproj" />
+    <Project Path="dotnet/Toon/Toon.csproj" />
 </Solution>

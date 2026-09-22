@@ -83,9 +83,9 @@ inspector: a `<pre>` of the whole state tree + last 20 actions. Screenshot it.
 
 ## Deliverables per candidate (in the candidate's worktree)
 
-1. `source/pe-tools/apps/web/src/state-bench/<candidate>/` — the proto (store, mock host,
+1. `ts/apps/web/src/state-bench/<candidate>/` — the proto (store, mock host,
    panes, route file `routes/state-bench.<candidate>.tsx`). Route must compile under `vp check`.
-2. `source/pe-tools/apps/web/src/state-bench/<candidate>/bench.test.ts` — vitest, NO React:
+2. `ts/apps/web/src/state-bench/<candidate>/bench.test.ts` — vitest, NO React:
    fixture swap, waterfall clears descendants, adopt → stale → refresh, failure surfaces as
    `error` feed, push `docChanged` invalidates doc+views+zones.
 3. `docs/research/state-arch/<NN>-<candidate>.md` — the research + proto report (template below).

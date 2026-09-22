@@ -100,11 +100,11 @@ Inspect historical files with `git show <commit>:<path>`. Baseline is `d978328`;
 
 | Topic | Baseline anchor | Endpoint anchor |
 | --- | --- | --- |
-| Script Pods versus reusable members | `source/Pe.Shared.Scripting/Pods/PodManifest.cs`; `source/pe-tools/packages/mcps/src/pea/pods-commands.ts`; `source/pe-tools/apps/web/src/routes/settings.tsx` | `source/pe-tools/apps/web/src/routes/pods.tsx`; `source/pe-tools/apps/web/src/route/spec-editor.tsx` |
-| Portable composition | `source/Pe.Revit.Scripting/Pods/ScriptPodArchiveService.cs` | Same path, `Vendor`; `docs/features/pods/LEDGER.md` for decisions and rejected intermediate designs |
-| Family authoring | `source/pe-tools/apps/web/src/family/workspace.tsx`; `source/pe-tools/apps/web/src/families/workspace.tsx` | `source/pe-tools/apps/web/src/route/family/live.tsx`; `source/pe-tools/apps/web/src/route/family/manifest.ts`, especially `captureInput` and `staged` |
-| Document context | `source/pe-tools/apps/web/src/workbench/route-scope.tsx` | `source/pe-tools/packages/runtime/src/scope-store.ts`; `source/pe-tools/apps/web/src/route/use-route.ts` |
-| Schedule workflows | `source/pe-tools/apps/web/src/routes/schedule-grid.tsx` | `source/pe-tools/apps/web/src/route/schedules/live.tsx`; `source/pe-tools/apps/web/src/route/schedules/manifest.ts` |
-| Recovery and cancellation | Feature-specific stores and `pods-commands.ts` | `source/pe-tools/apps/host/src/action-journal.ts`; `native-receipts.ts`; `source/pe-tools/apps/web/src/actions/receipt.tsx` |
-| Chat continuity | `source/pe-tools/apps/web/src/routes/chat.tsx`; `workbench/aui.tsx` | `source/pe-tools/apps/web/src/chat/composer-bank.tsx`; `workbench/deferred-result.ts`; `workbench/lens/thread-body.tsx` |
-| Existing Takeoffs journey | `source/pe-tools/apps/web/src/takeoff/store.ts`; `source/Pe.Revit.Space/Partition.cs` | `source/pe-tools/apps/web/src/takeoff/actions.ts`; `docs/features/takeoffs/LEDGER.md` |
+| Script Pods versus reusable members | `dotnet/Pe.Shared.Scripting/Pods/PodManifest.cs`; `ts/packages/mcps/src/pea/pods-commands.ts`; `ts/apps/web/src/routes/settings.tsx` | `ts/apps/web/src/routes/pods.tsx`; `ts/apps/web/src/route/spec-editor.tsx` |
+| Portable composition | `dotnet/Pe.Revit.Scripting/Pods/ScriptPodArchiveService.cs` | Same path, `Vendor`; `docs/features/pods/LEDGER.md` for decisions and rejected intermediate designs |
+| Family authoring | `ts/apps/web/src/family/workspace.tsx`; `ts/apps/web/src/families/workspace.tsx` | `ts/apps/web/src/route/family/live.tsx`; `ts/apps/web/src/route/family/manifest.ts`, especially `captureInput` and `staged` |
+| Document context | `ts/apps/web/src/workbench/route-scope.tsx` | `ts/packages/runtime/src/scope-store.ts`; `ts/apps/web/src/route/use-route.ts` |
+| Schedule workflows | `ts/apps/web/src/routes/schedule-grid.tsx` | `ts/apps/web/src/route/schedules/live.tsx`; `ts/apps/web/src/route/schedules/manifest.ts` |
+| Recovery and cancellation | Feature-specific stores and `pods-commands.ts` | `ts/apps/host/src/action-journal.ts`; `native-receipts.ts`; `ts/apps/web/src/actions/receipt.tsx` |
+| Chat continuity | `ts/apps/web/src/routes/chat.tsx`; `workbench/aui.tsx` | `ts/apps/web/src/chat/composer-bank.tsx`; `workbench/deferred-result.ts`; `workbench/lens/thread-body.tsx` |
+| Existing Takeoffs journey | `ts/apps/web/src/takeoff/store.ts`; `dotnet/Pe.Revit.Space/Partition.cs` | `ts/apps/web/src/takeoff/actions.ts`; `docs/features/takeoffs/LEDGER.md` |

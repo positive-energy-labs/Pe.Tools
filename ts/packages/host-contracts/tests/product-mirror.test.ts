@@ -14,7 +14,7 @@ import {
   scriptingWorkspaceIdentity,
 } from "@pe/host-contracts/contracts";
 
-const sourceDir = fileURLToPath(new URL("../../../../", import.meta.url));
+const sourceDir = fileURLToPath(new URL("../../../../dotnet/", import.meta.url));
 
 type ConstMap = Record<string, string>;
 
@@ -86,7 +86,7 @@ test("contracts/product.ts mirrors the C# product and host-endpoint constants", 
 // Third mirror leg: the product manifest is the deployment authority for the host service, so its
 // host payload's name/health/shutdown must equal the same contract constants. After this, every
 // host identity string is SDK-owned, mirror-tested, or generated.
-const manifestUrl = new URL("../../../../../product.payloads.json", import.meta.url);
+const manifestUrl = new URL("../../../../product.payloads.json", import.meta.url);
 
 test("product.payloads.json host payload mirrors the host service contract", () => {
   const manifest = JSON.parse(readFileSync(fileURLToPath(manifestUrl), "utf8")) as {
@@ -108,6 +108,6 @@ test("pea dev shim pins the workspace package manager", () => {
   ) as { packageManager: string };
   const pea = manifest.payloads.find((p) => p.type === "PathShim" && p.name === "pea");
   expect(pea?.dev).toBe(
-    `corepack ${workspace.packageManager} --dir "{root}/source/pe-tools" --filter @pe/pea pea`,
+    `corepack ${workspace.packageManager} --dir "{root}/ts" --filter @pe/pea pea`,
   );
 });

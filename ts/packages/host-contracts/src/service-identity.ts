@@ -29,7 +29,7 @@ export function sourceHostServiceName(sourceRoot: string): string {
 }
 
 /**
- * The ONE identity input for a dev host: a Pe.Tools checkout root maps to `<root>/source/pe-tools`,
+ * The ONE identity input for a dev host: a Pe.Tools checkout root maps to `<root>/ts`,
  * the directory the host runs from and hashes its service name over. Mirror of the C# side
  * (ProductDevelopmentRuntimeLayout.ResolveSourceHostWorkingDirectory), including the package.json
  * existence check — every deriver (host, MCP clients, C# launcher) must pass THIS through
@@ -38,7 +38,7 @@ export function sourceHostServiceName(sourceRoot: string): string {
  */
 export function devHostSourceDir(checkoutRoot: string): string | null {
   if (existsSync(join(checkoutRoot, "apps", "host", "package.json"))) return checkoutRoot;
-  const candidate = join(checkoutRoot, "source", "pe-tools");
+  const candidate = join(checkoutRoot, "ts");
   return existsSync(join(candidate, "apps", "host", "package.json")) ? candidate : null;
 }
 

@@ -14,7 +14,7 @@ namespace Build.Modules;
 [DependsOn<ResolveBuildLayoutModule>]
 [DependsOn<CleanProjectModule>(Optional = true)]
 public sealed class CreateAutomationBundleModule(IOptions<BuildOptions> buildOptions) : Module {
-    private const string WorkerProjectPath = "source/Pe.Dev.RevitAutomation.Worker/Pe.Dev.RevitAutomation.Worker.csproj";
+    private const string WorkerProjectPath = "dotnet/Pe.Dev.RevitAutomation.Worker/Pe.Dev.RevitAutomation.Worker.csproj";
 
     protected override async Task ExecuteModuleAsync(IModuleContext context, CancellationToken cancellationToken) {
         var versioning = (await context.GetModule<ResolveVersioningModule>()).ValueOrDefault!;

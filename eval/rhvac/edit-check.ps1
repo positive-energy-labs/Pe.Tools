@@ -14,7 +14,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ps32 = 'C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe'
-$rhvacDir = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\source\Pe.Revit.Takeoff\Rhvac'))
+$rhvacDir = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\dotnet\Pe.Revit.Takeoff\Rhvac'))
 $extractScript = Join-Path $rhvacDir 'extract-rhvac.ps1'
 $exportScript = Join-Path $rhvacDir 'export-rhvac.ps1'
 if (![IO.File]::Exists($SourceR10)) { throw "Source .r10 not found: $SourceR10 (copy the engineer's file here first; see oracle.source.txt)" }

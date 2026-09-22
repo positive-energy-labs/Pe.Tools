@@ -1,7 +1,7 @@
 # Grounding: Revit electrical panel schedules
 
 Scope: one subject — how Revit owns panel-schedule data, and where a value must live to appear.
-Serves `source/Pe.Revit.DocumentData/Electrical/`, primarily `ElectricalPanelScheduleQueryCollector.cs`
+Serves `dotnet/Pe.Revit.DocumentData/Electrical/`, primarily `ElectricalPanelScheduleQueryCollector.cs`
 (the collector that walks `PanelScheduleView` -> panel -> template -> `SectionType` cells).
 
 Facts below are labelled as the sources labelled them: unlabelled = verified against Autodesk docs or
@@ -157,10 +157,10 @@ multi-load circuits need an explicit max / first / error-on-conflict policy. Des
 
 ## Repo anchors
 
-- Panel-schedule read lane: `source/Pe.Revit.DocumentData/Electrical/ElectricalPanelScheduleQueryCollector.cs`
-- Connector authoring (native-friendly upstream lane): `source/Pe.Revit.FamilyFoundry/Operations/MakeElecConnector.cs`
-- Live probe lane: `source/Pe.Revit.Scripting/Execution/RevitScriptExecutionService.cs`,
-  `source/Pe.App/Commands/Scripting/CmdScriptingWorkspace.cs`
+- Panel-schedule read lane: `dotnet/Pe.Revit.DocumentData/Electrical/ElectricalPanelScheduleQueryCollector.cs`
+- Connector authoring (native-friendly upstream lane): `dotnet/Pe.Revit.FamilyFoundry/Operations/MakeElecConnector.cs`
+- Live probe lane: `dotnet/Pe.Revit.Scripting/Execution/RevitScriptExecutionService.cs`,
+  `dotnet/Pe.App/Commands/Scripting/CmdScriptingWorkspace.cs`
 
 ## Sources
 

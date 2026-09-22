@@ -11,13 +11,13 @@ Sources used:
 | Kind | Location | Version |
 |---|---|---|
 | Clone | `.explore/effect` (`Effect-TS/effect`, shallow, HEAD `b3f268d`) | `4.0.0-rc.111` |
-| Installed | `source/pe-tools/apps/web/node_modules/effect/src/...` | `4.0.0-beta.92` (pinned) |
+| Installed | `ts/apps/web/node_modules/effect/src/...` | `4.0.0-beta.92` (pinned) |
 | Clone | `.explore/effect-atom` (`tim-smart/effect-atom`) | v3 line, `60bcae0` |
 | Clone | `.explore/tanstack-devtools` (`TanStack/devtools`, `566d39b`) | current |
 | Clone | `.explore/jotai-devtools` (`jotaijs/jotai-devtools`, `43ba45c`) | v0.14.0 |
 | Web | effect.website v4 devtools, VS Code marketplace, GitHub issues | fetched 2026-08-24 |
 
-Paths below are relative to the clone root, or to `source/pe-tools/` for repo files.
+Paths below are relative to the clone root, or to `ts/` for repo files.
 
 ---
 
@@ -316,7 +316,7 @@ An agent cannot see a panel. So **build the collector headless first, and expose
 panel is one view on that data; a browser probe is another.
 
 The `inspect()` taxonomy already exists in the bench proto
-(`Pe.Tools-sb-effect-atom/source/pe-tools/apps/web/src/state-bench/effect-atom/model.ts:715-742`):
+(`Pe.Tools-sb-effect-atom/ts/apps/web/src/state-bench/effect-atom/model.ts:715-742`):
 
 ```ts
 inspect() {                                   // model.ts:715
@@ -370,10 +370,10 @@ Built on 2026-08-24:
 
 | File | Lines | Purpose |
 |---|---:|---|
-| `source/pe-tools/apps/web/src/state/atom-inspect.ts` | 209 | Public-API collector, cause hook, snapshots, polling subscription, refresh, and safe primitive set |
-| `source/pe-tools/apps/web/src/state/atom-inspect.test.ts` | 71 | Headless registry tests for census, counters, the 100-change ring, cause join, and deterministic snapshots |
-| `source/pe-tools/apps/web/src/integrations/atoms/devtools.tsx` | 159 | TanStack Devtools table, prefix filter, hot-node sort, node detail, actions, and last 20 changes |
-| `source/pe-tools/apps/web/src/routes/__root.tsx` | 75 | `AtomDevtools` import and one plugin registration |
+| `ts/apps/web/src/state/atom-inspect.ts` | 209 | Public-API collector, cause hook, snapshots, polling subscription, refresh, and safe primitive set |
+| `ts/apps/web/src/state/atom-inspect.test.ts` | 71 | Headless registry tests for census, counters, the 100-change ring, cause join, and deterministic snapshots |
+| `ts/apps/web/src/integrations/atoms/devtools.tsx` | 159 | TanStack Devtools table, prefix filter, hot-node sort, node detail, actions, and last 20 changes |
+| `ts/apps/web/src/routes/__root.tsx` | 75 | `AtomDevtools` import and one plugin registration |
 
 Product code is 368 lines across the collector and panel. The optional graph view was not built.
 

@@ -22,7 +22,7 @@ pnpm-lock.yaml
 
 #  Custom
 Old_Template.rvt
-source/Pe.Revit.Tests/Fixtures/ViewImageFacts/
+dotnet/Pe.Revit.Tests/Fixtures/ViewImageFacts/
 .env
 .artifacts/
 tmp/

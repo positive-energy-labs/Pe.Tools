@@ -36,7 +36,7 @@ itself.
 - `AppCore.cs` is the startup truth. If a capability depends on bootstrapping, logging, or event subscription,
   verify it there first.
 - `ButtonRegistry.cs` is the ribbon truth. Do not scatter command discovery assumptions across docs.
-- When rename-era paths drift, trust the current command files under `source/Pe.App/Commands/...`, not stale docs or
+- When rename-era paths drift, trust the current command files under `dotnet/Pe.App/Commands/...`, not stale docs or
   plans.
 - If the host bridge UI looks broken, check both Revit-side bridge startup (`HostRuntime.Initialize`) and external host
   availability before debugging schema/data logic.

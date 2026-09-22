@@ -10,7 +10,7 @@ internal sealed class RevitAutomationWorkerBundleBuilder {
     private const string WorkerAssemblyName = "Pe.Dev.RevitAutomation.Worker";
     private const string WorkerClassName = "Pe.Dev.RevitAutomation.Worker.RevitAutomationShellApp";
     private const string WorkerClientId = "11A07E95-68DE-4E58-A699-59B27F9600D2";
-    private const string WorkerProjectPath = "source/Pe.Dev.RevitAutomation.Worker/Pe.Dev.RevitAutomation.Worker.csproj";
+    private const string WorkerProjectPath = "dotnet/Pe.Dev.RevitAutomation.Worker/Pe.Dev.RevitAutomation.Worker.csproj";
 
     public async Task<WorkerBundleArtifact> BuildAsync(
         string repoRoot,

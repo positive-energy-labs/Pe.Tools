@@ -13,7 +13,7 @@ Owns ordinary non-Revit tests for shared contracts, host boundaries, APS boundar
 Use ordinary compile and deterministic lanes only:
 
 ```powershell
-dotnet tool run pe-revit -- test deterministic --project source/Pe.Shared.Tests/Pe.Shared.Tests.csproj
+dotnet tool run pe-revit -- test deterministic --project dotnet/Pe.Shared.Tests/Pe.Shared.Tests.csproj
 ```
 
 This is deterministic proof with contact none. A passing run proves ordinary package behavior only; it does not prove loaded Revit runtime freshness.

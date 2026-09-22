@@ -4,7 +4,7 @@
 
 - Classification: **browser evidence** (not source-only analysis).
 - Browser: existing `pe.tools-unify-runtime-01` CDP `9222`; proof used only owned target `6DD36FB304CFB2E1F938130A2E771608`.
-- Receipt: port `5176` resolves to `C:\Users\kaitp\source\repos\Pe.Tools\source\pe-tools` (`dev` lane). No server or Revit session was launched.
+- Receipt: port `5176` resolves to `C:\Users\kaitp\source\repos\Pe.Tools\ts` (`dev` lane). No server or Revit session was launched.
 - Existing spike target `EA084DCCBDF2D57642CF9AACF247CB8D` at `5175` remained present and untouched.
 - Method: native WebSocket CDP, DOM rectangles/roles, console and network events, and PNG captures. Normal was `1280x900`; narrow was `720x900` on the owned tab only. This is geometry evidence, not a performance measurement.
 
@@ -63,7 +63,7 @@ Artifacts: `.artifacts/runs/root-browser-20260916/chat-spa-journey.png` and `cha
 
 ## Follow-up — thread inventory wire evidence
 
-- Source identity: current root receipt resolves the web server to `C:\Users\kaitp\source\repos\Pe.Tools\source\pe-tools` on `5176`; root source was `f979704` for the SPA proof.
+- Source identity: current root receipt resolves the web server to `C:\Users\kaitp\source\repos\Pe.Tools\ts` on `5176`; root source was `f979704` for the SPA proof.
 - Exact refresh trigger, read from the loaded root source: `workbench/provider/view.tsx:81-86` defines `refreshThreads()` as `session.listThreads()`, and `view.tsx:111-114` schedules it with `setTimeout(..., 1_000)` only after `loading` is false and no stream fault exists.
 - Browser body after that delay: `THREADS 146`, with visible entries `a503f11e…`, `4bbeabfe…`, `Revit API docs links`, `4eaaf432…`, `34da89b1…`, and `+141`. This falsifies an empty server inventory.
 - Wire capture: Network observation was attached after the first refresh window, then the visible `threads` inventory control was invoked twice. Both samples recorded **no HTTP request, no HTTP response, and therefore no status/body to report**; the control is not the `listThreads()` refresh trigger. The first sample saw one WebSocket frame; the second saw none. No endpoint/status is inferred from this.

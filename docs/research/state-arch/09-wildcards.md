@@ -53,7 +53,7 @@ Framework bindings are separate packages in the same repo: `@effect/atom-react`,
 `@effect/atom-solid`, `@effect/atom-vue`, all at `4.0.0-beta.98`
 (`.explore/effect-smol/packages/atom/react/package.json`). `@effect/atom-react@4.0.0-beta.107`
 is on npm, and this repo already depends on it
-(`source/pe-tools/apps/web/package.json`).
+(`ts/apps/web/package.json`).
 
 The scenario's whole state-kind table has a native primitive:
 

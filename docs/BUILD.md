@@ -82,7 +82,7 @@ MSBuild solution configuration (Debug.R24 / Debug.R25 / Debug.R26)
 The active solution configuration is the year authority. What an IDE build still contributes is exactly one thing: it writes the **package-local fixed-path output** (`bin/obj`, not `.artifacts/`) that a dev-lane session copies from and that the hot-reload emitter baselines against. Any build that writes that path — Rider, VS Code, or `dotnet build /p:PeIsolatedBuild=false` — serves equally, and none of them launches Revit.
 
 ```powershell
-dotnet tool run pe-revit -- session start --project .\source\Pe.App\Pe.App.csproj --year 25  # open Revit on this checkout
+dotnet tool run pe-revit -- session start --project .\dotnet\Pe.App\Pe.App.csproj --year 25  # open Revit on this checkout
 dotnet tool run pe-revit -- session hr --id pe.app-25                                  # apply your latest edit (hot, else cold swap)
 dotnet tool run pe-revit -- session list --json                                        # the session registry
 ```
@@ -96,9 +96,9 @@ The debugger remains an ordinary attach-to-process against the session's Revit, 
 Use ordinary `dotnet build` when you need compile confidence.
 
 ```powershell
-dotnet build .\source\Pe.Revit\Pe.Revit.csproj -c Debug.R25
-dotnet build .\source\Pe.App\Pe.App.csproj -c Debug.R25
-dotnet build .\source\Pe.Dev.Cli\Pe.Dev.Cli.csproj -c Debug.R25
+dotnet build .\dotnet\Pe.Revit\Pe.Revit.csproj -c Debug.R25
+dotnet build .\dotnet\Pe.App\Pe.App.csproj -c Debug.R25
+dotnet build .\dotnet\Pe.Dev.Cli\Pe.Dev.Cli.csproj -c Debug.R25
 ```
 
 This proves compile correctness only. It does not refresh any session's loaded assemblies, the package-local interactive outputs, installed product roots, or source-linked TypeScript payloads.
@@ -110,8 +110,8 @@ This proves compile correctness only. It does not refresh any session's loaded a
 `pe-revit test --project <P>` is the whole test surface. It reads the project, picks deterministic or fresh, and says which and why. `--attach` is the one override, and it is the only rung a caller decides.
 
 ```powershell
-dotnet tool run pe-revit -- test --plan --project .\source\Pe.Revit.Tests\Pe.Revit.Tests.csproj --json
-dotnet tool run pe-revit -- test --project .\source\Pe.Revit.Tests\Pe.Revit.Tests.csproj --filter "Name~Reports_runtime_assembly_load_paths" --timeout-seconds 900 --json
+dotnet tool run pe-revit -- test --plan --project .\dotnet\Pe.Revit.Tests\Pe.Revit.Tests.csproj --json
+dotnet tool run pe-revit -- test --project .\dotnet\Pe.Revit.Tests\Pe.Revit.Tests.csproj --filter "Name~Reports_runtime_assembly_load_paths" --timeout-seconds 900 --json
 ```
 
 Run `--plan` first when the rung is not obvious: it prints the chosen rung, the reason, the resolved year and configuration, and the exact command, and launches nothing. Real Revit-backed runs should carry a bounded timeout, because a Revit launch or a test-adapter hang is otherwise easy to mistake for agent failure. `pe-revit guide test` owns the refusal table and the fresh-rung machinery.
@@ -142,7 +142,7 @@ Do not document or depend on removed public `pe-dev` command groups (`doctor`, `
 
 ```powershell
 dotnet tool run pe-revit -- session start --year 25 --id pe.app-25-probe --json          # installed payload
-dotnet tool run pe-revit -- session start --project .\source\Pe.App\Pe.App.csproj --year 25 --json   # this checkout's bytes
+dotnet tool run pe-revit -- session start --project .\dotnet\Pe.App\Pe.App.csproj --year 25 --json   # this checkout's bytes
 ```
 
 Bare `start` (no `--project`) is the **installed** lane — every product on its fixed installed path, no checkout, no build, no copy. That is what an end user runs, and it is the only lane that proves installed behavior. Adding `--project` makes it the **dev** lane. Name which one any claim used; they run different bytes and prove different things.
@@ -303,25 +303,25 @@ Installed Pea ships at a fixed path; the installer lays it and MSI replaces it i
     package.json                      # mastracode package-root decoy
 ```
 
-The payload is a Node SEA executable produced by Vite+/tsdown from `source/pe-tools/apps/pea/src/main.ts`. Because a SEA cannot static-ESM-import external bare specifiers, `apps/pea/vite.config.ts` carries the `pe:sea-require-shim` plugin (identical to the host's): the win32 natives (duckdb/tokenizers/libsql) plus the JS sidecars that break when inlined (`drizzle-orm`, `get-stream`) are rewritten to runtime `createRequire` and staged into `node_modules\` beside the exe; `onnxruntime-node` is a throwing stub (no embedding feature runs — see SDK-LEDGER T9). `stage-native-sidecars.mjs` is the authority for the exact staged set. Build machines need Vite+ with Node 25.7.0+ and the `source/pe-tools` dependency store; end-user machines run no `pnpm install`/`deploy`/resolution. The shim resolves the installed target by fixed path; `pea --installed` forces it; a `pea.dev.txt` (written by `pe-revit dev link`) routes to the checkout instead.
+The payload is a Node SEA executable produced by Vite+/tsdown from `ts/apps/pea/src/main.ts`. Because a SEA cannot static-ESM-import external bare specifiers, `apps/pea/vite.config.ts` carries the `pe:sea-require-shim` plugin (identical to the host's): the win32 natives (duckdb/tokenizers/libsql) plus the JS sidecars that break when inlined (`drizzle-orm`, `get-stream`) are rewritten to runtime `createRequire` and staged into `node_modules\` beside the exe; `onnxruntime-node` is a throwing stub (no embedding feature runs — see SDK-LEDGER T9). `stage-native-sidecars.mjs` is the authority for the exact staged set. Build machines need Vite+ with Node 25.7.0+ and the `ts` dependency store; end-user machines run no `pnpm install`/`deploy`/resolution. The shim resolves the installed target by fixed path; `pea --installed` forces it; a `pea.dev.txt` (written by `pe-revit dev link`) routes to the checkout instead.
 
-Private `source/pe-tools` packages are source-exported for development. Their Vite+ package configs use explicit `pack.entry` values so `vp pack` can still produce artifacts without mutating package exports back to `dist`; keep installed payload bundling as the artifact boundary instead of adding parallel `main` / `main-installed` source entrypoints.
+Private `ts` packages are source-exported for development. Their Vite+ package configs use explicit `pack.entry` values so `vp pack` can still produce artifacts without mutating package exports back to `dist`; keep installed payload bundling as the artifact boundary instead of adding parallel `main` / `main-installed` source entrypoints.
 
 Artifact proof for `pack pea` touches no Revit. It proves archive shape and portable light CLI behavior, such as `--help` and host-operation contract search from a temp root. It does not prove attached-rung behavior, fresh-rung behavior, installed MSI registration, or full TUI rendering freshness.
 
 ### PATH-visible CLI decision
 
-`pea` is the product/operator CLI. In the source-linked dev lane it is a PATH-visible launcher command under the installed-shaped `bin\pea` root, but it executes TypeScript sources from `source/pe-tools/apps` instead of an installer payload. (There is no separate `peco` dev CLI anymore; SDK `pe-revit` owns dev-session mechanics.)
+`pea` is the product/operator CLI. In the source-linked dev lane it is a PATH-visible launcher command under the installed-shaped `bin\pea` root, but it executes TypeScript sources from `ts/apps` instead of an installer payload. (There is no separate `peco` dev CLI anymore; SDK `pe-revit` owns dev-session mechanics.)
 
 The clean source-linked CLI model is:
 
-- Bare `pea` launches the Pea Revit/operator agent TUI from `source/pe-tools/apps/pea/src/main.ts`.
+- Bare `pea` launches the Pea Revit/operator agent TUI from `ts/apps/pea/src/main.ts`.
 - The source-linked `pea` package script uses `vp exec jiti src/main.ts`. This keeps the runtime under Vite+'s managed Node while letting `jiti` handle the repo's TypeScript/NodeNext source graph. Raw `vp exec node src/main.ts` is not enough for this source graph because Node's built-in TypeScript support is still strip/transform limited and does not resolve the repo's `.js` source specifiers back to `.ts`.
-- `vp run dev` from `source/pe-tools` starts the checkout's host and its separately owned Vite frontend.
+- `vp run dev` from `ts` starts the checkout's host and its separately owned Vite frontend.
 - `pea <subcommand> ...` stays available for product/operator commands such as `host` and `script`.
 - `pea --prompt "..." [--thread <id>] [--json]` runs one headless Pea turn and prints `{ threadId, response }` — the black-box product probe lane.
 - `pea --installed ...` is the explicit installed-lane selector. Use it in installed-lane validation and scripts where ambiguity would be expensive.
-- `pea --dev ...` is the explicit source-linked selector: it routes through the shim's `pea.dev.txt` marker (written by `pe-revit dev link`) and runs the Pea app from `source/pe-tools/apps/pea`.
+- `pea --dev ...` is the explicit source-linked selector: it routes through the shim's `pea.dev.txt` marker (written by `pe-revit dev link`) and runs the Pea app from `ts/apps/pea`.
 - `PEA_RUNTIME=dev` is a local shell convenience only. Do not use ambient environment selection as proof of lane.
 - `Pe.App`'s lane comes from `PePayloadContext.SourceRoot`: a checkout root recorded by an SDK dev-link session descriptor ⇒ dev lane; absent ⇒ the fixed installed layout (`bin\host\Pe.Host.exe`). There is no loader, no `Pe.App.runtime.json` descriptor, and no ambient lane inference.
 
@@ -335,7 +335,7 @@ Pe.Tools-specific APS workflows. It is not a web or host supervisor.
 
 Source-linked web dev is one command, one checkout, and one browser origin. The backend and frontend run in separate Node processes.
 
-- `vp run dev` from `source/pe-tools` or `apps/host` runs the watched host. After the SDK grants its service claim, it starts Vite from the same checkout and passes the claimed backend address over IPC. The launcher prints the checkout, browser URL, and backend URL.
+- `vp run dev` from `ts` or `apps/host` runs the watched host. After the SDK grants its service claim, it starts Vite from the same checkout and passes the claimed backend address over IPC. The launcher prints the checkout, browser URL, and backend URL.
 - On Windows, stopping `vp run dev` also stops Revit launched through that Host. Ordinary Host source reloads preserve Revit.
 - Vite owns document serving, its dependency optimizer, and HMR. Product APIs, SSE, and the Revit bridge proxy to the exact claimed backend. `/ops` document navigation stays in Vite; JSON catalog requests reach the host.
 - Each checkout retains `host-source-<hash-of-canonical-source-root>.json`. Revit, Pea, and MCPs discover that backend receipt exactly as before. Installed `host.json` remains separate. Browser navigation to the dev backend redirects to its frontend and preserves the path and query.
@@ -353,7 +353,7 @@ Useful dev-lane refresh commands:
 pe-revit path ensure     # once per machine: registers <appBase>\shims on the user PATH (safely)
 pe-revit dev link        # from this checkout: routes the pea shim to source
 pe-revit dev status      # shows each shim's resolved lane
-pnpm --dir source/pe-tools dev
+pnpm --dir ts dev
 pea
 pea --installed --help
 ```
@@ -407,7 +407,7 @@ Session selection is caller scope, not operation payload: `HostSessionScope.brid
 
 Operation metadata travels with the thing it describes, and the connected session validates it at registration — callers never hand-maintain a parallel copy.
 
-- **Field options and descriptions live on the request DTO.** `[FieldOptions("<domain>")]` on a property (`source/Pe.Shared.RevitData/FieldOptionsAttribute.cs`) makes `BridgeOpSchemaGenerator` emit an `x-options` node on that property's request schema, and the property's XML `<summary>` becomes its schema `description`. The `/ops` form renders an option-backed string field as an input + `<datalist>` and shows the description; agents read the same off the catalog. This requires `GenerateDocumentationFile` on the *defining* project and the `.xml` present beside the assembly at runtime (it deploys with the bundle, so a missing description usually means the dependency's outputs went stale — see the SDK stamp/deploy note above — not that XML was skipped).
+- **Field options and descriptions live on the request DTO.** `[FieldOptions("<domain>")]` on a property (`dotnet/Pe.Shared.RevitData/FieldOptionsAttribute.cs`) makes `BridgeOpSchemaGenerator` emit an `x-options` node on that property's request schema, and the property's XML `<summary>` becomes its schema `description`. The `/ops` form renders an option-backed string field as an input + `<datalist>` and shows the description; agents read the same off the catalog. This requires `GenerateDocumentationFile` on the *defining* project and the `.xml` present beside the assembly at runtime (it deploys with the bundle, so a missing description usually means the dependency's outputs went stale — see the SDK stamp/deploy note above — not that XML was skipped).
 - **Options resolve live, by source key.** The `revit.catalog.field-options` op (`{ sourceKey }` → `FieldOptionsData`) resolves against the shared `SettingsValueDomainRegistry` — the *same* value domains the settings field-options path uses, so category/family/parameter lists come from the open document. Because it resolves by key alone (no property binding), a source key must be globally unambiguous.
 - **Registration is the validation gate.** `OpRegistry` scans in two phases — discover + validate the whole set, then commit — so a failed op cannot half-register and mask the real error when the bridge supervisor re-scans on every reconnect. Validation strict-deserializes every request example and safe default against the request type (`MissingMemberHandling.Error`), so example drift fails registration and the unit tests instead of reaching a caller. Examples and call guidance are capped at two entries each.
 
@@ -416,15 +416,15 @@ Operation metadata travels with the thing it describes, and the connected sessio
 Design Automation flows touch no Revit session. Keep first-pass audit manifests intentionally small: one or two models before broadening.
 
 ```powershell
-dotnet run --project source/Pe.Dev.Cli -- automation auth login
-dotnet run --project source/Pe.Dev.Cli -- automation browse hubs
-dotnet run --project source/Pe.Dev.Cli -- automation manifest create --path docs/context/my-run/schedules.json
-dotnet run --project source/Pe.Dev.Cli -- automation submit schedules --manifest docs/context/my-run/schedules.json
-dotnet run --project source/Pe.Dev.Cli -- automation inspect receipt --receipt latest --download-artifacts true
+dotnet run --project dotnet/Pe.Dev.Cli -- automation auth login
+dotnet run --project dotnet/Pe.Dev.Cli -- automation browse hubs
+dotnet run --project dotnet/Pe.Dev.Cli -- automation manifest create --path docs/context/my-run/schedules.json
+dotnet run --project dotnet/Pe.Dev.Cli -- automation submit schedules --manifest docs/context/my-run/schedules.json
+dotnet run --project dotnet/Pe.Dev.Cli -- automation inspect receipt --receipt latest --download-artifacts true
 ```
 
 The automation shell is `Pe.Dev.RevitAutomation.Worker`, not desktop `Pe.App`. Desktop and DA remain
-sibling shells over shared DA-safe runtime packages. `Pe.Dev.Cli` (`dotnet run --project source/Pe.Dev.Cli -- automation`, no shim) is an interim thin terminal
+sibling shells over shared DA-safe runtime packages. `Pe.Dev.Cli` (`dotnet run --project dotnet/Pe.Dev.Cli -- automation`, no shim) is an interim thin terminal
 adapter; a future Pea/host workflow can replace it when product use proves the right operation shape.
 
 ## Build matrix and configuration facts
@@ -470,6 +470,6 @@ adapter; a future Pea/host workflow can replace it when product use proves the r
 | Package automation appbundle only | `dotnet run --project .\build\Build.csproj -c Release -- pack automation`                                                        |
 | Publish GitHub release artifacts  | `dotnet run --project .\build\Build.csproj -c Release -- pack publish`                                                           |
 | Link source CLI shims             | `pe-revit path ensure` (once), `pe-revit dev link`, then `pea`                                                                    |
-| Run source web dev explicitly     | `pnpm --dir source/pe-tools dev`                                                                                                  |
+| Run source web dev explicitly     | `pnpm --dir ts dev`                                                                                                  |
 | Validate installed `pea` lane     | `pea --installed ...`                                                                                                            |
 | Regenerate host op types          | `pnpm --filter @pe/host-contracts codegen` (offline); `codegen:verify-live -- --session <id>` for live parity                    |

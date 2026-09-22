@@ -12,18 +12,18 @@ db = ".artifacts/factory/events.sqlite"
 # The command runs with cwd = a clean checkout of the sha being measured; FACTORY_SHA and FACTORY_ROOT are set.
 
 [sensor.loc]
-run = "node {root}/source/pe-tools/packages/factory/sensors/loc.ts"
-scope = ["source/**"]
+run = "node {root}/ts/packages/factory/sensors/loc.ts"
+scope = ["dotnet/**", "ts/**"]
 
 [sensor.markers]
-run = "node {root}/source/pe-tools/packages/factory/sensors/markers.ts"
-scope = ["source/**", "docs/**", ".agents/**", ".claude/**"]
+run = "node {root}/ts/packages/factory/sensors/markers.ts"
+scope = ["dotnet/**", "ts/**", "docs/**", ".agents/**", ".claude/**"]
 
 [actuator.fmt]
-run = "node {root}/source/pe-tools/node_modules/.pnpm/node_modules/oxfmt/dist/cli.js source/pe-tools/packages/factory"
+run = "node {root}/ts/node_modules/.pnpm/node_modules/oxfmt/dist/cli.js ts/packages/factory"
 
 [actuator.echo]
-run = "node {root}/source/pe-tools/packages/factory/actuators/echo.ts"
+run = "node {root}/ts/packages/factory/actuators/echo.ts"
 
 # ---- loops: trigger, sensors, setpoints. Round 1 has no actuators; a loop with no `act` only measures.
 

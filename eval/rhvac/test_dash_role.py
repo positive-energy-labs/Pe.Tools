@@ -17,8 +17,8 @@ from PIL import Image, ImageDraw
 HERE = Path(__file__).resolve().parent
 ZONE_SCRIPT = HERE / "render-zone-promotion.py"
 ROOT = HERE.parents[1]
-LAW_PATH = ROOT / "source/pe-tools/apps/web/src/runs/visual-law.json"
-BASE_CSS_PATH = ROOT / "source/pe-tools/apps/web/src/base.css"
+LAW_PATH = ROOT / "ts/apps/web/src/runs/visual-law.json"
+BASE_CSS_PATH = ROOT / "ts/apps/web/src/base.css"
 
 
 def load_renderer():

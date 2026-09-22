@@ -70,7 +70,7 @@ LEDGER       docs/features/takeoffs/LEDGER.md
 CURRENCY     python eval/rhvac/score-looks-good.py score <run>/report.json -> board v1.1 savedWork
 SECONDARY    accepted rooms / accepted sf / residue ft, from the BOARD line. savedWork credits HELD
              area, so it moves without any product win. Never read it alone.
-GATES        dotnet test source/Pe.Takeoff.Tests -c Debug (143 green), and no already-accepted room's
+GATES        dotnet test dotnet/Pe.Takeoff.Tests -c Debug (143 green), and no already-accepted room's
              edgeOnInk falls by more than 0.005
 DECIDER      metric-first
 VISUAL       compare-zone-runs.py; report-card zones at BIG_MOVE checkpoints

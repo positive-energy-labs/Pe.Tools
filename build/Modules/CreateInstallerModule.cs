@@ -41,7 +41,7 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         var signing = signingResult.ValueOrDefault!;
         var rootDirectory = context.Git().RootDirectory;
 
-        var hostPackageDirectory = rootDirectory.GetFolder("source").GetFolder("pe-tools").GetFolder("apps").GetFolder("host");
+        var hostPackageDirectory = rootDirectory.GetFolder("ts").GetFolder("apps").GetFolder("host");
         // Presence check only: the payload name/entry now come from the checked-in manifest, but the
         // build still asserts the repo has exactly one RevitAddin project to stage.
         _ = BuildProjectDiscovery.AssemblyName(
@@ -75,7 +75,7 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         );
         var unsignedNode = PrepareUnsignedNode(signing);
         try {
-            var peaPackageDirectory = rootDirectory.GetFolder("source").GetFolder("pe-tools").GetFolder("apps").GetFolder("pea");
+            var peaPackageDirectory = rootDirectory.GetFolder("ts").GetFolder("apps").GetFolder("pea");
             await Task.WhenAll(
                 PublishRuntimeAsync(context, rootDirectory, sourceManifestPath, hostPackageDirectory, signing, unsignedNode, cancellationToken),
                 PublishPeaAsync(context, sourceManifestPath, peaPackageDirectory, signing, unsignedNode, cancellationToken)

@@ -20,7 +20,7 @@ import { candidateKey, normalizeExtract, type RhvacExtract, type RoomMap } from 
 
 const FIXTURE_DIR = join(
   process.env.PE_PRIVATE_FIXTURES ??
-    join(import.meta.dirname, "../../../../../../.private/fixtures"),
+    join(import.meta.dirname, "../../../../../.private/fixtures"),
   "project-a/web",
 );
 const fixturePresent = existsSync(join(FIXTURE_DIR, "manifest.json"));

@@ -10,8 +10,8 @@ function fakeCheckout(): string {
   mkdirSync(join(root, ".git"));
   writeFileSync(join(root, "Pe.Tools.slnx"), "");
   mkdirSync(join(root, "source", "deep"), { recursive: true });
-  mkdirSync(join(root, "source", "pe-tools", "apps", "host"), { recursive: true });
-  writeFileSync(join(root, "source", "pe-tools", "apps", "host", "package.json"), "{}");
+  mkdirSync(join(root, "ts", "apps", "host"), { recursive: true });
+  writeFileSync(join(root, "ts", "apps", "host", "package.json"), "{}");
   return root;
 }
 
@@ -22,16 +22,16 @@ test("checkoutRootFrom walks up to the .git + Pe.Tools.slnx root", () => {
 });
 
 // The 2026-07-22 regression: the MCP hashed the checkout ROOT while the host and C# side hash
-// `<root>/source/pe-tools` — different service names, so discovery could never match. The mapping
+// `<root>/ts` — different service names, so discovery could never match. The mapping
 // helper is the single agreement point; the derived name must equal the host-side derivation.
 test("checkout root maps to the host source dir and hashes to the host's service name", () => {
   const root = fakeCheckout();
   const hostDir = devHostSourceDir(root);
-  expect(hostDir).toBe(join(root, "source", "pe-tools"));
+  expect(hostDir).toBe(join(root, "ts"));
   // Idempotent: the host source dir passes through unchanged.
   expect(devHostSourceDir(hostDir!)).toBe(hostDir);
   expect(sourceHostServiceName(hostDir!)).toBe(
-    sourceHostServiceName(join(root, "source", "pe-tools")),
+    sourceHostServiceName(join(root, "ts")),
   );
 });
 

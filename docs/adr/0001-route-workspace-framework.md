@@ -6,8 +6,8 @@ schedule-grid), each driven e2e with proven Revit/disk writes, plus a 4-way
 compiling state-layer bake-off (bare hook vs TanStack Query vs Effect.Atom vs
 Legend State). The working docs and scratch package were deleted after this ADR
 absorbed their conclusions; the full friction reports live in git history
-(`source/pe-tools/docs/route-plugin-harvest.md`,
-`source/pe-tools/packages/scratch-state-bakeoff`).
+(`ts/docs/route-plugin-harvest.md`,
+`ts/packages/scratch-state-bakeoff`).
 
 ## Context
 

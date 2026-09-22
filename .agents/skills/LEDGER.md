@@ -83,7 +83,7 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 - "Name once", the rename ban: the set is still finding its shape.
 - A routing corpus the check runs: user ruled no; a misroute that bites is the trigger to revisit.
 - An `implement`/`bite` stance, a diagram stance, a fifth kind for house policy: the prompt, a register law, and a `scope` field cover them.
-- 2026-08-31, worktree dependency wiring (`wire-worktree.ps1`): it redirected `@pe/*` into the candidate but shared third-party dependencies with the donor. Falsifier: 22 of 37 wired worktrees had lockfiles that differed from the donor, and one candidate resolved `class-variance-authority` it neither declared nor locked. Killed for `vp i --frozen-lockfile --prefer-offline` from `source/pe-tools`, the only taught install surface.
+- 2026-08-31, worktree dependency wiring (`wire-worktree.ps1`): it redirected `@pe/*` into the candidate but shared third-party dependencies with the donor. Falsifier: 22 of 37 wired worktrees had lockfiles that differed from the donor, and one candidate resolved `class-variance-authority` it neither declared nor locked. Killed for `vp i --frozen-lockfile --prefer-offline` from `ts`, the only taught install surface.
 
 ## Owed
 

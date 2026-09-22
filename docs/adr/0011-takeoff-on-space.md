@@ -6,7 +6,7 @@ status: proposed
 
 ## Context
 
-The takeoff partition (step 3 of `source/Pe.Revit.Takeoff/README.md`) finds rooms inside a
+The takeoff partition (step 3 of `dotnet/Pe.Revit.Takeoff/README.md`) finds rooms inside a
 designer-drawn Zoning Region. Today it reads wall evidence by creating up to seven views per level,
 exporting them as PNG, and flood-filling the raster. The wall source is not Wall elements; projectA
 has none. Enclosure is IFC Structural Framing, Columns and Generic Models plus the per-level

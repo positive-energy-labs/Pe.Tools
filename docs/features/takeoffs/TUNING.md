@@ -25,7 +25,7 @@ distance is diagnostic-only, confidence=high only, and near-meaningless on Lower
 Conservation gates in the test suite stay the only gates.
 
 ```
-dotnet test source/Pe.Takeoff.Tests -c Debug          # writes .artifacts/takeoff-zone-promotion/report.json
+dotnet test dotnet/Pe.Takeoff.Tests -c Debug          # writes .artifacts/takeoff-zone-promotion/report.json
 python eval/rhvac/score-looks-good.py score  .artifacts/takeoff-zone-promotion/report.json
 python eval/rhvac/score-looks-good.py compare <baseline-report.json> <candidate-report.json>
 ```

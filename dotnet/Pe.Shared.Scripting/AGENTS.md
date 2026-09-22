@@ -20,8 +20,8 @@ Owns Revit-neutral scripting primitives shared by Revit-hosted execution and fut
 
 ## Validation
 
-- `dotnet build .\source\Pe.Shared.Scripting\Pe.Shared.Scripting.csproj -c Debug.R25`
-- Also build the consuming adapter after changes: `dotnet build .\source\Pe.Revit.Scripting\Pe.Revit.Scripting.csproj -c Debug.R25`
+- `dotnet build .\dotnet\Pe.Shared.Scripting\Pe.Shared.Scripting.csproj -c Debug.R25`
+- Also build the consuming adapter after changes: `dotnet build .\dotnet\Pe.Revit.Scripting\Pe.Revit.Scripting.csproj -c Debug.R25`
 
 ## Shared Language
 

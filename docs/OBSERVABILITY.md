@@ -11,8 +11,8 @@ PostHog-only, no auth: the project API key is a public write-only ingest key. Re
 
 No key → all capture is a no-op. Two implementations, same event shapes:
 
-- TS: `source/pe-tools/packages/runtime/src/analytics.ts` (host + pea runtime)
-- C#: `source/Pe.App/Analytics/PostHogAnalytics.cs` (Revit add-in)
+- TS: `ts/packages/runtime/src/analytics.ts` (host + pea runtime)
+- C#: `dotnet/Pe.App/Analytics/PostHogAnalytics.cs` (Revit add-in)
 
 Both post to `/i/v0/e/` — the same route the SDK's install-failure telemetry
 (`Pe.Revit.Sdk` `Telemetry.cs`, `install_failure` / `field_report` / `msi_bootstrap_failure`

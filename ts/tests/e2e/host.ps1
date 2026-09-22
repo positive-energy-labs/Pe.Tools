@@ -13,5 +13,5 @@ foreach ($f in 'auth.json', 'settings.json') {
 }
 $env:PE_TOOLS_STATE_DIR = Join-Path $box 'state'
 $env:MASTRA_APP_DATA_DIR = Join-Path $box 'appdata'
-Set-Location (Join-Path $root 'source\pe-tools')
+Set-Location (Join-Path $root 'ts')
 vp run dev:no-revit

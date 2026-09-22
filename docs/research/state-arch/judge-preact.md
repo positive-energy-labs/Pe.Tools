@@ -9,7 +9,7 @@ async layer. The author wrote that layer. Every async result below is a result a
 
 ## Path legend
 
-| Short | Full path (from `source/pe-tools/apps/web/src/`) | Lines |
+| Short | Full path (from `ts/apps/web/src/`) | Lines |
 |---|---|---:|
 | `async.ts` | `state-bench/preact/async.ts` | 204 |
 | `host.ts` | `state-bench/preact/host.ts` | 205 |

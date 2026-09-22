@@ -84,10 +84,10 @@
     {
       "type": "VersionedApp",
       "name": "host",
-      "source": "source/pe-tools/apps/host/dist-installed",
+      "source": "ts/apps/host/dist-installed",
       "entry": "Pe.Host.exe",
       "dev": "vp run @pe/host#attach",
-      "build": "pnpm --dir source/pe-tools --filter @pe/host build:payload",
+      "build": "pnpm --dir ts --filter @pe/host build:payload",
       "service": {
         "preferredPort": 5180,
         "health": "/host/status",
@@ -102,15 +102,15 @@
     {
       "type": "VersionedApp",
       "name": "pea",
-      "source": "source/pe-tools/apps/pea/dist-installed",
+      "source": "ts/apps/pea/dist-installed",
       "entry": "pea.exe",
-      "build": "pnpm --dir source/pe-tools --filter @pe/pea build:installed"
+      "build": "pnpm --dir ts --filter @pe/pea build:installed"
     },
     {
       "type": "PathShim",
       "name": "pea",
       "target": "versionedApp:pea",
-      "dev": "corepack pnpm@11.13.1 --dir \"{root}/source/pe-tools\" --filter @pe/pea pea"
+      "dev": "corepack pnpm@11.13.1 --dir \"{root}/ts\" --filter @pe/pea pea"
     }
   ]
 }

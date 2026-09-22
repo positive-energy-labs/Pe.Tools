@@ -25,6 +25,6 @@ Only a signal that distinguishes both coincident controls can replace `NestedFac
 
 ## Validation
 
-- Compile: `dotnet build source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests --no-restore`
+- Compile: `dotnet build dotnet/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests --no-restore`
 - Result: exit 0, 0 errors, 22 warnings.
 - Runtime: intentionally pending the proof owner; no Revit lifecycle or capture behavior changed in this slice.

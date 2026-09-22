@@ -11,8 +11,8 @@ uncommitted baseline.
 
 | Command | Cwd | Result |
 | --- | --- | --- |
-| `vp test src/takeoff src/targeting` | `source/pe-tools/apps/web` | **PASS. 3 files, 33 tests, 801 ms.** |
-| `vp check apps/web/src/takeoff apps/web/src/routes/takeoffs.tsx apps/web/src/targeting` | `source/pe-tools` | **PASS. 18 files formatted; 0 warnings, lint errors, or type errors.** |
+| `vp test src/takeoff src/targeting` | `ts/apps/web` | **PASS. 3 files, 33 tests, 801 ms.** |
+| `vp check apps/web/src/takeoff apps/web/src/routes/takeoffs.tsx apps/web/src/targeting` | `ts` | **PASS. 18 files formatted; 0 warnings, lint errors, or type errors.** |
 | Judge probe (3 cases, written then deleted) | `apps/web` | 3 run; P1–P3 below. Worktree left clean. |
 
 The report's two claimed lane results are exact. The 33 tests are 9 new store cases, 19
@@ -258,7 +258,7 @@ run, and deleted — worktree left clean.
 | --- | --- | --- |
 | `vp test src/takeoff src/targeting src/state` | `apps/web` | **PASS. 4 files, 39 tests, 3.07 s.** |
 | `vp test src/components/master-table` | `apps/web` | **PASS. 1 file, 9 tests.** |
-| `vp check` on the 7 touched paths | `source/pe-tools` | **PASS. 29 files formatted; 0 warnings, lint, or type errors.** |
+| `vp check` on the 7 touched paths | `ts` | **PASS. 29 files formatted; 0 warnings, lint, or type errors.** |
 | Judge probes Q1–Q4 (written, run, deleted) | `apps/web` | 4 cases; output inline below. |
 
 ## Verdicts on the six claims

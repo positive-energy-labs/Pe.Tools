@@ -17,7 +17,7 @@ import { makeMastraRuntimeLive, MastraRuntime } from "../src/mastra-runtime.ts";
 test("dev:no-revit uses the shared source entrypoint and a distinct dev receipt", () => {
   const rootPackage = readPackage(path.resolve(import.meta.dirname, "../../..", "package.json"));
   const hostPackage = readPackage(path.resolve(import.meta.dirname, "..", "package.json"));
-  const sourceRoot = "C:\\Users\\Alice\\Repo\\source\\pe-tools";
+  const sourceRoot = "C:\\Users\\Alice\\Repo\\ts";
   const defaultCapabilities = resolveHostCapabilities(["node", "src/dev.ts"]);
   const noRevitCapabilities = resolveHostCapabilities([
     "node",

@@ -588,7 +588,7 @@ class ReviewTakeoffTests(unittest.TestCase):
 
     def test_visual_law_residue_styles_are_distinct_and_unfilled(self):
         law = json.loads((HERE.parents[1]
-                          / "source/pe-tools/apps/web/src/runs/visual-law.json").read_text())
+                          / "ts/apps/web/src/runs/visual-law.json").read_text())
         for name in ("voidWash", "excludedWash"):
             self.assertNotIn(name, law)
         self.assertIsNone(law["void"]["fill"])

@@ -97,7 +97,7 @@
 
     <section id="census" aria-labelledby="census-title">
       <div class="eyebrow">Same rules, three points</div><h2 id="census-title">Repository census</h2>
-      <p>Line counts below are <strong>physical lines</strong>, not semantic LOC. The rule counts Git-tracked TS-family files under all <code>source/pe-tools</code>, including workspace-root files, <code>apps</code>, and <code>packages</code>; excludes generated files and <code>routeTree.gen.ts</code>; and separates production from tests.</p>
+      <p>Line counts below are <strong>physical lines</strong>, not semantic LOC. The rule counts Git-tracked TS-family files under all <code>ts</code>, including workspace-root files, <code>apps</code>, and <code>packages</code>; excludes generated files and <code>routeTree.gen.ts</code>; and separates production from tests.</p>
       <div class="table-wrap"><table><thead><tr><th>Measure</th><th>Main <code>c2a8660</code></th><th>Base <code>faaf465</code></th><th>Worktree <code>f5b58c9</code></th></tr></thead><tbody>
         <tr><td>Branch / divergence</td><td><code>main</code>; 2 left</td><td>merge base</td><td><code>goal/pea-cleanroom</code>; 26 right</td></tr>
         <tr><td>Git delta from base</td><td>6 skill files, +20/−8</td><td>—</td><td>87 files, +3,451/−7,676; net −4,225</td></tr>
@@ -128,7 +128,7 @@
         <tr><td>3</td><td>Working-state third message</td><td>Second thread accepted <q>Write 500 numbered...</q>; status became <q>pea is working</q></td><td>Native message POST 200</td></tr>
         <tr><td>4</td><td>Two chats open</td><td>Tabs <code>tab_5</code> and <code>tab_4</code> simultaneously held distinct <code>/chat?thread=</code> URLs</td><td>Both message reads 200</td></tr>
         <tr><td>5</td><td>Interrupt while working</td><td><code>button[aria-label='Stop']</code> clicked; idle returned, Stop vanished, interrupted turn removed</td><td>Exactly 1 <code>/abort</code> 200</td></tr>
-        <tr><td>6</td><td>Exact approval path</td><td><code>request_access</code> for <code>source/pe-tools/apps/web/src/host</code> rendered Approve and Deny</td><td>Native run remained suspended</td></tr>
+        <tr><td>6</td><td>Exact approval path</td><td><code>request_access</code> for <code>ts/apps/web/src/host</code> rendered Approve and Deny</td><td>Native run remained suspended</td></tr>
         <tr><td>7</td><td>Approval result</td><td>Approve removed controls; tool card became <code>ok</code>; Pea reported <q>Access was granted.</q></td><td>Exactly 1 <code>/tool-approval</code> 200; permission reread 200</td></tr>
       </tbody></table></div>
       <div class="grid">

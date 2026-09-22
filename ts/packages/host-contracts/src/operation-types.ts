@@ -453,7 +453,7 @@ export const hostSessionSummaryDataSchema = Schema.Struct({
 
 // --- RHVAC .r10 ops (TS-owned; spawn the repo's 32-bit Jet scripts) ------------
 // The extract projection is the camelCase JSON emitted by
-// source/Pe.Revit.Takeoff/Rhvac/extract-rhvac.ps1 — these schemas mirror it, not
+// dotnet/Pe.Revit.Takeoff/Rhvac/extract-rhvac.ps1 — these schemas mirror it, not
 // the C# RhvacRoom write shape (the host converts on save).
 
 export const rhvacPathRequestSchema = Schema.Struct({

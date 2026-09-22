@@ -2,15 +2,15 @@
 
 Adversarial review of `docs/research/state-arch/02-effect-atom.md` and the proto in worktree
 `Pe.Tools-sb-effect-atom`. All `model.ts` / `bench.tsx` / `bench.test.ts` / `mock-host.ts` line
-references are `source/pe-tools/apps/web/src/state-bench/effect-atom/<file>`. `route:` is
-`source/pe-tools/apps/web/src/routes/state-bench.effect-atom.tsx`. `Hooks.ts:` is the installed
+references are `ts/apps/web/src/state-bench/effect-atom/<file>`. `route:` is
+`ts/apps/web/src/routes/state-bench.effect-atom.tsx`. `Hooks.ts:` is the installed
 `@effect/atom-react@4.0.0-beta.92` source.
 
 ## 0. Lane facts the judge ran
 
 | Command | Result |
 | --- | --- |
-| `vp run @pe/web#test -- state-bench` (from `source/pe-tools`) | **FAILS.** `error: Failed to plan tasks from 'vp run' in task @pe/web#test * Task "state-bench" not found` |
+| `vp run @pe/web#test -- state-bench` (from `ts`) | **FAILS.** `error: Failed to plan tasks from 'vp run' in task @pe/web#test * Task "state-bench" not found` |
 | `vp test src/state-bench/effect-atom/bench.test.ts` (from `apps/web`) | **PASS. 1 file, 5 tests, 1.18 s.** This is the command the report names |
 | `vp check apps/web/src/state-bench/effect-atom apps/web/src/routes/state-bench.effect-atom.tsx` | **PASS.** "All 5 files are correctly formatted"; "Found no warnings, lint errors, or type errors in 5 files" |
 | `.artifacts/runs/state-bench/effect-atom-inspector.png` | Present, 16 509 B |

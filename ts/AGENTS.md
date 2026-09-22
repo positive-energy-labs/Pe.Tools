@@ -19,7 +19,7 @@ Docs are local at `node_modules/vite-plus/docs` or online at https://viteplus.de
 
 ## Decision
 
-`source/pe-tools` is the TypeScript workspace for Pe.Tools product-adjacent surfaces: user-facing `pea`, generated Host contracts, and small TypeScript libraries that make agent/TUI work possible.
+`ts` is the TypeScript workspace for Pe.Tools product-adjacent surfaces: user-facing `pea`, generated Host contracts, and small TypeScript libraries that make agent/TUI work possible.
 
 This workspace should use:
 

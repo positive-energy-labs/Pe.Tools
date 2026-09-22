@@ -127,7 +127,7 @@ No live per-cell editing or undo precedent exists — built new.
 
 ## In-repo wrapper paths (prefer these over raw API calls)
 
-- `source/Pe.Revit/Extensions/FamDocument/` — `SetFormula`, `SetValue` (the set-unset trick), `GetValue`, `AddParameter`, `FindParameter`, `ProcessFamily`
-- `source/Pe.Revit.FamilyFoundry/Operations/` — `SetParamValues*`, `PurgeParams`, `BacklinkParamsToBuiltIn`, `CreateFamilyTypes`, …
-- `source/Pe.Revit.FamilyFoundry/Snapshots/` — `ParameterSnapshot`, `FamilySnapshot`
-- `source/Pe.Revit.DocumentData/Families/Extraction/FamilySnapshotExtractor.cs` — the single canonical snapshot producer
+- `dotnet/Pe.Revit/Extensions/FamDocument/` — `SetFormula`, `SetValue` (the set-unset trick), `GetValue`, `AddParameter`, `FindParameter`, `ProcessFamily`
+- `dotnet/Pe.Revit.FamilyFoundry/Operations/` — `SetParamValues*`, `PurgeParams`, `BacklinkParamsToBuiltIn`, `CreateFamilyTypes`, …
+- `dotnet/Pe.Revit.FamilyFoundry/Snapshots/` — `ParameterSnapshot`, `FamilySnapshot`
+- `dotnet/Pe.Revit.DocumentData/Families/Extraction/FamilySnapshotExtractor.cs` — the single canonical snapshot producer

@@ -36,7 +36,7 @@ function sourceRootFromModule(): string | null {
  * it just spawned who it is — never user configuration) → cwd walk (an agent working in a worktree
  * automatically addresses that worktree's host) → module path (last resort: where this code lives).
  * Every candidate is mapped through {@link devHostSourceDir} — the service-name hash is over the
- * host's `source/pe-tools` dir, NEVER the checkout root, and every deriver must agree byte-for-byte.
+ * host's `ts` dir, NEVER the checkout root, and every deriver must agree byte-for-byte.
  */
 function resolveLaneAndRoot(): { lane: "dev" | "installed"; sourceRoot: string | null } {
   const configured = process.env.PE_LANE?.trim().toLowerCase();

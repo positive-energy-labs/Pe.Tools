@@ -17,7 +17,7 @@ Disposable measurement handoff for root, 2026-09-16. Measurement only; no design
 
 So the baseline turns off **all** runtime spike behaviour, not only memo and equal-readings. Root cannot separate the effect of each change from these runs.
 
-**Restoring the spike files:** before switching, the files were copied to `.artifacts/runtime-bench-20260916/spike-bytes/source/pe-tools/apps/web/src/…` and the diff was saved as `spike-bytes/spike.patch`. The baseline switch ran `git restore --source=HEAD` on those 6 paths only. Afterwards the copies were written back. SHA-256 of each of the 6 files matches its saved copy, and `git diff --stat` again shows the original 8 files, 46+/11−.
+**Restoring the spike files:** before switching, the files were copied to `.artifacts/runtime-bench-20260916/spike-bytes/ts/apps/web/src/…` and the diff was saved as `spike-bytes/spike.patch`. The baseline switch ran `git restore --source=HEAD` on those 6 paths only. Afterwards the copies were written back. SHA-256 of each of the 6 files matches its saved copy, and `git diff --stat` again shows the original 8 files, 46+/11−.
 
 ## Results (renderer main-thread self time, ms)
 
@@ -148,7 +148,7 @@ node "$d\cdp-root.mjs" run root reconnect
 
 | Request | Result |
 |---|---|
-| `5176/pe/resources?keys=[{"kind":"host-status"}]` (first SSE frame) | `controllerId: "pea"`, `resourceId: "pea:QzpcVXNlcnNca2FpdHBcT25lRHJpdmVcRG9jdW1lbnRzXFBlLlRvb2xz"` (base64 of `C:\Users\kaitp\OneDrive\Documents\Pe.Tools`), `serviceName: host-source-cfac28d8dd61-no-revit`, `sourceRoot: C:\Users\kaitp\source\repos\Pe.Tools\source\pe-tools`, `capabilities.revit: false`, `bridgeIsConnected: false`, pid 40296 |
+| `5176/pe/resources?keys=[{"kind":"host-status"}]` (first SSE frame) | `controllerId: "pea"`, `resourceId: "pea:QzpcVXNlcnNca2FpdHBcT25lRHJpdmVcRG9jdW1lbnRzXFBlLlRvb2xz"` (base64 of `C:\Users\kaitp\OneDrive\Documents\Pe.Tools`), `serviceName: host-source-cfac28d8dd61-no-revit`, `sourceRoot: C:\Users\kaitp\source\repos\Pe.Tools\ts`, `capabilities.revit: false`, `bridgeIsConnected: false`, pid 40296 |
 | `5175/pe/resources…` | no response (spike stopped) |
 | `5176/pe/thread/aa327a56…` | **200, 718,016 B.** It was 500 (locked) before the spike stopped, and the spike served 1,700,039 B for the same thread. The difference is not attributed here; it may come from root's runtime cuts. |
 | `5176/api/agent-controller/pea/sessions/<resourceId>/threads?sessionScope=4bbeabfe…` | **200, 27,535 B, `{threads:[146]}`**, including `aa327a56` ("Revit API docs links", `updatedAt` 2026-09-17T01:03:21Z). The response is identical with `sessionScope=aa327a56…`. |
@@ -173,7 +173,7 @@ node "$d\cdp-root.mjs" run root select "Revit API docs links|4bbeabfe..."
 ## Current-root results (stable build `6b0ddb4`, 2026-09-16/17)
 
 **Setup and custody:**
-- Chrome tab `6DD36FB3…` on 5176. Host pid 68132 on port 55177, process start 2026-09-17T01:13:34.399Z, source root `Pe.Tools/source/pe-tools`.
+- Chrome tab `6DD36FB3…` on 5176. Host pid 68132 on port 55177, process start 2026-09-17T01:13:34.399Z, source root `Pe.Tools/ts`.
 - Development build with React StrictMode, attached CDP session, window 1280 css px, "threads" view (no plugin pane).
 - Nothing was sent, no threads were deleted, Revit was not touched.
 

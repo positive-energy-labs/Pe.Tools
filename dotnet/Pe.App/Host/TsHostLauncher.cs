@@ -50,7 +50,7 @@ internal static class TsHostLauncher {
 
     /// <summary>The pnpm workspace the dev host runs from; its path is the dev service identity.</summary>
     private static string? SourceHostDirectory =>
-        Context.SourceRoot is { } root ? Path.Combine(root, "source", "pe-tools") : null;
+        Context.SourceRoot is { } root ? Path.Combine(root, "ts") : null;
 
     private static ServiceResult EnsureInstalled() {
         var product = InstalledProduct.Open(Context.InstallRoot!)

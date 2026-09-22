@@ -4,7 +4,7 @@ Purpose: **you have Effect v3 internalized from training. Writing v4 by reflex p
 This doc is the antidote. Read it before writing any Effect in this repo.
 
 Sources of truth (verify against these, never from memory):
-- **Our condoned style:** `source/pe-tools/apps/host/src/` — `index.ts`, `bridge.ts`, `call-route.ts`,
+- **Our condoned style:** `ts/apps/host/src/` — `index.ts`, `bridge.ts`, `call-route.ts`,
   `host-ownership.ts`, `local-ops.ts`, `local-error.ts`, `product-paths.ts`, and `@pe/host-contracts`.
   Host runs `effect@4.0.0-beta.92`.
 - **The library:** `.explore\effect-smol` (Effect working repo, currently
@@ -17,7 +17,7 @@ Host is on **beta.92**; effect-smol HEAD is **beta.94+**. The beta moves fast an
 releases. **Never trust a signature from memory or from this doc alone when it matters.** Two ways to confirm:
 
 1. Installed package (matches what actually compiles here):
-   `source/pe-tools/node_modules/.pnpm/effect@4.0.0-beta.92/node_modules/effect/src/<Module>.ts`
+   `ts/node_modules/.pnpm/effect@4.0.0-beta.92/node_modules/effect/src/<Module>.ts`
    (the published package ships `src/` — grep it directly.)
 2. effect-smol at HEAD: `packages/effect/src/<area>/<Module>.ts`. If a signature differs from what the
    installed version exposes, the installed version wins for compiling; note the drift.

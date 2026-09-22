@@ -18,7 +18,7 @@ const snapshot = (rawContent: string, composedContent = rawContent): FamilySnaps
 test("native fixtures project parameters without inventing fixture content and author native paths", () => {
   for (const name of ["a-box", "b-grd", "c-bath-shower", "d-bath-shower-refline"]) {
     const raw = readFileSync(
-      new URL(`../../../../../Pe.Revit.Tests/Fixtures/FamilyModel/${name}.json`, import.meta.url),
+      new URL(`../../../../../dotnet/Pe.Revit.Tests/Fixtures/FamilyModel/${name}.json`, import.meta.url),
       "utf8",
     );
     const input = snapshot(raw);
@@ -124,7 +124,7 @@ test("native source geometry resolves macros, seeds and labeled dimensions", () 
   const source = (name: string): FamilyModel =>
     JSON.parse(
       readFileSync(
-        new URL(`../../../../../Pe.Revit.Tests/Fixtures/FamilyModel/${name}.json`, import.meta.url),
+        new URL(`../../../../../dotnet/Pe.Revit.Tests/Fixtures/FamilyModel/${name}.json`, import.meta.url),
         "utf8",
       ),
     );
@@ -178,7 +178,7 @@ test("a captured family draws its extrusions from labeled planes, per type", () 
   const captured: FamilyModel = JSON.parse(
     readFileSync(
       new URL(
-        "../../../../../Pe.Revit.Tests/Fixtures/FamilyModel/w6-revit-air-terminal.captured.json",
+        "../../../../../dotnet/Pe.Revit.Tests/Fixtures/FamilyModel/w6-revit-air-terminal.captured.json",
         import.meta.url,
       ),
       "utf8",
@@ -204,7 +204,7 @@ test("offline shared declarations survive native projection and unrelated value 
   const patch = JSON.parse(
     readFileSync(
       new URL(
-        "../../../../../../docs/features/family/acceptance/parameters.patch.json",
+        "../../../../../docs/features/family/acceptance/parameters.patch.json",
         import.meta.url,
       ),
       "utf8",

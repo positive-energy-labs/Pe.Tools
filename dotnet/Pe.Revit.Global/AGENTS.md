@@ -13,10 +13,10 @@ before higher packages copy it.
 
 ## Critical Entry Points
 
-- `source/Pe.Revit/Extensions/` - preferred home for document-owned naming, identity, path, and other extension surfaces
+- `dotnet/Pe.Revit/Extensions/` - preferred home for document-owned naming, identity, path, and other extension surfaces
   that only need `Document`.
-- `source/Pe.Revit/Extensions/RvtUiApplication/RevitUiSession.cs` and
-  `source/Pe.Revit/Extensions/RvtUiApplication/UIApplicationDocumentSessionExtensions.cs` - explicit current-session and
+- `dotnet/Pe.Revit/Extensions/RvtUiApplication/RevitUiSession.cs` and
+  `dotnet/Pe.Revit/Extensions/RvtUiApplication/UIApplicationDocumentSessionExtensions.cs` - explicit current-session and
   `UIApplication` document-session helpers.
 - `Services/Document/DocumentTrackerAccessor.cs` - process-wide handle to the SDK document tracker
   (`PePayloadContext.Documents`): document identity, lifecycle events, and per-document `State<T>` bags. Subscribe here
@@ -46,7 +46,7 @@ before higher packages copy it.
 
 ## Living Memory
 
-- If a helper only needs `Document`, default to a `Document` extension under `source/Pe.Revit/Extensions/` before adding more
+- If a helper only needs `Document`, default to a `Document` extension under `dotnet/Pe.Revit/Extensions/` before adding more
   static manager methods.
 - Prefer document-owned entrypoints even when the implementation still lives in a feature package; the feature model can
   move later without callers relearning the seam.

@@ -151,9 +151,9 @@ The underlying literature is substantially older than the tools. Current documen
 
 Source inspection at `850b8698347aa7501244ddb958aaee67e56c4f3e`, with pre-existing untracked `docs/features/factory/` and `factory.toml` preserved:
 
-- `source/pe-tools/vite.config.ts` already enables type-aware linting and type checking. Extend this path before adding a duplicate general lint stack.
+- `ts/vite.config.ts` already enables type-aware linting and type checking. Extend this path before adding a duplicate general lint stack.
 - The inspected web and host tsconfigs already enable `strict`. Neither explicitly enables `noUncheckedIndexedAccess` or `exactOptionalPropertyTypes`; these are candidate pilots, not a finding that all packages lack them. [Option semantics](https://www.typescriptlang.org/tsconfig/)
-- `source/pe-tools/tests/repo-guards/src/` already contains architecture-adjacent and documentation guards. Reuse these where the required rule is small; use a graph tool for graph questions.
+- `ts/tests/repo-guards/src/` already contains architecture-adjacent and documentation guards. Reuse these where the required rule is small; use a graph tool for graph questions.
 - Several C# project files explicitly enable nullable analysis. Effective SDK-imported analyzer settings were not evaluated in this research, so no repo-wide coverage claim follows.
 - Generated and SDK-vendored files already have explicit formatting exclusions. Keep them separate from authored-code metrics.
 

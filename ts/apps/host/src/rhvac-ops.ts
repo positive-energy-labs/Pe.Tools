@@ -26,11 +26,11 @@ import { LocalOpError } from "./local-error.ts";
 /**
  * RHVAC .r10 local ops. An .r10 file is an Access 97 Jet database only the
  * 32-bit Jet driver can open, so open/assemblies/sync spawn the repo's proven
- * scripts (source/Pe.Revit.Takeoff/Rhvac/*.ps1) under SysWOW64 PowerShell and
+ * scripts (dotnet/Pe.Revit.Takeoff/Rhvac/*.ps1) under SysWOW64 PowerShell and
  * exchange JSON through temp files. Pure file/process ops — no Revit session.
  *
- * Script paths resolve from hostOwnership.sourceRoot (<repo>/source/pe-tools →
- * <repo>/source/Pe.Revit.Takeoff/Rhvac), so the lane exists on dev hosts only;
+ * Script paths resolve from hostOwnership.sourceRoot (<repo>/ts →
+ * <repo>/dotnet/Pe.Revit.Takeoff/Rhvac), so the lane exists on dev hosts only;
  * the installed lane reports a clear "unavailable" error instead of guessing.
  */
 
@@ -43,7 +43,7 @@ const SAVE_TIMEOUT_MS = 300_000;
 export function rhvacScriptDirectory(): string | null {
   return hostOwnership.sourceRoot === null
     ? null
-    : resolve(hostOwnership.sourceRoot, "..", "Pe.Revit.Takeoff", "Rhvac");
+    : resolve(hostOwnership.sourceRoot, "..", "dotnet", "Pe.Revit.Takeoff", "Rhvac");
 }
 
 export const rhvacOpen = Effect.fnUntraced(function* (input: RhvacPathRequest) {
@@ -340,7 +340,7 @@ const runRhvacScript = Effect.fnUntraced(function* (
     return yield* Effect.fail(
       new LocalOpError(
         key,
-        "rhvac.* ops spawn the repo's 32-bit Jet scripts (source/Pe.Revit.Takeoff/Rhvac); this host has no source root, so the lane is unavailable on the installed lane.",
+        "rhvac.* ops spawn the repo's 32-bit Jet scripts (dotnet/Pe.Revit.Takeoff/Rhvac); this host has no source root, so the lane is unavailable on the installed lane.",
         501,
       ),
     );

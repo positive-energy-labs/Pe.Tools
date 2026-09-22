@@ -5,7 +5,7 @@
 Owns the Revit-side family reconciler: capture a live family document as a `FamilyModel`, diff it against a
 desired model, lower the differences to an `OperationQueue`, apply that queue inside one `FamilyVisit`, and write
 a `FamilyReceipt`. The portable contracts themselves (`FamilyModel`, `FamilyPatch`) live in
-`source/Pe.Shared.RevitData/Families/`, which holds no Revit assembly reference.
+`dotnet/Pe.Shared.RevitData/Families/`, which holds no Revit assembly reference.
 
 ## Purpose
 

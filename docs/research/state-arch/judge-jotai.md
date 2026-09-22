@@ -2,8 +2,8 @@
 
 Adversarial review of candidate `jotai` against `SCENARIO.md`, census §10 (R1–R20), and
 qr-repo §6 (R1–R16). All `store.ts`, `view.tsx`, `bench.test.ts` paths are relative to
-`source/pe-tools/apps/web/src/state-bench/jotai/`. `route` is
-`source/pe-tools/apps/web/src/routes/state-bench.jotai.tsx`.
+`ts/apps/web/src/state-bench/jotai/`. `route` is
+`ts/apps/web/src/routes/state-bench.jotai.tsx`.
 
 ## 0. Proof lanes I ran myself
 

@@ -105,12 +105,12 @@ function readOptionalString(value: unknown): string | undefined {
  * chooses source vs installed. A source-linked (dev) host starts sessions from its own checkout's
  * Pe.App project; an installed-lane host omits `--project` entirely, because a project-less
  * `session start` IS the installed lane (the `--installed <payload>` flag is gone — lane is
- * payload SOURCE, derived, never named by the caller). `sourceRoot` is the pe-tools monorepo root
- * (…\Pe.Tools\source\pe-tools), so the repo root is two levels up.
+ * payload SOURCE, derived, never named by the caller). `sourceRoot` is the ts monorepo root
+ * (…\Pe.Tools\ts), so the repo root is one level up.
  */
 export function resolveStartProject(lane: HostLane, sourceRoot: string | null): string | undefined {
   return lane === "dev" && sourceRoot
-    ? join(sourceRoot, "..", "..", "source", "Pe.App", "Pe.App.csproj")
+    ? join(sourceRoot, "..", "dotnet", "Pe.App", "Pe.App.csproj")
     : undefined;
 }
 

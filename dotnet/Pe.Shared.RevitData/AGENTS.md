@@ -14,7 +14,7 @@ Owns durable DTOs and enums for Revit state collected through host operations, s
 - `DocumentSessionContextContracts.cs` - active/open document session summaries.
 - `SelectionContracts.cs` - element context, selection, explicit element references, and nearby document facts.
 - `LoadedFamiliesContracts.cs` - loaded-family catalog/matrix contracts and parameter presence language.
-- `Parameters/AuthoredParameterContracts.cs` and `Parameters/ParameterValueApplyContracts.cs` - authored-parameter shape and value-apply contracts. The canonical parameter identity itself is produced by `ParameterIdentityEngine.cs` in `source/Pe.Revit.DocumentData/Parameters/`.
+- `Parameters/AuthoredParameterContracts.cs` and `Parameters/ParameterValueApplyContracts.cs` - authored-parameter shape and value-apply contracts. The canonical parameter identity itself is produced by `ParameterIdentityEngine.cs` in `dotnet/Pe.Revit.DocumentData/Parameters/`.
 - `Schedules/` - schedule catalog/detail/profile contracts.
 - `ProjectBrowserContracts.cs` and `ProjectIndexContracts.cs` - browser navigation/provenance and compact semantic project-index contracts.
 - `SheetContracts.cs` - minimal sheet anchor/detail contracts for printed-context correlation, scripts, and external extractors.

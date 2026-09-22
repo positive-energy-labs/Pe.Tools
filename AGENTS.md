@@ -77,14 +77,14 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
 
 ## Critical Entry Points
 
-- `source/Pe.App/AppCore.cs` - desktop Revit payload startup, host bridge bootstrap, ribbon/task initialization; the SDK generates the Revit application adapter.
-- `source/Pe.App/ButtonRegistry.cs` - top-level desktop command and ribbon exposure.
-- `source/pe-tools/apps/host/src/index.ts` - TS-built `Pe.Host.exe` HTTP/RPC/WebSocket host entrypoint.
-- `source/pe-tools/apps/pea/` - TypeScript Pea CLI/runtime surface. `pea host` and `pea script` are the operator surface; `pea --prompt` runs one headless Pea turn for black-box product probes.
-- `source/Pe.Shared.StorageRuntime/` - C# storage roots, module/document identity, runtime state/output/log files, APS settings lookup, and small settings metadata contracts.
-- `source/Pe.Revit.Global/` - document-owned Revit helpers, APS contracts, and DA-safe collector seams that both shells can share.
-- `source/Pe.Revit/Extensions/` - strong primitives such as `FamilyDocument`, value coercion helpers, formula helpers, and parameter lookup helpers.
-- `source/Pe.Revit.FamilyFoundry/OperationProcessor.cs` - main Family Foundry execution orchestrator; intent and decisions in `docs/features/family/LEDGER.md`.
+- `dotnet/Pe.App/AppCore.cs` - desktop Revit payload startup, host bridge bootstrap, ribbon/task initialization; the SDK generates the Revit application adapter.
+- `dotnet/Pe.App/ButtonRegistry.cs` - top-level desktop command and ribbon exposure.
+- `ts/apps/host/src/index.ts` - TS-built `Pe.Host.exe` HTTP/RPC/WebSocket host entrypoint.
+- `ts/apps/pea/` - TypeScript Pea CLI/runtime surface. `pea host` and `pea script` are the operator surface; `pea --prompt` runs one headless Pea turn for black-box product probes.
+- `dotnet/Pe.Shared.StorageRuntime/` - C# storage roots, module/document identity, runtime state/output/log files, APS settings lookup, and small settings metadata contracts.
+- `dotnet/Pe.Revit.Global/` - document-owned Revit helpers, APS contracts, and DA-safe collector seams that both shells can share.
+- `dotnet/Pe.Revit/Extensions/` - strong primitives such as `FamilyDocument`, value coercion helpers, formula helpers, and parameter lookup helpers.
+- `dotnet/Pe.Revit.FamilyFoundry/OperationProcessor.cs` - main Family Foundry execution orchestrator; intent and decisions in `docs/features/family/LEDGER.md`.
 
 ## Shared Language
 

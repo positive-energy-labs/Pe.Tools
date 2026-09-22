@@ -6,7 +6,7 @@ Date: 2026-08-24. Read-only. No source file was changed.
 
 ## Scope and path prefixes
 
-Two checkouts hold the two clusters. Both use the same app root: `source/pe-tools/apps/web/src`.
+Two checkouts hold the two clusters. Both use the same app root: `ts/apps/web/src`.
 
 | Prefix | Checkout | Cluster |
 |---|---|---|

@@ -21,7 +21,7 @@ import { join } from "node:path";
 
 const ZONES_JSON = join(
   process.env.PE_PRIVATE_FIXTURES ??
-    join(import.meta.dirname, "../../../../../../.private/fixtures"),
+    join(import.meta.dirname, "../../../../../.private/fixtures"),
   "project-a/web/zones.json",
 );
 const declared = existsSync(ZONES_JSON)

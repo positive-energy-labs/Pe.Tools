@@ -18,7 +18,7 @@ This package is the shared backbone for C# storage identity and product-root com
 - `Json/` - JSON/CSV file wrappers plus directive marker attributes consumed by settings schema/runtime code.
 - `Capabilities/` - small schema metadata contracts that are exported through host contract codegen.
 
-Authored settings document open/save/validate/composition is TS-owned in `source/pe-tools/apps/host/src/settings.ts`. Revit schema generation, schema definitions, validation, type bindings, and field options live in `source/Pe.Revit.SettingsRuntime`.
+Authored settings document open/save/validate/composition is TS-owned in `ts/apps/host/src/settings.ts`. Revit schema generation, schema definitions, validation, type bindings, and field options live in `dotnet/Pe.Revit.SettingsRuntime`.
 
 ## Validation
 

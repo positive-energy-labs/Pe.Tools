@@ -28,13 +28,13 @@ Verdict: **Steps 1–5 reached. Deterministic, compile, and fixture-browser lane
 
 Commit `e1c0fa3` completed the fixture adoption proof, made the targeting manifest single-source,
 and fixed an audit-found regression so a live `.r10` open is joined back into the authority world
-(`source/pe-tools/apps/web/src/takeoff/store.ts:553`).
+(`ts/apps/web/src/takeoff/store.ts:553`).
 
 ## Proof
 
 - **Deterministic:** `vp test src/takeoff src/targeting` from `apps/web` — 3 files, 33 tests passed.
   The store suite includes all five requested cases plus fixture-panel adoption and live `.r10`
-  projection (`source/pe-tools/apps/web/src/takeoff/store.test.ts`).
+  projection (`ts/apps/web/src/takeoff/store.test.ts`).
 - **Compile/static:** `vp check` on all touched TypeScript/TSX files — correctly formatted; zero
   warnings, lint errors, or type errors.
 - **Browser fixture:** `vp run @pe/web#dev` served port 3002. HTTP GET
@@ -57,16 +57,16 @@ not imports or comments.
 | `targeting/kit.tsx` | absent → 3 | absent → 2 | absent → 2 | absent → 1 | absent → 8 | absent → 1 | absent → 624 |
 
 The route's two effects are lifecycle plumbing only: cancelable disposal and validated router
-search → store input (`source/pe-tools/apps/web/src/routes/takeoffs.tsx:121`). Atlas's two state
+search → store input (`ts/apps/web/src/routes/takeoffs.tsx:121`). Atlas's two state
 cells are pane chrome (`planOpen`, `statsOpen`), and its one effect is the keyboard listener
-(`source/pe-tools/apps/web/src/takeoff/atlas.tsx:390`, `:445`). Its two suppressions are memo
+(`ts/apps/web/src/takeoff/atlas.tsx:390`, `:445`). Its two suppressions are memo
 dependency suppressions, not domain-state synchronization.
 
 ## S1–S10 audit
 
 | Item | Status | Evidence |
 | --- | --- | --- |
-| S1 bindings | **met** | One exported `TAKEOFF_LINKS` manifest feeds both store clearing and route UI; the store reuses `pickInto` (`source/pe-tools/apps/web/src/takeoff/store.ts:174`, `:785`). |
+| S1 bindings | **met** | One exported `TAKEOFF_LINKS` manifest feeds both store clearing and route UI; the store reuses `pickInto` (`ts/apps/web/src/takeoff/store.ts:174`, `:785`). |
 | S2 URL boundary | **met** | Router `validateSearch` is the only declaration; the route alone owns `navigate`; the store reads one writable search atom and emits through `SearchPort` (`src/routes/takeoffs.tsx:67`, `:104`; `src/takeoff/store.ts:61`, `:762`). No `Atom.searchParam` exists. |
 | S3 one projector | **met** | One `resultFeed` projects all six feeds from AsyncResult, basis, and waiting (`src/takeoff/store.ts:266`, `:504`). |
 | S4 feed truth | **met** | Snapshot, candidates, RHVAC list, and `.r10` open use SWR; stale/error/loading/fresh/fixture come from AsyncResult rather than route literals (`src/takeoff/store.ts:423`, `:440`, `:481`, `:498`). |
@@ -78,7 +78,7 @@ dependency suppressions, not domain-state synchronization.
 | S10 inspection/lifecycle | **met** | All registry nodes are labeled; `inspect()` returns URL, persisted, page, feeds, actions; `dispose()` unsubscribes, clears the timer, and disposes the registry (`src/takeoff/store.ts:1022`, `:1039`; `src/routes/takeoffs.tsx:121`). |
 
 The verb bracket is **met**: all takeoffs writes are serial through `runVerb`, which owns busy id and
-seconds, receipt, typed failure, and declared invalidations (`source/pe-tools/apps/web/src/takeoff/store.ts:685`,
+seconds, receipt, typed failure, and declared invalidations (`ts/apps/web/src/takeoff/store.ts:685`,
 `:889`, `:967`).
 
 ## Left undone and why
@@ -97,7 +97,7 @@ seconds, receipt, typed failure, and declared invalidations (`source/pe-tools/ap
 1. The zone card is the remaining S6 exception described above.
 2. `TakeoffHost.openRhvac` is still typed as `unknown`; the world projector narrows it with a local
    cast because the host contract does not export the RPC result type at this seam
-   (`source/pe-tools/apps/web/src/takeoff/store.ts:575`). Compile and deterministic projection are
+   (`ts/apps/web/src/takeoff/store.ts:575`). Compile and deterministic projection are
    green, but a malformed live response is not runtime-validated here.
 3. Fixture adoption proves the complete UI/store verb path and receipt but does not mutate the
    immutable fixture dataset. The current fixture candidates are already stamped, so a re-read is
@@ -120,14 +120,14 @@ deliberately not attempted because the user reserved those decisions and the liv
 
 | Item | Status | Evidence |
 | --- | --- | --- |
-| G1 | **done** | Conflict now compares the staged base with `roomEdit(authority)` and uses no `keyof WorldRoom` cast (`source/pe-tools/apps/web/src/takeoff/store.ts:666`). Judge probe P1 covers a room with nested Manual J data (`source/pe-tools/apps/web/src/takeoff/store.test.ts:220`). Commit `a61e519`. |
-| G2 | **done** | Adopt invalidates both snapshot and candidates (`source/pe-tools/apps/web/src/takeoff/store.ts:682`); the SWR test asserts a second candidate read (`source/pe-tools/apps/web/src/takeoff/store.test.ts:264`). Commit `1c2bea0`. |
-| G3 | **done** | A failed `.r10` feed renders a retry verb that invalidates `rhvac-open` and `rhvac-list` (`source/pe-tools/apps/web/src/routes/takeoffs.tsx:282`). Commit `d08f613`. |
-| G4 | **done** | Feed badges render their basis (`source/pe-tools/apps/web/src/targeting/head.tsx:41`). Zone cards and both room surfaces subscribe to the entity family (`source/pe-tools/apps/web/src/takeoff/atlas.tsx:352`, `:1551`, `:1687`). URL-bound and plan-focus remain two named currencies (`source/pe-tools/apps/web/src/takeoff/store.ts:659`). This supersedes the Pass 1 S6 limitation. Commit `d7d0bfa`. |
-| G5 | **done** | Atlas actions are hoisted and memoized once per store (`source/pe-tools/apps/web/src/takeoff/atlas.tsx:73`, `:417`); the keydown handler is ref-backed and the listener mounts once (`:494`, `:519`). Commit `02374ec`. |
+| G1 | **done** | Conflict now compares the staged base with `roomEdit(authority)` and uses no `keyof WorldRoom` cast (`ts/apps/web/src/takeoff/store.ts:666`). Judge probe P1 covers a room with nested Manual J data (`ts/apps/web/src/takeoff/store.test.ts:220`). Commit `a61e519`. |
+| G2 | **done** | Adopt invalidates both snapshot and candidates (`ts/apps/web/src/takeoff/store.ts:682`); the SWR test asserts a second candidate read (`ts/apps/web/src/takeoff/store.test.ts:264`). Commit `1c2bea0`. |
+| G3 | **done** | A failed `.r10` feed renders a retry verb that invalidates `rhvac-open` and `rhvac-list` (`ts/apps/web/src/routes/takeoffs.tsx:282`). Commit `d08f613`. |
+| G4 | **done** | Feed badges render their basis (`ts/apps/web/src/targeting/head.tsx:41`). Zone cards and both room surfaces subscribe to the entity family (`ts/apps/web/src/takeoff/atlas.tsx:352`, `:1551`, `:1687`). URL-bound and plan-focus remain two named currencies (`ts/apps/web/src/takeoff/store.ts:659`). This supersedes the Pass 1 S6 limitation. Commit `d7d0bfa`. |
+| G5 | **done** | Atlas actions are hoisted and memoized once per store (`ts/apps/web/src/takeoff/atlas.tsx:73`, `:417`); the keydown handler is ref-backed and the listener mounts once (`:494`, `:519`). Commit `02374ec`. |
 | G6 | **done** | The hook table below is recomputed from `git show 335906d~1`; the Step 5 deletion claim above was narrowed to the three removals the diff proves. Commit `1a5430c`. |
-| G9 | **done** | Fresh reads state a fixed wall-clock time instead of calculating a relative `ago()` during render (`source/pe-tools/apps/web/src/targeting/kit.tsx:237`). Commit `9ac0abb`. |
-| Devtools | **done, with Effect internals noted** | The store structurally implements `InspectableAtomStore`, exposes its registry and inspector, and brackets every store-owned `set`/`update` with `note({verb,key})` (`source/pe-tools/apps/web/src/takeoff/store.ts:299`, `:1117`). Route registration is reactive, so an already-mounted panel switches to the route store (`source/pe-tools/apps/web/src/state/atom-inspect.ts:64`; `source/pe-tools/apps/web/src/integrations/atoms/devtools.tsx:27`). The no-React Adopt test asserts a recorded cause (`source/pe-tools/apps/web/src/takeoff/store.test.ts:382`). |
+| G9 | **done** | Fresh reads state a fixed wall-clock time instead of calculating a relative `ago()` during render (`ts/apps/web/src/targeting/kit.tsx:237`). Commit `9ac0abb`. |
+| Devtools | **done, with Effect internals noted** | The store structurally implements `InspectableAtomStore`, exposes its registry and inspector, and brackets every store-owned `set`/`update` with `note({verb,key})` (`ts/apps/web/src/takeoff/store.ts:299`, `:1117`). Route registration is reactive, so an already-mounted panel switches to the route store (`ts/apps/web/src/state/atom-inspect.ts:64`; `ts/apps/web/src/integrations/atoms/devtools.tsx:27`). The no-React Adopt test asserts a recorded cause (`ts/apps/web/src/takeoff/store.test.ts:382`). |
 
 ### Pass 2 hook table
 
@@ -211,9 +211,9 @@ Commit `ee8c1b4` completed G9 through G12 and resolved G14 with executable proof
 
 | Item | Status | Evidence |
 | --- | --- | --- |
-| G9 | **done** | `zoneKeyAtom`, `stageFilterAtom`, `fieldsModeAtom`, and `cursorAtom` are independent writable scalars; `atlasPageAtom` is their aggregate view. `atlasRowsAtom` reads only zone and stage, and `visibleRowsAtom` reads only fields mode. Q4 writes the cursor and asserts both row-array identities remain stable (`source/pe-tools/apps/web/src/takeoff/store.test.ts:283`). |
-| G10 | **done** | The store's `owned` helper mounts auto-disposable atoms for the store lifetime, and `dispose()` releases those mounts. The private `Atom.context` layer atom is also made disposable (`source/pe-tools/apps/web/src/takeoff/store.ts:398`, `:413`, `:1285`). Q1 creates and disposes four stores on one registry; after each idle TTL the node count equals the zero-node baseline (`store.test.ts:302`). |
-| G11 | **done** | `ATLAS_COLUMN_SEMANTICS` is the one exported sort/facet table. Both the store projection and every Atlas column consume it (`source/pe-tools/apps/web/src/takeoff/store.ts:328`; `source/pe-tools/apps/web/src/takeoff/atlas.tsx:518`). The vocabulary-only fallback was not needed. |
+| G9 | **done** | `zoneKeyAtom`, `stageFilterAtom`, `fieldsModeAtom`, and `cursorAtom` are independent writable scalars; `atlasPageAtom` is their aggregate view. `atlasRowsAtom` reads only zone and stage, and `visibleRowsAtom` reads only fields mode. Q4 writes the cursor and asserts both row-array identities remain stable (`ts/apps/web/src/takeoff/store.test.ts:283`). |
+| G10 | **done** | The store's `owned` helper mounts auto-disposable atoms for the store lifetime, and `dispose()` releases those mounts. The private `Atom.context` layer atom is also made disposable (`ts/apps/web/src/takeoff/store.ts:398`, `:413`, `:1285`). Q1 creates and disposes four stores on one registry; after each idle TTL the node count equals the zero-node baseline (`store.test.ts:302`). |
+| G11 | **done** | `ATLAS_COLUMN_SEMANTICS` is the one exported sort/facet table. Both the store projection and every Atlas column consume it (`ts/apps/web/src/takeoff/store.ts:328`; `ts/apps/web/src/takeoff/atlas.tsx:518`). The vocabulary-only fallback was not needed. |
 | G12 | **done** | ADR 0009 now records the G10 mount-release-TTL mechanism and the eager `RegistryContext` default-registry footgun. |
 | G13 | **measured** | Ten warmed cursor switches with TanStack devtools closed consumed 3,095.683 ms of script, 57.848 ms of layout, and 4,763.274 ms of task time. The active row changed between Bath and Study, and the console had zero warnings/errors. G9 removed store row derivation from this path, but the React table still renders expensively on cursor changes. |
 | G14 | **resolved** | G1 is covered by the nested Manual J conflict regression (`store.test.ts:325`). G2 is covered by the adopt test that asserts a second candidates read (`:347`). G3 now has `retryRhvac()` and a failed-open recovery test (`:461`); the route's retry verb calls that action. The Pass 2 report was correct. The judge was correct that Pass 3 did not touch G1-G3, but wrong that they remained open at HEAD. |
@@ -246,11 +246,11 @@ Commit `40768fe` completed G15 through G19.
 
 | Item | Status | Evidence |
 | --- | --- | --- |
-| G15 | **done** | Decisions and staged edits are single record atoms; per-room decided/staged atoms are projections rather than writable family authorities. Hovered, selected, bound, decided, staged, and entity family members enter the store's `owned` release list when materialized. The four-cycle G10 test now calls both `decide()` and `patchRoom()` before disposal; it failed first with 375 surviving nodes and now returns to the zero-node baseline after every TTL (`source/pe-tools/apps/web/src/takeoff/store.test.ts:302`). |
-| G16 | **done** | `MasterRow` is memoized, row callbacks and `cellsFor` are stable, and Atlas supplies stable row key, gutter, table-state, click, and hover callbacks. The jsdom regression counts cell renders across an `activeKey` change and requires at most two rows (`source/pe-tools/apps/web/src/components/master-table/master-table.test.tsx:144`). |
-| G17 | **done** | Atlas subscribes directly to stage filter, zone key, level, cursor, and fields mode. It never reads `store.atoms.atlasPage`; the aggregate remains only the sentence/inspection view (`source/pe-tools/apps/web/src/takeoff/atlas.tsx:417`). |
-| G18 | **done** | `match` is optional column semantics, and the flags column's one predicate is consumed by both Atlas and `visibleRowsAtom` (`source/pe-tools/apps/web/src/takeoff/store.ts:323`). |
-| G19 | **done** | Both fixture lanes now contain 180 rooms. The real-geometry browser fixture is unchanged; the deterministic synthetic fallback receives one stable parity room. This retains an offline fixture fallback while removing the review-ambiguous 179/180 split (`source/pe-tools/apps/web/src/takeoff/proto/mock.ts:219`). |
+| G15 | **done** | Decisions and staged edits are single record atoms; per-room decided/staged atoms are projections rather than writable family authorities. Hovered, selected, bound, decided, staged, and entity family members enter the store's `owned` release list when materialized. The four-cycle G10 test now calls both `decide()` and `patchRoom()` before disposal; it failed first with 375 surviving nodes and now returns to the zero-node baseline after every TTL (`ts/apps/web/src/takeoff/store.test.ts:302`). |
+| G16 | **done** | `MasterRow` is memoized, row callbacks and `cellsFor` are stable, and Atlas supplies stable row key, gutter, table-state, click, and hover callbacks. The jsdom regression counts cell renders across an `activeKey` change and requires at most two rows (`ts/apps/web/src/components/master-table/master-table.test.tsx:144`). |
+| G17 | **done** | Atlas subscribes directly to stage filter, zone key, level, cursor, and fields mode. It never reads `store.atoms.atlasPage`; the aggregate remains only the sentence/inspection view (`ts/apps/web/src/takeoff/atlas.tsx:417`). |
+| G18 | **done** | `match` is optional column semantics, and the flags column's one predicate is consumed by both Atlas and `visibleRowsAtom` (`ts/apps/web/src/takeoff/store.ts:323`). |
+| G19 | **done** | Both fixture lanes now contain 180 rooms. The real-geometry browser fixture is unchanged; the deterministic synthetic fallback receives one stable parity room. This retains an offline fixture fallback while removing the review-ambiguous 179/180 split (`ts/apps/web/src/takeoff/proto/mock.ts:219`). |
 
 ### Pass 5 proof
 
@@ -280,7 +280,7 @@ rows, and columns directly. The requested Ponytail marker and owed G7 entry are 
 
 ### Full check result
 
-Unscoped `vp check` from `source/pe-tools` remains red on exactly six pre-existing formatting
+Unscoped `vp check` from `ts` remains red on exactly six pre-existing formatting
 files:
 
 ```text

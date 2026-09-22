@@ -17,7 +17,7 @@ shims behind the run are in `LEDGER.md`.
    picker is app-level — the file itself has near-zero cloneable assemblies; the preset catalog
    shim covers the gap, uncovered assemblies land as zero rows (flagged).
 3. **Dev lane up**: the target model is open in the dev Revit session and `vp run dev` is running
-   from `source/pe-tools`. Use the dynamic host URL printed by the command. Only one
+   from `ts`. Use the dynamic host URL printed by the command. Only one
    take-over-host process at a time.
 
 ## The run

@@ -162,7 +162,7 @@ Post-format physical lines:
 
 Type inference is excellent for ordinary observable leaf reads and computed values, but proxy types become noisy at library edges. `For` would not accept `Observable<Zone[] | undefined>` even immediately after a Suspense read, requiring a post-Suspense `Observable<Zone[]>` cast (`panes.tsx:9-10`). Indexed proxy writes also surface `undefined` in updater callbacks. The centralized object is easy to explore in TypeScript, but the many `.get()`/`.peek()` choices encode behavioral meaning that review must catch.
 
-Inspector screenshot: [`source/pe-tools/apps/web/src/state-bench/legend/legend-inspector.png`](../../../source/pe-tools/apps/web/src/state-bench/legend/legend-inspector.png). It shows the whole state snapshot, derived basis/progress/seams, and the last 20 actions. The route rendered in Chrome and `Invoke-WebRequest http://localhost:3004/state-bench/legend` returned HTTP 200 with 4,456 bytes.
+Inspector screenshot: [`ts/apps/web/src/state-bench/legend/legend-inspector.png`](../../../ts/apps/web/src/state-bench/legend/legend-inspector.png). It shows the whole state snapshot, derived basis/progress/seams, and the last 20 actions. The route rendered in Chrome and `Invoke-WebRequest http://localhost:3004/state-bench/legend` returned HTTP 200 with 4,456 bytes.
 
 The three worst papercuts:
 

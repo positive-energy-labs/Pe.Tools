@@ -1,6 +1,6 @@
 # Chat runtime checkpoint review
 
-A bounded, independent review done on 2026-09-16. It reads only the committed diff in the sibling checkout `Pe.Tools-unify-chat`, from base `1406e70` to `6533201` (commits 5658ec1, 6345064, 7cd5b66 and 6533201); uncommitted work there was ignored. Proof lane: **source reading only.** Nothing was run, benchmarked or edited. The paths below are relative to `source/pe-tools/apps/web/src/`, with line numbers as of `6533201`.
+A bounded, independent review done on 2026-09-16. It reads only the committed diff in the sibling checkout `Pe.Tools-unify-chat`, from base `1406e70` to `6533201` (commits 5658ec1, 6345064, 7cd5b66 and 6533201); uncommitted work there was ignored. Proof lane: **source reading only.** Nothing was run, benchmarked or edited. The paths below are relative to `ts/apps/web/src/`, with line numbers as of `6533201`.
 
 ## Findings
 

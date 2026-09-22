@@ -742,7 +742,7 @@ test("Pea doors author native JSON and plan both family routes under the turn Ta
   const patch = JSON.parse(
     readFileSync(
       new URL(
-        "../../../../../docs/features/family/acceptance/parameters.patch.json",
+        "../../../../docs/features/family/acceptance/parameters.patch.json",
         import.meta.url,
       ),
       "utf8",

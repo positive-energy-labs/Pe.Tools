@@ -99,7 +99,7 @@ public sealed class DeploymentRuntimeContractTests {
 
     [Test]
     public void Host_service_identity_is_installed_global_and_dev_checkout_scoped() {
-        const string sourceRoot = @"C:\Users\Alice\Repo\source\pe-tools\";
+        const string sourceRoot = @"C:\Users\Alice\Repo\ts\";
 
         Assert.Multiple(() => {
             Assert.That(
@@ -108,7 +108,7 @@ public sealed class DeploymentRuntimeContractTests {
             );
             Assert.That(
                 HostEndpoint.ResolveServiceName("dev", sourceRoot),
-                Is.EqualTo("host-source-a3684ea655f3")
+                Is.EqualTo("host-source-f621c53928f2")
             );
             Assert.That(
                 HostEndpoint.SourceServiceName(sourceRoot.ToLowerInvariant()),

@@ -10,7 +10,7 @@ const repo = execFileSync("git", ["rev-parse", "--show-toplevel"], {
   encoding: "utf8",
 }).trim();
 const bridgeAgent = readFileSync(
-  resolve(repo, "source/Pe.Revit.Global/Services/Host/BridgeAgent.cs"),
+  resolve(repo, "dotnet/Pe.Revit.Global/Services/Host/BridgeAgent.cs"),
   "utf8",
 );
 const dispatch = bridgeAgent.slice(

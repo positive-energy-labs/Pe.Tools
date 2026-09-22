@@ -16,4 +16,4 @@ Tests and scripts resolve the root from `PE_PRIVATE_FIXTURES`, defaulting to `<r
 | `rewrite/` | inputs for the 2026-09 history rewrite | disposable after the rewrite |
 | `sdk-feed/` | optional home for the local NuGet feed if it leaves `eng/sdk-feed` | NuGet |
 
-Project tokens are deliberate. Never put a client name in a path or a file under `source/`, `eval/`, or `docs/`.
+Project tokens are deliberate. Never put a client name in a path or a file under `dotnet/`, `ts/`, `eval/`, or `docs/`.

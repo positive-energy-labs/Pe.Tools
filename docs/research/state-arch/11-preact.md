@@ -69,11 +69,11 @@ function Route() {
 
 The centralized object worked. Components read signals and call model actions. The library fought the scenario at async state, URL persistence, cache policy, mutation policy, Suspense, and devtools. All of those were built locally.
 
-One extra failure appeared in the browser. `useModel` returns its disposer directly from a passive effect (`packages/react/runtime/src/index.ts:463-472`). React development effect replay called that disposer, then reused the same instance. The first version left every async request aborted and caused the Plan Suspense boundary to retry about 800 times per second. `armReactLifecycle` defers disposal and cancels it when the route effect reconnects (`source/pe-tools/apps/web/src/state-bench/preact/model.ts:513`). This is prototype code, not a general fix for the library.
+One extra failure appeared in the browser. `useModel` returns its disposer directly from a passive effect (`packages/react/runtime/src/index.ts:463-472`). React development effect replay called that disposer, then reused the same instance. The first version left every async request aborted and caused the Plan Suspense boundary to retry about 800 times per second. `armReactLifecycle` defers disposal and cancels it when the route effect reconnects (`ts/apps/web/src/state-bench/preact/model.ts:513`). This is prototype code, not a general fix for the library.
 
 ## 4. Async waterfalls
 
-The 204-line helper is `source/pe-tools/apps/web/src/state-bench/preact/async.ts`. Its explicit `get` subscribes when the read happens, including after an `await` (`async.ts:47-96`). Each run receives the active `AbortSignal` (`async.ts:110`). A dependency write aborts that signal and starts the callback again. Pending state keeps the previous `data`.
+The 204-line helper is `ts/apps/web/src/state-bench/preact/async.ts`. Its explicit `get` subscribes when the read happens, including after an `await` (`async.ts:47-96`). Each run receives the active `AbortSignal` (`async.ts:110`). A dependency write aborts that signal and starts the callback again. Pending state keeps the previous `data`.
 
 ```ts
 const activeDoc = asyncCompute(async (get, abort) => {

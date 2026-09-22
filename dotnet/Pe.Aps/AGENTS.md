@@ -11,7 +11,7 @@ Owns APS-facing mechanics for Pe.Tools: auth, Data Management, Object Storage, a
 ## Critical Entry Points
 
 - `Aps.cs` - top-level APS factory for auth-backed Object Storage, Data Management, cloud-model catalog, and Design Automation services.
-- `Auth/IApsCredentialProvider.cs` - credential contract this package consumes; the concrete loader is `source/Pe.Shared.StorageRuntime/ApsCredentialSource.cs`, which reads APS web credentials from global settings.
+- `Auth/IApsCredentialProvider.cs` - credential contract this package consumes; the concrete loader is `dotnet/Pe.Shared.StorageRuntime/ApsCredentialSource.cs`, which reads APS web credentials from global settings.
 - `Auth/ApsAuthService.cs` - CLI/host-friendly login/logout/token façade.
 - `Core/ApsAuthenticationService.cs` - OAuth, persisted token store, and token acquisition.
 - `Core/DataManagementApiClient.cs` - low-level Data Management SDK parsing and source-download support.

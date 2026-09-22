@@ -132,7 +132,7 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
       // Preserve failed/unknown receipts before deleting only this integration test's owned root.
       const evidence = resolve(
         import.meta.dirname,
-        "../../../../../../.artifacts/handoffs/route-goal",
+        "../../../../../.artifacts/handoffs/route-goal",
         `demo-native-rhvac-${randomUUID()}.json`,
       );
       await mkdir(join(evidence, ".."), { recursive: true });

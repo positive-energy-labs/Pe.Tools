@@ -3,7 +3,7 @@
  * THE ROUTE PRIMITIVE GUARD — mechanical proof for route-primitive-fable.html §8.
  * =============================================================================================
  *
- * Lives (once promoted) at source/pe-tools/tests/repo-guards/route-primitive.guard.test.ts —
+ * Lives (once promoted) at ts/tests/repo-guards/route-primitive.guard.test.ts —
  * same runner (`vp test`) and posture as design-guard.test.ts / docs-guard.test.ts: plain fs
  * walks, plain regexes, no AST, no new dependency. Written ahead of the cutover it proves;
  * several `it`s are EXPECTED RED until the fold named in guards/README.md lands.
@@ -43,9 +43,9 @@ const REPO = execFileSync("git", ["rev-parse", "--show-toplevel"], {
   encoding: "utf8",
 }).trim();
 
-const WEB_SRC = resolve(REPO, "source/pe-tools/apps/web/src");
-const AGENT_CONTRACTS_SRC = resolve(REPO, "source/pe-tools/packages/agent-contracts/src");
-const PE_TOOLS_ROOT = resolve(REPO, "source/pe-tools");
+const WEB_SRC = resolve(REPO, "ts/apps/web/src");
+const AGENT_CONTRACTS_SRC = resolve(REPO, "ts/packages/agent-contracts/src");
+const PE_TOOLS_ROOT = resolve(REPO, "ts");
 
 type Entry = { rel: string; abs: string; text: string };
 

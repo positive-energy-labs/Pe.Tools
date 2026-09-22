@@ -1,6 +1,6 @@
 """Render law-bound verdict and forensic views from an offline takeoff report."""
 
-# COUPLING: source/pe-tools/apps/web/src/runs/visual-law.json is the single visual-law
+# COUPLING: ts/apps/web/src/runs/visual-law.json is the single visual-law
 # declaration shared with the /runs TypeScript renderer. Do not restate its values here.
 
 import argparse
@@ -19,13 +19,13 @@ import overlay
 
 
 LAW_PATH = (Path(__file__).resolve().parents[2]
-            / "source/pe-tools/apps/web/src/runs/visual-law.json")
+            / "ts/apps/web/src/runs/visual-law.json")
 
 # base.css is the ONLY numeric dash authority (ruling 2026-08-28). The visual law names a
 # semantic role; both this renderer and the /runs TypeScript surface resolve the pattern from
 # here, so the two can no longer drift the way they did before 2026-08-23.
 BASE_CSS_PATH = (Path(__file__).resolve().parents[2]
-                 / "source/pe-tools/apps/web/src/base.css")
+                 / "ts/apps/web/src/base.css")
 
 
 def load_visual_law(path=LAW_PATH):

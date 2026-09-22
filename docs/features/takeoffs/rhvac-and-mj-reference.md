@@ -3,7 +3,7 @@
 Stable external-world facts for the Takeoff package: the Elite RHVAC `.r10` file format, the firm's
 Manual J conventions, and the Revit-vs-RHVAC terminology crosswalk. These are reverse-engineered
 from real files and verified against the firm's most complex project (projectA, 150 rooms). No
-code change invalidates them; the direction in [`AGENTS.md`](../../../source/Pe.Revit.Takeoff/AGENTS.md)
+code change invalidates them; the direction in [`AGENTS.md`](../../../dotnet/Pe.Revit.Takeoff/AGENTS.md)
 does.
 
 ## `.r10` container & I/O

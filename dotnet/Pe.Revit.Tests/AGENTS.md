@@ -27,13 +27,13 @@ Owns the VSTest-based Revit-backed test harness for this repo. The harness uses 
 Default: the **fresh** rung. One ephemeral controlled Revit on the installed payload, the year's add-in quarantine leased, the process stopped at the end.
 
 ```powershell
-dotnet tool run pe-revit -- test --project .\source\Pe.Revit.Tests\Pe.Revit.Tests.csproj --filter "Name~Reports_runtime_assembly_load_paths" --timeout-seconds 900 --json
+dotnet tool run pe-revit -- test --project .\dotnet\Pe.Revit.Tests\Pe.Revit.Tests.csproj --filter "Name~Reports_runtime_assembly_load_paths" --timeout-seconds 900 --json
 ```
 
 Override with **attached** only when the running session's documents, UI state, or loaded assemblies are the thing under test. `--attach` converges that session first, so the code under test is the code you just saved:
 
 ```powershell
-dotnet tool run pe-revit -- test --project .\source\Pe.Revit.Tests\Pe.Revit.Tests.csproj --attach --id pe.app-25 --filter "Name~SomeFocusedTest" --timeout-seconds 900 --json
+dotnet tool run pe-revit -- test --project .\dotnet\Pe.Revit.Tests\Pe.Revit.Tests.csproj --attach --id pe.app-25 --filter "Name~SomeFocusedTest" --timeout-seconds 900 --json
 ```
 
 For freshness outside a test run, `pe-revit session converge` attaches the hot-reload emitter to a live session and `pe-revit session restart` is the mechanism that actually reloads. Run `pe-revit test --plan --project <P>` when the rung is not obvious, and `pe-revit guide test` for the refusal table.

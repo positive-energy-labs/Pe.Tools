@@ -9,7 +9,7 @@ For kaitpw. Read-only. This file names the fewest pages that carry the result.
 
 | Token | Expands to |
 |---|---|
-| `W<c>` | `C:\Users\kaitp\source\repos\Pe.Tools-sb-<c>\source\pe-tools\apps\web\src` |
+| `W<c>` | `C:\Users\kaitp\source\repos\Pe.Tools-sb-<c>\ts\apps\web\src` |
 | proto | `W<c>/state-bench/<c>/` |
 | route | `W<c>/routes/state-bench.<c>.tsx` |
 

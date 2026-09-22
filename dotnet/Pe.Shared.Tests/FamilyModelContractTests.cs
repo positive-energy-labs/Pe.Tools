@@ -173,8 +173,8 @@ public sealed class FamilyModelContractTests {
     public static string FixtureDir {
         get {
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
-            while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "source", "Pe.Revit.Tests"))) dir = dir.Parent;
-            return Path.Combine(dir!.FullName, "source", "Pe.Revit.Tests", "Fixtures", "FamilyModel");
+            while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "dotnet", "Pe.Revit.Tests"))) dir = dir.Parent;
+            return Path.Combine(dir!.FullName, "dotnet", "Pe.Revit.Tests", "Fixtures", "FamilyModel");
         }
     }
 

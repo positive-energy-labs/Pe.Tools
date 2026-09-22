@@ -1,6 +1,6 @@
 # mep-placement ledger
 
-Give Pea a real *ability*: draft collision-free duct/pipe placement from a plain-language ask, then refine with the user. The deliverable is a skill + an opinionated placement abstraction, not just code. Ported to `source/Pe.Revit.Placement` (Engine, Router, DuctPlacer, Obstacles, DraftWriter, Fluent) + the bundled `place-mep-ducts` skill.
+Give Pea a real *ability*: draft collision-free duct/pipe placement from a plain-language ask, then refine with the user. The deliverable is a skill + an opinionated placement abstraction, not just code. Ported to `dotnet/Pe.Revit.Placement` (Engine, Router, DuctPlacer, Obstacles, DraftWriter, Fluent) + the bundled `place-mep-ducts` skill.
 
 ## Decided
 

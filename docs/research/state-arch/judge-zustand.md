@@ -4,13 +4,13 @@ Adversarial review. The judge ran every command. The judge did not trust the rep
 
 - Proto worktree: `C:\Users\kaitp\source\repos\Pe.Tools-sb-zustand`
 - Files judged: `state-bench/zustand/{model.ts,bench.ts,view.tsx,bench.test.ts}`, `routes/state-bench.zustand.tsx`
-- Line references are `file:line` inside `source/pe-tools/apps/web/src/`.
+- Line references are `file:line` inside `ts/apps/web/src/`.
 
 ## 0. Lanes the judge ran
 
 | Command | Result | Note |
 |---|---|---|
-| `vp run @pe/web#test -- state-bench` (from `source/pe-tools`) | FAILS: `Task "state-bench" not found` | The mission command does not work. The report says the same at §8.3. The report is correct. |
+| `vp run @pe/web#test -- state-bench` (from `ts`) | FAILS: `Task "state-bench" not found` | The mission command does not work. The report says the same at §8.3. The report is correct. |
 | `vp test src/state-bench/zustand/bench.test.ts` (from `apps/web`) | PASS. 1 file, 5 tests, 858 ms | Matches the report's §5 claim exactly. |
 | `vp check src/state-bench/zustand src/routes/state-bench.zustand.tsx` | PASS. 5 files formatted; 0 warnings, 0 lint errors, 0 type errors | Matches the report's §8 claim. |
 | Judge probe (temporary test, deleted after use) | 5 probes; all confirmed the defects below | Working tree left clean. |

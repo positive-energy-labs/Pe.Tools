@@ -32,7 +32,7 @@ The original fixture hash is checked after close. The test was compiled only; th
 
 ## Validation and behavior tally
 
-- Compile lane: `dotnet build source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests`
+- Compile lane: `dotnet build dotnet/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests`
 - Result: exit 0, 0 errors, 127 warnings.
 - Changed behavior: one exact warning ID now refuses and rolls back Family Foundry edit/load.
 - Preserved behavior: all unrelated warnings and all non-FamilyVisit failure-policy callers.

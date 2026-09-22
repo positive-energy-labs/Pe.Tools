@@ -134,7 +134,7 @@ Physical line counts after formatting were 856 controller/model lines, 632 React
 
 Type inference is strong inside a Zustand selector and a single Query option object. `useShallow` keeps tuple selectors precise ([implementation](https://github.com/pmndrs/zustand/blob/f094eebe9bd3b4b0d77b997f69ab1d273f69a877/src/react/shallow.ts#L4-L11), `.explore/zustand/src/react/shallow.ts:4-11`). Inference weakens where conditional query options meet `useQuery`; the route needed an explicit `useQuery<Zone[]>` helper (`view.tsx:351-364`). Middleware composition also makes the store's final mutator type harder to read than its state type.
 
-Devtools evidence: [devtools.png](../../../source/pe-tools/apps/web/src/state-bench/zustand/devtools.png). The screenshot shows the URL-backed selected zone, one dirty rename, 500 plan rectangles, the Zustand tree, and the separate Query cache. Redux DevTools receives named Zustand actions through `devtools`; Query state still needs Query Devtools or the inspector.
+Devtools evidence: [devtools.png](../../../ts/apps/web/src/state-bench/zustand/devtools.png). The screenshot shows the URL-backed selected zone, one dirty rename, 500 plan rectangles, the Zustand tree, and the separate Query cache. Redux DevTools receives named Zustand actions through `devtools`; Query state still needs Query Devtools or the inspector.
 
 The three worst papercuts were:
 

@@ -12,8 +12,8 @@
 
 Installed-source evidence:
 
-- `source/pe-tools/node_modules/.pnpm/beautiful-mermaid@1.1.3/node_modules/beautiful-mermaid/src/types.ts` (`RenderOptions.font`)
-- `source/pe-tools/node_modules/.pnpm/beautiful-mermaid@1.1.3/node_modules/beautiful-mermaid/src/theme.ts` (`buildStyleBlock`, unconditional `fontImports`)
+- `ts/node_modules/.pnpm/beautiful-mermaid@1.1.3/node_modules/beautiful-mermaid/src/types.ts` (`RenderOptions.font`)
+- `ts/node_modules/.pnpm/beautiful-mermaid@1.1.3/node_modules/beautiful-mermaid/src/theme.ts` (`buildStyleBlock`, unconditional `fontImports`)
 
 ## Adapter boundary
 

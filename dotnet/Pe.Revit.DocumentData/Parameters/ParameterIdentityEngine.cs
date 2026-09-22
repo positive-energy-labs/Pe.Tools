@@ -3,7 +3,7 @@ namespace Pe.Revit.DocumentData.Parameters;
 
 // FOOTGUN: Literal PE_* names are project/fixture data only; runtime logic must not treat the
 // prefix as a parameter-authority signal. (2026-08-17, folded from
-// source/Pe.Revit.FamilyFoundry/_README.md, deleted — git history.)
+// dotnet/Pe.Revit.FamilyFoundry/_README.md, deleted — git history.)
 // Shared-vs-local classification resolves ONLY through this engine's ParameterIdentity, captured
 // shared GUIDs, injected parameter-service evidence, or resolved shared definitions. A name that
 // starts with PE_ proves nothing about who owns the parameter — real projects carry PE_-prefixed

@@ -33,8 +33,8 @@ function parsed(body: unknown): SessionActionRequest {
 // --- action → CLI args mapping ----------------------------------------------------------------
 
 test("start on a source-linked (dev) host uses the checkout's Pe.App project", () => {
-  const project = resolveStartProject("dev", "C:\\repo\\Pe.Tools\\source\\pe-tools");
-  expect(project).toBe(join("C:\\repo\\Pe.Tools", "source", "Pe.App", "Pe.App.csproj"));
+  const project = resolveStartProject("dev", "C:\\repo\\Pe.Tools\\ts");
+  expect(project).toBe(join("C:\\repo\\Pe.Tools", "dotnet", "Pe.App", "Pe.App.csproj"));
 
   const request = parsed({ action: "start", year: 25, id: "scratch", lane: "dev" });
   expect(request.lane).toBe("dev");
@@ -43,7 +43,7 @@ test("start on a source-linked (dev) host uses the checkout's Pe.App project", (
     "session",
     "start",
     "--project",
-    join("C:\\repo\\Pe.Tools", "source", "Pe.App", "Pe.App.csproj"),
+    join("C:\\repo\\Pe.Tools", "dotnet", "Pe.App", "Pe.App.csproj"),
     "--year",
     "25",
     "--id",
@@ -172,7 +172,7 @@ test("caller-provided timeouts get a margin over the CLI's own budget", () => {
 test("dev host selects its checkout CLI even when an installed shim exists", () => {
   expect(
     peRevitLauncher(
-      { lane: "dev", sourceRoot: "C:\\repo\\Pe.Tools\\source\\pe-tools" },
+      { lane: "dev", sourceRoot: "C:\\repo\\Pe.Tools\\ts" },
       undefined,
       () => true,
     ),
@@ -207,10 +207,10 @@ test("session CLI rejects empty, invalid, and non-envelope output", () => {
 
 test("checkout pin answers with an envelope against isolated SDK roots", async () => {
   const root = await mkdtemp(join(tmpdir(), "pe-tools-session-list-"));
-  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../../../..");
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../../..");
   const launch = peRevitLauncher({
     lane: "dev",
-    sourceRoot: join(repoRoot, "source", "pe-tools"),
+    sourceRoot: join(repoRoot, "ts"),
   });
   const args = ["session", "list", "--all", "--json"];
   const registryRoot = join(root, "registry");

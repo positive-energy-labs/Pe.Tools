@@ -2,14 +2,14 @@
 
 Adversarial review of `docs/research/state-arch/04-legend.md` and the proto in worktree
 `Pe.Tools-sb-legend`. All line references are that worktree, under
-`source/pe-tools/apps/web/src/`. The judge ran every lane. The judge also ran five scratch
+`ts/apps/web/src/`. The judge ran every lane. The judge also ran five scratch
 probes (`__judge_scratch.test.ts`, created, run, then deleted; the worktree is unchanged).
 
 ## 0. Lanes the judge ran
 
 | Lane | Command | Real output |
 |---|---|---|
-| Requested test lane | `vp run @pe/web#test -- state-bench` (from `source/pe-tools`) | `error: Failed to plan tasks from 'vp run' in task @pe/web#test / * Task "state-bench" not found` |
+| Requested test lane | `vp run @pe/web#test -- state-bench` (from `ts`) | `error: Failed to plan tasks from 'vp run' in task @pe/web#test / * Task "state-bench" not found` |
 | Corrected test lane | `vp test src/state-bench/legend/bench.test.ts` (from `apps/web`) | `Test Files 1 passed (1) / Tests 5 passed (5)` in 1.53 s |
 | Type/lint/format | `vp check apps/web/src/state-bench/legend apps/web/src/routes/state-bench.legend.tsx` | `pass: All 6 files are correctly formatted` / `pass: Found no warnings, lint errors, or type errors in 6 files` |
 | SSR | `vp dev --port 3411`, `curl -L /state-bench/legend` | `HTTP=200 bytes=4456` after a 307 to the defaulted search string |
@@ -22,7 +22,7 @@ Three facts the lanes do not show:
 | Fact | Evidence |
 |---|---|
 | The 4 456-byte SSR body has **no route markup**. `grep` for `Legend state bench`, `Zone list`, `Staging table` finds 0 hits. The 200 proves the SSR module graph loads. It does not prove the route server-renders. | fetched body |
-| The `@tanstack/query-core` fix is a **hand-forged lockfile entry**. The published manifest of `@legendapp/state@3.0.0-beta.48` declares only `use-sync-external-store`, but `pnpm-lock.yaml` lists `'@tanstack/query-core': 5.101.4` under Legend's snapshot. Any non-frozen `pnpm install` re-resolves from the manifest and drops it, which returns SSR to 500. | `node_modules/.pnpm/@legendapp+state@3.0.0-beta.48_react@19.2.7/node_modules/@legendapp/state/package.json`; `git show HEAD -- source/pe-tools/pnpm-lock.yaml` |
+| The `@tanstack/query-core` fix is a **hand-forged lockfile entry**. The published manifest of `@legendapp/state@3.0.0-beta.48` declares only `use-sync-external-store`, but `pnpm-lock.yaml` lists `'@tanstack/query-core': 5.101.4` under Legend's snapshot. Any non-frozen `pnpm install` re-resolves from the manifest and drops it, which returns SSR to 500. | `node_modules/.pnpm/@legendapp+state@3.0.0-beta.48_react@19.2.7/node_modules/@legendapp/state/package.json`; `git show HEAD -- ts/pnpm-lock.yaml` |
 | `@tanstack/query-core` was also added as a direct `@pe/web` dependency and no source file imports it. | `apps/web/package.json:30`; `grep -rn "@tanstack/query-core" apps/web/src` → 0 hits |
 
 ## A. Scenario compliance

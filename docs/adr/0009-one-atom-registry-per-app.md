@@ -11,7 +11,7 @@ That split one browser app into separate graphs.
 The Effect React Suspense implementation keeps a module-level promise map keyed by atom object,
 not by `(registry, atom)` (`@effect/atom-react/dist/Hooks.js:221`). The route workspace already
 deduplicates one wire for each `(route, stateKey, scope)` coordinate
-(`source/pe-tools/apps/web/src/workbench/route-state.tsx:134`). Both behaviors require one graph
+(`ts/apps/web/src/workbench/route-state.tsx:134`). Both behaviors require one graph
 for one mounted app.
 
 ## Decision

@@ -29,8 +29,8 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\source\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj" />
-        <ProjectReference Include="..\source\Pe.Shared.Product\Pe.Shared.Product.csproj" />
+        <ProjectReference Include="..\dotnet\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj" />
+        <ProjectReference Include="..\dotnet\Pe.Shared.Product\Pe.Shared.Product.csproj" />
     </ItemGroup>
 
 </Project>

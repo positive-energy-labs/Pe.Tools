@@ -12,7 +12,7 @@ if ($SessionId -eq 'pe.app-25') { throw 'pe.app-25 is outside this proof lane.' 
 if ($RunName -notmatch '^[a-zA-Z0-9._-]+$') { throw 'RunName must be a filename segment.' }
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../../../..')).Path
 $output = Join-Path $repoRoot ".artifacts/runs/ff-route-acceptance/$RunName"
-$fixture = if ($SourceFixture) { (Resolve-Path -LiteralPath $SourceFixture).Path } else { Join-Path $repoRoot 'source/Pe.Revit.Tests/Fixtures/FamilyModel/a-box.family.json' }
+$fixture = if ($SourceFixture) { (Resolve-Path -LiteralPath $SourceFixture).Path } else { Join-Path $repoRoot 'dotnet/Pe.Revit.Tests/Fixtures/FamilyModel/a-box.family.json' }
 $model = Get-Content -LiteralPath $fixture -Raw | ConvertFrom-Json
 if ($model.datums.'Ref. Level'.normal -ne 'Z' -or $model.parameters.Voltage.value -ne '480 V') {
     throw 'Use the integrated canonical Box fixture (unsigned datums and explicit Voltage units).'

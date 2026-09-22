@@ -10,7 +10,7 @@ const string usage = """
                        --help, -h           Show this help text.
 
                      Web development is not a pe-dev responsibility. Use:
-                       pnpm --dir source/pe-tools dev
+                       pnpm --dir ts dev
                      """;
 
 if (args.Length == 0 || args is ["--help" or "-h"]) {

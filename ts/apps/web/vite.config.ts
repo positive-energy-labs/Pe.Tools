@@ -13,7 +13,7 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 /** Dev-only: serve the private project-a web fixture at /rhvac-fixture. Never part of the build. */
 function privateFixtures(): Plugin {
   const dir = join(
-    process.env.PE_PRIVATE_FIXTURES ?? join(import.meta.dirname, "../../../../.private/fixtures"),
+    process.env.PE_PRIVATE_FIXTURES ?? join(import.meta.dirname, "../../../.private/fixtures"),
     "project-a/web",
   );
   return {
@@ -80,7 +80,7 @@ const config = defineConfig(({ mode }) => {
       fs: {
         allow: [
           searchForWorkspaceRoot(import.meta.dirname),
-          fileURLToPath(new URL("../../../Pe.Revit.Tests/Fixtures/FamilyModel", import.meta.url)),
+          fileURLToPath(new URL("../../../dotnet/Pe.Revit.Tests/Fixtures/FamilyModel", import.meta.url)),
         ],
       },
       proxy: process.env.PE_TOOLS_HOST_BASE_URL

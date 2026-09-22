@@ -26,7 +26,7 @@ The SDK CLI was `0.1.0-beta.150`, SHA-256 `4D23791A6C273158A4E64D5361F79D2A04C57
 
 ## Workload and measurements
 
-[`PalettePerformanceProbe`](../../source/Pe.App/Benchmarks/PalettePerformanceProbe.cs) creates an unsaved Revit project, adds 120 drafting views, loads a real family fixture and duplicates types, and closes its document without saving. The four surfaces contain 120 views, 91 family types including template types, 449 real ribbon commands, and 13 JSON profiles from the test fixtures. Counts matched between baseline and candidate.
+[`PalettePerformanceProbe`](../../dotnet/Pe.App/Benchmarks/PalettePerformanceProbe.cs) creates an unsaved Revit project, adds 120 drafting views, loads a real family fixture and duplicates types, and closes its document without saving. The four surfaces contain 120 views, 91 family types including template types, 449 real ribbon commands, and 13 JSON profiles from the test fixtures. Counts matched between baseline and candidate.
 
 The probe opens actual `PaletteFactory` windows, runs five searches including clears, then 40 downward navigation steps (15 for profiles). It uses the app's Revit queue and WPF dispatcher. Opening includes acquisition and initial layout. Search includes debounce, filtering, and layout. These timings do not measure OS key delivery or GPU presentation.
 

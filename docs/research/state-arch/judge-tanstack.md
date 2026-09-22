@@ -5,7 +5,7 @@ Adversarial review of `03-tanstack.md` and its proto. Date: 2026-08-24. Worktree
 
 ## Path legend
 
-| Short | Full path (from `source/pe-tools/apps/web/src/`) |
+| Short | Full path (from `ts/apps/web/src/`) |
 |---|---|
 | `model.ts` | `state-bench/tanstack/model.ts` (663 lines) |
 | `view.tsx` | `state-bench/tanstack/view.tsx` (459 lines) |
@@ -19,7 +19,7 @@ Adversarial review of `03-tanstack.md` and its proto. Date: 2026-08-24. Worktree
 |---|---|
 | `vp run @pe/web#test -- state-bench` (the command the mission gave) | FAILS: `Task "state-bench" not found`. The report's command form, `vp test src/state-bench/tanstack/bench.test.ts`, is the correct one. |
 | `npx vp test state-bench --run --reporter=verbose` (from `apps/web`) | 1 file, **5 tests, 5 passed**, 342 ms. All five named cases exist and pass. |
-| `npx vp check` (from `source/pe-tools`) | **exit 0**. 437 files formatted; 398 files with no lint, warning, or type error. |
+| `npx vp check` (from `ts`) | **exit 0**. 437 files formatted; 398 files with no lint, warning, or type error. |
 | `git diff --stat main...HEAD` | 2 new deps (`@tanstack/store`, `@tanstack/react-store`), 325 lockfile lines, 7 proto/doc files. No unrelated source edits. |
 
 The report's test count, pass count, and `vp check` claim are true. The report's LOC table

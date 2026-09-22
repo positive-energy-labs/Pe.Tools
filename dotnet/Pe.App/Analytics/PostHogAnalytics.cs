@@ -14,7 +14,7 @@ namespace Pe.App.Analytics;
 ///     a checkout without one reads Documents\Pe.Tools\preferences.json:
 ///     { "posthog": { "apiKey": "phc_...", "host": "https://us.i.posthog.com" } }
 ///     No key → every call is a no-op. The key is a public write-only ingest key.
-///     Mirrors source/pe-tools/packages/runtime/src/analytics.ts (event shapes must match).
+///     Mirrors ts/packages/runtime/src/analytics.ts (event shapes must match).
 /// </summary>
 internal static class PostHogAnalytics {
     // ponytail: char cap, not bytes — close enough for a truncation signal.

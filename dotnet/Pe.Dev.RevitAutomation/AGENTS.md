@@ -28,10 +28,10 @@ Owns reusable local/operator services used by the interim `pe-dev automation` ad
 
 Focused test coverage currently lives in:
 
-- `source/Pe.Revit.Tests/ParameterCollectionArtifactCollectorTests.cs`
-- `source/Pe.Revit.Tests/RevitAutomationContractsTests.cs`
-- `source/Pe.Revit.Tests/AutomationProbeCliTests.cs`
-- `source/Pe.Revit.Tests/AutomationProbeSettingsTests.cs`
+- `dotnet/Pe.Revit.Tests/ParameterCollectionArtifactCollectorTests.cs`
+- `dotnet/Pe.Revit.Tests/RevitAutomationContractsTests.cs`
+- `dotnet/Pe.Revit.Tests/AutomationProbeCliTests.cs`
+- `dotnet/Pe.Revit.Tests/AutomationProbeSettingsTests.cs`
 
 When validating the current DA lane, prefer a tiny schedule manifest first so submit/inspect flow, bundle readiness, and artifact download can be checked without waiting on a full scrape.
 
