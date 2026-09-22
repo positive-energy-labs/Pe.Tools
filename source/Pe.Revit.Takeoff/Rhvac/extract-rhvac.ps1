@@ -226,7 +226,7 @@ try {
         ForEach-Object COLUMN_NAME)
     # FOOTGUN: the .r10 schema has NO [Name] column — the System (and Room) name lives in
     # [Description]. Extractor and sync both expose it as `name`. Proof:
-    # eval/rhvac/project-a/UPSERT-PROBE.md.
+    # .private/fixtures/project-a/rhvac/UPSERT-PROBE.md.
     # FOOTGUN: the column list above is read from the schema at RUNTIME on purpose — column counts
     # drift across RHVAC releases (System is 240 columns in projectA, 237 in the firm template), so a
     # baked list silently breaks on the next file. Proof: eval/rhvac/template/SYNC-PROOF.md.

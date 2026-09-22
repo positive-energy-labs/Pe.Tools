@@ -15,8 +15,8 @@
 # Runs from any PowerShell; it spawns the 32-bit Jet lane itself.
 #
 # ---------------------------------------------------------------------------------------------
-# PROVEN on eval/rhvac/project-a/projectA.local.r10 (150 rooms), evidence in
-# eval/rhvac/project-a/UPSERT-PROBE.md, and on the firm template, evidence in
+# PROVEN on .private/fixtures/project-a/rhvac/local.r10 (150 rooms), evidence in
+# .private/fixtures/project-a/rhvac/UPSERT-PROBE.md, and on the firm template, evidence in
 # eval/rhvac/template/SYSTEM-INSERT-PROBE.md:
 #   * Row-level UPDATE of Room by Identifier changes exactly the targeted columns. A full 26,103-
 #     line row-level dump of all 18 tables diffed to exactly the 2 lines written.
@@ -29,7 +29,7 @@
 #   * FOOTGUN: Room.Identifier and System.Identifier are Jet COUNTERs assigned automatically --
 #     NEVER supply one on INSERT. The PRIMARY KEY of both is [Number] (unique, NOT NULL) and it IS
 #     yours to supply. Getting this backwards is the classic .r10 corruption. Proof:
-#     eval/rhvac/project-a/UPSERT-PROBE.md.
+#     .private/fixtures/project-a/rhvac/UPSERT-PROBE.md.
 #   * FOOTGUN: this lane reads its column lists from the schema at RUNTIME, never from a baked list.
 #     Column counts drift across RHVAC releases -- System is 237 columns in the firm template and
 #     240 in projectA. Proof: eval/rhvac/template/SYNC-PROOF.md (residual gap 5).

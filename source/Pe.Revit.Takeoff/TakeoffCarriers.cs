@@ -12,7 +12,7 @@ namespace Pe.Revit.Takeoff;
 // SharedParameterBinder landed on all 9,212 FilledRegions, set + Regenerate round-tripped
 // in-transaction, and read back identically from a separate later call. Evidence:
 // docs/features/takeoffs/LEDGER.md 2026-08-14 (live Revit); the .r10 side is proven in
-// eval/rhvac/project-a/UPSERT-PROBE.md. Residual: survival across save/sync/reopen is untested.
+// .private/fixtures/project-a/rhvac/UPSERT-PROBE.md. Residual: survival across save/sync/reopen is untested.
 public static class TakeoffCarriers
 {
     // Stable carrier identities. Changing any of these orphans deployed models — never reuse.

@@ -1,6 +1,6 @@
 /**
  * RHVAC domain types — the extract-JSON shape produced by the .r10 reverse
- * engineering (eval/rhvac/project-a/oracle.extract.json is the reference fixture).
+ * engineering (.private/fixtures/project-a/rhvac/oracle.extract.json is the reference fixture).
  * These types are the web-side mirror of the wave-2 `rhvac.*` host ops; keep
  * them in sync with the extract script rather than inventing fields.
  */
