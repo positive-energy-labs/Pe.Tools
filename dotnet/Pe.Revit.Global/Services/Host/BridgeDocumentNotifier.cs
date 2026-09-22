@@ -1,5 +1,6 @@
 using Autodesk.Revit.UI.Events;
 using Pe.Revit.Extensions.ProjDocument;
+using Pe.Revit.Global.Services.Document;
 using Pe.Revit.Loader.Documents;
 using Pe.Shared.HostContracts.Bridge;
 using Pe.Shared.HostContracts.Protocol;
@@ -11,7 +12,9 @@ namespace Pe.Revit.Global.Services.Host;
 ///     Publishes document invalidation events to the TS host while the external bridge is
 ///     connected. Pure tracker subscriber: identity, dedupe (ActiveChanged), and sandbox/empty
 ///     filtering (ChangeFilter) are the tracker's job; cache upkeep is DocumentCacheMaintenance's.
-///     Only the notification throttle lives here.
+///     Only the notification throttle lives here, and it publishes its trailing edge: a change
+///     inside the 750 ms window arms one pending publish on the next Revit idle past the window,
+///     carrying every document that changed in it. Nothing is dropped.
 /// </summary>
 internal sealed class BridgeDocumentNotifier : IDisposable {
     private static readonly TimeSpan DocumentChangedMinInterval = TimeSpan.FromMilliseconds(750);
@@ -19,10 +22,14 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
     private readonly Func<BridgeStateSnapshot> _snapshot;
     private readonly Func<DocumentInvalidationEvent, BridgeStateSnapshot, Task> _publishAsync;
     private readonly object _sync = new();
+    /// <summary>Documents changed since the last publish; drained into the next one.</summary>
+    private readonly HashSet<string> _changedOpenIds = new(StringComparer.Ordinal);
     private bool _disposed;
     private bool _isInitialized;
     private bool _isReplaying;
     private DateTime _lastDocumentChangedNotificationUtc = DateTime.MinValue;
+    /// <summary>The single armed trailing publish; null when none is pending.</summary>
+    private EventHandler<IdlingEventArgs>? _trailing;
 
     public BridgeDocumentNotifier(
         IDocumentTracker documents,
@@ -38,6 +45,11 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
         lock (this._sync) {
             if (this._disposed)
                 return;
+
+            if (this._trailing is not null) {
+                RevitUiSession.CurrentUIApplication.Idling -= this._trailing;
+                this._trailing = null;
+            }
 
             if (this._isInitialized) {
                 this._documents.Opened -= this.OnOpened;
@@ -100,9 +112,15 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
 
     private void OnChanged(TrackedDocument tracked, Autodesk.Revit.DB.Events.DocumentChangedEventArgs e) {
         lock (this._sync) {
-            var utcNow = DateTime.UtcNow;
-            if (utcNow - this._lastDocumentChangedNotificationUtc < DocumentChangedMinInterval)
+            if (this._disposed)
                 return;
+
+            this._changedOpenIds.Add(tracked.OpenId());
+            var utcNow = DateTime.UtcNow;
+            if (utcNow - this._lastDocumentChangedNotificationUtc < DocumentChangedMinInterval) {
+                this.ArmTrailingPublish();
+                return;
+            }
 
             this._lastDocumentChangedNotificationUtc = utcNow;
         }
@@ -110,8 +128,44 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
         _ = this.PublishCurrentAsync(DocumentInvalidationReason.Changed);
     }
 
+    /// <summary>
+    ///     Arms at most one trailing publish. Idling is the only Revit API thread we can hand a
+    ///     delayed publish to (the snapshot reads the API); it fires past the window and unarms.
+    /// </summary>
+    private void ArmTrailingPublish() {
+        if (this._trailing is not null)
+            return;
+
+        var uiApplication = RevitUiSession.CurrentUIApplication;
+        this._trailing = (_, _) => {
+            lock (this._sync) {
+                if (this._trailing is null)
+                    return;
+                if (!this._disposed
+                    && DateTime.UtcNow - this._lastDocumentChangedNotificationUtc < DocumentChangedMinInterval)
+                    return;
+
+                uiApplication.Idling -= this._trailing;
+                this._trailing = null;
+                if (this._disposed)
+                    return;
+
+                this._lastDocumentChangedNotificationUtc = DateTime.UtcNow;
+            }
+
+            _ = this.PublishCurrentAsync(DocumentInvalidationReason.Changed);
+        };
+        uiApplication.Idling += this._trailing;
+    }
+
     private Task PublishCurrentAsync(DocumentInvalidationReason reason) {
         var snapshot = this._snapshot();
+        List<string> changed;
+        lock (this._sync) {
+            changed = [.. this._changedOpenIds];
+            this._changedOpenIds.Clear();
+        }
+
         var payload = new DocumentInvalidationEvent(
             reason,
             snapshot.ActiveDocumentTitle,
@@ -126,6 +180,7 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
             snapshot.HasActiveDocument,
             snapshot.OpenDocuments.Count,
             snapshot.ActiveDocumentObservedAtUnixMs,
+            changed,
             RevitVersion: snapshot.RevitVersion
         );
         return this.PublishAsync(payload, snapshot);

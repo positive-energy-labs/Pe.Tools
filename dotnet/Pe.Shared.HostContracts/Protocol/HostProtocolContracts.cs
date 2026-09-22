@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
 namespace Pe.Shared.HostContracts.Protocol;
@@ -31,7 +31,9 @@ public static class HostProtocol {
     // 49: RevitViewImageRegistrationRefusal gains CropOutsideImage
     // 50: HostOpsCatalogEntry gains Actor ("human" | "any")
     // 51: family draft sources may omit pod context; run receipts may have no pod; Family Foundry changes carry before/after
-    public const int ContractVersion = 51;
+    // 52: DocumentInvalidationEvent gains ChangedOpenIds (the documents that changed since the
+    //     last publish, by open id) — the per-document change mark
+    public const int ContractVersion = 52;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
@@ -73,5 +75,11 @@ public record DocumentInvalidationEvent(
     bool HasActiveDocument,
     int OpenDocumentCount,
     long DocumentObservedAtUnixMs,
+    /// <summary>
+    ///     The documents that changed since the last publish, by open id (the same id a
+    ///     <c>BridgeDocumentSnapshot.OpenId</c> carries). Empty for Opened/Closed and for a
+    ///     republish that no edit caused.
+    /// </summary>
+    IReadOnlyList<string> ChangedOpenIds,
     string? RevitVersion = null
 );

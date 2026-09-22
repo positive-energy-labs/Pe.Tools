@@ -10,10 +10,10 @@ import {
   type Reading,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
-import { previousOf } from "#/readings";
+import { previousOf, useHostStatus } from "#/readings";
 import { refuse, useRoute, type EntitySearch } from "#/route";
 import { RouteKeys } from "#/route/keys";
-import { dueOnFocus } from "#/route/stage";
+import { isChanged, useChangeMark } from "#/host/changed";
 import { ActionReceiptView } from "#/actions/receipt";
 import { EntityRouteView } from "#/route/entity";
 import { ActionFlag } from "#/route/situation";
@@ -152,17 +152,30 @@ export function LiveScheduleGridWorkspace({
   };
   const execute: ScheduleGridState["execute"] = (kind, input = {}) =>
     handle.actions[kind].run(input);
+  // Freshness is the document's change mark against the drawn read, never an age. A bridge that is
+  // gone says so instead: nothing can be known about a model we are not attached to.
+  const mark = useChangeMark(target ?? null);
+  const connected = previousOf(useHostStatus())?.bridgeIsConnected !== false;
+  const freshness: ScheduleGridState["freshness"] = !connected
+    ? "disconnected"
+    : shown && isChanged(mark, shown.snapshot.takenAt)
+      ? "changed"
+      : "current";
   const readingFailure =
     readingError(handle.readings.catalog) ??
     readingError(handle.readings.work) ??
     readingError(handle.readings.saved) ??
     readingError(handle.readings.receipts);
-  /** A pane's focus edge, as the stage declares it: re-acquire what it draws, or run its read. */
+  /**
+   * A pane's focus edge: re-read only when Revit says this document changed since the read was
+   * taken. An unmarked pane is left alone, and a pane already focused is never re-read under the
+   * hands — this runs on the focus edge only.
+   */
   const focusOf = (pane: "rail" | "grid") => () => {
     const declared = SCHEDULE_STAGES[page.stage].panes[pane];
     if (!declared || handle.busy) return;
     const takenAt = pane === "grid" ? shown?.snapshot.takenAt : catalog?.takenAt;
-    if (!dueOnFocus(declared.onFocus, takenAt)) return;
+    if (!isChanged(mark, takenAt)) return;
     if (!declared.reads) return handle.revalidate(declared.draws);
     if (shown) void handle.actions[declared.reads].run({ scheduleId: shown.snapshot.scheduleId });
   };
@@ -178,6 +191,7 @@ export function LiveScheduleGridWorkspace({
     blockedBecause: handle.actions.push.refusal,
     refused: page.refused,
     onFocus: { rail: focusOf("rail"), grid: focusOf("grid") },
+    freshness,
   };
 
   const resolve = (

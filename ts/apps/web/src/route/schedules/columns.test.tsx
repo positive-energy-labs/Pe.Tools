@@ -62,6 +62,7 @@ test("a grid cell draws the contract's transitions and accept writes at the rend
         busy: null,
         refused: {},
         onFocus: { rail: () => {}, grid: () => {} },
+        freshness: "current",
       }}
     />,
   );

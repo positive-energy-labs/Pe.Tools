@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   scheduleCellKey,
   splitScheduleCellKey,
@@ -19,12 +19,10 @@ import { TableFrame } from "#/components/master-table/table-frame";
 import { useTableState } from "#/components/master-table/view";
 import { List } from "#/components/lang/list-popup";
 import { Pane, PaneSplit } from "#/components/lang/pane";
-import { timeAgo } from "#/lib/utils";
 import type { CellWire } from "#/components/lang/band";
 import { PendingStrip } from "./pending-strip";
 import { cellText, scheduleLock, useScheduleGridColumns } from "./columns";
 import type { Refusal } from "#/route";
-import { STALE_S } from "./stage";
 
 export interface ScheduleGridState {
   slice: ScheduleGridDocument | null;
@@ -44,20 +42,27 @@ export interface ScheduleGridState {
   refused: Readonly<Record<string, string>>;
   /** Each pane's focus edge, as the stage declares it (`stage.ts`). */
   onFocus: { rail: () => void; grid: () => void };
-}
-
-/** Now, every 15 s: an age that crosses the stale line shows without a re-render from elsewhere. */
-function useNow() {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 15_000);
-    return () => clearInterval(timer);
-  }, []);
-  return now;
+  /**
+   * What is known about the drawn read: `changed` = Revit changed this document since it was
+   * taken; `disconnected` = no bridge, so nothing is known. Never an age.
+   */
+  freshness: "current" | "changed" | "disconnected";
 }
 
 export function ScheduleGridWorkspace({
-  state: { slice, revision, hydrated, apply, execute, busy, snapshot, catalog, refused, onFocus },
+  state: {
+    slice,
+    revision,
+    hydrated,
+    apply,
+    execute,
+    busy,
+    snapshot,
+    catalog,
+    refused,
+    onFocus,
+    freshness,
+  },
 }: {
   state: ScheduleGridState;
 }) {
@@ -68,7 +73,6 @@ export function ScheduleGridWorkspace({
 
   const [activeRow, setActiveRow] = useState<string | null>(null);
   const [railCollapsed, setRailCollapsed] = useState(false);
-  const now = useNow();
 
   const staged = Object.entries(cells).filter(([, cell]) => cell.staged != null);
   const stagedCount = staged.length;
@@ -81,11 +85,6 @@ export function ScheduleGridWorkspace({
   const readAgain = () => {
     if (snapshot && busy == null) void execute("refresh", { scheduleId: snapshot.scheduleId });
   };
-  // ASSUME(kai): age only when stale | alt: never, focus revalidates
-  const staleSince =
-    snapshot?.takenAt != null && now - Date.parse(snapshot.takenAt) > STALE_S * 1000
-      ? snapshot.takenAt
-      : null;
 
   const bindingAt = (key: string) => {
     const { rowNumber, columnNumber } = splitScheduleCellKey(key);
@@ -128,7 +127,7 @@ export function ScheduleGridWorkspace({
           )
         }
         facts={
-          snapshot?.truncated || staleSince ? (
+          snapshot?.truncated || freshness !== "current" ? (
             <>
               {snapshot?.truncated ? (
                 <FactChip
@@ -138,13 +137,21 @@ export function ScheduleGridWorkspace({
                   truncated
                 </FactChip>
               ) : null}
-              {staleSince ? (
+              {freshness === "disconnected" ? (
+                <FactChip
+                  tone="caution"
+                  title="No Revit bridge is attached, so nothing can be known about the model behind this read."
+                >
+                  disconnected
+                </FactChip>
+              ) : null}
+              {freshness === "changed" ? (
                 <>
                   <FactChip
                     tone="caution"
-                    title="The model may have moved since this read. Clicking into the grid reads it again."
+                    title="Revit changed this document after this read was taken. Reading again brings the grid back to what Revit holds."
                   >
-                    read {timeAgo(staleSince)}
+                    changed in Revit
                   </FactChip>
                   <ActionButton
                     label="read again (r)"
