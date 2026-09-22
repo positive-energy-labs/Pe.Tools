@@ -151,7 +151,7 @@ export function RouteKeys<W, R extends string, P, A extends string>({
     : [];
   return (
     <KeyScope id={handle.manifest.name}>
-      <RouteChords
+      <NodeChords
         keys={names.map((name) => {
           const action = handle.actions[name];
           return {
@@ -168,8 +168,52 @@ export function RouteKeys<W, R extends string, P, A extends string>({
   );
 }
 
-/** Inside the node it declares, so `useScopeKeys` reads the route node and not the one above it. */
-function RouteChords({ keys }: { keys: readonly ScopeKey[] }) {
+/** Inside the node it declares, so `useScopeKeys` reads that node and not the one above it. */
+function NodeChords({ keys }: { keys: readonly ScopeKey[] }) {
   useScopeKeys(keys);
   return null;
+}
+
+/* ── The stage node ────────────────────────────────────────────────────────── */
+
+/**
+ * The stage scope: the rung between the route and its panes. A stage owns its chords — the stage
+ * declares them (`route/stage.ts`, `StageDecl.keys`) and the manifest carries none — so a chord
+ * bound in one stage is dead the moment another stage draws. Like the route node it binds on the
+ * document, so a stage chord fires with nothing focused, and a pane's own chord still wins over it.
+ */
+export function StageKeys<W, R extends string, P, A extends string>({
+  id,
+  handle,
+  keys,
+  chords = true,
+  children,
+}: {
+  /** What help hangs these keys off: `${route}:${stage}`. */
+  id: string;
+  handle: RouteHandle<W, R, P, A>;
+  keys: Partial<Readonly<Record<A, Chord>>>;
+  /** False where another surface owns the chords (this page is embedded in a chat pane). */
+  chords?: boolean;
+  children?: ReactNode;
+}) {
+  const latest = useRef(handle);
+  latest.current = handle;
+  return (
+    <KeyScope id={id} hidden={!chords}>
+      <NodeChords
+        keys={(Object.entries(keys) as [A, Chord][]).map(([name, hotkey]) => {
+          const action = handle.actions[name];
+          return {
+            hotkey,
+            label: action.label,
+            says: action.says,
+            refusal: action.refusal,
+            callback: () => void latest.current.actions[name].run(),
+          };
+        })}
+      />
+      {children}
+    </KeyScope>
+  );
 }

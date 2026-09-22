@@ -23,8 +23,8 @@ export interface PaneDecl<R extends string, A extends string> {
 export interface StageDecl<R extends string, A extends string, N extends string = string> {
   /** The stage verbs: effects that belong to the stage (push, plan, commit), drawn on the row. */
   readonly verbs: readonly A[];
-  /** The stage node's chords, by verb. */
-  readonly keys: Partial<Readonly<Record<A, Chord>>>;
+  /** The stage node's chords, by verb; the chord grammar only, so a row can draw the word. */
+  readonly keys: Partial<Readonly<Record<A, Extract<Chord, string>>>>;
   /** The panes this stage shows; a pane it omits is hidden. */
   readonly panes: Partial<Readonly<Record<N, PaneDecl<R, A>>>>;
 }

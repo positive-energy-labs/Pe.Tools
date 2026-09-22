@@ -24,7 +24,6 @@ import {
 } from "#/route";
 import { previousOf } from "#/readings";
 import { DEMO_PODS, DEMO_SPEC_PATH } from "#/route/seeds";
-import { SCHEDULE_STAGES } from "./stage";
 import { readScheduleCapture } from "../../../../../packages/mcps/src/shared/schedule-client";
 import {
   actionResult,
@@ -198,7 +197,6 @@ export const schedulesManifest = () =>
           waitSeconds: NATIVE_APPLY_WAIT_S,
           ...semanticActionFacts("schedule.grid.push"),
           input: semanticActionInputSchema("schedule.grid.push") as never,
-          chord: SCHEDULE_STAGES.audit.keys.push,
           dirties: ["work", "saved", "receipts"],
           requires: { work: true, readings: ["saved", "receipts"] },
           // The verb carries its operand: how many staged cells it writes.

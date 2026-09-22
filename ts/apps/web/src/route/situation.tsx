@@ -403,11 +403,14 @@ export function SituationAction({
   handle,
   name,
   action,
+  chord = action.chord,
   commit,
 }: {
   handle: RouteHandle<any, any, any, any>;
   name: string;
   action: ActionHandle;
+  /** The chord drawn beside it; defaults to the manifest's. A stage passes its own (`stage.ts`). */
+  chord?: string;
   commit?: boolean;
 }) {
   const outcome = handle.outcome?.key === name ? handle.outcome : null;
@@ -428,7 +431,7 @@ export function SituationAction({
   const refusedNow = Boolean(outcome?.refusal) && dismissed !== outcome?.at;
   const stopped = action.refusal !== null || (handle.busy !== null && busy === null);
   const flag = useContext(ActionFlag)[name];
-  const reason = `${action.refusal ?? action.says}${action.chord ? ` · ${action.chord}` : ""}`;
+  const reason = `${action.refusal ?? action.says}${chord ? ` · ${chord}` : ""}`;
   return (
     <span className="group relative inline-flex">
       <Popover.Root open={shown} onOpenChange={(o) => !o && outcome && setDismissed(outcome.at)}>
@@ -542,11 +545,14 @@ const Noun = ({ children, title }: { children: ReactNode; title: string }) => (
 function ActionBoard({
   handle,
   verbs,
+  chords,
   commit,
   work,
 }: {
   handle: RouteHandle<any, any, any, any>;
   verbs: readonly [string, ActionHandle][];
+  /** The chords the stage node binds, by verb; a route-bound chord comes off the action. */
+  chords?: Readonly<Record<string, string | undefined>>;
   commit?: string;
   /** Where Work stands, beside the verbs ("r3 · 2 room edits staged"); null draws no meter. */
   work: string | null;
@@ -584,6 +590,7 @@ function ActionBoard({
             handle={handle}
             name={name}
             action={action}
+            chord={chords?.[name] ?? action.chord}
             commit={name === commit}
           />
         ))}
@@ -600,6 +607,7 @@ function ActionBoard({
       </span>
       {verbs.map(([name, action]) => {
         const spec = declared[name];
+        const chord = chords?.[name] ?? action.chord;
         return (
           <Fragment key={name}>
             <span className="flex justify-start">
@@ -607,6 +615,7 @@ function ActionBoard({
                 handle={handle}
                 name={name}
                 action={action}
+                chord={chord}
                 commit={name === commit}
               />
             </span>
@@ -638,7 +647,7 @@ function ActionBoard({
               ) : (
                 "—"
               )}
-              {action.chord ? <Kbd>{action.chord}</Kbd> : null}
+              {chord ? <Kbd>{chord}</Kbd> : null}
             </span>
           </Fragment>
         );
@@ -705,6 +714,8 @@ export interface SituationProps {
   commit?: string;
   /** The stage verbs the row draws, as the route's stage declares them; absent = every verb of the stage. */
   verbs?: readonly string[];
+  /** The chords the stage node binds, by verb (`StageDecl.keys`); the row draws them beside the verb. */
+  chords?: Readonly<Record<string, string | undefined>>;
   /**
    * Staged Work. When `count` is above zero the band under the verb row shows: the frame (count
    * and noun, revision, read freshness, commit, discard, conflict with reload) is drawn here and
@@ -779,6 +790,7 @@ export function Situation({
   chooseStage,
   commit,
   verbs: declaredVerbs,
+  chords,
   work,
   band,
   startFreshAside,
@@ -867,6 +879,7 @@ export function Situation({
             <ActionBoard
               handle={handle}
               verbs={verbs}
+              chords={chords}
               commit={commit}
               // A declared stage draws no work meter; the Ledger keeps the revision.
               work={declaredVerbs ? null : workWord}

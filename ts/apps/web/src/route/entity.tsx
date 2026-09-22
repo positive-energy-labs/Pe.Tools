@@ -8,7 +8,7 @@ import { useEffect, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { Pane, PaneSplit } from "#/components/lang/pane";
-import { KeyScope } from "#/route/keys";
+import { StageKeys } from "#/route/keys";
 import { Surface } from "#/components/lang/surface";
 import { previousOf } from "#/readings";
 
@@ -173,6 +173,7 @@ export function EntityRouteView({
           // commits by planning.
           commit={def.plan || def.staged ? "plan" : "apply"}
           verbs={stages?.[page.stage].verbs}
+          chords={stages?.[page.stage].keys}
           band={band}
           startFreshAside={startFreshAside}
           onStartedFresh={onStartedFresh}
@@ -270,7 +271,19 @@ export function EntityRouteView({
       />
     </Surface>
   );
-  // The optional stage node: panes nest under the stage that shows them, so a chord bound in one
-  // stage cannot fire from another.
-  return stages ? <KeyScope id={`${def.key}:${page.stage}`}>{board}</KeyScope> : board;
+  // The optional stage node: panes nest under the stage that shows them, and the stage's own
+  // chords are bound here, so a chord bound in one stage cannot fire from another. A page that does
+  // not own the URL does not own the chords either (a chat pane) — the same gate `RouteKeys` takes.
+  return stages ? (
+    <StageKeys
+      id={`${def.key}:${page.stage}`}
+      handle={handle}
+      keys={stages[page.stage].keys}
+      chords={url}
+    >
+      {board}
+    </StageKeys>
+  ) : (
+    board
+  );
 }
