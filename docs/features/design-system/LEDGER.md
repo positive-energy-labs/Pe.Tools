@@ -613,6 +613,10 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 - 2026-09-10 — Keys are one registration shape across three tiers (route manifest chord, pane `shortcuts`, widget `useHotkeys`) via `keyMeta({name, description, tier, region?, refusal?})`; pane keys gained `says` and `refusal` (a refused key reveals the card). The help page `route/help.tsx` (Alt+/) is rebuilt over registrations: measured panes with leaders per region, manifest chords in a band, `manifest.docs` below. No root manifest until a navigation chord exists; chat's palette and mode chords are tagged surface chords, not actions.
 
 ## Owed
+- Revit-backed proof of the change mark: in a dev session on `/schedules`, two model edits under 750 ms apart must draw "changed in Revit" after the second (the deleted `st2-stale` journey's successor; no no-Revit lane can raise a mark).
+- Revit-backed proof of ephemeral Work: stage in an unsaved project, Save As, the lifetime line goes and the cell survives; close a second unsaved project, the receipt draws with its count. Premise test: `OpenDocumentIdentityTests.Open_identity_survives_saveas_but_not_close_and_reopen`.
+- Ephemeral Work orphaned when no tab watches the close: `route/open:<session>/<openId>` stays in the store, unreachable. Fix is a host sweep on the bridge's document-close edge; `RouteDocumentStore` has no enumeration, so it is a seam, not a line.
+- The `/schedules` spec pane still unmounts instead of hiding (`TODO:` at `route/entity.tsx`): `SpecEditor` does work while rendering and never settles hidden.
 - Add deterministic fixtures for Data Tables, Ops, Parameter Links, Runs and Schedule Grid. Review URLs alone do not prove their pane geometry or states.
 - Chat prompt suggestions wait until kaitpw has example prompts that are proven to work.
 - Large tool outputs (element lists in the MB range) are rendered whole. `Code`'s 64 KB gate is the interim; the real fix is a bounded output contract on the tool result itself.
