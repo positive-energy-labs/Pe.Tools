@@ -1,51 +1,25 @@
-import { existsSync } from "node:fs";
-import { dirname, isAbsolute, join, normalize, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { isAbsolute } from "node:path";
 import { hostProcessIdentity, scriptingWorkspaceIdentity } from "@pe/host-contracts/contracts";
 import { discoverServiceSync } from "@pe/host-contracts/pe-service";
 import {
-  devHostSourceDir,
+  checkoutRootFrom,
   hostServiceName,
   productRoot,
+  sourceRootVariable,
 } from "@pe/host-contracts/service-identity";
 import { firstNonBlank } from "./cli-values.ts";
-
-/**
- * A Pe.Tools checkout root: a `.git` entry (dir in the main checkout, file in a linked worktree)
- * with `Pe.Tools.slnx` beside it. Walks up like git does, so identity follows where the WORK is.
- */
-export function checkoutRootFrom(start: string): string | null {
-  let dir = resolve(start);
-  for (;;) {
-    if (existsSync(join(dir, ".git")) && existsSync(join(dir, "Pe.Tools.slnx"))) return dir;
-    const parent = dirname(dir);
-    if (parent === dir) return null;
-    dir = parent;
-  }
-}
-
-function sourceRootFromModule(): string | null {
-  const modulePath = normalize(fileURLToPath(import.meta.url));
-  const marker = `${normalize("packages/mcps/src").toLowerCase()}\\`;
-  const index = modulePath.toLowerCase().indexOf(marker);
-  return index >= 0 ? modulePath.slice(0, index - 1) : null;
-}
 
 /**
  * Identity by location, like git. Precedence: spawn-plumbing env (a supervisor telling the child
  * it just spawned who it is — never user configuration) → cwd walk (an agent working in a worktree
  * automatically addresses that worktree's host) → module path (last resort: where this code lives).
- * Every candidate is mapped through {@link devHostSourceDir} — the service-name hash is over the
- * host's `ts` dir, NEVER the checkout root, and every deriver must agree byte-for-byte.
+ * Every candidate is a checkout root, the one string every deriver hashes.
  */
 function resolveLaneAndRoot(): { lane: "dev" | "installed"; sourceRoot: string | null } {
   const configured = process.env.PE_LANE?.trim().toLowerCase();
-  const envSourceRoot = process.env.PE_TOOLS_HOST_SOURCE_DIR?.trim() || null;
-  const cwdRoot = checkoutRootFrom(process.cwd());
   const located =
-    (envSourceRoot ? (devHostSourceDir(envSourceRoot) ?? envSourceRoot) : null) ??
-    (cwdRoot ? devHostSourceDir(cwdRoot) : null) ??
-    sourceRootFromModule();
+    process.env[sourceRootVariable]?.trim() ||
+    (checkoutRootFrom(process.cwd()) ?? checkoutRootFrom(import.meta.dirname));
   const lane =
     configured === "installed"
       ? ("installed" as const)
@@ -66,13 +40,11 @@ function laneTokenBaseUrl(token: string): string | null | undefined {
     const live = discoverServiceSync(productRoot(), hostServiceName("installed", null));
     return live ? `http://127.0.0.1:${live.port}` : hostProcessIdentity.defaultHostBaseUrl;
   }
-  const walked =
-    token.toLowerCase() !== "dev" && isAbsolute(token) ? checkoutRootFrom(token) : null;
   const root =
     token.toLowerCase() === "dev"
       ? resolveLaneAndRoot().sourceRoot
-      : walked
-        ? devHostSourceDir(walked)
+      : isAbsolute(token)
+        ? checkoutRootFrom(token)
         : null;
   if (!root) {
     throw new Error(

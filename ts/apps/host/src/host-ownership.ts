@@ -1,9 +1,8 @@
-import { normalize } from "node:path";
-import { fileURLToPath } from "node:url";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import {
-  devHostSourceDir,
+  checkoutRootFrom,
   hostServiceName,
+  sourceRootVariable,
   type HostLane,
 } from "@pe/host-contracts/service-identity";
 import type { PeaRuntimeCapabilities } from "@pe/runtime/pea";
@@ -75,26 +74,10 @@ function resolveHostLane(): HostLane {
 }
 
 /**
- * The dev host's identity input, mapped through the ONE derivation every deriver shares —
- * `devHostSourceDir` (host-contracts/service-identity.ts), mirrored in C# by
- * `ProductDevelopmentRuntimeLayout.ResolveSourceHostWorkingDirectory`. A spawn-plumbing env var
- * wins (a supervisor telling the child what it just spawned); otherwise this module's own location
- * says which checkout the host is running from. Both go through the same mapping, so the host and
- * its clients (`pea --host dev`, `TsHostLauncher`) hash the same string or none of them do.
+ * The dev host's identity input: the checkout it serves. Spawn plumbing wins (a supervisor telling
+ * the child what it just spawned); otherwise the checkout this module lives in. Host, MCP clients,
+ * pea, and `TsHostLauncher` all hash the checkout root, so they agree by construction.
  */
 function resolveSourceRoot(): string | null {
-  const candidate = hostOwnershipEnvironmentSource() ?? sourceRootFromModule();
-  return candidate ? (devHostSourceDir(candidate) ?? candidate) : null;
-}
-
-function sourceRootFromModule(): string | null {
-  const modulePath = normalize(fileURLToPath(import.meta.url));
-  const marker = `${normalize("apps/host/src").toLowerCase()}\\`;
-  const index = modulePath.toLowerCase().indexOf(marker);
-  return index >= 0 ? modulePath.slice(0, index - 1) : null;
-}
-
-function hostOwnershipEnvironmentSource(): string | null {
-  const value = process.env.PE_TOOLS_HOST_SOURCE_DIR?.trim();
-  return value || null;
+  return process.env[sourceRootVariable]?.trim() || checkoutRootFrom(import.meta.dirname);
 }

@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { once } from "node:events";
 import { createServer } from "vite-plus";
 import { chooseServicePort, rememberServicePort } from "@pe/host-contracts/pe-service-host";
-import { productRoot } from "@pe/host-contracts/service-identity";
+import { checkoutRootFrom, productRoot } from "@pe/host-contracts/service-identity";
 
 if (!process.send) throw new Error("Run vp run dev from the host or workspace package.");
 const disconnected = once(process, "disconnect");
@@ -15,8 +15,8 @@ const [file] = await Promise.race([
   }),
 ]);
 const webRoot = resolve(import.meta.dirname, "../../web");
-const sourceRoot = resolve(webRoot, "../..");
-if (resolve(file.sourceRoot).toLowerCase() !== sourceRoot.toLowerCase())
+const sourceRoot = checkoutRootFrom(webRoot);
+if (!sourceRoot || resolve(file.sourceRoot).toLowerCase() !== sourceRoot.toLowerCase())
   throw new Error("Dev frontend and host must belong to the same checkout.");
 const name = file.name + "-web";
 const baseUrl = `http://127.0.0.1:${file.port}`;

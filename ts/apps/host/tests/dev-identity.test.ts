@@ -16,7 +16,7 @@ test("foreign checkout spawn plumbing fails before claiming a host or starting V
           ...process.env,
           LOCALAPPDATA: state,
           PE_LANE: "dev",
-          PE_TOOLS_HOST_SOURCE_DIR: join(state, "foreign-checkout"),
+          PE_TOOLS_SOURCE_ROOT: join(state, "foreign-checkout"),
           PE_TOOLS_HOST_SERVICE_NAME: undefined,
           WATCH_REPORT_DEPENDENCIES: undefined,
         },

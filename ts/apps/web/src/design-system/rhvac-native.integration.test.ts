@@ -2,9 +2,10 @@ import { stagedTakeoffEdits, takeoffsRouteState } from "@pe/agent-contracts";
 import { test, expect } from "vite-plus/test";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
+import { checkoutRoot } from "../../checkout-paths.ts";
 import { manifest as takeoffManifest } from "#/takeoff/manifest";
 import { createDemoOwner } from "../../../host/src/demo-owner";
 import { admitTakeoffAction, fileVersion } from "../../../host/src/takeoff-actions";
@@ -130,9 +131,9 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
       );
     } finally {
       // Preserve failed/unknown receipts before deleting only this integration test's owned root.
-      const evidence = resolve(
-        import.meta.dirname,
-        "../../../../../.artifacts/handoffs/route-goal",
+      const evidence = join(
+        checkoutRoot,
+        ".artifacts/handoffs/route-goal",
         `demo-native-rhvac-${randomUUID()}.json`,
       );
       await mkdir(join(evidence, ".."), { recursive: true });

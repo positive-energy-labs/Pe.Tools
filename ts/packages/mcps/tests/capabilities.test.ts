@@ -1,5 +1,7 @@
 import type { PodList } from "@pe/host-contracts/operation-types";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
 import { familiesRouteState } from "@pe/agent-contracts";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
@@ -741,9 +743,9 @@ test("the doors ride the host under the turn Target and name the revision and re
 test("Pea doors author native JSON and plan both family routes under the turn Target", async () => {
   const patch = JSON.parse(
     readFileSync(
-      new URL(
-        "../../../../docs/features/family/acceptance/parameters.patch.json",
-        import.meta.url,
+      join(
+        checkoutRootFrom(import.meta.dirname)!,
+        "docs/features/family/acceptance/parameters.patch.json",
       ),
       "utf8",
     ),

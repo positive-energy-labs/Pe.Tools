@@ -3,10 +3,8 @@
  * THE ROUTE PRIMITIVE GUARD — mechanical proof for route-primitive-fable.html §8.
  * =============================================================================================
  *
- * Lives (once promoted) at ts/tests/repo-guards/route-primitive.guard.test.ts —
- * same runner (`vp test`) and posture as design-guard.test.ts / docs-guard.test.ts: plain fs
- * walks, plain regexes, no AST, no new dependency. Written ahead of the cutover it proves;
- * several `it`s are EXPECTED RED until the fold named in guards/README.md lands.
+ * Same posture as design-guard.test.ts / docs-guard.test.ts: plain fs walks, plain regexes, no
+ * AST, no new dependency.
  *
  * One `it` per row of fable §8:
  *  1. no fixture lane leak        no fixture*.ts(x)/fixtures.ts file, no "fixture" literal

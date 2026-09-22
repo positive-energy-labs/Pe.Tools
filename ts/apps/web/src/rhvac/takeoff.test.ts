@@ -7,6 +7,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { privateFixturesDir } from "../../checkout-paths.ts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -18,11 +19,7 @@ import {
 } from "./takeoff";
 import { candidateKey, normalizeExtract, type RhvacExtract, type RoomMap } from "./types";
 
-const FIXTURE_DIR = join(
-  process.env.PE_PRIVATE_FIXTURES ??
-    join(import.meta.dirname, "../../../../../.private/fixtures"),
-  "project-a/web",
-);
+const FIXTURE_DIR = join(privateFixturesDir, "project-a/web");
 const fixturePresent = existsSync(join(FIXTURE_DIR, "manifest.json"));
 
 const readFixture = (name: string) => {

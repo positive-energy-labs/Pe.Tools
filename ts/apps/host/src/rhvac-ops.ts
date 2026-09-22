@@ -15,6 +15,7 @@ import type {
   RhvacSyncResult,
   RhvacTakeoffData,
 } from "@pe/host-contracts/operation-types";
+import { checkoutLayout } from "@pe/host-contracts/service-identity";
 import {
   readDirectoryEntriesOrEmpty,
   readFileStringBomAwareOrEmpty,
@@ -29,8 +30,8 @@ import { LocalOpError } from "./local-error.ts";
  * scripts (dotnet/Pe.Revit.Takeoff/Rhvac/*.ps1) under SysWOW64 PowerShell and
  * exchange JSON through temp files. Pure file/process ops — no Revit session.
  *
- * Script paths resolve from hostOwnership.sourceRoot (<repo>/ts →
- * <repo>/dotnet/Pe.Revit.Takeoff/Rhvac), so the lane exists on dev hosts only;
+ * Script paths resolve from the checkout root (hostOwnership.sourceRoot), so the lane exists on
+ * dev hosts only;
  * the installed lane reports a clear "unavailable" error instead of guessing.
  */
 
@@ -43,7 +44,7 @@ const SAVE_TIMEOUT_MS = 300_000;
 export function rhvacScriptDirectory(): string | null {
   return hostOwnership.sourceRoot === null
     ? null
-    : resolve(hostOwnership.sourceRoot, "..", "dotnet", "Pe.Revit.Takeoff", "Rhvac");
+    : resolve(hostOwnership.sourceRoot, checkoutLayout.dotnet, "Pe.Revit.Takeoff", "Rhvac");
 }
 
 export const rhvacOpen = Effect.fnUntraced(function* (input: RhvacPathRequest) {

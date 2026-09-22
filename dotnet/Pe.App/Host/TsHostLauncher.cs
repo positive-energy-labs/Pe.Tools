@@ -14,7 +14,9 @@ namespace Pe.App.Host;
 ///     This type only names the process to run and what a matching service file looks like.
 /// </summary>
 internal static class TsHostLauncher {
-    private const string SourceDirectoryEnvironmentVariable = "PE_TOOLS_HOST_SOURCE_DIR";
+    private const string SourceRootEnvironmentVariable = "PE_TOOLS_SOURCE_ROOT";
+    /// <summary>The checkout's TS workspace, where the dev host runs. Mirror: TS <c>checkoutLayout.ts</c>.</summary>
+    private const string TsWorkspaceDirectory = "ts";
     private static readonly TimeSpan DevStartupTimeout = TimeSpan.FromSeconds(90); // vite cold-starts in 40-60 s
 
     private static PePayloadContext? _context;
@@ -46,11 +48,8 @@ internal static class TsHostLauncher {
 
     public static string ResolveHostBaseUrl() => HostEndpoint.ResolveHostBaseUrl();
 
-    private static string ServiceName => HostEndpoint.ResolveServiceName(Context.Lane, SourceHostDirectory);
-
-    /// <summary>The pnpm workspace the dev host runs from; its path is the dev service identity.</summary>
-    private static string? SourceHostDirectory =>
-        Context.SourceRoot is { } root ? Path.Combine(root, "ts") : null;
+    /// <summary>The checkout root is the dev service identity, the same string every TS deriver hashes.</summary>
+    private static string ServiceName => HostEndpoint.ResolveServiceName(Context.Lane, Context.SourceRoot);
 
     private static ServiceResult EnsureInstalled() {
         var product = InstalledProduct.Open(Context.InstallRoot!)
@@ -61,7 +60,7 @@ internal static class TsHostLauncher {
     private static ServiceResult EnsureDev() {
         var sourceRoot = Context.SourceRoot
             ?? throw new InvalidOperationException("The dev lane requires a checkout source root from the session descriptor.");
-        var workingDirectory = SourceHostDirectory!;
+        var workingDirectory = Path.Combine(sourceRoot, TsWorkspaceDirectory);
         // Fresh worktrees don't share node_modules; without this the spawned host dies instantly
         // and the supervisor blind-waits the full timeout with no cause in the message.
         if (!Directory.Exists(Path.Combine(workingDirectory, "node_modules")))
@@ -80,12 +79,12 @@ internal static class TsHostLauncher {
             CreateNoWindow = true
         };
         start.EnvironmentVariables[HostEndpoint.ServiceNameVariable] = ServiceName;
-        start.EnvironmentVariables[SourceDirectoryEnvironmentVariable] = workingDirectory;
+        start.EnvironmentVariables[SourceRootEnvironmentVariable] = sourceRoot;
 
         var appBase = InstalledProduct.AppBaseFor(ProductIdentity.ProductName, ProductIdentity.VendorName);
         return InstalledProduct.EnsureRunning(
             appBase, ServiceName, spec, start, Context.Lane, null,
-            file => file.Lane == "dev" && PathsEqual(file.SourceRoot, workingDirectory),
+            file => file.Lane == "dev" && PathsEqual(file.SourceRoot, sourceRoot),
             DevStartupTimeout);
     }
 

@@ -4,7 +4,7 @@
 // root and the lane→name mapping.
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { hostProcessIdentity, productIdentity } from "./contracts/product.ts";
 import { sourceServiceName } from "./vendor/pe-service.ts";
 
@@ -29,18 +29,28 @@ export function sourceHostServiceName(sourceRoot: string): string {
 }
 
 /**
- * The ONE identity input for a dev host: a Pe.Tools checkout root maps to `<root>/ts`,
- * the directory the host runs from and hashes its service name over. Mirror of the C# side
- * (ProductDevelopmentRuntimeLayout.ResolveSourceHostWorkingDirectory), including the package.json
- * existence check — every deriver (host, MCP clients, C# launcher) must pass THIS through
- * `hostServiceName`, never the checkout root itself, or the names disagree by construction.
- * Idempotent: a path that already is the host source dir passes through.
+ * The checkout's language roots, named once. C# mirror: `TsHostLauncher` (the one C# spelling of
+ * the TS root). Everything else derives paths from a checkout root through these.
  */
-export function devHostSourceDir(checkoutRoot: string): string | null {
-  if (existsSync(join(checkoutRoot, "apps", "host", "package.json"))) return checkoutRoot;
-  const candidate = join(checkoutRoot, "ts");
-  return existsSync(join(candidate, "apps", "host", "package.json")) ? candidate : null;
+export const checkoutLayout = { ts: "ts", dotnet: "dotnet" } as const;
+
+/**
+ * A Pe.Tools checkout root — the ONE dev identity input, hashed by host, MCP clients, pea, and the
+ * C# launcher alike. A `.git` entry (dir in the main checkout, file in a linked worktree) with
+ * `Pe.Tools.slnx` beside it. Walks up like git does, so identity follows where the WORK is.
+ */
+export function checkoutRootFrom(start: string): string | null {
+  let dir = resolve(start);
+  for (;;) {
+    if (existsSync(join(dir, ".git")) && existsSync(join(dir, "Pe.Tools.slnx"))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
 }
+
+/** Spawn plumbing: a supervisor tells the host it just spawned which checkout it serves. */
+export const sourceRootVariable = "PE_TOOLS_SOURCE_ROOT";
 
 /**
  * The service name for a host lane: the installed host is the one global name; a dev host derives a

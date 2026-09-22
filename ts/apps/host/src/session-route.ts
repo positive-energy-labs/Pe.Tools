@@ -18,6 +18,7 @@ import {
   sessionStopArgv,
 } from "@pe/host-contracts/pe-revit-contract";
 import type { SessionAction, SessionActionRequest } from "@pe/host-contracts/contracts";
+import { checkoutLayout } from "@pe/host-contracts/service-identity";
 import { hostOwnership, type HostLane } from "./host-ownership.ts";
 import { peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-launch.ts";
 
@@ -105,12 +106,11 @@ function readOptionalString(value: unknown): string | undefined {
  * chooses source vs installed. A source-linked (dev) host starts sessions from its own checkout's
  * Pe.App project; an installed-lane host omits `--project` entirely, because a project-less
  * `session start` IS the installed lane (the `--installed <payload>` flag is gone — lane is
- * payload SOURCE, derived, never named by the caller). `sourceRoot` is the ts monorepo root
- * (…\Pe.Tools\ts), so the repo root is one level up.
+ * payload SOURCE, derived, never named by the caller). `sourceRoot` is the checkout root.
  */
 export function resolveStartProject(lane: HostLane, sourceRoot: string | null): string | undefined {
   return lane === "dev" && sourceRoot
-    ? join(sourceRoot, "..", "dotnet", "Pe.App", "Pe.App.csproj")
+    ? join(sourceRoot, checkoutLayout.dotnet, "Pe.App", "Pe.App.csproj")
     : undefined;
 }
 

@@ -5,7 +5,9 @@
 // here at all — product.payloads.json is its single authority.
 
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { checkoutLayout, checkoutRootFrom } from "../src/service-identity.ts";
 import { expect, test } from "vite-plus/test";
 import {
   hostProcessIdentity,
@@ -14,7 +16,8 @@ import {
   scriptingWorkspaceIdentity,
 } from "@pe/host-contracts/contracts";
 
-const sourceDir = fileURLToPath(new URL("../../../../dotnet/", import.meta.url));
+const checkoutRoot = checkoutRootFrom(import.meta.dirname)!;
+const sourceDir = join(checkoutRoot, checkoutLayout.dotnet);
 
 type ConstMap = Record<string, string>;
 
@@ -22,7 +25,7 @@ type ConstMap = Record<string, string>;
 function parseCsharpConsts(fileNames: readonly string[]): Record<string, ConstMap> {
   const raw: Record<string, Record<string, { literal?: string; ref?: string }>> = {};
   for (const fileName of fileNames) {
-    const source = readFileSync(`${sourceDir}${fileName}`, "utf8");
+    const source = readFileSync(join(sourceDir, fileName), "utf8");
     for (const classMatch of source.matchAll(/(?:class|record)\s+(\w+)[^{]*\{([\s\S]*?)^\}/gm)) {
       const [, className, body] = classMatch;
       const consts: Record<string, { literal?: string; ref?: string }> = (raw[className] ??= {});
@@ -86,10 +89,10 @@ test("contracts/product.ts mirrors the C# product and host-endpoint constants", 
 // Third mirror leg: the product manifest is the deployment authority for the host service, so its
 // host payload's name/health/shutdown must equal the same contract constants. After this, every
 // host identity string is SDK-owned, mirror-tested, or generated.
-const manifestUrl = new URL("../../../../product.payloads.json", import.meta.url);
+const manifestPath = join(checkoutRoot, "product.payloads.json");
 
 test("product.payloads.json host payload mirrors the host service contract", () => {
-  const manifest = JSON.parse(readFileSync(fileURLToPath(manifestUrl), "utf8")) as {
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
     payloads: { type: string; name: string; service?: { health?: string; shutdown?: string } }[];
   };
   const host = manifest.payloads.find((p) => p.type === "VersionedApp" && p.name === "host");
@@ -100,7 +103,7 @@ test("product.payloads.json host payload mirrors the host service contract", () 
 });
 
 test("pea dev shim pins the workspace package manager", () => {
-  const manifest = JSON.parse(readFileSync(fileURLToPath(manifestUrl), "utf8")) as {
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
     payloads: { type: string; name: string; dev?: string }[];
   };
   const workspace = JSON.parse(

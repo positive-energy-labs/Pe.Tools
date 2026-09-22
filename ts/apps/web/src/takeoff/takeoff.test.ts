@@ -18,12 +18,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { ZonePeek } from "#/takeoff/zone-peek";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { privateFixturesDir } from "../../checkout-paths.ts";
 
-const ZONES_JSON = join(
-  process.env.PE_PRIVATE_FIXTURES ??
-    join(import.meta.dirname, "../../../../../.private/fixtures"),
-  "project-a/web/zones.json",
-);
+const ZONES_JSON = join(privateFixturesDir, "project-a/web/zones.json");
 const declared = existsSync(ZONES_JSON)
   ? (JSON.parse(readFileSync(ZONES_JSON, "utf8")) as DeclaredZone[])
   : [];

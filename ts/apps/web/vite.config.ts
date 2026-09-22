@@ -1,6 +1,6 @@
 import { createReadStream, existsSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { familyFixturesDir, privateFixturesDir } from "./checkout-paths.ts";
 import { devHostProxy } from "./dev-proxy.ts";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -12,10 +12,7 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 
 /** Dev-only: serve the private project-a web fixture at /rhvac-fixture. Never part of the build. */
 function privateFixtures(): Plugin {
-  const dir = join(
-    process.env.PE_PRIVATE_FIXTURES ?? join(import.meta.dirname, "../../../.private/fixtures"),
-    "project-a/web",
-  );
+  const dir = join(privateFixturesDir, "project-a/web");
   return {
     name: "pe-private-fixtures",
     apply: "serve",
@@ -78,16 +75,17 @@ const config = defineConfig(({ mode }) => {
     ],
     server: {
       fs: {
-        allow: [
-          searchForWorkspaceRoot(import.meta.dirname),
-          fileURLToPath(new URL("../../../dotnet/Pe.Revit.Tests/Fixtures/FamilyModel", import.meta.url)),
-        ],
+        allow: [searchForWorkspaceRoot(import.meta.dirname), familyFixturesDir],
       },
       proxy: process.env.PE_TOOLS_HOST_BASE_URL
         ? devHostProxy(process.env.PE_TOOLS_HOST_BASE_URL)
         : undefined,
     },
-    resolve: { tsconfigPaths: true, dedupe: ["react", "react-dom"] },
+    resolve: {
+      tsconfigPaths: true,
+      dedupe: ["react", "react-dom"],
+      alias: { "@family-fixtures": familyFixturesDir },
+    },
     optimizeDeps: {
       // ponytail: the dev host's optimizer held its bundle until static-import crawl end and the
       // crawl never ended on 2026-09-11 (504 Outdated Optimize Dep forever, `deps_temp_*` never

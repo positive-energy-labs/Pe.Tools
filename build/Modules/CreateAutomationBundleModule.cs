@@ -14,8 +14,6 @@ namespace Build.Modules;
 [DependsOn<ResolveBuildLayoutModule>]
 [DependsOn<CleanProjectModule>(Optional = true)]
 public sealed class CreateAutomationBundleModule(IOptions<BuildOptions> buildOptions) : Module {
-    private const string WorkerProjectPath = "dotnet/Pe.Dev.RevitAutomation.Worker/Pe.Dev.RevitAutomation.Worker.csproj";
-
     protected override async Task ExecuteModuleAsync(IModuleContext context, CancellationToken cancellationToken) {
         var versioning = (await context.GetModule<ResolveVersioningModule>()).ValueOrDefault!;
         var matrix = (await context.GetModule<ResolveBuildMatrixModule>()).ValueOrDefault!;
@@ -31,7 +29,7 @@ public sealed class CreateAutomationBundleModule(IOptions<BuildOptions> buildOpt
                 ? spec.Year
                 : throw new InvalidOperationException($"Automation packaging does not support '{configuration}'."))
             .ToArray();
-        var project = Path.Combine(context.Git().RootDirectory.Path, WorkerProjectPath);
+        var project = BuildProjectDiscovery.FindSingleProjectByKind(context.Git().RootDirectory.Path, "AutomationWorker");
         await BuildDotNetCli.BuildTargetQuietAsync(
             context,
             project,

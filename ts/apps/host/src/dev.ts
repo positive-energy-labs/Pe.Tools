@@ -4,13 +4,14 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { Deferred, Effect } from "effect";
 import { NodeRuntime } from "@effect/platform-node";
+import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
 import { hostOwnership } from "./host-ownership.ts";
 import { hostProgram } from "./host-program.ts";
 
 // Reject foreign spawn plumbing before claiming or evicting any checkout's host.
 if (
   resolve(hostOwnership.sourceRoot ?? "").toLowerCase() !==
-  resolve(import.meta.dirname, "../../..").toLowerCase()
+  resolve(checkoutRootFrom(import.meta.dirname) ?? "").toLowerCase()
 )
   throw new Error("Dev host source identity does not match this checkout.");
 

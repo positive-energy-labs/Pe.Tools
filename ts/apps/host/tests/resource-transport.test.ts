@@ -1,5 +1,6 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
-import { resolve, join } from "node:path";
+import { join } from "node:path";
+import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { readingAtom } from "../../web/src/readings.ts";
@@ -51,7 +52,7 @@ const schema = takeoffsRouteState.schema.extend({
 });
 
 async function owners() {
-  const base = resolve("../../../.artifacts/tmp");
+  const base = join(checkoutRootFrom(import.meta.dirname)!, ".artifacts/tmp");
   await mkdir(base, { recursive: true });
   const directory = await mkdtemp(join(base, "resource-proof-"));
   const rows = new Map<string, unknown>();

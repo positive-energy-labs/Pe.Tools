@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { checkoutRoot, familyFixturesDir } from "../../checkout-paths.ts";
 import { expect, test } from "vite-plus/test";
 import type { FamilySnapshot } from "#/family/host";
 import { familySource } from "#/family/source";
@@ -17,10 +19,7 @@ const snapshot = (rawContent: string, composedContent = rawContent): FamilySnaps
 
 test("native fixtures project parameters without inventing fixture content and author native paths", () => {
   for (const name of ["a-box", "b-grd", "c-bath-shower", "d-bath-shower-refline"]) {
-    const raw = readFileSync(
-      new URL(`../../../../../dotnet/Pe.Revit.Tests/Fixtures/FamilyModel/${name}.json`, import.meta.url),
-      "utf8",
-    );
+    const raw = readFileSync(join(familyFixturesDir, `${name}.json`), "utf8");
     const input = snapshot(raw);
     const lane = familySource(input, null);
     expect(lane.parseError).toBeNull();
@@ -122,12 +121,7 @@ test("native capture without an authored file renders a read-only family lane", 
 
 test("native source geometry resolves macros, seeds and labeled dimensions", () => {
   const source = (name: string): FamilyModel =>
-    JSON.parse(
-      readFileSync(
-        new URL(`../../../../../dotnet/Pe.Revit.Tests/Fixtures/FamilyModel/${name}.json`, import.meta.url),
-        "utf8",
-      ),
-    );
+    JSON.parse(readFileSync(join(familyFixturesDir, `${name}.json`), "utf8"));
   const box = source("a-box");
   // Native datums are unsigned axes; signed ref-plane seeds retain their sign.
   for (const datum of Object.values(box.datums!))
@@ -176,13 +170,10 @@ test("native source geometry resolves macros, seeds and labeled dimensions", () 
 
 test("a captured family draws its extrusions from labeled planes, per type", () => {
   const captured: FamilyModel = JSON.parse(
-    readFileSync(
-      new URL(
-        "../../../../../dotnet/Pe.Revit.Tests/Fixtures/FamilyModel/w6-revit-air-terminal.captured.json",
-        import.meta.url,
-      ),
-      "utf8",
-    ).replace(/^\uFEFF/, ""),
+    readFileSync(join(familyFixturesDir, "w6-revit-air-terminal.captured.json"), "utf8").replace(
+      /^\uFEFF/,
+      "",
+    ),
   );
   const box = (typeName: string, slug: string) => {
     const geo = buildSheet(captured, typeName).solids.find((solid) => solid.slug === slug)!.box;
@@ -203,10 +194,7 @@ test("a captured family draws its extrusions from labeled planes, per type", () 
 test("offline shared declarations survive native projection and unrelated value edits", () => {
   const patch = JSON.parse(
     readFileSync(
-      new URL(
-        "../../../../../docs/features/family/acceptance/parameters.patch.json",
-        import.meta.url,
-      ),
+      join(checkoutRoot, "docs/features/family/acceptance/parameters.patch.json"),
       "utf8",
     ),
   );

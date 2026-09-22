@@ -587,8 +587,11 @@ class ReviewTakeoffTests(unittest.TestCase):
                     self.assertIn(image.convert("RGB").getpixel((0, 0)), colors)
 
     def test_visual_law_residue_styles_are_distinct_and_unfilled(self):
-        law = json.loads((HERE.parents[1]
-                          / "ts/apps/web/src/runs/visual-law.json").read_text())
+        sys.path.insert(0, str(HERE))
+        spec = importlib.util.spec_from_file_location("zone_renderer_residue", ZONE_SCRIPT)
+        renderer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(renderer)
+        law = json.loads(renderer.LAW_PATH.read_text())
         for name in ("voidWash", "excludedWash"):
             self.assertNotIn(name, law)
         self.assertIsNone(law["void"]["fill"])

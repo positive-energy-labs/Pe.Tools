@@ -16,9 +16,6 @@ from PIL import Image, ImageDraw
 
 HERE = Path(__file__).resolve().parent
 ZONE_SCRIPT = HERE / "render-zone-promotion.py"
-ROOT = HERE.parents[1]
-LAW_PATH = ROOT / "ts/apps/web/src/runs/visual-law.json"
-BASE_CSS_PATH = ROOT / "ts/apps/web/src/base.css"
 
 
 def load_renderer():
@@ -31,7 +28,7 @@ def load_renderer():
 class DashRoleCoupling(unittest.TestCase):
     def setUp(self):
         self.renderer = load_renderer()
-        self.law = json.loads(LAW_PATH.read_text(encoding="utf-8"))
+        self.law = json.loads(self.renderer.LAW_PATH.read_text(encoding="utf-8"))
 
     def test_law_names_a_role_and_never_a_pattern(self):
         stroke = self.law["zone"]["stroke"]
@@ -46,7 +43,7 @@ class DashRoleCoupling(unittest.TestCase):
         self.assertTrue(all(value >= 0 for value in pattern))
         # The value the renderer resolved is the value base.css declares — no local copy.
         declared = f"--dash-{role}:"
-        css = BASE_CSS_PATH.read_text(encoding="utf-8")
+        css = self.renderer.BASE_CSS_PATH.read_text(encoding="utf-8")
         line = next(one for one in css.splitlines() if declared in one)
         expected = tuple(float(v) for v in line.split(":", 1)[1].strip().rstrip(";").split())
         self.assertEqual(pattern, expected)

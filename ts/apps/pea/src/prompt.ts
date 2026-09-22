@@ -15,7 +15,12 @@ import { resolvePeaProductHomePath } from "@pe/mcps";
 import { createPeaRuntime, type PeaRuntimeHandle } from "@pe/runtime/pea";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { productRoot } from "@pe/host-contracts/service-identity";
-import { sourceHostServiceName } from "@pe/host-contracts/service-identity";
+import {
+  checkoutLayout,
+  checkoutRootFrom,
+  sourceHostServiceName,
+  sourceRootVariable,
+} from "@pe/host-contracts/service-identity";
 import { ensureRunning } from "@pe/host-contracts/pe-service";
 
 const runtimeCloseTimeoutMs = 5000;
@@ -193,14 +198,15 @@ async function ensureTsHostRunning(): Promise<string> {
   // not linger as orphaned watchers). Takeover stays a human spelling (`pnpm dev`).
   // ponytail: it still boots middleware-mode Vite this headless lane never uses; split a web-less
   // entry if the cold-start budget (45s) ever matters here.
-  const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+  const sourceRoot = checkoutRootFrom(path.dirname(fileURLToPath(import.meta.url)));
+  if (!sourceRoot) throw new Error("The dev lane needs a Pe.Tools checkout above pea's sources.");
   const serviceName = sourceHostServiceName(sourceRoot);
   const override = process.env.PE_TOOLS_HOST_LAUNCH_COMMAND?.trim();
   const result = await ensureRunning(productRoot(), serviceName, {
     spawnCommand: {
       command: override ?? "vp",
       args: override ? [] : ["run", "@pe/host#attach"],
-      cwd: sourceRoot,
+      cwd: path.join(sourceRoot, checkoutLayout.ts),
       shell: true,
     },
     matchSourceRoot: sourceRoot,
@@ -209,7 +215,7 @@ async function ensureTsHostRunning(): Promise<string> {
     lane: "dev",
     timeoutMs: sourceHostStartupTimeoutMs,
     spawnEnv: {
-      PE_TOOLS_HOST_SOURCE_DIR: sourceRoot,
+      [sourceRootVariable]: sourceRoot,
       [hostProcessIdentity.serviceNameVariable]: serviceName,
     },
   });

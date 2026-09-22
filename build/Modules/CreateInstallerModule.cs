@@ -41,7 +41,6 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         var signing = signingResult.ValueOrDefault!;
         var rootDirectory = context.Git().RootDirectory;
 
-        var hostPackageDirectory = rootDirectory.GetFolder("ts").GetFolder("apps").GetFolder("host");
         // Presence check only: the payload name/entry now come from the checked-in manifest, but the
         // build still asserts the repo has exactly one RevitAddin project to stage.
         _ = BuildProjectDiscovery.AssemblyName(
@@ -75,10 +74,9 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         );
         var unsignedNode = PrepareUnsignedNode(signing);
         try {
-            var peaPackageDirectory = rootDirectory.GetFolder("ts").GetFolder("apps").GetFolder("pea");
             await Task.WhenAll(
-                PublishRuntimeAsync(context, rootDirectory, sourceManifestPath, hostPackageDirectory, signing, unsignedNode, cancellationToken),
-                PublishPeaAsync(context, sourceManifestPath, peaPackageDirectory, signing, unsignedNode, cancellationToken)
+                PublishRuntimeAsync(context, rootDirectory, sourceManifestPath, signing, unsignedNode, cancellationToken),
+                PublishPeaAsync(context, rootDirectory, sourceManifestPath, signing, unsignedNode, cancellationToken)
             );
         } finally {
             Directory.Delete(Path.GetDirectoryName(unsignedNode)!, recursive: true);
@@ -154,21 +152,17 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         IModuleContext context,
         Folder rootDirectory,
         string manifestPath,
-        Folder hostPackageDirectory,
         PackageSigningResult signing,
         string unsignedNode,
         CancellationToken cancellationToken
     ) {
         context.Logger.LogInformation("Building TS host runtime for installer packaging.");
-        await context.Shell.Command.ExecuteCommandLineTool(
-            new GenericCommandLineToolOptions("pnpm") { Arguments = ["--filter", "@pe/host", "build:payload"] },
-            new CommandExecutionOptions { WorkingDirectory = hostPackageDirectory.Parent!.Parent!.Path },
-            cancellationToken
-        );
+        var host = ReadVersionedApp(manifestPath, "host");
+        await RunPayloadBuildAsync(context, rootDirectory, host, cancellationToken);
 
-        var builtHostDirectory = Path.Combine(hostPackageDirectory.Path, "dist-installed");
+        var builtHostDirectory = Path.Combine(rootDirectory.Path, host.Source);
         var runtimePublishDirectory = new Folder(builtHostDirectory);
-        var hostExecutableName = PayloadEntryName(manifestPath, "host");
+        var hostExecutableName = host.Entry;
         var builtHostExecutable = Path.Combine(builtHostDirectory, hostExecutableName);
         await BuildSignableSeaAsync(
             context,
@@ -211,22 +205,19 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
 
     private static async Task PublishPeaAsync(
         IModuleContext context,
+        Folder rootDirectory,
         string manifestPath,
-        Folder peaPackageDirectory,
         PackageSigningResult signing,
         string unsignedNode,
         CancellationToken cancellationToken
     ) {
         context.Logger.LogInformation("Building TS pea runtime for installer packaging.");
-        await context.Shell.Command.ExecuteCommandLineTool(
-            new GenericCommandLineToolOptions("pnpm") { Arguments = ["--filter", "@pe/pea", "build:installed"] },
-            new CommandExecutionOptions { WorkingDirectory = peaPackageDirectory.Parent!.Parent!.Path },
-            cancellationToken
-        );
+        var pea = ReadVersionedApp(manifestPath, "pea");
+        await RunPayloadBuildAsync(context, rootDirectory, pea, cancellationToken);
 
-        var builtPeaDirectory = Path.Combine(peaPackageDirectory.Path, "dist-installed");
+        var builtPeaDirectory = Path.Combine(rootDirectory.Path, pea.Source);
         var peaPublishDirectory = new Folder(builtPeaDirectory);
-        var peaExecutableName = PayloadEntryName(manifestPath, "pea");
+        var peaExecutableName = pea.Entry;
         var builtPeaExecutable = Path.Combine(builtPeaDirectory, peaExecutableName);
         await BuildSignableSeaAsync(
             context,
@@ -308,16 +299,32 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
     ///     The executable a VersionedApp payload lands as, read from product.payloads.json — the
     ///     single authority for the installed layout. The build never restates these names.
     /// </summary>
-    private static string PayloadEntryName(string manifestPath, string payloadName) {
+    /// <summary>A VersionedApp payload as the checked-in manifest declares it; the manifest owns its paths.</summary>
+    private sealed record VersionedApp(string Name, string Entry, string Source, string Build);
+
+    private static VersionedApp ReadVersionedApp(string manifestPath, string payloadName) {
         using var document = JsonDocument.Parse(System.IO.File.ReadAllText(manifestPath));
         foreach (var payload in document.RootElement.GetProperty("payloads").EnumerateArray()) {
             if (payload.GetProperty("type").GetString() != "VersionedApp") continue;
             if (payload.GetProperty("name").GetString() != payloadName) continue;
-            return payload.GetProperty("entry").GetString()
-                   ?? throw new InvalidOperationException($"Payload '{payloadName}' has no entry in {manifestPath}.");
+            string Required(string property) => payload.TryGetProperty(property, out var value) && value.GetString() is { Length: > 0 } text
+                ? text
+                : throw new InvalidOperationException($"Payload '{payloadName}' has no {property} in {manifestPath}.");
+            return new VersionedApp(payloadName, Required("entry"), Required("source"), Required("build"));
         }
 
         throw new InvalidOperationException($"No VersionedApp payload named '{payloadName}' in {manifestPath}.");
+    }
+
+    /// <summary>Runs the payload's manifest build command from the checkout root, where its paths are rooted.</summary>
+    private static Task RunPayloadBuildAsync(IModuleContext context, Folder rootDirectory, VersionedApp payload, CancellationToken cancellationToken) {
+        // ponytail: space split; the manifest build commands carry no quoted arguments.
+        var parts = payload.Build.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return context.Shell.Command.ExecuteCommandLineTool(
+            new GenericCommandLineToolOptions(parts[0]) { Arguments = parts[1..] },
+            new CommandExecutionOptions { WorkingDirectory = rootDirectory.Path },
+            cancellationToken
+        );
     }
 
     private static void ValidateManifestYears(string manifestPath, IReadOnlyCollection<string> configurations) {
