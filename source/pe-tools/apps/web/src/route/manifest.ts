@@ -125,6 +125,11 @@ export interface RouteManifest<W, R extends string, P, A extends string> {
   work?: WorkSpec<W>;
   readings?: Readonly<Record<R, ReadingSpec<P>>>;
   page?: z.ZodType<P>;
+  /**
+   * Page keys the person's Work holds at the same top-level path (F-B-5b). The page reads them
+   * from Work, absent → the page default; `setPage` writes them to Work as the person.
+   */
+  workPage?: readonly (keyof P & keyof W & string)[];
   /** The stages a route works in; `word` is the first word of the Situation ("Auditing rooms"). */
   stages?: readonly { key: string; word: string }[];
   actions?: Readonly<Record<A, RouteAction<W, R, P, never>>>;
@@ -446,7 +451,7 @@ export function sheetOf<W, R extends string, P>(
  */
 export function entityRoute<W, const R extends string, P extends object, const A extends string>(
   def: EntityRouteDef<W, R, P>,
-  audit: Pick<RouteManifest<W, R, P, A>, "work" | "readings" | "page" | "actions" | "seeds"> = {},
+  audit: Pick<RouteManifest<W, R, P, A>, "work" | "workPage" | "readings" | "page" | "actions" | "seeds"> = {},
 ): RouteManifest<W, R | EntityReading, P & EntityPage, A | EntityAction> {
   const plan = def.plan as ApplyPlan<unknown, string, object> | undefined;
   const staged = def.staged as EntityRouteDef<unknown, string, object>["staged"];
@@ -577,6 +582,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
       { key: "apply", word: "Applying" },
     ],
     work: audit.work,
+    workPage: audit.workPage as never,
     // `pods` is provided by the route's owner (a live `pod.list`, or the seed); never subscribed.
     readings: { ...audit.readings, pods: () => null } as Record<
       R | EntityReading,

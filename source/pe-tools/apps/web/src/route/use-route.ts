@@ -742,7 +742,7 @@ export function useRoute<W, R extends string, P, A extends string>(
       seed ? makeAtomRegistry({ defaultIdleTTL: 400 }) : appAtomRegistry,
     ),
   );
-  const [page, setPageState] = useState<P>(() => {
+  const [statePage, setPageState] = useState<P>(() => {
     const initial = { ...seed?.page, ...options.page };
     return manifest.page ? manifest.page.parse(initial) : (initial as P);
   });
@@ -754,7 +754,7 @@ export function useRoute<W, R extends string, P, A extends string>(
   const failure = useOwned(owner.registry, owner.failure);
   const log = useOwned(owner.registry, owner.log) ?? [];
   const { target: requestedTarget = null, work: requestedWork, provided } = options;
-  const target = typeof requestedTarget === "function" ? requestedTarget(page) : requestedTarget;
+  const target = typeof requestedTarget === "function" ? requestedTarget(statePage) : requestedTarget;
   const spec = manifest.work;
   const inventory = useMemo(
     () => (seed ? null : readingAtom({ kind: "inventory" }, peReadings)),
@@ -907,7 +907,7 @@ export function useRoute<W, R extends string, P, A extends string>(
       : null;
   }, [resolution, inventoryResult]);
   const work =
-    typeof requestedWork === "function" ? requestedWork(page, resolvedAddress) : requestedWork;
+    typeof requestedWork === "function" ? requestedWork(statePage, resolvedAddress) : requestedWork;
   const key: WorkKey = useMemo(
     () => ({
       route: manifest.key,
@@ -938,6 +938,21 @@ export function useRoute<W, R extends string, P, A extends string>(
     [seed, sliceResult],
   );
   const workCurrent = Boolean(seed || sliceResult?.state === "ready");
+  // The page keys Work holds read from Work only; the page state's copy of them is never read.
+  const workPage = manifest.workPage;
+  const pageDefaults = useMemo(() => manifest.page?.parse({}) as P | undefined, [manifest.page]);
+  const page = useMemo(
+    () =>
+      workPage?.length
+        ? ({
+            ...statePage,
+            ...Object.fromEntries(
+              workPage.map((name) => [name, doc?.doc?.[name] ?? pageDefaults?.[name]]),
+            ),
+          } as P)
+        : statePage,
+    [statePage, workPage, doc, pageDefaults],
+  );
 
   // Every declared Reading is one subject on the one stream — EXCEPT in the demo lane, where the
   // seed is the whole observation and nothing is asked of the host. Subscribing anyway also
@@ -1077,12 +1092,24 @@ export function useRoute<W, R extends string, P, A extends string>(
       return result;
     };
   }, [writer, owner, seed]);
-  // Stable: it is `page[1]`, `ctx.setPage`, and a dep of consumer memos (families/store.ts).
+  // Stable per writer: it is `page[1]` and a dep of consumer memos (families/store.ts).
   const pageEpoch = useRef(0);
-  const setPage = useCallback((next: Partial<P>) => {
-    pageEpoch.current += 1;
-    setPageState((current) => ({ ...current, ...next }));
-  }, []);
+  // A Work-held key is one human write, only when it changes; the rest is page state.
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  const setPage = useCallback(
+    (next: Partial<P>) => {
+      pageEpoch.current += 1;
+      const rest = { ...next };
+      for (const name of workPage ?? []) delete rest[name];
+      const held = (workPage ?? []).filter(
+        (name) => Object.hasOwn(next, name) && next[name] !== pageRef.current[name],
+      );
+      if (held.length) void writeWork(held.map((name) => ({ path: [name], value: next[name] })));
+      setPageState((current) => ({ ...current, ...rest }));
+    },
+    [workPage, writeWork],
+  );
   const scopeKey = JSON.stringify([boundKey, key]);
   const actionScope = useMemo(() => ({}), [scopeKey]);
   const currentActionScope = useRef(actionScope);

@@ -184,6 +184,8 @@ export const manifest = entityRoute<
     inventory: { kind: "inventory" },
   } as never,
   page: familiesPageSchema as never,
+  // The pod is the person's, on Work (F-B-5b): chosen once, it survives a reload and plans the draft.
+  workPage: ["pod"] as never,
   actions: {
     scope: {
       label: "apply scope",

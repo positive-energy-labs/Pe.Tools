@@ -130,14 +130,14 @@ const seed = (
 ): FamiliesSeed => ({
   title,
   target: { kind: "document", ref: TARGET },
-  work: doc,
+  work: { pod: POD.id, ...doc },
   readings: {
     receipts: [],
     inventory: { sessions: [] },
     pods: DEMO_PODS,
     ...readings,
   },
-  page: { pod: POD.id, ...page } as never,
+  page: page as never,
 });
 
 /**
