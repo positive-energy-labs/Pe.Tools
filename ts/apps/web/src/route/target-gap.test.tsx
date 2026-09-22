@@ -397,25 +397,41 @@ test("an action initializes current absent Work at revision zero", async () => {
   }
 });
 
-test("document-owned Work stays unbound until an Address or named workspace exists", () => {
-  const requests: unknown[] = [];
-  const subscribe = vi.spyOn(peReadings, "subscribe").mockImplementation((request) => {
-    requests.push(request);
-    return () => {};
-  });
-  const work = {
-    route: "document-work-gate",
-    title: "Document Work gate",
-    description: "proof",
-    schema: z.object({}),
-    agentWriteMask: [],
-    commands: {},
-  };
-  const manifest = defineRoute({
+/**
+ * The kernel's inventory atom is shared and lives ~400 ms past its last unmount, so a test that
+ * needs to feed the inventory itself waits for the previous mount to be disposed first.
+ */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 450));
+
+const openInventory = (address: string | null) => ({
+  kind: "snapshot",
+  key: "inventory",
+  value: {
+    sessions: [
+      {
+        connected: true,
+        sessionId: "revit",
+        sdkSessionId: "friendly-recovery-name",
+        openDocumentCount: 1,
+        openDocuments: [{ openId: "doc", address, title: "Unsaved", isFamilyDocument: false }],
+      },
+    ],
+  },
+});
+
+const gateManifest = () =>
+  defineRoute({
     key: "document-work-gate",
     name: "Document Work gate",
     needs: "project",
-    work,
+    work: {
+      route: "document-work-gate",
+      title: "Document Work gate",
+      description: "proof",
+      schema: z.object({}),
+      agentWriteMask: [],
+      commands: {},
+    },
     actions: {
       save: {
         label: "save",
@@ -430,11 +446,43 @@ test("document-owned Work stays unbound until an Address or named workspace exis
       },
     },
   });
+
+const PIN = JSON.stringify({ kind: "open", ref: { session: "revit", openId: "doc" } });
+
+test("an unsaved document's Work subscribes under its exact open lifetime", async () => {
+  await settle();
+  const requests: unknown[] = [];
+  let inventory!: Parameters<typeof peReadings.subscribe>[1];
+  const subscribe = vi.spyOn(peReadings, "subscribe").mockImplementation((request, accept) => {
+    requests.push(request);
+    if (request.kind === "inventory") inventory = accept;
+    return () => {};
+  });
+  const manifest = gateManifest();
   try {
+    // Nothing bound at all: there is no lifetime to key by and no Work is asked for.
     const unbound = renderHook(() => useRoute(manifest));
     expect(requests).not.toContainEqual(expect.objectContaining({ kind: "work" }));
     expect(unbound.result.current.work.doc).toBeNull();
+    expect(unbound.result.current.work.ephemeral).toBe(false);
     unbound.unmount();
+
+    // A bound document with no Address: the Work keys by `{ session, openId }`, never by title
+    // and never by an invented Address.
+    const open = renderHook(() => useRoute(manifest, { target: PIN }));
+    act(() => inventory(openInventory(null) as never));
+    expect(requests).toContainEqual({
+      kind: "work",
+      route: "document-work-gate",
+      target: null,
+      open: { session: "revit", openId: "doc" },
+    });
+    expect(open.result.current.work.key).toMatchObject({
+      target: null,
+      open: { session: "revit", openId: "doc" },
+    });
+    expect(open.result.current.work.ephemeral).toBe(true);
+    open.unmount();
 
     renderHook(() => useRoute(manifest, { work: "saved-review" }));
     expect(requests).toContainEqual({
@@ -445,6 +493,93 @@ test("document-owned Work stays unbound until an Address or named workspace exis
     });
   } finally {
     cleanup();
+    subscribe.mockRestore();
+  }
+});
+
+test("Save As moves the Work key to the Address and carries the open lifetime with it", async () => {
+  await settle();
+  const requests: unknown[] = [];
+  let inventory!: Parameters<typeof peReadings.subscribe>[1];
+  const subscribe = vi.spyOn(peReadings, "subscribe").mockImplementation((request, accept) => {
+    requests.push(request);
+    if (request.kind === "inventory") inventory = accept;
+    return () => {};
+  });
+  const manifest = gateManifest();
+  try {
+    const { result } = renderHook(() => useRoute(manifest, { target: PIN }));
+    act(() => inventory(openInventory(null) as never));
+    expect(result.current.work.ephemeral).toBe(true);
+
+    // Save As: the same lifetime now has an Address. The key moves, and the lifetime rides along
+    // so the host can carry the addressless Work over exactly once.
+    act(() => inventory(openInventory("C:\\Models\\Saved.rvt") as never));
+    expect(result.current.work.key).toMatchObject({
+      target: "C:\\Models\\Saved.rvt",
+      open: { session: "revit", openId: "doc" },
+    });
+    expect(result.current.work.ephemeral).toBe(false);
+    expect(requests).toContainEqual({
+      kind: "work",
+      route: "document-work-gate",
+      target: "C:\\Models\\Saved.rvt",
+      open: { session: "revit", openId: "doc" },
+    });
+  } finally {
+    cleanup();
+    subscribe.mockRestore();
+  }
+});
+
+test("the unsaved document closes: its Work is discarded once and the receipt is drawn", async () => {
+  await settle();
+  const requests: unknown[] = [];
+  let inventory!: Parameters<typeof peReadings.subscribe>[1];
+  const subscribe = vi.spyOn(peReadings, "subscribe").mockImplementation((request, accept) => {
+    requests.push(request);
+    if (request.kind === "inventory") inventory = accept;
+    return () => {};
+  });
+  const discards: string[] = [];
+  const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    discards.push(input as string);
+    return new Response(JSON.stringify({ ok: true, revision: 0 }));
+  });
+  const manifest = gateManifest();
+  try {
+    const { result } = renderHook(() => useRoute(manifest, { target: PIN }));
+    act(() => inventory(openInventory(null) as never));
+    expect(result.current.work.discarded).toBe(false);
+
+    await act(async () => {
+      inventory({
+        kind: "snapshot",
+        key: "inventory",
+        value: {
+          sessions: [
+            {
+              connected: true,
+              sessionId: "revit",
+              sdkSessionId: "friendly-recovery-name",
+              openDocumentCount: 0,
+              openDocuments: [],
+            },
+          ],
+        },
+      } as never);
+    });
+    expect(result.current.bindingLost?.reason).toBe("document-closed");
+    expect(discards).toEqual([
+      expect.stringContaining("/route-state/document-work-gate/discard?open=revit%2Fdoc"),
+    ]);
+    expect(result.current.work.discarded).toBe(true);
+    // No confirm dialog: the receipt is dismissable and nothing is asked of the person.
+    act(() => result.current.work.dismissDiscarded());
+    expect(result.current.work.discarded).toBe(false);
+  } finally {
+    cleanup();
+    fetch.mockRestore();
     subscribe.mockRestore();
   }
 });

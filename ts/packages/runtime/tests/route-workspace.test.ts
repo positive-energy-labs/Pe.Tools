@@ -439,3 +439,67 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
+
+/* ── Addressless Work is ephemeral (design-system ledger, 2026-09-22) ─────────────────────── */
+
+const unsaved: WorkKey = {
+  route: "test-route",
+  target: null,
+  open: { session: "revit", openId: "doc-1" },
+};
+const savedAs: WorkKey = { ...unsaved, target: address("C:\\Models\\Saved.rvt") };
+
+test("an unsaved document's Work keys by its open lifetime and never by the empty target", async () => {
+  const { store, state } = memoryStore();
+  const module = workspace(store);
+  expect(
+    await bind(module, unsaved).apply("human", [{ path: ["values", "a"], value: "A" }], 0),
+  ).toMatchObject({ ok: true });
+  expect([...state.keys()]).toEqual(["test-route/open:revit/doc-1\0test-route"]);
+  // A second unsaved document in the same session shares nothing with the first.
+  const other = { ...unsaved, open: { session: "revit", openId: "doc-2" } };
+  expect(await bind(module, other).read()).toBeNull();
+});
+
+test("Save As carries the addressless Work to the Address once and silently", async () => {
+  const { store, state } = memoryStore();
+  const module = workspace(store);
+  await bind(module, unsaved).apply("human", [{ path: ["values", "a"], value: "A" }], 0);
+
+  const events: RouteWorkspaceEvent[] = [];
+  module.subscribe((event) => events.push(event));
+  expect((await bind(module, savedAs).read())?.doc).toMatchObject({ values: { a: "A" } });
+  // The migration is a move, not a copy, and says nothing on the event stream.
+  expect(events).toEqual([]);
+  expect(state.get("test-route/open:revit/doc-1\0test-route")).toBeNull();
+
+  // Once. Work written at the Address afterwards is never overwritten by a re-read.
+  await bind(module, savedAs).apply("human", [{ path: ["values", "b"], value: "B" }], 1);
+  await bind(module, unsaved).apply("human", [{ path: ["values", "a"], value: "later" }], 0);
+  expect((await bind(module, savedAs).read())?.doc).toMatchObject({ values: { a: "A", b: "B" } });
+});
+
+test("an addressed document's own Work is never replaced by a stale addressless carry-over", async () => {
+  const { store } = memoryStore();
+  const module = workspace(store);
+  await bind(module, unsaved).apply("human", [{ path: ["values", "a"], value: "unsaved" }], 0);
+  await bind(module, { route: "test-route", target: savedAs.target }).apply(
+    "human",
+    [{ path: ["values", "a"], value: "addressed" }],
+    0,
+  );
+  expect((await bind(module, savedAs).read())?.doc).toMatchObject({ values: { a: "addressed" } });
+});
+
+test("the document lifetime ends and its Work is discarded; saved Work refuses", async () => {
+  const { store } = memoryStore();
+  const module = workspace(store);
+  await bind(module, unsaved).apply("human", [{ path: ["values", "a"], value: "A" }], 0);
+
+  expect(await module.discard(documentA, "test-route")).toMatchObject({ ok: false });
+  expect(
+    await module.discard({ route: "test-route", target: null, work: "named" }, "test-route"),
+  ).toMatchObject({ ok: false });
+  expect(await module.discard(unsaved, "test-route")).toMatchObject({ ok: true });
+  expect(await bind(module, unsaved).read()).toBeNull();
+});

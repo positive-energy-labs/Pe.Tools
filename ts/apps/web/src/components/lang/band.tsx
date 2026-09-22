@@ -32,6 +32,10 @@ export interface WorkBandProps {
   discard: () => void;
   commit?: { label: string; reason: string; disabled?: boolean; run: () => void };
   unresolved?: readonly string[];
+  /** One standing line about this Work's own lifetime; not a toast, it stays while it holds. */
+  lifetime?: string;
+  /** What was discarded when a Work's lifetime ended, dismissable and never a confirm. */
+  receipt?: { text: string; dismiss: () => void };
   reload?: () => void;
   /** Offered only on unreadable saved Work: set it aside, untouched, and start an empty one. */
   startFresh?: () => void;
@@ -66,6 +70,8 @@ export function WorkBand({
   discard,
   commit,
   unresolved = [],
+  lifetime,
+  receipt,
   reload,
   startFresh,
   startFreshAside,
@@ -74,7 +80,7 @@ export function WorkBand({
   showRevision = true,
 }: WorkBandProps) {
   // Unresolved is the band's own state and says itself even when nothing is staged.
-  if (!visible && !unresolved.length) return null;
+  if (!visible && !unresolved.length && !receipt) return null;
   return (
     <>
       {visible ? (
@@ -127,7 +133,26 @@ export function WorkBand({
               ) : null}
             </span>
           </div>
+          {lifetime ? (
+            <p className="t-small text-ink-2" role="note">
+              {lifetime}
+            </p>
+          ) : null}
           {body}
+        </div>
+      ) : null}
+      {receipt ? (
+        <div
+          className="hairline-t flex flex-wrap items-baseline gap-x-2 gap-y-1 py-1.5 t-prose"
+          role="status"
+        >
+          <span className="w-[9rem] t-small t-upper text-ink-mute">discarded</span>
+          <span>{receipt.text}</span>
+          <span className="ml-auto">
+            <Press frame="line" tone="quiet" size="value" onClick={receipt.dismiss}>
+              dismiss
+            </Press>
+          </span>
         </div>
       ) : null}
       {unresolved.length ? (

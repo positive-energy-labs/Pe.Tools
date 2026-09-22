@@ -16,7 +16,15 @@
  * The route declares its verbs once (its manifest) and this file only draws them: dotted =
  * operable, dashed = empty slot, caution = the world disagrees, bold = unsaved, mono = measured.
  */
-import { Fragment, createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Popover } from "@base-ui/react/popover";
 import { Gauge } from "lucide-react";
 import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
@@ -749,6 +757,18 @@ export function Situation({
       !(handle.manifest.actions as Record<string, { sheet?: true }> | undefined)?.[name]?.sheet,
   ) as [string, ActionHandle][];
   const staged = work && work.count > 0 ? work : null;
+  // An unsaved document's Work says its own lifetime from the first staged item, and after the
+  // document closes the receipt names what went with it. The count is the last one seen staged:
+  // the Work itself is gone by then (2026-09-22, addressless Work is ephemeral).
+  const discardable = useRef(0);
+  useEffect(() => {
+    if (handle.work.ephemeral && staged) discardable.current = staged.count;
+  }, [handle.work.ephemeral, staged]);
+  const receipt = handle.work.discarded &&
+    discardable.current > 0 && {
+      text: `unsaved document closed — ${discardable.current} ${staged?.noun ?? work?.noun ?? "edit"}${discardable.current === 1 ? "" : "s"} discarded with it`,
+      dismiss: handle.work.dismissDiscarded,
+    };
   const commitAction = commit ? handle.actions[commit] : undefined;
   useChatPlanIntent(handle, commitAction);
   const workWord = workBandWord({
@@ -844,6 +864,12 @@ export function Situation({
                     : undefined
                 }
                 unresolved={unresolved as string[]}
+                lifetime={
+                  handle.work.ephemeral && staged
+                    ? "Unsaved document. This Work lives until it closes. Save to keep it."
+                    : undefined
+                }
+                receipt={receipt || undefined}
                 reload={handle.work.reload}
                 startFresh={
                   handle.work.startFresh

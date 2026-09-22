@@ -444,12 +444,15 @@ class RouteAtomKey implements Equal.Equal {
 
 function routeUrl(
   route: string,
-  operation: "apply" | "command" | typeof START_FRESH | "salvage",
+  operation: "apply" | "command" | typeof START_FRESH | "salvage" | "discard",
   key: WorkKey,
 ) {
   const url = new URL(peUrl(resolveWorkbenchConfig(), `/route-state/${route}/${operation}`));
   if (key.work !== undefined) url.searchParams.set("work", key.work);
-  else if (key.target !== null) url.searchParams.set("target", key.target);
+  else {
+    if (key.target !== null) url.searchParams.set("target", key.target);
+    if (key.open) url.searchParams.set("open", `${key.open.session}/${key.open.openId}`);
+  }
   return url.toString();
 }
 
@@ -499,7 +502,7 @@ export function docWriter<S extends RouteStateSpec<any>>(
   conflict: Atom.Writable<boolean> | undefined,
 ) {
   const send = async (
-    operation: "apply" | "command" | typeof START_FRESH,
+    operation: "apply" | "command" | typeof START_FRESH | "discard",
     body: Record<string, unknown> & { expectedRevision?: number },
     onAccepted?: (base: number, revision: number) => void,
   ): Promise<Refusal | null> => {
@@ -552,6 +555,8 @@ export function docWriter<S extends RouteStateSpec<any>>(
     startFresh: () => send(START_FRESH, {}),
     /** The human door only: what the route carries over from Work it can no longer read. */
     salvage: () => getRouteSalvage(routeUrl(spec.route, "salvage", key)),
+    /** The unsaved document this Work belonged to closed; the host refuses any addressed scope. */
+    discard: () => send("discard", {}),
   };
 }
 
@@ -626,6 +631,11 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
   } | null;
   readonly work: {
     readonly key: WorkKey;
+    /** Addressless: this Work belongs to one unsaved document's lifetime and dies with it. */
+    readonly ephemeral: boolean;
+    /** That lifetime ended and the Work was discarded; the route draws the receipt until dismissed. */
+    readonly discarded: boolean;
+    readonly dismissDiscarded: () => void;
     readonly doc: W | null;
     readonly revision: number | null;
     /** Whether the authoritative Work reading is current, including a current absent document. */
@@ -910,20 +920,32 @@ export function useRoute<W, R extends string, P, A extends string>(
   }, [resolution, inventoryResult]);
   const work =
     typeof requestedWork === "function" ? requestedWork(page, resolvedAddress) : requestedWork;
+  const boundDocument =
+    resolution.kind === "resolved" && resolution.target.kind === "document"
+      ? resolution.target.ref
+      : null;
+  const boundRef = JSON.stringify(boundDocument);
+  // An unsaved document has no Address, so its Work keys by the one lifetime it belongs to. The
+  // ref rides along once the Address exists too, so the host carries that Work over on Save As.
   const key: WorkKey = useMemo(
     () => ({
       route: manifest.key,
       target: resolvedAddress,
       ...(work !== undefined ? { work } : {}),
+      ...(work === undefined && boundDocument ? { open: boundDocument } : {}),
     }),
-    [manifest.key, resolvedAddress, work],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- boundDocument is identified by boundRef
+    [manifest.key, resolvedAddress, work, boundRef],
   );
+  /** An unsaved document's Work: keyed by this lifetime, and gone when it ends. */
+  const ephemeral = key.target === null && key.open !== undefined;
   // A target-owned Work declaration cannot fall back to the shared `route/target:` key while its
   // Address is unresolved. Host/file Work and explicit named workspaces intentionally use null.
   const workNeedsTarget = (
     Object.values(manifest.actions ?? {}) as NonNullable<typeof manifest.actions>[A][]
   ).some((action) => action.requires?.work && action.needs !== "host");
-  const canReadWork = seed || work !== undefined || resolvedAddress !== null || !workNeedsTarget;
+  const canReadWork =
+    seed || work !== undefined || resolvedAddress !== null || ephemeral || !workNeedsTarget;
   const slice = useMemo(
     () => (!seed && spec && canReadWork ? docAtom(spec, key, peReadings) : null),
     [seed, spec, canReadWork, key],
@@ -948,10 +970,6 @@ export function useRoute<W, R extends string, P, A extends string>(
   // lane threw on mount before it could draw a single seeded row.
   // The live lane binds the resolved document into every placeholder target and leaves those
   // Readings `absent` until the route resolves — the same request is never sent unbound.
-  const boundDocument =
-    resolution.kind === "resolved" && resolution.target.kind === "document"
-      ? resolution.target.ref
-      : null;
   const boundKey = JSON.stringify(boundDocument);
   const resolvedReadingSpecs = useMemo(
     () =>
@@ -1290,9 +1308,32 @@ export function useRoute<W, R extends string, P, A extends string>(
     actionScope,
   ]);
 
+  // An unsaved document's Work lives exactly as long as that document. The key stays in hand
+  // across the close (the resolution no longer names it), so the Work is discarded at the host
+  // once, and the route draws its receipt from `discarded`.
+  const ephemeralKey = useRef<WorkKey | null>(null);
+  const [discarded, setDiscarded] = useState(false);
+  useEffect(() => {
+    if (ephemeral) ephemeralKey.current = key;
+  }, [ephemeral, key]);
+  useEffect(() => {
+    const gone = ephemeralKey.current;
+    if (seed || !spec || !bindingLost || !gone?.open) return;
+    if (
+      gone.open.session !== bindingLost.ref.session ||
+      gone.open.openId !== bindingLost.ref.openId
+    )
+      return;
+    ephemeralKey.current = null;
+    void postRouteWrite(routeUrl(spec.route, "discard", gone), {}).then(() => setDiscarded(true));
+  }, [seed, spec, bindingLost]);
+
   const workHandle = useMemo(
     () => ({
       key,
+      ephemeral,
+      discarded,
+      dismissDiscarded: () => setDiscarded(false),
       doc: (doc?.doc ?? null) as W | null,
       revision: doc?.revision ?? null,
       current: workCurrent,
@@ -1318,7 +1359,20 @@ export function useRoute<W, R extends string, P, A extends string>(
         if (spec) dirty({ ...key, kind: "work" });
       },
     }),
-    [key, doc, workCurrent, sliceResult, writer, writeWork, owner, conflictNow, spec, seed],
+    [
+      key,
+      ephemeral,
+      discarded,
+      doc,
+      workCurrent,
+      sliceResult,
+      writer,
+      writeWork,
+      owner,
+      conflictNow,
+      spec,
+      seed,
+    ],
   );
 
   return {

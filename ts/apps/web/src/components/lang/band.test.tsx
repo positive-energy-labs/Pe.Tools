@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { availableTransitions, type TrichotomyCellLike } from "@pe/agent-contracts";
-import { cleanup } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import {
@@ -8,6 +8,7 @@ import {
   fanOutWord,
   reviewTransitions,
   runFanOut,
+  WorkBand,
   type CellWire,
 } from "#/components/lang/band";
 
@@ -93,4 +94,48 @@ test("discard unstages every staged address in one write", async () => {
   const outcome = await discardStaged(w, Object.fromEntries(CASES.map(([n, c]) => [n, c])));
   expect(outcome.covered).toEqual(["contested", "agreed", "staged"]);
   expect(w.write).toHaveBeenCalledOnce();
+});
+
+test("an unsaved document's Work says its lifetime once, above the staged rows", () => {
+  const { rerender } = render(
+    <WorkBand
+      count={0}
+      noun="room edit"
+      revision={0}
+      discard={() => {}}
+      lifetime="Unsaved document. This Work lives until it closes. Save to keep it."
+    />,
+  );
+  // Nothing staged yet: no band, so no lifetime line.
+  expect(screen.queryByRole("note")).toBeNull();
+  rerender(
+    <WorkBand
+      count={1}
+      noun="room edit"
+      revision={1}
+      discard={() => {}}
+      lifetime="Unsaved document. This Work lives until it closes. Save to keep it."
+    />,
+  );
+  expect(screen.getByRole("note").textContent).toBe(
+    "Unsaved document. This Work lives until it closes. Save to keep it.",
+  );
+});
+
+test("the discard receipt names what went with the document and dismisses without a confirm", () => {
+  const dismiss = vi.fn();
+  render(
+    <WorkBand
+      count={0}
+      noun="room edit"
+      revision={null}
+      discard={() => {}}
+      receipt={{ text: "unsaved document closed — 3 room edits discarded with it", dismiss }}
+    />,
+  );
+  expect(screen.getByRole("status").textContent).toContain(
+    "unsaved document closed — 3 room edits discarded with it",
+  );
+  screen.getByRole("button", { name: "dismiss" }).click();
+  expect(dismiss).toHaveBeenCalledOnce();
 });

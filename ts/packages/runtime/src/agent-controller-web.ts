@@ -1,5 +1,10 @@
 import type { MastraCompositeStore } from "@mastra/core/storage";
-import { addressSchema, type CapabilityCatalog, type WorkKey } from "@pe/agent-contracts";
+import {
+  addressSchema,
+  documentRefSchema,
+  type CapabilityCatalog,
+  type WorkKey,
+} from "@pe/agent-contracts";
 import { AgentController, type Session } from "@mastra/core/agent-controller";
 import { Mastra } from "@mastra/core/mastra";
 import { MastraServer } from "@mastra/hono";
@@ -277,6 +282,13 @@ export async function buildAgentControllerApp(
       run: (scope: WorkKey, route: string, actor: "agent" | "human") =>
         routeWorkspace.startFresh(scope, route, actor),
     },
+    {
+      // The unsaved document this Work belonged to closed; the scope itself is what refuses.
+      suffix: "discard",
+      schema: z.object({}),
+      hint: "expected {}",
+      run: (scope: WorkKey, route: string) => routeWorkspace.discard(scope, route),
+    },
   ] as const;
   const mountRouteStateWrites = (prefix: string, actor: "agent" | "human") => {
     for (const write of writes)
@@ -332,10 +344,29 @@ function scopeOr400(c: Context, shape: "read" | "write"): WorkKey | Response {
     if (target || work.length > 200) return invalid("Provide exactly one Work key");
     return { route, target: null, work };
   }
-  if (!target) return { route, target: null };
+  // `open=<session>/<openId>`: the exact document lifetime. Alone it keys an unsaved document's
+  // ephemeral Work; beside a Target it is what a Save As migration carries over from.
+  const open = c.req.query("open")?.trim();
+  let ref: { session: string; openId: string } | undefined;
+  if (open) {
+    const cut = open.indexOf("/");
+    const parsed = documentRefSchema.safeParse({
+      session: open.slice(0, Math.max(cut, 0)),
+      openId: open.slice(cut + 1),
+    });
+    if (cut < 1 || !parsed.success)
+      return invalid("invalid open document: expected <session>/<openId>");
+    ref = parsed.data;
+  }
+  const scope = (target: WorkKey["target"]): WorkKey => ({
+    route,
+    target,
+    ...(ref ? { open: ref } : {}),
+  });
+  if (!target) return scope(null);
   const parsed = addressSchema.safeParse(target);
   if (!parsed.success) return invalid("invalid Target: expected a document Address");
-  return { route, target: parsed.data };
+  return scope(parsed.data);
 }
 
 function routeDocumentKey(targetKey: string, route: string): string {

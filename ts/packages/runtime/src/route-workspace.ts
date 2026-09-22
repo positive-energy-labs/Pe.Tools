@@ -1,4 +1,4 @@
-import { workKey, type WorkKey } from "@pe/agent-contracts";
+import { ephemeralWorkKey, workKey, type WorkKey } from "@pe/agent-contracts";
 import { z } from "zod";
 import { OwnerReads, type OwnerValue } from "./owner-read.ts";
 import {
@@ -35,7 +35,7 @@ export interface RouteWorkspaceEvent {
   scope: WorkKey;
   actor: RouteActor;
   route: string;
-  action: "apply" | "command" | "start-fresh";
+  action: "apply" | "command" | "start-fresh" | "discard";
   revision: number;
   command?: string;
   patchCount?: number;
@@ -342,12 +342,54 @@ export class RouteWorkspace {
     spec: RouteStateSpec<z.ZodType>,
     create = true,
   ): Promise<RouteEnvelope<unknown> | null> {
-    let raw = await this.options.store.getState({
-      targetKey: workKey(scope),
-      route: spec.route,
-    });
+    const raw = await this.#carryOver(scope, spec.route);
     if (raw == null) return create ? emptyEnvelope(spec) : null;
     return parseEnvelope(raw, spec);
+  }
+
+  /**
+   * The document's Work, and the one silent migration: Save As gave an unsaved document an
+   * Address, so the Work it staged while addressless moves to the Address key, byte-for-byte and
+   * exactly once. Nothing is migrated onto Work the Address already has.
+   */
+  async #carryOver(scope: WorkKey, route: string): Promise<unknown> {
+    const { store } = this.options;
+    const targetKey = workKey(scope);
+    const raw = await store.getState({ targetKey, route });
+    const ephemeral = ephemeralWorkKey(scope);
+    if (raw != null || !ephemeral) return raw;
+    const carried = await store.getState({ targetKey: workKey(ephemeral), route });
+    if (carried == null) return null;
+    await store.setState({ targetKey, route, value: carried });
+    await store.setState({ targetKey: workKey(ephemeral), route, value: null });
+    return carried;
+  }
+
+  /**
+   * The document lifetime this addressless Work belonged to ended, so the Work is gone. Only ever
+   * an `open`-keyed scope: addressed and named Work is never discarded from under a person.
+   */
+  async discard(scope: WorkKey, route: string): Promise<RouteStateWriteResult> {
+    if (!this.#registry.has(route)) return unknownRoute(route);
+    if (scope.work !== undefined || scope.target !== null || scope.open === undefined)
+      return refuse(
+        "refused",
+        "only an unsaved document's Work is discarded",
+        "Saved Work is kept; nothing was discarded.",
+      );
+    return this.#serialized(scope, route, async () => {
+      await this.options.store.setState({ targetKey: workKey(scope), route, value: null });
+      await this.#publish({
+        type: "route_workspace",
+        scope,
+        route,
+        actor: "human",
+        action: "discard",
+        revision: 0,
+        ok: true,
+      });
+      return { ok: true, revision: 0 };
+    });
   }
 
   async #persist(scope: WorkKey, route: string, envelope: RouteEnvelope<unknown>): Promise<void> {
