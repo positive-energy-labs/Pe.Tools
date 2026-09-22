@@ -61,6 +61,7 @@ export function createRuntimeMemoryProfile<
   };
 }
 
+// TODO: probably most flip semanticRecall, generateTitle, and workingMemory to true. I remember some auth problems with recall and title tho. working mem is untested but intriguing
 export function createRuntimeMemoryOptions(
   overrides: MemoryConfigInternal | undefined,
 ): MemoryConfigInternal {

@@ -3,6 +3,7 @@ name: delegate
 description: Who does what, at what cost. Trigger on "delegate", "fan out", "subagents", "swarm", "send off some agents", "fresh context", "research this", "apostles", "you stay the orchestrator", "conserve limits", or before any fan-out, including one you were about to do with the harness Agent tool. Not the mechanics of running agents; that is `execute`.
 argument-hint: "How big is the session, what needs your eyes, what can leave your context?"
 figure: Abbot, Falconer, and Breeder — who does what, at what cost, down which line
+prevents: context rot: one session carrying everything, counsel building
 ---
 # Delegate
 
@@ -12,16 +13,15 @@ figure: Abbot, Falconer, and Breeder — who does what, at what cost, down which
 
 **Be the Breeder only on a settled base.** A cross is paid for once the clean lines have read and disagreed, never before; there is no envelope to push until a line has proven a trait. Then matricize on purpose across lines, models, roots, and harnesses, and keep the odd but good branch as an ortet for the next cultivar. A broken paradigm is not bred out of; it gets a new founder, and that is `demiurge`, not a fan-out.
 
-Mode: no fan-out without a posture table first. Task, who (model and thinking), why. You are a row in it.
+Mode: the posture table first: task, who (model and thinking), why. You are a row in it, and the runner `execute` names refuses to cast without it.
 
 ## Laws
 
+- [Scope: repo] Power comes in numbers and diversity, not perfection at every step. Use rounds and adversaries rather than big tasks or higher thinking levels. Swarm-like behavior does better surfacing patterns than drilling in on every edge case immediately.
 - Delegate when any of these holds: the task needs 20+ tool calls, the goal is unambiguous, you want a fresh perspective, the work is parallel and non-overlapping, or it would break your train of thought. The bigger the session or the lower your limits, the more work leaves your context.
 - Every mission is bounded and specified. Give the agent an edge (stop condition, time box, report file) and make the important choices before you send it. Send unbounded work to the model with taste. An agent that lacks a choice returns a question, not a guess. The model table below ranks them; read it always if you are Fable 5.
 - Send one ask per turn. Four questions in one prompt return one averaged answer, and no part of it belongs to its question. Send the follow-up down the same line.
-- Run agents on the observable runner `execute` names, never on the harness Agent tool. Harness runs are invisible, cannot be interjected, and die on a user interrupt.
 - Make the shared base once (research, fixture, scaffold) and hand it to every agent.
-- Send instrument-first missions. "Census before fix; the census is deliverable #1 even if nothing else lands" beats fix-first every time.
 - Every agent writes a report file the user can open. Never relay a result by paraphrase alone; paraphrase is Telephone.
 - After any interruption, never assert an agent is alive. Check, then relaunch or declare the work lost.
 - Reuse before you re-brief. An agent that just read the terrain is primed; send it the next question instead of paying a fresh one to read the same files.
@@ -32,16 +32,17 @@ Mode: no fan-out without a posture table first. Task, who (model and thinking), 
 - One writing line, one tree. Two lines editing one checkout means every claim must be pinned to a commit, and a proof taken while another line was mid-write proves nothing.
 - Leave it better than you found it. Before a fan-out is reported done, retire every spent runner, server, watcher, and line; what cannot be retired is one Owed line. Let go of any resource no foreseeable future needs. An anti-pattern seen on the way is one Owed line, not a fix.
 
-# Models (Scope: `repo`)
+# Models [Scope: `repo`]
 
 Cost: price per task. Taste: opinions, pretty code, UI/UX, architecture, decisions. Intelligence: full marks on a big but bounded and/or specified task without derailing. Bounded: a supplied edge. Specified: the important choices supplied.
 
 | Model | Cost | Taste | Intelligence | Use for | Notes |
 |--|--|--|--|--|--|
-| Fable 5 | 10 | 9 | 7 | Design, aesthetics, decisions. Only for unbounded AND unspecified work, or an important design opinion. | Low or medium thinking. Never in parallel. |
-| Opus 5 | 6 | 6 | 3 | Initial implementations, **bounded**. Or UI. Talks like it is intelligent, is not; derails on the first tangent not forbidden. | Medium or high thinking. Small task, forbid going beyond it. |
-| Codex (GPT-5.6) | 2 | 4 | 9 | Foot soldier: migrations, brute force, long slogs, compile smashing, censuses. Goal quantifiable AND choices specified. | Codex TOML sets model and thinking (5.6 high). Takes you at face value, no interpretation. Best for swarms and goal loops. |
+| claude-fable-5-1 | 10 | 9 | 8 | Design, aesthetics, decisions. Exceptional at UX/UI | Low think, maybe medium when task requires taste. Avoid parallel. |
+| gpt-6-astra | 7 | 7 | 10 | Extremely dependable, thorough, and suited for long-horizon | Low think, medium if big and complicated. Sometimes in parallel. |
+| claude-opus-5 | 6 | 5 | 3 | Swarm opinions, bug hunt, research. **Bounded** v0 implementations. UI-tweaking foot soldier. | Medium think. Walks and talks like its intelligent but it's not; derails on the first tangent not forbidden. |
+| gpt-5.6-sol | 2 | 3 | 8 | Foot soldier: migrations, brute force, long slogs, compile smashing, censuses. Goal quantifiable AND choices specified. | Low or medium think. Takes you at face value, no interpretation. Best for implementation swarms and goal loops. |
 
-Imitating intelligence is half the battle: a seemingly insightful opinion can give you a new idea, and pretty architecture is a base that only needs filling in. Different providers give different perspectives; anything below GPT-5.6 and Opus 5 is fair game for cheap perspective.
+Imitating intelligence is half the battle: a seemingly insightful opinion can give you a new idea, and pretty architecture is a base that only needs filling in. Different providers give different perspectives. At least 1/4 subagents must come from a different provider. And anything below GPT-5.6 and Opus 5 is fair game for cheap perspective.
 
 Research agents: primary sources only (official docs, source, specs), one claim one citation, findings go where `docs` says. Clone third-party source locally and sync before reading; grep beats the web.

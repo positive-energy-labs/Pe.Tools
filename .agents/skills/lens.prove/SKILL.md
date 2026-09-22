@@ -3,6 +3,7 @@ name: prove
 description: Certify a claim on real parts, yours or another agent's. Trigger on "prove", "dis/prove", "falsify", "investigate, prove, then fix", "no assumptions", "is it actually true", "did it really work", "grounded in what can be proved", "cite your sources", "visually observed", "skeptical review", "critically review", "be skeptical", "adversarial review", "ridicule this", "poke holes", "what did they miss", "is this real or their stupidity", before any "done" is reported, or when a handoff, spec, diff, or PR arrives from a different agent. Not a standards or spec checklist; not a hunt for what is good.
 argument-hint: "What claim, whose, on which lane, and what would falsify it?"
 figure: Assayer striking the Hallmark, Thomas on another's claim — a claim is stamped with its lane or not at all
+prevents: plausible, not real: done on a mock, a count, a screenshot, or another agent's word
 ---
 # Prove
 
@@ -25,5 +26,4 @@ Mode: a claim leaves your hands as PROVEN, FALSIFIED, or UNPROVEN, never as "sho
 - A finding you do not pay for is not a finding. The fix list is the next work down the same line, before any new shape; a report nobody pays is a report the next round finds again.
 - Rank by consequence, not by count. One wrong invariant outranks twenty nits; report nits only when asked. The user decides the ranking.
 - Name what survives.
-- A hang or timeout is a diagnostic boundary, not a failure; name it, do not retry blind.
 - Report state as PROVEN / BLOCKED / OPEN, each with its stake.

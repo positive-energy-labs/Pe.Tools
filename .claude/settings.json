@@ -10,6 +10,16 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"process.stdout.write(require('fs').readFileSync('.agents/skills/ALWAYS.md','utf8'))\""
+          }
+        ]
+      }
     ]
   }
 }

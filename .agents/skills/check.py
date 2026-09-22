@@ -87,24 +87,26 @@ def main():
         fail('root.index', 'missing')
     else:
         order = {k: i for i, k in enumerate(('root', 'lens', 'pass', 'loop', 'slot'))}
-        want = ['| Kind | Stance | Figure/It is | Rounds | User-only | Stop |', '|---|---|---|---|---|---|']
+        want = ['| Kind | Stance | Figure/It is | Prevents | Rounds | User-only | Stop |', '|---|---|---|---|---|---|---|']
         for d, (kind, name, text) in sorted(skills.items(), key=lambda kv: (order[kv[1][0]], kv[0])):
             fm = frontmatter(text) or ''
-            figure, stop = field(fm, 'figure'), field(fm, 'stop')
+            figure, stop, prevents = field(fm, 'figure'), field(fm, 'stop'), field(fm, 'prevents')
             if not figure:
                 fail(d, 'no frontmatter figure:; the index table projects it')
+            if not prevents:
+                fail(d, 'no frontmatter prevents:; the index table projects the failure each stance prevents')
             if kind in ('pass', 'loop') and not stop:
                 fail(d, 'a %s with no frontmatter stop:' % kind)
             if kind == 'slot' and field(fm, 'scope') not in ('skills', 'repo'):
                 fail(d, 'a slot needs scope: skills | repo')
             user_only = '**yes**' if field(fm, 'disable-model-invocation') == 'true' else 'no'
             if kind == 'slot':
-                want.append('| slot | `%s` | %s | - | - | - |' % (name, figure))
+                want.append('| slot | `%s` | %s | %s | - | - | - |' % (name, figure, prevents))
             elif kind == 'root':
-                want.append('| root | `%s` | %s | - | %s | - |' % (name, figure, user_only))
+                want.append('| root | `%s` | %s | %s | - | %s | - |' % (name, figure, prevents, user_only))
             else:
-                want.append('| %s | `%s` | %s | %s | %s | %s |' % (
-                    kind, name, figure, 'yes' if kind == 'loop' else 'no', user_only, stop or ''))
+                want.append('| %s | `%s` | %s | %s | %s | %s | %s |' % (
+                    kind, name, figure, prevents, 'yes' if kind == 'loop' else 'no', user_only, stop or ''))
         want = '\n'.join(want)
         tbl = re.search(r'^\| Kind \| Stance.*?(?=\n\n)', idx[2], re.S | re.M)
         if not tbl:

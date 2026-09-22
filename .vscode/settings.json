@@ -11,5 +11,6 @@
   },
   "[typescript]": {
     "editor.defaultFormatter": "vscode.typescript-language-features"
-  }
+  },
+  "deno.enable": true
 }

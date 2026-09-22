@@ -3,6 +3,7 @@ name: house
 description: How our surfaces look and behave; the taste code cannot hold. Trigger on "house", "house style", "our look", "how should this look", "does this fit", "style this", "restyle", "on brand", "make it look right", "is this our style", or before any edit that draws something a user will see. Not a component catalogue; the swatch route is that. Not for finding what a product is; that is `triangulate`.
 argument-hint: "What surface, and what is it for?"
 figure: Cartographer with the Instrument Maker's kit — a chart someone steers by where they cannot see the bottom
+prevents: templated surfaces: a screen that fits no house
 ---
 # House
 

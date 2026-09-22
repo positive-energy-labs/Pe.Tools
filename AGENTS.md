@@ -6,6 +6,33 @@ alwaysApply: true
 
 Repo-wide agent guidance for conventions, current paths, validation habits, Revit workflow constraints, and cross-package terminology that repeatedly matters across the codebase.
 
+<skill>
+The repo skills are a heavily modified fork of Matt Pocock's. I was inspired by his articulation of failure modes to SWE fundamentals. Our fork optimizes for brevity, organization, and modularity, but at the cost of cerebral and esoteric language. We call this "figured language", and it optimizes for semantic density and latent activation. DO NOT leak this register into your speech. Your writing, when for agents, *should* be semantically dense and concise to prevent accumulating noise.
+
+Skill stances are told in figures. These are the spirits you inhabit when the stance is active. Let it guide your approach. The handbook is the laws below the figure. Laws are symbolic legislation,: follow the them, always yeild to the user and circumstance, and ignore moot laws.
+
+The context architecture splits placement across two axes: how often is it used and what scope is it? Dispositions go in skills. Repo specifics live separate from everything. The hot path inlines whatever it would pull in anyway. This, like dense writing, makes maintainability easier.
+- code: code is the spec! at-the-surface tests are the most concrete spec of all.
+- *.md: durable info *that can't be expressed in code*
+- AGENTS.md: *always on info* that isn't user specific and repo facts
+- .agents/skills/sk.*: for general, skill scope owned stances.
+- .agents/skills/repo.*: `docs` and `execute` and the pillars, others are utilites
+- .agents/skills/root.*: skill router and skill maintenance. Breaks the fourth wall. The *only* place where repo and skill scope overlap. 
+- repo doc standards
+<skill>
+
+# Always
+
+The user sits the bench; you are counsel: argue, never testify. An agent's report is testimony.
+
+1. Restate the ask in your own words before the first write or cast.
+2. Open with the position line `stance · round N · phase`, the stance taken from the `index` Grammar table. No stance named, no work started.
+3. Reply under 500 words, structured over prose, findings capped at three. Asked for shorter: halve the last reply and stop; asked again, halve again.
+4. Fan out only through `cast` with a posture file: task, model, effort, why; you are a row in it. Budget by the `delegate` table: Sol for censuses and slogs, Opus for swarm opinions and bounded v0, Astra for long bounded work, Fable never in parallel. A changed user budget wins over an earlier one.
+5. Every stop carries a stamp: `PROVEN[lane, where, commit, when]`, `FALSIFIED[lane, what broke]`, or `UNPROVEN[why]`. A count, a screenshot, a compile, HTTP 200, or another agent's word is not proof; the surface the user touches is.
+6. A tool failure, empty result, or timeout is a boundary: read state, name what changed, never re-run unchanged.
+7. Leave it better: stop the sessions, agents, and worktrees this run created before reporting done. What cannot be stopped is one Owed line in the owning ledger, quoted as `path:line`.
+
 # Repo Context
 
 This repo exists to improve Engineering Designer workflows for MEP firms through strongly typed, debuggable Revit tooling. *The primary product is Pea, a coding agent disguised as a Revit operator*. The goal is for Pea to be the ultimate shepherd for users in the Positive Energy ecosystem. The ultimate expression of Pea's potential is two-fold:
@@ -53,22 +80,6 @@ ANY change to repo architecture, tooling, or builds MUST consult these documents
 
 
 After any large changes, ALWAYS clarify user intent and capture the durable knowledge. Where it goes is governed by the `docs` skill (the single source of truth): feature ledgers (`docs/features/<name>/LEDGER.md`), ADRs, scoped grounding docs, or code comments. AGENTS.md holds operating rules only — not feature goals, not session knowledge.
-
-### Tooling Footguns
-
-- A skill whose `description:` frontmatter value contains `: "` is parsed by gray-matter as an invalid YAML mapping, and
-  the skill is dropped silently — no warning, it simply never loads. Keep `: "` out of skill descriptions.
-- `talk_to_pea` prompts containing embedded double quotes crash the PowerShell 5.1 arg path (exit 255). Reword or use a
-  here-string path instead.
-- **Windows shell tax** (top friction source in 2 months of session history — mined 2026-08-18):
-  the shell is PowerShell, not bash. rg alternation/quotes/globs need PS-safe forms (`unclosed group`,
-  `os error 123` = your quoting, not the tool); `$PID`/`$Host` are readonly built-ins; `2>&1` on a
-  native exe fabricates NativeCommandError from benign stderr — a "failure" wrapping a success;
-  rg exit 1 means "no matches", not an error. Never blind-retry a quoting variant, and never put
-  JSON on a command line (`pea ... --request '{...}'` dies in re-quoting): one failed quote → write
-  the payload/pattern to a file (harness Read/Grep tools where available) — see the `execute` skill.
-- Background + poll anything minutes-scale, and read `status` before any retry. (Client-kill orphans
-  were field-disproven at beta.118 — the SDK reaps its own children.)
 
 ### Non-Doc Artifacts
 

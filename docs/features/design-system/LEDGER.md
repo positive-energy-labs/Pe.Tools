@@ -14,6 +14,13 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 
 ## Decided
 
+### Route primitive recovery — 2026-09-08
+
+- A chat turn may do non-Revit work without a document binding; document work in Revit must bind its execution target. Pea must be able to explicitly target another document within the same turn (project → open family → query → close). Default-versus-call contracts and the proposed session-only bootstrap exception are in `ROUTE-PRIMITIVE.md` section 8; no cutover yet.
+- Live target loss returns to Instances with the requested document retained as a recovery choice; confirmed closure removes the dead URL session, while a temporary outage preserves the request during checking. Round 3 proposal and evidence: `ROUTE-PRIMITIVE.md` section 7.
+- An explicitly selected session must not silently fall back to another holder of the document. This supersedes ADR 0010's pin-as-tiebreak policy for the new route model; the resolver/host/UI cutover remains unimplemented.
+- Explicit file-authoring and saved-review modes remain available without Revit. Shared authored work/proposals with independent per-view memory is preferred, but simultaneous editing may be relaxed if complexity or instability materially increases.
+
 ### Where a rule lives
 
 - 2026-08-29 — Taste that code cannot hold lives in `lens.house`: figure, referents,
@@ -253,6 +260,18 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 
 ### Route and state architecture (cross-route, owned here)
 
+- 2026-09-07 — Route primitive, demiurge round 1 verdicts (kaitpw). Reports:
+  `.artifacts/handoffs/route-primitive-20260907/`, seven axes, posture in `posture.md`.
+  1. The atom inspector is a DEV TOOL, not a product surface. kaitpw: "Inspector is a dev tool so
+     I can play a more active role in state design beside agents." The inspector is an authoring
+     instrument for state design. It does not ship to users.
+  2. `?demo=<stage>-<action>` REPLACES `?source=fixture`. One fixture entrypoint, never two.
+  3. A demo can WRITE. kaitpw: "No more units... demos would be useless if none of their state
+     could be touched." Demos are the deterministic proof lane. Units are retired as the default.
+     Cost acknowledged by kaitpw: every host operation on an action's path must be stubbable.
+  4. Shape the primitive against `/family` (the bound-local-JSON case), prove it against
+     `/takeoffs` (the fattest route).
+
 - 2026-08-19 — THREE-HOME ADDRESSING: the sentence carries external bindings (test: it survives the
   page closing and other software can touch it); page memory carries the rest; the route document
   carries what an agent shares. The full binding set lives in ONE sentence.
@@ -471,6 +490,24 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
   ships (`h-*`, `face-*`, `z-*`) read as unregistered. A checker's loader is part of its claim.
 
 ## Owed
+
+- Route primitive round 2: three chimeras built and committed, none merged, none wired to the
+  router so none is browser-proven. `rp/phase` at `cb41adf` (`Pe.Tools-rp-phase`), `rp/lens` at
+  `5b7005b` (`Pe.Tools-rp-lens`), `rp/log` at `352619b` (`Pe.Tools-rp-log`). Reports in
+  `.artifacts/handoffs/route-primitive-20260907/chimera-{phase,lens,log}.md`. Retire the three
+  worktrees when a shape is chosen.
+- Route primitive: shape proposed, not built. Spec, justification, rejects and the seven axis
+  reports are in [ROUTE-PRIMITIVE.md](ROUTE-PRIMITIVE.md); five open questions in its §6. Full
+  agent reports in `.artifacts/handoffs/route-primitive-20260907/` (gitignored; promote before
+  deleting). First move is moving the `Product` manifest out of the React render function
+  (`apps/web/src/takeoff/route-workspace.tsx:157-256`); nothing else in the spec can be typed
+  until it lands.
+- Delete the duplicate `/events` EventSource at `apps/web/src/takeoff/host.ts:155`; the singleton
+  at `apps/web/src/host/events.ts:9` already holds that stream, and the page burns five of
+  Chrome's six per-origin connections.
+- `settings.document.save` takes `expectedVersionToken` from a snapshot it reads at save time
+  (`packages/mcps/src/pea/settings-commands.ts:103-121`), so an outside edit to the same key is
+  clobbered and `conflictDetected` cannot fire.
 
 - `Picker` gained `derived` (a dashed underline: the bound value was reported by the world, not chosen; house law 8) for the chat to-line on 2026-09-06 without a swatch specimen; add one beside the popover specimens on `/design-system`.
 - 2026-09-01 pane/tutorial refinements (kaitpw at the merge verdict: "some refinements need to
