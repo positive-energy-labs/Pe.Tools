@@ -9,7 +9,7 @@ public sealed record BuildOptions {
     ///     Application version.
     /// </summary>
     /// <remarks>
-    ///     This will override the version determined by GitVersion.Tool. <br />
+    ///     This will override the version determined from git. <br />
     /// </remarks>
     /// <example>
     ///     1.0.0-alpha.1.250101 <br />
