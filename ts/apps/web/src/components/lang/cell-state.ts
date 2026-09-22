@@ -1,4 +1,4 @@
-import { sameValue, type TrichotomyCellLike } from "@pe/agent-contracts";
+import { sameValue, type MeasuredValue, type TrichotomyCellLike } from "@pe/agent-contracts";
 import type React from "react";
 
 /** The one squiggle slot. Ranked; exactly one may draw. `never` is NOT here on purpose —
@@ -161,11 +161,8 @@ export interface DisplayUnit {
   symbol?: string | null;
 }
 
-/** What a measured cell stages: Revit's number in the display unit, and that unit's spelling. */
-export interface MeasuredValue {
-  value: string;
-  unit: string;
-}
+/** What a measured cell stages: `@pe/agent-contracts` `MeasuredValue`, the schedule rung itself. */
+export type { MeasuredValue };
 
 /**
  * A staged value as one line of text. The measured kind is the only one that stages an object, so

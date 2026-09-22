@@ -164,7 +164,8 @@ test("the list's keys are registrations on the scope node it sits in, as help re
     </KeyScope>,
   );
   const words = seen.filter((meta) => meta.scope === "words");
-  expect(words.every((meta) => meta.depth === 0)).toBe(true);
+  // One node below the root: the context default is the root, so depth 0 is never a list.
+  expect(words.every((meta) => meta.depth === 1)).toBe(true);
   expect(words.map((meta) => meta.name)).toEqual(
     expect.arrayContaining(["next", "previous", "pick", "back", "toggle", "extend down"]),
   );

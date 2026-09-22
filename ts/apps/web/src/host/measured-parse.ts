@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 
-import type { DisplayUnit, MeasuredValue } from "#/components/lang/cell";
+import { type DisplayUnit, type MeasuredValue, unitWord } from "#/components/lang/cell";
 import { callHostRpc, type HostCallOptions } from "#/host/client";
 
 export type MeasuredAnswer = MeasuredValue | { refusal: string } | null;
@@ -20,7 +20,8 @@ export function useMeasuredParse(basis: unknown, scope?: HostCallOptions) {
   }, [basis]);
   return useCallback(
     async (displayUnit: DisplayUnit | null | undefined, text: string): Promise<MeasuredAnswer> => {
-      if (!displayUnit?.typeId)
+      const word = displayUnit?.typeId ? unitWord(displayUnit) : null;
+      if (!displayUnit?.typeId || word === null)
         return { refusal: "type a unit — this column shows no unit of its own" };
       const signal = running.current.signal;
       const answer = await callHostRpc(
@@ -33,10 +34,7 @@ export function useMeasuredParse(basis: unknown, scope?: HostCallOptions) {
       });
       if (answer == null) return null;
       return answer.ok && answer.text != null
-        ? {
-            value: answer.text,
-            unit: displayUnit.symbol || displayUnit.label || displayUnit.typeId,
-          }
+        ? { value: answer.text, unit: word }
         : { refusal: answer.refusal ?? `Revit could not read "${text}" here.` };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the ref is re-armed by `basis` above

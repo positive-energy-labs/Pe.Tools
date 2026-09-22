@@ -496,10 +496,11 @@ test("the document lifetime ends and its Work is discarded; saved Work refuses",
   const module = workspace(store);
   await bind(module, unsaved).apply("human", [{ path: ["values", "a"], value: "A" }], 0);
 
-  expect(await module.discard(documentA, "test-route")).toMatchObject({ ok: false });
+  expect(await module.discard(documentA, "test-route", "human")).toMatchObject({ ok: false });
   expect(
-    await module.discard({ route: "test-route", target: null, work: "named" }, "test-route"),
+    await module.discard({ route: "test-route", target: null, work: "named" }, "test-route", "human"),
   ).toMatchObject({ ok: false });
-  expect(await module.discard(unsaved, "test-route")).toMatchObject({ ok: true });
+  expect(await module.discard(unsaved, "test-route", "agent")).toMatchObject({ ok: false });
+  expect(await module.discard(unsaved, "test-route", "human")).toMatchObject({ ok: true });
   expect(await bind(module, unsaved).read()).toBeNull();
 });

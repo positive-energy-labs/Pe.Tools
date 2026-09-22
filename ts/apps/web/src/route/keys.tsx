@@ -53,10 +53,13 @@ interface ScopeNode {
   element?: RefObject<HTMLElement | null>;
 }
 
-/** The tree's root. `routes/__root.tsx` declares it; a surface rendered alone still has it. */
+/**
+ * The tree's root, and the context's default: every node nests under it, so a surface rendered
+ * alone (a test, a popover) still has a live node to hang off, and nothing declares it twice.
+ */
 const APP: ScopeNode = { id: "app", depth: 0, live: true };
 
-const ScopeContext = createContext<ScopeNode | null>(null);
+const ScopeContext = createContext<ScopeNode>(APP);
 
 export function KeyScope({
   id,
@@ -72,8 +75,8 @@ export function KeyScope({
   children: ReactNode;
 }) {
   const above = use(ScopeContext);
-  const live = !hidden && (above?.live ?? true);
-  const depth = (above?.depth ?? -1) + 1;
+  const live = !hidden && above.live;
+  const depth = above.depth + 1;
   const node = useMemo(() => ({ id, depth, live, element }), [id, depth, live, element]);
   return <ScopeContext value={node}>{children}</ScopeContext>;
 }
@@ -102,7 +105,7 @@ export function useScopeKeys(
   keys: readonly ScopeKey[],
   region?: RefObject<HTMLElement | null> | HTMLElement | null,
 ): void {
-  const node = use(ScopeContext) ?? APP;
+  const node = use(ScopeContext);
   const definitions: UseHotkeyDefinition[] = keys.map((key) => ({
     hotkey: key.hotkey,
     callback: key.callback,

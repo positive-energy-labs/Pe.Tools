@@ -283,11 +283,13 @@ export async function buildAgentControllerApp(
         routeWorkspace.startFresh(scope, route, actor),
     },
     {
-      // The unsaved document this Work belonged to closed; the scope itself is what refuses.
+      // Mounted under both prefixes; the agent door is refused by discard itself, and only an
+      // open-keyed scope is ever discarded.
       suffix: "discard",
       schema: z.object({}),
       hint: "expected {}",
-      run: (scope: WorkKey, route: string) => routeWorkspace.discard(scope, route),
+      run: (scope: WorkKey, route: string, actor: "agent" | "human") =>
+        routeWorkspace.discard(scope, route, actor),
     },
   ] as const;
   const mountRouteStateWrites = (prefix: string, actor: "agent" | "human") => {

@@ -369,8 +369,14 @@ export class RouteWorkspace {
    * The document lifetime this addressless Work belonged to ended, so the Work is gone. Only ever
    * an `open`-keyed scope: addressed and named Work is never discarded from under a person.
    */
-  async discard(scope: WorkKey, route: string): Promise<RouteStateWriteResult> {
+  async discard(scope: WorkKey, route: string, actor: RouteActor): Promise<RouteStateWriteResult> {
     if (!this.#registry.has(route)) return unknownRoute(route);
+    if (actor !== "human")
+      return refuse(
+        "refused",
+        "discard is human-only",
+        "Only the person whose document closed discards its Work.",
+      );
     if (scope.work !== undefined || scope.target !== null || scope.open === undefined)
       return refuse(
         "refused",

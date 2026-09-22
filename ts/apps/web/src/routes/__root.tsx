@@ -16,7 +16,6 @@ import { ActionButton } from "../components/lang/action-button";
 import { useAction, useHostCall } from "#/readings";
 import { inspectAtomRegistry } from "../state/atom-inspect";
 import { appAtomRegistry, routeSearch } from "../route/use-route";
-import { KeyScope } from "../route/keys";
 import {
   acknowledgeUpdate,
   readInstallStatus,
@@ -66,11 +65,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 export function RootComponent() {
   return (
     <div className="h-dvh min-h-0 min-w-0">
-      {/* The outermost scope node. Every route node nests inside it, so a chord bound by a
-          surface that has no route around it still has a node to hang off. */}
-      <KeyScope id="app">
-        <Outlet />
-      </KeyScope>
+      <Outlet />
     </div>
   );
 }
