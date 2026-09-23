@@ -177,7 +177,7 @@ export function LiveScheduleGridWorkspace({
    * hands — this runs on the focus edge only.
    */
   const focusOf = (pane: "rail" | "grid") => () => {
-    const declared = SCHEDULE_STAGES[page.stage].panes[pane];
+    const declared = SCHEDULE_STAGES[page.stage === "archived" ? "audit" : page.stage].panes[pane];
     if (!declared || handle.busy) return;
     if (!(pane === "grid" ? gridChanged : railChanged)) return;
     if (!declared.reads) return handle.revalidate(declared.draws);

@@ -91,6 +91,8 @@ export type RouteAction<W, R extends string, P, I = void> = ActionIdentity<W, R,
   stage?: string;
   /** Runs only from its confirmation sheet; the verb row draws no second button for it. */
   sheet?: true;
+  /** Available to route callers and Pea, without a bare button in the verb row. */
+  visible?: false;
   /** Page state the verb carries in its button ("Partition 10"); null = no count. */
   count?: (ctx: Ctx<W, R, P>) => number | null;
   ready: (ctx: Ctx<W, R, P>, input: I) => string | null;
@@ -199,7 +201,7 @@ export interface HeldRow {
 export const STALE_PLAN = "The staged cells changed since this plan; plan again";
 
 export interface EntityPage {
-  stage: EntityStage;
+  stage: EntityStage | "archived";
   /** The member the editor holds; capture lands here, apply reads it. Empty = none. */
   pod: string;
   path: string;
@@ -212,7 +214,7 @@ export interface EntityPage {
 }
 
 const entityPage = z.object({
-  stage: z.enum(["audit", "capture", "apply"]).default("audit"),
+  stage: z.enum(["audit", "capture", "apply", "archived"]).default("audit"),
   pod: z.string().default(""),
   path: z.string().default(""),
   selection: z.array(z.string()).default([]),
@@ -273,7 +275,7 @@ export interface EntityRouteDef<W, R extends string, P> {
    */
   schema: string | readonly [string, ...string[]];
   /** The host workflow that captures into the route's pod and returns the new member(s). */
-  capture: SemanticActionKey;
+  capture?: SemanticActionKey;
   /** The host workflow that applies a saved spec in one step, when there is no plan. */
   apply: SemanticActionKey;
   /** The audit Readings an apply changes in Revit (a new schedule joins the catalog): its
@@ -315,6 +317,8 @@ export interface EntityRouteDef<W, R extends string, P> {
   captureInput?: (
     ctx: Ctx<W, R | EntityReading, P & EntityPage>,
   ) => Record<string, unknown> | string;
+  /** Refuse planning/apply when route-owned edits belong to another exact document. */
+  targetReady?: (ctx: Ctx<W, R | EntityReading, P & EntityPage>) => string | null;
   docs?: ReactNode;
 }
 
@@ -455,7 +459,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
   const capture: RouteAction<unknown, string, EntityPage, never> = {
     waitSeconds: NATIVE_READ_WAIT_S,
     label: `capture ${def.entity}`,
-    does: def.capture,
+    does: def.capture!,
     input: z.void() as unknown as z.ZodType<never>,
     dirties: ["pods"],
     count: (ctx) => (def.target === "selection" ? ctx.page.selection.length || null : null),
@@ -470,7 +474,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
       const extra = def.captureInput?.(ctx as never);
       if (typeof extra === "string") throw Error(extra);
       // The host captures and files the new members; the page lands on the first it wrote.
-      const result = await workflow(def.capture, { pod: ctx.page.pod, ...extra }, ctx);
+      const result = await workflow(def.capture!, { pod: ctx.page.pod, ...extra }, ctx);
       const members = (result.members ?? [result.member]) as MemberRef[];
       // The page lands on what the capture wrote; only the person changes the stage.
       if (members[0]) ctx.setPage({ path: members[0].path, selection: [] });
@@ -499,6 +503,8 @@ export function entityRoute<W, const R extends string, P extends object, const A
     dirties: [],
     count: (ctx) => stagedCount(ctx) || null,
     ready: (ctx) => {
+      const targetRefusal = def.targetReady?.(ctx as never);
+      if (targetRefusal) return targetRefusal;
       // Staged work is a supplied draft. It can plan without filing a member or choosing a Pod.
       if (stagedCount(ctx)) return null;
       return plan ? savedSpec(ctx) : "nothing is staged to plan";
@@ -524,6 +530,8 @@ export function entityRoute<W, const R extends string, P extends object, const A
     dirties: ["pods", ...(def.applies ?? [])],
     count: (ctx) => (plan || staged ? sheetView(ctx)?.included.length || null : null),
     ready: (ctx) => {
+      const targetRefusal = def.targetReady?.(ctx as never);
+      if (targetRefusal) return targetRefusal;
       // A staged sheet carries its own sealed plans; the page's member is not sent.
       const missing = stagedSheet(ctx) ? null : savedSpec(ctx);
       if (missing || !(plan || staged)) return missing;
@@ -545,7 +553,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
       const outcome = stagedSheet(ctx)
         ? await staged!.apply(ctx as never, view.included)
         : await plan!.apply(ctx as never, view.included, sourceOf(ctx));
-      ctx.setPage({ confirming: false, sheet: null });
+      ctx.setPage({ confirming: false, sheet: null }, ["sheet", "stage", "pod", "path"]);
       return outcome ?? null;
     },
   };
@@ -556,7 +564,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
     needs: def.needs ?? "project",
     stages: [
       { key: "audit", word: "Auditing" },
-      { key: "capture", word: "Capturing" },
+      ...(def.capture ? [{ key: "capture", word: "Capturing" }] : []),
       { key: "apply", word: "Applying" },
     ],
     work: audit.work,
@@ -570,7 +578,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
     >,
     actions: {
       ...audit.actions,
-      capture,
+      ...(def.capture ? { capture } : {}),
       ...(plan || staged ? { plan: planVerb } : {}),
       apply,
     } as never,

@@ -20,8 +20,9 @@ import {
 import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
-import { admitFamilyAction, readFamily } from "../src/family-actions.ts";
-import { sdkSessions } from "./native-receipt-fixture.ts";
+import { admitFamilyAction, readFamily, recoverFamilyAction } from "../src/family-actions.ts";
+import { documentMarks } from "../src/document-marks.ts";
+import { sdkEnvelope, sdkSessions } from "./native-receipt-fixture.ts";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -60,6 +61,26 @@ const loaded = [
   { familyId: 3, familyName: "Elbow", categoryName: "Ducts", types },
   { familyId: 9, familyName: "Grille", categoryName: "Air Terminals", types },
 ];
+const matrixFamily = (familyName: string, value: string, familyId = 1) => ({
+  familyId,
+  familyUniqueId: `unique-${familyName}-${familyId}`,
+  familyName,
+  categoryName: "Ducts",
+  typeNames: ["T"],
+  parameters: [
+    {
+      definition: { identity: { key: "Width", kind: "NameFallback", name: "Width" } },
+      kind: "FamilyParameter",
+      scope: "Family",
+      storageType: "Double",
+      formulaState: "None",
+      valuesPerType: { T: value },
+    },
+  ],
+  issues: [],
+  isPartial: false,
+  placedInstanceCount: 1,
+});
 const link = {
   formatVersion: 1,
   definitions: [
@@ -94,7 +115,7 @@ const linkData = {
   appliedWriteCount: 2,
 };
 
-async function setup() {
+async function setup(sdk: (args: readonly string[]) => Promise<string> = sdkSessions) {
   vi.stubEnv("PE_LANE", "dev");
   const dir = await mkdtemp(join(tmpdir(), "pe-route-apply-"));
   cleanup.push(() => rm(dir, { recursive: true, force: true }));
@@ -109,6 +130,9 @@ async function setup() {
   let planEntries = [entry(1, "Box", "h1"), entry(2, "Pipe", "h2")];
   let nativeFails = false;
   let nativeUnknown = false;
+  let matrixFails = false;
+  let matrixValue = "2in";
+  let onBridgeEvent: ((event: unknown) => void) | null = null;
   const box = {
     familyId: 1,
     familyName: "Box",
@@ -122,7 +146,12 @@ async function setup() {
   let duringNative: (() => Promise<void>) | null = null;
   let familyDocument = false;
   const bridge = {
-    subscribe: () => () => {},
+    subscribe: (listener: (event: unknown) => void) => {
+      onBridgeEvent = listener;
+      return () => {
+        onBridgeEvent = null;
+      };
+    },
     list: Effect.sync(() => [
       {
         sessionId: "A",
@@ -170,6 +199,22 @@ async function setup() {
             },
           };
         }
+        if (key === "revit.matrix.loaded-families") {
+          if (matrixFails) throw Error("loaded-project matrix unavailable");
+          return {
+            value: {
+              families: input.filter.familyNames.map((name: string) =>
+                matrixFamily(name, matrixValue, name === "Box" ? 11 : 2),
+              ),
+              issues: [],
+              page: {
+                totalCount: input.filter.familyNames.length,
+                returnedCount: input.filter.familyNames.length,
+                isTruncated: false,
+              },
+            },
+          };
+        }
         // The engine resolves exactly the names it is passed to their current ids.
         if (key === "families.plan")
           return {
@@ -191,6 +236,7 @@ async function setup() {
       }),
     // biome-ignore lint/suspicious/noExplicitAny: the fixture implements only what the host calls.
   } as any;
+  documentMarks(bridge);
   const work = new RouteWorkspace({
     registrations: [
       { spec: familiesRouteState, handlers: {} },
@@ -207,7 +253,7 @@ async function setup() {
   const captures = new TakeoffCaptures(join(dir, "captures"));
   const owner = new ActionJournal(join(dir, "actions.json"));
   // biome-ignore lint/suspicious/noExplicitAny: the SDK reader is the shared native-receipt fixture.
-  const deps = { workspace: work, sdk: sdkSessions, podsRoot } as any;
+  const deps = { workspace: work, sdk, podsRoot } as any;
   const read = (key: string, input: unknown = {}, readScope = scope) =>
     readFamily({ key, input, scope: readScope, target }, captures, bridge, deps);
   const admit = async (
@@ -217,6 +263,7 @@ async function setup() {
     id = `${key}${revision}`,
     actor: "human" | "agent" = "human",
     where: { route: string; target: string } | null = scope,
+    resume = false,
   ) => {
     const row = await admitFamilyAction(
       {
@@ -232,6 +279,7 @@ async function setup() {
       captures,
       bridge,
       deps,
+      resume,
     );
     return owner.wait(row.id);
   };
@@ -249,7 +297,23 @@ async function setup() {
     },
     owner,
     captures,
+    recover: (id: string) => recoverFamilyAction(id, owner, deps),
     sent,
+    matrixFails: (value: boolean) => {
+      matrixFails = value;
+    },
+    matrixValue: (value: string) => {
+      matrixValue = value;
+    },
+    changed: async () => {
+      onBridgeEvent?.({
+        sessionId: target.session,
+        kind: "event",
+        eventName: "document-changed",
+        payloadJson: JSON.stringify({ changedOpenIds: [target.openId] }),
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    },
     read,
     admit,
     entries: (next: typeof planEntries) => {
@@ -570,6 +634,33 @@ test("apply sends the bytes its plan sealed, not the member as saved since", asy
   expect(sent.find((row) => row.key === "families.apply")!.input.specJson).toBe(composed);
 });
 
+test("saved Pod apply also reads back affected families when its exact Work has a full reading", async () => {
+  const env = await setup();
+  const revision = await authorFamilies(env.work);
+  const doc = familiesRouteState.schema.parse((await env.work.read(scope, "families"))!.doc);
+  const baseline = await env.captures.saveFamilies({
+    work: scope,
+    document: target,
+    filter: stagedFilter(doc)!,
+    capturedAt: doc.takenAt!,
+    result: {
+      families: [matrixFamily("Box", "1in"), matrixFamily("Pipe", "1in", 2)],
+      issues: [],
+      page: { totalCount: 2, returnedCount: 2, isTruncated: false },
+    },
+  });
+  const plan = resultOf<Plan>(await env.admit("families.plan", { source }, revision));
+  const done = resultOf<{ readback: { id: string } }>(
+    await env.admit(
+      "families.apply",
+      { plan: plan.id, expectedPlanHashes: { "1": "h1" } },
+      revision,
+    ),
+  );
+  expect((await env.captures.families(done.readback.id)).readback?.sourceId).toBe(baseline.id);
+  expect(env.sent.filter((row) => row.key === "revit.matrix.loaded-families")).toHaveLength(1);
+});
+
 test("apply refuses a plan it cannot name, another document's, or a hash the plan never made", async () => {
   const { work, admit, sent } = await setup();
   const revision = await authorFamilies(work);
@@ -709,6 +800,18 @@ async function stagedPlan(
   content?: string,
 ) {
   const authored = await authorFamilies(env.work);
+  const document = familiesRouteState.schema.parse((await env.work.read(scope, "families"))!.doc);
+  await env.captures.saveFamilies({
+    work: scope,
+    document: target,
+    filter: stagedFilter(document)!,
+    capturedAt: document.takenAt!,
+    result: {
+      families: [matrixFamily("Box", "1in"), matrixFamily("Pipe", "1in", 2)],
+      issues: [],
+      page: { totalCount: 2, returnedCount: 2, isTruncated: false },
+    },
+  });
   const revision = (
     await env.work.apply(scope, "families", "human", [{ path: ["cells"], value: cells }], authored)
   ).revision!;
@@ -739,6 +842,95 @@ test("a staged plan files nothing in the pod; apply carries the exact draft byte
   expect(Buffer.from(root.bytesBase64, "base64").toString("utf8")).toBe(draft.content);
   expect(root.sha256).toBe(createHash("sha256").update(draft.content).digest("hex"));
   expect((await cellsNow(env.work))[W]?.staged).toBeNull();
+});
+
+test("apply reads only successful loaded families, retains untouched rows, and leaves the full-read stamp", async () => {
+  const env = await setup();
+  const { apply, revision } = await stagedPlan(env, { [W]: staged("10") });
+  const baseline = (await env.captures.latestFamilies(scope))!;
+  const done = resultOf<{ readback: { id: string } }>(
+    await env.admit("families.apply", apply, revision),
+  );
+  const updated = await env.captures.families(done.readback.id);
+  expect(env.sent.filter((row) => row.key === "revit.matrix.loaded-families")).toEqual([
+    expect.objectContaining({
+      input: expect.objectContaining({
+        filter: { categoryNames: ["Ducts"], familyNames: ["Box"], placementScope: "AllLoaded" },
+        budget: { maxEntries: 1, maxSamplesPerEntry: 1000 },
+      }),
+    }),
+  ]);
+  expect(updated.capturedAt).toBe(baseline.capturedAt);
+  expect(updated.readback).toEqual({
+    sourceId: baseline.id,
+    verifiedFamilies: [{ name: "Box", at: expect.any(String) }],
+  });
+  expect(
+    updated.result.families.map((family) => [
+      family.familyName,
+      family.familyId,
+      family.parameters[0]?.valuesPerType.T,
+    ]),
+  ).toEqual([
+    ["Box", 11, "2in"],
+    ["Pipe", 2, "1in"],
+  ]);
+  expect(
+    familiesRouteState.schema.parse((await env.work.read(scope, "families"))!.doc).takenAt,
+  ).toBe(baseline.capturedAt);
+});
+
+test("a failed post-apply readback keeps the native success and previous saved matrix", async () => {
+  const env = await setup();
+  const { apply, revision } = await stagedPlan(env, { [W]: staged("10") });
+  const baseline = (await env.captures.latestFamilies(scope))!;
+  env.matrixFails(true);
+  const done = resultOf<{ readbackError: string }>(
+    await env.admit("families.apply", apply, revision),
+  );
+  expect(done.readbackError).toContain("loaded-project matrix unavailable");
+  expect((await env.captures.latestFamilies(scope))?.id).toBe(baseline.id);
+  expect((await cellsNow(env.work))[W]?.staged).toBeNull();
+});
+
+test("separate staged plans dispatch after the first changes the document", async () => {
+  const env = await setup();
+  const pipeCell = familyCellKey({ familyName: "Pipe", typeName: "T", parameter: "Width" });
+  const { apply, revision } = await stagedPlan(env, {
+    [W]: staged("10"),
+    [pipeCell]: staged("20"),
+  });
+  const pipe = familyStagedPatch(await cellsNow(env.work), "Pipe")!;
+  const pipePlan = resultOf<Plan>(
+    await env.admit(
+      "families.plan",
+      {
+        source: {
+          path: "staged/Pipe.json",
+          content: `${JSON.stringify({ $schema: "https://ff/schema.json", ...pipe.spec }, null, 2)}\n`,
+        },
+        familyNames: ["Pipe"],
+      },
+      revision,
+      "pipe-plan",
+    ),
+  );
+  resultOf(await env.admit("families.apply", apply, revision, "box-apply"));
+  await env.changed();
+  env.applied({ receipts: [{ ...env.box, familyId: 2, familyName: "Pipe", loadedFamilyId: 12 }] });
+  const second = resultOf<{ retired: { retired: string[] } }>(
+    await env.admit(
+      "families.apply",
+      {
+        plan: pipePlan.id,
+        expectedPlanHashes: pipePlan.included,
+      },
+      revision,
+      "pipe-apply",
+    ),
+  );
+  expect(second.retired.retired).toEqual([pipeCell]);
+  expect(env.sent.filter((row) => row.key === "families.apply")).toHaveLength(2);
 });
 
 test("a source that is both a saved member and a draft refuses; neither arm wins by stripping", async () => {
@@ -833,10 +1025,15 @@ test("a leftover staged cell still addresses its family after an apply reloads i
   // Box is element 11 now; the leftover cell names Box, so it plans and retires against 11.
   env.entries([entry(11, "Box", "h11"), entry(2, "Pipe", "h2")]);
   const leftover = { [D]: staged("5") };
-  const now = (await env.work.read(scope, "families"))!.revision;
+  const afterApply = (await env.work.read(scope, "families"))!.revision;
   const after = await cellsNow(env.work);
   expect(after[W]?.staged).toBeNull();
   expect(after[D]).toEqual(leftover[D]);
+  const retained = (await env.captures.latestFamilies(scope))!;
+  expect(retained.readback?.verifiedFamilies).toEqual([{ name: "Box", at: expect.any(String) }]);
+  expect(retained.capturedAt).toBe(
+    familiesRouteState.schema.parse((await env.work.read(scope, "families"))!.doc).takenAt,
+  );
   const generated = familyStagedPatch(leftover, "Box")!;
   const draft = {
     pod: "global",
@@ -845,7 +1042,7 @@ test("a leftover staged cell still addresses its family after an apply reloads i
 `,
   };
   const plan = resultOf<Plan>(
-    await env.admit("families.plan", { source: draft, familyNames: ["Box"] }, now, "again"),
+    await env.admit("families.plan", { source: draft, familyNames: ["Box"] }, afterApply, "again"),
   );
   expect(plan.included).toEqual({ "11": "h11" });
   expect((plan as Plan & { orphaned: string[] }).orphaned).toEqual([]);
@@ -854,7 +1051,7 @@ test("a leftover staged cell still addresses its family after an apply reloads i
     await env.admit(
       "families.apply",
       { plan: plan.id, expectedPlanHashes: plan.included },
-      now,
+      afterApply,
       "again-apply",
     ),
   );
@@ -1266,6 +1463,162 @@ test("a plan whose apply outcome is unknown refuses another apply until it is re
   unknown(false);
   await expect(admit("families.apply", input, revision, "again")).rejects.toThrow(/recover/);
   expect(sent.filter((s) => s.key === "families.apply")).toHaveLength(1);
+});
+
+test("an interrupted Families apply resumes from its exact durable FF run without native redispatch", async () => {
+  let nativeResult: unknown;
+  const env = await setup(async (args) =>
+    args.includes("result") ? sdkEnvelope(nativeResult) : sdkSessions(),
+  );
+  const { apply, revision } = await stagedPlan(env, { [W]: staged("10") });
+  env.unknown(true);
+  const interrupted = await env.admit("families.apply", apply, revision, "interrupted");
+  env.unknown(false);
+  expect(interrupted.state).toBe("unknown");
+  const step = interrupted.steps.find((row) => row.key === "families.apply")!;
+  const prepared = (
+    interrupted.preparation as { value: { process: { pid: number; processStartUtc: string } } }
+  ).value;
+  nativeResult = {
+    state: "completed",
+    requestId: step.id,
+    receipt: {
+      requestId: step.id,
+      key: step.key,
+      pid: prepared.process.pid,
+      processStartUtc: prepared.process.processStartUtc,
+      verdict: "ok",
+      startedUtc: "2026-09-23T09:00:00Z",
+      completedUtc: "2026-09-23T09:00:01Z",
+      responsePath: "aborted.json",
+    },
+    response: { error: "WebSocket Aborted" },
+  };
+  // Older SDK recovery treated verdict=ok plus this transport error as a successful step.
+  const mistaken = await env.owner.recover("interrupted", async (row) => ({
+    step: {
+      id: row.id,
+      key: row.key,
+      kind: row.kind,
+      input: row.input,
+      state: "succeeded",
+      result: { error: "WebSocket Aborted" },
+    },
+    evidence: nativeResult,
+  }));
+  expect(mistaken.steps.find((row) => row.id === step.id)?.state).toBe("succeeded");
+  const unsupported = await env.recover("interrupted");
+  expect(unsupported.state).toBe("unknown");
+  expect(unsupported.steps.find((row) => row.id === step.id)?.state).toBe("unknown");
+  await expect(
+    env.admit("families.apply", apply, revision, "interrupted", "human", scope, true),
+  ).rejects.toThrow(/Recover every uncertain step/);
+
+  const input = step.input as {
+    plan: string;
+    specJson: string;
+    expectedPlanHashes: Record<string, string>;
+    familyNames: Record<string, string>;
+    source: {
+      root: {
+        id: string | null;
+        path: string;
+        sha256: string;
+        origin: string;
+        bytesBase64: string;
+      };
+    };
+  };
+  const run = join(
+    env.podsRoot,
+    "default",
+    "output",
+    "operations",
+    "20260923-090000-0123456789abcdef0123456789abcdef",
+  );
+  await mkdir(run, { recursive: true });
+  const runInput = {
+    operation: "families.apply",
+    plan: { actionId: input.plan },
+    expectedPlanHashes: input.expectedPlanHashes,
+    familyNames: input.familyNames,
+    target: {
+      openId: "another-document",
+      process: {
+        processId: prepared.process.pid,
+        processStartUtc: prepared.process.processStartUtc,
+      },
+    },
+    source: {
+      origin: input.source.root.origin,
+      pod: input.source.root.id,
+      path: input.source.root.path,
+      sha256: input.source.root.sha256,
+    },
+    files: [
+      {
+        role: "supplied-draft",
+        address: input.source.root.path,
+        sha256: input.source.root.sha256,
+        file: "source/00-Box.json",
+      },
+    ],
+  };
+  await writeFile(join(run, "input.json"), JSON.stringify(runInput));
+  await writeFile(join(run, "effective-input.json"), input.specJson);
+  await mkdir(join(run, "source"), { recursive: true });
+  await writeFile(
+    join(run, "source", "00-Box.json"),
+    Buffer.from(input.source.root.bytesBase64, "base64"),
+  );
+  await writeFile(
+    join(run, "receipt.json"),
+    JSON.stringify({
+      operation: "families.apply",
+      outcome: "Succeeded",
+      origin: input.source.root.origin,
+      planHash: input.expectedPlanHashes["1"],
+      outputs: ["input.json", "apply.json"],
+    }),
+  );
+  await writeFile(
+    join(run, "apply.json"),
+    JSON.stringify({
+      Receipts: [
+        {
+          FamilyId: 1,
+          FamilyName: "Box",
+          Success: true,
+          Converged: true,
+          Error: null,
+          PlanHash: input.expectedPlanHashes["1"],
+          Residue: [],
+          Errors: [],
+          ArtifactDirectory: "Box",
+          LoadedFamilyId: 11,
+        },
+      ],
+      Diagnostics: [],
+      Reason: null,
+    }),
+  );
+  const wrongDocument = await env.recover("interrupted");
+  expect(wrongDocument.steps.find((row) => row.id === step.id)?.state).toBe("unknown");
+  await writeFile(
+    join(run, "input.json"),
+    JSON.stringify({ ...runInput, target: { ...runInput.target, openId: target.openId } }),
+  );
+  const recovered = await env.recover("interrupted");
+  expect(recovered.state).toBe("unknown");
+  expect(recovered.steps.find((row) => row.id === step.id)).toMatchObject({
+    state: "succeeded",
+    result: { receipts: [{ familyName: "Box", success: true, loadedFamilyId: 11 }] },
+  });
+  const resumed = resultOf<{ retired: { retired: string[] } }>(
+    await env.admit("families.apply", apply, revision, "interrupted", "human", scope, true),
+  );
+  expect(resumed.retired.retired).toEqual([W]);
+  expect(env.sent.filter((row) => row.key === "families.apply")).toHaveLength(1);
 });
 
 /* ── O8-b: a stale review refuses ────────────────────────────────────────────────────────── */

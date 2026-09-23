@@ -1,29 +1,167 @@
 import { Pane } from "#/components/lang/pane";
+import { useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
+import { Surface } from "#/components/lang/surface";
+import { Switcher } from "#/components/lang/switcher";
 import { FamiliesMatrix } from "#/families/matrix";
 import { familiesSpec } from "#/families/manifest";
 import { FAMILIES_STAGES } from "#/families/stage";
 import { DEMO_FAMILIES_SPEC } from "#/families/seeds";
 import {
-  FamiliesCaptureBand,
   FamiliesCarryOverLine,
   FamiliesProposalsBand,
   FamiliesReceiptsBand,
   SalvagedExclusions,
 } from "#/families/readout-bands";
-import { FamiliesFilterBand } from "#/families/scope-band";
+import { LoadedFamilyPlacement } from "#/host/loaded-families-view";
+import { FamiliesScopeProposal, filterWords } from "#/families/scope-band";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
-import { ChangedInRevit } from "#/route/changed";
 import { EntityRouteView } from "#/route/entity";
-import { SituationCell } from "#/route/situation-marks";
+import { Situation } from "#/route/situation";
+import type { Rung } from "#/route/ladder";
+import { Ladder } from "#/route/ladder";
+import type { FamiliesObservationSummary } from "#/families/host";
+import { inventoryOf, previousOf } from "#/readings";
+import { FamiliesReadStatus as ReadStatus } from "./read-status";
 
 const noun = (n: number, word: string) =>
   `${n} ${n === 1 ? word : word.endsWith("y") ? `${word.slice(0, -1)}ies` : `${word}s`}`;
 
+const archiveDocument = (
+  read: FamiliesObservationSummary,
+  sessions: ReturnType<typeof inventoryOf>,
+) =>
+  read.documentTitle ||
+  sessions
+    .find((session) => session.sessionId === read.document.session)
+    ?.openDocuments?.find((document) => document.openId === read.document.openId)?.title ||
+  (read.work.binding === "address"
+    ? read.work.target.split(/[\\/]/).at(-1) || read.work.target
+    : read.document.openId);
+
+function FamiliesReadStatus({ archived }: { archived: boolean }) {
+  const { store, lastReading, retainedError, changed, matrixReading, readAgain } =
+    useFamiliesWorkspace();
+  return (
+    <ReadStatus
+      reading={lastReading}
+      error={retainedError}
+      changed={changed}
+      archived={archived}
+      loading={archived && matrixReading}
+      failure={archived ? store.archive.failure : undefined}
+      retry={archived ? store.archive.retry : undefined}
+      readAgain={archived ? undefined : readAgain}
+      busy={matrixReading}
+      readbackError={archived ? null : store.readbackError}
+    />
+  );
+}
+
+function FamiliesArchivedView({ url }: { url?: boolean }) {
+  const { store, lastReading } = useFamiliesWorkspace();
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!url) return;
+    void navigate({
+      to: ".",
+      search: (previous: Record<string, unknown>) => ({ ...previous, stage: "archived" }),
+      replace: true,
+    } as never);
+  }, [url, navigate]);
+  const { list, selectedId, loading, error, select } = store.archive;
+  const observed = previousOf(store.handle.inventory) as
+    | { sessions?: Parameters<typeof inventoryOf>[0] }
+    | undefined;
+  const sessions = inventoryOf(observed?.sessions ?? []);
+  const selected = list.find((read) => read.id === selectedId);
+  return (
+    <Surface
+      head={
+        <Situation
+          handle={store.handle}
+          inspection
+          band={<FamiliesReadStatus archived />}
+          target={{ session: null, document: null }}
+          chooseStage={(stage) => store.setPage({ stage: stage as "audit" | "apply" | "archived" })}
+          sentence={
+            <>
+              families from{" "}
+              <Ladder
+                levels={[
+                  {
+                    key: "past read",
+                    label: selected
+                      ? `${archiveDocument(selected, sessions)} · ${new Date(selected.completedAt).toLocaleString()}${selected.readback ? " · after apply" : ""}`
+                      : null,
+                    placeholder: "choose a past read",
+                    options: list.map((read) => ({
+                      id: read.id,
+                      label: archiveDocument(read, sessions),
+                      sub: `${filterWords(read.filter)} · ${new Date(read.completedAt).toLocaleString()}${read.readback ? " · after apply" : ""}`,
+                    })),
+                    note: error
+                      ? "past reads unavailable — retry below"
+                      : loading
+                        ? "loading past reads…"
+                        : "no past reads",
+                    picked: (id) => id === selectedId,
+                    pick: select,
+                  },
+                ]}
+              />
+              .
+            </>
+          }
+          ledger={
+            selected
+              ? [
+                  [
+                    "reading",
+                    `${archiveDocument(selected, sessions)} · ${new Date(selected.capturedAt).toLocaleString()}`,
+                  ],
+                ]
+              : []
+          }
+        />
+      }
+    >
+      <div className="flex size-full min-h-0 min-w-0 flex-col">
+        <Pane
+          kind="content"
+          title="archived families"
+          help="A saved reading for inspection. Choose Audit to read or edit the current document."
+          scroll="clip"
+          flush
+          headerless
+        >
+          {lastReading ? (
+            <FamiliesMatrix />
+          ) : (
+            <p className="px-4 py-3 t-small text-ink-2">
+              {error
+                ? "Table unavailable. Retry or choose another past read above."
+                : loading
+                  ? ""
+                  : "Choose a past read above. Reads saved in Audit appear here."}
+            </p>
+          )}
+        </Pane>
+      </div>
+    </Surface>
+  );
+}
+
 /**
- * `/families` on the kernel. The sentence names the applied scope ("families over 12 families");
- * the audit is the scope draft, the last apply's receipts and the matrix with its pick column.
+ * `/families` on the kernel. The sentence names the last completed read; the picker prepares the
+ * next one. The matrix stays on its completed reading until Read families answers.
  */
 export function FamiliesWorkspaceView({ url }: { url?: boolean }) {
+  const { archived } = useFamiliesWorkspace();
+  return archived ? <FamiliesArchivedView url={url} /> : <FamiliesActiveView url={url} />;
+}
+
+function FamiliesActiveView({ url }: { url?: boolean }) {
   const {
     store,
     applied,
@@ -32,26 +170,140 @@ export function FamiliesWorkspaceView({ url }: { url?: boolean }) {
     outsideProfile,
     matrixIssue,
     totalFamilies,
-    changed,
-    readAgain,
-    matrixReading,
+    draftCategories,
+    pickedFamilies,
+    categories,
+    draftFamilyNames,
+    categoryFeed,
+    familyFeed,
+    placement,
+    setPlacement,
+    setDraftCategories,
+    setPickedFamilies,
   } = useFamiliesWorkspace();
+  const categoryCheck = (id: string): boolean | "mixed" => {
+    if (!id) {
+      if (!draftCategories.length) return false;
+      if (draftCategories.length !== categories.length) return "mixed";
+      const states = draftCategories.map(categoryCheck);
+      return states.every((state) => state === true)
+        ? true
+        : states.every((state) => state === false)
+          ? false
+          : "mixed";
+    }
+    if (!draftCategories.includes(id)) return false;
+    if (pickedFamilies === null) return true;
+    const names =
+      familyFeed.options
+        ?.filter((option) => option.categoryName === id)
+        .map((option) => option.id) ?? [];
+    if (!names.length) return true;
+    const selected = names.filter((name) => pickedFamilies.includes(name)).length;
+    return selected === names.length ? true : selected > 0 ? "mixed" : false;
+  };
+  const targetRungs = (): readonly Rung[] => [
+    {
+      key: "category",
+      label: draftCategories.length ? `${draftCategories.length} categories` : null,
+      placeholder: "choose categories",
+      options:
+        categoryFeed.options === null
+          ? null
+          : [{ id: "", label: "all categories" }, ...categories.map((id) => ({ id, label: id }))],
+      note: categoryFeed.state === "loading" ? "reading categories…" : "no categories",
+      multi: true,
+      picked: (id) =>
+        id
+          ? draftCategories.includes(id)
+          : categories.length > 0 && draftCategories.length === categories.length,
+      checked: categoryCheck,
+      pick: (id) =>
+        setDraftCategories(
+          id === ""
+            ? draftCategories.length === categories.length
+              ? []
+              : [...categories]
+            : draftCategories.includes(id)
+              ? draftCategories.filter((name) => name !== id)
+              : [...draftCategories, id].sort(),
+        ),
+      extra: (
+        <Switcher
+          ariaLabel="placement filter"
+          value={placement}
+          onChange={setPlacement}
+          options={[
+            {
+              value: LoadedFamilyPlacement.AllLoaded,
+              label: "all loaded",
+              title: "Read every loaded family in the selected categories",
+            },
+            {
+              value: LoadedFamilyPlacement.PlacedOnly,
+              label: "placed only",
+              title: "Read families with placed instances",
+            },
+            {
+              value: LoadedFamilyPlacement.UnplacedOnly,
+              label: "unplaced only",
+              title: "Read families without placed instances",
+            },
+          ]}
+        />
+      ),
+    },
+    {
+      key: "family",
+      label: draftCategories.length
+        ? `${draftCategories.length === 1 ? draftCategories[0] : `${draftCategories.length} categories`} · ${
+            pickedFamilies === null
+              ? draftFamilyNames.length
+                ? `all ${draftFamilyNames.length} families`
+                : "all families"
+              : `${pickedFamilies.length} families`
+          }`
+        : null,
+      placeholder: "choose families",
+      options:
+        !draftCategories.length || familyFeed.options === null
+          ? null
+          : [
+              { id: "", label: "all families" },
+              ...draftFamilyNames.map((id) => ({ id, label: id })),
+            ],
+      note: familyFeed.state === "loading" ? "resolving families…" : "no families",
+      multi: true,
+      picked: (id) => (id ? pickedFamilies?.includes(id) === true : pickedFamilies === null),
+      checked: (id) =>
+        id
+          ? pickedFamilies === null || pickedFamilies.includes(id)
+          : pickedFamilies === null
+            ? true
+            : pickedFamilies.length
+              ? "mixed"
+              : false,
+      pick: (id) =>
+        setPickedFamilies(
+          id === ""
+            ? pickedFamilies === null
+              ? []
+              : null
+            : pickedFamilies === null
+              ? draftFamilyNames.filter((name) => name !== id)
+              : pickedFamilies.includes(id)
+                ? pickedFamilies.filter((name) => name !== id)
+                : [...pickedFamilies, id].sort(),
+        ),
+      extra: (
+        <span className="t-small text-ink-2">
+          {draftFamilyNames.length} families available · selections prepare the next read
+        </span>
+      ),
+    },
+  ];
   // An empty familyNames list means every family the categories resolve to: read the resolved count.
   const scoped = applied ? applied.familyNames.length || totalFamilies : 0;
-  const scope = (
-    <SituationCell io={store.page.stage === "audit" ? "w" : "r"} empty={!applied}>
-      <span
-        className={applied ? undefined : "border-b seam-border border-current text-ink-2"}
-        title={
-          applied
-            ? `${applied.placementScope} · ${applied.categoryNames.join(", ") || "every category"}; the scope draft changes it`
-            : "no scope staged; draft one in the audit and apply it, or accept Pea's"
-        }
-      >
-        {applied ? noun(scoped, "family") : "no staged scope"}
-      </span>
-    </SituationCell>
-  );
   return (
     <EntityRouteView
       def={familiesSpec}
@@ -60,8 +312,21 @@ export function FamiliesWorkspaceView({ url }: { url?: boolean }) {
       fixture={store.demo ? DEMO_FAMILIES_SPEC : undefined}
       url={url}
       stages={FAMILIES_STAGES}
-      subject={<>families over {scope}</>}
-      health={matrixIssue ? `${matrixIssue.title} · ${matrixIssue.message}` : null}
+      targetRungs={store.page.stage === "audit" ? targetRungs : undefined}
+      auditPlan={Object.values(store.cells).some((cell) => cell.staged != null)}
+      subject={<>loaded families</>}
+      health={matrixIssue?.title ?? null}
+      band={
+        <>
+          <div className="flex flex-wrap items-center gap-x-3">
+            <FamiliesReadStatus archived={false} />
+            <FamiliesReceiptsBand />
+          </div>
+          <FamiliesCarryOverLine />
+          <FamiliesScopeProposal />
+          <FamiliesProposalsBand />
+        </>
+      }
       startFreshAside={<SalvagedExclusions />}
       onStartedFresh={store.actions.startedFresh}
       hold={(id) => {
@@ -73,7 +338,7 @@ export function FamiliesWorkspaceView({ url }: { url?: boolean }) {
           "scope",
           applied
             ? `${applied.placementScope} · ${applied.categoryNames.join(", ") || "every category"} · ${noun(scoped, "family")}`
-            : "none staged",
+            : "none read",
         ],
         [
           "plan",
@@ -85,26 +350,10 @@ export function FamiliesWorkspaceView({ url }: { url?: boolean }) {
       ]}
     >
       <div className="flex size-full min-h-0 min-w-0 flex-col">
-        <div data-slot="readout-band" className="shrink-0 py-1.5">
-          {changed ? (
-            <div className="flex items-center gap-2">
-              <ChangedInRevit
-                what="the loaded families"
-                busy={matrixReading}
-                onReadAgain={readAgain}
-              />
-            </div>
-          ) : null}
-          <FamiliesCarryOverLine />
-          <FamiliesFilterBand />
-          <FamiliesProposalsBand />
-          <FamiliesCaptureBand />
-          <FamiliesReceiptsBand />
-        </div>
         <Pane
           kind="content"
           title="families"
-          help="Families and types in the applied scope. Pick rows to capture them; open a row to inspect its family."
+          help="Families and types from the last explicit read. Open a row to inspect its family."
           scroll="clip"
           flush
           headerless

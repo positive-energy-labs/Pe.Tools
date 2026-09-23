@@ -38,6 +38,7 @@ export interface RowState {
   cursor?: boolean;
   /** In the selected set. */
   selected?: boolean;
+  checked?: boolean | "mixed";
   /** The open, current or bound item (the thread you are in, the level you are on). */
   active?: boolean;
   pending?: boolean;
@@ -85,12 +86,24 @@ const rowStateProps = (state: RowState) => ({
   "data-failed": state.failed ? "" : undefined,
   "aria-disabled": state.refusal ? true : undefined,
   "aria-selected": state.selected === undefined ? undefined : state.selected,
+  "aria-checked": state.checked,
 });
 
 export function Row(props: RowProps) {
-  const { cursor, selected, active, pending, failed, refusal, id, role, onClick, onMouseMove } =
-    props;
-  const states = rowStateProps({ cursor, selected, active, pending, failed, refusal });
+  const {
+    cursor,
+    selected,
+    checked,
+    active,
+    pending,
+    failed,
+    refusal,
+    id,
+    role,
+    onClick,
+    onMouseMove,
+  } = props;
+  const states = rowStateProps({ cursor, selected, checked, active, pending, failed, refusal });
   const shared = {
     id,
     role,

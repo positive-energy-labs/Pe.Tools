@@ -1,23 +1,20 @@
-import { useEffect, useMemo, useRef } from "react";
-import { familyCellValueSchema, FAMILY_CATALOG_LIMIT } from "@pe/agent-contracts";
+import { useMemo } from "react";
+import { familyCellValueSchema, type FamilyCellState } from "@pe/agent-contracts";
 
 import { runFanOut, type CellWire } from "#/components/lang/band";
 import type { FamiliesStore } from "#/families/store";
-import { toHostIssue } from "#/host/issues";
 import { useMeasuredParse } from "#/host/measured-parse";
 import {
   cellText,
   visibleParameters,
   LoadedFamilyPlacement,
   type FamilySnapshotRecord,
-  type LoadedFamiliesMatrixRequest,
 } from "#/host/loaded-families-view";
-import { useLoadedFamiliesMatrixQuery } from "#/readings";
 import { useTableChips } from "#/components/anatomy";
 import {
   familiesLockOf,
   isYesNo,
-  useFamiliesColumns,
+  useLiveCells,
   type ParamColumn,
   type TypeRow,
 } from "#/families/matrix-columns";
@@ -29,23 +26,8 @@ import { familyCellEntries } from "#/families/staged";
 import { familyVerdicts } from "#/families/verdict";
 import { typeRowKey } from "#/families/picks";
 
-/**
- * Revit reloads every applied family under a new element id (w8-revit trip 12), so once an apply
- * settles, whatever its outcome, the audit re-reads its scope. Rows, picks, receipts and the next
- * plan key by family name, so they carry across; the sheet's hashes closed with it.
- */
-function useAfterApply(busy: string | null, reresolve: () => void) {
-  const applying = useRef(false);
-  const latest = useRef(reresolve);
-  latest.current = reresolve;
-  useEffect(() => {
-    if (busy === "apply") applying.current = true;
-    else if (applying.current) {
-      applying.current = false;
-      latest.current();
-    }
-  }, [busy]);
-}
+const NO_CELLS: Record<string, FamilyCellState> = {};
+const NO_EXCLUDED = new Set<string>();
 
 /** The placement filter's vocabulary, and what each choice MEANS for the audit. */
 function useFamiliesWorkspaceModel(
@@ -53,40 +35,52 @@ function useFamiliesWorkspaceModel(
   fixtureFamilies?: readonly FamilySnapshotRecord[],
 ) {
   const target = store.target;
+  const archived = store.page.stage === "archived";
   const scope = store.documentScope;
   const draft = store.draft;
   const { placement, categories: draftCategories, families: pickedFamilies } = draft;
   const setPlacement = (next: LoadedFamilyPlacement) =>
     store.actions.setDraft((previous) => ({ ...previous, placement: next }));
   const setDraftCategories = (next: string[]) =>
-    store.actions.setDraft((previous) => ({ ...previous, categories: next }));
-  const setPickedFamilies = (next: string[]) =>
+    store.actions.setDraft((previous) => ({ ...previous, categories: next, families: null }));
+  const setPickedFamilies = (next: string[] | null) =>
     store.actions.setDraft((previous) => ({ ...previous, families: next }));
-  const applied = store.applied;
-  const cells = store.cells;
+  const visibleReading = archived
+    ? store.archive.reading
+    : ([store.page.reading, store.retainedReading].find(
+        (reading) =>
+          reading &&
+          scope &&
+          reading.document.session === scope.bridgeSessionId &&
+          reading.document.openId === scope.openDocumentId,
+      ) ?? null);
+  const applied = archived
+    ? (visibleReading?.filter ?? null)
+    : fixtureFamilies
+      ? store.applied
+      : (visibleReading?.filter ?? null);
+  const cells = archived ? NO_CELLS : store.cells;
   const staged = useMemo(
     () => familyCellEntries(cells).filter((entry) => entry.cell.staged != null),
     [cells],
   );
-  const plan = store.plan;
-  const picked = store.picked;
-  const setPicked = store.actions.setPicked;
-  const applyData = store.applyData;
-  const showUncommon = store.showUncommon;
-  const setShowUncommon = store.actions.setShowUncommon;
+  const plan = archived ? null : store.plan;
+  const applyData = archived ? null : store.applyData;
   const tableState = store.table;
   const busyState = store.busy;
   const busy = busyState?.key ?? null;
   const categoryFeed = store.feeds.category;
   const familyFeed = store.feeds.family;
 
-  const fixture = fixtureFamilies !== undefined;
+  const fixture = !archived && fixtureFamilies !== undefined;
   // The resolved target came from this inventory subject. Requiring its current observation keeps
   // retained stale inventory from counting as a connected bridge.
   const connected =
-    fixture || (scope !== undefined && store.handle.readings.inventory.state === "ready");
+    archived ||
+    fixture ||
+    (scope !== undefined && store.handle.readings.inventory.state === "ready");
 
-  // ── scope: the cheap catalog feeds both pickers; the matrix waits for Apply ───────────────────
+  // Cheap catalog feeds the chooser. The matrix waits for the explicit read action.
   const categories = useMemo(
     () => categoryFeed.options?.map((option) => option.id) ?? [],
     [categoryFeed.options],
@@ -99,52 +93,19 @@ function useFamiliesWorkspaceModel(
     [fixture, fixtureFamilies, familyFeed.options],
   );
 
-  // The plan's budget, so the band counts the families the plan will plan; samples lifted so no
-  // type/cell is dropped from the master table.
-  const matrixRequest = useMemo<LoadedFamiliesMatrixRequest | undefined>(
-    () =>
-      applied
-        ? {
-            filter: applied,
-            budget: {
-              maxEntries: FAMILY_CATALOG_LIMIT,
-              maxSamplesPerEntry: 1000,
-            },
-            includeTempPlacement: true,
-          }
-        : undefined,
-    [applied],
-  );
-  const matrix = useLoadedFamiliesMatrixQuery(matrixRequest, {
-    ...scope,
-    // Not gated on the inventory's freshness: Revit busy with this very read lets the inventory
-    // go stale, and a gate on it aborted the read it was waiting for, forever (F-J1-4, hold 3).
-    // The resolved scope survives that gap; a bridge truly gone ends through the read's own wait.
-    enabled: !fixture && scope !== undefined && matrixRequest !== undefined,
-  });
-  useAfterApply(busy, () => matrix.refresh());
-  /*
-   * Freshness is the host's per-document change mark on this Work's envelope, against `takenAt`:
-   * each new matrix read is the Reading staged rungs rest on, so it stamps `takenAt`.
-   */
-  const matrixRead = matrix.data;
-  const writeWork = store.handle.work.write;
-  useEffect(() => {
-    // ponytail: client clock; host and web share one machine today; upgrade is a takenAt on the matrix op result
-    if (matrixRead) void writeWork([{ path: ["takenAt"], value: new Date().toISOString() }]);
-  }, [matrixRead, writeWork]);
-  const readAgain = () => matrix.refresh();
+  const readAgain = () => void store.handle.actions.read.run();
   const families = useMemo(
-    () => fixtureFamilies ?? matrix.data?.families ?? [],
-    [fixtureFamilies, matrix.data?.families],
+    () =>
+      (archived
+        ? visibleReading?.result.families
+        : (fixtureFamilies ?? visibleReading?.result.families)) ?? [],
+    [archived, fixtureFamilies, visibleReading?.result.families],
   );
-  // Capture's contract takes ids: mirror this reading's name → id for it (see FamiliesPage.loaded).
-  const setLoaded = store.actions.setLoaded;
-  useEffect(() => {
-    setLoaded(Object.fromEntries(families.map((family) => [family.familyName, family.familyId])));
-  }, [families, setLoaded]);
   // Work holds exclusions by family name; so does every verdict and plan row read here.
-  const excludedNames = useMemo(() => new Set(Object.keys(store.excluded)), [store.excluded]);
+  const excludedNames = useMemo(
+    () => (archived ? NO_EXCLUDED : new Set(Object.keys(store.excluded))),
+    [archived, store.excluded],
+  );
 
   // ── table model ──────────────────────────────────────────────────────────────────────────────
   const { rows, params } = useMemo(() => {
@@ -180,6 +141,8 @@ function useFamiliesWorkspaceModel(
         const scopes: TypeRow["scopes"] = {};
         const formulas: TypeRow["formulas"] = {};
         const storageTypes: TypeRow["storageTypes"] = {};
+        const displayUnits: NonNullable<TypeRow["displayUnits"]> = {};
+        const yesNos: NonNullable<TypeRow["yesNos"]> = {};
         for (const param of visible) {
           const key = param.definition.identity.key;
           values[key] = cellText(param.valuesPerType[typeName]);
@@ -188,6 +151,8 @@ function useFamiliesWorkspaceModel(
           storageTypes[key] = familyCellValueSchema.shape.storageType.safeParse(
             param.storageType,
           ).data;
+          displayUnits[key] = param.displayUnit ?? null;
+          yesNos[key] = isYesNo(param.definition.dataTypeId);
         }
         rows.push({
           key: typeRowKey(family, typeName),
@@ -200,6 +165,8 @@ function useFamiliesWorkspaceModel(
           scopes,
           formulas,
           storageTypes,
+          displayUnits,
+          yesNos,
         });
       }
     }
@@ -223,16 +190,7 @@ function useFamiliesWorkspaceModel(
   );
   // A measured cell's one call, owned by this matrix Reading: a re-read aborts what is in flight.
   const parse = useMeasuredParse(families, store.documentScope);
-  const { columns, uncommonCount } = useFamiliesColumns({
-    familyState,
-    params,
-    showUncommon,
-    totalFamilies,
-    cells,
-    propose: store.actions.propose,
-    wire,
-    parse,
-  });
+  const live = useLiveCells(cells, wire);
 
   const stagedFamilies = useMemo(
     () => new Set(staged.map((entry) => entry.familyName)).size,
@@ -241,33 +199,22 @@ function useFamiliesWorkspaceModel(
 
   const chips = useTableChips({
     categories:
-      applied && applied.categoryNames.length > 0
+      !archived && applied && applied.categoryNames.length > 0
         ? {
             label: `categories · ${applied.categoryNames.length}`,
             onClear: () => setDraftCategories([]),
           }
         : null,
     placement:
-      placement !== LoadedFamilyPlacement.AllLoaded
+      !archived && placement !== LoadedFamilyPlacement.AllLoaded
         ? {
             label: `placement · ${placement}`,
             onClear: () => setPlacement(LoadedFamilyPlacement.AllLoaded),
           }
         : null,
-    uncommon:
-      !showUncommon && uncommonCount > 0
-        ? { label: `uncommon · ${uncommonCount} hidden`, onClear: () => setShowUncommon(true) }
-        : null,
-    picked:
-      picked.size > 0
-        ? {
-            label: `capture · ${picked.size} picked · esc`,
-            onClear: () => setPicked(new Set()),
-          }
-        : null,
     // Staged cells are what plan will generate: countable here, removable in one press.
     staged:
-      staged.length > 0
+      !archived && staged.length > 0
         ? {
             label: `staged · ${staged.length} cell${staged.length === 1 ? "" : "s"} · ${stagedFamilies} famil${stagedFamilies === 1 ? "y" : "ies"}`,
             onClear: () =>
@@ -288,11 +235,14 @@ function useFamiliesWorkspaceModel(
     [plan, excludedNames],
   );
 
-  const matrixIssue = matrix.error
-    ? toHostIssue(matrix.error, "Couldn't load the matrix")
-    : undefined;
+  const matrixIssue =
+    archived && store.archive.error
+      ? { title: "Couldn't load archived reading", message: store.archive.error }
+      : store.handle.outcome?.key === "read" && store.handle.outcome.refusal
+        ? { title: "Couldn't read families", message: store.handle.outcome.refusal.message }
+        : undefined;
   /** The matrix read is in flight: an empty table is "reading", never "resolved to none". */
-  const matrixReading = !fixture && matrix.pending;
+  const matrixReading = archived ? store.archive.loading : !fixture && busy === "read";
   const totalTypes = rows.length;
 
   // Families in scope the plan does not claim — surfaced as excluded-with-reason, never hidden.
@@ -303,6 +253,7 @@ function useFamiliesWorkspaceModel(
 
   return {
     store,
+    archived,
     /** The saved Work cannot be read: its refusal and start fresh are the only instruction, so
      * every Work-bearing control is inert and no empty-Work instruction is drawn (F-J6-1). */
     workUnreadable: store.handle.work.refusal != null,
@@ -319,11 +270,9 @@ function useFamiliesWorkspaceModel(
     setPickedFamilies,
     applied,
     plan,
-    picked,
-    setPicked,
+    lastReading: visibleReading,
+    retainedError: archived ? store.archive.error : store.retainedError,
     applyData,
-    showUncommon,
-    setShowUncommon,
     tableState,
     busy,
     categoryFeed,
@@ -331,21 +280,19 @@ function useFamiliesWorkspaceModel(
     connected,
     categories,
     draftFamilyNames,
-    matrixRequest,
-    matrix,
     families,
     rows,
     params,
     totalFamilies,
     familyState,
-    columns,
-    uncommonCount,
     wire,
+    live,
+    parse,
     chips,
     includedPlanned,
     matrixIssue,
     matrixReading,
-    changed: store.handle.work.changed && !fixture,
+    changed: !archived && store.handle.work.changed && !fixture,
     readAgain,
     totalTypes,
     outsideProfile,

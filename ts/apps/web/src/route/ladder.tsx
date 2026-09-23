@@ -7,10 +7,11 @@
  * Marks: dotted underline = operable and held; dashed = empty or reported by the world, not chosen;
  * the caution tone = the ladder is incomplete or its feed disagrees.
  */
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 
-import type { Level } from "#/components/lang/collection";
+import type { Collection, Level } from "#/components/lang/collection";
 import { ListPopup } from "#/components/lang/list-popup";
+import { Press } from "#/components/lang/press";
 
 interface RungOption {
   id: string;
@@ -31,6 +32,7 @@ export interface Rung {
   note?: string;
   multi?: boolean;
   picked?: (id: string) => boolean;
+  checked?: (id: string) => boolean | "mixed";
   pick: (id: string) => void;
   /** Route-supplied footer under the options of this rung. */
   extra?: ReactNode;
@@ -53,6 +55,7 @@ export function Ladder({
   disabled?: boolean;
   title?: string;
 }) {
+  const collection = useRef<Collection<Hit> | null>(null);
   const unbound = levels.findIndex((rung) => rung.label === null);
   const complete = unbound < 0;
   const word = complete ? (levels.at(-1)?.label ?? "") : levels[unbound]!.placeholder;
@@ -87,6 +90,9 @@ export function Ladder({
       // The trigger's face is a value or a placeholder; its name says what it chooses.
       triggerLabel={name}
       levels={rungs}
+      onCollection={(current) => {
+        collection.current = current;
+      }}
       startLevel={complete ? levels.length - 1 : unbound}
       keyOf={(hit) => `${hit.rung}:${hit.id}`}
       labelOf={(hit) => `${hit.label} ${hit.sub ?? ""}`.trim()}
@@ -95,10 +101,30 @@ export function Ladder({
       selected={selected}
       empty="nothing to choose"
       maxHeight="min(16rem, calc(100dvh - 6rem))"
-      footer={(level) => levels[level]?.extra}
+      footer={(level) => (
+        <>
+          {levels[level]?.extra}
+          {levels[level]?.multi && level < levels.length - 1 ? (
+            <Press size="value" onClick={() => collection.current?.backTo(level + 1)}>
+              show {levels[level + 1]?.key}
+            </Press>
+          ) : null}
+        </>
+      )}
       row={(hit) => ({
-        lead: rungOf(hit).multi ? (
-          <span className="face-mono">{rungOf(hit).picked?.(hit.id) ? "☑" : "☐"}</span>
+        checked: rungOf(hit).checked?.(hit.id),
+        lead: rungOf(hit).checked ? (
+          <span aria-hidden="true" className="face-mono">
+            {rungOf(hit).checked?.(hit.id) === "mixed"
+              ? "▣"
+              : rungOf(hit).checked?.(hit.id)
+                ? "☑"
+                : "☐"}
+          </span>
+        ) : rungOf(hit).multi ? (
+          <span aria-hidden="true" className="face-mono">
+            {rungOf(hit).picked?.(hit.id) ? "☑" : "☐"}
+          </span>
         ) : undefined,
         label: hit.label,
         meta: hit.sub,

@@ -1,53 +1,106 @@
-# RP merge preparation (2026-09-15)
+# Families route demiurge (opened 2026-09-23)
 
-Review checkout: `Pe.Tools-rp-review-7`, branch `review/rp-seven-commit`.
-Main is not merged. The user has one final request before merge.
-Historical milestone measurements and prototype reports remain in git history.
+Trigger: the first real use of `/families` after the route rewrites. The job on 2026-09-24 is an
+apply over about 7 Air Terminal families and 9 parameters. The effort shapes primitives, not the
+route; `/families` is the first consumer. Cross-route verdicts land here, route evidence in
+`docs/features/family/LEDGER.md`.
 
-## Merge boundary
+## Baseline (measured on `/families?demo=edit`, 1280×800)
 
-- Prove the RP substrate through Chat, Takeoffs' front half, and Family's structural integration.
-- The head projects authoritative state. No fabricated facts, seed-specific head logic,
-  compatibility adapters, or competing primitive owners.
-- Keep Target, Work, Reading, Action, Page and View distinct. Dedicated route controllers own
-  dependent transitions. Private widget mechanics and pure formatting remain local.
-- Human buttons, hotkeys and Pea share semantic policy. Work revisions and exact document
-  lifetimes constrain execution. ActionJournal owns external outcomes and recovery.
-- Frozen seeds prove rendering only. Real-button journeys prove the relevant RP behavior;
-  a native mutation additionally requires its durable receipt.
-- Full Family engine acceptance, downstream Takeoffs sync/export, tutorial polish and completion
-  of low-priority products are deferred. A competing primitive is not a product deferral.
-- SDK lifecycle stays in Pe.Revit.Sdk. Preserve concurrent checkout and Revit sessions.
+- First data row at y=346. Ten strata sit above it: name line, sentence, verb row, band slot,
+  fixture line, last-read line, rules strip, table-frame head, chip strip, column header.
+- Receipts are drawn six ways: `Dialog`, verb popover flag (`SituationAction`), `OutcomeLine`,
+  `WorkBand` receipt, page log, fan-out outcome.
+- Narrowing has three inputs that end as the same chip: the rules text (`pivot-rules.ts`, own
+  parser and hand-rolled listbox), `TableFrame` search, column facet filters.
+- The families matrix is not a Reading. It is a one-shot RPC with no taken-at because a Reading
+  frame is capped at `READING_MAX_FRAME_BYTES` (2 MiB) on the one host stream.
 
-## Current shape
+## Nouns
 
-Work envelopes contain document and revision, not external-operation state. Work-local commands
-stay in RouteWorkspace; semantic effects use ActionJournal. Receipt detail views observe their
-original ID through the shared Reading lifecycle. Completed Chat cards read the document, target
-and revision recorded by their own call; the live dock follows the current thread separately.
+| Noun | Meaning |
+|---|---|
+| receipt | durable evidence a verb produced; outlives the verb |
+| outcome | the verb's transient answer: busy, refused, ran |
+| mark | a fact bound to a row or column: converged, failed, issue, stale |
+| query | the one text that narrows a table; each token is a chip |
+| inspectable | anything with an address a link can open |
 
-The Situation and remaining shell verbs use the same action controls. The Situation exposes
-Work conflicts and action failures. Seeds refuse actions instead of manufacturing success.
-Family and Settings share one Settings owner; the redundant file strip is deleted. Current absent Work initializes through the same open action. Schedule Grid has one owner with Page-selected target/work identity, declared Readings and Actions. Late actions cannot overwrite Page after a target or Work switch, including A-to-B-to-A.
+Legacy nouns under review: band, readout, read status, rules.
 
-## Evidence and accounting
+## Rulings
 
-The seven-commit baseline is `285afc3`; Fable's review fixes are `73f467a` and `288bdd9`.
-Fable's earlier review reports are timestamped testimony under
-`.artifacts/handoffs/rp-review-7/`; their open findings must be checked against current code.
-After `cc14253`, root reran all 23 Chrome/Host Chat and frozen-seed scenarios: passed.
-The 50-file formatting/lint/type check and all 93 repository guards also passed.
-These scenarios use a deterministic model and no Revit; they do not certify native operations.
+1. 2026-09-23, receipts leave modals. Family-bound facts are marks on the table (S3). The whole
+   receipt opens as an inspectable (S4). The verb flag carries only the outcome.
+2. 2026-09-23, per-reading rails. A Reading's interface grows provenance (taken-at, stale mark,
+   re-read verb), its slice of the page log (derived from `dirties`), and its receipts. The Pane
+   draws that as one rail, collapsed to the latest line. The head keeps the sentence, the verbs,
+   and log entries with no reading (target, stage, work). This absorbs `read-status.tsx`, the
+   last-read line, `ChangedInRevit`'s separate button, and the read-issue and verified dialogs.
+3. 2026-09-23, the matrix becomes a Reading by envelope-on-stream, body-on-RPC: the frame carries
+   taken-at, changed and a version; the client fetches the body when the version moves. Raising
+   the cap and paging frames were rejected. Lands in a `close` loop after this one; ADR owed then.
+4. 2026-09-23, two height rungs: `--head-h` and `--item-h`. The head takes the tall one.
+5. 2026-09-23, read again is not a separate button. The read verb wears the stale mark and the
+   `r` chord; a failed apply's flag offers it.
+6. 2026-09-23, the rule language stays as the one `TableFrame` query grammar; `ListPopup` is the
+   discoverable inserter; the hand-rolled listbox in `pivot.tsx` dies.
+7. 2026-09-23, a pane breaks locality too when it is far from the mark. Round 2 measured 213 px
+   (pane) against 40 px to the nearest edge (mode); the top-left metric was wrong because the
+   band spans the table. Superseded by ruling 9: receipts are not a pane and not page data.
+8. 2026-09-23, "the current Situation head is a robust base"; paradigms inside it flip, the head
+   itself is not replaced. S5 stays killed; V1's verbs-in-sentence is not adopted.
+9. 2026-09-23, receipts are not their own pane and in principle never render on the page as
+   data. A receipt is a log entry with a link to its inspectable (S4). Marks on family column
+   headers stay a candidate, with practical doubts, not a ruling.
+10. 2026-09-23, the head's log is a column, never a full-width horizontal layer. Log kinds show
+   as tabs on the column (all, per reading, work, target) so a person filters there. A dense row
+   shows the entry's `label`; hover shows `says` and the resource link. This replaces ruling 2's
+   per-reading rail: the reading pane keeps only the stale mark on its read verb (ruling 5).
+   The log title and its tabs sit on the head line above the hairline, level with the sentence.
+11. 2026-09-23, the staged and proposal area of the head is a generic React slot with a default
+   render. The default reads as a sentence for first-glance comprehension but is richer than
+   counts, and it is not part of the targeting sentence.
+12. 2026-09-23, density law for the reshape: every fact in the head earns its place by one of
+   hover, colour on the text, or deletion. Most timestamps are deleted. The V1 slice is the
+   data slurry to avoid.
+13. 2026-09-23, one query box in `TableFrame` adopted (V5). The `narrow` inserter needs a clearer
+   form; a suggestion list inside the box is the fallback.
+14. 2026-09-23, the Work slot's default render says what is staged by the person and by Pea and
+   on how many of each depth-1 group (families, parameters). It is computed generically from
+   the Work cells with the contract's `summarize` and the route's `groupOf`, the same call
+   Chat's proposal head makes, so every route gets it without prose. Primitives are the layer
+   fixed; every route is a consumer.
+15. 2026-09-23, an inspectable opens by its kind's default policy: the local default app for an
+   artifact on disk (host shell open), or a route capable of displaying it. The registry of
+   inspectable kinds carries the policy. No table mode and no pane for receipts. More displaying
+   routes come as the persistence and output model of the Revit routes is honed.
+16. 2026-09-23, correction to 9 and 15: a right pane for stage, apply and output IS decent on
+   `/families`, because it localizes related things. Primitive first: the Situation head conveys
+   the generic part of what that pane says for free (ruling 14's Work summary, ruling 10's log
+   column), and the head exposes slots so a route customizes the presentation where it earns it.
+   `/families` fills the pane; `/family` may summarize a geometry apply at the level of a whole
+   solid extrusion instead of parameters. The slot contract is the deliverable, the pane is one
+   consumer.
 
-Independent real-button Family proof selected `pe-vav-test.json`, clicked Open, observed the
-exact file in the sentence and no duplicate strip, and captured the Settings open command after
-Work subscription. Settings also passed real picker/Open proof at `2cfc41c`: Work connected and the selected file readout appeared, with no duplicate strip. The visible no-Revit review server is in Herdr pane `w3:p9` at `http://127.0.0.1:5175`; the existing 5173 server was preserved. Native Family build and Schedule Grid push remain outside this close-out proof.
+## Open
 
-Close-out from `288bdd9`: production +359/-621 across 23 files (net -262); tests +191/-192
-across eight files. Deleted the retired Work replay protocol, duplicate Settings owners, and
-the second Schedule Grid owner. Added one focused stale-completion regression test;
-no new production files or dependencies.
+- Whether the artifacts link is broken live. In the demo lane `artifactDirectory` is a fake path,
+  so the demo proves nothing. UNPROVEN.
 
-Measure each slice from its actual commit base. Separate production from tests/fixtures and docs;
-count retired owners and mutation paths, not renamed symbols. Do not infer cyclomatic complexity
-from line counts. The broader engine diff is not an RP-only LOC denominator.
+## Shapes on the table
+
+| Shape | Composition | Epitaph |
+|---|---|---|
+| S1 flags | every receipt is the producing verb's flag | a receipt from before reload has no verb; still an overlay |
+| S2 log is the ledger | page log in a pane, rows expand to receipts | chronology is not state |
+| S3 table is the page | marks on headers and gutter; head shrinks | host-level diagnostics need one unplaced slot |
+| S4 addressable inspection | `?inspect=<kind>:<id>`, spec pane generalizes to an inspector, every mention links | URL state plus a registry of inspectable kinds |
+| S5 no head | sentence only | scan speed dies (house law 3) |
+
+Adopted after round 2: S4, S2 as the tabbed log column (ruling 10), S1 for outcomes only. S3 reduced to a candidate. S5 killed.
+
+## Tomorrow slice (2026-09-24)
+
+Plan and apply were proven small-scale by the user; a second agent is walking the verification
+on 2026-09-23. No reshape from this map merges before the job.

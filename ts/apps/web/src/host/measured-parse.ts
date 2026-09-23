@@ -11,7 +11,7 @@ export type MeasuredAnswer = MeasuredValue | { refusal: string } | null;
  * The measured cell's one call, owned by the Reading it was typed against. `basis` is whatever
  * identifies that Reading: when it changes — a re-read — every parse still in flight is aborted and
  * answers null, so a value read against the old Reading can never be staged against the new one.
- * The typed text is never kept; only what Revit said comes back.
+ * The typed text is never kept; Revit's unrounded value in the requested unit comes back.
  */
 export function useMeasuredParse(basis: unknown, scope?: HostCallOptions) {
   const running = useRef<AbortController>(new AbortController());
@@ -28,7 +28,10 @@ export function useMeasuredParse(basis: unknown, scope?: HostCallOptions) {
       if (displayUnit?.refusal) return { refusal: displayUnit.refusal };
       const word = displayUnit?.typeId ? unitWord(displayUnit) : null;
       if (!displayUnit?.typeId || word === null)
-        return { refusal: "type a unit — this column shows no unit of its own" };
+        return {
+          refusal:
+            "Revit did not report this measured parameter's display unit, so this cell cannot be staged.",
+        };
       const signal = running.current.signal;
       const answer = await callHostRpc(
         "revit.resolve.unit-value",
@@ -36,11 +39,12 @@ export function useMeasuredParse(basis: unknown, scope?: HostCallOptions) {
         { ...scope, signal },
       ).catch((error: unknown) => {
         if (signal.aborted) return null;
-        throw error;
+        return { refusal: error instanceof Error ? error.message : String(error) };
       });
       if (answer == null) return null;
-      return answer.ok && answer.text != null
-        ? { value: answer.text, unit: word }
+      if (!("ok" in answer)) return answer;
+      return answer.ok && answer.value != null && Number.isFinite(answer.value)
+        ? { value: String(answer.value), unit: word }
         : { refusal: answer.refusal ?? `Revit could not read "${text}" here.` };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the ref is re-armed by `basis` above

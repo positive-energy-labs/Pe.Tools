@@ -7,7 +7,7 @@ import { expect, test, vi } from "vite-plus/test";
 import { Effect } from "effect";
 import type { ReadingFrame } from "@pe/agent-contracts";
 import type { HostBridgeEvent, RevitBridge } from "../src/bridge.ts";
-import { documentMarks, STALE_READ } from "../src/document-marks.ts";
+import { assertFresh, documentMarks, STALE_READ } from "../src/document-marks.ts";
 import { setup } from "./schedule-test-fixture.ts";
 import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts";
 import { resourceResponse } from "../../../packages/runtime/src/resource-stream.ts";
@@ -46,6 +46,16 @@ function fakeBridge(sdkSessionId?: string) {
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+test("a restored read from before host observation cannot arm apply", () => {
+  const marks = documentMarks(fakeBridge().bridge);
+  const old = new Date(marks.observedSince! - 1).toISOString();
+  expect(() => assertFresh(marks, A, old)).toThrow(STALE_READ);
+  expect(() => assertFresh(marks, A, "invalid-time")).toThrow(STALE_READ);
+  expect(() =>
+    assertFresh(marks, A, new Date(marks.observedSince! + 1).toISOString()),
+  ).not.toThrow();
+});
 
 test("one event marks every document it names, and nothing it does not", async () => {
   const world = fakeBridge();

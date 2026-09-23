@@ -126,7 +126,11 @@ function ShellVerbs<W, R extends string, P, A extends string>({
 }: {
   handle: RouteHandle<W, R, P, A>;
 }) {
-  const verbs = Object.entries(handle.actions) as [string, RouteHandle<W, R, P, A>["actions"][A]][];
+  const verbs = Object.entries(handle.actions).filter(
+    ([name]) =>
+      (handle.manifest.actions as Record<string, { visible?: false }> | undefined)?.[name]
+        ?.visible !== false,
+  ) as [string, RouteHandle<W, R, P, A>["actions"][A]][];
   if (!verbs.length) return null;
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

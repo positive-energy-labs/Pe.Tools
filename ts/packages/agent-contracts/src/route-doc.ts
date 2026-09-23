@@ -96,7 +96,7 @@ export function canonicalRouteInput(input: unknown): string {
 
 export function guardCommand<S extends z.ZodType>(
   spec: RouteStateSpec<S>,
-  envelope: RouteEnvelope<z.infer<S>>,
+  _envelope: RouteEnvelope<z.infer<S>>,
   actor: RouteActor,
   name: string,
   input: unknown,

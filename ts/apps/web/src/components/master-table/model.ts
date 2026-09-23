@@ -121,6 +121,10 @@ export interface TableState {
   filters: Filters;
   sorts: SortKey[];
   query: string;
+  /** Route-owned command rules; consumers give the words their meaning. */
+  rules?: string;
+  /** Column visibility is view state, so column definitions remain stable. */
+  hiddenColumns?: string[];
 }
 
 /**

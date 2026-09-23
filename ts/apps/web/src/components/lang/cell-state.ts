@@ -162,11 +162,11 @@ export type StateCellProps = StateCellBase &
          * THE MEASURED CELL (ruled 2026-09-22), one kind beside `numeric`. A bare number stages at once
          * with the column's display unit and never calls Revit, so the cell reads "300 CFM" the moment
          * it is staged and what is reviewed is what is applied. Text carrying a unit shows as typed
-         * until commit, then ONE read-only host parse answers with Revit's own value and rendering,
+         * until commit, then ONE read-only host parse answers with Revit's unrounded value,
          * which is what gets staged; a re-read of the Reading cancels it (`parse` resolves null). A
          * refusal is cell-local, carries Revit's reason, and stages nothing. A measured column with no
-         * display unit refuses a bare number at the cell — the ask is "type a unit", never a push-time
-         * surprise. The unit is always the Reading's own evidence, never a web guess.
+         * display unit refuses at the cell; the unit is always the Reading's own evidence, never a
+         * web guess. A caller with no display unit locks the cell because the parse needs one.
          */
         measured: {
           displayUnit?: MeasuredDisplayUnit | null;
@@ -211,7 +211,11 @@ export function readMeasuredText(
   const unit = displayUnit ? unitWord(displayUnit) : null;
   return unit
     ? { kind: "stage", staged: { value: typed, unit } }
-    : { kind: "refuse", reason: "type a unit — this column shows no unit of its own" };
+    : {
+        kind: "refuse",
+        reason:
+          "Revit did not report this measured parameter's display unit, so this cell cannot be staged.",
+      };
 }
 
 export type CellTransitionKind = "accept" | "deny" | "unstage";

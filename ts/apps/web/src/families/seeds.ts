@@ -181,14 +181,9 @@ const staged: FamiliesRouteDocument = familiesRouteState.schema.parse({
 });
 
 /**
- * `?demo=capture` picks two families; `?demo=apply` opens the confirmation sheet on the plan;
- * `?demo=edit` shows the table with one staged and one open cell proposal.
+ * `?demo=apply` opens the confirmation sheet on the plan; `?demo=edit` shows proposals.
  */
 export const FAMILIES_SEEDS = {
-  capture: seed("two families picked for capture into the demo pod", {
-    stage: "capture",
-    selection: ["3101", "3102"],
-  }),
   apply: seed("a saved spec planned over three families, one held back, one refused", {
     stage: "apply",
     path: DEMO_FAMILIES_SPEC_PATH,

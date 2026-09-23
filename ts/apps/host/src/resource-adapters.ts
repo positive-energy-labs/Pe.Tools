@@ -99,7 +99,9 @@ export const markReadings =
     let servedAt = Number.POSITIVE_INFINITY;
     let latest: (ReadingFrame & { kind: "snapshot" }) | null = null;
     let changed = false;
-    const markedNow = () => bound !== null && (marks.changedAt(bound) ?? 0) > servedAt;
+    const markedNow = () =>
+      bound !== null &&
+      ((marks.observedSince ?? 0) > servedAt || (marks.changedAt(bound) ?? 0) > servedAt);
     const unwatch = marks.subscribe(() => {
       if (!latest || markedNow() === changed) return;
       changed = markedNow();

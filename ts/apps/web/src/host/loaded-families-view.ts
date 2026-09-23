@@ -8,7 +8,6 @@
  */
 import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
 
-export type LoadedFamiliesMatrixRequest = RevitMatrixLoadedFamilies.Req.Request;
 export type FamilySnapshotRecord = RevitMatrixLoadedFamilies.Res.FamilySnapshotRecord;
 export type FamilyParameterSnapshot = RevitMatrixLoadedFamilies.Res.FamilyParameterSnapshot;
 

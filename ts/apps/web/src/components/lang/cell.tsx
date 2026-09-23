@@ -162,6 +162,22 @@ export function StateCell(props: StateCellProps) {
   const [refusal, setRefusal] = useState<CellRefusal | null>(null);
   const initial = useRef(typeof value === "string" ? value : "");
   initial.current = typeof value === "string" ? value : "";
+  const editVersion = useRef(0);
+  const submitted = useRef<string | null>(null);
+  const priorValue = useRef(value);
+  useEffect(
+    () => () => {
+      editVersion.current++;
+    },
+    [],
+  );
+  useEffect(() => {
+    if (priorValue.current !== value) {
+      editVersion.current++;
+      submitted.current = null;
+      priorValue.current = value;
+    }
+  }, [value]);
 
   // A transition in flight inerts every verb on the cell; its refusal rides the same note.
   const refusalNote = refusal ?? (props.refused != null ? { message: props.refused } : null);
@@ -227,11 +243,14 @@ export function StateCell(props: StateCellProps) {
   if (props.scale === "row") {
     const commit = (el: HTMLInputElement) => {
       const text = el.value;
-      if (text === initial.current) return;
+      if (text === initial.current || text === submitted.current) return;
+      submitted.current = text;
+      const version = ++editVersion.current;
       let out = text;
       if (props.numeric != null) {
         const parsed = parseCell(text, props.numeric);
         if (parsed === null) {
+          submitted.current = null;
           el.value = initial.current; // restore the prior value, visibly
           setRefusal({
             message:
@@ -244,6 +263,8 @@ export function StateCell(props: StateCellProps) {
         out = fmtNum(parsed, props.numeric.digits);
       }
       const settle = (refused: string | CellRefusal | null | void) => {
+        if (version !== editVersion.current) return;
+        submitted.current = null;
         if (refused != null) {
           el.value = initial.current; // restore the drawn value, visibly
           setRefusal(typeof refused === "string" ? { message: refused } : refused);
@@ -261,13 +282,20 @@ export function StateCell(props: StateCellProps) {
       if (measured != null) {
         const decided = readMeasuredText(out, measured.displayUnit);
         if (decided.kind === "refuse") {
+          submitted.current = null;
           el.value = initial.current;
           setRefusal({ message: decided.reason });
         } else if (decided.kind === "stage") send(measured.stage(decided.staged));
         else
           void measured.parse(decided.text).then((answer) => {
-            if (answer == null) return; // a re-read cancelled it; the cell keeps what it had
+            if (version !== editVersion.current) return;
+            if (answer == null) {
+              submitted.current = null;
+              el.value = initial.current; // a re-read cancelled it
+              return;
+            }
             if ("refusal" in answer) {
+              submitted.current = null;
               el.value = initial.current;
               setRefusal({ message: answer.refusal });
             } else send(measured.stage(answer));
@@ -305,6 +333,10 @@ export function StateCell(props: StateCellProps) {
               read.unsettled != null ? slots.unsettled({ className: slots.input() }) : slots.input()
             }
             data-state={read.unsettled ?? undefined}
+            onChange={() => {
+              editVersion.current++;
+              submitted.current = null;
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
@@ -323,6 +355,8 @@ export function StateCell(props: StateCellProps) {
                 commit(e.currentTarget);
                 if (props.onNavigate?.(e.shiftKey ? "left" : "right")) e.preventDefault();
               } else if (e.key === "Escape") {
+                editVersion.current++;
+                submitted.current = null;
                 e.currentTarget.value = initial.current;
                 // spreadsheet convention: Escape hands focus back to the cell, where a/d/u live
                 const host = keyHost();

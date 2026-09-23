@@ -20,9 +20,11 @@ import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 import { createDeterministicRuntime } from "@pe/runtime/testing";
+import { address, bindWork } from "@pe/agent-contracts";
 import { resolvePeaWorld } from "@pe/runtime/pea";
 import { makeHttpLive } from "../src/app.ts";
 import { hostOwnership, productRoot } from "../src/host-ownership.ts";
+import { hostTakeoffCaptures } from "../src/takeoff-captures.ts";
 import { makeMastraRuntimeLive } from "../src/mastra-runtime.ts";
 
 type AnyManifest = {
@@ -379,22 +381,40 @@ test("live /family: capture, plan, apply files a run receipt", async () => {
   expect(workflows).toEqual(["family.capture", "family.capture", "family.plan", "family.apply"]);
 }, 180_000);
 
-/**
- * w8-revit trip 9: the page dispatched the loaded-families catalog twice a second. Over a quiet
- * wait the page reads the matrix once, and one scope change reads the catalog once. Counted on the
- * wire, by op key; categories arrive on the field-options Reading, not `/call`.
- */
-test("live /families: one catalog read per scope change, none while idle", async () => {
+async function readMechanicalFamilies(page: Page, expectedValue = "Fan Coil Unit - Ducted model") {
+  await page.getByRole("button", { name: "Choose category" }).click();
+  await page
+    .getByRole("option", { name: /Mechanical Equipment/ })
+    .first()
+    .click();
+  await run(page, "read families");
+  await expectModelValue(page, "Fan Coil Unit - Ducted", expectedValue);
+}
+
+const modelCell = (page: Page, family: string) =>
+  page
+    .getByRole("gridcell", { name: `PE_G___Model · ${family} · Type 1`, exact: true })
+    .locator("input");
+
+const expectModelValue = (page: Page, family: string, value: string) =>
+  expect.poll(() => modelCell(page, family).inputValue(), { timeout: 30_000 }).toBe(value);
+
+/** Picker changes resolve a cheap catalog; only the explicit action requests the matrix. */
+test("live /families: explicit read retains the last matrix while the next scope is drafted", async () => {
   const { shown } = await liveLoop("families-reads", async (page) => {
     const calls: string[] = [];
     page.on("request", (request: { method(): string; url(): string; postDataJSON(): unknown }) => {
+      if (request.method() === "POST" && request.url().includes("/families/readings")) {
+        calls.push("revit.matrix.loaded-families");
+        return;
+      }
       if (request.method() === "POST" && request.url().endsWith("/call"))
         calls.push((request.postDataJSON() as { key: string }).key);
     });
     await openLive(page, "/families", "demo=edit&live=1");
     const count = (key: string) => calls.filter((call) => call === key).length;
     // The categories picker is a ListPopup: its trigger opens a list whose search owns typing.
-    const trigger = page.getByRole("button", { name: "draft categories" });
+    const trigger = page.getByRole("button", { name: "Choose category" });
     await expect.poll(() => trigger.count(), { timeout: 30_000 }).toBe(1);
     await page.waitForTimeout(3_000);
     const idle = {
@@ -402,26 +422,181 @@ test("live /families: one catalog read per scope change, none while idle", async
       matrix: count("revit.matrix.loaded-families"),
     };
     await trigger.click();
-    const search = page.getByLabel("draft categories search");
-    await search.fill("Mech");
-    await search.press("Enter");
+    await page
+      .getByRole("option", { name: /Mechanical Equipment/ })
+      .first()
+      .click();
     await expect
       .poll(() => count("revit.catalog.loaded-families"), { timeout: 10_000 })
       .toBe(idle.catalog + 1);
     await page.waitForTimeout(3_000);
+    const afterScope = {
+      catalog: count("revit.catalog.loaded-families"),
+      matrix: count("revit.matrix.loaded-families"),
+    };
+    await run(page, "read families");
+    await expect
+      .poll(() => modelCell(page, "Fan Coil Unit - Ducted").count(), { timeout: 30_000 })
+      .toBe(1);
+    await page.getByRole("button", { name: "Choose family" }).click();
+    await page
+      .getByRole("option", { name: /Fan Coil Unit - Ducted/ })
+      .first()
+      .click();
+    await expect.poll(() => modelCell(page, "Fan Coil Unit - Ducted").count()).toBe(1);
     return JSON.stringify({
       idle,
-      afterScope: {
-        catalog: count("revit.catalog.loaded-families"),
-        matrix: count("revit.matrix.loaded-families"),
-      },
+      afterScope,
+      afterRead: count("revit.matrix.loaded-families"),
+      afterDraftChange: count("revit.matrix.loaded-families"),
     });
   });
   console.log(`families-reads ${shown}`);
-  const { idle, afterScope } = JSON.parse(shown) as Record<string, Record<string, number>>;
+  const { idle, afterScope, afterRead, afterDraftChange } = JSON.parse(shown) as {
+    idle: Record<string, number>;
+    afterScope: Record<string, number>;
+    afterRead: number;
+    afterDraftChange: number;
+  };
   expect(idle!.catalog).toBe(0);
-  expect(idle!.matrix).toBe(1);
+  expect(idle!.matrix).toBe(0);
   expect(afterScope).toEqual({ ...idle, catalog: 1 });
+  expect(afterRead).toBe(1);
+  expect(afterDraftChange).toBe(1);
+}, 180_000);
+
+test("/families Archived inspects a saved reading without a target or Revit connection", async () => {
+  const work = bindWork("families", address("C:/archive/Offline.rvt"));
+  const parameter = (name: string, value: string) => ({
+    definition: {
+      identity: { key: `name:${name}`, kind: "NameFallback", name },
+      isInstance: false,
+    },
+    kind: "FamilyParameter",
+    scope: "Family",
+    storageType: "String",
+    formulaState: "None",
+    valuesPerType: { "24x24": value },
+  });
+  const saved = await hostTakeoffCaptures().saveFamilies({
+    work,
+    document: { session: "closed-session", openId: "closed-document" },
+    filter: { categoryNames: ["Air Terminals"], familyNames: [], placementScope: "AllLoaded" },
+    capturedAt: "2026-09-22T12:00:00.000Z",
+    result: {
+      families: [
+        {
+          familyId: 1,
+          familyUniqueId: "offline-family",
+          familyName: "Offline diffuser",
+          categoryName: "Air Terminals",
+          typeNames: ["24x24"],
+          parameters: [parameter("Model", "ARCH-1"), parameter("Only unplaced", "Unplaced")],
+          issues: [],
+          isPartial: false,
+          placedInstanceCount: 0,
+        },
+        {
+          familyId: 2,
+          familyUniqueId: "placed-family",
+          familyName: "Placed_Diffuser-2",
+          categoryName: "Air Terminals",
+          typeNames: ["24x24"],
+          parameters: [parameter("Model", "ARCH-2")],
+          issues: [],
+          isPartial: false,
+          placedInstanceCount: 2,
+        },
+      ],
+      issues: [{ code: "FamilyEditWarning", severity: "Warning", message: "saved warning" }],
+      page: { totalCount: 2, returnedCount: 2, isTruncated: false },
+    },
+  });
+  const { shown } = await liveLoop("families-archive-offline", async (page) => {
+    const writes: string[] = [];
+    page.on("request", (request: { method(): string; url(): string; postDataJSON(): unknown }) => {
+      if (request.method() !== "POST") return;
+      if (request.url().includes("/families/readings")) writes.push("families.read");
+      if (request.url().includes("/pe/route-state/")) writes.push("work.write");
+      if (request.url().endsWith("/actions")) writes.push("action.write");
+      if (request.url().endsWith("/call"))
+        writes.push((request.postDataJSON() as { key?: string }).key ?? "unknown call");
+    });
+    await page.goto(`${baseUrl}/families?stage=archived`, { waitUntil: "domcontentloaded" });
+    await expect
+      .poll(
+        () =>
+          page.getByRole("columnheader", { name: "Offline diffuser · 24x24", exact: true }).count(),
+        { timeout: 30_000 },
+      )
+      .toBe(1);
+    const rules = page.getByRole("combobox", { name: "families table rules" });
+    await rules.fill("live placed");
+    await rules.press("Escape");
+    await expect
+      .poll(() =>
+        page.getByRole("columnheader", { name: "Offline diffuser · 24x24", exact: true }).count(),
+      )
+      .toBe(0);
+    expect(await page.getByRole("rowheader", { name: "Only unplaced", exact: true }).count()).toBe(
+      0,
+    );
+    await rules.fill("fams>=2");
+    await rules.press("Escape");
+    expect(await page.getByRole("rowheader", { name: "Only unplaced", exact: true }).count()).toBe(
+      0,
+    );
+    await rules.fill("blank live !Placed_Diffuser-2");
+    await rules.press("Escape");
+    expect(
+      await page
+        .getByRole("columnheader", { name: "Placed_Diffuser-2 · 24x24", exact: true })
+        .count(),
+    ).toBe(0);
+    await page
+      .getByRole("button", {
+        name: 'Remove the "hide Placed_Diffuser-2" narrowing — widens the view back out',
+      })
+      .click();
+    await expect
+      .poll(() =>
+        page.getByRole("columnheader", { name: "Placed_Diffuser-2 · 24x24", exact: true }).count(),
+      )
+      .toBe(1);
+    await rules.fill("!Offline%20diffuser");
+    await rules.press("Escape");
+    expect(
+      await page
+        .getByRole("columnheader", { name: "Offline diffuser · 24x24", exact: true })
+        .count(),
+    ).toBe(0);
+    await rules.fill("");
+    expect(await page.getByRole("option", { name: /fams>=N/ }).count()).toBe(1);
+    await rules.fill("blank live");
+    await rules.press("Escape");
+    const savedCell = page.getByRole("gridcell", {
+      name: "Model · Offline diffuser · 24x24",
+      exact: true,
+    });
+    await expect.poll(() => savedCell.innerText()).toContain("ARCH-1");
+    expect(await savedCell.locator("input").count()).toBe(0);
+    const body = await page.locator("body").innerText();
+    expect(new URL(page.url()).searchParams.get("target")).toBeNull();
+    expect(body).toContain("Offline.rvt");
+    expect(await page.getByRole("textbox").count()).toBe(0);
+    await page.getByRole("button", { name: "1 read issue", exact: true }).click();
+    await expect.poll(() => page.getByRole("dialog").innerText()).toContain("saved warning");
+    expect(
+      await page.getByRole("button", { name: /^read families|^plan|^apply families/ }).count(),
+    ).toBe(0);
+    // The shared shell may list Pods; Archive itself dispatches no native or Work action.
+    expect(writes.every((key) => key === "pod.list")).toBe(true);
+    expect(writes).not.toContain("families.read");
+    expect(writes).not.toContain("work.write");
+    expect(writes.filter((key) => key.startsWith("revit.") || key === "family.open")).toEqual([]);
+    return saved.id;
+  });
+  expect(shown).toBe(saved.id);
 }, 180_000);
 
 /**
@@ -432,55 +607,104 @@ test("live /families: one catalog read per scope change, none while idle", async
  * apply succeeds the host retires the unchanged staged cell, and `/pods` shows the run under the
  * draft's name as a supplied draft, not a saved member.
  */
-test("live /families: typed cells stage, one is typed back, plan and apply retire the other", async () => {
+test("live /families: retained readback supports repeat and consecutive family plans", async () => {
   const { shown, workflows } = await liveLoop("families-table", async (page) => {
+    let fullReads = 0;
+    page.on("request", (request: { method(): string; url(): string }) => {
+      if (request.method() === "POST" && request.url().includes("/families/readings")) fullReads++;
+    });
     const pod = await openLive(page, "/families", "demo=edit&live=1");
     await page.goto(`${page.url()}&pod=${pod}`, { waitUntil: "domcontentloaded" });
+    await readMechanicalFamilies(page);
     const body = page.locator("body");
     const band = (open: number, staged: number) =>
-      expect
-        .poll(() => page.locator('section[aria-label="proposals"]').innerText(), {
-          timeout: 30_000,
-        })
-        .toMatch(new RegExp(`${open} open[\\s\\S]*${staged} staged`));
-    const type = async (current: string, next: string) => {
-      const cell = page.locator(`input[value="${current}"]`).first();
-      await expect.poll(() => cell.count(), { timeout: 30_000 }).toBe(1);
+      open + staged === 0
+        ? expect
+            .poll(() => page.locator('section[aria-label="proposals"]').count(), {
+              timeout: 30_000,
+            })
+            .toBe(0)
+        : expect
+            .poll(() => page.locator('section[aria-label="proposals"]').innerText(), {
+              timeout: 30_000,
+            })
+            .toMatch(new RegExp(`${open} open[\\s\\S]*${staged} staged`));
+    const type = async (family: string, current: string, next: string) => {
+      const cell = modelCell(page, family);
+      await expectModelValue(page, family, current);
       await cell.fill(next);
       await cell.press("Enter");
-      // Edit one cell at a time, as a person does: the table rebuilds when Work lands, and text
-      // typed into a cell mid-rebuild is lost with the input (owed, not a Work loss).
-      await expect
-        .poll(() => page.locator(`input[value="${next}"]`).count(), { timeout: 30_000 })
-        .toBe(1);
+      // Edit one cell at a time, as a person does, and wait for Work to show each value.
+      await expectModelValue(page, family, next);
     };
     let typed = 0;
     for (const [family, next] of [
       ["Fan Coil Unit - Ducted", "FXMQ20"],
       ["Heat Pump - Split", "RXL30"],
     ]) {
-      await type(`${family} model`, next!);
+      await type(family, `${family} model`, next!);
       typed += 1;
       await band(0, typed);
     }
     // Staged cells are Work, not page memory: a reload still finds them.
     await page.reload({ waitUntil: "domcontentloaded" });
     await band(0, 2);
+    const auditUrl = new URL(page.url());
+    auditUrl.searchParams.set("stage", "audit");
+    await page.goto(auditUrl.href, { waitUntil: "domcontentloaded" });
+    // The host's retained matrix restores without another expensive Read.
+    await expectModelValue(page, "Fan Coil Unit - Ducted", "FXMQ20");
     // Typing a cell back to Revit's value clears its stage: it shows Revit's value again.
-    await type("RXL30", "Heat Pump - Split model");
+    await type("Heat Pump - Split", "RXL30", "Heat Pump - Split model");
     await band(0, 1);
-    await expect.poll(() => page.locator('input[value="Heat Pump - Split model"]').count()).toBe(1);
+    await expectModelValue(page, "Heat Pump - Split", "Heat Pump - Split model");
     if (SCRATCH)
       await page.screenshot({ path: join(SCRATCH, "families-table-staged.png"), fullPage: true });
     await run(page, "plan");
     if (SCRATCH)
       await page.screenshot({ path: join(SCRATCH, "families-table-plan.png"), fullPage: true });
+    let releaseReadback!: () => void;
+    const heldReadback = new Promise<void>((resolve) => {
+      releaseReadback = resolve;
+    });
+    let readbackRequested = false;
+    await page.route(
+      "**/families/readings?*",
+      async (route: { request(): { url(): string }; continue(): Promise<void> }) => {
+        if (!route.request().url().includes("id=")) return route.continue();
+        readbackRequested = true;
+        await heldReadback;
+        await route.continue();
+      },
+    );
     await applySheet(page);
+    await expect.poll(() => readbackRequested, { timeout: 30_000 }).toBe(true);
+    await page.getByRole("combobox", { name: "families table rules" }).fill("blank live p:model");
+    releaseReadback();
+    // The owner changes simulated native state; the Host's targeted matrix readback, not the
+    // staged input, supplies the value that the table draws after apply.
+    await expectModelValue(page, "Fan Coil Unit - Ducted", "FXMQ20");
+    await expect
+      .poll(() => page.getByRole("combobox", { name: "families table rules" }).inputValue())
+      .toBe("blank live p:model");
+    await expect
+      .poll(() => body.innerText(), { timeout: 30_000 })
+      .toContain("verified after apply");
+    // The retained post-apply observation keeps the original Work baseline. Plan two separate
+    // families from it; applying the first must not make the second plan unusable.
+    await type("Fan Coil Unit - Ducted", "FXMQ20", "FXMQ21");
+    await type("Heat Pump - Split", "Heat Pump - Split model", "RXL31");
+    await band(0, 2);
+    await run(page, "plan");
+    await applySheet(page);
+    await expectModelValue(page, "Fan Coil Unit - Ducted", "FXMQ21");
+    await expectModelValue(page, "Heat Pump - Split", "RXL31");
+    await band(0, 0);
+    expect(fullReads).toBe(1);
     // Plan filed no spec nobody authored: the page names no member.
     expect(new URL(page.url()).searchParams.get("path") ?? "").toBe("");
     await expect.poll(() => body.innerText(), { timeout: 30_000 }).toContain("apply families ran");
-    // The applied, unchanged staged cell retired: the band reads empty (it stays mounted, so the
-    // grid never moves, F-R4-1); the receipt is the record.
+    // The applied, unchanged staged cell retired; the empty review region disappears.
     await band(0, 0);
     // The run is filed under the draft's name; `/pods` browses members, and none was filed.
     // A string, so vitest leaves the page's own dynamic import alone.
@@ -500,27 +724,22 @@ test("live /families: typed cells stage, one is typed back, plan and apply retir
       memberPath: null,
       memberSha256: null,
     }),
+    expect.objectContaining({
+      operation: "families.apply",
+      outcome: "Succeeded",
+      podId: null,
+      origin: "SuppliedDraft",
+      memberPath: null,
+      memberSha256: null,
+    }),
   ]);
-  // One plan and one apply for the one staged family: the cleared one never reached the wire.
-  expect(workflows).toEqual(["families.plan", "families.apply"]);
-}, 180_000);
-
-test("live /families: capture, plan, apply files a run receipt", async () => {
-  const { shown, workflows } = await liveLoop("families", async (page) => {
-    const pod = await openLive(page, "/families", "demo=capture&live=1");
-    await page.goto(`${page.url()}&pod=${pod}`, { waitUntil: "domcontentloaded" });
-    // A row click picks it into the capture set (the master table's selection).
-    await page.getByRole("row").filter({ hasText: "Fan Coil Unit - Ducted" }).first().click();
-    await run(page, "capture families");
-    const path = await landed(page, /^settings\/families\/Fan-Coil-Unit-+Ducted-.*\.json$/);
-    // The captured family model is itself a families spec: plan and apply it.
-    await run(page, "plan");
-    await applySheet(page);
-    await expect
-      .poll(() => page.locator("body").innerText(), { timeout: 30_000 })
-      .toContain("apply families ran");
-    return receiptOnPods(page, pod, path, "families.apply");
-  });
-  expect(shown).toContain("Succeeded");
-  expect(workflows).toEqual(["families.capture", "families.plan", "families.apply"]);
+  // The second review planned and applied both families from the retained readback.
+  expect(workflows).toEqual([
+    "families.plan",
+    "families.apply",
+    "families.plan",
+    "families.plan",
+    "families.apply",
+    "families.apply",
+  ]);
 }, 180_000);

@@ -853,3 +853,4 @@ Paid at the primitives; the rulings are above and the evidence is
 - `use-route.ts` evicts the `own` revision chain by insertion order past 256 entries, so a long-lived page degrades from truthfully bound to stale; bound by observation, not count.
 - Command palette mirrors route verbs; one palette each for `/families`, `/family`, `/schedules` (user ruling 2026-09-22).
 - `targeting/**` (instrument cluster, direction glyphs, stage strip; deleted by `43ff94b0`, base `f459801e`) is undecided; stand up a worktree at the base commit and screenshot the route head before ruling.
+- Owed exploration (2026-09-23): a batteries-included proposal review surface in the Situation head shared with Chat. Consolidate the existing WorkBand/Situation work body, Chat ProposalHead, and FamiliesProposalsBand while keeping one Work and cell-transition owner; shape and placement remain undecided.

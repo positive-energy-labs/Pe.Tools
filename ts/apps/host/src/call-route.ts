@@ -24,7 +24,9 @@ import {
   memberWork,
   scheduleActions,
   workKeySchema,
+  FAMILY_CATALOG_LIMIT,
 } from "@pe/agent-contracts";
+import { z } from "zod";
 import { admitTakeoffAction, recoverTakeoffAction, fileVersion } from "./takeoff-actions.ts";
 import { takeoffActions } from "@pe/agent-contracts";
 import { Effect, Layer, Schema } from "effect";
@@ -35,6 +37,7 @@ import {
   actionStatusSchema,
 } from "@pe/agent-contracts";
 import { hostTakeoffCaptures, type TakeoffCaptures } from "./takeoff-captures.ts";
+import { documentMarks } from "./document-marks.ts";
 import {
   projectTakeoffSnapshot,
   projectTakeoffViews,
@@ -375,6 +378,123 @@ export function makeCallRoute(
       }),
     );
   });
+  const familiesReadings = HttpRouter.add("*", "/families/readings", (req) =>
+    RevitBridge.use((bridge) =>
+      Effect.tryPromise({
+        try: async () => {
+          if (forwardBase) {
+            const response = await fetch(`${forwardBase}${req.url}`, {
+              method: req.method,
+              headers: {
+                "content-type": "application/json",
+                [HOST_RPC_BRIDGE_SESSION_HEADER]: req.headers[HOST_RPC_BRIDGE_SESSION_HEADER] ?? "",
+                [HOST_RPC_DOCUMENT_HEADER]: req.headers[HOST_RPC_DOCUMENT_HEADER] ?? "",
+                ...(req.headers[ACTOR_HEADER] ? { [ACTOR_HEADER]: req.headers[ACTOR_HEADER] } : {}),
+              },
+              ...(req.method === "POST"
+                ? { body: JSON.stringify(await Effect.runPromise(req.json)) }
+                : {}),
+            });
+            return Response.jsonUnsafe(await response.json(), { status: response.status });
+          }
+          if (req.method === "GET") {
+            const query = new URL(req.url, "http://host").searchParams;
+            const id = query.get("id");
+            const raw = query.get("work");
+            if (id && raw) throw Error("Choose one Families reading lookup");
+            if (id) return Response.jsonUnsafe(await observations().families(id));
+            if (!raw) return Response.jsonUnsafe(await observations().familiesReadings());
+            const work = workKeySchema.parse(JSON.parse(raw));
+            if (work.route !== "families") throw Error("Families Work required");
+            return Response.jsonUnsafe(await observations().latestFamilies(work));
+          }
+          if (req.method !== "POST") throw Error("Unsupported Families reading method");
+          const body = z
+            .strictObject({
+              work: workKeySchema,
+              filter: z.strictObject({
+                categoryNames: z.array(z.string()).min(1),
+                familyNames: z.array(z.string()),
+                placementScope: z.enum(["AllLoaded", "PlacedOnly", "UnplacedOnly"]),
+              }),
+            })
+            .parse(await Effect.runPromise(req.json));
+          if (body.work.route !== "families") throw Error("Families Work required");
+          const target = documentRefSchema.parse({
+            session: req.headers[HOST_RPC_BRIDGE_SESSION_HEADER],
+            openId: req.headers[HOST_RPC_DOCUMENT_HEADER],
+          });
+          const definition = await operationDefinition(
+            "revit.matrix.loaded-families",
+            bridge,
+            target.session,
+          );
+          requireEligibleActor(definition, req.headers[ACTOR_HEADER] ?? "human");
+          if (definition.intent !== "Read") throw Error("Matrix operation must be a read");
+          const resolved = await gatewayTarget(
+            "revit.matrix.loaded-families",
+            definition.needs,
+            bridge,
+            target.session,
+            target.openId,
+          );
+          if (
+            resolved.kind !== "document" ||
+            resolved.ref.session !== target.session ||
+            resolved.ref.openId !== target.openId
+          )
+            throw Error("Families read requires the exact project document");
+          const session = (await Effect.runPromise(bridge.list)).find(
+            (row) => row.sessionId === target.session,
+          );
+          const document = session?.state?.openDocuments.find(
+            (row) => row.openId === target.openId,
+          );
+          if (body.work.binding === "address") {
+            if (
+              !document?.address ||
+              !sameAddress(addressSchema.parse(document.address), body.work.target)
+            )
+              throw Error("Families Work belongs to another document");
+          } else if (
+            body.work.binding !== "open" ||
+            body.work.open.session !== target.session ||
+            body.work.open.openId !== target.openId
+          )
+            throw Error("Families Work belongs to another document");
+          documentMarks(bridge);
+          const capturedAt = new Date().toISOString();
+          const result = await Effect.runPromise(
+            bridge.invoke(
+              "revit.matrix.loaded-families",
+              {
+                filter: body.filter,
+                budget: { maxEntries: FAMILY_CATALOG_LIMIT, maxSamplesPerEntry: 1000 },
+                includeTempPlacement: true,
+              },
+              target.session,
+              target.openId,
+            ),
+          );
+          const saved = await observations().saveFamilies({
+            work: body.work,
+            document: target,
+            ...(document?.title ? { documentTitle: document.title } : {}),
+            filter: body.filter,
+            capturedAt,
+            result:
+              result.value as import("@pe/host-contracts/generated").RevitMatrixLoadedFamilies.Res.Response,
+          });
+          return Response.jsonUnsafe(saved);
+        },
+        catch: (error) => error,
+      }).pipe(
+        Effect.catch((error) =>
+          Effect.succeed(Response.jsonUnsafe({ error: said(error) }, { status: 409 })),
+        ),
+      ),
+    ),
+  );
   const captured = HttpRouter.add("GET", "/takeoffs/observations", (req) =>
     Effect.tryPromise({
       try: async () => {
@@ -696,6 +816,7 @@ export function makeCallRoute(
   );
   return Layer.mergeAll(
     post,
+    familiesReadings,
     captured,
     actions,
     actionReads,

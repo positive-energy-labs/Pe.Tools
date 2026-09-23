@@ -19,10 +19,14 @@ import { OwnerReads, type OwnerValue } from "@pe/runtime";
 import {
   familyCaptureSchema,
   canonicalRouteInput,
+  workKey,
+  workKeySchema,
   type FamilyCapture,
   type WorkKey,
 } from "@pe/agent-contracts";
 import { createHash, randomUUID } from "node:crypto";
+import { z } from "zod";
+import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
 import { mkdir, readFile, readdir, rename, writeFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -32,6 +36,7 @@ import {
   takeoffSnapshotSchema,
   type Address,
   type DocumentRef,
+  type AppliedFilter,
   type TakeoffCapture,
   type TakeoffObservation,
   type TakeoffSnapshot,
@@ -42,12 +47,99 @@ const keyOf = (target: DocumentRef) => JSON.stringify([target.session, target.op
 const previousOf = (state: TakeoffObservation) =>
   state.kind === "ready" ? state.capture : state.kind === "empty" ? undefined : state.previous;
 
+const familiesObservationSchema = z.object({
+  id: z.string().regex(/^[a-f0-9]{64}$/),
+  work: workKeySchema.refine((work) => work.route === "families"),
+  document: z.object({ session: z.string().min(1), openId: z.string().min(1) }),
+  documentTitle: z.string().min(1).optional(),
+  filter: z.object({
+    categoryNames: z.array(z.string()),
+    familyNames: z.array(z.string()),
+    placementScope: z.enum(["AllLoaded", "PlacedOnly", "UnplacedOnly"]),
+  }),
+  capturedAt: z.iso.datetime(),
+  completedAt: z.iso.datetime(),
+  readback: z
+    .object({
+      sourceId: z.string().regex(/^[a-f0-9]{64}$/),
+      verifiedFamilies: z.array(z.object({ name: z.string().min(1), at: z.iso.datetime() })),
+    })
+    .optional(),
+  result: z
+    .object({
+      families: z.array(
+        z
+          .object({
+            familyId: z.number(),
+            familyUniqueId: z.string(),
+            familyName: z.string(),
+            typeNames: z.array(z.string()),
+            parameters: z.array(
+              z
+                .object({
+                  definition: z
+                    .object({
+                      identity: z
+                        .object({ key: z.string(), kind: z.string(), name: z.string() })
+                        .passthrough(),
+                    })
+                    .passthrough(),
+                  kind: z.string(),
+                  scope: z.string(),
+                  storageType: z.string(),
+                  formulaState: z.string(),
+                  valuesPerType: z.record(z.string(), z.string().nullable()),
+                })
+                .passthrough(),
+            ),
+            issues: z.array(
+              z
+                .object({ code: z.string(), severity: z.string(), message: z.string() })
+                .passthrough(),
+            ),
+            isPartial: z.boolean(),
+            placedInstanceCount: z.number(),
+          })
+          .passthrough(),
+      ),
+      issues: z.array(
+        z.object({ code: z.string(), severity: z.string(), message: z.string() }).passthrough(),
+      ),
+      page: z
+        .object({ totalCount: z.number(), returnedCount: z.number(), isTruncated: z.boolean() })
+        .nullable()
+        .optional(),
+    })
+    .passthrough(),
+});
+export type FamiliesObservation = {
+  id: string;
+  work: WorkKey;
+  document: DocumentRef;
+  documentTitle?: string;
+  filter: AppliedFilter;
+  capturedAt: string;
+  completedAt: string;
+  /** Targeted loaded-project reads after apply; all other families retain capturedAt evidence. */
+  readback?: { sourceId: string; verifiedFamilies: { name: string; at: string }[] };
+  result: RevitMatrixLoadedFamilies.Res.Response;
+};
+
+export type FamiliesObservationSummary = Omit<FamiliesObservation, "result"> & {
+  familyCount: number;
+  typeCount: number;
+  issueCount: number;
+};
+
+const familyObservationId = (id: string) => familiesObservationSchema.shape.id.parse(id);
+
 /** Immutable Takeoffs and Family observations outside authored Work. Immutable files use the host's existing atomic-replace pattern. */
 export class TakeoffCaptures {
   private readonly states = new Map<string, TakeoffObservation>();
   private readonly generations = new Map<string, number>();
   private readonly pending = new Map<string, Promise<unknown>>();
   private readonly reads = new OwnerReads();
+  private readonly familiesSaves = new Map<string, Promise<unknown>>();
   private readonly listeners = new Set<(key: string) => void>();
   constructor(private readonly directory: string) {}
 
@@ -298,6 +390,162 @@ export class TakeoffCaptures {
     return values
       .filter((value) => canonicalRouteInput(value.key) === canonicalRouteInput(scope))
       .sort((a, b) => b.capturedAt.localeCompare(a.capturedAt));
+  }
+  /** One latest pointer per durable Families Work; full observations remain immutable. */
+  async saveFamilies(
+    value: Omit<FamiliesObservation, "id" | "completedAt" | "result"> & { result: unknown },
+    expectedLatestId?: string,
+  ): Promise<FamiliesObservation> {
+    const work = workKey(value.work);
+    const completedAt = new Date().toISOString();
+    const id = createHash("sha256")
+      .update(JSON.stringify({ ...value, completedAt }))
+      .digest("hex");
+    const observation = familiesObservationSchema.parse({
+      ...value,
+      id,
+      completedAt,
+    }) as FamiliesObservation;
+    const key = createHash("sha256").update(work).digest("hex");
+    const directory = join(this.directory, "families");
+    const save = async () => {
+      await mkdir(directory, { recursive: true });
+      const snapshot = join(directory, `${id}.json`);
+      const pointer = join(directory, `${key}.latest`);
+      if (expectedLatestId) {
+        const latestId = await readFile(pointer, "utf8").catch((error: NodeJS.ErrnoException) => {
+          if (error.code === "ENOENT") return null;
+          throw error;
+        });
+        if (latestId !== expectedLatestId)
+          throw Error("A newer Families reading replaced the readback basis");
+      }
+      const tempSnapshot = join(directory, `${id}.${randomUUID()}.tmp`);
+      const tempPointer = join(directory, `${key}.${randomUUID()}.tmp`);
+      try {
+        await writeFile(tempSnapshot, JSON.stringify(observation), "utf8");
+        await rename(tempSnapshot, snapshot);
+        await writeFile(tempPointer, id, "utf8");
+        await rename(tempPointer, pointer);
+      } finally {
+        await rm(tempSnapshot, { force: true });
+        await rm(tempPointer, { force: true });
+      }
+    };
+    const pending = (this.familiesSaves.get(key) ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(save);
+    this.familiesSaves.set(key, pending);
+    try {
+      await pending;
+    } finally {
+      if (this.familiesSaves.get(key) === pending) this.familiesSaves.delete(key);
+    }
+    return observation;
+  }
+  async saveFamiliesReadback(
+    sourceId: string,
+    document: DocumentRef,
+    familyNames: readonly string[],
+    at: string,
+    result: unknown,
+  ): Promise<FamiliesObservation> {
+    const source = await this.families(sourceId);
+    if (source.document.session !== document.session || source.document.openId !== document.openId)
+      throw Error("Families readback belongs to another document");
+    const verified = familiesObservationSchema.shape.result.parse(result);
+    const names = new Set(familyNames);
+    if (
+      !names.size ||
+      verified.page?.isTruncated ||
+      verified.issues.some((issue) => issue.severity === "Error") ||
+      verified.families.some(
+        (family) =>
+          !names.has(family.familyName) ||
+          family.isPartial ||
+          family.issues.some((issue) => issue.severity === "Error") ||
+          !source.result.families.some((before) => before.familyName === family.familyName),
+      ) ||
+      verified.families.length !== names.size ||
+      [...names].some((name) => !verified.families.some((family) => family.familyName === name))
+    )
+      throw Error("Targeted Families readback did not return every applied family completely");
+    const byName = new Map(verified.families.map((family) => [family.familyName, family]));
+    const priorVerified = new Map(
+      source.readback?.verifiedFamilies.map((row) => [row.name, row.at]),
+    );
+    for (const name of names) priorVerified.set(name, at);
+    return this.saveFamilies(
+      {
+        work: source.work,
+        document,
+        ...(source.documentTitle ? { documentTitle: source.documentTitle } : {}),
+        filter: source.filter,
+        capturedAt: source.capturedAt,
+        readback: {
+          sourceId,
+          verifiedFamilies: [...priorVerified].map(([name, verifiedAt]) => ({
+            name,
+            at: verifiedAt,
+          })),
+        },
+        result: {
+          ...source.result,
+          families: source.result.families.map((family) => byName.get(family.familyName) ?? family),
+          issues: [
+            ...source.result.issues.filter(
+              (issue) => !issue.familyName || !names.has(issue.familyName),
+            ),
+            ...verified.issues,
+          ],
+        },
+      },
+      sourceId,
+    );
+  }
+  async latestFamilies(work: WorkKey): Promise<FamiliesObservation | null> {
+    const key = createHash("sha256").update(workKey(work)).digest("hex");
+    const directory = join(this.directory, "families");
+    const id = await readFile(join(directory, `${key}.latest`), "utf8").catch(
+      (error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      },
+    );
+    if (!id) return null;
+    const record = await this.families(id);
+    if (workKey(record.work) !== workKey(work))
+      throw Error("Families observation Work does not match its latest pointer");
+    return record;
+  }
+  async families(id: string): Promise<FamiliesObservation> {
+    familyObservationId(id);
+    const record = familiesObservationSchema.parse(
+      JSON.parse(await readFile(join(this.directory, "families", `${id}.json`), "utf8")),
+    ) as FamiliesObservation;
+    if (record.id !== id) throw Error("Families observation ID does not match its file");
+    return record;
+  }
+  async familiesReadings(): Promise<FamiliesObservationSummary[]> {
+    const directory = join(this.directory, "families");
+    const names = await readdir(directory).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return [];
+      throw error;
+    });
+    const readings: FamiliesObservationSummary[] = [];
+    // ponytail: scan immutable files until a measured archive size warrants a metadata index.
+    for (const name of names.filter((name) => /^[a-f0-9]{64}\.json$/.test(name))) {
+      const { result, ...reading } = await this.families(name.slice(0, -5));
+      readings.push({
+        ...reading,
+        familyCount: result.families.length,
+        typeCount: result.families.reduce((count, family) => count + family.typeNames.length, 0),
+        issueCount: result.issues.length,
+      });
+    }
+    return readings.sort(
+      (a, b) => b.completedAt.localeCompare(a.completedAt) || b.id.localeCompare(a.id),
+    );
   }
   private async save(
     snapshot: TakeoffSnapshot,

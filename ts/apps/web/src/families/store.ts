@@ -3,19 +3,16 @@
  *
  * The owner, the registry, the Target resolution, busy, refusals and the host caller all live in
  * `useRoute` now; the Work doc, the Readings and the two applies live in `families/manifest.ts`.
- * What is left here is what only Families knows: what the last capture saw, what the last apply
- * receipt said, and which picker is open. Plain values, no atoms.
+ * What is left here is the last apply receipt and page memory. Plain values, no atoms.
  */
 import { frozenDemo } from "#/host/demo-client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   actionReceiptSchema,
   actionStatusSchema,
   diagnosticSchema,
   familyCellKey,
-  familiesCaptureEvidenceSchema,
   ffReceiptSchema,
-  podMemberSourceSchema,
   type ActionStatus,
   type AppliedFilter,
   type FamilyCellAddress,
@@ -26,16 +23,23 @@ import {
   type FamilyExclusions,
   type Reading,
   transitionPatches,
+  workKey,
 } from "@pe/agent-contracts";
 import { z } from "zod";
 
 import type { CellWire } from "#/components/lang/band";
 import type { TableState } from "#/components/master-table/model";
-import { callHostRpc } from "#/host/client";
 import { useHostCall, previousOf, useReading } from "#/readings";
 import { useRoute, type EntityPage, type EntitySearch } from "#/route";
 import { usePodList } from "#/route/pods";
-import { createLiveFamiliesHost, type FamiliesDraft } from "#/families/host";
+import {
+  archivedFamiliesObservation,
+  archivedFamiliesObservations,
+  createLiveFamiliesHost,
+  latestFamiliesObservation,
+  openFamiliesArtifact,
+  type FamiliesDraft,
+} from "#/families/host";
 import { manifest, type FamiliesPage } from "#/families/manifest";
 
 /* ── Page memory ───────────────────────────────────────────────────────────── */
@@ -47,13 +51,11 @@ export type PickerState = {
 };
 
 export interface FamiliesPageMemory {
-  readonly showUncommon: boolean;
   readonly table: TableState;
   readonly picker: PickerState;
 }
 
 const EMPTY_MEMORY: FamiliesPageMemory = {
-  showUncommon: false,
   table: { filters: {}, sorts: [], query: "" },
   picker: { open: null, level: null, query: "" },
 };
@@ -67,18 +69,20 @@ const next = <A>(value: Setter<A>, previous: A): A =>
 
 /** The option-list shape the pickers read. `feed()` and its `Atom.swr` runtime are deleted. */
 export interface OptionList {
-  readonly options: readonly { id: string; label: string }[] | null;
+  readonly options: readonly { id: string; label: string; categoryName?: string | null }[] | null;
   readonly state: "loading" | "ready" | "error";
   readonly lane: "read";
   readonly stale: boolean;
 }
 
 const asFeed = (call: {
-  data?: readonly string[];
+  data?: readonly string[] | readonly { id: string; label: string; categoryName: string | null }[];
   error?: Error;
   isPending: boolean;
 }): OptionList => ({
-  options: call.data ? call.data.map((id) => ({ id, label: id })) : null,
+  options: call.data
+    ? call.data.map((value) => (typeof value === "string" ? { id: value, label: value } : value))
+    : null,
   state: call.error ? "error" : call.isPending ? "loading" : "ready",
   lane: "read",
   stale: false,
@@ -96,20 +100,6 @@ const latestStatusOf = (statuses: unknown, key: ActionStatus["key"]) =>
     : null;
 const latestApplyStatusOf = (statuses: unknown) => latestStatusOf(statuses, "families.apply");
 
-/**
- * What the last capture saw, from its original receipt: the members it filed and, per family,
- * coverage, unmodeled facts and failures. Null when the receipt is not a finished capture.
- */
-function captureEvidenceOf(receipts: unknown, id: string) {
-  const row = (receipts as { id: string; result?: unknown }[] | undefined)?.find(
-    (entry) => entry.id === id,
-  );
-  const result = z
-    .object({ members: z.array(podMemberSourceSchema), evidence: familiesCaptureEvidenceSchema })
-    .safeParse(row?.result);
-  return result.success ? result.data : null;
-}
-
 /** The last succeeded `families.apply` receipt, projected. Never Work: the receipt is the record. */
 function applyDataOf(statuses: unknown, receipts: unknown) {
   const row = latestApplyStatusOf(statuses);
@@ -123,10 +113,13 @@ function applyDataOf(statuses: unknown, receipts: unknown) {
   );
   if (!parsed || !step || step.state !== "succeeded") return null;
   const native = step.result as { diagnostics?: unknown[]; receipts?: unknown[] };
+  const result =
+    parsed.state === "succeeded" ? (parsed.result as { readbackError?: unknown }) : null;
   const ffReceipts = ffReceiptSchema.array().parse(native.receipts ?? []);
   return {
     actionId: parsed.id,
     appliedAt: parsed.startedAt,
+    readbackError: typeof result?.readbackError === "string" ? result.readbackError : null,
     diagnostics: diagnosticSchema.array().parse(native.diagnostics ?? []),
     receipts: ffReceipts,
     artifacts: [
@@ -140,7 +133,7 @@ function applyDataOf(statuses: unknown, receipts: unknown) {
 /* ── The hook ──────────────────────────────────────────────────────────────── */
 
 export function useFamiliesStore(
-  options: { target?: string; thread?: string; entry?: EntitySearch } = {},
+  options: { target?: string; thread?: string; entry?: EntitySearch; rules?: string } = {},
 ) {
   const demo = useMemo(() => frozenDemo() !== null, []);
   const [pods, refreshPods] = usePodList(!demo);
@@ -148,15 +141,41 @@ export function useFamiliesStore(
     target: options.target ? (options.target as never) : null,
     thread: options.thread,
     provided: { pods },
-    page: options.entry as never,
+    page: {
+      ...options.entry,
+      ...(options.rules === undefined ? {} : { rules: options.rules }),
+    } as never,
   });
   const [memory, setMemory] = useState<FamiliesPageMemory>(EMPTY_MEMORY);
   // The draft and the selection are Page: the verbs read them off `ctx.page`.
   const page = handle.page[0] as FamiliesPage & EntityPage;
   const setPage = handle.page[1] as (next: Partial<FamiliesPage & EntityPage>) => void;
-  // The capture picks, by family NAME (ruling): they survive a reload that reissues the ids.
-  const picked = useMemo(() => new Set(page.selection), [page.selection]);
+  const tableRef = useRef(memory.table);
+  tableRef.current = memory.table;
+  const rulesRef = useRef(page.rules);
+  rulesRef.current = page.rules;
+  const table = useMemo(() => ({ ...memory.table, rules: page.rules }), [memory.table, page.rules]);
+  useEffect(() => {
+    if (options.rules !== undefined && options.rules !== page.rules)
+      setPage({ rules: options.rules });
+    // URL changes seed the Page; local rule edits own subsequent renders until the URL changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options.rules]);
   const draft = page.draft;
+  const draftTouched = useRef(false);
+  const [archiveId, setArchiveId] = useState<string | null>(null);
+  const archiveListCall = useHostCall(
+    archivedFamiliesObservations,
+    ["families-archive-list"],
+    page.stage === "archived",
+  );
+  const archiveList = archiveListCall.data ?? [];
+  const selectedArchiveId = archiveId ?? archiveList[0]?.id ?? null;
+  const archiveCall = useHostCall(
+    () => archivedFamiliesObservation(selectedArchiveId!),
+    ["families-archive", selectedArchiveId],
+    page.stage === "archived" && selectedArchiveId !== null,
+  );
 
   const host = useMemo(() => createLiveFamiliesHost(), []);
   const documentTarget =
@@ -173,6 +192,51 @@ export function useFamiliesStore(
   );
 
   const doc = handle.work.doc as FamiliesRouteDocument | null;
+  const retainedCall = useHostCall(
+    () => latestFamiliesObservation(handle.work.key),
+    ["families-retained", workKey(handle.work.key)],
+    documentTarget !== null && page.stage !== "archived",
+  );
+  const retainedReading = retainedCall.data ?? null;
+  useEffect(() => {
+    if (
+      page.stage === "archived" ||
+      !retainedReading ||
+      handle.busy ||
+      retainedReading.document.session !== documentTarget?.session ||
+      retainedReading.document.openId !== documentTarget.openId ||
+      (page.reading &&
+        page.reading.document.session === documentTarget.session &&
+        page.reading.document.openId === documentTarget.openId)
+    )
+      return;
+    setPage({
+      reading: retainedReading,
+      ...(!draftTouched.current &&
+      !draft.categories.length &&
+      draft.families === null &&
+      draft.placement === "AllLoaded"
+        ? {
+            draft: {
+              categories: [...retainedReading.filter.categoryNames],
+              families: retainedReading.filter.familyNames.length
+                ? [...retainedReading.filter.familyNames]
+                : null,
+              placement: retainedReading.filter.placementScope,
+            },
+          }
+        : {}),
+    });
+  }, [
+    retainedReading,
+    documentTarget?.session,
+    documentTarget?.openId,
+    page.reading,
+    page.stage,
+    draft,
+    setPage,
+    handle.busy,
+  ]);
   // One shared empty list while Work is null: `actions` memoizes on it, and a fresh `[]` per
   // render would rebuild the controller on every pass.
   const excluded = doc?.excluded ?? NO_EXCLUDED;
@@ -203,18 +267,6 @@ export function useFamiliesStore(
   const applyData = useMemo(() => {
     return applyDataOf(receiptStatuses, previousOf(applyReceipt));
   }, [receiptStatuses, applyReceipt]);
-  const captureStatus = useMemo(
-    () => latestStatusOf(receiptStatuses, "families.capture"),
-    [receiptStatuses],
-  );
-  const captureReceipt = useReading(
-    !handle.demo && captureStatus ? { kind: "receipts", id: captureStatus.id } : null,
-  );
-  const captured = useMemo(
-    () => (captureStatus ? captureEvidenceOf(previousOf(captureReceipt), captureStatus.id) : null),
-    [captureStatus, captureReceipt],
-  );
-
   /*
    * Keyed on the ref's strings, never the ref: the resolution rebuilds it whenever the inventory
    * reading moves, and a catalog dispatch moves it, so an object key re-read on its own result.
@@ -222,10 +274,10 @@ export function useFamiliesStore(
   const categoryCall = useHostCall(
     () => host.categories(documentTarget!),
     ["categories", documentTarget?.session, documentTarget?.openId],
-    documentTarget !== null,
+    documentTarget !== null && page.stage !== "archived",
   );
   const familyCall = useHostCall(
-    () => (draft.categories.length ? host.families(documentTarget!, draft) : Promise.resolve([])),
+    () => host.families(documentTarget!, draft),
     [
       "families",
       documentTarget?.session,
@@ -233,7 +285,7 @@ export function useFamiliesStore(
       draft.placement,
       draft.categories.join("|"),
     ],
-    documentTarget !== null,
+    documentTarget !== null && page.stage !== "archived" && draft.categories.length > 0,
   );
   // FOOTGUN: base-ui `Combobox items` must keep identity between renders; a fresh `options`
   // array each render re-runs its store effect and React throws "Maximum update depth exceeded".
@@ -274,7 +326,10 @@ export function useFamiliesStore(
       };
     },
     ["salvage", documentTarget?.session, documentTarget?.openId, unreadable, page.carryOver],
-    salvage !== null && documentTarget !== null && (unreadable || page.carryOver),
+    salvage !== null &&
+      documentTarget !== null &&
+      page.stage !== "archived" &&
+      (unreadable || page.carryOver),
   );
 
   // The offer lasts until pressed, dismissed, or the next plan (journeys' ruling).
@@ -282,6 +337,8 @@ export function useFamiliesStore(
     if (page.sheet && page.carryOver) setPage({ carryOver: false });
   }, [page.sheet, page.carryOver, setPage]);
 
+  const cellsRef = useRef(cells);
+  cellsRef.current = cells;
   const actions = useMemo(
     () => ({
       /** Start fresh landed: the fresh page offers what the old Work held back. */
@@ -308,14 +365,16 @@ export function useFamiliesStore(
         if (!refusal) setPage({ carryOver: false });
         return refusal;
       },
-      setDraft: (value: Setter<FamiliesDraft>) => setPage({ draft: next(value, draft) }),
-      setPicked: (value: Setter<Set<string>>) => setPage({ selection: [...next(value, picked)] }),
-      /** The current reading's name → id, which capture's contract still takes (by id). */
-      setLoaded: (loaded: Record<string, number>) => setPage({ loaded }),
-      setShowUncommon: (value: Setter<boolean>) =>
-        setMemory((current) => ({ ...current, showUncommon: next(value, current.showUncommon) })),
-      setTable: (value: Setter<TableState>) =>
-        setMemory((current) => ({ ...current, table: next(value, current.table) })),
+      setDraft: (value: Setter<FamiliesDraft>) => {
+        draftTouched.current = true;
+        setPage({ draft: next(value, draft) });
+      },
+      setTable: (value: Setter<TableState>) => {
+        const updated = next(value, { ...tableRef.current, rules: rulesRef.current });
+        if (updated.rules !== rulesRef.current) setPage({ rules: updated.rules ?? "" });
+        const { rules: _rules, ...table } = updated;
+        setMemory((current) => ({ ...current, table }));
+      },
       setPicker: (value: Setter<PickerState>) =>
         setMemory((current) => ({ ...current, picker: next(value, current.picker) })),
       /**
@@ -326,7 +385,7 @@ export function useFamiliesStore(
       propose: (address: FamilyCellAddress, value: FamilyCellValue, current: string) => {
         const key = familyCellKey(address);
         return handle.work.write(
-          transitionPatches(["cells"], key, cells[key] ?? {}, {
+          transitionPatches(["cells"], key, cellsRef.current[key] ?? {}, {
             kind: "stage",
             rung: { value },
             baseline: { value: { value: current, storageType: value.storageType } },
@@ -342,16 +401,12 @@ export function useFamiliesStore(
             ? { path: ["excluded", familyName] }
             : { path: ["excluded", familyName], value: { by: "person" } },
         ]),
-      openFamily: (familyId: number) => {
-        if (!documentScope)
-          return Promise.reject(Error("Select an exact available project document"));
-        return callHostRpc("family.open", { familyId }, documentScope);
-      },
-      openPath: (path: string) =>
-        callHostRpc("host.shell.open", { path }, { bridgeSessionId: target || undefined }),
+      openPath: openFamiliesArtifact,
     }),
+    // `cells` rides a ref: a staged keystroke must not mint a new `propose`, or every column
+    // def and every drawn cell (511 × 435) rebuilds behind it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [handle.work, cells, draft, setPage, picked, excluded, target, documentScope],
+    [handle.work, draft, setPage, excluded, target, documentScope],
   );
 
   return {
@@ -365,15 +420,35 @@ export function useFamiliesStore(
     applied,
     plan,
     applyData,
-    captured,
+    readbackError:
+      page.readbackError ??
+      (applyData?.readbackError &&
+      (!page.reading || Date.parse(page.reading.completedAt) <= Date.parse(applyData.appliedAt))
+        ? applyData.readbackError
+        : null),
     draft,
-    picked,
     demo,
     refreshPods,
-    showUncommon: memory.showUncommon,
-    table: memory.table,
+    table,
     picker: memory.picker,
     page,
+    retainedReading,
+    retainedError: retainedCall.error?.message ?? null,
+    archive: {
+      list: archiveList,
+      selectedId: selectedArchiveId,
+      reading: archiveCall.data?.id === selectedArchiveId ? archiveCall.data : null,
+      loading: archiveListCall.isPending || archiveCall.isPending,
+      error: archiveListCall.error?.message ?? archiveCall.error?.message ?? null,
+      failure: archiveListCall.error
+        ? "Couldn't load past reads."
+        : "Couldn't load this saved read.",
+      retry: () => {
+        if (archiveListCall.error) archiveListCall.refresh();
+        else archiveCall.refresh();
+      },
+      select: setArchiveId,
+    },
     setPage,
     busy: handle.busy,
     failure: handle.failure,

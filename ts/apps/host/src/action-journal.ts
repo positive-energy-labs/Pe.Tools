@@ -147,7 +147,7 @@ function settle(
         : undefined;
   if (cancelled?.state === "cancelled")
     return { state: "cancelled", error: cancelled.error, status: cancelled.status };
-  const failedStep = steps.findLast((step) => step.state === "failed");
+  const failedStep = [...steps].reverse().find((step) => step.state === "failed");
   const why = reason ?? (failedStep?.state === "failed" ? failedStep : undefined);
   if (steps.some((step) => step.state === "succeeded" && step.kind !== "publication")) {
     if (!why) return null;
@@ -541,6 +541,7 @@ export class ActionJournal {
   async recover(
     id: string,
     read: (step: ActionStep, prepared: unknown) => Promise<{ step: ActionStep; evidence: unknown }>,
+    revisit?: (step: ActionStep) => boolean,
   ): Promise<ActionReceipt> {
     const original = (await this.list(undefined, id))[0];
     if (!original) throw Error(`Action '${id}' has no admitted receipt`);
@@ -553,7 +554,10 @@ export class ActionJournal {
       return original;
     const updates: { step: ActionStep; evidence: unknown }[] = [];
     for (const step of original.steps)
-      if (step.kind === "native" && (step.state === "unknown" || incompleteSchedule)) {
+      if (
+        step.kind === "native" &&
+        (step.state === "unknown" || incompleteSchedule || revisit?.(step))
+      ) {
         try {
           const update = await read(step, original.preparation.value);
           updates.push(

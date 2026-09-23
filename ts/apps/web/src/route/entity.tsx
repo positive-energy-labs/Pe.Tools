@@ -13,7 +13,7 @@ import { Surface } from "#/components/lang/surface";
 import { previousOf } from "#/readings";
 
 import { isSpecOf, sheetOf, type EntityPage, type EntityRouteDef, type PodRow } from "./manifest";
-import { Ladder } from "./ladder";
+import { Ladder, type Rung } from "./ladder";
 import { PlanSheetView } from "./plan-sheet";
 import { SpecEditor, type DemoSpec } from "./spec-editor";
 import { Situation } from "./situation";
@@ -60,6 +60,8 @@ export function EntityRouteView({
   url = true,
   pick,
   stages,
+  targetRungs,
+  auditPlan,
   children,
 }: {
   def: EntityRouteDef<any, any, any>;
@@ -89,7 +91,11 @@ export function EntityRouteView({
    * The route's stages, declared (`route/stage.ts`): the row draws each stage's verbs and chords,
    * and the spec pane shows where the stage names it.
    */
-  stages: Readonly<Record<EntityPage["stage"], StageDecl<string, string>>>;
+  stages: Readonly<Partial<Record<EntityPage["stage"], StageDecl<string, string>>>>;
+  /** Route-owned refinements of the one session/document target picker. */
+  targetRungs?: (ladder: ReturnType<typeof useDocumentLadder>) => readonly Rung[];
+  /** The audit shows Plan only once route-owned edits exist. */
+  auditPlan?: boolean;
   /** The audit. */
   children: ReactNode;
 }) {
@@ -110,8 +116,9 @@ export function EntityRouteView({
   const specless = confirming && !page.path;
   // TODO: hide this pane (Pane `hidden`) instead of unmounting it, so it keeps what was typed —
   // SpecEditor works while it renders, and a hidden pre-render of it never settles.
-  const stage = stages[page.stage];
+  const stage = stages[page.stage] ?? stages.audit!;
   const specHidden = !stage.panes.spec && !confirming;
+  const podRelevant = Boolean(def.capture) || page.stage === "apply";
   // Field options come from the document this route acts on, read-only (user verdict, grill 2).
   const optionsFrom =
     handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
@@ -172,7 +179,11 @@ export function EntityRouteView({
           // With a plan lane the sheet's apply is the one apply button (w8-revit trip 5); the row
           // commits by planning.
           commit={def.plan || def.staged ? "plan" : "apply"}
-          verbs={stage.verbs}
+          verbs={
+            page.stage === "audit" && auditPlan === false
+              ? stage.verbs.filter((verb) => verb !== "plan")
+              : stage.verbs
+          }
           chords={stage.keys}
           meter={stage.meter}
           band={band}
@@ -182,14 +193,21 @@ export function EntityRouteView({
             <>
               {subject ?? def.entity}
               {def.target === "selection" ? ` (${page.selection.length} picked)` : ""} in{" "}
-              <LadderPicker ladder={ladder} disabled={handle.busy !== null} />
+              {targetRungs ? (
+                <Ladder
+                  levels={[...(ladder.hosted ? [] : ladder.levels), ...targetRungs(ladder)]}
+                  disabled={handle.busy !== null}
+                />
+              ) : (
+                <LadderPicker ladder={ladder} disabled={handle.busy !== null} />
+              )}
               {ladder.refusal ? (
                 <span role="status" data-tone="caution">
                   {" "}
                   ({ladder.refusal})
                 </span>
               ) : null}
-              , filed to {podCell}
+              {podRelevant ? <>, filed to {podCell}</> : null}
               {member ? (
                 <>
                   {" "}
@@ -209,8 +227,12 @@ export function EntityRouteView({
             </>
           }
           ledger={[
-            ["pod", pod ? `${pod.id} · ${pod.folder}` : "none"],
-            ["spec", page.path || "none"],
+            ...(podRelevant
+              ? ([
+                  ["pod", pod ? `${pod.id} · ${pod.folder}` : "none"],
+                  ["spec", page.path || "none"],
+                ] as const)
+              : []),
             ...(facts ?? []),
           ]}
         />

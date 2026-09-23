@@ -54,10 +54,11 @@ export function TableFrame<Row extends RowData>({
   selection,
   children,
 }: TableFrameProps<Row>) {
-  const shown = visibleRows(rows, columns, state).map(rowKey);
+  const visibleColumns = columns.filter((column) => !state.hiddenColumns?.includes(column.key));
+  const shown = visibleRows(rows, visibleColumns, state).map(rowKey);
   const reach = selection ? selectableKeys(selection, shown) : [];
   const selectedShown = reach.filter((key) => selection!.selected.has(key)).length;
-  const filtered = columns.filter((column) => state.filters[column.key]);
+  const filtered = visibleColumns.filter((column) => state.filters[column.key]);
   const setFilter = (key: string, value: string | null) => {
     const next = { ...state.filters };
     if (value === null) delete next[key];

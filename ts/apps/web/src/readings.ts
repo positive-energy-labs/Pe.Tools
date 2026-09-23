@@ -46,8 +46,7 @@ import type {
   OpKey,
 } from "@pe/host-contracts/operation-types";
 import { callHostRpc } from "#/host/client.ts";
-import { HOST_READ_WAIT_S, NATIVE_READ_WAIT_S } from "#/route/waits";
-import type { LoadedFamiliesMatrixRequest } from "#/host/loaded-families-view.ts";
+import { HOST_READ_WAIT_S } from "#/route/waits";
 import type { HostLane } from "@pe/host-contracts/service-identity";
 import { peUrl, resolveWorkbenchConfig } from "#/workbench/config.ts";
 
@@ -814,17 +813,6 @@ export function useHostOp<K extends OpKey>(key: K, ...args: OpCallArgs<K, HostQu
 
 export const useHostStatusQuery = (options?: HostQueryOptions) =>
   useHostOp("host.status", undefined, options);
-
-export const useLoadedFamiliesMatrixQuery = (
-  request: LoadedFamiliesMatrixRequest | undefined,
-  options?: HostQueryOptions,
-) =>
-  useHostOp("revit.matrix.loaded-families", request as LoadedFamiliesMatrixRequest, {
-    // The matrix is the expensive native read: a longer, still finite, wait.
-    waitSeconds: NATIVE_READ_WAIT_S,
-    ...options,
-    enabled: (options?.enabled ?? true) && Boolean(request),
-  });
 
 /** A value domain's options (the `revit.catalog.field-options` answer). */
 export type FieldOptionsData = HostOpResponse<"revit.catalog.field-options">;

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { resolve, win32 } from "node:path";
+import { join, resolve, win32 } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import {
@@ -58,8 +58,13 @@ import type {
   FamilyCapture as NativeFamilyCapture,
   FamilyPlan,
   RevitCatalogLoadedFamilies,
+  RevitMatrixLoadedFamilies,
 } from "@pe/host-contracts/generated";
-import { hostProcessIdentity } from "@pe/host-contracts/contracts";
+import {
+  hostProcessIdentity,
+  productPathNames,
+  scriptingWorkspaceIdentity,
+} from "@pe/host-contracts/contracts";
 import { BridgeError, type RevitBridge } from "./bridge.ts";
 import { assertFresh, documentMarks } from "./document-marks.ts";
 import { ActionIncomplete, type ActionJournal } from "./action-journal.ts";
@@ -75,6 +80,8 @@ import {
 } from "./settings.ts";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
 import { LocalOpError } from "./local-error.ts";
+import { productPodsRootPath } from "./product-paths.ts";
+import { familiesApplyRun, isFamiliesApplyResponse } from "./family-run-recovery.ts";
 
 const refused = (message: string) => new BridgeError(message, 409, { notDispatched: true });
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -347,6 +354,9 @@ type Prepared =
       sealed?: Sealed;
       /** An apply retires these staged cells after proven native success, if still unchanged. */
       retire?: Consumed | null;
+      /** A Families Work reading to update after apply, if this route supplied one. */
+      readbackWork?: WorkKey;
+      readbackTakenAt?: string | null;
     }
   | {
       kind: "capture";
@@ -387,6 +397,12 @@ export async function admitFamilyAction(
   const admission = actionAdmissionSchema.parse(raw);
   if (!Object.hasOwn(familyActions, admission.key)) throw refused("Unknown family/file action");
   const key = admission.key as FamilyActionKey;
+  if (resume && key === "families.apply") {
+    const original = (await owner.list(undefined, admission.id))[0];
+    const native = original?.steps.find((step) => step.kind === "native" && step.key === key);
+    if (native?.state === "succeeded" && !isFamiliesApplyResponse(native.result))
+      throw refused("Recover the interrupted Families apply from its native run before resuming");
+  }
   const definition = familyActions[key];
   if (definition.actor === "human" && admission.actor !== "human")
     throw refused("This action requires human approval");
@@ -531,7 +547,8 @@ export async function admitFamilyAction(
             )
           )
             throw refused("The staged cells changed since this plan; plan again");
-          assertFresh(documentMarks(bridge), target!, sealed.takenAt ?? null);
+          if (consumed.route === "family")
+            assertFresh(documentMarks(bridge), target!, sealed.takenAt ?? null);
         }
         const included = (plan.result as { included: Record<string, string> }).included;
         const stray = Object.keys(input.expectedPlanHashes).filter(
@@ -539,6 +556,14 @@ export async function admitFamilyAction(
         );
         if (stray.length)
           throw refused(`Families ${stray.join(", ")} are not in the reviewed plan as sent`);
+        const readbackBase =
+          key === "families.apply" && !sealed.consumed && admission.bases.work && work
+            ? await work.read(admission.bases.work.key, familiesRouteState.route)
+            : null;
+        const readbackDocument =
+          readbackBase && readbackBase.revision === admission.bases.work?.revision
+            ? familiesRouteState.schema.parse(readbackBase.doc)
+            : null;
         return {
           kind: "native",
           process,
@@ -564,6 +589,12 @@ export async function admitFamilyAction(
             ...(sealed.executionOptions ? { executionOptions: sealed.executionOptions } : {}),
           },
           retire: sealed.consumed,
+          ...(key === "families.apply" && (sealed.consumed || readbackDocument)
+            ? {
+                readbackWork: sealed.consumed?.key ?? admission.bases.work!.key,
+                readbackTakenAt: sealed.consumed ? sealed.takenAt : readbackDocument?.takenAt,
+              }
+            : {}),
         };
       }
       if (key === "families.plan") {
@@ -587,6 +618,16 @@ export async function admitFamilyAction(
           generated && canonicalRouteInput(generated.spec) === unstamped(rootText(source))
             ? consumedOf(base!.key, "families", doc.cells, generated.keys)
             : null;
+        if (consumed) {
+          const observed = await captures.latestFamilies(base!.key);
+          if (
+            !observed ||
+            observed.capturedAt !== doc.takenAt ||
+            observed.document.session !== target!.session ||
+            observed.document.openId !== target!.openId
+          )
+            throw refused("Read these staged families in this exact document before planning");
+        }
         return {
           kind: "native",
           process,
@@ -668,14 +709,22 @@ export async function admitFamilyAction(
     },
     async (execution) => {
       const prepared = execution.prepared as Prepared;
-      const native = (nativeKey: string, input: unknown, process: NativeProcess) =>
-        execution.step("native", nativeKey, input, async (id) => {
+      const native = async (nativeKey: string, input: unknown, process: NativeProcess) => {
+        const recorded = execution.recorded("native", nativeKey);
+        const result = await execution.step("native", nativeKey, input, async (id) => {
           await current(bridge, target!, documentKind(key), nativeProcessSchema.parse(process));
           const result = await invoke(bridge, target!, nativeKey, input, id);
           if (nativeKey === "family.apply" || nativeKey === "families.apply")
             appliedSomething(result);
           return result;
         });
+        if (
+          recorded?.state === "succeeded" &&
+          (nativeKey === "family.apply" || nativeKey === "families.apply")
+        )
+          appliedSomething(result);
+        return result;
+      };
       // The scope resolves to names only; name -> current id is the library's, at plan.
       const resolveScope = async (scope: AppliedFilter, process: NativeProcess) => {
         const catalog = (await native(
@@ -830,6 +879,53 @@ export async function admitFamilyAction(
           };
         }
         const consumed = prepared.retire;
+        const readback = async () => {
+          if (key !== "families.apply") return {};
+          const names = [
+            ...new Set(
+              (result as FamiliesApply.Res.Response).receipts.flatMap((receipt) =>
+                receipt.success ? [receipt.familyName] : [],
+              ),
+            ),
+          ];
+          if (!names.length) return {};
+          try {
+            if (!prepared.readbackWork)
+              throw Error("No reviewed Families reading is available for this apply");
+            const source = await captures.latestFamilies(prepared.readbackWork);
+            if (
+              !source ||
+              source.capturedAt !== prepared.readbackTakenAt ||
+              source.document.session !== target!.session ||
+              source.document.openId !== target!.openId
+            )
+              throw Error("The reviewed Families reading is no longer the latest saved reading");
+            await current(bridge, target!, "project", prepared.process);
+            const at = new Date().toISOString();
+            const observed = (await invoke(bridge, target!, "revit.matrix.loaded-families", {
+              filter: {
+                categoryNames: source.filter.categoryNames,
+                familyNames: names,
+                placementScope: "AllLoaded",
+              },
+              budget: { maxEntries: names.length, maxSamplesPerEntry: 1000 },
+              includeTempPlacement: true,
+            })) as RevitMatrixLoadedFamilies.Res.Response;
+            const saved = await captures.saveFamiliesReadback(
+              source.id,
+              target!,
+              names,
+              at,
+              observed,
+            );
+            return { readback: { id: saved.id } };
+          } catch (error) {
+            // The native apply receipt and consumed-cell retirement remain successful evidence.
+            return {
+              readbackError: `Families applied, but their loaded-project values could not be verified: ${error instanceof Error ? error.message : String(error)}`,
+            };
+          }
+        };
         if (consumed) {
           // By name: the apply reloaded the family, so its element id is already a new one.
           const succeeded = new Set(
@@ -851,11 +947,12 @@ export async function admitFamilyAction(
             retire(work, retiring, admission.actor),
           );
           await execution.publish(retired);
-          return { executionContext: target, native: result, retired };
+          return { executionContext: target, native: result, retired, ...(await readback()) };
         }
         return {
           executionContext: target,
           native: result,
+          ...(await readback()),
           ...(key === "family.build"
             ? { outputPath: (result as { outputPath?: string }).outputPath }
             : {}),
@@ -932,18 +1029,81 @@ async function retire(
   throw new ActionIncomplete("Applied; Work kept moving, so staged cells were not retired", {});
 }
 
-export const recoverFamilyAction = (
+export const recoverFamilyAction = async (
   id: string,
   owner: ActionJournal,
   deps: FamilyActionDependencies,
-) =>
-  owner.recover(id, (step, prepared) =>
-    readNativeReceipt(
-      step,
-      nativeProcessSchema.parse((prepared as { process: unknown }).process),
-      deps.sdk,
-    ),
+) => {
+  const original = (await owner.list(undefined, id))[0];
+  const familiesApply = original?.key === "families.apply";
+  return owner.recover(
+    id,
+    async (step, prepared) => {
+      const process = nativeProcessSchema.parse((prepared as { process: unknown }).process);
+      if (!familiesApply || step.key !== "families.apply")
+        return readNativeReceipt(step, process, deps.sdk);
+      const sdk = await readNativeReceipt(step, process, deps.sdk).catch((error: unknown) => ({
+        step,
+        evidence: { error: String(error) },
+      }));
+      if (sdk.step.state === "succeeded" && isFamiliesApplyResponse(sdk.step.result)) return sdk;
+      const unknown = {
+        id: step.id,
+        key: step.key,
+        kind: step.kind,
+        input: step.input,
+        state: "unknown" as const,
+        error:
+          "The SDK response does not prove the Families apply outcome; inspect its exact native run",
+        status: 503,
+      };
+      if (sdk.step.state === "failed" || sdk.step.state === "cancelled")
+        return { step: unknown, evidence: { sdk: sdk.evidence, conflict: sdk.step } };
+      try {
+        const input = (prepared as { input?: { source?: { root?: { id?: string | null } } } })
+          .input;
+        const pods = { podsRoot: deps.podsRoot };
+        const root = input?.source?.root?.id
+          ? join(
+              await runPods(deps, podFolder(input.source.root.id, pods)),
+              productPathNames.outputDirectoryName,
+            )
+          : join(
+              deps.podsRoot ?? productPodsRootPath(),
+              scriptingWorkspaceIdentity.defaultWorkspaceKey,
+              productPathNames.outputDirectoryName,
+              "operations",
+            );
+        const target = original?.destination;
+        const run =
+          target?.kind === "document"
+            ? await familiesApplyRun(root, step, prepared, target.ref.openId)
+            : null;
+        return run
+          ? {
+              step: {
+                id: step.id,
+                key: step.key,
+                kind: step.kind,
+                input: step.input,
+                state: "succeeded" as const,
+                result: run.result,
+              },
+              evidence: { sdk: sdk.evidence, nativeRun: run.evidence },
+            }
+          : { step: unknown, evidence: { sdk: sdk.evidence, nativeRun: "missing or ambiguous" } };
+      } catch (error) {
+        return { step: unknown, evidence: { sdk: sdk.evidence, nativeRun: String(error) } };
+      }
+    },
+    familiesApply
+      ? (step) =>
+          step.key === "families.apply" &&
+          step.state === "succeeded" &&
+          !isFamiliesApplyResponse(step.result)
+      : undefined,
   );
+};
 
 export async function readFamily(
   raw: { key: string; input?: unknown; target?: unknown; scope: unknown },

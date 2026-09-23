@@ -54,7 +54,7 @@ export function parseDocumentsKnownFolder(
   const match = /^\s*Personal\s+REG_(?:EXPAND_)?SZ\s+(.+?)\s*$/m.exec(regQueryOutput);
   if (!match)
     throw new Error(`Documents known folder unreadable: no Personal value in:\n${regQueryOutput}`);
-  const expanded = match[1]!.replace(/%([^%]+)%/g, (whole, name: string) => {
+  const expanded = match[1]!.replace(/%([^%]+)%/g, (_whole, name: string) => {
     const value = env[name] ?? env[name.toUpperCase()];
     if (!value) throw new Error(`Documents known folder names undefined variable '${name}'.`);
     return value;

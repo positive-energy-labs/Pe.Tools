@@ -16,6 +16,7 @@ catalog:
   vite: npm:@voidzero-dev/vite-plus-core@0.2.1
   vite-plus: 0.2.1
   knip: ^6.37.0
+  zod: 4.3.6
 overrides:
   vite: "catalog:"
   "@smithy/core": 3.33.3

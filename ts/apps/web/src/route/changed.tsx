@@ -1,7 +1,7 @@
 /**
- * "changed in Revit" — one drawing of the host's per-document change mark, for every surface that
+ * One drawing of the host's per-document freshness mark, for every surface that
  * draws a document (design-system ledger, 2026-09-22). The fact is always the host's: a Reading's
- * envelope says a document changed after the read it carries was taken. This says so and offers
+ * envelope says a document changed or host observation began after the read. This says so and offers
  * the re-read; it never measures an age and never decides freshness itself.
  */
 import { FactChip } from "#/components/lang/chip";
@@ -37,9 +37,9 @@ export function ChangedInRevit({
     <>
       <FactChip
         tone="caution"
-        title="Revit changed this document after this read was taken. Reading again brings it back to what Revit holds."
+        title="This read is no longer verified against Revit. Reading again updates it from Revit."
       >
-        changed in Revit
+        read may be stale
       </FactChip>
       <ActionButton
         label="read again (r)"

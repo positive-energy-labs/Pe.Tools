@@ -32,7 +32,9 @@ export function visibleRows<Row>(
   columns: readonly Column<Row>[],
   state: TableState,
 ): Row[] {
-  const resolved = columns.map(resolveStateColumn);
+  const resolved = columns
+    .filter((column) => !state.hiddenColumns?.includes(column.key))
+    .map(resolveStateColumn);
   const byKey = new Map(resolved.map((column) => [column.key, column]));
   const query = state.query.trim().toLowerCase();
   const searchable = resolved.filter((column) => column.search);

@@ -29,6 +29,8 @@ test("explicit dev proxy routes action/Family APIs and leaves page/foreign paths
       "/actions/resume?x=1",
       "/family/readings",
       "/family/readings?id=capture",
+      "/families/readings",
+      "/families/readings?work=scope",
     ]) {
       expect(matches(path), path).toHaveLength(1);
       expect(proxies[matches(path)[0]].target).toBe("http://explicit-host:8123");
@@ -38,6 +40,7 @@ test("explicit dev proxy routes action/Family APIs and leaves page/foreign paths
       "/family?mode=file",
       "/family/readings-other",
       "/family/readings/foreign",
+      "/families/readings-other",
       "/actions-extra",
       "/actions/foreign",
       "/else/actions",

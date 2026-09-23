@@ -30,10 +30,9 @@
     }
   },
   "longTitle": {
-    "total": 39,
+    "total": 33,
     "byArea": {
       "components": 4,
-      "families": 6,
       "family": 16,
       "grounded-doc": 1,
       "route": 1,

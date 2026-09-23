@@ -97,7 +97,7 @@ const DEMO_ROWS = [
 ];
 
 /** One loaded family as the matrix and catalog report it; ids are the seed's 1-based order. */
-const loadedFamily = (familyId: number, familyName: string) => ({
+const loadedFamily = (familyId: number, familyName: string, model?: string) => ({
   familyId,
   familyUniqueId: `demo-family-${familyId}`,
   familyName,
@@ -115,7 +115,7 @@ const loadedFamily = (familyId: number, familyName: string) => ({
       scope: "Family",
       storageType: "String",
       formulaState: "None",
-      valuesPerType: { "Type 1": `${familyName} model` },
+      valuesPerType: { "Type 1": model ?? `${familyName} model` },
     },
   ],
   issues: [],
@@ -278,8 +278,10 @@ export async function createDemoOwner(parent: string, raw: unknown) {
     let nativeModel = opened?.content ?? "{}";
     // The simulated schedule's cells; a push edits them so the readback shows the new value.
     const rows = DEMO_ROWS.map((row) => [...row]);
+    const familyModels = new Map<string, string>();
     const scheduleWork = new Set<string>();
     let simulatedPlan: { hash: string; spec: string } | undefined;
+    const simulatedFamilyPlans = new Map<string, { hash: string; spec: string }>();
     // Every owner but `family` holds a project document, so the project engines answer there.
     const project = seed.route !== "family";
     /** The simulated engine files saved-member runs in their pod and podless draft runs in the demo owner's pod. */
@@ -443,7 +445,8 @@ export async function createDemoOwner(parent: string, raw: unknown) {
             } else if (key === "families.plan" && seed.route === "families") {
               const spec = (input as { specJson: string }).specJson;
               const planned = { hash: createHash("sha256").update(spec).digest("hex"), spec };
-              simulatedPlan = planned;
+              for (const familyName of (input as { familyNames: string[] }).familyNames)
+                simulatedFamilyPlans.set(`${planned.hash}:${familyName}`, planned);
               value = {
                 diagnostics: [],
                 // The engine resolves exactly the names the target resolved to their ids.
@@ -472,13 +475,26 @@ export async function createDemoOwner(parent: string, raw: unknown) {
             } else if (key === "families.apply" && seed.route === "families") {
               const expected = (input as { expectedPlanHashes: Record<string, string> })
                 .expectedPlanHashes;
-              if (!simulatedPlan || !Object.keys(expected).length)
+              if (!Object.keys(expected).length)
                 throw new BridgeError("No reviewed simulated plan", 409, { notDispatched: true });
+              for (const [familyId, planHash] of Object.entries(expected)) {
+                const familyName = seed.readings.families[Number(familyId) - 1];
+                const planned = simulatedFamilyPlans.get(planHash);
+                if (!familyName || !planned || planHash !== `${planned.hash}:${familyName}`)
+                  throw new BridgeError("Simulated family plan changed", 409, {
+                    notDispatched: true,
+                  });
+                const patch = JSON.parse(planned.spec) as {
+                  patch?: { types?: Record<string, Record<string, unknown>> };
+                };
+                const model = patch.patch?.types?.["Type 1"]?.PE_G___Model;
+                if (typeof model === "string") familyModels.set(familyName, model);
+              }
               value = {
                 receiptPath: await fileRun(
                   "families.apply",
                   (input as { source: RunSource }).source,
-                  simulatedPlan.hash,
+                  Object.values(expected).join(","),
                 ),
                 diagnostics: [],
                 receipts: Object.entries(expected).map(([familyId, planHash]) => ({
@@ -735,8 +751,16 @@ export async function createDemoOwner(parent: string, raw: unknown) {
               value = {
                 summary: { truncated: false },
                 families: seed.readings.families
-                  .map((familyName, index) => loadedFamily(index + 1, familyName))
+                  .map((familyName, index) =>
+                    loadedFamily(index + 1, familyName, familyModels.get(familyName)),
+                  )
                   .filter((family) => !names?.length || names.includes(family.familyName)),
+                issues: [],
+                page: {
+                  totalCount: seed.readings.families.length,
+                  returnedCount: seed.readings.families.length,
+                  isTruncated: false,
+                },
                 simulated: true,
               };
             } else if (key === "families.capture" && seed.route === "families") {
@@ -1104,6 +1128,56 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         const body = (await request.clone().json()) as { key: string };
         if (body.key !== "family.saved")
           return json({ error: "Unsupported or nonlocal Family reading" }, 409);
+      }
+      if (url.pathname === "/families/readings" && seed.route === "families") {
+        if (request.method === "GET") {
+          const id = url.searchParams.get("id");
+          if (id) return json(await captures.families(id));
+          const raw = url.searchParams.get("work");
+          if (!raw) return json(await captures.familiesReadings());
+          const work = JSON.parse(raw) as WorkKey;
+          if (workKey(work) !== workKey(scope)) return json({ error: "Other Families Work" }, 409);
+          return json(await captures.latestFamilies(work));
+        }
+        if (request.method === "POST") {
+          const body = (await request.json()) as {
+            work: WorkKey;
+            filter: {
+              categoryNames: string[];
+              familyNames: string[];
+              placementScope: "AllLoaded" | "PlacedOnly" | "UnplacedOnly";
+            };
+          };
+          if (workKey(body.work) !== workKey(scope) || !body.filter.categoryNames.length)
+            return json({ error: "Local Families Work and category required" }, 409);
+          const families = seed.readings.families
+            .map((familyName, index) =>
+              loadedFamily(index + 1, familyName, familyModels.get(familyName)),
+            )
+            .filter(
+              (family) =>
+                !body.filter.familyNames.length ||
+                body.filter.familyNames.includes(family.familyName),
+            );
+          return json(
+            await captures.saveFamilies({
+              work: body.work,
+              document: target,
+              documentTitle: "Isolated demo (simulated)",
+              filter: body.filter,
+              capturedAt: new Date().toISOString(),
+              result: {
+                families,
+                issues: [],
+                page: {
+                  totalCount: families.length,
+                  returnedCount: families.length,
+                  isTruncated: false,
+                },
+              },
+            }),
+          );
+        }
       }
       // The browser's Work writes (`/pe/route-state/<route>/<apply|command>`), fenced to this owner.
       const write = /^\/pe\/route-state\/([^/]+)\/(apply|command)$/.exec(url.pathname);

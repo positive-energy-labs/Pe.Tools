@@ -18,7 +18,7 @@ export const frozenDemo = (): string | null => {
 
 /** The paths a page reaches the host on; everything else (documents, schemas) stays put. */
 const HOST_PATH =
-  /^\/(?:call|actions|family\/readings|schedules\/readings|pe\/resources|pe\/route-state\/)/;
+  /^\/(?:call|actions|family\/readings|families\/readings|schedules\/readings|pe\/resources|pe\/route-state\/)/;
 
 const schemaUrl = (path: string) => `${location.origin}/schemas/settings/${path}`;
 const common = {

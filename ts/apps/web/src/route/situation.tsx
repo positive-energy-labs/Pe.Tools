@@ -35,6 +35,8 @@ export interface SituationProps {
   health?: string | null;
   /** Diagnostic projection of the target selected by the sentence. */
   target: { session: string | null; document: string | null };
+  /** Saved observations have no live target, Work controls, verbs, or route log. */
+  inspection?: boolean;
   /** A controller transition when changing stage has dependent state. */
   chooseStage?: (stage: string) => void;
   /** The verb that commits Work; drawn bold. */
@@ -75,14 +77,14 @@ export interface SituationProps {
  * edge and says on the World stream how many Work documents it removed, so the route reports what
  * was deleted rather than the count it last saw staged (2026-09-22, addressless Work is ephemeral).
  */
-function useDiscardReceipt(handle: RouteHandle<any, any, any, any>) {
+function useDiscardReceipt(handle: RouteHandle<any, any, any, any>, enabled = true) {
   const route = handle.manifest.work?.route ?? null;
   const open = handle.work.key.open ?? handle.bindingLost?.ref ?? null;
   const session = open?.session ?? null;
   const openId = open?.openId ?? null;
   const [removed, setRemoved] = useState(0);
   useHostEvents<DiscardEvent>(
-    !handle.demo && route !== null && session !== null,
+    enabled && !handle.demo && route !== null && session !== null,
     useCallback(
       (event) => {
         if (event.type !== "route_workspace" || event.action !== "discard") return;
@@ -116,6 +118,7 @@ export function Situation({
   sentence,
   health,
   target,
+  inspection = false,
   chooseStage,
   commit,
   verbs: declaredVerbs,
@@ -137,11 +140,15 @@ export function Situation({
   const verbs = Object.entries(handle.actions).filter(
     ([name, action]) =>
       (declaredVerbs ? declaredVerbs.includes(name) : !action.stage || action.stage === stage) &&
-      !(handle.manifest.actions as Record<string, { sheet?: true }> | undefined)?.[name]?.sheet,
+      !(handle.manifest.actions as Record<string, { sheet?: true; visible?: false }> | undefined)?.[
+        name
+      ]?.sheet &&
+      (handle.manifest.actions as Record<string, { visible?: false }> | undefined)?.[name]
+        ?.visible !== false,
   ) as [string, ActionHandle][];
-  const staged = work && work.count > 0 ? work : null;
-  const receipt = useDiscardReceipt(handle);
-  const commitAction = commit ? handle.actions[commit] : undefined;
+  const staged = !inspection && work && work.count > 0 ? work : null;
+  const receipt = useDiscardReceipt(handle, !inspection);
+  const commitAction = !inspection && commit ? handle.actions[commit] : undefined;
   useChatPlanIntent(handle, commitAction);
   const workWord = workBandWord({
     revision: handle.work.revision,
@@ -169,14 +176,20 @@ export function Situation({
             <Cluster
               handle={handle}
               lamp={
-                <ChainLamp
-                  handle={handle}
-                  health={health}
-                  session={target.session}
-                  document={target.document}
+                inspection ? null : (
+                  <ChainLamp
+                    handle={handle}
+                    health={health}
+                    session={target.session}
+                    document={target.document}
+                  />
+                )
+              }
+              state={
+                <Ledger
+                  rows={inspection ? (ledger ?? []) : [...(ledger ?? []), ["work", workWord]]}
                 />
               }
-              state={<Ledger rows={[...(ledger ?? []), ["work", workWord]]} />}
             />
           </div>
         }
@@ -206,69 +219,77 @@ export function Situation({
               )}{" "}
               {sentence}
             </p>
-            <ActionBoard
-              handle={handle}
-              verbs={verbs}
-              chords={chords}
-              commit={commit}
-              work={meter === false ? null : workWord}
-            />
+            {!inspection ? (
+              <ActionBoard
+                handle={handle}
+                verbs={verbs}
+                chords={chords}
+                commit={commit}
+                work={meter === false ? null : workWord}
+              />
+            ) : null}
             {/* F-R4-1: the staged and unresolved lines (and a route's band) share ONE fixed
                 block that scrolls itself, so a first stage or a refusal never grows the head and
                 moves the grid under the person (fixture look 12: a refusal moved it 28px). */}
-            <div data-slot="situation-band" className="h-16 overflow-y-auto">
-              <WorkBand
-                count={staged?.count ?? 0}
-                noun={staged?.noun ?? "edit"}
-                revision={handle.work.revision}
-                read={staged?.read}
-                conflict={handle.work.conflict}
-                busy={handle.busy !== null}
-                discard={() => void staged?.discard()}
-                commit={
-                  commitAction
-                    ? {
-                        label: commitAction.label,
-                        reason: commitAction.refusal ?? commitAction.says,
-                        disabled: commitAction.refusal !== null,
-                        run: () => void commitAction.run(),
-                      }
-                    : undefined
-                }
-                unresolved={unresolved as string[]}
-                lifetime={
-                  handle.work.ephemeral && staged
-                    ? "Unsaved document. This Work lives until it closes. Save to keep it."
-                    : undefined
-                }
-                receipt={receipt || undefined}
-                reload={handle.work.reload}
-                startFresh={
-                  handle.work.startFresh
-                    ? () =>
-                        void handle.work.startFresh?.().then((refusal) => {
-                          if (!refusal) onStartedFresh?.();
-                        })
-                    : undefined
-                }
-                startFreshAside={startFreshAside}
-                body={staged?.body}
-                showRevision={false}
-              />
-              {band}
-            </div>
+            {!inspection ? (
+              <div data-slot="situation-band" className="h-16 overflow-y-auto">
+                <WorkBand
+                  count={staged?.count ?? 0}
+                  noun={staged?.noun ?? "edit"}
+                  revision={handle.work.revision}
+                  read={staged?.read}
+                  conflict={handle.work.conflict}
+                  busy={handle.busy !== null}
+                  discard={() => void staged?.discard()}
+                  commit={
+                    commitAction
+                      ? {
+                          label: commitAction.label,
+                          reason: commitAction.refusal ?? commitAction.says,
+                          disabled: commitAction.refusal !== null,
+                          run: () => void commitAction.run(),
+                        }
+                      : undefined
+                  }
+                  unresolved={unresolved as string[]}
+                  lifetime={
+                    handle.work.ephemeral && staged
+                      ? "Unsaved document. This Work lives until it closes. Save to keep it."
+                      : undefined
+                  }
+                  receipt={receipt || undefined}
+                  reload={handle.work.reload}
+                  startFresh={
+                    handle.work.startFresh
+                      ? () =>
+                          void handle.work.startFresh?.().then((refusal) => {
+                            if (!refusal) onStartedFresh?.();
+                          })
+                      : undefined
+                  }
+                  startFreshAside={startFreshAside}
+                  body={staged?.body}
+                  showRevision={false}
+                />
+                {band}
+              </div>
+            ) : (
+              band
+            )}
           </div>
-          <div className="flex min-w-[24rem] flex-[2] flex-col">
-            <div className="hairline-t flex flex-col gap-1 py-1.5">
-              <span className="flex items-baseline gap-2">
-                <Label>log</Label>
-                {handle.log.length ? (
-                  <span className="t-small face-mono text-ink-mute">{handle.log.length}</span>
-                ) : null}
-              </span>
-              <PageLog entries={handle.log} />
+          {!inspection ? (
+            <div className="flex min-w-[24rem] flex-[2] flex-col">
+              <div className="hairline-t flex flex-col gap-1 py-1.5">
+                <span className="flex items-baseline gap-2">
+                  <Label>log</Label>
+                  {handle.log.length ? (
+                    <span className="t-small face-mono text-ink-mute">{handle.log.length}</span>
+                  ) : null}
+                </span>
+                <PageLog entries={handle.log} />
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
       </ArtifactFrame>
     </section>

@@ -17,6 +17,8 @@ export interface DocumentRef {
 }
 
 export interface DocumentMarks {
+  /** Earliest read this host can judge against its own observed change events. */
+  readonly observedSince?: number;
   /** When this exact open document last changed in Revit, or null while it never has. */
   readonly changedAt: (ref: DocumentRef) => number | null;
   /** Fires whenever any mark moves. */
@@ -26,12 +28,12 @@ export interface DocumentMarks {
 const NO_MARKS: DocumentMarks = { changedAt: () => null, subscribe: () => () => {} };
 
 /** The one refusal an apply over a newer change mark gets. */
-export const STALE_READ =
-  "Revit changed this document after the read your staged cells rest on; read again, then apply.";
+export const STALE_READ = "This read is no longer verified against Revit; read again, then apply.";
 
 /** An apply rests on the read taken at `takenAt`; a later mark on its document refuses it undispatched. */
 export function assertFresh(marks: DocumentMarks, ref: DocumentRef, takenAt: string | null): void {
-  if (takenAt === null || (marks.changedAt(ref) ?? 0) > Date.parse(takenAt))
+  const at = takenAt === null ? Number.NaN : Date.parse(takenAt);
+  if (!Number.isFinite(at) || (marks.observedSince ?? 0) > at || (marks.changedAt(ref) ?? 0) > at)
     throw new BridgeError(STALE_READ, 409, { notDispatched: true });
 }
 
@@ -80,6 +82,7 @@ export function documentMarks(bridge?: RevitBridge["Service"]): DocumentMarks {
   });
 
   const holder: DocumentMarks = {
+    observedSince: Date.now(),
     changedAt: (ref) =>
       Math.max(
         marks.get(ref.session)?.get(ref.openId) ?? 0,

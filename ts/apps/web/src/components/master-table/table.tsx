@@ -117,9 +117,15 @@ export function Table<Row extends RowData>({
   maxHeight,
   caption,
 }: TableProps<Row>) {
-  const columns = useMemo(() => rawColumns.map(resolveStateColumn), [rawColumns]);
   const [own, setOwn] = useState(emptyTableState);
   const state = controlled ?? own;
+  const columns = useMemo(
+    () =>
+      rawColumns
+        .filter((column) => !state.hiddenColumns?.includes(column.key))
+        .map(resolveStateColumn),
+    [rawColumns, state.hiddenColumns],
+  );
   const stateRef = useRef(state);
   stateRef.current = state;
   const update = (change: (state: TableState) => TableState) => {
@@ -134,10 +140,10 @@ export function Table<Row extends RowData>({
   );
   // THE VIEW: the one pure function; the grid draws its answer and nothing else.
   const viewed = useMemo(() => {
-    if (visibleKeys === undefined) return visibleRows(rows, rawColumns, state);
+    if (visibleKeys === undefined) return visibleRows(rows, columns, state);
     const byKey = new Map(rows.map((row) => [rowKey(row), row]));
     return visibleKeys.map((key) => byKey.get(key)).filter((row) => row !== undefined);
-  }, [rows, rawColumns, state, visibleKeys, rowKey]);
+  }, [rows, columns, state, visibleKeys, rowKey]);
   const tableColumns = useMemo(() => toColumnDefs(columns), [columns]);
   const sorting = useMemo(() => toSortingState(state.sorts), [state.sorts]);
   const columnPinning = useMemo(
