@@ -89,7 +89,7 @@ export function ActionReceiptView({
             <ActionButton
               key={key}
               label={CONTROL_LABEL[key]}
-              reason={actionControls[key].description}
+              reason={actionControls[key].says}
               disabled={control.isPending || !CONTROL_REACHES[key](row?.state)}
               onClick={() => control.mutate(key)}
             />
