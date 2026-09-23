@@ -1,3 +1,4 @@
+using Pe.Shared.HostContracts.SettingsStorage;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
@@ -20,7 +21,7 @@ public sealed class JsonSchemaBuildOptions(
     SettingsRuntimeMode runtimeMode,
     Document? document = null
 ) {
-    private readonly ConcurrentDictionary<string, IReadOnlyList<ValueDomainOptionItem>> _valueDomainSampleCache = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, IReadOnlyList<FieldOptionItem>> _valueDomainSampleCache = new(StringComparer.Ordinal);
 
     public SettingsRuntimeMode RuntimeMode { get; } = runtimeMode;
     private Document? Document { get; } = document;
@@ -38,16 +39,16 @@ public sealed class JsonSchemaBuildOptions(
     public bool TryGetCachedValueDomainSamples(
         string domainKey,
         IReadOnlyDictionary<string, string>? fieldValues,
-        out IReadOnlyList<ValueDomainOptionItem> samples
+        out IReadOnlyList<FieldOptionItem> samples
     ) => this._valueDomainSampleCache.TryGetValue(
         CreateValueDomainSampleCacheKey(domainKey, fieldValues),
         out samples!
     );
 
-    public IReadOnlyList<ValueDomainOptionItem> CacheValueDomainSamples(
+    public IReadOnlyList<FieldOptionItem> CacheValueDomainSamples(
         string domainKey,
         IReadOnlyDictionary<string, string>? fieldValues,
-        IReadOnlyList<ValueDomainOptionItem> samples
+        IReadOnlyList<FieldOptionItem> samples
     ) {
         var key = CreateValueDomainSampleCacheKey(domainKey, fieldValues);
         this._valueDomainSampleCache[key] = samples;
@@ -110,17 +111,16 @@ public static class JsonSchemaFactory {
         };
         fragmentSchema.Properties["Items"] = itemsProperty;
         fragmentSchema.RequiredProperties.Add("Items");
-        CopyRootDatasetMetadata(itemSchema, fragmentSchema);
 
         fragmentSchema = SchemaExampleDefinitionConsolidator.Consolidate(fragmentSchema);
         return SchemaDefaultInjector.ApplyFragmentDefaults(fragmentSchema, itemType);
     }
 
     public static string CreateEditorSchemaJson(Type type, JsonSchemaBuildOptions options) =>
-        EditorSchemaTransformer.TransformToEditorJson(BuildAuthoringSchema(type, options));
+        BuildAuthoringSchema(type, options).ToJson();
 
     public static string CreateEditorFragmentSchemaJson(Type itemType, JsonSchemaBuildOptions options) =>
-        EditorSchemaTransformer.TransformFragmentToEditorJson(BuildFragmentSchema(itemType, options));
+        BuildFragmentSchema(itemType, options).ToJson();
 
     public static JsonSchemaData CreateEditorSchemaData(Type type, JsonSchemaBuildOptions options) {
         if (type == null)
@@ -183,16 +183,6 @@ public static class JsonSchemaFactory {
             SyntheticPropertyInfo.Create(targetType),
             options
         );
-    }
-
-    private static void CopyRootDatasetMetadata(JsonSchema sourceSchema, JsonSchema targetSchema) {
-        var actualSourceSchema = sourceSchema.HasReference ? sourceSchema.Reference : sourceSchema;
-        if (actualSourceSchema?.ExtensionData == null ||
-            !actualSourceSchema.ExtensionData.TryGetValue("x-data", out var rawRootData))
-            return;
-
-        targetSchema.ExtensionData ??= new Dictionary<string, object?>();
-        targetSchema.ExtensionData["x-data"] = rawRootData;
     }
 
     private static JsonSchema NormalizeCustomUnionWrappers(JsonSchema schema) {

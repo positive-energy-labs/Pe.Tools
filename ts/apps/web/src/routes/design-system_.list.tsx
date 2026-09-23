@@ -18,8 +18,40 @@ import {
   TablePanel,
   ZonesPanel,
 } from "#/design-system/list-specimen";
+import { CATEGORY_OPTIONS } from "#/design-system/specimens-data";
+import type { FieldOptionState } from "#/lib/schema-to-field-render/shared";
+import { FieldOptions } from "#/lib/schema-to-field-render/field-metadata";
 
 export const Route = createFileRoute("/design-system_/list")({ component: ListRoute });
+
+/** A baked HostOnly domain and a LiveDocument one Revit changed after the read. Specimen data. */
+const FIELD_OPTION_STATES: FieldOptionState[] = [
+  {
+    sourceKey: "category-names",
+    runtime: "HostOnly",
+    mode: "suggestion",
+    allowsCustomValue: true,
+    items: CATEGORY_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+    isLoading: false,
+    source: "examples",
+    changed: false,
+    dependencies: [],
+  },
+  {
+    sourceKey: "schedule-field-names",
+    runtime: "LiveDocument",
+    mode: "suggestion",
+    allowsCustomValue: true,
+    items: [
+      { value: "Flow", label: "Flow" },
+      { value: "Size", label: "Size" },
+    ],
+    isLoading: false,
+    source: "remote",
+    changed: true,
+    dependencies: [{ key: "CategoryName", scope: "sibling", value: "Ducts" }],
+  },
+];
 
 function ListRoute() {
   const [said, say] = useState<string | null>(null);
@@ -55,6 +87,13 @@ function ListRoute() {
           </Panel>
           <Panel title="combobox" kind="ListPopup trigger · async · create">
             <FieldOptionsPanel say={say} />
+          </Panel>
+          <Panel title="field options" kind="FieldOptions · baked, live, changed">
+            <div className="flex flex-col gap-2">
+              {FIELD_OPTION_STATES.map((options) => (
+                <FieldOptions key={options.sourceKey} options={options} />
+              ))}
+            </div>
           </Panel>
           <Panel title="slash menu" kind="ListPopup caret · input-owned">
             <SlashPanel say={say} />

@@ -1,99 +1,27 @@
-using Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
+using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.StorageRuntime.Capabilities;
-using System.Reflection;
 
 namespace Pe.Revit.SettingsRuntime.Json.ValueDomains;
 
-public interface ISettingsValueDomainService {
-    ValueTask<ValueDomainResult> GetOptionsAsync(
-        Type settingsType,
-        string propertyPath,
-        string sourceKey,
-        ValueDomainExecutionContext context,
-        CancellationToken cancellationToken = default
-    );
-}
+public static class SettingsValueDomainService {
+    /// <summary>Reads one value domain by key alone; null when no domain is registered for the key.</summary>
+    public static FieldOptionsData? Read(string key, ValueDomainExecutionContext context) {
+        if (!SettingsValueDomainRegistry.Shared.TryCreate(key, out var domain))
+            return null;
 
-public sealed class SettingsValueDomainService : ISettingsValueDomainService {
-    public static SettingsValueDomainService Shared { get; } = new();
-
-    public async ValueTask<ValueDomainResult> GetOptionsAsync(
-        Type settingsType,
-        string propertyPath,
-        string sourceKey,
-        ValueDomainExecutionContext context,
-        CancellationToken cancellationToken = default
-    ) {
-        if (settingsType == null)
-            throw new ArgumentNullException(nameof(settingsType));
-        if (string.IsNullOrWhiteSpace(propertyPath))
-            throw new ArgumentException("Property path is required.", nameof(propertyPath));
-        if (string.IsNullOrWhiteSpace(sourceKey))
-            throw new ArgumentException("Source key is required.", nameof(sourceKey));
-        if (context == null)
-            throw new ArgumentNullException(nameof(context));
-
-        var property = SettingsPropertyPathResolver.ResolveProperty(settingsType, propertyPath);
-        if (property == null) {
-            return new ValueDomainResult(ValueDomainResultKind.Empty, "Property not found for value domain.", null, []);
-        }
-
-        var descriptor = this.ResolveDescriptor(property);
-        if (descriptor == null) {
-            return new ValueDomainResult(ValueDomainResultKind.Empty, "No value domain configured for property.", null, []);
-        }
-
-        if (!string.Equals(descriptor.Key, sourceKey, StringComparison.Ordinal)) {
-            return new ValueDomainResult(
-                ValueDomainResultKind.Empty,
-                "Requested value domain does not match property binding.",
-                descriptor,
-                []
-            );
-        }
-
-        if (!context.RuntimeMode.Supports(descriptor.RequiredRuntimeMode)) {
-            return new ValueDomainResult(
-                ValueDomainResultKind.Unsupported,
-                "Value domain is not supported in the current runtime.",
-                descriptor,
-                []
-            );
-        }
+        var descriptor = domain.Describe();
+        if (!context.RuntimeMode.Supports(descriptor.RequiredRuntimeMode))
+            return new FieldOptionsData(descriptor, [], new FieldOptionsResult(
+                FieldOptionsResultKind.Unsupported,
+                $"'{key}' needs {descriptor.RequiredRuntimeMode}; this runtime is {context.RuntimeMode}."));
 
         try {
-            if (!SettingsValueDomainRegistry.Shared.TryCreate(descriptor.Key, out var domain)) {
-                return new ValueDomainResult(
-                    ValueDomainResultKind.Unsupported,
-                    "Value domain is not registered in the current runtime.",
-                    descriptor,
-                    []
-                );
-            }
-
-            var items = await domain.GetOptionsAsync(context, cancellationToken);
-            return new ValueDomainResult(
-                ValueDomainResultKind.Success,
-                $"Retrieved {items.Count} value-domain options.",
-                descriptor,
-                items
-            );
+            var items = domain.GetOptionsAsync(context).AsTask().GetAwaiter().GetResult();
+            return new FieldOptionsData(descriptor, items.ToList(), new FieldOptionsResult(
+                FieldOptionsResultKind.Success,
+                $"Retrieved {items.Count} options."));
         } catch (Exception ex) {
-            return new ValueDomainResult(
-                ValueDomainResultKind.Failure,
-                ex.Message,
-                descriptor,
-                []
-            );
+            return new FieldOptionsData(descriptor, [], new FieldOptionsResult(FieldOptionsResultKind.Failure, ex.Message));
         }
-    }
-
-    private SettingsValueDomainDescriptor? ResolveDescriptor(PropertyInfo property) {
-        if (SettingsSchemaDefinitionRegistry.Shared.TryGet(property.DeclaringType!, out var definition) &&
-            definition.Bindings.TryGetValue(property.Name, out var binding) &&
-            binding.ValueDomain != null)
-            return binding.ValueDomain;
-
-        return null;
     }
 }

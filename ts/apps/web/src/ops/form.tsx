@@ -1,8 +1,7 @@
 /**
  * The request form is the settings form. A bridge op's request schema carries the same
  * `x-options` node the settings pipeline emits (`FieldOptionsAttribute`), so the one renderer
- * draws both; only the option resolver differs, and it is injected here: Revit value domains
- * answer through `revit.catalog.field-options` on the target session.
+ * draws both, reading options through the same field-options Reading from the target document.
  */
 import { useMemo } from "react";
 import { applySchemaDefaultsToValue, parseSchema } from "@pe/schema-core";
@@ -10,8 +9,7 @@ import type { ExecutionTarget } from "@pe/agent-contracts";
 
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { JsonEditor } from "#/components/lang/code";
-import { SchemaToFieldRender, type RemoteOptionsHook } from "#/lib/schema-to-field-render";
-import { useHostOp } from "#/readings";
+import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
 
 export type FormValues = Record<string, unknown>;
 
@@ -56,13 +54,6 @@ export function prune(value: unknown): unknown {
   return value === "" || value === null ? undefined : value;
 }
 
-const sessionOf = (target: ExecutionTarget) =>
-  target.kind === "session"
-    ? { bridgeSessionId: target.session }
-    : target.kind === "document"
-      ? { bridgeSessionId: target.ref.session, openDocumentId: target.ref.openId }
-      : {};
-
 export function OpForm({
   schemaJson,
   values,
@@ -75,26 +66,16 @@ export function OpForm({
   target: ExecutionTarget;
 }) {
   const schema = useMemo(() => (schemaJson ? parseSchema(schemaJson) : undefined), [schemaJson]);
-  const scope = sessionOf(target);
-  const useRemoteOptions = useMemo<RemoteOptionsHook>(
-    () => (request, enabled) =>
-      useHostOp(
-        "revit.catalog.field-options",
-        { sourceKey: request.sourceKey, contextValues: request.contextValues ?? {} },
-        { ...scope, enabled: enabled && Boolean(scope.bridgeSessionId) },
-      ),
-    [scope.bridgeSessionId, scope.openDocumentId], // eslint-disable-line react-hooks/exhaustive-deps
-  );
+  // x-options fields sit on document ops; a host or session target reads no options.
+  const optionsFrom = target.kind === "document" ? target.ref : null;
   if (!schema) return <RawRequest values={values} onChange={onChange} />;
   return (
     <SchemaToFieldRender
       schema={schema}
-      // An op request has no `$schema`; its options come from the injected Revit answerer.
-      schemaUrl=""
       baselineValues={{}}
       values={values}
       onChange={(path, value) => onChange(setPath(values, path.split("."), value) as FormValues)}
-      useRemoteOptions={useRemoteOptions}
+      optionsFrom={optionsFrom}
     />
   );
 }

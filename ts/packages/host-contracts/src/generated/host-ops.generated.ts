@@ -1667,29 +1667,42 @@ export namespace RevitCatalogElectricalPanels {
   }
 }
 
-/** Read document-specific option values for a value-domain source key (e.g. category-names, family-names). Request schemas mark option-backed fields with an x-options.key annotation that resolves through this operation. */
+/** Read the options of one value domain by key (an x-options.key on a settings or request schema, e.g. category-names), with the context values its dependsOn names. Serves the field-options Reading. */
 export namespace RevitCatalogFieldOptions {
   export namespace Req {
     /**
-     * Options for a value domain addressed by source key alone — the resolution target for
-     * request schema fields annotated with x-options (see FieldOptionsAttribute).
+     * The one field-options read: a value-domain key (an x-options.key) and the context
+     * values its dependsOn names.
      *
      */
     export interface Request {
-      sourceKey: string;
-      contextValues?: null | {
+      key: string;
+      context?: null | {
         [k: string]: string;
       };
     }
   }
   export namespace Res {
-    export type FieldOptionsMode = "Suggestion" | "Constraint";
+    export type SettingsOptionsMode = "Suggestion" | "Constraint";
+    export type SettingsOptionsDependencyScope = "Sibling" | "Context";
+    export type SettingsRuntimeMode = "HostOnly" | "LiveDocument";
+    export type FieldOptionsResultKind = "Success" | "Unsupported" | "Failure";
 
     export interface Response {
-      sourceKey: string;
-      mode: FieldOptionsMode;
-      allowsCustomValue: boolean;
+      descriptor: SettingsValueDomainDescriptor;
       items: FieldOptionItem[];
+      result: FieldOptionsResult;
+    }
+    export interface SettingsValueDomainDescriptor {
+      key: string;
+      mode: SettingsOptionsMode;
+      allowsCustomValue: boolean;
+      dependsOn: SettingsOptionsDependency[];
+      requiredRuntimeMode: SettingsRuntimeMode;
+    }
+    export interface SettingsOptionsDependency {
+      key: string;
+      scope: SettingsOptionsDependencyScope;
     }
     export interface FieldOptionItem {
       value: string;
@@ -1698,6 +1711,10 @@ export namespace RevitCatalogFieldOptions {
       metadata?: null | {
         [k: string]: string;
       };
+    }
+    export interface FieldOptionsResult {
+      kind: FieldOptionsResultKind;
+      message: string;
     }
   }
 }
@@ -1787,50 +1804,6 @@ export namespace RevitCatalogLoadedFamilies {
       totalCount: number;
       returnedCount: number;
       isTruncated: boolean;
-    }
-  }
-}
-
-/** Read document-specific option values for loaded-family query filters. */
-export namespace RevitCatalogLoadedFamiliesFilterFieldOptions {
-  export namespace Req {
-    export interface Request {
-      propertyPath: string;
-      sourceKey: string;
-      contextValues?: null | {
-        [k: string]: string;
-      };
-    }
-  }
-  export namespace Res {
-    export type FieldOptionsMode = "Suggestion" | "Constraint";
-
-    export interface Response {
-      sourceKey: string;
-      mode: FieldOptionsMode;
-      allowsCustomValue: boolean;
-      items: FieldOptionItem[];
-    }
-    export interface FieldOptionItem {
-      value: string;
-      label: string;
-      description?: null | string;
-      metadata?: null | {
-        [k: string]: string;
-      };
-    }
-  }
-}
-
-/** Read the filter schema for loaded-family catalog and matrix queries. */
-export namespace RevitCatalogLoadedFamiliesFilterSchema {
-  export namespace Req {
-    export interface Request {}
-  }
-  export namespace Res {
-    export interface Response {
-      schemaJson: string;
-      fragmentSchemaJson?: null | string;
     }
   }
 }
@@ -5431,84 +5404,6 @@ export namespace ScriptingWorkspaceBootstrap {
   }
 }
 
-/** Read document-specific field option values for one field of the settings library a `$schema` URL names. */
-export namespace SettingsFieldOptions {
-  export namespace Req {
-    export interface Request {
-      schemaUrl: string;
-      propertyPath: string;
-      sourceKey: string;
-      contextValues?: null | {
-        [k: string]: string;
-      };
-    }
-  }
-  export namespace Res {
-    export type FieldOptionsMode = "Suggestion" | "Constraint";
-
-    export interface Response {
-      sourceKey: string;
-      mode: FieldOptionsMode;
-      allowsCustomValue: boolean;
-      items: FieldOptionItem[];
-    }
-    export interface FieldOptionItem {
-      value: string;
-      label: string;
-      description?: null | string;
-      metadata?: null | {
-        [k: string]: string;
-      };
-    }
-  }
-}
-
-/** Read Revit parameter definitions and available parameter facts from the active document for settings authoring. */
-export namespace SettingsParameterCatalog {
-  export namespace Req {
-    export interface Request {
-      contextValues?: null | {
-        [k: string]: string;
-      };
-    }
-  }
-  export namespace Res {
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-
-    export interface Response {
-      entries: ParameterCatalogEntry[];
-      familyCount: number;
-      typeCount: number;
-    }
-    export interface ParameterCatalogEntry {
-      definition: ParameterDefinitionDescriptor;
-      storageType: string;
-      isParamService: boolean;
-      familyNames: string[];
-      typeNames: string[];
-    }
-    export interface ParameterDefinitionDescriptor {
-      identity: ParameterIdentity;
-      isInstance?: boolean | null;
-      dataTypeId?: null | string;
-      dataTypeLabel?: null | string;
-      groupTypeId?: null | string;
-      groupTypeLabel?: null | string;
-      visible?: boolean | null;
-      userModifiable?: boolean | null;
-      description?: null | string;
-    }
-    export interface ParameterIdentity {
-      key: string;
-      kind: ParameterIdentityKind;
-      name: string;
-      builtInParameterId?: number | null;
-      sharedGuid?: null | string;
-      parameterElementId?: number | null;
-    }
-  }
-}
-
 /** Read the live editor schema of the settings library a `$schema` URL names. */
 export namespace SettingsSchema {
   export namespace Req {
@@ -5884,8 +5779,6 @@ export interface HostOps {
   "revit.catalog.electrical-panels": { request: RevitCatalogElectricalPanels.Req.Request; response: RevitCatalogElectricalPanels.Res.Response };
   "revit.catalog.field-options": { request: RevitCatalogFieldOptions.Req.Request; response: RevitCatalogFieldOptions.Res.Response };
   "revit.catalog.loaded-families": { request: RevitCatalogLoadedFamilies.Req.Request; response: RevitCatalogLoadedFamilies.Res.Response };
-  "revit.catalog.loaded-families.filter-field-options": { request: RevitCatalogLoadedFamiliesFilterFieldOptions.Req.Request; response: RevitCatalogLoadedFamiliesFilterFieldOptions.Res.Response };
-  "revit.catalog.loaded-families.filter-schema": { request: RevitCatalogLoadedFamiliesFilterSchema.Req.Request; response: RevitCatalogLoadedFamiliesFilterSchema.Res.Response };
   "revit.catalog.parameter-bindings": { request: RevitCatalogParameterBindings.Req.Request; response: RevitCatalogParameterBindings.Res.Response };
   "revit.catalog.parameter-evidence": { request: RevitCatalogParameterEvidence.Req.Request; response: RevitCatalogParameterEvidence.Res.Response };
   "revit.catalog.project-browser": { request: RevitCatalogProjectBrowser.Req.Request; response: RevitCatalogProjectBrowser.Res.Response };
@@ -5915,8 +5808,6 @@ export interface HostOps {
   "schedule.cells.apply": { request: ScheduleCellsApply.Req.Request; response: ScheduleCellsApply.Res.Response };
   "scripting.execute": { request: ScriptingExecute.Req.Request; response: ScriptingExecute.Res.Response };
   "scripting.workspace.bootstrap": { request: ScriptingWorkspaceBootstrap.Req.Request; response: ScriptingWorkspaceBootstrap.Res.Response };
-  "settings.field-options": { request: SettingsFieldOptions.Req.Request; response: SettingsFieldOptions.Res.Response };
-  "settings.parameter-catalog": { request: SettingsParameterCatalog.Req.Request; response: SettingsParameterCatalog.Res.Response };
   "settings.schema": { request: SettingsSchema.Req.Request; response: SettingsSchema.Res.Response };
   "settings.validate": { request: SettingsValidate.Req.Request; response: SettingsValidate.Res.Response };
   "takeoffs.adopt": { request: TakeoffsAdopt.Req.Request; response: TakeoffsAdopt.Res.Response };
@@ -5956,8 +5847,6 @@ export const hostOpKeys = [
   "revit.catalog.electrical-panels",
   "revit.catalog.field-options",
   "revit.catalog.loaded-families",
-  "revit.catalog.loaded-families.filter-field-options",
-  "revit.catalog.loaded-families.filter-schema",
   "revit.catalog.parameter-bindings",
   "revit.catalog.parameter-evidence",
   "revit.catalog.project-browser",
@@ -5987,8 +5876,6 @@ export const hostOpKeys = [
   "schedule.cells.apply",
   "scripting.execute",
   "scripting.workspace.bootstrap",
-  "settings.field-options",
-  "settings.parameter-catalog",
   "settings.schema",
   "settings.validate",
   "takeoffs.adopt",

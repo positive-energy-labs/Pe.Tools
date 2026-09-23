@@ -1,3 +1,4 @@
+using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.Compat;
 using Pe.Shared.RevitData;
@@ -11,14 +12,14 @@ public sealed class CategoryIdsValueDomain()
         SettingsRuntimeMode.LiveDocument,
         mode: SettingsOptionsMode.Constraint,
         allowsCustomValue: false) {
-    public override ValueTask<IReadOnlyList<ValueDomainOptionItem>> GetOptionsAsync(
+    public override ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
         ValueDomainExecutionContext context,
         CancellationToken cancellationToken = default
     ) {
         var items = context.GetActiveDocument()
             .CollectInstanceCategories()
             .OrderBy(category => category.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(category => new ValueDomainOptionItem(
+            .Select(category => new FieldOptionItem(
                 category.Id.Value().ToString(),
                 category.Name,
                 null,
@@ -34,9 +35,10 @@ public sealed class ElementUniqueIdsValueDomain()
     : SettingsValueDomainBase(
         ValueDomainKeys.ElementUniqueIds,
         SettingsRuntimeMode.LiveDocument,
+        DocumentValueDomainContext.Context(ValueDomainContextKeys.CategoryId),
         mode: SettingsOptionsMode.Constraint,
         allowsCustomValue: false) {
-    public override ValueTask<IReadOnlyList<ValueDomainOptionItem>> GetOptionsAsync(
+    public override ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
         ValueDomainExecutionContext context,
         CancellationToken cancellationToken = default
     ) {
@@ -52,7 +54,7 @@ public sealed class ElementUniqueIdsValueDomain()
                     : $"{element.Name} · {element.Id.Value()}";
                 var description = string.Join(" · ", new[] { element.Category?.Name, type?.Name }
                     .Where(value => !string.IsNullOrWhiteSpace(value)));
-                return new ValueDomainOptionItem(element.UniqueId, label, description);
+                return new FieldOptionItem(element.UniqueId, label, description);
             })
             .OrderBy(item => item.Label, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -64,9 +66,16 @@ public sealed class ParameterIdentitiesValueDomain()
     : SettingsValueDomainBase(
         ValueDomainKeys.ParameterIdentities,
         SettingsRuntimeMode.LiveDocument,
+        DocumentValueDomainContext.Context(
+            ValueDomainContextKeys.CategoryId,
+            ValueDomainContextKeys.ElementUniqueIds,
+            ValueDomainContextKeys.ParameterScope,
+            ValueDomainContextKeys.WritableOnly,
+            ValueDomainContextKeys.StorageType,
+            ValueDomainContextKeys.DataTypeId),
         mode: SettingsOptionsMode.Constraint,
         allowsCustomValue: false) {
-    public override ValueTask<IReadOnlyList<ValueDomainOptionItem>> GetOptionsAsync(
+    public override ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
         ValueDomainExecutionContext context,
         CancellationToken cancellationToken = default
     ) {
@@ -86,7 +95,7 @@ public sealed class ParameterIdentitiesValueDomain()
             foreach (var type in doc.ResolveElementTypes(elements))
                 AddParameters(type.Parameters.Cast<Parameter>(), "type", writableOnly, storageType, dataTypeId, candidates);
 
-        IReadOnlyList<ValueDomainOptionItem> items = candidates.Values
+        IReadOnlyList<FieldOptionItem> items = candidates.Values
             .OrderBy(candidate => candidate.Identity.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(candidate => candidate.Scope, StringComparer.Ordinal)
             .Select(candidate => candidate.ToItem())
@@ -130,7 +139,7 @@ public sealed class ParameterIdentitiesValueDomain()
     }
 
     private sealed record ParameterOption(ParameterIdentity Identity, string Scope, string StorageType, string? DataTypeId) {
-        public ValueDomainOptionItem ToItem() {
+        public FieldOptionItem ToItem() {
             var metadata = new Dictionary<string, string> {
                 ["key"] = this.Identity.Key,
                 ["kind"] = this.Identity.Kind.ToString(),
@@ -142,7 +151,7 @@ public sealed class ParameterIdentitiesValueDomain()
             Add(metadata, "sharedGuid", this.Identity.SharedGuid);
             Add(metadata, "parameterElementId", this.Identity.ParameterElementId?.ToString());
             Add(metadata, "dataTypeId", this.DataTypeId);
-            return new ValueDomainOptionItem(
+            return new FieldOptionItem(
                 $"{this.Identity.Key}|{this.Scope}",
                 $"{this.Identity.Name} · {this.Scope}",
                 this.DataTypeId,
@@ -156,6 +165,9 @@ public sealed class ParameterIdentitiesValueDomain()
 }
 
 file static class DocumentValueDomainContext {
+    public static IReadOnlyList<SettingsOptionsDependency> Context(params string[] keys) =>
+        keys.Select(key => new SettingsOptionsDependency(key, SettingsOptionsDependencyScope.Context)).ToList();
+
     public static bool TryCategoryId(ValueDomainExecutionContext context, out long categoryId) =>
         long.TryParse(Read(context, ValueDomainContextKeys.CategoryId), out categoryId) && categoryId != 0;
 

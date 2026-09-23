@@ -40,7 +40,7 @@ import type {
 } from "@pe/host-contracts/pe-revit-contract";
 import type {
   BridgeSessionListEntry,
-  HostOpRequest,
+  HostOpResponse,
   HostSessionScope,
   OpCallArgs,
   OpKey,
@@ -853,22 +853,26 @@ export const useLoadedFamiliesMatrixQuery = (
     enabled: (options?.enabled ?? true) && Boolean(request),
   });
 
-export const useFieldOptionsQuery = (
-  request: HostOpRequest<"settings.field-options">,
-  options?: HostQueryOptions,
-) =>
-  useHostOp("settings.field-options", request, {
-    ...options,
-    enabled:
-      (options?.enabled ?? true) &&
-      Boolean(request.schemaUrl && request.propertyPath && request.sourceKey),
-  });
+/** A value domain's options (the `revit.catalog.field-options` answer). */
+export type FieldOptionsData = HostOpResponse<"revit.catalog.field-options">;
 
-export const useParameterCatalogQuery = (
-  request: HostOpRequest<"settings.parameter-catalog">,
-  options?: HostQueryOptions,
-) =>
-  useHostOp("settings.parameter-catalog", request, {
-    ...options,
-    enabled: options?.enabled ?? true,
-  });
+/**
+ * The one door to a field's options: an `x-options.key` read from one named document, with the
+ * context values its `dependsOn` names. No document or no key reads nothing. A LiveDocument key's
+ * Reading carries Revit's change mark (`changedInRevit`).
+ */
+export const useFieldOptionsReading = (
+  target: { session: string; openId: string } | null | undefined,
+  key: string | undefined,
+  context: Record<string, string> = {},
+): Reading<FieldOptionsData> =>
+  useReading<FieldOptionsData>(
+    target && key
+      ? {
+          kind: "field-options",
+          target: { session: target.session, openId: target.openId },
+          key,
+          context,
+        }
+      : null,
+  );

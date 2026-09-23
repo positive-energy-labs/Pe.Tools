@@ -29,15 +29,14 @@ export interface RenderFieldOptionDependency {
 
 export interface RenderFieldOptionSource {
   key: string;
-  resolver: string;
-  dataset?: string | null;
   mode: string;
   allowsCustomValue: boolean;
   dependsOn: RenderFieldOptionDependency[];
+  requiredRuntimeMode?: string;
 }
 export type NormalizedFieldOptionMode = "suggestion" | "constraint";
-export type NormalizedFieldOptionResolver = "remote" | "dataset";
-export type NormalizedFieldOptionDataset = string;
+/** Whether a domain needs an open document (LiveDocument) or only Revit (HostOnly, baked into settings schemas). */
+export type NormalizedFieldOptionRuntime = "HostOnly" | "LiveDocument";
 export type NormalizedFieldOptionDependencyScope = "sibling" | "context";
 
 export interface NormalizedRenderFieldOptionDependency {
@@ -47,11 +46,10 @@ export interface NormalizedRenderFieldOptionDependency {
 
 export interface NormalizedRenderFieldOptionSource {
   key: string;
-  resolver: NormalizedFieldOptionResolver;
-  dataset?: NormalizedFieldOptionDataset;
   mode: NormalizedFieldOptionMode;
   allowsCustomValue: boolean;
   dependsOn: NormalizedRenderFieldOptionDependency[];
+  requiredRuntimeMode?: NormalizedFieldOptionRuntime;
 }
 
 export interface NormalizedRenderDynamicColumnOrder {

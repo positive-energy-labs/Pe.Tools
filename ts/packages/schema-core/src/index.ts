@@ -8,10 +8,9 @@ import { SchemaDocument } from "./runtime/schema-document.ts";
 
 export type {
   FieldHint,
-  NormalizedFieldOptionDataset,
   NormalizedFieldOptionDependencyScope,
   NormalizedFieldOptionMode,
-  NormalizedFieldOptionResolver,
+  NormalizedFieldOptionRuntime,
   NormalizedRenderFieldOptionDependency,
   NormalizedRenderFieldOptionSource,
   NormalizedRenderDynamicColumnOrder,

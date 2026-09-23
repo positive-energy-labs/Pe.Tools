@@ -1,9 +1,7 @@
 import type {
   FieldHint,
-  NormalizedFieldOptionDataset,
   NormalizedFieldOptionDependencyScope,
   NormalizedFieldOptionMode,
-  NormalizedFieldOptionResolver,
   NormalizedRenderFieldOptionDependency,
   NormalizedRenderFieldOptionSource,
   NormalizedRenderUiBehavior,
@@ -15,20 +13,6 @@ import type {
 export function normalizeFieldOptionMode(value: unknown): NormalizedFieldOptionMode | undefined {
   const normalized = typeof value === "string" ? value.toLowerCase() : undefined;
   return normalized === "suggestion" || normalized === "constraint" ? normalized : undefined;
-}
-
-export function normalizeFieldOptionResolver(
-  value: unknown,
-): NormalizedFieldOptionResolver | undefined {
-  const normalized = typeof value === "string" ? value.toLowerCase() : undefined;
-  return normalized === "remote" || normalized === "dataset" ? normalized : undefined;
-}
-
-export function normalizeFieldOptionDataset(
-  value: unknown,
-): NormalizedFieldOptionDataset | undefined {
-  const normalized = typeof value === "string" ? value.toLowerCase() : undefined;
-  return normalized && normalized.length > 0 ? normalized : undefined;
 }
 
 export function normalizeFieldOptionDependencyScope(
@@ -141,10 +125,13 @@ export function getFieldOptionSource(
     return {
       key: candidate.key,
       mode,
-      resolver: normalizeFieldOptionResolver(candidate.resolver) ?? "remote",
-      dataset: normalizeFieldOptionDataset(candidate.dataset),
       allowsCustomValue: candidate.allowsCustomValue,
       dependsOn,
+      requiredRuntimeMode:
+        candidate.requiredRuntimeMode === "HostOnly" ||
+        candidate.requiredRuntimeMode === "LiveDocument"
+          ? candidate.requiredRuntimeMode
+          : undefined,
     };
   }
 

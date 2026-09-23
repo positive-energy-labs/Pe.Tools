@@ -159,10 +159,6 @@ export class SchemaNodeRef {
     return getProviderKey(this.node);
   }
 
-  hasRemoteOptions(): boolean {
-    return this.optionSource()?.resolver === "remote";
-  }
-
   hasInlineSuggestions(): boolean {
     return Array.isArray(this.node.examples) && this.node.examples.length > 0;
   }

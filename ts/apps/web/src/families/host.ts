@@ -1,6 +1,7 @@
 import { type AppliedFilter, type DocumentRef } from "@pe/agent-contracts";
 
 import { callHostRpc } from "#/host/client";
+import { readReading, type FieldOptionsData } from "#/readings";
 
 export type FamiliesDraft = {
   placement: AppliedFilter["placementScope"];
@@ -17,13 +18,13 @@ export interface FamiliesHost {
 
 export function createLiveFamiliesHost(): FamiliesHost {
   return {
-    // The filter DTO's `[FieldOptions("category-names")]` domain, not a whole-catalog read.
+    // The filter DTO's `[FieldOptions("category-names")]` domain, read through the form's Reading.
     async categories(target) {
-      const result = await callHostRpc(
-        "revit.catalog.field-options",
-        { sourceKey: "category-names" },
-        { bridgeSessionId: target.session, openDocumentId: target.openId },
-      );
+      const result = (await readReading({
+        kind: "field-options",
+        target,
+        key: "category-names",
+      })) as FieldOptionsData;
       return result.items.map((item) => item.value).sort((a, b) => a.localeCompare(b));
     },
     async families(target, draft) {

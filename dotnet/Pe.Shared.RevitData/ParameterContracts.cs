@@ -11,10 +11,6 @@ public enum ParameterIdentityKind {
     NameFallback
 }
 
-public record ParameterCatalogRequest(
-    Dictionary<string, string>? ContextValues
-);
-
 public record ParameterIdentity(
     string Key,
     ParameterIdentityKind Kind,
@@ -44,18 +40,4 @@ public record ParameterDefinitionDescriptor(
     bool? Visible = null,
     bool? UserModifiable = null,
     string? Description = null
-);
-
-public record ParameterCatalogEntry(
-    ParameterDefinitionDescriptor Definition,
-    string StorageType,
-    bool IsParamService,
-    List<string> FamilyNames,
-    List<string> TypeNames
-);
-
-public record ParameterCatalogData(
-    List<ParameterCatalogEntry> Entries,
-    int FamilyCount,
-    int TypeCount
 );

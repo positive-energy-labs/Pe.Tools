@@ -180,10 +180,8 @@ public sealed record HostOperationDefinition(
             "revit.catalog.parameter-bindings" => """{ "projection": { "view": "Summary" }, "budget": { "maxEntries": 50 } }""",
             "revit.catalog.parameter-evidence" => """{ "scope": "ActiveViewVisible", "candidateParameters": [], "budget": { "maxEntries": 25, "maxSamplesPerEntry": 5 } }""",
             "revit.matrix.parameter-coverage" => """{ "parameters": [], "scope": "ActiveViewVisible", "budget": { "maxEntries": 25, "maxSamplesPerEntry": 5 } }""",
-            "revit.catalog.field-options" => """{ "sourceKey": "category-names" }""",
+            "revit.catalog.field-options" => """{ "key": "category-names" }""",
             "settings.schema" => """{ "schemaUrl": "/schemas/settings/CmdScheduleManager/schedules.json" }""",
-            "settings.field-options" => """{ "schemaUrl": "/schemas/settings/CmdScheduleManager/schedules.json", "propertyPath": "fields[].parameter.name", "sourceKey": "schedule-field-names", "contextValues": {} }""",
-            "settings.parameter-catalog" => """{ "contextValues": {} }""",
             _ => "{}"
         };
     }
@@ -204,10 +202,7 @@ public sealed record HostOperationDefinition(
         if (key is "revit.matrix.schedule-profiles"
             or "revit.catalog.electrical-load-classifications"
             or "revit.catalog.field-options"
-            or "revit.catalog.loaded-families.filter-field-options"
-            or "revit.catalog.loaded-families.filter-schema"
-            or "revit.apply.parameters-service-cache.refresh"
-            or "settings.field-options")
+            or "revit.apply.parameters-service-cache.refresh")
             return HostOperationVisibility.ExpertOnly;
         if (key.StartsWith("scripting.", StringComparison.Ordinal))
             return HostOperationVisibility.ExpertOnly;

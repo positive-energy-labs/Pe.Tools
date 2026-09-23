@@ -204,6 +204,40 @@ export function hostResourceObserver(
         case "document-mark":
           accept({ value: {} });
           return () => {};
+        // A LiveDocument key's value names its document, which binds the mark (`documentIn`).
+        case "field-options": {
+          if (!bridge) {
+            accept({ error: "No Revit bridge" });
+            return () => {};
+          }
+          let live = true;
+          const { target, key: domain, context } = request;
+          void Effect.runPromise(
+            bridge.invoke(
+              "revit.catalog.field-options",
+              { key: domain, context },
+              target.session,
+              target.openId,
+            ),
+          ).then(
+            ({ value }) => {
+              const { descriptor } = value as { descriptor: { requiredRuntimeMode: string } };
+              if (live)
+                accept({
+                  value:
+                    descriptor.requiredRuntimeMode === "LiveDocument"
+                      ? { ...(value as object), target }
+                      : value,
+                });
+            },
+            (error: unknown) => {
+              if (live) accept({ error: error instanceof Error ? error.message : String(error) });
+            },
+          );
+          return () => {
+            live = false;
+          };
+        }
         case "inventory":
           return inventoryReads.observe(
             "inventory",

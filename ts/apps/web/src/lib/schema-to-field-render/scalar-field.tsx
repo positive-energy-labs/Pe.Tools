@@ -1,7 +1,7 @@
 import { Input } from "#/components/lang/input";
 import { ListInput, ListPopup } from "#/components/lang/list-popup";
 import { Switch } from "#/components/lang/switch";
-import { FieldLabelRow, FieldMessages, FieldOptionsMetadata } from "./field-metadata";
+import { FieldLabelRow, FieldMessages, FieldOptions } from "./field-metadata";
 import {
   coercePrimitive,
   primitiveInputValue,
@@ -104,7 +104,7 @@ export function ScalarField({
         )}
       </div>
       <div className="col-start-2 empty:hidden">
-        <FieldOptionsMetadata options={optionsState} />
+        <FieldOptions options={optionsState} />
       </div>
       <div className="col-start-2 empty:hidden">
         <FieldMessages messages={field.errors} compact />

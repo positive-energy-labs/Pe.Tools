@@ -1,15 +1,8 @@
 import { useMemo } from "react";
-import { useFieldOptionsQuery, useParameterCatalogQuery } from "#/readings";
+import { changedInRevit, previousOf, useFieldOptionsReading } from "#/readings";
 import type { SchemaNodeRef } from "@pe/schema-core";
 import { normalizeFieldOptionMode, readPathValue } from "@pe/schema-core";
-import type {
-  FieldOptionItem,
-  FieldOptionState,
-  FieldOptionsRequest,
-  FieldRendererProps,
-  ParameterCatalogEntry,
-  RemoteOptionsHook,
-} from "./field-option";
+import type { FieldOptionItem, FieldOptionState, FieldRendererProps } from "./field-option";
 import {
   buildContextValues,
   toLocalItems,
@@ -17,59 +10,20 @@ import {
   useSchemaRenderContext,
 } from "./field-option";
 
-export function toLocalItemsFromExamples(values: unknown[]): FieldOptionItem[] {
+function toLocalItemsFromExamples(values: unknown[]): FieldOptionItem[] {
   return toLocalItems(
-    values.flatMap((value) => {
-      if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-        return [String(value)];
-      }
-
-      return [];
-    }),
+    values.flatMap((value) =>
+      typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+        ? [String(value)]
+        : [],
+    ),
   );
 }
 
-export function parseDelimitedContextValues(value: string | undefined): string[] {
-  return (
-    value
-      ?.split("|")
-      .map((entry) => entry.trim())
-      .filter(Boolean) ?? []
-  );
-}
-
-export function projectFamilyParameterCatalogValues(
-  entries: readonly ParameterCatalogEntry[],
-  contextValues: Record<string, string>,
-): string[] {
-  const selectedFamilyNames = parseDelimitedContextValues(contextValues.SelectedFamilyNames);
-  if (selectedFamilyNames.length === 0) {
-    return entries.map((entry) => entry.definition.identity.name);
-  }
-
-  const selectedFamilies = new Set(selectedFamilyNames);
-  return entries
-    .filter((entry) => entry.familyNames.some((familyName) => selectedFamilies.has(familyName)))
-    .map((entry) => entry.definition.identity.name);
-}
-
-export function projectParameterCatalogItems(
-  entries: readonly ParameterCatalogEntry[],
-  sourceKey: string,
-  contextValues: Record<string, string>,
-): FieldOptionItem[] {
-  const projectedValues =
-    sourceKey === "FamilyParameterNamesProvider"
-      ? projectFamilyParameterCatalogValues(entries, contextValues)
-      : entries.map((entry) => entry.definition.identity.name);
-
-  const dedupedValues = Array.from(new Set(projectedValues)).sort((a, b) => a.localeCompare(b));
-  return toLocalItems(dedupedValues);
-}
-
-const useSettingsRemoteOptions: RemoteOptionsHook = (request, enabled) =>
-  useFieldOptionsQuery(request, { enabled });
-
+/**
+ * A field's options: a schema enum, a HostOnly domain's values baked into the schema, or the
+ * field-options Reading from the render's document. A baked field never reads.
+ */
 export function useFieldOptions({
   node,
   providerNode,
@@ -78,168 +32,75 @@ export function useFieldOptions({
   node: SchemaNodeRef;
   providerNode?: SchemaNodeRef;
   fieldPath: string;
-}) {
-  const { schemaUrl, values: allValues, useRemoteOptions } = useSchemaRenderContext();
-  const useRemote = useRemoteOptions ?? useSettingsRemoteOptions;
-  const effectiveProviderNode = providerNode ?? node;
-  const requestPath = effectiveProviderNode.providerPath();
-  const remoteSource = useMemo(() => effectiveProviderNode.optionSource(), [effectiveProviderNode]);
-  const request = useMemo<FieldOptionsRequest>(() => {
-    return {
-      schemaUrl,
-      propertyPath: requestPath,
-      sourceKey: remoteSource?.key ?? "",
-      contextValues: buildContextValues(remoteSource?.dependsOn ?? [], fieldPath, allValues),
-    };
-  }, [allValues, fieldPath, remoteSource, requestPath, schemaUrl]);
-  const contextValues = request.contextValues ?? {};
-  const dependencyStates = useMemo(
+}): FieldOptionState {
+  const { values: allValues, optionsFrom } = useSchemaRenderContext();
+  const source = useMemo(() => (providerNode ?? node).optionSource(), [providerNode, node]);
+  const contextValues = useMemo(
+    () => buildContextValues(source?.dependsOn ?? [], fieldPath, allValues),
+    [allValues, fieldPath, source],
+  );
+  const dependencies = useMemo(
     () =>
-      (remoteSource?.dependsOn ?? []).map((dependency) => ({
+      (source?.dependsOn ?? []).map((dependency) => ({
         ...dependency,
         value: contextValues[dependency.key],
       })),
-    [contextValues, remoteSource?.dependsOn],
-  );
-  const resolver = remoteSource?.resolver;
-  const dataset = remoteSource?.dataset;
-  const usesRemoteResolver = resolver === "remote";
-  const usesParameterCatalogDataset = resolver === "dataset" && dataset === "parametercatalog";
-  const remoteQuery = useRemote(request, usesRemoteResolver);
-  const parameterCatalogQuery = useParameterCatalogQuery(
-    { contextValues },
-    { enabled: usesParameterCatalogDataset },
+    [contextValues, source?.dependsOn],
   );
   const enumItems = useMemo(() => {
     const rawNode = node.raw();
-    return Array.isArray(rawNode.enum)
-      ? toLocalItems(rawNode.enum.map((value) => String(value)))
-      : [];
+    return Array.isArray(rawNode.enum) ? toLocalItems(rawNode.enum.map(String)) : [];
   }, [node]);
   const inlineItems = useMemo(() => {
     const rawNode = node.raw();
     return Array.isArray(rawNode.examples) ? toLocalItemsFromExamples(rawNode.examples) : [];
   }, [node]);
-  const datasetItems = useMemo(() => {
-    if (!usesParameterCatalogDataset || !remoteSource) {
-      return [] as FieldOptionItem[];
-    }
+  const baked =
+    enumItems.length > 0 || (source?.requiredRuntimeMode === "HostOnly" && inlineItems.length > 0);
+  const reading = useFieldOptionsReading(baked ? null : optionsFrom, source?.key, contextValues);
+  const read = previousOf(reading);
+  const common = {
+    sourceKey: source?.key,
+    runtime: source?.requiredRuntimeMode,
+    changed: changedInRevit(reading),
+    dependencies,
+  };
 
-    const entries = parameterCatalogQuery.data?.entries ?? [];
-    return projectParameterCatalogItems(entries, remoteSource.key, contextValues);
-  }, [
-    contextValues,
-    parameterCatalogQuery.data?.entries,
-    remoteSource,
-    usesParameterCatalogDataset,
-  ]);
-
-  function createState(
-    state: Omit<FieldOptionState, "contextValues" | "dependencies" | "requestPath">,
-  ): FieldOptionState {
+  if (enumItems.length > 0)
     return {
-      ...state,
-      requestPath,
-      dependencies: dependencyStates,
-      contextValues,
-    };
-  }
-
-  if (enumItems.length > 0) {
-    return createState({
+      ...common,
       items: enumItems,
       mode: "constraint",
       allowsCustomValue: false,
       isLoading: false,
       source: "enum",
-    });
-  }
+    };
 
-  const remoteItems = remoteQuery.data?.items ?? [];
-  if (usesRemoteResolver && remoteItems.length > 0 && remoteSource) {
-    return createState({
-      items: remoteItems,
-      mode: normalizeFieldOptionMode(remoteQuery.data?.mode) ?? remoteSource.mode,
-      allowsCustomValue: remoteQuery.data?.allowsCustomValue ?? remoteSource.allowsCustomValue,
+  if (source && !baked && read && read.items.length > 0)
+    return {
+      ...common,
+      items: read.items,
+      mode: normalizeFieldOptionMode(read.descriptor.mode) ?? source.mode,
+      allowsCustomValue: read.descriptor.allowsCustomValue,
       isLoading: false,
-      errorMessage: undefined,
+      errorMessage: read.result.kind === "Success" ? undefined : read.result.message,
       source: "remote",
-      sourceKey: remoteSource.key,
-      resolver: remoteSource.resolver,
-      dataset: remoteSource.dataset,
-    });
-  }
+    };
 
-  if (usesParameterCatalogDataset && datasetItems.length > 0 && remoteSource) {
-    return createState({
-      items: datasetItems,
-      mode: remoteSource.mode,
-      allowsCustomValue: remoteSource.allowsCustomValue,
-      isLoading: false,
-      errorMessage: undefined,
-      source: "dataset",
-      sourceKey: remoteSource.key,
-      resolver: remoteSource.resolver,
-      dataset: remoteSource.dataset,
-    });
-  }
-
-  if (usesRemoteResolver && remoteSource && (remoteQuery.isPending || remoteQuery.pending)) {
-    return createState({
-      items: [] as FieldOptionItem[],
-      mode: remoteSource.mode,
-      allowsCustomValue: remoteSource.allowsCustomValue,
-      isLoading: true,
-      errorMessage: undefined,
-      source: "remote",
-      sourceKey: remoteSource.key,
-      resolver: remoteSource.resolver,
-      dataset: remoteSource.dataset,
-    });
-  }
-
-  if (
-    usesParameterCatalogDataset &&
-    remoteSource &&
-    (parameterCatalogQuery.isPending || parameterCatalogQuery.pending)
-  ) {
-    return createState({
-      items: [] as FieldOptionItem[],
-      mode: remoteSource.mode,
-      allowsCustomValue: remoteSource.allowsCustomValue,
-      isLoading: true,
-      errorMessage: undefined,
-      source: "dataset",
-      sourceKey: remoteSource.key,
-      resolver: remoteSource.resolver,
-      dataset: remoteSource.dataset,
-    });
-  }
-
-  const remoteErrorMessage =
-    usesRemoteResolver && remoteQuery.error instanceof Error
-      ? remoteQuery.error.message
-      : usesParameterCatalogDataset && parameterCatalogQuery.error instanceof Error
-        ? parameterCatalogQuery.error.message
-        : undefined;
-
-  return createState({
+  return {
+    ...common,
     items: inlineItems,
-    mode: remoteSource?.mode ?? "suggestion",
-    allowsCustomValue: remoteSource?.allowsCustomValue ?? true,
-    isLoading: false,
-    errorMessage: remoteErrorMessage,
-    source: remoteSource
-      ? usesParameterCatalogDataset
-        ? "dataset"
-        : "remote"
-      : inlineItems.length > 0
-        ? "examples"
-        : "none",
-    sourceKey: remoteSource?.key,
-    resolver: remoteSource?.resolver,
-    dataset: remoteSource?.dataset,
-  });
+    mode: source?.mode ?? "suggestion",
+    allowsCustomValue: source?.allowsCustomValue ?? true,
+    isLoading: reading.state === "loading",
+    errorMessage:
+      reading.state === "failed"
+        ? reading.message
+        : read && read.result.kind !== "Success"
+          ? read.result.message
+          : undefined,
+    source: source && !baked ? "remote" : inlineItems.length > 0 ? "examples" : "none",
+  };
 }
 
 export function useResolvedFieldNode({ node, path }: FieldRendererProps) {

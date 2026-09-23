@@ -6,7 +6,7 @@ import { CellListSelect } from "#/components/lang/list-popup";
 import type { Column } from "#/components/master-table/model";
 import { Table } from "#/components/master-table/table";
 import type { SchemaNodeRef } from "@pe/schema-core";
-import { FieldLabelRow, FieldMessages, FieldOptionsMetadata } from "./field-metadata";
+import { FieldLabelRow, FieldMessages, FieldOptions } from "./field-metadata";
 import {
   primitiveInputValue,
   type ResolvedFieldRendererProps,
@@ -335,7 +335,7 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
             ? "Loading table suggestions..."
             : "Schema-driven table with fixed and dynamic columns."}
         </span>
-        <FieldOptionsMetadata options={primaryColumnOptions} />
+        <FieldOptions options={primaryColumnOptions} />
         <div className="flex items-center gap-2">
           <ActionButton
             label="add column"

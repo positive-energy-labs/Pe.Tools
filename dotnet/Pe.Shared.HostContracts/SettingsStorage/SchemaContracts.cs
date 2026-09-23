@@ -1,25 +1,19 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using Pe.Shared.StorageRuntime.Capabilities;
 
 namespace Pe.Shared.HostContracts.SettingsStorage;
 
 /// <summary>A settings library addressed by the `$schema` URL its specs carry.</summary>
 public record SchemaRequest(string SchemaUrl);
 
-public record FieldOptionsRequest(
-    string SchemaUrl,
-    string PropertyPath,
-    string SourceKey,
-    Dictionary<string, string>? ContextValues
-);
-
 /// <summary>
-///     Options for a value domain addressed by source key alone — the resolution target for
-///     request schema fields annotated with <c>x-options</c> (see FieldOptionsAttribute).
+///     The one field-options read: a value-domain key (an <c>x-options.key</c>) and the context
+///     values its <c>dependsOn</c> names.
 /// </summary>
-public record ValueDomainOptionsRequest(
-    string SourceKey,
-    Dictionary<string, string>? ContextValues = null
+public record FieldOptionsRequest(
+    string Key,
+    Dictionary<string, string>? Context = null
 );
 
 /// <summary>Semantic validation of one spec by the library its `$schema` names; structural validation stays in the host.</summary>
@@ -39,9 +33,10 @@ public record ValidationIssue(
 );
 
 [JsonConverter(typeof(StringEnumConverter))]
-public enum FieldOptionsMode {
-    Suggestion,
-    Constraint
+public enum FieldOptionsResultKind {
+    Success,
+    Unsupported,
+    Failure
 }
 
 public record SchemaData(
@@ -56,11 +51,12 @@ public record FieldOptionItem(
     Dictionary<string, string>? Metadata = null
 );
 
+public record FieldOptionsResult(FieldOptionsResultKind Kind, string Message);
+
 public record FieldOptionsData(
-    string SourceKey,
-    FieldOptionsMode Mode,
-    bool AllowsCustomValue,
-    List<FieldOptionItem> Items
+    SettingsValueDomainDescriptor Descriptor,
+    List<FieldOptionItem> Items,
+    FieldOptionsResult Result
 );
 
 public record ValidationData(

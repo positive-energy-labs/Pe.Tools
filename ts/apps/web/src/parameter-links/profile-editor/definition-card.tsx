@@ -1,5 +1,9 @@
 import { Plus, Trash2 } from "lucide-react";
-import type { ParameterLinkDefinition, ParameterLinkProfile } from "@pe/agent-contracts";
+import type {
+  DocumentRef,
+  ParameterLinkDefinition,
+  ParameterLinkProfile,
+} from "@pe/agent-contracts";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { EmptyState } from "#/components/lang/empty";
 import { ActionButton } from "#/components/lang/action-button";
@@ -8,8 +12,9 @@ import {
   FieldOptionPicker,
   FieldOptionSelect,
   parameterReferenceFromOption,
-  useFieldOptions,
+  pickerOptions,
 } from "#/host/field-options";
+import { useFieldOptionsReading } from "#/readings";
 import {
   REDUCERS,
   RELATIONSHIPS,
@@ -34,7 +39,7 @@ export function DefinitionCard({
   definition: ParameterLinkDefinition;
   disabled?: boolean;
   fieldOptionsEnabled?: boolean;
-  target?: string;
+  target?: DocumentRef | null;
   onChange: (next: ParameterLinkProfile) => void;
 }) {
   const patch = (fields: Partial<ParameterLinkDefinition>) =>
@@ -50,22 +55,26 @@ export function DefinitionCard({
     : Array.from(
         new Set(enabledAssignments.flatMap((assignment) => assignment.sourceElementUniqueIds)),
       );
-  const categories = useFieldOptions("category-ids", {}, target, fieldOptionsEnabled);
-  const elements = useFieldOptions(
-    "element-unique-ids",
-    { CategoryId: String(definition.sourceCategoryId) },
-    target,
-    fieldOptionsEnabled && definition.sourceCategoryId !== 0,
+  const categories = pickerOptions(
+    useFieldOptionsReading(fieldOptionsEnabled ? target : null, "category-ids"),
   );
-  const sourceParameters = useFieldOptions(
-    "parameter-identities",
-    {
-      CategoryId: String(definition.sourceCategoryId),
-      ParameterScope: "instanceThenType",
-      ...(sourceElementIds.length ? { ElementUniqueIds: sourceElementIds.join("\n") } : {}),
-    },
-    target,
-    fieldOptionsEnabled && definition.sourceCategoryId !== 0,
+  const elements = pickerOptions(
+    useFieldOptionsReading(
+      fieldOptionsEnabled && definition.sourceCategoryId !== 0 ? target : null,
+      "element-unique-ids",
+      { CategoryId: String(definition.sourceCategoryId) },
+    ),
+  );
+  const sourceParameters = pickerOptions(
+    useFieldOptionsReading(
+      fieldOptionsEnabled && definition.sourceCategoryId !== 0 ? target : null,
+      "parameter-identities",
+      {
+        CategoryId: String(definition.sourceCategoryId),
+        ParameterScope: "instanceThenType",
+        ...(sourceElementIds.length ? { ElementUniqueIds: sourceElementIds.join("\n") } : {}),
+      },
+    ),
   );
   const targetCategoryId =
     definition.relationship === "sameElement"
@@ -76,27 +85,29 @@ export function DefinitionCard({
           )?.value ?? 0,
         );
   const selectedSource = findParameterOption(sourceParameters.items, definition.sourceParameter);
-  const targetParameters = useFieldOptions(
-    "parameter-identities",
-    {
-      CategoryId: String(targetCategoryId),
-      ParameterScope: "instance",
-      WritableOnly: "true",
-      ...(selectedSource?.metadata?.storageType
-        ? { StorageType: selectedSource.metadata.storageType }
-        : {}),
-      ...(selectedSource?.metadata?.dataTypeId
-        ? { DataTypeId: selectedSource.metadata.dataTypeId }
-        : {}),
-    },
-    target,
-    fieldOptionsEnabled && targetCategoryId !== 0,
+  const targetParameters = pickerOptions(
+    useFieldOptionsReading(
+      fieldOptionsEnabled && targetCategoryId !== 0 ? target : null,
+      "parameter-identities",
+      {
+        CategoryId: String(targetCategoryId),
+        ParameterScope: "instance",
+        WritableOnly: "true",
+        ...(selectedSource?.metadata?.storageType
+          ? { StorageType: selectedSource.metadata.storageType }
+          : {}),
+        ...(selectedSource?.metadata?.dataTypeId
+          ? { DataTypeId: selectedSource.metadata.dataTypeId }
+          : {}),
+      },
+    ),
   );
-  const readableTargetParameters = useFieldOptions(
-    "parameter-identities",
-    { CategoryId: String(targetCategoryId), ParameterScope: "instance" },
-    target,
-    fieldOptionsEnabled && targetCategoryId !== 0,
+  const readableTargetParameters = pickerOptions(
+    useFieldOptionsReading(
+      fieldOptionsEnabled && targetCategoryId !== 0 ? target : null,
+      "parameter-identities",
+      { CategoryId: String(targetCategoryId), ParameterScope: "instance" },
+    ),
   );
 
   return (
@@ -129,7 +140,9 @@ export function DefinitionCard({
             fallbackLabel={
               definition.sourceCategoryId ? `Category ${definition.sourceCategoryId}` : undefined
             }
-            placeholder={categories.isPending ? "Loading categories…" : "Choose a category"}
+            placeholder={
+              categories.status === "pending" ? "Loading categories…" : "Choose a category"
+            }
             disabled={disabled}
             onChange={(option) => patch({ sourceCategoryId: Number(option.value) })}
           />
@@ -153,7 +166,9 @@ export function DefinitionCard({
             }
             fallbackLabel={parameterLabel(definition.sourceParameter)}
             placeholder={
-              sourceParameters.isPending ? "Loading parameters…" : "Choose a source parameter"
+              sourceParameters.status === "pending"
+                ? "Loading parameters…"
+                : "Choose a source parameter"
             }
             disabled={disabled || definition.sourceCategoryId === 0}
             onChange={(option) =>
@@ -173,7 +188,7 @@ export function DefinitionCard({
             }
             fallbackLabel={parameterLabel(definition.targetParameter)}
             placeholder={
-              targetParameters.isPending
+              targetParameters.status === "pending"
                 ? "Loading compatible parameters…"
                 : "Choose a target parameter"
             }

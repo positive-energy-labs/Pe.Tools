@@ -5,6 +5,7 @@ using NJsonSchema;
 using NJsonSchema.Generation;
 using NJsonSchema.NewtonsoftJson.Generation;
 using Pe.Shared.RevitData;
+using Pe.Shared.StorageRuntime.Capabilities;
 using System.Collections.Concurrent;
 using System.Reflection;
 
@@ -21,6 +22,9 @@ namespace Pe.Shared.HostContracts.Operations;
 /// </summary>
 public static class BridgeOpSchemaGenerator {
     private static readonly ConcurrentDictionary<(Type, bool), string> SchemaJsonByType = new();
+
+    /// <summary>Resolves a [FieldOptions] key to its registered value-domain descriptor; set when SettingsRuntime registers its domains.</summary>
+    public static Func<string, SettingsValueDomainDescriptor>? DescribeFieldOptions { get; set; }
 
     private static readonly NewtonsoftJsonSchemaGeneratorSettings GeneratorSettings = new() {
         FlattenInheritanceHierarchy = true,
@@ -97,20 +101,16 @@ public static class BridgeOpSchemaGenerator {
         }
     }
 
-    // Emits the same x-options node the settings schema pipeline uses (and
-    // @pe/schema-core reads), so one property attribute lights up every form.
+    // Emits the registered descriptor as the same x-options node the settings schema pipeline
+    // writes (and @pe/schema-core reads), so one property attribute lights up every form.
     private static void ApplyFieldOptions(PropertyInfo property, JsonSchemaProperty schema) {
         var attribute = property.GetCustomAttribute<FieldOptionsAttribute>();
         if (attribute == null)
             return;
+        var describe = DescribeFieldOptions
+                       ?? throw new InvalidOperationException($"[FieldOptions(\"{attribute.SourceKey}\")] needs value domains registered before schema generation.");
         schema.ExtensionData ??= new Dictionary<string, object?>();
-        schema.ExtensionData["x-options"] = new Dictionary<string, object?> {
-            ["key"] = attribute.SourceKey,
-            ["mode"] = attribute.Constraint ? "constraint" : "suggestion",
-            ["resolver"] = "remote",
-            ["allowsCustomValue"] = attribute.AllowsCustomValue,
-            ["dependsOn"] = Array.Empty<object>()
-        };
+        schema.ExtensionData["x-options"] = describe(attribute.SourceKey).ToOptionsPayload();
     }
 
     private static Dictionary<string, ParameterInfo> LargestConstructorParameters(Type type) {

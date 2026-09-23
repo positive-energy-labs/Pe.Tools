@@ -20,10 +20,6 @@ vi.mock("#/lib/token", async (importOriginal) => ({
   ...(await importOriginal<typeof import("#/lib/token")>()),
   token: () => "currentColor",
 }));
-vi.mock("#/readings", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("#/readings")>()),
-  useFieldOptionsQuery: () => ({ data: undefined, isPending: false, error: undefined }),
-}));
 
 afterEach(cleanup);
 

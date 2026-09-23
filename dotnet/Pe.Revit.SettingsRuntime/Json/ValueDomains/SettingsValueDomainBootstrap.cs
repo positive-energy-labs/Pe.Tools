@@ -1,3 +1,5 @@
+using Pe.Shared.HostContracts.Operations;
+
 namespace Pe.Revit.SettingsRuntime.Json.ValueDomains;
 
 public static class SettingsValueDomainBootstrap {
@@ -8,6 +10,9 @@ public static class SettingsValueDomainBootstrap {
             return;
 
         var registry = SettingsValueDomainRegistry.Shared;
+        BridgeOpSchemaGenerator.DescribeFieldOptions = key => registry.TryDescribe(key, out var descriptor)
+            ? descriptor
+            : throw new InvalidOperationException($"Value domain '{key}' is not registered.");
         registry.Register(ValueDomainKeys.AnnotationTagFamilyNames, static () => new AnnotationTagFamilyNamesValueDomain());
         registry.Register(ValueDomainKeys.AnnotationTagTypeNames, static () => new AnnotationTagTypeNamesValueDomain());
         registry.Register(ValueDomainKeys.CategoryNames, static () => new CategoryNamesValueDomain());

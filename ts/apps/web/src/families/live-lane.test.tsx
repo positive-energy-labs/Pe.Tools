@@ -68,6 +68,10 @@ class WireSource {
       this.timers.push(setTimeout(() => this.onmessage?.({ data: JSON.stringify(frame) }), delay));
     for (const request of keys) {
       const key = readingKey(request);
+      if (request.kind === "field-options") {
+        hostCalls.push("field-options");
+        send(0, { kind: "failure", key, error: "no host in test" });
+      }
       if (request.kind === "receipts") {
         receiptRequests.push(request);
         if (!request.id) send(0, { kind: "snapshot", key, value: [applyStatus] });
@@ -132,7 +136,7 @@ test("the families live lane mounts without an update-depth loop", async () => {
     target: { session: SESSION, openId: OPEN_ID },
   });
   expect(receiptRequests).toContainEqual({ kind: "receipts", id: APPLY_ID });
-  expect(hostCalls).toContain("revit.catalog.field-options");
+  expect(hostCalls).toContain("field-options");
   expect(hostCalls).not.toContain("revit.catalog.loaded-families");
   expect(hostCalls).not.toContain("host.status");
 });

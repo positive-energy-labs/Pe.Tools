@@ -39,6 +39,8 @@ internal static class OpsCatalogCommand {
             outPath = args[index + 1];
         }
 
+        // [FieldOptions] request properties emit their registered value-domain descriptor.
+        Pe.Revit.SettingsRuntime.Json.ValueDomains.SettingsValueDomainBootstrap.RegisterDefaults();
         var operations = ReadDefinitions()
             .Select(HostOpsCatalogEntry.FromDefinition)
             .OrderBy(entry => entry.Key, StringComparer.Ordinal)

@@ -28,16 +28,16 @@ public static class RevitJsonSchemaFactory {
         );
     }
 
+    /// <summary>The editor schema, with every HostOnly value domain's values baked in.</summary>
     public static JsonSchemaData CreateEditorSchemaData(
         Type type,
         SettingsRuntimeMode runtimeMode,
-        bool resolveFieldOptionSamples = false,
         Document? document = null
     ) {
         RevitTypeRegistry.Initialize();
         return JsonSchemaFactory.CreateEditorSchemaData(
             type,
-            CreateOptions(runtimeMode, resolveFieldOptionSamples, document)
+            CreateOptions(runtimeMode, true, document)
         );
     }
 

@@ -21,8 +21,6 @@ vi.mock("#/host/client", async (importOriginal) => {
     ...(await importOriginal<typeof import("#/host/client")>()),
     callHostRpc: async (key: string) => {
       calls.push(key);
-      if (key === "revit.catalog.field-options")
-        return { items: [{ value: "Mechanical Equipment" }] };
       if (key === "revit.catalog.loaded-families")
         return { families: DEMO_FAMILIES.map((f) => ({ familyName: f.familyName })) };
       if (key === "revit.matrix.loaded-families") {
@@ -58,45 +56,47 @@ class WireSource {
     for (const request of keys) {
       const key = readingKey(request);
       const value =
-        request.kind === "inventory"
-          ? {
-              sessions: [
-                {
-                  connected: true,
-                  sessionId: SESSION,
-                  openDocumentCount: 1,
-                  openDocuments: [
-                    {
-                      openId: "open-1",
-                      title: "MEP",
-                      address: AT,
-                      isFamilyDocument: false,
-                    },
-                  ],
-                },
-              ],
-            }
-          : request.kind === "thread-head"
-            ? { defaultTarget: { kind: "open", ref: REF }, revision: 1 }
-            : request.kind === "work"
-              ? {
-                  revision: 3,
-                  doc: {
-                    // project-a Work r1 (HOLD 6): Pea's scope proposal, nothing staged.
-                    scope: {
-                      proposal: {
-                        value: {
-                          categoryNames: [],
-                          familyNames: [DEMO_FAMILIES[0]!.familyName],
-                          placementScope: "AllLoaded",
+        request.kind === "field-options"
+          ? { items: [{ value: "Mechanical Equipment" }] }
+          : request.kind === "inventory"
+            ? {
+                sessions: [
+                  {
+                    connected: true,
+                    sessionId: SESSION,
+                    openDocumentCount: 1,
+                    openDocuments: [
+                      {
+                        openId: "open-1",
+                        title: "MEP",
+                        address: AT,
+                        isFamilyDocument: false,
+                      },
+                    ],
+                  },
+                ],
+              }
+            : request.kind === "thread-head"
+              ? { defaultTarget: { kind: "open", ref: REF }, revision: 1 }
+              : request.kind === "work"
+                ? {
+                    revision: 3,
+                    doc: {
+                      // project-a Work r1 (HOLD 6): Pea's scope proposal, nothing staged.
+                      scope: {
+                        proposal: {
+                          value: {
+                            categoryNames: [],
+                            familyNames: [DEMO_FAMILIES[0]!.familyName],
+                            placementScope: "AllLoaded",
+                          },
                         },
                       },
+                      cells: {},
+                      excluded: {},
                     },
-                    cells: {},
-                    excluded: {},
-                  },
-                }
-              : undefined;
+                  }
+                : undefined;
       if (request.kind === "inventory")
         (globalThis as { inventoryBlip?: () => void }).inventoryBlip = () => {
           setTimeout(() => this.onmessage?.({ data: JSON.stringify({ kind: "stale", key }) }), 0);

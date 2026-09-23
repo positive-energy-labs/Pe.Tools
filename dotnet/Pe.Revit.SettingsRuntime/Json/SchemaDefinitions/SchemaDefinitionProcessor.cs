@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+using Pe.Shared.HostContracts.SettingsStorage;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using NJsonSchema;
@@ -20,9 +21,6 @@ public sealed class SchemaDefinitionProcessor(JsonSchemaBuildOptions options) : 
         var actualSchema = context.Schema.HasReference ? context.Schema.Reference : context.Schema;
         if (actualSchema == null)
             return;
-
-        if (context.ContextualType.Type == definition.SettingsType && definition.Datasets.Count != 0)
-            SchemaMetadataWriter.ApplyRootData(actualSchema, definition.Datasets);
 
         foreach (var binding in definition.Bindings.Values) {
             if (!actualSchema.Properties.TryGetValue(binding.JsonPropertyName, out var propertySchema))
@@ -58,19 +56,15 @@ public sealed class SchemaDefinitionProcessor(JsonSchemaBuildOptions options) : 
                 }
             }
 
-            if (binding.DatasetOptions != null) {
-                ValidateDatasetOptions(definition, binding);
-                SchemaMetadataWriter.ApplyDatasetOptions(targetSchema, binding.DatasetOptions);
-                continue;
-            }
-
             if (binding.ValueDomain == null)
                 continue;
 
             var descriptor = binding.ValueDomain;
-            IReadOnlyList<ValueDomainOptionItem>? samples = null;
+            IReadOnlyList<FieldOptionItem>? samples = null;
+            // HostOnly domains need no document, so their values are baked into the schema; a
+            // LiveDocument domain is read through the field-options Reading instead.
             if (this._options.ResolveValueDomainSamples &&
-                this._options.RuntimeMode.Supports(descriptor.RequiredRuntimeMode)) {
+                descriptor.RequiredRuntimeMode == SettingsRuntimeMode.HostOnly) {
                 try {
                     if (this._options.TryGetCachedValueDomainSamples(descriptor.Key, null, out var cachedSamples)) {
                         samples = cachedSamples;
@@ -99,43 +93,6 @@ public sealed class SchemaDefinitionProcessor(JsonSchemaBuildOptions options) : 
 
         foreach (var branch in schema.OneOf.Where(branch => branch.Type == JsonObjectType.Null).ToList())
             _ = schema.OneOf.Remove(branch);
-    }
-
-    private static void ValidateDatasetOptions(
-        SettingsSchemaDefinitionDescriptor definition,
-        SettingsSchemaPropertyBinding binding
-    ) {
-        var datasetOptions = binding.DatasetOptions
-                             ?? throw new InvalidOperationException("Dataset options binding is required.");
-        if (!TryResolveDatasetBinding(definition, datasetOptions.DatasetRef, out var datasetBinding)) {
-            throw new InvalidOperationException(
-                $"Property '{binding.JsonPropertyName}' references unknown dataset '{datasetOptions.DatasetRef}'."
-            );
-        }
-
-        if (!datasetBinding.SupportedProjections.Contains(datasetOptions.Projection,
-                StringComparer.OrdinalIgnoreCase)) {
-            throw new InvalidOperationException(
-                $"Property '{binding.JsonPropertyName}' references unsupported projection '{datasetOptions.Projection}' on dataset '{datasetOptions.DatasetRef}'."
-            );
-        }
-
-        if (string.IsNullOrWhiteSpace(datasetOptions.Key)) {
-            throw new InvalidOperationException(
-                $"Property '{binding.JsonPropertyName}' dataset options must define a key."
-            );
-        }
-    }
-
-    private static bool TryResolveDatasetBinding(
-        SettingsSchemaDefinitionDescriptor definition,
-        string datasetRef,
-        out SettingsSchemaDatasetBinding datasetBinding
-    ) {
-        if (definition.Datasets.TryGetValue(datasetRef, out datasetBinding!))
-            return true;
-
-        return SettingsSchemaDefinitionRegistry.Shared.TryResolveDatasetBinding(datasetRef, out datasetBinding);
     }
 
     private static SchemaUiMetadata? ResolveUiMetadata(

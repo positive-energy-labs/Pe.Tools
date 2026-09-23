@@ -26,52 +26,5 @@ public static class SettingsPropertyPathResolver {
         return property;
     }
 
-    public static PropertyInfo? ResolveProperty(Type rootType, string propertyPath) {
-        if (rootType == null)
-            throw new ArgumentNullException(nameof(rootType));
-        if (string.IsNullOrWhiteSpace(propertyPath))
-            throw new ArgumentException("Property path is required.", nameof(propertyPath));
-
-        var parts = propertyPath.Split('.');
-        var currentType = rootType;
-        PropertyInfo? property = null;
-
-        foreach (var part in parts) {
-            if (string.Equals(part, "items", StringComparison.OrdinalIgnoreCase)) {
-                currentType = UnwrapCollectionItemType(currentType) ?? currentType;
-                continue;
-            }
-
-            property = currentType.GetProperty(
-                part,
-                BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase
-            );
-            if (property == null)
-                return null;
-
-            currentType = UnwrapCollectionItemType(property.PropertyType) ?? property.PropertyType;
-        }
-
-        return property;
-    }
-
-    private static Type? UnwrapCollectionItemType(Type type) {
-        var unwrappedType = Nullable.GetUnderlyingType(type) ?? type;
-        if (unwrappedType.IsArray)
-            return unwrappedType.GetElementType();
-        if (!unwrappedType.IsGenericType)
-            return null;
-
-        var genericTypeDefinition = unwrappedType.GetGenericTypeDefinition();
-        if (genericTypeDefinition != typeof(List<>) &&
-            genericTypeDefinition != typeof(IList<>) &&
-            genericTypeDefinition != typeof(ICollection<>) &&
-            genericTypeDefinition != typeof(IEnumerable<>) &&
-            genericTypeDefinition != typeof(IReadOnlyList<>) &&
-            genericTypeDefinition != typeof(IReadOnlyCollection<>))
-            return null;
-
-        return unwrappedType.GetGenericArguments()[0];
-    }
 }
 

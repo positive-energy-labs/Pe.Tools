@@ -3,7 +3,7 @@
  * w8-revit trip 9: `/families` dispatched `revit.catalog.loaded-families` twice a second, because
  * the reads keyed on the resolved ref object and the inventory reading rebuilds it on every move
  * (a catalog dispatch is one). Here the inventory moves eight times on the same document; the
- * categories come from field-options once, and one scope change reads the catalog once.
+ * categories come from the field-options Reading once, and one scope change reads the catalog once.
  */
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -22,16 +22,6 @@ vi.mock("#/host/client", async (importOriginal) => {
     ...actual,
     callHostRpc: (key: string, input: unknown) => {
       hostCalls.push({ key, input });
-      if (key === "revit.catalog.field-options")
-        return Promise.resolve({
-          sourceKey: "category-names",
-          mode: "Suggestion",
-          allowsCustomValue: false,
-          items: [
-            { value: "Sprinklers", label: "Sprinklers" },
-            { value: "Duct Fittings", label: "Duct Fittings" },
-          ],
-        });
       if (key === "revit.catalog.loaded-families")
         return Promise.resolve({
           families: [{ familyId: 1, familyName: "Elbow", categoryName: "Duct Fittings" }],
@@ -51,16 +41,32 @@ import { FamiliesRouteContent } from "#/routes/families";
 const SESSION = "session-553a4c85413fe3ae";
 const doc = familiesRouteState.schema.parse({});
 
+// One field-options read is one run of streams that carry its key.
+let fieldOptionsOpen = false;
 class WireSource {
   onmessage: ((event: { data: string }) => void) | null = null;
   onerror: (() => void) | null = null;
   private timers: ReturnType<typeof setTimeout>[] = [];
   constructor(url: string) {
     const keys = JSON.parse(new URL(url).searchParams.get("keys") ?? "[]") as ReadingRequest[];
+    const reading = keys.find((request) => request.kind === "field-options");
+    if (reading && !fieldOptionsOpen) hostCalls.push({ key: "field-options", input: reading });
+    fieldOptionsOpen = Boolean(reading);
     const send = (delay: number, frame: unknown) =>
       this.timers.push(setTimeout(() => this.onmessage?.({ data: JSON.stringify(frame) }), delay));
     for (const request of keys) {
       const key = readingKey(request);
+      if (request.kind === "field-options")
+        send(0, {
+          kind: "snapshot",
+          key,
+          value: {
+            items: [
+              { value: "Sprinklers", label: "Sprinklers" },
+              { value: "Duct Fittings", label: "Duct Fittings" },
+            ],
+          },
+        });
       if (request.kind === "receipts") send(0, { kind: "snapshot", key, value: [] });
       // Same document, a new observation time: what the state-sync after every dispatch publishes.
       if (request.kind === "inventory")
@@ -122,9 +128,11 @@ test("categories read once from field-options; one scope change reads the catalo
     { timeout: 5000 },
   );
   await act(() => new Promise((resolve) => setTimeout(resolve, 250)));
-  expect(count("revit.catalog.field-options")).toBe(1);
-  expect(hostCalls.find((call) => call.key === "revit.catalog.field-options")?.input).toEqual({
-    sourceKey: "category-names",
+  expect(count("field-options")).toBe(1);
+  expect(hostCalls.find((call) => call.key === "field-options")?.input).toEqual({
+    kind: "field-options",
+    target: { session: SESSION, openId: "open-1" },
+    key: "category-names",
   });
   expect(count("revit.catalog.loaded-families")).toBe(0);
 
@@ -134,6 +142,6 @@ test("categories read once from field-options; one scope change reads the catalo
   await act(async () => fireEvent.keyDown(search, { key: "Enter" }));
   await act(() => new Promise((resolve) => setTimeout(resolve, 500)));
   expect(count("revit.catalog.loaded-families")).toBe(1);
-  expect(count("revit.catalog.field-options")).toBe(1);
+  expect(count("field-options")).toBe(1);
   // A whole-route mount plus two real waits: over 5s under a loaded full run.
 }, 15_000);

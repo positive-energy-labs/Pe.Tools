@@ -41,12 +41,6 @@ public enum ExcludedParameterReason {
     ProjectObservedBuiltIn
 }
 
-public record LoadedFamiliesFilterFieldOptionsRequest(
-    string PropertyPath,
-    string SourceKey,
-    Dictionary<string, string>? ContextValues
-);
-
 public record LoadedFamiliesCatalogRequest(
     LoadedFamiliesFilter? Filter,
     RevitDataProjectionRequest? Projection = null,

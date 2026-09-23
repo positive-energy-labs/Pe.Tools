@@ -1,10 +1,9 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
 
 namespace Pe.Shared.StorageRuntime.Capabilities;
-
-public enum SettingsOptionsResolverKind {
-    Remote,
-    Dataset
-}
 
 public enum SettingsOptionsMode {
     Suggestion,
@@ -21,16 +20,20 @@ public sealed record SettingsOptionsDependency(
     SettingsOptionsDependencyScope Scope
 );
 
-// Single source of truth for a field's options source: the runtime descriptor is
-// also the TS-exported wire shape. The x-options payload carries every field
-// except RequiredRuntimeMode, which the writer emits separately under
-// x-runtime-capabilities; the browser reads x-options loosely, so the extra
-// field is harmless.
+// Single source of truth for a field's options source: the runtime descriptor is also the
+// x-options payload every schema writer emits and the descriptor the field-options read returns.
 public sealed record SettingsValueDomainDescriptor(
     string Key,
-    SettingsOptionsResolverKind Resolver,
     SettingsOptionsMode Mode,
     bool AllowsCustomValue,
     IReadOnlyList<SettingsOptionsDependency> DependsOn,
     SettingsRuntimeMode RequiredRuntimeMode
-);
+) {
+    private static readonly JsonSerializer Serializer = JsonSerializer.CreateDefault(new JsonSerializerSettings {
+        ContractResolver = new CamelCasePropertyNamesContractResolver(),
+        Converters = [new StringEnumConverter()]
+    });
+
+    /// <summary>The x-options node: `{ key, mode, allowsCustomValue, dependsOn, requiredRuntimeMode }`.</summary>
+    public JObject ToOptionsPayload() => JObject.FromObject(this, Serializer);
+}

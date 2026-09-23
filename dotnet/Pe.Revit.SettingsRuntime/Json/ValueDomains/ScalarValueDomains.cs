@@ -1,3 +1,4 @@
+using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.DocumentData.Schedules.Authored.ValueDomains;
 using Pe.Revit.SettingsRuntime.Json.SchemaProviders;
@@ -16,7 +17,6 @@ public abstract class SettingsValueDomainBase : ISettingsValueDomain {
     ) {
         this.Descriptor = new SettingsValueDomainDescriptor(
             key,
-            SettingsOptionsResolverKind.Remote,
             mode,
             allowsCustomValue,
             dependsOn ?? [],
@@ -28,21 +28,21 @@ public abstract class SettingsValueDomainBase : ISettingsValueDomain {
 
     public SettingsValueDomainDescriptor Describe() => this.Descriptor;
 
-    public abstract ValueTask<IReadOnlyList<ValueDomainOptionItem>> GetOptionsAsync(
+    public abstract ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
         ValueDomainExecutionContext context,
         CancellationToken cancellationToken = default
     );
 
-    protected static ValueTask<IReadOnlyList<ValueDomainOptionItem>> ToItems(IEnumerable<string> values) =>
+    protected static ValueTask<IReadOnlyList<FieldOptionItem>> ToItems(IEnumerable<string> values) =>
         new(values
             .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(value => new ValueDomainOptionItem(value, value, null))
+            .Select(value => new FieldOptionItem(value, value, null))
             .ToList());
 }
 
 public sealed class CategoryNamesValueDomain()
     : SettingsValueDomainBase(ValueDomainKeys.CategoryNames, SettingsRuntimeMode.HostOnly) {
-    public override ValueTask<IReadOnlyList<ValueDomainOptionItem>> GetOptionsAsync(
+    public override ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
         ValueDomainExecutionContext context,
         CancellationToken cancellationToken = default
     ) => ToItems(ScheduleCategoryValueDomain.GetOptions());
@@ -62,7 +62,7 @@ public sealed class CategoryNamesValueDomain()
 
 public sealed class SpecNamesValueDomain()
     : SettingsValueDomainBase(ValueDomainKeys.SpecNames, SettingsRuntimeMode.HostOnly) {
-    public override ValueTask<IReadOnlyList<ValueDomainOptionItem>> GetOptionsAsync(
+    public override ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
         ValueDomainExecutionContext context,
         CancellationToken cancellationToken = default
     ) => ToItems(RevitLabelCatalog.GetLabelToSpecMap().Keys);
@@ -79,7 +79,7 @@ public sealed class SpecNamesValueDomain()
 
 public sealed class PropertyGroupNamesValueDomain()
     : SettingsValueDomainBase(ValueDomainKeys.PropertyGroupNames, SettingsRuntimeMode.HostOnly) {
-    public override ValueTask<IReadOnlyList<ValueDomainOptionItem>> GetOptionsAsync(
+    public override ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
         ValueDomainExecutionContext context,
         CancellationToken cancellationToken = default
     ) => ToItems(RevitLabelCatalog.GetLabelToPropertyGroupMap().Keys);
@@ -96,7 +96,7 @@ public sealed class PropertyGroupNamesValueDomain()
 
 public sealed class FamilyNamesValueDomain()
     : SettingsValueDomainBase(ValueDomainKeys.FamilyNames, SettingsRuntimeMode.LiveDocument) {
-    public override ValueTask<IReadOnlyList<ValueDomainOptionItem>> GetOptionsAsync(
+    public override ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
         ValueDomainExecutionContext context,
         CancellationToken cancellationToken = default
     ) {
@@ -123,7 +123,7 @@ public sealed class SharedParameterNamesValueDomain()
         SettingsRuntimeMode.LiveDocument,
         [new SettingsOptionsDependency(ValueDomainContextKeys.SelectedFamilyNames, SettingsOptionsDependencyScope.Context)]
     ) {
-    public override ValueTask<IReadOnlyList<ValueDomainOptionItem>> GetOptionsAsync(
+    public override ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
         ValueDomainExecutionContext context,
         CancellationToken cancellationToken = default
     ) {
@@ -176,7 +176,7 @@ public sealed class ScheduleFieldNamesValueDomain()
         SettingsRuntimeMode.LiveDocument,
         [new SettingsOptionsDependency(ValueDomainContextKeys.CategoryName, SettingsOptionsDependencyScope.Sibling)]
     ) {
-    public override ValueTask<IReadOnlyList<ValueDomainOptionItem>> GetOptionsAsync(
+    public override ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
         ValueDomainExecutionContext context,
         CancellationToken cancellationToken = default
     ) {
@@ -202,7 +202,7 @@ public sealed class ScheduleFieldNamesValueDomain()
 
 public sealed class ScheduleViewTemplateNamesValueDomain()
     : SettingsValueDomainBase(ValueDomainKeys.ScheduleViewTemplateNames, SettingsRuntimeMode.LiveDocument) {
-    public override ValueTask<IReadOnlyList<ValueDomainOptionItem>> GetOptionsAsync(
+    public override ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
         ValueDomainExecutionContext context,
         CancellationToken cancellationToken = default
     ) {
@@ -216,7 +216,7 @@ public sealed class ScheduleViewTemplateNamesValueDomain()
 
 public sealed class LineStyleNamesValueDomain()
     : SettingsValueDomainBase(ValueDomainKeys.LineStyleNames, SettingsRuntimeMode.LiveDocument) {
-    public override ValueTask<IReadOnlyList<ValueDomainOptionItem>> GetOptionsAsync(
+    public override ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
         ValueDomainExecutionContext context,
         CancellationToken cancellationToken = default
     ) {

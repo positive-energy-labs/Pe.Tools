@@ -33,7 +33,6 @@ function Host({ onValues }: { onValues: (v: typeof initial) => void }) {
   return (
     <SchemaToFieldRender
       schema={schema}
-      schemaUrl=""
       baselineValues={initial}
       values={values}
       onChange={(path, value) => {
@@ -90,7 +89,6 @@ test("a primary column with options is the in-cell list, and typed text is still
     return (
       <SchemaToFieldRender
         schema={withOptions as unknown as RenderSchemaNode}
-        schemaUrl=""
         baselineValues={initial}
         values={values}
         onChange={(_path, value) => {

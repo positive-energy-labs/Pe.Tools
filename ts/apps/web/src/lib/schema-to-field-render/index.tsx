@@ -1,23 +1,18 @@
 import { useMemo } from "react";
 import { FieldRenderer } from "./field-renderer";
-import {
-  SchemaRenderProvider,
-  type RemoteOptionsHook,
-  type SchemaToFieldRenderProps,
-  type SettingsValues,
-} from "./shared";
+import { SchemaRenderProvider, type SchemaToFieldRenderProps, type SettingsValues } from "./shared";
 import { SchemaDocument, type SchemaNodeRef } from "@pe/schema-core";
+import type { DocumentRef } from "@pe/agent-contracts";
 import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import { buildFieldChangeMap, projectHostValidationState } from "./field-state";
 
 export function SchemaToFieldRender({
   schema,
-  schemaUrl,
   baselineValues,
   issues,
   values,
   onChange,
-  useRemoteOptions,
+  optionsFrom,
 }: SchemaToFieldRenderProps) {
   const schemaDocument = useMemo(() => SchemaDocument.from(schema), [schema]);
   const rootEntries = useMemo(
@@ -36,36 +31,33 @@ export function SchemaToFieldRender({
 
   return (
     <SchemaToFieldRenderContent
-      schemaUrl={schemaUrl}
       schemaDocument={schemaDocument}
       rootEntries={rootEntries}
       values={values}
       baselineValues={baselineValues}
       onChange={onChange}
       errors={projectedValidationState.fieldIssuesByPath}
-      useRemoteOptions={useRemoteOptions}
+      optionsFrom={optionsFrom}
     />
   );
 }
 
 function SchemaToFieldRenderContent({
-  schemaUrl,
   schemaDocument,
   rootEntries,
   values,
   baselineValues,
   onChange,
   errors,
-  useRemoteOptions,
+  optionsFrom,
 }: {
-  schemaUrl: string;
   schemaDocument: SchemaDocument;
   rootEntries: Array<[string, SchemaNodeRef]>;
   values: SettingsValues;
   baselineValues: SettingsValues;
   onChange: (path: string, value: unknown) => void;
   errors: ReadonlyMap<string, MemberIssue[]>;
-  useRemoteOptions?: RemoteOptionsHook;
+  optionsFrom?: DocumentRef | null;
 }) {
   const fieldChanges = useMemo(
     () => buildFieldChangeMap(baselineValues, values ?? {}),
@@ -78,9 +70,8 @@ function SchemaToFieldRenderContent({
       onChange={onChange}
       errors={errors}
       schemaDocument={schemaDocument}
-      schemaUrl={schemaUrl}
       fieldChanges={fieldChanges}
-      useRemoteOptions={useRemoteOptions}
+      optionsFrom={optionsFrom}
     >
       <div className="hairline-rows">
         {rootEntries.map(([key, nodeRef]) => (
@@ -92,5 +83,3 @@ function SchemaToFieldRenderContent({
     </SchemaRenderProvider>
   );
 }
-
-export type { RemoteOptionsHook } from "./shared";

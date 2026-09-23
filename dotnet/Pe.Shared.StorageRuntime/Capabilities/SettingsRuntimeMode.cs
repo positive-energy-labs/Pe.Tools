@@ -1,4 +1,3 @@
-
 namespace Pe.Shared.StorageRuntime.Capabilities;
 
 public enum SettingsRuntimeMode {
@@ -9,14 +8,4 @@ public enum SettingsRuntimeMode {
 public static class SettingsRuntimeModeExtensions {
     public static bool Supports(this SettingsRuntimeMode currentMode, SettingsRuntimeMode requiredMode) =>
         currentMode >= requiredMode;
-
-    public static IReadOnlyDictionary<string, bool> ToMetadata(this SettingsRuntimeMode runtimeMode) =>
-        runtimeMode switch {
-            SettingsRuntimeMode.LiveDocument => new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase) {
-                ["hasRevitApiContext"] = true, ["hasActiveDocument"] = true
-            },
-            _ => new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase) {
-                ["hasRevitApiContext"] = false, ["hasActiveDocument"] = false
-            }
-        };
 }

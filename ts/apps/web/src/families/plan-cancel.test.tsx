@@ -20,8 +20,6 @@ vi.mock("#/host/client", async (importOriginal) => {
     ...(await importOriginal<typeof import("#/host/client")>()),
     callHostRpc: async (key: string) => {
       if (key === "pod.list") return { pods: [{ id: "p", name: "P", folder: "f", members: [] }] };
-      if (key === "revit.catalog.field-options")
-        return { items: [{ value: "Mechanical Equipment" }] };
       if (key === "revit.catalog.loaded-families")
         return { families: DEMO_FAMILIES.map((f) => ({ familyName: f.familyName })) };
       if (key === "revit.matrix.loaded-families") return { families: DEMO_FAMILIES, issues: [] };
@@ -54,49 +52,51 @@ class WireSource {
     const keys = JSON.parse(new URL(url).searchParams.get("keys") ?? "[]") as ReadingRequest[];
     for (const request of keys) {
       const value =
-        request.kind === "inventory"
-          ? {
-              sessions: [
-                {
-                  connected: true,
-                  sessionId: REF.session,
-                  openDocumentCount: 1,
-                  openDocuments: [
-                    {
-                      openId: REF.openId,
-                      title: "MEP",
-                      address: "C:\\M.rvt",
-                      isFamilyDocument: false,
-                    },
-                  ],
-                },
-              ],
-            }
-          : request.kind === "thread-head"
-            ? { defaultTarget: { kind: "open", ref: REF }, revision: 1 }
-            : request.kind === "work"
-              ? {
-                  revision: 3,
-                  doc: {
-                    scope: {
-                      staged: {
-                        value: {
-                          categoryNames: ["Mechanical Equipment"],
-                          familyNames: [],
-                          placementScope: "AllLoaded",
+        request.kind === "field-options"
+          ? { items: [{ value: "Mechanical Equipment" }] }
+          : request.kind === "inventory"
+            ? {
+                sessions: [
+                  {
+                    connected: true,
+                    sessionId: REF.session,
+                    openDocumentCount: 1,
+                    openDocuments: [
+                      {
+                        openId: REF.openId,
+                        title: "MEP",
+                        address: "C:\\M.rvt",
+                        isFamilyDocument: false,
+                      },
+                    ],
+                  },
+                ],
+              }
+            : request.kind === "thread-head"
+              ? { defaultTarget: { kind: "open", ref: REF }, revision: 1 }
+              : request.kind === "work"
+                ? {
+                    revision: 3,
+                    doc: {
+                      scope: {
+                        staged: {
+                          value: {
+                            categoryNames: ["Mechanical Equipment"],
+                            familyNames: [],
+                            placementScope: "AllLoaded",
+                          },
                         },
                       },
-                    },
-                    cells: {
-                      [STAGED]: {
-                        proposal: null,
-                        staged: { value: { value: "FXMQ20", storageType: "String" } },
+                      cells: {
+                        [STAGED]: {
+                          proposal: null,
+                          staged: { value: { value: "FXMQ20", storageType: "String" } },
+                        },
                       },
+                      excluded: {},
                     },
-                    excluded: {},
-                  },
-                }
-              : undefined;
+                  }
+                : undefined;
       if (value !== undefined)
         setTimeout(() => {
           const key = readingKey(request);

@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 
 import { ListChips, ListPopup } from "#/components/lang/list-popup";
-import { useHostOp } from "#/readings";
-import type { ParameterReference } from "@pe/agent-contracts";
+import { previousOf, type FieldOptionsData } from "#/readings";
+import type { ParameterReference, Reading } from "@pe/agent-contracts";
 
 export type FieldOption = {
   value: string;
@@ -34,27 +34,15 @@ function numberOrNull(value: string | undefined) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-export function useFieldOptions(
-  sourceKey: string,
-  contextValues: Record<string, string> = {},
-  bridgeSessionId?: string,
-  enabled = true,
-  openDocumentId?: string,
-) {
-  const query = useHostOp(
-    "revit.catalog.field-options",
-    { sourceKey, contextValues },
-    { bridgeSessionId, openDocumentId, enabled },
-  );
-  const items = (query.data?.items ?? []).filter(
-    (item) => typeof item.value === "string" && typeof item.label === "string",
-  );
-  // Pending and failed are states of the list, never an empty list (R7).
-  const status = query.pending ? "pending" : query.error ? "failed" : "ready";
-  return { ...query, items, status } as const;
-}
-
 export type FieldOptionStatus = "ready" | "pending" | "failed";
+
+/** A field-options Reading as a picker draws it: pending and failed are states of the list, never an empty list (R7). */
+export function pickerOptions(reading: Reading<FieldOptionsData>) {
+  const items: FieldOption[] = previousOf(reading)?.items ?? [];
+  const status: FieldOptionStatus =
+    reading.state === "loading" ? "pending" : reading.state === "failed" ? "failed" : "ready";
+  return { items, status };
+}
 
 const optionRow = (option: FieldOption & { stale?: boolean }) => ({
   label: option.label,

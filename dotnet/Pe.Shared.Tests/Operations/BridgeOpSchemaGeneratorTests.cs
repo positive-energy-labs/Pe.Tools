@@ -1,3 +1,4 @@
+using Pe.Shared.StorageRuntime.Capabilities;
 using Newtonsoft.Json.Linq;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.RevitData;
@@ -87,6 +88,8 @@ public sealed class BridgeOpSchemaGeneratorTests {
 
     [Test]
     public void Request_schema_carries_x_options_and_descriptions_for_annotated_properties() {
+        BridgeOpSchemaGenerator.DescribeFieldOptions = key =>
+            new SettingsValueDomainDescriptor(key, SettingsOptionsMode.Suggestion, true, [], SettingsRuntimeMode.HostOnly);
         var schema = JObject.Parse(BridgeOpSchemaGenerator.GetRequestSchemaJson(typeof(LoadedFamiliesCatalogRequest)));
 
         var contains = schema.SelectToken("$.definitions.LoadedFamiliesFilter.properties.categoryNameContains") as JObject;
@@ -94,7 +97,7 @@ public sealed class BridgeOpSchemaGeneratorTests {
         var options = contains!["x-options"] as JObject;
         Assert.That(options, Is.Not.Null, "x-options annotation missing");
         Assert.That((string?)options!["key"], Is.EqualTo("category-names"));
-        Assert.That((string?)options["mode"], Is.EqualTo("suggestion"));
+        Assert.That((string?)options["mode"], Is.EqualTo("Suggestion"));
         Assert.That((bool?)options["allowsCustomValue"], Is.True);
         Assert.That((string?)contains["description"], Does.Contain("substring"), "XML doc summary missing");
     }

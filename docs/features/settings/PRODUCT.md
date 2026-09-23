@@ -141,7 +141,7 @@ preserve per-worktree lane isolation; unset = takeover-era behavior, untouched.
 From the precedent, the recovered pipeline, and round 1:
 
 - **SettingsFormPane** — the generated form: schema-core effective nodes → field renderers
-  (scalar/object/array/table), enum/suggestion inputs fed by `settings.field-options`,
+  (scalar/object/array/table), enum/suggestion inputs fed by the `field-options` Reading,
   trichotomy state (StateCell) per field, owed-marker gutter. The kit's centerpiece.
 - **JsonPane** — `JsonView`/`JsonEditor` over @tanstack/highlight (built, round 1); line
   decorations for trichotomy/validation joinery.

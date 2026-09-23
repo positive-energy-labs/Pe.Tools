@@ -1,3 +1,4 @@
+using Pe.Shared.HostContracts.SettingsStorage;
 // Quarantined: registry/value-domain assertions are broad but may pin schema generator internals more than user-facing authoring contracts.
 // Review whether a smaller public schema contract should survive; delete duplicate shape checks.
 using Newtonsoft.Json;
@@ -69,7 +70,6 @@ public sealed class SchemaDefinitionValueDomainTests {
 
         var options = parameterSchema!["x-options"];
         Assert.That(options?["key"]?.Value<string>(), Is.EqualTo(DomainKey));
-        Assert.That(options?["resolver"]?.Value<string>(), Is.EqualTo("Remote"));
         Assert.That(options?["mode"]?.Value<string>(), Is.EqualTo("Suggestion"));
         Assert.That(options?["allowsCustomValue"]?.Value<bool>(), Is.True);
 
@@ -153,14 +153,13 @@ public sealed class SchemaDefinitionValueDomainTests {
     private sealed class SchemaDefinitionValueDomainTestDomain : ISettingsValueDomain {
         public SettingsValueDomainDescriptor Describe() => new(
             DomainKey,
-            SettingsOptionsResolverKind.Remote,
             SettingsOptionsMode.Suggestion,
             true,
             [new SettingsOptionsDependency(ValueDomainContextKeys.SelectedFamilyNames, SettingsOptionsDependencyScope.Context)],
-            SettingsRuntimeMode.LiveDocument
+            SettingsRuntimeMode.HostOnly
         );
 
-        public ValueTask<IReadOnlyList<ValueDomainOptionItem>> GetOptionsAsync(
+        public ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
             ValueDomainExecutionContext context,
             CancellationToken cancellationToken = default
         ) => new(CreateOptions());
@@ -169,22 +168,21 @@ public sealed class SchemaDefinitionValueDomainTests {
     private sealed class SchemaDefinitionConstraintValueDomainTestDomain : ISettingsValueDomain {
         public SettingsValueDomainDescriptor Describe() => new(
             ConstraintDomainKey,
-            SettingsOptionsResolverKind.Remote,
             SettingsOptionsMode.Constraint,
             false,
             [],
             SettingsRuntimeMode.HostOnly
         );
 
-        public ValueTask<IReadOnlyList<ValueDomainOptionItem>> GetOptionsAsync(
+        public ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
             ValueDomainExecutionContext context,
             CancellationToken cancellationToken = default
         ) => new(CreateOptions());
     }
 
-    private static IReadOnlyList<ValueDomainOptionItem> CreateOptions() => [
-        new ValueDomainOptionItem("Beta", "Beta", null),
-        new ValueDomainOptionItem("Alpha", "Alpha", null)
+    private static IReadOnlyList<FieldOptionItem> CreateOptions() => [
+        new FieldOptionItem("Beta", "Beta", null),
+        new FieldOptionItem("Alpha", "Alpha", null)
     ];
 
     private static IReadOnlyList<string> GetMeaningfulStringValues(JToken? token) =>

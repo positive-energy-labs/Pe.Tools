@@ -381,8 +381,8 @@ test("live /family: capture, plan, apply files a run receipt", async () => {
 
 /**
  * w8-revit trip 9: the page dispatched the loaded-families catalog twice a second. Over a quiet
- * wait the page reads categories once from field-options and the matrix once, and one scope change
- * reads the catalog once. Counted on the wire, by op key.
+ * wait the page reads the matrix once, and one scope change reads the catalog once. Counted on the
+ * wire, by op key; categories arrive on the field-options Reading, not `/call`.
  */
 test("live /families: one catalog read per scope change, none while idle", async () => {
   const { shown } = await liveLoop("families-reads", async (page) => {
@@ -398,7 +398,6 @@ test("live /families: one catalog read per scope change, none while idle", async
     await expect.poll(() => trigger.count(), { timeout: 30_000 }).toBe(1);
     await page.waitForTimeout(3_000);
     const idle = {
-      options: count("revit.catalog.field-options"),
       catalog: count("revit.catalog.loaded-families"),
       matrix: count("revit.matrix.loaded-families"),
     };
@@ -413,7 +412,6 @@ test("live /families: one catalog read per scope change, none while idle", async
     return JSON.stringify({
       idle,
       afterScope: {
-        options: count("revit.catalog.field-options"),
         catalog: count("revit.catalog.loaded-families"),
         matrix: count("revit.matrix.loaded-families"),
       },
@@ -421,7 +419,6 @@ test("live /families: one catalog read per scope change, none while idle", async
   });
   console.log(`families-reads ${shown}`);
   const { idle, afterScope } = JSON.parse(shown) as Record<string, Record<string, number>>;
-  expect(idle!.options).toBe(1);
   expect(idle!.catalog).toBe(0);
   expect(idle!.matrix).toBe(1);
   expect(afterScope).toEqual({ ...idle, catalog: 1 });

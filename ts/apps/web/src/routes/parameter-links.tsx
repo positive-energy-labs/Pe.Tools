@@ -111,6 +111,7 @@ export function ParameterLinksRouteContent({ thread }: { thread?: string } = {})
   return (
     <ParameterLinksWorkspace
       documentAddress={(ref?.openId ?? "") as import("@pe/agent-contracts").Address}
+      optionsFrom={ref}
       route={handle}
       connected={handle.work.revision !== null && bridgeConnected}
       peaActive={workbench?.isRunning ?? false}
@@ -138,8 +139,11 @@ export function ParameterLinksWorkspace({
   reading,
   readingId,
   fieldOptionsEnabled = true,
+  optionsFrom = null,
 }: {
   documentAddress: import("@pe/agent-contracts").Address;
+  /** The document the definition cards read their field options from. */
+  optionsFrom?: import("@pe/agent-contracts").DocumentRef | null;
   route: ParameterLinksHandle;
   connected: boolean | null;
   peaActive?: boolean;
@@ -449,6 +453,7 @@ export function ParameterLinksWorkspace({
                     profile={editing}
                     disabled={busy != null || peaActive}
                     fieldOptionsEnabled={fieldOptionsEnabled}
+                    target={optionsFrom}
                     onChange={onDraftChange}
                   />
                 </>

@@ -1,3 +1,4 @@
+using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Revit.SettingsRuntime.Modules.AutoTag;
 using Pe.Shared.StorageRuntime.Capabilities;
 
@@ -77,7 +78,7 @@ public sealed class AnnotationTagFamilyNamesValueDomain()
         BuiltInCategory.OST_WireTags
     ];
 
-    public override ValueTask<IReadOnlyList<ValueDomainOptionItem>> GetOptionsAsync(
+    public override ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
         ValueDomainExecutionContext context,
         CancellationToken cancellationToken = default
     ) {
@@ -130,7 +131,7 @@ public sealed class AnnotationTagTypeNamesValueDomain()
         SettingsRuntimeMode.LiveDocument,
         [new SettingsOptionsDependency(ValueDomainContextKeys.TagFamilyName, SettingsOptionsDependencyScope.Sibling)]
     ) {
-    public override ValueTask<IReadOnlyList<ValueDomainOptionItem>> GetOptionsAsync(
+    public override ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
         ValueDomainExecutionContext context,
         CancellationToken cancellationToken = default
     ) {

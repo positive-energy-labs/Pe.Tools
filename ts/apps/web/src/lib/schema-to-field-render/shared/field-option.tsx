@@ -1,7 +1,9 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
-import type { SettingsFieldOptions, SettingsParameterCatalog } from "@pe/host-contracts/generated";
+import type { DocumentRef } from "@pe/agent-contracts";
+import type { RevitCatalogFieldOptions } from "@pe/host-contracts/generated";
 import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import type {
+  NormalizedFieldOptionRuntime,
   NormalizedRenderFieldOptionDependency,
   RenderSchemaNode,
   SchemaNodeRef,
@@ -9,37 +11,19 @@ import type {
 import { getFieldOrder, readPathValue, type SchemaDocument } from "@pe/schema-core";
 import type { FieldChangeSummary } from "../field-state";
 
-export type FieldOptionItem = SettingsFieldOptions.Res.FieldOptionItem;
-
-export type FieldOptionsRequest = SettingsFieldOptions.Req.Request;
-
-export type ParameterCatalogEntry = SettingsParameterCatalog.Res.ParameterCatalogEntry;
+export type FieldOptionItem = RevitCatalogFieldOptions.Res.FieldOptionItem;
 
 export type SettingsValues = Record<string, unknown>;
-
-/**
- * How a field with `x-options` (resolver "remote") asks for its value domain. Settings answers
- * through `settings.field-options`; a route may inject another answerer (ops asks Revit).
- */
-export type RemoteOptionsHook = (
-  request: FieldOptionsRequest,
-  enabled: boolean,
-) => {
-  data?: { items: readonly FieldOptionItem[]; mode?: string; allowsCustomValue?: boolean };
-  pending?: boolean;
-  isPending?: boolean;
-  error?: unknown;
-};
 
 export interface SchemaToFieldRenderProps {
   values: SettingsValues;
   onChange: (path: string, value: unknown) => void;
   schema: RenderSchemaNode;
-  schemaUrl: string;
   baselineValues: SettingsValues;
   /** The host's diagnostics on these values; each lands beside the field its path names. */
   issues?: readonly MemberIssue[];
-  useRemoteOptions?: RemoteOptionsHook;
+  /** The document every `x-options` field reads its options from; none reads nothing. */
+  optionsFrom?: DocumentRef | null;
 }
 
 export interface FieldRendererProps {
@@ -57,13 +41,13 @@ export interface FieldOptionState {
   allowsCustomValue: boolean;
   isLoading: boolean;
   errorMessage?: string;
-  source: "enum" | "examples" | "remote" | "dataset" | "none";
+  source: "enum" | "examples" | "remote" | "none";
   sourceKey?: string;
-  resolver?: "remote" | "dataset";
-  dataset?: string;
-  requestPath?: string;
+  /** HostOnly values are baked into the schema; LiveDocument values are read from the document. */
+  runtime?: NormalizedFieldOptionRuntime;
+  /** Revit changed the document after these options were read (LiveDocument keys only). */
+  changed: boolean;
   dependencies: FieldOptionDependencyState[];
-  contextValues: Record<string, string>;
 }
 
 export interface ResolvedFieldRendererProps extends FieldRendererProps {
@@ -79,10 +63,9 @@ export interface SchemaRenderContextValue {
   values: SettingsValues;
   onChange: (path: string, value: unknown) => void;
   errors: ReadonlyMap<string, MemberIssue[]>;
-  schemaUrl: string;
   schemaDocument: SchemaDocument;
   fieldChanges: ReadonlyMap<string, FieldChangeSummary>;
-  useRemoteOptions?: RemoteOptionsHook;
+  optionsFrom?: DocumentRef | null;
 }
 
 export const SchemaRenderContext = createContext<SchemaRenderContextValue | null>(null);
@@ -92,18 +75,16 @@ export function SchemaRenderProvider({
   onChange,
   errors,
   schemaDocument,
-  schemaUrl,
   fieldChanges,
-  useRemoteOptions,
+  optionsFrom,
   children,
 }: {
   values: SettingsValues;
   onChange: (path: string, value: unknown) => void;
   errors: ReadonlyMap<string, MemberIssue[]>;
   schemaDocument: SchemaDocument;
-  schemaUrl: string;
   fieldChanges: ReadonlyMap<string, FieldChangeSummary>;
-  useRemoteOptions?: RemoteOptionsHook;
+  optionsFrom?: DocumentRef | null;
   children: ReactNode;
 }) {
   const contextValue = useMemo(
@@ -111,12 +92,11 @@ export function SchemaRenderProvider({
       values,
       onChange,
       errors,
-      schemaUrl,
       schemaDocument,
       fieldChanges,
-      useRemoteOptions,
+      optionsFrom,
     }),
-    [errors, fieldChanges, onChange, schemaDocument, schemaUrl, values, useRemoteOptions],
+    [errors, fieldChanges, onChange, schemaDocument, values, optionsFrom],
   );
 
   return (

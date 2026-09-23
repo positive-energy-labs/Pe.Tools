@@ -1,3 +1,4 @@
+using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Revit.DocumentData.Schedules.Authored.ValueDomains;
 using Pe.Shared.StorageRuntime.Capabilities;
 
@@ -10,11 +11,11 @@ public sealed class UnitTypeIdValueDomain()
         mode: SettingsOptionsMode.Constraint,
         allowsCustomValue: false
     ) {
-    public override ValueTask<IReadOnlyList<ValueDomainOptionItem>> GetOptionsAsync(
+    public override ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
         ValueDomainExecutionContext context,
         CancellationToken cancellationToken = default
     ) => new(ScheduleFieldFormatValueDomain.GetUnitOptions()
-        .Select(option => new ValueDomainOptionItem(option.Value, option.Label, null))
+        .Select(option => new FieldOptionItem(option.Value, option.Label, null))
         .ToList());
 }
 
@@ -26,7 +27,7 @@ public sealed class SymbolTypeIdValueDomain()
         SettingsOptionsMode.Constraint,
         false
     ) {
-    public override ValueTask<IReadOnlyList<ValueDomainOptionItem>> GetOptionsAsync(
+    public override ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
         ValueDomainExecutionContext context,
         CancellationToken cancellationToken = default
     ) {
@@ -35,7 +36,7 @@ public sealed class SymbolTypeIdValueDomain()
             : null;
 
         return new(ScheduleFieldFormatValueDomain.GetSymbolOptions(unitValue)
-            .Select(option => new ValueDomainOptionItem(option.Value, option.Label, null))
+            .Select(option => new FieldOptionItem(option.Value, option.Label, null))
             .ToList());
     }
 }

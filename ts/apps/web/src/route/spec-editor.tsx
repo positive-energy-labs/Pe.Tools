@@ -36,14 +36,7 @@ import { OutcomeLine } from "#/components/lang/outcome";
 import { Switcher } from "#/components/lang/switcher";
 import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
 import { projectHostValidationState } from "#/lib/schema-to-field-render/field-state";
-import type { RemoteOptionsHook } from "#/lib/schema-to-field-render/shared";
-import {
-  inventoryOf,
-  previousOf,
-  useFieldOptionsQuery,
-  useHostStatus,
-  useInventory,
-} from "#/readings";
+import { inventoryOf, previousOf, useHostStatus, useInventory } from "#/readings";
 import { schemaFormModel } from "#/settings/schema-form";
 import {
   reviewAddresses,
@@ -356,17 +349,11 @@ function useOptionsFrom(pinned: OptionsFrom | null | undefined, enabled: boolean
   const open = sessions.find(
     (item) => item.sessionId === (session ?? from?.session),
   )?.openDocuments;
-  const useRemoteOptions: RemoteOptionsHook = (request, wanted) =>
-    useFieldOptionsQuery(request, {
-      enabled: wanted && Boolean(from),
-      bridgeSessionId: from?.session,
-      openDocumentId: from?.openId,
-    });
   const word = from
     ? (open?.find((item) => item.openId === from.openId)?.title ?? from.openId)
     : null;
   return {
-    useRemoteOptions,
+    from,
     word,
     owned,
     levels: [
@@ -695,11 +682,8 @@ export function SpecEditor({
           <div className="px-3 py-1.5">
             <SchemaToFieldRender
               schema={form.schema}
-              // The member's own URL from pod.list: a draft's $schema may be relative to its file.
-              // The demo lane has no host to answer remote options, so it asks for none.
-              schemaUrl={fixture ? "" : (schema ?? "")}
               baselineValues={baseline.baseline}
-              useRemoteOptions={options.useRemoteOptions}
+              optionsFrom={options.from}
               values={form.parsedRaw}
               issues={issues}
               onChange={(path, value) =>

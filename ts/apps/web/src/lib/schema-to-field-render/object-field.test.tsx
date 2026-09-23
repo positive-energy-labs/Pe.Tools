@@ -38,7 +38,6 @@ function Host({ issues, onValues }: { issues?: MemberIssue[]; onValues?: (v: obj
   return (
     <SchemaToFieldRender
       schema={schema}
-      schemaUrl=""
       baselineValues={values}
       values={values}
       issues={issues}

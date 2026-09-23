@@ -174,7 +174,12 @@ export function FieldMessages({
   );
 }
 
-export function FieldOptionsMetadata({ options }: { options: FieldOptionState }) {
+/**
+ * What a field's options are: the value domain, how it binds, where its values come from (baked
+ * HostOnly or read from the live document), how many and which, and whether Revit changed the
+ * document after they were read.
+ */
+export function FieldOptions({ options }: { options: FieldOptionState }) {
   if (
     options.source === "none" &&
     options.dependencies.length === 0 &&
@@ -183,25 +188,32 @@ export function FieldOptionsMetadata({ options }: { options: FieldOptionState })
   ) {
     return null;
   }
+  const shown = options.items.slice(0, 3).map((item) => item.label);
+  const more = options.items.length > shown.length ? ", …" : "";
 
   return (
     <div className="flex flex-wrap gap-1">
-      <FactChip title="The schema source that supplies this field's choices.">
-        {options.sourceKey ? `source ${options.sourceKey}` : options.source}
+      <FactChip title="The value domain that supplies this field's choices.">
+        {options.sourceKey ?? options.source}
       </FactChip>
-      {options.isLoading ? (
-        <FactChip title="This field's choices are still resolving.">loading</FactChip>
-      ) : null}
-      {options.resolver ? (
-        <FactChip title="The resolver that supplies this field's choices.">{`resolver ${options.resolver}`}</FactChip>
-      ) : null}
-      {options.dataset ? (
-        <FactChip title="The dataset that supplies this field's choices.">{`dataset ${options.dataset}`}</FactChip>
-      ) : null}
-      <FactChip title="Whether this field accepts values outside the supplied choices.">
-        {options.allowsCustomValue ? "custom allowed" : "fixed choices"}
+      <FactChip title="Whether the choices constrain the value or only suggest it.">
+        {options.allowsCustomValue ? options.mode : `${options.mode}, fixed`}
       </FactChip>
-      <FactChip title="Whether supplied choices constrain the value or provide suggestions.">{`mode ${options.mode}`}</FactChip>
+      {options.runtime ? (
+        <FactChip title="HostOnly values are baked into the schema; LiveDocument values are read from the open document.">
+          {options.runtime === "HostOnly" ? "baked" : "live document"}
+        </FactChip>
+      ) : null}
+      <FactChip title="How many choices the field offers, and the first few.">
+        {options.isLoading
+          ? "loading"
+          : `${options.items.length} options${shown.length ? ` · ${shown.join(", ")}${more}` : ""}`}
+      </FactChip>
+      {options.changed ? (
+        <FactChip tone="caution" title="Revit changed this document after these options were read.">
+          changed in Revit
+        </FactChip>
+      ) : null}
       {options.dependencies.map((dependency) => (
         <FactChip
           key={`${dependency.scope ?? "context"}:${dependency.key}`}

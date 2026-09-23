@@ -1,5 +1,5 @@
 import { Plus } from "lucide-react";
-import type { ParameterLinkProfile } from "@pe/agent-contracts";
+import type { DocumentRef, ParameterLinkProfile } from "@pe/agent-contracts";
 import { EmptyState } from "#/components/lang/empty";
 import { ActionButton } from "#/components/lang/action-button";
 import { addDefinition } from "#/parameter-links/model";
@@ -15,7 +15,7 @@ export function ProfileEditor({
   profile: ParameterLinkProfile | null;
   disabled?: boolean;
   fieldOptionsEnabled?: boolean;
-  target?: string;
+  target?: DocumentRef | null;
   onChange: (next: ParameterLinkProfile) => void;
 }) {
   if (!profile || profile.definitions.length === 0) {

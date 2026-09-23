@@ -705,15 +705,20 @@ export async function createDemoOwner(parent: string, raw: unknown) {
               };
             } else if (
               key === "revit.catalog.field-options" &&
-              (input as { sourceKey: string }).sourceKey === "category-names" &&
+              (input as { key: string }).key === "category-names" &&
               seed.route === "families"
             ) {
               // The one category every simulated family carries (`loadedFamily`).
               value = {
-                sourceKey: "category-names",
-                mode: "Suggestion",
-                allowsCustomValue: false,
+                descriptor: {
+                  key: "category-names",
+                  mode: "Suggestion",
+                  allowsCustomValue: true,
+                  dependsOn: [],
+                  requiredRuntimeMode: "HostOnly",
+                },
                 items: [{ value: "Mechanical Equipment", label: "Mechanical Equipment" }],
+                result: { kind: "Success", message: "Simulated." },
                 simulated: true,
               };
             } else if (
@@ -918,6 +923,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
           (request.subject !== "catalog" || targetMatches(request.target!))) ||
         (request.kind === "family-readings" && localScope(request.work)) ||
         (request.kind === "takeoff-reading" && targetMatches(request.target)) ||
+        (request.kind === "field-options" && targetMatches(request.target)) ||
         (request.kind === "receipts" &&
           (!request.target || targetMatches(request.target)) &&
           (!request.id || request.id.startsWith(`${id}:`)));

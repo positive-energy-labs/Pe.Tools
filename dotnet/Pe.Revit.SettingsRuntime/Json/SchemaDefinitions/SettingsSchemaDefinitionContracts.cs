@@ -29,33 +29,14 @@ public abstract class SettingsSchemaDefinition<TSettings> : ISettingsSchemaDefin
 }
 
 public interface ISettingsSchemaBuilder<TSettings> {
-    void Data(
-        string id,
-        Action<ISettingsDataBuilder> configure
-    );
-
     void Property<TValue>(
         Expression<Func<TSettings, TValue>> propertyExpression,
         Action<ISettingsPropertyBuilder<TValue>> configure
     );
 }
 
-public interface ISettingsDataBuilder {
-    void Provider(string provider);
-    void Load(SettingsSchemaDatasetLoadMode loadMode);
-    void SupportsProjection(params string[] projections);
-}
-
 public interface ISettingsPropertyBuilder<TValue> {
     void UseValueDomain(string domainKey);
-
-    void UseDatasetOptions(
-        string datasetRef,
-        string projection,
-        SettingsOptionsMode mode = SettingsOptionsMode.Suggestion,
-        bool allowsCustomValue = true,
-        string? key = null
-    );
 
     void DependsOnContext(params string[] keys);
     void DependsOnSibling(params string[] keys);
@@ -86,36 +67,12 @@ public interface ISchemaUiBehaviorBuilder {
     void DynamicColumnOrder<TSource>() where TSource : ISchemaUiDynamicColumnOrderSource, new();
 }
 
-public enum SettingsSchemaDatasetLoadMode {
-    Eager,
-    Manual,
-    Visible
-}
-
 public sealed class SettingsSchemaDefinitionDescriptor(
     Type settingsType,
-    IReadOnlyDictionary<string, SettingsSchemaDatasetBinding> datasets,
     IReadOnlyDictionary<string, SettingsSchemaPropertyBinding> bindings
 ) {
     public Type SettingsType { get; } = settingsType;
-    public IReadOnlyDictionary<string, SettingsSchemaDatasetBinding> Datasets { get; } = datasets;
     public IReadOnlyDictionary<string, SettingsSchemaPropertyBinding> Bindings { get; } = bindings;
-}
-
-public sealed class SettingsSchemaDatasetBinding {
-    public string Id { get; init; } = string.Empty;
-    public string Provider { get; init; } = string.Empty;
-    public SettingsSchemaDatasetLoadMode LoadMode { get; init; } = SettingsSchemaDatasetLoadMode.Manual;
-    public IReadOnlyList<string> SupportedProjections { get; init; } = [];
-}
-
-public sealed class SettingsSchemaDatasetOptionsBinding {
-    public string Key { get; init; } = string.Empty;
-    public string DatasetRef { get; init; } = string.Empty;
-    public string Projection { get; init; } = string.Empty;
-    public SettingsOptionsMode Mode { get; init; } = SettingsOptionsMode.Suggestion;
-    public bool AllowsCustomValue { get; init; } = true;
-    public IReadOnlyList<SettingsOptionsDependency> DependsOn { get; init; } = [];
 }
 
 public sealed class SettingsSchemaPropertyBinding {
@@ -124,7 +81,6 @@ public sealed class SettingsSchemaPropertyBinding {
     public string? Description { get; init; }
     public string? DisplayName { get; init; }
     public SettingsValueDomainDescriptor? ValueDomain { get; init; }
-    public SettingsSchemaDatasetOptionsBinding? DatasetOptions { get; init; }
     public string? IncludableFragmentRoot { get; init; }
     public bool DisallowNull { get; init; }
     public SchemaUiMetadata? Ui { get; init; }
@@ -134,20 +90,6 @@ public sealed class SettingsSchemaPropertyBinding {
 internal sealed class SettingsSchemaBuilder<TSettings> : ISettingsSchemaBuilder<TSettings> {
     private readonly Dictionary<string, SettingsSchemaPropertyBinding> _bindings =
         new(StringComparer.OrdinalIgnoreCase);
-
-    private readonly Dictionary<string, SettingsSchemaDatasetBinding> _datasets =
-        new(StringComparer.OrdinalIgnoreCase);
-
-    public void Data(string id, Action<ISettingsDataBuilder> configure) {
-        if (string.IsNullOrWhiteSpace(id))
-            throw new ArgumentException("Dataset id is required.", nameof(id));
-        if (configure == null)
-            throw new ArgumentNullException(nameof(configure));
-
-        var builder = new SettingsSchemaDataBindingBuilder(id);
-        configure(builder);
-        this._datasets[id] = builder.Build();
-    }
 
     public void Property<TValue>(
         Expression<Func<TSettings, TValue>> propertyExpression,
@@ -165,14 +107,13 @@ internal sealed class SettingsSchemaBuilder<TSettings> : ISettingsSchemaBuilder<
     }
 
     public SettingsSchemaDefinitionDescriptor Build(Type settingsType) =>
-        new(settingsType, this._datasets, this._bindings);
+        new(settingsType, this._bindings);
 }
 
 internal sealed class SettingsPropertyBindingBuilder<TValue>(PropertyInfo propertyInfo)
     : ISettingsPropertyBuilder<TValue> {
     private readonly List<SettingsOptionsDependency> _dependsOn = [];
     private readonly List<string> _staticExamples = [];
-    private SettingsSchemaDatasetOptionsBinding? _datasetOptions;
     private string? _description;
     private string? _displayName;
     private string? _includableFragmentRoot;
@@ -192,29 +133,6 @@ internal sealed class SettingsPropertyBindingBuilder<TValue>(PropertyInfo proper
         }
 
         this._valueDomain = descriptor;
-    }
-
-    public void UseDatasetOptions(
-        string datasetRef,
-        string projection,
-        SettingsOptionsMode mode = SettingsOptionsMode.Suggestion,
-        bool allowsCustomValue = true,
-        string? key = null
-    ) {
-        this.ThrowIfOptionsAlreadyConfigured();
-        if (string.IsNullOrWhiteSpace(datasetRef))
-            throw new ArgumentException("Dataset ref is required.", nameof(datasetRef));
-        if (string.IsNullOrWhiteSpace(projection))
-            throw new ArgumentException("Projection is required.", nameof(projection));
-
-        this._datasetOptions = new SettingsSchemaDatasetOptionsBinding {
-            Key = string.IsNullOrWhiteSpace(key) ? $"{datasetRef}.{projection}" : key,
-            DatasetRef = datasetRef,
-            Projection = projection,
-            Mode = mode,
-            AllowsCustomValue = allowsCustomValue,
-            DependsOn = this._dependsOn.ToList()
-        };
     }
 
     public void DependsOnContext(params string[] keys) =>
@@ -252,9 +170,9 @@ internal sealed class SettingsPropertyBindingBuilder<TValue>(PropertyInfo proper
     }
 
     private void ThrowIfOptionsAlreadyConfigured() {
-        if (this._valueDomain != null || this._datasetOptions != null) {
+        if (this._valueDomain != null) {
             throw new InvalidOperationException(
-                $"Property '{propertyInfo.Name}' cannot configure both value-domain and dataset-backed options."
+                $"Property '{propertyInfo.Name}' configures its value domain twice."
             );
         }
     }
@@ -279,16 +197,6 @@ internal sealed class SettingsPropertyBindingBuilder<TValue>(PropertyInfo proper
         ValueDomain = this._valueDomain == null
             ? null
             : this._valueDomain with { DependsOn = MergeDependencies(this._valueDomain.DependsOn, this._dependsOn) },
-        DatasetOptions = this._datasetOptions == null
-            ? null
-            : new SettingsSchemaDatasetOptionsBinding {
-                Key = this._datasetOptions.Key,
-                DatasetRef = this._datasetOptions.DatasetRef,
-                Projection = this._datasetOptions.Projection,
-                Mode = this._datasetOptions.Mode,
-                AllowsCustomValue = this._datasetOptions.AllowsCustomValue,
-                DependsOn = this._dependsOn.ToList()
-            },
         IncludableFragmentRoot = this._includableFragmentRoot,
         DisallowNull = this._disallowNull,
         Ui = this._uiMetadata,
@@ -326,33 +234,6 @@ internal sealed class SettingsPropertyBindingBuilder<TValue>(PropertyInfo proper
             }
         }
     }
-}
-
-internal sealed class SettingsSchemaDataBindingBuilder(string id) : ISettingsDataBuilder {
-    private readonly List<string> _supportedProjections = [];
-    private SettingsSchemaDatasetLoadMode _loadMode = SettingsSchemaDatasetLoadMode.Manual;
-    private string? _provider;
-
-    public void Provider(string provider) => this._provider = string.IsNullOrWhiteSpace(provider) ? null : provider;
-
-    public void Load(SettingsSchemaDatasetLoadMode loadMode) => this._loadMode = loadMode;
-
-    public void SupportsProjection(params string[] projections) {
-        if (projections == null)
-            return;
-
-        foreach (var projection in projections.Where(value => !string.IsNullOrWhiteSpace(value))) {
-            if (!this._supportedProjections.Contains(projection, StringComparer.OrdinalIgnoreCase))
-                this._supportedProjections.Add(projection);
-        }
-    }
-
-    public SettingsSchemaDatasetBinding Build() => new() {
-        Id = id,
-        Provider = this._provider ?? throw new InvalidOperationException($"Dataset '{id}' must declare a provider."),
-        LoadMode = this._loadMode,
-        SupportedProjections = this._supportedProjections.ToList()
-    };
 }
 
 internal sealed record SchemaUiBuildResult(

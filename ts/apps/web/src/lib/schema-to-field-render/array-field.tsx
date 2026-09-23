@@ -5,7 +5,7 @@ import { ListChips, ListPopup } from "#/components/lang/list-popup";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { JsonEditor, stringify } from "#/components/lang/code";
 import { FieldRenderer } from "./field-renderer";
-import { FieldLabelRow, FieldMessages, FieldOptionsMetadata } from "./field-metadata";
+import { FieldLabelRow, FieldMessages, FieldOptions } from "./field-metadata";
 import {
   buildDefaultArrayItem,
   coercePrimitive,
@@ -142,7 +142,7 @@ export function ArrayField({
             : "Array is currently edited as JSON for the MVP."}
         </span>
       )}
-      <FieldOptionsMetadata options={optionsState} />
+      <FieldOptions options={optionsState} />
       <FieldMessages messages={field.errors} compact />
     </div>
   );

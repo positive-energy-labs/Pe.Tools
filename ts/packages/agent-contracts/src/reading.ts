@@ -85,6 +85,17 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
    * host serves it again unchanged.
    */
   z.strictObject({ kind: z.literal("document-mark"), target: documentRefSchema }),
+  /**
+   * One value domain's options (an `x-options.key`) read from one document, with the context
+   * values its `dependsOn` names. A LiveDocument key's value names its document, so the host
+   * marks it changed; a HostOnly key's value does not, so it carries no mark.
+   */
+  z.strictObject({
+    kind: z.literal("field-options"),
+    target: documentRefSchema,
+    key: z.string().min(1),
+    context: z.record(z.string(), z.string()).optional(),
+  }),
   z.strictObject({ kind: z.literal("inventory") }),
   z.strictObject({ kind: z.literal("world") }),
   /** The host's own liveness. Polled by the host on its own 5s timer, never by a client. */

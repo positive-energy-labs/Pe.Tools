@@ -59,7 +59,7 @@ interface Option {
   label: string;
   sub?: string;
 }
-/** The families demo parameters and one built-in, as `settings.field-options` would answer. */
+/** The families demo parameters and one built-in, as the `field-options` Reading would answer. */
 export const FIELD_OPTIONS: Option[] = [
   ...new Set(DEMO_FAMILIES.flatMap((f) => f.parameters.map((p) => p.definition.identity.name))),
 ]

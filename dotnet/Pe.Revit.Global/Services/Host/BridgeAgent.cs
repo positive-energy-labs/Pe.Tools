@@ -72,6 +72,8 @@ internal sealed class BridgeAgent : IDisposable {
             activeDocument?.Title,
             moduleRegistry.GetModules().Count()
         );
+        // The op catalog describes [FieldOptions] keys through the registered value domains.
+        Pe.Revit.SettingsRuntime.Json.ValueDomains.SettingsValueDomainBootstrap.RegisterDefaults();
         var requestService = new RequestService(revitTaskQueue, this._moduleRegistry, this._throttleGate);
         this._revitDataRequestService = new RevitDataRequestService();
         this._scriptingMessageHandler = new ScriptingBridgeMessageHandler(
