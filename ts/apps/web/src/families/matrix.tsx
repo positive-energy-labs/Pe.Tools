@@ -90,9 +90,6 @@ export function FamiliesMatrix() {
               <a href="/families?demo=apply">plan confirmation fixture</a>
             </p>
           )}
-          {applied && !archived && (
-            <p className="px-4 py-1 t-small text-ink-2">last read · {filterWords(applied)}</p>
-          )}
         </>
       }
     />

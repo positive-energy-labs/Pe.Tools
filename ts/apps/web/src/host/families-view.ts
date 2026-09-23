@@ -17,11 +17,11 @@ export async function releaseFamiliesView(instance: string): Promise<void> {
   await fetch(url(`/${instance}`), { method: "DELETE", keepalive: true });
 }
 
-export async function acknowledgeFamiliesRules(input: {
+export async function acknowledgeFamiliesQuery(input: {
   instance: string;
   commandId: string;
   revision: number;
-  rules: string;
+  query: string;
   counts: FamiliesView["counts"];
 }): Promise<void> {
   const response = await fetch(url("/ack"), {

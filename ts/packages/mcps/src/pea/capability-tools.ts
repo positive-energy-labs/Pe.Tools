@@ -576,13 +576,13 @@ async function dispatch(
     }
     case "route-doc":
     case "route-command": {
-      if (row.key === "route:families.view" || row.key === "route:families.set-rules") {
+      if (row.key === "route:families.view" || row.key === "route:families.set-query") {
         if (!viewThread) throw Error("The admitted turn has no thread.");
         const query = new URLSearchParams({ thread: viewThread });
         if (row.key === "route:families.view" && typeof payload.instance === "string")
           query.set("instance", payload.instance);
         const response = await fetch(
-          `${base()}/pe/route-view/families${row.key.endsWith(".view") ? `?${query.toString()}` : "/set-rules"}`,
+          `${base()}/pe/route-view/families${row.key.endsWith(".view") ? `?${query.toString()}` : "/set-query"}`,
           row.key.endsWith(".view")
             ? undefined
             : {

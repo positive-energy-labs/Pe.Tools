@@ -25,7 +25,6 @@ import type { CellWire } from "#/components/lang/band";
 import { PendingStrip } from "./pending-strip";
 import { cellText, scheduleLock, useScheduleGridColumns } from "./columns";
 import type { Refusal } from "#/route";
-import { ChangedInRevit } from "#/route/changed";
 
 export interface ScheduleGridState {
   slice: ScheduleGridDocument | null;
@@ -88,10 +87,6 @@ export function ScheduleGridWorkspace({
   const pending = Object.entries(cells).filter(
     ([, cell]) => cell.proposal != null || cell.staged != null,
   );
-  const readAgain = () => {
-    if (snapshot && busy == null) void execute("refresh", { scheduleId: snapshot.scheduleId });
-  };
-
   const bindingAt = (key: string) => {
     const { rowNumber, columnNumber } = splitScheduleCellKey(key);
     return snapshot?.rows
@@ -145,7 +140,7 @@ export function ScheduleGridWorkspace({
           )
         }
         facts={
-          snapshot?.truncated || freshness !== "current" ? (
+          snapshot?.truncated || freshness === "disconnected" ? (
             <>
               {snapshot?.truncated ? (
                 <FactChip
@@ -162,14 +157,6 @@ export function ScheduleGridWorkspace({
                 >
                   disconnected
                 </FactChip>
-              ) : null}
-              {freshness === "changed" ? (
-                <ChangedInRevit
-                  what={`“${snapshot!.scheduleName}”`}
-                  busy={busy === "refresh"}
-                  disabled={busy != null}
-                  onReadAgain={readAgain}
-                />
               ) : null}
             </>
           ) : undefined

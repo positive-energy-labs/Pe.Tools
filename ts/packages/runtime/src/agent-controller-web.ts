@@ -259,14 +259,14 @@ export async function buildAgentControllerApp(
       ? c.json(result)
       : c.json(result ?? { ok: false, error: "view unavailable" }, 409);
   });
-  app.post("/pe/route-view/families/set-rules", async (c) => {
+  app.post("/pe/route-view/families/set-query", async (c) => {
     const parsed = familiesViewCommandSchema.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json({ ok: false, error: "invalid Families rules command" }, 400);
-    const result = await views.setRules(
+    if (!parsed.success) return c.json({ ok: false, error: "invalid Families query command" }, 400);
+    const result = await views.setQuery(
       parsed.data.thread,
       parsed.data.instance,
       parsed.data.revision,
-      parsed.data.rules,
+      parsed.data.query,
     );
     return c.json(result, (result as { ok: boolean }).ok ? 200 : 409);
   });

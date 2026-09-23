@@ -46,7 +46,9 @@ const POLL_MS: Record<string, number> = { "host-status": 5_000 };
 
 /** The document a Reading is bound to, or null when it is not one document's Reading. */
 const documentOf = (request: { kind: string } & Record<string, unknown>): DocumentRef | null =>
-  request.kind === "schedule-reading" || request.kind === "takeoff-reading"
+  request.kind === "schedule-reading" ||
+  request.kind === "takeoff-reading" ||
+  request.kind === "families-matrix"
     ? ((request.target as DocumentRef | undefined) ?? null)
     : request.kind === "family-readings"
       ? (((request.work as { open?: DocumentRef }).open ?? null) as DocumentRef | null)
@@ -66,12 +68,17 @@ const takenIn = (value: unknown): number | null => {
         capturedAt?: unknown;
         takenAt?: unknown;
         snapshot?: { takenAt?: unknown };
+        reading?: { observedAt?: unknown };
       }
     | null
     | undefined;
   // A Work slice (`{ doc, revision }`) rests on the Reading its doc says it was staged over.
   const iso =
-    record?.doc?.takenAt ?? record?.capturedAt ?? record?.snapshot?.takenAt ?? record?.takenAt;
+    record?.doc?.takenAt ??
+    record?.capturedAt ??
+    record?.snapshot?.takenAt ??
+    record?.reading?.observedAt ??
+    record?.takenAt;
   const at = typeof iso === "string" ? Date.parse(iso) : Number.NaN;
   return Number.isNaN(at) ? null : at;
 };
@@ -210,6 +217,8 @@ export function hostResourceObserver(
           );
         case "takeoff-reading":
           return captures().observe(request.target, accept);
+        case "families-matrix":
+          return captures().observeFamiliesMatrix(request.target, request.filter, accept);
         case "family-readings": {
           const owner = captures();
           return owner.observeFamily(request.work, accept);

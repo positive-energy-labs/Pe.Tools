@@ -1,27 +1,19 @@
-import { useState } from "react";
 import { showFamilyCell, type FamiliesPatchCell, type PodDraftSource } from "@pe/agent-contracts";
 
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { ActionButton } from "#/components/lang/action-button";
-import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "#/components/lang/dialog";
-import { Press } from "#/components/lang/press";
-import {
-  fanOutWord,
-  ReviewRow,
-  runFanOut,
-  UnstageAll,
-  type FanOutOutcome,
-} from "#/components/lang/band";
+import { ReviewRow } from "#/components/lang/band";
 import { ValueDiff } from "#/components/lang/value-diff";
 import type { Column } from "#/components/master-table/model";
 import { Table } from "#/components/master-table/table";
 import { familyCellEntries } from "#/families/staged";
 import type { SalvagedExclusion } from "#/families/store";
 import { filterWords } from "#/families/scope-band";
-import { SectionLabel } from "#/families/readout-primitives";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
+import { ARTIFACT } from "#/families/manifest";
+import { Inspect } from "#/route/inspect";
 import { cn } from "#/lib/utils";
 
 /** THE RECEIPTS: one bare `Table` row per family, as the op reported it. */
@@ -29,7 +21,7 @@ type Receipt = NonNullable<
   ReturnType<typeof useFamiliesWorkspace>["applyData"]
 >["receipts"][number];
 const CELL = "face-mono block truncate px-(--item-pad-x)";
-const receiptColumns = (openPath: (path: string) => unknown): Column<Receipt>[] => [
+const receiptColumns: Column<Receipt>[] = [
   {
     key: "family",
     label: "family",
@@ -87,82 +79,54 @@ const receiptColumns = (openPath: (path: string) => unknown): Column<Receipt>[] 
     label: "artifacts",
     width: "w-24",
     right: true,
+    // The bundle on disk, opened by the one inspectable policy the log's apply row uses.
     cell: (entry) =>
       entry.artifactDirectory && (
-        /* Leaving the app entirely — nav:out, which is the direction browsers
-           already taught. It writes nothing, so it is not blue-filled. */
-        <ActionButton
-          label="artifacts"
-          tone="nav"
-          direction="out"
-          onClick={() => void openPath(entry.artifactDirectory ?? "")}
-          reason={`Open the artifact bundle for this family in your OS file browser (${entry.artifactDirectory}). The bundle stays on disk — this route never copies it.`}
-        />
+        <Inspect spec={ARTIFACT} id={entry.artifactDirectory}>
+          artifacts
+        </Inspect>
       ),
   },
 ];
 
-/** What the last apply actually did, per family, as the op reported it. */
-export function FamiliesReceiptsBand() {
-  const { store, applyData } = useFamiliesWorkspace();
-  const [openError, setOpenError] = useState<string | null>(null);
-  const openPath = async (path: string) => {
-    setOpenError(null);
-    try {
-      await store.actions.openPath(path);
-    } catch (error) {
-      setOpenError(error instanceof Error ? error.message : String(error));
-    }
-  };
+/** The output pane after an apply: what it actually did, per family, as the op reported it. */
+export function FamiliesReceipts() {
+  const { applyData } = useFamiliesWorkspace();
   if (!applyData) return null;
-  const converged = applyData.receipts.filter((entry) => entry.converged).length;
   return (
-    <Dialog>
-      <DialogTrigger render={<Press tone="quiet" size="value" frame="line" />}>
-        Apply results · {converged}/{applyData.receipts.length} converged
-      </DialogTrigger>
-      <DialogContent>
-        <DialogTitle>Apply results</DialogTitle>
-        {openError ? (
-          <OutcomeLine kind="error" label="Couldn't open artifacts" says={openError} />
-        ) : null}
-        {applyData.diagnostics.map((issue) => (
-          <OutcomeLine
-            key={`${issue.code}:${issue.path}`}
-            kind="error"
-            label={issue.code}
-            says={issue.message}
-          />
-        ))}
-        <Table
-          label="receipts"
-          rows={applyData.receipts}
-          columns={receiptColumns(openPath)}
-          // A receipt is its family's, by name (ruling); the id it applied under is gone on reload.
-          rowKey={(entry) => entry.familyName}
-          empty={
-            <EmptyState story="scope" exit="re-plan and read the decision queue before retrying">
-              no receipts — apply ran and reported nothing
-            </EmptyState>
-          }
+    <div className="flex flex-col gap-1">
+      {applyData.diagnostics.map((issue) => (
+        <OutcomeLine
+          key={`${issue.code}:${issue.path}`}
+          kind="error"
+          label={issue.code}
+          says={issue.message}
         />
-      </DialogContent>
-    </Dialog>
+      ))}
+      <Table
+        label="receipts"
+        rows={applyData.receipts}
+        columns={receiptColumns}
+        // A receipt is its family's, by name (ruling); the id it applied under is gone on reload.
+        rowKey={(entry) => entry.familyName}
+        empty={
+          <EmptyState story="scope" exit="re-plan and read the decision queue before retrying">
+            no receipts — apply ran and reported nothing
+          </EmptyState>
+        }
+      />
+    </div>
   );
 }
 
 /**
- * THE PROPOSALS BAND — every pending cell on the table, one `ReviewRow` each: the matrix cell's
+ * THE PROPOSALS LIST — under the Work sentence, every pending cell on the table, one `ReviewRow` each: the matrix cell's
  * own verbs (exactly `availableTransitions`, over the families wire), findable without scrolling
- * a large matrix. Its "all" verbs are aggregates only: one `runFanOut` each (an aggregate accept
- * skips contested cells, A7), with the outcome in the kit's words. Plan reads staged cells.
+ * a large matrix. Its counts and aggregates are the Situation's Work sentence. Plan reads staged cells.
  */
 export function FamiliesProposalsBand() {
   const { cells, rows, params, wire, plan, store } = useFamiliesWorkspace();
-  const [outcome, setOutcome] = useState<FanOutOutcome | null>(null);
   const patch = store.handle.work.doc?.patch ?? ({} as FamiliesPatchCell);
-  const patchOpen = patch.proposal != null && patch.staged == null;
-  const patchStaged = patch.staged != null;
   const patchSource = (patch.staged ?? patch.proposal)?.value;
   // A plan row with no resolved id (no `hashKey`) is a name the host refused, in its own words.
   const orphans = new Map(
@@ -180,138 +144,72 @@ export function FamiliesProposalsBand() {
     );
     return key && row ? (row.values[key] ?? "") : null;
   };
-  const keys = entries.map((entry) => entry.key);
-  const open = entries.filter(({ cell }) => cell.proposal != null && cell.staged == null);
-  const staged = entries.filter(({ cell }) => cell.staged != null);
-  const all = (kind: "accept" | "deny") => void runFanOut(wire, cells, keys, kind).then(setOutcome);
-  if (!entries.length && !patchSource && !outcome?.refusal) return null;
+  if (!entries.length && !patchSource) return null;
   return (
-    <section aria-label="proposals" className="flex flex-col gap-1 py-1">
-      <Dialog>
-        <DialogTrigger render={<Press tone="quiet" size="value" frame="line" />}>
-          Review edits · {open.length + Number(patchOpen)} open ·{" "}
-          {staged.length + Number(patchStaged)} staged
-        </DialogTrigger>
-        <DialogContent>
-          <DialogTitle>Review family edits</DialogTitle>
-          <div className="flex items-center gap-2">
-            <SectionLabel>
-              <span title="Pea proposes; you stage reviewed values. Plan reads staged cells.">
-                proposals
+    // In the head's Work slot: that block is fixed and scrolls itself, so the grid never moves (F-R4-1).
+    <section aria-label="proposals" className="flex flex-col">
+      {patchSource ? (
+        <div>
+          <ReviewRow
+            wire={{ ...store.wire, segment: null }}
+            address="patch"
+            label={<span className="face-mono text-ink-2">native FF patch</span>}
+            cell={patch}
+            facts={{ value: <ValueDiff from={null} to={patchSource.path} /> }}
+            show={(value) =>
+              `${(value as PodDraftSource).path} · different patch bytes; inspect proposed source below`
+            }
+          />
+          {(["proposal", "staged"] as const).map((rung) =>
+            patch[rung] ? (
+              <details key={rung} className="t-small">
+                <summary>
+                  Review exact {rung} patch · {patch[rung]!.value.path}
+                </summary>
+                <pre className="max-h-64 overflow-auto whitespace-pre-wrap face-mono">
+                  {patch[rung]!.value.content}
+                </pre>
+              </details>
+            ) : null,
+          )}
+          {patch.staged != null && entries.some(({ cell }) => cell.staged != null) ? (
+            <OutcomeLine
+              kind="refused"
+              label="choose one staged edit lane"
+              says="Unstage the native patch or the per-type cells before planning."
+            />
+          ) : null}
+        </div>
+      ) : null}
+      {entries.map((entry) => (
+        <div key={entry.key}>
+          <ReviewRow
+            wire={wire}
+            address={entry.key}
+            label={
+              <span className="face-mono text-ink-2" data-proposal-row={entry.key}>
+                {entry.familyName} · {entry.typeName} · {entry.parameter}
               </span>
-            </SectionLabel>
-            <FactChip
-              tone={open.length + Number(patchOpen) ? "pea" : "meta"}
-              title="Proposals nobody has staged yet."
-            >
-              {open.length + Number(patchOpen)} open
-            </FactChip>
-            <FactChip
-              tone={staged.length + Number(patchStaged) ? "caution" : "meta"}
-              title="Staged edits: what plan will consume."
-            >
-              {staged.length + Number(patchStaged)} staged
-            </FactChip>
-            <span className="ml-auto flex items-center gap-1">
-              <ActionButton
-                tone="agent"
-                label="accept all cells"
-                disabled={!open.length}
-                reason={
-                  open.length
-                    ? `Accept every open proposal in one write; cells you staged yourself are skipped. Nothing reaches Revit until apply.`
-                    : "nothing is open to accept"
-                }
-                onClick={() => all("accept")}
-              />
-              <ActionButton
-                label="deny all cells"
-                reason="Clear every proposal on this table in one write. Staged values stay."
-                onClick={() => all("deny")}
-              />
-              <UnstageAll wire={wire} cells={cells} keys={keys} done={setOutcome} />
-            </span>
-          </div>
-          <div data-slot="proposals-list" className="flex flex-col gap-1">
-            {outcome ? (
-              <OutcomeLine
-                kind={outcome.refusal ? "refused" : "receipt"}
-                label={fanOutWord(outcome)}
-                says={outcome.refusal ? "nothing was written" : undefined}
-              />
-            ) : null}
-            {entries.length === 0 && !patchSource ? (
-              <span className="t-small text-ink-2">nothing proposed or staged</span>
-            ) : null}
-            {patchSource ? (
-              <div>
-                <ReviewRow
-                  wire={{ ...store.wire, segment: null }}
-                  address="patch"
-                  label={<span className="face-mono text-ink-2">native FF patch</span>}
-                  cell={patch}
-                  facts={{ value: <ValueDiff from={null} to={patchSource.path} /> }}
-                  show={(value) =>
-                    `${(value as PodDraftSource).path} · different patch bytes; inspect proposed source below`
-                  }
+            }
+            cell={entry.cell}
+            facts={{
+              value: (
+                <ValueDiff
+                  from={current(entry)}
+                  to={showFamilyCell(
+                    (entry.cell.staged ?? entry.cell.proposal)?.value ?? { value: "" },
+                  )}
                 />
-                {(["proposal", "staged"] as const).map((rung) =>
-                  patch[rung] ? (
-                    <details key={rung} className="t-small">
-                      <summary>
-                        Review exact {rung} patch · {patch[rung]!.value.path}
-                      </summary>
-                      <pre className="max-h-64 overflow-auto whitespace-pre-wrap face-mono">
-                        {patch[rung]!.value.content}
-                      </pre>
-                    </details>
-                  ) : null,
-                )}
-                {patchStaged && staged.length ? (
-                  <OutcomeLine
-                    kind="refused"
-                    label="choose one staged edit lane"
-                    says="Unstage the native patch or the per-type cells before planning."
-                  />
-                ) : null}
-              </div>
-            ) : null}
-            {entries.map((entry) => (
-              <div key={entry.key}>
-                <ReviewRow
-                  wire={wire}
-                  address={entry.key}
-                  label={
-                    <span className="face-mono text-ink-2" data-proposal-row={entry.key}>
-                      {entry.familyName} · {entry.typeName} · {entry.parameter}
-                    </span>
-                  }
-                  cell={entry.cell}
-                  facts={{
-                    value: (
-                      <ValueDiff
-                        from={current(entry)}
-                        to={showFamilyCell(
-                          (entry.cell.staged ?? entry.cell.proposal)?.value ?? { value: "" },
-                        )}
-                      />
-                    ),
-                  }}
-                  show={showFamilyCell}
-                />
-                {/* Orphaned: the plan could not resolve this family by name. Clearing stays free. */}
-                {orphans.has(entry.familyName) ? (
-                  <OutcomeLine
-                    kind="refused"
-                    label="orphaned"
-                    says={orphans.get(entry.familyName)}
-                  />
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
+              ),
+            }}
+            show={showFamilyCell}
+          />
+          {/* Orphaned: the plan could not resolve this family by name. Clearing stays free. */}
+          {orphans.has(entry.familyName) ? (
+            <OutcomeLine kind="refused" label="orphaned" says={orphans.get(entry.familyName)} />
+          ) : null}
+        </div>
+      ))}
     </section>
   );
 }

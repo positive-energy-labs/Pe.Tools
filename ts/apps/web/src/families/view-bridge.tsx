@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FamiliesView } from "@pe/agent-contracts";
 import { useHostEvents } from "#/readings";
 import {
-  acknowledgeFamiliesRules,
+  acknowledgeFamiliesQuery,
   publishFamiliesView,
   releaseFamiliesView,
 } from "#/host/families-view";
@@ -15,7 +15,7 @@ type Intent = {
   instance: string;
   commandId: string;
   revision: number;
-  rules: string;
+  query: string;
 };
 const ruleHelp = suggestionsFor("", [], []);
 
@@ -45,16 +45,16 @@ export function FamiliesViewBridge({
     return () => document.removeEventListener("visibilitychange", changed);
   }, []);
   const { store, lastReading, rows, params, families, tableState } = model;
-  const rules = tableState.rules ?? "";
+  const query = tableState.query ?? "";
   const pivot = useMemo(() => buildPivot(rows, params, families), [rows, params, families]);
   const counts = useMemo(() => {
-    const filtered = applyRules(rules, pivot.pivotRows, pivot.pivotFamilies);
+    const filtered = applyRules(query, pivot.pivotRows, pivot.pivotFamilies);
     return {
       families: filtered.shownFamilies.length,
       types: filtered.shownFamilies.reduce((sum, family) => sum + family.types, 0),
       parameters: filtered.shownRows.length,
     };
-  }, [pivot, rules]);
+  }, [pivot, query]);
   const stage = store.page.stage;
   const rawView: FamiliesView | null =
     thread &&
@@ -66,7 +66,7 @@ export function FamiliesViewBridge({
           instance: instance.current,
           surface,
           stage: stage as FamiliesView["stage"],
-          rules,
+          query,
           ruleHelp,
           readingId: lastReading?.id ?? null,
           document: lastReading?.document ?? store.documentTarget,
@@ -125,22 +125,22 @@ export function FamiliesViewBridge({
       )
         return;
       setCommandIntent(event);
-      store.setPage({ rules: event.rules });
+      store.setPage({ query: event.query });
     },
     [store.setPage],
   );
   useHostEvents(Boolean(view), onEvent);
   useEffect(() => {
-    if (!commandIntent || !view || rules !== commandIntent.rules) return;
+    if (!commandIntent || !view || query !== commandIntent.query) return;
     let canceled = false;
     void publish(view)
       .then(async () => {
         if (canceled) return;
-        await acknowledgeFamiliesRules({
+        await acknowledgeFamiliesQuery({
           instance: instance.current,
           commandId: commandIntent.commandId,
           revision: commandIntent.revision,
-          rules,
+          query,
           counts,
         });
         if (!canceled) setCommandIntent(null);
@@ -149,6 +149,6 @@ export function FamiliesViewBridge({
     return () => {
       canceled = true;
     };
-  }, [commandIntent, view, rules, counts, publish]);
+  }, [commandIntent, view, query, counts, publish]);
   return null;
 }

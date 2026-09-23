@@ -132,7 +132,7 @@ test("pe_find maps every kind and ranks and filters visible rows", async () => {
   const view = (await find({ query: "visible families rules" })).matches;
   expect(view.map((row) => row.key)).toContain("route:families.view");
   expect(
-    catalog().capabilities.find((row) => row.key === "route:families.set-rules")?.mutates,
+    catalog().capabilities.find((row) => row.key === "route:families.set-query")?.mutates,
   ).toBe(true);
   expect((await find({ query: "loaded families" })).matches[0]?.key).toBe(
     "op:revit.catalog.loaded-families",
@@ -344,7 +344,7 @@ test("Families view Pea doors require a mounted pane and return an exact retaine
         instance,
         revision: 2,
         stage: "archived",
-        rules: "blank",
+        query: "blank",
         readingId: "r1",
         document: { session: "s", openId: "o" },
         work: { binding: "host", route: "families", target: null },
@@ -363,17 +363,17 @@ test("Families view Pea doors require a mounted pane and return an exact retaine
         },
       });
     }
-    if (url.pathname === "/pe/route-view/families/set-rules") {
+    if (url.pathname === "/pe/route-view/families/set-query") {
       expect(JSON.parse(String(init?.body))).toMatchObject({
         thread: turn.thread,
         instance,
         revision: 2,
-        rules: "filled",
+        query: "filled",
       });
       return Response.json(
         stale
           ? { ok: false, error: "view changed" }
-          : { ok: true, rules: "filled", counts: { families: 1, types: 2, parameters: 3 } },
+          : { ok: true, query: "filled", counts: { families: 1, types: 2, parameters: 3 } },
         { status: stale ? 409 : 200 },
       );
     }
@@ -396,16 +396,16 @@ test("Families view Pea doors require a mounted pane and return an exact retaine
   expect(view.result.reading.apsParametersCache.artifact.url).toContain("http://127.0.0.1:9/");
   expect(
     await run(peDo, {
-      key: "route:families.set-rules",
-      input: { instance, revision: 2, rules: "filled" },
+      key: "route:families.set-query",
+      input: { instance, revision: 2, query: "filled" },
       timeoutSeconds: 30,
     }),
   ).toMatchObject({ ok: true });
   stale = true;
   expect(
     await run(peDo, {
-      key: "route:families.set-rules",
-      input: { instance, revision: 2, rules: "filled" },
+      key: "route:families.set-query",
+      input: { instance, revision: 2, query: "filled" },
       timeoutSeconds: 30,
     }),
   ).toMatchObject({ ok: false });

@@ -5,6 +5,7 @@ import { actionRecipe } from "#/components/lang/action-button";
 import { FactChip } from "#/components/lang/chip";
 import { Kbd } from "#/components/lang/kbd";
 import { Press } from "#/components/lang/press";
+import { changedInRevit } from "#/readings";
 import type { RouteAction } from "./manifest";
 import type { ActionHandle, RouteHandle } from "./use-route";
 
@@ -46,7 +47,17 @@ export function SituationAction({
   const refusedNow = Boolean(outcome?.refusal) && dismissed !== outcome?.at;
   const stopped = action.refusal !== null || (handle.busy !== null && busy === null);
   const flag = useContext(ActionFlag)[name];
-  const reason = `${action.refusal ?? action.says}${chord ? ` · ${chord}` : ""}`;
+  // The read verb wears Revit's change mark on what it reads (MAP ruling 5); never a second button.
+  const rereads = (handle.manifest.actions as Record<string, { rereads?: string } | undefined>)?.[
+    name
+  ]?.rereads;
+  const stale =
+    rereads === undefined
+      ? false
+      : rereads in handle.readings
+        ? changedInRevit(handle.readings[rereads])
+        : rereads === "work" && handle.work.changed;
+  const reason = `${action.refusal ?? `${stale ? "Revit changed this document since the last read. " : ""}${action.says}`}${chord ? ` · ${chord}` : ""}`;
   return (
     <span className="group relative inline-flex">
       <Popover.Root open={shown} onOpenChange={(o) => !o && outcome && setDismissed(outcome.at)}>
@@ -58,7 +69,7 @@ export function SituationAction({
               size="value"
               state={stopped ? "disabled" : "rest"}
               aria-disabled={stopped}
-              data-tone={refusedNow ? "caution" : undefined}
+              data-tone={refusedNow || stale ? "caution" : undefined}
               title={reason}
               onClick={() => void action.run()}
               style={{ fontWeight: commit ? 600 : undefined }}
@@ -165,7 +176,7 @@ export function ActionBoard({
   /** The chords the stage node binds, by verb; a route-bound chord comes off the action. */
   chords?: Readonly<Record<string, string | undefined>>;
   commit?: string;
-  /** Where Work stands, beside the verbs ("r3 · 2 room edits staged"); null draws no meter. */
+  /** Where Work stands, beside the verbs ("r3"; the Work sentence owns counts); null draws no meter. */
   work: string | null;
 }) {
   const [open, setOpen] = useState(false);

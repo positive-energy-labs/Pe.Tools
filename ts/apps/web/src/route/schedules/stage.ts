@@ -24,9 +24,9 @@ const grid: PaneDecl<R, A> = {
 // Revealing this pane moves no focus (ledger 2026-09-22).
 const spec: PaneDecl<R, A> = { draws: ["pods"], verbs: ["save"] };
 
-const verbs: readonly A[] = ["push", "capture", "apply"];
+const verbs: readonly A[] = ["refresh", "push", "capture", "apply"];
 // Push binds Mod+Enter — the one chord that writes to Revit (ledger 2026-09-22).
-const keys = { push: "Mod+Enter" } as const;
+const keys = { refresh: "R", push: "Mod+Enter" } as const;
 // Push is a stage verb: the stage node binds this chord (`route/keys.tsx` `stageChords`), so it is
 // live only while a stage of this route draws, and the manifest carries no chord for it.
 

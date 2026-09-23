@@ -1,3 +1,5 @@
+import type { QueryGrammar, QueryToken } from "#/components/master-table/model";
+import { tokenAt } from "#/components/master-table/view";
 import type { ParamColumn, TypeRow } from "#/families/matrix-columns";
 import type { FamilySnapshotRecord } from "#/host/loaded-families-view";
 
@@ -109,8 +111,11 @@ const RULES: readonly Rule[] = [
   },
 ];
 
+/** A bare word the rule catalogue does not name is free text: the frame's substring search. */
+const free = (raw: string) => /^[^!:<>=]+$/.test(raw);
+
 const numeric = /^(fams|filled)(>=|<=|>|<|=)(\d+)(%?)$/;
-export const decoded = (word: string) => {
+const decoded = (word: string) => {
   try {
     return decodeURIComponent(word);
   } catch {
@@ -145,10 +150,7 @@ function parseRules(text: string, families: readonly PivotFamily[]) {
       const want = Number(n);
       numbers.push({
         raw,
-        label:
-          field === "fams"
-            ? `parameters on ${op} ${n} families`
-            : `parameters ${op} ${n}${pct} ${pct ? "of types" : "types"} filled`,
+        label: numberLabel(field!, op!, n!, pct!),
         test: (row) =>
           compare(
             field === "fams"
@@ -170,7 +172,7 @@ function parseRules(text: string, families: readonly PivotFamily[]) {
       );
       if (hit) hidden.add(hit.name);
       else unknown.push(raw);
-    } else unknown.push(raw);
+    } else if (!free(raw)) unknown.push(raw);
   }
   return { rules, numbers, hidden, family, parameter, unknown };
 }
@@ -267,8 +269,47 @@ export function suggestionsFor(
   ].filter((entry) => entry.insert.startsWith(lower));
 }
 
-export const removeToken = (text: string, token: string) =>
-  text
-    .split(/\s+/)
-    .filter((word) => word !== token)
-    .join(" ");
+function numberLabel(field: string, op: string, n: string, pct: string) {
+  return field === "fams"
+    ? `parameters on ${op} ${n} families`
+    : `parameters ${op} ${n}${pct} ${pct ? "of types" : "types"} filled`;
+}
+
+/** The families query grammar: one catalogue supplies tokens, chips, and suggestions. */
+export function familiesGrammar(
+  rows: readonly PivotRow[],
+  families: readonly PivotFamily[],
+): QueryGrammar {
+  const kindOf = (raw: string): QueryToken["kind"] => {
+    const { unknown } = parseRules(raw, families);
+    if (unknown.length) return "unknown";
+    return free(raw) && !RULES.some((rule) => rule.word === raw.toLowerCase()) ? "free" : "rule";
+  };
+  return {
+    tokens: (text) =>
+      text
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((raw) => ({ text: raw, kind: kindOf(raw) })),
+    suggest: (text, caret) =>
+      suggestionsFor(tokenAt(text, caret).text.toLowerCase(), families, rows),
+    chip: ({ text, kind }) => {
+      const lower = text.toLowerCase();
+      const match = numeric.exec(lower);
+      const label =
+        kind === "unknown"
+          ? `unknown: ${text}`
+          : kind === "free"
+            ? `search: ${text}`
+            : (RULES.find((rule) => rule.word === lower)?.label ??
+              (match
+                ? numberLabel(match[1]!, match[2]!, match[3]!, match[4]!)
+                : text.startsWith("!")
+                  ? `hide ${decoded(text.slice(1))}`
+                  : lower.startsWith("f:")
+                    ? `families containing ${decoded(text.slice(2))}`
+                    : `parameters containing ${decoded(text.slice(2))}`));
+      return { label };
+    },
+  };
+}

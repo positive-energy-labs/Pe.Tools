@@ -125,11 +125,11 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
       rank: 2,
     },
     {
-      key: "route:families.set-rules",
+      key: "route:families.set-query",
       kind: "route-command",
-      title: "Set Families visible rules",
+      title: "Set Families visible query",
       description:
-        "Change the rule line in one mounted Families view. Read route:families.view first, then pass its instance and revision. The browser acknowledges the rendered rules and counts. No Work or Revit read.",
+        "Change the query line in one mounted Families view. Read route:families.view first, then pass its instance and revision. The browser acknowledges the rendered query and counts. No Work or Revit read.",
       finds: ["families", "filter", "rules", "visible"],
       needs: "nothing",
       mutates: true,
@@ -138,7 +138,7 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
         z.object({
           instance: z.uuid(),
           revision: z.number().int().nonnegative(),
-          rules: z.string().max(4096),
+          query: z.string().max(4096),
         }),
       ) as Record<string, unknown>,
       source: "browser Page",

@@ -2,10 +2,29 @@ import { RefreshCw, Save } from "lucide-react";
 
 import { Press, pressRecipe } from "#/components/lang/press";
 import { ActionButton, ActionGroup, actionRecipe } from "#/components/lang/action-button";
+import { Section } from "#/components/lang/section";
+import { SituationAction } from "#/route/situation-verbs";
 
 import { RecipeGrid } from "./recipe-grid";
 
 const noop = () => {};
+
+/** A read verb whose Work Revit changed since the read: the verb wears the mark, no second button. */
+const staleHandle = {
+  manifest: { actions: { read: { rereads: "work" } } },
+  readings: {},
+  work: { changed: true },
+  outcome: null,
+  busy: null,
+  stop: noop,
+} as never;
+const readVerb = {
+  label: "read families",
+  says: "Read the drafted families from this exact document.",
+  refusal: null,
+  count: null,
+  run: noop,
+} as never;
 
 export function LangPressSpecimens() {
   return (
@@ -56,6 +75,9 @@ export function LangPressSpecimens() {
           );
         }}
       />
+      <Section label="SituationAction · stale">
+        <SituationAction handle={staleHandle} name="read" action={readVerb} chord="R" />
+      </Section>
     </>
   );
 }

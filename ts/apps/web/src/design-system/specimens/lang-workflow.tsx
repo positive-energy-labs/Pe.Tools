@@ -6,10 +6,11 @@ import { ArmingStrip, armingStripRecipe } from "#/components/lang/arming-strip";
 import { ArtifactFrame, artifactFrameRecipe } from "#/components/lang/artifact-frame";
 import {
   reviewAddresses,
-  reviewCommit,
   ReviewRow,
   UnstageAll,
-  WorkBand,
+  WorkSentence,
+  WorkStanding,
+  workSummary,
   type CellWire,
 } from "#/components/lang/band";
 import { StateCell } from "#/components/lang/cell";
@@ -42,30 +43,32 @@ export function LangWorkflowSpecimens() {
           <Kbd mute>Esc</Kbd>
         </div>
       </SpecimenFrame>
-      <SpecimenFrame name="WorkBand · ReviewRow · UnstageAll" importPath="#/components/lang/band">
-        <UnstageAll
-          wire={wire}
+      <SpecimenFrame
+        name="WorkSentence · WorkStanding · ReviewRow · UnstageAll"
+        importPath="#/components/lang/band"
+      >
+        <WorkSentence
+          summary={workSummary(REVIEW_SPECIMEN, { groupOf: (key) => [key] }, ["field"])}
           cells={REVIEW_SPECIMEN}
-          keys={Object.keys(REVIEW_SPECIMEN)}
-          done={noop}
+          wire={wire}
+          commit={<ActionButton label="save" reason="Write every staged field" onClick={noop} />}
         />
-        <WorkBand
-          count={2}
-          noun="edit"
-          revision={4}
-          discard={noop}
-          commit={reviewCommit("save 2 staged", 2, noop)}
-          visible
-          body={reviewAddresses(REVIEW_SPECIMEN).map(([address, cell]) => (
-            <ReviewRow
-              key={address}
-              wire={wire}
-              address={address}
-              label={address}
-              cell={cell}
-              facts={{ value: String((cell.staged ?? cell.proposal)?.value) }}
-            />
-          ))}
+        <UnstageAll wire={wire} cells={REVIEW_SPECIMEN} keys={["Face Width"]} done={noop} />
+        {reviewAddresses(REVIEW_SPECIMEN).map(([address, cell]) => (
+          <ReviewRow
+            key={address}
+            wire={wire}
+            address={address}
+            label={address}
+            cell={cell}
+            facts={{ value: String((cell.staged ?? cell.proposal)?.value) }}
+          />
+        ))}
+        <WorkStanding
+          lifetime="Unsaved document. This Work lives until it closes. Save to keep it."
+          unresolved={["another writer changed this Work; your last write did not land"]}
+          conflict
+          reload={noop}
         />
       </SpecimenFrame>
       <RecipeGrid

@@ -87,13 +87,20 @@ export interface NarrowChipProps {
   onRemove: () => void;
   /** Required: what this narrowing does to the view. */
   title: string;
+  /** A narrowing the grammar could not read: it admits nothing and says so. */
+  caution?: boolean;
 }
 
 /** A removable narrowing control. Same shell as a fact, one affordance more. */
-export function NarrowChip({ label, count, onRemove, title }: NarrowChipProps) {
-  const { base, count: countSlot, remove } = chipRecipe();
+export function NarrowChip({ label, count, onRemove, title, caution }: NarrowChipProps) {
+  const { base, count: countSlot, remove } = chipRecipe({ tone: caution ? "caution" : "meta" });
   return (
-    <span className={base()} data-surface="artifact" title={title}>
+    <span
+      className={base()}
+      data-tone={caution ? "caution" : undefined}
+      data-surface="artifact"
+      title={title}
+    >
       {label}
       <span className={countSlot()}>{count}</span>
       <button

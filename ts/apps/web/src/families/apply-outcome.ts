@@ -14,6 +14,43 @@ export interface PlanRun {
   readonly action: ActionReceipt;
 }
 
+/** The per-family receipts one plan's action reported; none unless its apply step succeeded. */
+const receiptsOf = (action: ActionReceipt) => {
+  const step = action.steps.find(
+    (one) => one.key === "families.apply" && one.state === "succeeded",
+  );
+  const native = (step?.state === "succeeded" ? step.result : undefined) as
+    | { receipts?: unknown[] }
+    | undefined;
+  return ffReceiptSchema.array().parse(native?.receipts ?? []);
+};
+
+/**
+ * One apply's receipts in counts, and the run's artifact directory: the one directory every
+ * receipt's bundle sits in (their common parent), or null when no receipt names one on disk.
+ */
+export function applyTally(runs: readonly PlanRun[]) {
+  const receipts = runs.flatMap(({ action }) => receiptsOf(action));
+  const dirs = [
+    ...new Set(receipts.flatMap((r) => (r.artifactDirectory ? [r.artifactDirectory] : []))),
+  ];
+  const common = dirs.reduce((a, b) => {
+    let i = 0;
+    while (i < a.length && a[i] === b[i]) i++;
+    return a.slice(0, i);
+  }, dirs[0] ?? "");
+  return {
+    families: receipts.length,
+    converged: receipts.filter((r) => r.converged).length,
+    residue: receipts.filter((r) => r.success && !r.converged).length,
+    failed: receipts.filter((r) => !r.success).length,
+    artifact:
+      dirs.length === 1
+        ? dirs[0]!
+        : common.slice(0, Math.max(common.lastIndexOf("/"), common.lastIndexOf("\\"))) || null,
+  };
+}
+
 export function applyOutcome(runs: readonly PlanRun[], planned: number): Refusal | null {
   let applied = 0;
   const failed: string[] = [];
@@ -21,13 +58,7 @@ export function applyOutcome(runs: readonly PlanRun[], planned: number): Refusal
   let effectsUnproven = false;
   for (const { families, action } of runs) {
     if (action.state === "succeeded") {
-      const step = action.steps.find(
-        (one) => one.key === "families.apply" && one.state === "succeeded",
-      );
-      const native = (step?.state === "succeeded" ? step.result : undefined) as
-        | { receipts?: unknown[] }
-        | undefined;
-      for (const receipt of ffReceiptSchema.array().parse(native?.receipts ?? [])) {
+      for (const receipt of receiptsOf(action)) {
         if (receipt.success) applied += 1;
         else
           failed.push(

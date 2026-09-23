@@ -359,7 +359,7 @@ export function useRoute<W, R extends string, P, A extends string>(
   usePageLogNotes(owner, {
     target: boundKey,
     stage: manifest.stages?.find((item) => item.key === stage)?.word,
-    revision: doc?.revision ?? null,
+    work: { slice: doc, segment: manifest.cells?.segment },
     lost: bindingLost,
   });
 
@@ -413,6 +413,8 @@ export function useRoute<W, R extends string, P, A extends string>(
       },
       readings,
       page,
+      note: (label: string, says: string, refused = false, link?: LogEntry["link"]) =>
+        owner.note("verb", label, says, refused, undefined, link),
       call: (operation: string, input?: unknown) =>
         callHostDynamic(operation, input, targetHeaders(ctx.target)),
       // Bound to the action's snapshot, through the queue: it follows this owner's own landed

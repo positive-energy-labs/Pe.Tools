@@ -1,3 +1,4 @@
+import { plural } from "#/components/lang/band";
 import { Pane } from "#/components/lang/pane";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
@@ -10,7 +11,7 @@ import { DEMO_FAMILIES_SPEC } from "#/families/seeds";
 import {
   FamiliesCarryOverLine,
   FamiliesProposalsBand,
-  FamiliesReceiptsBand,
+  FamiliesReceipts,
   SalvagedExclusions,
 } from "#/families/readout-bands";
 import { LoadedFamilyPlacement } from "#/host/loaded-families-view";
@@ -22,10 +23,7 @@ import type { Rung } from "#/route/ladder";
 import { Ladder } from "#/route/ladder";
 import type { FamiliesObservationSummary } from "#/families/host";
 import { inventoryOf, previousOf } from "#/readings";
-import { FamiliesReadStatus as ReadStatus } from "./read-status";
-
-const noun = (n: number, word: string) =>
-  `${n} ${n === 1 ? word : word.endsWith("y") ? `${word.slice(0, -1)}ies` : `${word}s`}`;
+import { ActionButton } from "#/components/lang/action-button";
 
 const archiveDocument = (
   read: FamiliesObservationSummary,
@@ -39,25 +37,6 @@ const archiveDocument = (
     ? read.work.target.split(/[\\/]/).at(-1) || read.work.target
     : read.document.openId);
 
-function FamiliesReadStatus({ archived }: { archived: boolean }) {
-  const { store, lastReading, retainedError, changed, matrixReading, readAgain } =
-    useFamiliesWorkspace();
-  return (
-    <ReadStatus
-      reading={lastReading}
-      error={retainedError}
-      changed={changed}
-      archived={archived}
-      loading={archived && matrixReading}
-      failure={archived ? store.archive.failure : undefined}
-      retry={archived ? store.archive.retry : undefined}
-      readAgain={archived ? undefined : readAgain}
-      busy={matrixReading}
-      readbackError={archived ? null : store.readbackError}
-    />
-  );
-}
-
 function FamiliesArchivedView({ url }: { url?: boolean }) {
   const { store, lastReading } = useFamiliesWorkspace();
   const navigate = useNavigate();
@@ -69,7 +48,7 @@ function FamiliesArchivedView({ url }: { url?: boolean }) {
       replace: true,
     } as never);
   }, [url, navigate]);
-  const { list, selectedId, loading, error, select } = store.archive;
+  const { list, selectedId, loading, error, failure, retry, select } = store.archive;
   const observed = previousOf(store.handle.inventory) as
     | { sessions?: Parameters<typeof inventoryOf>[0] }
     | undefined;
@@ -81,7 +60,6 @@ function FamiliesArchivedView({ url }: { url?: boolean }) {
         <Situation
           handle={store.handle}
           inspection
-          band={<FamiliesReadStatus archived />}
           target={{ session: null, document: null }}
           chooseStage={(stage) => store.setPage({ stage: stage as "audit" | "apply" | "archived" })}
           sentence={
@@ -100,11 +78,15 @@ function FamiliesArchivedView({ url }: { url?: boolean }) {
                       label: archiveDocument(read, sessions),
                       sub: `${filterWords(read.filter)} · ${new Date(read.completedAt).toLocaleString()}${read.readback ? " · after apply" : ""}`,
                     })),
-                    note: error
-                      ? "past reads unavailable — retry below"
-                      : loading
-                        ? "loading past reads…"
-                        : "no past reads",
+                    note: error ? failure : loading ? "loading past reads…" : "no past reads",
+                    extra: error ? (
+                      <ActionButton
+                        label="Retry"
+                        reason={`Try loading the saved data again; does not read Revit · ${error}`}
+                        onClick={retry}
+                        busy={loading}
+                      />
+                    ) : undefined,
                     picked: (id) => id === selectedId,
                     pick: select,
                   },
@@ -180,6 +162,7 @@ function FamiliesActiveView({ url }: { url?: boolean }) {
     setPlacement,
     setDraftCategories,
     setPickedFamilies,
+    wire,
   } = useFamiliesWorkspace();
   const categoryCheck = (id: string): boolean | "mixed" => {
     if (!id) {
@@ -319,17 +302,17 @@ function FamiliesActiveView({ url }: { url?: boolean }) {
       }
       subject={<>loaded families</>}
       health={matrixIssue?.title ?? null}
-      band={
+      wire={wire}
+      output={store.applyData ? <FamiliesReceipts /> : null}
+      // The Work sentence, then what the Work carries beside its cells.
+      work={(_, sentence) => (
         <>
-          <div className="flex flex-wrap items-center gap-x-3">
-            <FamiliesReadStatus archived={false} />
-            <FamiliesReceiptsBand />
-          </div>
+          {sentence}
           <FamiliesCarryOverLine />
           <FamiliesScopeProposal />
           <FamiliesProposalsBand />
         </>
-      }
+      )}
       startFreshAside={<SalvagedExclusions />}
       onStartedFresh={store.actions.startedFresh}
       hold={(id) => {
@@ -340,7 +323,7 @@ function FamiliesActiveView({ url }: { url?: boolean }) {
         [
           "scope",
           applied
-            ? `${applied.placementScope} · ${applied.categoryNames.join(", ") || "every category"} · ${noun(scoped, "family")}`
+            ? `${applied.placementScope} · ${applied.categoryNames.join(", ") || "every category"} · ${plural(scoped, "family")}`
             : "none read",
         ],
         [

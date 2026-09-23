@@ -6,8 +6,8 @@
  * narrow screen. The ledger lives behind the gauge. The verb row projects into a vertical view on
  * its toggle, where each button says why it is refused (or what it does) and what it dispatches.
  * Every verb's outcome grows out of its button as a flag; nothing else in the head moves. Under
- * it: the staged Work band (count and noun, revision, read freshness, commit, discard; the route
- * fills its body) and the unresolved band (lost write, conflicting writer, last refusal).
+ * it: the Work slot (by default one sentence of what is staged and proposed, the aggregates and
+ * commit; a route may replace it) and the Work's standing lines (lifetime, lost write, conflict).
  *
  * The head is an ARTIFACT — a machine-operated object that carries state — so it wears the kit's
  * one enclosure: the name line is the recessed head band, the board sits on artifact ground. Four
@@ -16,16 +16,24 @@
  * The route declares its verbs once (its manifest) and this file only draws them: dotted =
  * operable, dashed = empty slot, caution = the world disagrees, bold = unsaved, mono = measured.
  */
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
+import type { TrichotomyCellLike } from "@pe/agent-contracts";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { WorkBand, workBandWord } from "#/components/lang/band";
+import {
+  WorkSentence,
+  workWord,
+  WorkStanding,
+  workSummary,
+  type CellWire,
+  type WorkSummary,
+} from "#/components/lang/band";
 import { useHostEvents } from "#/readings";
 import { Ladder } from "./ladder";
 import type { ActionHandle, RouteHandle } from "./use-route";
 import { Ledger, PageLog } from "./situation-grids";
 import { useChatPlanIntent } from "./situation-ladder";
 import { ChainLamp, Cluster } from "./situation-lamp";
-import { ActionBoard, Label } from "./situation-verbs";
+import { ActionBoard, SituationAction } from "./situation-verbs";
 
 export interface SituationProps {
   handle: RouteHandle<any, any, any, any>;
@@ -48,22 +56,13 @@ export interface SituationProps {
   /** False: no Work meter beside the verbs (`StageDecl.meter`). */
   meter?: false;
   /**
-   * Staged Work. When `count` is above zero the band under the verb row shows: the frame (count
-   * and noun, revision, read freshness, commit, discard, conflict with reload) is drawn here and
-   * `body` is what the route puts inside it (its staged rows).
+   * The Work slot, given the cells' summary and the default sentence (`WorkSentence`, with the
+   * aggregates and the commit verb). Absent, the sentence alone. A route with cells keeps the
+   * sentence and adds beside it: while cells are staged the commit is drawn nowhere else.
    */
-  work?: {
-    count: number;
-    /** Singular; pluralized by count ("room edit"). */
-    noun: string;
-    /** When the document was last read, as the route words it ("14:02:11 · stale"). */
-    read?: string;
-    /** Drop everything staged. The band's Discard verb. */
-    discard: () => Promise<unknown>;
-    body?: ReactNode;
-  };
-  /** Free content under the verb row, for routes without a Work frame. Prefer `work`. */
-  band?: ReactNode;
+  work?: (summary: WorkSummary, sentence: ReactNode) => ReactNode;
+  /** How the default's aggregates write; absent = the Work's own write at the manifest's segment. */
+  wire?: CellWire;
   /** Read-only, in the start-fresh confirm: what the set-aside Work carried (a route's salvage). */
   startFreshAside?: ReactNode;
   /** After start fresh landed: the route may offer what the old Work carried. */
@@ -105,6 +104,8 @@ function useDiscardReceipt(handle: RouteHandle<any, any, any, any>, enabled = tr
   };
 }
 
+const NO_CELLS: Record<string, TrichotomyCellLike> = {};
+
 type DiscardEvent = {
   type?: string;
   action?: string;
@@ -125,7 +126,7 @@ export function Situation({
   chords,
   meter,
   work,
-  band,
+  wire: routeWire,
   startFreshAside,
   onStartedFresh,
   ledger,
@@ -137,6 +138,19 @@ export function Situation({
   const stages = handle.manifest.stages ?? [];
   const stage = typeof page.stage === "string" ? page.stage : null;
   const word = stages.find((item) => item.key === stage)?.word ?? handle.manifest.name;
+  const spec = handle.manifest.cells;
+  const doc = handle.work.doc as Record<string, Record<string, TrichotomyCellLike>> | null;
+  const cells = (spec && doc?.[spec.segment]) || NO_CELLS;
+  const wire: CellWire = routeWire ?? {
+    segment: spec?.segment ?? null,
+    revision: handle.work.revision,
+    write: handle.work.write,
+  };
+  const { lockOf } = wire;
+  const summary = useMemo(
+    () => workSummary(cells, { groupOf: spec?.groupOf ?? (() => []), lockOf }, spec?.nouns),
+    [cells, spec, lockOf],
+  );
   const verbs = Object.entries(handle.actions).filter(
     ([name, action]) =>
       (declaredVerbs ? declaredVerbs.includes(name) : !action.stage || action.stage === stage) &&
@@ -144,16 +158,33 @@ export function Situation({
         name
       ]?.sheet &&
       (handle.manifest.actions as Record<string, { visible?: false }> | undefined)?.[name]
-        ?.visible !== false,
+        ?.visible !== false &&
+      // The commit verb is drawn once: in the Work sentence while something is staged, else here.
+      !(name === commit && summary.staged > 0),
   ) as [string, ActionHandle][];
-  const staged = !inspection && work && work.count > 0 ? work : null;
   const receipt = useDiscardReceipt(handle, !inspection);
   const commitAction = !inspection && commit ? handle.actions[commit] : undefined;
+  const workLine = (
+    <WorkSentence
+      summary={summary}
+      cells={cells}
+      wire={wire}
+      commit={
+        commit && commitAction ? (
+          <SituationAction
+            handle={handle}
+            name={commit}
+            action={commitAction}
+            chord={chords?.[commit] ?? commitAction.chord}
+            commit
+          />
+        ) : null
+      }
+    />
+  );
   useChatPlanIntent(handle, commitAction);
-  const workWord = workBandWord({
+  const meterWord = workWord({
     revision: handle.work.revision,
-    count: staged?.count ?? 0,
-    noun: staged?.noun ?? "edit",
     conflict: handle.work.conflict,
     unreadable: handle.work.refusal != null,
   });
@@ -187,7 +218,7 @@ export function Situation({
               }
               state={
                 <Ledger
-                  rows={inspection ? (ledger ?? []) : [...(ledger ?? []), ["work", workWord]]}
+                  rows={inspection ? (ledger ?? []) : [...(ledger ?? []), ["work", meterWord]]}
                 />
               }
             />
@@ -225,35 +256,20 @@ export function Situation({
                 verbs={verbs}
                 chords={chords}
                 commit={commit}
-                work={meter === false ? null : workWord}
+                work={meter === false ? null : meterWord}
               />
             ) : null}
-            {/* F-R4-1: the staged and unresolved lines (and a route's band) share ONE fixed
+            {/* F-R4-1: the Work slot and the standing lines share ONE fixed
                 block that scrolls itself, so a first stage or a refusal never grows the head and
                 moves the grid under the person (fixture look 12: a refusal moved it 28px). */}
             {!inspection ? (
               <div data-slot="situation-band" className="h-16 overflow-y-auto">
-                <WorkBand
-                  count={staged?.count ?? 0}
-                  noun={staged?.noun ?? "edit"}
-                  revision={handle.work.revision}
-                  read={staged?.read}
+                {work ? work(summary, workLine) : workLine}
+                <WorkStanding
                   conflict={handle.work.conflict}
-                  busy={handle.busy !== null}
-                  discard={() => void staged?.discard()}
-                  commit={
-                    commitAction
-                      ? {
-                          label: commitAction.label,
-                          reason: commitAction.refusal ?? commitAction.says,
-                          disabled: commitAction.refusal !== null,
-                          run: () => void commitAction.run(),
-                        }
-                      : undefined
-                  }
                   unresolved={unresolved as string[]}
                   lifetime={
-                    handle.work.ephemeral && staged
+                    handle.work.ephemeral && summary.staged
                       ? "Unsaved document. This Work lives until it closes. Save to keep it."
                       : undefined
                   }
@@ -268,26 +284,15 @@ export function Situation({
                       : undefined
                   }
                   startFreshAside={startFreshAside}
-                  body={staged?.body}
-                  showRevision={false}
                 />
-                {band}
               </div>
             ) : (
-              band
+              work?.(summary, null)
             )}
           </div>
           {!inspection ? (
-            <div className="flex min-w-[24rem] flex-[2] flex-col">
-              <div className="hairline-t flex flex-col gap-1 py-1.5">
-                <span className="flex items-baseline gap-2">
-                  <Label>log</Label>
-                  {handle.log.length ? (
-                    <span className="t-small face-mono text-ink-mute">{handle.log.length}</span>
-                  ) : null}
-                </span>
-                <PageLog entries={handle.log} />
-              </div>
+            <div className="min-w-[24rem] flex-[2]">
+              <PageLog entries={handle.log} manifest={handle.manifest} />
             </div>
           ) : null}
         </div>

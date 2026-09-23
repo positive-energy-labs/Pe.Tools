@@ -7,7 +7,7 @@ type Intent = {
   instance: string;
   commandId: string;
   revision: number;
-  rules: string;
+  query: string;
 };
 const MAX_AGE_MS = 15_000;
 
@@ -19,7 +19,7 @@ export class RouteViewStore {
     string,
     {
       lease: Lease;
-      rules: string;
+      query: string;
       resolve: (value: unknown) => void;
       timer: ReturnType<typeof setTimeout>;
     }
@@ -65,7 +65,7 @@ export class RouteViewStore {
     return () => this.listeners.delete(listener);
   }
 
-  async setRules(thread: string, instance: string, revision: number, rules: string) {
+  async setQuery(thread: string, instance: string, revision: number, query: string) {
     const selected = this.select(thread, instance);
     if (!selected || "ok" in selected) return { ok: false, error: "view unavailable" };
     const lease = this.leases.get(instance)!;
@@ -76,13 +76,13 @@ export class RouteViewStore {
     const commandId = crypto.randomUUID();
     const result = new Promise<unknown>((resolve) => {
       const timer = setTimeout(
-        () => this.finish(commandId, { ok: false, error: "view did not acknowledge rules" }),
+        () => this.finish(commandId, { ok: false, error: "view did not acknowledge query" }),
         8_000,
       );
-      this.pending.set(commandId, { lease, rules, resolve, timer });
+      this.pending.set(commandId, { lease, query, resolve, timer });
     });
     for (const listener of this.listeners)
-      listener({ type: "families-view-intent", thread, instance, commandId, revision, rules });
+      listener({ type: "families-view-intent", thread, instance, commandId, revision, query });
     return result;
   }
 
@@ -90,7 +90,7 @@ export class RouteViewStore {
     instance: string;
     commandId: string;
     revision: number;
-    rules: string;
+    query: string;
     counts: FamiliesView["counts"];
   }) {
     const pending = this.pending.get(input.commandId);
@@ -106,14 +106,14 @@ export class RouteViewStore {
     if (
       !current ||
       context(current) !== context(pending.lease.view) ||
-      current.rules !== input.rules ||
-      pending.rules !== input.rules ||
+      current.query !== input.query ||
+      pending.query !== input.query ||
       JSON.stringify(current.counts) !== JSON.stringify(input.counts)
     )
       return { ok: false, error: "view context changed before acknowledgement" };
     this.finish(input.commandId, {
       ok: true,
-      rules: input.rules,
+      query: input.query,
       counts: input.counts,
       instance: input.instance,
     });

@@ -153,7 +153,7 @@ function AskLine({ resolve }: { resolve: (verdict: Ask) => void }) {
 }
 
 /** A matrix address's group path: parameter › family › type. */
-const matrixGroupOf = (key: string) => {
+export const matrixGroupOf = (key: string) => {
   const [type, parameter] = key.split("::") as [string, string];
   return [parameter, MATRIX.find((row) => row.key === type)?.family ?? "", type];
 };

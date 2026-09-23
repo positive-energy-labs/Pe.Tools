@@ -12,7 +12,7 @@ const str = (value: unknown) => (typeof value === "string" ? value : "");
 /** `?demo=<action>` mounts one seed of `manifest.seeds`; stage, pod and path are the page in the URL. */
 export const familiesSearch = (
   search: Record<string, unknown>,
-): ReturnType<typeof routeSearch> & EntitySearch & { demo?: string; rules?: string } => {
+): ReturnType<typeof routeSearch> & EntitySearch & { demo?: string; query?: string } => {
   const entry = entitySearch(search);
   return {
     ...routeSearch(search),
@@ -22,7 +22,7 @@ export const familiesSearch = (
         ? search.stage
         : undefined,
     demo: str(search.demo) || undefined,
-    rules: typeof search.rules === "string" ? search.rules : undefined,
+    query: typeof search.query === "string" ? search.query : undefined,
   };
 };
 
@@ -32,14 +32,14 @@ export const Route = createFileRoute("/families")({
 });
 
 function FamiliesRoute() {
-  const { target, stage, pod, path, rules } = Route.useSearch();
+  const { target, stage, pod, path, query } = Route.useSearch();
   const thread = useRouteThread();
   return (
     <FamiliesRouteContent
       target={target}
       thread={thread}
       entry={{ stage, pod, path }}
-      rules={rules ?? DEFAULT_FAMILIES_RULES}
+      query={query ?? DEFAULT_FAMILIES_RULES}
       surface="route"
       url
     />
@@ -50,7 +50,7 @@ export function FamiliesRouteContent({
   target = "",
   thread,
   entry,
-  rules,
+  query,
   url = false,
   visible = true,
   surface = "route",
@@ -60,7 +60,7 @@ export function FamiliesRouteContent({
   /** The URL page state, read once at mount. */
   entry?: EntitySearch;
   /** The URL's rule line; absent on embedded chat panes. */
-  rules?: string;
+  query?: string;
   /** True only on the route itself; a chat pane does not own the URL. */
   url?: boolean;
   visible?: boolean;
@@ -70,22 +70,22 @@ export function FamiliesRouteContent({
   const store = useFamiliesStore({
     target,
     thread,
-    rules,
+    query,
     entry: entry && Object.fromEntries(Object.entries(entry).filter(([, value]) => value)),
   });
-  const previousRules = useRef(store.table.rules);
+  const previousQuery = useRef(store.table.query);
   useEffect(() => {
-    if (!url || previousRules.current === store.table.rules) return;
-    previousRules.current = store.table.rules;
+    if (!url || previousQuery.current === store.table.query) return;
+    previousQuery.current = store.table.query;
     void navigate({
       to: ".",
       replace: true,
       search: (previous: Record<string, unknown>) => ({
         ...previous,
-        rules: store.table.rules === DEFAULT_FAMILIES_RULES ? undefined : store.table.rules,
+        query: store.table.query === DEFAULT_FAMILIES_RULES ? undefined : store.table.query,
       }),
     });
-  }, [url, store.table.rules, navigate]);
+  }, [url, store.table.query, navigate]);
   return (
     <FamiliesWorkspace
       store={store}

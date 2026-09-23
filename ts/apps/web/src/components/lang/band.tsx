@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   availableTransitions,
   fanOut,
+  summarize,
   transitionBinding,
   transitionPatches,
+  type CellGroup,
   type FanOutKind,
   type RouteStatePatch,
   type SkipReason,
@@ -22,15 +24,8 @@ import { Press } from "#/components/lang/press";
 import { ActionButton } from "#/components/lang/action-button";
 import { useScopeKeys } from "#/route/keys";
 
-export interface WorkBandProps {
-  count: number;
-  noun: string;
-  revision: number | null;
-  read?: string;
+export interface WorkStandingProps {
   conflict?: boolean;
-  busy?: boolean;
-  discard: () => void;
-  commit?: { label: string; reason: string; disabled?: boolean; run: () => void };
   unresolved?: readonly string[];
   /** One standing line about this Work's own lifetime; not a toast, it stays while it holds. */
   lifetime?: string;
@@ -41,105 +36,41 @@ export interface WorkBandProps {
   startFresh?: () => void;
   /** What the confirm shows, read-only, of the Work start fresh sets aside (a route's salvage). */
   startFreshAside?: ReactNode;
-  body?: ReactNode;
-  /** Compact heads may remain present for open proposals or transient asks with nothing staged. */
-  visible?: boolean;
-  /** Situation already carries this word beside its verb row. */
-  showRevision?: boolean;
 }
 
-export const workBandWord = ({
+/** The Work in one word for meters and ledgers: "r4 · changed elsewhere"; the sentence owns counts. */
+export const workWord = ({
   revision,
-  count,
-  noun,
   conflict,
   unreadable,
-}: Pick<WorkBandProps, "revision" | "count" | "noun" | "conflict"> & { unreadable?: boolean }) =>
+}: {
+  revision: number | null;
+  conflict?: boolean;
+  unreadable?: boolean;
+}) =>
   `${unreadable ? "unreadable" : revision === null ? "unwritten" : `r${revision}`}${
-    count > 0 ? ` · ${count} ${noun}${count === 1 ? "" : "s"} staged` : ""
-  }${conflict ? " · changed elsewhere" : ""}`;
+    conflict ? " · changed elsewhere" : ""
+  }`;
 
-/** The Work frame used below route heads and inside compact composer heads. */
-export function WorkBand({
-  count,
-  noun,
-  revision,
-  read,
+/**
+ * A Work's standing lines, none of them cells: its own lifetime, what a closed document
+ * discarded, and what is unresolved (a lost write, a conflicting writer, the last refusal).
+ */
+export function WorkStanding({
   conflict,
-  busy,
-  discard,
-  commit,
   unresolved = [],
   lifetime,
   receipt,
   reload,
   startFresh,
   startFreshAside,
-  body,
-  visible = count > 0,
-  showRevision = true,
-}: WorkBandProps) {
-  // Unresolved is the band's own state and says itself even when nothing is staged.
-  if (!visible && !unresolved.length && !receipt) return null;
+}: WorkStandingProps) {
   return (
     <>
-      {visible ? (
-        <div className="hairline-t flex flex-col gap-1 py-1.5 t-prose">
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-            <span className="w-[9rem] t-small t-upper text-ink-mute">staged</span>
-            <span>
-              <b className="font-semibold text-ink">
-                {count} {noun}
-                {count === 1 ? "" : "s"}
-              </b>
-              {read ? <span className="face-mono text-ink-mute"> · read {read}</span> : null}
-            </span>
-            <span className="ml-auto flex items-baseline gap-2">
-              <Press
-                frame="line"
-                tone="quiet"
-                size="value"
-                state={busy ? "disabled" : "rest"}
-                disabled={busy}
-                onClick={discard}
-              >
-                discard
-              </Press>
-              {commit ? (
-                <span className="flex items-baseline gap-2">
-                  <Press
-                    frame="line"
-                    tone="neutral"
-                    size="value"
-                    state={commit.disabled || busy ? "disabled" : "rest"}
-                    disabled={commit.disabled || busy}
-                    title={commit.reason}
-                    onClick={commit.run}
-                  >
-                    {commit.label}
-                  </Press>
-                  {commit.disabled ? (
-                    // SPECIMEN: /design-system/band K5. A conflicting Work must say why plan refuses.
-                    <span className="max-w-[36ch] t-small face-mono text-ink-2 italic">
-                      {commit.reason}
-                    </span>
-                  ) : null}
-                </span>
-              ) : null}
-              {showRevision ? (
-                <span className="t-small face-mono text-ink-mute">
-                  {workBandWord({ revision, count, noun, conflict })}
-                </span>
-              ) : null}
-            </span>
-          </div>
-          {lifetime ? (
-            <p className="t-small text-ink-2" role="note">
-              {lifetime}
-            </p>
-          ) : null}
-          {body}
-        </div>
+      {lifetime ? (
+        <p className="t-small text-ink-2" role="note">
+          {lifetime}
+        </p>
       ) : null}
       {receipt ? (
         <div
@@ -173,6 +104,41 @@ export function WorkBand({
       ) : null}
     </>
   );
+}
+
+/** Proposed, staged and contested cells over a set of groups. */
+export const tally = (groups: readonly Pick<CellGroup, "proposed" | "staged" | "contested">[]) => {
+  const sum = (field: "proposed" | "staged" | "contested") =>
+    groups.reduce((total, group) => total + group[field], 0);
+  return { proposed: sum("proposed"), staged: sum("staged"), contested: sum("contested") };
+};
+
+/** A Work's cells at head scale: the tally, the contract's groups, and how many at each named depth. */
+export interface WorkSummary extends ReturnType<typeof tally> {
+  groups: CellGroup[];
+  /** Distinct groups at each depth the route names ("3 families"). */
+  spans: { noun: string; count: number }[];
+}
+
+/** The one summary the Situation's Work slot and Chat's proposal head read (ruling 14). */
+export function workSummary(
+  cells: Record<string, TrichotomyCellLike>,
+  ctx: Pick<CellWire, "baselineOf" | "lockOf"> & { groupOf: (key: string) => string[] },
+  nouns: readonly string[] = [],
+): WorkSummary {
+  const { groups } = summarize(cells, {
+    groupOf: ctx.groupOf,
+    baselineOf: (key) => ctx.baselineOf?.(key),
+    lockOf: ctx.lockOf,
+  });
+  return {
+    ...tally(groups),
+    groups,
+    spans: nouns.map((noun, depth) => ({
+      noun,
+      count: new Set(groups.map((group) => group.path[depth])).size,
+    })),
+  };
 }
 
 /**
@@ -323,35 +289,6 @@ export function ReviewRow({
 export const reviewAddresses = <C extends TrichotomyCellLike>(cells: Record<string, C>) =>
   Object.entries(cells).filter(([, cell]) => cell.proposal != null || cell.staged != null);
 
-/** The band's discard: `unstage` fanned over every staged address. */
-export const discardStaged = (wire: CellWire, cells: Record<string, TrichotomyCellLike>) =>
-  runFanOut(
-    wire,
-    cells,
-    Object.keys(cells).filter((key) => cells[key]?.staged != null),
-    "unstage",
-  );
-
-/**
- * The consumer's commit verb on the band: refused while nothing is staged, or for the consumer's
- * own reason, which the band then says beside the verb.
- */
-export const reviewCommit = (
-  label: string,
-  staged: number,
-  run: () => void,
-  refusal?: string | null,
-): NonNullable<WorkBandProps["commit"]> => ({
-  label,
-  run,
-  disabled: staged === 0 || refusal != null,
-  reason:
-    refusal ??
-    (staged === 0
-      ? "Nothing staged yet — accept a proposal first"
-      : "Write every staged value through — this leaves the page"),
-});
-
 /** How long the unstage confirm waits for its second press. */
 const CONFIRM_MS = 4000;
 
@@ -458,5 +395,70 @@ function StartFresh({ run, aside }: { run: () => void; aside?: ReactNode }) {
       </span>
       {armed ? aside : null}
     </span>
+  );
+}
+
+/** `3 families`: a count and its English plural. */
+export const plural = (n: number, noun: string) =>
+  `${n} ${n === 1 ? noun : noun.endsWith("y") ? `${noun.slice(0, -1)}ies` : `${noun}s`}`;
+
+/**
+ * The Work slot's default render (ruling 14): one sentence of what you staged and Pea proposed, on
+ * how many of each group the route names, then the aggregates. Accept and deny all are one
+ * `runFanOut` over every cell; unstage all is the discard. Nothing pending draws nothing.
+ */
+export function WorkSentence({
+  summary,
+  cells,
+  wire,
+  commit,
+}: {
+  summary: WorkSummary;
+  cells: Record<string, TrichotomyCellLike>;
+  wire: CellWire;
+  /** The consumer's commit verb, drawn while something is staged. */
+  commit?: ReactNode;
+}) {
+  const [outcome, setOutcome] = useState<FanOutOutcome | null>(null);
+  const { staged, proposed, contested, spans } = summary;
+  if (!staged && !proposed) return null;
+  const keys = Object.keys(cells);
+  const all = (kind: "accept" | "deny") => void runFanOut(wire, cells, keys, kind).then(setOutcome);
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 t-prose">
+      <span className="text-ink-2">
+        {staged ? (
+          <b className="font-semibold text-ink">{plural(staged, "cell")} staged by you</b>
+        ) : null}
+        {staged && proposed ? ", " : null}
+        {proposed ? <span data-tone="pea">{proposed} proposed by Pea</span> : null}
+        {contested ? <span data-tone="caution"> · {contested} contested</span> : null}
+        {spans.map((span) => ` · ${plural(span.count, span.noun)}`)}
+      </span>
+      {outcome ? (
+        <span className="t-small text-ink-2" data-tone={outcome.refusal ? "caution" : undefined}>
+          {fanOutWord(outcome)}
+        </span>
+      ) : null}
+      <span className="ml-auto flex items-baseline gap-1">
+        {proposed ? (
+          <>
+            <ActionButton
+              tone="agent"
+              label="accept all"
+              reason="Accept every open proposal in one write; cells you staged are skipped. Nothing reaches Revit until apply."
+              onClick={() => all("accept")}
+            />
+            <ActionButton
+              label="deny all"
+              reason="Clear every open proposal in one write. Staged values stay."
+              onClick={() => all("deny")}
+            />
+          </>
+        ) : null}
+        <UnstageAll wire={wire} cells={cells} keys={keys} done={setOutcome} />
+        {staged ? commit : null}
+      </span>
+    </div>
   );
 }

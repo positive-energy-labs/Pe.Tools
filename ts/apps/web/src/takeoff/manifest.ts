@@ -1,4 +1,4 @@
-import { takeoffsRouteState } from "@pe/agent-contracts";
+import { takeoffEditAddress, takeoffsRouteState } from "@pe/agent-contracts";
 
 import { defineRoute } from "#/route/manifest";
 import {
@@ -15,6 +15,11 @@ export const manifest = defineRoute({
   docs: "Choose a project input, adopt its zones, then audit and synchronize the resulting takeoff readings before using them downstream.",
   needs: "project",
   work: takeoffsRouteState,
+  cells: {
+    segment: "edits",
+    groupOf: (key: string) => [takeoffEditAddress(key).roomId],
+    nouns: ["room"],
+  },
   readings: {
     snapshot: { kind: "takeoff-reading", target: { session: "", openId: "" } },
     rhvacVersion: (page: TakeoffPage) =>

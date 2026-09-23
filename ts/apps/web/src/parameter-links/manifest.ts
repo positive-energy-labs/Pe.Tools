@@ -5,12 +5,13 @@
 import { z } from "zod";
 import {
   parameterLinksRouteState,
+  semanticActions,
   type ParameterLinksDocument,
   type WorkKey,
   stagedParameterProfile,
 } from "@pe/agent-contracts";
 
-import { defineRoute, semanticActionInputSchema, type Ctx as RouteCtx } from "#/route";
+import { defineRoute, type Ctx as RouteCtx } from "#/route";
 import {
   actionResult,
   readFamilyCapture,
@@ -98,7 +99,7 @@ export const manifest = defineRoute<
     apply: {
       label: "apply links",
       does: "parameter-links.apply",
-      input: semanticActionInputSchema("parameter-links.apply") as never,
+      input: semanticActions["parameter-links.apply"].input as never,
       dirties: ["links", "receipts"],
       requires: { work: true, readings: ["links"] },
       ready: () => null,
