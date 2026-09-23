@@ -1,3 +1,4 @@
+import { browserActionSays } from "@pe/agent-contracts";
 // @vitest-environment jsdom
 /**
  * K3 lifetime invariants of the Chat plugin pane (crusade-authority-k3-lifetime.md): the pane is
@@ -46,7 +47,7 @@ vi.mock("#/routes/families", async () => {
     actions: {
       plan: {
         label: "plan",
-        says: "plans the staged set",
+        says: browserActionSays.memberOpen,
         needs: "host",
         actor: "any",
         input: z.void() as unknown as ZodType<never>,

@@ -1,10 +1,10 @@
+import { browserActionSays } from "@pe/agent-contracts";
 /**
  * The chat route, declared once. The thread head is a Reading, so the route's default Target is
  * whatever the head says — `useRoute` reads it back out of `readings` and no component keeps a
  * second copy. `send` and `cancel` run `workbench/actions.ts` over the session the provider holds,
  * because that session IS chat's host caller; `new` and `fork` run the provider's thread verbs.
  */
-import { askLifetime } from "@pe/agent-contracts";
 import { z } from "zod";
 
 import { defineRoute, type RouteManifest } from "#/route";
@@ -65,7 +65,7 @@ export const chatManifest = (
     actions: {
       send: {
         label: "send",
-        says: "sends the composer's prompt to pea under the thread's admitted target",
+        says: browserActionSays.chatSend,
         needs: "host",
         actor: "human",
         input: promptInput as unknown as z.ZodType<never>,
@@ -90,7 +90,7 @@ export const chatManifest = (
       },
       cancel: {
         label: "cancel",
-        says: `stops the running turn; its open asks expire, unanswered (an ask ${askLifetime})`,
+        says: browserActionSays.chatCancel,
         needs: "host",
         actor: "human",
         input: z.void() as unknown as z.ZodType<never>,
@@ -103,7 +103,7 @@ export const chatManifest = (
       },
       new: {
         label: "new",
-        says: "starts a new, empty thread and opens it",
+        says: browserActionSays.chatNew,
         needs: "host",
         actor: "human",
         input: z.void() as unknown as z.ZodType<never>,
@@ -115,7 +115,7 @@ export const chatManifest = (
       },
       fork: {
         label: "fork",
-        says: "clones this thread, messages and all, and opens the clone",
+        says: browserActionSays.chatFork,
         needs: "host",
         actor: "human",
         input: z.void() as unknown as z.ZodType<never>,

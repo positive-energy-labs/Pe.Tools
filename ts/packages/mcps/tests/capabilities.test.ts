@@ -120,7 +120,6 @@ test("pe_find maps every kind and ranks and filters visible rows", async () => {
   expect((await find({})).map.kinds.map((row) => row.kind)).toEqual([
     "op",
     "route-doc",
-    "route-command",
     "pod",
     "skill",
   ]);

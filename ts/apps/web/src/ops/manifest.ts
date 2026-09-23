@@ -1,3 +1,4 @@
+import { opsAction } from "@pe/agent-contracts";
 /**
  * The Ops route, declared once. It is the host op runner: the situation ladder picks the target,
  * the catalogue picks the op, the schema draws the form, `run` is the one verb. Every gate the
@@ -18,16 +19,10 @@ export type Custody = "controlled" | "observed";
 export type OpsReading = "inventory";
 export type OpsCtx = Ctx<never, OpsReading, Record<string, never>>;
 
-const NEEDS = {
-  nothing: "session",
-  document: "document",
-  "project-document": "project",
-  "family-document": "family",
-} as const;
-
-/** What the harness must resolve before this op may run. A host-local op needs no Revit. */
-export const opNeeds = (op?: HostOperationCatalogEntry) =>
-  !op || isTsOnlyOperationKey(op.key) ? "host" : NEEDS[op.needs];
+/** Shared action facts derive the required target from the selected operation. */
+const facts = (op?: HostOperationCatalogEntry) =>
+  opsAction(op?.needs, !op || isTsOnlyOperationKey(op.key));
+export const opNeeds = (op?: HostOperationCatalogEntry) => facts(op).needs;
 
 export const isMutation = (op?: HostOperationCatalogEntry) =>
   op?.intent?.toLowerCase() === "mutate";
@@ -67,9 +62,7 @@ export const opsManifest = (
     actions: {
       run: {
         label: "Run",
-        says: "runs the selected operation on the target the sentence names",
-        needs,
-        actor: "human",
+        ...facts(deps.selected),
         input: z.void() as unknown as z.ZodType<never>,
         dirties: [],
         chord: "Mod+Enter",

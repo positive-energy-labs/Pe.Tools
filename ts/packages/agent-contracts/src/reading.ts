@@ -140,3 +140,17 @@ export const readingFrameSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 export type ReadingFrame = z.infer<typeof readingFrameSchema>;
+
+/** Named resources invalidated by shared actions; route-local aliases are typed by each manifest. */
+export type ActionReadingKey =
+  | "snapshot"
+  | "takeoff-views"
+  | "candidates"
+  | "rhvac-open"
+  | "receipts"
+  | "pods"
+  | "family"
+  | "families"
+  | "parameter-links"
+  | "schedules"
+  | "sdk";

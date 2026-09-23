@@ -582,7 +582,7 @@ async function dispatch(
         );
       if (parsed.route === settingsRouteState.route && !input.workspaceId)
         throw new Error(
-          "Supply workspaceId for the member's Work, then open it with { member: { pod, path } }.",
+          "Use op:pod.list to find members and supply workspaceId for the member's Work opened by the editor.",
         );
       if (
         input.workspaceId &&

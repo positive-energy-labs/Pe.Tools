@@ -229,7 +229,7 @@ Propose scope.proposal first (exact loaded family names), then the cells in the 
 
 ## Pod members
 
-Validate with pe_do key=route:pods.validate and includeProposals, repair the first diagnostic, and revalidate. Start from diagnostics and artifacts, and keep authored intent, generated output, and runtime proof distinct. Edit a member file directly only when no route binds it, and say so before you do.
+Enumerate members with pe_read key=op:pod.list. Propose fields through route:pods.propose against the member Work opened in the editor. Validate candidate content with pe_read key=op:pod.member.compose, passing pod, path, and content; repair the first diagnostic and revalidate. Keep authored intent, generated output, and runtime proof distinct. Edit a member file directly only when no route binds it, and say so before you do.
 
 Report what you proposed (route, count, and one line of what changes) and what the person must stage and which verb commits it.
 `,

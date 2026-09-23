@@ -97,7 +97,12 @@ vi.mock("./use-route", async (original) => ({
         doc: work.doc,
         revision: work.revision,
       },
-      command: async () => null,
+      write: async (patches: RouteStatePatch[]) => {
+        work.doc = patch(work.doc!, patches);
+        work.revision += 1;
+        publish();
+        return null;
+      },
     };
     const actions = Object.fromEntries(
       Object.entries(manifest.actions).map(([name, action]) => [
@@ -201,4 +206,25 @@ test("save refuses a draft the host just called invalid, in raw mode too, and cl
   expect((screen.getByRole("button", { name: /save as new/i }) as HTMLButtonElement).disabled).toBe(
     false,
   );
+});
+
+test("opening and adopting member bytes uses generic Work writes and preserves proposals until review", async () => {
+  disk.content = '{"x":1}';
+  disk.sha256 = "opened";
+  work.doc = { basis: null, fields: {} };
+  diagnostics = [];
+  const view = render(<SpecEditor member={member} schema={null} />);
+  await waitFor(() => expect(work.doc!.basis?.sha256).toBe("opened"));
+  view.unmount();
+  work.doc!.fields["/x"] = { proposal: { value: 2 } };
+  disk.content = '{"x":3}';
+  disk.sha256 = "changed";
+  render(<SpecEditor member={member} schema={null} />);
+  const adopt = await screen.findByRole("button", { name: "adopt disk bytes" });
+  expect(work.doc!.basis!.sha256).toBe("opened");
+  expect(work.doc!.fields["/x"].proposal?.value).toBe(2);
+  await act(async () => void fireEvent.click(adopt));
+  await waitFor(() => expect(work.doc!.basis!.sha256).toBe("changed"));
+  expect(work.doc!.basis!.rawContent).toBe(disk.content);
+  expect(work.doc!.fields).toEqual({});
 });

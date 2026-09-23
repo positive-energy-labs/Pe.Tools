@@ -1,3 +1,4 @@
+import { browserActionSays } from "@pe/agent-contracts";
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { expect, test, vi } from "vite-plus/test";
@@ -22,7 +23,7 @@ test("an action completing after an A to B to A target change cannot write the n
     actions: {
       refresh: {
         label: "refresh",
-        says: "reads once",
+        says: browserActionSays.memberOpen,
         needs: "document",
         actor: "any",
         input: z.void() as unknown as z.ZodType<never>,
@@ -90,7 +91,7 @@ test("an action cannot replace newer member navigation within the same target an
     actions: {
       capture: {
         label: "capture",
-        says: "captures one member",
+        says: browserActionSays.memberOpen,
         needs: "host",
         actor: "any",
         input: z.void() as unknown as z.ZodType<never>,
@@ -133,7 +134,7 @@ test("a retained old action handle cannot borrow the epoch of newer navigation",
     actions: {
       capture: {
         label: "capture",
-        says: "captures the rendered member",
+        says: browserActionSays.memberOpen,
         needs: "host",
         actor: "any",
         input: z.void() as unknown as z.ZodType<never>,
@@ -184,7 +185,7 @@ test("action page progress continues until a user selection or review change sup
     actions: {
       plan: {
         label: "plan",
-        says: "publishes two steps",
+        says: browserActionSays.memberOpen,
         needs: "host",
         actor: "any",
         input: z.void() as unknown as z.ZodType<never>,
@@ -253,7 +254,7 @@ test("an action can guard its source fields while an unrelated page projection c
     actions: {
       plan: {
         label: "plan",
-        says: "opens a sheet",
+        says: browserActionSays.memberOpen,
         needs: "host",
         actor: "any",
         input: z.void() as unknown as z.ZodType<never>,

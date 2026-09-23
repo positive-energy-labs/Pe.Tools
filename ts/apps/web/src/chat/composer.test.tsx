@@ -1,3 +1,4 @@
+import { browserActionSays } from "@pe/agent-contracts";
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { Activity, useState } from "react";
@@ -55,7 +56,7 @@ test("the slash menu's keys are the list's: ↓ and Enter pick without sending; 
 
 const newAction = {
   label: "new",
-  says: "starts a new, empty thread and opens it",
+  says: browserActionSays.memberOpen,
   refusal: null,
   count: null,
   run: vi.fn(),
@@ -79,11 +80,17 @@ function mount({
       handle={
         {
           actions: {
-            send: { label: "send", says: "", refusal: null, count: null, run: send },
+            send: {
+              label: "send",
+              says: browserActionSays.chatSend,
+              refusal: null,
+              count: null,
+              run: send,
+            },
             new: newAction,
             fork: {
               label: "fork",
-              says: "clones this thread",
+              says: browserActionSays.memberOpen,
               refusal: "No thread to fork",
               count: null,
               run: vi.fn(),
@@ -277,7 +284,13 @@ test("Activity retains each visited thread draft without sharing it", () => {
               handle={
                 {
                   actions: {
-                    send: { label: "send", says: "", refusal: null, count: null, run: vi.fn() },
+                    send: {
+                      label: "send",
+                      says: browserActionSays.chatSend,
+                      refusal: null,
+                      count: null,
+                      run: vi.fn(),
+                    },
                     new: newAction,
                     fork: { ...newAction, label: "fork" },
                   },
@@ -312,7 +325,13 @@ test("a late send clears only its exact submitted draft", async () => {
       handle={
         {
           actions: {
-            send: { label: "send", says: "", refusal: null, count: null, run },
+            send: {
+              label: "send",
+              says: browserActionSays.chatSend,
+              refusal: null,
+              count: null,
+              run,
+            },
             new: newAction,
             fork: { ...newAction, label: "fork" },
           },

@@ -1,3 +1,4 @@
+import { browserActionSays } from "@pe/agent-contracts";
 /**
  * `/family`, declared once: an entity route whose audit is the family anatomy and parameter table.
  * The kernel owns capture and apply (and apply's plan confirmation); this file owns the audit's
@@ -406,7 +407,7 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
     actions: {
       read: {
         label: "read family",
-        says: "Read the open family's spec from Revit into the draft; files nothing. Proposals stay.",
+        says: browserActionSays.familyRead,
         needs: "family",
         actor: "any",
         input: z.void(),
@@ -421,7 +422,7 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
       },
       "prepare-build": {
         label: "review build",
-        says: "Review the exact saved family profile before building its .rfa.",
+        says: browserActionSays.familyPrepareBuild,
         needs: "document",
         actor: "human",
         input: buildInput,
@@ -447,7 +448,7 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
       },
       "cancel-build": {
         label: "cancel build",
-        says: "Dismiss the current reviewed build without changing the family profile.",
+        says: browserActionSays.familyDismissBuild,
         needs: "host",
         actor: "human",
         input: z.void(),

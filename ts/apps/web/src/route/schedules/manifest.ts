@@ -1,3 +1,4 @@
+import { browserActionSays } from "@pe/agent-contracts";
 import { z } from "zod";
 import {
   canonicalRouteInput,
@@ -150,7 +151,7 @@ export const schedulesManifest = () =>
         refresh: {
           label: "read schedule",
           waitSeconds: HOST_READ_WAIT_S,
-          says: "reads the selected schedule from Revit into a fresh capture",
+          says: browserActionSays.scheduleRead,
           needs: "document",
           actor: "human",
           input: scheduleReads["schedule.grid.snapshot"].input.prefault(

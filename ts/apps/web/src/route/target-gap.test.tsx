@@ -1,3 +1,4 @@
+import { browserActionSays } from "@pe/agent-contracts";
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, renderHook } from "@testing-library/react";
 import { expect, test, vi } from "vite-plus/test";
@@ -27,7 +28,7 @@ test("a stream reconnect retains the target and dirties the bound Reading", asyn
     actions: {
       refresh: {
         label: "refresh",
-        says: "reads again",
+        says: browserActionSays.memberOpen,
         needs: "document",
         actor: "any",
         input: z.void() as unknown as z.ZodType<never>,
@@ -89,7 +90,7 @@ test("a missing Work writer refuses before the action can continue", async () =>
     actions: {
       save: {
         label: "save",
-        says: "writes Work",
+        says: browserActionSays.memberOpen,
         needs: "host",
         actor: "human",
         input: z.void() as unknown as z.ZodType<never>,
@@ -211,7 +212,7 @@ test("a late action write keeps the Work revision it computed from", async () =>
     actions: {
       compute: {
         label: "compute",
-        says: "writes from one snapshot",
+        says: browserActionSays.memberOpen,
         needs: "host",
         actor: "any",
         input: z.void() as unknown as z.ZodType<never>,
@@ -305,7 +306,7 @@ test("action commands use their snapshot revision on immediate and late runs", a
     actions: {
       save: {
         label: "save",
-        says: "commands from one snapshot",
+        says: browserActionSays.memberOpen,
         needs: "host",
         actor: "human",
         input: z.boolean() as unknown as z.ZodType<never>,
@@ -376,7 +377,7 @@ test("an action initializes current absent Work at revision zero", async () => {
     actions: {
       initialize: {
         label: "initialize",
-        says: "starts Work",
+        says: browserActionSays.memberOpen,
         needs: "host",
         actor: "human",
         input: z.void() as unknown as z.ZodType<never>,
@@ -436,7 +437,7 @@ const gateManifest = () =>
     actions: {
       save: {
         label: "save",
-        says: "writes the selected document",
+        says: browserActionSays.memberOpen,
         needs: "project",
         actor: "human",
         input: z.void() as unknown as z.ZodType<never>,
@@ -618,7 +619,7 @@ test("a frozen seed owns an isolated registry, refuses actions, and never reache
     actions: {
       show: {
         label: "show",
-        says: "shows the seed",
+        says: browserActionSays.memberOpen,
         needs: "document",
         actor: "any",
         input: z.void() as unknown as z.ZodType<never>,

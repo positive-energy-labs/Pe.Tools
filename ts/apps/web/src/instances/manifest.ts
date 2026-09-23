@@ -1,3 +1,4 @@
+import { browserActionSays } from "@pe/agent-contracts";
 /**
  * The instances route, declared once. Instances is where sessions come FROM, so it declares no
  * `needs`: it must render with nothing attached. Its Readings are the four SDK/broker subjects the
@@ -45,7 +46,7 @@ export const instancesManifest = defineRoute({
   actions: {
     refresh: {
       label: "refresh",
-      says: "reacquire the SDK census, installed years and recents without changing Work",
+      says: browserActionSays.instancesRefresh,
       needs: "host",
       actor: "any",
       input: z.void() as unknown as z.ZodType<never>,

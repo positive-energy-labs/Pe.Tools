@@ -1,3 +1,4 @@
+import { browserActionSays } from "@pe/agent-contracts";
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
@@ -329,7 +330,7 @@ async function mountAction() {
       ...base.actions,
       poke: {
         label: "poke",
-        says: "writes one cell",
+        says: browserActionSays.memberOpen,
         needs: "host" as const,
         actor: "any" as const,
         input: z.void(),

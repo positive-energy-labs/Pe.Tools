@@ -1,3 +1,4 @@
+import { browserActionSays } from "@pe/agent-contracts";
 // @vitest-environment jsdom
 /**
  * The Situation's verb row runs a verb with no input. A verb that needs an input it was not given refuses by name, never with a raw schema message.
@@ -22,7 +23,7 @@ test("a verb that needs an input it was not given refuses by name", async () => 
     actions: {
       open: {
         label: "open schedule",
-        says: "opens the chosen schedule",
+        says: browserActionSays.memberOpen,
         needs: "host",
         actor: "any",
         input: z.object({ scheduleId: z.number() }) as never,

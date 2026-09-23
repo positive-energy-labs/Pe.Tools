@@ -1,3 +1,4 @@
+import { browserActionSays } from "@pe/agent-contracts";
 /**
  * The stage rung of the scope tree binds the stage's own chords (ledger 2026-09-22): push is a
  * stage verb, so `StageDecl.keys` is where `Mod+Enter` lives and the manifest carries no chord for
@@ -21,7 +22,7 @@ const handleWith = (push: () => void) =>
     actions: {
       push: {
         label: "push",
-        says: "writes the staged cells to Revit",
+        says: browserActionSays.memberOpen,
         refusal: null,
         chord: undefined,
         run: async () => {

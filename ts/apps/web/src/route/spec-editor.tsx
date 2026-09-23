@@ -1,3 +1,4 @@
+import { browserActionSays } from "@pe/agent-contracts";
 /**
  * THE MEMBER EDITOR — one member, one draft; form and raw JSON are two modes of that draft. A draft
  * the form cannot render stays raw, byte for byte. Offline the host answers schema issues only;
@@ -19,6 +20,7 @@ import {
   podMemberSchema,
   settingsCandidate,
   settingsRouteState,
+  settingsBasisSchema,
   type PodMember,
   type SettingsFieldState,
   type SettingsRouteDocument,
@@ -117,24 +119,61 @@ export const memberWorkManifest = (seed?: SettingsRouteDocument) => {
     actions: {
       open: {
         label: "open",
-        says: "adopts the member's saved bytes as the Work basis; refuses while edits are pending",
+        says: browserActionSays.memberOpen,
         needs: "host",
         actor: "any",
         input: openInput as never,
         dirties: [],
         ready: () => null,
-        run: (ctx, input: z.infer<typeof openInput>) => ctx.command("open", input),
+        run: async (ctx, { member }: z.infer<typeof openInput>) => {
+          const doc = ctx.work.doc;
+          const reading = await podHost.read(member);
+          const basis = settingsBasisSchema.parse({
+            member,
+            rawContent: reading.content,
+            sha256: reading.sha256,
+          });
+          if (
+            doc?.basis?.member.pod === member.pod &&
+            doc.basis.member.path === member.path &&
+            doc.basis.sha256 === basis.sha256
+          )
+            return;
+          if (Object.values(doc?.fields ?? {}).some((field) => field.staged || field.proposal))
+            throw Error(
+              "Pending work retains its original basis. Review the new reading and explicitly adopt it, discarding old edits.",
+            );
+          return ctx.write([
+            { path: ["basis"], value: basis },
+            { path: ["fields"], value: {} },
+          ]);
+        },
       },
       adopt: {
         label: "adopt disk bytes",
-        says: "adopts the member as it is on disk now and discards the old proposals and staged fields",
+        says: browserActionSays.memberAdopt,
         needs: "host",
         actor: "human",
         input: adoptInput as never,
         dirties: [],
         ready: (ctx) => (ctx.work.doc?.basis ? null : "open a pod member first"),
-        run: (ctx, input: z.infer<typeof adoptInput>) =>
-          ctx.command("adopt", { member: ctx.work.doc!.basis!.member, sha256: input.sha256 }),
+        run: async (ctx, input: z.infer<typeof adoptInput>) => {
+          const member = ctx.work.doc!.basis!.member;
+          const reading = await podHost.read(member);
+          if (reading.sha256 !== input.sha256)
+            throw Error("The member changed after review. Refresh and review again.");
+          return ctx.write([
+            {
+              path: ["basis"],
+              value: settingsBasisSchema.parse({
+                member,
+                rawContent: reading.content,
+                sha256: reading.sha256,
+              }),
+            },
+            { path: ["fields"], value: {} },
+          ]);
+        },
       },
       save: {
         label: "save",

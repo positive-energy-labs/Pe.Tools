@@ -28,7 +28,6 @@ import { TakeoffCaptures } from "./takeoff-captures.ts";
 import { RevitBridge, BridgeError } from "./bridge.ts";
 import { makeCallRoute, type CallRouteDispatch } from "./call-route.ts";
 import { assertDemoPath, createDemoSettings } from "./demo-settings.ts";
-import { createSettingsCommandHandlers } from "../../../packages/mcps/src/pea/settings-commands.ts";
 import { familiesAdmission } from "../../../packages/mcps/src/pea/families-admission.ts";
 import { resourceResponse, type ResourceObserver } from "@pe/runtime";
 import { hostResourceObserver } from "./resource-adapters.ts";
@@ -152,15 +151,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         scheduleGridRouteState,
       ].map((spec) => ({
         spec,
-        handlers:
-          spec.route === settingsRouteState.route
-            ? createSettingsCommandHandlers({
-                pods: {
-                  read: (member) => settings.readMember(member),
-                  compose: (request) => settings.composeMember(request),
-                },
-              })
-            : {},
+        handlers: {},
         // The same door the live host runs, over the simulated catalog.
         ...(spec.route === familiesRouteState.route
           ? {

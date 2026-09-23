@@ -1,3 +1,4 @@
+import { browserActionSays } from "@pe/agent-contracts";
 // @vitest-environment jsdom
 /**
  * The shell's obligations: an EMPTY manifest renders (name + lamp, nothing else), and an action
@@ -42,7 +43,7 @@ test("an action that refuses says why instead of running", async () => {
     actions: {
       commit: {
         label: "commit",
-        says: "write the staged rows",
+        says: browserActionSays.memberOpen,
         needs: "host",
         actor: "any",
         input: z.undefined() as never,
@@ -69,7 +70,7 @@ test("the shell runs the supplied workspace handle and shares its outcome and Pa
     actions: {
       review: {
         label: "review",
-        says: "Open the workspace review",
+        says: browserActionSays.memberOpen,
         needs: "host",
         actor: "any",
         input: z.void() as never,

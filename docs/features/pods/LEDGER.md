@@ -3,6 +3,7 @@
 Rewritten 2026-09-16 after the pod/product boundary grill. Git holds the earlier form.
 
 ## Decided
+- 2026-09-22: Pod member Work uses generic revision-checked writes. The editor adopts disk bytes, Pea proposes field changes, and pod.list plus pod.member.compose supply enumeration and validation. Per-route command handlers are retired.
 
 - 2026-09-22, `entrypoints` declares palette buttons, not execution permission. Bounded captured `src` files may run without a palette entry, so settings-only manifests stay valid. `PodManifestValidator` upgrades v1 in memory and import reports the diagnostic while preserving the archived bytes.
 

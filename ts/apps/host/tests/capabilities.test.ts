@@ -3,7 +3,8 @@ import { createServer as createNodeServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Deferred, Effect, Layer } from "effect";
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
+import { documentsRootEnvVar } from "@pe/host-contracts/product-paths";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 import { resolvePeaWorld } from "@pe/runtime/pea";
@@ -21,6 +22,7 @@ test("GET /pe/capabilities answers fast without Revit and names the silent sourc
   const databaseRoot = mkdtempSync(join(tmpdir(), "pe-caps-db-"));
   const previousLocalAppData = process.env.LOCALAPPDATA;
   process.env.LOCALAPPDATA = localAppData;
+  vi.stubEnv(documentsRootEnvVar, join(localAppData, "Documents"));
   const appBase = productRoot();
   const nodeServer = createNodeServer();
   const program = Effect.scoped(
@@ -86,7 +88,9 @@ test("GET /pe/capabilities answers fast without Revit and names the silent sourc
     expect(keys).toContain("workflow:instances.start");
     expect(keys.some((key) => key.startsWith("route:ops"))).toBe(false);
     // The member Work route is named for the pods its members live in.
-    expect(keys).toContain("route:pods.open");
+    expect(keys).toContain("route:pods.propose");
+    expect(keys).toContain("op:pod.list");
+    expect(keys).not.toContain("route:pods.open");
     expect(keys).toContain("skill:build-pod");
     expect(keys.some((key) => key.startsWith("op:revit."))).toBe(false);
 
@@ -96,6 +100,7 @@ test("GET /pe/capabilities answers fast without Revit and names the silent sourc
     });
     await done;
   } finally {
+    vi.unstubAllEnvs();
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;
     else process.env.LOCALAPPDATA = previousLocalAppData;
     for (const directory of [databaseRoot, localAppData])

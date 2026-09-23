@@ -1,5 +1,6 @@
+import { opsManifest } from "#/ops/manifest";
 import { expect, test } from "vite-plus/test";
-import { semanticActions } from "@pe/agent-contracts";
+import { semanticActions, opsAction } from "@pe/agent-contracts";
 
 import { manifest as family } from "#/routes/family";
 import { manifest as families } from "#/families/manifest";
@@ -45,4 +46,15 @@ test("Takeoffs sync remains agent-capable while its browser review and admission
     dirties: ["snapshot", "rhvacVersion", "receipts"],
   });
   expect(takeoffs.actions!.sync.actor).toBe("human");
+});
+
+test("Ops projects shared prose, actor and the selected operation's target need", () => {
+  for (const op of [
+    { key: "pod.list", needs: "nothing" as const, intent: "Read" as const },
+    { key: "scripting.execute", needs: "nothing" as const, intent: "Mutate" as const },
+    { key: "family.apply", needs: "family-document" as const, intent: "Mutate" as const },
+  ])
+    expect(opsManifest({ selected: op }).actions!.run).toMatchObject(
+      opsAction(op.needs, op.key === "pod.list"),
+    );
 });

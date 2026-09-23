@@ -53,7 +53,7 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
       kind: "op",
       title: "Instances readings",
       // Named, not spread: an action row also carries `says`/`dirties`, which a Capability is not.
-      description: instancesReading.description,
+      description: instancesReading.says,
       needs: instancesReading.needs,
       actor: instancesReading.actor,
       mutates: instancesReading.mutates,
@@ -66,7 +66,7 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
         key: `workflow:${key}`,
         kind: "op",
         title: key,
-        description: action.description,
+        description: action.says,
         needs: action.needs,
         actor: action.actor,
         mutates: true,
@@ -85,7 +85,7 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
         key: `op:${key}`,
         kind: "op",
         title: key,
-        description: reading.description,
+        description: reading.says,
         needs: reading.needs,
         actor: reading.actor,
         mutates: false,
@@ -101,7 +101,7 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
         key: `op:${key}`,
         kind: "op",
         title: key,
-        description: action.description,
+        description: action.says,
         needs: action.needs,
         actor: action.actor,
         mutates: action.mutates,
@@ -142,7 +142,7 @@ function opRow(op: OpsCatalogEntry): Capability {
 function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
   const scopeHint =
     spec.route === settingsRouteState.route
-      ? "Supply workspaceId for the member's Work and open it with { member: { pod, path } }; this is shared file Work independent of Revit."
+      ? "Use op:pod.list to enumerate members. Supply workspaceId for the member's Work opened by the editor; propose fields against its adopted basis. This is shared file Work independent of Revit."
       : "Runs under this thread's Scope; no target input.";
   const read: Capability = {
     key: `route:${spec.route}`,

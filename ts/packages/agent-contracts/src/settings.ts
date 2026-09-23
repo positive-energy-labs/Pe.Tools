@@ -108,31 +108,7 @@ export const settingsRouteState = {
   description: "Review, validate, and save proposed changes to one pod member.",
   schema: settingsRouteDocumentSchema,
   agentWriteMask: trichotomyAgentMask("fields"),
-  commands: {
-    open: {
-      description:
-        "Explicitly adopt a member reading as the edit basis. Refuses pending edits; use adopt after reviewing a conflict.",
-      input: z.object({ member: podMemberSchema }),
-      actor: "any",
-    },
-    adopt: {
-      description:
-        "Adopt the reviewed disk content version and discard the old field edits/proposals explicitly. Refuses if the disk changed again.",
-      input: z.object({ member: podMemberSchema, sha256: z.string() }),
-      actor: "human",
-    },
-    refresh: {
-      description: "Re-read the bound member. Proposals and staged values are preserved.",
-      input: z.object({}),
-      actor: "any",
-    },
-    validate: {
-      description:
-        "Validate the document with staged values spliced in (and proposals too when includeProposals is true) without saving. Use this to prove a proposal is schema-valid before the human stages it.",
-      input: z.object({ includeProposals: z.boolean().optional() }),
-      actor: "any",
-    },
-  },
+  commands: {},
 } satisfies RouteStateSpec<typeof settingsRouteDocumentSchema>;
 
 /** Decode an RFC 6901 JSON Pointer field key into property segments. */

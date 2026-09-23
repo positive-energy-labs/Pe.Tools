@@ -62,8 +62,6 @@ export const instancesActions = {
     needs: "nothing",
     actor: "any",
     input: workInput,
-    description:
-      "Start the authored staged session through the SDK under this action id; the receipt is the SDK envelope.",
   },
   "instances.open": {
     says: "Open the authored staged document in the explicitly supplied session incarnation; refused if that document is already open there.",
@@ -71,8 +69,6 @@ export const instancesActions = {
     needs: "nothing",
     actor: "any",
     input: sessionInput,
-    description:
-      "Open the authored staged document in the explicitly supplied session incarnation; refused if that document is already open there.",
   },
   "instances.restart": {
     says: "Restart the explicitly supplied session incarnation. Human-only.",
@@ -80,7 +76,6 @@ export const instancesActions = {
     needs: "nothing",
     actor: "human",
     input: sessionInput,
-    description: "Restart the explicitly supplied session incarnation. Human-only.",
   },
   "instances.stop": {
     says: "Stop the explicitly supplied session incarnation. Human-only.",
@@ -88,7 +83,6 @@ export const instancesActions = {
     needs: "nothing",
     actor: "human",
     input: sessionInput.extend({ force: z.boolean().default(false) }),
-    description: "Stop the explicitly supplied session incarnation. Human-only.",
   },
   "instances.close": {
     says: "Close the explicitly supplied document lifetime by its published openId. Human-only.",
@@ -96,8 +90,6 @@ export const instancesActions = {
     needs: "nothing",
     actor: "human",
     input: sessionInput.extend({ document: documentRefSchema, intent: z.string().min(1) }),
-    description:
-      "Close the explicitly supplied document lifetime by its published openId. Human-only.",
   },
 } as const;
 export type InstancesActionKey = keyof typeof instancesActions;
@@ -108,8 +100,6 @@ export const instancesReading = {
   needs: "nothing",
   actor: "any",
   mutates: false,
-  description:
-    "Read SDK sessions, installed years, recents or current documents without changing authored Instances Work.",
   input: z.object({
     read: z.enum(["sessions", "doctor", "recents", "current"]),
     id: z.string().optional(),
