@@ -1,16 +1,13 @@
 /**
  * THE TEST BAR (ruling 2026-09-22, crusade C8). A test is canon only if it drives a surface a user
- * or agent touches, or pins a public contract. Every web and host test file lands in one class,
- * first match wins:
+ * or agent touches, or pins a public contract. Its lane is its path:
  *
- *   SCAFFOLD  it fakes its own world: `vi.mock(`, `vi.spyOn(`, `vi.fn(`, `toHaveBeenCalled`,
- *             `renderHook(` (private route-state), or an `as never` cast that forges a handle.
+ *   SURFACE   apps/host/tests/**            the host speaks HTTP
+ *             apps/web/src/routes/-*.test.tsx  a rendered route
+ *   CONTRACT  a web or host test that parses through @pe/agent-contracts or @pe/host-contracts
+ *   SCAFFOLD  any other web test, and any test in a lane that fakes its world: `vi.mock(`,
+ *             `vi.spyOn(`, `vi.fn(`, `toHaveBeenCalled`, `renderHook(`, or an `as never` cast.
  *             An empty Effect context cast and a spy on `console.log` (a CLI's output) are plumbing.
- *   SURFACE   it drives a surface: a host test that speaks HTTP (`fetch(`, `.request(`, `listen(`,
- *             `handler(new Request(`),
- *             or a web test that renders a route module (`#/routes/`).
- *   CONTRACT  it parses through `@pe/agent-contracts` or `@pe/host-contracts` (`.parse(`).
- *   SCAFFOLD  anything else: a unit with no surface and no public contract.
  *
  * The census prints every file's class. SCAFFOLD is held at the recorded ceiling until the sweep
  * brings it to zero; a new SCAFFOLD file fails, a removed one lowers the ceiling.
@@ -23,23 +20,22 @@ import { expect, it } from "vite-plus/test";
 const TS = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const ROOTS = ["apps/web/src", "apps/host/tests"];
 const FAKE = /vi\.(mock|spyOn|fn)\(|toHaveBeenCalled|renderHook\(|as never\b/;
-const HTTP = /fetch\(|\.request\(|listen\(|handler\(new Request\(/;
 /** Plumbing, not a forged world: an empty Effect context, and a CLI's printed output. */
 const PLUMBING = /Context\.empty\(\) as never|vi\.spyOn\(console, "log"\)/g;
-const ROUTE = /from "#\/routes\//;
+const SURFACE_LANE = /^apps\/host\/tests\/|^apps\/web\/src\/routes\/-[^/]+\.test\.tsx$/;
 const CONTRACT =
   /from "@pe\/(agent|host)-contracts[^"]*"[\s\S]*\.parse\(|\.parse\([\s\S]*from "@pe\/(agent|host)-contracts/;
 
-// ponytail: a ceiling, not an allowlist. The 15 are held for the measured, work, actions, and
-// options crusades; sweep each after its merge, then delete this constant and assert zero.
-const SCAFFOLD_CEILING = 15;
+// ponytail: a ceiling, not an allowlist. Held for the web sweep (three contract-pinning web tests
+// outside the routes lane included); sweep, then delete this constant and assert zero.
+const SCAFFOLD_CEILING = 16;
 
 type Kind = "SURFACE" | "CONTRACT" | "SCAFFOLD";
 
 function classify(rel: string, text: string): Kind {
   if (FAKE.test(text.replace(PLUMBING, ""))) return "SCAFFOLD";
-  if (rel.startsWith("apps/host/") ? HTTP.test(text) : ROUTE.test(text)) return "SURFACE";
   if (CONTRACT.test(text)) return "CONTRACT";
+  if (SURFACE_LANE.test(rel)) return "SURFACE";
   return "SCAFFOLD";
 }
 

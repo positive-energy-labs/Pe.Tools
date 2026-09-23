@@ -10,35 +10,6 @@ import {
   HOST_RPC_DOCUMENT_HEADER,
 } from "@pe/host-contracts/operation-types";
 
-/** Both browser and MCP collect through the actual /call publication boundary. */
-export async function readTakeoffCapture(target: DocumentRef, base = "", signal?: AbortSignal) {
-  signal = signal
-    ? AbortSignal.any([signal, AbortSignal.timeout(120_000)])
-    : AbortSignal.timeout(120_000);
-  const response = await fetch(`${base}/call`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      [HOST_RPC_BRIDGE_SESSION_HEADER]: target.session,
-      [HOST_RPC_DOCUMENT_HEADER]: target.openId,
-    },
-    body: JSON.stringify({ key: "takeoffs.snapshot" }),
-    signal,
-  });
-  if (!response.ok)
-    throw Error(`Snapshot read failed (${response.status}): ${await response.text()}`);
-  const id = response.headers.get("x-pe-takeoff-capture-id");
-  if (!id) throw Error("Snapshot response omitted its durable capture identity.");
-  const capture = await readSavedTakeoffCapture(id, base, signal);
-  if (
-    capture.provenance.kind !== "live" ||
-    capture.provenance.target.session !== target.session ||
-    capture.provenance.target.openId !== target.openId
-  )
-    throw Error("Snapshot capture does not belong to the requested open document lifetime.");
-  return capture;
-}
-
 // Immutable IDs share one bounded cache across observation/status and explicit saved reads.
 const captures = new Map<string, Promise<TakeoffCapture>>();
 /** That capture file's exact stored text and path, by its already-validated ID. Read once. */
@@ -55,7 +26,7 @@ export async function readSavedTakeoffText(
   return (await response.json()) as { path: string; text: string };
 }
 
-export async function readSavedTakeoffCapture(id: string, base = "", signal?: AbortSignal) {
+async function readSavedTakeoffCapture(id: string, base = "", signal?: AbortSignal) {
   const key = `${base}/${id}`;
   let pending = captures.get(key);
   if (!pending) {

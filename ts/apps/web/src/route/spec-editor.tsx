@@ -82,7 +82,7 @@ export async function openMember(member: PodMember): Promise<SettingsSnapshot> {
   };
 }
 
-export type MemberWorkAction = "open" | "adopt" | "save";
+type MemberWorkAction = "open" | "adopt" | "save";
 export type MemberWorkHandle = RouteHandle<
   SettingsRouteDocument,
   never,
@@ -98,7 +98,7 @@ const adoptInput = z.object({ sha256: z.string().min(1) });
  * reviewer and `/family` write them); refresh and validate stay Work commands Pea calls, because
  * the editor already re-reads the member and shows live composition diagnostics.
  */
-export const memberWorkManifest = (seed?: SettingsRouteDocument) => {
+const memberWorkManifest = (seed?: SettingsRouteDocument) => {
   // `?demo=<key>` mounts a seed under whatever key the host page was opened with.
   const demo = globalThis.location
     ? new URLSearchParams(globalThis.location.search).get("demo")

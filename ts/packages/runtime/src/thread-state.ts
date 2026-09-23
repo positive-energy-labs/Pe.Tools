@@ -213,7 +213,7 @@ export function expireAsks(
  * What an ask a new turn ended reads as, in the stored transcript and in the next turn's model
  * context: unanswered, never rejected and never silently dropped (journeys, E2E-J5).
  */
-export const EXPIRED_UNANSWERED = {
+const EXPIRED_UNANSWERED = {
   expired: "unanswered",
   note: "The person sent a new message instead of answering.",
 } as const;

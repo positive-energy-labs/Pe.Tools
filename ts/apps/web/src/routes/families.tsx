@@ -5,9 +5,6 @@ import { useFamiliesStore } from "#/families/store";
 import { entitySearch, useRouteThread, type EntitySearch } from "#/route";
 import { routeSearch } from "#/route/route-owner";
 
-import { manifest as familiesManifest } from "#/families/manifest";
-export const manifest = familiesManifest;
-
 const str = (value: unknown) => (typeof value === "string" ? value : "");
 
 /** `?demo=<action>` mounts one seed of `manifest.seeds`; stage, pod and path are the page in the URL. */

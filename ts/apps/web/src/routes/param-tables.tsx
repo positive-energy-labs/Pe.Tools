@@ -5,7 +5,7 @@ import { VariantE } from "#/param-tables/variants/variant-e";
 
 /** Round-one winner. The search parser remains so existing URLs keep their shape. */
 /** Not cut over yet: an empty manifest is a legal manifest and the shell renders one. */
-export const manifest = emptyManifest("param-tables", "Param Tables");
+const manifest = emptyManifest("param-tables", "Param Tables");
 
 function RouteShelledVariantE() {
   return (

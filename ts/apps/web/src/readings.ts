@@ -51,7 +51,7 @@ import type { LoadedFamiliesMatrixRequest } from "#/host/loaded-families-view.ts
 import type { HostLane } from "@pe/host-contracts/service-identity";
 import { peUrl, resolveWorkbenchConfig } from "#/workbench/config.ts";
 
-export type { Custody, Lane };
+export type { Lane };
 
 /* -- The one wire ------------------------------------------------------------------------- */
 
@@ -59,7 +59,7 @@ type Frame = (ReadingFrame & { stale?: boolean }) | { kind: "stale"; key: string
 type Source = Pick<EventSource, "onopen" | "onmessage" | "onerror" | "close">;
 
 /** One browser connection. This map owns subscriptions and retained evidence, never owner truth. */
-export class PeReadings {
+class PeReadings {
   private readonly entries = new Map<
     string,
     {
@@ -253,7 +253,7 @@ export const mapReading = <A, B>(reading: Reading<A>, project: (value: A) => B):
         : { ...reading, previous: reading.previous ? project(reading.previous) : undefined };
 
 /** One frame advances one Reading. Evidence from before an invalidation is never erased. */
-export function advance<T>(reading: Reading<T>, frame: Frame): Reading<T> {
+function advance<T>(reading: Reading<T>, frame: Frame): Reading<T> {
   const previous = previousOf(reading);
   switch (frame.kind) {
     case "snapshot":
@@ -364,7 +364,7 @@ export function readReading(
 
 /* -- TakeoffModel events: the one push channel that is not a subject ----------------------------- */
 
-export function subscribeHostEvents<T>(listener: (event: T) => void): () => void {
+function subscribeHostEvents<T>(listener: (event: T) => void): () => void {
   return peReadings.subscribe({ kind: "world" }, (frame) => {
     if (frame.kind === "event") listener(frame.value as T);
     else if (frame.kind === "gap" || frame.kind === "stale")
@@ -422,10 +422,6 @@ export interface SessionInventory {
 
 const CUSTODIES: readonly Custody[] = ["controlled", "observed"];
 const LANES: readonly Lane[] = ["dev", "installed"];
-
-/** Mint the active Revit document identity. */
-export const documentAddress = (session: SessionInventory): Address | null =>
-  addressSchema.safeParse(session.activeDocumentId).data ?? null;
 
 /** The id a Target names: the pe-revit session id when the payload has one, else the broker's. */
 export const sessionKey = (session: SessionInventory): string =>
@@ -537,7 +533,7 @@ function projectObservation(row: SessionObservation): ObservationView {
 }
 
 /** Joins only one exact process incarnation; the SDK census owns every Revit's classification. */
-export function inventoryView(
+function inventoryView(
   rows: readonly (SessionObservation & { brokerSessionId?: string | null })[],
   sessions: readonly SessionInventory[],
 ): Inventory[] {
@@ -618,10 +614,6 @@ export function targetInventory(
   }
   return { kind: "ready", sessions };
 }
-
-/** The one inventory the Target resolver reads. */
-export const useTargetInventory = (enabled = true): TargetInventory =>
-  targetInventory(useInventory(enabled));
 
 /** Every Revit the SDK census knows, joined to the ones the bridge can see. */
 export function useFleet() {

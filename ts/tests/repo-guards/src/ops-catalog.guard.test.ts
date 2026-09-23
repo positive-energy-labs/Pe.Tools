@@ -1,27 +1,13 @@
 /**
- * =============================================================================================
- * THE OPS-CATALOG DRIFT GUARD — the generated operation catalog is public-contract authority.
- * =============================================================================================
- *
- * `@pe/host-contracts` generates `src/generated/host-ops.generated.ts` from `pe-dev ops-catalog`,
- * and `codegen:check` is the drift gate. Nothing ran that gate: the `--project` path went dead at
- * the `dotnet/` move and no test noticed, so C# operations could drift from the TypeScript the app
- * imports without a red anywhere (crusade review 2026-09-22).
- *
- * Two `it`s, coarse to fine:
- *  1. live script paths   every filesystem path the `codegen*` scripts name resolves. A rename or
- *                         a folder move reddens here in milliseconds, with the path in the message.
- *  2. no drift            the `codegen:check` script itself runs, exactly as package.json writes
- *                         it: the C# CLI projects the catalog and the typegen diffs it against the
- *                         checked-in file. This is the gate; it is never skipped, so a missing
- *                         `dotnet` is a red and not a silence.
- *
- * Same posture as the other guards: plain fs, plain regex, no new dependency.
- * =============================================================================================
+ * THE OPS-CATALOG DRIFT GUARD. `host-ops.generated.ts` is projected from the dotnet graph by
+ * `pnpm codegen` in @pe/host-contracts, which also records `ops-catalog.sha`, a hash of every
+ * non-test C# source. A dotnet edit without a regen reddens here in milliseconds; the guard never
+ * builds dotnet (the old shape took 200 to 330 s per run with its output hidden, signal 1 of the
+ * crusade review 2026-09-22). `codegen:check` remains the slow lane that proves the generator.
  */
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { delimiter, dirname, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -37,16 +23,6 @@ const scripts = (
     scripts: Record<string, string>;
   }
 ).scripts;
-
-/** The bins a pnpm script would have on PATH, so `dotnet`, `vpx` and `node` resolve the same way. */
-const env = {
-  ...process.env,
-  PATH: [
-    resolve(PACKAGE, "node_modules/.bin"),
-    resolve(REPO, "ts/node_modules/.bin"),
-    process.env.PATH ?? "",
-  ].join(delimiter),
-};
 
 describe("ops-catalog codegen", () => {
   it("names only paths that exist", () => {
@@ -65,8 +41,11 @@ describe("ops-catalog codegen", () => {
     expect(dead, "a codegen script points at a path that no longer exists").toEqual([]);
   });
 
-  it("generates exactly the checked-in host-ops.generated.ts", () => {
-    // The script, verbatim: a guard that re-spelled the command would not guard the command.
-    execSync(scripts["codegen:check"]!, { cwd: PACKAGE, env, stdio: "pipe" });
-  }, 600_000);
+  it("host-ops.generated.ts was generated from the current dotnet sources", () => {
+    const r = spawnSync("node", ["scripts/ops-catalog-hash.ts"], {
+      cwd: PACKAGE,
+      encoding: "utf8",
+    });
+    expect(r.status, r.stderr).toBe(0);
+  });
 });

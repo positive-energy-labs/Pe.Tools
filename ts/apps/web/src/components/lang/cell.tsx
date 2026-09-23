@@ -86,18 +86,15 @@ export {
   cellFromTrichotomy,
   cellStateLabel,
   fmtNum,
-  parseCell,
   readMeasuredText,
   unitWord,
 } from "./cell-state";
 export type {
   CellCommit,
   CellRefusal,
-  CellStateName,
   CellTransition,
   CellTransitionKind,
   StateCellProps,
-  Unsettled,
 } from "./cell-state";
 
 /** Each kind's glyph, key and plain sentence. The caller's `reason` overrides the sentence. */
@@ -138,7 +135,7 @@ function CellKeys({
  * Table hands each cell its td. Absent, the cell is its own host.
  */
 /** The drawn empty value: a stated blank, as the band draws it. */
-export const EMPTY_MARK = "–";
+const EMPTY_MARK = "–";
 
 /** The refusal's words for Pea, folded away under the person's sentence. */
 const RefusalDetail = ({ detail }: { detail: string }) => (

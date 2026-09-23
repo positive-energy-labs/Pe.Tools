@@ -2,14 +2,6 @@ import z from "zod";
 
 export type SearchResult = z.infer<typeof toolOutputSchemas.searchResultSchema>;
 
-export type SearchResponseRvtDocsCom = z.infer<
-  typeof toolOutputSchemas.searchResponseRvtDocsComSchema
->;
-
-export type SearchResponseRevitApiDocsCom = z.infer<
-  typeof toolOutputSchemas.searchResponseRevitApiDocsComSchema
->;
-
 export const SearchResultTypes = [
   "Class",
   "Constructor",
@@ -21,17 +13,17 @@ export const SearchResultTypes = [
   "Enumeration",
 ] as const;
 
-export const defaultRevitApiDocsYear = 2025;
-export const defaultRevitApiMaxResults = 10;
+const defaultRevitApiDocsYear = 2025;
+const defaultRevitApiMaxResults = 10;
 
-export const usageExampleSchema = z.object({
+const usageExampleSchema = z.object({
   file: z.string().describe("Absolute path to a local source file using this API member."),
   startLine: z.number(),
   endLine: z.number(),
   enclosing: z.string().describe("Fully qualified enclosing member containing the usage."),
 });
 
-export const searchResultSchema = z.object({
+const searchResultSchema = z.object({
   title: z.string(),
   description: z.string().optional(),
   namespace: z.string().optional(),
@@ -55,13 +47,13 @@ export const searchResultSchema = z.object({
     .describe("Extracted markdown from this result's documentation page."),
 });
 
-export const searchResultsSchema = z.array(searchResultSchema);
+const searchResultsSchema = z.array(searchResultSchema);
 
-export const docsTextSchema = z.string();
+const docsTextSchema = z.string();
 
-export const docsTextResultsSchema = z.array(docsTextSchema);
+const docsTextResultsSchema = z.array(docsTextSchema);
 
-export const searchResponseRvtDocsComSchema = z.object({
+const searchResponseRvtDocsComSchema = z.object({
   current_version_results: z
     .array(
       z.object({
@@ -77,7 +69,7 @@ export const searchResponseRvtDocsComSchema = z.object({
     .optional(),
 });
 
-export const searchResponseRevitApiDocsComSchema = z.object({
+const searchResponseRevitApiDocsComSchema = z.object({
   sections: z
     .object({
       Products: z
@@ -137,7 +129,7 @@ export const toolInputArgSchemas = {
     ),
 };
 
-export const toolOutputSchemas = {
+const toolOutputSchemas = {
   searchResultSchema,
   searchResultsSchema,
   docsTextSchema,

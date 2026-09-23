@@ -20,7 +20,7 @@ import { hostOwnership, productRoot } from "./host-ownership.ts";
 
 // The dev script (`pnpm dev`) passes this to authorize a dev-over-dev takeover; it becomes
 // `hostReplacementPolicy` DATA (SDK-owned), not local probe logic (IPC-SEAM-SPEC D3).
-export const DEV_TAKEOVER_ARGUMENT = "--take-over-host";
+const DEV_TAKEOVER_ARGUMENT = "--take-over-host";
 
 /**
  * Lifecycle handles shared between the launch root and the request handlers (Pillar 3):

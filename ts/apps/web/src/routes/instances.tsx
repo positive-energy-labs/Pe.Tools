@@ -1,11 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { instancesManifest } from "#/instances/manifest";
 import { InstancesPage } from "#/instances/route";
 
 export { InstancesPage } from "#/instances/route";
-
-/** The one manifest for `/instances` (route-primitive guard row 4). */
-export const manifest = instancesManifest;
 
 export const instancesSearch = (search: Record<string, unknown>) => ({
   thread: typeof search.thread === "string" ? search.thread.trim() : undefined,

@@ -25,7 +25,7 @@ import { ensureRunning } from "@pe/host-contracts/pe-service";
 
 const runtimeCloseTimeoutMs = 5000;
 const sourceHostStartupTimeoutMs = 45_000;
-export const defaultPeaPromptTimeoutSeconds = 900;
+const defaultPeaPromptTimeoutSeconds = 900;
 
 // Progress breadcrumbs on stderr: off by default so `pea --prompt --json` stays pipe-clean.
 // Set PEA_PROMPT_TRACE=1 to locate a stuck await on timeout.

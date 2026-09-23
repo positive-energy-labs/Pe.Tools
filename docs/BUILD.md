@@ -394,7 +394,7 @@ pnpm --filter @pe/host-contracts codegen:check
 pnpm --filter @pe/host-contracts codegen:verify-live -- --session <bridgeSessionId>
 ```
 
-The generator is `packages/host-contracts/scripts/host-typegen.ts`; root `pnpm typegen:check` delegates to the offline `codegen:check` and runs inside `pnpm ready`. Regenerate after changing a C# request/response DTO or adding an op, and commit the result like a lockfile. Schema required-ness is honest per direction: response properties are required exactly when non-nullable in C#; request properties are required only when non-nullable *and* their constructor parameter has no default (`BridgeOpSchemaGenerator`).
+The generator is `packages/host-contracts/scripts/host-typegen.ts`; `pnpm verify` guards drift through `src/generated/ops-catalog.sha`, a hash of every non-test C# source that `pnpm codegen` records; a dotnet edit without a regen reddens the ops-catalog guard in milliseconds. Regenerate after changing a C# request/response DTO or adding an op, and commit the result like a lockfile. Schema required-ness is honest per direction: response properties are required exactly when non-nullable in C#; request properties are required only when non-nullable *and* their constructor parameter has no default (`BridgeOpSchemaGenerator`).
 
 What lives in `@pe/host-contracts`:
 

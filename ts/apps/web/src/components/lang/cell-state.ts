@@ -8,7 +8,7 @@ import type React from "react";
 
 /** The one squiggle slot. Ranked; exactly one may draw. `never` is NOT here on purpose —
  * nothing exists to distrust, so it draws no squiggle (ruled 2026-08-16, consolidation batch). */
-export type Unsettled = "drift" | "stale" | "unverified";
+type Unsettled = "drift" | "stale" | "unverified";
 
 /** A refusal a cell says: the person's sentence, and optionally words written for Pea. */
 export interface CellRefusal {

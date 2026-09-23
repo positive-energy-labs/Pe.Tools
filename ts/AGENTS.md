@@ -9,8 +9,7 @@ Docs are local at `node_modules/vite-plus/docs` or online at https://viteplus.de
 ## Review Checklist
 
 - [ ] Run `vp install` after pulling remote changes and before getting started.
-- [ ] Run `vp check` and `vp test` to format, lint, type check and test changes.
-- [ ] Check if there are `vite.config.ts` tasks or `package.json` scripts necessary for validation, run via `vp run <script>`.
+- [ ] Run `pnpm verify` before claiming a change is done. It is the only proof entrypoint; CI runs the same command.
 - [ ] If setup, runtime, or package-manager behavior looks wrong, run `vp env doctor` and include its output when asking for help.
 
 <!--VITE PLUS END-->

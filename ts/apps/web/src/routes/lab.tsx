@@ -14,7 +14,7 @@ import { useChooseTarget } from "#/route/shell";
 import { useDocumentLadder } from "#/route/situation-ladder";
 
 /** Not cut over yet: the lab needs a session to call the host, and nothing else. */
-export const manifest: RouteManifest<never, "inventory", Record<string, never>, never> = {
+const manifest: RouteManifest<never, "inventory", Record<string, never>, never> = {
   ...emptyManifest("lab", "Lab"),
   needs: "session",
   readings: { inventory: { kind: "inventory" } },

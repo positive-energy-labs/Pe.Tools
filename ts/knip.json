@@ -1,0 +1,22 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "ignore": ["**/vendor/**", "**/*.generated.ts", "**/routeTree.gen.ts"],
+  "ignoreBinaries": ["vp", "vpx", "reg.exe"],
+  "ignoreDependencies": [
+    "@typescript/native-preview",
+    "bumpp",
+    "jiti",
+    "@opentui/solid",
+    "@family-fixtures/.*"
+  ],
+  "workspaces": {
+    ".": { "entry": ["scripts/*.ts", "tests/e2e/*.ts"] },
+    "apps/host": { "entry": ["src/index.ts", "src/dev.ts", "scripts/*.{ts,mjs}"] },
+    "apps/web": { "entry": ["src/routes/**/*.{ts,tsx}", "scripts/*"] },
+    "packages/factory": { "entry": ["actuators/*.ts", "sensors/*.ts"] },
+    "packages/host-contracts": { "entry": ["scripts/*.ts"] },
+    "packages/mcps": { "entry": ["src/server.ts"] },
+    "tests/e2e": { "entry": ["*.ts"] },
+    "tests/repo-guards": {}
+  }
+}

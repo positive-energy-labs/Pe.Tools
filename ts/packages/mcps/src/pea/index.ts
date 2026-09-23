@@ -13,7 +13,6 @@ export {
   peDo,
   peFind,
   peRead,
-  targetSet,
 } from "./capability-tools.ts";
 export {
   buildCapabilities,
@@ -36,7 +35,7 @@ export {
 const sessionOf = (target: DocumentRequest | null | undefined): string | undefined =>
   target ? (target.kind === "open" ? target.ref.session : target.session) : undefined;
 
-export const captureView = createCaptureViewTool(
+const captureView = createCaptureViewTool(
   (context) =>
     new HostRpcCaller({
       hostBaseUrl: peaHostBaseUrl(),

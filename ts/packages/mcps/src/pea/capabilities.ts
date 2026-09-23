@@ -34,7 +34,6 @@ type OpsCatalogEntry = HostOperationDefinition & {
   requestSchemaJson?: string;
   responseSchemaJson?: string;
 };
-export type { PodList };
 type Sessions = HostOpResponse<"bridge.sessions.list">["sessions"];
 
 export interface CapabilitySources {

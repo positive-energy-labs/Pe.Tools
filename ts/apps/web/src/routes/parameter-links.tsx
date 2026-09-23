@@ -45,7 +45,7 @@ import {
   type ParameterLinksPage,
   type ParameterLinksReadingKey,
 } from "#/parameter-links/manifest";
-export const manifest = parameterLinksManifest;
+const manifest = parameterLinksManifest;
 
 /**
  * /parameter-links — the route-native workspace for cross-element parameter links.

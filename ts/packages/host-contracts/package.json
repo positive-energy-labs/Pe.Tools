@@ -62,7 +62,7 @@
     "test": "vp test",
     "check": "vp check",
     "prepublishOnly": "vp run build",
-    "codegen": "dotnet run --project ../../../dotnet/Pe.Dev.Cli -- ops-catalog --out .cache/ops-catalog.json && vpx node --import jiti/register scripts/host-typegen.ts --catalog .cache/ops-catalog.json",
+    "codegen": "dotnet run --project ../../../dotnet/Pe.Dev.Cli -- ops-catalog --out .cache/ops-catalog.json && vpx node --import jiti/register scripts/host-typegen.ts --catalog .cache/ops-catalog.json && node scripts/ops-catalog-hash.ts --write",
     "codegen:check": "dotnet run --project ../../../dotnet/Pe.Dev.Cli -- ops-catalog --out .cache/ops-catalog.json && vpx node --import jiti/register scripts/host-typegen.ts --catalog .cache/ops-catalog.json --check",
     "codegen:verify-live": "vpx node --import jiti/register scripts/host-typegen.ts --check"
   },

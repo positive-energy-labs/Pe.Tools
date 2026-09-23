@@ -21,7 +21,7 @@ import { RouteShell, emptyManifest } from "#/route";
 import { Card } from "#/components/lang/card";
 
 /** Not cut over yet: an empty manifest is a legal manifest and the shell renders one. */
-export const manifest = emptyManifest("index", "Positive Energy");
+const manifest = emptyManifest("index", "Positive Energy");
 
 export const Route = createFileRoute("/")({ component: App });
 

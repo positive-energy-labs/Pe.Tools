@@ -72,7 +72,7 @@ export const requestAccess = createTool({
   },
 });
 
-export function requestAccessRequiresApproval(
+function requestAccessRequiresApproval(
   { path: requestedPath }: RequestAccessInput,
   context: unknown,
 ): boolean {
@@ -95,7 +95,7 @@ export function resolveWorkspacePathAccess(
   };
 }
 
-export function grantWorkspaceAccess(options: {
+function grantWorkspaceAccess(options: {
   controllerCtx?: RequestAccessControllerContext;
   localFilesystem?: LocalFilesystem;
   threadSettings?: RuntimeThreadSettingsContext;
@@ -147,12 +147,12 @@ async function grantWorkspaceAccessAsync(options: {
   );
 }
 
-export function resolveRequestedPath(requestedPath: string, basePath = process.cwd()): string {
+function resolveRequestedPath(requestedPath: string, basePath = process.cwd()): string {
   const expanded = expandTilde(requestedPath);
   return path.resolve(path.isAbsolute(expanded) ? expanded : path.join(basePath, expanded));
 }
 
-export function isPathAllowed(
+function isPathAllowed(
   targetPath: string,
   projectRoot: string,
   allowedPaths: readonly string[] = [],

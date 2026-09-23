@@ -56,7 +56,7 @@ export async function operationDefinition(
     requestSchemaJson: (raw as { requestSchemaJson?: string }).requestSchemaJson,
   };
 }
-export async function resolveGatewaySession(bridge: RevitBridge["Service"], selector?: string) {
+async function resolveGatewaySession(bridge: RevitBridge["Service"], selector?: string) {
   const sessions = (await Effect.runPromise(bridge.list))
     .filter((s) => s.sessionId)
     .map((s) => ({

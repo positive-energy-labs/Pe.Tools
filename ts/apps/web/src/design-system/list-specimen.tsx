@@ -22,7 +22,7 @@ interface Thread {
   id: string;
   title: string;
 }
-export const THREADS: Thread[] = [
+const THREADS: Thread[] = [
   ...CHAT_SEED_THREADS,
   ...Object.entries(CHAT_SEEDS).map(([id, seed]) => ({ id, title: seed.title })),
 ];
@@ -41,7 +41,7 @@ const SESSIONS: LadderItem[] = [
   { key: "pe.app-25", label: "pe.app-25", sub: "reading…", pending: true },
   { key: "pe.app-24", label: "pe.app-24", sub: "read failed: bridge closed", failed: true },
 ];
-export const LADDER = [
+const LADDER = [
   { label: "session", items: () => SESSIONS },
   {
     label: "document",
@@ -60,7 +60,7 @@ interface Option {
   sub?: string;
 }
 /** The families demo parameters and one built-in, as the `field-options` Reading would answer. */
-export const FIELD_OPTIONS: Option[] = [
+const FIELD_OPTIONS: Option[] = [
   ...new Set(DEMO_FAMILIES.flatMap((f) => f.parameters.map((p) => p.definition.identity.name))),
 ]
   .map((name) => ({ key: `name:${name}`, label: name, sub: "family parameter" }))
@@ -72,7 +72,7 @@ interface Member {
   pod: string;
   schema: string | null;
 }
-export const MEMBERS: Member[] = DEMO_PODS.flatMap((pod) =>
+const MEMBERS: Member[] = DEMO_PODS.flatMap((pod) =>
   pod.members.map((m) => ({
     key: `${pod.id}:${m.path}`,
     label: m.path,
@@ -96,7 +96,7 @@ const box = (x: number, y: number, w: number, h: number): [number, number][][] =
     [x, y + h],
   ],
 ];
-export const ZONES: Zone[] = [
+const ZONES: Zone[] = [
   {
     key: "zone-0",
     label: "Transparent Cyan 4",
@@ -131,7 +131,7 @@ const bounds = (loops: [number, number][][]) => {
   };
 };
 
-export const COMMANDS = selectSkillCommands(CHAT_SEED_STATE.inspect).map((c) => ({
+const COMMANDS = selectSkillCommands(CHAT_SEED_STATE.inspect).map((c) => ({
   key: c.name,
   label: `/${c.name}`,
   sub: c.description,

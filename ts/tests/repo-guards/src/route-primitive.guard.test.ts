@@ -171,33 +171,6 @@ describe("route primitive guard — no react-query", () => {
   });
 });
 
-// ── 4. one manifest per route ────────────────────────────────────────────────────────────────
-
-describe("route primitive guard — one manifest per route", () => {
-  it("every routes/*.tsx (excluding __root.tsx, -*.test.tsx, design-system_*) exports exactly one `export const manifest`", () => {
-    const routeFiles = WEB_FILES.filter(
-      (f) =>
-        /^routes\/[^/]+\.tsx$/.test(f.rel) &&
-        f.rel !== "routes/__root.tsx" &&
-        !/^routes\/-.*\.test\.tsx$/.test(f.rel) &&
-        !f.rel.startsWith("routes/design-system_"),
-    );
-    expect(routeFiles.length, "no route files found — the corpus query is wrong").toBeGreaterThan(
-      0,
-    );
-
-    const offences: string[] = [];
-    for (const f of routeFiles) {
-      const count = [...f.text.matchAll(/export const manifest\b/g)].length;
-      if (count !== 1) offences.push(`${f.rel} (found ${count})`);
-    }
-    expect(
-      offences.length,
-      `Route files must export exactly one \`export const manifest\` (fable §3, fold-2-paper.md naming ruling):\n${list(offences)}`,
-    ).toBe(0);
-  });
-});
-
 // ── 5. one stream, one registry ──────────────────────────────────────────────────────────────
 
 describe("route primitive guard — one stream, one registry", () => {

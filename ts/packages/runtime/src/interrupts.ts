@@ -6,37 +6,6 @@ export interface RuntimeResumeDecision {
   payload?: RuntimeJsonValue;
 }
 
-export function createRuntimeResumeContextEntries(
-  decisions: RuntimeResumeDecision[] | undefined,
-): Array<{ description: string; value: string }> {
-  if (!decisions || decisions.length === 0) return [];
-  return [
-    {
-      description: "Runtime resume decisions",
-      value: JSON.stringify(decisions.map(withoutUndefinedResumeDecision), null, 2),
-    },
-  ];
-}
-
-export function toRuntimeResumeDecisions(
-  decisions:
-    | Array<{
-        interruptId: string;
-        status: "resolved" | "cancelled";
-        payload?: unknown;
-      }>
-    | undefined,
-): RuntimeResumeDecision[] | undefined {
-  if (!decisions || decisions.length === 0) return undefined;
-  return decisions.map((decision) =>
-    withoutUndefinedResumeDecision({
-      interruptId: decision.interruptId,
-      status: decision.status,
-      payload: decision.payload === undefined ? undefined : sanitizeJson(decision.payload),
-    }),
-  );
-}
-
 export function readRuntimeResumeDecisions(value: unknown): RuntimeResumeDecision[] {
   return Array.isArray(value) ? value.map(readRuntimeResumeDecision).filter(isDefined) : [];
 }

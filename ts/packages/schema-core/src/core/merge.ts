@@ -54,10 +54,7 @@ function mergeRecords(
   };
 }
 
-export function mergeSchemaNodes(
-  base: RenderSchemaNode,
-  override: RenderSchemaNode,
-): RenderSchemaNode {
+function mergeSchemaNodes(base: RenderSchemaNode, override: RenderSchemaNode): RenderSchemaNode {
   const merged: RenderSchemaNode = {
     ...base,
     ...override,

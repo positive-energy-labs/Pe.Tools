@@ -3,8 +3,6 @@ import { TakeoffsRoute } from "#/takeoff/route";
 import { routeSearch } from "#/route/route-owner";
 
 export { TakeoffsRoute, LiveTakeoffsRoute } from "#/takeoff/route";
-import { manifest as takeoffsManifest } from "#/takeoff/manifest";
-export const manifest = takeoffsManifest;
 
 const str = (value: unknown) => (typeof value === "string" ? value : "");
 

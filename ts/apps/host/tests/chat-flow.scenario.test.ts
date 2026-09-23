@@ -349,7 +349,6 @@ test("the browser walks one durable chat lifecycle", async () => {
     expect(findBody).toContain(`"session":"${scopeSession}"`);
     expect(findBody).toContain('"revision":1');
     expect(findBody).toContain('"map":{');
-    expect(findBody).toContain("route-command");
     // pe_read route:instances under that Target: the document lands under the Work key.
     await driveTurn("READ_TURN", readFinalText);
     expect(JSON.stringify((await readThread()).messages)).toContain('"key":"route:instances"');

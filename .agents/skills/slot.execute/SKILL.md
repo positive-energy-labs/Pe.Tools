@@ -73,7 +73,7 @@ dotnet tool run pe-revit -- <command> --json
 
 ## Host, web, Pea, and browser
 
-- Run checks and tests through the owning package from `ts`. Use `vp check --fix <paths>` once, then `vp check <paths>` once. A package name is not a check target.
+- `pnpm verify` from `ts` is the one proof of a change: workspace check, knip, every package's tests, then the repo guards, serialized, full output. Nothing else is a named proof entrypoint.
 - Run host or web dev servers in Herdr. Ports are dynamic; read the service receipt under `%LOCALAPPDATA%\Positive Energy\Pe.Tools\state\service\` instead of assuming one.
 - The generated contract in `packages/host-contracts/src/vendor/generated/pe-revit-contract.ts` owns `pe-revit` argv and envelopes. Do not hand-write either.
 - `pea` is checkout-pinned. Read the checkout and host URL it reports before treating its answer as evidence, especially from a worktree.

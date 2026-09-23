@@ -42,7 +42,6 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.21.0",
-    "@hono/node-server": "^1.19.14",
     "@mastra/code-sdk": "1.4.0",
     "@mastra/core": "1.61.0",
     "@mastra/hono": "1.7.1",

@@ -51,11 +51,9 @@ export const scriptBootstrapInputSchema = z.object({
     .describe("Pe scripting workspace (pod) key. Defaults to the runtime workspace."),
 });
 
-export const opCancelInputSchema = z.object({
+const opCancelInputSchema = z.object({
   requestId: z.string().describe("The requestId the in-flight operation was sent under."),
 });
-
-export const scriptPodListInputSchema = z.object({});
 
 export const scriptPodImportInputSchema = z.object({
   archivePath: z
@@ -85,7 +83,6 @@ export type ScriptRuntimeContext = HostSessionScope & {
 export type ScriptExecuteInput = z.input<typeof scriptExecuteInputSchema>;
 export type ScriptBootstrapInput = z.input<typeof scriptBootstrapInputSchema>;
 export type OpCancelInput = z.input<typeof opCancelInputSchema>;
-export type ScriptPodListInput = z.input<typeof scriptPodListInputSchema>;
 export type ScriptPodImportInput = z.input<typeof scriptPodImportInputSchema>;
 export type ScriptPodExportInput = z.input<typeof scriptPodExportInputSchema>;
 

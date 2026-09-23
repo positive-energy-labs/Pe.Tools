@@ -5,7 +5,7 @@ export interface FieldHint {
   placeholder?: string;
 }
 
-export interface RenderUiMetadata {
+interface RenderUiMetadata {
   renderer?: string | null;
   layout?: {
     section?: string | null;

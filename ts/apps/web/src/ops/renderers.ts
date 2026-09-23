@@ -31,7 +31,8 @@ export const outputRenderers: Record<string, ComponentType<OpViewProps>> = {
   "revit.matrix.loaded-families": LoadedFamiliesView,
 };
 
-/** These catalog operations deliberately show their schema-shaped raw receipt. */
+/** These catalog operations deliberately show their schema-shaped raw receipt.
+ * @public read by name from the action-authority guard, not imported. */
 export const rawByDesign = [
   "aps.auth.login",
   "aps.auth.logout",

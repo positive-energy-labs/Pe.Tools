@@ -1,9 +1,5 @@
 import { actionListFilterSchema, type ActionListFilter } from "@pe/agent-contracts";
 import {
-  HOST_RPC_BRIDGE_SESSION_HEADER,
-  HOST_RPC_DOCUMENT_HEADER,
-} from "@pe/host-contracts/operation-types";
-import {
   canonicalRouteInput,
   semanticActions,
   actionReceiptSchema,
@@ -14,7 +10,6 @@ import {
   type ActionBases,
   type DocumentRef,
   type ActionReceipt,
-  type TakeoffActionKey,
   type SemanticActionKey,
   familyCaptureSchema,
   type FamilyReadKey,
@@ -84,18 +79,6 @@ export async function cancelAction(id: string, base = "") {
 /** Stop everything this client still has in flight. Each refusal is the caller's to report. */
 export const cancelRunningAdmissions = () =>
   Promise.allSettled(runningAdmissions().map(({ id, base }) => cancelAction(id, base)));
-
-export async function readActionStatuses(target: DocumentRef, base = "", signal?: AbortSignal) {
-  const response = await fetch(`${base}/actions`, {
-    headers: {
-      [HOST_RPC_BRIDGE_SESSION_HEADER]: target.session,
-      [HOST_RPC_DOCUMENT_HEADER]: target.openId,
-    },
-    signal,
-  });
-  if (!response.ok) throw Error(`Action status read failed (${response.status})`);
-  return actionStatusSchema.array().parse(await response.json());
-}
 export async function readAction(id: string, base = "", signal?: AbortSignal) {
   const response = await fetch(`${base}/actions?id=${encodeURIComponent(id)}`, { signal });
   if (!response.ok) throw Error(`Action recovery failed (${response.status})`);
@@ -269,11 +252,6 @@ export async function controlAction(
   if (!response.ok) throw Error(await response.text());
   return actionReceiptSchema.parse(await response.json());
 }
-
-export const runTakeoffAction = (
-  key: TakeoffActionKey,
-  ...args: Parameters<typeof runSemanticAction> extends [unknown, ...infer Rest] ? Rest : never
-) => runSemanticAction(key, ...args);
 export async function readFamilyCapture(
   key: FamilyReadKey,
   input: unknown,
@@ -288,13 +266,6 @@ export async function readFamilyCapture(
   });
   if (!response.ok) throw Error(await response.text());
   return familyCaptureSchema.parse(await response.json());
-}
-export async function readFamilyCaptures(scope: WorkKey, base = "") {
-  const response = await fetch(
-    `${base}/family/readings?${new URLSearchParams({ scope: JSON.stringify(scope) }).toString()}`,
-  );
-  if (!response.ok) throw Error(await response.text());
-  return familyCaptureSchema.array().parse(await response.json());
 }
 
 export async function saveSettingsAction(
@@ -336,10 +307,3 @@ export async function readScopedActionStatuses(
 
 /** Retained local admission evidence only; no recovery or dispatch. */
 export const inspectRetainedActions = () => structuredClone([...retained.values()]);
-
-/** Retire only the explicitly disposed isolated endpoint's retained browser admissions. */
-export function releaseDemoAdmissions(base: string) {
-  if (!/^\/demo\/instances\/demo-[\w-]+$/.test(base))
-    throw Error("Exact isolated demo endpoint required");
-  for (const key of retained.keys()) if (key.startsWith(`pe-action:${base}:`)) retain(key);
-}

@@ -44,3 +44,22 @@ jobs:
 
       - name: Compile Release.R25
         run: dotnet build Pe.Tools.slnx -c Release.R25 -v:q -nologo
+
+      # The one proof of a ts change: the same `pnpm verify` a human runs (ts/scripts/verify.ts).
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ts/package.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: ts/pnpm-lock.yaml
+
+      - name: verify
+        working-directory: ts
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm verify

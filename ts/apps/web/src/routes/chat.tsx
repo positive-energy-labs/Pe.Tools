@@ -3,7 +3,6 @@ import { z } from "zod";
 import { MODES } from "#/workbench/depth";
 import { WorkbenchProvider } from "#/workbench/provider";
 import { ChatShell } from "#/chat/chat-shell";
-import { chatManifest } from "#/chat/manifest";
 import { CHAT_PLUGIN_ROUTES } from "#/workbench/chat-plugins";
 /**
  * Chat URL state — the single home for navigable/shareable state. TanStack Router owns all of it
@@ -35,9 +34,6 @@ export const chatSearchSchema = z.object({
   focus: z.string().optional().catch(undefined),
   prompt: z.string().max(PROMPT_MAX).optional(),
 });
-
-/** The route, declared once. `chat-shell` re-derives it with the live session bound. */
-export const manifest = chatManifest({ thread: "" });
 
 export const Route = createFileRoute("/chat")({
   validateSearch: chatSearchSchema,

@@ -15,7 +15,7 @@ export function normalizeFieldOptionMode(value: unknown): NormalizedFieldOptionM
   return normalized === "suggestion" || normalized === "constraint" ? normalized : undefined;
 }
 
-export function normalizeFieldOptionDependencyScope(
+function normalizeFieldOptionDependencyScope(
   value: unknown,
 ): NormalizedFieldOptionDependencyScope | undefined {
   const normalized = typeof value === "string" ? value.toLowerCase() : undefined;

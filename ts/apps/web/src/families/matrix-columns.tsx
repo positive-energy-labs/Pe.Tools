@@ -84,7 +84,7 @@ const CLUSTER_ORDER: Record<Cluster, number> = {
  * (not on this family), a project binding (the value lives on instances, not in the family) and a
  * formula-driven parameter (the family computes it) are all outside what a patch can say.
  */
-export function patchable(row: TypeRow, key: string): boolean {
+function patchable(row: TypeRow, key: string): boolean {
   const scope = row.scopes[key];
   return (
     Boolean(scope) &&
@@ -372,7 +372,7 @@ export function useFamiliesColumns({
  * its `staged`, read through the one reader `cellFromTrichotomy`. At row scale the prior value and
  * the author ride the title; accept and deny sit in the proposals band beside the table.
  */
-export function ProposalCell({
+function ProposalCell({
   current,
   reason,
   cell,

@@ -1,9 +1,5 @@
 import type { RenderSchemaNode } from "./types.ts";
 
-function isObjectNode(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === "object" && !Array.isArray(value));
-}
-
 function cloneNode<T>(value: T): T {
   if (value === undefined) {
     return value;
@@ -76,8 +72,4 @@ export function preprocessSchema(root: RenderSchemaNode): RenderSchemaNode {
   const copy = cloneNode(root);
   preprocessRecursive(copy);
   return copy;
-}
-
-export function isSchemaObject(value: unknown): value is RenderSchemaNode {
-  return isObjectNode(value);
 }

@@ -18,7 +18,7 @@ import { SAMPLE_DOC } from "#/grounded-doc/sample";
  * this route is just a harness around them.
  */
 /** Not cut over yet: an empty manifest is a legal manifest and the shell renders one. */
-export const manifest = emptyManifest("doc-lab", "Doc Lab");
+const manifest = emptyManifest("doc-lab", "Doc Lab");
 
 function RouteShelledDocLabRoute() {
   return (

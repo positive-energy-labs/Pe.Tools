@@ -32,7 +32,7 @@ import { type SheetRow, Sheet, seedRows } from "#/grilles/sheet";
 import { SpecDrawing } from "#/grilles/spec-drawing";
 
 /** Not cut over yet: an empty manifest is a legal manifest and the shell renders one. */
-export const manifest = emptyManifest("grilles", "Grilles");
+const manifest = emptyManifest("grilles", "Grilles");
 
 function RouteShelledGrillesRoute() {
   return (

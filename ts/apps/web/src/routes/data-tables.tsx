@@ -29,7 +29,7 @@ import { DraftEditor } from "#/data-tables/draft-editor";
  */
 export const dataTablesSearch = (_search: Record<string, unknown>) => ({});
 
-export const manifest = defineRoute({
+const manifest = defineRoute({
   key: "data-tables",
   name: "Data Tables",
   docs: "Create or select a data table, edit its columns and rows, then apply the staged definition to Revit.",

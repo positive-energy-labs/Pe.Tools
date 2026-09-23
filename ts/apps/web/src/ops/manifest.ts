@@ -14,21 +14,21 @@ export type HostOperationCatalogEntry = HostOperationDefinition & {
   responseSchemaJson?: string;
 };
 
-export type Custody = "controlled" | "observed";
+type Custody = "controlled" | "observed";
 export type OpsReading = "inventory";
-export type OpsCtx = Ctx<never, OpsReading, Record<string, never>>;
+type OpsCtx = Ctx<never, OpsReading, Record<string, never>>;
 
 /**
  * The selected operation's record, as the Run verb's `does`. A host-local op needs nothing; a
  * native op with no document need still needs the session that lists it. Its press is human.
  */
-export const opRecord = (op?: HostOperationCatalogEntry): HostRecord => ({
+const opRecord = (op?: HostOperationCatalogEntry): HostRecord => ({
   says: "runs the selected operation on the target the sentence names",
   actor: "human",
   needs:
     !op || isTsOnlyOperationKey(op.key) ? "nothing" : op.needs === "nothing" ? "session" : op.needs,
 });
-export const opNeeds = (op?: HostOperationCatalogEntry) => targetNeed(opRecord(op).needs);
+const opNeeds = (op?: HostOperationCatalogEntry) => targetNeed(opRecord(op).needs);
 
 export const isMutation = (op?: HostOperationCatalogEntry) =>
   op?.intent?.toLowerCase() === "mutate";
@@ -38,7 +38,7 @@ export const isMutation = (op?: HostOperationCatalogEntry) =>
  * before origin: a mutation on a Revit session runs only under controlled custody. A host-local
  * mutation has no custody to judge and is audited by the action journal instead (`run.ts`).
  */
-export const opsRefusal = (op: HostOperationCatalogEntry | undefined, custody?: Custody) =>
+const opsRefusal = (op: HostOperationCatalogEntry | undefined, custody?: Custody) =>
   !op
     ? "pick an operation"
     : !op.intent

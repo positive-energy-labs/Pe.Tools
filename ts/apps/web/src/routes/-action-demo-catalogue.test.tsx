@@ -15,7 +15,7 @@ import { manifest as takeoffManifest } from "#/takeoff/manifest";
 import { manifest as familyManifest } from "#/routes/family";
 import { manifest as familiesManifest } from "#/families/manifest";
 
-import { ActionDemoCatalogue, SEED_CATALOGUE } from "./action-demo-catalogue";
+import { ActionDemoCatalogue, SEED_CATALOGUE } from "#/design-system/action-demo-catalogue";
 
 const declared = [
   ["chat", CHAT_SEEDS],

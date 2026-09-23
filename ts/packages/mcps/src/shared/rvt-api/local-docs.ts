@@ -31,7 +31,7 @@ export type DocMember = {
   assembly: string;
 };
 
-export type UsageExample = {
+type UsageExample = {
   file: string;
   startLine: number;
   endLine: number;
@@ -62,7 +62,7 @@ export type LocalDocsOptions = {
 // ---------------------------------------------------------------------------
 // Discovery
 
-export function productRoot(): string {
+function productRoot(): string {
   const base = process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local");
   return join(base, "Positive Energy", "Pe.Tools");
 }
@@ -258,7 +258,7 @@ function insertMembers(db: DatabaseSync, members: DocMember[]): void {
 }
 
 /** Opens the cached index for a year, (re)building it if absent or stale. Returns null when no XML corpus exists. */
-export function openIndex(year: number, opts: LocalDocsOptions = {}): DatabaseSync | null {
+function openIndex(year: number, opts: LocalDocsOptions = {}): DatabaseSync | null {
   const xmlPaths = opts.xmlPaths ?? findRevitInstallXmls(year);
   if (xmlPaths.length === 0) return null;
 
@@ -302,7 +302,7 @@ type ExamplesFile = {
 
 let cachedExamples: { path: string; index: Map<string, UsageExample[]> } | null = null;
 
-export function findExamplesPath(): string | null {
+function findExamplesPath(): string | null {
   if (process.env.PE_API_EXAMPLES_JSON && existsSync(process.env.PE_API_EXAMPLES_JSON)) {
     return process.env.PE_API_EXAMPLES_JSON;
   }
@@ -313,7 +313,7 @@ export function findExamplesPath(): string | null {
   return existsSync(candidate) ? candidate : null;
 }
 
-export function loadExamples(examplesPath?: string | null): Map<string, UsageExample[]> {
+function loadExamples(examplesPath?: string | null): Map<string, UsageExample[]> {
   const path = examplesPath ?? findExamplesPath();
   if (!path || !existsSync(path)) return new Map();
   if (cachedExamples?.path === path) return cachedExamples.index;

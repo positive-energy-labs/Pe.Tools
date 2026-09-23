@@ -51,7 +51,7 @@ export interface AdmissionContext {
  * The destination the host will independently compute from `needs`. It must match exactly, so
  * a missing session or document is an error here rather than a refusal three hops later.
  */
-export function admissionDestination(
+function admissionDestination(
   key: string,
   needs: string,
   scope: { bridgeSessionId?: string; openDocumentId?: string },

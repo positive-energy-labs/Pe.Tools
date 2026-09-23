@@ -9,7 +9,7 @@ import { DesignSystemSpecimens } from "#/design-system/specimens/index";
 import { ThesisSpecimen } from "#/design-system/specimens/thesis";
 
 /** Not cut over yet: an empty manifest is a legal manifest and the shell renders one. */
-export const manifest = emptyManifest("design-system", "Design System");
+const manifest = emptyManifest("design-system", "Design System");
 
 function RouteShelledDesignSystem() {
   return (

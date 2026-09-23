@@ -11,7 +11,7 @@ surface is for. `/design-system` is the executable law; a position that can rend
 
 `tests/repo-guards/src/design-guard.test.ts` and `design-adherence.test.ts` are the lint: some
 categories are hard zeros, the rest are ratchet baselines that must fall and never rise. Run
-`vp run @pe/repo-guards#test` from `ts` before you claim a change is done. A guard
+`pnpm verify` from `ts` before you claim a change is done. A guard
 change lands as ruling plus code plus guard in one commit; rulings go to
 `docs/features/design-system/LEDGER.md`.
 

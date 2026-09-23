@@ -15,7 +15,7 @@ import { manifest as familyManifest } from "#/routes/family";
 import { manifest as familiesManifest } from "#/families/manifest";
 import { Demo } from "./exhibit";
 
-export interface SeedRow {
+interface SeedRow {
   /** The manifest key the seed belongs to. */
   route: string;
   /** The route path `?demo=` is appended to. */

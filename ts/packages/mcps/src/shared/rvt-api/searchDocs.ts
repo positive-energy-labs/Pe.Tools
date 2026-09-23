@@ -56,7 +56,7 @@ function sortByType(results: SearchResult[]): SearchResult[] {
 /**
  * Searches Revit API documentation using the rvtdocs.com search endpoint
  */
-export async function searchRvtDocsCom(
+async function searchRvtDocsCom(
   query: string,
   year: number,
   maxResults: number,
@@ -92,7 +92,7 @@ export async function searchRvtDocsCom(
  * Searches Revit API documentation using the www.revitapidocs.com search endpoint
  * This is necessary to keep because it makes "Properties" and "Methods" pages available
  */
-export async function searchRevitApiDocsCom(
+async function searchRevitApiDocsCom(
   query: string,
   year: number,
   maxResults: number,

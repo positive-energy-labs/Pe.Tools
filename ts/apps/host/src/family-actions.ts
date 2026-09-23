@@ -234,7 +234,7 @@ export const writeCaptureRun = (
   );
 };
 
-export async function current(
+async function current(
   bridge: RevitBridge["Service"],
   target: DocumentRef,
   family: boolean | "project",
@@ -256,7 +256,7 @@ export async function current(
     throw refused("The exact admitted document lifetime/process is no longer available");
   return session;
 }
-export async function invoke(
+async function invoke(
   bridge: RevitBridge["Service"],
   target: DocumentRef,
   key: string,

@@ -1,10 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { OpsRoute } from "#/ops/workspace";
-import { opsManifest } from "#/ops/manifest";
-
-/** The route, declared once. `ops/workspace.tsx` re-derives it with the selection bound. */
-export const manifest = opsManifest();
 
 const str = (value: unknown) => (typeof value === "string" && value ? value : undefined);
 

@@ -12,7 +12,7 @@ import RunBrowser from "../runs/browser";
 export const runsSearch = (_search: Record<string, unknown>) => ({});
 
 /** Not cut over yet: an empty manifest is a legal manifest and the shell renders one. */
-export const manifest = emptyManifest("runs", "Runs");
+const manifest = emptyManifest("runs", "Runs");
 
 function RouteShelledRunsPage() {
   return (
