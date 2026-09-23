@@ -29,7 +29,7 @@ test("dev:no-revit uses the shared source entrypoint and a distinct dev receipt"
 
   expect(rootPackage.scripts?.["dev:no-revit"]).toBe("vp run --filter @pe/host dev:no-revit");
   expect(hostPackage.scripts?.["dev:no-revit"]).toBe(
-    "vp exec node --import jiti/register scripts/dev-watch.ts --take-over-host --no-revit",
+    "vp exec node scripts/dev-watch.ts --take-over-host --no-revit",
   );
   expect(defaultCapabilities).toEqual({ revit: true });
   expect(noRevitCapabilities).toEqual({ revit: false });

@@ -29,11 +29,7 @@ const program = hostProgram(
         Effect.sync(() =>
           spawn(
             process.execPath,
-            [
-              "--import",
-              "jiti/register",
-              fileURLToPath(new URL("../scripts/dev-web.ts", import.meta.url)),
-            ],
+            [fileURLToPath(new URL("../scripts/dev-web.ts", import.meta.url))],
             {
               cwd: new URL("../", import.meta.url),
               stdio: ["ignore", "inherit", "inherit", "ipc"],

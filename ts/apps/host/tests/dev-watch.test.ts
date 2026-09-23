@@ -27,7 +27,7 @@ test("host and workspace package source edits restart the child, but retirement 
     watch("retire", () => process.send("retired", () => process.exit(0)));
   `,
   );
-  const launcher = spawn(process.execPath, ["--import", "jiti/register", "scripts/dev-watch.ts"], {
+  const launcher = spawn(process.execPath, ["scripts/dev-watch.ts"], {
     cwd: host,
     windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"],

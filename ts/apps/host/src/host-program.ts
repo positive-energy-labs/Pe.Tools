@@ -4,7 +4,7 @@ import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { chooseServicePort } from "@pe/host-contracts/pe-service-host";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { productRoot } from "@pe/host-contracts/service-identity";
-import { DEV_TAKEOVER_ARGUMENT, evictLiveHost, resolveHostVersion } from "./host-lifecycle.ts";
+import { resolveHostVersion } from "./host-lifecycle.ts";
 import { makeHttpLive, resolveWebRoot } from "./app.ts";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
 import { makeMastraRuntimeLive } from "./mastra-runtime.ts";
@@ -24,11 +24,6 @@ export const hostProgram = (
       yield* Effect.sync(() =>
         capture("app_boot", { component: "host", version: resolveHostVersion() }),
       );
-      if (hostOwnership.lane === "dev" && process.argv.includes(DEV_TAKEOVER_ARGUMENT)) {
-        yield* Effect.promise(() =>
-          evictLiveHost(productRoot(), hostOwnership.serviceName, "dev takeover"),
-        );
-      }
       const port = yield* Effect.promise(() =>
         chooseServicePort(productRoot(), hostOwnership.serviceName, preferredPort),
       );

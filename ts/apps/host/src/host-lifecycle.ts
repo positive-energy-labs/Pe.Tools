@@ -4,7 +4,6 @@ import { Context, Deferred, Effect, Layer } from "effect";
 import { HttpRouter, HttpServer, HttpServerResponse as Response } from "effect/unstable/http";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import {
-  isRecordedOwnerAlive,
   readServiceFile,
   sweepDeadServiceFiles,
   writeServiceFile,
@@ -116,37 +115,6 @@ export async function announceServedSession(
   } catch (error) {
     console.warn(`pe-host could not record the served session id: ${String(error)}`);
   }
-}
-
-/**
- * Cooperative token shutdown of a live service-file owner (the same wire shape the SDK's takeOver
- * uses), waiting for verified exit. Best-effort: a refusal returns and leaves downstream layers
- * (SDK claim, Mastra thread-lock retry) to report the contention honestly.
- *
- * A dev host runs this BEFORE binding (see host-program.ts) against exactly ONE incumbent: its own
- * same-name predecessor, gated on `--take-over-host` (the D3 dev-over-dev policy). Pre-bind
- * eviction lets `chooseServicePort` reuse the remembered port instead of drifting to an ephemeral
- * one on every takeover. The installed host is never a target — dev and installed hosts are
- * siblings (ruled 2026-08-20) and a Mastra thread contention degrades to 503, which is cheap;
- * dropping a live installed session's bridge is not.
- */
-export async function evictLiveHost(appBase: string, name: string, why: string): Promise<void> {
-  const incumbent = await readServiceFile(appBase, name);
-  if (!incumbent || !(await isRecordedOwnerAlive(incumbent))) return;
-  console.log(`pe-host evicting ${name} pid=${incumbent.pid} port=${incumbent.port} (${why})`);
-  try {
-    await fetch(`http://127.0.0.1:${incumbent.port}${hostProcessIdentity.shutdownPath}`, {
-      method: "POST",
-      headers: { "x-pe-service-token": incumbent.token, "content-type": "application/json" },
-      body: JSON.stringify({ token: incumbent.token }),
-      signal: AbortSignal.timeout(5_000),
-    });
-  } catch {
-    return; // ponytail: unreachable/refusing incumbent — the SDK claim / Mastra retry reports it
-  }
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline && (await isRecordedOwnerAlive(incumbent)))
-    await new Promise((resolve) => setTimeout(resolve, 500));
 }
 
 /**
