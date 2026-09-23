@@ -7,6 +7,17 @@ namespace Pe.Revit.Tests;
 
 [TestFixture]
 public sealed class OpRegistryTests {
+    [Test]
+    public void Mutation_requires_an_explicit_actor() {
+        Assert.Throws<InvalidOperationException>(() => OpRegistry.Define(
+            new OpAttribute("test.mutation") { Does = "Mutate", Intent = OpIntent.Mutate }, typeof(NoRequest), typeof(SchemaData)));
+        foreach (var actor in Enum.GetValues<OpActor>()) {
+            var definition = OpRegistry.Define(new OpAttribute("test.mutation") {
+                Does = "Mutate", Intent = OpIntent.Mutate, Actor = actor
+            }, typeof(NoRequest), typeof(SchemaData));
+            Assert.That(HostOpsCatalogEntry.FromDefinition(definition).Actor, Is.EqualTo(actor.ToString().ToLowerInvariant()));
+        }
+    }
     private sealed class BrokenAssembly : Assembly {
         public override Type[] GetTypes() =>
             throw new ReflectionTypeLoadException(Array.Empty<Type?>(), Array.Empty<Exception?>());

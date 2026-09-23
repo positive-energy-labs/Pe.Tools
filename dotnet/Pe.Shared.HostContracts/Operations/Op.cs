@@ -26,6 +26,7 @@ public enum OpTier {
 }
 
 /// <summary>Who may run an op: anyone, or only the person. Pea neither finds nor runs a Human op.</summary>
+[JsonConverter(typeof(StringEnumConverter))]
 public enum OpActor {
     Any,
     Human
@@ -48,7 +49,8 @@ public sealed class OpAttribute(string key) : Attribute {
     public string? Example { get; init; }
     public bool IsPublic { get; init; } = true;
     public OpThread Thread { get; init; } = OpThread.Any;
-    public OpActor Actor { get; init; } = OpActor.Any;
+    internal OpActor? DeclaredActor { get; private set; }
+    public OpActor Actor { get => this.DeclaredActor ?? OpActor.Any; init => this.DeclaredActor = value; }
 }
 
 public sealed class Op {
@@ -203,6 +205,8 @@ public static class OpRegistry {
             : null;
         int EnumValue(string name, int fallback) => Named(name) is { } value ? Convert.ToInt32(value) : fallback;
 
+        if ((OpIntent)EnumValue(nameof(OpAttribute.Intent), (int)OpIntent.Read) == OpIntent.Mutate && Named(nameof(OpAttribute.Actor)) is null)
+            throw new InvalidOperationException($"[Op({data.ConstructorArguments[0].Value})] must declare Actor for mutation.");
         return new OpAttribute((string)data.ConstructorArguments[0].Value!) {
             Title = Named(nameof(OpAttribute.Title)) as string,
             Does = Named(nameof(OpAttribute.Does)) as string
@@ -269,6 +273,8 @@ public static class OpRegistry {
         Type responseType,
         OpNeeds needs = OpNeeds.Nothing
     ) {
+        if (attribute.Intent == OpIntent.Mutate && attribute.DeclaredActor is null)
+            throw new InvalidOperationException($"[Op({attribute.Key})] must declare Actor for mutation.");
         var metadata = HostOperationAgentMetadata.Create(
             attribute.Does,
             attribute.Finds,
@@ -402,7 +408,7 @@ public sealed record HostOpsCatalogEntry(
             metadata.CallGuidance,
             BridgeOpSchemaGenerator.GetRequestSchemaJson(definition.RequestType),
             BridgeOpSchemaGenerator.GetResponseSchemaJson(definition.ResponseType),
-            definition.Actor == OpActor.Human ? "human" : "any"
+            definition.Actor.ToString().ToLowerInvariant()
         );
     }
 }

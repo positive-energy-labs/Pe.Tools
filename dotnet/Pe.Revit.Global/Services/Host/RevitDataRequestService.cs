@@ -1,4 +1,4 @@
-﻿using Autodesk.Revit.DB.Electrical;
+using Autodesk.Revit.DB.Electrical;
 using Pe.Revit.DocumentData.AgentContext;
 using Pe.Revit.DocumentData.Electrical;
 using Pe.Revit.DocumentData.Families.Loaded.Collectors;
@@ -51,32 +51,32 @@ internal sealed class RevitDataRequestService {
     private static TakeoffCandidatesData GetTakeoffCandidatesCore(TakeoffCandidatesRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document => new TakeoffCandidatesData(TakeoffAtlas.CandidateRegions(document, request)));
 
-    [Op("takeoffs.adopt", Does = "Adopt Filled Regions as Zoning Regions and register their System tags in one transaction.", Title = "Adopt Takeoff Regions", Finds = ["takeoffs", "adopt", "zones", "filled-regions", "register"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    [Op("takeoffs.adopt", Does = "Adopt Filled Regions as Zoning Regions and register their System tags in one transaction.", Title = "Adopt Takeoff Regions", Finds = ["takeoffs", "adopt", "zones", "filled-regions", "register"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static TakeoffAdoptResult AdoptTakeoffRegionsCore(TakeoffAdoptRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document => TakeoffAtlas.AdoptZones(document, request), "Pe Adopt Takeoff Regions");
 
-    [Op("takeoffs.initialize-carrier", Does = "Bind the next missing Takeoff carrier for the requested stage in one transaction.", Title = "Initialize Next Takeoff Carrier", Finds = ["takeoffs", "initialize", "carriers", "shared-parameters"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    [Op("takeoffs.initialize-carrier", Does = "Bind the next missing Takeoff carrier for the requested stage in one transaction.", Title = "Initialize Next Takeoff Carrier", Finds = ["takeoffs", "initialize", "carriers", "shared-parameters"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static TakeoffCarrierInitializationData InitializeTakeoffCarrierCore(TakeoffCarrierInitializationRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(
             activeDocument.Value,
             document => TakeoffCarriers.InitializeNext(document, request.Stage),
             "Pe Initialize Takeoff Carrier");
 
-    [Op("takeoffs.partition", Does = "Partition one Zoning Region on the resident Space soup and materialize Room Regions in one transaction.", Title = "Partition Takeoff Zone", Finds = ["takeoffs", "partition", "zones", "rooms", "materialize"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    [Op("takeoffs.partition", Does = "Partition one Zoning Region on the resident Space soup and materialize Room Regions in one transaction.", Title = "Partition Takeoff Zone", Finds = ["takeoffs", "partition", "zones", "rooms", "materialize"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static TakeoffPartitionResult PartitionTakeoffCore(TakeoffPartitionRequest request, ProjectDocument activeDocument) =>
         // ADR 0011: TakeoffAtlas.Partition calls Pe.Revit.Partition.Verbs.Partition and hands the
         // PartitionAnswer to ZoneMaterializer. The call cannot live in this file: Pe.Revit.Space
         // references Pe.Revit.Global, so Global referencing Partition is a project cycle.
         RunTakeoff(activeDocument.Value, document => TakeoffAtlas.Partition(document, request), "Pe Partition Takeoff Zone");
 
-    [Op("takeoffs.rhvac-links", Does = "Write RHVAC file and room links to Room Region provenance in one transaction.", Title = "Link Takeoff Rooms to RHVAC", Finds = ["takeoffs", "rhvac", "links", "rooms", "provenance"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    [Op("takeoffs.rhvac-links", Does = "Write RHVAC file and room links to Room Region provenance in one transaction.", Title = "Link Takeoff Rooms to RHVAC", Finds = ["takeoffs", "rhvac", "links", "rooms", "provenance"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static TakeoffRhvacLinksData LinkTakeoffRhvacCore(TakeoffRhvacLinksRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(
             activeDocument.Value,
             document => new TakeoffRhvacLinksData(TakeoffAtlas.LinkRhvacBatch(document, request)),
             "Pe Link Takeoff Rooms to RHVAC");
 
-    [Op("revit.apply.parameters-service-cache.refresh", Does = "Refresh the global APS Parameters Service cache through the connected Revit runtime.", Title = "Refresh Parameters Service Cache", Finds = ["aps", "parameters", "cache", "refresh", "parameter-service"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
+    [Op("revit.apply.parameters-service-cache.refresh", Does = "Refresh the global APS Parameters Service cache through the connected Revit runtime.", Title = "Refresh Parameters Service Cache", Finds = ["aps", "parameters", "cache", "refresh", "parameter-service"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
     private static Task<ParametersServiceCacheData> RefreshParametersServiceCacheCore(
         NoRequest _,
         CancellationToken cancellationToken
@@ -84,7 +84,7 @@ internal sealed class RevitDataRequestService {
         ? Task.FromCanceled<ParametersServiceCacheData>(cancellationToken)
         : ParametersServiceCache.RefreshAsync();
 
-    [Op("revit.apply.command.execute", Does = "Search Revit ribbon/postable commands by name and execute one by command id — the same discovery and PostCommand machinery as the command palette. Call with searchText to list candidates without executing, then commandId to post.", Title = "Execute Ribbon Command", Finds = ["command", "execute", "postable", "ribbon", "palette", "post", "trigger"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Example = "{ \"searchText\": \"sheet\" }", Thread = OpThread.Revit)]
+    [Op("revit.apply.command.execute", Does = "Search Revit ribbon/postable commands by name and execute one by command id — the same discovery and PostCommand machinery as the command palette. Call with searchText to list candidates without executing, then commandId to post.", Title = "Execute Ribbon Command", Finds = ["command", "execute", "postable", "ribbon", "palette", "post", "trigger"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"searchText\": \"sheet\" }", Thread = OpThread.Revit)]
     private static RibbonCommandExecuteData ExecuteRibbonCommandCore(RibbonCommandExecuteRequest request, RevitDocument activeDocument) {
         var document = activeDocument.Value;
         var uiApp = RequireDocumentUi(document);
@@ -366,7 +366,7 @@ internal sealed class RevitDataRequestService {
         return data with { Issues = [.. data.Issues, .. dialogs.Select(d => new RevitDataIssue("RevitDialogAnswered", RevitDataIssueSeverity.Warning, d.Message))] };
     }
 
-    [Op("data-table.apply", Does = "Upsert a synthetic data table in one host-owned transaction: a key schedule whose rows are freely user-editable and whose cells are shared parameters on stable row elements — ideal for arbitrary agent-authored tables like design conditions or install notes. Can also place the table on a sheet. Authored element schedules apply through schedule.apply.", Title = "Apply Data Table", Finds = ["schedules", "data-table", "key-schedule", "table", "apply", "create", "upsert", "rows", "sheet-placement", "mutation"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Example = "{ \"table\": { \"name\": \"ASHRAE Design Conditions\", \"columns\": [{ \"heading\": \"Condition\" }, { \"heading\": \"Value (°F)\", \"kind\": \"Number\" }], \"rows\": [{ \"key\": \"cooling-db\", \"values\": [\"Cooling Design DB\", \"94.1\"] }, { \"key\": \"heating-db\", \"values\": [\"Heating Design DB\", \"12.3\"] }] }, \"placement\": { \"sheet\": \"M-001\" } }")]
+    [Op("data-table.apply", Does = "Upsert a synthetic data table in one host-owned transaction: a key schedule whose rows are freely user-editable and whose cells are shared parameters on stable row elements — ideal for arbitrary agent-authored tables like design conditions or install notes. Can also place the table on a sheet. Authored element schedules apply through schedule.apply.", Title = "Apply Data Table", Finds = ["schedules", "data-table", "key-schedule", "table", "apply", "create", "upsert", "rows", "sheet-placement", "mutation"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"table\": { \"name\": \"ASHRAE Design Conditions\", \"columns\": [{ \"heading\": \"Condition\" }, { \"heading\": \"Value (°F)\", \"kind\": \"Number\" }], \"rows\": [{ \"key\": \"cooling-db\", \"values\": [\"Cooling Design DB\", \"94.1\"] }, { \"key\": \"heating-db\", \"values\": [\"Heating Design DB\", \"12.3\"] }] }, \"placement\": { \"sheet\": \"M-001\" } }")]
     private ScheduleApplyData ApplyScheduleCore(ScheduleApplyRequest request, RevitDocument activeDocument) {
         var document = activeDocument.Value;
         if (request.Table is null)
@@ -784,7 +784,7 @@ internal sealed class RevitDataRequestService {
         }
     }
 
-    [Op("family.temporary.acquire", Does = "Acquire an independent inactive copy of a loaded family for multiple calls. Retain acquisitionId before calling; retry only with that ID. Use the returned exact document ref for each query/action. Release at turn end; unchanged cleanup never saves or loads back.", Title = "Acquire Temporary Family", Finds = ["family", "temporary", "acquire", "edit-family"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    [Op("family.temporary.acquire", Does = "Acquire an independent inactive copy of a loaded family for multiple calls. Retain acquisitionId before calling; retry only with that ID. Use the returned exact document ref for each query/action. Release at turn end; unchanged cleanup never saves or loads back.", Title = "Acquire Temporary Family", Finds = ["family", "temporary", "acquire", "edit-family"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static TemporaryDocumentData AcquireTemporaryFamily(TemporaryFamilyAcquireRequest request, ProjectDocument source) {
         var session = HostRuntime.SessionId ?? throw new InvalidOperationException("Bridge session identity is unavailable.");
         var tracker = DocumentTrackerAccessor.Current ?? throw new InvalidOperationException("Document tracker is unavailable.");
@@ -799,7 +799,7 @@ internal sealed class RevitDataRequestService {
         return TemporaryResult(session, receipt);
     }
 
-    [Op("document.temporary.release", Does = "Release only the native lifetime owned by acquisitionId. Default refuses changes since acquisition; discard is an explicit decision. Borrowed documents never close. A recovery-required result needs a user decision. Does not load a family back.", Title = "Release Temporary Document", Finds = ["family", "temporary", "release", "cleanup"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Thread = OpThread.Revit)]
+    [Op("document.temporary.release", Does = "Release only the native lifetime owned by acquisitionId. Default refuses changes since acquisition; discard is an explicit decision. Borrowed documents never close. A recovery-required result needs a user decision. Does not load a family back.", Title = "Release Temporary Document", Finds = ["family", "temporary", "release", "cleanup"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Thread = OpThread.Revit)]
     private static TemporaryDocumentData ReleaseTemporaryDocument(TemporaryDocumentReleaseRequest request) {
         var session = HostRuntime.SessionId ?? throw new InvalidOperationException("Bridge session identity is unavailable.");
         var tracker = DocumentTrackerAccessor.Current ?? throw new InvalidOperationException("Document tracker is unavailable.");
@@ -816,7 +816,7 @@ internal sealed class RevitDataRequestService {
         new(receipt.AcquisitionId, receipt.Status, receipt.OpenId is { } openId ? new(session, openId) : null,
             receipt.RecoveryId, receipt.Detail, receipt.RecordedOpenId, receipt.RecordedStatus);
 
-    [Op("family.open", Does = "Open a loaded family from the active project in the Revit family editor and activate it (saves to a scratch .rfa to make activation possible).", Title = "Open Family In Editor", Finds = ["family-editor", "family", "open", "edit-family", "activate"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    [Op("family.open", Does = "Open a loaded family from the active project in the Revit family editor and activate it (saves to a scratch .rfa to make activation possible).", Title = "Open Family In Editor", Finds = ["family-editor", "family", "open", "edit-family", "activate"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private FamilyOpenData OpenFamilyCore(FamilyOpenRequest request, ProjectDocument activeDocument) {
         var document = activeDocument.Value;
         var uiApp = RequireDocumentUi(document);

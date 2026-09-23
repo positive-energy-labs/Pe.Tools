@@ -32,6 +32,14 @@ public sealed class ScriptPodSourceTests {
     public void Captured_set_compiles_without_a_workspace_or_materialization() => CompileAndRun(Bundle());
 
     [Test]
+    public void A_manifest_without_entrypoints_can_execute_a_captured_source() {
+        var bundle = Bundle();
+        bundle.Files[0] = new("pod.json", Convert.ToBase64String(Encoding.UTF8.GetBytes(
+            """{"schemaVersion":2,"id":"sample","name":"Sample","version":"1"}""")));
+        CompileAndRun(bundle);
+    }
+
+    [Test]
     public void Captured_relative_reference_compiles_against_original_root_with_a_real_dll() {
         var root = Path.Combine(Path.GetTempPath(), "pod-reference-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "lib", "2025"));
@@ -99,6 +107,6 @@ public sealed class ScriptPodSourceTests {
         Reject(bundle with { Files = [bundle.Files[0], .. Enumerable.Range(0, 5).Select(i => new ScriptPodSourceFile($"src/F{i}.cs", Convert.ToBase64String(new byte[512 * 1024])))] });
         Reject(bundle with { Files = [new("pod.json", "not base64!"), bundle.Files[1]] });
         Assert.That(ScriptPodSourceNormalizer.Normalize(bundle, "Other Local Copy", "src/Main.cs").Manifest.Id, Is.EqualTo("sample"));
-        Assert.Throws<ArgumentException>(() => ScriptPodSourceNormalizer.Normalize(bundle, "sample", "src/Helper.cs"));
+        Assert.That(ScriptPodSourceNormalizer.Normalize(bundle, "sample", "src/Helper.cs").SourceSet.EntryPointSourceName, Is.EqualTo("Helper.cs"));
     }
 }

@@ -61,11 +61,11 @@ public static class PodRuns {
     /// <summary>The exact effective input, then the root, then each dependency in consumed order; every hash is checked against its bytes.</summary>
     public static List<PodRunInputFile> ComposedInput(PodComposedSource source, string effectiveInput) {
         var root = source.Root;
-        if (root.Origin == PodSourceOrigin.SavedMember && root.Id is null)
+        if (root.Origin == PodRunOrigin.SavedMember && root.Id is null)
             throw new InvalidDataException("A saved composition root requires its pod id.");
         return [
             new("effective", null, "effective-input.json", "effective-input.json", Encoding.UTF8.GetBytes(effectiveInput)),
-            new(root.Origin == PodSourceOrigin.SavedMember ? "saved-member" : "supplied-draft", root.Id, root.Path,
+            new(root.Origin == PodRunOrigin.SavedMember ? "saved-member" : "supplied-draft", root.Id, root.Path,
                 $"source/00-{Path.GetFileName(root.Path)}", Decode(root.Id, root.Path, root.Sha256, root.BytesBase64)),
             .. source.Dependencies.Select((dependency, index) => new PodRunInputFile("dependency", dependency.Id, dependency.Path,
                 $"source/{index + 1:D2}-{Path.GetFileName(dependency.Path)}", Decode(dependency.Id, dependency.Path, dependency.Sha256, dependency.BytesBase64)))

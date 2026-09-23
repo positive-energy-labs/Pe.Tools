@@ -33,7 +33,7 @@ Owns the Revit-side scripting runtime: workspace bootstrap, source normalization
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------- |
 | **inline snippet**       | Submitted source content compiled for one request outside workspace `src/`.                                       |
 | **workspace path**       | A workspace-relative `.cs` file resolved under the host-created workspace.                                        |
-| **Pod mode**             | The only workspace execution mode: validate root `pod.json`, compile all `src/**/*.cs`, and execute only a declared entrypoint. Workspaces without `pod.json` are rejected with bootstrap guidance. |
+| **Pod mode**             | The only workspace execution mode: validate root `pod.json`, compile all `src/**/*.cs`, and execute a captured src file. Workspaces without `pod.json` are rejected with bootstrap guidance. |
 | **execution**            | One scripting request returning one final result payload.                                                         |
 | **ReadOnly**             | Default permission mode; runs inside a rollback guard, so document changes are discarded and reported as a warning. |
 | **WriteTransaction**     | Explicit mutation mode; this package opens one host-owned Revit transaction.                                      |
@@ -41,7 +41,7 @@ Owns the Revit-side scripting runtime: workspace bootstrap, source normalization
 
 ## Living Memory
 
-- Workspace execution is Pod-only: one captured snapshot is gated (manifest and entrypoints) before admission, the requested source must be a declared entrypoint, and the whole captured `src/` tree compiles together. Never re-read mutable workspace inputs after preparation.
+- Workspace execution is Pod-only: one captured snapshot is gated (manifest and entrypoints) before admission, the requested source must exist in the captured src tree, and the whole captured `src/` tree compiles together. Never re-read mutable workspace inputs after preparation.
 - Each request must resolve to exactly one non-abstract `PeScriptContainer`.
 - `ReadOnly` execution runs inside a document rollback guard: in-guard document changes are rolled back, discarded, and surfaced as a `readonly`-stage warning; only mutations that persist outside the guard fail the run at the `mutation-monitor` stage. `WriteTransaction` requires a writable active document and opens one host-owned transaction. Pod manifests never grant write permission; permission is request-owned.
 - Static policy always rejects process/shell and unmanaged interop. It rejects script-owned transactions in `ReadOnly` and `WriteTransaction`; `NoTransaction` permits script/library-owned transaction boundaries. There is no ReadOnly semantic mutation blacklist. The rollback guard and document-bound mutation monitor are the ReadOnly guardrails.

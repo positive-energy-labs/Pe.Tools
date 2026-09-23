@@ -8,13 +8,22 @@ namespace Pe.Revit.Tests;
 [TestFixture]
 public sealed class PodReceiptTests {
     [Test]
+    public void Receipt_origin_cannot_claim_a_saved_hash_for_a_draft() {
+        Assert.That(typeof(PodReceipt).GetConstructors(), Is.Empty);
+        foreach (var name in new[] { "Origin", "MemberPath", "MemberSha256" })
+            Assert.That(typeof(PodReceipt).GetProperty(name)!.SetMethod, Is.Null, name);
+        var receipt = PodReceipt.ForSource(new(null, "draft.json", "draft-sha", "e30=", PodRunOrigin.SuppliedDraft),
+            "family.apply", null, PodRunOutcome.Failed, [], null);
+        Assert.That(receipt.MemberSha256, Is.Null);
+    }
+    [Test]
     public void Receipt_survives_artifact_limit_and_identifies_the_member() {
         var pod = Path.Combine(Path.GetTempPath(), "pe-pod-receipt-" + Guid.NewGuid().ToString("N"));
         try {
             var writer = new ScriptArtifactWriter(pod);
             for (var index = 0; index < 100; index++) writer.WriteText($"{index}.txt", "output");
             Assert.Throws<InvalidOperationException>(() => writer.WriteText("overflow.txt", "output"));
-            var receipt = writer.WriteReceipt(new PodReceipt("sample", "src/Run.cs", "abc", PodRunOrigin.SavedMember, "scripting.execute", null, PodRunOutcome.Failed, ["0.txt"], "Validation refused the operation."));
+            var receipt = writer.WriteReceipt(PodReceipt.ForSavedMember("sample", "src/Run.cs", "abc", "scripting.execute", null, PodRunOutcome.Failed, ["0.txt"], "Validation refused the operation."));
             var saved = JObject.Parse(File.ReadAllText(receipt.FullPath));
             var runFolder = Path.GetDirectoryName(receipt.FullPath)!;
 
@@ -60,13 +69,13 @@ public sealed class PodReceiptTests {
         try {
             var writer = new ScriptArtifactWriter(pod);
             writer.WriteInput(new { operation = "test" }, [new PodRunInputFile("inline-script", null, "inline", "source/00-inline.csx", [1, 2, 3])]);
-            var run = Path.GetDirectoryName(writer.WriteReceipt(new PodReceipt("pod", "member", "sha", PodRunOrigin.SavedMember, "test", null, PodRunOutcome.Failed, [], null)).FullPath)!;
+            var run = Path.GetDirectoryName(writer.WriteReceipt(PodReceipt.ForSavedMember("pod", "member", "sha", "test", null, PodRunOutcome.Failed, [], null)).FullPath)!;
 
             Assert.Multiple(() => {
                 Assert.That(writer.Inputs, Is.EqualTo(new[] { "input.json", "source/00-inline.csx" }));
                 Assert.Throws<ArgumentException>(() => writer.WriteText("source/00-inline.csx", "forged"));
                 Assert.Throws<IOException>(() => PodRuns.WriteReceiptIn(run,
-                    new PodReceipt("pod", "member", "sha", PodRunOrigin.SavedMember, "test", null, PodRunOutcome.Failed, [], null), [("input.json", [0])]));
+                    PodReceipt.ForSavedMember("pod", "member", "sha", "test", null, PodRunOutcome.Failed, [], null), [("input.json", [0])]));
                 Assert.That(File.ReadAllBytes(Path.Combine(run, "source", "00-inline.csx")), Is.EqualTo(new byte[] { 1, 2, 3 }));
             });
         } finally {

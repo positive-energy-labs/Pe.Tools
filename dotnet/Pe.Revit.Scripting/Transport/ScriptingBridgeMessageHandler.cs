@@ -1,4 +1,4 @@
-﻿using Autodesk.Revit.UI;
+using Autodesk.Revit.UI;
 using Pe.Revit.Operations;
 using Pe.Revit.Scripting.Bootstrap;
 using Pe.Revit.Scripting.Execution;
@@ -71,7 +71,7 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
         pendingRequest.Execute(this);
     }
 
-    [Op("scripting.workspace.bootstrap", Does = "Create or update a C# Revit scripting pod workspace: pod.json, PeScripts.csproj, docs, and a sample entrypoint script.", Title = "Bootstrap Script Workspace", Finds = ["script", "workspace", "pod", "bootstrap", "files"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
+    [Op("scripting.workspace.bootstrap", Does = "Create or update a C# Revit scripting pod workspace: pod.json, PeScripts.csproj, docs, and a sample entrypoint script.", Title = "Bootstrap Script Workspace", Finds = ["script", "workspace", "pod", "bootstrap", "files"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
     public Task<ScriptWorkspaceBootstrapData> BootstrapWorkspaceAsync(
         ScriptWorkspaceBootstrapRequest request,
         CancellationToken cancellationToken
@@ -93,7 +93,7 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
         cancellationToken
     );
 
-    [Op("scripting.execute", Does = "Execute trusted in-process C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a pod entrypoint declared in the workspace's pod.json — exactly one of the two. sourceBundle may supply captured Pod manifest, project presence and source bytes with sourcePath; references resolve from the original workspace key. The supplied document is the script target; UI document and selection are available only when it is active. permissionMode defaults to ReadOnly, which discards supplied-document changes via a rollback guard; pass WriteTransaction for one host-owned transaction, or NoTransaction when the script or called library must own transaction boundaries (including APIs such as Document.SaveAs that reject an open transaction).", Title = "Execute Revit Script", Finds = ["script", "execute", "csharp", "revit", "pod"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
+    [Op("scripting.execute", Does = "Execute trusted in-process C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a captured src file in a valid pod workspace — exactly one of the two. sourceBundle may supply captured Pod manifest, project presence and source bytes with sourcePath; references resolve from the original workspace key. The supplied document is the script target; UI document and selection are available only when it is active. permissionMode defaults to ReadOnly, which discards supplied-document changes via a rollback guard; pass WriteTransaction for one host-owned transaction, or NoTransaction when the script or called library must own transaction boundaries (including APIs such as Document.SaveAs that reject an open transaction).", Title = "Execute Revit Script", Finds = ["script", "execute", "csharp", "revit", "pod"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
     public async Task<ExecuteRevitScriptData> ExecuteAsync(
         ExecuteRevitScriptRequest request,
         RevitDocument target,
@@ -151,14 +151,14 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
         return Task.FromResult(new PodMemberComposeData(result.Composed, source.Root, result.Diagnostics.ToList(), source.Dependencies));
     }
 
-    [Op("pod.export", Does = "Export an installed pod as a .zip archive. Every consumed foreign fragment is vendored under settings/_vendor/<id>/ and its reference rewritten to @local/_vendor/<id>/..., so the archive composes from its own bytes.", Title = "Export Pod", Finds = ["pod", "export", "publish", "zip", "archive", "vendor"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    [Op("pod.export", Does = "Export an installed pod as a .zip archive. Every consumed foreign fragment is vendored under settings/_vendor/<id>/ and its reference rewritten to @local/_vendor/<id>/..., so the archive composes from its own bytes.", Title = "Export Pod", Finds = ["pod", "export", "publish", "zip", "archive", "vendor"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation)]
     public Task<PodExportData> ExportPodAsync(PodExportRequest request, CancellationToken cancellationToken) => this.EnqueueAsync(
         "export pod",
         () => this._podArchiveService.Export(request, RevitRuntimeTargetFramework.Resolve(this.RequireUiApplication().Application.VersionNumber ?? "unknown")),
         cancellationToken
     );
 
-    [Op("pod.import", Does = "Import a pod .zip archive into a new folder under Documents/Pe.Tools/Pods (default: the manifest id). Bytes are extracted unchanged and imported.json records the archive SHA-256, locator, and date.", Title = "Import Pod", Finds = ["pod", "import", "install", "zip", "archive"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    [Op("pod.import", Does = "Import a pod .zip archive into a new folder under Documents/Pe.Tools/Pods (default: the manifest id). Bytes are extracted unchanged and imported.json records the archive SHA-256, locator, and date.", Title = "Import Pod", Finds = ["pod", "import", "install", "zip", "archive"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation)]
     public Task<PodImportData> ImportPodAsync(PodImportRequest request, CancellationToken cancellationToken) => this.EnqueueAsync(
         "import pod",
         () => {

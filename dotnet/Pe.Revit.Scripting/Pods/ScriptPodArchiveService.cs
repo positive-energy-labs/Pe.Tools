@@ -63,7 +63,7 @@ public sealed class ScriptPodArchiveService(
 
         if (manifest.Manifest.Entrypoints.Count > 0)
             _ = bootstrapService.Bootstrap(folderName, createSampleScript: false, revitVersion, targetFramework, runtimeAssemblyPath, preserveProject: true);
-        return new PodImportData(manifest.Manifest.Id, folder);
+        return new PodImportData(manifest.Manifest.Id, folder, manifest.Diagnostics.Count == 0 ? null : manifest.Diagnostics);
     }
 
     public PodExportData Export(PodExportRequest request, string targetFramework) {

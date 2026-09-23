@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
 namespace Pe.Shared.HostContracts.Scripting;
@@ -82,27 +82,39 @@ public enum PodRunOutcome {
 ///     supplied draft keeps the path it drafts and its own bytes and hash stay in `input.json`; operation input
 ///     names no member.
 /// </summary>
-public record PodReceipt(
-    string? PodId,
-    string? MemberPath,
-    string? MemberSha256,
-    PodRunOrigin Origin,
-    string Operation,
-    string? PlanHash,
-    PodRunOutcome Outcome,
-    List<string> Outputs,
-    string? Reason
-) {
-    private readonly string? _reason = Reason is "" ? null : Reason;
+public sealed record PodReceipt {
+    private PodReceipt(string? podId, string? memberPath, string? memberSha256, PodRunOrigin origin,
+        string operation, string? planHash, PodRunOutcome outcome, List<string> outputs, string? reason) {
+        (this.PodId, this.MemberPath, this.MemberSha256, this.Origin) = (podId, memberPath, memberSha256, origin);
+        (this.Operation, this.PlanHash, this.Outcome, this.Outputs, this.Reason) = (operation, planHash, outcome, outputs, reason);
+    }
 
-    /// <summary>A failure's text; `null` when there is none. An empty string is not a third shape, however a writer spells "no reason".</summary>
+    public string? PodId { get; }
+    public string? MemberPath { get; }
+    public string? MemberSha256 { get; }
+    public PodRunOrigin Origin { get; }
+    public string Operation { get; init; }
+    public string? PlanHash { get; init; }
+    public PodRunOutcome Outcome { get; init; }
+    public List<string> Outputs { get; init; }
+    private readonly string? _reason;
     public string? Reason { get => this._reason; init => this._reason = value is "" ? null : value; }
 
-    /// <summary>The receipt of a run from a captured composition root; a draft never claims the saved member's hash.</summary>
+    public static PodReceipt ForSavedMember(string? podId, string path, string sha256, string operation,
+        string? planHash, PodRunOutcome outcome, List<string> outputs, string? reason) =>
+        new(podId, path, sha256, PodRunOrigin.SavedMember, operation, planHash, outcome, outputs, reason);
+
+    public static PodReceipt ForOperation(string podId, string operation, string? planHash,
+        PodRunOutcome outcome, List<string> outputs, string? reason) =>
+        new(podId, null, null, PodRunOrigin.Operation, operation, planHash, outcome, outputs, reason);
+
+    /// <summary>A draft never claims a saved member's hash; operation input is not a captured member.</summary>
     public static PodReceipt ForSource(PodCapturedSourceData root, string operation, string? planHash, PodRunOutcome outcome, List<string> outputs, string? reason) =>
-        root.Origin == PodSourceOrigin.SavedMember
-            ? new(root.Id, root.Path, root.Sha256, PodRunOrigin.SavedMember, operation, planHash, outcome, outputs, reason)
-            : new(root.Id, null, null, PodRunOrigin.SuppliedDraft, operation, planHash, outcome, outputs, reason);
+        root.Origin switch {
+            PodRunOrigin.SavedMember => ForSavedMember(root.Id, root.Path, root.Sha256, operation, planHash, outcome, outputs, reason),
+            PodRunOrigin.SuppliedDraft => new(root.Id, null, null, root.Origin, operation, planHash, outcome, outputs, reason),
+            _ => throw new ArgumentException("A captured source must be a saved member or supplied draft.", nameof(root))
+        };
 }
 
 public record PodMemberComposeRequest(string? Pod, string Path, string? Content = null, PodCapturedSourceData? Source = null);
@@ -114,19 +126,13 @@ public record PodCapturedSourceData(
     [property: JsonProperty(Required = Required.Always)] string Path,
     [property: JsonProperty(Required = Required.Always)] string Sha256,
     [property: JsonProperty(Required = Required.Always)] string BytesBase64,
-    [property: JsonProperty(Required = Required.Always)] PodSourceOrigin Origin);
+    [property: JsonProperty(Required = Required.Always)] PodRunOrigin Origin);
 
 public record PodConsumedSourceData(
     [property: JsonProperty(Required = Required.Always)] string Id,
     [property: JsonProperty(Required = Required.Always)] string Path,
     [property: JsonProperty(Required = Required.Always)] string Sha256,
     [property: JsonProperty(Required = Required.Always)] string BytesBase64);
-
-[JsonConverter(typeof(StringEnumConverter))]
-public enum PodSourceOrigin {
-    SavedMember,
-    SuppliedDraft
-}
 
 public record PodDependencyData(string Id, string Path, string Sha256);
 
@@ -136,7 +142,7 @@ public record PodExportData(string ArchivePath, List<PodDependencyData> Vendored
 
 public record PodImportRequest(string ArchivePath, string? Folder = null);
 
-public record PodImportData(string Id, string Folder);
+public record PodImportData(string Id, string Folder, IReadOnlyList<ScriptDiagnostic>? Diagnostics = null);
 
 [JsonConverter(typeof(StringEnumConverter))]
 public enum ScriptExecutionStatus {

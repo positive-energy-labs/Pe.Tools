@@ -60,7 +60,7 @@ public sealed record PodCapturedSource(
     string Sha256,
     byte[] Bytes,
     string Content,
-    PodSourceOrigin Origin
+    PodRunOrigin Origin
 );
 
 /// <summary>
@@ -165,6 +165,8 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null) {
 
     internal static PodCapturedSource CaptureComposeSource(PodMemberComposeRequest request) {
         var source = request.Source ?? throw new InvalidDataException("Captured compose source is required.");
+        if (source.Origin is not (PodRunOrigin.SavedMember or PodRunOrigin.SuppliedDraft))
+            throw new InvalidDataException("Captured compose source must be a saved member or supplied draft.");
         var content = request.Content ?? throw new InvalidDataException("Captured compose source requires content.");
         var bytes = Convert.FromBase64String(source.BytesBase64);
         if (source.Id != request.Pod || source.Path != request.Path || source.Sha256 != Sha256(bytes)
@@ -209,7 +211,7 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null) {
                 Sha256(bytes),
                 bytes,
                 draftContent ?? Encoding.UTF8.GetString(bytes),
-                draftContent is null ? PodSourceOrigin.SavedMember : PodSourceOrigin.SuppliedDraft);
+                draftContent is null ? PodRunOrigin.SavedMember : PodRunOrigin.SuppliedDraft);
         }
 
         bool Resolve(string reference, out PodConsumedDependency dependency, out string reason) {

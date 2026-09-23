@@ -5,6 +5,8 @@ fleet cockpit, and `/settings`. Design-language and primitive gaps this cluster 
 design-system ledger, not restated here.
 
 ## Decided
+
+- 2026-09-22, every mutating `OpAttribute` declares `Actor`, including `Any`, because omission must not grant agent access. `OpRegistry` refuses an omitted actor and projects its enum name into the catalog.
 - 2026-09-13, takeover retires the entire dev command, including its source watcher, before cleanup; later edits restart only the surviving command. Replace Node's persistent watch mode and remove the ineffective 60-second pre-eviction guard. Installed startup continues through the SDK and packaged Host, with no source watcher or Vite server.
 - 2026-09-12, keep one dev command and checkout-scoped SDK host identity; launch a separate Vite frontend only after the backend claim succeeds. Vite proxies product APIs and owns HMR; frontend reloads do not restart the backend. Per-launch optimizer caches prevent cross-launch interference.
 - 2026-09-12, pin MSBuild SDK, local CLI and generated TypeScript contract to 0.1.0-beta.157 from canonical SDK merge 881234d. Main and route-primitive consume identical eleven-package feed bytes; both restored CLIs report the same source commit. Packaging and consumer checks do not prove installed or Revit session freshness.

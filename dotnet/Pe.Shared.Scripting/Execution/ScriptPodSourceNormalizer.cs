@@ -21,8 +21,6 @@ public static class ScriptPodSourceNormalizer {
         var manifest = PodManifestValidator.ValidateJson(Decode(manifestFile.BytesBase64, out _));
         if (!manifest.Success || manifest.Manifest is null)
             throw new ArgumentException(string.Join("; ", manifest.Diagnostics.Select(d => d.Message)), PodManifestValidator.DiagnosticStage);
-        if (!manifest.Manifest.Entrypoints.Any(e => string.Equals(e.SourcePath, selected, StringComparison.OrdinalIgnoreCase)))
-            throw new ArgumentException("pod.json does not declare the requested entrypoint.", PodManifestValidator.DiagnosticStage);
         var project = captured.TryGetValue("PeScripts.csproj", out var projectFile) ? Decode(projectFile.BytesBase64, out _) : null;
         var sources = bundle.Files.Where(file => file.Path.Replace('\\', '/').StartsWith("src/", StringComparison.OrdinalIgnoreCase)).ToList();
         if (sources.Count is < 1 or > MaxFiles)

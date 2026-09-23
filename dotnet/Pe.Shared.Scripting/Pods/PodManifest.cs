@@ -67,6 +67,10 @@ public static class PodManifestValidator {
         AddUnknownFieldDiagnostics(root, TopLevelFields, diagnostics, "pod.json");
 
         var schemaVersion = ReadRequiredInteger(root, "schemaVersion", diagnostics);
+        if (schemaVersion == 1) {
+            schemaVersion = CurrentSchemaVersion;
+            diagnostics.Add(ScriptDiagnosticFactory.Info(DiagnosticStage, "pod.json schemaVersion upgraded from 1 to 2."));
+        }
         if (schemaVersion.HasValue && schemaVersion.Value != CurrentSchemaVersion)
             diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, $"pod.json schemaVersion must be {CurrentSchemaVersion}."));
 

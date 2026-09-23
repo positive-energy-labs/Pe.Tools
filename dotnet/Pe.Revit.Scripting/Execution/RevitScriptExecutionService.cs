@@ -1,4 +1,4 @@
-﻿using Autodesk.Revit.DB;
+using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.UI;
 using Microsoft.CodeAnalysis;
@@ -43,7 +43,7 @@ public sealed class RevitScriptExecutionService(
     private readonly ScriptReferenceResolver _referenceResolver = referenceResolver;
     private readonly Func<UIApplication?> _uiApplicationAccessor = uiApplicationAccessor;
 
-    private const string AuthoringShapeHint = "Inline scriptContent accepts Execute-body statements such as WriteLine(\"...\"), with optional leading using directives, or a full container class: public sealed class Script : PeScriptContainer { public override void Execute() { WriteLine(\"...\"); } }. Execute() returns void. Pod scripts are normal C# files with one PeScriptContainer, declared as entrypoints in pod.json. Inside Execute(), use doc, uidoc, app, selection, revitVersion, ct, Artifacts, Result(...), and WriteLine(...).";
+    private const string AuthoringShapeHint = "Inline scriptContent accepts Execute-body statements such as WriteLine(\"...\"), with optional leading using directives, or a full container class: public sealed class Script : PeScriptContainer { public override void Execute() { WriteLine(\"...\"); } }. Execute() returns void. Pod scripts are normal C# files with one PeScriptContainer; pod.json entrypoints expose palette buttons. Inside Execute(), use doc, uidoc, app, selection, revitVersion, ct, Artifacts, Result(...), and WriteLine(...).";
 
     /// <summary>Standard wiring shared by the bridge transport and the in-process palette runner.</summary>
     public static RevitScriptExecutionService CreateDefault(
@@ -114,9 +114,9 @@ public sealed class RevitScriptExecutionService(
             outputSink.Artifacts = new ScriptArtifactWriter(runPod);
             revitVersion = plan.RevitVersion;
             try {
-                outputSink.Attribution = plan.Attribution ?? new PodReceipt(
+                outputSink.Attribution = plan.Attribution ?? PodReceipt.ForOperation(
                     ScriptPodPreparationService.ReadId(runPod) ?? throw new InvalidDataException($"The pod at {runPod} has no manifest id to store the run under."),
-                    null, null, PodRunOrigin.Operation, "scripting.execute", null, PodRunOutcome.Failed, [], null);
+                    "scripting.execute", null, PodRunOutcome.Failed, [], null);
                 outputSink.Artifacts.WriteInput(PodRuns.WithReviewBasis(RunInputMetadata(plan, request), null), RunInputFiles(plan, request));
             } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException) {
                 AppendDiagnostic(diagnostics, ScriptDiagnosticFactory.Error("run.input", $"The run input could not be saved, so nothing ran: {exception.Message}"));
@@ -469,10 +469,9 @@ public sealed class RevitScriptExecutionService(
                 executionMode = ScriptWorkspaceExecutionMode.Pod;
                 podManifest = captured.Manifest;
                 projectSeed = captured.ProjectSeed;
-                var entrypoint = podManifest.Entrypoints.Single(item => string.Equals(item.SourcePath, request.SourcePath, StringComparison.OrdinalIgnoreCase));
-                var member = preparation.Members.Single(item => string.Equals(item.Path, entrypoint.SourcePath, StringComparison.OrdinalIgnoreCase));
+                var member = preparation.Members.Single(item => string.Equals(item.Path, "src/" + sourceSet.EntryPointSourceName, StringComparison.OrdinalIgnoreCase));
                 // Outcome and output references are settled when CreateResult observes the final result.
-                preparedAttribution = new PodReceipt(podManifest.Id, member.Path, member.Sha256, PodRunOrigin.SavedMember, "scripting.execute", null, PodRunOutcome.Failed, [], null);
+                preparedAttribution = PodReceipt.ForSavedMember(podManifest.Id, member.Path, member.Sha256, "scripting.execute", null, PodRunOutcome.Failed, [], null);
             }
 
             var canonicalProjectContent = this._projectGenerator.GenerateProjectContent(

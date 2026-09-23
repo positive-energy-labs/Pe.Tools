@@ -170,7 +170,10 @@ export namespace DocumentTemporaryStatus {
 /** Reconcile explicit loaded families to a saved spec or supplied draft, refusing plan drift per family and any family reloaded since the plan (its name now resolves to another id), and write the run receipt beside its operation output. */
 export namespace FamiliesApply {
   export namespace Req {
-    export type PodSourceOrigin = "SavedMember" | "SuppliedDraft";
+    /**
+     * What a run's source was: a saved member's bytes, a supplied draft, or operation input with no member.
+     */
+    export type PodRunOrigin = "SavedMember" | "SuppliedDraft" | "Operation";
 
     /**
      * Apply a saved spec to explicit loaded families; each family's `expectedPlanHash` from families.plan gates drift. Both maps are
@@ -204,7 +207,7 @@ export namespace FamiliesApply {
       path: string;
       sha256: string;
       bytesBase64: string;
-      origin: PodSourceOrigin;
+      origin: PodRunOrigin;
     }
     export interface PodConsumedSourceData {
       id: string;
@@ -436,7 +439,10 @@ export namespace FamiliesPlan {
 /** Reconcile the active family document to a saved spec or supplied draft, refusing plan drift, and write the run receipt beside its operation output. */
 export namespace FamilyApply {
   export namespace Req {
-    export type PodSourceOrigin = "SavedMember" | "SuppliedDraft";
+    /**
+     * What a run's source was: a saved member's bytes, a supplied draft, or operation input with no member.
+     */
+    export type PodRunOrigin = "SavedMember" | "SuppliedDraft" | "Operation";
 
     /**
      * Apply a saved spec to the active family document; the family's `expectedPlanHash` from family.plan
@@ -467,7 +473,7 @@ export namespace FamilyApply {
       path: string;
       sha256: string;
       bytesBase64: string;
-      origin: PodSourceOrigin;
+      origin: PodRunOrigin;
     }
     export interface PodConsumedSourceData {
       id: string;
@@ -559,7 +565,10 @@ export namespace FamilyApply {
 /** Build a new Revit family from a saved family model spec by reconciling a fresh document from the spec's template. The .rfa lands in a fresh run folder in the source pod beside the run receipt; the operation returns both paths. */
 export namespace FamilyBuild {
   export namespace Req {
-    export type PodSourceOrigin = "SavedMember" | "SuppliedDraft";
+    /**
+     * What a run's source was: a saved member's bytes, a supplied draft, or operation input with no member.
+     */
+    export type PodRunOrigin = "SavedMember" | "SuppliedDraft" | "Operation";
 
     /**
      * Build a new family from a saved family model spec on its header's template; nested models resolve
@@ -586,7 +595,7 @@ export namespace FamilyBuild {
       path: string;
       sha256: string;
       bytesBase64: string;
-      origin: PodSourceOrigin;
+      origin: PodRunOrigin;
     }
     export interface PodConsumedSourceData {
       id: string;
@@ -890,9 +899,18 @@ export namespace PodImport {
     }
   }
   export namespace Res {
+    export type ScriptDiagnosticSeverity = "Info" | "Warning" | "Error";
+
     export interface Response {
       id: string;
       folder: string;
+      diagnostics?: ScriptDiagnostic[] | null;
+    }
+    export interface ScriptDiagnostic {
+      stage: string;
+      severity: ScriptDiagnosticSeverity;
+      message: string;
+      source?: null | string;
     }
   }
 }
@@ -900,7 +918,10 @@ export namespace PodImport {
 /** Compose one JSON member ($include, $preset) from the saved file or the supplied draft content. @local/ resolves inside the pod; @<id>/ resolves to the installed pod with that manifest id. Returns composed JSON, this member's diagnostics only, and consumed fragments with SHA-256. */
 export namespace PodMemberCompose {
   export namespace Req {
-    export type PodSourceOrigin = "SavedMember" | "SuppliedDraft";
+    /**
+     * What a run's source was: a saved member's bytes, a supplied draft, or operation input with no member.
+     */
+    export type PodRunOrigin = "SavedMember" | "SuppliedDraft" | "Operation";
 
     export interface Request {
       pod?: null | string;
@@ -913,11 +934,14 @@ export namespace PodMemberCompose {
       path: string;
       sha256: string;
       bytesBase64: string;
-      origin: PodSourceOrigin;
+      origin: PodRunOrigin;
     }
   }
   export namespace Res {
-    export type PodSourceOrigin = "SavedMember" | "SuppliedDraft";
+    /**
+     * What a run's source was: a saved member's bytes, a supplied draft, or operation input with no member.
+     */
+    export type PodRunOrigin = "SavedMember" | "SuppliedDraft" | "Operation";
     export type ScriptDiagnosticSeverity = "Info" | "Warning" | "Error";
 
     export interface Response {
@@ -931,7 +955,7 @@ export namespace PodMemberCompose {
       path: string;
       sha256: string;
       bytesBase64: string;
-      origin: PodSourceOrigin;
+      origin: PodRunOrigin;
     }
     export interface ScriptDiagnostic {
       stage: string;
@@ -5026,7 +5050,10 @@ export namespace RevitResolveUnitValue {
 /** Create a new schedule from a saved schedule spec and write the run receipt into the source pod. Never edits an existing schedule. */
 export namespace ScheduleApply {
   export namespace Req {
-    export type PodSourceOrigin = "SavedMember" | "SuppliedDraft";
+    /**
+     * What a run's source was: a saved member's bytes, a supplied draft, or operation input with no member.
+     */
+    export type PodRunOrigin = "SavedMember" | "SuppliedDraft" | "Operation";
 
     /**
      * Create a new schedule from a saved spec. Apply never edits an existing schedule.
@@ -5049,7 +5076,7 @@ export namespace ScheduleApply {
       path: string;
       sha256: string;
       bytesBase64: string;
-      origin: PodSourceOrigin;
+      origin: PodRunOrigin;
     }
     export interface PodConsumedSourceData {
       id: string;
@@ -5283,7 +5310,7 @@ export namespace ScheduleCellsApply {
   }
 }
 
-/** Execute trusted in-process C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a pod entrypoint declared in the workspace's pod.json — exactly one of the two. sourceBundle may supply captured Pod manifest, project presence and source bytes with sourcePath; references resolve from the original workspace key. The supplied document is the script target; UI document and selection are available only when it is active. permissionMode defaults to ReadOnly, which discards supplied-document changes via a rollback guard; pass WriteTransaction for one host-owned transaction, or NoTransaction when the script or called library must own transaction boundaries (including APIs such as Document.SaveAs that reject an open transaction). */
+/** Execute trusted in-process C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a captured src file in a valid pod workspace — exactly one of the two. sourceBundle may supply captured Pod manifest, project presence and source bytes with sourcePath; references resolve from the original workspace key. The supplied document is the script target; UI document and selection are available only when it is active. permissionMode defaults to ReadOnly, which discards supplied-document changes via a rollback guard; pass WriteTransaction for one host-owned transaction, or NoTransaction when the script or called library must own transaction boundaries (including APIs such as Document.SaveAs that reject an open transaction). */
 export namespace ScriptingExecute {
   export namespace Req {
     export type ScriptPermissionMode = "ReadOnly" | "WriteTransaction" | "NoTransaction";
@@ -5367,9 +5394,6 @@ export namespace ScriptingExecute {
       planHash?: null | string;
       outcome: PodRunOutcome;
       outputs: string[];
-      /**
-       * A failure's text; `null` when there is none. An empty string is not a third shape, however a writer spells "no reason".
-       */
       reason?: null | string;
     }
   }

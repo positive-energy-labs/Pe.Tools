@@ -4,6 +4,8 @@ Rewritten 2026-09-16 after the pod/product boundary grill. Git holds the earlier
 
 ## Decided
 
+- 2026-09-22, `entrypoints` declares palette buttons, not execution permission. Bounded captured `src` files may run without a palette entry, so settings-only manifests stay valid. `PodManifestValidator` upgrades v1 in memory and import reports the diagnostic while preserving the archived bytes.
+
 - 2026-09-19, Live Family and Families drafts plan/apply without Pod selection, following the resource-relevance rule in `docs/features/design-system/LEDGER.md`. Internal run storage preserves exact consumed input and honest source attribution; saving a portable member remains a separate user purpose. This supersedes mandatory saved-content or Pod selection for live draft execution.
 
 - 2026-09-16: A pod is one folder of plain source: scripts with declared entrypoints, JSON members, assets. Typed JSON is reusable data. A library owns the operation and the domain validation; storage knows no domain rules.
