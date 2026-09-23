@@ -3,7 +3,6 @@ import {
   scheduleReads,
   type ScheduleReadKey,
   actionControls,
-  type ActionControlKey,
   semanticActions,
   familyReads,
   familiesRouteState,
@@ -12,14 +11,14 @@ import {
   type FamilyReadKey,
   actionBasesSchema,
   type SemanticActionKey,
+  type ActionReceipt,
 } from "@pe/agent-contracts";
 import {
-  runSemanticAction,
-  submitAction,
+  type DetachedAction,
   readAction,
   readFamilyCapture,
-  controlAction,
 } from "../shared/takeoff-action-client.ts";
+import { runCapability } from "../shared/admission.ts";
 import { readScheduleCapture } from "../shared/schedule-client.ts";
 /**
  * The three doors plus the one Scope door.
@@ -224,7 +223,7 @@ export const peRead = createTool({
     "Run one capability that does not mutate: an op: row with mutates false, a route: document read, or a skill: body. Refuses mutating rows with a hint to use pe_do. Split from pe_do so reads never wait on an approval prompt. Runs under this thread's Scope; the result names the revision and the resolved target.",
   inputSchema: runInputSchema,
   execute: (input, context) =>
-    runCapability(input, context, (row) =>
+    executeTool(input, context, (row) =>
       row.mutates ? `'${row.key}' mutates; run it with pe_do (approval-gated).` : null,
     ),
 });
@@ -234,10 +233,10 @@ export const peDo = createTool({
   description:
     "Do one capability by key from pe_find. Approval-gated because it may mutate; use pe_read for rows that do not. Human-only rows refuse. Op calls accept an exact per-call target override; omission uses the frozen turn default. The result separately names Scope revision and actual target. For Takeoffs actions, retain input.actionId from the admitted result to recover the same attempt; never mint another ID after an uncertain outcome.",
   inputSchema: runInputSchema,
-  execute: (input, context) => runCapability(input, context, () => null, true),
+  execute: (input, context) => executeTool(input, context, () => null, true),
 });
 
-async function runCapability(
+async function executeTool(
   input: RunInput,
   context: unknown,
   gate: (row: Capability) => string | null,
@@ -413,16 +412,7 @@ async function dispatch(
         };
       }
       if (Object.hasOwn(actionControls, key)) {
-        if (key === "action.resume") {
-          const original = await controlAction("action.read", payload, base());
-          if (
-            original.kind === "workflow" &&
-            Object.hasOwn(semanticActions, original.key) &&
-            semanticActions[original.key as SemanticActionKey].actor === "human"
-          )
-            throw Error("This original action requires human approval to resume");
-        }
-        const result = await controlAction(key as ActionControlKey, payload, base(), "agent");
+        const result = await runCapability(key, payload, { hostBaseUrl: base(), actor: "agent" });
         return { ok: true, target: { session: null, document: null }, result };
       }
       if (row.key.startsWith("workflow:")) {
@@ -432,18 +422,24 @@ async function dispatch(
         )
           throw Error("Semantic action requires the exact selected lifetime");
         const { bases, actionId, ...intent } = payload;
-        const row = await runSemanticAction(
-          key as SemanticActionKey,
+        const row = (await runCapability(
+          key,
           intent,
-          target.bridgeSessionId && target.openDocumentId
-            ? { session: target.bridgeSessionId, openId: target.openDocumentId }
-            : undefined,
-          actionBasesSchema.parse(bases ?? {}),
-          "agent",
-          base(),
-          typeof actionId === "string" ? actionId : requestId,
-          input.timeoutSeconds * 1000,
-        );
+          {
+            hostBaseUrl: base(),
+            ...target,
+            actor: "agent",
+            bases: actionBasesSchema.parse(bases ?? {}),
+            actionId: typeof actionId === "string" ? actionId : requestId,
+            timeoutMs: input.timeoutSeconds * 1000,
+            receipt: true,
+          },
+          {
+            kind: "workflow",
+            needs: semanticActions[key as SemanticActionKey].needs,
+            mutates: true,
+          },
+        )) as ActionReceipt | DetachedAction;
         return {
           ok: row.state === "succeeded" || row.state === "detached",
           target: { session: target.bridgeSessionId ?? null, document: null },
@@ -496,19 +492,19 @@ async function dispatch(
           async () => {
             if (!target.bridgeSessionId)
               throw Error("Original temporary-document session is unavailable");
-            const released = await submitAction(
+            const released = (await runCapability(
+              "document.temporary.release",
+              { acquisitionId, releaseId },
               {
-                id: releaseId,
-                kind: "operation",
-                key: "document.temporary.release",
+                hostBaseUrl: base(),
+                bridgeSessionId: target.bridgeSessionId,
+                actionId: releaseId,
                 actor: "agent",
-                input: { acquisitionId, releaseId },
-                bases: {},
-                destination: { kind: "session", session: target.bridgeSessionId },
+                timeoutMs: 30_000,
+                receipt: true,
               },
-              base(),
-              30_000,
-            );
+              { kind: "operation", needs: "session", mutates: true },
+            )) as ActionReceipt | DetachedAction;
             return released.state === "succeeded"
               ? released.result
               : { status: "recovery-required", receipt: released };

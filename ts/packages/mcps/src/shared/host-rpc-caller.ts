@@ -1,10 +1,6 @@
-import {
-  actionAdmissionSchema,
-  canonicalRouteInput,
-  type ActionReceipt,
-} from "@pe/agent-contracts";
-import { submitAction, readAction, type DetachedAction } from "./takeoff-action-client.ts";
-import { admissionDestination, CANCEL_KEY } from "./admission.ts";
+import { type ActionReceipt } from "@pe/agent-contracts";
+import { readAction, type DetachedAction } from "./takeoff-action-client.ts";
+import { runCapability, CANCEL_KEY } from "./admission.ts";
 import { Effect } from "effect";
 /** What a /call response says it actually ran against; headers absent means no Revit session. */
 export type ResolvedTarget = { session: string | null; document: string | null };
@@ -192,51 +188,23 @@ export class HostRpcCaller {
     // op.cancel never waits on the catalog: see readCapabilityIntent.
     const operation = prior || key === CANCEL_KEY ? undefined : await this.getOperation(key);
     if (prior || operation?.intent === "Mutate") {
-      const actor = this.options.actor;
-      if (!actor) throw Error("Mutation caller must supply its initiating actor");
-      // One destination builder: the host recomputes this from `needs` and compares it exactly.
-      const destination =
-        prior?.destination ??
-        admissionDestination(key, operation?.needs ?? "document", this.options);
-      const admission = actionAdmissionSchema.parse({
-        id: this.options.requestId ?? crypto.randomUUID(),
-        kind: "operation",
-        key,
-        actor,
-        destination,
-        input: request ?? {},
-        bases: {},
-      });
-      if (
-        prior &&
-        (prior.kind !== "operation" ||
-          prior.key !== key ||
-          prior.actor !== actor ||
-          canonicalRouteInput(prior.request) !== canonicalRouteInput(admission.input))
-      )
-        throw Error("Original operation ID conflicts with the requested intent");
-      if (prior) {
-        const session =
-          prior.destination.kind === "document"
-            ? prior.destination.ref.session
-            : prior.destination.kind === "session"
-              ? prior.destination.session
-              : undefined;
-        const openId =
-          prior.destination.kind === "document" ? prior.destination.ref.openId : undefined;
-        if (
-          (this.options.bridgeSessionId && this.options.bridgeSessionId !== session) ||
-          (this.options.openDocumentId && this.options.openDocumentId !== openId)
-        )
-          throw Error("Original operation ID conflicts with the requested destination");
-      }
       const started = Date.now();
-      await this.options.beforeAdmission?.(admission.id);
-      const action = await submitAction(
-        admission,
-        this.options.hostBaseUrl,
-        this.options.timeoutMs ?? 30_000,
-      );
+      const action = (await runCapability(
+        key,
+        (request ?? {}) as Record<string, unknown>,
+        {
+          ...this.options,
+          actionId: this.options.requestId,
+          receipt: true,
+        },
+        {
+          kind: "operation",
+          mutates: true,
+          needs: operation?.needs ?? "document",
+          destination: prior?.destination,
+          prior,
+        },
+      )) as ActionReceipt | DetachedAction;
       return action.state === "succeeded"
         ? { ok: true, key, elapsedMs: Date.now() - started, response: action.result, action }
         : {

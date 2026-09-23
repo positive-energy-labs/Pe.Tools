@@ -9,6 +9,8 @@ restated here.
 
 ## Decided
 
+- 2026-09-22: Pea operation, workflow, action-control, and temporary-document cleanup calls use shared admission. Keep replay identity checks there so CLI and MCP cannot diverge.
+
 - 2026-09-16: Current Chat performance is good enough for this wave; stop further performance experiments. Retaining five recently visited transcripts with Activity is a future option, with draft lifetime independent of transcript eviction, not a required cutover.
 
 - 2026-09-16, Unsent Chat text and attachments stay with their mounted thread; draft edits do not update the URL. Incoming `?prompt=` links may seed initial text, but that seed must not carry across thread selection.

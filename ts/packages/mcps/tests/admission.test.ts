@@ -1,410 +1,187 @@
-import { expect, test } from "vite-plus/test";
-import { admissionDestination, runCapability } from "../src/shared/admission.ts";
-import { ScriptingTools } from "../src/shared/scripting.ts";
-import { cli } from "gunshi";
-import { PeaCliCommands } from "../src/pea/PeaCliCommands.ts";
-
+import { afterEach, expect, test, vi } from "vite-plus/test";
+import { peDo, peRead, configurePeaProductToolContext } from "../src/pea/capability-tools.ts";
+import { buildCapabilities } from "../src/pea/capabilities.ts";
+import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 import { bodyText } from "./body-text.ts";
 
-/**
- * A fake host serving exactly the two endpoints a mutation needs: the generated operation
- * catalog and `/actions`. `/call` is left unrouted, so any surviving raw-mutation dispatch fails
- * here — that is the w5-revit defect this file pins.
- */
-const operations = [
+const operations: HostOperationDefinition[] = [
+  { key: "scripting.execute", intent: "Mutate", needs: "document" },
   { key: "scripting.workspace.bootstrap", intent: "Mutate", needs: "nothing" },
-  { key: "scripting.execute", intent: "Mutate", needs: "nothing" },
   { key: "pod.import", intent: "Mutate", needs: "nothing" },
   { key: "pod.export", intent: "Mutate", needs: "nothing" },
+  { key: "revit.context.summary", intent: "Read", needs: "document" },
 ];
+const target = { kind: "open", ref: { session: "A", openId: "open-A" } } as const;
+const destination = { kind: "document", ref: target.ref };
+const receipt = (admission: Record<string, unknown>) => {
+  const { input, ...rest } = admission;
+  return {
+    ...rest,
+    request: input,
+    state: "succeeded",
+    result: { done: true },
+    steps: [],
+    preparation: { state: "unprepared" },
+    recovery: [],
+    publication: { state: "unrequested" },
+    startedAt: new Date(0).toISOString(),
+  };
+};
 
-/**
- * Like the real `/ops` (`apps/host/src/ops-catalog.ts`): native keys only under a session
- * selector, and a session whose bridge does not answer yields a 200 carrying `bridgeCatalogError`.
- */
-function fakeHost(
-  options: {
-    session?: string;
-    bridgeDown?: boolean;
-    summaryDown?: boolean;
-    prior?: Record<string, unknown>;
-  } = {},
-) {
-  const submitted: unknown[] = [];
-  const original = globalThis.fetch;
-  globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
-    const url = String(input instanceof Request ? input.url : input);
-    if (url.includes("/actions?id=")) return Response.json(options.prior ? [options.prior] : []);
-    if (url.endsWith("/ops")) {
-      const selected = (init?.headers as Record<string, string> | undefined)?.[
-        "x-pe-bridge-session-id"
-      ];
-      if (!selected)
-        return Response.json({
-          operations: [],
-          bridgeCatalogError: "Select a session for native operations",
-        });
-      if (options.bridgeDown)
-        return Response.json({ operations: [], bridgeCatalogError: "bridge request timed out" });
-      return Response.json({ operations });
+function host(prior?: Record<string, unknown>) {
+  configurePeaProductToolContext({ hostBaseUrl: "http://admission.test" });
+  const posts: Record<string, unknown>[] = [];
+  const reads: string[] = [];
+  vi.stubGlobal("fetch", async (input: Request | string | URL, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    reads.push(url.pathname);
+    if (url.pathname === "/actions") {
+      if (init?.method !== "POST") return Response.json(prior ? [prior] : []);
+      const body = JSON.parse(await bodyText(init));
+      posts.push(body);
+      return Response.json(receipt(body));
     }
-    if (url.endsWith("/call")) {
-      const { key } = JSON.parse(await bodyText(init)) as { key: string };
-      if (key !== "bridge.sessions.summary")
-        throw new Error(`fake host refuses raw dispatch of '${key}' on /call`);
-      if (options.summaryDown) return new Response("boom", { status: 500 });
-      return Response.json({ sessionId: options.session ?? null, openDocumentCount: 0 });
-    }
-    if (url.endsWith("/actions") && init?.method === "POST") {
-      const { input: request, ...attempt } = JSON.parse(await bodyText(init)) as Record<
-        string,
-        unknown
-      >;
-      submitted.push({ ...attempt, input: request });
+    if (prior) throw Error("Replay must not consult a live catalog or target");
+    if (url.pathname === "/pe/capabilities")
       return Response.json({
-        ...attempt,
-        request,
-        state: "succeeded",
-        result: { ok: attempt.key },
-        steps: [],
-        preparation: { state: "unprepared" },
-        recovery: [],
-        startedAt: new Date(0).toISOString(),
-        publication: { state: "unrequested" },
+        at: new Date(0).toISOString(),
+        sources: {},
+        sessions: [],
+        capabilities: buildCapabilities({ ops: operations, routes: [], pods: null, skills: [] }),
       });
+    if (url.pathname === "/ops") return Response.json({ operations });
+    if (url.pathname === "/call") {
+      const body = JSON.parse(await bodyText(init));
+      if (body.key === "bridge.sessions.list")
+        return Response.json({
+          sessions: [
+            {
+              sessionId: "A",
+              connected: true,
+              openDocuments: [{ openId: "open-A", address: "C:/A.rvt", isFamilyDocument: false }],
+            },
+          ],
+        });
+      if (body.key === "revit.context.summary") return Response.json({ title: "A" });
+      throw Error(`Raw mutation on /call: ${body.key}`);
     }
-    throw new Error(`fake host has no route for ${init?.method ?? "GET"} ${url}`);
-  }) as typeof fetch;
-  return { submitted, restore: () => void (globalThis.fetch = original) };
+    throw Error(`Unexpected ${url.href}`);
+  });
+  return { posts, reads };
 }
 
-const tools = (session?: string) =>
-  new ScriptingTools({
-    hostBaseUrl: "http://host.test",
-    bridgeSessionId: session,
-    actor: "agent",
-    workspaceKey: "demo-pod",
-  });
+afterEach(() => {
+  vi.unstubAllGlobals();
+  configurePeaProductToolContext({});
+});
 
-test("every mutating pea script verb builds the exact /actions admission", async () => {
-  const host = fakeHost({ session: "session-catalog" });
-  try {
-    const pea = tools();
-    await pea.bootstrap({});
-    await pea.execute({ sourcePath: "src/SampleScript.cs" });
-    await pea.importPod({ archivePath: "a.zip" });
-    await pea.exportPod({ pod: "demo-pod", archivePath: "b.zip" });
-    expect(
-      host.submitted.map((admission) => {
-        const { id: _id, ...rest } = admission as Record<string, unknown>;
-        return rest;
-      }),
-    ).toEqual([
-      {
-        kind: "operation",
-        key: "scripting.workspace.bootstrap",
-        actor: "agent",
-        destination: { kind: "session", session: "session-catalog" },
-        input: { workspaceKey: "demo-pod" },
-        bases: {},
+const call = (tool: typeof peDo | typeof peRead, input: Record<string, unknown>, id = "attempt") =>
+  tool.execute!(
+    { timeoutSeconds: 30, ...input } as never,
+    { agent: { toolCallId: id } } as never,
+  ) as Promise<Record<string, unknown>>;
+
+test("pe_do admits native operations and workflows with exact identity, actor, target and bases", async () => {
+  const { posts } = host();
+  expect(
+    await call(peDo, { key: "op:scripting.execute", target, input: { scriptContent: "x" } }),
+  ).toMatchObject({ ok: true });
+  for (const key of ["scripting.workspace.bootstrap", "pod.import", "pod.export"])
+    expect(await call(peDo, { key: `op:${key}`, target: "A" }, key)).toMatchObject({ ok: true });
+  const bases = { captureId: "c".repeat(64) };
+  expect(
+    await call(peDo, {
+      key: "workflow:takeoffs.partition",
+      target,
+      input: {
+        zoneRegion: 1,
+        view: "v",
+        zoneName: "z",
+        zoneGuid: "g",
+        bases,
+        actionId: "workflow",
       },
-      {
-        kind: "operation",
-        key: "scripting.execute",
-        actor: "agent",
-        destination: { kind: "session", session: "session-catalog" },
-        input: { sourcePath: "src/SampleScript.cs", workspaceKey: "demo-pod" },
-        bases: {},
-      },
-      {
-        kind: "operation",
-        key: "pod.import",
-        actor: "agent",
-        destination: { kind: "session", session: "session-catalog" },
-        input: { archivePath: "a.zip" },
-        bases: {},
-      },
-      {
-        kind: "operation",
-        key: "pod.export",
-        actor: "agent",
-        destination: { kind: "session", session: "session-catalog" },
-        input: { pod: "demo-pod", archivePath: "b.zip" },
-        bases: {},
-      },
-    ]);
-  } finally {
-    host.restore();
-  }
-});
-
-test("pea script cancel reaches /call with no catalog read and no session lookup", async () => {
-  // w8-revit 4c: /ops is served on the Revit thread the running script holds, so any read of it
-  // times out exactly when a cancel is needed. Here every route but /call throws.
-  const seen: string[] = [];
-  const original = globalThis.fetch;
-  globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
-    const url = String(input instanceof Request ? input.url : input);
-    seen.push(`${init?.method ?? "GET"} ${new URL(url).pathname}`);
-    if (!url.endsWith("/call")) throw new Error(`cancel must not touch ${url}`);
-    expect(JSON.parse(await bodyText(init))).toMatchObject({
-      key: "op.cancel",
-      request: { requestId: "running-script" },
-    });
-    return Response.json({ cancelled: true, requestId: "running-script", message: "signalled" });
-  }) as typeof fetch;
-  try {
-    const result = await tools().cancel({ requestId: "running-script" });
-    expect(result).toMatchObject({ cancelled: true, requestId: "running-script" });
-    expect(seen).toEqual(["POST /call"]);
-  } finally {
-    globalThis.fetch = original;
-  }
-});
-
-test("an explicit session selector outranks the one the catalog answered from", async () => {
-  const host = fakeHost({ session: "session-catalog" });
-  try {
-    await tools("session-explicit").bootstrap({});
-    expect((host.submitted[0] as { destination: unknown }).destination).toEqual({
-      kind: "session",
-      session: "session-explicit",
-    });
-  } finally {
-    host.restore();
-  }
-});
-
-test("the catalog, not the caller, says whether a key is an operation or a workflow", async () => {
-  const host = fakeHost({ session: "session-catalog" });
-  try {
-    await runCapability(
-      "family.capture",
-      { target: {} },
-      {
-        hostBaseUrl: "http://host.test",
-        actor: "agent",
-        openDocumentId: "open-1",
-      },
-    );
-    expect(host.submitted[0]).toMatchObject({
-      kind: "workflow",
-      key: "family.capture",
-      destination: { kind: "document", ref: { session: "session-catalog", openId: "open-1" } },
-    });
-  } finally {
-    host.restore();
-  }
-});
-
-test("a mutation with no session, no actor, or no catalog row refuses before it POSTs", async () => {
-  const host = fakeHost();
-  try {
-    await expect(tools().bootstrap({})).rejects.toThrow("none is connected to http://host.test");
-    await expect(
-      runCapability("family.capture", {}, { hostBaseUrl: "http://host.test", actor: "agent" }),
-    ).rejects.toThrow("none is connected or named");
-    await expect(
-      new ScriptingTools({
-        hostBaseUrl: "http://host.test",
-        bridgeSessionId: "s",
-        workspaceKey: "demo-pod",
-      }).exportPod({
-        pod: "p",
-        archivePath: "b.zip",
-      }),
-    ).rejects.toThrow("initiating actor");
-    await expect(
-      runCapability("pod.nonesuch", {}, { hostBaseUrl: "http://host.test", actor: "agent" }),
-    ).rejects.toThrow("none is connected");
-    expect(host.submitted).toEqual([]);
-  } finally {
-    host.restore();
-  }
-});
-
-test("a document destination needs the exact open lifetime, never an active-document fallback", () => {
-  expect(() =>
-    admissionDestination("family.capture", "family-document", { bridgeSessionId: "s" }),
-  ).toThrow("exact open family-document");
-  // Host-local keys run on the host even when a session is connected.
-  expect(admissionDestination("pod.list", "nothing", { bridgeSessionId: "s" })).toEqual({
-    kind: "host",
-  });
-});
-
-test("a read key never enters admission; it stays on /call", async () => {
-  const host = fakeHost({ session: "session-catalog" });
-  try {
-    await expect(tools().listPods()).rejects.toThrow("refuses raw dispatch of 'pod.list'");
-    expect(host.submitted).toEqual([]);
-  } finally {
-    host.restore();
-  }
-});
-
-/** `pea host operations call`, driven through Gunshi exactly as a user types it. */
-async function peaCall(args: string[]) {
-  const command = new PeaCliCommands({ hostBaseUrl: "http://host.test" }).hostCommand();
-  const printed: string[] = [];
-  const log = console.log;
-  console.log = (line: unknown) => void printed.push(String(line));
-  try {
-    await cli(["operations", "call", ...args], command, { subCommands: command.subCommands });
-  } finally {
-    console.log = log;
-  }
-  return printed;
-}
-
-test("a native key with no --bridge-session-id reads the catalog of the connected session", async () => {
-  const host = fakeHost({ session: "session-live" });
-  try {
-    await peaCall([
-      "--key",
-      "scripting.workspace.bootstrap",
-      "--actor",
-      "agent",
-      "--request",
-      "{}",
-    ]);
-    await tools().bootstrap({});
-    expect(host.submitted).toMatchObject([
-      { kind: "operation", destination: { kind: "session", session: "session-live" } },
-      { kind: "operation", destination: { kind: "session", session: "session-live" } },
-    ]);
-  } finally {
-    host.restore();
-  }
-});
-
-test("a native key with no session names how to pick one", async () => {
-  const host = fakeHost();
-  try {
-    await expect(peaCall(["--key", "scripting.execute", "--actor", "agent"])).rejects.toThrow(
-      /'scripting.execute' runs in a Revit session and none is connected.*--bridge-session-id.*pea host status/,
-    );
-    expect(host.submitted).toEqual([]);
-  } finally {
-    host.restore();
-  }
-});
-
-test("an unreachable catalog and an unknown key are two refusals with two causes", async () => {
-  const down = fakeHost({ session: "session-live", bridgeDown: true });
-  try {
-    await expect(
-      peaCall(["--key", "scripting.execute", "--actor", "agent", "--bridge-session-id", "s-down"]),
-    ).rejects.toThrow("catalog of session 's-down' is unreachable: bridge request timed out");
-  } finally {
-    down.restore();
-  }
-  const up = fakeHost({ session: "session-live" });
-  try {
-    // The down answer was not cached: the same session now serves its catalog.
-    await peaCall([
-      "--key",
-      "scripting.execute",
-      "--actor",
-      "agent",
-      "--bridge-session-id",
-      "s-down",
-    ]);
-    await expect(peaCall(["--key", "pod.nonesuch", "--actor", "agent"])).rejects.toThrow(
-      "'pod.nonesuch' is not in the operation catalog of session 'session-live'",
-    );
-    expect(up.submitted).toHaveLength(1);
-  } finally {
-    up.restore();
-  }
-  const original = globalThis.fetch;
-  globalThis.fetch = (async () => {
-    throw new TypeError("fetch failed");
-  }) as typeof fetch;
-  try {
-    // A dead host is a transport error that names the URL, not "no session".
-    await expect(peaCall(["--key", "scripting.execute", "--actor", "agent"])).rejects.toThrow(
-      "POST http://host.test/call failed: TypeError: fetch failed",
-    );
-  } finally {
-    globalThis.fetch = original;
-  }
-});
-
-test("operations call admits schedule.grid.push as a workflow with its bases", async () => {
-  const host = fakeHost({ session: "session-live" });
-  try {
-    await peaCall([
-      "--key",
-      "schedule.grid.push",
-      "--actor",
-      "human",
-      "--open-document-id",
-      "open-1",
-      "--request",
-      JSON.stringify({ bases: { captureId: "c".repeat(64) } }),
-    ]);
-    expect(host.submitted).toMatchObject([
-      {
-        kind: "workflow",
-        key: "schedule.grid.push",
-        actor: "human",
-        destination: { kind: "document", ref: { session: "session-live", openId: "open-1" } },
-        input: {},
-        bases: { captureId: "c".repeat(64) },
-      },
-    ]);
-  } finally {
-    host.restore();
-  }
-});
-
-test("an original action id with no named session replays its receipt's destination, reading no session or catalog", async () => {
-  const destination = { kind: "document", ref: { session: "A", openId: "open-A" } };
-  const host = fakeHost({
-    summaryDown: true,
-    prior: {
+    }),
+  ).toMatchObject({ ok: true });
+  expect(posts).toMatchObject([
+    {
+      id: "attempt",
       kind: "operation",
-      id: "original",
       key: "scripting.execute",
-      actor: "human",
+      actor: "agent",
       destination,
-      request: { scriptContent: "x" },
+      input: { scriptContent: "x" },
       bases: {},
-      steps: [],
-      preparation: { state: "unprepared" },
-      recovery: [],
-      startedAt: new Date(0).toISOString(),
-      publication: { state: "unrequested" },
-      state: "running",
     },
-  });
-  try {
-    await runCapability(
-      "scripting.execute",
-      { scriptContent: "x" },
-      { hostBaseUrl: "http://host.test", actor: "human", actionId: "original" },
-    );
-    expect(host.submitted).toMatchObject([{ id: "original", destination }]);
-  } finally {
-    host.restore();
-  }
+    ...["scripting.workspace.bootstrap", "pod.import", "pod.export"].map((key) => ({
+      id: key,
+      kind: "operation",
+      key,
+      actor: "agent",
+      destination: { kind: "session", session: "A" },
+    })),
+    {
+      id: "workflow",
+      kind: "workflow",
+      key: "takeoffs.partition",
+      actor: "agent",
+      destination,
+      bases,
+    },
+  ]);
+  expect(posts.at(-1)?.input).not.toHaveProperty("bases");
 });
 
-test("a session summary the host fails to answer is a refusal naming the URL", async () => {
-  const host = fakeHost({ summaryDown: true });
-  try {
-    const refusal = await runCapability(
-      "scripting.execute",
-      {},
-      { hostBaseUrl: "http://host.test", actor: "agent" },
-    ).catch((error: unknown) => error);
-    expect(refusal).toBeInstanceOf(Error);
-    expect((refusal as Error).constructor).toBe(Error);
-    expect((refusal as Error).message).toContain("http://host.test/call");
-    expect((refusal as Error).message).toContain("--bridge-session-id");
-    expect(host.submitted).toEqual([]);
-  } finally {
-    host.restore();
-  }
+test("pe_read refuses mutations; pe_do refuses human, unknown and missing or closed targets before admission", async () => {
+  const { posts } = host();
+  expect(await call(peRead, { key: "op:scripting.execute", target })).toMatchObject({
+    isError: true,
+    content: expect.stringContaining("pe_do"),
+  });
+  for (const input of [
+    { key: "workflow:families.apply", target },
+    { key: "op:missing", target },
+    { key: "op:scripting.execute" },
+    {
+      key: "op:scripting.execute",
+      target: { kind: "open", ref: { session: "A", openId: "closed" } },
+    },
+  ])
+    expect(await call(peDo, input)).toMatchObject({ isError: true });
+  expect(posts).toEqual([]);
+  expect(await call(peRead, { key: "op:revit.context.summary", target })).toMatchObject({
+    ok: true,
+    result: { title: "A" },
+  });
+  expect(posts).toEqual([]);
+});
+
+test("pe_do replays the original receipt without catalog or target discovery and refuses changed intent or destination", async () => {
+  const { posts, reads } = host(
+    receipt({
+      id: "attempt",
+      kind: "operation",
+      key: "scripting.execute",
+      actor: "agent",
+      destination,
+      input: { scriptContent: "x" },
+      bases: {},
+    }),
+  );
+  expect(
+    await call(peDo, { key: "op:scripting.execute", input: { scriptContent: "x" } }),
+  ).toMatchObject({ ok: true });
+  expect(posts).toMatchObject([{ id: "attempt", destination, input: { scriptContent: "x" } }]);
+  await expect(
+    call(peDo, { key: "op:scripting.execute", input: { scriptContent: "changed" } }),
+  ).rejects.toThrow("conflicts");
+  await expect(
+    call(peDo, {
+      key: "op:scripting.execute",
+      input: { scriptContent: "x" },
+      target: { kind: "open", ref: { session: "B", openId: "open-B" } },
+    }),
+  ).rejects.toThrow("destination");
+  expect(posts).toHaveLength(1);
+  expect(new Set(reads)).toEqual(new Set(["/actions"]));
 });

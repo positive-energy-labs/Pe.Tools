@@ -11,6 +11,10 @@ import {
   actionAdmissionSchema,
   scheduleReads,
   semanticActions,
+  actionControls,
+  type ActionControlKey,
+  canonicalRouteInput,
+  type ActionReceipt,
   type ScheduleReadKey,
   type ActionBases,
   type ExecutionTarget,
@@ -19,7 +23,13 @@ import {
 import { isTsOnlyOperationKey, tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 import { HostRpcCaller } from "./host-rpc-caller.ts";
 import { readScheduleCapture } from "./schedule-client.ts";
-import { actionResult, readAction, submitAction } from "./takeoff-action-client.ts";
+import {
+  actionResult,
+  readAction,
+  submitAction,
+  runSemanticAction,
+  controlAction,
+} from "./takeoff-action-client.ts";
 
 export interface AdmissionContext {
   hostBaseUrl: string;
@@ -32,6 +42,9 @@ export interface AdmissionContext {
   actionId?: string;
   timeoutMs?: number;
   bases?: ActionBases;
+  /** Tool surfaces retain the receipt; CLI and scripting callers consume its result. */
+  receipt?: boolean;
+  beforeAdmission?: (id: string) => Promise<void>;
 }
 
 /**
@@ -71,6 +84,7 @@ export type CapabilityIntent = {
   mutates: boolean;
   session?: string;
   destination?: ExecutionTarget;
+  prior?: ActionReceipt;
 };
 
 /**
@@ -96,7 +110,8 @@ export async function readCapabilityIntent(
     context.actionId && !context.bridgeSessionId
       ? await readAction(context.actionId, context.hostBaseUrl)
       : undefined;
-  if (prior) return { kind: prior.kind, needs: "", mutates: true, destination: prior.destination };
+  if (prior)
+    return { kind: prior.kind, needs: "", mutates: true, destination: prior.destination, prior };
   const local = tsOnlyOperationCatalog.find((row) => row.key === key);
   if (local) return { kind: "operation", needs: local.needs, mutates: local.intent !== "Read" };
   if (Object.hasOwn(semanticActions, key))
@@ -174,6 +189,18 @@ export async function runCapability(
   context: AdmissionContext,
   intent?: CapabilityIntent,
 ): Promise<unknown> {
+  if (Object.hasOwn(actionControls, key)) {
+    if (key === "action.resume" && context.actor === "agent") {
+      const original = await controlAction("action.read", input, context.hostBaseUrl);
+      if (
+        original.kind === "workflow" &&
+        Object.hasOwn(semanticActions, original.key) &&
+        semanticActions[original.key as SemanticActionKey].actor === "human"
+      )
+        throw Error("This original action requires human approval to resume");
+    }
+    return controlAction(key as ActionControlKey, input, context.hostBaseUrl, context.actor);
+  }
   intent ??= await readCapabilityIntent(key, context);
   if (intent.kind === "schedule-read")
     return readScheduleCapture(
@@ -192,6 +219,26 @@ export async function runCapability(
     );
   if (!context.actor)
     throw new Error(`'${key}' mutates; name the initiating actor (--actor human|agent).`);
+  if (intent.kind === "workflow" && !intent.prior) {
+    if (intent.needs !== "nothing")
+      admissionDestination(key, intent.needs, {
+        bridgeSessionId: await resolveSession(context),
+        openDocumentId: context.openDocumentId,
+      });
+    const action = await runSemanticAction(
+      key as SemanticActionKey,
+      input,
+      context.openDocumentId
+        ? { session: await requireSession(key, context), openId: context.openDocumentId }
+        : undefined,
+      context.bases,
+      context.actor,
+      context.hostBaseUrl,
+      context.actionId,
+      context.timeoutMs ?? 30_000,
+    );
+    return context.receipt ? action : actionResult(action);
+  }
   const admission = actionAdmissionSchema.parse({
     id: context.actionId ?? crypto.randomUUID(),
     kind: intent.kind,
@@ -206,7 +253,30 @@ export async function runCapability(
     input,
     bases: context.bases ?? {},
   });
-  return actionResult(
-    await submitAction(admission, context.hostBaseUrl, context.timeoutMs ?? 30_000),
-  );
+  const prior = intent.prior;
+  if (prior) {
+    if (
+      prior.kind !== admission.kind ||
+      prior.key !== key ||
+      prior.actor !== context.actor ||
+      canonicalRouteInput(prior.request) !== canonicalRouteInput(input) ||
+      canonicalRouteInput(prior.bases) !== canonicalRouteInput(admission.bases)
+    )
+      throw Error("Original operation ID conflicts with the requested intent");
+    const session =
+      prior.destination.kind === "document"
+        ? prior.destination.ref.session
+        : prior.destination.kind === "session"
+          ? prior.destination.session
+          : undefined;
+    const openId = prior.destination.kind === "document" ? prior.destination.ref.openId : undefined;
+    if (
+      (context.bridgeSessionId && context.bridgeSessionId !== session) ||
+      (context.openDocumentId && context.openDocumentId !== openId)
+    )
+      throw Error("Original operation ID conflicts with the requested destination");
+  }
+  await context.beforeAdmission?.(admission.id);
+  const action = await submitAction(admission, context.hostBaseUrl, context.timeoutMs ?? 30_000);
+  return context.receipt ? action : actionResult(action);
 }

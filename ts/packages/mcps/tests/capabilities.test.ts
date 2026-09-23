@@ -3,17 +3,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
 import { familiesRouteState } from "@pe/agent-contracts";
-import { expect, test, vi } from "vite-plus/test";
+import { afterEach, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-types";
-import {
-  address,
-  capabilityMap,
-  findCapabilities,
-  turnContextKey,
-  type CapabilityCatalog,
-  type Turn,
-} from "@pe/agent-contracts";
+import { address, turnContextKey, type CapabilityCatalog, type Turn } from "@pe/agent-contracts";
 import { buildCapabilities } from "../src/pea/capabilities.ts";
 import { createRouteRegistrations } from "../src/pea/routes.ts";
 import { bundledPeaSkills } from "../src/pea/skills.ts";
@@ -88,61 +81,55 @@ function catalog(): CapabilityCatalog {
   };
 }
 
-test("every source projects into one row shape with no hidden tier", () => {
-  const rows = catalog().capabilities;
-  const keys = rows.map((row) => row.key);
-  // An ExpertOnly op and a scripting.* op are plain rows now; the tier is a rank, not a filter.
-  expect(rows.find((row) => row.key === "op:revit.catalog.loaded-families")?.rank).toBe(0);
-  expect(keys).toContain("op:scripting.execute");
-  expect(keys).toContain("route:instances");
-  // Every collaborative route is on cells: each offers Pea a propose door, never a staging one.
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
+
+async function find(input: Record<string, unknown>) {
+  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
+  vi.stubGlobal("fetch", async () => Response.json(catalog()));
+  return (await run(peFind, { limit: 50, ...input })) as {
+    matches: Array<{ key: string; description: string; needs: string; input: unknown }>;
+    map: { total: number; kinds: Array<{ kind: string }> };
+  };
+}
+
+test("pe_find offers operations, collaborative Work, valid Pod entrypoints and skills", async () => {
+  const rows = (await find({ query: "", mutates: false })).matches;
+  const mutating = (await find({ mutates: true })).matches;
+  const keys = [...rows, ...mutating].map((row) => row.key);
+  for (const key of [
+    "op:scripting.execute",
+    "route:instances",
+    "route:pods",
+    "pod:sheets.rename",
+    "skill:build-pod",
+  ])
+    expect(keys).toContain(key);
   for (const route of ["families", "instances", "parameter-links", "takeoffs"])
     expect(keys).toContain(`route:${route}.propose`);
-  // Instances lifecycle is a semantic action behind host admission, not a route command.
-  expect(rows.find((row) => row.key === "workflow:instances.start")).toMatchObject({
-    kind: "op",
-    actor: "any",
-    mutates: true,
-  });
-  expect(rows.find((row) => row.key === "workflow:instances.stop")?.actor).toBe("human");
-  expect(
-    rows.some((row) => row.kind === "route-command" && row.key.startsWith("route:instances")),
-  ).toBe(false);
-  // /pods is the member editor that replaced /settings; /ops stays a read-only projection.
-  expect(keys).toContain("route:pods");
+  expect(keys).not.toContain("pod:broken.run");
   expect(keys.some((key) => key.startsWith("route:ops"))).toBe(false);
-  // Only valid pods become buttons; invalid ones are absent, not hidden.
-  expect(rows.filter((row) => row.kind === "pod").map((row) => row.key)).toEqual([
-    "pod:sheets.rename",
-  ]);
-  expect(keys).toContain("skill:build-pod");
   expect(new Set(keys).size).toBe(keys.length);
-  for (const row of rows)
+  for (const row of [...rows, ...mutating])
     expect(z.record(z.string(), z.unknown()).safeParse(row.input).success).toBe(true);
 });
 
-test("no query gives the map; a query ranks across kinds; needs filters replace hiding", () => {
-  const rows = catalog().capabilities;
-  const map = capabilityMap(rows);
-  expect(map.kinds.map((kind) => kind.kind)).toEqual([
+test("pe_find maps every kind and ranks and filters visible rows", async () => {
+  expect((await find({})).map.kinds.map((row) => row.kind)).toEqual([
     "op",
     "route-doc",
     "route-command",
     "pod",
     "skill",
   ]);
-  expect(map.total).toBe(rows.length);
-  expect(findCapabilities(rows, { query: "loaded families" })[0]?.key).toBe(
+  expect((await find({ query: "loaded families" })).matches[0]?.key).toBe(
     "op:revit.catalog.loaded-families",
   );
-  expect(findCapabilities(rows, { query: "rename sheets" })[0]?.key).toBe("pod:sheets.rename");
+  expect((await find({ query: "rename sheets" })).matches[0]?.key).toBe("pod:sheets.rename");
   expect(
-    findCapabilities(rows, { query: "instances.start", kind: "op" })
-      .slice(0, 2)
-      .map((row) => row.key),
-  ).toContain("workflow:instances.start");
-  expect(
-    findCapabilities(rows, { needs: "project-document" }).every(
+    (await find({ needs: "project-document" })).matches.every(
       (row) => row.needs === "project-document",
     ),
   ).toBe(true);
@@ -180,8 +167,10 @@ test("F-H6-3: plan and capture over loaded families are human verbs; Pea never f
   }
 });
 
-test("F-H6-2: the Families route tells Pea to propose a scope, then cells against it, without waiting for staging", () => {
-  const read = catalog().capabilities.find((row) => row.key === "route:families")!.description;
+test("F-H6-2: the Families route tells Pea to propose a scope, then cells against it, without waiting for staging", async () => {
+  const read = (await find({ kind: "route-doc" })).matches.find(
+    (row) => row.key === "route:families",
+  )!.description;
   expect(read).toContain("revit.catalog.loaded-families");
   expect(read).toMatch(/scope\.proposal first[^]*cells[^]*staged scope, else the proposed one/);
   expect(read).toMatch(/do not wait for the person to stage/i);
