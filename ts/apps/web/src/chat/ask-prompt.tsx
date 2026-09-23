@@ -6,6 +6,7 @@ import { ActionButton } from "#/components/lang/action-button";
 import { Input } from "#/components/lang/input";
 import { Textarea } from "#/components/lang/textarea";
 import { readRecord, readString } from "#/workbench/chat-state";
+import { Markdown } from "#/workbench/prose";
 
 export type Question = {
   text: string;
@@ -49,7 +50,10 @@ export function AskUserPrompt({
   const [selected, setSelected] = useState<string[]>([]);
   return (
     <div className="flex min-w-0 flex-col gap-2 py-1">
-      <div className="t-prose">{question.text}</div>
+      {/* A live ask sits in the HEAD, above the composer — so its question is capped and scrolls
+          inside itself. A long one (numbered sections, option lists) otherwise grew the head past
+          the viewport and pushed the transcript, the answer box and Answer off the page. */}
+      <Markdown text={question.text} className="max-h-[22rem] overflow-y-auto pr-2" />
       {question.options.length === 0 ? (
         <>
           <Textarea

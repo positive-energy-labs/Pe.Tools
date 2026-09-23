@@ -1,9 +1,7 @@
 import { expect, test } from "vite-plus/test";
 import {
   lensScrollIntent,
-  nextTailFollowState,
   scrollTopForIntent,
-  tailFollowState,
   turnAtFocalPoint,
   type ScrollMetrics,
 } from "../src/workbench/model";
@@ -34,56 +32,6 @@ test("unknown focus falls back to tail", () => {
   ).toBe(1500);
 });
 
-test("tail follow detaches when the user scrolls away", () => {
-  expect(tailFollowState({ scrollTop: 1300, scrollHeight: 2000, clientHeight: 500 })).toBe(
-    "following",
-  );
-  expect(tailFollowState({ scrollTop: 1000, scrollHeight: 2000, clientHeight: 500 })).toBe(
-    "detached",
-  );
-});
-
-test("tail follow survives content growth until the user scrolls up", () => {
-  expect(
-    nextTailFollowState(
-      "following",
-      { scrollTop: 1500, scrollHeight: 2400, clientHeight: 500 },
-      1500,
-      true,
-    ),
-  ).toBe("following");
-  expect(
-    nextTailFollowState(
-      "following",
-      { scrollTop: 1200, scrollHeight: 2400, clientHeight: 500 },
-      1500,
-      true,
-    ),
-  ).toBe("detached");
-});
-
-test("upward scroll inside the tail zone detaches (no snap-back)", () => {
-  // scrollTop 1450 is within TAIL_THRESHOLD_PX of the bottom (max 1500) — previously this
-  // stayed "following" and the next measure snapped the view back down.
-  expect(
-    nextTailFollowState(
-      "following",
-      { scrollTop: 1450, scrollHeight: 2000, clientHeight: 500 },
-      1500,
-      true,
-    ),
-  ).toBe("detached");
-  // scrolling back down into the zone re-attaches
-  expect(
-    nextTailFollowState(
-      "detached",
-      { scrollTop: 1450, scrollHeight: 2000, clientHeight: 500 },
-      1400,
-      true,
-    ),
-  ).toBe("following");
-});
-
 test("focal point reports the current turn", () => {
   expect(
     turnAtFocalPoint(
@@ -94,24 +42,4 @@ test("focal point reports the current turn", () => {
       { scrollTop: 300, scrollHeight: 1500, clientHeight: 500 },
     ),
   ).toBe(2);
-});
-
-test("only user intent moves follow; a browser clamp does not", () => {
-  // Content shrank and the browser clamped scrollTop down: the view is still at the tail.
-  expect(
-    nextTailFollowState(
-      "following",
-      { scrollTop: 900, scrollHeight: 1500, clientHeight: 600 },
-      1000,
-      false,
-    ),
-  ).toBe("following");
-  expect(
-    nextTailFollowState(
-      "following",
-      { scrollTop: 900, scrollHeight: 1500, clientHeight: 600 },
-      1000,
-      true,
-    ),
-  ).toBe("detached");
 });

@@ -2,7 +2,6 @@ import { annotation } from "#/components/anatomy";
 import { modeDepth } from "../depth";
 import { Moments } from "../moments";
 import { EmptyState, emptyMark } from "#/components/lang/empty";
-import { Press } from "#/components/lang/press";
 import { ContextStrip, formatTime } from "./context-strip";
 import { useLensModel } from "./model";
 import type { Mode } from "../depth";
@@ -36,9 +35,8 @@ export function Lens({
     csFocalRef,
     caretRef,
     bandRefs,
-    following,
     registerMoment,
-    onPointerDown,
+    onBandClick,
     scrollToTail,
   } = useLensModel({ state, mode, sideOpen }); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -46,7 +44,7 @@ export function Lens({
     <div {...annotation("frame")} ref={frameRef} data-mode={mode}>
       <div {...annotation("scroller")} ref={scrollerRef}>
         <div {...annotation("grid")}>
-          <div {...annotation("dial")} onPointerDown={onPointerDown} aria-label="Timeline">
+          <div {...annotation("dial")} onClick={onBandClick} aria-label="Timeline">
             <div
               aria-hidden="true"
               title={`to: ${threadScope.defaultTarget === null ? "none" : threadScope.defaultTarget.kind === "named" ? threadScope.defaultTarget.address : threadScope.defaultTarget.ref.openId} r${threadScope.revision}`}
@@ -87,19 +85,26 @@ export function Lens({
             <div {...annotation("reticle-cap")} ref={capBotRef} />
             <div {...annotation("reticle-focal")} ref={csFocalRef} />
             <div {...annotation("caret")} ref={caretRef} />
-            {!following && moments.length > 0 ? (
-              <span {...annotation("tail")}>
-                <Press
-                  type="button"
-                  tone="quiet"
-                  size="icon"
-                  title="Jump to latest"
-                  aria-label="Jump to latest"
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={scrollToTail}
-                >
-                  ↓
-                </Press>
+            {/* Always present: nothing auto-scrolls any more, so this bar is the only way back
+                to the live tail. It IS the press - no chip inside the rail. */}
+            {moments.length > 0 ? (
+              <span
+                {...annotation("tail")}
+                role="button"
+                tabIndex={0}
+                title="Jump to latest"
+                aria-label="Jump to latest"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  scrollToTail();
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  scrollToTail();
+                }}
+              >
+                ↓
               </span>
             ) : null}
           </div>

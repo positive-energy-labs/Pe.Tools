@@ -115,7 +115,10 @@ export function ProposalHead({ asks, works }: { asks: readonly ReactNode[]; work
   const shown = all || live.length <= REST_WORKS ? live : live.slice(0, REST_WORKS);
   const rest = live.slice(shown.length).map((parts) => countWords(parts.flatMap(headGroups)));
   return (
-    <div aria-label="Pea proposals" className="hairline-t hairline-b flex flex-col py-1 t-prose">
+    <div
+      aria-label="Pea proposals"
+      className="hairline-t hairline-b flex flex-col px-2 py-1 t-prose"
+    >
       {asks}
       {shown.map((parts) => (
         <WorkLine key={parts[0]!.id} parts={parts} />

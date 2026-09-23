@@ -33,6 +33,45 @@ import { deferredResultSummary, useDeferredToolResult } from "./deferred-result"
 
 type RegisterMoment = (id: string, el: HTMLElement | null) => void;
 
+const EMPTY_RUNS: ReadonlySet<string> = new Set();
+
+/** A turn that is nothing but finished tool calls: machinery, foldable. Anything else breaks a run. */
+const machinery = (message: ChatMessage) =>
+  message.role === "assistant" &&
+  !message.running &&
+  message.parts.length > 0 &&
+  message.parts.every((part) => part.type === "tool-call");
+
+const callTitles = (message: ChatMessage) =>
+  message.parts.flatMap((part) => (part.type === "tool-call" ? [toolTitle(part.call.title)] : []));
+
+/** A folded run: the lead message wears the summary, the rest render only while it is open. */
+type ToolRun = { id: string; titles: string[] };
+
+/**
+ * Every maximal run of consecutive machinery turns, keyed by every message id in it. A run of one
+ * call stays inline — folding it would hide a row behind a row.
+ */
+function toolRuns(messages: ChatMessage[]): Map<string, ToolRun> {
+  const runs = new Map<string, ToolRun>();
+  for (let start = 0; start < messages.length; ) {
+    if (!machinery(messages[start]!)) {
+      start += 1;
+      continue;
+    }
+    let end = start;
+    const titles: string[] = [];
+    while (end < messages.length && machinery(messages[end]!))
+      titles.push(...callTitles(messages[end++]!));
+    if (titles.length > 1) {
+      const run = { id: messages[start]!.id, titles };
+      for (let i = start; i < end; i += 1) runs.set(messages[i]!.id, run);
+    }
+    start = end;
+  }
+  return runs;
+}
+
 /** The transcript: one section per message, drawn from the same array the lens measures. */
 export function Moments({
   messages,
@@ -41,22 +80,47 @@ export function Moments({
   messages: ChatMessage[];
   register: RegisterMoment;
 }) {
+  const [opened, setOpened] = useState<ReadonlySet<string>>(EMPTY_RUNS);
+  const runs = toolRuns(messages);
   let turn = 0;
-  return messages.map((message, index) => {
+  return messages.flatMap((message, index) => {
     if (message.role === "user") turn += 1;
+    const run = runs.get(message.id);
+    const open = run ? opened.has(run.id) : false;
+    // A closed run is ONE row: its non-lead members leave the DOM entirely, so the lens measures
+    // the transcript as it is laid out rather than a stack of zero-height ghosts.
+    if (run && run.id !== message.id && !open) return [];
     // A moment directly under one of the same role draws no role line: a run of pea turns reads
     // as one block, not N banners.
     const continues = messages[index - 1]?.role === message.role;
     const head = continues ? null : <MomentHead message={message} turn={Math.max(1, turn)} />;
-    return (
+    return [
       <MomentSection key={message.id} message={message} register={register}>
         {message.role === "user" ? (
           <UserMoment message={message} head={head} />
         ) : (
-          <AssistantMoment message={message} head={head} />
+          <AssistantMoment
+            message={message}
+            head={head}
+            fold={
+              run && run.id === message.id
+                ? {
+                    titles: run.titles,
+                    open,
+                    toggle: (next: boolean) =>
+                      setOpened((current) => {
+                        const ids = new Set(current);
+                        if (next) ids.add(run.id);
+                        else ids.delete(run.id);
+                        return ids;
+                      }),
+                  }
+                : undefined
+            }
+          />
         )}
-      </MomentSection>
-    );
+      </MomentSection>,
+    ];
   });
 }
 
@@ -164,7 +228,10 @@ function UserMoment({ message, head }: { message: ChatMessage; head: ReactNode }
         ) : null}
 
         {text ? (
-          <div className="boundary-l px-3 py-1.5 t-prose text-ink" data-surface="recess">
+          <div
+            className="boundary-l px-3 py-1.5 t-prose whitespace-pre-wrap text-ink"
+            data-surface="recess"
+          >
             {text}
           </div>
         ) : null}
@@ -173,14 +240,17 @@ function UserMoment({ message, head }: { message: ChatMessage; head: ReactNode }
   );
 }
 
-function AssistantMoment({ message, head }: { message: ChatMessage; head: ReactNode }) {
+function AssistantMoment({
+  message,
+  head,
+  fold,
+}: {
+  message: ChatMessage;
+  head: ReactNode;
+  /** Set on the lead turn of a folded run; its summary counts the whole run's calls. */
+  fold?: { titles: string[]; open: boolean; toggle: (open: boolean) => void };
+}) {
   const { parts, running } = message;
-  // A turn that is nothing but tool calls is machinery, not speech: it folds behind one summary
-  // row so an uninterrupted run of calls costs one line of the transcript instead of N.
-  const titles = parts.flatMap((part) =>
-    part.type === "tool-call" ? [toolTitle(part.call.title)] : [],
-  );
-  const toolOnly = titles.length === parts.length;
   const body = (
     <div className="flex min-w-0 flex-col gap-[3px]">
       <PartsBoundary>
@@ -195,11 +265,15 @@ function AssistantMoment({ message, head }: { message: ChatMessage; head: ReactN
   return (
     <>
       {head}
-      {toolOnly && titles.length > 1 && !running ? (
-        <details {...annotation("tool-run")}>
+      {fold ? (
+        <details
+          {...annotation("tool-run")}
+          open={fold.open}
+          onToggle={(event) => fold.toggle(event.currentTarget.open)}
+        >
           <summary>
-            <span className="face-mono">⌗ {titles.length} calls</span>
-            <span className="truncate text-ink-2">{titles.join(" · ")}</span>
+            <span className="face-mono">⌗ {fold.titles.length} calls</span>
+            <span className="truncate text-ink-2">{fold.titles.join(" · ")}</span>
           </summary>
           {body}
         </details>

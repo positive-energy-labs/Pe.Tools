@@ -52,7 +52,7 @@
 /* The transcript owns column 1; its map dial occupies the fixed right rail. */
 [data-annotation="grid"] {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--map, 64px);
+  grid-template-columns: minmax(0, 1fr) var(--map, 46px);
   align-items: start;
 }
 /* all share row 1 — explicit grid-column alone bumps items into separate rows */
@@ -76,7 +76,6 @@
   --pe-on: var(--pe-artifact);
   touch-action: none;
   user-select: none;
-  cursor: ns-resize;
 }
 [data-annotation="dial-strip"] {
   position: absolute;
@@ -86,8 +85,9 @@
 }
 [data-annotation="dial-band"] {
   position: absolute;
-  right: 14px;
+  right: 6px;
   width: 8px;
+  cursor: pointer;
   border-radius: 0; /* hard-square segment bars */
   opacity: 0.38;
   transition:
@@ -99,9 +99,13 @@
    ALWAYS on the focal band (the reticle readout). Machine-measured: mono, tracked, tabular. */
 [data-annotation="dial-band"] [data-annotation="dial-number"] {
   position: absolute;
-  /* band is 8px at right:14px of the 64px lane; 12px inset leaves ~38px of leftward room —
-     enough for "#999" in 12px mono without clipping at the lane's overflow:hidden edge. */
-  right: 12px;
+  /* Anchored to the band's own LEFT edge, not a fixed lane inset: the focal band grows leftward,
+     and a fixed inset put the number underneath it.
+     ponytail: ~19px of leftward room beside a focal band in the 46px lane — "#99" fits, a
+     four-character turn clips at the lane's overflow:hidden edge. Widen --map if threads get
+     that long. */
+  right: 100%;
+  margin-right: 4px;
   top: 50%;
   transform: translateY(-50%);
   font-family: var(--font-mono);
@@ -198,8 +202,8 @@
 }
 [data-annotation="reticle-wick"] {
   position: absolute;
-  left: 4px;
-  right: 4px;
+  left: 3px;
+  right: 3px;
   border: 1px solid color-mix(in srgb, var(--pe-ink) 70%, transparent);
   border-radius: 0;
   pointer-events: none;
@@ -220,25 +224,24 @@
   pointer-events: none;
   z-index: 5;
 }
-/* jump-to-tail — shown only while detached from the live tail. Within-page navigation, so it
-   wears nav's blue TEXT (never a fill). Hover is the one veil. */
+/* jump-to-tail — the rail's footer, always there (nothing auto-scrolls any more, so this is the
+   ONLY way back to the live tail). Full lane width, no border: a bar, not a chip floating in the
+   dial. Within-page navigation, so it wears nav's blue TEXT (never a fill). Hover is the one veil. */
 [data-annotation="tail"] {
   position: absolute;
-  bottom: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 22px;
-  height: 22px;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 20px;
   display: grid;
   place-items: center;
-  border: 0.5px solid var(--pe-line);
-  border-radius: var(--radius);
+  border-top: 0.5px solid var(--pe-line);
   background: var(--pe-artifact);
   --pe-on: var(--pe-artifact);
   color: var(--pe-nav);
   font-family: var(--font-mono);
   font-size: var(--type-prose-size);
-  line-height: var(--type-prose-line-height);
+  line-height: 1;
   cursor: pointer;
   z-index: 6;
 }
@@ -249,14 +252,21 @@
 /* chat — near plane, the real scroll. The composer floats over the bottom; pad the tail by its
    live height (+ the pb-4 gap below it) so the last turn always clears the input box. */
 [data-annotation="chat"] {
+  /* ONE MEASURE, CENTRED IN THE LANE. A transcript that grows to the window runs 150+ characters
+     a line on a wide monitor, and at that length paragraph breaks stop registering at all — the
+     eye loses the return sweep before it finds them.
+     A px knob, not `ch`: this box's own font is 10px while the prose inside it is 11px, so `ch`
+     here measures the wrong type. 750px is ~135 characters at the measured 5.5px prose character.
+     Turn `--chat-measure` if that reads long or short. */
+  max-width: var(--chat-measure, 750px);
+  margin-inline: auto;
   padding: 14px 20px;
 }
 [data-annotation="moment"] {
   /* ONE rhythm: a moment is spaced like any other row (3px), so a run of folded tool turns reads
      as one list instead of N widely-spaced islands. The air is spent at the speaker handoff
      instead — see the hairline rules below, which own both the rule and the padding.
-     The left inset is unconditional: the focal rule is an inset shadow, so padding it on ALL
-     moments keeps the contents put when focus moves. */
+     The left inset is the transcript's lane, not a focus mark: the dial answers "where am I". */
   padding: 3px 0 3px 10px;
   scroll-margin-top: 12px;
 }
@@ -276,12 +286,6 @@
   border-top: 0.5px solid var(--pe-line);
   margin-top: 10px;
   padding-top: 10px;
-}
-/* The focal turn's left rule answers "where am I" — a locate mark, neutral ink for BOTH roles
-   (R13a). The old per-role provenance hue spent identity on a selection question.
-   Inset shadow = zero layout shift. */
-[data-annotation="moment"].focal {
-  box-shadow: inset 2px 0 0 var(--pe-ink);
 }
 [data-annotation="tool-marker"] {
   /* full-width ledger row: identifiers pack left, the mono status owns the right edge. A flex row,
@@ -576,7 +580,15 @@
 [data-annotation="tool-run"] > summary:hover {
   background: color-mix(in srgb, var(--pe-pea) 6%, transparent);
 }
+/* The count leads and holds its line: it is the one fact the folded row must always say.
+   Without this it shrank to a sliver and wrapped "112 calls" under the tool list. */
+[data-annotation="tool-run"] > summary span:first-child {
+  flex: none;
+  white-space: nowrap;
+}
+/* The tool list is the elastic part — it takes the slack and ellipsises. */
 [data-annotation="tool-run"] > summary span:last-child {
+  flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -19,7 +19,10 @@ import { cn } from "#/lib/utils";
 const PROSE_CLASS = [
   "prose min-w-0 max-w-none text-ink [overflow-wrap:anywhere]",
   "prose-pe",
-  "prose-p:my-0 prose-p:mb-[0.45em] last:prose-p:mb-0",
+  // `last:prose-p:mb-0` read as "when the PROSE BOX is a last child, kill every paragraph gap" —
+  // and the box almost always is one, so the transcript had no paragraph spacing at all. The
+  // variant belongs on the paragraph: `prose-p:last:mb-0` is the last paragraph inside the box.
+  "prose-p:my-0 prose-p:mb-[0.8em] prose-p:last:mb-0",
   "prose-headings:font-sans prose-headings:text-ink prose-headings:mt-[0.9em] prose-headings:mb-[0.35em]",
   "prose-a:underline prose-a:underline-offset-2",
   "prose-code:rounded-none prose-code:border-[0.5px] prose-code:border-line prose-code:px-[5px] prose-code:py-px",

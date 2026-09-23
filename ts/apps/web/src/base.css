@@ -141,6 +141,11 @@
     font-family: var(--font-body);
     font-size: var(--type-small-size);
     line-height: var(--type-small-line-height);
+    /* ONE APPARENT SIZE across the three faces. A px is a px, but the eye reads x-height: at
+       10px, ui-monospace's x-height measures 0.52em against Open Sans's 0.54, so a mono path or
+       count set at the same size as its sans label reads a step smaller. Pinning every face to
+       the body font's own 0.54 leaves sans untouched and lifts mono and display onto its line. */
+    font-size-adjust: 0.54;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }

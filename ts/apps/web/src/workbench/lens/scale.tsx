@@ -1,8 +1,9 @@
 import { type ToolCall } from "../chat-state";
 
-export const SCALE = 0.14;
+/** Document px → dial px. Lower = the whole thread packs into less rail. */
+export const SCALE = 0.09;
 export const FOCAL = 0.5;
-export const MIN_BAND = 3;
+export const MIN_BAND = 2;
 export const HEAD_H = 40;
 
 export interface Geom {

@@ -29,7 +29,6 @@ function createCurrentThreadView(deps: {
     "widget/lens-intent",
     Atom.make<LensScrollIntent>(deps.turn ? { kind: "turn", turn: deps.turn } : { kind: "tail" }),
   );
-  const lensFollowing = Atom.map(lensIntent, (intent) => intent.kind === "tail");
   const world = core.owned<Atom.Writable<WorldState>>(
     "widget/world",
     Atom.make<WorldState>({
@@ -66,7 +65,7 @@ function createCurrentThreadView(deps: {
   core.expose({ page: { lensInspectKey } });
   return {
     registry: deps.registry,
-    atoms: { lensInspectKey, lensPinKey, lensIntent, lensFollowing, world, worldCache },
+    atoms: { lensInspectKey, lensPinKey, lensIntent, world, worldCache },
     actions: {
       setLensInspectKey: (value: Setter<string | null>) =>
         set("set-lens-inspect-key", lensInspectKey, value),

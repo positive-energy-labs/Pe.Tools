@@ -8,20 +8,15 @@ import { useThreadScope } from "#/chat/scope";
 import { selectBreakdown, selectMessages } from "../chat-state";
 import {
   lensScrollIntent,
-  nextTailFollowState,
   type LensScrollIntent,
   scrollTopForIntent,
   turnAtFocalPoint,
-  type TailFollowState,
 } from "../model";
 import type { Geom } from "./scale";
 import { FOCAL, HEAD_H, MIN_BAND, SCALE } from "./scale";
 import { TARGET_RAIL_COLOR, buildTraceCells, toMoments } from "./context-strip";
 import type { Mode } from "../depth";
 import type { ChatState } from "../chat-state";
-
-const USER_INPUT_MS = 800;
-const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
 
 export function useLensModel({
   state,
@@ -97,16 +92,9 @@ export function useLensModel({
   const intent = useCallback(() => view.registry.get(view.atoms.lensIntent), [view]);
   const setIntent = view.actions.setLensIntent;
 
-  const following = useAtomValue(view.atoms.lensFollowing);
-
-  const scrollTopRef = useRef(0);
-
-  // A `turn` intent from the URL is not realised until its moment has registered with geometry.
-  // Until then every measure retries; user input takes over from it.
+  // The opening position is placed ONCE — the URL's turn, else the tail. After that the scroller
+  // is the user's: nothing here ever moves it again on its own (no tail-follow, F-J1).
   const landedRef = useRef(false);
-
-  // The last wheel/touch/key/drag. A scroll event this soon after one is the user's.
-  const userInputAtRef = useRef(-Infinity);
 
   const [, bumpMeasure] = useReducer((tick: number) => tick + 1, 0);
 
@@ -139,50 +127,31 @@ export function useLensModel({
     }
   }, []);
 
-  // drag the gutter to scrub (gutter motion ÷ SCALE = chat motion); a tap centers the band.
-  const onPointerDown = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
+  // Click a band to center its turn. No drag-to-scrub: the dial is a row of targets, and the
+  // scrub gesture only ever fought the click.
+  const onBandClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
       const scroller = scrollerRef.current;
-      if (!scroller) return;
-      const startY = event.clientY;
-      const startScroll = scroller.scrollTop;
       const bandKey = (event.target as HTMLElement).closest<HTMLElement>(
         '[data-annotation="dial-band"]',
       )?.dataset.key;
-      let dragged = false;
-      const move = (ev: PointerEvent) => {
-        if (Math.abs(ev.clientY - startY) > 3) dragged = true;
-        if (!dragged) return;
-        userInputAtRef.current = performance.now();
-        scroller.scrollTop = startScroll + (ev.clientY - startY) / SCALE;
-      };
-      const up = () => {
-        window.removeEventListener("pointermove", move);
-        window.removeEventListener("pointerup", up);
-        if (!dragged && bandKey) {
-          const g = geomRef.current.find((geom) => geom.key === bandKey);
-          if (g) {
-            // A tap detaches first, so no follow snap fights the animation.
-            landedRef.current = true;
-            setIntent({ kind: "turn", turn: g.turn });
-            scroller.scrollTo({ top: g.top - FOCAL * scroller.clientHeight, behavior: "smooth" });
-          }
-        }
-      };
-      window.addEventListener("pointermove", move);
-      window.addEventListener("pointerup", up);
+      if (!scroller || !bandKey) return;
+      const g = geomRef.current.find((geom) => geom.key === bandKey);
+      if (!g) return;
+      landedRef.current = true;
+      setIntent({ kind: "turn", turn: g.turn });
+      scroller.scrollTo({ top: g.top - FOCAL * scroller.clientHeight, behavior: "smooth" });
     },
     [setIntent],
   );
 
-  // Jump-to-tail: re-attach follow and snap to the bottom (the re-measure snap keeps it there).
+  // Jump-to-tail: the one thing that puts the view at the bottom, and only when pressed.
   const scrollToTail = useCallback(() => {
     const scroller = scrollerRef.current;
     if (!scroller) return;
     landedRef.current = true;
-    setIntent({ kind: "tail" });
-    scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight;
-  }, [setIntent]);
+    scroller.scrollTo({ top: scroller.scrollHeight - scroller.clientHeight, behavior: "smooth" });
+  }, []);
 
   // The single scroll controller: candlestick + bands + chat stubs + pinned fisheye cards.
   // Mutates refs only (no per-frame React render). Re-measures on resize and on row changes.
@@ -249,13 +218,14 @@ export function useLensModel({
       if (csFocalRef.current) csFocalRef.current.style.top = `${fy}px`;
       if (caretRef.current) caretRef.current.style.top = `${fy}px`;
 
-      // While detached, the intent tracks the turn on the focal axis (what a reload reopens).
-      // Not before a URL turn has landed: a scroll before that is not the user's.
-      const current = intent();
-      if (current.kind === "turn" && landedRef.current) {
+      // The intent tracks the turn on the focal axis (what a reload reopens). Not before the
+      // opening position has landed: a scroll before that is not the user's.
+      if (landedRef.current) {
+        const current = intent();
         const metrics = { scrollTop: s, scrollHeight: scroller.scrollHeight, clientHeight: V };
         const turn = turnAtFocalPoint(geom, metrics, FOCAL);
-        if (turn !== undefined && turn !== current.turn) setIntent({ kind: "turn", turn });
+        if (turn !== undefined && (current.kind !== "turn" || turn !== current.turn))
+          setIntent({ kind: "turn", turn });
       }
 
       strip.style.transform = `translateY(${focalG - SCALE * (s + FOCAL * V)}px)`;
@@ -279,10 +249,8 @@ export function useLensModel({
           band.classList.toggle("focal", g.key === fk);
         }
         const moment = momentRefs.current.get(g.key);
-        if (moment) {
-          moment.classList.toggle("focal", g.key === fk);
-          moment.classList.toggle("hover", g.key === hoverKey);
-        }
+        // No focal mark on the moment: the dial band is the one "where am I" (its own `.focal`).
+        if (moment) moment.classList.toggle("hover", g.key === hoverKey);
       }
 
       // The focal card = the LAST tool whose inline marker sits at or above the focal axis —
@@ -349,20 +317,22 @@ export function useLensModel({
         scrollHeight: scroller.scrollHeight,
         clientHeight: scroller.clientHeight,
       };
+      // The opening position, placed ONCE. A later re-measure (streaming text, an image, a tool
+      // body) never moves the scroller again: auto-scroll-to-bottom is gone.
       const current = intent();
-      if (current.kind === "tail") {
-        scroller.scrollTop = scrollTopForIntent(current, geom, metrics, FOCAL);
-      } else if (!landedRef.current) {
-        if (geom.some((g) => g.turn === current.turn && g.height > 0)) {
+      if (!landedRef.current && geom.length > 0) {
+        if (current.kind === "tail") {
+          scroller.scrollTop = scrollTopForIntent(current, geom, metrics, FOCAL);
+          landedRef.current = true;
+        } else if (geom.some((g) => g.turn === current.turn && g.height > 0)) {
           scroller.scrollTop = scrollTopForIntent(current, geom, metrics, FOCAL);
           landedRef.current = true;
         } else if (!loading && !moments.some((moment) => moment.turn === current.turn)) {
           // The thread is here and has no such turn: open at the tail instead.
-          setIntent({ kind: "tail" });
           scroller.scrollTop = scrollTopForIntent({ kind: "tail" }, geom, metrics, FOCAL);
+          landedRef.current = true;
         }
       }
-      scrollTopRef.current = scroller.scrollTop;
       sync();
     };
 
@@ -383,50 +353,16 @@ export function useLensModel({
 
     measure();
     // The box AND the content: a message that grows after render (highlighting, an image, a tool
-    // body) re-measures and, while following, re-snaps before paint.
+    // body) re-measures the dial's geometry. It does NOT move the scroller.
     const ro = new ResizeObserver(measure);
     ro.observe(scroller);
     if (chatRef.current) ro.observe(chatRef.current);
-    const follow = (byUser: boolean) => {
-      const metrics = {
-        scrollTop: scroller.scrollTop,
-        scrollHeight: scroller.scrollHeight,
-        clientHeight: scroller.clientHeight,
-      };
-      if (byUser) landedRef.current = true;
-      const before: TailFollowState = intent().kind === "tail" ? "following" : "detached";
-      const next = nextTailFollowState(before, metrics, scrollTopRef.current, byUser);
-      if (next !== before) {
-        const turn = turnAtFocalPoint(geomRef.current, metrics, FOCAL);
-        setIntent(next === "following" ? { kind: "tail" } : { kind: "turn", turn: turn ?? 1 });
-      }
-      scrollTopRef.current = scroller.scrollTop;
-      schedule();
-    };
-    const onScroll = () => follow(performance.now() - userInputAtRef.current < USER_INPUT_MS);
-    // Touch momentum sends no input events after the finger lifts, so a long fling outruns the
-    // window. The scroll's end still belongs to the gesture that started it.
-    let scrollEndAt = -Infinity;
-    const onScrollEnd = () => {
-      const byGesture = userInputAtRef.current > scrollEndAt;
-      scrollEndAt = performance.now();
-      if (byGesture) follow(true);
-    };
-    const onUserInput = () => {
-      userInputAtRef.current = performance.now();
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (SCROLL_KEYS.has(event.key)) onUserInput();
-    };
+    // The scroller is read, never written: a scroll only re-draws the dial.
+    const onScroll = () => schedule();
     scroller.addEventListener("scroll", onScroll, { passive: true });
-    scroller.addEventListener("scrollend", onScrollEnd);
-    scroller.addEventListener("wheel", onUserInput, { passive: true });
-    scroller.addEventListener("touchmove", onUserInput, { passive: true });
-    scroller.addEventListener("keydown", onKey);
 
     // Transcript turn-number tags dispatch this (moments.tsx MomentHead): center that turn on the focal
     // axis — same gesture as tapping its mapdial band.
-    // Smooth is safe here: the intent detaches first, so no follow snap fights the animation.
     const onFocusTurn = (event: Event) => {
       const turn = (event as CustomEvent<number>).detail;
       if (!Number.isFinite(turn)) return;
@@ -467,10 +403,6 @@ export function useLensModel({
     return () => {
       ro.disconnect();
       scroller.removeEventListener("scroll", onScroll);
-      scroller.removeEventListener("scrollend", onScrollEnd);
-      scroller.removeEventListener("wheel", onUserInput);
-      scroller.removeEventListener("touchmove", onUserInput);
-      scroller.removeEventListener("keydown", onKey);
       window.removeEventListener("pe:focus-turn", onFocusTurn);
       cancelAnimationFrame(raf);
       chat?.removeEventListener("mouseover", onChatOver);
@@ -511,9 +443,8 @@ export function useLensModel({
     bandRefs,
     cardRefs,
     inspectKey,
-    following,
     registerMoment,
-    onPointerDown,
+    onBandClick,
     scrollToTail,
   };
 }

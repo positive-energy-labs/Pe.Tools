@@ -1,5 +1,3 @@
-export type TailFollowState = "following" | "detached";
-
 export interface ScrollMetrics {
   scrollTop: number;
   scrollHeight: number;
@@ -15,34 +13,8 @@ export interface FocalGeometry {
 
 export type LensScrollIntent = { kind: "turn"; turn: number } | { kind: "tail" };
 
-const TAIL_THRESHOLD_PX = 240;
-
 export function lensScrollIntent(turn?: number): LensScrollIntent {
   return typeof turn === "number" ? { kind: "turn", turn } : { kind: "tail" };
-}
-
-function isNearTail(metrics: ScrollMetrics, threshold = TAIL_THRESHOLD_PX): boolean {
-  return metrics.scrollHeight - metrics.scrollTop - metrics.clientHeight <= threshold;
-}
-
-export function tailFollowState(metrics: ScrollMetrics): TailFollowState {
-  return isNearTail(metrics) ? "following" : "detached";
-}
-
-/**
- * Follow moves only on user intent (wheel, touch, scroll keys, gutter drag). A scrollTop the
- * browser changes on its own (content shrank, a clamp) leaves follow where it was.
- */
-export function nextTailFollowState(
-  current: TailFollowState,
-  metrics: ScrollMetrics,
-  previousScrollTop: number,
-  byUser: boolean,
-): TailFollowState {
-  if (!byUser) return current;
-  if (metrics.scrollTop < previousScrollTop) return "detached";
-  if (isNearTail(metrics)) return "following";
-  return current;
 }
 
 export function scrollTopForIntent(
