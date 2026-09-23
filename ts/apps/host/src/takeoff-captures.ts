@@ -37,6 +37,7 @@ import {
   type Address,
   type DocumentRef,
   type AppliedFilter,
+  type FamiliesMatrixEnvelope,
   type TakeoffCapture,
   type TakeoffObservation,
   type TakeoffSnapshot,
@@ -180,6 +181,44 @@ export class TakeoffCaptures {
         await prepare?.();
         signal.throwIfAborted();
         return this.familyReadings(scope, signal);
+      },
+      (notify) => this.subscribe(key, notify),
+      listener,
+    );
+  }
+
+  /**
+   * The families matrix Reading's envelope (MAP ruling 3): the last completed matrix read of this
+   * document over this filter, as its taken-at and its body's id. The body stays on disk, fetched
+   * by id over RPC; a completed read (`saveFamilies`) publishes a new envelope.
+   */
+  observeFamiliesMatrix(
+    target: DocumentRef,
+    filter: AppliedFilter,
+    listener: (value: OwnerValue<FamiliesMatrixEnvelope>) => void,
+  ) {
+    const key = `families-matrix:${keyOf(target)}`;
+    return this.reads.observe(
+      `${key}:${canonicalRouteInput(filter)}`,
+      async () => {
+        const latest = (await this.familiesReadings())
+          .filter(
+            (read) =>
+              keyOf(read.document) === keyOf(target) &&
+              canonicalRouteInput(read.filter) === canonicalRouteInput(filter),
+          )
+          .sort((a, b) => b.completedAt.localeCompare(a.completedAt))[0];
+        return latest
+          ? {
+              reading: {
+                at: latest.work.binding === "address" ? latest.work.target : null,
+                version: null,
+                // A readback re-read what the apply touched, after the apply's own change.
+                observedAt: latest.readback ? latest.completedAt : latest.capturedAt,
+              },
+              bodyVersion: latest.id,
+            }
+          : null;
       },
       (notify) => this.subscribe(key, notify),
       listener,
@@ -441,6 +480,7 @@ export class TakeoffCaptures {
     } finally {
       if (this.familiesSaves.get(key) === pending) this.familiesSaves.delete(key);
     }
+    this.notify(`families-matrix:${keyOf(value.document)}`);
     return observation;
   }
   async saveFamiliesReadback(

@@ -12,7 +12,8 @@ import { NarrowChip } from "#/components/lang/chip";
 import { Input } from "#/components/lang/input";
 import { Press } from "#/components/lang/press";
 import { labelOf } from "#/components/master-table/master-table-header";
-import type { Column, TableState } from "#/components/master-table/model";
+import type { Column, QueryGrammar, TableState } from "#/components/master-table/model";
+import { QueryBox, QueryChips } from "#/components/master-table/query";
 import { selectableKeys, type TableSelection } from "#/components/master-table/table";
 import { visibleRows } from "#/components/master-table/view";
 
@@ -27,6 +28,8 @@ export interface TableFrameProps<Row extends RowData> {
   summary?: ReactNode;
   /** Present, the strip draws a free-text search over the searchable columns. */
   searchPlaceholder?: string;
+  /** Present, the search box is the one query box: its tokens chip and its grammar suggests. */
+  query?: { grammar: QueryGrammar };
   /** Route-owned filters narrowing the rows before the table sees them: one chip each. Present
    * (even empty), the chip row reserves its line, so a chip appearing never moves the grid. */
   chips?: { label: string; onClear: () => void }[];
@@ -47,6 +50,7 @@ export function TableFrame<Row extends RowData>({
   onStateChange,
   summary,
   searchPlaceholder,
+  query,
   chips,
   filters,
   modes,
@@ -55,7 +59,9 @@ export function TableFrame<Row extends RowData>({
   children,
 }: TableFrameProps<Row>) {
   const visibleColumns = columns.filter((column) => !state.hiddenColumns?.includes(column.key));
-  const shown = visibleRows(rows, visibleColumns, state).map(rowKey);
+  const grammar = query?.grammar;
+  const shown = visibleRows(rows, visibleColumns, state, grammar).map(rowKey);
+  const setQuery = (text: string) => onStateChange({ ...state, query: text });
   const reach = selection ? selectableKeys(selection, shown) : [];
   const selectedShown = reach.filter((key) => selection!.selected.has(key)).length;
   const filtered = visibleColumns.filter((column) => state.filters[column.key]);
@@ -83,16 +89,25 @@ export function TableFrame<Row extends RowData>({
       }
       headTrail={
         <>
-          {searchPlaceholder && (
-            <div className="w-44">
-              <Input
-                face="mono"
-                value={state.query}
-                onChange={(event) => onStateChange({ ...state, query: event.target.value })}
-                placeholder={searchPlaceholder}
-                title="Free-text filter. It reads only the columns that declare themselves searchable, so a match here always points at a visible column."
-              />
-            </div>
+          {grammar ? (
+            <QueryBox
+              grammar={grammar}
+              text={state.query}
+              onChange={setQuery}
+              placeholder={searchPlaceholder}
+            />
+          ) : (
+            searchPlaceholder && (
+              <div className="w-44">
+                <Input
+                  face="mono"
+                  value={state.query}
+                  onChange={(event) => onStateChange({ ...state, query: event.target.value })}
+                  placeholder={searchPlaceholder}
+                  title="Free-text filter. It reads only the columns that declare themselves searchable, so a match here always points at a visible column."
+                />
+              </div>
+            )
           )}
           {modes}
           {selection && reach.length > 0 && (
@@ -129,13 +144,22 @@ export function TableFrame<Row extends RowData>({
               title="A route-owned filter narrowing this table right now. The count is rows still in scope; removing it widens back out."
             />
           ))}
-          {state.query && (
-            <NarrowChip
-              label={`search: ${state.query}`}
+          {grammar ? (
+            <QueryChips
+              grammar={grammar}
+              text={state.query}
+              onChange={setQuery}
               count={shown.length}
-              onRemove={() => onStateChange({ ...state, query: "" })}
-              title="The free-text filter narrowing this table right now. The count is rows still in scope; removing it widens back out."
             />
+          ) : (
+            state.query && (
+              <NarrowChip
+                label={`search: ${state.query}`}
+                count={shown.length}
+                onRemove={() => onStateChange({ ...state, query: "" })}
+                title="The free-text filter narrowing this table right now. The count is rows still in scope; removing it widens back out."
+              />
+            )
           )}
           {filtered.map((column) => (
             <NarrowChip

@@ -28,7 +28,8 @@ import {
 } from "#/route";
 
 import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
-import { applyOutcome, type PlanRun } from "./apply-outcome";
+import { applyOutcome, applyTally, type PlanRun } from "./apply-outcome";
+import { plural } from "#/components/lang/band";
 import {
   archivedFamiliesObservation,
   readFamiliesObservation,
@@ -37,7 +38,8 @@ import {
 } from "./host";
 import { FAMILIES_SEEDS } from "./seeds";
 import { podHost } from "#/route/pods";
-import { stagedDrafts } from "./staged";
+import type { Inspectable } from "#/route/inspect";
+import { familiesGroupOf, stagedDrafts } from "./staged";
 import { DEFAULT_FAMILIES_RULES } from "./pivot-rules";
 
 export interface FamiliesPage {
@@ -45,9 +47,8 @@ export interface FamiliesPage {
   draft: FamiliesDraft;
   /** The exact document and scope last requested by the person. */
   reading: FamiliesObservation | null;
-  readbackError: string | null;
-  /** Pivot rule text; route-owned so Pea and direct URLs address the same view. */
-  rules: string;
+  /** The pivot's query box text; route-owned so Pea and direct URLs address the same view. */
+  query: string;
   /**
    * After start fresh: the fresh page offers to hold the old Work's exclusions back again, until
    * pressed, dismissed, or the next plan (journeys' ruling). ponytail: page memory, so a reload
@@ -86,12 +87,11 @@ const familiesPageSchema = z.object({
     })
     .nullable()
     .default(null),
-  readbackError: z.string().nullable().default(null),
-  rules: z.string().default(DEFAULT_FAMILIES_RULES),
+  query: z.string().default(DEFAULT_FAMILIES_RULES),
   carryOver: z.boolean().default(false),
 });
 
-export type FamiliesReadingKey = "receipts" | "inventory";
+export type FamiliesReadingKey = "receipts" | "inventory" | "matrix";
 
 /**
  * The plan result's `excluded` ({ familyName, by }): the sheet says who held each family back, by
@@ -155,14 +155,36 @@ async function applyFamiliesPlans(
         workKey(reading.work) !== workKey(ctx.work.key)
       )
         throw Error("Readback belongs to another Families target");
-      ctx.setPage({ reading, readbackError }, ["reading", "stage"]);
+      ctx.setPage({ reading }, ["reading", "stage"]);
     } catch (error) {
       readbackError = `Families applied, but their saved readback could not be loaded: ${error instanceof Error ? error.message : String(error)}`;
-      ctx.setPage({ readbackError }, ["reading", "stage"]);
     }
-  } else if (readbackError) ctx.setPage({ readbackError }, ["reading", "stage"]);
+  }
+  // The receipt is a log row linking the run's artifacts (MAP ruling 9); failed families refuse it.
+  const tally = applyTally(runs);
+  if (tally.families)
+    ctx.note(
+      [
+        `apply ${plural(tally.families, "family")}`,
+        `${tally.converged} converged`,
+        tally.residue ? `${tally.residue} residue` : "",
+        tally.failed ? `${tally.failed} failed` : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      tally.artifact ?? "no artifacts on disk",
+      tally.failed > 0,
+      tally.artifact ? { kind: "artifact", id: tally.artifact } : undefined,
+    );
+  // The receipt stands; the table keeps its earlier values. The log says so (MAP ruling 9).
+  if (readbackError) ctx.note("readback unavailable", readbackError, true);
   return applyOutcome(runs, included.length);
 }
+
+export const ARTIFACT: Inspectable = {
+  label: (id) => id.split(/[\\/]/).at(-1) ?? id,
+  open: { kind: "shell", path: (id) => id },
+};
 
 export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReadingKey, FamiliesPage> =
   {
@@ -172,6 +194,7 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
     target: "document",
     schema: [FF_SPEC_SCHEMA, FAMILY_MODEL_SCHEMA],
     apply: "families.apply",
+    applies: ["matrix"],
     targetReady: (ctx) => {
       if (ctx.page.stage === "archived") return "Archived readings are inspection only";
       if (!stagedDrafts(ctx.work.doc?.cells ?? {}).length) return null;
@@ -249,26 +272,38 @@ const familiesRoute = entityRoute<
   FamiliesRouteDocument,
   FamiliesReadingKey,
   FamiliesPage,
-  "read" | "save-draft" | "set-rules"
+  "read" | "save-draft" | "set-query"
 >(familiesSpec, {
   work: familiesRouteState,
+  cells: { segment: "cells", groupOf: familiesGroupOf, nouns: ["parameter", "family"] },
+  // An apply's artifact bundle, on disk: opened in the host's default app, never copied.
+  inspectables: { artifact: ARTIFACT },
   readings: {
     receipts: { kind: "receipts", target: { session: "", openId: "" } },
     inventory: { kind: "inventory" },
+    // The matrix read on screen, as an envelope: its taken-at, change mark and body id (ruling 3).
+    matrix: (page: FamiliesPage) =>
+      page.reading
+        ? {
+            kind: "families-matrix",
+            target: { session: "", openId: "" },
+            filter: page.reading.filter,
+          }
+        : null,
   } as never,
   page: familiesPageSchema as never,
   actions: {
-    "set-rules": {
-      label: "set table rules",
-      says: "Set the Families pivot's narrowing rules without reading or changing Revit.",
+    "set-query": {
+      label: "set table query",
+      says: "Set the Families pivot's query (rules and free words) without reading or changing Revit.",
       needs: "host",
       actor: "any",
       visible: false,
-      input: z.object({ rules: z.string() }) as never,
+      input: z.object({ query: z.string() }) as never,
       dirties: [],
       ready: () => null,
-      run: async (ctx, input: { rules: string }) => {
-        ctx.setPage({ rules: input.rules });
+      run: async (ctx, input: { query: string }) => {
+        ctx.setPage({ query: input.query });
       },
     },
     read: {
@@ -277,7 +312,8 @@ const familiesRoute = entityRoute<
       needs: "project",
       actor: "any",
       input: z.void() as never,
-      dirties: [],
+      dirties: ["matrix"],
+      rereads: "matrix",
       waitSeconds: 240,
       stage: "audit",
       count: (ctx) => ctx.page.draft.families?.length || null,
@@ -318,7 +354,16 @@ const familiesRoute = entityRoute<
             next: Partial<FamiliesPage>,
             guard: readonly (keyof (FamiliesPage & EntityPage))[],
           ) => void
-        )({ reading, readbackError: null }, ["reading", "stage"]);
+        )({ reading }, ["reading", "stage"]);
+        const page = reading.result.page;
+        if (page?.isTruncated)
+          ctx.note(
+            "incomplete read",
+            `${page.returnedCount} of ${page.totalCount} families returned`,
+            true,
+          );
+        for (const issue of reading.result.issues)
+          ctx.note("read issue", `${issue.familyName ?? issue.code}: ${issue.message}`, true);
       },
     },
     "save-draft": {

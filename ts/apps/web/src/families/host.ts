@@ -1,9 +1,4 @@
-import {
-  actionAdmissionSchema,
-  type AppliedFilter,
-  type DocumentRef,
-  type WorkKey,
-} from "@pe/agent-contracts";
+import { type AppliedFilter, type DocumentRef, type WorkKey } from "@pe/agent-contracts";
 import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
@@ -12,7 +7,6 @@ import {
 
 import { callHostRpc, hostUrl } from "#/host/client";
 import { readReading, type FieldOptionsData } from "#/readings";
-import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 export type FamiliesDraft = {
   placement: AppliedFilter["placementScope"];
@@ -80,27 +74,6 @@ export async function archivedFamiliesObservation(id: string): Promise<FamiliesO
   const body = await response.json();
   if (!response.ok) throw Error(body.error ?? `Families observation failed (${response.status})`);
   return body as FamiliesObservation;
-}
-
-/** Opening an apply artifact is a host-local mutation, so it needs a journaled human admission. */
-export async function openFamiliesArtifact(path: string): Promise<void> {
-  const action = await submitAction(
-    actionAdmissionSchema.parse({
-      id: crypto.randomUUID(),
-      kind: "operation",
-      key: "host.shell.open",
-      actor: "human",
-      destination: { kind: "host" },
-      input: { path },
-      bases: {},
-    }),
-    "",
-    30_000,
-  );
-  if (action.state !== "succeeded")
-    throw Error(
-      "error" in action && action.error ? String(action.error) : `host.shell.open ${action.state}`,
-    );
 }
 
 export interface FamiliesHost {

@@ -116,13 +116,31 @@ interface SortKey {
 /** Column filters, keyed by column key. A key is absent when that column is unfiltered. */
 type Filters = Record<string, string>;
 
+/** A word of the query box: `free` is substring search, `unknown` draws a caution chip. */
+export interface QueryToken {
+  text: string;
+  kind: "rule" | "free" | "unknown";
+}
+
+export interface QuerySuggestion {
+  insert: string;
+  label: string;
+  hint: string;
+}
+
+/** A table's query language: the frame draws its box, chips, and suggestions from this alone. */
+export interface QueryGrammar {
+  tokens: (text: string) => QueryToken[];
+  suggest: (text: string, caret: number) => QuerySuggestion[];
+  chip: (token: QueryToken) => { label: string };
+}
+
 /** Route-ownable table state. Supplying it lets Pea read and drive the exact visible model. */
 export interface TableState {
   filters: Filters;
   sorts: SortKey[];
+  /** The query box's whole text: free words search; a grammar gives the other tokens meaning. */
   query: string;
-  /** Route-owned command rules; consumers give the words their meaning. */
-  rules?: string;
   /** Column visibility is view state, so column definitions remain stable. */
   hiddenColumns?: string[];
 }

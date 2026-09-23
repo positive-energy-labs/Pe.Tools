@@ -275,7 +275,7 @@ export function ComposerHead({
                     ],
                   ]}
                 />
-                <PageLog entries={handle.log} />
+                <PageLog entries={handle.log} manifest={handle.manifest} />
               </>
             }
           />

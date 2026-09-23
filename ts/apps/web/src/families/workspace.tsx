@@ -93,7 +93,6 @@ function useFamiliesWorkspaceModel(
     [fixture, fixtureFamilies, familyFeed.options],
   );
 
-  const readAgain = () => void store.handle.actions.read.run();
   const families = useMemo(
     () =>
       (archived
@@ -238,9 +237,11 @@ function useFamiliesWorkspaceModel(
   const matrixIssue =
     archived && store.archive.error
       ? { title: "Couldn't load archived reading", message: store.archive.error }
-      : store.handle.outcome?.key === "read" && store.handle.outcome.refusal
-        ? { title: "Couldn't read families", message: store.handle.outcome.refusal.message }
-        : undefined;
+      : !archived && store.retainedError
+        ? { title: "Couldn't load the last read", message: store.retainedError }
+        : store.handle.outcome?.key === "read" && store.handle.outcome.refusal
+          ? { title: "Couldn't read families", message: store.handle.outcome.refusal.message }
+          : undefined;
   /** The matrix read is in flight: an empty table is "reading", never "resolved to none". */
   const matrixReading = archived ? store.archive.loading : !fixture && busy === "read";
   const totalTypes = rows.length;
@@ -271,7 +272,6 @@ function useFamiliesWorkspaceModel(
     applied,
     plan,
     lastReading: visibleReading,
-    retainedError: archived ? store.archive.error : store.retainedError,
     applyData,
     tableState,
     busy,
@@ -292,8 +292,6 @@ function useFamiliesWorkspaceModel(
     includedPlanned,
     matrixIssue,
     matrixReading,
-    changed: !archived && store.handle.work.changed && !fixture,
-    readAgain,
     totalTypes,
     outsideProfile,
   };

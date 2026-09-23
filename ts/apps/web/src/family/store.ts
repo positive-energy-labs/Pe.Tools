@@ -515,11 +515,6 @@ export function useFamilyStore(options: {
     readings,
     profile,
     target: targetLabel,
-    /**
-     * Revit changed the open family document after the read the draft rests on (`takenAt`), as
-     * the Work Reading's envelope says. `read` is the re-read.
-     */
-    changed: handle.work.changed,
     /** The exact document a read-only host call from this page must name. */
     documentScope: target
       ? { bridgeSessionId: target.session, openDocumentId: target.openId }

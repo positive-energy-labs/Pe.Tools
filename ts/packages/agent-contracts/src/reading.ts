@@ -5,6 +5,7 @@
  */
 import { z } from "zod";
 import { actionListFilterSchema } from "./action-receipts.ts";
+import { appliedScopeSchema } from "./families.ts";
 import { canonicalRouteInput } from "./route-doc.ts";
 import { workKey, workKeySchema } from "./route-state.ts";
 import { addressSchema, documentRefSchema, sameAddress } from "./target.ts";
@@ -28,6 +29,19 @@ export const here = <A extends { reading: Observation }>(
 /** Version drift is meaningful only between readings of the same document. */
 export const superseded = (older: Observation, newer: Observation): boolean =>
   sameAddress(older.at, newer.at) && older.version !== newer.version;
+
+/**
+ * A `families-matrix` snapshot: when the last completed matrix read was taken, and its body's id
+ * (`bodyVersion`, the saved observation's content hash). Null until that document and filter are
+ * read. An unsaved document has no address, so `at` may be null.
+ */
+export const familiesMatrixEnvelopeSchema = z
+  .object({
+    reading: observationSchema.extend({ at: addressSchema.nullable() }),
+    bodyVersion: z.string().min(1),
+  })
+  .nullable();
+export type FamiliesMatrixEnvelope = z.infer<typeof familiesMatrixEnvelopeSchema>;
 
 /* ── The lifecycle every Reading has ──────────────────────────────────────────────────────── */
 
@@ -65,6 +79,16 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
   ]),
   z.strictObject({ kind: z.literal("thread-head"), thread: z.string().min(1).max(200) }),
   z.strictObject({ kind: z.literal("takeoff-reading"), target: documentRefSchema }),
+  /**
+   * The families matrix of one document over one filter, by ENVELOPE only
+   * (`familiesMatrixEnvelopeSchema`): the stream says when the last matrix read completed and which
+   * body it produced; the client fetches the body over RPC when `bodyVersion` moves (MAP ruling 3).
+   */
+  z.strictObject({
+    kind: z.literal("families-matrix"),
+    target: documentRefSchema,
+    filter: appliedScopeSchema,
+  }),
   /** The current disk identity of one RHVAC project file. */
   z.strictObject({ kind: z.literal("rhvac-file-version"), path: z.string().min(1) }),
   z.strictObject({

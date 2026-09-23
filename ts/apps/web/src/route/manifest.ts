@@ -4,6 +4,7 @@
  * `RouteShell` draws it. The fable calls this type `Route`; every `routes/*.tsx` already exports a
  * TanStack `Route`, so the type is `RouteManifest` and the per-route export is `manifest`.
  */
+import { noteCaptured, type Inspectable, type InspectableRef } from "./inspect";
 import type { PodList } from "@pe/host-contracts/operation-types";
 import { previousOf } from "#/readings";
 import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
@@ -18,26 +19,21 @@ import {
   type ActionBases,
   type Rung,
   type SemanticActionKey,
+  type ExecutionTarget,
+  type Reading,
+  type ReadingRequest,
+  type RouteStatePatch,
+  type RouteStateSpec,
+  type Seed,
+  type WorkKey,
 } from "@pe/agent-contracts";
 import { targetNeed, type ActionIdentity } from "./facts";
-import type {
-  ExecutionTarget,
-  Reading,
-  ReadingRequest,
-  RouteStatePatch,
-  RouteStateSpec,
-  Seed,
-  WorkKey,
-} from "@pe/agent-contracts";
 import type { Refusal } from "./refusal";
 
 export const semanticActionInput = (
   key: SemanticActionKey,
   input: unknown,
 ): Record<string, unknown> => semanticActions[key].input.parse(input);
-
-export const semanticActionInputSchema = (key: SemanticActionKey): z.ZodType =>
-  semanticActions[key].input;
 
 /** What a Reading key names: a fixed subject, or one selected by the route's current Page. */
 type ReadingSpec<P> = ReadingRequest | ((page: P, work: WorkKey) => ReadingRequest | null);
@@ -67,6 +63,8 @@ export interface Ctx<W, R extends string, P> {
   readonly command: (name: string, input?: unknown) => Promise<Refusal | null>;
   /** Publishes action progress only while its original Target, Work, and user Page remain current. */
   readonly setPage: (next: Partial<P>, guard?: readonly (keyof P)[]) => void;
+  /** One page-log line from inside the verb: what its result says beside its outcome. */
+  readonly note: (label: string, says: string, refused?: boolean, link?: InspectableRef) => void;
 }
 
 import { DEFAULT_WAIT_S, HOST_READ_WAIT_S, NATIVE_APPLY_WAIT_S, NATIVE_READ_WAIT_S } from "./waits";
@@ -79,6 +77,8 @@ export type RouteAction<W, R extends string, P, I = void> = ActionIdentity<W, R,
   input: z.ZodType<I>;
   /** Browser Reading keys invalidated on success; semantic actions name Host and Pea resources. */
   dirties: readonly R[];
+  /** What this verb reads again: a Reading key, or `work` for the Work's own read. Revit's change mark there makes it stale. */
+  rereads?: R | "work";
   /**
    * How long this verb may stay in flight before it ends as "stopped: no answer after Ns" and
    * releases busy (a timeout is a diagnostic boundary, never a retry). Default `DEFAULT_WAIT_S`.
@@ -110,6 +110,13 @@ export interface RouteManifest<W, R extends string, P, A extends string> {
   name: string;
   needs?: "session" | "document" | "project" | "family";
   work?: WorkSpec<W>;
+  /**
+   * The Work's trichotomy cells: the segment holding them, and the group path the Situation and
+   * Chat summarize them by. `nouns` names the path's depths, singular ("parameter", "family").
+   */
+  cells?: { segment: string; groupOf: (key: string) => string[]; nouns: readonly string[] };
+  /** What its verbs produce, by kind, and how each opens; `member` is built in (`inspect.tsx`). */
+  inspectables?: Readonly<Record<string, Inspectable>>;
   readings?: Readonly<Record<R, ReadingSpec<P>>>;
   page?: z.ZodType<P>;
   /** The stages a route works in; `word` is the first word of the Situation ("Auditing rooms"). */
@@ -435,7 +442,10 @@ export function sheetOf<W, R extends string, P>(
  */
 export function entityRoute<W, const R extends string, P extends object, const A extends string>(
   def: EntityRouteDef<W, R, P>,
-  audit: Pick<RouteManifest<W, R, P, A>, "work" | "readings" | "page" | "actions" | "seeds"> = {},
+  audit: Pick<
+    RouteManifest<W, R, P, A>,
+    "work" | "cells" | "inspectables" | "readings" | "page" | "actions" | "seeds"
+  > = {},
 ): RouteManifest<W, R | EntityReading, P & EntityPage, A | EntityAction> {
   const plan = def.plan as ApplyPlan<unknown, string, object> | undefined;
   const staged = def.staged as EntityRouteDef<unknown, string, object>["staged"];
@@ -478,6 +488,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
       const members = (result.members ?? [result.member]) as MemberRef[];
       // The page lands on what the capture wrote; only the person changes the stage.
       if (members[0]) ctx.setPage({ path: members[0].path, selection: [] });
+      noteCaptured(ctx, def.entity, members);
       def.onCaptured?.(result, ctx as never);
     },
   };
@@ -568,6 +579,8 @@ export function entityRoute<W, const R extends string, P extends object, const A
       { key: "apply", word: "Applying" },
     ],
     work: audit.work,
+    cells: audit.cells,
+    inspectables: audit.inspectables,
     // `pods` is provided by the route's owner (a live `pod.list`, or the seed); never subscribed.
     readings: { ...audit.readings, pods: () => null } as Record<
       R | EntityReading,

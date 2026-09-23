@@ -39,11 +39,11 @@ import { inventoryOf, previousOf, useHostStatus, useInventory } from "#/readings
 import { schemaFormModel } from "#/settings/schema-form";
 import {
   reviewAddresses,
-  reviewCommit,
-  discardStaged,
   type CellWire,
   ReviewRow,
-  WorkBand,
+  WorkSentence,
+  WorkStanding,
+  workSummary,
 } from "#/components/lang/band";
 import {
   actionResult,
@@ -258,8 +258,6 @@ function ProposalLane({ work, readSha }: { work: MemberWorkHandle; readSha: stri
   // The root raw edit is the editor's draft, not a card.
   const { [""]: _draft, ...fields } = doc?.fields ?? {};
   const items = reviewAddresses(fields);
-  const proposed = items.filter(([, cell]) => cell.proposal != null && cell.staged == null).length;
-  const staged = items.filter(([, cell]) => cell.staged != null);
   const basisSha = doc?.basis?.sha256 ?? null;
   // The Work reviews bytes the editor no longer sees on disk: only a person may adopt the new ones.
   const moved = !work.demo && readSha !== null && basisSha !== null && readSha !== basisSha;
@@ -275,9 +273,6 @@ function ProposalLane({ work, readSha }: { work: MemberWorkHandle; readSha: stri
       head={
         <>
           <Tag>pea</Tag>
-          <FactChip tone={proposed ? "pea" : "meta"} title="Open Pea proposals on this member.">
-            {proposed} proposed
-          </FactChip>
           {moved ? (
             <ActionButton
               label="adopt disk bytes"
@@ -290,33 +285,34 @@ function ProposalLane({ work, readSha }: { work: MemberWorkHandle; readSha: stri
       }
     >
       <div className="px-3">
-        <WorkBand
-          count={staged.length}
-          noun="field"
-          revision={work.work.revision}
+        <WorkSentence
+          summary={workSummary(fields, { groupOf: (key) => [key] }, ["field"])}
+          cells={fields}
+          wire={wire}
+          commit={
+            <ActionButton
+              label="save"
+              reason={work.actions.save.refusal ?? "Write every staged field to the member"}
+              disabled={work.actions.save.refusal != null || busy}
+              onClick={() => void work.actions.save.run().catch(() => undefined)}
+            />
+          }
+        />
+        <WorkStanding
           conflict={work.work.conflict}
           reload={work.work.reload}
-          busy={busy}
-          visible
-          discard={() => void discardStaged(wire, fields).catch(() => undefined)}
-          commit={reviewCommit(
-            `save ${staged.length} staged`,
-            staged.length,
-            () => void work.actions.save.run().catch(() => undefined),
-            work.actions.save.refusal,
-          )}
           unresolved={work.failure ? [work.failure.message] : []}
-          body={items.map(([path, cell]) => (
-            <ReviewRow
-              key={path}
-              wire={wire}
-              address={path}
-              label={<span className="face-mono">{path}</span>}
-              cell={cell}
-              facts={{ value: display(cell.staged ?? cell.proposal) }}
-            />
-          ))}
         />
+        {items.map(([path, cell]) => (
+          <ReviewRow
+            key={path}
+            wire={wire}
+            address={path}
+            label={<span className="face-mono">{path}</span>}
+            cell={cell}
+            facts={{ value: display(cell.staged ?? cell.proposal) }}
+          />
+        ))}
       </div>
     </ArtifactFrame>
   );

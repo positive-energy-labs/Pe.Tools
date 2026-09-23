@@ -5,6 +5,7 @@ import {
   scheduleGridRouteState,
   scheduleReadingSchema,
   scheduleReads,
+  semanticActions,
   splitScheduleCellKey,
   stagedEntries,
   type ActionStatus,
@@ -17,7 +18,6 @@ import {
   refuse,
   HOST_READ_WAIT_S,
   NATIVE_APPLY_WAIT_S,
-  semanticActionInputSchema,
   type Ctx as RouteCtx,
   type EntityRouteDef,
 } from "#/route";
@@ -156,6 +156,7 @@ export const schedulesManifest = () =>
             {},
           ) as unknown as z.ZodType<never>,
           dirties: ["work", "saved"],
+          rereads: "work",
           ready: () => null,
           run: async (ctx: Ctx, input: Record<string, unknown>) => {
             // No subject named: re-read the open schedule, never whatever view Revit has active.
@@ -195,7 +196,7 @@ export const schedulesManifest = () =>
           label: "push",
           waitSeconds: NATIVE_APPLY_WAIT_S,
           does: "schedule.grid.push",
-          input: semanticActionInputSchema("schedule.grid.push") as never,
+          input: semanticActions["schedule.grid.push"].input as never,
           dirties: ["work", "saved", "receipts"],
           requires: { work: true, readings: ["saved", "receipts"] },
           // The verb carries its operand: how many staged cells it writes.

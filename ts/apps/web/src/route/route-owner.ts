@@ -1,9 +1,10 @@
 /** The route owner: one per route and registry; it holds the log, the runner and the page. */
+import type { InspectableRef } from "./inspect";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
-import type { ExecutionTarget } from "@pe/agent-contracts";
+import type { ExecutionTarget, TrichotomyCellLike } from "@pe/agent-contracts";
 import { Layer } from "effect";
 import { inspectAtomRegistry, type OwnerReferences } from "#/state/atom-inspect";
 import { causeRefusal, refuse, type Refusal } from "./refusal";
@@ -93,9 +94,24 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
   // The page log: one per route, newest first. Every verb run, refusal and target change lands
   // here, so no widget keeps its own activity list (Situation, 2026-09-13).
   const log = owned("log", Atom.make<readonly LogEntry[]>([]));
-  const note = (kind: LogEntry["kind"], label: string, says: string, refused = false) =>
+  const note = (
+    kind: LogEntry["kind"],
+    label: string,
+    says: string,
+    refused = false,
+    action?: string,
+    link?: InspectableRef,
+  ) =>
     registry.set(log, [
-      { at: new Date().toLocaleTimeString([], { hour12: false }), kind, label, says, refused },
+      {
+        at: new Date().toLocaleTimeString([], { hour12: false }),
+        kind,
+        label,
+        says,
+        refused,
+        action,
+        link,
+      },
       ...registry.get(log).slice(0, 199),
     ]);
 
@@ -118,12 +134,13 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
     /** In flight past this, the verb ends as stopped and releases busy; Infinity = unbounded. */
     waitSeconds = Infinity,
   ): Promise<Refusal | null> => {
+    const verb = (says: string, refused = false) => note("verb", label, says, refused, key);
     if (inFlight) {
       // A busy refusal is a refusal like any other: on the verb, and one line in the page log.
       const running = Math.floor((Date.now() - runningSince) / 1000);
       const refusal = refuse("busy", `${runningLabel} still running (${running}s)`);
       write(key, "failure", () => registry.set(failure, refusal));
-      note("verb", label, `refused · ${refusal.message}`, true);
+      verb(`refused · ${refusal.message}`, true);
       return refusal;
     }
     inFlight = true;
@@ -164,7 +181,7 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
           );
           if (!settled.length)
             refused.push("Nothing this page started is running on the host yet.");
-          if (refused.length) note("verb", label, `stop refused · ${refused.join(" ")}`, true);
+          if (refused.length) verb(`stop refused · ${refused.join(" ")}`, true);
           else resolve("stopped");
         });
       };
@@ -182,19 +199,17 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
       if (result === "timeout") {
         const refusal = refuse("unknown", `stopped: no answer after ${waitSeconds}s`);
         write(key, "failure", () => registry.set(failure, refusal));
-        note("verb", label, refusal.message, true);
+        verb(refusal.message, true);
         running
           .then(
             (late) =>
               !disposed &&
-              note(
-                "verb",
-                label,
+              verb(
                 `late · ${late ? outcomeSays(late) : "answered"} after the stop; re-reading, nothing retried`,
                 Boolean(late),
               ),
             (cause: unknown) =>
-              !disposed && note("verb", label, `late · failed · ${refusalOf(cause).message}`, true),
+              !disposed && verb(`late · failed · ${refusalOf(cause).message}`, true),
           )
           .finally(() => {
             // A late answer only refreshes what the verb dirties; it never writes on its own.
@@ -204,16 +219,11 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
         return refusal;
       }
       if (result === "stopped") {
-        note(
-          "verb",
-          label,
-          "stopped · cancel signalled; the op stops at its next checkpoint",
-          true,
-        );
+        verb("stopped · cancel signalled; the op stops at its next checkpoint", true);
         const late = (says: string, refusal: Refusal | null) => {
           if (disposed) return;
           write(key, "failure", () => registry.set(failure, refusal));
-          note("verb", label, `late · ${says}`, Boolean(refusal));
+          verb(`late · ${says}`, Boolean(refusal));
           if (!refusal) invalidateKeys();
         };
         running
@@ -228,14 +238,14 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
         return null;
       }
       write(key, "failure", () => registry.set(failure, result));
-      note("verb", label, result ? outcomeSays(result) : "ran", Boolean(result));
+      verb(result ? outcomeSays(result) : "ran", Boolean(result));
       // A partial outcome landed something: what it dirties is stale either way.
       if (!result || result.code === "partial") invalidateKeys();
       return result;
     } catch (cause) {
       const refusal = refusalOf(cause);
       write(key, "failure", () => registry.set(failure, refusal));
-      note("verb", label, `failed · ${refusal.message}`, true);
+      verb(`failed · ${refusal.message}`, true);
       return refusal;
     } finally {
       clearTimeout(bound);
@@ -293,6 +303,10 @@ export interface LogEntry {
   readonly label: string;
   readonly says: string;
   readonly refused: boolean;
+  /** The action key of a verb entry; its reading tabs derive from the action's `dirties`. */
+  readonly action?: string;
+  /** What the entry produced, resolved through the manifest's inspectables when drawn. */
+  readonly link?: InspectableRef;
 }
 
 /** What a bare run lacks: the fields an empty object misses, or "a value" when it is not an object. */
@@ -371,41 +385,86 @@ export function routeSearch(search: Record<string, unknown>): {
   };
 }
 
+/** Staged and proposed cell counts: what a Work revision changed, when the route has cells. */
+type CellTally = { staged: number; proposed: number };
+
+const cells = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** What one Work revision did to its cells, as the person would say it. */
+function workWords(was: CellTally | null, now: CellTally | null, revision: number) {
+  if (!was || !now) return `loaded Work r${revision}`;
+  const staged = now.staged - was.staged;
+  const proposed = now.proposed - was.proposed;
+  if (staged > 0 && proposed < 0) return `accepted ${cells(staged, "proposal")}`;
+  if (staged > 0) return `staged ${cells(staged, "cell")}`;
+  if (staged < 0) return `unstaged ${cells(-staged, "cell")}`;
+  if (proposed > 0) return `Pea proposed ${cells(proposed, "cell")}`;
+  if (proposed < 0) return `cleared ${cells(-proposed, "proposal")}`;
+  return `changed Work r${revision}`;
+}
+
 /**
  * Page-log rows for the three events that are not verbs (Situation, 2026-09-13): the target
- * binding, the stage word and the Work revision. Each notes only when its value changes.
+ * binding, the stage word and the Work revision. Each notes only when its value changes, with a
+ * label that says what happened; hover keeps the detail.
  */
 export function usePageLogNotes(
   owner: Pick<ReturnType<typeof createRouteOwner>, "note">,
   now: {
     target: string;
     stage: string | undefined;
-    revision: number | null;
+    /** The Work slice, and the segment its cells sit in when the route declares cells. */
+    work: { slice: Slice<unknown> | null; segment: string | undefined };
     lost: { ref: { session: string; openId: string }; reason: string } | null;
   },
 ) {
-  const { target, stage, revision, lost } = now;
+  const { target, stage, lost } = now;
+  const revision = now.work.slice?.revision ?? null;
+  const { segment } = now.work;
+  const cells = segment
+    ? Object.values(
+        ((now.work.slice?.doc ?? {}) as Record<string, Record<string, TrichotomyCellLike>>)[
+          segment
+        ] ?? {},
+      )
+    : null;
+  const staged = cells?.filter((cell) => cell.staged != null).length ?? null;
+  const proposed =
+    cells?.filter((cell) => cell.proposal != null && cell.staged == null).length ?? null;
   const lostKey = lost ? `${lost.ref.session}/${lost.ref.openId}` : null;
-  const seen = useRef({ target, stage, revision, lost: null as string | null });
+  const seen = useRef({
+    target,
+    stage,
+    revision,
+    tally: null as CellTally | null,
+    lost: null as string | null,
+  });
   useEffect(() => {
+    const tally = staged === null || proposed === null ? null : { staged, proposed };
     if (seen.current.target !== target) {
       seen.current.target = target;
       const bound = JSON.parse(target) as { session: string; openId: string } | null;
       // A lost binding notes itself below, with its reason, on load as on a transition.
       if (bound || !lost)
-        owner.note("target", "target", bound ? `${bound.session} › ${bound.openId}` : "unbound");
+        owner.note(
+          "target",
+          bound ? `bound ${bound.openId}` : "unbound",
+          bound ? `${bound.session} › ${bound.openId}` : "no document",
+        );
     }
     if (seen.current.lost !== lostKey) {
       seen.current.lost = lostKey;
-      if (lost) owner.note("target", "target", `unbound (${lost.reason.replace("-", " ")})`);
+      if (lost) owner.note("target", `unbound: ${lost.reason.replace("-", " ")}`, lostKey!);
     }
     if (seen.current.stage !== stage) {
       seen.current.stage = stage;
-      if (stage) owner.note("stage", "stage", stage);
+      if (stage) owner.note("stage", `now ${stage.toLowerCase()}`, stage);
     }
     if (seen.current.revision !== revision) {
       seen.current.revision = revision;
-      if (revision !== null) owner.note("work", "work", `r${revision} loaded`);
+      if (revision !== null)
+        owner.note("work", workWords(seen.current.tally, tally, revision), `r${revision}`);
+      seen.current.tally = tally;
     }
-  }, [owner, target, stage, revision, lostKey, lost]);
+  }, [owner, target, stage, revision, staged, proposed, lostKey, lost]);
 }

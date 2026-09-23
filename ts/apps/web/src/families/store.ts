@@ -21,6 +21,7 @@ import {
   stagedFilter,
   type FamiliesRouteDocument,
   type FamilyExclusions,
+  type FamiliesMatrixEnvelope,
   type Reading,
   transitionPatches,
   workKey,
@@ -37,7 +38,6 @@ import {
   archivedFamiliesObservations,
   createLiveFamiliesHost,
   latestFamiliesObservation,
-  openFamiliesArtifact,
   type FamiliesDraft,
 } from "#/families/host";
 import { manifest, type FamiliesPage } from "#/families/manifest";
@@ -113,13 +113,10 @@ function applyDataOf(statuses: unknown, receipts: unknown) {
   );
   if (!parsed || !step || step.state !== "succeeded") return null;
   const native = step.result as { diagnostics?: unknown[]; receipts?: unknown[] };
-  const result =
-    parsed.state === "succeeded" ? (parsed.result as { readbackError?: unknown }) : null;
   const ffReceipts = ffReceiptSchema.array().parse(native.receipts ?? []);
   return {
     actionId: parsed.id,
     appliedAt: parsed.startedAt,
-    readbackError: typeof result?.readbackError === "string" ? result.readbackError : null,
     diagnostics: diagnosticSchema.array().parse(native.diagnostics ?? []),
     receipts: ffReceipts,
     artifacts: [
@@ -133,7 +130,7 @@ function applyDataOf(statuses: unknown, receipts: unknown) {
 /* ── The hook ──────────────────────────────────────────────────────────────── */
 
 export function useFamiliesStore(
-  options: { target?: string; thread?: string; entry?: EntitySearch; rules?: string } = {},
+  options: { target?: string; thread?: string; entry?: EntitySearch; query?: string } = {},
 ) {
   const demo = useMemo(() => frozenDemo() !== null, []);
   const [pods, refreshPods] = usePodList(!demo);
@@ -143,7 +140,7 @@ export function useFamiliesStore(
     provided: { pods },
     page: {
       ...options.entry,
-      ...(options.rules === undefined ? {} : { rules: options.rules }),
+      ...(options.query === undefined ? {} : { query: options.query }),
     } as never,
   });
   const [memory, setMemory] = useState<FamiliesPageMemory>(EMPTY_MEMORY);
@@ -152,15 +149,15 @@ export function useFamiliesStore(
   const setPage = handle.page[1] as (next: Partial<FamiliesPage & EntityPage>) => void;
   const tableRef = useRef(memory.table);
   tableRef.current = memory.table;
-  const rulesRef = useRef(page.rules);
-  rulesRef.current = page.rules;
-  const table = useMemo(() => ({ ...memory.table, rules: page.rules }), [memory.table, page.rules]);
+  const queryRef = useRef(page.query);
+  queryRef.current = page.query;
+  const table = useMemo(() => ({ ...memory.table, query: page.query }), [memory.table, page.query]);
   useEffect(() => {
-    if (options.rules !== undefined && options.rules !== page.rules)
-      setPage({ rules: options.rules });
+    if (options.query !== undefined && options.query !== page.query)
+      setPage({ query: options.query });
     // URL changes seed the Page; local rule edits own subsequent renders until the URL changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [options.rules]);
+  }, [options.query]);
   const draft = page.draft;
   const draftTouched = useRef(false);
   const [archiveId, setArchiveId] = useState<string | null>(null);
@@ -237,6 +234,23 @@ export function useFamiliesStore(
     setPage,
     handle.busy,
   ]);
+  // The matrix Reading is an envelope (MAP ruling 3): when its body id moves past the reading on
+  // screen (another reader, a readback), fetch that body once over RPC. The body never streams.
+  const bodyVersion =
+    (previousOf(handle.readings.matrix as Reading<unknown>) as FamiliesMatrixEnvelope | undefined)
+      ?.bodyVersion ?? null;
+  useEffect(() => {
+    if (!bodyVersion || bodyVersion === page.reading?.id || page.stage === "archived") return;
+    let live = true;
+    // A failed fetch leaves the matrix on its last body; the envelope still says it moved.
+    void archivedFamiliesObservation(bodyVersion).then(
+      (reading) => live && setPage({ reading }),
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [bodyVersion, page.reading?.id, page.stage, setPage]);
   // One shared empty list while Work is null: `actions` memoizes on it, and a fresh `[]` per
   // render would rebuild the controller on every pass.
   const excluded = doc?.excluded ?? NO_EXCLUDED;
@@ -370,10 +384,9 @@ export function useFamiliesStore(
         setPage({ draft: next(value, draft) });
       },
       setTable: (value: Setter<TableState>) => {
-        const updated = next(value, { ...tableRef.current, rules: rulesRef.current });
-        if (updated.rules !== rulesRef.current) setPage({ rules: updated.rules ?? "" });
-        const { rules: _rules, ...table } = updated;
-        setMemory((current) => ({ ...current, table }));
+        const updated = next(value, { ...tableRef.current, query: queryRef.current });
+        if (updated.query !== queryRef.current) setPage({ query: updated.query });
+        setMemory((current) => ({ ...current, table: updated }));
       },
       setPicker: (value: Setter<PickerState>) =>
         setMemory((current) => ({ ...current, picker: next(value, current.picker) })),
@@ -401,7 +414,6 @@ export function useFamiliesStore(
             ? { path: ["excluded", familyName] }
             : { path: ["excluded", familyName], value: { by: "person" } },
         ]),
-      openPath: openFamiliesArtifact,
     }),
     // `cells` rides a ref: a staged keystroke must not mint a new `propose`, or every column
     // def and every drawn cell (511 × 435) rebuilds behind it.
@@ -420,12 +432,6 @@ export function useFamiliesStore(
     applied,
     plan,
     applyData,
-    readbackError:
-      page.readbackError ??
-      (applyData?.readbackError &&
-      (!page.reading || Date.parse(page.reading.completedAt) <= Date.parse(applyData.appliedAt))
-        ? applyData.readbackError
-        : null),
     draft,
     demo,
     refreshPods,

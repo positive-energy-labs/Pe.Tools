@@ -7,13 +7,15 @@
  */
 import { useMemo, useState, type ReactNode } from "react";
 import { Check, X } from "lucide-react";
-import { fanOut, summarize, type CellGroup, type TrichotomyCellLike } from "@pe/agent-contracts";
+import { fanOut, type CellGroup, type TrichotomyCellLike } from "@pe/agent-contracts";
 
 import { ActionButton } from "#/components/lang/action-button";
 import {
   fanOutWord,
   runFanOut,
+  tally,
   UnstageAll,
+  workSummary,
   type CellWire,
   type FanOutOutcome,
 } from "#/components/lang/band";
@@ -58,10 +60,9 @@ const showDefault = (value: unknown) => (typeof value === "string" ? value : JSO
 
 /** Depth-1 groups, contested first, then by pending size, then label. */
 function headGroups(work: Pick<HeadWork, "cells" | "groupOf" | "wire">): CellGroup[] {
-  const { groups } = summarize(work.cells, {
+  const { groups } = workSummary(work.cells, {
+    ...work.wire,
     groupOf: (key) => work.groupOf(key).slice(0, 1),
-    baselineOf: (key) => work.wire.baselineOf?.(key),
-    lockOf: work.wire.lockOf,
   });
   return groups.sort(
     (a, b) =>
@@ -72,13 +73,7 @@ function headGroups(work: Pick<HeadWork, "cells" | "groupOf" | "wire">): CellGro
 }
 
 /** `{P} proposed · {S} staged · {C} contested`, zeros omitted. */
-function countWords(groups: readonly Pick<CellGroup, "proposed" | "staged" | "contested">[]) {
-  const sum = (field: "proposed" | "staged" | "contested") =>
-    groups.reduce((total, group) => total + group[field], 0);
-  return { proposed: sum("proposed"), staged: sum("staged"), contested: sum("contested") };
-}
-
-function Counts({ proposed, staged, contested }: ReturnType<typeof countWords>) {
+function Counts({ proposed, staged, contested }: ReturnType<typeof tally>) {
   const parts: ReactNode[] = [];
   if (proposed)
     parts.push(
@@ -113,7 +108,7 @@ export function ProposalHead({ asks, works }: { asks: readonly ReactNode[]; work
   const live = [...lines.values()];
   if (!asks.length && !live.length) return null;
   const shown = all || live.length <= REST_WORKS ? live : live.slice(0, REST_WORKS);
-  const rest = live.slice(shown.length).map((parts) => countWords(parts.flatMap(headGroups)));
+  const rest = live.slice(shown.length).map((parts) => tally(parts.flatMap(headGroups)));
   return (
     <div
       aria-label="Pea proposals"
@@ -142,7 +137,7 @@ function WorkLine({ parts }: { parts: HeadWork[] }) {
   const [open, setOpen] = useState(false);
   const work = parts[0]!;
   const groups = parts.map(headGroups);
-  const counts = countWords(groups.flat());
+  const counts = tally(groups.flat());
   return (
     <div className="flex flex-col" data-work={work.id}>
       <div className="flex flex-wrap items-baseline gap-x-3 py-0.5">

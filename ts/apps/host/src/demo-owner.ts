@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
@@ -505,7 +506,10 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                   planHash,
                   residue: [],
                   errors: [],
-                  artifactDirectory: join(root, "artifacts", familyId),
+                  // The simulated engine writes no bundle: a path that is not on disk is no link.
+                  artifactDirectory: existsSync(join(root, "artifacts", familyId))
+                    ? join(root, "artifacts", familyId)
+                    : null,
                 })),
                 simulated: true,
               };
@@ -955,6 +959,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
           (request.subject !== "catalog" || targetMatches(request.target!))) ||
         (request.kind === "family-readings" && localScope(request.work)) ||
         (request.kind === "takeoff-reading" && targetMatches(request.target)) ||
+        (request.kind === "families-matrix" && targetMatches(request.target)) ||
         (request.kind === "field-options" && targetMatches(request.target)) ||
         (request.kind === "receipts" &&
           (!request.target || targetMatches(request.target)) &&

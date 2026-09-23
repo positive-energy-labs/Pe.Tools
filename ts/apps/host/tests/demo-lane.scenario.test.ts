@@ -293,6 +293,13 @@ async function landed(page: Page, pattern: RegExp) {
   return decodeURIComponent(new URL(page.url()).searchParams.get("path")!);
 }
 
+/** The page log drew a row for the verb whose hover says `says`: the row is the label, hover the rest. */
+async function logged(page: Page, label: string, says: string) {
+  const rows = page.locator(`section[aria-label="Situation"] li[title$=" · ${says}"]`);
+  const row = rows.filter({ hasText: new RegExp(`^${label}$`) });
+  await expect.poll(() => row.count(), { timeout: 30_000 }).toBeGreaterThan(0);
+}
+
 /** `/pods` for the member: the run receipt the apply filed, as the page draws it. */
 async function receiptOnPods(page: Page, pod: string, path: string, operation: string) {
   await page.goto(
@@ -347,9 +354,7 @@ test("live /schedules: capture then apply files a run receipt", async () => {
     await run(page, "capture schedule");
     const path = await landed(page, /^settings\/schedules\/schedule-481223-.*\.json$/);
     await run(page, "apply schedule");
-    await expect
-      .poll(() => page.locator("body").innerText(), { timeout: 30_000 })
-      .toContain("apply schedule ran");
+    await logged(page, "apply schedule", "ran");
     return receiptOnPods(page, pod, path, "schedule.apply");
   });
   expect(shown).toContain("Succeeded");
@@ -364,12 +369,13 @@ test("live /family: capture, plan, apply files a run receipt", async () => {
     await page.goto(`${page.url()}&pod=${pod}`, { waitUntil: "domcontentloaded" });
     await run(page, "capture family");
     const path = await landed(page, /^settings\/family\/Simulated-demo-family-.*\.json$/);
+    // The capture's receipt is a log row whose label opens the member it filed.
+    await logged(page, "captured 1 family", path);
+    if (SCRATCH) await page.screenshot({ path: join(SCRATCH, "family-captured.png") });
     await run(page, "plan");
     await applySheet(page);
     // The log prints the verb the user pressed, never the action key (w4-revit defect 9).
-    await expect
-      .poll(() => page.locator("body").innerText(), { timeout: 30_000 })
-      .toContain("apply family ran");
+    await logged(page, "apply family", "ran");
     // The owner answers the lamp's host-status read, so the head names no broken host.
     expect(await page.locator("body").innerText()).not.toContain("unreachable");
     return receiptOnPods(page, pod, path, "family.apply");
@@ -530,7 +536,7 @@ test("/families Archived inspects a saved reading without a target or Revit conn
         { timeout: 30_000 },
       )
       .toBe(1);
-    const rules = page.getByRole("combobox", { name: "families table rules" });
+    const rules = page.getByRole("combobox", { name: "table query" });
     await rules.fill("live placed");
     await rules.press("Escape");
     await expect
@@ -584,8 +590,6 @@ test("/families Archived inspects a saved reading without a target or Revit conn
     expect(new URL(page.url()).searchParams.get("target")).toBeNull();
     expect(body).toContain("Offline.rvt");
     expect(await page.getByRole("textbox").count()).toBe(0);
-    await page.getByRole("button", { name: "1 read issue", exact: true }).click();
-    await expect.poll(() => page.getByRole("dialog").innerText()).toContain("saved warning");
     expect(
       await page.getByRole("button", { name: /^read families|^plan|^apply families/ }).count(),
     ).toBe(0);
@@ -616,19 +620,29 @@ test("live /families: retained readback supports repeat and consecutive family p
     const pod = await openLive(page, "/families", "demo=edit&live=1");
     await page.goto(`${page.url()}&pod=${pod}`, { waitUntil: "domcontentloaded" });
     await readMechanicalFamilies(page);
-    const body = page.locator("body");
-    const band = (open: number, staged: number) =>
-      open + staged === 0
-        ? expect
-            .poll(() => page.locator('section[aria-label="proposals"]').count(), {
-              timeout: 30_000,
-            })
-            .toBe(0)
-        : expect
-            .poll(() => page.locator('section[aria-label="proposals"]').innerText(), {
-              timeout: 30_000,
-            })
-            .toMatch(new RegExp(`${open} open[\\s\\S]*${staged} staged`));
+    // The read dirties the matrix Reading: the log grows its tab (MAP ruling 3).
+    await expect
+      .poll(() => page.locator('[aria-label="log kind"] button').allInnerTexts(), {
+        timeout: 30_000,
+      })
+      .toContain("matrix");
+    if (SCRATCH)
+      await page
+        .locator('section[aria-label="Situation"]')
+        .screenshot({ path: join(SCRATCH, "families-read.png") });
+    // The Situation's Work sentence ("2 cells staged by you, 1 proposed by Pea · …"); none when
+    // nothing is pending.
+    const band = (open: number, staged: number) => {
+      const says = [
+        staged ? `${staged} cell${staged === 1 ? "" : "s"} staged by you` : "",
+        open ? `${open} proposed by Pea` : "",
+      ].filter(Boolean);
+      return expect
+        .poll(() => page.locator('[data-slot="situation-band"]').innerText(), { timeout: 30_000 })
+        .toMatch(
+          says.length ? new RegExp(`^${says.join(", ")}( ·|$)`) : /^(?![\s\S]*by (you|Pea))/,
+        );
+    };
     const type = async (family: string, current: string, next: string) => {
       const cell = modelCell(page, family);
       await expectModelValue(page, family, current);
@@ -679,17 +693,17 @@ test("live /families: retained readback supports repeat and consecutive family p
     );
     await applySheet(page);
     await expect.poll(() => readbackRequested, { timeout: 30_000 }).toBe(true);
-    await page.getByRole("combobox", { name: "families table rules" }).fill("blank live p:model");
+    await page.getByRole("combobox", { name: "table query" }).fill("blank live p:model");
     releaseReadback();
     // The owner changes simulated native state; the Host's targeted matrix readback, not the
     // staged input, supplies the value that the table draws after apply.
     await expectModelValue(page, "Fan Coil Unit - Ducted", "FXMQ20");
+    // The apply is one log row; the simulated engine writes no bundle, so it links nothing.
+    await logged(page, "apply 1 family · 1 converged", "no artifacts on disk");
+    if (SCRATCH) await page.screenshot({ path: join(SCRATCH, "families-applied.png") });
     await expect
-      .poll(() => page.getByRole("combobox", { name: "families table rules" }).inputValue())
+      .poll(() => page.getByRole("combobox", { name: "table query" }).inputValue())
       .toBe("blank live p:model");
-    await expect
-      .poll(() => body.innerText(), { timeout: 30_000 })
-      .toContain("verified after apply");
     // The retained post-apply observation keeps the original Work baseline. Plan two separate
     // families from it; applying the first must not make the second plan unusable.
     await type("Fan Coil Unit - Ducted", "FXMQ20", "FXMQ21");
@@ -703,8 +717,8 @@ test("live /families: retained readback supports repeat and consecutive family p
     expect(fullReads).toBe(1);
     // Plan filed no spec nobody authored: the page names no member.
     expect(new URL(page.url()).searchParams.get("path") ?? "").toBe("");
-    await expect.poll(() => body.innerText(), { timeout: 30_000 }).toContain("apply families ran");
-    // The applied, unchanged staged cell retired; the empty review region disappears.
+    await logged(page, "apply families", "ran");
+    // The applied, unchanged staged cell retired: the sentence is gone; the receipt is the record.
     await band(0, 0);
     // The run is filed under the draft's name; `/pods` browses members, and none was filed.
     // A string, so vitest leaves the page's own dynamic import alone.

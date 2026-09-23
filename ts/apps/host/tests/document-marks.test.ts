@@ -5,7 +5,16 @@
  */
 import { expect, test, vi } from "vite-plus/test";
 import { Effect } from "effect";
-import type { ReadingFrame } from "@pe/agent-contracts";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  address,
+  bindWork,
+  familiesMatrixEnvelopeSchema,
+  type ReadingFrame,
+} from "@pe/agent-contracts";
+import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import type { HostBridgeEvent, RevitBridge } from "../src/bridge.ts";
 import { assertFresh, documentMarks, STALE_READ } from "../src/document-marks.ts";
 import { setup } from "./schedule-test-fixture.ts";
@@ -248,4 +257,62 @@ test("a push over a newer mark is refused undispatched in one sentence, over HTT
   expect(await f.submit()).toMatchObject({ error: STALE_READ });
   expect(f.sent.filter((call) => call.key === "schedule.cells.apply")).toEqual([]);
   expect((await f.view()).doc.cells["1::2"].staged.value).toBe("150 VA");
+});
+
+test("the families matrix Reading streams an envelope, never the body, and wears the mark", async () => {
+  const world = fakeBridge();
+  const marks = documentMarks(world.bridge);
+  const dir = await mkdtemp(join(tmpdir(), "pe-matrix-envelope-"));
+  const captures = new TakeoffCaptures(dir);
+  const filter = {
+    categoryNames: ["Mechanical Equipment"],
+    familyNames: [],
+    placementScope: "AllLoaded" as const,
+  };
+  const frames: ReadingFrame[] = [];
+  const release = markReadings(marks)(
+    hostResourceObserver(world.bridge, undefined as never, () => captures),
+  )({ kind: "families-matrix", target: A, filter }, (frame) => frames.push(frame));
+  await vi.waitFor(() => expect(frames).toHaveLength(1));
+  expect(frames[0]).toMatchObject({ kind: "snapshot", value: null });
+
+  // A completed matrix read: a large body goes to disk, an envelope goes to the stream.
+  const family = (i: number) => ({
+    familyId: i,
+    familyUniqueId: `u${i}`,
+    familyName: `Family ${i}`,
+    typeNames: ["Type 1"],
+    parameters: Array.from({ length: 40 }, (_, p) => ({
+      definition: { identity: { key: `k${p}`, kind: "FamilyParameter", name: `P${p}` } },
+      kind: "FamilyParameter",
+      scope: "Type",
+      storageType: "String",
+      formulaState: "None",
+      valuesPerType: { "Type 1": `value ${p}` },
+    })),
+    issues: [],
+    isPartial: false,
+    placedInstanceCount: 0,
+  });
+  const saved = await captures.saveFamilies({
+    work: bindWork("families", address("C:/demo.rvt")),
+    document: A,
+    filter,
+    capturedAt: new Date().toISOString(),
+    result: { families: Array.from({ length: 200 }, (_, i) => family(i)), issues: [], page: null },
+  });
+  await vi.waitFor(() => expect(frames).toHaveLength(2));
+  const envelope = frames[1] as ReadingFrame & { kind: "snapshot" };
+  expect(familiesMatrixEnvelopeSchema.parse(envelope.value)?.bodyVersion).toBe(saved.id);
+  expect(envelope.changed).toBe(false);
+  const bytes = JSON.stringify(envelope).length;
+  expect(JSON.stringify(envelope)).not.toContain("Family 1");
+  // Measured: 415 bytes here, against a 1.6 MB body that stays on disk.
+  expect(bytes).toBeLessThan(1024);
+
+  world.changed("S1", "open-A");
+  await vi.waitFor(() => expect(frames).toHaveLength(3));
+  expect(frames[2]).toMatchObject({ value: { bodyVersion: saved.id }, changed: true });
+  release();
+  await rm(dir, { recursive: true, force: true });
 });

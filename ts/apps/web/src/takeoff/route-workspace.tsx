@@ -1,4 +1,3 @@
-import { takeoffDiscardEdits } from "@pe/agent-contracts";
 import { PartitionReview } from "#/takeoff/partition-review";
 import { flagShape, flagZone, TakeoffProposalRows } from "#/takeoff/proposals";
 import { useNavigate } from "@tanstack/react-router";
@@ -19,7 +18,6 @@ import { Input } from "#/components/lang/input";
 
 function TakeoffHead({ store }: { store: TakeoffsController }) {
   const ladder = useDocumentLadder(store.handle, store.actions.resetTarget);
-  const staged = Object.keys(store.staged).length;
   const world = store.world;
   const capture = previousOf(store.snapshot);
   const health = takeoffReadingHealth(store.snapshot);
@@ -114,25 +112,14 @@ function TakeoffHead({ store }: { store: TakeoffsController }) {
       sentence={sentence}
       chooseStage={(stage) => store.actions.chooseStage(stage as typeof store.stage)}
       commit="commit-sync"
-      band={store.stage === "adopt" ? <AdoptRegions store={store} /> : undefined}
-      work={{
-        count: staged,
-        noun: "room edit",
-        read: capture
-          ? `${capture.reading.observedAt}${store.snapshot.state === "failed" ? " · stale" : ""}`
-          : undefined,
-        discard: () =>
-          store.handle.work.doc
-            ? store.handle.work.write(takeoffDiscardEdits(store.handle.work.doc))
-            : Promise.resolve(null),
-        body: staged ? (
-          <span className="flex flex-wrap gap-x-4 text-ink-2">
-            {Object.values(store.staged).map((edit) => (
-              <span key={edit.roomId}>{edit.roomId}</span>
-            ))}
-          </span>
-        ) : null,
-      }}
+      work={(_, sentence) => (
+        <>
+          {sentence}
+          {store.stage === "adopt" ? <AdoptRegions store={store} /> : null}
+        </>
+      )}
+      // A staged room edit carries its room's base; the controller's wire writes it.
+      wire={store.wires.edits}
       ledger={[
         [
           "read",

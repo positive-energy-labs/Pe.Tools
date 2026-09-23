@@ -8,7 +8,7 @@ import {
   transitionPatches,
   type InstancesLaunch,
 } from "@pe/agent-contracts";
-import { ReviewRow, WorkBand, type CellWire } from "#/components/lang/band";
+import { ReviewRow, WorkStanding, type CellWire } from "#/components/lang/band";
 import { type InstancesHandle } from "#/instances/manifest";
 import { useMemo, useState } from "react";
 import { peReadings, readReading, useHostCall } from "#/readings";
@@ -483,12 +483,7 @@ export function InstancesCluster({
   // with start fresh, exactly as a Situation route draws it (C1/O-8/G1).
   if (work.refusal)
     return (
-      <WorkBand
-        count={0}
-        noun="launch"
-        revision={work.revision}
-        discard={() => {}}
-        visible={false}
+      <WorkStanding
         unresolved={[work.refusal]}
         startFresh={work.startFresh ? () => void work.startFresh?.() : undefined}
       />

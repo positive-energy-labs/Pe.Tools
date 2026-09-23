@@ -10,7 +10,7 @@
 import { useState } from "react";
 
 import { resolveStateColumn } from "#/components/master-table/master-table-columns";
-import type { Column, TableState } from "#/components/master-table/model";
+import type { Column, QueryGrammar, TableState } from "#/components/master-table/model";
 
 export const emptyTableState = (): TableState => ({ filters: {}, sorts: [], query: "" });
 
@@ -31,12 +31,23 @@ export function visibleRows<Row>(
   rows: readonly Row[],
   columns: readonly Column<Row>[],
   state: TableState,
+  grammar?: QueryGrammar,
 ): Row[] {
   const resolved = columns
     .filter((column) => !state.hiddenColumns?.includes(column.key))
     .map(resolveStateColumn);
   const byKey = new Map(resolved.map((column) => [column.key, column]));
-  const query = state.query.trim().toLowerCase();
+  // With a grammar only its free words search, each one on its own; without, the whole text does.
+  const words = (
+    grammar
+      ? grammar
+          .tokens(state.query)
+          .filter((token) => token.kind === "free")
+          .map((token) => token.text)
+      : [state.query.trim()]
+  )
+    .map((word) => word.toLowerCase())
+    .filter(Boolean);
   const searchable = resolved.filter((column) => column.search);
   const kept = rows.filter((row) => {
     for (const [key, value] of Object.entries(state.filters)) {
@@ -46,7 +57,9 @@ export function visibleRows<Row>(
       const hit = column.match ? column.match(row, value) : column.facet?.(row) === value;
       if (!hit) return false;
     }
-    return !query || searchable.some((column) => column.search!(row).toLowerCase().includes(query));
+    return words.every((word) =>
+      searchable.some((column) => column.search!(row).toLowerCase().includes(word)),
+    );
   });
   const sorts = state.sorts.filter((sort) => byKey.get(sort.key)?.sort);
   if (!sorts.length) return kept;
@@ -62,3 +75,16 @@ export function visibleRows<Row>(
     })
     .map(({ row }) => row);
 }
+
+/** The whitespace-delimited word under the caret, and the text before the caret within it. */
+export function tokenAt(text: string, caret: number) {
+  const start = text.lastIndexOf(" ", caret - 1) + 1;
+  const end = text.indexOf(" ", caret);
+  return { start, end: end === -1 ? text.length : end, text: text.slice(start, caret) };
+}
+
+export const removeToken = (text: string, token: string) =>
+  text
+    .split(/\s+/)
+    .filter((word) => word !== token)
+    .join(" ");

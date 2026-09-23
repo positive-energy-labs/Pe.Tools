@@ -86,7 +86,7 @@ export const familyExecutionOptionsSchema = z
   .strict();
 export type FamilyExecutionOptions = z.infer<typeof familyExecutionOptionsSchema>;
 
-const appliedScopeSchema = z.object({
+export const appliedScopeSchema = z.object({
   categoryNames: z.array(z.string()),
   familyNames: z.array(z.string()),
   placementScope: z.enum(["AllLoaded", "PlacedOnly", "UnplacedOnly"]),

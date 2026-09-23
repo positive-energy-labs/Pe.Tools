@@ -413,6 +413,7 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
         actor: "any",
         input: z.void(),
         dirties: [],
+        rereads: "work",
         stage: "audit",
         ready: () => null,
         run: async (ctx: Ctx) => {

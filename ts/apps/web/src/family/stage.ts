@@ -20,7 +20,7 @@ const spec: PaneDecl<R, A> = { draws: ["pods"], verbs: ["save"] };
 
 // Apply is the plan sheet's one button, never the row's.
 const across: readonly A[] = ["capture", "plan"];
-const keys = {} as const;
+const keys = { read: "R" } as const;
 
 export const FAMILY_STAGES: Readonly<Record<EntityStage, StageDecl<R, A, Pane>>> = {
   audit: {

@@ -231,7 +231,7 @@ export function LiveScheduleGridWorkspace({
         refreshPods={refreshPods}
         fixture={demo ? DEMO_SPEC : undefined}
         url={url}
-        band={resolve}
+        work={() => resolve}
         stages={SCHEDULE_STAGES}
       >
         {audit}

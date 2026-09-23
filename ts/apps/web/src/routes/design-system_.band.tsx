@@ -2,13 +2,7 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ActionButton } from "#/components/lang/action-button";
-import {
-  discardStaged,
-  fanOutWord,
-  reviewCommit,
-  WorkBand,
-  type FanOutOutcome,
-} from "#/components/lang/band";
+import { fanOutWord, WorkSentence, workSummary, type FanOutOutcome } from "#/components/lang/band";
 import { FactChip } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Section } from "#/components/lang/section";
@@ -23,6 +17,7 @@ import {
   acceptVoltage,
   MATRIX_COLUMNS,
   matrixRows,
+  matrixGroupOf,
   matrixWire,
   TypeForm,
   type Ask,
@@ -92,15 +87,17 @@ function BandRoute() {
                 for its verbs; on a focused cell <b>a</b> accepts, <b>d</b> denies, <b>u</b>{" "}
                 unstages, typing stages.
               </p>
-              <WorkBand
-                count={staged}
-                noun="cell"
-                revision={null}
-                visible
-                discard={() => aggregate(discardStaged(wire, cells))}
-                commit={reviewCommit(`plan ${staged} staged · SIMULATED`, staged, () =>
-                  say(`SIMULATED · plan of ${staged} staged cells`),
-                )}
+              <WorkSentence
+                summary={workSummary(cells, { groupOf: matrixGroupOf }, ["parameter", "family"])}
+                cells={cells}
+                wire={wire}
+                commit={
+                  <ActionButton
+                    label="plan · SIMULATED"
+                    reason="Plan the staged cells; the fixture writes nothing"
+                    onClick={() => say(`SIMULATED · plan of ${staged} staged cells`)}
+                  />
+                }
               />
               <div className="h-[26rem]">
                 <TableFrame

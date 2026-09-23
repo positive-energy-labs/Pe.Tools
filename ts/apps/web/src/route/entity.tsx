@@ -4,10 +4,11 @@
  * above the editor. `/family`, `/families` and `/schedules` are definitions (`entityRoute`), not
  * implementations. Stage, pod and path live in the URL so `/pods` can deep-link a spec.
  */
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { Pane, PaneSplit } from "#/components/lang/pane";
+import { Switcher } from "#/components/lang/switcher";
 import { KeysNode, stageChords } from "#/route/keys";
 import { Surface } from "#/components/lang/surface";
 import { previousOf } from "#/readings";
@@ -16,7 +17,7 @@ import { isSpecOf, sheetOf, type EntityPage, type EntityRouteDef, type PodRow } 
 import { Ladder, type Rung } from "./ladder";
 import { PlanSheetView } from "./plan-sheet";
 import { SpecEditor, type DemoSpec } from "./spec-editor";
-import { Situation } from "./situation";
+import { Situation, type SituationProps } from "./situation";
 import { LadderPicker, useDocumentLadder } from "./situation-ladder";
 import { SituationCell } from "./situation-marks";
 import type { RouteHandle } from "./use-route";
@@ -52,7 +53,8 @@ export function EntityRouteView({
   fixture,
   facts,
   subject,
-  band,
+  work,
+  wire,
   startFreshAside,
   onStartedFresh,
   health,
@@ -62,6 +64,7 @@ export function EntityRouteView({
   stages,
   targetRungs,
   auditPlan,
+  output,
   children,
 }: {
   def: EntityRouteDef<any, any, any>;
@@ -72,8 +75,9 @@ export function EntityRouteView({
   facts?: readonly (readonly [string, ReactNode])[];
   /** What the sentence says after the stage word; defaults to the entity noun. */
   subject?: ReactNode;
-  /** Route content under the Situation's verb row. */
-  band?: ReactNode;
+  /** The Situation's Work slot and aggregate wire (`SituationProps`). */
+  work?: SituationProps["work"];
+  wire?: SituationProps["wire"];
   startFreshAside?: ReactNode;
   onStartedFresh?: () => void;
   /** The audit's complaint for the chain lamp; null = healthy. */
@@ -96,6 +100,11 @@ export function EntityRouteView({
   targetRungs?: (ladder: ReturnType<typeof useDocumentLadder>) => readonly Rung[];
   /** The audit shows Plan only once route-owned edits exist. */
   auditPlan?: boolean;
+  /**
+   * What the last run put out (ruling 16), in the right pane beside spec and plan. The pane turns
+   * to it when it appears; null = no output yet.
+   */
+  output?: ReactNode;
   /** The audit. */
   children: ReactNode;
 }) {
@@ -117,7 +126,11 @@ export function EntityRouteView({
   // TODO: hide this pane (Pane `hidden`) instead of unmounting it, so it keeps what was typed —
   // SpecEditor works while it renders, and a hidden pre-render of it never settles.
   const stage = stages[page.stage] ?? stages.audit!;
-  const specHidden = !stage.panes.spec && !confirming;
+  const [pane, setPane] = useState<"spec" | "output">("spec");
+  const hasOutput = output != null;
+  useEffect(() => setPane(hasOutput ? "output" : "spec"), [hasOutput]);
+  const showOutput = !confirming && hasOutput && pane === "output";
+  const specHidden = !stage.panes.spec && !confirming && !hasOutput;
   const podRelevant = Boolean(def.capture) || page.stage === "apply";
   // Field options come from the document this route acts on, read-only (user verdict, grill 2).
   const optionsFrom =
@@ -186,7 +199,8 @@ export function EntityRouteView({
           }
           chords={stage.keys}
           meter={stage.meter}
-          band={band}
+          work={work}
+          wire={wire}
           startFreshAside={startFreshAside}
           onStartedFresh={onStartedFresh}
           sentence={
@@ -247,10 +261,24 @@ export function EntityRouteView({
           specHidden ? null : (
             <Pane
               kind="inspector"
-              title={confirming ? "plan" : "spec"}
+              title={confirming ? "plan" : showOutput ? "output" : "spec"}
               meta={def.entity}
               side="right"
+              actions={
+                !confirming && hasOutput ? (
+                  <Switcher
+                    ariaLabel="right pane"
+                    value={pane}
+                    onChange={setPane}
+                    options={[
+                      { value: "spec", label: "spec", title: "The open member's spec" },
+                      { value: "output", label: "output", title: "What the last run put out" },
+                    ]}
+                  />
+                ) : undefined
+              }
             >
+              {showOutput ? output : null}
               {confirming ? (
                 <PlanSheetView
                   sheet={view?.sheet ?? null}
@@ -273,7 +301,7 @@ export function EntityRouteView({
                   busy={handle.busy !== null}
                 />
               ) : null}
-              {specless ? null : (
+              {specless || showOutput ? null : (
                 <SpecEditor
                   member={page.pod && page.path ? { pod: page.pod, path: page.path } : null}
                   // A just-captured member is this route's spec before the pod list re-reads.
