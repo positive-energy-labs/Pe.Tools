@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { showFamilyCell } from "@pe/agent-contracts";
+import { showFamilyCell, type FamiliesPatchCell, type PodDraftSource } from "@pe/agent-contracts";
 
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
@@ -158,8 +158,12 @@ export function FamiliesReceiptsBand() {
  * skips contested cells, A7), with the outcome in the kit's words. Plan reads staged cells.
  */
 export function FamiliesProposalsBand() {
-  const { cells, rows, params, wire, plan } = useFamiliesWorkspace();
+  const { cells, rows, params, wire, plan, store } = useFamiliesWorkspace();
   const [outcome, setOutcome] = useState<FanOutOutcome | null>(null);
+  const patch = store.handle.work.doc?.patch ?? ({} as FamiliesPatchCell);
+  const patchOpen = patch.proposal != null && patch.staged == null;
+  const patchStaged = patch.staged != null;
+  const patchSource = (patch.staged ?? patch.proposal)?.value;
   // A plan row with no resolved id (no `hashKey`) is a name the host refused, in its own words.
   const orphans = new Map(
     (plan?.entries ?? []).flatMap((entry) =>
@@ -180,12 +184,13 @@ export function FamiliesProposalsBand() {
   const open = entries.filter(({ cell }) => cell.proposal != null && cell.staged == null);
   const staged = entries.filter(({ cell }) => cell.staged != null);
   const all = (kind: "accept" | "deny") => void runFanOut(wire, cells, keys, kind).then(setOutcome);
-  if (!entries.length && !outcome?.refusal) return null;
+  if (!entries.length && !patchSource && !outcome?.refusal) return null;
   return (
     <section aria-label="proposals" className="flex flex-col gap-1 py-1">
       <Dialog>
         <DialogTrigger render={<Press tone="quiet" size="value" frame="line" />}>
-          Review edits · {open.length} open · {staged.length} staged
+          Review edits · {open.length + Number(patchOpen)} open ·{" "}
+          {staged.length + Number(patchStaged)} staged
         </DialogTrigger>
         <DialogContent>
           <DialogTitle>Review family edits</DialogTitle>
@@ -195,19 +200,22 @@ export function FamiliesProposalsBand() {
                 proposals
               </span>
             </SectionLabel>
-            <FactChip tone={open.length ? "pea" : "meta"} title="Proposals nobody has staged yet.">
-              {open.length} open
+            <FactChip
+              tone={open.length + Number(patchOpen) ? "pea" : "meta"}
+              title="Proposals nobody has staged yet."
+            >
+              {open.length + Number(patchOpen)} open
             </FactChip>
             <FactChip
-              tone={staged.length ? "caution" : "meta"}
-              title="Staged cells: what plan will generate."
+              tone={staged.length + Number(patchStaged) ? "caution" : "meta"}
+              title="Staged edits: what plan will consume."
             >
-              {staged.length} staged
+              {staged.length + Number(patchStaged)} staged
             </FactChip>
             <span className="ml-auto flex items-center gap-1">
               <ActionButton
                 tone="agent"
-                label="accept all"
+                label="accept all cells"
                 disabled={!open.length}
                 reason={
                   open.length
@@ -217,7 +225,7 @@ export function FamiliesProposalsBand() {
                 onClick={() => all("accept")}
               />
               <ActionButton
-                label="deny all"
+                label="deny all cells"
                 reason="Clear every proposal on this table in one write. Staged values stay."
                 onClick={() => all("deny")}
               />
@@ -232,8 +240,41 @@ export function FamiliesProposalsBand() {
                 says={outcome.refusal ? "nothing was written" : undefined}
               />
             ) : null}
-            {entries.length === 0 ? (
+            {entries.length === 0 && !patchSource ? (
               <span className="t-small text-ink-2">nothing proposed or staged</span>
+            ) : null}
+            {patchSource ? (
+              <div>
+                <ReviewRow
+                  wire={{ ...store.wire, segment: null }}
+                  address="patch"
+                  label={<span className="face-mono text-ink-2">native FF patch</span>}
+                  cell={patch}
+                  facts={{ value: <ValueDiff from={null} to={patchSource.path} /> }}
+                  show={(value) =>
+                    `${(value as PodDraftSource).path} · different patch bytes; inspect proposed source below`
+                  }
+                />
+                {(["proposal", "staged"] as const).map((rung) =>
+                  patch[rung] ? (
+                    <details key={rung} className="t-small">
+                      <summary>
+                        Review exact {rung} patch · {patch[rung]!.value.path}
+                      </summary>
+                      <pre className="max-h-64 overflow-auto whitespace-pre-wrap face-mono">
+                        {patch[rung]!.value.content}
+                      </pre>
+                    </details>
+                  ) : null,
+                )}
+                {patchStaged && staged.length ? (
+                  <OutcomeLine
+                    kind="refused"
+                    label="choose one staged edit lane"
+                    says="Unstage the native patch or the per-type cells before planning."
+                  />
+                ) : null}
+              </div>
             ) : null}
             {entries.map((entry) => (
               <div key={entry.key}>

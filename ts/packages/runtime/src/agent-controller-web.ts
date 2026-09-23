@@ -5,6 +5,9 @@ import {
   documentRefSchema,
   type CapabilityCatalog,
   type WorkKey,
+  familiesViewSchema,
+  familiesViewCommandSchema,
+  familiesViewAckSchema,
 } from "@pe/agent-contracts";
 import { AgentController, type Session } from "@mastra/core/agent-controller";
 import { Mastra } from "@mastra/core/mastra";
@@ -21,6 +24,8 @@ import {
 import type { ScopeStore } from "./scope-store.ts";
 import { readThreadState, readToolResult, toWireDisplayState } from "./thread-state.ts";
 import { RouteWorkspace, type RouteWorkspaceRegistration } from "./route-workspace.ts";
+import { RouteViewStore } from "./route-view-store.ts";
+import { readingKey } from "@pe/agent-contracts";
 
 /* ── Route-state dispatcher request bodies ─────────────────────────────────── */
 
@@ -221,8 +226,56 @@ export async function buildAgentControllerApp(
 
   options.onRouteWorkspace?.(routeWorkspace, storage);
   const resources = observeResources(routeWorkspace, runtime.scopes, options.observeHostResource);
-  const observe = options.markReadings ? options.markReadings(resources) : resources;
+  const views = new RouteViewStore();
+  const observeBase = options.markReadings ? options.markReadings(resources) : resources;
+  const observe: ResourceObserver = (request, publish) => {
+    const release = observeBase(request, publish);
+    if (request.kind !== "world") return release;
+    const releaseViews = views.subscribe((intent) =>
+      publish({ kind: "event", key: readingKey(request), value: intent }),
+    );
+    return () => {
+      releaseViews();
+      release();
+    };
+  };
   app.get("/pe/resources", (c) => resourceResponse(c.req.raw, observe));
+
+  app.put("/pe/route-view/families", async (c) => {
+    const parsed = familiesViewSchema.safeParse(await c.req.json().catch(() => null));
+    return parsed.success
+      ? c.json(views.publish(parsed.data))
+      : c.json({ error: "invalid Families view" }, 400);
+  });
+  app.delete("/pe/route-view/families/:instance", (c) => {
+    views.remove(c.req.param("instance"));
+    return c.json({ ok: true });
+  });
+  app.get("/pe/route-view/families", (c) => {
+    const thread = c.req.query("thread");
+    if (!thread) return c.json({ error: "thread required" }, 400);
+    const result = views.select(thread, c.req.query("instance"));
+    return result && !("ok" in result)
+      ? c.json(result)
+      : c.json(result ?? { ok: false, error: "view unavailable" }, 409);
+  });
+  app.post("/pe/route-view/families/set-rules", async (c) => {
+    const parsed = familiesViewCommandSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ ok: false, error: "invalid Families rules command" }, 400);
+    const result = await views.setRules(
+      parsed.data.thread,
+      parsed.data.instance,
+      parsed.data.revision,
+      parsed.data.rules,
+    );
+    return c.json(result, (result as { ok: boolean }).ok ? 200 : 409);
+  });
+  app.post("/pe/route-view/families/ack", async (c) => {
+    const parsed = familiesViewAckSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ ok: false, error: "invalid Families view ack" }, 400);
+    const result = views.ack(parsed.data);
+    return c.json(result, result.ok ? 200 : 409);
+  });
 
   // Discovery is unscoped; every document read or write names one route scope: a chat Scope
   // (?target=<address>, or neither) or a standalone ?work=<id>.

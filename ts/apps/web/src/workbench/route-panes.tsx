@@ -16,13 +16,15 @@ import { TakeoffsPane } from "#/takeoff/pane";
 import { InstancesPage } from "#/instances/route";
 import type { ChatPluginRoute } from "./chat-plugins";
 
-type View = (props: { thread: string }) => ReactNode;
+type View = (props: { thread: string; visible: boolean }) => ReactNode;
 
 const views: Record<ChatPluginRoute, View> = {
   instances: () => <HostedInstances />,
   takeoffs: ({ thread }) => <TakeoffsPane thread={thread} />,
   family: ({ thread }) => <FamilyRouteView thread={thread} url={false} />,
-  families: ({ thread }) => <FamiliesRouteContent thread={thread} />,
+  families: ({ thread, visible }) => (
+    <FamiliesRouteContent thread={thread} visible={visible} surface="chat" />
+  ),
   pods: ({ thread }) => <HostedPods thread={thread} />,
   "parameter-links": ({ thread }) => <ParameterLinksRouteContent thread={thread} />,
   schedules: ({ thread }) => <LiveScheduleGridWorkspace framed url={false} thread={thread} />,
@@ -39,6 +41,7 @@ export function useChatPluginHost(
   thread: string,
   intent: ContextType<typeof ChatPlanIntent> = null,
   focus: readonly string[] | null = null,
+  open = true,
 ) {
   const [homes, setHomes] = useState<ReadonlyMap<ChatPluginRoute, HTMLElement>>(new Map());
   // Created after mount: the server renders no portals, and a portal's home must outlive the pane.
@@ -59,7 +62,7 @@ export function useChatPluginHost(
       <ChatHosted.Provider value>
         <ChatPlanIntent.Provider value={intent?.route === route ? intent : null}>
           <ChatFocus.Provider value={route === plugin ? focus : null}>
-            <View thread={thread} />
+            <View thread={thread} visible={route === plugin && open} />
           </ChatFocus.Provider>
         </ChatPlanIntent.Provider>
       </ChatHosted.Provider>,

@@ -27,8 +27,9 @@ import {
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
+import { productPathNames } from "@pe/host-contracts/contracts";
 import { mkdir, readFile, readdir, rename, writeFile, rm, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   sameAddress,
   takeoffCaptureSchema,
@@ -131,6 +132,35 @@ export type FamiliesObservationSummary = Omit<FamiliesObservation, "result"> & {
   issueCount: number;
 };
 
+type JsonArtifactReference = {
+  path: string;
+  url: string;
+  sha256: string;
+  sizeBytes: number;
+  format: "json";
+};
+
+type ApsParameterCacheReference =
+  | {
+      source: "parameters-service-cache";
+      status: "ready";
+      modifiedAt: string;
+      artifact: JsonArtifactReference;
+    }
+  | {
+      source: "parameters-service-cache";
+      status: "missing" | "malformed";
+      reason: string;
+    };
+
+const artifactOf = (path: string, url: string, bytes: Buffer): JsonArtifactReference => ({
+  path: resolve(path),
+  url,
+  sha256: createHash("sha256").update(bytes).digest("hex"),
+  sizeBytes: bytes.length,
+  format: "json",
+});
+
 const familyObservationId = (id: string) => familiesObservationSchema.shape.id.parse(id);
 
 /** Immutable Takeoffs and Family observations outside authored Work. Immutable files use the host's existing atomic-replace pattern. */
@@ -141,7 +171,15 @@ export class TakeoffCaptures {
   private readonly reads = new OwnerReads();
   private readonly familiesSaves = new Map<string, Promise<unknown>>();
   private readonly listeners = new Set<(key: string) => void>();
-  constructor(private readonly directory: string) {}
+  constructor(
+    private readonly directory: string,
+    private readonly apsCachePath = join(
+      productRoot(),
+      productPathNames.stateDirectoryName,
+      productPathNames.globalDirectoryName,
+      "parameters-service-cache.json",
+    ),
+  ) {}
 
   private notify(key: string) {
     for (const listener of this.listeners) listener(key);
@@ -519,12 +557,90 @@ export class TakeoffCaptures {
     return record;
   }
   async families(id: string): Promise<FamiliesObservation> {
+    return (await this.familiesFile(id)).record;
+  }
+  private async familiesFile(id: string) {
     familyObservationId(id);
+    const path = join(this.directory, "families", `${id}.json`);
+    const bytes = await readFile(path);
     const record = familiesObservationSchema.parse(
-      JSON.parse(await readFile(join(this.directory, "families", `${id}.json`), "utf8")),
+      JSON.parse(bytes.toString("utf8")),
     ) as FamiliesObservation;
     if (record.id !== id) throw Error("Families observation ID does not match its file");
-    return record;
+    return { record, path, bytes };
+  }
+  async familiesArtifact(id: string): Promise<Buffer> {
+    return (await this.familiesFile(id)).bytes;
+  }
+  async familiesReference(id: string) {
+    const { record, path, bytes } = await this.familiesFile(id);
+    const { result, ...reading } = record;
+    return {
+      ...reading,
+      familyCount: result.families.length,
+      typeCount: result.families.reduce((count, family) => count + family.typeNames.length, 0),
+      issueCount: result.issues.length,
+      familyIssueCount: result.families.reduce((count, family) => count + family.issues.length, 0),
+      partialFamilyCount: result.families.filter((family) => family.isPartial).length,
+      page: result.page ?? null,
+      valueSemantics:
+        "valuesPerType are Revit-formatted display strings: null and empty string differ, and measured values may be rounded. This retained reading is evidence, not edit authority; use an explicit Family capture for exact native model values and dependencies.",
+      artifact: artifactOf(path, `/families/readings?id=${id}&format=artifact`, bytes),
+      apsParametersCache: (await this.apsParameterCache(id)).reference,
+    };
+  }
+  private async apsParameterCache(
+    id: string,
+  ): Promise<{ reference: ApsParameterCacheReference; bytes: Buffer | null }> {
+    const source = "parameters-service-cache" as const;
+    const bytes = await readFile(this.apsCachePath).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (!bytes)
+      return {
+        reference: { source, status: "missing", reason: "No saved APS parameter cache exists." },
+        bytes: null,
+      };
+    try {
+      const parsed: unknown = JSON.parse(bytes.toString("utf8"));
+      if (!parsed || typeof parsed !== "object" || !Array.isArray(Reflect.get(parsed, "Results")))
+        throw Error("Results array missing");
+    } catch {
+      return {
+        reference: {
+          source,
+          status: "malformed",
+          reason: "Saved APS parameter cache is not valid Parameters Service JSON.",
+        },
+        bytes: null,
+      };
+    }
+    const modifiedAt = (await stat(this.apsCachePath)).mtime.toISOString();
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    return {
+      reference: {
+        source,
+        status: "ready",
+        modifiedAt,
+        artifact: artifactOf(
+          this.apsCachePath,
+          `/families/readings?id=${id}&format=parameters-cache&sha256=${sha256}`,
+          bytes,
+        ),
+      },
+      bytes,
+    };
+  }
+  async apsParameterCacheArtifact(id: string, expectedSha256: string): Promise<Buffer> {
+    await this.families(id);
+    if (!/^[a-f0-9]{64}$/.test(expectedSha256)) throw Error("APS cache SHA-256 required");
+    const { reference: cache, bytes } = await this.apsParameterCache(id);
+    if (cache.status !== "ready") throw Error(cache.reason);
+    if (!bytes) throw Error("APS parameter cache bytes are unavailable");
+    if (cache.artifact.sha256 !== expectedSha256)
+      throw Error("APS parameter cache changed since this reference; request a fresh reference.");
+    return bytes;
   }
   async familiesReadings(): Promise<FamiliesObservationSummary[]> {
     const directory = join(this.directory, "families");

@@ -6,8 +6,8 @@ import type {
   PermissionRules,
 } from "@mastra/client-js";
 import { threadAccessPolicies, type ExpiredAsk, type ThreadViewState } from "@pe/agent-contracts";
-import { stringify } from "#/components/lang/code";
-import type { PeInspect } from "#/host/inspect.ts";
+import { stringify } from "../components/lang/code-format.ts";
+import type { PeInspect } from "../host/inspect.ts";
 
 export type ChatDisplay = Omit<
   Partial<Extract<KnownAgentControllerEvent, { type: "display_state_changed" }>["displayState"]>,

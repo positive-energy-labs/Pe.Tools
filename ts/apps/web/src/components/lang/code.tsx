@@ -7,7 +7,7 @@
  *   the left and the machine-measured facts on the right — line count, copy, and "show all".
  * - `Code` owns the height clamp; the container owns show/hide.
  * - `@tanstack/highlight` is the only highlighter. C# is ours because Pods are C# scripts.
- * - One `stringify` lives here, and `Code` takes a string, so the byte count is a fact the
+ * - One `stringify` lives in code-format, and `Code` takes a string, so the byte count is a fact the
  *   caller can see before it hands the block over.
  *
  * WHY TWO EXPORTS AND NOT ONE `editable` FLAG (ledger line 18): a textarea owns caret,
@@ -67,15 +67,7 @@ const highlighter = createHighlighter({
 });
 
 export type { HighlightDecoration };
-
-/** The one pretty-printer. Anything that refuses to serialize still has to render as something. */
-export function stringify(value: unknown): string {
-  try {
-    return JSON.stringify(value, null, 2) ?? String(value);
-  } catch {
-    return String(value);
-  }
-}
+export { stringify } from "./code-format";
 
 /**
  * Does the highlighter hold a grammar for this tag? `normalizeLanguage` is the highlighter's own

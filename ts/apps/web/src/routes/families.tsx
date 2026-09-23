@@ -40,6 +40,7 @@ function FamiliesRoute() {
       thread={thread}
       entry={{ stage, pod, path }}
       rules={rules ?? DEFAULT_FAMILIES_RULES}
+      surface="route"
       url
     />
   );
@@ -51,6 +52,8 @@ export function FamiliesRouteContent({
   entry,
   rules,
   url = false,
+  visible = true,
+  surface = "route",
 }: {
   target?: string;
   thread?: string;
@@ -60,6 +63,8 @@ export function FamiliesRouteContent({
   rules?: string;
   /** True only on the route itself; a chat pane does not own the URL. */
   url?: boolean;
+  visible?: boolean;
+  surface?: "chat" | "route";
 }) {
   const navigate = useNavigate();
   const store = useFamiliesStore({
@@ -81,5 +86,13 @@ export function FamiliesRouteContent({
       }),
     });
   }, [url, store.table.rules, navigate]);
-  return <FamiliesWorkspace store={store} url={url} />;
+  return (
+    <FamiliesWorkspace
+      store={store}
+      url={url}
+      thread={thread}
+      visible={visible}
+      surface={surface}
+    />
+  );
 }

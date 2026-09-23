@@ -1,5 +1,6 @@
 export * from "./activity.ts";
 export * from "./route-state.ts";
+export * from "./route-view.ts";
 export * from "./route-doc.ts";
 export * from "./reading.ts";
 export * from "./trichotomy.ts";

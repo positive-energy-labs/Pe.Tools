@@ -384,7 +384,13 @@ test("neither route document can hold an observation or a receipt", async () => 
   // A native plan was returned, and neither the Work document nor a reading moved.
   expect(plan.plan).toHaveLength(2);
   expect(doc.revision).toBe(revision);
-  expect(Object.keys(doc.doc as object).sort()).toEqual(["cells", "excluded", "scope", "takenAt"]);
+  expect(Object.keys(doc.doc as object).sort()).toEqual([
+    "cells",
+    "excluded",
+    "patch",
+    "scope",
+    "takenAt",
+  ]);
   expect(JSON.stringify(doc.doc)).not.toContain("planHash");
   expect(await captures.familyReadings(scope)).toEqual([]);
 
@@ -828,6 +834,205 @@ async function stagedPlan(
   );
   return { plan, revision, draft, apply: { plan: plan.id, expectedPlanHashes: plan.included } };
 }
+
+const nativePatch = {
+  path: "proposed/duct-patch.json",
+  content: `${JSON.stringify({
+    $schema: "https://ff/schemas/settings/FamilyFoundry/patches.json",
+    select: { names: ["Box", "Pipe"] },
+    patch: { parameters: { Width: { formula: "NeckOuterW" } } },
+  })}\n`,
+};
+
+async function nativePatchPlan(env: Awaited<ReturnType<typeof setup>>) {
+  const authored = await authorFamilies(env.work);
+  const document = familiesRouteState.schema.parse((await env.work.read(scope, "families"))!.doc);
+  await env.captures.saveFamilies({
+    work: scope,
+    document: target,
+    filter: stagedFilter(document)!,
+    capturedAt: document.takenAt!,
+    result: {
+      families: [matrixFamily("Box", "1in"), matrixFamily("Pipe", "1in", 2)],
+      issues: [],
+      page: { totalCount: 2, returnedCount: 2, isTruncated: false },
+    },
+  });
+  const revision = (
+    await env.work.apply(
+      scope,
+      "families",
+      "human",
+      [{ path: ["patch", "staged"], value: { value: nativePatch } }],
+      authored,
+    )
+  ).revision!;
+  const plan = resultOf<Plan>(await env.admit("families.plan", { source: nativePatch }, revision));
+  return { plan, revision, apply: { plan: plan.id, expectedPlanHashes: plan.included } };
+}
+
+test("native patch proposal is staged by a person and its exact supplied bytes retire after every family succeeds", async () => {
+  const env = await setup();
+  const proposed = await authorFamilies(env.work);
+  const document = familiesRouteState.schema.parse((await env.work.read(scope, "families"))!.doc);
+  await env.captures.saveFamilies({
+    work: scope,
+    document: target,
+    filter: stagedFilter(document)!,
+    capturedAt: document.takenAt!,
+    result: {
+      families: [matrixFamily("Box", "1in"), matrixFamily("Pipe", "1in", 2)],
+      issues: [],
+      page: { totalCount: 2, returnedCount: 2, isTruncated: false },
+    },
+  });
+  const byPea = await env.work.apply(
+    scope,
+    "families",
+    "agent",
+    [{ path: ["patch", "proposal"], value: { value: nativePatch } }],
+    proposed,
+  );
+  expect(byPea.ok).toBe(true);
+  const deniedStage = await env.work.apply(
+    scope,
+    "families",
+    "agent",
+    [{ path: ["patch", "staged"], value: { value: nativePatch } }],
+    byPea.revision!,
+  );
+  expect(deniedStage.ok).toBe(false);
+  const accepted = await env.work.apply(
+    scope,
+    "families",
+    "human",
+    transitionPatches([], "patch", { proposal: { value: nativePatch } }, { kind: "accept" }),
+    byPea.revision!,
+  );
+  expect(accepted.ok).toBe(true);
+  // Plan admission binds the exact reviewed source, including path and unchanged content bytes.
+  const wrong = await env.admit(
+    "families.plan",
+    { source: { ...nativePatch, content: `${nativePatch.content} ` } },
+    accepted.revision!,
+    "wrong-patch",
+  );
+  expect(wrong.state).toBe("failed");
+  expect(String((wrong as { error?: string }).error)).toMatch(/exact native patch source/);
+  expect(env.sent.filter((row) => row.key === "families.plan")).toHaveLength(0);
+  // A new Pea counterproposal leaves the human's staged bytes authoritative.
+  const counter = await env.work.apply(
+    scope,
+    "families",
+    "agent",
+    [{ path: ["patch", "proposal"], value: { value: { ...nativePatch, path: "counter.json" } } }],
+    accepted.revision!,
+  );
+  expect(counter.ok).toBe(true);
+  const plan = resultOf<Plan>(
+    await env.admit("families.plan", { source: nativePatch }, counter.revision!),
+  );
+  env.applied({ receipts: [env.box, { ...env.box, familyId: 2, familyName: "Pipe" }] });
+  const done = resultOf<{ retired: { retired: string[] } }>(
+    await env.admit(
+      "families.apply",
+      { plan: plan.id, expectedPlanHashes: plan.included },
+      counter.revision!,
+    ),
+  );
+  expect(done.retired.retired).toContain("patch");
+  const final = familiesRouteState.schema.parse((await env.work.read(scope, "families"))!.doc);
+  expect(final.patch.staged).toBeNull();
+  expect(final.patch.proposal?.value.path).toBe("counter.json");
+  const root = env.sent.find((row) => row.key === "families.apply")!.input.source.root;
+  expect(Buffer.from(root.bytesBase64, "base64").toString("utf8")).toBe(nativePatch.content);
+});
+
+test("native patch refuses mixed staged cells and keeps its staged rung after partial success", async () => {
+  const env = await setup();
+  const { apply, revision } = await nativePatchPlan(env);
+  env.applied({
+    receipts: [
+      env.box,
+      { ...env.box, familyId: 2, familyName: "Pipe", converged: false, residue: ["Width"] },
+    ],
+  });
+  const done = resultOf<{ retired: { retired: string[] } }>(
+    await env.admit("families.apply", apply, revision),
+  );
+  expect(done.retired.retired).not.toContain("patch");
+  expect(
+    familiesRouteState.schema.parse((await env.work.read(scope, "families"))!.doc).patch.staged,
+  ).toEqual({ value: nativePatch });
+  const current = (await env.work.read(scope, "families"))!.revision;
+  const mixed = await env.work.apply(
+    scope,
+    "families",
+    "human",
+    [{ path: ["cells", W], value: staged("10") }],
+    current,
+  );
+  expect(mixed.ok).toBe(true);
+  const refused = await env.admit(
+    "families.plan",
+    { source: nativePatch },
+    mixed.revision!,
+    "mixed-patch-plan",
+  );
+  expect(refused.state).toBe("failed");
+  expect(String((refused as { error?: string }).error)).toMatch(/not both/);
+});
+
+test("native patch apply refuses a changed staged source before native dispatch", async () => {
+  const env = await setup();
+  const { apply, revision } = await nativePatchPlan(env);
+  const changed = await env.work.apply(
+    scope,
+    "families",
+    "human",
+    [{ path: ["patch", "staged"], value: { value: { ...nativePatch, path: "changed.json" } } }],
+    revision,
+  );
+  expect(changed.ok).toBe(true);
+  const refused = await env.admit("families.apply", apply, changed.revision!);
+  expect(refused.state).toBe("failed");
+  expect(String((refused as { error?: string }).error)).toMatch(/staged native patch changed/);
+  expect(env.sent.filter((row) => row.key === "families.apply")).toHaveLength(0);
+});
+
+test("native patch apply refuses cells staged after its plan", async () => {
+  const env = await setup();
+  const { apply, revision } = await nativePatchPlan(env);
+  const mixed = await env.work.apply(
+    scope,
+    "families",
+    "human",
+    [{ path: ["cells", W], value: staged("10") }],
+    revision,
+  );
+  expect(mixed.ok).toBe(true);
+  const refused = await env.admit("families.apply", apply, mixed.revision!);
+  expect(refused.state).toBe("failed");
+  expect(String((refused as { error?: string }).error)).toMatch(/not both/);
+  expect(env.sent.filter((row) => row.key === "families.apply")).toHaveLength(0);
+});
+
+test("per-type cell apply refuses a native patch staged after its plan", async () => {
+  const env = await setup();
+  const { apply, revision } = await stagedPlan(env, { [W]: staged("10") });
+  const mixed = await env.work.apply(
+    scope,
+    "families",
+    "human",
+    [{ path: ["patch", "staged"], value: { value: nativePatch } }],
+    revision,
+  );
+  expect(mixed.ok).toBe(true);
+  const refused = await env.admit("families.apply", apply, mixed.revision!);
+  expect(refused.state).toBe("failed");
+  expect(String((refused as { error?: string }).error)).toMatch(/not both/);
+  expect(env.sent.filter((row) => row.key === "families.apply")).toHaveLength(0);
+});
 const cellsNow = async (work: RouteWorkspace) =>
   familiesRouteState.schema.parse((await work.read(scope, "families"))!.doc).cells;
 

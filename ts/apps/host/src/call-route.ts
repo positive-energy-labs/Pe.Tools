@@ -395,13 +395,38 @@ export function makeCallRoute(
                 ? { body: JSON.stringify(await Effect.runPromise(req.json)) }
                 : {}),
             });
+            if (
+              ["artifact", "parameters-cache"].includes(
+                new URL(req.url, "http://host").searchParams.get("format") ?? "",
+              )
+            )
+              return Response.uint8Array(new Uint8Array(await response.arrayBuffer()), {
+                status: response.status,
+                contentType: response.headers.get("content-type") ?? "application/json",
+              });
             return Response.jsonUnsafe(await response.json(), { status: response.status });
           }
           if (req.method === "GET") {
             const query = new URL(req.url, "http://host").searchParams;
             const id = query.get("id");
             const raw = query.get("work");
+            const format = query.get("format");
             if (id && raw) throw Error("Choose one Families reading lookup");
+            if (format) {
+              if (!id) throw Error("A Families reading ID is required for an artifact reference");
+              if (format === "reference")
+                return Response.jsonUnsafe(await observations().familiesReference(id));
+              if (format === "artifact")
+                return Response.uint8Array(await observations().familiesArtifact(id), {
+                  contentType: "application/json",
+                });
+              if (format === "parameters-cache")
+                return Response.uint8Array(
+                  await observations().apsParameterCacheArtifact(id, query.get("sha256") ?? ""),
+                  { contentType: "application/json" },
+                );
+              throw Error(`Unknown Families reading format '${format}'`);
+            }
             if (id) return Response.jsonUnsafe(await observations().families(id));
             if (!raw) return Response.jsonUnsafe(await observations().familiesReadings());
             const work = workKeySchema.parse(JSON.parse(raw));

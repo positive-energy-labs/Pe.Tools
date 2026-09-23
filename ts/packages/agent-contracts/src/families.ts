@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { isRecord, type RouteStateSpec } from "./route-state.ts";
 import { trichotomyAgentMask, trichotomyCellSchema } from "./trichotomy.ts";
+import { podDraftSourceSchema } from "./settings.ts";
 
 export const diagnosticSchema = z.object({
   code: z.string(),
@@ -264,6 +265,29 @@ export function familyStagedPatch(
 export const familyFilterCellSchema = trichotomyCellSchema(appliedScopeSchema).strict();
 export type FamilyFilterCell = z.infer<typeof familyFilterCellSchema>;
 
+/** Supplied Family Foundry patch bytes. Native schema and semantic validation remain FF's job. */
+export const familiesPatchSourceSchema = podDraftSourceSchema.strict().refine((source) => {
+  try {
+    const value: unknown = JSON.parse(source.content);
+    return (
+      value !== null &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      "patch" in value &&
+      value.patch !== null &&
+      typeof value.patch === "object" &&
+      !Array.isArray(value.patch) &&
+      "$schema" in value &&
+      typeof value.$schema === "string" &&
+      value.$schema.endsWith("/schemas/settings/FamilyFoundry/patches.json")
+    );
+  } catch {
+    return false;
+  }
+}, "Supply JSON for the native Family Foundry patches schema");
+export const familiesPatchCellSchema = trichotomyCellSchema(familiesPatchSourceSchema).strict();
+export type FamiliesPatchCell = z.infer<typeof familiesPatchCellSchema>;
+
 /** Who held a family back. The route door checks it is the writer, so it is never just claimed. */
 export const exclusionAuthorSchema = z.enum(["person", "pea"]);
 export type FamilyExclusions = Record<string, { by: z.infer<typeof exclusionAuthorSchema> }>;
@@ -292,6 +316,8 @@ const familiesDocumentSchema = z
       )
       .default({}),
     cells: z.record(familyCellKeySchema, familyCellStateSchema).default({}),
+    /** One reviewed native FF patch source, beside per-type cell edits. Only one lane may be staged. */
+    patch: familiesPatchCellSchema.default({}),
     executionOptions: familyExecutionOptionsSchema.optional(),
     /** The pod the person plans the draft in and saves it to (F-B-5b). The person's choice; Pea never writes it. */
     pod: z.string().min(1).optional(),
@@ -355,11 +381,12 @@ export const familiesRouteState = {
     "propose",
   ],
   description:
-    'Family Foundry: propose scope.proposal first = { value: { categoryNames, familyNames, placementScope } } (exact family names from op:revit.catalog.loaded-families); the person stages it, and plan audits only the staged scope. Then propose cells.<key>.proposal, where <key> is [familyName,typeName,parameter] of a type listed in the route read\'s scopeTypes (the staged scope, else the proposed one) (the family NAME, never an element id); do not wait for the person to stage the scope. A person stages reviewed cells before plan or apply. Hold a family back with excluded.<familyName> = { by: "pea" }; the plan sheet names who held it back, and only the person lifts their own.',
+    'Family Foundry: propose scope.proposal first = { value: { categoryNames, familyNames, placementScope } } (exact family names from op:revit.catalog.loaded-families); the person stages it, and plan audits only the staged scope. Propose cells.<key>.proposal for per-type values, where <key> is [familyName,typeName,parameter] of a type listed in the route read\'s scopeTypes (the staged scope, else the proposed one); do not wait for the person to stage the scope. Or propose patch.proposal = { value: { path, content } } for native Family Foundry patch JSON carrying the /schemas/settings/FamilyFoundry/patches.json schema. The person reviews and stages; never write staged. The patch source and per-type cells cannot both be staged. Hold a family back with excluded.<familyName> = { by: "pea" }; the plan sheet names who held it back, and only the person lifts their own.',
   schema: familiesDocumentSchema,
   // Pea writes proposals only. A staged value reaches plan only through a person's review.
   agentWriteMask: [
     ["scope", "proposal"],
+    ["patch", "proposal"],
     ["excluded"],
     ...trichotomyAgentMask(),
     ["executionOptions"],

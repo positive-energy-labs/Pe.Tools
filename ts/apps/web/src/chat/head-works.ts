@@ -16,6 +16,7 @@ import {
   takeoffsRouteState,
   type Address,
   type AppliedFilter,
+  type PodDraftSource,
   type RouteStatePatch,
   type InstancesLaunch,
   type TrichotomyCellLike,
@@ -178,6 +179,20 @@ export function useHeadWorks(
       show: (value) => filterWords(value as AppliedFilter),
       ...exitsOf,
       // The scope band heads the pane; a ["scope"] focus would match no type row.
+      open: () => exits.open("families"),
+    },
+    {
+      id: `families-patch:${address}`,
+      route: familiesRouteState.title,
+      subject,
+      cells: { patch: work.doc.patch as TrichotomyCellLike },
+      wire: { ...wire, segment: null },
+      groupOf: () => ["native FF patch"],
+      show: (value) => {
+        const source = value as PodDraftSource;
+        return `${source.path} · ${source.content.length} characters`; // exact bytes are reviewed in Families
+      },
+      ...exitsOf,
       open: () => exits.open("families"),
     },
     {

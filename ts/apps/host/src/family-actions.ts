@@ -294,7 +294,13 @@ export async function lifetime(
 }
 
 /** The staged cells a plan provably consumed, at the Work revision the plan was bound to. */
-type Consumed = { key: WorkKey; route: "family" | "families"; cells: Record<string, Rung> };
+type Consumed = {
+  key: WorkKey;
+  route: "family" | "families";
+  cells: Record<string, Rung>;
+  /** The single native patch rung, separate from canonical per-type cell addresses. */
+  patch?: Rung;
+};
 type Sealed = {
   specJson: string;
   source: { root: { bytesBase64: string } };
@@ -354,6 +360,8 @@ type Prepared =
       sealed?: Sealed;
       /** An apply retires these staged cells after proven native success, if still unchanged. */
       retire?: Consumed | null;
+      /** Full patch retires only when every actionable, unheld planned family succeeded. */
+      retirePatchNames?: readonly string[] | null;
       /** A Families Work reading to update after apply, if this route supplied one. */
       readbackWork?: WorkKey;
       readbackTakenAt?: string | null;
@@ -538,15 +546,30 @@ export async function admitFamilyAction(
         const consumed = sealed.consumed;
         if (consumed) {
           const view = work ? await work.read(consumed.key, workRoute(consumed)) : null;
-          const now = (
-            view?.doc as { cells?: Record<string, { staged?: Rung | null }> } | undefined
-          )?.cells;
+          const document = view?.doc as
+            | {
+                cells?: Record<string, { staged?: Rung | null }>;
+                patch?: { staged?: Rung | null };
+              }
+            | undefined;
+          const now = document?.cells;
           if (
             Object.entries(consumed.cells).some(
               ([cell, rung]) => !sameValue(now?.[cell]?.staged, rung),
-            )
+            ) ||
+            (consumed.patch && !sameValue(document?.patch?.staged, consumed.patch))
           )
-            throw refused("The staged cells changed since this plan; plan again");
+            throw refused(
+              consumed.patch
+                ? "The staged native patch changed since this plan; plan again"
+                : "The staged cells changed since this plan; plan again",
+            );
+          if (
+            consumed.route === "families" &&
+            ((consumed.patch && Object.values(now ?? {}).some((cell) => cell.staged != null)) ||
+              (Object.keys(consumed.cells).length > 0 && document?.patch?.staged != null))
+          )
+            throw refused("Stage either a native Family Foundry patch or per-type cells, not both");
           if (consumed.route === "family")
             assertFresh(documentMarks(bridge), target!, sealed.takenAt ?? null);
         }
@@ -556,6 +579,23 @@ export async function admitFamilyAction(
         );
         if (stray.length)
           throw refused(`Families ${stray.join(", ")} are not in the reviewed plan as sent`);
+        const patchEntries =
+          key === "families.apply" && sealed.consumed?.patch
+            ? (plan.result as { plan: FfPlanEntry[] }).plan
+            : null;
+        const patchTargets = patchEntries?.flatMap((entry) =>
+          entry.changes.length + entry.runEffects.length ? [entry] : [],
+        );
+        const retirePatchNames = patchEntries
+          ? patchEntries.every((entry) => entry.refusals.length === 0) &&
+            patchTargets!.every(
+              (entry) =>
+                entry.familyId != null &&
+                Object.hasOwn(input.expectedPlanHashes, String(entry.familyId)),
+            )
+            ? patchTargets!.map((entry) => entry.familyName)
+            : null
+          : undefined;
         const readbackBase =
           key === "families.apply" && !sealed.consumed && admission.bases.work && work
             ? await work.read(admission.bases.work.key, familiesRouteState.route)
@@ -589,6 +629,7 @@ export async function admitFamilyAction(
             ...(sealed.executionOptions ? { executionOptions: sealed.executionOptions } : {}),
           },
           retire: sealed.consumed,
+          retirePatchNames,
           ...(key === "families.apply" && (sealed.consumed || readbackDocument)
             ? {
                 readbackWork: sealed.consumed?.key ?? admission.bases.work!.key,
@@ -607,6 +648,14 @@ export async function admitFamilyAction(
         const doc = familiesRouteState.schema.parse(view.doc);
         const scope = stagedFilter(doc);
         if (!scope) throw refused("Stage a scope before planning");
+        const hasCells = stagedEntries(doc.cells).length > 0;
+        if (doc.patch.staged && hasCells)
+          throw refused("Stage either a native Family Foundry patch or per-type cells, not both");
+        if (
+          doc.patch.staged &&
+          canonicalRouteInput(input.source) !== canonicalRouteInput(doc.patch.staged.value)
+        )
+          throw refused("Plan the exact native patch source staged in Families Work");
         const { specJson, source } = await familySpec(deps, input.source, pods);
         // A generated draft plans one family; it consumes that family's staged cells only if the
         // captured bytes are exactly what those cells generate.
@@ -614,10 +663,13 @@ export async function admitFamilyAction(
           input.familyNames?.length === 1
             ? familyStagedPatch(doc.cells, input.familyNames[0]!)
             : null;
-        const consumed =
+        const consumedCells =
           generated && canonicalRouteInput(generated.spec) === unstamped(rootText(source))
             ? consumedOf(base!.key, "families", doc.cells, generated.keys)
             : null;
+        const consumed: Consumed | null = doc.patch.staged
+          ? { key: base!.key, route: "families", cells: {}, patch: doc.patch.staged }
+          : consumedCells;
         if (consumed) {
           const observed = await captures.latestFamilies(base!.key);
           if (
@@ -933,6 +985,13 @@ export async function admitFamilyAction(
               receipt.success ? [receipt.familyName] : [],
             ),
           );
+          const converged = new Set(
+            (result as FamiliesApply.Res.Response).receipts.flatMap((receipt) =>
+              receipt.success && receipt.converged ? [receipt.familyName] : [],
+            ),
+          );
+          const patchConverged =
+            prepared.retirePatchNames?.every((name) => converged.has(name)) ?? false;
           // A family document applies its one family; Families retires per proven family only.
           const retiring: Consumed = {
             ...consumed,
@@ -942,6 +1001,7 @@ export async function admitFamilyAction(
                   consumed.route === "family" || succeeded.has(familyCellAddress(cell).familyName),
               ),
             ),
+            ...(consumed.patch && !patchConverged ? { patch: undefined } : {}),
           };
           const retired = await execution.step("publication", "work.retire", retiring, () =>
             retire(work, retiring, admission.actor),
@@ -1008,15 +1068,28 @@ async function retire(
   for (let attempt = 0; attempt < 3; attempt++) {
     const view = await work.read(consumed.key, route);
     if (!view) return { retired: [] as string[] };
-    const cells = (
-      view.doc as { cells: Record<string, { proposal?: Rung | null; staged?: Rung | null }> }
-    ).cells;
+    const document = view.doc as {
+      cells: Record<string, { proposal?: Rung | null; staged?: Rung | null }>;
+      patch?: { proposal?: Rung | null; staged?: Rung | null };
+    };
+    const cells = document.cells;
     const patches = Object.entries(consumed.cells).flatMap(([cell, rung]) =>
       cells[cell]
         ? transitionPatches(["cells"], cell, cells[cell]!, { kind: "retire", consumed: rung })
         : [],
     );
-    const retired = [...new Set(patches.map((patch) => String(patch.path[1])))];
+    if (consumed.patch && document.patch)
+      patches.push(
+        ...transitionPatches([], "patch", document.patch, {
+          kind: "retire",
+          consumed: consumed.patch,
+        }),
+      );
+    const retired = [
+      ...new Set(
+        patches.map((patch) => (patch.path[0] === "patch" ? "patch" : String(patch.path[1]))),
+      ),
+    ];
     if (!patches.length) return { retired, revision: view.revision };
     const landed = await work.apply(consumed.key, route, actor, patches, view.revision);
     if (landed.ok) return { retired, revision: landed.revision };

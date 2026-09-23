@@ -174,6 +174,11 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
     apply: "families.apply",
     targetReady: (ctx) => {
       if (ctx.page.stage === "archived") return "Archived readings are inspection only";
+      if (ctx.work.doc?.patch.staged && stagedDrafts(ctx.work.doc.cells).length)
+        return "Stage either a native Family Foundry patch or per-type cells, not both";
+      if (ctx.work.doc?.patch.staged && !ctx.work.doc.scope.staged)
+        return "stage a Families scope before planning the native patch";
+      if (ctx.work.doc?.patch.staged) return null;
       if (!stagedDrafts(ctx.work.doc?.cells ?? {}).length) return null;
       const read = ctx.page.reading;
       const target = documentOf(ctx);
@@ -208,13 +213,35 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
      * saves a copy of the draft, both only when pressed.
      */
     staged: {
-      cells: (ctx) => ctx.work.doc?.cells ?? {},
+      cells: (ctx) => ({
+        ...ctx.work.doc?.cells,
+        ...(ctx.work.doc?.patch.staged ? { patch: ctx.work.doc.patch } : {}),
+      }),
       plan: async (ctx) => {
         const doc = ctx.work.doc;
         if (!doc || ctx.work.revision === null) throw Error("author the route's Work first");
         const bases = { work: { key: ctx.work.key, revision: ctx.work.revision } };
         const entries: PlanEntry[] = [];
         const held: HeldRow[] = [];
+        if (doc.patch.staged) {
+          if (stagedDrafts(doc.cells).length)
+            throw Error("Stage either a native Family Foundry patch or per-type cells, not both");
+          const result = await workflow(
+            "families.plan",
+            {
+              source: doc.patch.staged.value,
+              ...(doc.executionOptions ? { executionOptions: doc.executionOptions } : {}),
+            },
+            ctx,
+            bases,
+          );
+          const rows = [result.plan].flat().map((plan) => ({
+            ...ffPlanRow(ffPlanEntrySchema.parse(plan)),
+            plan: String(result.id),
+          }));
+          const held = heldOf(result, rows);
+          return held.length ? { entries: rows, held } : { entries: rows };
+        }
         for (const draft of stagedDrafts(doc.cells, stagedSchema())) {
           const result = await workflow(
             "families.plan",
@@ -242,7 +269,7 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
       // One action per plan; the verb's outcome is every family's receipt, summed (F-J3-3/4).
       apply: (ctx, included) => applyFamiliesPlans(ctx, included, false),
     },
-    docs: "Read loaded families on request, stage reviewed values, then plan those cells as drafts or plan a saved Pod patch and apply the confirmed families.",
+    docs: "Read loaded families on request, stage reviewed per-type values or a native Family Foundry patch, then plan those exact bytes or a saved Pod member and apply the confirmed families.",
   };
 
 const familiesRoute = entityRoute<

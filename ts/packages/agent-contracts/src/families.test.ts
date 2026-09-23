@@ -57,6 +57,7 @@ describe("familiesRouteState", () => {
       scope: {},
       excluded: {},
       cells: {},
+      patch: {},
       takenAt: null,
     });
     // Old Work held a bare filter (or null) as its scope: it fails closed, never reads as unscoped.
@@ -66,10 +67,45 @@ describe("familiesRouteState", () => {
     // Pea may propose, but only a person stages: the scope too (F-J1-10).
     expect(familiesRouteState.agentWriteMask).toEqual([
       ["scope", "proposal"],
+      ["patch", "proposal"],
       ["excluded"],
       ["cells", "*", "proposal"],
       ["executionOptions"],
     ]);
+  });
+
+  it("accepts a native patch proposal as exact supplied bytes but does not let Pea stage it", () => {
+    const value = {
+      path: "proposed/duct-patch.json",
+      content: JSON.stringify({
+        $schema: "https://host/schemas/settings/FamilyFoundry/patches.json",
+        select: { names: ["Box", "Pipe"] },
+        patch: { parameters: { Width: { formula: "NeckOuterW" } } },
+      }),
+    };
+    const empty = familiesRouteState.schema.parse({});
+    const proposed = applyPatches(
+      familiesRouteState,
+      { version: 1, revision: 0, doc: empty },
+      "agent",
+      [{ path: ["patch", "proposal"], value: { value } }],
+      0,
+    );
+    expect(proposed.ok).toBe(true);
+    expect(
+      applyPatches(
+        familiesRouteState,
+        { version: 1, revision: 0, doc: empty },
+        "agent",
+        [{ path: ["patch", "staged"], value: { value } }],
+        0,
+      ).ok,
+    ).toBe(false);
+    expect(
+      familiesRouteState.schema.safeParse({
+        patch: { proposal: { value: { ...value, content: "{" } } },
+      }).success,
+    ).toBe(false);
   });
 
   it("encodes separator, quote, and unicode addresses as distinct canonical tuples", () => {

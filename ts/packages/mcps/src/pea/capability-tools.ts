@@ -351,6 +351,7 @@ async function executeTool(
       defaultTarget,
       requestIdentity(context),
       turnOf(context)?.id,
+      turnOf(context)?.thread,
       catalog,
     );
     const turn = turnOf(context);
@@ -377,6 +378,7 @@ async function dispatch(
   defaultTarget: Target,
   requestId: string,
   turnId?: string,
+  viewThread?: string,
   catalog?: CapabilityCatalog,
 ): Promise<Outcome> {
   const coerced = coerceJsonObject(input.input);
@@ -574,6 +576,61 @@ async function dispatch(
     }
     case "route-doc":
     case "route-command": {
+      if (row.key === "route:families.view" || row.key === "route:families.set-rules") {
+        if (!viewThread) throw Error("The admitted turn has no thread.");
+        const query = new URLSearchParams({ thread: viewThread });
+        if (row.key === "route:families.view" && typeof payload.instance === "string")
+          query.set("instance", payload.instance);
+        const response = await fetch(
+          `${base()}/pe/route-view/families${row.key.endsWith(".view") ? `?${query.toString()}` : "/set-rules"}`,
+          row.key.endsWith(".view")
+            ? undefined
+            : {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ ...payload, thread: viewThread }),
+              },
+        );
+        const result = (await response.json()) as Record<string, unknown>;
+        if (
+          row.key === "route:families.view" &&
+          response.ok &&
+          typeof result.readingId === "string"
+        ) {
+          const reference = await fetch(
+            `${base()}/families/readings?id=${encodeURIComponent(result.readingId)}&format=reference`,
+          );
+          if (reference.ok) {
+            const reading = (await reference.json()) as Record<string, unknown>;
+            const absolute = (entry: unknown) => {
+              if (
+                entry &&
+                typeof entry === "object" &&
+                typeof (entry as { url?: unknown }).url === "string"
+              )
+                (entry as { url: string }).url = new URL(
+                  (entry as { url: string }).url,
+                  base(),
+                ).toString();
+            };
+            absolute(reading.artifact);
+            absolute((reading.apsParametersCache as { artifact?: unknown } | undefined)?.artifact);
+            result.reading = reading;
+          } else
+            result.readingError = `Retained reading reference unavailable (${reference.status})`;
+        }
+        const observed = result.document as { session?: unknown } | undefined;
+        const work = result.work as { binding?: unknown; target?: unknown } | undefined;
+        return {
+          ok: response.ok,
+          target: {
+            session: typeof observed?.session === "string" ? observed.session : null,
+            document:
+              work?.binding === "address" && typeof work.target === "string" ? work.target : null,
+          },
+          result,
+        };
+      }
       const parsed = parseRouteKey(row.key);
       if (!parsed) throw new Error(`Malformed route key '${row.key}'.`);
       if (parsed.route === scheduleGridRouteState.route && !input.workspaceId)
@@ -603,6 +660,9 @@ async function dispatch(
         const result = await routeFetch(
           `/pe/route-state/${encodeURIComponent(parsed.route)}?${scope.query}`,
         );
+        if (parsed.route === familiesRouteState.route && !("isError" in result))
+          result.hint =
+            "This is authored Work. Read route:families.view for the currently visible matrix or archived reading; no matrix read is started.";
         // ponytail: families is the only route keyed by loaded Revit types; generalize when a second route needs it
         if (parsed.route !== familiesRouteState.route || "isError" in result)
           return { ok: !("isError" in result), target: scope.target, result };

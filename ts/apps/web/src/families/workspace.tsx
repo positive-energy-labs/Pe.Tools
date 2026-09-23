@@ -25,6 +25,7 @@ import { DEMO_FAMILIES } from "#/families/seeds";
 import { familyCellEntries } from "#/families/staged";
 import { familyVerdicts } from "#/families/verdict";
 import { typeRowKey } from "#/families/picks";
+import { FamiliesViewBridge } from "./view-bridge";
 
 const NO_CELLS: Record<string, FamilyCellState> = {};
 const NO_EXCLUDED = new Set<string>();
@@ -301,10 +302,23 @@ function useFamiliesWorkspaceModel(
 
 export type FamiliesWorkspaceModel = ReturnType<typeof useFamiliesWorkspaceModel>;
 
-export function FamiliesWorkspace({ store, url }: { store: FamiliesStore; url?: boolean }) {
+export function FamiliesWorkspace({
+  store,
+  url,
+  thread,
+  visible = true,
+  surface = "route",
+}: {
+  store: FamiliesStore;
+  url?: boolean;
+  thread?: string;
+  visible?: boolean;
+  surface?: "chat" | "route";
+}) {
   const model = useFamiliesWorkspaceModel(store, store.demo ? DEMO_FAMILIES : undefined);
   return (
     <FamiliesWorkspaceProvider value={model}>
+      <FamiliesViewBridge model={model} thread={thread} visible={visible} surface={surface} />
       <FamiliesWorkspaceView url={url} />
     </FamiliesWorkspaceProvider>
   );

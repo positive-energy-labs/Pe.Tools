@@ -313,7 +313,10 @@ function FamiliesActiveView({ url }: { url?: boolean }) {
       url={url}
       stages={FAMILIES_STAGES}
       targetRungs={store.page.stage === "audit" ? targetRungs : undefined}
-      auditPlan={Object.values(store.cells).some((cell) => cell.staged != null)}
+      auditPlan={
+        store.handle.work.doc?.patch.staged != null ||
+        Object.values(store.cells).some((cell) => cell.staged != null)
+      }
       subject={<>loaded families</>}
       health={matrixIssue?.title ?? null}
       band={

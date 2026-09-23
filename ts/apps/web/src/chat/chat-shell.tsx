@@ -125,7 +125,7 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
     [planIntent, store],
   );
   const focusPath = parseFocus(focus);
-  const host = useChatPluginHost(plugin, currentThreadId, intent, focusPath);
+  const host = useChatPluginHost(plugin, currentThreadId, intent, focusPath, pluginOpen);
 
   // Context gauges (cap + OM meters) ride beside the composer now, so the cache view is derived
   // here instead of inside the Lens. userTurns gates the diff baseline (advances on each send).

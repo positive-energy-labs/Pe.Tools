@@ -125,9 +125,15 @@ test("pe_find maps every kind and ranks and filters visible rows", async () => {
   expect((await find({})).map.kinds.map((row) => row.kind)).toEqual([
     "op",
     "route-doc",
+    "route-command",
     "pod",
     "skill",
   ]);
+  const view = (await find({ query: "visible families rules" })).matches;
+  expect(view.map((row) => row.key)).toContain("route:families.view");
+  expect(
+    catalog().capabilities.find((row) => row.key === "route:families.set-rules")?.mutates,
+  ).toBe(true);
   expect((await find({ query: "loaded families" })).matches[0]?.key).toBe(
     "op:revit.catalog.loaded-families",
   );
@@ -321,6 +327,89 @@ const run = (tool: ExecutableTool, input: unknown, admitted = turn) =>
       requestContext: { [turnContextKey]: admitted },
     } as never,
   );
+
+test("Families view Pea doors require a mounted pane and return an exact retained reference", async () => {
+  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
+  const instance = "00000000-0000-4000-8000-000000000001";
+  let mounted = false;
+  let stale = false;
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname === "/pe/capabilities") return Response.json(catalog());
+    if (url.pathname === "/pe/route-view/families" && !mounted)
+      return Response.json({ ok: false, error: "no mounted Families view" }, { status: 409 });
+    if (url.pathname === "/pe/route-view/families") {
+      expect(url.searchParams.get("thread")).toBe(turn.thread);
+      return Response.json({
+        instance,
+        revision: 2,
+        stage: "archived",
+        rules: "blank",
+        readingId: "r1",
+        document: { session: "s", openId: "o" },
+        work: { binding: "host", route: "families", target: null },
+        counts: { families: 2, types: 3, parameters: 4 },
+        ruleHelp: [{ insert: "blank", label: "blank", hint: "empty values" }],
+      });
+    }
+    if (url.pathname === "/families/readings") {
+      expect(url.searchParams.get("format")).toBe("reference");
+      return Response.json({
+        id: "r1",
+        artifact: { url: "/families/readings?id=r1&format=artifact" },
+        apsParametersCache: {
+          status: "ready",
+          artifact: { url: "/families/readings?id=r1&format=parameters-cache" },
+        },
+      });
+    }
+    if (url.pathname === "/pe/route-view/families/set-rules") {
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        thread: turn.thread,
+        instance,
+        revision: 2,
+        rules: "filled",
+      });
+      return Response.json(
+        stale
+          ? { ok: false, error: "view changed" }
+          : { ok: true, rules: "filled", counts: { families: 1, types: 2, parameters: 3 } },
+        { status: stale ? 409 : 200 },
+      );
+    }
+    throw Error(`unexpected ${url.pathname}`);
+  });
+  expect(await run(peRead, { key: "route:families.view", timeoutSeconds: 30 })).toMatchObject({
+    ok: false,
+  });
+  mounted = true;
+  const view = (await run(peRead, { key: "route:families.view", timeoutSeconds: 30 })) as {
+    result: {
+      document: { openId: string };
+      reading: { artifact: { url: string }; apsParametersCache: { artifact: { url: string } } };
+    };
+  };
+  expect(view.result.document.openId).toBe("o");
+  expect(view.result.reading.artifact.url).toBe(
+    "http://127.0.0.1:9/families/readings?id=r1&format=artifact",
+  );
+  expect(view.result.reading.apsParametersCache.artifact.url).toContain("http://127.0.0.1:9/");
+  expect(
+    await run(peDo, {
+      key: "route:families.set-rules",
+      input: { instance, revision: 2, rules: "filled" },
+      timeoutSeconds: 30,
+    }),
+  ).toMatchObject({ ok: true });
+  stale = true;
+  expect(
+    await run(peDo, {
+      key: "route:families.set-rules",
+      input: { instance, revision: 2, rules: "filled" },
+      timeoutSeconds: 30,
+    }),
+  ).toMatchObject({ ok: false });
+});
 
 test("pe_find reads native capabilities under an exact-open turn Target", async () => {
   // Name the host explicitly: without it `base()` discovers no running dev host for this

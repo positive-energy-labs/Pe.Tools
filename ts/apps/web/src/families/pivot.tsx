@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { ReadCell } from "#/components/master-table/cells";
 import { ListPopup } from "#/components/lang/list-popup";
@@ -19,6 +19,7 @@ import {
   type PivotRow,
 } from "#/families/pivot-rules";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
+import { ChatFocus } from "#/route/situation-ladder";
 
 const rowKey = (row: PivotRow) => row.key;
 
@@ -58,6 +59,7 @@ const identityColumns: Column<PivotRow>[] = [
 ];
 
 export function FamiliesPivot({ empty, above }: { empty?: ReactNode; above?: ReactNode }) {
+  const focus = useContext(ChatFocus);
   const {
     rows,
     params,
@@ -74,6 +76,20 @@ export function FamiliesPivot({ empty, above }: { empty?: ReactNode; above?: Rea
     [rows, params, families],
   );
   const rules = tableState.rules ?? DEFAULT_FAMILIES_RULES;
+  const focusKey = focus?.[0] ?? null;
+  const appliedFocus = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focusKey) {
+      appliedFocus.current = null;
+      return;
+    }
+    if (appliedFocus.current === focusKey) return;
+    const param = params.find((entry) => entry.key === focusKey);
+    if (param) {
+      appliedFocus.current = focusKey;
+      store.setPage({ rules: `p:${encodeURIComponent(param.name)}` });
+    }
+  }, [focusKey, params, store.setPage]);
   const filtered = useMemo(
     () => applyRules(rules, pivotRows, pivotFamilies),
     [rules, pivotRows, pivotFamilies],
@@ -158,6 +174,7 @@ export function FamiliesPivot({ empty, above }: { empty?: ReactNode; above?: Rea
               onChange={(event) => {
                 setRules(event.target.value);
                 setCaret(event.target.selectionStart ?? event.target.value.length);
+                setFocused(true);
               }}
               onSelect={(event) => setCaret(event.currentTarget.selectionStart ?? 0)}
               onFocus={() => setFocused(true)}
