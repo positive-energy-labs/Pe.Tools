@@ -86,7 +86,7 @@ export interface FamilyModel {
 // ── portable-literal + reference helpers ────────────────────────────────────────────────────────
 
 /** A portable length literal (`24in`, `2 1/2in`, `3ft`, `600mm`) in inches, or null. */
-export function inches(text: string | undefined): number | null {
+function inches(text: string | undefined): number | null {
   if (!text) return null;
   const number = String.raw`(?:\d+(?:\.\d+)?(?:\s+\d+/\d+)?|\d+/\d+)`;
   const value = (raw: string) =>
@@ -167,7 +167,7 @@ function evalLen(model: FamilyModel, typeName: string, raw: string | undefined):
 
 export type Axis = "x" | "y" | "z";
 
-export interface Vec3 {
+interface Vec3 {
   x: number | null;
   y: number | null;
   z: number | null;
@@ -219,7 +219,7 @@ const axisOf = (normal: string): Axis | null =>
  * equality dimension, so each type draws from its own numbers. A formula label does not resolve
  * here, so its planes keep their seeds.
  */
-export function planeGeos(model: FamilyModel, typeName: string): PlaneGeo[] {
+function planeGeos(model: FamilyModel, typeName: string): PlaneGeo[] {
   const planes = new Map<string, PlaneGeo>();
   for (const [slug, datum] of Object.entries(model.datums ?? {}))
     planes.set(slug, {

@@ -27,7 +27,7 @@ export interface ParameterLinksPage {
   view: "links" | "plan";
 }
 
-export const parameterLinksPageSchema = z.object({
+const parameterLinksPageSchema = z.object({
   view: z.enum(["links", "plan"]).default("links"),
 });
 

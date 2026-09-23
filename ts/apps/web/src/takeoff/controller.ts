@@ -32,12 +32,7 @@ import type { CellWire } from "#/components/lang/band";
 import { previousOf, useHostCall } from "#/readings";
 import { NATIVE_READ_WAIT_S } from "#/route/waits";
 import { useRoute } from "#/route/use-route";
-import {
-  DEMO_CANDIDATES,
-  snapshotOfObservation,
-  syncPlan,
-  type TakeoffReadingKey,
-} from "#/takeoff/actions";
+import { DEMO_CANDIDATES, snapshotOfObservation, syncPlan } from "#/takeoff/actions";
 import { readCandidates } from "#/takeoff/host";
 import { manifest } from "#/takeoff/manifest";
 import {
@@ -65,7 +60,7 @@ export interface TakeoffNavigation {
   readonly room: string | null;
 }
 
-export const EMPTY_TAKEOFF_SELECTION: TakeoffSelection = {
+const EMPTY_TAKEOFF_SELECTION: TakeoffSelection = {
   views: [],
   zones: [],
   r10: "",
@@ -112,7 +107,7 @@ const EMPTY_WORLD: TakeoffModel = { docName: "", r10Path: null, lanes: [], zones
  * writes. Staging an edit cell — typing, or accepting Pea's proposal — carries the base when the
  * room has none yet, read from the authoritative world.
  */
-export function withEditBases(
+function withEditBases(
   doc: { bases: Readonly<Record<string, unknown>> },
   world: { zones: readonly { rooms: readonly ModelRoom[] }[] },
   patches: RouteStatePatch[],
@@ -130,7 +125,7 @@ export function withEditBases(
   return [...bases, ...patches];
 }
 
-export const roomEdit = (room: ModelRoom): RoomEdit => ({
+const roomEdit = (room: ModelRoom): RoomEdit => ({
   name: room.name,
   type: room.type,
   ceilingFt: room.ceilingFt,
@@ -224,7 +219,7 @@ const compare = (a: string | number | undefined, b: string | number | undefined)
 };
 
 /** Authority geometry plus the staged room edits the Work doc carries. */
-export function stagedModel(
+function stagedModel(
   authority: TakeoffModel,
   staged: Readonly<Record<string, StagedRoomEdit>>,
 ): TakeoffModel {
@@ -237,7 +232,7 @@ export function stagedModel(
   };
 }
 
-export function atlasRows(
+function atlasRows(
   world: TakeoffModel,
   page: { zoneKey: string | null; stageFilter: TakeoffModel["zones"][number]["stage"] | null },
   decisions: Readonly<Record<string, "accept" | "dismiss">>,
@@ -290,7 +285,7 @@ export function visibleRowKeys(
 }
 
 /** A stamped designer region carries provenance; an unstamped one is named from the view. */
-export function adoptDrafts(
+function adoptDrafts(
   candidates: readonly CandidateRegion[],
   patches: Readonly<Record<string, Partial<AdoptDraft>>>,
 ): readonly AdoptDraft[] {
@@ -641,4 +636,3 @@ export function useTakeoffsController(options: {
 }
 
 export type TakeoffsController = ReturnType<typeof useTakeoffsController>;
-export type { TakeoffReadingKey };

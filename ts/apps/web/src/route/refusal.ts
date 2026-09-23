@@ -28,38 +28,6 @@ export interface Refusal {
 export const refuse = (code: RefusalCode, message: string, detail?: string): Refusal =>
   detail === undefined ? { code, message } : { code, message, detail };
 
-/** The order a caller must test in: the first reason that applies is the one it says. */
-export const REFUSAL_ORDER: readonly RefusalCode[] = [
-  "no-target",
-  "not-ready",
-  "stale-revision",
-  "busy",
-  "conflict",
-  "partial",
-  "failed",
-  "unknown",
-];
-
-export const firstRefusal = (candidates: readonly (Refusal | null)[]): Refusal | null =>
-  candidates
-    .filter((value): value is Refusal => value !== null)
-    .sort((a, b) => REFUSAL_ORDER.indexOf(a.code) - REFUSAL_ORDER.indexOf(b.code))[0] ?? null;
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
-/** A command result may report per-item failures beside an overall ok: that is `partial`. */
-export function partialRefusal(result: { result?: unknown }, noun: string): Refusal | null {
-  const failures = isRecord(result.result) ? result.result.failures : undefined;
-  if (!Array.isArray(failures) || failures.length === 0) return null;
-  const first = failures[0] as { key?: string; error?: string };
-  const detail = [first?.key, first?.error].filter((part) => typeof part === "string").join(": ");
-  return refuse(
-    "partial",
-    `${failures.length} ${noun}${failures.length === 1 ? "" : "s"} failed${detail ? `: ${detail}` : "."}`,
-  );
-}
-
 /** The host's typed write refusal, mapped onto the one vocabulary. */
 export function writeRefusal(result: RouteStateWriteResult): Refusal | null {
   if (result.ok) return null;
@@ -80,7 +48,7 @@ const names = (families: readonly string[] = []) => families.join(", ");
  * The Families door's refusal in the person's words: one sentence per `code`, built from its
  * structured parts only. `agentHint` is Pea's and is never read here.
  */
-export function doorSentence(refusal: FamiliesRefusal): string {
+function doorSentence(refusal: FamiliesRefusal): string {
   switch (refusal.code) {
     case "unknown-family-type":
       return (refusal.cells ?? [])

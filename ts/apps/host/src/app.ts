@@ -96,7 +96,7 @@ const bridgeEventsRoute = HttpRouter.add("GET", "/events", () =>
   }),
 );
 
-export const noRevitBoundary = () =>
+const noRevitBoundary = () =>
   Layer.mergeAll(
     HttpRouter.add("*", BRIDGE_PATH, emptyNotFound),
     HttpRouter.add("*", "/sessions", emptyNotFound),

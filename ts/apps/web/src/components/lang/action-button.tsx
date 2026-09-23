@@ -66,11 +66,8 @@ export const actionRecipe = tv({
   defaultVariants: { tone: "act" },
 });
 
-/** `nav` is separated out at the type level because it alone requires a `direction`. */
-export type ActionTone = "act" | "commit" | "nav" | "agent";
-
 /** The three directions browsers already taught. Each supplies its own arrow. */
-export type NavDirection = "back" | "forward" | "out";
+type NavDirection = "back" | "forward" | "out";
 
 const NAV_ICON: Record<NavDirection, LucideIcon> = {
   back: ArrowLeft,

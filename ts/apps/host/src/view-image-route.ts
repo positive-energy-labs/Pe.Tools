@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
 
 /** Where `RevitViewImageExporter` writes: `Path.GetTempPath()/pe-view-captures`, same user temp as this host. */
-export const viewImageRoot = () => join(tmpdir(), "pe-view-captures");
+const viewImageRoot = () => join(tmpdir(), "pe-view-captures");
 
 const shaPattern = /^\/view-image\/([0-9a-f]{64})\.png$/;
 
@@ -15,7 +15,7 @@ const shaPattern = /^\/view-image\/([0-9a-f]{64})\.png$/;
  * never a path; bytes are re-hashed on every read, so an overwritten or stale export 404s instead of drawing
  * under a registration it no longer matches.
  */
-export async function readViewImage(root: string, sha: string): Promise<Buffer | null> {
+async function readViewImage(root: string, sha: string): Promise<Buffer | null> {
   const names = await readdir(root).catch(() => [] as string[]);
   // ponytail: hashes every PNG in the root per request; key a name->(mtime,sha) memo if captures pile up.
   for (const name of names.filter((n) => n.endsWith(".png"))) {

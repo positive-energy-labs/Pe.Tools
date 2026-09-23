@@ -23,7 +23,7 @@ type MockStage =
   | "synced"
   | "drifted";
 
-export const STAGE_ORDER: MockStage[] = [
+const STAGE_ORDER: MockStage[] = [
   "declared",
   "registered",
   "partitioned",
@@ -33,7 +33,7 @@ export const STAGE_ORDER: MockStage[] = [
   "drifted",
 ];
 
-export type RoomType =
+type RoomType =
   | "bedroom"
   | "primary bedroom"
   | "full bath"
@@ -138,9 +138,9 @@ export interface MockModel {
   docName: string;
 }
 
-export const SENSIBLE_CAP_BTUH = 32_000;
+const SENSIBLE_CAP_BTUH = 32_000;
 
-export function assistData(type: RoomType, sqft: number, bedroomsInZone: number): MockRoomData {
+function assistData(type: RoomType, sqft: number, bedroomsInZone: number): MockRoomData {
   const lightingW = Math.round(0.25 * sqft);
   const people = type === "primary bedroom" ? 2 : type === "bedroom" ? 1 : 0;
   const equip: Record<string, [number, number]> = {
@@ -187,7 +187,7 @@ const ZONE_NAMES = [
 
 /** Synthetic declared zones for the seed world: three per zoning view, sized to hit every mock stage.
  * Loops are sheet inches. Real declared zones come from the private fixture (zones.json) via mock-geo. */
-export const SEED_ZONES: DeclaredZone[] = ["Lower", "Main", "Upper", "Attic"].flatMap((level, li) =>
+const SEED_ZONES: DeclaredZone[] = ["Lower", "Main", "Upper", "Attic"].flatMap((level, li) =>
   [
     [12, 20, "Transparent Cyan 4", "0,210,210"],
     [40, 30, "Transparent Magenta 2", "210,0,210"],

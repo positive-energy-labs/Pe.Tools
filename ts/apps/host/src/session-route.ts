@@ -7,7 +7,6 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { join } from "node:path";
 import {
   docCloneArgv,
-  docCloseArgv,
   docCurrentArgv,
   docOpenArgv,
   docRecentsArgv,
@@ -218,32 +217,7 @@ export function docCloneArgs(request: DocCloneRequest): string[] {
   return docCloneArgv(request);
 }
 
-type DocCloseRequest = {
-  readonly id: string;
-  readonly doc?: string;
-  readonly intent: string;
-};
-
-export function parseDocCloseRequest(
-  body: unknown,
-):
-  | { readonly ok: true; readonly request: DocCloseRequest }
-  | { readonly ok: false; readonly error: string } {
-  const record =
-    typeof body === "object" && body !== null && !Array.isArray(body)
-      ? (body as Record<string, unknown>)
-      : {};
-  const id = readOptionalString(record.id);
-  const intent = readOptionalString(record.intent);
-  if (!id || !intent) return { ok: false, error: "document close requires id and intent" };
-  return { ok: true, request: { id, intent, doc: readOptionalString(record.doc) } };
-}
-
-export function docCloseArgs(request: DocCloseRequest): string[] {
-  return docCloseArgv(request);
-}
-
-export function docCurrentArgs(id?: string | null, doc?: string | null): string[] {
+function docCurrentArgs(id?: string | null, doc?: string | null): string[] {
   return docCurrentArgv({ id: readOptionalString(id), doc: readOptionalString(doc) });
 }
 

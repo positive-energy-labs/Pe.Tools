@@ -51,10 +51,10 @@ export const semanticActionInputSchema = (key: SemanticActionKey): z.ZodType =>
   semanticActions[key].input;
 
 /** What a Reading key names: a fixed subject, or one selected by the route's current Page. */
-export type ReadingSpec<P> = ReadingRequest | ((page: P, work: WorkKey) => ReadingRequest | null);
+type ReadingSpec<P> = ReadingRequest | ((page: P, work: WorkKey) => ReadingRequest | null);
 
 /** What Work a route owns: the route-state spec that already carries schema, mask and commands. */
-export type WorkSpec<W> = RouteStateSpec<z.ZodType<W>>;
+type WorkSpec<W> = RouteStateSpec<z.ZodType<W>>;
 
 /** A call bound to a resolved ExecutionTarget. */
 export type HostCaller = (operation: string, input?: unknown) => Promise<unknown>;
@@ -81,7 +81,7 @@ export interface Ctx<W, R extends string, P> {
 }
 
 import { DEFAULT_WAIT_S, HOST_READ_WAIT_S, NATIVE_APPLY_WAIT_S, NATIVE_READ_WAIT_S } from "./waits";
-export { DEFAULT_WAIT_S, HOST_READ_WAIT_S, NATIVE_APPLY_WAIT_S, NATIVE_READ_WAIT_S };
+export { DEFAULT_WAIT_S, HOST_READ_WAIT_S, NATIVE_APPLY_WAIT_S };
 
 export interface RouteAction<W, R extends string, P, I = void> {
   label: string;
@@ -112,7 +112,7 @@ export interface RouteAction<W, R extends string, P, I = void> {
   run: (ctx: Ctx<W, R, P>, input: I) => Promise<void | Refusal | null>;
 }
 
-export interface View<R extends string> {
+interface View<R extends string> {
   key: string;
   label: string;
   draws: (props: { readonly readings: Readonly<Record<R, Reading<unknown>>> }) => ReactNode;
@@ -226,7 +226,7 @@ export interface EntityPage {
   sheet: PlanSheet | null;
 }
 
-export const entityPage = z.object({
+const entityPage = z.object({
   stage: z.enum(["audit", "capture", "apply"]).default("audit"),
   pod: z.string().default(""),
   path: z.string().default(""),
@@ -252,7 +252,7 @@ export type EntityView<W, R extends string, P> = Pick<
   "work" | "readings" | "page"
 >;
 
-export interface MemberSource extends MemberRef {
+interface MemberSource extends MemberRef {
   sha256: string;
 }
 
@@ -409,7 +409,7 @@ const podsOf = (view: Viewed) =>
   (previousOf(view.readings.pods) as readonly PodRow[] | undefined) ?? [];
 
 /** The saved member the page names, if the pod list holds it. */
-export const memberOf = (view: Viewed) =>
+const memberOf = (view: Viewed) =>
   podsOf(view)
     .find((row) => row.id === view.page.pod)
     ?.members.find((row) => row.path === view.page.path);

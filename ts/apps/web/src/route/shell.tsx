@@ -94,7 +94,7 @@ export function useHostLamp(enabled = true): Lamp {
   };
 }
 
-export function HostLamp({ live = true }: { live?: boolean }) {
+function HostLamp({ live = true }: { live?: boolean }) {
   const lamp = useHostLamp(live);
   return (
     <ArtifactFrame>

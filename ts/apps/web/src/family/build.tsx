@@ -82,18 +82,18 @@ export function buildOutputPath(_relativePath: string): string {
 }
 
 /** WHICH family, from WHICH document, to WHICH .rfa — the human-readable reason, in one line. */
-export function buildTarget(facts: BuildFacts, familyName: string): string {
+function buildTarget(facts: BuildFacts, familyName: string): string {
   if (facts.relativePath == null) return `${familyName} · no document open`;
   return `${familyName} · ${facts.relativePath} → ${buildOutputPath(facts.relativePath)}`;
 }
 
 /** The plan hash the refusal cites. The version token is it — see `superseded`. */
-export function buildPlanHash(versionToken: string | null): string {
+function buildPlanHash(versionToken: string | null): string {
   return versionToken == null ? "untokened" : `v${versionToken}`;
 }
 
 /** One host issue as words. Issues are `unknown` on the wire; a shape check beats a cast. */
-export function issueText(issue: unknown): string {
+function issueText(issue: unknown): string {
   if (typeof issue === "string") return issue;
   if (typeof issue === "object" && issue != null && "message" in issue)
     return String((issue as { message: unknown }).message);

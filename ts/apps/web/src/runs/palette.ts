@@ -1,8 +1,6 @@
 import law from "./visual-law.json";
 
 type Rgba = [number, number, number, number];
-
-export const VISUAL_LAW = law;
 export const PLAN_LAW = law.substrate.plan;
 export const INK_M = law.substrate.ink.rgba as Rgba;
 export const SEAL_DOOR = law.invented.sealDoor as Rgba;

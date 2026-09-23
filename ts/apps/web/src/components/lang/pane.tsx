@@ -22,7 +22,7 @@ import { tv, type VariantProps } from "#/lib/tv";
 
 import { Rail } from "./rail";
 
-export type PaneKind = "navigation" | "visual" | "content" | "inspector" | "flank";
+type PaneKind = "navigation" | "visual" | "content" | "inspector" | "flank";
 
 /** A pane chord, bound on the pane's own scope node. */
 export type PaneShortcut = ScopeKey;
@@ -418,4 +418,3 @@ function PaneChords({
 }
 
 export { PaneSplit } from "./pane-resize";
-export type { PaneCollapseSpec, PaneSizeSpec, PaneSplitProps } from "./pane-resize";

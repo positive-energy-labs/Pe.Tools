@@ -8,7 +8,7 @@ import type {
   RenderSchemaNode,
   SchemaNodeRef,
 } from "@pe/schema-core";
-import { getFieldOrder, readPathValue, type SchemaDocument } from "@pe/schema-core";
+import { readPathValue, type SchemaDocument } from "@pe/schema-core";
 import type { FieldChangeSummary } from "../field-state";
 
 export type FieldOptionItem = RevitCatalogFieldOptions.Res.FieldOptionItem;
@@ -31,7 +31,7 @@ export interface FieldRendererProps {
   node: RenderSchemaNode;
 }
 
-export interface FieldOptionDependencyState extends NormalizedRenderFieldOptionDependency {
+interface FieldOptionDependencyState extends NormalizedRenderFieldOptionDependency {
   value?: string;
 }
 
@@ -59,7 +59,7 @@ export interface ResolvedFieldRendererProps extends FieldRendererProps {
   placeholder?: string;
 }
 
-export interface SchemaRenderContextValue {
+interface SchemaRenderContextValue {
   values: SettingsValues;
   onChange: (path: string, value: unknown) => void;
   errors: ReadonlyMap<string, MemberIssue[]>;
@@ -68,7 +68,7 @@ export interface SchemaRenderContextValue {
   optionsFrom?: DocumentRef | null;
 }
 
-export const SchemaRenderContext = createContext<SchemaRenderContextValue | null>(null);
+const SchemaRenderContext = createContext<SchemaRenderContextValue | null>(null);
 
 export function SchemaRenderProvider({
   values,
@@ -129,10 +129,6 @@ export function useSettingsField(path: string) {
   };
 }
 
-export function useSchemaRoot() {
-  return useSchemaDocument().rawRoot();
-}
-
 export function useSchemaDocument() {
   return useSchemaRenderContext().schemaDocument;
 }
@@ -160,26 +156,11 @@ export function primitiveInputValue(value: unknown): string {
     : "";
 }
 
-export function objectEntriesSorted(
-  properties: Record<string, RenderSchemaNode>,
-): Array<[string, RenderSchemaNode]> {
-  return Object.entries(properties).sort(([aKey, aNode], [bKey, bNode]) => {
-    const aOrder = Number(getFieldOrder(aNode) ?? 10_000);
-    const bOrder = Number(getFieldOrder(bNode) ?? 10_000);
-
-    if (aOrder !== bOrder) {
-      return aOrder - bOrder;
-    }
-
-    return aKey.localeCompare(bKey);
-  });
-}
-
 export function buildDefaultArrayItem(itemNode: SchemaNodeRef | undefined) {
   return itemNode?.defaultValue() ?? {};
 }
 
-export function serializeContextValue(value: unknown): string | undefined {
+function serializeContextValue(value: unknown): string | undefined {
   if (value === undefined || value === null) {
     return undefined;
   }
@@ -196,13 +177,13 @@ export function serializeContextValue(value: unknown): string | undefined {
   return JSON.stringify(value);
 }
 
-export function getParentObjectPath(fieldPath: string) {
+function getParentObjectPath(fieldPath: string) {
   const parts = fieldPath.split(".");
   parts.pop();
   return parts.join(".");
 }
 
-export function resolveContextDependencyValue(
+function resolveContextDependencyValue(
   dependency: NormalizedRenderFieldOptionDependency,
   fieldPath: string,
   allValues: SettingsValues,

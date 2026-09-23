@@ -14,14 +14,14 @@ import { tv } from "#/lib/tv";
 
 /** Collapse leaves the pane's own chrome visible (`collapsedSize` ≈ toolbar height) so the
  * re-expand affordance lives IN the pane — no separate rail node to design. */
-export interface PaneCollapseSpec {
+interface PaneCollapseSpec {
   collapsed?: boolean;
   onCollapsedChange?: (collapsed: boolean) => void;
   collapsedSize?: number;
   collapseBelow?: number;
 }
 
-export interface PaneSizeSpec {
+interface PaneSizeSpec {
   defaultSize: number;
   minSize: number;
   maxSize?: number;
@@ -64,7 +64,7 @@ function storedSize(spec: PaneSizeSpec) {
   }
 }
 
-export function usePaneSize(spec: PaneSizeSpec): PaneSizeState {
+function usePaneSize(spec: PaneSizeSpec): PaneSizeState {
   const [internalSize, setInternalSize] = useState(() => storedSize(spec));
   const [collapsedInternal, setCollapsedInternal] = useState(false);
   const size = clampSize(internalSize, spec);
@@ -129,7 +129,7 @@ export function usePaneSize(spec: PaneSizeSpec): PaneSizeState {
 
 /** Keep a pane size honest against its measured container — at mount and on every container
  * resize — closing the gap where a persisted size starves the other side until first drag. */
-export function usePaneFit(
+function usePaneFit(
   ref: React.RefObject<HTMLDivElement | null>,
   measure: (rect: DOMRectReadOnly) => void,
 ) {

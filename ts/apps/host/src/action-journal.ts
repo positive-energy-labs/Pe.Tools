@@ -90,7 +90,7 @@ export class ActionIncomplete extends Error {
 }
 
 /** What ended an attempt: its executor returned or threw, recovery read receipts, or the host stopped. */
-export type SettleCause =
+type SettleCause =
   | { kind: "returned"; result: unknown }
   | { kind: "threw"; error: unknown }
   | { kind: "recovered" }
@@ -107,7 +107,7 @@ type Settled = { state: Exclude<ActionReceipt["state"], "running"> } & Record<st
  * - with no effect, a failure is failed and not dispatched.
  * `null` means recovery proved nothing new and the attempt keeps its state.
  */
-export function settle(
+function settle(
   prepared: boolean,
   steps: readonly ActionStep[],
   cause: SettleCause,

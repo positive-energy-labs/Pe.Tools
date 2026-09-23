@@ -21,16 +21,16 @@ export function whySentence(layers: Layer[], cache: CacheView, reprocessed: numb
   )} reprocessed at full price). Layers above the horizon stayed cache-warm.`;
 }
 
-export const BAR =
+const BAR =
   "relative flex h-[13px] items-stretch overflow-hidden rounded-sm border-[0.5px] border-line-2 on-page";
 
-export const BAR_WIN = "relative min-w-[2px] border-l-[0.5px] border-line";
+const BAR_WIN = "relative min-w-[2px] border-l-[0.5px] border-line";
 
-export const BAR_FILL = "absolute inset-y-0 left-0";
+const BAR_FILL = "absolute inset-y-0 left-0";
 
-export const BAR_TRIG = "absolute inset-y-0 right-0 w-0 border-r-[0.5px] border-line-2";
+const BAR_TRIG = "absolute inset-y-0 right-0 w-0 border-r-[0.5px] border-line-2";
 
-export function BudgetBar({
+function BudgetBar({
   breakdown,
   cache,
   className = BAR,

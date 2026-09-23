@@ -17,7 +17,7 @@ type WorldCacheState = {
   baseline: Map<string, string> | null;
 };
 
-export function createCurrentThreadView(deps: {
+function createCurrentThreadView(deps: {
   registry: AtomRegistry.AtomRegistry;
   turn?: number;
   patch: (partial: { turn?: number }, replace?: boolean) => Promise<void>;

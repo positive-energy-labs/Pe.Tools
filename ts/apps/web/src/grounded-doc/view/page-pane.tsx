@@ -31,7 +31,7 @@ export function PagePane({
   );
 }
 
-export function PageCanvas({
+function PageCanvas({
   page,
   engine,
   refs,

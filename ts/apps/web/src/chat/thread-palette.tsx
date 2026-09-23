@@ -49,18 +49,6 @@ function ThreadActions({
   );
 }
 
-export function ThreadEmpty() {
-  return (
-    <main className="grid min-h-screen place-items-center font-sans" data-surface="page">
-      <a href="/chat" className="veil rounded-sm px-3 py-2">
-        <EmptyState story="scope" exit="open the thread palette">
-          pick or start a thread
-        </EmptyState>
-      </a>
-    </main>
-  );
-}
-
 /**
  * Always-on sidebar thread list — the `threads` mode body, on the one list. Shows the 5 most
  * recent; everything else lives behind the ⌘K palette (onSearch). New/search live here.

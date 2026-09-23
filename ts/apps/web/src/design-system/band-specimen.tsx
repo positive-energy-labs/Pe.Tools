@@ -50,7 +50,7 @@ export const matrixWire = (write: CellWire["write"]): CellWire => ({
 });
 
 /** One address as every consumer reads it: the reader's marks plus the cell's own verbs. */
-export function cellState({ cells, wire, outcome }: Matrix, key: string): StateCellProps {
+function cellState({ cells, wire, outcome }: Matrix, key: string): StateCellProps {
   const cell = cells[key] ?? {};
   const lock = LOCKS[key] ?? null;
   return {
@@ -159,7 +159,7 @@ const matrixGroupOf = (key: string) => {
 };
 
 /** The matrix as the Chat head reads it: the same cells, wire and group path as the table. */
-export const matrixHeadWork = (matrix: Matrix, say: (text: string) => void): HeadWork => ({
+const matrixHeadWork = (matrix: Matrix, say: (text: string) => void): HeadWork => ({
   id: "families:MEP Coordination.rvt",
   route: "Families",
   subject: "MEP Coordination.rvt",

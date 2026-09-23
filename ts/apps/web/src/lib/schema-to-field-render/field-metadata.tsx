@@ -94,7 +94,7 @@ function FieldMetadataTooltip({
   );
 }
 
-export function FieldChangeBadge({ path, compact = false }: { path?: string; compact?: boolean }) {
+function FieldChangeBadge({ path, compact = false }: { path?: string; compact?: boolean }) {
   const change = useFieldChangeSummary(path ?? "");
   if (!path || !change) {
     return null;

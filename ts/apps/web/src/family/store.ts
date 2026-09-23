@@ -53,7 +53,7 @@ const next = <A>(value: Setter<A>, previous: A): A =>
 
 export type Inspect = { kind: "part"; slug: string } | { kind: "param"; name: string } | null;
 export type Binding = { slug: string; property: string } | null;
-export type ArmedBuild = { token: string | null; reason: string } | null;
+type ArmedBuild = { token: string | null; reason: string } | null;
 export type PickerState = { open: string | null; level: string | null; query: string };
 
 const emptyTable = (): TableState => ({ filters: {}, sorts: [], query: "" });
@@ -110,7 +110,7 @@ const absentFacts: FamilyAuthoringFacts = {
 /* ── Pure projections ──────────────────────────────────────────────────────── */
 
 /** The last succeeded `family.apply` receipt, folded onto the projection. */
-export function applyOnto(
+function applyOnto(
   projection: Omit<FamilyDocument, "plan">,
   statuses: unknown,
   receipts: unknown,

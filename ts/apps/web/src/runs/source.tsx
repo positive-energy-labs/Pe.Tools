@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext } from "react";
 
 import { runExport } from "./feedback/export";
 import { hydrateFromSet } from "./feedback/hydrate";
@@ -14,7 +14,7 @@ import {
   poolModalZones,
 } from "./world";
 
-export const liveRunsSource = {
+const liveRunsSource = {
   fetchRunIndex,
   loadRunReport,
   loadRunScores,
@@ -33,15 +33,5 @@ export const liveRunsSource = {
 export type RunsSource = typeof liveRunsSource;
 
 const RunsSourceContext = createContext<RunsSource>(liveRunsSource);
-
-export function RunsSourceProvider({
-  source,
-  children,
-}: {
-  source: RunsSource;
-  children: ReactNode;
-}) {
-  return <RunsSourceContext.Provider value={source}>{children}</RunsSourceContext.Provider>;
-}
 
 export const useRunsSource = () => useContext(RunsSourceContext);

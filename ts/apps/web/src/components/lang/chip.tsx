@@ -50,7 +50,7 @@ export const chipRecipe = tv({
 });
 
 /** The meaning roles a fact may wear. No chip-only hues exist, by design. */
-export type FactTone = "meta" | "caution" | "done" | "alarm" | "pea";
+type FactTone = "meta" | "caution" | "done" | "alarm" | "pea";
 
 export interface FactChipProps {
   children: React.ReactNode;

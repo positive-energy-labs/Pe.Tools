@@ -8,10 +8,6 @@ if (!root) throw new Error(`apps/web is not inside a Pe.Tools checkout (${import
 
 export const checkoutRoot = root;
 
-/** Client fixtures live outside the tree; `PE_PRIVATE_FIXTURES` points elsewhere when needed. */
-export const privateFixturesDir =
-  process.env.PE_PRIVATE_FIXTURES ?? join(root, ".private", "fixtures");
-
 /** The authored family fixtures, owned by the C# test project. */
 export const familyFixturesDir = join(
   root,

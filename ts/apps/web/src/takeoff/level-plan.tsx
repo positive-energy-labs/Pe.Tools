@@ -35,13 +35,13 @@ export interface TakeoffPlanImage {
  * (tx + s·x, ty − s·y), which is `toPx` with pxPerFt = s, minX = −tx/s, maxY = ty/s: the SVG's
  * own frame, handed to `planCanvasTransform` unchanged. Revit's registration stays the authority.
  */
-export function planViewport(frame: AffineFrame) {
+function planViewport(frame: AffineFrame) {
   const [tx, ty] = frame.toViewport([0, 0]);
   return { minX: -tx / frame.scale, maxY: ty / frame.scale, pxPerFt: frame.scale };
 }
 
 /** The one plan image layer, under the zones, in the zones' coordinate frame. */
-export function PlanImageLayer({ plan, frame }: { plan: TakeoffPlanImage; frame: AffineFrame }) {
+function PlanImageLayer({ plan, frame }: { plan: TakeoffPlanImage; frame: AffineFrame }) {
   const { registration } = plan;
   return (
     <image

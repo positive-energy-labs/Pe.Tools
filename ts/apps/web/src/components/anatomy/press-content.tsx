@@ -1,6 +1,6 @@
 import { tv, type VariantProps } from "#/lib/tv";
 
-export const pressContentRecipe = tv({
+const pressContentRecipe = tv({
   variants: {
     geometry: {
       row: "flex w-full items-center gap-2 px-2 py-1.5 text-left",

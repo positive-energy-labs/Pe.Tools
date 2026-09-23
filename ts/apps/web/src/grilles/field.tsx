@@ -4,7 +4,7 @@ import { Input } from "#/components/lang/input";
 import { frac } from "./math";
 
 /** Parses `5/8`, `1 1/2`, `0.625`. */
-export function parseInches(s: string): number | null {
+function parseInches(s: string): number | null {
   const t = s.trim().replace(/[″"]/g, "");
   const m = /^(-?\d+)?\s*(?:(\d+)\/(\d+))?$/.exec(t);
   if (m && (m[1] || m[2])) {

@@ -73,7 +73,7 @@ export interface Verdict {
  * one-word reading (`cellStateLabel`); `sort` defaults to attention order (`CELL_STATE_ORDER`).
  * Either can still be supplied to override.
  */
-export interface StateColumn<Row> extends ColumnBase<Row> {
+interface StateColumn<Row> extends ColumnBase<Row> {
   state: (row: Row) => StateCellProps;
   /**
    * Domain vocabulary override (ruled 2026-08-16, takeoffs finding #1): the word the filter,
@@ -98,7 +98,7 @@ export interface StateColumn<Row> extends ColumnBase<Row> {
  * facet and sort default to the word. This clause replaces and deletes `stateColumn`, the
  * last parallel cell-state renderer.
  */
-export interface VerdictColumn<Row> extends ColumnBase<Row> {
+interface VerdictColumn<Row> extends ColumnBase<Row> {
   verdict: (row: Row) => Verdict;
   state?: never;
   word?: never;
@@ -108,13 +108,13 @@ export interface VerdictColumn<Row> extends ColumnBase<Row> {
 /** Exactly one of `cell`, `state` and `verdict` — a column draws a body or declares one. */
 export type Column<Row> = ValueColumn<Row> | StateColumn<Row> | VerdictColumn<Row>;
 
-export interface SortKey {
+interface SortKey {
   key: string;
   dir: "asc" | "desc";
 }
 
 /** Column filters, keyed by column key. A key is absent when that column is unfiltered. */
-export type Filters = Record<string, string>;
+type Filters = Record<string, string>;
 
 /** Route-ownable table state. Supplying it lets Pea read and drive the exact visible model. */
 export interface TableState {
@@ -149,4 +149,4 @@ export function facetOptions<Row>(
 /** The numeric-cell semantics moved into the language with the editor (fit reviews 2026-08-16,
  * #2 — `StateCell.numeric` is the one commit path now). Re-exported so table consumers keep
  * their import site. */
-export { fmtNum, parseCell } from "#/components/lang/cell";
+export { fmtNum } from "#/components/lang/cell";

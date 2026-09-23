@@ -57,7 +57,7 @@ import {
  * 2026-09-01, variant E round).
  */
 
-export type ClusterEvent = { readonly atMs: number; readonly label: string };
+type ClusterEvent = { readonly atMs: number; readonly label: string };
 
 type DocFact = {
   readonly id: string;
@@ -81,7 +81,7 @@ const documentScope = (session: string, document: string): DocumentScope | null 
   session && document ? { kind: "document", document, pin: session } : null;
 
 /** `session start --id` accepts ≤64 chars of letters, digits, `.`, `-`, `_`. */
-export const sessionIdOf = (name: string) =>
+const sessionIdOf = (name: string) =>
   name
     .trim()
     .toLowerCase()

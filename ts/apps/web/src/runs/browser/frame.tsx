@@ -28,7 +28,7 @@ export function levelViewport(f: Frame): ZoneViewport {
   };
 }
 
-export function rasterFrame(r: Raster): Frame {
+function rasterFrame(r: Raster): Frame {
   return {
     minX: r.minX,
     minY: r.minY,
@@ -48,12 +48,9 @@ export function levelFrame(level: string, source: Frame): Frame {
   return f;
 }
 
-export const levelCanvasCache = new Map<
-  string,
-  Promise<{ canvas: HTMLCanvasElement; ink: Raster }>
->();
+const levelCanvasCache = new Map<string, Promise<{ canvas: HTMLCanvasElement; ink: Raster }>>();
 
-export function loadLevelCanvas(
+function loadLevelCanvas(
   runId: string,
   zone: ZoneRecord,
   source: RunsSource,

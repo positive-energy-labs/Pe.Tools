@@ -1,6 +1,6 @@
 import type { ContextBreakdown, ContextItem, ContextSegment } from "./chat-state";
 
-export const REQUEST_RANK: Record<string, number> = {
+const REQUEST_RANK: Record<string, number> = {
   tools: 0,
   "system-prompt": 1,
   skills: 1,
@@ -9,7 +9,7 @@ export const REQUEST_RANK: Record<string, number> = {
   free: 9,
 };
 
-export function rankOf(id: string): number {
+function rankOf(id: string): number {
   return REQUEST_RANK[id] ?? 1;
 }
 
@@ -22,7 +22,7 @@ export interface CacheView {
   stateOf: (id: string) => CacheState;
 }
 
-export function segSignature(segment: ContextSegment): string {
+function segSignature(segment: ContextSegment): string {
   const items = (segment.items ?? []).map((item) => `${item.name}:${item.tokens ?? ""}`).join("~");
   return `${Math.round(segment.tokens)}|${items}`;
 }

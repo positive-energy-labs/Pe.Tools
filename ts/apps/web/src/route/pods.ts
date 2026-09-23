@@ -5,7 +5,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { actionAdmissionSchema, type Reading } from "@pe/agent-contracts";
 import type {
-  MemberIssue,
   PodMemberComposeResponse,
   PodMemberWritten,
 } from "@pe/host-contracts/operation-types";
@@ -13,8 +12,6 @@ import type {
 import { composeMember, listPods, listRuns, readMember } from "#/host/pods";
 import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type { MemberRef, PodRow } from "./manifest";
-
-export type Diagnostic = MemberIssue;
 export type Composed = PodMemberComposeResponse;
 
 /** A host-local mutation: admitted under an id, its receipt is the truth of what happened. */

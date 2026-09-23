@@ -39,7 +39,7 @@ export const standingFilterProposal = (scope: FamiliesRouteDocument["scope"]) =>
  * its verbs are exactly the contract's (`reviewTransitions`). A person's own apply stages beside
  * it, so a differing proposal stays drawn as the counter-proposal.
  */
-export function PeaFilterProposal({
+function PeaFilterProposal({
   scope,
   wire,
 }: {

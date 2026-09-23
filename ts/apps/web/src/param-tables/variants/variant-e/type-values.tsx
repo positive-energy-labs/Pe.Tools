@@ -2,7 +2,7 @@ import { token } from "#/lib/token";
 import { type OutcomeKind } from "#/components/lang/outcome";
 import { FC_UNITS, PARAM_META, type FcRow, type ParamMeta } from "#/param-tables/variants/data";
 
-export interface TypeVals {
+interface TypeVals {
   ewt: number;
   lwt: number;
 }
@@ -35,7 +35,7 @@ export const initialModel = (): Model =>
 
 export type FactKey = "heatEwt" | "heatLwt" | "odtWinter";
 
-export interface Fact {
+interface Fact {
   label: string;
   unit: string;
   value: number;
@@ -70,7 +70,7 @@ export interface Link {
   set: (v: TypeVals, n: number) => TypeVals;
 }
 
-export const param = (name: string): ParamMeta => {
+const param = (name: string): ParamMeta => {
   const found = PARAM_META.find((p) => p.name === name);
   if (found == null) throw new Error(`unknown param ${name}`);
   return found;

@@ -73,7 +73,7 @@ const targetHeaders = (target: ExecutionTarget) =>
  * The one place a registry is constructed (fable law 5). `?demo=` owners get their own isolated
  * registry from here rather than reaching for `AtomRegistry.make` a second time.
  */
-export const makeAtomRegistry = (options?: Parameters<typeof AtomRegistry.make>[0]) =>
+const makeAtomRegistry = (options?: Parameters<typeof AtomRegistry.make>[0]) =>
   AtomRegistry.make(options);
 
 /** The app's one registry. Was `state/registry.ts`. */
@@ -335,8 +335,6 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
   };
 }
 
-export type RouteOwner = ReturnType<typeof createRouteOwner>;
-
 /** One page-log line. `refused` draws the caution hue; the text is the whole reason. */
 export interface LogEntry {
   readonly at: string;
@@ -496,7 +494,7 @@ function docAtom<S extends RouteStateSpec<any>>(
 
 const notHydrated = refuse("not-ready", "route document is not hydrated");
 
-export function docWriter<S extends RouteStateSpec<any>>(
+function docWriter<S extends RouteStateSpec<any>>(
   spec: S,
   key: WorkKey,
   registry: AtomRegistry.AtomRegistry,
@@ -607,7 +605,7 @@ export interface ActionHandle {
 }
 
 /** What the last run of an action left behind: the action, and its refusal or nothing. */
-export interface RouteOutcome<A extends string> {
+interface RouteOutcome<A extends string> {
   readonly key: A;
   readonly label: string;
   readonly refusal: Refusal | null;
@@ -681,7 +679,7 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
   revalidate(keys: readonly R[]): void;
 }
 
-export interface BindingLost {
+interface BindingLost {
   readonly ref: { readonly session: string; readonly openId: string };
   readonly title: string | null;
   readonly sentence: string;

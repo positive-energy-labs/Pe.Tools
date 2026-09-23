@@ -100,7 +100,7 @@ const latestApplyStatusOf = (statuses: unknown) => latestStatusOf(statuses, "fam
  * What the last capture saw, from its original receipt: the members it filed and, per family,
  * coverage, unmodeled facts and failures. Null when the receipt is not a finished capture.
  */
-export function captureEvidenceOf(receipts: unknown, id: string) {
+function captureEvidenceOf(receipts: unknown, id: string) {
   const row = (receipts as { id: string; result?: unknown }[] | undefined)?.find(
     (entry) => entry.id === id,
   );
@@ -111,7 +111,7 @@ export function captureEvidenceOf(receipts: unknown, id: string) {
 }
 
 /** The last succeeded `families.apply` receipt, projected. Never Work: the receipt is the record. */
-export function applyDataOf(statuses: unknown, receipts: unknown) {
+function applyDataOf(statuses: unknown, receipts: unknown) {
   const row = latestApplyStatusOf(statuses);
   if (!row || !receipts) return null;
   const parsed = actionReceiptSchema

@@ -264,7 +264,7 @@ export function SyncPanel({ store }: { store: TakeoffsController }) {
   );
 }
 
-export function Panel({
+function Panel({
   title,
   onClose,
   children,

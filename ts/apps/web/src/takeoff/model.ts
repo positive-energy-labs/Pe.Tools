@@ -7,16 +7,8 @@ export interface DeclaredZone {
   loops: [number, number][][];
 }
 import { boundsOf, type AffineFrame, type Bounds2 } from "#/lib/affine-frame";
-import type { DetectedRoom, LiveRegion, PartitionRun } from "@pe/agent-contracts";
 
-export type {
-  CandidateRegion,
-  DetectedRoom,
-  LiveRegion,
-  PartitionRun,
-  RegistrySystem,
-  ViewFacts,
-} from "@pe/agent-contracts";
+export type { CandidateRegion } from "@pe/agent-contracts";
 
 interface LevelLane {
   view: string;
@@ -52,8 +44,6 @@ const LEVEL_LANES: LevelLane[] = [
   },
 ];
 
-export const DEFAULT_ARTIFACT_DIR = "%USERPROFILE%\\OneDrive\\Documents\\Pe.Tools\\takeoff";
-
 export interface Zone extends Omit<DeclaredZone, "color"> {
   color: string;
   lane: LevelLane;
@@ -64,10 +54,10 @@ export interface Zone extends Omit<DeclaredZone, "color"> {
   bounds: Bounds2;
 }
 
-export const zoneGuid = (levelIndex: number, ordinal: number) =>
+const zoneGuid = (levelIndex: number, ordinal: number) =>
   `7a4e0000-0000-4000-8000-${String(levelIndex).padStart(6, "0")}${String(ordinal).padStart(6, "0")}`;
 
-export const shoelace = (loop: readonly (readonly [number, number])[]) => {
+const shoelace = (loop: readonly (readonly [number, number])[]) => {
   let sum = 0;
   for (let i = 0; i < loop.length; i++) {
     const a = loop[i]!;
@@ -135,71 +125,6 @@ export function buildZones(declared: DeclaredZone[]): Zone[] {
       });
   });
   return zones;
-}
-
-type ZoneStage = "unregistered" | "registered" | "partitioned";
-
-export const zoneStage = (tags: string[], materializedRooms: number): ZoneStage =>
-  materializedRooms > 0 ? "partitioned" : tags.length > 0 ? "registered" : "unregistered";
-
-export function regionForRoom(room: DetectedRoom, regions: LiveRegion[]): LiveRegion | undefined {
-  return regions.find(
-    (region) =>
-      region.role === "room-region" &&
-      containsEvenOdd([region.outer, ...region.holes], room.label[0], room.label[1]),
-  );
-}
-
-interface DecisionRow {
-  key: string;
-  kind: "flag" | "orphan" | "failure";
-  subject: string;
-  flag: string;
-  detail: string;
-  sqft: number | null;
-  elementId: number | null;
-}
-
-export function decisionRows(run: PartitionRun): DecisionRow[] {
-  const rows: DecisionRow[] = [];
-  const claimed = new Set<number>();
-  for (const room of run.rooms) {
-    const region = regionForRoom(room, run.regions);
-    if (region) claimed.add(region.elementId);
-    for (const flag of room.flags)
-      rows.push({
-        key: `flag:${room.id}:${flag}`,
-        kind: "flag",
-        subject: room.id,
-        flag,
-        detail: FLAG_MEANING[flag] ?? flag,
-        sqft: room.rawSqft,
-        elementId: region?.elementId ?? null,
-      });
-  }
-  for (const region of run.regions) {
-    if (region.role !== "room-region" || claimed.has(region.elementId)) continue;
-    rows.push({
-      key: `orphan:${region.guid}`,
-      kind: "orphan",
-      subject: region.guid.slice(0, 8),
-      flag: "orphaned-region",
-      detail: "this rerun claimed no room here — the designer's region stands until accepted",
-      sqft: region.sqft,
-      elementId: region.elementId,
-    });
-  }
-  for (const failure of run.failures)
-    rows.push({
-      key: `failure:${failure}`,
-      kind: "failure",
-      subject: failure.split(":")[0] ?? failure,
-      flag: "materialize-failed",
-      detail: failure,
-      sqft: null,
-      elementId: null,
-    });
-  return rows;
 }
 
 export const FLAG_MEANING: Record<string, string> = {

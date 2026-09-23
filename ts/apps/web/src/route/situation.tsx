@@ -246,7 +246,7 @@ export const ChatHosted = createContext(false);
  * Refusals are the action's own: they land in the route's page log, and go back to the head
  * where plan was pressed (F-B-5).
  */
-export function useChatPlanIntent(
+function useChatPlanIntent(
   handle: Pick<RouteHandle<any, any, any, any>, "manifest" | "work">,
   commit: ActionHandle | undefined,
 ) {

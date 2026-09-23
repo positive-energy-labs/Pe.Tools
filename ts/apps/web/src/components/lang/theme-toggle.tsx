@@ -79,5 +79,3 @@ export function ThemeToggle() {
     </Press>
   );
 }
-
-export default ThemeToggle;

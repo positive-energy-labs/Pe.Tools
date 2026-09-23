@@ -28,7 +28,7 @@ export function useDeferredToolResult(call: ToolCall, enabled: boolean) {
   };
 }
 
-export async function loadDeferredToolResult(
+async function loadDeferredToolResult(
   origin: string,
   threadId: string,
   ref: DeferredToolResultRef,

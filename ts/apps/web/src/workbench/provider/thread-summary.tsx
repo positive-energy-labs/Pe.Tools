@@ -9,8 +9,6 @@ import type * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import type { ThreadBody } from "../chat-state";
 
-export type { WorkbenchAttachment } from "../prompt";
-
 export interface StoredThreadSummary {
   id: string;
   title: string;

@@ -123,7 +123,7 @@ export type HostBridgeEvent = {
 /** Backpressure cap for transient world notifications; current state remains query-owned. */
 const EVENT_STREAM_CAPACITY = 500;
 
-export function getBridgeRegistrationRejection(registration: BridgeRegistrationRequest) {
+function getBridgeRegistrationRejection(registration: BridgeRegistrationRequest) {
   return registration.contractVersion === BRIDGE_CONTRACT_VERSION
     ? null
     : `Unsupported bridge contract version '${registration.contractVersion}'. Expected '${BRIDGE_CONTRACT_VERSION}'.`;
@@ -132,7 +132,7 @@ export function getBridgeRegistrationRejection(registration: BridgeRegistrationR
 /** Accepts only Host/UI lanes; lane-less sessions remain targetable by process identity. */
 const LANES: readonly Lane[] = ["dev", "installed"];
 
-export function normalizeSessionLane(lane: string | null | undefined): Lane | null {
+function normalizeSessionLane(lane: string | null | undefined): Lane | null {
   const normalized = lane?.trim().toLowerCase();
   return LANES.find((known) => known === normalized) ?? null;
 }
@@ -144,7 +144,7 @@ export function normalizeSessionLane(lane: string | null | undefined): Lane | nu
  * the sdkSessionId from its launch receipt was launched by pe-revit, and is therefore controlled.
  * The SDK resolver is the enforcement point; this is disclosure, never a second gate.
  */
-export function inferCustody(session: Pick<SessionTargetCandidate, "sdkSessionId">): Custody {
+function inferCustody(session: Pick<SessionTargetCandidate, "sdkSessionId">): Custody {
   return session.sdkSessionId ? "controlled" : "observed";
 }
 
@@ -161,7 +161,7 @@ export type SessionTargetCandidate = {
 // ponytail: the wire reports only the ACTIVE document per session (openDocumentCount is a bare
 // number), so "holds" means "is active in". Widen the state-sync payload with the open-document
 // list when a background document must be addressable.
-export function heldDocuments(
+function heldDocuments(
   state: Pick<BridgeStateSnapshot, "activeDocumentCloudModelGuid" | "activeDocumentPath">,
 ): string[] {
   const id = state.activeDocumentCloudModelGuid ?? state.activeDocumentPath;
@@ -394,12 +394,12 @@ const encodePayloadJson = Effect.fnUntraced(function* (payload: unknown) {
 });
 
 /** Records one request under its wire id; a later phase for the same id replaces the earlier one. */
-export const trackBridgeRequest = (
+const trackBridgeRequest = (
   requests: Ref.Ref<ReadonlyMap<string, BridgeRequest>>,
   request: BridgeRequest,
 ) => Ref.update(requests, (live) => new Map(live).set(request.requestId, request));
 
-export const forgetBridgeRequest = (
+const forgetBridgeRequest = (
   requests: Ref.Ref<ReadonlyMap<string, BridgeRequest>>,
   requestId: string,
 ) =>
@@ -410,7 +410,7 @@ export const forgetBridgeRequest = (
   });
 
 /** Routes one Response frame to the request that carries its id. */
-export const completeBridgeRequest = Effect.fnUntraced(function* (
+const completeBridgeRequest = Effect.fnUntraced(function* (
   requests: Ref.Ref<ReadonlyMap<string, BridgeRequest>>,
   response: BridgeResponse,
 ) {

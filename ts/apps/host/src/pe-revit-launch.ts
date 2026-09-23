@@ -3,14 +3,10 @@
 
 import { productIdentity } from "@pe/host-contracts/contracts";
 import { hostOwnership, type HostOwnership } from "./host-ownership.ts";
-import {
-  installRoot as sdkInstallRoot,
-  peRevitLaunch,
-  type PeRevitLaunch,
-} from "@pe/host-contracts/pe-revit-cli";
+import { peRevitLaunch, type PeRevitLaunch } from "@pe/host-contracts/pe-revit-cli";
 
 export { validatePeRevitEnvelope, parsePeRevitEnvelope } from "@pe/host-contracts/pe-revit-cli";
-export type { PeRevitLaunch, PeRevitEnvelope } from "@pe/host-contracts/pe-revit-cli";
+export type { PeRevitLaunch } from "@pe/host-contracts/pe-revit-cli";
 
 export function peRevitLauncher(
   ownership: Pick<HostOwnership, "lane" | "sourceRoot"> = hostOwnership,
@@ -29,9 +25,4 @@ export function peRevitLauncher(
     process.env.LOCALAPPDATA,
     ...(fileExists ? [fileExists] : []),
   );
-}
-
-/** Product root under `%LOCALAPPDATA%\<vendor>\<product>` (bin, shims, logs). */
-export function installRoot(): string {
-  return sdkInstallRoot(productIdentity.vendorName, productIdentity.productName);
 }

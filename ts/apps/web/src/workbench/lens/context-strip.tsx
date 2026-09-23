@@ -4,7 +4,6 @@ import { useState } from "react";
 import { toolTitle } from "@pe/agent-contracts";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { Code, stringify } from "#/components/lang/code";
-import type { SessionEvent } from "#/host/world-log";
 import {
   selectToolCalls,
   formatBytes,
@@ -74,7 +73,7 @@ export function ContextStrip({ state, depth }: { state: ChatState; depth: "read"
   );
 }
 
-export const PLAN_ITEM =
+const PLAN_ITEM =
   "grid grid-cols-[14px_minmax(0,1fr)] gap-1.5 border-b-[0.5px] border-line px-3 py-1.5 t-prose last:border-b-0";
 
 export function TraceCellView({
@@ -91,7 +90,7 @@ export function TraceCellView({
   );
 }
 
-export function CellHeader({ call }: { call: ToolCall }) {
+function CellHeader({ call }: { call: ToolCall }) {
   return (
     <div {...annotation("cell-head")}>
       <span {...annotation("cell-title")}>{toolTitle(call.title)}</span>
@@ -162,31 +161,12 @@ export function buildTraceCells(state: ChatState): TraceCell[] {
   }));
 }
 
-export function ticksForMoment(
-  log: SessionEvent[],
-  moments: Moment[],
-  index: number,
-): SessionEvent[] {
-  if (log.length === 0) return [];
-  const at = (i: number) => moments[i]?.createdAt?.getTime();
-  const lower = index > 0 ? at(index - 1) : undefined;
-  const upper = at(index);
-  const isLast = index === moments.length - 1;
-  return log
-    .filter((event) => {
-      if (lower !== undefined && event.atMs <= lower) return false;
-      if (upper !== undefined && event.atMs > upper) return isLast; // tail events ride the last band
-      return upper !== undefined || isLast;
-    })
-    .slice(0, 4); // a band is ~turn-height; more than 4 ticks would smear
-}
-
 export function formatTime(date?: Date): string | undefined {
   if (!date || Number.isNaN(date.getTime())) return undefined;
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-export const TOOL_STATUS_COLOR: Record<string, string> = {
+const TOOL_STATUS_COLOR: Record<string, string> = {
   completed: token("done"),
   failed: token("caution"),
   in_progress: token("ink-2"),
@@ -194,7 +174,7 @@ export const TOOL_STATUS_COLOR: Record<string, string> = {
   cancelled: token("ink-2"),
 };
 
-export function statusColor(status: string): string {
+function statusColor(status: string): string {
   return TOOL_STATUS_COLOR[status] ?? token("ink-2");
 }
 

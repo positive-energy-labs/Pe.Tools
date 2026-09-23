@@ -223,7 +223,7 @@ export function PlanDock(props: {
   );
 }
 
-export type Board = ReturnType<typeof boardSummary>;
+type Board = ReturnType<typeof boardSummary>;
 
 /** Scorer columns lifted from the package's scores.json. The python scorer is the only author
  * of these numbers (SHIMS.md #1 close) — this row NEVER computes a stand-in. */

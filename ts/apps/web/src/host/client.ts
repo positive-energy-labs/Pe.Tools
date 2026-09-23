@@ -69,8 +69,3 @@ async function postCall(
   }
   return response.json();
 }
-
-export function scopedHostRpc(baseURL: string): typeof callHostRpc {
-  return (key, ...args) =>
-    postCall(key, args[0], { ...args[1], baseURL }) as ReturnType<typeof callHostRpc<typeof key>>;
-}

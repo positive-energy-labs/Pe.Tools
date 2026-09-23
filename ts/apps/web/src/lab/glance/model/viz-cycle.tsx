@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { type CoverageSegment } from "#/components/lang/coverage-bar";
 import { type VizIndex } from "#/ops/primitives";
 
-export const VIZ_CYCLE: VizIndex[] = [1, 2, 3, 4, 5, 6];
+const VIZ_CYCLE: VizIndex[] = [1, 2, 3, 4, 5, 6];
 
 export function categoryViz(name: string, index: number): VizIndex {
   const n = name.toLowerCase();

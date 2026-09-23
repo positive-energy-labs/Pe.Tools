@@ -45,7 +45,7 @@ export function useCacheView(
   return computeCacheView(breakdown, baseline);
 }
 
-export const SEGMENT_TONES: Record<string, string> = {
+const SEGMENT_TONES: Record<string, string> = {
   tools: token("viz-6"),
   "system-prompt": token("viz-3"),
   skills: token("viz-2"),

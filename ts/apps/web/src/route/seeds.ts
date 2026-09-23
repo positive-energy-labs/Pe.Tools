@@ -14,13 +14,13 @@ import type { DemoSpec } from "./spec-editor";
 
 const SCHEDULE_SCHEMA = "http://localhost:5150/schemas/settings/CmdScheduleManager/schedules.json";
 const FAMILIES_SCHEMA = "http://localhost:5150/schemas/settings/FamilyFoundry/patches.json";
-export const hash = (n: number) => String(n).repeat(64).slice(0, 64);
+const hash = (n: number) => String(n).repeat(64).slice(0, 64);
 
 export const DEMO_SPEC_PATH = "settings/schedule/DX Fan Coil Unit.json";
 export const DEMO_FAMILIES_SPEC_PATH = "settings/families/Mech equipment standard.json";
 const DEMO_HEADER_PATH = "settings/_fields/Header.json";
 const DEMO_PERF_HEAT_PATH = "settings/_fields/IU Perf Heat.json";
-export const DEMO_RECEIPT_PATH = "output/2026-09-12T14-02-11Z/receipt.json";
+const DEMO_RECEIPT_PATH = "output/2026-09-12T14-02-11Z/receipt.json";
 
 export const DEMO_PODS: readonly PodRow[] = [
   {
@@ -73,11 +73,11 @@ export const DEMO_RUN: Run = {
 };
 
 /** The captured schema names a fragment no demo pod holds; the seed drops that one example. */
-export const SCHEDULE_SEED_SCHEMA = SCHEDULE_SEED_CAPTURED_SCHEMA.replace(
+const SCHEDULE_SEED_SCHEMA = SCHEDULE_SEED_CAPTURED_SCHEMA.replace(
   ',\r\n                  "@global/_fields/my-fragment"',
   "",
 );
-export const SCHEDULE_SEED_RAW = SCHEDULE_SEED_BYTES;
+const SCHEDULE_SEED_RAW = SCHEDULE_SEED_BYTES;
 
 /**
  * One of each thing a reviewer must see on the schedule member: an open Pea proposal (note and

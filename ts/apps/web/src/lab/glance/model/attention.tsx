@@ -9,7 +9,7 @@ import type { SyntheticOp, SyntheticViewProps } from "#/lab/synthetic";
 import { MonoAside, composition, obs } from "./viz-cycle";
 import { ModelGlanceView } from "./summary";
 
-export function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
+function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
   const res = asRecord(results["revit.glance.attention"]);
   if (!res) return <UnrecognizedShape />;
 

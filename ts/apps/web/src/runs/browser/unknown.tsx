@@ -3,7 +3,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { fmtNum } from "#/components/master-table/model";
 import { FactChip as Chip } from "#/components/lang/chip";
 import { type StagedItem } from "../feedback/staging";
-import { HELD_HATCH, type ResidueKind } from "../palette";
+import { HELD_HATCH } from "../palette";
 import { difference, type Partiality, type ZoneRecord } from "../world";
 
 // the export must not dress a disposition-unknown room as accepted either (SHIMS.md #3).
@@ -167,14 +167,6 @@ export function Delta({
   );
 }
 
-export type PanelHover = {
-  label: string;
-  flaggable: boolean;
-  flagged: boolean;
-  x: number;
-  y: number;
-};
-
 export function HatchPattern(props: {
   id: string;
   color: string;
@@ -193,16 +185,3 @@ export function HatchPattern(props: {
     </pattern>
   );
 }
-
-export const heldPatternId = (runId: string, zone: ZoneRecord, candidateId: string) =>
-  `held-${encodeURIComponent(`${runId}/${zone.zoneKey ?? zone.Zone}/${candidateId}`)}`;
-
-export const residuePatternId = (
-  runId: string,
-  zone: ZoneRecord,
-  elementId: string,
-  kind: ResidueKind,
-) => `residue-${kind}-${encodeURIComponent(`${runId}/${zone.zoneKey ?? zone.Zone}/${elementId}`)}`;
-
-export const residueKind = (reason: string): ResidueKind =>
-  reason === "excluded" ? "excluded" : "void";

@@ -5,7 +5,6 @@ export type {
   RoomType,
   Phase,
   TakeoffModel,
-  ModelView,
   ModelRoom,
   ModelSystem,
   ModelZone,

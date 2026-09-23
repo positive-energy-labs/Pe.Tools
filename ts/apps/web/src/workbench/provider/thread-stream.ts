@@ -56,7 +56,7 @@ const bodyAtoms = Atom.family((key: string) => {
   ).pipe(Atom.autoDispose);
 });
 
-export const threadBodyAtom = (origin: string, threadId: string) =>
+const threadBodyAtom = (origin: string, threadId: string) =>
   bodyAtoms(JSON.stringify([origin, threadId]));
 
 const invalidatingEvents = new Set<AgentControllerEvent["type"]>([
@@ -77,9 +77,6 @@ export function chatLoading(hostStatus: Reading<unknown>, threadPending: boolean
   const hostKnown = previousOf(hostStatus) !== undefined || hostStatus.state === "failed";
   return !hostKnown || threadPending;
 }
-
-export const threadQueryKey = (origin: string, threadId: string | null) =>
-  ["pe-thread", origin, threadId] as const;
 
 export function useThreadStream(options: {
   origin: string;

@@ -1,12 +1,7 @@
-import type { ReactNode } from "react";
-
 import type { HostErrorKind } from "@pe/host-contracts/contracts";
 import { HostCallError } from "@pe/host-contracts/operation-types";
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { FactChip } from "#/components/lang/chip";
-import { OutcomeLine } from "#/components/lang/outcome";
 
-export type HostIssueKind =
+type HostIssueKind =
   | "disconnected"
   | "bridge_busy"
   | "invalid_request"
@@ -28,7 +23,7 @@ export type HostIssue = {
   raw?: unknown;
 };
 
-export type HostIssueFieldIssue = {
+type HostIssueFieldIssue = {
   path: string;
   message: string;
   code?: string;
@@ -150,67 +145,4 @@ export function toHostIssue(error: unknown, fallbackTitle = "Host failure"): Hos
 function readNumber(record: Record<string, unknown>, key: string): number | undefined {
   const value = record[key];
   return typeof value === "number" ? value : undefined;
-}
-
-export function HostIssuePanel({
-  issue,
-  action,
-  compact = false,
-}: {
-  issue?: HostIssue;
-  action?: ReactNode;
-  compact?: boolean;
-}) {
-  if (!issue) return null;
-
-  const caution = issue.kind === "conflict" || issue.kind === "bridge_busy";
-  return (
-    <ArtifactFrame
-      head={
-        <div className="flex w-full items-start justify-between gap-3">
-          <OutcomeLine
-            kind={caution ? "error" : "refused"}
-            label={issue.title}
-            says={issue.message}
-          />
-          {action}
-        </div>
-      }
-    >
-      <div className={compact ? "p-2" : "p-3"}>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {issue.status ? <HostIssueMeta>status {issue.status}</HostIssueMeta> : null}
-          {issue.operationKey ? <HostIssueMeta>{issue.operationKey}</HostIssueMeta> : null}
-          {issue.activeOperation ? (
-            <HostIssueMeta>active {issue.activeOperation}</HostIssueMeta>
-          ) : null}
-          {issue.retryHint ? <HostIssueMeta>{issue.retryHint}</HostIssueMeta> : null}
-          {issue.bridgePrecondition ? (
-            <HostIssueMeta>{issue.bridgePrecondition}</HostIssueMeta>
-          ) : null}
-        </div>
-        {issue.fieldIssues?.length ? (
-          <ul className="mt-2">
-            {issue.fieldIssues.slice(0, 5).map((fieldIssue) => (
-              <li key={`${fieldIssue.path}:${fieldIssue.message}`}>
-                <code>{fieldIssue.path}</code>: {fieldIssue.message}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
-    </ArtifactFrame>
-  );
-}
-
-function HostIssueMeta({ children }: { children: ReactNode }) {
-  return <FactChip title="Host diagnostic detail.">{children}</FactChip>;
-}
-
-export function HostConnectionPill({ connected, label }: { connected: boolean; label?: string }) {
-  return (
-    <FactChip tone={connected ? "done" : "meta"} title="Current host connection state.">
-      {connected ? (label ?? "Connected") : "Disconnected"}
-    </FactChip>
-  );
 }

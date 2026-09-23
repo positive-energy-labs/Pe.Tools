@@ -22,7 +22,7 @@ const LANE_VIZ: Record<Lane, string> = {
   dev: "2",
 };
 
-export function laneVar(lane: Lane): string {
+function laneVar(lane: Lane): string {
   return token(`viz-${LANE_VIZ[lane]}`);
 }
 

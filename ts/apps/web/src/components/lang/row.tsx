@@ -77,7 +77,7 @@ type RowProps = RowState & {
   );
 
 /** The states as attributes: the one place a row's state becomes DOM. */
-export const rowStateProps = (state: RowState) => ({
+const rowStateProps = (state: RowState) => ({
   "data-cursor": state.cursor ? "" : undefined,
   "data-selected": state.selected ? "" : undefined,
   "data-active": state.active ? "" : undefined,

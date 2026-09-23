@@ -19,7 +19,6 @@
 import { showCellValue, type MeasuredValue } from "@pe/agent-contracts";
 import type { TableState, VerdictTone } from "#/components/master-table/model";
 import {
-  FAMILY_SPEC,
   boundParam,
   type GeomConstituent,
   type ProtoLive,
@@ -34,7 +33,7 @@ import {
 
 /** A constituent the profile describes in PROSE — the anatomy list's row, and the only reading of
  * a constituent that a geometry-less profile can offer. */
-export interface ProseConstituent {
+interface ProseConstituent {
   slug: string;
   kind: "solid" | "connector";
   text: string;
@@ -134,10 +133,6 @@ export function buildFamilyPageModel(source: FamilySpecModel): FamilyPageModel {
   };
 }
 
-/** THE DECLARED FIXTURE LANE. Built once, because `world.ts` never changes at runtime — the page
- * renders this when no family document is open, and says so with its dashed seam chip. */
-export const EMPTY_FAMILY_MODEL: FamilyPageModel = buildFamilyPageModel(FAMILY_SPEC);
-
 /** "core-bore" + "stub.depth" → "Core Bore Stub Depth". The name a new parameter INHERITS from the
  * property it was lifted out of — a promoted literal should arrive already saying where it came
  * from, rather than making you invent a name at the exact moment you are trying to do something
@@ -206,7 +201,7 @@ export const AGREEMENT_TONE: Record<Agreement, VerdictTone> = {
 };
 
 /** Worst-first, so a row's one-word state is the thing it is most asking of you. */
-export const AGREEMENT_RANK: Agreement[] = [
+const AGREEMENT_RANK: Agreement[] = [
   "drift",
   "only-profile",
   "only-live",

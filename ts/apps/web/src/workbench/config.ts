@@ -13,7 +13,7 @@ export function resolveWorkbenchConfig(): WorkbenchEndpointConfig {
   return { origin: window.location.origin };
 }
 
-export function workbenchUrl(
+function workbenchUrl(
   config: WorkbenchEndpointConfig,
   path: string,
   query: Record<string, string> = {},

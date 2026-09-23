@@ -160,7 +160,7 @@ export const apsAuthToken: (input: ApsTokenRequest) => ApsAuthEffect<ApsTokenRes
     );
   });
 
-export function normalizeApsTokenRequest(input: ApsTokenRequest): NormalizedApsTokenRequest {
+function normalizeApsTokenRequest(input: ApsTokenRequest): NormalizedApsTokenRequest {
   return {
     explicitScopes: input.explicitScopes ? normalizeScopes(input.explicitScopes) : null,
     flowKind: input.flowKind ?? ApsAuthFlowKind.ThreeLeggedConfidential,
@@ -168,16 +168,13 @@ export function normalizeApsTokenRequest(input: ApsTokenRequest): NormalizedApsT
   };
 }
 
-export function resolveApsScopes(request: NormalizedApsTokenRequest): readonly string[] {
+function resolveApsScopes(request: NormalizedApsTokenRequest): readonly string[] {
   return request.explicitScopes?.length
     ? request.explicitScopes
     : scopeProfiles[request.scopeProfile];
 }
 
-export function createApsTokenStoreKey(
-  clientId: string,
-  request: NormalizedApsTokenRequest,
-): string {
+function createApsTokenStoreKey(clientId: string, request: NormalizedApsTokenRequest): string {
   return [clientId, request.flowKind, resolveApsScopes(request).join(" ")].join("|");
 }
 

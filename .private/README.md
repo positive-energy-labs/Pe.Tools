@@ -2,7 +2,7 @@
 
 Machine-local data that must never be committed, bundled, or served from a release build. Everything here except this file is gitignored. Delete this folder and every test that reads it skips; nothing fails.
 
-Tests and scripts resolve the root from `PE_PRIVATE_FIXTURES`, defaulting to `<repo>/.private/fixtures`. C# tests call `PrivateFixtures.Dir("<relative>")` (`eng/PrivateFixtures.cs`); TypeScript tests `skipIf` on `existsSync`; python and PowerShell scripts take a `--project` or `-SourceR10` default under the same root. The web dev server serves `fixtures/project-a/web/` at `/rhvac-fixture` in dev only (`apps/web/vite.config.ts`); the production bundle never contains it.
+Tests and scripts resolve the root from `PE_PRIVATE_FIXTURES`, defaulting to `<repo>/.private/fixtures`. C# tests call `PrivateFixtures.Dir("<relative>")` (`eng/PrivateFixtures.cs`); TypeScript tests `skipIf` on `existsSync`; python and PowerShell scripts take a `--project` or `-SourceR10` default under the same root.
 
 ## Layout
 

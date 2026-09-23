@@ -19,17 +19,15 @@ export type HostOwnership = {
   readonly sourceRoot: string | null;
 };
 
-export const NO_REVIT_ARGUMENT = "--no-revit";
+const NO_REVIT_ARGUMENT = "--no-revit";
 export const hostCapabilities = resolveHostCapabilities();
 export const hostOwnership = resolveHostOwnership();
 
-export function resolveHostCapabilities(
-  argv: readonly string[] = process.argv,
-): PeaRuntimeCapabilities {
+function resolveHostCapabilities(argv: readonly string[] = process.argv): PeaRuntimeCapabilities {
   return { revit: !argv.includes(NO_REVIT_ARGUMENT) };
 }
 
-export function serviceNameForCapabilities(
+function serviceNameForCapabilities(
   serviceName: string,
   capabilities: PeaRuntimeCapabilities,
 ): string {

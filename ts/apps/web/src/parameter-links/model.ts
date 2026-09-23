@@ -20,13 +20,6 @@ export const SOURCE_SCOPES: SourceKind[] = ["instance", "type", "instanceThenTyp
 export const RELATIONSHIPS: Relationship[] = ["sameElement", "electricalEquipmentCircuits"];
 export const REDUCERS: Reducer[] = ["first", "min", "max"];
 
-/** The person's staged profile is the only editable one; Pea's proposal is not drawn here yet. */
-export function editingProfile(
-  document: ParameterLinksDocument | null,
-): ParameterLinkProfile | null {
-  return document ? stagedParameterProfile(document) : null;
-}
-
 export function sameProfile(
   left: ParameterLinkProfile | null | undefined,
   right: ParameterLinkProfile | null | undefined,
@@ -38,7 +31,7 @@ export function sameProfile(
  * Freshness, computed exactly as the server computes it before it admits an apply: an
  * evaluation belongs to the draft named by its basis, and to no other.
  */
-export function evaluationIsCurrent(
+function evaluationIsCurrent(
   document: ParameterLinksDocument | null,
   reading: ParameterLinksReading | null,
 ): boolean {
@@ -55,13 +48,13 @@ export function isDraftDirty(
   return !sameProfile(draft, reading?.stored);
 }
 
-export function errorIssueCount(evaluation: ParameterLinkEvaluation | null | undefined): number {
+function errorIssueCount(evaluation: ParameterLinkEvaluation | null | undefined): number {
   return evaluation?.issues.filter((issue) => issue.severity === "error").length ?? 0;
 }
 
 /** One refusal string, so the strip and the verb can never disagree about why. */
 /** The host's refusal for applying a proposal preview (`family-actions.ts`), word for word. */
-export const PROPOSAL_PREVIEW_REFUSAL =
+const PROPOSAL_PREVIEW_REFUSAL =
   "The reviewed reading is a proposal preview; stage the profile and preview again";
 
 /** A profile said as one line: how much it links. */
@@ -83,20 +76,13 @@ export function applyRefusal(
   return null;
 }
 
-export function parseUniqueIds(text: string): string[] {
-  return text
-    .split(/[\n,]/)
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
-}
-
 let sequence = 0;
-export function freshId(prefix: string): string {
+function freshId(prefix: string): string {
   sequence += 1;
   return `${prefix}-${Date.now().toString(36)}-${sequence.toString(36)}`;
 }
 
-export function blankDefinition(id = freshId("def")): ParameterLinkDefinition {
+function blankDefinition(id = freshId("def")): ParameterLinkDefinition {
   return {
     id,
     sourceCategoryId: 0,
@@ -108,15 +94,8 @@ export function blankDefinition(id = freshId("def")): ParameterLinkDefinition {
   };
 }
 
-export function blankAssignment(
-  definitionId: string,
-  id = freshId("asn"),
-): ParameterLinkAssignment {
+function blankAssignment(definitionId: string, id = freshId("asn")): ParameterLinkAssignment {
   return { id, definitionId, enabled: true, sourceElementUniqueIds: [] };
-}
-
-export function blankProfile(): ParameterLinkProfile {
-  return { formatVersion: 1, definitions: [blankDefinition()], assignments: [] };
 }
 
 export function addDefinition(profile: ParameterLinkProfile | null): ParameterLinkProfile {

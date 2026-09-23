@@ -27,7 +27,7 @@ export async function freezeScript(
   return { sourceBundle: await capturePod(workspace) };
 }
 
-export async function capturePod(
+async function capturePod(
   workspace: string,
   podsRoot = join(productUserContentRootPath(), productPathNames.podsDirectoryName),
 ): Promise<ScriptingExecute.Req.ScriptPodSourceBundle> {

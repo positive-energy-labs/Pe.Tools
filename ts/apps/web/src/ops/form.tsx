@@ -29,7 +29,7 @@ export function seedValues(schemaJson: string | undefined, exampleJson: string |
 }
 
 /** Write one dotted path; arrays keep their shape. */
-export function setPath(value: unknown, path: readonly string[], next: unknown): unknown {
+function setPath(value: unknown, path: readonly string[], next: unknown): unknown {
   if (path.length === 0) return next;
   const [head, ...rest] = path as [string, ...string[]];
   if (Array.isArray(value)) {
@@ -42,7 +42,7 @@ export function setPath(value: unknown, path: readonly string[], next: unknown):
 }
 
 /** Empty strings and nulls are unset fields, not values; the host fills its own defaults. */
-export function prune(value: unknown): unknown {
+function prune(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(prune);
   if (value && typeof value === "object")
     return Object.fromEntries(

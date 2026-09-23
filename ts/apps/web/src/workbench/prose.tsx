@@ -52,7 +52,7 @@ function codeText(node: ReactNode): string {
  * last line must be a closing run of the opener's character, at least as long. While a message
  * streams, the fence under the cursor has no such line yet.
  */
-export function fenceClosed(raw: string): boolean {
+function fenceClosed(raw: string): boolean {
   const lines = raw.trimEnd().split("\n");
   const opener = /^\s*(`{3,}|~{3,})/.exec(lines[0] ?? "")?.[1];
   if (!opener || lines.length < 2) return false;

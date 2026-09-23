@@ -6,7 +6,7 @@ import { List } from "#/components/lang/list-popup";
 import type { Run } from "#/route/pods";
 
 /** Where a run's source came from, said as the person reads it. */
-export function runSource(run: Run, memberSha256?: string): string {
+function runSource(run: Run, memberSha256?: string): string {
   const receipt = run.receipt;
   if (!receipt) return "receipt unreadable";
   if (receipt.origin === "SuppliedDraft") return "draft · filed nowhere";

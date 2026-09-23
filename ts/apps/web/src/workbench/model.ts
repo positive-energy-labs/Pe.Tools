@@ -15,13 +15,13 @@ export interface FocalGeometry {
 
 export type LensScrollIntent = { kind: "turn"; turn: number } | { kind: "tail" };
 
-export const TAIL_THRESHOLD_PX = 240;
+const TAIL_THRESHOLD_PX = 240;
 
 export function lensScrollIntent(turn?: number): LensScrollIntent {
   return typeof turn === "number" ? { kind: "turn", turn } : { kind: "tail" };
 }
 
-export function isNearTail(metrics: ScrollMetrics, threshold = TAIL_THRESHOLD_PX): boolean {
+function isNearTail(metrics: ScrollMetrics, threshold = TAIL_THRESHOLD_PX): boolean {
   return metrics.scrollHeight - metrics.scrollTop - metrics.clientHeight <= threshold;
 }
 

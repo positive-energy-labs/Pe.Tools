@@ -50,14 +50,14 @@ export interface HeadWork {
 const REST_WORKS = 3;
 const GROUP_ROWS = 5;
 const EXAMPLES = 2;
-export const COMMIT_REASON =
+const COMMIT_REASON =
   "Open the plan in the pane — staging is not applying; the confirmation lists every change before Revit changes";
 
 const pending = (cell: TrichotomyCellLike) => cell.proposal != null || cell.staged != null;
 const showDefault = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
 
 /** Depth-1 groups, contested first, then by pending size, then label. */
-export function headGroups(work: Pick<HeadWork, "cells" | "groupOf" | "wire">): CellGroup[] {
+function headGroups(work: Pick<HeadWork, "cells" | "groupOf" | "wire">): CellGroup[] {
   const { groups } = summarize(work.cells, {
     groupOf: (key) => work.groupOf(key).slice(0, 1),
     baselineOf: (key) => work.wire.baselineOf?.(key),
@@ -72,9 +72,7 @@ export function headGroups(work: Pick<HeadWork, "cells" | "groupOf" | "wire">): 
 }
 
 /** `{P} proposed · {S} staged · {C} contested`, zeros omitted. */
-export function countWords(
-  groups: readonly Pick<CellGroup, "proposed" | "staged" | "contested">[],
-) {
+function countWords(groups: readonly Pick<CellGroup, "proposed" | "staged" | "contested">[]) {
   const sum = (field: "proposed" | "staged" | "contested") =>
     groups.reduce((total, group) => total + group[field], 0);
   return { proposed: sum("proposed"), staged: sum("staged"), contested: sum("contested") };

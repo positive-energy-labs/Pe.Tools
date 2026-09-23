@@ -48,7 +48,7 @@ export const selectableKeys = (selection: TableSelection, shown: readonly string
  * The table's selection is the one collection's multi-select over the rows AS SHOWN: click toggles,
  * shift-click extends over the visible order, Escape clears (select-all is the frame's).
  */
-export function useTableSelection(selection: TableSelection | undefined, shown: readonly string[]) {
+function useTableSelection(selection: TableSelection | undefined, shown: readonly string[]) {
   const collection = useCollection<string>({
     items: shown,
     keyOf: (key) => key,

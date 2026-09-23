@@ -41,7 +41,7 @@ const PS32_EXE = "C:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe
 const EXTRACT_TIMEOUT_MS = 120_000;
 const SAVE_TIMEOUT_MS = 300_000;
 
-export function rhvacScriptDirectory(): string | null {
+function rhvacScriptDirectory(): string | null {
   return hostOwnership.sourceRoot === null
     ? null
     : resolve(hostOwnership.sourceRoot, checkoutLayout.dotnet, "Pe.Revit.Takeoff", "Rhvac");

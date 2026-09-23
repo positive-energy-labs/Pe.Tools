@@ -748,8 +748,8 @@ function captureHostOp(
   });
 }
 
-export const RESOLVED_SESSION_HEADER = "x-pe-resolved-session";
-export const RESOLVED_DOCUMENT_HEADER = "x-pe-resolved-document";
+const RESOLVED_SESSION_HEADER = "x-pe-resolved-session";
+const RESOLVED_DOCUMENT_HEADER = "x-pe-resolved-document";
 
 function resolvedTargetHeaders({
   session,
@@ -764,7 +764,7 @@ function resolvedTargetHeaders({
   return headers;
 }
 
-export class InvalidHostRequest {
+class InvalidHostRequest {
   readonly _tag = "InvalidHostRequest";
   constructor(
     readonly key: string,
@@ -792,7 +792,7 @@ function ambiguousBridgeTarget(sessions: readonly BridgeSessionView[]): BridgeEr
   );
 }
 
-export const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
+const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
   key: TsOnlyOperationKey,
   request: unknown,
   bridgeSessionId: string | undefined,

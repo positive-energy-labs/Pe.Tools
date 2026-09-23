@@ -7,7 +7,7 @@ import { PressContent } from "#/components/anatomy/press-content";
 
 export type Lens = { curId: string | null; prevId: string | null };
 
-export function pinMatchesLens(item: StagedItem, lens: Lens): boolean {
+function pinMatchesLens(item: StagedItem, lens: Lens): boolean {
   return item.runB === lens.curId && item.runA === lens.prevId;
 }
 

@@ -7,16 +7,6 @@ type ImportPath = `#/components/${"lang" | "ui"}/${string}`;
 export type GridVariantProps = Record<string, string | boolean>;
 type Axis = readonly [name: string, values: readonly string[]];
 
-export function recipeVariantProps(recipe: RecipeMetadata): GridVariantProps[] {
-  const axes = Object.entries(recipe.variants).map(
-    ([axis, values]) => [axis, Object.keys(values)] as const,
-  );
-  if (axes.length === 0) return [{}];
-  const groups: readonly (readonly Axis[])[] =
-    axes.length <= 2 ? [axes] : [axes.slice(0, 2), ...axes.slice(2).map((axis) => [axis])];
-  return groups.flatMap(variantPropsForAxes);
-}
-
 export function RecipeGrid({
   name,
   importPath,

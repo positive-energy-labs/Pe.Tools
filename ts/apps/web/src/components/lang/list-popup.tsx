@@ -23,7 +23,7 @@ import {
 import { Row, RowGroupHead, type RowState } from "./row";
 
 /** What a caller draws for one item: the Row's slots and its own states. */
-export type RowParts = Omit<RowState, "cursor" | "selected"> & {
+type RowParts = Omit<RowState, "cursor" | "selected"> & {
   lead?: ReactNode;
   label: ReactNode;
   sub?: ReactNode;

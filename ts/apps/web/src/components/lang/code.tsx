@@ -44,7 +44,7 @@ import { diagramKind, useDiagram } from "#/components/lang/diagram";
 
 import "./code.css";
 
-export const highlighter = createHighlighter({
+const highlighter = createHighlighter({
   fallbackLanguage: "plaintext",
   languages: [
     json,

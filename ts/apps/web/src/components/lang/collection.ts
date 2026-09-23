@@ -12,9 +12,9 @@ import { useId, useMemo, useState } from "react";
 import { useScopeKeys, type ScopeKey } from "#/route/keys";
 
 export type FilterMode = "none" | "substring" | "fuzzy";
-export type SelectMode = "none" | "single" | "multi";
+type SelectMode = "none" | "single" | "multi";
 /** Empty (nothing in scope) is not no-match (the query hid everything): two exits (R17). */
-export type CollectionStatus = "ready" | "empty" | "no-match" | "pending" | "failed" | "refused";
+type CollectionStatus = "ready" | "empty" | "no-match" | "pending" | "failed" | "refused";
 
 /** One ladder rung (R12): its label, and its items given the path picked above it. */
 export interface Level<T> {
@@ -86,7 +86,7 @@ export type VisibleRow<T> =
  * runs and word starts, and penalises the gap before the first hit. Null = no match.
  * ponytail: O(label × query) per item; fine for the few hundred rows any list here holds.
  */
-export function fuzzyScore(label: string, query: string): number | null {
+function fuzzyScore(label: string, query: string): number | null {
   const text = label.toLowerCase();
   const q = query.toLowerCase();
   let score = 0;

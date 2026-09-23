@@ -62,7 +62,7 @@ const modelSchema = () =>
 type FamilyRouteDocument = FamilyDraft;
 
 /** The baseline with staged cells laid on it: what save files and plan plans. */
-export const draftSpec = (draft: FamilyDraft): string | null =>
+const draftSpec = (draft: FamilyDraft): string | null =>
   draft.reading === null ? null : settingsCandidate(draft.reading, draft.cells);
 
 export interface FamilyPage {
@@ -251,7 +251,7 @@ const profileInputOf = (ctx: Ctx) => {
   return profile?.sha256 ? { source: { ...profile.member, sha256: profile.sha256 } } : null;
 };
 
-export const sameSource = (left: PodMemberSource, right: PodMemberSource) =>
+const sameSource = (left: PodMemberSource, right: PodMemberSource) =>
   left.pod === right.pod && left.path === right.path && left.sha256 === right.sha256;
 
 /** Family spec readings (parsed documents) belong to the member's Work, not the open Revit file. */
@@ -288,7 +288,7 @@ export function familyDemoFields(raw: string): Record<string, SettingsFieldState
 }
 
 /** The demo lane's draft over a fixture: the fixture is the reading, its demo fields the proposals. */
-export const familyDemoDraft = (raw: string): FamilyDraft => ({
+const familyDemoDraft = (raw: string): FamilyDraft => ({
   reading: raw,
   cells: familyDemoFields(raw),
 });

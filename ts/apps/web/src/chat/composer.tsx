@@ -32,7 +32,7 @@ interface SlashCommand {
   description: string;
 }
 
-export function Composer({
+function Composer({
   handle,
   topBar,
   draft,

@@ -15,7 +15,7 @@ import type { RunRow } from "./plan-dock";
 import { Delta } from "./unknown";
 import { rowScores } from "./plan-dock";
 
-export function savedWorkDelta(cur: RunScores | null, prev: RunScores | null): number | null {
+function savedWorkDelta(cur: RunScores | null, prev: RunScores | null): number | null {
   if (!cur || !prev) return null;
   const c = scoreBoards(cur);
   const p = scoreBoards(prev);
@@ -66,7 +66,7 @@ export async function buildLedgerRows(
   });
 }
 
-export const NO_SCORES_TITLE =
+const NO_SCORES_TITLE =
   "No scores.json in this run package. Measurements are unavailable; nothing is recomputed in their place.";
 
 export function scoreCell(row: RunRow, value: number | null): ReactNode {

@@ -1,3 +1,3 @@
-export type { StoredThreadSummary, WorkbenchAttachment } from "./provider/thread-summary";
+export type { StoredThreadSummary } from "./provider/thread-summary";
 export { WorkbenchProvider } from "./provider/view";
-export { useWorkbench, forkSessionThread, resumeDataForSuspension } from "./provider/use-workbench";
+export { useWorkbench } from "./provider/use-workbench";

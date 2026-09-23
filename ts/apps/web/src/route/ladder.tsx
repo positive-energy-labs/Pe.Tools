@@ -12,7 +12,7 @@ import type { ReactNode } from "react";
 import type { Level } from "#/components/lang/collection";
 import { ListPopup } from "#/components/lang/list-popup";
 
-export interface RungOption {
+interface RungOption {
   id: string;
   label: string;
   /** A measured fact beside the label (a count, a kind, a path tail). */

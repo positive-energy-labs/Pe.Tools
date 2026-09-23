@@ -66,13 +66,7 @@ export function GroundedDocView({
   );
 }
 
-export function UploadSurface({
-  engine,
-  extra,
-}: {
-  engine: GroundedDocEngine;
-  extra?: React.ReactNode;
-}) {
+function UploadSurface({ engine, extra }: { engine: GroundedDocEngine; extra?: React.ReactNode }) {
   const [dragOver, setDragOver] = useState(false);
   const [url, setUrl] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -175,7 +169,7 @@ export function UploadSurface({
   );
 }
 
-export function MarkdownPane({
+function MarkdownPane({
   engine,
   refs,
 }: {

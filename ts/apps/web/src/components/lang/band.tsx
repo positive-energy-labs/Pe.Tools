@@ -193,7 +193,7 @@ export interface CellWire {
 }
 
 /** Where a wire's cells sit in its Work: under its segment, or at the root. */
-export const cellsPath = (wire: CellWire) => (wire.segment === null ? [] : [wire.segment]);
+const cellsPath = (wire: CellWire) => (wire.segment === null ? [] : [wire.segment]);
 
 const DRAWN = new Set<string>(["accept", "deny", "unstage"] satisfies CellTransitionKind[]);
 

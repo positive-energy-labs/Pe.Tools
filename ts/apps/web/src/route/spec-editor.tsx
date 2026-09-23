@@ -211,10 +211,7 @@ export const memberWorkManifest = (seed?: SettingsRouteDocument) => {
  * The member's Settings Work, opened the way every member surface opens it. A member whose Work
  * has no basis yet adopts the saved bytes. `seed` is the demo lane's Work and nothing is fetched.
  */
-export function useMemberWork(
-  member: PodMember | null,
-  seed?: SettingsRouteDocument,
-): MemberWorkHandle {
+function useMemberWork(member: PodMember | null, seed?: SettingsRouteDocument): MemberWorkHandle {
   const manifest = useMemo(() => memberWorkManifest(seed), [seed]);
   const handle = useRoute(manifest, {
     work: !seed && member ? memberWork(member) : undefined,
@@ -232,7 +229,7 @@ export function useMemberWork(
 }
 
 /** The demo lane's Work for a member: its fixture bytes as the basis, and the seeded fields. */
-export const seededWork = (
+const seededWork = (
   member: PodMember | null,
   fixture: DemoSpec | undefined,
 ): SettingsRouteDocument | undefined =>

@@ -28,14 +28,14 @@ export function diagramKind(source: string): "supported" | "unsupported" {
   return header && SUPPORTED.test(header) ? "supported" : "unsupported";
 }
 
-export function stripStyles(source: string): string {
+function stripStyles(source: string): string {
   return source
     .split("\n")
     .filter((line) => !/^\s*(style|classDef|linkStyle)\b/.test(line))
     .join("\n");
 }
 
-export function sanitizeSvg(svg: string): string {
+function sanitizeSvg(svg: string): string {
   const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
   if (doc.querySelector("parsererror")) throw new Error("The renderer returned invalid SVG");
   for (const element of doc.querySelectorAll("script, foreignObject")) element.remove();
@@ -56,7 +56,7 @@ export function sanitizeSvg(svg: string): string {
 }
 
 // Every role is a house token, so light and dark follow the page with no re-render.
-export const diagramColors = () => ({
+const diagramColors = () => ({
   bg: tokenRef("artifact"),
   fg: tokenRef("ink"),
   line: tokenRef("line-2"),

@@ -5,7 +5,7 @@ import type { Draft } from "./model";
 type Apply = (patches: RouteStatePatch[], expectedRevision: number) => Promise<Refusal | null>;
 
 /** Unacknowledged editor input belongs to its file, including while no pane is mounted. */
-export class FamilyEditBuffer {
+class FamilyEditBuffer {
   private pending = new Map<string, RouteStatePatch>();
   private revision = 0;
   private observedRevision = 0;

@@ -42,15 +42,6 @@ export type VariantProps<T extends (...args: never[]) => unknown> = Omit<
   "class" | "className"
 >;
 
-export function recipeClass<State>(
-  slot: (props?: ClassProp) => string,
-  className?: string | ((state: State) => string | undefined),
-): string | ((state: State) => string) {
-  return typeof className === "function"
-    ? (state) => slot({ className: className(state) })
-    : slot({ className });
-}
-
 export function tv<const S extends Slots, const V extends Variants<S>>(
   config: Config<S, V> & { slots: S },
 ): SlotRecipe<S, V>;

@@ -52,7 +52,7 @@ export interface FamiliesPage {
   carryOver: boolean;
 }
 
-export const familiesPageSchema = z.object({
+const familiesPageSchema = z.object({
   draft: z
     .object({
       placement: z.enum(["AllLoaded", "PlacedOnly", "UnplacedOnly"]).default("AllLoaded"),

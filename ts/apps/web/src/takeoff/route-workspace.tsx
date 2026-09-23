@@ -164,7 +164,7 @@ export type TakeoffViewSelection = {
   target?: string;
 };
 
-export function TakeoffsView({
+function TakeoffsView({
   store,
   select,
 }: {

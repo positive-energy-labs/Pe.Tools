@@ -32,7 +32,7 @@ const corner = (point: number[]): [number, number] => {
 };
 
 /** The drawable plan, or the host's stated reason there is none. */
-export function planOf(response: Response): { plan: TakeoffPlanImage } | { refusal: PlanRefusal } {
+function planOf(response: Response): { plan: TakeoffPlanImage } | { refusal: PlanRefusal } {
   const registration = response.registration;
   if (registration && response.imageUrl)
     return {

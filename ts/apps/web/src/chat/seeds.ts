@@ -211,7 +211,7 @@ const DIAGRAM_REJECTED = {
 };
 
 /** Pea drew once with a bad spec (rejected, nothing drawn), then drew the duct system. */
-export const CHAT_DIAGRAM_STATE: ChatState = {
+const CHAT_DIAGRAM_STATE: ChatState = {
   ...emptyChatState(),
   messages: [
     message("user-d1", "user", 40, [

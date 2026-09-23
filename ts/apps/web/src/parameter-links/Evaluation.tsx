@@ -85,7 +85,7 @@ function WritesTable({ writes }: { writes: Write[] }) {
   );
 }
 
-export function displayParameterLinkValue(value: ParameterLinkValue): string {
+function displayParameterLinkValue(value: ParameterLinkValue): string {
   if (value.displayValue) return value.displayValue;
   const raw = value.doubleValue ?? value.integerValue ?? value.stringValue ?? value.elementIdValue;
   return raw == null ? "—" : String(raw);

@@ -82,7 +82,7 @@ const basisOf = (ctx: Ctx) => {
   return saved.success && saved.data.id === ctx.work.doc?.basis?.captureId ? saved.data : null;
 };
 /** F-H5-1: a Work bound to a closed document lifetime; the way out is a re-read, which rebinds. */
-export const REOPENED =
+const REOPENED =
   "Re-opened in Revit since this was staged: read the schedule again. Changed cells come back marked stale.";
 const reopened = (ctx: Ctx) => {
   const basis = basisOf(ctx);

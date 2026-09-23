@@ -14,7 +14,7 @@ export type ChatDisplay = Omit<
   "omProgress"
 > & { omProgress?: OmProgress };
 
-export interface OmProgress {
+interface OmProgress {
   status?: string;
   pendingTokens?: number;
   threshold?: number;
@@ -61,7 +61,7 @@ export function emptyChatState(): ChatState {
 }
 
 /** `result` is whatever the call has produced so far: partial while running, raw on failure. */
-export type ToolOutcome = { result?: unknown } & (
+type ToolOutcome = { result?: unknown } & (
   | { status: "in_progress" }
   | { status: "completed" }
   | { status: "failed"; error: string }
@@ -441,7 +441,7 @@ export function selectApprovals(display: ChatDisplay): Approval[] {
 }
 
 /** The runtime derives expiry; an ask the live frame still holds wins over a stale body. */
-export function selectExpiredAsks(state: ChatState): ExpiredAsk[] {
+function selectExpiredAsks(state: ChatState): ExpiredAsk[] {
   const live = new Set(selectApprovals(state.display).map((approval) => approval.toolCallId));
   return (state.expiredAsks ?? []).filter((ask) => !live.has(ask.toolCallId));
 }
@@ -495,7 +495,7 @@ export interface ContextSegment {
   items?: ContextItem[];
 }
 
-export interface MemoryWindows {
+interface MemoryWindows {
   messageTokens: number;
   observationThreshold: number;
   observationTokens: number;
@@ -650,11 +650,11 @@ function breakdownSkills(skills: unknown[] | undefined): ContextItem[] {
   });
 }
 
-export function estimateTokens(text: string | undefined): number {
+function estimateTokens(text: string | undefined): number {
   return text ? Math.ceil(text.length / 4) : 0;
 }
 
-export function messageText(message: MastraDBMessage): string {
+function messageText(message: MastraDBMessage): string {
   return message.content.parts
     .map((part) => partText(part))
     .filter(Boolean)
@@ -680,7 +680,7 @@ export function toolTarget(args: unknown): string | undefined {
 
 /** Display text for a value that may already BE text. Not `stringify`: an error message
  * must not reach the user wrapped in quotes. */
-export function text(value: unknown): string {
+function text(value: unknown): string {
   if (value === undefined || value === null) return "";
   return typeof value === "string" ? value : stringify(value);
 }
@@ -699,7 +699,7 @@ export function readString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-export function imageSource(
+function imageSource(
   direct: string | undefined,
   data: string | undefined,
   mime: string | undefined,

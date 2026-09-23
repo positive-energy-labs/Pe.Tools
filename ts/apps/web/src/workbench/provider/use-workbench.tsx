@@ -1,6 +1,6 @@
 import { useContext } from "react";
 import { type AgentControllerThreadInfo, type PlanResume } from "@mastra/client-js";
-import { readRecord, readString, shortId, type ChatState } from "../chat-state";
+import { readRecord, readString, shortId } from "../chat-state";
 import { type WorkbenchAttachment } from "../prompt";
 import type {
   MessageFile,
@@ -15,20 +15,6 @@ export function useWorkbench(): WorkbenchContextValue {
   const context = useContext(WorkbenchContext);
   if (!context) throw new Error("useWorkbench must be used inside WorkbenchProvider.");
   return context;
-}
-
-export function withoutGate(
-  display: ChatState["display"],
-  toolCallId: string,
-): ChatState["display"] {
-  const suspensions = { ...display.pendingSuspensions };
-  delete suspensions[toolCallId];
-  return {
-    ...display,
-    pendingApproval:
-      display.pendingApproval?.toolCallId === toolCallId ? null : display.pendingApproval,
-    pendingSuspensions: suspensions,
-  };
 }
 
 export async function forkSessionThread(
@@ -97,7 +83,7 @@ export function toFiles(attachments: WorkbenchAttachment[] | undefined): Message
 }
 
 // ponytail: fine for text attachments; chunk the byte loop if multi-MB text ever needs base64ing.
-export function toBase64(text: string): string {
+function toBase64(text: string): string {
   const bytes = new TextEncoder().encode(text);
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -115,15 +101,15 @@ export function toSummaries(threads: AgentControllerThreadInfo[]): StoredThreadS
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 
-export function readArray(value: unknown): unknown[] | undefined {
+function readArray(value: unknown): unknown[] | undefined {
   return Array.isArray(value) ? value : undefined;
 }
 
-export function optionText(value: unknown): string {
+function optionText(value: unknown): string {
   return readString(value) ?? readString(readRecord(value)?.label) ?? "";
 }
 
-export function copyStrings(
+function copyStrings(
   source: Record<string, unknown> | undefined,
   keys: string[],
 ): Partial<Pick<PlanResume, "path" | "title" | "plan">> {

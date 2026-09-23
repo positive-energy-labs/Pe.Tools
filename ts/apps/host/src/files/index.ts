@@ -5,7 +5,7 @@ import { LocalOpError } from "../local-error.ts";
 
 export type DirectoryEntryInfo = { name: string; info: FileSystem.File.Info };
 
-export const readFileString = Effect.fnUntraced(function* (path: string, operationKey: string) {
+const readFileString = Effect.fnUntraced(function* (path: string, operationKey: string) {
   const fs = yield* FileSystem.FileSystem;
   return yield* fs
     .readFileString(path)
@@ -75,7 +75,7 @@ export const makeDirectory = Effect.fnUntraced(function* (path: string, operatio
     .pipe(Effect.mapError((error) => new LocalOpError(operationKey, error.message)));
 });
 
-export const statFile = Effect.fnUntraced(function* (path: string, operationKey: string) {
+const statFile = Effect.fnUntraced(function* (path: string, operationKey: string) {
   const fs = yield* FileSystem.FileSystem;
   return yield* fs
     .stat(path)

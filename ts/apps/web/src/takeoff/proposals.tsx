@@ -33,7 +33,7 @@ export const flagShape = (key: string) => (JSON.parse(key) as [string, string])[
 export const flagZone = (key: string) => (JSON.parse(key) as [string, string])[0];
 
 /** A cell Pea is arguing for: a proposal that is not what is staged. */
-export const proposing = (cell: TrichotomyCellLike | undefined) =>
+const proposing = (cell: TrichotomyCellLike | undefined) =>
   cell?.proposal != null && !sameValue(cell.proposal, cell.staged);
 
 /** One review row per proposing cell whose key passes `keep`; nothing when none. */

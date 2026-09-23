@@ -257,7 +257,7 @@ export function SessionStrip({
   );
 }
 
-export function ItemRow({
+function ItemRow({
   item,
   open,
   onToggle,
@@ -313,7 +313,7 @@ export function ItemRow({
   );
 }
 
-export function driftHint(blast: Blast): string {
+function driftHint(blast: Blast): string {
   if (blast === "prefix") return "A change here re-sends the entire context.";
   if (blast === "system") return "The cached tools prefix survives; system down is reprocessed.";
   return "New tail only — the cached prefix above is untouched.";

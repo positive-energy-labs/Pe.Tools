@@ -136,7 +136,7 @@ export function frac(x: number): string {
 export const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
 /** Rib width below which the option is not on the table. LORE (no fabricator has ruled). */
-export const MIN_RIB = 1 / 4;
+const MIN_RIB = 1 / 4;
 
 /**
  * Every (opening width × count) on the 1/16″ grid that fills the middle with a rib ≥ MIN_RIB.

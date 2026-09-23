@@ -6,14 +6,13 @@
     }
   },
   "hostBelowRoute": {
-    "total": 10,
+    "total": 9,
     "byArea": {
       "chat": 1,
       "grounded-doc": 1,
       "lab": 2,
       "(root)": 1,
       "runs": 2,
-      "takeoff": 1,
       "workbench": 2
     }
   },

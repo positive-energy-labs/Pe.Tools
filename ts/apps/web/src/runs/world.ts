@@ -1,4 +1,4 @@
-export type RunMeta = {
+type RunMeta = {
   runId: string;
   generatedUtc: string;
   optionsHash: string;
@@ -123,10 +123,10 @@ export function comparisonPlan(
   return { ...plan, registration: reference.registration };
 }
 
-export type Ring = { kind: string; points: [number, number][] };
+type Ring = { kind: string; points: [number, number][] };
 /** disposition: persisted 8th ROOM column (SHIMS.md #3 close). `null` = the package predates the
  * column (or is raw detector output) — UNKNOWN, and the renderer must never dress it as accepted. */
-export type TsvRoom = {
+type TsvRoom = {
   id: string;
   sqft: number;
   lx: number;
@@ -134,7 +134,7 @@ export type TsvRoom = {
   ceil: number | null;
   disposition: "accepted" | "held" | "void" | "excluded" | null;
 };
-export type TsvResidue = { id: string; reason: string; sqft: number; loops: [number, number][][] };
+type TsvResidue = { id: string; reason: string; sqft: number; loops: [number, number][][] };
 export type ZoneGeometry = {
   rooms: TsvRoom[];
   polys: Map<string, Ring[]>;
@@ -258,7 +258,7 @@ export type ZonePair = {
   pairedBy: "key" | "name";
 };
 
-export function reportKeyed(report: RunReport | null): boolean {
+function reportKeyed(report: RunReport | null): boolean {
   return !!report && report.Zones.length > 0 && report.Zones.every((zone) => !!zone.zoneKey);
 }
 
@@ -305,7 +305,7 @@ export function matchZone(candidates: ZoneRecord[], target: ZoneRecord): ZoneRec
 
 const rasterCache = new Map<string, Promise<Raster>>();
 
-export function classesPathForSeals(sealsPath: string): string {
+function classesPathForSeals(sealsPath: string): string {
   return sealsPath.replace(/(^|\/)seals_([^/]+)$/, "$1classes_$2");
 }
 
@@ -337,7 +337,7 @@ export function loadSealClasses(runId: string, sealsPath: string): Promise<Class
   return cached;
 }
 
-export function planSidecarPaths(inkPath: string): { image: string; registration: string } {
+function planSidecarPaths(inkPath: string): { image: string; registration: string } {
   const slash = inkPath.lastIndexOf("/");
   const directory = slash < 0 ? "" : inkPath.slice(0, slash + 1);
   const file = inkPath.slice(slash + 1);
@@ -404,7 +404,7 @@ export function loadRaster(runId: string, relPath: string): Promise<Raster> {
   return cached;
 }
 
-export function replayPathForInk(inkPath: string): string {
+function replayPathForInk(inkPath: string): string {
   const slash = inkPath.lastIndexOf("/");
   const directory = slash < 0 ? "" : inkPath.slice(0, slash + 1);
   const file = inkPath.slice(slash + 1);
@@ -412,7 +412,7 @@ export function replayPathForInk(inkPath: string): string {
   return `${directory}replay_${file.slice(4)}`;
 }
 
-export function parseReplaySeedInk(buffer: ArrayBuffer): Raster {
+function parseReplaySeedInk(buffer: ArrayBuffer): Raster {
   const view = new DataView(buffer);
   const bytes = new Uint8Array(buffer);
   let offset = 0;
@@ -491,7 +491,7 @@ export function loadReplaySeedInk(runId: string, inkPath: string): Promise<Raste
   return cached;
 }
 
-export function rasterBit(raster: Raster, x: number, y: number): boolean {
+function rasterBit(raster: Raster, x: number, y: number): boolean {
   const i = y * raster.w + x;
   return ((raster.bits[i >> 3]! >> (i & 7)) & 1) === 1;
 }

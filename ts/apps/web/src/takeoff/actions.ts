@@ -194,7 +194,7 @@ const currentSnapshot = (ctx: Ctx) => {
   const observation = ctx.readings.snapshot.observation as TakeoffObservation;
   return observation.kind === "ready" ? observation.capture.snapshot : null;
 };
-export const takeoffHealth = (snapshot: TakeoffSnapshot | undefined): string | null =>
+const takeoffHealth = (snapshot: TakeoffSnapshot | undefined): string | null =>
   snapshot?.carriers.status === "needs-initialization"
     ? `needs initialization · ${snapshot.carriers.missingCarrierGuids.length} carriers`
     : null;

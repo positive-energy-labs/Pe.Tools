@@ -34,7 +34,7 @@ import { typeRowKey } from "#/families/picks";
  * settles, whatever its outcome, the audit re-reads its scope. Rows, picks, receipts and the next
  * plan key by family name, so they carry across; the sheet's hashes closed with it.
  */
-export function useAfterApply(busy: string | null, reresolve: () => void) {
+function useAfterApply(busy: string | null, reresolve: () => void) {
   const applying = useRef(false);
   const latest = useRef(reresolve);
   latest.current = reresolve;

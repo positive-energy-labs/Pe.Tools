@@ -460,8 +460,3 @@ export const PARAM_META: ParamMeta[] = [
   },
   { name: "PE_G___TagInstance", scope: "instance", storage: "String", label: "Tag" },
 ];
-
-export const DEMO_LINK = {
-  sourceLabel: "Heating loop supply/return (design)",
-  targets: ["PE_M_PerfHeat_FluidEWT", "PE_M_PerfHeat_FluidLWT"],
-} as const;
