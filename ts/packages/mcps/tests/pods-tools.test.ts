@@ -30,7 +30,7 @@ test("Pea enumerates Pod members and proposes revision-checked Work without rout
       },
     },
   });
-  const scope = { route: "pods", target: null, work: "member-a" };
+  const scope = { binding: "workspace", route: "pods", target: null, work: "member-a" } as const;
   const member = { pod: "demo", path: "settings/a.json" };
   // The browser opens a member through the public generic Work write contract.
   await runtime.apply(
