@@ -848,3 +848,8 @@ Paid at the primitives; the rulings are above and the evidence is
   phase-4 cutover round, not before: route fixes on an unsettled density law get redone. Family
   rows whose identity cell wraps to two lines still break the 20px rhythm (`density round 1`,
   measured); nowrap/ellipsis lands at the same cutover.
+- Name sweep (Codex-grade, one commit per item): `scope` naming a `WorkKey` at ten sites; `ScopeStore` persisting `scope:${threadId}` after Scope became Target; `bridgeSelector`; `OpenDocumentCount` beside `OpenDocuments`; the `schedule-grid` literal in `bridge-protocol.ts`; `TakeoffPromotionFacts` on the generated wire; `help.tsx:3` header; two `Thumbnail` components; two `ListPopup` specimens; two synthetic zone worlds; mojibake at `bridge.ts:207`.
+- `firstRefusal` in `route/refusal.ts` sorts by `REFUSAL_ORDER.indexOf`, so a code outside the list returns -1 and outranks `no-target`; make `REFUSAL_ORDER` provably exhaustive.
+- `use-route.ts` evicts the `own` revision chain by insertion order past 256 entries, so a long-lived page degrades from truthfully bound to stale; bound by observation, not count.
+- Command palette mirrors route verbs; one palette each for `/families`, `/family`, `/schedules` (user ruling 2026-09-22).
+- `targeting/**` (instrument cluster, direction glyphs, stage strip; deleted by `43ff94b0`, base `f459801e`) is undecided; stand up a worktree at the base commit and screenshot the route head before ruling.

@@ -263,3 +263,7 @@ restated here.
 - 2026-08-17 — Defer separate browser resolver, browser field-options endpoint, browser-specific UI activation, and browser filters on unrelated operations until usage proves them. (folded from repo-backlog-capture.md)
 - 2026-08-17 — Evaluate dedicated `revit.catalog.views` and `revit.catalog.sheets` only after project-browser/project-index/schedule provenance patterns settle. (folded from repo-backlog-capture.md)
 - 2026-08-17 — Promote repeated `host_operation_call` patterns into convenience tools only after usage proves they earn context. (folded from repo-backlog-capture.md)
+- `TurnDocuments.#turns` in `mcps/src/pea/owned-documents.ts` is unbounded (its `ponytail:` comment says so); drop a turn's tombstone once no delayed call can enter.
+- Chat drafts survive by React mount (`ComposerBank` behind `<Activity>`), not by thread identity; a reload loses every draft.
+- `toWireDisplayState` (`runtime/src/thread-state.ts`) serializes `activeTools` and `currentMessage` eagerly, so a tool result over `DEFERRED_TOOL_RESULT_BYTES` still crosses on every attach; defer on the SSE path too.
+- MCP resource scoping (`scopeRuntimeResource`, `inScope`) was deleted with no successor; Pea must be able to touch any root when given permission (user ruling 2026-09-22), so restore it as a permission check, never a refusal.

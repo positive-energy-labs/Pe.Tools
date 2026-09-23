@@ -63,3 +63,4 @@ The factory is the control loop over this repo: sensors read the tree at a commi
 - mise is not installed; sensor and actuator rows run raw commands until mise is adopted for tool pins and `sources` staleness.
 - The projection page is vanilla HTML in round 1; taking the kit as a workspace dependency is owed once the kit is a package.
 - Unverified: whether mise merges nested package `mise.toml` tasks upward without an includes entry.
+- The factory has no caller (`@pe/factory` appears nowhere outside its directory) and two declarations (`factory.toml` shipped; the 2026-09-18 ledger line rules `factory.config.ts`); `configAt` casts TOML to `Config` with no validation. Settle the declaration and wire one lane.
