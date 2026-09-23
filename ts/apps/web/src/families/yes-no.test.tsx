@@ -29,6 +29,7 @@ const ROW: TypeRow = {
   values: { "Offset Symbol": "No" },
   scopes: { "Offset Symbol": "Family" },
   formulas: { "Offset Symbol": "None" },
+  storageTypes: { "Offset Symbol": "Integer" },
 };
 
 function Matrix({ propose }: { propose: (...args: unknown[]) => Promise<void> }) {

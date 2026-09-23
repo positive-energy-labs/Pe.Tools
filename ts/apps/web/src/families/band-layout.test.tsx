@@ -21,7 +21,7 @@ const staged = (n: number): Record<string, FamilyCellState> =>
   Object.fromEntries(
     Array.from({ length: n }, (_, i) => [
       familyCellKey({ familyName: `F${i}`, typeName: "T", parameter: "Model" }),
-      { proposal: null, staged: { value: { value: `v${i}` } } },
+      { proposal: null, staged: { value: { value: `v${i}`, storageType: "String" } } },
     ]),
   );
 

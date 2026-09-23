@@ -328,8 +328,8 @@ export function useFamiliesStore(
         return handle.work.write(
           transitionPatches(["cells"], key, cells[key] ?? {}, {
             kind: "stage",
-            rung: { value: { value: value.value } },
-            baseline: { value: { value: current } },
+            rung: { value },
+            baseline: { value: { ...value, value: current } },
           }),
         );
       },

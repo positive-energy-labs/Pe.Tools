@@ -5,6 +5,7 @@ import { NodeServices } from "@effect/platform-node";
 import {
   actionAdmissionSchema,
   familyActions,
+  familyCaptureSchema,
   familyReads,
   familiesCaptureEvidenceSchema,
   familiesRouteState,
@@ -141,7 +142,7 @@ const familyMember = (modelJson: string) => {
 
 /** A draft saved as a member says what it is, whatever `$schema` it carried. */
 const draftContent = (spec: string) => {
-  const { $schema: _, ...model } = JSON.parse(spec.replace(/^﻿/, "")) as object & {
+  const { $schema: _, ...model } = JSON.parse(spec.replace(/^\uFEFF/, "")) as object & {
     $schema?: string;
   };
   return `${JSON.stringify({ $schema: familyModelSchema(), ...model }, null, 2)}
@@ -965,7 +966,7 @@ export async function readFamily(
       images?: unknown[];
     };
     if (!response.ok || parsed.error) throw Error(parsed.error ?? "Spec parsing failed");
-    reading = {
+    reading = familyCaptureSchema.shape.reading.parse({
       kind: "spec",
       value: {
         parseId: parsed.jobId ?? null,
@@ -973,7 +974,7 @@ export async function readFamily(
         blocks: parsed.blocks ?? [],
         images: parsed.images ?? [],
       },
-    };
+    });
   } else {
     const target = documentRefSchema.parse(raw.target);
     // Parameter Links reads a project document, not a family document.

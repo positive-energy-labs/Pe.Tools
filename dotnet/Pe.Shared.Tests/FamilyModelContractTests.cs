@@ -1,6 +1,5 @@
+using Pe.Shared.StorageRuntime.FamilyFoundry;
 using Newtonsoft.Json.Linq;
-using Pe.Revit.FamilyFoundry.OperationSettings;
-using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Shared.RevitData.Families;
 using Pe.Shared.StorageRuntime.Json;
 
@@ -154,8 +153,8 @@ public sealed class FamilyModelContractTests {
             ["Number"] = new JObject { ["value"] = 3 },
             ["Formula"] = new JObject { ["formula"] = "480" }
         } };
-        Assert.That(FamilyValueUnits.Validate(patch, name => name != "Number").Count, Is.EqualTo(accepted ? 0 : 1));
-        Assert.That(FamilyValueUnits.Validate(new JObject(), _ => true), Is.Empty, "Captured unmentioned values are not authored literals.");
+        Assert.That(FamilyModelValidator.ValidateAuthoredUnits(patch, name => name != "Number").Count, Is.EqualTo(accepted ? 0 : 1));
+        Assert.That(FamilyModelValidator.ValidateAuthoredUnits(new JObject(), _ => true), Is.Empty, "Captured unmentioned values are not authored literals.");
     }
 
     [Test]

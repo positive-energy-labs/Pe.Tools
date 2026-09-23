@@ -388,7 +388,14 @@ export const composeMember = Effect.fnUntraced(function* (
         ),
       );
       dependencies = [...result.dependencies];
-      source = { ...result.source, id: result.source.id ?? null };
+      if (result.source.origin === "Operation")
+        return yield* Effect.fail(
+          new LocalOpError(
+            "pod.member.compose",
+            "A composition requires a saved member or supplied draft.",
+          ),
+        );
+      source = { ...result.source, id: result.source.id ?? null, origin: result.source.origin };
       composed = result.composed == null ? undefined : JSON.parse(result.composed);
     }
   }

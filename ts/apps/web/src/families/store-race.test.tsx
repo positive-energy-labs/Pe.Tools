@@ -81,9 +81,9 @@ import { useFamiliesStore } from "./store";
 const x = { familyName: "F", typeName: "T", parameter: "X" };
 const y = { familyName: "F", typeName: "T", parameter: "Y" };
 const z = { familyName: "G", typeName: "T", parameter: "Z" };
-const human = (value: string) => ({ value });
+const human = (value: string) => ({ value, storageType: "String" as const });
 const pea = (value: string): FamilyCellState["proposal"] => ({
-  value: { value },
+  value: { value, storageType: "String" },
 });
 const cell = (address: typeof x) => server.envelope.doc.cells[familyCellKey(address)];
 
@@ -213,20 +213,26 @@ test("each verb touches one rung: accept, counter, deny and unstage keep the oth
   const { observe, actions } = start({ [familyCellKey(x)]: { proposal: pea("P"), staged: null } });
   await act(() => actions().accept([x]));
   expect(cell(x)).toMatchObject({
-    proposal: { value: { value: "P" } },
-    staged: { value: { value: "P" } },
+    proposal: { value: { value: "P", storageType: "String" } },
+    staged: { value: { value: "P", storageType: "String" } },
   });
   await act(() => actions().propose(x, human("H"), "base"));
   expect(cell(x)).toMatchObject({
-    proposal: { value: { value: "P" } },
-    staged: { value: { value: "H" } },
+    proposal: { value: { value: "P", storageType: "String" } },
+    staged: { value: { value: "H", storageType: "String" } },
   });
   await act(() => actions().deny([x]));
-  expect(cell(x)).toMatchObject({ proposal: null, staged: { value: { value: "H" } } });
+  expect(cell(x)).toMatchObject({
+    proposal: null,
+    staged: { value: { value: "H", storageType: "String" } },
+  });
   external([{ path: ["cells", familyCellKey(x), "proposal"], value: pea("R") }]);
   observe();
   await act(() => actions().unstage([x]));
-  expect(cell(x)).toMatchObject({ proposal: { value: { value: "R" } }, staged: null });
+  expect(cell(x)).toMatchObject({
+    proposal: { value: { value: "R", storageType: "String" } },
+    staged: null,
+  });
   await act(() => actions().propose(y, human("base"), "base"));
   expect(cell(y)?.staged ?? null).toBeNull();
 });
@@ -272,7 +278,7 @@ test("type then quick accept or deny lands; a foreign write between them refuses
   external([{ path: ["cells", familyCellKey(y), "proposal"], value: pea("F") }]);
   expect((await act(() => late.accept([x]))).refused).toMatchObject({ code: "stale-revision" });
   expect((await act(() => late.deny([x]))).refused).toMatchObject({ code: "stale-revision" });
-  expect(cell(x)).toMatchObject({ proposal: { value: { value: "P" } } });
+  expect(cell(x)).toMatchObject({ proposal: { value: { value: "P", storageType: "String" } } });
   expect(cell(x)?.staged ?? null).toBeNull();
 });
 
@@ -281,7 +287,7 @@ test("an aggregate accept skips a contested cell and refuses once for every cove
     [familyCellKey(x)]: { proposal: pea("P"), staged: null },
     [familyCellKey(y)]: {
       proposal: pea("Q"),
-      staged: { value: { value: "mine" } },
+      staged: { value: { value: "mine", storageType: "String" } },
     },
     [familyCellKey(z)]: { proposal: pea("R"), staged: null },
   });
@@ -300,7 +306,7 @@ test("an emptied cell stages the empty value; empty equal to the baseline stages
   const { actions } = start();
   // Rulings 2026-09-18 16:00 #3: an empty value is a value, so a person can clear a parameter.
   await act(() => actions().propose(x, human(""), "base"));
-  expect(cell(x)?.staged).toEqual({ value: { value: "" } });
+  expect(cell(x)?.staged).toEqual({ value: { value: "", storageType: "String" } });
   await act(() => actions().propose(y, human(""), ""));
   expect(cell(y)?.staged ?? null).toBeNull();
 });

@@ -13,7 +13,9 @@ const entry = (
   address: { familyName, typeName, parameter },
   cell: {
     proposal: null,
-    staged: { value: { value } },
+    staged: {
+      value: { value, storageType: parameter === "PE_G___Capacity" ? "Double" : "String" },
+    },
   } satisfies FamilyCellState,
 });
 const cells = (...entries: ReturnType<typeof entry>[]): Record<string, FamilyCellState> =>
@@ -23,8 +25,8 @@ describe("staged family cells", () => {
   it("looks up the full address and retains proposal plus staged values", () => {
     const address = { familyName: "A", typeName: "T1", parameter: "P" };
     const state: FamilyCellState = {
-      proposal: { value: { value: "pea" } },
-      staged: { value: { value: "human" } },
+      proposal: { value: { value: "pea", storageType: "String" } },
+      staged: { value: { value: "human", storageType: "String" } },
     };
     const document = { [familyCellKey(address)]: state };
     expect(cellAt(document, address)).toBe(state);
@@ -32,18 +34,18 @@ describe("staged family cells", () => {
   });
 
   it("keeps a JSON scalar a scalar and everything else the typed text", () => {
-    expect(patchValue("12")).toBe(12);
-    expect(patchValue("true")).toBe(true);
-    expect(patchValue("false")).toBe(false);
-    expect(patchValue("FXMQ20")).toBe("FXMQ20");
-    expect(patchValue("3' - 6\"")).toBe("3' - 6\"");
+    expect(patchValue("12", "Integer")).toBe(12);
+    expect(patchValue("true", "Integer")).toBe(true);
+    expect(patchValue("false", "Integer")).toBe(false);
+    expect(patchValue("FXMQ20", "Integer")).toBe("FXMQ20");
+    expect(patchValue("3' - 6\"", "Double")).toBe("3' - 6\"");
   });
 
   it("generates one patch draft per family from staged cells only", () => {
     const open: ReturnType<typeof entry> = {
       address: { familyName: "Open", typeName: "O-1", parameter: "PE_G___Model" },
       cell: {
-        proposal: { value: { value: "ignored" } },
+        proposal: { value: { value: "ignored", storageType: "String" } },
         staged: null,
       },
     };

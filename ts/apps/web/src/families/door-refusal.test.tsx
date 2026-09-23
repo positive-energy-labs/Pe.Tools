@@ -69,6 +69,7 @@ const ROWS: TypeRow[] = [
     values: { [PARAMETER]: "LBP15A" },
     scopes: { [PARAMETER]: "Family" },
     formulas: { [PARAMETER]: "None" },
+    storageTypes: { [PARAMETER]: "String" },
   },
 ];
 

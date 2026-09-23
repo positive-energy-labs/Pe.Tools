@@ -10,7 +10,7 @@ public static class FamilyModelUnitValidation {
         ForgeTypeId? Spec(string name, FamilyModelParameter parameter) =>
             parameter.Shared == true ? parameter.SharedSpecId is { } id ? new ForgeTypeId(id) : sharedSource(name)?.GetDataType()
             : parameter.DataType is { } data ? SetParamMetadata.Spec(data) : null;
-        var diagnostics = FamilyValueUnits.Validate(authored, name => {
+        var diagnostics = FamilyModelValidator.ValidateAuthoredUnits(authored, name => {
             if (!resolved.Parameters.TryGetValue(name, out var parameter)) return false;
             var spec = Spec(name, parameter);
             return spec is not null && spec != SpecTypeId.Number && spec != SpecTypeId.Int.Integer && UnitUtils.IsMeasurableSpec(spec);

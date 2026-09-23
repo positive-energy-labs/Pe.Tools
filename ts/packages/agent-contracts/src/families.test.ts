@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  familyStagedPatch,
   familyCellAddress,
   familyCellKey,
   familiesExcluded,
@@ -8,8 +9,48 @@ import {
   familiesRouteState,
 } from "./families.ts";
 import { applyPatches } from "./route-doc.ts";
+import { familyCaptureSchema } from "./family-actions.ts";
 
 describe("familiesRouteState", () => {
+  it("persists spec readings only with typed document blocks and images", () => {
+    const reading = {
+      kind: "spec",
+      value: {
+        fileName: "spec.pdf",
+        blocks: [{ id: "b", page: 1, kind: "text", md: "Model" }],
+        images: [{ id: "i", page: 1, category: "diagram" }],
+      },
+    };
+    expect(familyCaptureSchema.shape.reading.parse(JSON.parse(JSON.stringify(reading)))).toEqual(
+      reading,
+    );
+    expect(familyCaptureSchema.shape.reading.safeParse({ ...reading, value: 3 }).success).toBe(
+      false,
+    );
+    expect(
+      familyCaptureSchema.shape.reading.safeParse({
+        ...reading,
+        value: { ...reading.value, blocks: [{}] },
+      }).success,
+    ).toBe(false);
+  });
+  it("round-trips numeric-looking Text through staged Work into a Family Foundry patch", () => {
+    const key = familyCellKey({ familyName: "F", typeName: "T", parameter: "Text" });
+    const doc = familiesRouteState.schema.parse(
+      JSON.parse(
+        JSON.stringify({
+          cells: { [key]: { staged: { value: { value: "3", storageType: "String" } } } },
+        }),
+      ),
+    );
+    const patch = JSON.parse(JSON.stringify(familyStagedPatch(doc.cells, "F")!.spec));
+    expect(patch.patch.types.T.Text).toBe("3");
+    expect(
+      familiesRouteState.schema.safeParse({
+        cells: { [key]: { staged: { value: { value: "3" } } } },
+      }).success,
+    ).toBe(false);
+  });
   it("is authored Work and nothing else: no plan, no receipts, no observation keys", () => {
     expect(familiesRouteState.schema.parse({})).toEqual({
       scope: {},

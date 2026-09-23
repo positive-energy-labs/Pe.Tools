@@ -172,7 +172,12 @@ export function familyCatalogProblem(catalog: {
  * (`patch.types.<typeName>.<parameter>`). Never a family element id: every LoadFamily after an edit
  * replaces the Family element, so only the name is stable across applies.
  */
-export const familyCellValueSchema = z.object({ value: z.string() }).strict();
+export const familyCellValueSchema = z
+  .object({
+    value: z.string(),
+    storageType: z.enum(["String", "Integer", "Double", "ElementId", "None"]),
+  })
+  .strict();
 export type FamilyCellValue = z.infer<typeof familyCellValueSchema>;
 export const familyCellStateSchema = trichotomyCellSchema(familyCellValueSchema);
 export type FamilyCellState = z.infer<typeof familyCellStateSchema>;
@@ -205,15 +210,20 @@ const familyCellKeySchema = z.string().refine(
   { error: "a family cell key must be a canonical [familyName,typeName,parameter] JSON tuple" },
 );
 
-/** A typed cell value as the Family Foundry patch writes it: a JSON scalar stays one. */
-export const patchValue = (text: string): string | number | boolean =>
-  text === "true"
-    ? true
-    : text === "false"
-      ? false
-      : text.trim() !== "" && Number.isFinite(Number(text))
-        ? Number(text)
-        : text;
+/** Only a declared numeric storage type permits numeric coercion; Text always preserves its bytes. */
+export const patchValue = (
+  text: string,
+  storageType: FamilyCellValue["storageType"],
+): string | number | boolean => {
+  if (storageType === "Integer" && (text === "true" || text === "false")) return text === "true";
+  if (
+    (storageType === "Double" || storageType === "Integer") &&
+    text.trim() !== "" &&
+    Number.isFinite(Number(text))
+  )
+    return Number(text);
+  return text;
+};
 
 /**
  * The patch member one family's staged cells generate, without its `$schema`, and the cell keys it
@@ -233,7 +243,10 @@ export function familyStagedPatch(
   for (const [key, cell] of Object.entries(cells)) {
     const address = familyCellAddress(key);
     if (address.familyName !== familyName || !cell.staged) continue;
-    (types[address.typeName] ??= {})[address.parameter] = patchValue(cell.staged.value.value);
+    (types[address.typeName] ??= {})[address.parameter] = patchValue(
+      cell.staged.value.value,
+      cell.staged.value.storageType,
+    );
     keys.push(key);
   }
   return keys.length === 0

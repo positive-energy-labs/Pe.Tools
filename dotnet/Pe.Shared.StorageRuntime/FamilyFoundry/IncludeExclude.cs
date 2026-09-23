@@ -1,6 +1,6 @@
 using Pe.Shared.StorageRuntime.Json;
 
-namespace Pe.Revit.FamilyFoundry.OperationSettings;
+namespace Pe.Shared.StorageRuntime.FamilyFoundry;
 
 public class IncludeFamilies {
     [Includable(IncludableFragmentRoot.FamilyNames)]

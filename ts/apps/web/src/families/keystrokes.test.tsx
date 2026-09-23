@@ -36,6 +36,7 @@ const row = (familyId: number, familyName: string, value: string): TypeRow => ({
   values: { Model: value },
   scopes: { Model: "Family" },
   formulas: { Model: "None" },
+  storageTypes: { Model: "String" },
 });
 const ROWS = [row(1, "Fan Coil", "FXMQ15"), row(2, "Heat Pump", "RXL24")];
 
@@ -51,7 +52,7 @@ function Matrix({ inlineClick = false }: { inlineClick?: boolean }) {
     cells,
     wire: { segment: "cells", revision: 1, write: async () => null },
     // The write lands later, as Work does: only then do the cells (and the columns) change.
-    propose: (address: FamilyCellAddress, value: { value: string }) =>
+    propose: (address: FamilyCellAddress, value: NonNullable<FamilyCellState["staged"]>["value"]) =>
       new Promise<void>((resolve) => {
         land = () => {
           setCells((current) => ({

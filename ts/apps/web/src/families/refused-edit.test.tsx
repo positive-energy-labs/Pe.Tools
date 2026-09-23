@@ -37,6 +37,7 @@ const ROWS: TypeRow[] = [
     values: { Model: "FXMQ15" },
     scopes: { Model: "Family" },
     formulas: { Model: "None" },
+    storageTypes: { Model: "String" },
   },
 ];
 const REFUSED = "1 cell key(s) name no type of a family loaded in this Work's scope";

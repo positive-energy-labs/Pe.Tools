@@ -5,6 +5,7 @@ import {
   familyCellValueSchema,
   showCellValue,
   type FamilyCellState,
+  type FamilyCellValue,
 } from "@pe/agent-contracts";
 import { reviewTransitions, type CellWire } from "#/components/lang/band";
 import { ReadCell } from "#/components/master-table/cells";
@@ -37,6 +38,7 @@ export interface TypeRow {
   values: Record<string, string>;
   scopes: Record<string, FamilyParameterSnapshot["scope"]>;
   formulas: Record<string, FamilyParameterSnapshot["formulaState"]>;
+  storageTypes: Record<string, FamilyCellValue["storageType"] | undefined>;
 }
 
 export interface ParamColumn {
@@ -88,6 +90,8 @@ export function patchable(row: TypeRow, key: string): boolean {
   const scope = row.scopes[key];
   return (
     Boolean(scope) &&
+    row.storageTypes[key] != null &&
+    row.storageTypes[key] !== "None" &&
     scope !== "Unresolved" &&
     scope !== "ProjectBindingOnly" &&
     row.formulas[key] !== "Present"
@@ -113,6 +117,8 @@ function cellReason(row: TypeRow, key: string, instance: boolean): string {
   const scope = row.scopes[key];
   if (!scope || scope === "Unresolved")
     return "This parameter does not exist on this family, so there is nothing to read and nothing a profile could change here.";
+  if (!row.storageTypes[key] || row.storageTypes[key] === "None")
+    return "This parameter has no declared writable storage type.";
   if (scope === "ProjectBindingOnly")
     return "Bound at the PROJECT, not owned by the family. The value lives on placed instances; editing the family will not move it.";
   if (row.formulas[key] === "Present")
@@ -285,7 +291,13 @@ export function useFamiliesColumns({
                 select="single"
                 selected={[shown]}
                 empty="no choices"
-                onPick={(choice) => void propose(address, { value: choice }, value)}
+                onPick={(choice) =>
+                  void propose(
+                    address,
+                    { value: choice, storageType: row.storageTypes[col.key]! },
+                    value,
+                  )
+                }
               />
             );
           }
@@ -306,7 +318,11 @@ export function useFamiliesColumns({
                     : undefined
                 }
                 onCommit={(next) =>
-                  propose(address, { value: next }, value).then((refusal) => refusal ?? null)
+                  propose(
+                    address,
+                    { value: next, storageType: row.storageTypes[col.key]! },
+                    value,
+                  ).then((refusal) => refusal ?? null)
                 }
               />
             );

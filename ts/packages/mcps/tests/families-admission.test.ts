@@ -40,7 +40,7 @@ const propose = (familyName: string, typeName = "12 X 4") => ({
     familyCellKey({ familyName, typeName, parameter: "View Description" }),
     "proposal",
   ],
-  value: { value: { value: "Base" } },
+  value: { value: { value: "Base", storageType: "String" } },
 });
 
 test("F-J1-7: a proposal naming no loaded family is refused at the door, naming the key", async () => {
@@ -62,7 +62,12 @@ test("an element id in the family slot is refused by the schema, before Revit is
     scope,
     "families",
     "agent",
-    [{ path: ["cells", key, "proposal"], value: { value: { value: "Base" } } }],
+    [
+      {
+        path: ["cells", key, "proposal"],
+        value: { value: { value: "Base", storageType: "String" } },
+      },
+    ],
     0,
   );
   expect(refused).toMatchObject({ ok: false });
@@ -224,7 +229,7 @@ test("F-J1-12: the live catalog loopback admits a key for a type past the tenth,
           }),
           "staged",
         ],
-        value: { value: { value: "" } },
+        value: { value: { value: "", storageType: "String" } },
       },
     ],
     2,

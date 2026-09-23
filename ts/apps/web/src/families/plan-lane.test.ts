@@ -125,7 +125,7 @@ test("capture evidence is read off the capture's own receipt, failures included"
 /* F-J3-6: plan words what it plans; saving the draft to the pod is its own, optional verb. */
 const staged = (familyName: string, value: string) => [
   familyCellKey({ familyName, typeName: "T", parameter: "Mark" }),
-  { staged: { value: { value } } },
+  { staged: { value: { value, storageType: "String" } } },
 ];
 const stagedView = () =>
   view({

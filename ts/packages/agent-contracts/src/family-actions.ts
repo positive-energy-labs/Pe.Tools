@@ -1,5 +1,6 @@
 import type { ActionDefinition } from "./semantic-actions.ts";
 import { z } from "zod";
+import { specDocSchema, familyDocImageSchema } from "./family.ts";
 import { documentRefSchema } from "./target.ts";
 import { workKeySchema } from "./route-state.ts";
 import { podDraftSourceSchema, podMemberSchema, podMemberSourceSchema } from "./settings.ts";
@@ -17,7 +18,10 @@ export const familyCaptureSchema = z.object({
   reading: z.discriminatedUnion("kind", [
     // Route readings live beside Family's, in the same owner, under the route's own WorkKey.
     z.object({ kind: z.literal("parameter-links"), value: parameterLinksReadingSchema }),
-    z.object({ kind: z.literal("spec"), value: z.unknown() }),
+    z.object({
+      kind: z.literal("spec"),
+      value: specDocSchema.extend({ images: z.array(familyDocImageSchema) }),
+    }),
   ]),
 });
 export type FamilyCapture = z.infer<typeof familyCaptureSchema>;

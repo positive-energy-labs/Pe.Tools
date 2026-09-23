@@ -166,15 +166,15 @@ const staged: FamiliesRouteDocument = familiesRouteState.schema.parse({
   },
   cells: {
     [familyCellKey(peaModel)]: {
-      proposal: { value: { value: peaModel.value } },
-      staged: { value: { value: peaModel.value } },
+      proposal: { value: { value: peaModel.value, storageType: "String" } },
+      staged: { value: { value: peaModel.value, storageType: "String" } },
     },
     [familyCellKey({
       familyName: "Heat Pump - Split",
       typeName: "HP-1",
       parameter: "PE_G___Manufacturer",
     })]: {
-      proposal: { value: { value: "Mitsubishi" } },
+      proposal: { value: { value: "Mitsubishi", storageType: "String" } },
       staged: null,
     },
   },

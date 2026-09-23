@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { FAMILY_CATALOG_LIMIT } from "@pe/agent-contracts";
+import { familyCellValueSchema, FAMILY_CATALOG_LIMIT } from "@pe/agent-contracts";
 
 import { runFanOut, type CellWire } from "#/components/lang/band";
 import type { FamiliesStore } from "#/families/store";
@@ -182,11 +182,15 @@ function useFamiliesWorkspaceModel(
         const values: TypeRow["values"] = {};
         const scopes: TypeRow["scopes"] = {};
         const formulas: TypeRow["formulas"] = {};
+        const storageTypes: TypeRow["storageTypes"] = {};
         for (const param of visible) {
           const key = param.definition.identity.key;
           values[key] = cellText(param.valuesPerType[typeName]);
           scopes[key] = param.scope;
           formulas[key] = param.formulaState;
+          storageTypes[key] = familyCellValueSchema.shape.storageType.safeParse(
+            param.storageType,
+          ).data;
         }
         rows.push({
           key: typeRowKey(family, typeName),
@@ -198,6 +202,7 @@ function useFamiliesWorkspaceModel(
           values,
           scopes,
           formulas,
+          storageTypes,
         });
       }
     }

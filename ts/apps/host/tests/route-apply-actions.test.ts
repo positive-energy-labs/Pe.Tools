@@ -360,7 +360,7 @@ test("pea proposes a families cell like a person does, and cannot accept it", as
   const { work } = await setup();
   const revision = await authorFamilies(work);
   const cell = familyCellKey({ familyName: "Box", typeName: "T1", parameter: "PE_G___Model" });
-  const value = { value: "FXMQ20" };
+  const value = { value: "FXMQ20", storageType: "String" };
   const proposed = await work.apply(
     scope,
     "families",
@@ -696,9 +696,9 @@ const H = cellOf("Height");
 const D = cellOf("Depth");
 const staged = (value: string): FamilyCellState => ({
   proposal: null,
-  staged: { value: { value } },
+  staged: { value: { value, storageType: "Double" as const } },
 });
-const rung = (value: string) => ({ value: { value } });
+const rung = (value: string) => ({ value: { value, storageType: "Double" as const } });
 
 /** Box's staged cells, the member they generate, and its one-family plan at that revision. */
 async function stagedPlan(
@@ -785,7 +785,7 @@ test("a user who keeps editing during apply loses nothing; unchanged consumed ce
 test("a consumed unchanged cell retires once, with a proposal equal to it; replay neither redispatches nor re-retires", async () => {
   const env = await setup();
   const { apply, revision } = await stagedPlan(env, {
-    [W]: { proposal: rung("10"), staged: { value: { value: "10" } } },
+    [W]: { proposal: rung("10"), staged: { value: { value: "10", storageType: "Double" } } },
   });
   const first = await env.admit("families.apply", apply, revision, "retire-once");
   resultOf(first);

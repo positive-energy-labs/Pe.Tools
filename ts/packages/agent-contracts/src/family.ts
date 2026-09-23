@@ -132,7 +132,7 @@ export const familyEvidenceSchema = z.union([
 /** Parser-extracted figures/diagram crops — ids only; geometry stays in the parse
  * cache. Pea may cite an image id as a proposal source; the parser measured its
  * region, so image citations ground exactly (never estimated). */
-const familyDocImageSchema = z.object({
+export const familyDocImageSchema = z.object({
   id: z.string(),
   page: z.number(),
   category: z.string(),

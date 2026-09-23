@@ -40,6 +40,7 @@ const ROWS: TypeRow[] = [
     values: { [PARAMETER]: "100 CFM" },
     scopes: { [PARAMETER]: "Family" },
     formulas: { [PARAMETER]: "None" },
+    storageTypes: { [PARAMETER]: "Double" },
   },
 ];
 
@@ -76,7 +77,11 @@ test("a bare number stages the project's unit with it and never calls Revit", as
   const { input } = matrix(CFM, propose, parse);
   await type(input, "300");
   expect(parse).not.toHaveBeenCalled();
-  expect(propose).toHaveBeenCalledWith(expect.anything(), { value: "300 CFM" }, "100 CFM");
+  expect(propose).toHaveBeenCalledWith(
+    expect.anything(),
+    { value: "300 CFM", storageType: "Double" },
+    "100 CFM",
+  );
 });
 
 test("typed text is Revit's to read, and Revit's answer is what is staged", async () => {
@@ -85,7 +90,11 @@ test("typed text is Revit's to read, and Revit's answer is what is staged", asyn
   const { input } = matrix(CFM, propose, parse);
   await type(input, "300 L/s");
   expect(parse).toHaveBeenCalledWith(CFM, "300 L/s");
-  expect(propose).toHaveBeenCalledWith(expect.anything(), { value: "635.66 CFM" }, "100 CFM");
+  expect(propose).toHaveBeenCalledWith(
+    expect.anything(),
+    { value: "635.66 CFM", storageType: "Double" },
+    "100 CFM",
+  );
 });
 
 test("a measured parameter the project shows no unit for asks at the cell and stages nothing", async () => {

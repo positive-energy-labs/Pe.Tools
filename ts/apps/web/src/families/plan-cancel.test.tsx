@@ -87,7 +87,12 @@ class WireSource {
                         },
                       },
                     },
-                    cells: { [STAGED]: { proposal: null, staged: { value: { value: "FXMQ20" } } } },
+                    cells: {
+                      [STAGED]: {
+                        proposal: null,
+                        staged: { value: { value: "FXMQ20", storageType: "String" } },
+                      },
+                    },
                     excluded: {},
                   },
                 }

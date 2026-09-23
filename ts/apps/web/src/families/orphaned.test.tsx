@@ -18,8 +18,8 @@ const key = (familyName: string) =>
 
 test("a cell the plan could not resolve by name draws orphaned, with the host's reason, and clears", () => {
   const cells: Record<string, FamilyCellState> = {
-    [key("Ghost")]: { proposal: null, staged: { value: { value: "x" } } },
-    [key("Alpha")]: { proposal: null, staged: { value: { value: "y" } } },
+    [key("Ghost")]: { proposal: null, staged: { value: { value: "x", storageType: "String" } } },
+    [key("Alpha")]: { proposal: null, staged: { value: { value: "y", storageType: "String" } } },
   };
   const plan = {
     entries: [

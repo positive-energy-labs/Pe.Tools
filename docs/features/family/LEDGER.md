@@ -3,6 +3,7 @@
 Recentered 2026-09-08 from the operator stories, source history, and native tests. Git before this rewrite retains the old run narratives.
 
 ## Decided
+- 2026-09-22, staged Families values retain the parameter's declared `storageType`; missing declarations refuse instead of guessing from text. `FamilyModelValidator.ValidateAuthoredUnits` owns literal validation, `MappingUnits` owns allowed mapping units, and Revit owns conversion. The validator and unit table perform no conversion.
 - 2026-09-22, `/family` operates only on the family document Revit already has open; selecting a project family never opens its editor, and no route-owned opener is built. Its measured cells show the open `.rfa` document's own units (design-system ledger 2026-09-22).
 
 - 2026-09-18: `FamilyProfileConverter` and the frozen company corpus are deleted (`company-20260906`, `company-composed-20260906.json`, the reconstructed fragment, the Grinder native override, the corpus contract tests and `scripts/familyfoundry-monthly-host-proof.mjs`). The user ruled: "the company migration HAS landed: FamilyProfileConverter and the company corpus are deletable." Engine tests that used the converter only to build input now author the `FamilyPatch` inline. The mechanical mapping fragment (`Fixtures/Profiles/mech-equip-mapping-data.json`), the Magna3 horsepower overlay and the frozen Parameters Service definitions stay, because kept engine and Old_template tests read them. Proof: source compile; the Revit-backed ports are unproven until a native run.
