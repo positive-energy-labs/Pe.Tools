@@ -76,6 +76,8 @@ export interface BuildAgentControllerAppOptions {
   routeRegistrations?: readonly RouteWorkspaceRegistration[];
   onRouteWorkspace?: (workspace: RouteWorkspace, storage: MastraCompositeStore | undefined) => void;
   observeHostResource?: ResourceObserver;
+  /** Wraps every served Reading, Work included, e.g. with the host's document change mark. */
+  markReadings?: (observe: ResourceObserver) => ResourceObserver;
   /** The one capability catalog, read for a bridge selector; served at GET /pe/capabilities. */
   capabilityCatalog?: { read(bridgeSelector?: string): Promise<CapabilityCatalog> };
 }
@@ -218,7 +220,8 @@ export async function buildAgentControllerApp(
   });
 
   options.onRouteWorkspace?.(routeWorkspace, storage);
-  const observe = observeResources(routeWorkspace, runtime.scopes, options.observeHostResource);
+  const resources = observeResources(routeWorkspace, runtime.scopes, options.observeHostResource);
+  const observe = options.markReadings ? options.markReadings(resources) : resources;
   app.get("/pe/resources", (c) => resourceResponse(c.req.raw, observe));
 
   // Discovery is unscoped; every document read or write names one route scope: a chat Scope

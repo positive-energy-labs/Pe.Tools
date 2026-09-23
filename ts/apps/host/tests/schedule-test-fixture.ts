@@ -22,7 +22,8 @@ import { buildCapabilities } from "../../../packages/mcps/src/pea/capabilities.t
 import { ActionJournal } from "../src/action-journal.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import { RevitBridge, BridgeError, type HostBridgeEvent } from "../src/bridge.ts";
-import { hostResourceObserver } from "../src/resource-adapters.ts";
+import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts";
+import { documentMarks } from "../src/document-marks.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { sdkSessions, sdkEnvelope, originalProcess } from "./native-receipt-fixture.ts";
 import { detailResponse } from "./schedule-fixture.ts";
@@ -97,6 +98,8 @@ export async function setup() {
       }),
     },
     observeHostResource: (request, publish) => observeHost(request, publish),
+    // As the host boots: one mark holder per bridge, shared by every Reading and every push.
+    markReadings: (observe) => (request, publish) => markReadings(marks)(observe)(request, publish),
     routeRegistrations: [
       {
         spec: scheduleGridRouteState,
@@ -195,6 +198,7 @@ export async function setup() {
       }),
   } as unknown as RevitBridge["Service"];
   // One observer for the whole fixture, as the host builds it: one mark holder, one bridge tap.
+  const marks = documentMarks(bridge);
   const observeHost = hostResourceObserver(
     bridge,
     () => owner,
@@ -293,6 +297,7 @@ export async function setup() {
   expect(
     await patch([
       { path: ["basis"], value: { captureId: reading.id } },
+      { path: ["takenAt"], value: reading.capturedAt },
       { path: ["cells", "1::2"], value: { staged: { value: "150 VA" } } },
     ]),
   ).toMatchObject({ ok: true });

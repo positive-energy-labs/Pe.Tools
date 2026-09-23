@@ -7,7 +7,7 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { peReadings } from "#/readings";
-import { familyManifest } from "./family/manifest";
+import { familyManifest } from "../family/manifest";
 import { useRoute } from "./use-route";
 
 const inventory = {

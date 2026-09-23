@@ -8,6 +8,8 @@
 - 2026-08-16 — Snapshot freshness stays a plain fact chip ("read 4m ago"), no invented staleness threshold: freshness has no subject/threshold in the model, so a schedule read yesterday and one read 4s ago must render alike.
 - 2026-08-16 — Every `state:` column getting its own 7-word facet is accepted as the language default even on wide schedules (12 columns = 12 mostly-"clean" dropdowns); suppressing facets per column would lose the clause's counting.
 
+- 2026-09-22 (C7, user: whole-document mark) — Freshness has teeth: schedule Work records `takenAt`, the host-clock time of the basis Reading (written with `basis`, and by `rebindScheduleWork`); `schedule.grid.push` refuses undispatched when the document's change mark is newer, in one sentence: `Revit changed this document after the read your staged cells rest on; read again, then apply.` `r` (bound by `ChangedInRevit` itself) reads again. Proof: journey `ts/tests/e2e/st4-changed.ts` (demo lane, RED then GREEN), `apps/host/tests/document-marks.test.ts` push case.
+
 ## Tried & rejected
 - 2026-08-16 — Hand-rolled `ScheduleTable`/`Cell`/`CellAction` with trichotomy tint classes (`bg-cat-green/12`, `bg-cat-clay/12`, `bg-destructive/10`), kiln badges and `Input`-in-cell: ~260 LOC deleted for MasterTable + editable `StateCell`; the tints were viz hues carrying state.
 - 2026-08-16 — A per-cell mark for cells that failed a partial push: outcomes have no item links, and the failure list exists only in a transient command result — inventing a mark would have been fiction. Left as `OutcomeLine partial` ("failed cells stay staged").

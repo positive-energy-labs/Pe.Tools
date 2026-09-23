@@ -16,9 +16,9 @@ import { StateDot } from "#/components/master-table/cells";
 import { useHostStatus } from "#/readings";
 
 import { RouteHelpButton } from "./help";
-import { RouteKeys } from "./keys";
+import { KeysNode, manifestChords } from "./keys";
 import type { RouteManifest } from "./manifest";
-import { SituationAction } from "./situation";
+import { SituationAction } from "./situation-verbs";
 import { useRoute, type RouteHandle } from "./use-route";
 
 /* ── The lamp ──────────────────────────────────────────────────────────────── */
@@ -233,7 +233,7 @@ function BaselineShell<W, R extends string, P, A extends string>({
       aria-label={`${manifest.name} route`}
       className={`flex ${children ? "h-full" : ""} min-h-0 min-w-0 flex-col gap-2`}
     >
-      <RouteKeys handle={handle}>
+      <KeysNode id={manifest.name} keys={manifestChords(handle)}>
         {situation ?? (
           <>
             <div className="flex min-w-0 items-center justify-between gap-4">
@@ -248,7 +248,7 @@ function BaselineShell<W, R extends string, P, A extends string>({
           </>
         )}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
-      </RouteKeys>
+      </KeysNode>
     </div>
   );
 }

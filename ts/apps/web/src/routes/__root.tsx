@@ -15,7 +15,7 @@ import { OwnerInspector } from "../state/owner-inspector";
 import { ActionButton } from "../components/lang/action-button";
 import { useAction, useHostCall } from "#/readings";
 import { inspectAtomRegistry } from "../state/atom-inspect";
-import { appAtomRegistry, routeSearch } from "../route/use-route";
+import { appAtomRegistry, routeSearch } from "../route/route-owner";
 import {
   acknowledgeUpdate,
   readInstallStatus,

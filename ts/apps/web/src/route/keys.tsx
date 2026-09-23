@@ -12,7 +12,7 @@
  * `useScopeKeys` is the only door. A file that imports `@tanstack/react-hotkeys` to register a
  * chord is a repo-guard red (`tests/repo-guards/src/route-primitive.guard.test.ts`).
  */
-import { createContext, use, useMemo, useRef, type ReactNode, type RefObject } from "react";
+import { createContext, use, useMemo, type ReactNode, type RefObject } from "react";
 import {
   useHotkeys,
   useHotkeyRegistrations,
@@ -125,44 +125,29 @@ export function useScopeKeys(
   useHotkeys(definitions, { target: region ?? node.element });
 }
 
-/* ── The route node ────────────────────────────────────────────────────────── */
+/* ── The route and stage nodes ─────────────────────────────────────────────── */
 
 /**
- * The route scope: the outermost node, bound on the document so a route chord fires with nothing
- * focused. It binds every manifest action that declares a chord; a refused chord still fires and
- * the handle records the refusal, exactly like a refused button.
+ * A route or stage scope node: it binds on the document, so its chords fire with nothing focused,
+ * and a pane's own chord still wins over it. A refused chord still fires and the handle records
+ * the refusal, exactly like a refused button.
  */
-export function RouteKeys<W, R extends string, P, A extends string>({
-  handle,
-  chords = true,
+export function KeysNode({
+  id,
+  keys,
+  hidden,
   children,
 }: {
-  handle: RouteHandle<W, R, P, A>;
-  /** False where another route already owns the chords (this page is embedded in a chat pane). */
-  chords?: boolean;
+  /** What help hangs these keys off: the route name, or `${route}:${stage}`. */
+  id: string;
+  keys: readonly ScopeKey[];
+  /** False-owner gate: a stage embedded where another surface owns the chords (a chat pane). */
+  hidden?: boolean;
   children?: ReactNode;
 }) {
-  const latest = useRef(handle);
-  latest.current = handle;
-  const names = chords
-    ? (Object.keys(handle.actions) as A[]).filter(
-        (name) => handle.actions[name].chord !== undefined,
-      )
-    : [];
   return (
-    <KeyScope id={handle.manifest.name}>
-      <NodeChords
-        keys={names.map((name) => {
-          const action = handle.actions[name];
-          return {
-            hotkey: action.chord as Chord,
-            label: action.label,
-            says: action.says,
-            refusal: action.refusal,
-            callback: () => void latest.current.actions[name].run(),
-          };
-        })}
-      />
+    <KeyScope id={id} hidden={hidden}>
+      <NodeChords keys={keys} />
       {children}
     </KeyScope>
   );
@@ -174,46 +159,33 @@ function NodeChords({ keys }: { keys: readonly ScopeKey[] }) {
   return null;
 }
 
-/* ── The stage node ────────────────────────────────────────────────────────── */
+type AnyHandle = RouteHandle<any, any, any, any>;
+
+const actionKey = (handle: AnyHandle, name: string, hotkey: Chord): ScopeKey => {
+  const action = handle.actions[name]!;
+  return {
+    hotkey,
+    label: action.label,
+    says: action.says,
+    refusal: action.refusal,
+    callback: () => void action.run(),
+  };
+};
+
+/** The route node's chords: every manifest action that declares one. */
+export const manifestChords = (handle: AnyHandle): ScopeKey[] =>
+  Object.entries(handle.actions)
+    .filter(([, action]) => action.chord !== undefined)
+    .map(([name, action]) => actionKey(handle, name, action.chord as Chord));
 
 /**
- * The stage scope: the rung between the route and its panes. A stage owns its chords — the stage
- * declares them (`route/stage.ts`, `StageDecl.keys`) and the manifest carries none — so a chord
- * bound in one stage is dead the moment another stage draws. Like the route node it binds on the
- * document, so a stage chord fires with nothing focused, and a pane's own chord still wins over it.
+ * The stage node's chords: a stage owns them (`route/stage.ts`, `StageDecl.keys`) and the manifest
+ * carries none, so a chord bound in one stage is dead the moment another stage draws.
  */
-export function StageKeys<W, R extends string, P, A extends string>({
-  id,
-  handle,
-  keys,
-  chords = true,
-  children,
-}: {
-  /** What help hangs these keys off: `${route}:${stage}`. */
-  id: string;
-  handle: RouteHandle<W, R, P, A>;
-  keys: Partial<Readonly<Record<A, Chord>>>;
-  /** False where another surface owns the chords (this page is embedded in a chat pane). */
-  chords?: boolean;
-  children?: ReactNode;
-}) {
-  const latest = useRef(handle);
-  latest.current = handle;
-  return (
-    <KeyScope id={id} hidden={!chords}>
-      <NodeChords
-        keys={(Object.entries(keys) as [A, Chord][]).map(([name, hotkey]) => {
-          const action = handle.actions[name];
-          return {
-            hotkey,
-            label: action.label,
-            says: action.says,
-            refusal: action.refusal,
-            callback: () => void latest.current.actions[name].run(),
-          };
-        })}
-      />
-      {children}
-    </KeyScope>
+export const stageChords = (
+  handle: AnyHandle,
+  keys: Readonly<Record<string, Chord | undefined>>,
+): ScopeKey[] =>
+  Object.entries(keys).flatMap(([name, hotkey]) =>
+    hotkey === undefined ? [] : [actionKey(handle, name, hotkey)],
   );
-}

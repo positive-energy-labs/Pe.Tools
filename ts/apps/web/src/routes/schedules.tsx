@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { entitySearch, routeSearch, useRouteThread, type EntitySearch } from "#/route";
+import { entitySearch, useRouteThread, type EntitySearch } from "#/route";
+import { routeSearch } from "#/route/route-owner";
 import { LiveScheduleGridWorkspace } from "#/route/schedules/live";
 import { schedulesManifest } from "#/route/schedules/manifest";
 

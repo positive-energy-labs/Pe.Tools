@@ -122,6 +122,7 @@ async function setup() {
   let duringNative: (() => Promise<void>) | null = null;
   let familyDocument = false;
   const bridge = {
+    subscribe: () => () => {},
     list: Effect.sync(() => [
       {
         sessionId: "A",
@@ -294,6 +295,7 @@ async function authorFamilies(work: RouteWorkspace, revision = 0, where = scope)
           },
         },
       },
+      { path: ["takenAt"], value: new Date().toISOString() },
     ],
     revision,
   );
@@ -318,7 +320,7 @@ test("neither route document can hold an observation or a receipt", async () => 
   // A native plan was returned, and neither the Work document nor a reading moved.
   expect(plan.plan).toHaveLength(2);
   expect(doc.revision).toBe(revision);
-  expect(Object.keys(doc.doc as object).sort()).toEqual(["cells", "excluded", "scope"]);
+  expect(Object.keys(doc.doc as object).sort()).toEqual(["cells", "excluded", "scope", "takenAt"]);
   expect(JSON.stringify(doc.doc)).not.toContain("planHash");
   expect(await captures.familyReadings(scope)).toEqual([]);
 
@@ -948,6 +950,7 @@ test("/family retires the draft's consumed cells after a proven apply, and keeps
       "human",
       [
         { path: ["reading"], value: reading },
+        { path: ["takenAt"], value: new Date().toISOString() },
         {
           path: ["cells"],
           value: { "/Width": { staged: { value: 5 } }, "/Height": { staged: { value: 7 } } },

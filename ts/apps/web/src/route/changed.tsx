@@ -6,6 +6,7 @@
  */
 import { FactChip } from "#/components/lang/chip";
 import { ActionButton } from "#/components/lang/action-button";
+import { useScopeKeys } from "#/route/keys";
 
 export function ChangedInRevit({
   what,
@@ -19,6 +20,19 @@ export function ChangedInRevit({
   disabled?: boolean;
   onReadAgain: () => void;
 }) {
+  const says = `Read ${what} from Revit again — proposals and staged cells stay.`;
+  const refusal = busy ? "A read is running" : disabled ? "Another action is running" : null;
+  useScopeKeys([
+    {
+      hotkey: "R",
+      label: "read again",
+      says,
+      refusal,
+      callback: () => {
+        if (!refusal) onReadAgain();
+      },
+    },
+  ]);
   return (
     <>
       <FactChip
@@ -31,7 +45,7 @@ export function ChangedInRevit({
         label="read again (r)"
         busy={busy}
         disabled={disabled}
-        reason={`Read ${what} from Revit again — proposals and staged cells stay.`}
+        reason={says}
         onClick={onReadAgain}
       />
     </>

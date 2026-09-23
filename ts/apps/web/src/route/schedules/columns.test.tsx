@@ -52,7 +52,7 @@ test("a grid cell draws the contract's transitions and accept writes at the rend
   const { container } = render(
     <ScheduleGridWorkspace
       state={{
-        slice: { cells },
+        slice: { cells, takenAt: null },
         revision: 7,
         hydrated: true,
         apply,

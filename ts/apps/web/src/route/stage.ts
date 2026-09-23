@@ -27,4 +27,6 @@ export interface StageDecl<R extends string, A extends string, N extends string 
   readonly keys: Partial<Readonly<Record<A, Extract<Chord, string>>>>;
   /** The panes this stage shows; a pane it omits is hidden. */
   readonly panes: Partial<Readonly<Record<N, PaneDecl<R, A>>>>;
+  /** False: the row draws no Work meter beside the verbs (the Ledger keeps the revision). */
+  readonly meter?: false;
 }

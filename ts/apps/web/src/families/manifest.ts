@@ -15,7 +15,7 @@ import {
 } from "@pe/agent-contracts";
 
 import { FF_SPEC_SCHEMA, ffPlanRow } from "#/host/familyfoundry";
-import { FAMILY_MODEL_SCHEMA } from "#/route/family/manifest";
+import { FAMILY_MODEL_SCHEMA } from "#/family/manifest";
 import {
   admissionPlan,
   byPlan,

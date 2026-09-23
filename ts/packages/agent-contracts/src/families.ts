@@ -295,6 +295,8 @@ const familiesDocumentSchema = z
     executionOptions: familyExecutionOptionsSchema.optional(),
     /** The pod the person plans the draft in and saves it to (F-B-5b). The person's choice; Pea never writes it. */
     pod: z.string().min(1).optional(),
+    /** When the Reading these staged rungs rest on was taken, on the host's clock. The change mark compares against this. */
+    takenAt: z.string().nullable().default(null),
   })
   .strict();
 export type FamiliesRouteDocument = z.infer<typeof familiesDocumentSchema>;

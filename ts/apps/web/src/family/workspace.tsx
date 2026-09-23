@@ -152,9 +152,9 @@ export function FamilyWorkspace({ store }: { store: FamilyStore }) {
           <div className="hairline-b flex flex-wrap items-center gap-2 px-3 py-1.5 t-small">
             <ChangedInRevit
               what="the open family"
-              busy={store.handle.busy?.key === "capture"}
+              busy={store.handle.busy?.key === "read"}
               disabled={store.handle.busy !== null}
-              onReadAgain={() => void store.actions.capture().catch(() => undefined)}
+              onReadAgain={() => void store.actions.read().catch(() => undefined)}
             />
           </div>
         ) : null}

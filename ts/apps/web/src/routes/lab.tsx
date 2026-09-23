@@ -11,7 +11,7 @@ import { SyntheticRunner } from "#/lab/synthetic";
 import { RouteShell, emptyManifest, useRoute, type RouteManifest } from "#/route";
 import { Ladder } from "#/route/ladder";
 import { useChooseTarget } from "#/route/shell";
-import { useDocumentLadder } from "#/route/situation";
+import { useDocumentLadder } from "#/route/situation-ladder";
 
 /** Not cut over yet: the lab needs a session to call the host, and nothing else. */
 export const manifest: RouteManifest<never, "inventory", Record<string, never>, never> = {

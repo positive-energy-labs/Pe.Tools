@@ -61,7 +61,7 @@ const ROUTES: readonly { path: string; manifest: AnyManifest }[] = [
   { path: "/takeoffs", manifest: (await load("/src/takeoff/manifest.ts")).manifest as AnyManifest },
   {
     path: "/family",
-    manifest: ((await load("/src/route/family/manifest.ts")).familyManifest as () => AnyManifest)(),
+    manifest: ((await load("/src/family/manifest.ts")).familyManifest as () => AnyManifest)(),
   },
   {
     path: "/families",

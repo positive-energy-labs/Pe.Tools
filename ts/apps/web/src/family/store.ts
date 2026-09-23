@@ -2,7 +2,7 @@
  * Family — the route's projections and its page memory, and nothing else.
  *
  * The owner, the registry, the Target resolution, busy, refusals, the pod and spec selection, and
- * capture/apply live in the route kernel (`route/family/manifest.ts` over `entityRoute`). What is
+ * capture/apply live in the route kernel (`family/manifest.ts` over `entityRoute`). What is
  * left here is what only Family knows: how the draft (the live reading and its proposals), the
  * capture evidence and the saved member a build needs become one lane, and which selections the
  * sheet holds while it is open.
@@ -42,8 +42,8 @@ import {
   projectReadings,
   type FamilyAuthoringFacts,
   type FamilyPage,
-} from "#/route/family/manifest";
-import { previousOf, useDocumentMark, useReading } from "#/readings";
+} from "#/family/manifest";
+import { previousOf, useReading } from "#/readings";
 import { useRoute, type EntityPage } from "#/route";
 import { openMember } from "#/route/spec-editor";
 
@@ -315,7 +315,6 @@ export function useFamilyStore(options: {
       ? handle.resolution.target.ref
       : null;
   const targetLabel = target?.session ?? "";
-  const { changed: documentChanged, read: markRead } = useDocumentMark(target);
 
   /* ── Family Readings ────────────────────────────────────────────────────── */
   const familyReading = handle.readings.family as Reading<unknown>;
@@ -485,11 +484,7 @@ export function useFamilyStore(options: {
         setPage({ pod: next.pod, path: next.path, buildReview: null });
       },
       /** Capture files a new member (the kernel lands the page on it) and returns its evidence. */
-      capture: async () => {
-        const result = await handle.actions.capture.run();
-        markRead();
-        return result;
-      },
+      capture: () => handle.actions.capture.run(),
       async build() {
         const result = await handle.actions.build.run();
         return result?.message ?? null;
@@ -499,7 +494,6 @@ export function useFamilyStore(options: {
     [
       handle.actions,
       handle.work,
-      markRead,
       draft,
       lane,
       snapshot,
@@ -522,10 +516,10 @@ export function useFamilyStore(options: {
     profile,
     target: targetLabel,
     /**
-     * Revit changed the open family document after this page last read it, as the host's mark
-     * says. Capturing again is the re-read; `readAgain` runs it and re-serves the mark.
+     * Revit changed the open family document after the read the draft rests on (`takenAt`), as
+     * the Work Reading's envelope says. `read` is the re-read.
      */
-    changed: documentChanged,
+    changed: handle.work.changed,
     /** The exact document a read-only host call from this page must name. */
     documentScope: target
       ? { bridgeSessionId: target.session, openDocumentId: target.openId }

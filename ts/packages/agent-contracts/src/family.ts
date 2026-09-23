@@ -18,6 +18,8 @@ export const familyDraftSchema = z
     /** Immutable draft baseline; it is not a claim about current Revit state. */
     reading: z.string().nullable().default(null),
     cells: z.record(z.string(), settingsFieldStateSchema).default({}),
+    /** When the Reading these staged rungs rest on was taken, on the host's clock. The change mark compares against this. */
+    takenAt: z.string().nullable().default(null),
   })
   .strict();
 export type FamilyDraft = z.infer<typeof familyDraftSchema>;

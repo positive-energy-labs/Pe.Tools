@@ -77,6 +77,7 @@ const projectSeed = (): DemoSeed => ({
       },
       excluded: {},
       cells: {},
+      takenAt: null,
     },
   },
   readings: {

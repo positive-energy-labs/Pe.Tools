@@ -8,7 +8,7 @@ import { nextPicks, pickedRowKeys } from "#/families/picks";
 import { filterWords, standingFilterProposal } from "#/families/scope-band";
 import { focusedTypes } from "#/families/staged";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
-import { ChatFocus } from "#/route/situation";
+import { ChatFocus } from "#/route/situation-ladder";
 
 export function FamiliesMatrix() {
   const {

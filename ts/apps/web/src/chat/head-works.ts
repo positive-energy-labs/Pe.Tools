@@ -24,7 +24,7 @@ import {
 import { filterWords } from "#/families/scope-band";
 import { familiesGroupOf } from "#/families/staged";
 import { INSTANCES_WORK } from "#/instances/manifest";
-import { useRouteWork } from "#/route/use-route";
+import { useRouteWork } from "#/route/route-work";
 import type { ChatPluginRoute } from "#/workbench/chat-plugins";
 
 import type { HeadWork } from "./proposal-head";

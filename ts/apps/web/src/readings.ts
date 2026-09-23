@@ -327,25 +327,6 @@ export function useReading<T = unknown>(
   return useAtomValue(atom);
 }
 
-/**
- * One open document's change mark, for a surface whose read is not a Reading (the `/families`
- * matrix is a one-shot op). `changed` is the host's answer, on the host's clock; `read` tells the
- * host this surface has just read the document again, which serves the mark afresh.
- */
-export function useDocumentMark(target: { session: string; openId: string } | null): {
-  changed: boolean;
-  read: () => void;
-} {
-  const request: ReadingRequest | null = target ? { kind: "document-mark", target } : null;
-  const changed = changedInRevit(useReading(request));
-  const key = target ? `${target.session}:${target.openId}` : "";
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- the ref's strings are its identity
-  const read = useCallback(() => {
-    if (request) dirty(request);
-  }, [key]);
-  return { changed, read };
-}
-
 /** An Action succeeded; this subject's snapshot is reacquired from the host. */
 export const dirty = (request: ReadingRequest, source: Readings = peReadings) =>
   source.dirty(request);

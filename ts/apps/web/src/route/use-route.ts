@@ -4,593 +4,46 @@
  * a resolution, its Work, its Readings, its Page, and one handle per action. Public handles return
  * structured Refusals (`route/refusal.ts`).
  */
-import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
+import * as Atom from "effect/unstable/reactivity/Atom";
 import { frozenDemo } from "#/host/demo-client";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
-  addressSchema,
-  documentRequestSchema,
-  parseRouteDoc,
-  resolveCallTarget,
-  sameAddress,
-  START_FRESH,
   UNREADABLE_WORK,
-  threadHeadSchema,
-  workKey,
   bindWork,
   type Address,
-  type DocumentRequest,
-  type ExecutionTarget,
   type Reading,
   type ReadingRequest,
-  type RouteDocOf,
   type RouteStatePatch,
-  type RouteStateSpec,
   type TargetResolution,
   type WorkKey,
 } from "@pe/agent-contracts";
-import { Equal, Hash, Layer, Option } from "effect";
-/** A Reading of one shape becomes a Reading of another; every lifecycle state is preserved. */
-const readingMap = <A, B>(reading: Reading<A>, f: (value: A) => B): Reading<B> =>
-  reading.state === "ready"
-    ? { state: "ready", observation: f(reading.observation) }
-    : reading.state === "absent"
-      ? reading
-      : reading.previous === undefined
-        ? (reading as Reading<B>)
-        : ({ ...reading, previous: f(reading.previous) } as Reading<B>);
-import * as Atom from "effect/unstable/reactivity/Atom";
-import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
-import * as Reactivity from "effect/unstable/reactivity/Reactivity";
-
 import {
+  changedInRevit,
   dirty,
   readingAtom,
   peReadings,
-  inventoryOf,
   previousOf,
   targetInventory,
-  type Readings,
 } from "#/readings";
-import { inspectAtomRegistry, type OwnerReferences } from "#/state/atom-inspect";
-import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
 import { DEFAULT_WAIT_S, type RouteManifest } from "./manifest";
 import { callHostDynamic } from "#/host/client";
-import { causeRefusal, refuse, writeRefusal, type Refusal } from "./refusal";
-import { getRouteSalvage, postRouteWrite } from "./host";
+import { causeRefusal, refuse, type Refusal } from "./refusal";
 import { useThreadScope } from "#/chat/scope";
-import { cancelRunningAdmissions } from "../../../../packages/mcps/src/shared/takeoff-action-client";
-
-/** A resolved Target is only ever two headers on the one `/call` endpoint. */
-const targetHeaders = (target: ExecutionTarget) =>
-  target.kind === "session"
-    ? { bridgeSessionId: target.session }
-    : target.kind === "document"
-      ? { bridgeSessionId: target.ref.session, openDocumentId: target.ref.openId }
-      : {};
-
-/**
- * The one place a registry is constructed (fable law 5). `?demo=` owners get their own isolated
- * registry from here rather than reaching for `AtomRegistry.make` a second time.
- */
-const makeAtomRegistry = (options?: Parameters<typeof AtomRegistry.make>[0]) =>
-  AtomRegistry.make(options);
-
-/** The app's one registry. Was `state/registry.ts`. */
-export const appAtomRegistry = makeAtomRegistry({ defaultIdleTTL: 400 });
-
-/** A render subscribed to one atom in the owner's registry; `null` atom reads as `null`. */
-function useOwned<A>(registry: AtomRegistry.AtomRegistry, atom: Atom.Atom<A> | null): A | null {
-  const subscribe = useMemo(
-    () => (notify: () => void) => (atom ? registry.subscribe(atom, notify) : () => {}),
-    [registry, atom],
-  );
-  return useSyncExternalStore(subscribe, () => (atom ? registry.get(atom) : null));
-}
-
-export type Slice<D> = { doc: D; revision: number } | { doc: null; revision: null };
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
-/** Internal unwind only; the public action boundary still returns the structured refusal. */
-class ActionRefusal extends Error {
-  constructor(readonly refusal: Refusal) {
-    super(refusal.message);
-  }
-}
-
-const refusalOf = (cause: unknown) =>
-  cause instanceof ActionRefusal ? cause.refusal : causeRefusal(cause);
-
-/* ── The owner ─────────────────────────────────────────────────────────────── */
-
-export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegistry) {
-  const inspector = inspectAtomRegistry(registry);
-  const id = `${route}/${crypto.randomUUID()}`;
-  const releases: Array<() => void> = [];
-  let busyTimer: ReturnType<typeof setInterval> | undefined;
-  let inFlight = false;
-  let disposed = false;
-
-  const keep = <A extends Atom.Atom<any>>(atom: A): A => {
-    const kept = atom.pipe(Atom.autoDispose);
-    releases.push(registry.mount(kept));
-    return kept;
-  };
-  /** Labels and mounts an atom. `AtomRegistry.mount` reads eagerly (`AtomRegistry.ts:537`). */
-  function owned<A extends Atom.Atom<any>>(label: string, atom: A): A;
-  function owned(label: string): <A extends Atom.Atom<any>>(atom: A) => A;
-  function owned<A extends Atom.Atom<any>>(label: string, atom?: A) {
-    const own = <T extends Atom.Atom<any>>(value: T): T =>
-      keep(value.pipe(Atom.withLabel(`${route}/${label}`)));
-    return atom ? own(atom) : own;
-  }
-  const write = <A>(action: string, key: string, mutate: () => A): A => {
-    const result = mutate();
-    inspector.recordLocalCall(id, { verb: action, key });
-    return result;
-  };
-
-  const runtime = keep(Atom.runtime(Layer.empty));
-  Reflect.set(runtime.layer, "keepAlive", false);
-  const invalidate = keep(runtime.fn((keys: readonly string[]) => Reactivity.invalidate(keys)));
-
-  const busy = owned("action/busy", Atom.make<{ key: string; seconds: number } | null>(null));
-  const failure = owned("action/failure", Atom.make<Refusal | null>(null));
-  const conflict = owned("work/conflict", Atom.make(false));
-  // The page log: one per route, newest first. Every verb run, refusal and target change lands
-  // here, so no widget keeps its own activity list (Situation, 2026-09-13).
-  const log = owned("log", Atom.make<readonly LogEntry[]>([]));
-  const note = (kind: LogEntry["kind"], label: string, says: string, refused = false) =>
-    registry.set(log, [
-      { at: new Date().toLocaleTimeString([], { hour12: false }), kind, label, says, refused },
-      ...registry.get(log).slice(0, 199),
-    ]);
-
-  let stopper: (() => void) | null = null;
-  /** The running verb's button word and start, for a busy refusal to name (and say how long). */
-  let runningLabel = "";
-  let runningSince = 0;
-
-  /**
-   * Busy is a RUNTIME refusal (ruling Q4): one action at a time, and the second one is told so.
-   * `onStopped` fires instead of a result when the wait was stopped from the flag.
-   */
-  const runAction = async (
-    key: string,
-    work: () => Promise<Refusal | null>,
-    keys?: readonly string[],
-    onStopped?: () => void,
-    /** The word on the button. The log says what the user pressed, never the action key. */
-    label = key,
-    /** In flight past this, the verb ends as stopped and releases busy; Infinity = unbounded. */
-    waitSeconds = Infinity,
-  ): Promise<Refusal | null> => {
-    if (inFlight) {
-      // A busy refusal is a refusal like any other: on the verb, and one line in the page log.
-      const running = Math.floor((Date.now() - runningSince) / 1000);
-      const refusal = refuse("busy", `${runningLabel} still running (${running}s)`);
-      write(key, "failure", () => registry.set(failure, refusal));
-      note("verb", label, `refused · ${refusal.message}`, true);
-      return refusal;
-    }
-    inFlight = true;
-    runningLabel = label;
-    runningSince = Date.now();
-    write(key, "busy", () => registry.set(busy, { key, seconds: 0 }));
-    const started = Date.now();
-    busyTimer = setInterval(
-      () =>
-        write(key, "busy", () =>
-          registry.set(busy, { key, seconds: Math.floor((Date.now() - started) / 1000) }),
-        ),
-      250,
-    );
-    const invalidateKeys = () => {
-      if (keys?.length)
-        write(key, `invalidate/${keys.join(",")}`, () => registry.set(invalidate, keys));
-    };
-    let detached = false;
-    const finish = () => {
-      stopper = null;
-      if (busyTimer) clearInterval(busyTimer);
-      busyTimer = undefined;
-      inFlight = false;
-      if (!disposed) write(key, "busy", () => registry.set(busy, null));
-    };
-    // The stop reaches the RUNNING OP: the host sends `op.cancel` outside its per-session gate,
-    // so Revit stops at the operation's next checkpoint and the row settles `cancelled`. The wait
-    // is released only once the host said yes; a refusal leaves the op running and says why.
-    // A late result still lands as its own row.
-    const stopped = new Promise<"stopped">((resolve) => {
-      stopper = () => {
-        void cancelRunningAdmissions().then((settled) => {
-          const refused = settled.flatMap((one) =>
-            one.status === "rejected"
-              ? [one.reason instanceof Error ? one.reason.message : String(one.reason)]
-              : [],
-          );
-          if (!settled.length)
-            refused.push("Nothing this page started is running on the host yet.");
-          if (refused.length) note("verb", label, `stop refused · ${refused.join(" ")}`, true);
-          else resolve("stopped");
-        });
-      };
-    });
-    // The bound: past it the verb ends honestly (never success, never a retry) and busy is
-    // released; the op may still answer, and that late answer is only logged and re-read below.
-    let bound: ReturnType<typeof setTimeout> | undefined;
-    const timedOut = new Promise<"timeout">((resolve) => {
-      if (Number.isFinite(waitSeconds))
-        bound = setTimeout(() => resolve("timeout"), waitSeconds * 1000);
-    });
-    try {
-      const running = work();
-      const result = await Promise.race([running, stopped, timedOut]);
-      if (result === "timeout") {
-        const refusal = refuse("unknown", `stopped: no answer after ${waitSeconds}s`);
-        write(key, "failure", () => registry.set(failure, refusal));
-        note("verb", label, refusal.message, true);
-        running
-          .then(
-            (late) =>
-              !disposed &&
-              note(
-                "verb",
-                label,
-                `late · ${late ? outcomeSays(late) : "answered"} after the stop; re-reading, nothing retried`,
-                Boolean(late),
-              ),
-            (cause: unknown) =>
-              !disposed && note("verb", label, `late · failed · ${refusalOf(cause).message}`, true),
-          )
-          .finally(() => {
-            // A late answer only refreshes what the verb dirties; it never writes on its own.
-            if (!disposed) invalidateKeys();
-          });
-        onStopped?.();
-        return refusal;
-      }
-      if (result === "stopped") {
-        note(
-          "verb",
-          label,
-          "stopped · cancel signalled; the op stops at its next checkpoint",
-          true,
-        );
-        const late = (says: string, refusal: Refusal | null) => {
-          if (disposed) return;
-          write(key, "failure", () => registry.set(failure, refusal));
-          note("verb", label, `late · ${says}`, Boolean(refusal));
-          if (!refusal) invalidateKeys();
-        };
-        running
-          .then((result) => late(result ? `refused · ${result.message}` : "ran", result))
-          .catch((cause: unknown) => {
-            const refusal = refusalOf(cause);
-            late(`failed · ${refusal.message}`, refusal);
-          })
-          .finally(finish);
-        detached = true;
-        onStopped?.();
-        return null;
-      }
-      write(key, "failure", () => registry.set(failure, result));
-      note("verb", label, result ? outcomeSays(result) : "ran", Boolean(result));
-      // A partial outcome landed something: what it dirties is stale either way.
-      if (!result || result.code === "partial") invalidateKeys();
-      return result;
-    } catch (cause) {
-      const refusal = refusalOf(cause);
-      write(key, "failure", () => registry.set(failure, refusal));
-      note("verb", label, `failed · ${refusal.message}`, true);
-      return refusal;
-    } finally {
-      clearTimeout(bound);
-      if (!detached) finish();
-    }
-  };
-
-  return {
-    registry,
-    id,
-    expose(references: OwnerReferences) {
-      const release = inspector.expose(id, references);
-      const nodes = [
-        ...new Set(Object.values(references).flatMap((entries) => Object.values(entries))),
-      ].flatMap((atom) => {
-        const node = registry.getNodes().get(atom);
-        // Owner-mounted outputs are already active. Watching them adds no producer reads.
-        return node && node.listeners.size > 0 ? [node] : [];
-      });
-      const onPublication = () => inspector.notify();
-      for (const node of nodes) node.listeners.add(onPublication);
-      releases.push(() => {
-        for (const node of nodes) node.listeners.delete(onPublication);
-        release();
-      });
-    },
-    owned,
-    /** Mount an existing shared family without cloning its identity or disposal policy. */
-    shared<A extends Atom.Atom<any>>(atom: A): A {
-      releases.push(registry.mount(atom));
-      return atom;
-    },
-    write,
-    runAction,
-    /** Stop the running action: signal the host, then release the wait. No-op when nothing runs. */
-    stop: () => stopper?.(),
-    busy,
-    failure,
-    conflict,
-    log,
-    note,
-    dispose() {
-      if (disposed) return;
-      disposed = true;
-      if (busyTimer) clearInterval(busyTimer);
-      for (const release of releases.splice(0).reverse()) release();
-    },
-  };
-}
-
-/** One page-log line. `refused` draws the caution hue; the text is the whole reason. */
-export interface LogEntry {
-  readonly at: string;
-  readonly kind: "verb" | "target" | "stage" | "work";
-  readonly label: string;
-  readonly says: string;
-  readonly refused: boolean;
-}
-
-/** What a bare run lacks: the fields an empty object misses, or "a value" when it is not an object. */
-const missingFields = (schema: {
-  safeParse: (value: unknown) => {
-    success: boolean;
-    error?: { issues: { path: PropertyKey[] }[] };
-  };
-}) => {
-  const issues = schema.safeParse({}).error?.issues ?? [];
-  const names = issues.map((issue) => issue.path.map(String).join(".")).filter(Boolean);
-  return names.length ? names.join(", ") : "a value";
-};
-
-/**
- * How the page log says a verb's returned outcome. A sentence that already names what happened
- * ("partly applied: …", "refused — nothing ran: …", "failed in Revit — …") is said as is; any
- * other refusal is prefixed so a refusal never reads as a failure, nor a failure as a refusal.
- */
-const outcomeSays = (refusal: Refusal) =>
-  /^(partly applied|refused|failed)/.test(refusal.message)
-    ? refusal.message
-    : `${refusal.code === "failed" ? "failed" : "refused"} · ${refusal.message}`;
-
-/** Mount an owner for the life of a component; StrictMode's double-mount disposes once. */
-export function useRouteOwner<T extends { dispose(): void; registry: AtomRegistry.AtomRegistry }>(
-  create: () => T,
-  identity?: unknown,
-): T {
-  const storeRef = useRef<T | null>(null);
-  const identityRef = useRef(identity);
-  const retiredRef = useRef<T[]>([]);
-  const disposeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  if (storeRef.current === null || !Object.is(identityRef.current, identity)) {
-    if (storeRef.current !== null) retiredRef.current.push(storeRef.current);
-    storeRef.current = create();
-    identityRef.current = identity;
-  }
-  const store = storeRef.current;
-  useEffect(() => {
-    if (disposeTimer.current) clearTimeout(disposeTimer.current);
-    for (const retired of retiredRef.current.splice(0)) retired.dispose();
-    return () => {
-      disposeTimer.current = setTimeout(() => store.dispose(), 0);
-    };
-  }, [store]);
-  return store;
-}
-
-/**
- * Route search preserves the target string; parseTarget validates its exact request or shorthand.
- * `thread` names the thread whose head is the route's target store; the root retains it on every
- * link, so the URL carries the thread.
- */
-export function routeSearch(search: Record<string, unknown>): {
-  target?: string;
-  work?: string;
-  thread?: string;
-} {
-  // The router JSON-parses search values, so an exact `?target={"kind":"open",...}` arrives as an
-  // object. It is re-serialized here so `parseTarget` always reads the one string grammar; left as
-  // an object it threw in render, and the SSR stream hung on the throw instead of finishing.
-  const raw = search.target;
-  const target =
-    typeof raw === "string"
-      ? raw.trim()
-      : raw !== null && typeof raw === "object"
-        ? JSON.stringify(raw)
-        : "";
-  const work = typeof search.work === "string" ? search.work.trim() : "";
-  const thread = typeof search.thread === "string" ? search.thread.trim() : "";
-  return {
-    ...(target ? { target } : {}),
-    ...(work ? { work } : {}),
-    ...(thread ? { thread } : {}),
-  };
-}
-
-/* ── Work ──────────────────────────────────────────────────────────────────── */
-
-class RouteAtomKey implements Equal.Equal {
-  constructor(
-    readonly spec: RouteStateSpec<any>,
-    readonly key: WorkKey,
-    readonly resources: Readings,
-  ) {}
-  [Equal.symbol](that: Equal.Equal): boolean {
-    return (
-      that instanceof RouteAtomKey &&
-      this.spec.route === that.spec.route &&
-      this.resources === that.resources &&
-      workKey(this.key) === workKey(that.key)
-    );
-  }
-  [Hash.symbol]() {
-    return Hash.string(`${this.spec.route}\0${workKey(this.key)}`);
-  }
-}
-
-function routeUrl(
-  route: string,
-  operation: "apply" | "command" | typeof START_FRESH | "salvage",
-  key: WorkKey,
-) {
-  const url = new URL(peUrl(resolveWorkbenchConfig(), `/route-state/${route}/${operation}`));
-  if (key.work !== undefined) url.searchParams.set("work", key.work);
-  else {
-    if (key.target !== null) url.searchParams.set("target", key.target);
-    const open = key.binding === "address" ? key.from : key.open;
-    if (open) url.searchParams.set("open", `${open.session}/${open.openId}`);
-  }
-  return url.toString();
-}
-
-const routeAtom = Atom.family((key: RouteAtomKey) => {
-  const { spec } = key;
-  const resource = readingAtom({ ...key.key, kind: "work" }, key.resources);
-  return Atom.make((get) => {
-    const result = get(resource);
-    try {
-      return readingMap(result, (raw): Slice<RouteDocOf<typeof spec>> => {
-        if (raw === null) return { doc: null, revision: null };
-        if (!isRecord(raw) || !Number.isInteger(raw.revision) || !("doc" in raw))
-          throw Error("Work response has no document or revision");
-        return {
-          doc: parseRouteDoc(raw.doc, spec),
-          revision: raw.revision as number,
-        };
-      });
-    } catch (error) {
-      const self = Option.getOrUndefined(get.self<Reading<Slice<RouteDocOf<typeof spec>>>>());
-      const previous = self ? previousOf(self) : undefined;
-      const failed: Reading<Slice<RouteDocOf<typeof spec>>> = {
-        state: "failed",
-        message: error instanceof Error ? error.message : String(error),
-        ...(previous !== undefined && { previous }),
-      };
-      return failed;
-    }
-  }).pipe(Atom.withLabel(`${spec.route}/slice`));
-});
-
-function docAtom<S extends RouteStateSpec<any>>(
-  spec: S,
-  key: WorkKey,
-  resources: Readings = peReadings,
-): Atom.Atom<Reading<Slice<RouteDocOf<S>>>> {
-  return routeAtom(new RouteAtomKey(spec, key, resources));
-}
-
-const notHydrated = refuse("not-ready", "route document is not hydrated");
-
-function docWriter<S extends RouteStateSpec<any>>(
-  spec: S,
-  key: WorkKey,
-  registry: AtomRegistry.AtomRegistry,
-  slice: Atom.Atom<Reading<Slice<RouteDocOf<S>>>>,
-  conflict: Atom.Writable<boolean> | undefined,
-) {
-  const send = async (
-    operation: "apply" | "command" | typeof START_FRESH,
-    body: Record<string, unknown> & { expectedRevision?: number },
-    onAccepted?: (base: number, revision: number) => void,
-  ): Promise<Refusal | null> => {
-    try {
-      const { status, result } = await postRouteWrite(routeUrl(spec.route, operation, key), body);
-      if (!result) return refuse("failed", `${operation} failed (${status})`);
-      if (!result.ok && result.code === "stale_revision" && conflict) registry.set(conflict, true);
-      if (result.ok && body.expectedRevision !== undefined)
-        onAccepted?.(body.expectedRevision, result.revision);
-      return writeRefusal(result);
-    } catch (cause) {
-      return causeRefusal(cause);
-    }
-  };
-  const writeRevision = (explicit?: number): number | null => {
-    // An explicit revision is the caller's own declaration and the server arbitrates it: a queued
-    // apply carries the revision its predecessor just landed, which the owner has not observed yet.
-    if (explicit !== undefined) return explicit;
-    const current = registry.get(slice);
-    if (current.state !== "ready") return null;
-    // Only an explicit authored write can initialize absent Work. Observation never creates it.
-    return current.observation.revision ?? 0;
-  };
-  return {
-    apply: (
-      patches: RouteStatePatch[],
-      expectedRevision?: number,
-      onAccepted?: (base: number, revision: number) => void,
-    ) => {
-      const revision = writeRevision(expectedRevision);
-      if (revision === null) return Promise.resolve(notHydrated);
-      return send("apply", { patches, expectedRevision: revision }, onAccepted);
-    },
-    command: (
-      name: keyof S["commands"] & string,
-      input?: unknown,
-      expectedRevision?: number,
-      onAccepted?: (base: number, revision: number) => void,
-    ) => {
-      const revision = writeRevision(expectedRevision);
-      return revision === null
-        ? Promise.resolve(notHydrated)
-        : send(
-            "command",
-            { command: name, input: input ?? {}, expectedRevision: revision },
-            onAccepted,
-          );
-    },
-    /** The human door only; the host refuses Pea's door and readable Work. */
-    startFresh: () => send(START_FRESH, {}),
-    /** The human door only: what the route carries over from Work it can no longer read. */
-    salvage: () => getRouteSalvage(routeUrl(spec.route, "salvage", key)),
-  };
-}
-
-/**
- * One route's Work read and written by key, with no route owner: the Chat head's summary of Work
- * the thread's document holds. It reads the same Work atom a mounted route (the plugin pane) reads,
- * so both re-render from one Work; its writes are foreign to that route's own-write chain, so a
- * bound write either side refuses truthfully when the other landed first.
- */
-export function useRouteWork<S extends RouteStateSpec<any>>(spec: S, key: WorkKey | null) {
-  const id = key ? JSON.stringify(key) : null;
-  const slice = useMemo(
-    () => (key ? docAtom(spec, key, peReadings) : null),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the key is identified by its JSON
-    [spec, id],
-  );
-  const reading = useOwned(appAtomRegistry, slice);
-  const writer = useMemo(
-    () => (key && slice ? docWriter(spec, key, appAtomRegistry, slice, undefined) : null),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the key is identified by its JSON
-    [spec, slice],
-  );
-  const current = reading ? previousOf(reading) : undefined;
-  return {
-    doc: (current?.doc ?? null) as RouteDocOf<S> | null,
-    revision: current?.revision ?? null,
-    stale: reading?.state === "stale",
-    write: (patches: RouteStatePatch[], expectedRevision?: number) =>
-      writer ? writer.apply(patches, expectedRevision) : Promise.resolve(notHydrated),
-    reload: () => {
-      if (key) dirty({ ...key, kind: "work" });
-    },
-  };
-}
-
-/* ── The hook ──────────────────────────────────────────────────────────────── */
+import {
+  ActionRefusal,
+  type LogEntry,
+  type Slice,
+  appAtomRegistry,
+  createRouteOwner,
+  makeAtomRegistry,
+  missingFields,
+  targetHeaders,
+  useOwned,
+  usePageLogNotes,
+  useRouteOwner,
+} from "./route-owner";
+import { docAtom, docWriter, notHydrated } from "./route-work";
+import { useRouteTarget, type BindingLost } from "./route-target";
 
 export interface ActionHandle {
   readonly label: string;
@@ -635,6 +88,8 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
     readonly revision: number | null;
     /** Whether the authoritative Work reading is current, including a current absent document. */
     readonly current: boolean;
+    /** Revit changed the Work's document after the read its staged rungs rest on (`takenAt`). */
+    readonly changed: boolean;
     /** `expectedRevision` binds the write; `null` binds it to nothing rendered and refuses. */
     readonly write: (
       patches: RouteStatePatch[],
@@ -679,57 +134,6 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
   revalidate(keys: readonly R[]): void;
 }
 
-interface BindingLost {
-  readonly ref: { readonly session: string; readonly openId: string };
-  readonly title: string | null;
-  readonly sentence: string;
-  readonly reason: "document-closed" | "session-gone";
-  readonly reopened: { readonly openId: string; readonly title: string } | null;
-}
-
-/** The inventory's open documents, keyed `session/openId`, with their titles. */
-const openTitles = (inventory: Reading<unknown>) => {
-  const observed = previousOf(inventory) as
-    | { sessions?: readonly BridgeSessionListEntry[] }
-    | undefined;
-  return new Map(
-    inventoryOf(observed?.sessions ?? []).flatMap((session) =>
-      (session.openDocuments ?? []).map(
-        (doc) => [`${session.sessionId}/${doc.openId}`, doc.title] as const,
-      ),
-    ),
-  );
-};
-
-/**
- * `?target` accepts a schema-validated JSON DocumentRequest for exact picker selections.
- * A document Address (path or cloud GUID) names the document in whichever
- * session holds it open; anything else is a session key and names that session's one open document.
- */
-export function parseTarget(
-  target: string | null | undefined,
-):
-  | { kind: "address"; address: Address }
-  | { kind: "session"; session: string }
-  | { kind: "request"; request: DocumentRequest }
-  | null {
-  if (!target) return null;
-  if (target.startsWith("{")) {
-    try {
-      const request = documentRequestSchema.safeParse(JSON.parse(target));
-      return request.success
-        ? { kind: "request", request: request.data }
-        : { kind: "session", session: target };
-    } catch {
-      return { kind: "session", session: target };
-    }
-  }
-  const parsed = addressSchema.safeParse(target);
-  return parsed.success
-    ? { kind: "address", address: parsed.data }
-    : { kind: "session", session: target };
-}
-
 export function useRoute<W, R extends string, P, A extends string>(
   manifest: RouteManifest<W, R, P, A>,
   options: {
@@ -763,156 +167,9 @@ export function useRoute<W, R extends string, P, A extends string>(
   const { target: requestedTarget = null, work: requestedWork, provided } = options;
   const target = typeof requestedTarget === "function" ? requestedTarget(page) : requestedTarget;
   const spec = manifest.work;
-  const inventory = useMemo(
-    () => (seed ? null : readingAtom({ kind: "inventory" }, peReadings)),
-    [seed],
-  );
-  const inventoryResult = (useOwned(owner.registry, inventory) ?? {
-    state: "absent",
-  }) as Reading<unknown>;
   const conflictNow = useOwned(owner.registry, owner.conflict) ?? false;
-  /**
-   * The route's default Target is whatever the thread head says. A route that declares a
-   * `thread-head` Reading resolves against it; one that does not has no default and refuses until
-   * a document is chosen. No component keeps a second copy (fable law 6).
-   */
-  const headRequest = useMemo(
-    () =>
-      (options.thread
-        ? { kind: "thread-head", thread: options.thread }
-        : Object.values(manifest.readings ?? {}).find(
-            (request) =>
-              typeof request !== "function" &&
-              (request as ReadingRequest | undefined)?.kind === "thread-head",
-          )) as Extract<ReadingRequest, { kind: "thread-head" }> | undefined,
-    [manifest.readings, options.thread],
-  );
-  const headAtom = useMemo(
-    () => (!seed && headRequest ? readingAtom(headRequest, peReadings) : null),
-    [headRequest, seed],
-  );
-  const headResult = useOwned(owner.registry, headAtom) as Reading<unknown> | null;
-  const scope = useThreadScope(
-    headRequest?.thread ?? "",
-    headResult !== null,
-    headResult ?? { state: "absent" },
-  );
-  const defaultDocument = useMemo(
-    () =>
-      threadHeadSchema.safeParse(headResult ? previousOf(headResult) : undefined).data
-        ?.defaultTarget ?? null,
-    [headResult],
-  );
-  const resolution: TargetResolution = useMemo(() => {
-    // A seed's explicit synthetic Target is its authority; host is the backward-safe absence.
-    if (seed)
-      return {
-        kind: "resolved",
-        target: seed.target ?? ({ kind: "host" } as ExecutionTarget),
-      };
-    if (!manifest.needs) return { kind: "resolved", target: { kind: "host" } as ExecutionTarget };
-    // Adding a document Reading reconnects the shared stream. Retain the observed target
-    // across that gap, or dropping its Readings would trigger another reconnect forever.
-    const inventory = targetInventory(inventoryResult as Parameters<typeof targetInventory>[0]);
-
-    // A chosen `?target` beats the thread head; see `parseTarget` for the grammar.
-    const chosen = parseTarget(target);
-    let request: DocumentRequest | null = defaultDocument;
-    if (chosen && inventory.kind === "ready") {
-      if (chosen.kind === "request") {
-        request = chosen.request;
-      } else if (chosen.kind === "session") {
-        const found = inventory.sessions[chosen.session];
-        if (!found) return { kind: "choose", reason: "session-gone" };
-        if (found.kind !== "ready") return found;
-        if (found.values.length === 0) return { kind: "choose", reason: "document-closed" };
-        if (found.values.length > 1) return { kind: "choose", reason: "ambiguous" };
-        request = {
-          kind: "open",
-          ref: { session: chosen.session, openId: found.values[0]!.openId },
-        };
-      } else {
-        const holders = Object.entries(inventory.sessions).filter(
-          ([, found]) =>
-            found.kind === "ready" &&
-            found.values.some(
-              (doc) => doc.address !== null && sameAddress(doc.address, chosen.address),
-            ),
-        );
-        if (holders.length === 0) return { kind: "choose", reason: "document-closed" };
-        if (holders.length > 1) return { kind: "choose", reason: "ambiguous" };
-        request = { kind: "named", session: holders[0]![0], address: chosen.address };
-      }
-    }
-    const session = request?.kind === "open" ? request.ref.session : request?.session;
-    const needs =
-      manifest.needs === "session"
-        ? ({ needs: "session", target: session ?? "" } as const)
-        : ({
-            needs:
-              manifest.needs === "family"
-                ? ("family-document" as const)
-                : manifest.needs === "project"
-                  ? ("project-document" as const)
-                  : ("document" as const),
-          } as const);
-    if (needs.needs === "session" && !needs.target) return { kind: "choose", reason: "missing" };
-    return resolveCallTarget(needs as never, request, inventory);
-  }, [seed, manifest.needs, inventoryResult, defaultDocument, target]);
-
-  // A bound exact document that left the inventory: named, with the title it last had, and the
-  // same title reopened in its session offered. Titles seen are remembered for exactly this.
-  const seenTitles = useRef(new Map<string, string>());
-  const open = useMemo(() => openTitles(inventoryResult), [inventoryResult]);
-  for (const [id, title] of open) seenTitles.current.set(id, title);
-  const bindingLost = useMemo((): BindingLost | null => {
-    if (seed || resolution.kind !== "choose") return null;
-    if (resolution.reason !== "document-closed" && resolution.reason !== "session-gone")
-      return null;
-    const chosen = parseTarget(target);
-    const pinned = chosen?.kind === "request";
-    const request = pinned ? chosen.request : defaultDocument;
-    if (request?.kind !== "open") return null;
-    const { ref } = request;
-    const title = seenTitles.current.get(`${ref.session}/${ref.openId}`) ?? null;
-    const reopened =
-      title === null
-        ? null
-        : ([...open].find(
-            ([id, other]) =>
-              other === title &&
-              id.startsWith(`${ref.session}/`) &&
-              id !== `${ref.session}/${ref.openId}`,
-          ) ?? null);
-    return {
-      ref,
-      title,
-      // A `?target` pin is this page's own binding; a Chat head is the thread's (the words the
-      // host's route door uses). Remembered titles only label it; they never rebind.
-      sentence: pinned
-        ? `the document this page was bound to closed (${title ?? "untitled"} · ${ref.openId.slice(0, 8)}…); bind it again in the sentence above`
-        : `the Chat's document is no longer open — pick it again (${title ?? "untitled"} · ${ref.openId.slice(0, 8)}…)`,
-      reason: resolution.reason,
-      reopened: reopened
-        ? { openId: reopened[0].slice(ref.session.length + 1), title: reopened[1] }
-        : null,
-    };
-  }, [seed, resolution, target, defaultDocument, open]);
-  const bindingLostRef = useRef(bindingLost);
-  bindingLostRef.current = bindingLost;
-
-  // The Work key is the resolved document's Address, so a session-key `?target` and an Address
-  // `?target` for the same document read and write the same Work.
-  const resolvedAddress = useMemo((): Address | null => {
-    if (resolution.kind !== "resolved" || resolution.target.kind !== "document") return null;
-    const inventory = targetInventory(inventoryResult as Parameters<typeof targetInventory>[0]);
-    const found =
-      inventory.kind === "ready" ? inventory.sessions[resolution.target.ref.session] : undefined;
-    const ref = resolution.target.ref;
-    return found?.kind === "ready"
-      ? (found.values.find((doc) => doc.openId === ref.openId)?.address ?? null)
-      : null;
-  }, [resolution, inventoryResult]);
+  const { inventoryResult, head, resolution, bindingLost, bindingLostRef, resolvedAddress } =
+    useRouteTarget(manifest, owner.registry, seed, target, options.thread);
   const work =
     typeof requestedWork === "function" ? requestedWork(page, resolvedAddress) : requestedWork;
   const boundDocument =
@@ -1098,40 +355,13 @@ export function useRoute<W, R extends string, P, A extends string>(
   const currentActionScope = useRef(actionScope);
   currentActionScope.current = actionScope;
 
-  // Page-log rows for the three events that are not verbs (Situation, 2026-09-13): the target
-  // binding, the stage word and the Work revision. Each notes only when its value changes.
   const stage = (page as { stage?: unknown }).stage;
-  const stageWord = manifest.stages?.find((item) => item.key === stage)?.word;
-  const revision = doc?.revision ?? null;
-  const lostKey = bindingLost ? `${bindingLost.ref.session}/${bindingLost.ref.openId}` : null;
-  const seen = useRef({
+  usePageLogNotes(owner, {
     target: boundKey,
-    stage: stageWord,
-    revision,
-    lost: null as string | null,
+    stage: manifest.stages?.find((item) => item.key === stage)?.word,
+    revision: doc?.revision ?? null,
+    lost: bindingLost,
   });
-  useEffect(() => {
-    if (seen.current.target !== boundKey) {
-      seen.current.target = boundKey;
-      const bound = JSON.parse(boundKey) as { session: string; openId: string } | null;
-      // A lost binding notes itself below, with its reason, on load as on a transition.
-      if (bound || !bindingLost)
-        owner.note("target", "target", bound ? `${bound.session} › ${bound.openId}` : "unbound");
-    }
-    if (seen.current.lost !== lostKey) {
-      seen.current.lost = lostKey;
-      if (bindingLost)
-        owner.note("target", "target", `unbound (${bindingLost.reason.replace("-", " ")})`);
-    }
-    if (seen.current.stage !== stageWord) {
-      seen.current.stage = stageWord;
-      if (stageWord) owner.note("stage", "stage", stageWord);
-    }
-    if (seen.current.revision !== revision) {
-      seen.current.revision = revision;
-      if (revision !== null) owner.note("work", "work", `r${revision} loaded`);
-    }
-  }, [owner, boundKey, stageWord, revision, lostKey, bindingLost]);
 
   const actions = useMemo(() => {
     const targetRefusal = (needs: NonNullable<typeof manifest.needs> | "host") => {
@@ -1305,6 +535,7 @@ export function useRoute<W, R extends string, P, A extends string>(
       doc: (doc?.doc ?? null) as W | null,
       revision: doc?.revision ?? null,
       current: workCurrent,
+      changed: sliceResult ? changedInRevit(sliceResult) : false,
       write: writeWork,
       conflict: conflictNow,
       refusal: sliceResult?.state === "failed" ? sliceResult.message : null,
@@ -1346,7 +577,7 @@ export function useRoute<W, R extends string, P, A extends string>(
     manifest,
     resolution,
     chosen: target,
-    head: headRequest && headResult ? { thread: headRequest.thread, ...scope } : null,
+    head,
     work: workHandle,
     readings,
     inventory: seededReadings ? (seededReadings.inventory ?? { state: "absent" }) : inventoryResult,

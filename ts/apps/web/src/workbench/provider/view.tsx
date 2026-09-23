@@ -11,8 +11,8 @@ import {
   type AccessLevel,
 } from "../chat-state";
 import { previousOf, useHostStatus } from "#/readings";
-import { appAtomRegistry } from "#/route";
-import { useRouteOwner } from "#/route";
+import { appAtomRegistry } from "#/route/route-owner";
+import { useRouteOwner } from "#/route/route-owner";
 import { createChatPageStore } from "../store";
 import type { WorkbenchAttachment } from "../prompt";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";

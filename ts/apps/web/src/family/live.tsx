@@ -8,6 +8,7 @@ import { familyFixtures, type AuthoredFamilyName } from "#/family/authored-famil
 import { useFamilyStore } from "#/family/store";
 import { FamilyWorkspace, familyFacts } from "#/family/workspace";
 import { familyDemoFields, familySpec } from "./manifest";
+import { FAMILY_STAGES } from "./stage";
 
 /** The demo lane holds no family model schema offline, so its editor opens the raw JSON. */
 const DEMO_SCHEMA = "";
@@ -62,6 +63,7 @@ export function FamilyRouteView({
       }
       facts={familyFacts(store)}
       url={url}
+      stages={FAMILY_STAGES}
       pick={(member) => void store.actions.open(member).catch(() => undefined)}
     >
       <FamilyWorkspace store={store} />

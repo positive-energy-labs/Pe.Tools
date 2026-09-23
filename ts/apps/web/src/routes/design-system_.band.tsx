@@ -29,7 +29,7 @@ import {
   type Matrix,
 } from "#/design-system/band-specimen";
 import { StaleSection } from "#/design-system/stale-specimen";
-import { SituationCell } from "#/route/situation";
+import { SituationCell } from "#/route/situation-marks";
 
 export const Route = createFileRoute("/design-system_/band")({ component: BandRoute });
 

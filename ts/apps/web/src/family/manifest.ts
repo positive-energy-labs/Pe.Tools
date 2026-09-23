@@ -48,7 +48,7 @@ import { familyFixtures, type AuthoredFamilyName } from "#/family/authored-famil
 import {
   actionResult,
   runSemanticAction,
-} from "../../../../../packages/mcps/src/shared/takeoff-action-client";
+} from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 /** The `$schema` path that says a member is a family model: the spec `/family` captures and applies. */
 export const FAMILY_MODEL_SCHEMA = "/schemas/settings/FamilyFoundry/models.json";
@@ -291,6 +291,7 @@ export function familyDemoFields(raw: string): Record<string, SettingsFieldState
 const familyDemoDraft = (raw: string): FamilyDraft => ({
   reading: raw,
   cells: familyDemoFields(raw),
+  takenAt: null,
 });
 
 const DEMO_POD = "demo";
@@ -418,8 +419,11 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
         ready: () => null,
         run: async (ctx: Ctx) => {
           const read = await workflow("family.capture", {}, ctx);
-          // not a cell: reading
-          await ctx.write([{ path: ["reading"], value: read.spec }]);
+          // not a cell: reading, and when it was taken on the host's clock
+          await ctx.write([
+            { path: ["reading"], value: read.spec },
+            { path: ["takenAt"], value: read.capturedAt },
+          ]);
         },
       },
       "prepare-build": {

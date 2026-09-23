@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vite-plus/test";
 
-import { FAMILY_DEMO_PODS } from "#/route/family/manifest";
+import { FAMILY_DEMO_PODS } from "#/family/manifest";
 import { DEMO_PODS } from "#/route/seeds";
 
 import { DEMO_MEMBER_SPECS } from "#/routes/pods";

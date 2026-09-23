@@ -97,6 +97,8 @@ design-system ledger, not restated here.
 - 2026-08-16 — Validation issues stay document-scoped chips rather than being joined onto the fields they name: an issue on a staged field IS the `attention` fact, so joining is entangled with the unruled attention axis (design-system ledger, Owed) and would have pre-decided it.
 - 2026-08-16 — Every command failure lands as `OutcomeKind: "error"` (caution), never dressed as a refusal: `route.command` returns `{ok:false, error?, hint?}` with no refusal discriminator, and guessing would spend the one alarm dishonestly.
 
+- 2026-09-22 (C7) — One `DocumentMarks` holder per bridge (memoized), subscribed at boot and shared by `markReadings` (wraps every served Reading, Work included; a Work slice's time is `doc.takenAt`) and every apply. `assertFresh(marks, ref, takenAt)` throws `BridgeError(STALE_READ, 409, notDispatched)` when `takenAt` is null or older than the mark; `Revit changed this document after the read your staged cells rest on; read again, then apply.` The demo owner raises `document-changed` on `POST <instance>/document-changed`. Proof: `apps/host/tests/document-marks.test.ts`, journey `ts/tests/e2e/st4-changed.ts`.
+
 ## Tried & rejected
 
 - 2026-08-25 — (/settings) TanStack Form as a second draft beside `document.fields[*].staged`; save had to convert one into patches for the other (C1 settings #1).

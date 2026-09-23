@@ -1,6 +1,7 @@
 import { Pane } from "#/components/lang/pane";
 import { FamiliesMatrix } from "#/families/matrix";
 import { familiesSpec } from "#/families/manifest";
+import { FAMILIES_STAGES } from "#/families/stage";
 import { DEMO_FAMILIES_SPEC } from "#/families/seeds";
 import {
   FamiliesCaptureBand,
@@ -13,7 +14,7 @@ import { FamiliesFilterBand } from "#/families/scope-band";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 import { ChangedInRevit } from "#/route/changed";
 import { EntityRouteView } from "#/route/entity";
-import { SituationCell } from "#/route/situation";
+import { SituationCell } from "#/route/situation-marks";
 
 const noun = (n: number, word: string) =>
   `${n} ${n === 1 ? word : word.endsWith("y") ? `${word.slice(0, -1)}ies` : `${word}s`}`;
@@ -58,6 +59,7 @@ export function FamiliesWorkspaceView({ url }: { url?: boolean }) {
       refreshPods={store.refreshPods}
       fixture={store.demo ? DEMO_FAMILIES_SPEC : undefined}
       url={url}
+      stages={FAMILIES_STAGES}
       subject={<>families over {scope}</>}
       health={matrixIssue ? `${matrixIssue.title} · ${matrixIssue.message}` : null}
       startFreshAside={<SalvagedExclusions />}

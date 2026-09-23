@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { entitySearch, routeSearch, useRouteThread, type EntitySearch } from "#/route";
-import { FamilyRouteView } from "#/route/family/live";
-import { familyManifest } from "#/route/family/manifest";
+import { entitySearch, useRouteThread, type EntitySearch } from "#/route";
+import { routeSearch } from "#/route/route-owner";
+import { FamilyRouteView } from "#/family/live";
+import { familyManifest } from "#/family/manifest";
 
-/** The route, declared once. `route/family/live.tsx` binds it to the family audit and the pods. */
+/** The route, declared once. `family/live.tsx` binds it to the family audit and the pods. */
 export const manifest = familyManifest();
 
 export const familySearch = (

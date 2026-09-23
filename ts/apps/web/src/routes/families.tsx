@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { FamiliesWorkspace } from "#/families/workspace";
 import { useFamiliesStore } from "#/families/store";
-import { entitySearch, routeSearch, useRouteThread, type EntitySearch } from "#/route";
+import { entitySearch, useRouteThread, type EntitySearch } from "#/route";
+import { routeSearch } from "#/route/route-owner";
 
 import { manifest as familiesManifest } from "#/families/manifest";
 export const manifest = familiesManifest;

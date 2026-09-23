@@ -26,6 +26,7 @@ import {
   type ScheduleCellsApply,
 } from "@pe/host-contracts/generated";
 import { BridgeError, type RevitBridge } from "./bridge.ts";
+import { assertFresh, documentMarks } from "./document-marks.ts";
 import { ActionIncomplete, type ActionJournal } from "./action-journal.ts";
 import { actionWorkspace, type TakeoffActionDependencies } from "./takeoff-actions.ts";
 import { readOriginalProcess, readNativeReceipt, type NativeProcess } from "./native-receipts.ts";
@@ -300,6 +301,7 @@ export async function admitScheduleAction(
       });
       if (base.key.work !== reading.workspaceId)
         throw refused("Work binding belongs to another schedule");
+      assertFresh(documentMarks(bridge), target, document.takenAt);
       if (!same(reading.target, target)) {
         const message =
           "Work binding belongs to another document lifetime: the schedule was re-opened in Revit; read it again (staged cells are kept)";

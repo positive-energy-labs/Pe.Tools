@@ -13,9 +13,11 @@ import { Pane, PaneSplit } from "#/components/lang/pane";
 import { Surface } from "#/components/lang/surface";
 import { callHostRpc } from "#/host/client";
 import { useHostOp } from "#/readings";
-import { RouteShell, appAtomRegistry, defineRoute } from "#/route";
-import { createRouteOwner, refuse } from "#/route";
-import { useRouteOwner } from "#/route";
+import { RouteShell, defineRoute } from "#/route";
+import { appAtomRegistry } from "#/route/route-owner";
+import { refuse } from "#/route";
+import { createRouteOwner } from "#/route/route-owner";
+import { useRouteOwner } from "#/route/route-owner";
 import { DraftEditor } from "#/data-tables/draft-editor";
 
 /**

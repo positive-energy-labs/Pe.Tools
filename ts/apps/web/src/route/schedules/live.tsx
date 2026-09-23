@@ -12,10 +12,10 @@ import {
 } from "@pe/agent-contracts";
 import { changedInRevit, previousOf, useHostStatus } from "#/readings";
 import { refuse, useRoute, type EntitySearch } from "#/route";
-import { RouteKeys } from "#/route/keys";
+import { KeysNode, manifestChords } from "#/route/keys";
 import { ActionReceiptView } from "#/actions/receipt";
 import { EntityRouteView } from "#/route/entity";
-import { ActionFlag } from "#/route/situation";
+import { ActionFlag } from "#/route/situation-verbs";
 import { usePodList } from "#/route/pods";
 import { DEMO_SPEC } from "#/route/seeds";
 import { scheduleSpec, schedulesManifest } from "./manifest";
@@ -143,8 +143,12 @@ export function LiveScheduleGridWorkspace({
     );
     return work.write(
       writing && (!hasWork || !work.doc?.basis)
-        ? // not a cell: basis
-          [{ path: ["basis"], value: { captureId: shown.id } }, ...patches]
+        ? // not a cell: basis, and when that read was taken
+          [
+            { path: ["basis"], value: { captureId: shown.id } },
+            { path: ["takenAt"], value: shown.capturedAt },
+            ...patches,
+          ]
         : [...patches, ...unstale(work.doc, restaged)],
       expectedRevision,
     );
@@ -235,9 +239,9 @@ export function LiveScheduleGridWorkspace({
     </ActionFlag.Provider>
   );
   return (
-    <RouteKeys handle={handle} chords={framed && url}>
+    <KeysNode id={handle.manifest.name} keys={framed && url ? manifestChords(handle) : []}>
       {framed ? framedView : audit}
-    </RouteKeys>
+    </KeysNode>
   );
 }
 

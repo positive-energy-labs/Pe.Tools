@@ -23,7 +23,7 @@ import { filterItems, type Collection } from "#/components/lang/collection";
 import { ListPopup } from "#/components/lang/list-popup";
 import { Thumbnail } from "#/workbench/thumbnail";
 import { useSend, type ChatHandle } from "#/chat/composer-head";
-import { SituationAction } from "#/route/situation";
+import { SituationAction } from "#/route/situation-verbs";
 
 /** A skill the thread's inspect lists: the one thing the slash menu offers. `new` and `fork` are
  * route verbs (`chat/manifest.ts`); mode switches are the mode dial. */

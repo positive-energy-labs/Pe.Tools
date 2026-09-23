@@ -2,7 +2,7 @@ import type { ChatPluginRoute } from "./chat-plugins";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 
-import { createRouteOwner } from "#/route";
+import { createRouteOwner } from "#/route/route-owner";
 
 export interface ChatSearch {
   readonly thread?: string;

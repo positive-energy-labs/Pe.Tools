@@ -1,7 +1,7 @@
 import { createContext, useContext, type ReactNode } from "react";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
-import { createRouteOwner, useRouteOwner } from "#/route";
+import { createRouteOwner, useRouteOwner } from "#/route/route-owner";
 import type { LensScrollIntent } from "./model";
 
 type Setter<A> = A | ((previous: A) => A);

@@ -7,7 +7,7 @@ import { hostActionJournal } from "./gateway-owner.ts";
 import { hostTakeoffCaptures, type TakeoffCaptures } from "./takeoff-captures.ts";
 import { listBridgeSessions } from "./local-ops.ts";
 import { observeSdkReading } from "./session-route.ts";
-import { documentMarks, type DocumentMarks, type DocumentRef } from "./document-marks.ts";
+import type { DocumentMarks, DocumentRef } from "./document-marks.ts";
 
 /**
  * The host's own HTTP surface, read by the host on the host's clock. A one-shot Reading gets one
@@ -44,16 +44,16 @@ const ONE_SHOT: Record<string, (r: never) => readonly [string, RequestInit?]> = 
 
 const POLL_MS: Record<string, number> = { "host-status": 5_000 };
 
-/** Typed adapters into existing owners. No calls, mutations, or transport-owned revisions. */
 /** The document a Reading is bound to, or null when it is not one document's Reading. */
 const documentOf = (request: { kind: string } & Record<string, unknown>): DocumentRef | null =>
-  request.kind === "schedule-reading" ||
-  request.kind === "takeoff-reading" ||
-  request.kind === "document-mark"
+  request.kind === "schedule-reading" || request.kind === "takeoff-reading"
     ? ((request.target as DocumentRef | undefined) ?? null)
     : request.kind === "family-readings"
       ? (((request.work as { open?: DocumentRef }).open ?? null) as DocumentRef | null)
-      : null;
+      : request.kind === "work"
+        ? (((request.binding === "address" ? request.from : request.open) ??
+            null) as DocumentRef | null)
+        : null;
 
 /**
  * When the observation in a served value was taken, on the host's clock. A stored capture served
@@ -61,10 +61,17 @@ const documentOf = (request: { kind: string } & Record<string, unknown>): Docume
  */
 const takenIn = (value: unknown): number | null => {
   const record = value as
-    | { capturedAt?: unknown; takenAt?: unknown; snapshot?: { takenAt?: unknown } }
+    | {
+        doc?: { takenAt?: unknown } | null;
+        capturedAt?: unknown;
+        takenAt?: unknown;
+        snapshot?: { takenAt?: unknown };
+      }
     | null
     | undefined;
-  const iso = record?.capturedAt ?? record?.snapshot?.takenAt ?? record?.takenAt;
+  // A Work slice (`{ doc, revision }`) rests on the Reading its doc says it was staged over.
+  const iso =
+    record?.doc?.takenAt ?? record?.capturedAt ?? record?.snapshot?.takenAt ?? record?.takenAt;
   const at = typeof iso === "string" ? Date.parse(iso) : Number.NaN;
   return Number.isNaN(at) ? null : at;
 };
@@ -77,30 +84,28 @@ const documentIn = (value: unknown): DocumentRef | null => {
     : null;
 };
 
-export function hostResourceObserver(
-  bridge?: RevitBridge["Service"],
-  journal: () => ActionJournal = hostActionJournal,
-  captures: () => TakeoffCaptures = hostTakeoffCaptures,
-  origin = "http://127.0.0.1",
-  // Resolved at the call, not at the build: one observer outlives any one `fetch` binding.
-  read: (url: URL, init?: RequestInit) => Promise<Response> = (url, init) => fetch(url, init),
-  marks: DocumentMarks = documentMarks(bridge),
-): ResourceObserver {
-  const inventoryReads = new OwnerReads();
-  return (request, rawPublish) => {
-    const key = readingKey(request);
-    /**
-     * A document-bound Reading carries the change mark on its envelope: `changed` is false the
-     * moment the host serves it and becomes true when Revit changes that document afterwards,
-     * which the host publishes as a new envelope over the same value. No consumer compares clocks,
-     * and a client that missed the world event still sees what the envelope says.
-     */
+/**
+ * A document-bound Reading carries the change mark on its envelope: `changed` is false the moment
+ * the host serves it and becomes true when Revit changes that document afterwards, which the host
+ * publishes as a new envelope over the same value. No consumer compares clocks, and a client that
+ * missed the world event still sees what the envelope says. Wraps every Reading the host serves,
+ * Work included.
+ */
+export const markReadings =
+  (marks: DocumentMarks) =>
+  (observe: ResourceObserver): ResourceObserver =>
+  (request, rawPublish) => {
     let bound = documentOf(request as never);
     let servedAt = Number.POSITIVE_INFINITY;
     let latest: (ReadingFrame & { kind: "snapshot" }) | null = null;
     let changed = false;
     const markedNow = () => bound !== null && (marks.changedAt(bound) ?? 0) > servedAt;
-    const publish = (frame: ReadingFrame) => {
+    const unwatch = marks.subscribe(() => {
+      if (!latest || markedNow() === changed) return;
+      changed = markedNow();
+      rawPublish({ ...latest, changed });
+    });
+    const release = observe(request, (frame) => {
       if (frame.kind !== "snapshot") return rawPublish(frame);
       // A request that does not name the document (a workspace id, a capture id) is still one
       // document's Reading: the served value names the document it was read from.
@@ -110,13 +115,25 @@ export function hostResourceObserver(
       changed = markedNow();
       latest = frame;
       rawPublish({ ...frame, changed });
+    });
+    return () => {
+      release();
+      unwatch();
     };
-    const watch = () =>
-      marks.subscribe(() => {
-        if (!latest || markedNow() === changed) return;
-        changed = markedNow();
-        rawPublish({ ...latest, changed });
-      });
+  };
+
+/** Typed adapters into existing owners. No calls, mutations, or transport-owned revisions. */
+export function hostResourceObserver(
+  bridge?: RevitBridge["Service"],
+  journal: () => ActionJournal = hostActionJournal,
+  captures: () => TakeoffCaptures = hostTakeoffCaptures,
+  origin = "http://127.0.0.1",
+  // Resolved at the call, not at the build: one observer outlives any one `fetch` binding.
+  read: (url: URL, init?: RequestInit) => Promise<Response> = (url, init) => fetch(url, init),
+): ResourceObserver {
+  const inventoryReads = new OwnerReads();
+  return (request, publish) => {
+    const key = readingKey(request);
     const accept = (result: OwnerValue<unknown>) => publish(resourceSnapshot(key, result));
     /** Read the host's own HTTP surface once, or on the host's own timer. Never the client's. */
     const oneShot = (
@@ -154,12 +171,7 @@ export function hostResourceObserver(
         controller.abort();
       };
     };
-    const release = observe();
-    const unwatch = watch();
-    return () => {
-      release();
-      unwatch();
-    };
+    return observe();
 
     function observe(): () => void {
       switch (request.kind) {
@@ -200,10 +212,6 @@ export function hostResourceObserver(
           const owner = captures();
           return owner.observeFamily(request.work, accept);
         }
-        // The mark is the envelope; the value is empty and never changes.
-        case "document-mark":
-          accept({ value: {} });
-          return () => {};
         // A LiveDocument key's value names its document, which binds the mark (`documentIn`).
         case "field-options": {
           if (!bridge) {

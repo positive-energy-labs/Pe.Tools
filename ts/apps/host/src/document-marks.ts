@@ -9,7 +9,7 @@
  * it is read again.
  */
 import { Effect } from "effect";
-import type { RevitBridge } from "./bridge.ts";
+import { BridgeError, type RevitBridge } from "./bridge.ts";
 
 export interface DocumentRef {
   readonly session: string;
@@ -25,12 +25,26 @@ export interface DocumentMarks {
 
 const NO_MARKS: DocumentMarks = { changedAt: () => null, subscribe: () => () => {} };
 
+/** The one refusal an apply over a newer change mark gets. */
+export const STALE_READ =
+  "Revit changed this document after the read your staged cells rest on; read again, then apply.";
+
+/** An apply rests on the read taken at `takenAt`; a later mark on its document refuses it undispatched. */
+export function assertFresh(marks: DocumentMarks, ref: DocumentRef, takenAt: string | null): void {
+  if (takenAt === null || (marks.changedAt(ref) ?? 0) > Date.parse(takenAt))
+    throw new BridgeError(STALE_READ, 409, { notDispatched: true });
+}
+
+const held = new WeakMap<RevitBridge["Service"], DocumentMarks>();
+
 /**
- * One holder per host, fed by the bridge tap. `session` is whichever id a Target names: the marks
+ * One holder per bridge, fed by its tap: the Reading observer and every apply share it. `session` is whichever id a Target names: the marks
  * are recorded under both the broker session id and the pe-revit session id the payload reported.
  */
 export function documentMarks(bridge?: RevitBridge["Service"]): DocumentMarks {
   if (!bridge) return NO_MARKS;
+  const known = held.get(bridge);
+  if (known) return known;
   const marks = new Map<string, Map<string, number>>();
   const listeners = new Set<() => void>();
   let tail = Promise.resolve();
@@ -65,7 +79,7 @@ export function documentMarks(bridge?: RevitBridge["Service"]): DocumentMarks {
       .catch(() => undefined);
   });
 
-  return {
+  const holder: DocumentMarks = {
     changedAt: (ref) =>
       Math.max(
         marks.get(ref.session)?.get(ref.openId) ?? 0,
@@ -78,4 +92,6 @@ export function documentMarks(bridge?: RevitBridge["Service"]): DocumentMarks {
       };
     },
   };
+  held.set(bridge, holder);
+  return holder;
 }

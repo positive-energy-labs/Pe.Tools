@@ -54,6 +54,7 @@ export function rebindScheduleWork(
   });
   return [
     { path: ["basis"], value: { captureId: reading.id, ...(stale.length ? { stale } : {}) } },
+    { path: ["takenAt"], value: reading.capturedAt },
   ];
 }
 

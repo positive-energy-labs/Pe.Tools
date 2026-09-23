@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { TakeoffsRoute } from "#/takeoff/route";
-import { routeSearch } from "#/route";
+import { routeSearch } from "#/route/route-owner";
 
 export { TakeoffsRoute, LiveTakeoffsRoute } from "#/takeoff/route";
 import { manifest as takeoffsManifest } from "#/takeoff/manifest";

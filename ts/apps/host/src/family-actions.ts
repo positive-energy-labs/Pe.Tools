@@ -61,6 +61,7 @@ import type {
 } from "@pe/host-contracts/generated";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { BridgeError, type RevitBridge } from "./bridge.ts";
+import { assertFresh, documentMarks } from "./document-marks.ts";
 import { ActionIncomplete, type ActionJournal } from "./action-journal.ts";
 import { actionWorkspace, type TakeoffActionDependencies } from "./takeoff-actions.ts";
 import { readOriginalProcess, readNativeReceipt, type NativeProcess } from "./native-receipts.ts";
@@ -293,6 +294,8 @@ type Sealed = {
   executionOptions?: unknown;
   /** Null: no Work basis, or a member the staged cells do not generate. It retires nothing. */
   consumed: Consumed | null;
+  /** When the Reading the consumed rungs rest on was taken; sealed only beside a consumed. */
+  takenAt?: string | null;
 };
 
 /** A member's JSON as authored, ignoring the `$schema` URL its writer stamps. */
@@ -461,11 +464,13 @@ export async function admitFamilyAction(
         // With a reviewed draft, the plan consumes its staged cells only if the captured bytes ARE that draft.
         const base = admission.bases.work;
         let consumed: Consumed | null = null;
+        let takenAt: string | null = null;
         if (base) {
           const view = work ? await work.read(base.key, familyDraftRouteState.route) : null;
           if (!view || view.revision !== base.revision)
             throw refused("Current reviewed Family Work is required");
           const draft = familyDraftRouteState.schema.parse(view.doc);
+          takenAt = draft.takenAt;
           const staged = stagedEntries(draft.cells).map(([cell]) => cell);
           if (
             draft.reading !== null &&
@@ -480,7 +485,7 @@ export async function admitFamilyAction(
           nativeKey: "family.plan",
           input: { specJson },
           planned: { scope: null, excluded: {}, written: [] },
-          sealed: { specJson, source, consumed },
+          sealed: { specJson, source, consumed, ...(consumed && { takenAt }) },
         };
       }
       if (key === "family.apply" || key === "families.apply") {
@@ -526,6 +531,7 @@ export async function admitFamilyAction(
             )
           )
             throw refused("The staged cells changed since this plan; plan again");
+          assertFresh(documentMarks(bridge), target!, sealed.takenAt ?? null);
         }
         const included = (plan.result as { included: Record<string, string> }).included;
         const stray = Object.keys(input.expectedPlanHashes).filter(
@@ -594,6 +600,7 @@ export async function admitFamilyAction(
             source,
             ...(input.executionOptions ? { executionOptions: input.executionOptions } : {}),
             consumed,
+            ...(consumed && { takenAt: doc.takenAt }),
           },
           planned: {
             scope,
@@ -716,6 +723,8 @@ export async function admitFamilyAction(
           return {
             executionContext: target,
             spec: specs[0]!.content,
+            // Host clock, stamped before the native read: the Work's `takenAt` rests on it.
+            capturedAt: prepared.at,
             evidence: { ...(captured as object), origin: "capture", rfaPath: null, run: null },
           };
         const pod = prepared.pod;

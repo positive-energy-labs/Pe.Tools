@@ -177,6 +177,7 @@ test("/family: a human-authored proposal refuses in the sentence and stays; Pea'
   expect((await module.read(scope, "family"))!.doc).toEqual({
     reading: "{}",
     cells: { "/a": { proposal: { value: 1 }, staged: null } },
+    takenAt: null,
   });
 });
 

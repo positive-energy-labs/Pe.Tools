@@ -64,6 +64,7 @@ test("a rebind names each changed staged cell with the value reviewed against; t
   const doc = {
     basis: { captureId: "a".repeat(64) },
     cells: { "1::1": { staged: { value: "P-9" } }, "1::2": { staged: { value: "150 VA" } } },
+    takenAt: null,
   };
   const [first] = rebindScheduleWork(doc, reading("a", "100"), reading("b", "120"));
   expect(first).toEqual({

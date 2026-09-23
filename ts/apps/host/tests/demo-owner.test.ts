@@ -484,7 +484,7 @@ test("demo schedule push files a run in the bound pod with values before and aft
     target: f.owner.target,
   });
   expect(read.status, await read.clone().text()).toBe(200);
-  const reading = (await read.json()) as { id: string; workspaceId: string };
+  const reading = (await read.json()) as { id: string; workspaceId: string; capturedAt: string };
   const key = {
     binding: "workspace" as const,
     route: "schedules",
@@ -497,6 +497,7 @@ test("demo schedule push files a run in the bound pod with values before and aft
     {
       patches: [
         { path: ["basis"], value: { captureId: reading.id } },
+        { path: ["takenAt"], value: reading.capturedAt },
         { path: ["cells", "2::1"], value: { staged: { value: "R-454B" } } },
       ],
       expectedRevision: 0,

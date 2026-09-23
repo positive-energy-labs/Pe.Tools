@@ -155,6 +155,8 @@ export const scheduleGridDocumentSchema = z.object({
     })
     .nullish(),
   cells: z.record(z.string(), scheduleGridCellSchema).default({}),
+  /** When the Reading these staged rungs rest on was taken, on the host's clock. The change mark compares against this. */
+  takenAt: z.string().nullable().default(null),
 });
 export type ScheduleGridDocument = z.infer<typeof scheduleGridDocumentSchema>;
 export const scheduleGridRouteState = {

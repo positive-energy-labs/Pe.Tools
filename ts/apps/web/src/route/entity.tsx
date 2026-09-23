@@ -8,7 +8,7 @@ import { useEffect, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { Pane, PaneSplit } from "#/components/lang/pane";
-import { StageKeys } from "#/route/keys";
+import { KeysNode, stageChords } from "#/route/keys";
 import { Surface } from "#/components/lang/surface";
 import { previousOf } from "#/readings";
 
@@ -16,7 +16,9 @@ import { isSpecOf, sheetOf, type EntityPage, type EntityRouteDef, type PodRow } 
 import { Ladder } from "./ladder";
 import { PlanSheetView } from "./plan-sheet";
 import { SpecEditor, type DemoSpec } from "./spec-editor";
-import { LadderPicker, Situation, SituationCell, useDocumentLadder } from "./situation";
+import { Situation } from "./situation";
+import { LadderPicker, useDocumentLadder } from "./situation-ladder";
+import { SituationCell } from "./situation-marks";
 import type { RouteHandle } from "./use-route";
 import type { StageDecl } from "./stage";
 
@@ -84,11 +86,10 @@ export function EntityRouteView({
    */
   pick?: (member: { pod: string; path: string }) => void;
   /**
-   * The route's stages, declared (`route/stage.ts`): the row draws each stage's verbs, and the
-   * spec pane shows where the stage names it and takes focus when revealed. Absent = every verb
-   * of the stage, and the spec pane off the audit.
+   * The route's stages, declared (`route/stage.ts`): the row draws each stage's verbs and chords,
+   * and the spec pane shows where the stage names it.
    */
-  stages?: Readonly<Record<EntityPage["stage"], StageDecl<string, string>>>;
+  stages: Readonly<Record<EntityPage["stage"], StageDecl<string, string>>>;
   /** The audit. */
   children: ReactNode;
 }) {
@@ -109,9 +110,8 @@ export function EntityRouteView({
   const specless = confirming && !page.path;
   // TODO: hide this pane (Pane `hidden`) instead of unmounting it, so it keeps what was typed —
   // SpecEditor works while it renders, and a hidden pre-render of it never settles.
-  const specHidden = stages
-    ? !stages[page.stage].panes.spec && !confirming
-    : page.stage === "audit" && !confirming;
+  const stage = stages[page.stage];
+  const specHidden = !stage.panes.spec && !confirming;
   // Field options come from the document this route acts on, read-only (user verdict, grill 2).
   const optionsFrom =
     handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
@@ -172,8 +172,9 @@ export function EntityRouteView({
           // With a plan lane the sheet's apply is the one apply button (w8-revit trip 5); the row
           // commits by planning.
           commit={def.plan || def.staged ? "plan" : "apply"}
-          verbs={stages?.[page.stage].verbs}
-          chords={stages?.[page.stage].keys}
+          verbs={stage.verbs}
+          chords={stage.keys}
+          meter={stage.meter}
           band={band}
           startFreshAside={startFreshAside}
           onStartedFresh={onStartedFresh}
@@ -271,19 +272,16 @@ export function EntityRouteView({
       />
     </Surface>
   );
-  // The optional stage node: panes nest under the stage that shows them, and the stage's own
-  // chords are bound here, so a chord bound in one stage cannot fire from another. A page that does
-  // not own the URL does not own the chords either (a chat pane) — the same gate `RouteKeys` takes.
-  return stages ? (
-    <StageKeys
+  // The stage node: panes nest under the stage that shows them, and the stage's own chords are
+  // bound here, so a chord bound in one stage cannot fire from another. A page that does not own
+  // the URL does not own the chords either (a chat pane).
+  return (
+    <KeysNode
       id={`${def.key}:${page.stage}`}
-      handle={handle}
-      keys={stages[page.stage].keys}
-      chords={url}
+      keys={url ? stageChords(handle, stage.keys) : []}
+      hidden={!url}
     >
       {board}
-    </StageKeys>
-  ) : (
-    board
+    </KeysNode>
   );
 }

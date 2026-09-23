@@ -7,8 +7,9 @@ import { expect, test, vi } from "vite-plus/test";
 import { Effect } from "effect";
 import type { ReadingFrame } from "@pe/agent-contracts";
 import type { HostBridgeEvent, RevitBridge } from "../src/bridge.ts";
-import { documentMarks } from "../src/document-marks.ts";
-import { hostResourceObserver } from "../src/resource-adapters.ts";
+import { documentMarks, STALE_READ } from "../src/document-marks.ts";
+import { setup } from "./schedule-test-fixture.ts";
+import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts";
 import { resourceResponse } from "../../../packages/runtime/src/resource-stream.ts";
 
 const A = { session: "S1", openId: "open-A" };
@@ -82,18 +83,23 @@ test("the envelope carries the mark: served unchanged, republished changed, with
   const world = fakeBridge();
   const marks = documentMarks(world.bridge);
   const frames: ReadingFrame[] = [];
-  const observe = hostResourceObserver(
-    world.bridge,
-    undefined as never,
-    undefined as never,
-    "http://127.0.0.1",
-    () => Promise.reject(Error("no read")),
-    marks,
+  const capture = { id: "c1", target: A, capturedAt: new Date().toISOString() };
+  const observe = markReadings(marks)(
+    hostResourceObserver(
+      world.bridge,
+      undefined as never,
+      undefined as never,
+      "http://127.0.0.1",
+      () => Promise.resolve(new Response(JSON.stringify(capture))),
+    ),
   );
-  const release = observe({ kind: "document-mark", target: A }, (frame) => frames.push(frame));
+  const release = observe({ kind: "schedule-reading", subject: "saved", id: "c1" }, (frame) =>
+    frames.push(frame),
+  );
+  await settle();
   await settle();
   expect(frames).toEqual([
-    { kind: "snapshot", key: expect.any(String), value: {}, changed: false },
+    { kind: "snapshot", key: expect.any(String), value: capture, changed: false },
   ]);
 
   // Another document's change is not this document's mark.
@@ -105,7 +111,7 @@ test("the envelope carries the mark: served unchanged, republished changed, with
   world.changed("S1", "open-A");
   await settle();
   expect(frames).toHaveLength(2);
-  expect(frames[1]).toMatchObject({ kind: "snapshot", value: {}, changed: true });
+  expect(frames[1]).toMatchObject({ kind: "snapshot", value: capture, changed: true });
   release();
 
   // A released Reading is not republished.
@@ -128,13 +134,14 @@ test("a stored capture keeps its own taken-at: re-serving it after a gap does no
 
   const frames: ReadingFrame[] = [];
   // The client reconnected and subscribed again; the host serves the same stored capture.
-  hostResourceObserver(
-    world.bridge,
-    undefined as never,
-    undefined as never,
-    "http://127.0.0.1",
-    () => Promise.resolve(new Response(JSON.stringify(capture))),
-    marks,
+  markReadings(marks)(
+    hostResourceObserver(
+      world.bridge,
+      undefined as never,
+      undefined as never,
+      "http://127.0.0.1",
+      () => Promise.resolve(new Response(JSON.stringify(capture))),
+    ),
   )({ kind: "schedule-reading", subject: "saved", id: "c1" }, (frame) => frames.push(frame));
   await settle();
   await settle();
@@ -158,11 +165,15 @@ test("host resource drops broker and SDK marks when a disconnected session leave
     },
   } as unknown as RevitBridge["Service"];
   const marks = documentMarks(bridge);
-  const observe = hostResourceObserver(bridge, undefined, undefined, undefined, undefined, marks);
-  const response = resourceResponse(
-    new Request(
-      `http://host/pe/resources?keys=${encodeURIComponent(JSON.stringify([{ kind: "document-mark", target: A }]))}`,
+  const capture = { id: "c1", target: A, capturedAt: new Date().toISOString() };
+  const observe = markReadings(marks)(
+    hostResourceObserver(bridge, undefined, undefined, undefined, () =>
+      Promise.resolve(new Response(JSON.stringify(capture))),
     ),
+  );
+  const keys = [{ kind: "schedule-reading", subject: "saved", id: "c1" }];
+  const response = resourceResponse(
+    new Request(`http://host/pe/resources?keys=${encodeURIComponent(JSON.stringify(keys))}`),
     observe,
   );
   const reader = response.body!.getReader();
@@ -218,4 +229,13 @@ test("host resource drops broker and SDK marks when a disconnected session leave
     await reader.cancel();
     await collecting;
   }
+});
+
+test("a push over a newer mark is refused undispatched in one sentence, over HTTP", async () => {
+  const f = await setup();
+  f.revitChanged(f.b);
+  await settle();
+  expect(await f.submit()).toMatchObject({ error: STALE_READ });
+  expect(f.sent.filter((call) => call.key === "schedule.cells.apply")).toEqual([]);
+  expect((await f.view()).doc.cells["1::2"].staged.value).toBe("150 VA");
 });

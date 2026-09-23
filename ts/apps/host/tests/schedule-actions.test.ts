@@ -146,6 +146,7 @@ test("staged cells over the generated cap refuse before dispatch and keep every 
   const reading = await f.read();
   await f.patch([
     { path: ["basis"], value: { captureId: reading.id } },
+    { path: ["takenAt"], value: reading.capturedAt },
     {
       path: ["cells"],
       value: Object.fromEntries(
@@ -189,6 +190,7 @@ test("partial native outcome clears only a completely acknowledged cell and keep
   const reading = await f.read();
   await f.patch([
     { path: ["basis"], value: { captureId: reading.id } },
+    { path: ["takenAt"], value: reading.capturedAt },
     { path: ["cells", "2::2"], value: { staged: { value: "200 VA" } } },
   ]);
   f.setResponse(
@@ -370,7 +372,10 @@ test("unresolved original Work action survives another lifetime and is discovera
     await readScopedActionStatuses({ kind: "schedules", workspaceId: f.scope.work }),
   ).toMatchObject([{ id: original.id, state: "unknown" }]);
   const a = await f.read(f.a);
-  await f.patch([{ path: ["basis"], value: { captureId: a.id } }]);
+  await f.patch([
+    { path: ["basis"], value: { captureId: a.id } },
+    { path: ["takenAt"], value: a.capturedAt },
+  ]);
   expect(
     (
       await f.post("/actions", {
@@ -501,6 +506,7 @@ test("F-H5-1: a dead-lifetime push names its exit; a re-read rebinds and marks a
   const old = await f.read();
   await f.patch([
     { path: ["basis"], value: { captureId: old.id } },
+    { path: ["takenAt"], value: old.capturedAt },
     { path: ["cells", "1::1"], value: { staged: { value: "P-9" } } },
   ]);
   f.reopen();
@@ -553,6 +559,7 @@ test("ask A: a push refused on moved evidence rebinds on its readback; the refus
   const old = await f.read();
   await f.patch([
     { path: ["basis"], value: { captureId: old.id } },
+    { path: ["takenAt"], value: old.capturedAt },
     { path: ["cells", "1::1"], value: { staged: { value: "P-9" } } },
   ]);
   // Revit moves Load (1::2) after the review; the domain refuses that cell on its evidence.

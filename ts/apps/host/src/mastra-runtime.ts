@@ -7,7 +7,8 @@ import { HttpEffect, HttpRouter, HttpServer } from "effect/unstable/http";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { createCapabilityCatalogSource, createRouteRegistrations } from "@pe/mcps";
 import { buildAgentControllerApp, type RouteWorkspace, type ServableRuntime } from "@pe/runtime";
-import { hostResourceObserver } from "./resource-adapters.ts";
+import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
+import { documentMarks } from "./document-marks.ts";
 import {
   createPeaRuntime,
   type PeaRuntimeCapabilities,
@@ -147,6 +148,7 @@ export function makeMastraRuntimeLive(
             runtime,
             label: "pea",
             observeHostResource,
+            markReadings: markReadings(documentMarks(Option.getOrUndefined(bridge))),
             onRouteWorkspace: (workspace) => {
               bindActionWorkspace(workspace);
               sweepClosedDocuments(Option.getOrUndefined(bridge), workspace);

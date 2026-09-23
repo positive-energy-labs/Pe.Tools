@@ -27,12 +27,13 @@ import {
 import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
 import { ActionJournal } from "./action-journal.ts";
 import { TakeoffCaptures } from "./takeoff-captures.ts";
-import { RevitBridge, BridgeError } from "./bridge.ts";
+import { RevitBridge, BridgeError, type HostBridgeEvent } from "./bridge.ts";
 import { makeCallRoute, type CallRouteDispatch } from "./call-route.ts";
 import { assertDemoPath, createDemoSettings } from "./demo-settings.ts";
 import { familiesAdmission } from "../../../packages/mcps/src/pea/families-admission.ts";
 import { resourceResponse, type ResourceObserver } from "@pe/runtime";
-import { hostResourceObserver } from "./resource-adapters.ts";
+import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
+import { documentMarks } from "./document-marks.ts";
 import { readFamily } from "./family-actions.ts";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import type { ScheduleCellsApply } from "@pe/host-contracts/generated";
@@ -361,9 +362,14 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         },
       },
     ];
+    // The simulated session's event tap: `POST /document-changed` raises what Revit would.
+    const listeners = new Set<(event: HostBridgeEvent) => void>();
     const bridge = {
       list: Effect.sync(() => sessions),
-      subscribe: () => () => {},
+      subscribe: (listener: (event: HostBridgeEvent) => void) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
       invoke: (key: string, input: unknown, session?: string, openId?: string) =>
         Effect.tryPromise({
           try: async () => {
@@ -896,6 +902,8 @@ export async function createDemoOwner(parent: string, raw: unknown) {
     );
     const streams = new Set<AbortController>();
     // One-shot readings (a schedule reading, scoped receipts) read this owner's own surface.
+    // Subscribed now, before any event: the Readings and the push share this one holder.
+    const marked = markReadings(documentMarks(bridge));
     const hostObserve = hostResourceObserver(
       bridge,
       () => journal,
@@ -976,7 +984,20 @@ export async function createDemoOwner(parent: string, raw: unknown) {
           },
           { once: true },
         );
-        return resourceResponse(new Request(request, { signal: controller.signal }), observe);
+        return resourceResponse(
+          new Request(request, { signal: controller.signal }),
+          marked(observe),
+        );
+      }
+      if (url.pathname === "/document-changed" && request.method === "POST") {
+        for (const listener of listeners)
+          listener({
+            sessionId: id,
+            kind: "event",
+            eventName: "document-changed",
+            payloadJson: JSON.stringify({ changedOpenIds: [target.openId] }),
+          });
+        return json({ ok: true });
       }
       if (url.pathname === "/description") return json(description);
       // The lamp's read: this owner is the host, and its simulated session is the attached Revit.

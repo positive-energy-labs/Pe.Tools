@@ -79,13 +79,6 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
     scope: actionListFilterSchema.optional(),
   }),
   /**
-   * One open document's change mark, for a surface whose read is not a Reading (the `/families`
-   * matrix is a one-shot op). The value is empty: the fact is the envelope's `changed`, which the
-   * host derives from when it served this Reading. Re-read the surface, `dirty` this, and the
-   * host serves it again unchanged.
-   */
-  z.strictObject({ kind: z.literal("document-mark"), target: documentRefSchema }),
-  /**
    * One value domain's options (an `x-options.key`) read from one document, with the context
    * values its `dependsOn` names. A LiveDocument key's value names its document, so the host
    * marks it changed; a HostOnly key's value does not, so it carries no mark.

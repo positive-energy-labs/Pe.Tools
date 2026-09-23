@@ -2,5 +2,7 @@
   "family/workspace-table.tsx": 2,
   "route/help.tsx": 1,
   "route/inspector.tsx": 1,
-  "route/situation.tsx": 4
+  "route/situation-lamp.tsx": 2,
+  "route/situation-marks.tsx": 1,
+  "route/situation-verbs.tsx": 1
 }

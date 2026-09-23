@@ -35,6 +35,7 @@ const STALE_DOC: ScheduleGridDocument = {
     "2::2": { staged: { value: "95 VA" } },
     "3::2": { staged: { value: "75 VA" }, proposal: { value: "72 VA", note: "panel schedule" } },
   },
+  takenAt: null,
 } as ScheduleGridDocument;
 
 /** The real `StaleResolve` over a fixture Work; writes land locally, the push is simulated. */

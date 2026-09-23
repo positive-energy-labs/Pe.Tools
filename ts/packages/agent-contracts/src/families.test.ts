@@ -57,6 +57,7 @@ describe("familiesRouteState", () => {
       scope: {},
       excluded: {},
       cells: {},
+      takenAt: null,
     });
     // Old Work held a bare filter (or null) as its scope: it fails closed, never reads as unscoped.
     const filter = { categoryNames: [], familyNames: [], placementScope: "AllLoaded" };

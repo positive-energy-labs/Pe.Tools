@@ -239,20 +239,6 @@ export function ScheduleGridWorkspace({
             headerless
             scroll="clip"
             onActivate={onFocus.grid}
-            shortcuts={
-              snapshot
-                ? [
-                    {
-                      hotkey: "R",
-                      label: "read again",
-                      says: "Read this schedule from Revit again; proposals and staged cells stay.",
-                      refusal: busy != null ? `${busy} is running` : null,
-                      callback: readAgain,
-                      options: { ignoreInputs: true },
-                    },
-                  ]
-                : []
-            }
           >
             <section className="flex min-h-0 min-w-0 flex-1 flex-col">
               <div className="flex min-h-0 flex-1 flex-col">
