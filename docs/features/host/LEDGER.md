@@ -109,6 +109,7 @@ design-system ledger, not restated here.
 
 ## Owed
 
+- 2026-09-22, the test bar sweep deleted 18 SCAFFOLD test files with no surface replacement. Each behavior they asserted needs a surface test (CDP journey, MCP tool call, host HTTP) or a visible readout. Recover the assertions from git: `host-call-wait`, `host/client`, `host/familyfoundry`, `host/tests/action-export`, `host/tests/bridge-session`, `host/tests/dev-identity`, `host/tests/dev-watch`, `host/tests/dispatch`, `host/tests/executor-outcomes`, `host/tests/gateway`, `host/tests/no-revit`, `host/tests/partition-operation`, `host/tests/pod-consumer`, `host/tests/resource-transport`, `host/tests/rhvac-ops`, `host/tests/saved-capture-text`, `readings`, `readings-host-call`.
 - `vp run @pe/host#test` from a checkout whose dev host is up hangs on the third scenario file (both claim the checkout's service identity `host-source-<hash>`); it passes in a sibling worktree in about two minutes (2026-09-06, 13 files, 63 passed). Give the boundary tests their own identity, or refuse with a message naming the live host.
 
 - `/ops` gains ONE bounded staged-operation command for Pea (grill verdict kaitpw 2026-09-01,

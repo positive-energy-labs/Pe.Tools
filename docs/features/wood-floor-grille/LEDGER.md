@@ -18,6 +18,7 @@ Surface: `/grilles` (`apps/web/src/routes/grilles.tsx`, `apps/web/src/grilles/`)
 - 2026-08-25, magnitude by gradient (performance-sheet lattice); design-lang forbids hue-only fills below word scale; ink area was the non-hue alternative, and the qty chart beat both.
 
 ## Owed
+- 2026-09-22, the test bar sweep deleted 1 SCAFFOLD test files with no surface replacement. Each behavior they asserted needs a surface test (CDP journey, MCP tool call, host HTTP) or a visible readout. Recover the assertions from git: `grilles/math`.
 - Persistence: rows live in memory only. Where does a profile library live (job, document, host state)?
 - Export unit: is one page what the architect wants, or a drawing per grille; what must the title block carry (tag, revision)?
 - `MIN_RIB` (1/4″) is lore; a fabricator has not ruled it, nor stock widths or kerf.

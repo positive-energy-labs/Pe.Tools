@@ -1252,7 +1252,7 @@ describe("design guard — maintained surface hard zeros", () => {
     assertZero(
       "rawButton",
       scan(
-        FILES.filter((f) => isTsx(f) && !f.rel.endsWith(".test.tsx") && !inLang(f)),
+        FILES.filter((f) => isTsx(f) && !inLang(f)),
         /<button\b/g,
       ),
     );

@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { execFile } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
 import { expect, test } from "vite-plus/test";

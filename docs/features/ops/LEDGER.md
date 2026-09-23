@@ -18,6 +18,8 @@
 
 ## Owed
 - Prove a bridge op end to end on an attached Revit session: the form draws `x-options` through the `field-options` Reading, and a mutation lands in the journal and shows in `ActionReceiptView`. Proven so far: `host.topology` from the sentence, `POST /call` 200, on the dev session 2026-09-15.
+- 2026-09-22, the test bar sweep deleted 1 SCAFFOLD test files with no surface replacement. Each behavior they asserted needs a surface test (CDP journey, MCP tool call, host HTTP) or a visible readout. Recover the assertions from git: `ops/ops`.
+- Prove a bridge op end to end on an attached Revit session: the form draws `x-options` through `revit.catalog.field-options`, and a mutation lands in the journal and shows in `ActionReceiptView`. Proven so far: `host.topology` from the sentence, `POST /call` 200, on the dev session 2026-09-15.
 - `ReadingSpec` sees the page and Work but not the resolved target, so `workspace.tsx` reads the session-scoped catalogue with `useReading` beside the manifest instead of declaring it. Owned by the route substrate.
 - Route chords for next and previous op, and pane-tier caret movement between form fields; `Mod+Enter` runs today.
 - Declare `@pe/mcps` in `apps/web/package.json` or stop importing it by relative path; `ops/run.ts` is one of the importers.
