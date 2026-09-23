@@ -1,6 +1,9 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamDocument.SetValue;
 using Pe.Revit.Extensions.FamManager;
+using Pe.Revit.Parameters;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Pe.Revit.FamilyFoundry.Operations;
 
@@ -47,7 +50,7 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
                 continue;
             }
 
-            string? valueToSet = null;
+            JToken? valueToSet = null;
             var isFallback = false;
 
             if (currentTypeName is not null
@@ -88,14 +91,16 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
 
             IReadOnlyDictionary<string, string>? setValueDetails = null;
             try {
-                setValueDetails = SetValueForCurrentFamType(famDoc, parameter, valueToSet);
+                setValueDetails = valueToSet is JObject measured
+                    ? SetMeasured(famDoc, parameter, (string)measured["value"]!, (string)measured["unit"]!)
+                    : SetValueForCurrentFamType(famDoc, parameter, (string)valueToSet!);
                 _ = log
                     .WithParameterEvent(
                         ParameterEventOutcome.PerTypeValueSet,
                         isFallback ? ParameterEventReason.GlobalValueError : ParameterEventReason.NotApplicable,
                         parameterName: parameterName,
                         details: MergeDetails(setValueDetails, new Dictionary<string, string> {
-                            ["Value"] = valueToSet,
+                            ["Value"] = valueToSet.ToString(Formatting.None),
                             ["IsFallback"] = isFallback.ToString(),
                             ["FamilyTypeName"] = currentTypeName ?? string.Empty
                         }))
@@ -107,7 +112,7 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
                         ParameterEventReason.Exception,
                         parameterName: parameterName,
                         details: MergeDetails(setValueDetails, new Dictionary<string, string> {
-                            ["Value"] = valueToSet,
+                            ["Value"] = valueToSet.ToString(Formatting.None),
                             ["FamilyTypeName"] = currentTypeName ?? string.Empty
                         }))
                     .Error(ex);
@@ -115,6 +120,13 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
         }
 
         return new OperationLog(this.Name, groupContext.TakeSnapshot());
+    }
+
+    /// <summary>A measured `{ value, unit }` converts through the one unit door and is set as internal units.</summary>
+    private static IReadOnlyDictionary<string, string> SetMeasured(FamilyDocument famDoc, FamilyParameter parameter, string value, string unit) {
+        var internalValue = UnitValueResolver.ToInternal(value, unit, parameter.Definition.GetDataType());
+        famDoc.FamilyManager.Set(parameter, internalValue);
+        return new Dictionary<string, string> { ["Unit"] = unit, ["Internal"] = internalValue.ToString("R", System.Globalization.CultureInfo.InvariantCulture) };
     }
 
     private static IReadOnlyDictionary<string, string> SetValueForCurrentFamType(FamilyDocument famDoc, FamilyParameter parameter, string userValue) {

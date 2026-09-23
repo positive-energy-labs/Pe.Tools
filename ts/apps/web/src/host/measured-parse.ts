@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef } from "react";
 
-import { type DisplayUnit, type MeasuredValue, unitWord } from "#/components/lang/cell";
+import type { MeasuredDisplayUnit, MeasuredValue } from "@pe/agent-contracts";
+
+import { unitWord } from "#/components/lang/cell";
 import { callHostRpc, type HostCallOptions } from "#/host/client";
 
 export type MeasuredAnswer = MeasuredValue | { refusal: string } | null;
@@ -19,7 +21,11 @@ export function useMeasuredParse(basis: unknown, scope?: HostCallOptions) {
     return () => started.abort();
   }, [basis]);
   return useCallback(
-    async (displayUnit: DisplayUnit | null | undefined, text: string): Promise<MeasuredAnswer> => {
+    async (
+      displayUnit: MeasuredDisplayUnit | null | undefined,
+      text: string,
+    ): Promise<MeasuredAnswer> => {
+      if (displayUnit?.refusal) return { refusal: displayUnit.refusal };
       const word = displayUnit?.typeId ? unitWord(displayUnit) : null;
       if (!displayUnit?.typeId || word === null)
         return { refusal: "type a unit — this column shows no unit of its own" };

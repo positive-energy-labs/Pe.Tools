@@ -9,9 +9,6 @@ public static class Regexes {
 
     private static readonly Regex DoubleRegex = new(@"^-?\d*\.?\d+", RegexOptions.Compiled);
 
-    // Fallback pattern that finds numbers anywhere in the string (for cases where value has leading non-digit chars)
-    private static readonly Regex DoubleAnywhereRegex = new(@"-?\d+\.?\d*|-?\d*\.?\d+", RegexOptions.Compiled);
-
     public static bool TryExtractInteger(string? input, out int result) {
         result = 0;
         if (string.IsNullOrWhiteSpace(input)) return false;
@@ -29,16 +26,7 @@ public static class Regexes {
 
         var trimmed = input!.Trim();
 
-        // Try matching from the start first (most common case)
         var match = DoubleRegex.Match(trimmed);
-        if (match.Success
-            && double.TryParse(match.Value, NumberStyles.Float | NumberStyles.AllowLeadingSign,
-                CultureInfo.InvariantCulture, out result))
-            return true;
-
-        // Fallback: try to find a number anywhere in the string
-        // This handles edge cases like strings with leading units or special characters
-        match = DoubleAnywhereRegex.Match(trimmed);
         return match.Success
                && double.TryParse(match.Value, NumberStyles.Float | NumberStyles.AllowLeadingSign,
                    CultureInfo.InvariantCulture, out result);

@@ -16,6 +16,7 @@
  * Every helper below takes the world as its FIRST argument for the same reason: a helper that
  * closed over a module constant would silently keep answering about the fixture.
  */
+import { showCellValue, type MeasuredValue } from "@pe/agent-contracts";
 import type { TableState, VerdictTone } from "#/components/master-table/model";
 import {
   FAMILY_SPEC,
@@ -261,11 +262,18 @@ export function proposalCell(
   };
 }
 
+/** A family value as authored: text, or a measured value that carries its unit into the patch. */
+export type AuthoredValue = string | MeasuredValue;
+
+/** The one word for an authored value; a measured one reads with its unit. */
+export const authoredText = (value: AuthoredValue | undefined): string | undefined =>
+  value === undefined ? undefined : showCellValue(value);
+
 export interface Draft {
   /** paramName → family-level authored value, or "= formula". */
-  authored: Record<string, string>;
+  authored: Record<string, AuthoredValue>;
   /** typeName → paramName → override. Absent ⇒ that type inherits the authored value. */
-  types: Record<string, Record<string, string>>;
+  types: Record<string, Record<string, AuthoredValue>>;
   /** paramName → typeName → what Revit carries. */
   live: Record<string, Record<string, ProtoLiveValue>>;
   /**
@@ -337,8 +345,8 @@ export const OVERLAY_TITLE: Record<Overlay, string> = {
  * after the first save.
  */
 export interface SavedProfile {
-  authored: Record<string, string>;
-  types: Record<string, Record<string, string>>;
+  authored: Record<string, AuthoredValue>;
+  types: Record<string, Record<string, AuthoredValue>>;
   /** slug → property → binding, so a frozen literal's unsaved state is readable like any other. */
   geom: Record<string, Record<string, string>>;
 }
@@ -386,13 +394,17 @@ export function consumersOf(
   return map;
 }
 
-export function isFormula(value: string): boolean {
-  return value.trimStart().startsWith("=");
-}
+/** The expression a `= formula` value carries, or null for a value. */
+export const formulaOf = (value: AuthoredValue): string | null =>
+  typeof value === "string" && value.trimStart().startsWith("=")
+    ? value.replace(/^\s*=\s*/, "")
+    : null;
+
+export const isFormula = (value: AuthoredValue): boolean => formulaOf(value) !== null;
 
 /** What a type actually resolves to: its own override, else the family-level authored value. */
 export function effective(draft: Draft, param: string, typeName: string): string {
-  return draft.types[typeName]?.[param] ?? draft.authored[param] ?? "";
+  return authoredText(draft.types[typeName]?.[param] ?? draft.authored[param]) ?? "";
 }
 
 export interface PRow {
@@ -453,7 +465,7 @@ export function agreementOf(
   // as a parameter because it is not one. "unread" is the honest state — not agreement.
   if (row.kind === "ghost") return "unread";
   if (row.kind === "live-only") return "only-live";
-  const authored = draft.authored[row.name] ?? "";
+  const authored = authoredText(draft.authored[row.name]) ?? "";
   if (isFormula(authored)) return "derived";
   const entry = draft.live[row.name]?.[typeName];
   if (!entry) return world.missingInRevit.has(row.name) ? "only-profile" : "unread";
@@ -491,7 +503,7 @@ export function savedValueAt(saved: SavedProfile, row: PRow, typeName: string): 
   if (row.kind === "ghost") return saved.geom[row.slug ?? ""]?.[row.property ?? ""] ?? null;
   if (row.kind === "live-only") return null;
   if (!(row.name in saved.authored)) return null;
-  return saved.types[typeName]?.[row.name] ?? saved.authored[row.name] ?? "";
+  return authoredText(saved.types[typeName]?.[row.name] ?? saved.authored[row.name]) ?? "";
 }
 
 /** true when saving would write something into this cell — including "the row is new". */

@@ -1,7 +1,4 @@
-using Pe.Revit.DocumentData.Schedules.Authored.ValueDomains;
-using System.Reflection;
-
-namespace Pe.Revit.DocumentData.Parameters;
+namespace Pe.Revit.Parameters;
 
 /// <summary>
 ///     Resolves a caller-supplied unit string to a unit ForgeTypeId WITHIN a parameter's spec —
@@ -42,7 +39,7 @@ public static class ParameterUnitResolver {
         var vocabulary = string.Join("; ", validUnits.Select(DescribeUnit));
         throw new InvalidOperationException(matches.Count == 0
             ? $"Unit '{requested}' is not valid for this parameter's spec. Valid units: {vocabulary}"
-            : $"Unit '{requested}' is ambiguous within this parameter's spec ({string.Join(", ", matches.Select(ScheduleFieldFormatValueDomain.GetUnitLabel))}) and the candidates convert differently. Use a typeId or exact label. Valid units: {vocabulary}");
+            : $"Unit '{requested}' is ambiguous within this parameter's spec ({string.Join(", ", matches.Select(GetUnitLabel))}) and the candidates convert differently. Use a typeId or exact label. Valid units: {vocabulary}");
     }
 
     private static bool MatchesUnit(string requested, ForgeTypeId unitTypeId) {
@@ -60,23 +57,23 @@ public static class ParameterUnitResolver {
             string.Equals(requested, versionless[(colonIndex + 1)..], StringComparison.OrdinalIgnoreCase))
             return true;
 
-        if (string.Equals(requested, GetUnitTypeIdMemberName(unitTypeId), StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(requested, GetStaticMemberName(typeof(UnitTypeId), unitTypeId), StringComparison.OrdinalIgnoreCase))
             return true;
 
-        if (string.Equals(requested, ScheduleFieldFormatValueDomain.GetUnitLabel(unitTypeId), StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(requested, GetUnitLabel(unitTypeId), StringComparison.OrdinalIgnoreCase))
             return true;
 
-        return ScheduleFieldFormatValueDomain.GetValidSymbols(unitTypeId)
+        return GetValidSymbols(unitTypeId)
             .Any(symbolTypeId => string.Equals(
                 requested,
-                ScheduleFieldFormatValueDomain.GetSymbolLabel(symbolTypeId),
+                GetSymbolLabel(symbolTypeId),
                 StringComparison.OrdinalIgnoreCase));
     }
 
     private static string DescribeUnit(ForgeTypeId unitTypeId) {
-        var label = ScheduleFieldFormatValueDomain.GetUnitLabel(unitTypeId);
-        var symbols = ScheduleFieldFormatValueDomain.GetValidSymbols(unitTypeId)
-            .Select(ScheduleFieldFormatValueDomain.GetSymbolLabel)
+        var label = GetUnitLabel(unitTypeId);
+        var symbols = GetValidSymbols(unitTypeId)
+            .Select(GetSymbolLabel)
             .Where(symbol => !string.IsNullOrWhiteSpace(symbol))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(3)
@@ -84,13 +81,43 @@ public static class ParameterUnitResolver {
         return symbols.Count == 0 ? label : $"{label} ({string.Join(", ", symbols)})";
     }
 
-    private static string? GetUnitTypeIdMemberName(ForgeTypeId unitTypeId) {
-        foreach (var property in typeof(UnitTypeId).GetProperties(BindingFlags.Public | BindingFlags.Static)) {
+    public static IEnumerable<ForgeTypeId> GetValidSymbols(ForgeTypeId unitTypeId) {
+        try {
+            return FormatOptions.GetValidSymbols(unitTypeId);
+        } catch {
+            return [];
+        }
+    }
+
+    public static string GetUnitLabel(ForgeTypeId unitTypeId) {
+        try {
+            var label = LabelUtils.GetLabelForUnit(unitTypeId);
+            if (!string.IsNullOrWhiteSpace(label))
+                return label;
+        } catch {
+        }
+
+        return GetStaticMemberName(typeof(UnitTypeId), unitTypeId) ?? unitTypeId.TypeId;
+    }
+
+    public static string GetSymbolLabel(ForgeTypeId symbolTypeId) {
+        try {
+            var label = LabelUtils.GetLabelForSymbol(symbolTypeId);
+            if (!string.IsNullOrWhiteSpace(label))
+                return label;
+        } catch {
+        }
+
+        return GetStaticMemberName(typeof(SymbolTypeId), symbolTypeId) ?? symbolTypeId.TypeId;
+    }
+
+    private static string? GetStaticMemberName(Type type, ForgeTypeId forgeTypeId) {
+        foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Static)) {
             if (property.PropertyType != typeof(ForgeTypeId))
                 continue;
 
             if (property.GetValue(null) is ForgeTypeId value &&
-                string.Equals(value.TypeId, unitTypeId.TypeId, StringComparison.OrdinalIgnoreCase))
+                string.Equals(value.TypeId, forgeTypeId.TypeId, StringComparison.OrdinalIgnoreCase))
                 return property.Name;
         }
 

@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  familyStagedPatch,
   familyCellAddress,
   familyCellKey,
   familiesExcluded,
   familiesIncluded,
   familiesRouteState,
+  familyCellStateSchema,
+  familyStagedPatch,
 } from "./families.ts";
 import { applyPatches } from "./route-doc.ts";
 import { familyCaptureSchema } from "./family-actions.ts";
@@ -207,5 +208,18 @@ describe("familiesRouteState.salvage", () => {
     });
     for (const doc of [{ scope: null }, {}, { scope: { proposal: { value: bare } } }])
       expect(familiesRouteState.salvage(doc)).not.toHaveProperty("scope");
+  });
+});
+
+describe("familyStagedPatch", () => {
+  it("stages a measured cell as { value, unit } and the patch carries the object", () => {
+    const key = familyCellKey({ familyName: "AHU", typeName: "A", parameter: "Airflow" });
+    const cell = familyCellStateSchema.parse({
+      staged: { value: { value: "300", unit: "CFM", storageType: "Double" } },
+    });
+    expect(cell.staged?.value).toEqual({ value: "300", unit: "CFM", storageType: "Double" });
+    expect(familyStagedPatch({ [key]: cell }, "AHU")?.spec.patch.types).toEqual({
+      A: { Airflow: { value: "300", unit: "CFM" } },
+    });
   });
 });

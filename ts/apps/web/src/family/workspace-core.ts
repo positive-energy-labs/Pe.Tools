@@ -13,6 +13,7 @@ import {
   type Draft,
   type Focus,
   type PRow,
+  type AuthoredValue,
 } from "#/family/model";
 import type { ProtoProposal } from "#/family/world";
 import { useMeasuredParse } from "#/host/measured-parse";
@@ -213,8 +214,8 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
    * exactly as typing in a type cell severs a per-type one — the law does not care which level you
    * beat pea to.
    */
-  const editAuthored = (param: string, value: string): string | void => {
-    const trimmed = value.trim();
+  const editAuthored = (param: string, value: AuthoredValue): string | void => {
+    const trimmed = typeof value === "string" ? value.trim() : value;
     // A parameter with no family value is not a state — but a REFUSAL has to be audible. A silent
     // dropped commit looks exactly like an edit that landed and then vanished. Returning the
     // reason REFUSES the commit in the editable `StateCell` (R8): the cell restores the prior
@@ -234,11 +235,12 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
     });
   };
 
-  const editOverride = (param: string, typeName: string, value: string) =>
+  const editOverride = (param: string, typeName: string, value: AuthoredValue) =>
     setDraft((previous) => {
       const next = structuredClone(previous);
       const bucket = { ...next.types[typeName] };
-      if (value.trim() === "") delete bucket[param];
+      if (typeof value !== "string") bucket[param] = value;
+      else if (value.trim() === "") delete bucket[param];
       else bucket[param] = value.trim();
       next.types[typeName] = bucket;
       sever(next, param, typeName);

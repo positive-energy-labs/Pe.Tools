@@ -1,3 +1,4 @@
+using Pe.Revit.Parameters;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Operations;
@@ -200,7 +201,7 @@ internal static class LookupTableTestSupport {
             return double.Parse(lookupCase.ResultValue, CultureInfo.InvariantCulture);
 
         if (UnitUtils.IsMeasurableSpec(lookupCase.DataType)) {
-            if (UnitFormatUtils.TryParse(familyDocument.GetUnits(), lookupCase.DataType, lookupCase.ResultValue,
+            if (UnitValueResolver.TryParse(familyDocument.GetUnits(), lookupCase.DataType, lookupCase.ResultValue,
                     out var parsedValue))
                 return parsedValue;
 

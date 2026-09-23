@@ -96,8 +96,6 @@ export type {
   CellStateName,
   CellTransition,
   CellTransitionKind,
-  DisplayUnit,
-  MeasuredValue,
   StateCellProps,
   Unsettled,
 } from "./cell-state";

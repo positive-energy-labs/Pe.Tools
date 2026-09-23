@@ -823,7 +823,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             foreach (var basis in values.Where(v => v.Name.EndsWith("LookupUnit", StringComparison.Ordinal)))
                 foreach (var type in (JObject)json["types"]!) {
                     var text = type.Value![basis.Name]!.Value<string>();
-                    Assert.That(UnitFormatUtils.TryParse(target.GetUnits(), basis.Spec, text, out var raw), Is.True, $"{basis.Name}: {text}");
+                    Assert.That(UnitValueResolver.TryParse(target.GetUnits(), basis.Spec, text, out var raw), Is.True, $"{basis.Name}: {text}");
                     Assert.That(raw, Is.EqualTo(basis.Raw).Within(1e-14), $"Captured unit basis {basis.Name}: {text}");
                 }
             var patch = new FamilyPatch { Patch = new JObject { ["parameters"] = json["parameters"]!.DeepClone(), ["types"] = json["types"]!.DeepClone() } };

@@ -1,4 +1,4 @@
-import { settingsFieldPointer, showCellValue } from "@pe/agent-contracts";
+import { settingsFieldPointer, type MeasuredValue } from "@pe/agent-contracts";
 import { parameterText, paramSpec } from "#/family/family-model";
 import { EmptyState } from "#/components/lang/empty";
 import { FactChip, Tag } from "#/components/lang/chip";
@@ -11,7 +11,13 @@ import { Pane } from "#/components/lang/pane";
 import { SpecSheet, SpecText, ProposalCard } from "#/family/doc-pane";
 import { NavStateCell } from "#/family/marks";
 import { cellFromTrichotomy } from "#/components/lang/cell";
-import { bindingOf, isFormula, proposalCell, type FamilyPageModel } from "#/family/model";
+import {
+  authoredText,
+  bindingOf,
+  isFormula,
+  proposalCell,
+  type FamilyPageModel,
+} from "#/family/model";
 import { boundParam, type GeomConstituent } from "#/family/world";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 import { FamilyMetaControl } from "#/family/workspace-meta-control";
@@ -83,7 +89,7 @@ export function FamilyWorkspaceDocPane() {
                     setInspect({ kind: "param", name: bound });
                     setPinnedParam(bound);
                   }}
-                  title={`Driven by "${bound}", currently ${draft.authored[bound] ?? "—"}. Click to select that parameter: the value is edited on its row and in its own inspector, never in two places.`}
+                  title={`Driven by "${bound}", currently ${authoredText(draft.authored[bound]) ?? "—"}. Click to select that parameter: the value is edited on its row and in its own inspector, never in two places.`}
                   tone="nav"
                   size="caption"
                 >
@@ -132,7 +138,7 @@ export function FamilyWorkspaceDocPane() {
   const paramInspector = (name: string): React.ReactNode => {
     const row = rows.find((entry) => entry.name === name && entry.kind === "profile");
     const native = lane.drawingModel?.parameters ? paramSpec(lane.drawingModel, name) : null;
-    const authored = draft.authored[name] ?? "";
+    const authored = authoredText(draft.authored[name]) ?? "";
     const drives = consumers.get(name) ?? [];
     const blocks = world.grounding[name] ?? [];
     const family = proposalsAt(name, null);
@@ -174,7 +180,10 @@ export function FamilyWorkspaceDocPane() {
               caution note — the route's refusal paragraph this replaced is deleted. */}
           <NavStateCell
             {...cellFromTrichotomy(
-              proposalCell(family, (saved.authored[name] ?? null) !== authored ? authored : null),
+              proposalCell(
+                family,
+                (authoredText(saved.authored[name]) ?? null) !== authored ? authored : null,
+              ),
               { value: authored },
               parameterText,
             )}
@@ -185,19 +194,17 @@ export function FamilyWorkspaceDocPane() {
                 ? `A FORMULA — ${authored}. Its result is derived, so no type may override it and Revit's number for it is an output rather than a competing value. Edit the expression here; change what feeds it to change the result.`
                 : `The value every type inherits unless it authors its own. Editing it moves all ${world.typeNames.filter((typeName) => draft.types[typeName]?.[name] === undefined).length} inheriting type${world.typeNames.filter((typeName) => draft.types[typeName]?.[name] === undefined).length === 1 ? "" : "s"} at once — watch the grey placeholders in the table change. Begin with = to make it a formula.`
             }
-            // A formula is not a measured value; a measurable parameter is, in this document's unit.
-            measured={
-              !isFormula(authored) && world.live?.units?.[name]
-                ? {
+            // A formula is not a measured value; a measurable parameter is, in this document's
+            // unit, and stages Revit's answer as { value, unit } for the patch to carry.
+            {...(!isFormula(authored) && world.live?.units?.[name]
+              ? {
+                  measured: {
                     displayUnit: world.live.units[name]!,
                     parse: (text: string) => parse(world.live!.units![name]!, text),
-                    // The family authors its value as a literal, so Revit's answer is written in
-                    // this document's own unit grammar — the same door typed text takes.
-                    stage: (staged) => editAuthored(name, showCellValue(staged)),
-                  }
-                : undefined
-            }
-            onCommit={(next) => editAuthored(name, next)}
+                    stage: (staged: MeasuredValue) => editAuthored(name, staged),
+                  },
+                }
+              : { onCommit: (next: string) => editAuthored(name, next) })}
           />
           {family.length > 0 && (
             <p className="t-small face-mono mt-1" data-tone="pea">

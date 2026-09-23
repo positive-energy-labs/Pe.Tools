@@ -1,4 +1,9 @@
-import { sameValue, type MeasuredValue, type TrichotomyCellLike } from "@pe/agent-contracts";
+import {
+  type MeasuredDisplayUnit,
+  type MeasuredValue,
+  sameValue,
+  type TrichotomyCellLike,
+} from "@pe/agent-contracts";
 import type React from "react";
 
 /** The one squiggle slot. Ranked; exactly one may draw. `never` is NOT here on purpose —
@@ -17,7 +22,7 @@ export type CellCommit = (
   text: string,
 ) => string | void | Promise<string | CellRefusal | null | void>;
 
-export interface StateCellProps {
+export interface StateCellBase {
   /** The value as shown. Long values are expected — the grammar is built around them. */
   value: React.ReactNode;
   /**
@@ -91,37 +96,6 @@ export interface StateCellProps {
    */
   foot?: "inline" | "hover";
   /**
-   * THE EDITABLE CELL (ruled 2026-08-16, consolidation batch R8 — families #6, "the strongest
-   * finding of the sweep"). Present ⇒ the value slot renders as a caret-safe input; every mark
-   * stays OUTSIDE the text box ("do not steal the caret"). Return a string to REFUSE the
-   * commit: the cell restores the prior value and shows a dismissible caution note carrying
-   * the reason — §3's "restore AND say why, near the cell, without resizing the row". Requires
-   * `scale="row"` and a string `value`; `cap` other than editable wins and renders locked.
-   * An async commit (a Work write) may return a promise of that refusal: it restores the same
-   * way when the refusal arrives, so typed text is never left looking accepted.
-   *
-   * A measured cell never calls this — its staged value is an object, so it has its own
-   * `measured.stage`; the union stays inside the cell.
-   */
-  onCommit?: CellCommit;
-  /**
-   * THE MEASURED CELL (ruled 2026-09-22), one kind beside `numeric`. A bare number stages at once
-   * with the column's display unit and never calls Revit, so the cell reads "300 CFM" the moment
-   * it is staged and what is reviewed is what is applied. Text carrying a unit shows as typed
-   * until commit, then ONE read-only host parse answers with Revit's own value and rendering,
-   * which is what gets staged; a re-read of the Reading cancels it (`parse` resolves null). A
-   * refusal is cell-local, carries Revit's reason, and stages nothing. A measured column with no
-   * display unit refuses a bare number at the cell — the ask is "type a unit", never a push-time
-   * surprise. The unit is always the Reading's own evidence, never a web guess.
-   */
-  measured?: {
-    displayUnit?: DisplayUnit | null;
-    /** Effect-owned; null means the call was cancelled and the cell keeps what it had. */
-    parse: (text: string) => Promise<MeasuredValue | { refusal: string } | null>;
-    /** Where `{ value, unit }` goes — this kind's `onCommit`, and the only door the object takes. */
-    stage: (staged: MeasuredValue) => string | void | Promise<string | CellRefusal | null | void>;
-  };
-  /**
    * NUMERIC COMMIT (ruled 2026-08-16, fit reviews #2 — §3's named silent-swallow defect, killed
    * here): present ⇒ the commit path parses per `parseCell` before `onCommit` sees anything. A
    * refused parse (blank, not a number) RETURNS a reason, so the built-in refusal note fires —
@@ -163,22 +137,53 @@ export interface StateCellProps {
   refused?: string;
 }
 
-/**
- * That a cell measures something, and the unit it renders, as the Reading read it from that
- * document. A null `typeId` is the document showing no unit for the spec: the cell asks for one.
- */
-export interface DisplayUnit {
-  specTypeId: string;
-  typeId?: string | null;
-  label?: string | null;
-  symbol?: string | null;
-}
-
-/** What a measured cell stages: `@pe/agent-contracts` `MeasuredValue`, the schedule rung itself. */
-export type { MeasuredValue };
+/** A cell commits text (`onCommit`) or a measured value (`measured`), never both. */
+export type StateCellProps = StateCellBase &
+  (
+    | {
+        /**
+         * THE EDITABLE CELL (ruled 2026-08-16, consolidation batch R8 — families #6, "the strongest
+         * finding of the sweep"). Present ⇒ the value slot renders as a caret-safe input; every mark
+         * stays OUTSIDE the text box ("do not steal the caret"). Return a string to REFUSE the
+         * commit: the cell restores the prior value and shows a dismissible caution note carrying
+         * the reason — §3's "restore AND say why, near the cell, without resizing the row". Requires
+         * `scale="row"` and a string `value`; `cap` other than editable wins and renders locked.
+         * An async commit (a Work write) may return a promise of that refusal: it restores the same
+         * way when the refusal arrives, so typed text is never left looking accepted.
+         *
+         * A measured cell never has one — its staged value is an object, so it has its own
+         * `measured.stage`; the type makes the two doors exclusive.
+         */
+        onCommit?: CellCommit;
+        measured?: never;
+      }
+    | {
+        /**
+         * THE MEASURED CELL (ruled 2026-09-22), one kind beside `numeric`. A bare number stages at once
+         * with the column's display unit and never calls Revit, so the cell reads "300 CFM" the moment
+         * it is staged and what is reviewed is what is applied. Text carrying a unit shows as typed
+         * until commit, then ONE read-only host parse answers with Revit's own value and rendering,
+         * which is what gets staged; a re-read of the Reading cancels it (`parse` resolves null). A
+         * refusal is cell-local, carries Revit's reason, and stages nothing. A measured column with no
+         * display unit refuses a bare number at the cell — the ask is "type a unit", never a push-time
+         * surprise. The unit is always the Reading's own evidence, never a web guess.
+         */
+        measured: {
+          displayUnit?: MeasuredDisplayUnit | null;
+          /** Effect-owned; null means the call was cancelled and the cell keeps what it had. */
+          parse: (text: string) => Promise<MeasuredValue | { refusal: string } | null>;
+          /** Where `{ value, unit }` goes — this kind's `onCommit`, and the only door the object takes. */
+          stage: (
+            staged: MeasuredValue,
+          ) => string | void | Promise<string | CellRefusal | null | void>;
+        };
+        onCommit?: never;
+      }
+  );
 
 /** The word a display unit is drawn and staged under: its symbol when it has one, else its label. */
-export const unitWord = (unit: DisplayUnit): string | null => unit.symbol || unit.label || null;
+export const unitWord = (unit: MeasuredDisplayUnit): string | null =>
+  unit.symbol || unit.label || null;
 
 /** What one commit into a measured cell does — decided before anything is called. */
 export type MeasuredCommit =
@@ -195,11 +200,13 @@ const BARE_NUMBER = /^[+-]?(\d+\.?\d*|\.\d+)$/;
  */
 export function readMeasuredText(
   text: string,
-  displayUnit: DisplayUnit | null | undefined,
+  displayUnit: MeasuredDisplayUnit | null | undefined,
 ): MeasuredCommit {
   const typed = text.trim();
   if (typed === "")
     return { kind: "refuse", reason: "blank commits nothing — a cleared cell is not zero" };
+  // Revit failed to read this spec's unit: nothing may be assumed, so the cell says why.
+  if (displayUnit?.refusal) return { kind: "refuse", reason: displayUnit.refusal };
   if (!BARE_NUMBER.test(typed)) return { kind: "parse", text: typed };
   const unit = displayUnit ? unitWord(displayUnit) : null;
   return unit
@@ -233,10 +240,10 @@ const showJson = (value: unknown) => (typeof value === "string" ? value : JSON.s
 
 export function cellFromTrichotomy(
   cell: Pick<TrichotomyCellLike, "proposal" | "staged">,
-  facts: StateCellProps,
+  facts: StateCellBase,
   /** The caller's word for a counter-proposed value; domain values are the caller's to format. */
   show: (value: unknown) => string = showJson,
-): StateCellProps {
+): StateCellBase {
   const { proposal, staged } = cell;
   // Staging is the later rung, so it wins the stage slot; a proposal still standing behind a
   // staged value is authorship evidence, not a second state.

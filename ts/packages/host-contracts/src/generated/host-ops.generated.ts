@@ -658,7 +658,7 @@ export namespace FamilyCapture {
      * spec). Every spelling is one the parameter unit door accepts, so a human surface can stage a
      * bare number with it. Null where nothing is measurable at all; TypeId null where it measures
      * but this document shows no unit — the surface asks for one instead of letting a push refuse a
-     * bare number later. Evidence only: no write path fills a unit from it.
+     * bare number later. Refusal where Revit failed to answer, never read as not-measured. Evidence only: no write path fills a unit from it.
      *
      */
     export interface MeasuredDisplayUnit {
@@ -666,6 +666,7 @@ export namespace FamilyCapture {
       typeId?: null | string;
       label?: null | string;
       symbol?: null | string;
+      refusal?: null | string;
     }
   }
 }
@@ -3911,7 +3912,7 @@ export namespace RevitDetailSchedules {
      * spec). Every spelling is one the parameter unit door accepts, so a human surface can stage a
      * bare number with it. Null where nothing is measurable at all; TypeId null where it measures
      * but this document shows no unit — the surface asks for one instead of letting a push refuse a
-     * bare number later. Evidence only: no write path fills a unit from it.
+     * bare number later. Refusal where Revit failed to answer, never read as not-measured. Evidence only: no write path fills a unit from it.
      *
      */
     export interface MeasuredDisplayUnit {
@@ -3919,6 +3920,7 @@ export namespace RevitDetailSchedules {
       typeId?: null | string;
       label?: null | string;
       symbol?: null | string;
+      refusal?: null | string;
     }
     export interface RevitDataIssue {
       code: string;
@@ -4473,7 +4475,7 @@ export namespace RevitMatrixLoadedFamilies {
      * spec). Every spelling is one the parameter unit door accepts, so a human surface can stage a
      * bare number with it. Null where nothing is measurable at all; TypeId null where it measures
      * but this document shows no unit — the surface asks for one instead of letting a push refuse a
-     * bare number later. Evidence only: no write path fills a unit from it.
+     * bare number later. Refusal where Revit failed to answer, never read as not-measured. Evidence only: no write path fills a unit from it.
      *
      */
     export interface MeasuredDisplayUnit {
@@ -4481,6 +4483,7 @@ export namespace RevitMatrixLoadedFamilies {
       typeId?: null | string;
       label?: null | string;
       symbol?: null | string;
+      refusal?: null | string;
     }
     export interface RevitDataIssue {
       code: string;
@@ -5187,7 +5190,7 @@ export namespace ScheduleCellsApply {
      * spec). Every spelling is one the parameter unit door accepts, so a human surface can stage a
      * bare number with it. Null where nothing is measurable at all; TypeId null where it measures
      * but this document shows no unit — the surface asks for one instead of letting a push refuse a
-     * bare number later. Evidence only: no write path fills a unit from it.
+     * bare number later. Refusal where Revit failed to answer, never read as not-measured. Evidence only: no write path fills a unit from it.
      *
      */
     export interface MeasuredDisplayUnit {
@@ -5195,6 +5198,7 @@ export namespace ScheduleCellsApply {
       typeId?: null | string;
       label?: null | string;
       symbol?: null | string;
+      refusal?: null | string;
     }
   }
   export namespace Res {
@@ -5280,7 +5284,7 @@ export namespace ScheduleCellsApply {
      * spec). Every spelling is one the parameter unit door accepts, so a human surface can stage a
      * bare number with it. Null where nothing is measurable at all; TypeId null where it measures
      * but this document shows no unit — the surface asks for one instead of letting a push refuse a
-     * bare number later. Evidence only: no write path fills a unit from it.
+     * bare number later. Refusal where Revit failed to answer, never read as not-measured. Evidence only: no write path fills a unit from it.
      *
      */
     export interface MeasuredDisplayUnit {
@@ -5288,6 +5292,7 @@ export namespace ScheduleCellsApply {
       typeId?: null | string;
       label?: null | string;
       symbol?: null | string;
+      refusal?: null | string;
     }
     export interface ParameterValueEditResult {
       index: number;

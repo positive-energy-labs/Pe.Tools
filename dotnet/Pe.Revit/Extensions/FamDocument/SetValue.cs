@@ -50,7 +50,7 @@ public static class FamilyDocumentSetValue {
             StorageType.String => input,
             StorageType.Integer => int.Parse(input, CultureInfo.InvariantCulture),
             StorageType.Double when UnitUtils.IsMeasurableSpec(dataType) =>
-                ParameterStringIo.TryParseMeasuredValue(famDoc.GetUnits(), dataType, input, out var parsed)
+                UnitValueResolver.TryParse(famDoc.GetUnits(), dataType, input, out var parsed)
                     ? parsed
                     : double.Parse(input, CultureInfo.InvariantCulture),
             StorageType.Double => double.Parse(input, CultureInfo.InvariantCulture),
@@ -87,7 +87,7 @@ public static class FamilyDocumentSetValue {
         options.SetFormatOptions(format);
         var formula = UnitFormatUtils.Format(units, dataType, value, true, options);
         // Display precision can turn 0 K into -0.183333 K. Refuse lossy literals so callers can use per-type Set.
-        if (!UnitFormatUtils.TryParse(units, dataType, formula, out var parsed) || Math.Abs(parsed - value) > 1e-9)
+        if (!UnitValueResolver.TryParse(units, dataType, formula, out var parsed) || Math.Abs(parsed - value) > 1e-9)
             throw new InvalidOperationException($"Cannot represent {value:R} accurately as a formula literal for {dataType.TypeId}.");
         return formula;
     }

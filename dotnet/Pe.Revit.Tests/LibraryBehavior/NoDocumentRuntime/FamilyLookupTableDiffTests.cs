@@ -13,7 +13,7 @@ public sealed class FamilyLookupTableDiffTests {
         FamilyModelJson.Parse(Head + ",\"lookupTables\":{\"Depths\":{\"csv\":" + Newtonsoft.Json.JsonConvert.ToString(csv) + "}}}").Value!;
 
     private static IReadOnlyList<FamilyChange> Diff(string authored) =>
-        FamilyReconciler.Diff(Model(authored), Model(Captured), (string _, string _, out double value) => { value = 0; return false; })
+        FamilyReconciler.Diff(Model(authored), Model(Captured), (string _, PortableValue _, out double value) => { value = 0; return false; })
             .Where(change => change.Section == "lookupTables").ToList();
 
     [TestCase(",Key##length##feet,Out##number##general\nr1,1.000000,10.000000\nr2,2.000000,20.000000\n", TestName = "Diff_ignores_line_endings")]

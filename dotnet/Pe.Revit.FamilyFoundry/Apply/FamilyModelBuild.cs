@@ -287,7 +287,7 @@ public static class FamilyModelBuild {
     private static bool TryParseDouble(Document project, Parameter parameter, string value, out double parsed) {
         var dataType = parameter.Definition.GetDataType();
         return UnitUtils.IsMeasurableSpec(dataType)
-            ? ParameterStringIo.TryParseMeasuredValue(project.GetUnits(), dataType, value, out parsed)
+            ? UnitValueResolver.TryParse(project.GetUnits(), dataType, value, out parsed)
             : double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed);
     }
 }

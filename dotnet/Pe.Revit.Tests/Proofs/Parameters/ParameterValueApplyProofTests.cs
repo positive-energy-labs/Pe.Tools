@@ -1,6 +1,6 @@
 using Autodesk.Revit.DB.Structure;
 using Pe.Revit.DocumentData.Parameters;
-using Pe.Revit.DocumentData.Schedules.Authored.ValueDomains;
+using Pe.Revit.Parameters;
 using Pe.Shared.RevitData;
 
 namespace Pe.Revit.Tests;
@@ -185,8 +185,8 @@ public sealed class ParameterValueApplyProofTests {
                 // construction, no hand-written conversion constants.
                 var expectedFeet = UnitUtils.ConvertToInternalUnits(30, UnitTypeId.Inches);
                 // Resolve a symbol label ("in-ish") from the API so the proof survives label churn.
-                var inchSymbol = ScheduleFieldFormatValueDomain.GetValidSymbols(UnitTypeId.Inches)
-                    .Select(ScheduleFieldFormatValueDomain.GetSymbolLabel)
+                var inchSymbol = ParameterUnitResolver.GetValidSymbols(UnitTypeId.Inches)
+                    .Select(ParameterUnitResolver.GetSymbolLabel)
                     .FirstOrDefault(label => !string.IsNullOrWhiteSpace(label));
                 Assert.That(inchSymbol, Is.Not.Null, "Inches must expose at least one symbol label.");
 

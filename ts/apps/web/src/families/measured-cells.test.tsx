@@ -79,7 +79,7 @@ test("a bare number stages the project's unit with it and never calls Revit", as
   expect(parse).not.toHaveBeenCalled();
   expect(propose).toHaveBeenCalledWith(
     expect.anything(),
-    { value: "300 CFM", storageType: "Double" },
+    { value: "300", unit: "CFM", storageType: "Double" },
     "100 CFM",
   );
 });
@@ -92,7 +92,7 @@ test("typed text is Revit's to read, and Revit's answer is what is staged", asyn
   expect(parse).toHaveBeenCalledWith(CFM, "300 L/s");
   expect(propose).toHaveBeenCalledWith(
     expect.anything(),
-    { value: "635.66 CFM", storageType: "Double" },
+    { value: "635.66", unit: "CFM", storageType: "Double" },
     "100 CFM",
   );
 });

@@ -2,7 +2,14 @@ import type { Column, TableState } from "#/components/master-table/model";
 import { token } from "#/lib/token";
 import { PressContent } from "#/components/anatomy/press-content";
 import { Press } from "#/components/lang/press";
-import { bindingOf, isFormula, pinnedSort, sortDirOf, type PRow } from "#/family/model";
+import {
+  authoredText,
+  bindingOf,
+  isFormula,
+  pinnedSort,
+  sortDirOf,
+  type PRow,
+} from "#/family/model";
 import type { FamilyWorkspaceCore } from "#/family/workspace-core";
 
 export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
@@ -99,7 +106,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
         );
       }
 
-      const authored = draft.authored[row.name] ?? "";
+      const authored = authoredText(draft.authored[row.name]) ?? "";
       const blocks = world.grounding[row.name] ?? [];
       const family = proposalsAt(row.name, null);
       const drives = consumers.get(row.name) ?? [];

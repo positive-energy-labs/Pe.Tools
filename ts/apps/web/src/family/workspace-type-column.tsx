@@ -1,4 +1,4 @@
-import { settingsFieldPointer, showCellValue } from "@pe/agent-contracts";
+import { settingsFieldPointer, type MeasuredValue } from "@pe/agent-contracts";
 import type { Column } from "#/components/master-table/model";
 import { ReadCell } from "#/components/master-table/cells";
 import { cellFromTrichotomy, type StateCellProps } from "#/components/lang/cell";
@@ -16,6 +16,7 @@ import {
   proposalCell,
   savedValueAt,
   type PRow,
+  authoredText,
 } from "#/family/model";
 import type { FamilyWorkspaceCore } from "#/family/workspace-core";
 
@@ -148,7 +149,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
         );
       }
 
-      const authored = draft.authored[row.name] ?? "";
+      const authored = authoredText(draft.authored[row.name]) ?? "";
       const proposals = proposalsAt(row.name, typeName);
       const grounded = (world.grounding[row.name] ?? []).length > 0;
       const drifted = agreementOf(world, draft, row, typeName) === "drift";
@@ -256,7 +257,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
             reason={`LOCKED — the family level drives this with ${authored}, so a type cannot override its result. The formula is shown on the parameter's own cell; change what feeds it instead. Switch to ⇄ live to see the number Revit computes for it.`}
           />
         );
-      const override = draft.types[typeName]?.[row.name];
+      const override = authoredText(draft.types[typeName]?.[row.name]);
       const displayUnit = world.live?.units?.[row.name];
       return cell({
         value: override ?? "",
@@ -268,18 +269,17 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
               ? `"${typeName}" inherits ${authored || "nothing"} from the family — the grey number is the inheritance showing through, not a value this type holds. Type here to make it differ.${drifted ? ` The alarm underline says Revit disagrees; switch to ⇄ live to read its number in place.` : ""}${groundedNote}`
               : `"${typeName}" overrides the family value ${authored} with ${override}. Clear the cell to go back to inheriting.${drifted ? ` The alarm underline says Revit disagrees; switch to ⇄ live to read its number in place.` : ""}${groundedNote}`
         }${unsavedNote}`,
-        // A family value is written in the unit grammar ("300 CFM"), so the measured kind's answer
-        // IS the override: a bare number takes this document's own unit, typed text goes to Revit.
+        // A measured override stages Revit's answer as { value, unit }: a bare number takes this
+        // document's own unit, typed text goes to Revit, and the patch carries the object.
         ...(displayUnit
           ? {
               measured: {
                 displayUnit,
                 parse: (text: string) => parse(displayUnit, text),
-                stage: (staged) => editOverride(row.name, typeName, showCellValue(staged)),
+                stage: (staged: MeasuredValue) => editOverride(row.name, typeName, staged),
               },
             }
-          : {}),
-        onCommit: (next) => editOverride(row.name, typeName, next),
+          : { onCommit: (next: string) => editOverride(row.name, typeName, next) }),
       });
     },
   });

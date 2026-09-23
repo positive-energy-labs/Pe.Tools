@@ -192,6 +192,9 @@ export function LiveScheduleGridWorkspace({
     refused: page.refused,
     onFocus: { rail: focusOf("rail"), grid: focusOf("grid") },
     freshness,
+    documentScope: target
+      ? { bridgeSessionId: target.session, openDocumentId: target.openId }
+      : undefined,
   };
 
   const resolve = (

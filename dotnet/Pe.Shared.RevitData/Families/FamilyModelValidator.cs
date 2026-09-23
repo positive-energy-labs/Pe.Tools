@@ -259,7 +259,9 @@ public static class FamilyModelValidator {
         p.DataType ?? (p.SharedSpecId is { } spec && DataTypeConverter.TryParse(spec, out var named) ? named : null);
 
     private static void CheckValue(PortableValue v, DataType dt, string parameter, string path, HashSet<string> nameable, List<FamilyModelDiagnostic> d) {
+        var textLike = dt is DataType.Text or DataType.Url or DataType.Material or DataType.MultilineText or DataType.LoadClassification;
         var ok = dt.Measure() switch {
+            _ when v.Kind == PortableValueKind.Measured => !textLike && dt.Measure() is not (DataType.Integer or DataType.NumberOfPoles or DataType.YesNo or DataType.Number),
             DataType.Length => v.Kind == PortableValueKind.Length,
             DataType.Angle => v.Kind == PortableValueKind.Angle,
             DataType.Integer or DataType.NumberOfPoles => v.Kind == PortableValueKind.Integer,
@@ -270,8 +272,7 @@ public static class FamilyModelValidator {
         if (!ok) d.Add(new(FamilyModelDiagnosticCodes.ValueDataTypeMismatch, path, $"'{v.Text}' on '{parameter}' reads as {v.Kind}; a {dt} parameter takes {Legal(dt)}."));
         // Gotcha 18: text that names a parameter is a formula, not a value. A text-like value is a string, so a name
         // there is literal text; a unit-carrying spec admits text only for Revit units to read.
-        else if (v.Kind == PortableValueKind.Text && dt is not (DataType.Text or DataType.Url or DataType.Material
-                     or DataType.MultilineText or DataType.LoadClassification)
+        else if (v.Kind == PortableValueKind.Text && !textLike
                  && FormulaNames(v.Text).FirstOrDefault(nameable.Contains) is { } named)
             d.Add(new(FamilyModelDiagnosticCodes.ValueNamesParameter, path, $"'{v.Text}' names parameter '{named}'; a value that follows a parameter is a formula."));
     }

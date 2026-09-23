@@ -93,8 +93,9 @@ public sealed class SetKnownParamsSettings : IOperationSettings {
         return assignments;
     }
 
-    public Dictionary<string, Dictionary<string, string>> GetPerTypeAssignmentsByParameter() {
-        var valuesByParameter = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
+    /// <summary>A value is a JSON string, or a measured `{ value, unit }` object carried as is.</summary>
+    public Dictionary<string, Dictionary<string, JToken>> GetPerTypeAssignmentsByParameter() {
+        var valuesByParameter = new Dictionary<string, Dictionary<string, JToken>>(StringComparer.Ordinal);
         if (this.PerTypeAssignmentsTable.Count == 0) return valuesByParameter;
 
         for (var rowIndex = 0; rowIndex < this.PerTypeAssignmentsTable.Count; rowIndex++) {
@@ -106,14 +107,14 @@ public sealed class SetKnownParamsSettings : IOperationSettings {
             }
 
             if (!valuesByParameter.TryGetValue(parameterName, out var valuesPerType)) {
-                valuesPerType = new Dictionary<string, string>(StringComparer.Ordinal);
+                valuesPerType = new Dictionary<string, JToken>(StringComparer.Ordinal);
                 valuesByParameter[parameterName] = valuesPerType;
             }
 
             foreach (var kvp in row.ValuesByType) {
                 // A type can be named " " (Old_Template prioAir fans); trim for matching, never skip it.
                 var typeName = kvp.Key?.Trim();
-                var value = kvp.Value?.ToString();
+                var value = kvp.Value is null or { Type: JTokenType.Null } ? null : kvp.Value as JObject ?? (JToken)kvp.Value.ToString();
                 // "" is a value (clear to empty, ruling 1530-1), not an absent cell; only null means "no value for this type".
                 if (typeName is null || value is null)
                     continue;

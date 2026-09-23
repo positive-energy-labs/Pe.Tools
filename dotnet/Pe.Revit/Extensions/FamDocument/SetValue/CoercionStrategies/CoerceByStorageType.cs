@@ -1,3 +1,4 @@
+using System.Globalization;
 using Pe.Revit.Extensions.FamDocument.SetValue.Utils;
 using Pe.Revit.Global;
 using Pe.Revit.Parameters;
@@ -143,8 +144,7 @@ public class CoerceByStorageType : ICoercionStrategy {
                 under = new Units(UnitSystem.Metric);
                 under.SetFormatOptions(spec, new FormatOptions(unit));
             } catch (Autodesk.Revit.Exceptions.ApplicationException) { continue; } // a unit whose default format options are invalid
-            if (!ParameterStringIo.TryParseMeasuredValue(under, spec, text, out var read) &&
-                !ParameterStringIo.TryParseMeasuredValue(under, spec, NormalizeForUnitParsing(text), out read)) return false;
+            if (!TryParseMeasured(under, spec, text, out var read)) return false;
             readings.Add(read);
             if (readings.Count == 2) break;
         }
@@ -185,7 +185,7 @@ public class CoerceByStorageType : ICoercionStrategy {
         var dataType = context.TargetDataType;
 
         // SpecTypeId.Number is reported as "measurable" by Revit but has no units,
-        // so UnitFormatUtils.TryParse() can't parse it. Use regex extraction instead.
+        // so unit parsing cannot read it. Use regex extraction instead.
         // Compare TypeId strings since ForgeTypeId == operator may not work as expected
         // Number words ("Single", "Two-Pole") only ever mean a count: unitless targets only, never a measurable spec.
         var isNumberType = dataType?.TypeId == SpecTypeId.Number.TypeId;
@@ -195,23 +195,7 @@ public class CoerceByStorageType : ICoercionStrategy {
         // For measurable specs with actual units, use Revit's parser which understands imperial notation. A mapping's bare number reaches
         // Map, which refuses it with a reason.
         if (UnitUtils.IsMeasurableSpec(dataType)) {
-            var parseResult = ParameterStringIo.TryParseMeasuredValue(
-                context.FamilyDocument.GetUnits(),
-                dataType,
-                stringValue,
-                out _
-            );
-            if (!parseResult) {
-                var normalizedValue = NormalizeForUnitParsing(stringValue);
-                parseResult = ParameterStringIo.TryParseMeasuredValue(
-                    context.FamilyDocument.GetUnits(),
-                    dataType,
-                    normalizedValue,
-                    out _
-                );
-            }
-
-            return parseResult;
+            return TryParseMeasured(context.FamilyDocument.GetUnits(), dataType, stringValue, out _);
         }
 
         // For non-measurable doubles, use simple regex extraction
@@ -228,7 +212,7 @@ public class CoerceByStorageType : ICoercionStrategy {
         var dataType = context.TargetDataType;
 
         // SpecTypeId.Number is reported as "measurable" by Revit but has no units,
-        // so UnitFormatUtils.TryParse() can't parse it. Use regex extraction instead.
+        // so unit parsing cannot read it. Use regex extraction instead.
         // Compare TypeId strings since ForgeTypeId == operator may not work as expected
         if (dataType?.TypeId == SpecTypeId.Number.TypeId)
             return Regexes.TryExtractDouble(stringValue, out var number) ? number
@@ -238,16 +222,12 @@ public class CoerceByStorageType : ICoercionStrategy {
         // A mapping reads text in the unit it names, else in the mapping's declared unit; never the project's display unit.
         if (UnitUtils.IsMeasurableSpec(dataType) && context.SourceDataType is not null)
             return TryParseExplicitMeasure(dataType!, stringValue, out var named) ? named
-                : context.SourceUnit is { } unit && Regexes.TryExtractDouble(stringValue, out var bare) ? UnitUtils.ConvertToInternalUnits(bare, unit)
+                : context.SourceUnit is { } unit && double.TryParse(stringValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var bare) ? UnitUtils.ConvertToInternalUnits(bare, unit)
                 : throw new MissingUnitException($"'{stringValue}' names no unit for {dataType!.TypeId}; {MappingUnit.Hint(context.TargetParam)}");
 
         // For measurable specs with actual units, use Revit's parser which understands imperial notation
         if (UnitUtils.IsMeasurableSpec(dataType)) {
-            if (ParameterStringIo.TryParseMeasuredValue(context.FamilyDocument.GetUnits(), dataType, stringValue, out var parsed))
-                return parsed;
-
-            var normalizedValue = NormalizeForUnitParsing(stringValue);
-            if (ParameterStringIo.TryParseMeasuredValue(context.FamilyDocument.GetUnits(), dataType, normalizedValue, out parsed))
+            if (TryParseMeasured(context.FamilyDocument.GetUnits(), dataType, stringValue, out var parsed))
                 return parsed;
 
             throw new ArgumentException(
@@ -257,6 +237,10 @@ public class CoerceByStorageType : ICoercionStrategy {
         // For non-measurable doubles, use simple regex extraction
         return Regexes.ExtractDouble(stringValue);
     }
+
+    /// <summary>Measured text goes through the one parser, as typed and then normalized.</summary>
+    private static bool TryParseMeasured(Units units, ForgeTypeId spec, string text, out double value) =>
+        UnitValueResolver.TryParse(units, spec, text, out value) || UnitValueResolver.TryParse(units, spec, NormalizeForUnitParsing(text), out value);
 
     private static readonly (string Word, int Value)[] NumberWords = [
         ("zero", 0), ("none", 0),

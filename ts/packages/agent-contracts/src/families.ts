@@ -175,10 +175,18 @@ export function familyCatalogProblem(catalog: {
 export const familyCellValueSchema = z
   .object({
     value: z.string(),
+    unit: z.string().min(1).optional(),
     storageType: z.enum(["String", "Integer", "Double", "ElementId", "None"]),
   })
   .strict();
+/** A family cell value; a measured one carries its unit to the patch as `{ value, unit }`. */
 export type FamilyCellValue = z.infer<typeof familyCellValueSchema>;
+
+/** The one word for a family cell: a measured value reads with its unit. */
+export const showFamilyCell = (value: unknown): string => {
+  const cell = familyCellValueSchema.parse(value);
+  return cell.unit === undefined ? cell.value : `${cell.value} ${cell.unit}`;
+};
 export const familyCellStateSchema = trichotomyCellSchema(familyCellValueSchema);
 export type FamilyCellState = z.infer<typeof familyCellStateSchema>;
 
@@ -243,10 +251,9 @@ export function familyStagedPatch(
   for (const [key, cell] of Object.entries(cells)) {
     const address = familyCellAddress(key);
     if (address.familyName !== familyName || !cell.staged) continue;
-    (types[address.typeName] ??= {})[address.parameter] = patchValue(
-      cell.staged.value.value,
-      cell.staged.value.storageType,
-    );
+    const { value, unit, storageType } = cell.staged.value;
+    (types[address.typeName] ??= {})[address.parameter] =
+      unit === undefined ? patchValue(value, storageType) : { value, unit };
     keys.push(key);
   }
   return keys.length === 0

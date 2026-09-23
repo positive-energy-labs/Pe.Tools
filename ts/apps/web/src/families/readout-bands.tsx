@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { familyCellValueSchema } from "@pe/agent-contracts";
+import { showFamilyCell } from "@pe/agent-contracts";
 
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
@@ -310,11 +310,13 @@ export function FamiliesProposalsBand() {
                 value: (
                   <ValueDiff
                     from={current(entry)}
-                    to={(entry.cell.staged ?? entry.cell.proposal)?.value.value ?? ""}
+                    to={showFamilyCell(
+                      (entry.cell.staged ?? entry.cell.proposal)?.value ?? { value: "" },
+                    )}
                   />
                 ),
               }}
-              show={(value) => familyCellValueSchema.parse(value).value}
+              show={showFamilyCell}
             />
             {/* Orphaned: the plan could not resolve this family by name. Clearing stays free. */}
             {orphans.has(entry.familyName) ? (

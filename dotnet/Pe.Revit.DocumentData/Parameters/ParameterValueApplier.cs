@@ -1,3 +1,4 @@
+using Pe.Revit.Parameters;
 using Pe.Shared.RevitData.Families;
 using Pe.Revit.Failures;
 using Pe.Revit.Tasks;
@@ -242,12 +243,7 @@ public static class ParameterValueApplier {
             if (!isMeasurable)
                 throw new InvalidOperationException(
                     $"Unit '{edit.Unit}' was supplied but parameter '{parameter.Definition?.Name}' has no measurable spec; omit unit.");
-            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var number))
-                throw new InvalidOperationException(
-                    $"With an explicit unit, value must be a plain invariant number; got '{value}'.");
-
-            var unitTypeId = ParameterUnitResolver.Resolve(edit.Unit!, dataType!);
-            return UnitUtils.ConvertToInternalUnits(number, unitTypeId);
+            return UnitValueResolver.ToInternal(value, edit.Unit!, dataType!);
         }
 
         if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var bare)) {
@@ -261,7 +257,7 @@ public static class ParameterValueApplier {
         }
 
         if (dataType != null &&
-            UnitFormatUtils.TryParse(document.GetUnits(), dataType, value, out var parsed))
+            UnitValueResolver.TryParse(document.GetUnits(), dataType, value, out var parsed))
             return parsed;
 
         throw new InvalidOperationException(

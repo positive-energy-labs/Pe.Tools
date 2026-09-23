@@ -20,6 +20,7 @@ import { useTableState } from "#/components/master-table/view";
 import { List } from "#/components/lang/list-popup";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { useMeasuredParse } from "#/host/measured-parse";
+import type { HostCallOptions } from "#/host/client";
 import type { CellWire } from "#/components/lang/band";
 import { PendingStrip } from "./pending-strip";
 import { cellText, scheduleLock, useScheduleGridColumns } from "./columns";
@@ -49,6 +50,8 @@ export interface ScheduleGridState {
    * taken; `disconnected` = no bridge, so nothing is known. Never an age.
    */
   freshness: "current" | "changed" | "disconnected";
+  /** The document the drawn read came from; a measured parse is asked of exactly it. */
+  documentScope?: HostCallOptions;
 }
 
 export function ScheduleGridWorkspace({
@@ -64,6 +67,7 @@ export function ScheduleGridWorkspace({
     refused,
     onFocus,
     freshness,
+    documentScope,
   },
 }: {
   state: ScheduleGridState;
@@ -102,7 +106,7 @@ export function ScheduleGridWorkspace({
     lockOf: (key) => scheduleLock(bindingAt(key)),
   };
   /** The measured cell's one call, owned by this snapshot: a re-read aborts what is in flight. */
-  const parse = useMeasuredParse(snapshot);
+  const parse = useMeasuredParse(snapshot, documentScope);
   const parseMeasured = (key: string, text: string) => parse(bindingAt(key)?.displayUnit, text);
 
   /** Typing stages; it also severs a standing proposal, so the typed value is not contested. */

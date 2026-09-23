@@ -185,28 +185,29 @@ export function useScheduleGridColumns(
                 cap: binding == null ? "nohome" : lock ? "locked" : "editable",
                 capReason: lock ?? undefined,
                 note,
-                // Clearing a value is allowed (ruling 1600-3), as far as Revit can hold it: a
-                // text parameter can be empty, a number or an element id cannot.
-                onCommit: lock
-                  ? undefined
-                  : (text) =>
-                      text === "" && binding?.storageType !== "String"
-                        ? `a ${binding?.storageType ?? "non-text"} parameter cannot be empty in Revit — type a value`
-                        : stageEdit(key, text),
-                // A column Revit measures is a measured cell, display unit or not: with none, the
-                // cell asks for a unit rather than letting the push refuse the number later.
-                ...(binding?.displayUnit
+              }),
+              // A column Revit measures is a measured cell: with no unit of its own, the cell asks
+              // for one rather than letting the push refuse the number later.
+              ...(lock
+                ? {}
+                : binding?.displayUnit
                   ? {
                       measured: {
-                        displayUnit: binding?.displayUnit ?? null,
+                        displayUnit: binding.displayUnit,
                         parse: (text: string) => parseMeasured(key, text),
                         // The schedule stages `{ value, unit }` itself: Revit's number and the
                         // unit it was read in go to the apply apart, never as one string.
                         stage: (staged: MeasuredValue) => stageEdit(key, staged),
                       },
                     }
-                  : {}),
-              }),
+                  : {
+                      // Clearing a value is allowed (ruling 1600-3), as far as Revit can hold it:
+                      // a text parameter can be empty, a number or an element id cannot.
+                      onCommit: (text: string) =>
+                        text === "" && binding?.storageType !== "String"
+                          ? `a ${binding?.storageType ?? "non-text"} parameter cannot be empty in Revit — type a value`
+                          : stageEdit(key, text),
+                    }),
               ...(refused[key] ? { refused: refused[key] } : {}),
               transitions: scheduleTransitions(wire, key, cell, stale),
             };

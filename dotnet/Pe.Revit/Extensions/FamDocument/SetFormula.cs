@@ -1,4 +1,5 @@
-﻿using Pe.Revit.Extensions.FamParameter;
+using Pe.Revit.Parameters;
+using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.Extensions.FamParameter.Formula;
 using System.Diagnostics;
 using System.Globalization;
@@ -133,7 +134,7 @@ public static class Formula {
         var fallback = lookupContext.Arguments[2];
         if (UnitUtils.IsMeasurableSpec(dataType)
             && LooksLikePlainNumberLiteral(fallback)
-            && !UnitFormatUtils.TryParse(famDoc.GetUnits(), dataType, fallback, out _)) {
+            && !UnitValueResolver.TryParse(famDoc.GetUnits(), dataType, fallback, out _)) {
             errorMessage =
                 $"Cannot set formula on parameter '{targetParam.Name()}'. size_lookup default '{fallback}' is a plain numeric literal, but measurable parameters usually need a unit-typed fallback compatible with '{dataType.TypeId}'. Example patterns from real families are values like '2.38\"' or '0 GPM'.";
             return true;

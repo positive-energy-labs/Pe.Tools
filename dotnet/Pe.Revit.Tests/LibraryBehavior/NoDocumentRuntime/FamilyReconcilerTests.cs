@@ -309,7 +309,7 @@ public sealed class FamilyReconcilerTests {
         var desired = Parse($$"""{ {{Header}}, "parameters": { "W": { "dataType": "Length", "value": "12in" }, "N": { "dataType": "Number", "value": 480 } }, "types": { "A": {} } }""");
         var current = Parse($$"""{ {{Header}}, "parameters": { "W": { "dataType": "Length", "value": "1' - 0\"" }, "N": { "dataType": "Number", "value": "480.0" } }, "types": { "A": {} } }""");
         var calls = new List<string>();
-        bool Fake(string parameter, string text, out double value) { calls.Add($"{parameter}={text}"); return UnitResolvers.Portable(parameter, text, out value); }
+        bool Fake(string parameter, PortableValue text, out double value) { calls.Add($"{parameter}={text.Text}"); return UnitResolvers.Portable(parameter, text, out value); }
         Assert.Multiple(() => {
             Assert.That(FamilyReconciler.Diff(desired, current, Fake), Is.Empty);
             Assert.That(calls, Does.Contain("N=480").Or.Contain("N=480.0"), "the resolver decides numeric equality for non-length values");

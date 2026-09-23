@@ -76,7 +76,7 @@ public static class FamilyModelSettingsRegistration {
 /// </summary>
 internal sealed class ScalarSlotSchemaBinding(JsonObjectType types) : IJsonTypeSchemaBinding {
     public static readonly ScalarSlotSchemaBinding String = new(JsonObjectType.String);
-    public static readonly ScalarSlotSchemaBinding Value = new(JsonObjectType.String | JsonObjectType.Number | JsonObjectType.Boolean);
+    public static readonly ScalarSlotSchemaBinding Value = new(JsonObjectType.String | JsonObjectType.Number | JsonObjectType.Boolean | JsonObjectType.Object);
 
     public JsonObjectType SchemaType => types;
 

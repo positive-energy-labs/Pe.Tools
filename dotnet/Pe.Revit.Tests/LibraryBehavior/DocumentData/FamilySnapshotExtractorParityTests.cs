@@ -1,3 +1,4 @@
+using Pe.Revit.Parameters;
 using Pe.Revit.DocumentData.Families.Extraction;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Tasks;
@@ -101,7 +102,7 @@ public sealed class FamilySnapshotExtractorParityTests {
                         if (Pe.Shared.RevitData.Families.PortableScalar.TryParse(extractedValue, out var scalar))
                             parsed = scalar.Kind == Pe.Shared.RevitData.Families.PortableScalarKind.Length ? scalar.Feet : UnitUtils.ConvertToInternalUnits(scalar.Value, UnitTypeId.Degrees);
                         else if (spec == SpecTypeId.Number) parsed = double.Parse(extractedValue!, System.Globalization.CultureInfo.InvariantCulture);
-                        else Assert.That(UnitFormatUtils.TryParse(familyDocument.GetUnits(), spec, extractedValue, out parsed), Is.True, key);
+                        else Assert.That(UnitValueResolver.TryParse(familyDocument.GetUnits(), spec, extractedValue, out parsed), Is.True, key);
                         Assert.That(parsed, Is.EqualTo(raw).Within(Math.Max(1, Math.Abs(raw)) * 1e-12), key);
                     } else Assert.That(extractedValue, Is.EqualTo(groundTruth[key]), $"Cell '{key}' diverged.");
                     comparedCells++;

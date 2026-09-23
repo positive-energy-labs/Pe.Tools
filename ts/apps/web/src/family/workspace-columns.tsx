@@ -14,6 +14,7 @@ import {
   rowAgreement,
   sortDirOf,
   type PRow,
+  authoredText,
 } from "#/family/model";
 import type { FamilyWorkspaceCore } from "#/family/workspace-core";
 import { useFamilyIdentityColumns } from "#/family/workspace-identity-columns";
@@ -104,8 +105,8 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
       { value: "#new", label: `＋ new parameter "${newName}", seeded ${literal}` },
       ...candidates.map((param) => ({
         value: param.name,
-        label: `${param.name} — inherits ${draft.authored[param.name] ?? "nothing"}${
-          (draft.authored[param.name] ?? "") === literal
+        label: `${param.name} — inherits ${authoredText(draft.authored[param.name]) ?? "nothing"}${
+          (authoredText(draft.authored[param.name]) ?? "") === literal
             ? " (same as now)"
             : `, discards ${literal}`
         }`,

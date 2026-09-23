@@ -985,10 +985,18 @@ public readonly record struct PortableAngle(string? Parameter, double? Degrees, 
 ///     parameter is a formula, gotcha 18). `Yes`/`No` are the Yes/No literals; an unsuffixed number is Integer
 ///     or Number; anything else is Text, and Text on a measurable parameter is `value-datatype-mismatch`.
 ///     Values of non-length, non-angle specs (`208V`, `280 CFM`) are Text here and are normalized through
-///     Revit units by the reconciler (critic F5), never by this grammar.
+///     Revit units by the reconciler (critic F5), never by this grammar. A measured cell `{ value, unit }` is
+///     <see cref="PortableValueKind.Measured" />: <see cref="Text" /> is the value as rendered in <see cref="Unit" />
+///     (a plain number, or `1' - 6"`); the two stay apart to the write, where `UnitValueResolver.ToInternal`
+///     converts them.
 /// </summary>
 [JsonConverter(typeof(PortableValueConverter))]
-public readonly record struct PortableValue(PortableValueKind Kind, string Text, double? Number) {
+public readonly record struct PortableValue(PortableValueKind Kind, string Text, double? Number, string? Unit = null) {
+    public static PortableValue Measured(string value, string unit) =>
+        !string.IsNullOrWhiteSpace(value) && !string.IsNullOrWhiteSpace(unit)
+            ? new PortableValue(PortableValueKind.Measured, value.Trim(), null, unit.Trim())
+            : throw new JsonSerializationException($"A measured value needs a value and a unit; got '{value}' '{unit}'.");
+
     public static PortableValue Parse(string text) {
         if (text.StartsWith("param:", StringComparison.Ordinal))
             throw new JsonSerializationException($"'{text}': a value may not reference a parameter; use formula.");
@@ -1009,7 +1017,7 @@ public readonly record struct PortableValue(PortableValueKind Kind, string Text,
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-public enum PortableValueKind { Length, Angle, YesNo, Integer, Number, Text }
+public enum PortableValueKind { Length, Angle, YesNo, Integer, Number, Text, Measured }
 
 public sealed class PortableLengthConverter : JsonConverter<PortableLength> {
     public override PortableLength ReadJson(JsonReader reader, Type objectType, PortableLength existingValue, bool hasExistingValue, JsonSerializer serializer) =>
@@ -1035,10 +1043,17 @@ public sealed class PortableValueConverter : JsonConverter<PortableValue> {
             JsonToken.String => PortableValue.Parse((string)reader.Value!),
             JsonToken.Integer or JsonToken.Float => PortableValue.Parse(Convert.ToString(reader.Value, CultureInfo.InvariantCulture)!),
             JsonToken.Boolean => PortableValue.Parse((bool)reader.Value! ? "Yes" : "No"),
-            _ => throw new JsonSerializationException($"Expected a value string at {reader.Path}.")
+            JsonToken.StartObject when JObject.Load(reader) is { Count: 2 } o && o["value"] is JValue { Type: JTokenType.String or JTokenType.Integer or JTokenType.Float } v && o["unit"] is JValue { Type: JTokenType.String } u =>
+                PortableValue.Measured(Convert.ToString(v.Value, CultureInfo.InvariantCulture)!, (string)u!),
+            _ => throw new JsonSerializationException($"Expected a value string or {{ value, unit }} at {reader.Path}.")
         };
 
-    public override void WriteJson(JsonWriter writer, PortableValue value, JsonSerializer serializer) => writer.WriteValue(value.Text);
+    public override void WriteJson(JsonWriter writer, PortableValue value, JsonSerializer serializer) {
+        if (value.Kind == PortableValueKind.Measured)
+            new JObject { ["value"] = value.Text,["unit"] = value.Unit }.WriteTo(writer);
+        else
+            writer.WriteValue(value.Text);
+    }
 }
 
 /// <summary>

@@ -1,3 +1,5 @@
+import { measuredValueSchema, showCellValue, type MeasuredValue } from "@pe/agent-contracts";
+
 /**
  * The TS reading of the C# `FamilyModel` (`FamilyModelContracts.cs`): the shape `family.capture`
  * returns and an authored `family.json` holds. Loosely typed on purpose; the C# model validates.
@@ -14,7 +16,7 @@ export interface ParamSpec {
   sharedUserModifiable?: boolean;
   tooltip?: string;
   propertiesGroup?: string;
-  value?: string | number | boolean;
+  value?: string | number | boolean | MeasuredValue;
   formula?: string;
   /** Absent means TYPE (Revit's default). */
   isInstance?: boolean;
@@ -59,7 +61,7 @@ export interface FamilyModel {
   family: { name: string; category: string; template: string; placement: string };
   /** Exact Revit name → declaration. Family and shared parameters share this map (`shared: true`). */
   parameters: Record<string, ParamSpec>;
-  types: Record<string, Record<string, string>>;
+  types: Record<string, Record<string, string | MeasuredValue>>;
   datums?: Record<string, { normal: string; isLevel?: boolean }>;
   refPlanes?: Record<string, { normal: string; at: string }>;
   refLines?: Record<string, unknown>;
@@ -123,17 +125,20 @@ export const paramSpec = (model: FamilyModel, name: string): ParamSpec | undefin
 type ValueSource = "override" | "value" | "formula" | "missing";
 
 /** PortableValue's boolean literals use Revit's Yes/No spelling; raw JSON remains untouched —
- *  a structured value is written back as JSON, never as `[object Object]`. */
+ *  a measured value reads with its unit; any other structured value is written back as JSON,
+ *  never as `[object Object]`. */
 export const parameterText = (value: unknown): string =>
-  typeof value === "boolean"
-    ? value
-      ? "Yes"
-      : "No"
-    : typeof value === "string"
+  measuredValueSchema.safeParse(value).success
+    ? showCellValue(value)
+    : typeof value === "boolean"
       ? value
-      : value == null
-        ? ""
-        : JSON.stringify(value);
+        ? "Yes"
+        : "No"
+      : typeof value === "string"
+        ? value
+        : value == null
+          ? ""
+          : JSON.stringify(value);
 
 /** THE value trichotomy: type override → formula (resolved) → family value → missing. */
 function resolveParam(

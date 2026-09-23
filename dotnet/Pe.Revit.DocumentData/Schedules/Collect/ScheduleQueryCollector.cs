@@ -1,3 +1,4 @@
+using Pe.Revit.Parameters;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
@@ -936,7 +937,7 @@ public static class ScheduleQueryCollector {
             return false;
         }
 
-        return UnitFormatUtils.TryParse(context.EffectiveUnits, context.SpecTypeId, rowValue, out parsedValue);
+        return UnitValueResolver.TryParse(context.EffectiveUnits, context.SpecTypeId, rowValue, out parsedValue);
     }
 
     private static bool NearlyEquals(double left, double right) {

@@ -186,9 +186,9 @@ public static class FamilyReconciler {
         foreach (var type in current.Types.Keys.Where(t => !desired.Types.ContainsKey(t)))
             changes.Add(new FamilyChange("types", type, ChangeKind.Delete, null, current.Types[type], null));
         foreach (var (cell, want) in dCells) {
-            cCells.TryGetValue(cell, out var have);
-            if (have is null || !ScalarSame(want, have, units, cell.Parameter))
-                changes.Add(new FamilyChange("types.cell", $"{cell.Type}/{cell.Parameter}", ChangeKind.Update, null, have, want, cell));
+            var known = cCells.TryGetValue(cell, out var have);
+            if (!known || !CellSame(want, have, units, cell.Parameter))
+                changes.Add(new FamilyChange("types.cell", $"{cell.Type}/{cell.Parameter}", ChangeKind.Update, null, known ? have : null, want, cell));
         }
 
         Keyed(changes, "datums", desired.Datums, current.Datums, units);
@@ -247,13 +247,13 @@ public static class FamilyReconciler {
 
     // ── canonical form (F7): the uniform value becomes a cell in every type; parameters diff without it ──
 
-    private static (Dictionary<string, JObject> Params, Dictionary<FamilyCellKey, string> Cells) Canonical(FamilyModel m) {
-        var cells = new Dictionary<FamilyCellKey, string>();
+    private static (Dictionary<string, JObject> Params, Dictionary<FamilyCellKey, PortableValue> Cells) Canonical(FamilyModel m) {
+        var cells = new Dictionary<FamilyCellKey, PortableValue>();
         foreach (var (type, row) in m.Types)
-            foreach (var (param, value) in row) cells[new FamilyCellKey(type, param)] = value.Text;
+            foreach (var (param, value) in row) cells[new FamilyCellKey(type, param)] = value;
         foreach (var (name, p) in m.Parameters)
             if (p.Value is { } v)
-                foreach (var type in m.Types.Keys) cells.TryAdd(new FamilyCellKey(type, name), v.Text);
+                foreach (var type in m.Types.Keys) cells.TryAdd(new FamilyCellKey(type, name), v);
         var parameters = m.Parameters.ToDictionary(p => p.Key, p => {
             var o = JObject.FromObject(p.Value, Serializer);
             if (string.IsNullOrEmpty(p.Value.PropertiesGroup)) o.Remove("propertiesGroup");
@@ -433,13 +433,19 @@ public static class FamilyReconciler {
         return JToken.DeepEquals(a, b);
     }
 
+    private static bool CellSame(PortableValue a, PortableValue b, UnitResolver units, string parameter) =>
+        a.Kind != PortableValueKind.Measured && b.Kind != PortableValueKind.Measured
+            ? ScalarSame(a.Text, b.Text, units, parameter)
+            : units(parameter, a, out var ua) && units(parameter, b, out var ub) ? Math.Abs(ua - ub) < Tolerance : a == b;
+
     private static bool ScalarSame(string a, string b, UnitResolver units, string? parameter) {
         if (PortableScalar.TryParse(a, out var x) && PortableScalar.TryParse(b, out var y)) {
             if (x.Kind != y.Kind) return false;
             var (va, vb) = x.Kind == PortableScalarKind.Length ? (x.Feet, y.Feet) : (x.Value, y.Value);
             return Math.Abs(va - vb) < Tolerance;
         }
-        if (parameter is not null && units(parameter, a, out var ua) && units(parameter, b, out var ub)) return Math.Abs(ua - ub) < Tolerance;
+        if (parameter is not null && units(parameter, new PortableValue(PortableValueKind.Text, a, null), out var ua)
+            && units(parameter, new PortableValue(PortableValueKind.Text, b, null), out var ub)) return Math.Abs(ua - ub) < Tolerance;
         return string.Equals(a.Trim(), b.Trim(), StringComparison.Ordinal);
     }
 
@@ -579,7 +585,8 @@ public static class FamilyReconciler {
         foreach (var cell in cells) {
             var (type, param) = cell.Cell ?? throw new InvalidOperationException("A type-cell change requires typed identity.");
             if (!rows.TryGetValue(param, out var row)) rows[param] = row = new PerTypeAssignmentRow { Parameter = param };
-            row.ValuesByType[type] = (string)cell.After!;
+            var value = (PortableValue)cell.After!;
+            row.ValuesByType[type] = value.Kind == PortableValueKind.Measured ? new JObject { ["value"] = value.Text, ["unit"] = value.Unit } : value.Text;
         }
         return new SetKnownParamsSettings { PerTypeAssignmentsTable = rows.Values.ToList() };
     }

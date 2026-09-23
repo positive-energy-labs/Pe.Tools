@@ -1,4 +1,4 @@
-using System.Reflection;
+using static Pe.Revit.Parameters.ParameterUnitResolver;
 
 namespace Pe.Revit.DocumentData.Schedules.Authored.ValueDomains;
 
@@ -86,51 +86,6 @@ public static class ScheduleFieldFormatValueDomain {
         } catch {
             return false;
         }
-    }
-
-    // GetValidSymbols/GetUnitLabel/GetSymbolLabel are public: ParameterUnitResolver reuses this
-    // class as the spec→units/labels/symbols core for unit-aware value conversion.
-    public static IEnumerable<ForgeTypeId> GetValidSymbols(ForgeTypeId unitTypeId) {
-        try {
-            return FormatOptions.GetValidSymbols(unitTypeId);
-        } catch {
-            return [];
-        }
-    }
-
-    public static string GetUnitLabel(ForgeTypeId unitTypeId) {
-        try {
-            var label = LabelUtils.GetLabelForUnit(unitTypeId);
-            if (!string.IsNullOrWhiteSpace(label))
-                return label;
-        } catch {
-        }
-
-        return GetStaticMemberName(typeof(UnitTypeId), unitTypeId) ?? unitTypeId.TypeId;
-    }
-
-    public static string GetSymbolLabel(ForgeTypeId symbolTypeId) {
-        try {
-            var label = LabelUtils.GetLabelForSymbol(symbolTypeId);
-            if (!string.IsNullOrWhiteSpace(label))
-                return label;
-        } catch {
-        }
-
-        return GetStaticMemberName(typeof(SymbolTypeId), symbolTypeId) ?? symbolTypeId.TypeId;
-    }
-
-    private static string? GetStaticMemberName(Type type, ForgeTypeId forgeTypeId) {
-        foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Static)) {
-            if (property.PropertyType != typeof(ForgeTypeId))
-                continue;
-
-            if (property.GetValue(null) is ForgeTypeId value &&
-                string.Equals(value.TypeId, forgeTypeId.TypeId, StringComparison.OrdinalIgnoreCase))
-                return property.Name;
-        }
-
-        return null;
     }
 
     private static IEnumerable<T> WhereNotNull<T>(this IEnumerable<T?> values) where T : class {

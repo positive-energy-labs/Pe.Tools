@@ -2,7 +2,9 @@
 import { act, cleanup, fireEvent, render, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import { readMeasuredText, StateCell, type MeasuredValue } from "#/components/lang/cell";
+import type { MeasuredValue } from "@pe/agent-contracts";
+
+import { readMeasuredText, StateCell } from "#/components/lang/cell";
 import { Table } from "#/components/master-table/table";
 
 afterEach(cleanup);
@@ -66,23 +68,15 @@ test("blank commits nothing", () => {
 
 /* ── the cell ───────────────────────────────────────────────────────────────── */
 
-test("a bare number reaches measured.stage as { value, unit }, never onCommit", () => {
+test("a bare number reaches measured.stage as { value, unit }", () => {
   const parse = vi.fn(async () => null);
   const stage = vi.fn();
-  const onCommit = vi.fn();
   const { container } = inTable(
-    <StateCell
-      scale="row"
-      value=""
-      onCommit={onCommit}
-      measured={{ displayUnit: CFM, parse, stage }}
-    />,
+    <StateCell scale="row" value="" measured={{ displayUnit: CFM, parse, stage }} />,
   );
   type(inputOf(container), "300");
   expect(parse).not.toHaveBeenCalled();
   expect(stage).toHaveBeenCalledWith({ value: "300", unit: "CFM" });
-  // The union never reaches the plain door: a measured cell stages through its own.
-  expect(onCommit).not.toHaveBeenCalled();
 });
 
 test("typed text shows as typed until Revit answers, then Revit's value is what is staged", async () => {

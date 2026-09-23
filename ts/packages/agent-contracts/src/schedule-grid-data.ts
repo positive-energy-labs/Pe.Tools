@@ -84,14 +84,16 @@ export type ScheduleCellBindingTarget = z.infer<typeof scheduleCellBindingTarget
  * That the column measures something, and the unit it renders, read from Revit with the binding
  * (`MeasuredDisplayUnit`): the schedule field's effective format, else the document's units for its
  * spec. Absent wherever nothing is measurable; present with a null `typeId` where it measures but
- * this document shows no unit — then the cell asks for one. `specTypeId` is what a parse must be
- * told; `symbol ?? label` is what the cell draws and stages.
+ * this document shows no unit — then the cell asks for one. `refusal` is Revit failing to answer, never
+ * "not measured". `specTypeId` is what a parse must be told; `symbol || label` (symbol, else label;
+ * empty counts as absent) is what the cell draws and stages.
  */
 export const measuredDisplayUnitSchema = z.object({
   specTypeId: z.string(),
   typeId: z.string().nullish(),
   label: z.string().nullish(),
   symbol: z.string().nullish(),
+  refusal: z.string().nullish(),
 });
 export type MeasuredDisplayUnit = z.infer<typeof measuredDisplayUnitSchema>;
 

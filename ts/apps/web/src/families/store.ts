@@ -329,7 +329,7 @@ export function useFamiliesStore(
           transitionPatches(["cells"], key, cells[key] ?? {}, {
             kind: "stage",
             rung: { value },
-            baseline: { value: { ...value, value: current } },
+            baseline: { value: { value: current, storageType: value.storageType } },
           }),
         );
       },

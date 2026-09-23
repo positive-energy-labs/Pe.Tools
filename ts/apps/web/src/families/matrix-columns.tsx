@@ -2,10 +2,10 @@ import { useMemo } from "react";
 import {
   familyCellAddress,
   familyCellKey,
-  familyCellValueSchema,
-  showCellValue,
+  showFamilyCell,
   type FamilyCellState,
   type FamilyCellValue,
+  type MeasuredDisplayUnit,
 } from "@pe/agent-contracts";
 import { reviewTransitions, type CellWire } from "#/components/lang/band";
 import { ReadCell } from "#/components/master-table/cells";
@@ -15,7 +15,6 @@ import {
   StateCell,
   type CellRefusal,
   type CellTransition,
-  type DisplayUnit,
 } from "#/components/lang/cell";
 import type { MeasuredAnswer } from "#/host/measured-parse";
 import { CellListSelect } from "#/components/lang/list-popup";
@@ -26,7 +25,6 @@ import { cellAt } from "#/families/staged";
 import { cn } from "#/lib/utils";
 
 const COMMON_SHARE = 0.3;
-const showFamilyCell = (value: unknown) => familyCellValueSchema.parse(value).value;
 
 export interface TypeRow {
   key: string;
@@ -55,7 +53,7 @@ export interface ParamColumn {
    * That the parameter measures something, and the unit the PROJECT renders it in (the matrix reads
    * the project, so the project's units are what these cells show and stage).
    */
-  displayUnit?: DisplayUnit | null;
+  displayUnit?: MeasuredDisplayUnit | null;
 }
 
 /** Revit's Yes/No spec (`autodesk.spec:spec.bool-1.0.0`), read off the definition's data type. */
@@ -158,7 +156,7 @@ export function useFamiliesColumns({
   /** The families cell wire, with the matrix's lock facts. */
   wire: CellWire;
   /** One read-only host parse for a measured cell; a re-read of the matrix cancels it. */
-  parse?: (unit: DisplayUnit | null | undefined, text: string) => Promise<MeasuredAnswer>;
+  parse?: (unit: MeasuredDisplayUnit | null | undefined, text: string) => Promise<MeasuredAnswer>;
 }) {
   const columns = useMemo<Column<TypeRow>[]>(() => {
     const ordered = [...params].sort((a, b) => {
@@ -320,7 +318,7 @@ export function useFamiliesColumns({
                 onCommit={(next) =>
                   propose(
                     address,
-                    { value: next, storageType: row.storageTypes[col.key]! },
+                    { ...next, storageType: row.storageTypes[col.key]! },
                     value,
                   ).then((refusal) => refusal ?? null)
                 }
@@ -391,28 +389,29 @@ export function ProposalCell({
   /** Why a patch cannot write this cell; present, the cell draws locked and takes no typing. */
   lock?: string;
   /** Resolves to the write's refusal, if any: the kit then restores the drawn value and says it. */
-  onCommit?: (text: string) => Promise<CellRefusal | null>;
+  onCommit?: (value: Omit<FamilyCellValue, "storageType">) => Promise<CellRefusal | null>;
   /**
-   * The measured kind, minus its staging door: a family value is WRITTEN in the unit grammar
-   * ("300 CFM"), so this cell formats what Revit answered into that literal and writes it through
-   * the same `onCommit` as typed text. No second value shape reaches the store.
+   * The measured kind, minus its staging door: what Revit answered stages as `{ value, unit }`
+   * through the same `onCommit` as typed text, and the patch carries that object.
    */
-  measured?: { displayUnit: DisplayUnit; parse: (text: string) => Promise<MeasuredAnswer> };
+  measured?: { displayUnit: MeasuredDisplayUnit; parse: (text: string) => Promise<MeasuredAnswer> };
 }) {
   const move = useCellNavigation();
   const proposal = cell?.proposal;
   const staged = cell?.staged;
-  const shown = staged?.value.value ?? proposal?.value.value ?? current;
+  const stagedText = staged ? showFamilyCell(staged.value) : undefined;
+  const proposedText = proposal ? showFamilyCell(proposal.value) : undefined;
+  const shown = stagedText ?? proposedText ?? current;
   const note = proposal
-    ? `Pea proposed ${current || "(blank)"} → ${proposal.value.value}${
-        staged?.value.value === proposal.value.value
+    ? `Pea proposed ${current || "(blank)"} → ${proposedText}${
+        stagedText === proposedText
           ? "; staged — plan will include it"
           : staged
-            ? `; you staged ${staged.value.value}, so Pea's value is a counter-proposal`
+            ? `; you staged ${stagedText}, so Pea's value is a counter-proposal`
             : "; open — accept (a) or deny (d) it on this cell"
       }. Nothing has reached Revit.`
     : staged
-      ? `You staged ${current || "(blank)"} → ${staged.value.value}. Nothing has reached Revit.`
+      ? `You staged ${current || "(blank)"} → ${stagedText}. Nothing has reached Revit.`
       : reason;
   return (
     <span data-proposal={proposal ? "pea" : undefined} data-staged={staged ? "" : undefined}>
@@ -426,12 +425,11 @@ export function ProposalCell({
         capReason={lock}
         transitions={transitions}
         placeholder={proposal || staged ? current : undefined}
-        measured={
-          measured && onCommit && !lock
-            ? { ...measured, stage: (staged) => onCommit(showCellValue(staged)) }
-            : undefined
-        }
-        onCommit={lock || !onCommit ? undefined : onCommit}
+        {...(lock || !onCommit
+          ? {}
+          : measured
+            ? { measured: { ...measured, stage: onCommit } }
+            : { onCommit: (text: string) => onCommit({ value: text }) })}
         onNavigate={(direction) => move?.(direction) ?? false}
       />
     </span>

@@ -28,7 +28,14 @@ import { timeAgo } from "#/lib/utils";
 import type { ConnectorSpec, FamilyModel, FormSpec, ParamSpec } from "#/family/family-model";
 import { paramRef, paramSpec, parameterText } from "#/family/family-model";
 import type { EvidenceSlice } from "#/family/host";
-import { bindingOf, isFormula, type Draft, type FamilyPageModel } from "#/family/model";
+import {
+  authoredText,
+  bindingOf,
+  formulaOf,
+  type AuthoredValue,
+  type Draft,
+  type FamilyPageModel,
+} from "#/family/model";
 import type {
   GeomConstituent,
   GeomDim,
@@ -383,13 +390,15 @@ export function draftedModel(
     const spec = paramSpec(next, name);
     if (!spec) continue;
     const seeded = spec.formula != null ? `= ${spec.formula}` : parameterText(spec.value);
-    if (value === seeded) continue;
-    if (isFormula(value)) spec.formula = value.replace(/^\s*=\s*/, "");
-    else {
+    if (authoredText(value) === seeded) continue;
+    const formula = formulaOf(value);
+    if (formula !== null) {
+      spec.formula = formula;
+      delete spec.value;
+    } else {
       spec.value = value;
       delete spec.formula;
     }
-    if (isFormula(value)) delete spec.value;
   }
 
   // The type matrix is the draft's, wholesale: an override typed and an override cleared are
@@ -428,7 +437,7 @@ export const FAMILY_CELLS = "cells";
 /** Stage a value at one JSON Pointer. `undefined` DELETES the property, which is a different act
  * from writing an empty string and the settings schema keeps them apart. */
 /** A typed edit, as the shared cell machine stages it. The draft diff is this route's baseline. */
-function stage(segments: string[], value: string | undefined): RouteStatePatch {
+function stage(segments: string[], value: AuthoredValue | undefined): RouteStatePatch {
   return transitionPatches(
     [FAMILY_CELLS],
     settingsFieldPointer(segments),
@@ -457,7 +466,7 @@ export function draftToPatches(
 
   // ── the family level: a value XOR a formula, and the swap costs two patches ──────────────────
   for (const [name, value] of Object.entries(draft.authored)) {
-    if (savedDraft.authored[name] === value) continue;
+    if (authoredText(savedDraft.authored[name]) === authoredText(value)) continue;
 
     // A PROMOTED LITERAL is a whole new parameter, not a changed value: it needs the object the
     // document has no line for at all, seeded with the literal so the geometry does not move.
@@ -474,7 +483,7 @@ export function draftToPatches(
               value: {
                 dataType: seed?.dataType ?? FALLBACK_LENGTH_TYPE,
                 ...(seed?.group ? { propertiesGroup: seed.group } : {}),
-                ...(isFormula(value) ? { formula: value.replace(/^\s*=\s*/, "") } : { value }),
+                ...(formulaOf(value) === null ? { value } : { formula: formulaOf(value) }),
               },
             },
           },
@@ -484,8 +493,9 @@ export function draftToPatches(
     }
 
     const spec = paramSpec(model, name);
-    if (isFormula(value)) {
-      patches.push(stage(["parameters", name, "formula"], value.replace(/^\s*=\s*/, "")));
+    const formula = formulaOf(value);
+    if (formula !== null) {
+      patches.push(stage(["parameters", name, "formula"], formula));
       if (spec?.value != null) patches.push(stage(["parameters", name, "value"], undefined));
     } else {
       patches.push(stage(["parameters", name, "value"], value));
@@ -498,7 +508,7 @@ export function draftToPatches(
     const now = draft.types[typeName] ?? {};
     const disk = savedDraft.types[typeName] ?? {};
     for (const name of new Set([...Object.keys(now), ...Object.keys(disk)])) {
-      if (now[name] === disk[name]) continue;
+      if (authoredText(now[name]) === authoredText(disk[name])) continue;
       patches.push(stage(["types", typeName, name], now[name]));
     }
   }

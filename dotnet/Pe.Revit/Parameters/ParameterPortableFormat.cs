@@ -17,7 +17,7 @@ public static class ParameterPortableFormat {
             var number = UnitUtils.ConvertFromInternalUnits(value, unit).ToString("R", CultureInfo.InvariantCulture);
             foreach (var symbol in symbols) {
                 var text = number + " " + symbol;
-                if (UnitFormatUtils.TryParse(units, spec, text, out var parsed) &&
+                if (UnitValueResolver.TryParse(units, spec, text, out var parsed) &&
                     Math.Abs(parsed - value) <= Math.Max(1, Math.Abs(value)) * 1e-14) return text;
             }
             throw new InvalidOperationException($"Cannot capture exact explicit-unit value for '{spec.TypeId}': {value:R}.");
