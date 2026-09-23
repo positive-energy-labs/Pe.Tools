@@ -83,10 +83,40 @@ Legacy nouns under review: band, readout, read status, rules.
    solid extrusion instead of parameters. The slot contract is the deliverable, the pane is one
    consumer.
 
-## Open
+## Built (branch `families-primitives`, merged to main 2026-09-23)
 
-- Whether the artifacts link is broken live. In the demo lane `artifactDirectory` is a fake path,
-  so the demo proves nothing. UNPROVEN.
+- Slice 1, log column tabbed and dense; slice 2 and 2b, `WorkSentence` from the manifest's
+  `cells`, `WorkBand` deleted; slice 3, `rereads` on an action and the verb wears the stale
+  mark, `ChangedInRevit` and `read-status.tsx` deleted; slice 4, one query box in `TableFrame`.
+- Slice 5: `route/inspect.tsx` (an inspectable is a kind with a label and an open policy),
+  receipts as log rows with links, the right pane's output mode, no fake artifact path.
+- Slice 5b: every log row stands alone, the meter says only the revision, the ReviewRow list
+  lives in the Work slot so the grid never moves (first row y=208 in all states).
+- Slice 6: ruling 3 landed. `families-matrix` envelope (415 bytes for a 1.65 MB body, host
+  test), `read` declares `dirties`/`rereads: matrix`, the stale mark is the host's.
+- Squashed as one commit over main; reports and screenshots under
+  `.artifacts/runs/demiurge-20260923-families/`.
+- 2026-09-23, the 2026-09-22 line "a read is never a verb button" is superseded by ruling 5:
+  the read verb is a verb and carries the stale mark; the rail that line protected is gone.
+
+## Rulings after the merge review (2026-09-23)
+
+17. The log column lost its character: rows need the timestamp back and an ok/err mark; colour
+   on the row is undecided. Capped at about 7 rows with expand/hide.
+18. The output pane is strange. Proposals/staged, plan/apply and spec/output want one place;
+   where the doc-lab (spec editor) then goes is unruled. A `protoui` question, not a slice.
+19. Query chips are right; they need ellipsis truncation.
+20. The proposal sentence is good enough; code is the spec.
+
+## Open
+- The caution tint on a quiet verb button is faint (slice 3 report); a stale verb must read at a
+  glance (house law 3). Kit fix, owed to the ledger at close.
+- Archived reads show their read issues nowhere after slice 3.
+- A staged cell that apply retires logs as "unstaged 1 cell". Target rows say the openId, not
+  the document title.
+- A matrix body fetch failure is swallowed; the matrix keeps its last body.
+- `/family` keeps the approximate change mark (`rereads: "work"`).
+- ADR for ruling 3 (envelope on stream, body on RPC).
 
 ## Shapes on the table
 
