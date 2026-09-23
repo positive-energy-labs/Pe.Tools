@@ -93,19 +93,22 @@ export interface NarrowChipProps {
 
 /** A removable narrowing control. Same shell as a fact, one affordance more. */
 export function NarrowChip({ label, count, onRemove, title, caution }: NarrowChipProps) {
-  const { base, count: countSlot, remove } = chipRecipe({ tone: caution ? "caution" : "meta" });
+  const slot = chipRecipe({ tone: caution ? "caution" : "meta" });
   return (
     <span
-      className={base()}
+      className={slot.base()}
       data-tone={caution ? "caution" : undefined}
       data-surface="artifact"
       title={title}
     >
-      {label}
-      <span className={countSlot()}>{count}</span>
+      {/* One width for every narrowing; the full label rides the title. */}
+      <span className={slot.label({ class: "max-w-[18ch]" })} title={`${label} — ${title}`}>
+        {label}
+      </span>
+      <span className={slot.count()}>{count}</span>
       <button
         type="button"
-        className={remove()}
+        className={slot.remove()}
         onClick={onRemove}
         title={`Remove the "${label}" narrowing — widens the view back out`}
       >

@@ -293,10 +293,10 @@ async function landed(page: Page, pattern: RegExp) {
   return decodeURIComponent(new URL(page.url()).searchParams.get("path")!);
 }
 
-/** The page log drew a row for the verb whose hover says `says`: the row is the label, hover the rest. */
+/** The page log drew a row for the verb whose hover says `says`: the row ends in the label, hover says the rest. */
 async function logged(page: Page, label: string, says: string) {
   const rows = page.locator(`section[aria-label="Situation"] li[title$=" · ${says}"]`);
-  const row = rows.filter({ hasText: new RegExp(`^${label}$`) });
+  const row = rows.filter({ hasText: new RegExp(`${label}$`) });
   await expect.poll(() => row.count(), { timeout: 30_000 }).toBeGreaterThan(0);
 }
 

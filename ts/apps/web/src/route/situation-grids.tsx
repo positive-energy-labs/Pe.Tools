@@ -1,5 +1,6 @@
 /** The Situation's grids: the ledger behind the gauge and the page log column. */
 import { useState, type ReactNode } from "react";
+import { Press } from "#/components/lang/press";
 import { Switcher } from "#/components/lang/switcher";
 import { Inspect, inspectableOf } from "./inspect";
 import type { RouteManifest } from "./manifest";
@@ -25,10 +26,13 @@ export function Ledger({ rows }: { rows: readonly (readonly [string, ReactNode])
   );
 }
 
+const CAP = 7;
+
 /**
  * The page log column, newest first. Its head is the title and one tab per kind (all, each
  * reading, work, target); a verb belongs to a reading when its action dirties it. A tab with no
- * entries is not drawn. A row is the entry's label; hover says when and what it said.
+ * entries is not drawn. A row is `[at] [mark] label [link]`: ✓ a verb that ran, ✕ a refusal or
+ * failure; hover says what it said. The newest 7 show until "N more" opens the rest.
  */
 export function PageLog({
   entries,
@@ -38,6 +42,7 @@ export function PageLog({
   manifest: RouteManifest<any, any, any, any>;
 }) {
   const [picked, setPicked] = useState("all");
+  const [all, setAll] = useState(false);
   const actions = (manifest.actions ?? {}) as Record<string, { dirties?: readonly string[] }>;
   const tabOf = (entry: LogEntry) =>
     entry.kind === "verb" ? (actions[entry.action ?? ""]?.dirties ?? []) : [entry.kind];
@@ -59,16 +64,30 @@ export function PageLog({
             options={tabs.map((value) => ({ value, label: value, title: `${value} entries` }))}
           />
         ) : null}
+        {/* On the title line: the head is a fixed height, so a line under the rows would be clipped. */}
+        {shown.length > CAP ? (
+          <span className="ml-auto">
+            <Press type="button" tone="quiet" size="caption" onClick={() => setAll(!all)}>
+              {all ? "newest 7 ▴" : `${shown.length - CAP} more ▸`}
+            </Press>
+          </span>
+        ) : null}
       </div>
-      <ul className="hairline-t mt-1.5 h-24 overflow-y-auto pt-1 t-prose">
-        {shown.map((entry, index) => (
+      <ul className="hairline-t mt-1.5 h-[7lh] overflow-y-auto t-prose">
+        {(all ? shown : shown.slice(0, CAP)).map((entry, index) => (
           <li
             key={index}
             title={`${entry.at} · ${entry.says}`}
-            data-tone={entry.refused ? "caution" : undefined}
-            className="flex min-w-0 gap-2 truncate"
+            className="flex min-w-0 items-baseline gap-2"
           >
-            <span className={entry.refused ? "" : "text-ink"}>
+            <span className="face-mono shrink-0 t-small text-ink-mute">{entry.at}</span>
+            <span
+              className="w-[1ch] shrink-0 t-small"
+              data-tone={entry.refused ? "caution" : entry.kind === "verb" ? "done" : undefined}
+            >
+              {entry.refused ? "✕" : entry.kind === "verb" ? "✓" : ""}
+            </span>
+            <span className="min-w-0 truncate text-ink">
               {entry.link && inspectableOf(manifest.inspectables, entry.link.kind) ? (
                 <Inspect
                   spec={inspectableOf(manifest.inspectables, entry.link.kind)!}
