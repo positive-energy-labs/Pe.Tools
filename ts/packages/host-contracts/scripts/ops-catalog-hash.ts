@@ -3,8 +3,12 @@
  * dotnet edit that forgets to regenerate is drift. Rebuilding dotnet to notice took 200 to 330 s per
  * guard run; hashing every C# source takes milliseconds and reddens on the same edits.
  *
- *   --write   record the hash of every git-tracked dotnet/**\/*.cs outside *.Tests beside the artifact
- *   (none)    exit 1 when the recorded hash differs from the sources; the fix is `pnpm codegen`
+ *   --write   record the digest of every git-tracked dotnet/**\/*.cs outside *.Tests beside the artifact
+ *   (none)    exit 1 when the recorded digest differs from the sources; the fix is `pnpm codegen`
+ *
+ * Git-tracked only, hashed as git blobs: build output and stray files never reach the digest,
+ * `git hash-object` applies the same eol normalization in every checkout, and an uncommitted C#
+ * edit still changes its blob id, so the guard sees it before the commit.
  *
  * ponytail: any C# edit, op or not, demands one regen. A narrower hash needs the op graph, which
  * only the dotnet build knows.
@@ -12,25 +16,31 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const DOTNET = resolve(HERE, "../../../../dotnet");
+const ROOT = resolve(HERE, "../../../..");
 const SHA = resolve(HERE, "../src/generated/ops-catalog.sha");
 
-// Git-tracked only: build output and stray files never reach the hash, and `git ls-files` speaks
-// forward slashes on every platform, so the digest is the same in every checkout of one commit.
-const hash = createHash("sha256");
-const tracked = execFileSync("git", ["ls-files", "-z", "--", "*.cs"], { cwd: DOTNET })
+// Both calls run from the repo root: `hash-object --stdin-paths` reads paths relative to it.
+const tracked = execFileSync("git", ["ls-files", "-z", "--", "dotnet/*.cs"], { cwd: ROOT })
   .toString("utf8")
   .split("\0")
   .filter((f) => f.length > 0 && !/\.Tests\//.test(f))
   .sort();
-for (const f of tracked) {
+const blobs = execFileSync("git", ["hash-object", "--stdin-paths"], {
+  cwd: ROOT,
+  input: `${tracked.join("\n")}\n`,
+})
+  .toString("utf8")
+  .trim()
+  .split("\n");
+const hash = createHash("sha256");
+tracked.forEach((f, i) => {
   hash.update(f);
-  hash.update(readFileSync(join(DOTNET, f)));
-}
+  hash.update(blobs[i]!);
+});
 const now = hash.digest("hex");
 
 if (process.argv.includes("--write")) {
