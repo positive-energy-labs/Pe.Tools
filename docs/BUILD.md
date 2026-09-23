@@ -352,7 +352,7 @@ Useful dev-lane refresh commands:
 
 ```powershell
 pe-revit path ensure     # once per machine: registers <appBase>\shims on the user PATH (safely)
-pe-revit dev link        # from this checkout: routes the pea shim to source
+pe-revit dev link        # from this checkout: routes the pea shim to source and the pe-revit shim to the cwd's pinned tool
 pe-revit dev status      # shows each shim's resolved lane
 pnpm --dir ts dev
 pea

@@ -1,6 +1,6 @@
 # ADR 0006 — Vendor upstream packages through a committed repo-local feed
 
-Date: 2026-08-17. Status: accepted, implemented.
+Date: 2026-08-17. Status: accepted, amended 2026-09-22: the nupkgs are no longer committed (`.gitignore` excludes `eng/sdk-feed/*.nupkg` since the history rewrite), so the feed is machine-local and each worktree carries its own copy; the `sdk-feed` repo guard (`ts/tests/repo-guards`) fails until the pinned family is present. Publishing to nuget.org retires the feed (SDK release ledger).
 
 ## Context
 

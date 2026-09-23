@@ -84,7 +84,8 @@ dotnet tool run pe-revit -- <command> --json
 
 - Create worktrees as sibling directories with `git worktree add`; never nest them.
 - A fresh worktree has no dependency install. From `ts`, run `vp i --frozen-lockfile --prefer-offline`. Vite+ owns dependency installation; never use bare `pnpm install`.
-- A fresh worktree has no `eng/sdk-feed` (gitignored). Copy the `.nupkg` files from the main checkout; never junction or symlink them. `Remove-Item -Recurse` and `git worktree remove --force` follow a junction and empty the main checkout's feed (happened 2026-09-22; restore from `Pe.Revit.Sdk\.artifactseed`).
+- A fresh worktree has no `eng/sdk-feed` (gitignored). Copy the pinned `.nupkg` files from `Pe.Revit.Sdk\.artifacts\feed` or the main checkout; never junction or symlink them (a junction let `git worktree remove --force` empty the main checkout's feed, 2026-09-22). The `sdk-feed` repo guard fails until the pinned family is present.
+- Bare `pe-revit` on PATH is the product shim. Run `dotnet tool run pe-revit -- dev link` once from any checkout so the shim's dev lane runs the pinned tool of whatever cwd you are in (SDK beta.163); `dotnet tool run pe-revit -- <verb>` is the same tool without the shim.
 - Never `git stash` in a worktree. `refs/stash` is shared by every worktree of one repo; parallel lanes pop each other's work. Baseline with a throwaway worktree or `git diff > file`.
 - Herdr is PowerShell. Use one named Herdr session per worktree. Parse its returned session, workspace, tab, and pane IDs; never infer focus.
 - Before first use, resolve `herdr` with `Get-Command herdr`. If it is absent, set `HERDR_BIN` to the executable or report the agent lane unavailable; do not retry the wrapper unchanged.
