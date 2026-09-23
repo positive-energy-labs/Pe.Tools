@@ -1,4 +1,3 @@
-import { browserActionSays } from "@pe/agent-contracts";
 /**
  * THE MEMBER EDITOR — one member, one draft; form and raw JSON are two modes of that draft. A draft
  * the form cannot render stays raw, byte for byte. Offline the host answers schema issues only;
@@ -51,7 +50,7 @@ import {
   saveSettingsAction,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
-import { defineRoute, semanticActionFacts, type MemberRef } from "./manifest";
+import { defineRoute, type MemberRef } from "./manifest";
 import { Ladder } from "./ladder";
 import { podHost, type Composed } from "./pods";
 import { useRoute, type RouteHandle } from "./use-route";
@@ -112,7 +111,7 @@ export const memberWorkManifest = (seed?: SettingsRouteDocument) => {
     actions: {
       open: {
         label: "open",
-        says: browserActionSays.memberOpen,
+        says: "adopts the member's saved bytes as the Work basis; refuses while edits are pending",
         needs: "host",
         actor: "any",
         input: openInput as never,
@@ -144,7 +143,7 @@ export const memberWorkManifest = (seed?: SettingsRouteDocument) => {
       },
       adopt: {
         label: "adopt disk bytes",
-        says: browserActionSays.memberAdopt,
+        says: "adopts the member as it is on disk now and discards the old proposals and staged fields",
         needs: "host",
         actor: "human",
         input: adoptInput as never,
@@ -170,7 +169,7 @@ export const memberWorkManifest = (seed?: SettingsRouteDocument) => {
       },
       save: {
         label: "save",
-        ...semanticActionFacts("settings.write"),
+        does: "settings.write",
         input: z.void() as never,
         dirties: [],
         requires: { work: true },

@@ -1,4 +1,4 @@
-import { browserActionSays } from "@pe/agent-contracts";
+import { askLifetime } from "@pe/agent-contracts";
 /**
  * The chat route, declared once. The thread head is a Reading, so the route's default Target is
  * whatever the head says — `useRoute` reads it back out of `readings` and no component keeps a
@@ -65,7 +65,7 @@ export const chatManifest = (
     actions: {
       send: {
         label: "send",
-        says: browserActionSays.chatSend,
+        says: "sends the composer's prompt to pea under the thread's admitted target",
         needs: "host",
         actor: "human",
         input: promptInput as unknown as z.ZodType<never>,
@@ -90,7 +90,7 @@ export const chatManifest = (
       },
       cancel: {
         label: "cancel",
-        says: browserActionSays.chatCancel,
+        says: `stops the running turn; its open asks expire, unanswered (an ask ${askLifetime})`,
         needs: "host",
         actor: "human",
         input: z.void() as unknown as z.ZodType<never>,
@@ -103,7 +103,7 @@ export const chatManifest = (
       },
       new: {
         label: "new",
-        says: browserActionSays.chatNew,
+        says: "starts a new, empty thread and opens it",
         needs: "host",
         actor: "human",
         input: z.void() as unknown as z.ZodType<never>,
@@ -115,7 +115,7 @@ export const chatManifest = (
       },
       fork: {
         label: "fork",
-        says: browserActionSays.chatFork,
+        says: "clones this thread, messages and all, and opens the clone",
         needs: "host",
         actor: "human",
         input: z.void() as unknown as z.ZodType<never>,

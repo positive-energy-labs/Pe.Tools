@@ -2,7 +2,7 @@ import type { PodList } from "@pe/host-contracts/operation-types";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
-import { familiesRouteState } from "@pe/agent-contracts";
+import { familiesRouteState, hostActions } from "@pe/agent-contracts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-types";
@@ -94,6 +94,11 @@ async function find(input: Record<string, unknown>) {
     map: { total: number; kinds: Array<{ kind: string }> };
   };
 }
+
+test("every host action record is one pe_find row", () => {
+  const keys = new Set(catalog().capabilities.map((row) => row.key.replace(/^(op|workflow):/, "")));
+  expect(Object.keys(hostActions).filter((key) => !keys.has(key))).toEqual([]);
+});
 
 test("pe_find offers operations, collaborative Work, valid Pod entrypoints and skills", async () => {
   const rows = (await find({ query: "", mutates: false })).matches;

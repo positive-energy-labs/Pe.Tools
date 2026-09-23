@@ -1,4 +1,3 @@
-import { browserActionSays } from "@pe/agent-contracts";
 /**
  * The Parameter Links route, declared once. It has NO seeds by ruling (spec §7): the fixture
  * lane it used to carry is deleted, not ported, so `?demo=` is inert here.
@@ -11,12 +10,7 @@ import {
   stagedParameterProfile,
 } from "@pe/agent-contracts";
 
-import {
-  defineRoute,
-  semanticActionFacts,
-  semanticActionInputSchema,
-  type Ctx as RouteCtx,
-} from "#/route";
+import { defineRoute, semanticActionInputSchema, type Ctx as RouteCtx } from "#/route";
 import {
   actionResult,
   readFamilyCapture,
@@ -70,7 +64,7 @@ export const manifest = defineRoute<
   actions: {
     refresh: {
       label: "refresh",
-      says: browserActionSays.linksRefresh,
+      says: "Read the stored parameter links of the bound project without evaluating the draft.",
       needs: "project",
       actor: "any",
       input: z.void(),
@@ -80,7 +74,7 @@ export const manifest = defineRoute<
     },
     preview: {
       label: "preview",
-      says: browserActionSays.linksPreview,
+      says: "Evaluate the shared draft and project its exact target writes.",
       needs: "project",
       actor: "any",
       input: z.void(),
@@ -92,7 +86,7 @@ export const manifest = defineRoute<
     },
     previewProposal: {
       label: "preview Pea's proposal",
-      says: browserActionSays.linksProposal,
+      says: "Evaluate Pea's proposed profile — a labelled preview that never arms apply.",
       needs: "project",
       actor: "any",
       input: z.void(),
@@ -103,7 +97,7 @@ export const manifest = defineRoute<
     },
     apply: {
       label: "apply links",
-      ...semanticActionFacts("parameter-links.apply"),
+      does: "parameter-links.apply",
       input: semanticActionInputSchema("parameter-links.apply") as never,
       dirties: ["links", "receipts"],
       requires: { work: true, readings: ["links"] },

@@ -60,7 +60,7 @@ export function FlowMatrix({ handle }: { handle: RouteHandle<any, any, any, any>
           <Fragment key={name}>
             <span className="text-ink">
               {action.label}
-              {action.actor === "human" ? (
+              {handle.actions[name].actor === "human" ? (
                 <span className="t-small face-mono text-ink-mute"> human</span>
               ) : null}
             </span>
@@ -78,7 +78,7 @@ export function FlowMatrix({ handle }: { handle: RouteHandle<any, any, any, any>
                 </span>
               );
             })}
-            <span className="t-small face-mono text-ink-mute">{action.needs}</span>
+            <span className="t-small face-mono text-ink-mute">{handle.actions[name].needs}</span>
           </Fragment>
         ))}
       </div>

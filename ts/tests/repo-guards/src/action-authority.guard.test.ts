@@ -1,5 +1,4 @@
 import { readFileSync, readdirSync } from "node:fs";
-import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { expect, test } from "vite-plus/test";
 import ts from "typescript";
@@ -17,41 +16,6 @@ test("Pea has one capability admission door", () => {
       ].map(() => String(path).replaceAll("\\", "/")),
     );
   expect(owners).toEqual(["shared/admission.ts"]);
-});
-
-test("action blocks use shared prose instead of local says literals", () => {
-  const repo = resolve(src, "../../../..");
-  const violations: string[] = [];
-  const paths = execFileSync("git", ["ls-files", "--", "ts/**/*.ts", "ts/**/*.tsx"], {
-    cwd: repo,
-    encoding: "utf8",
-  })
-    .trim()
-    .split("\n");
-  for (const path of paths.filter((path) => !path.endsWith("/semantic-actions.ts"))) {
-    const source = ts.createSourceFile(
-      path,
-      readFileSync(resolve(repo, path), "utf8"),
-      ts.ScriptTarget.Latest,
-      true,
-    );
-    const visit = (node: ts.Node, actions = false) => {
-      const inside =
-        actions || (ts.isPropertyAssignment(node) && node.name.getText(source) === "actions");
-      if (
-        inside &&
-        ts.isPropertyAssignment(node) &&
-        node.name.getText(source) === "says" &&
-        (ts.isStringLiteralLike(node.initializer) || ts.isTemplateExpression(node.initializer))
-      )
-        violations.push(
-          `${path}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}`,
-        );
-      ts.forEachChild(node, (child) => visit(child, inside));
-    };
-    visit(source);
-  }
-  expect(violations).toEqual([]);
 });
 
 test("every catalog operation has a renderer or an explicit raw receipt decision", () => {

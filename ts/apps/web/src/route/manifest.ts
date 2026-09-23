@@ -11,6 +11,7 @@ import type { ReactNode } from "react";
 import { z } from "zod";
 import type { Chord } from "./keys";
 import {
+  hostActions,
   sameValue,
   semanticActions,
   stagedEntries,
@@ -18,6 +19,7 @@ import {
   type Rung,
   type SemanticActionKey,
 } from "@pe/agent-contracts";
+import { targetNeed, type ActionIdentity } from "./facts";
 import type {
   ExecutionTarget,
   Reading,
@@ -28,19 +30,6 @@ import type {
   WorkKey,
 } from "@pe/agent-contracts";
 import type { Refusal } from "./refusal";
-
-const semanticNeeds = {
-  nothing: "host",
-  session: "session",
-  document: "document",
-  "project-document": "project",
-  "family-document": "family",
-} as const;
-
-export const semanticActionFacts = (key: SemanticActionKey) => {
-  const { says, needs, actor } = semanticActions[key];
-  return { says, needs: semanticNeeds[needs], actor };
-};
 
 export const semanticActionInput = (
   key: SemanticActionKey,
@@ -83,14 +72,10 @@ export interface Ctx<W, R extends string, P> {
 import { DEFAULT_WAIT_S, HOST_READ_WAIT_S, NATIVE_APPLY_WAIT_S, NATIVE_READ_WAIT_S } from "./waits";
 export { DEFAULT_WAIT_S, HOST_READ_WAIT_S, NATIVE_APPLY_WAIT_S };
 
-export interface RouteAction<W, R extends string, P, I = void> {
+export type RouteAction<W, R extends string, P, I = void> = ActionIdentity<W, R, P> & {
   label: string;
-  /** What the verb does in any state: the catalog's words. */
-  says: string;
   /** What it does now, when that depends on the state (plan: the staged draft or the saved spec). */
   saysNow?: (ctx: Ctx<W, R, P>) => string;
-  needs: "host" | "session" | "document" | "project" | "family";
-  actor: "any" | "human";
   input: z.ZodType<I>;
   /** Browser Reading keys invalidated on success; semantic actions name Host and Pea resources. */
   dirties: readonly R[];
@@ -110,7 +95,7 @@ export interface RouteAction<W, R extends string, P, I = void> {
   count?: (ctx: Ctx<W, R, P>) => number | null;
   ready: (ctx: Ctx<W, R, P>, input: I) => string | null;
   run: (ctx: Ctx<W, R, P>, input: I) => Promise<void | Refusal | null>;
-}
+};
 
 interface View<R extends string> {
   key: string;
@@ -470,9 +455,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
   const capture: RouteAction<unknown, string, EntityPage, never> = {
     waitSeconds: NATIVE_READ_WAIT_S,
     label: `capture ${def.entity}`,
-    says: `reads the ${def.entity} from Revit into new members of the chosen pod`,
-    actor: "any",
-    needs: semanticActionFacts(def.capture).needs,
+    does: def.capture,
     input: z.void() as unknown as z.ZodType<never>,
     dirties: ["pods"],
     count: (ctx) => (def.target === "selection" ? ctx.page.selection.length || null : null),
@@ -510,7 +493,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
               : `plans the saved ${def.entity} spec and opens the confirmation sheet; changes nothing`,
         }
       : {}),
-    needs: semanticActionFacts(def.apply).needs,
+    needs: targetNeed(hostActions[def.apply].needs),
     actor: "any",
     input: z.void() as unknown as z.ZodType<never>,
     dirties: [],
@@ -534,7 +517,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
   const apply: RouteAction<unknown, string, EntityPage, never> = {
     waitSeconds: NATIVE_APPLY_WAIT_S,
     label: `apply ${def.entity}`,
-    ...semanticActionFacts(def.apply),
+    does: def.apply,
     // The plan sheet gates apply: its button is the only one (w8-revit trip 5).
     ...(plan || staged ? { sheet: true as const } : {}),
     input: z.void() as unknown as z.ZodType<never>,

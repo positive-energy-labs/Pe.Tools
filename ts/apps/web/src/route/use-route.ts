@@ -26,6 +26,7 @@ import {
   targetInventory,
 } from "#/readings";
 import { DEFAULT_WAIT_S, type RouteManifest } from "./manifest";
+import { actionFacts, staticNeed, type ActionFacts } from "./facts";
 import { callHostDynamic } from "#/host/client";
 import { causeRefusal, refuse, type Refusal } from "./refusal";
 import { useThreadScope } from "#/chat/scope";
@@ -45,9 +46,8 @@ import {
 import { docAtom, docWriter, notHydrated } from "./route-work";
 import { useRouteTarget, type BindingLost } from "./route-target";
 
-export interface ActionHandle {
+export interface ActionHandle extends ActionFacts {
   readonly label: string;
-  readonly says: string;
   readonly chord?: string;
   /** The manifest's `ready()` sentence; null = runnable. */
   readonly refusal: string | null;
@@ -190,7 +190,7 @@ export function useRoute<W, R extends string, P, A extends string>(
   // Address is unresolved. Host/file Work and explicit named workspaces intentionally use null.
   const workNeedsTarget = (
     Object.values(manifest.actions ?? {}) as NonNullable<typeof manifest.actions>[A][]
-  ).some((action) => action.requires?.work && action.needs !== "host");
+  ).some((action) => action.requires?.work && staticNeed(action) !== "host");
   const canReadWork =
     seed || work !== undefined || resolvedAddress !== null || ephemeral || !workNeedsTarget;
   const slice = useMemo(
@@ -387,7 +387,7 @@ export function useRoute<W, R extends string, P, A extends string>(
     };
     const requirementRefusal = (action: NonNullable<typeof manifest.actions>[A]) => {
       if (seed) return "frozen seed is read-only";
-      const target = targetRefusal(action.needs);
+      const target = targetRefusal(actionFacts(action, ctx as never).needs);
       if (target) return target;
       // Read and absent is a state of the world, not a loading one: say it (F-X-2). The first
       // authored write (a selection, a staged cell) initializes the Work.
@@ -451,9 +451,11 @@ export function useRoute<W, R extends string, P, A extends string>(
         const name = entry[0] as A;
         const action = entry[1] as NonNullable<typeof manifest.actions>[A];
         const health = requirementRefusal(action);
+        const facts = actionFacts(action, ctx as never);
         const handle: ActionHandle = {
+          ...facts,
           label: action.label,
-          says: action.saysNow?.(ctx as never) ?? action.says,
+          says: action.saysNow?.(ctx as never) ?? facts.says,
           ...(typeof action.chord === "string" ? { chord: action.chord } : {}),
           ...(action.stage ? { stage: action.stage } : {}),
           count: health ? null : (action.count?.(ctx as never) ?? null),
@@ -463,8 +465,6 @@ export function useRoute<W, R extends string, P, A extends string>(
             const refusal = await owner.runAction(
               name,
               async () => {
-                const target = targetRefusal(action.needs);
-                if (target) return refuse("no-target", target);
                 const unavailable = requirementRefusal(action);
                 if (unavailable) return refuse("not-ready", unavailable);
                 // The verb row runs a verb bare. An empty-object input is supplied; a verb that

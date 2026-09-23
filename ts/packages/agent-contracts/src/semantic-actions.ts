@@ -1,26 +1,31 @@
 import type { ActionReadingKey } from "./reading.ts";
-import { askLifetime } from "./thread.ts";
-import { instancesActions } from "./instances.ts";
-import { scheduleActions } from "./schedule-actions.ts";
-import { familyActions } from "./family-actions.ts";
+import { instancesActions, instancesReading } from "./instances.ts";
+import { scheduleActions, scheduleReads } from "./schedule-actions.ts";
+import { familyActions, familyReads } from "./family-actions.ts";
 import { stagedRoomEditSchema } from "./takeoffs.ts";
 import { nativeProcessSchema } from "./action-receipts.ts";
 import { z } from "zod";
 import { executionTargetSchema } from "./target.ts";
 import { workKeySchema } from "./route-state.ts";
 
+/** The target an action must be admitted against. `nothing` runs on the host alone. */
+export type ActionNeed =
+  | "nothing"
+  | "session"
+  | "document"
+  | "project-document"
+  | "family-document";
+
 /**
- * One record per Action. It projects to a button, a refusal, a chord, a help row, an agent tool,
- * a demo id and a host admission; nothing is declared twice.
+ * One record per host action. A browser verb, a help row, a refusal, an agent tool and a receipt
+ * are projections of it (a browser verb names it by key: `RouteAction.does`); nothing is declared twice.
  */
 export interface ActionDefinition {
   /** One sentence for a stranger; the agent tool description and the help row. */
   says: string;
-  /** A literal hotkey string, e.g. "mod+k". The shell registers it; the route never does. */
-  chord?: string;
   /** The Reading keys this action invalidates on success. */
   dirties: readonly ActionReadingKey[];
-  needs: string;
+  needs: ActionNeed;
   actor: "any" | "human";
   input: z.ZodType;
 }
@@ -33,7 +38,6 @@ const definitions = {
     actor: "human",
     input: z.object({ stage: z.string().min(1) }),
     dirties: ["snapshot"],
-    executors: ["takeoffs.initialize-carrier"],
   },
   "takeoffs.adopt": {
     says: "Adopt selected regions using the submitted names and system tags.",
@@ -43,7 +47,6 @@ const definitions = {
       views: z.array(z.object({ view: z.string(), items: z.array(item).min(1) })).min(1),
     }),
     dirties: ["snapshot", "takeoff-views", "candidates"],
-    executors: ["takeoffs.initialize-carrier", "takeoffs.adopt"],
   },
   "takeoffs.partition": {
     says: "Prepare carriers and partition the selected adopted zone.",
@@ -57,7 +60,6 @@ const definitions = {
       runId: z.string().optional(),
     }),
     dirties: ["snapshot", "takeoff-views"],
-    executors: ["takeoffs.initialize-carrier", "takeoffs.partition"],
   },
   "takeoffs.sync": {
     says: "Insert eligible rooms, preserve system/link behavior, and update linked staged rooms in RHVAC.",
@@ -65,7 +67,6 @@ const definitions = {
     actor: "any",
     input: z.object({ path: z.string().min(1), zones: z.array(z.string()).default([]) }),
     dirties: ["snapshot", "rhvac-open"],
-    executors: ["rhvac.sync", "takeoffs.rhvac-links"],
   },
 } as const;
 export const takeoffActions = definitions;
@@ -147,45 +148,12 @@ export const preparedTakeoffSchema = z.strictObject({
   decisions: z.record(z.string(), z.enum(["accept", "dismiss"])),
 });
 
-/** Browser-only verbs describe local Work and Page changes, not executable host workflows. */
-export const browserActionSays = {
-  chatCancel: `stops the running turn; its open asks expire, unanswered (an ask ${askLifetime})`,
-  chatFork: "clones this thread, messages and all, and opens the clone",
-  chatNew: "starts a new, empty thread and opens it",
-  chatSend: "sends the composer's prompt to pea under the thread's admitted target",
-  familiesSaveDraft:
-    "Saves a copy of the staged draft into the chosen pod, one member per family, for the person to edit later. Optional: plan does not need it and still plans the staged cells' own bytes.",
-  familiesScope: "Write the drafted categories, families and placement as the audited scope.",
-  familyDismissBuild: "Dismiss the current reviewed build without changing the family profile.",
-  familyPrepareBuild: "Review the exact saved family profile before building its .rfa.",
-  familyRead:
-    "Read the open family's spec from Revit into the draft; files nothing. Proposals stay.",
-  instancesRefresh: "reacquire the SDK census, installed years and recents without changing Work",
-  linksPreview: "Evaluate the shared draft and project its exact target writes.",
-  linksProposal: "Evaluate Pea's proposed profile — a labelled preview that never arms apply.",
-  linksRefresh:
-    "Read the stored parameter links of the bound project without evaluating the draft.",
-  memberAdopt:
-    "adopts the member as it is on disk now and discards the old proposals and staged fields",
-  memberOpen: "adopts the member's saved bytes as the Work basis; refuses while edits are pending",
-  scheduleRead: "reads the selected schedule from Revit into a fresh capture",
-} as const;
-
-/** Ops targets the selected operation; its human press is not another host workflow. */
-export const opsAction = (
-  needs: "nothing" | "document" | "project-document" | "family-document" = "nothing",
-  hostLocal = false,
-) => ({
-  says: "runs the selected operation on the target the sentence names",
-  actor: "human" as const,
-  needs: hostLocal
-    ? ("host" as const)
-    : (
-        {
-          nothing: "session",
-          document: "document",
-          "project-document": "project",
-          "family-document": "family",
-        } as const
-      )[needs],
-});
+/** Every host action a browser verb may name, and every row Pea may find. One key space. */
+export const hostActions = {
+  ...semanticActions,
+  ...actionControls,
+  ...familyReads,
+  ...scheduleReads,
+  "instances.read": instancesReading,
+} satisfies Record<string, ActionDefinition>;
+export type HostActionKey = keyof typeof hostActions;

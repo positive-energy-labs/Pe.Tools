@@ -27,7 +27,7 @@ import {
   takeoffDecisionKey,
 } from "@pe/agent-contracts";
 
-import { semanticActionFacts, semanticActionInput, type Ctx as RouteCtx } from "#/route/manifest";
+import { semanticActionInput, type Ctx as RouteCtx } from "#/route/manifest";
 import {
   runSemanticAction,
   actionResult,
@@ -344,7 +344,7 @@ const syncRefusal = (ctx: Ctx): string | null => {
 export const takeoffActions = {
   initialize: {
     label: "initialize",
-    ...semanticActionFacts("takeoffs.initialize"),
+    does: "takeoffs.initialize",
     input: z.void(),
     dirties: ["snapshot"],
     requires: { readings: ["snapshot"] },
@@ -365,7 +365,7 @@ export const takeoffActions = {
   },
   adopt: {
     label: "adopt",
-    ...semanticActionFacts("takeoffs.adopt"),
+    does: "takeoffs.adopt",
     input: z.void(),
     dirties: ["snapshot"],
     requires: { work: true, readings: ["snapshot"] },
@@ -379,7 +379,7 @@ export const takeoffActions = {
   },
   partition: {
     label: "partition",
-    ...semanticActionFacts("takeoffs.partition"),
+    does: "takeoffs.partition",
     input: z.void(),
     dirties: ["snapshot"],
     requires: { readings: ["snapshot"] },
@@ -458,7 +458,7 @@ export const takeoffActions = {
   },
   "commit-sync": {
     label: "sync",
-    ...semanticActionFacts("takeoffs.sync"),
+    does: "takeoffs.sync",
     input: z.void(),
     dirties: ["snapshot", "rhvacVersion", "receipts"],
     requires: { work: true, readings: ["snapshot", "rhvacVersion"] },

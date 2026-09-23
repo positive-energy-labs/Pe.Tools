@@ -39,7 +39,6 @@ export const familyActions = {
     needs: "nothing",
     actor: "human",
     dirties: ["pods"],
-    executors: ["pod.member.write", "pod.member.save"],
     input: z.object({
       member: podMemberSchema,
       write: z.discriminatedUnion("kind", [
@@ -53,7 +52,6 @@ export const familyActions = {
     needs: "family-document",
     actor: "any",
     dirties: ["pods"],
-    executors: ["family.capture", "pod.member.write"],
     input: z
       .object({ ...captureInto, pod: captureInto.pod.optional(), spec: z.string().optional() })
       .refine((input) => input.pod || (!input.spec && !input.path), "A draft saves into a pod"),
@@ -63,7 +61,6 @@ export const familyActions = {
     needs: "family-document",
     actor: "any",
     dirties: [],
-    executors: ["pod.member.compose", "family.plan"],
     input: z.object({ source: planSourceSchema }),
   },
   "family.apply": {
@@ -71,7 +68,6 @@ export const familyActions = {
     needs: "family-document",
     actor: "human",
     dirties: ["family", "pods"],
-    executors: ["pod.member.compose", "family.apply"],
     input: z.object({
       /** The succeeded `family.plan` action this applies; its sealed preparation is the input. */
       plan: z.string().min(1),
@@ -86,7 +82,6 @@ export const familyActions = {
     needs: "project-document",
     actor: "human",
     dirties: ["pods"],
-    executors: ["families.capture", "pod.member.write"],
     input: z.object({ pod: z.string().min(1), familyIds: z.array(z.number().int()).min(1) }),
   },
   "families.plan": {
@@ -94,7 +89,6 @@ export const familyActions = {
     needs: "project-document",
     actor: "human",
     dirties: [],
-    executors: ["pod.member.compose", "families.plan"],
     input: z
       .object({
         source: planSourceSchema,
@@ -113,7 +107,6 @@ export const familyActions = {
     needs: "project-document",
     actor: "human",
     dirties: ["families", "pods"],
-    executors: ["pod.member.compose", "families.apply"],
     input: z.object({
       /** The succeeded `families.plan` action this applies; its sealed preparation is the input. */
       plan: z.string().min(1),
@@ -125,7 +118,6 @@ export const familyActions = {
     needs: "project-document",
     actor: "human",
     dirties: ["parameter-links"],
-    executors: ["revit.apply.parameter-links"],
     input: z.object({ readingId: z.string().regex(/^[a-f0-9]{64}$/) }),
   },
   "family.build": {
@@ -133,7 +125,6 @@ export const familyActions = {
     needs: "document",
     actor: "human",
     dirties: ["family"],
-    executors: ["pod.member.compose", "family.build"],
     input: z.object({
       source: podMemberSourceSchema,
       outputPath: z.string().optional(),
@@ -144,14 +135,14 @@ export const familyActions = {
 export const familyReads = {
   "family.saved": {
     says: "Read an immutable saved Family reading, including historical citation IDs, without Revit.",
-    dirties: [], // TODO(fold-1): name the Readings this action invalidates
+    dirties: [],
     needs: "nothing",
     actor: "any",
     input: z.object({ id: z.string().regex(/^[a-f0-9]{64}$/) }),
   },
   "parameter-links.read": {
     says: "Read the stored parameter-link profile and runtime status, and optionally evaluate the authored draft, into a durable reading; writes nothing.",
-    dirties: [], // TODO(fold-1): name the Readings this action invalidates
+    dirties: [],
     needs: "project-document",
     actor: "any",
     input: z.object({
@@ -162,7 +153,7 @@ export const familyReads = {
   },
   "family.parse-spec": {
     says: "Read parsed spec blocks and image citations into a durable immutable reading.",
-    dirties: [], // TODO(fold-1): name the Readings this action invalidates
+    dirties: [],
     needs: "nothing",
     actor: "any",
     input: z.object({ url: z.string().url() }),

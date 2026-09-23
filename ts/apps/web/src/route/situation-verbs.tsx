@@ -239,12 +239,12 @@ export function ActionBoard({
             <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 t-small face-mono text-ink-mute">
               {spec ? (
                 <>
-                  {spec.actor === "human" ? (
+                  {action.actor === "human" ? (
                     <Noun title="a person runs this verb; Pea may only propose it">human</Noun>
                   ) : null}
                   needs
-                  <Noun title={`the target this verb needs bound: ${spec.needs}`}>
-                    {spec.needs}
+                  <Noun title={`the target this verb needs bound: ${action.needs}`}>
+                    {action.needs}
                   </Noun>
                   → dirties
                   {spec.dirties.length

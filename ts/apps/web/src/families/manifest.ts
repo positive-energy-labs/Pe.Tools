@@ -1,4 +1,3 @@
-import { browserActionSays } from "@pe/agent-contracts";
 /**
  * `/families`, declared once on the route kernel. The audit is the loaded-families matrix over an
  * authored scope, its cells open to proposals; capture files one spec member per picked family;
@@ -187,7 +186,7 @@ export const manifest = entityRoute<
   actions: {
     scope: {
       label: "apply scope",
-      says: browserActionSays.familiesScope,
+      says: "Write the drafted categories, families and placement as the audited scope.",
       needs: "project",
       actor: "any",
       input: z.void() as never,
@@ -218,7 +217,7 @@ export const manifest = entityRoute<
     },
     "save-draft": {
       label: "save draft to pod",
-      says: browserActionSays.familiesSaveDraft,
+      says: "Saves a copy of the staged draft into the chosen pod, one member per family, for the person to edit later. Optional: plan does not need it and still plans the staged cells' own bytes.",
       needs: "project",
       actor: "any",
       input: z.void() as never,

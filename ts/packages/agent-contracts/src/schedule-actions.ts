@@ -74,7 +74,6 @@ export const scheduleActions = {
     needs: "project-document",
     actor: "human",
     dirties: ["schedules", "pods"],
-    executors: ["schedule.cells.apply", "pod.run.write"],
     input: z.object({ pod: z.string().min(1).optional() }),
   },
   "schedule.capture": {
@@ -82,7 +81,6 @@ export const scheduleActions = {
     needs: "project-document",
     actor: "any",
     dirties: ["pods"],
-    executors: ["schedule.capture", "pod.member.write"],
     input: z.object({
       pod: z.string().min(1),
       path: z.string().min(1).optional(),
@@ -94,21 +92,20 @@ export const scheduleActions = {
     needs: "project-document",
     actor: "human",
     dirties: ["pods"],
-    executors: ["pod.member.compose", "schedule.apply"],
     input: z.object({ source: podMemberSourceSchema }),
   },
 } as const;
 export const scheduleReads = {
   "schedule.grid.catalog": {
     says: "Read schedules from the exact selected document without changing authored Work.",
-    dirties: [], // TODO(fold-1): name the Readings this action invalidates
+    dirties: [],
     needs: "project-document",
     actor: "any",
     input: z.object({}),
   },
   "schedule.grid.snapshot": {
     says: "Read one schedule and its bindings. Returns immutable reading ID and subject workspaceId. Read/propose route:schedules with this workspaceId; stage against basis.captureId. Reading never deletes cells.",
-    dirties: [], // TODO(fold-1): name the Readings this action invalidates
+    dirties: [],
     needs: "project-document",
     actor: "any",
     input: z.object({
@@ -119,14 +116,14 @@ export const scheduleReads = {
   },
   "schedule.grid.work": {
     says: "Read the latest retained schedule reading for a subject Work address. This is dated evidence, not a fresh native read.",
-    dirties: [], // TODO(fold-1): name the Readings this action invalidates
+    dirties: [],
     needs: "nothing",
     actor: "any",
     input: z.object({ workspaceId: z.string().min(1) }),
   },
   "schedule.grid.saved": {
     says: "Read an original immutable schedule snapshot and its exact target without Revit.",
-    dirties: [], // TODO(fold-1): name the Readings this action invalidates
+    dirties: [],
     needs: "nothing",
     actor: "any",
     input: z.object({ id: z.string().regex(/^[a-f0-9]{64}$/) }),

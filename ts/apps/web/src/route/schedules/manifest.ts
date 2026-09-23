@@ -1,4 +1,3 @@
-import { browserActionSays } from "@pe/agent-contracts";
 import { z } from "zod";
 import {
   canonicalRouteInput,
@@ -18,7 +17,6 @@ import {
   refuse,
   HOST_READ_WAIT_S,
   NATIVE_APPLY_WAIT_S,
-  semanticActionFacts,
   semanticActionInputSchema,
   type Ctx as RouteCtx,
   type EntityRouteDef,
@@ -151,7 +149,7 @@ export const schedulesManifest = () =>
         refresh: {
           label: "read schedule",
           waitSeconds: HOST_READ_WAIT_S,
-          says: browserActionSays.scheduleRead,
+          says: "reads the selected schedule from Revit into a fresh capture",
           needs: "document",
           actor: "human",
           input: scheduleReads["schedule.grid.snapshot"].input.prefault(
@@ -196,7 +194,7 @@ export const schedulesManifest = () =>
         push: {
           label: "push",
           waitSeconds: NATIVE_APPLY_WAIT_S,
-          ...semanticActionFacts("schedule.grid.push"),
+          does: "schedule.grid.push",
           input: semanticActionInputSchema("schedule.grid.push") as never,
           dirties: ["work", "saved", "receipts"],
           requires: { work: true, readings: ["saved", "receipts"] },

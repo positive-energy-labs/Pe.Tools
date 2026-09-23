@@ -1,4 +1,3 @@
-import { opsAction } from "@pe/agent-contracts";
 /**
  * The Ops route, declared once. It is the host op runner: the situation ladder picks the target,
  * the catalogue picks the op, the schema draws the form, `run` is the one verb. Every gate the
@@ -8,7 +7,7 @@ import { z } from "zod";
 import { isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 
-import { defineRoute, type Ctx, type RouteManifest } from "#/route";
+import { defineRoute, targetNeed, type Ctx, type HostRecord, type RouteManifest } from "#/route";
 
 export type HostOperationCatalogEntry = HostOperationDefinition & {
   requestSchemaJson?: string;
@@ -19,10 +18,17 @@ export type Custody = "controlled" | "observed";
 export type OpsReading = "inventory";
 export type OpsCtx = Ctx<never, OpsReading, Record<string, never>>;
 
-/** Shared action facts derive the required target from the selected operation. */
-const facts = (op?: HostOperationCatalogEntry) =>
-  opsAction(op?.needs, !op || isTsOnlyOperationKey(op.key));
-export const opNeeds = (op?: HostOperationCatalogEntry) => facts(op).needs;
+/**
+ * The selected operation's record, as the Run verb's `does`. A host-local op needs nothing; a
+ * native op with no document need still needs the session that lists it. Its press is human.
+ */
+export const opRecord = (op?: HostOperationCatalogEntry): HostRecord => ({
+  says: "runs the selected operation on the target the sentence names",
+  actor: "human",
+  needs:
+    !op || isTsOnlyOperationKey(op.key) ? "nothing" : op.needs === "nothing" ? "session" : op.needs,
+});
+export const opNeeds = (op?: HostOperationCatalogEntry) => targetNeed(opRecord(op).needs);
 
 export const isMutation = (op?: HostOperationCatalogEntry) =>
   op?.intent?.toLowerCase() === "mutate";
@@ -62,7 +68,7 @@ export const opsManifest = (
     actions: {
       run: {
         label: "Run",
-        ...facts(deps.selected),
+        does: () => opRecord(deps.selected),
         input: z.void() as unknown as z.ZodType<never>,
         dirties: [],
         chord: "Mod+Enter",

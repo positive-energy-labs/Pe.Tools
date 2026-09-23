@@ -9,6 +9,7 @@ restated here.
 
 ## Decided
 
+- 2026-09-23: A host action is one record, `ActionDefinition` in `packages/agent-contracts/src/semantic-actions.ts`, and `hostActions` is its one key space (workflows, action controls, family and schedule reads, `instances.read`). A browser verb names its record by key (`RouteAction.does`) or picks it at press time (Ops: `opRecord` of the selected operation), and never restates `says`, `needs` or `actor`; a verb no host action backs (a page change, a Work edit) is browser-local and says its own. Verdict kaitpw: "no, host-only" (browser verbs are not host records). Deleted: `browserActionSays`, `opsAction`, the unread `executors` field, the `says`-literal placement guard. The check is the type (`ActionIdentity` in `apps/web/src/route/facts.ts` forbids `does` beside `says`), the `hostActions` key-space count test, and "every host action record is one pe_find row" in `packages/mcps/tests/capabilities.test.ts`.
 - 2026-09-22: Pea operation, workflow, action-control, and temporary-document cleanup calls use shared admission. Keep replay identity checks there so CLI and MCP cannot diverge.
 
 - 2026-09-16: Current Chat performance is good enough for this wave; stop further performance experiments. Retaining five recently visited transcripts with Activity is a future option, with draft lifetime independent of transcript eviction, not a required cutover.
