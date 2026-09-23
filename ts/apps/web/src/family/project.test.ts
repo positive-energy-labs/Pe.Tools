@@ -537,7 +537,12 @@ it("keeps newer family input through an older acknowledgement, refusal and pane 
     release = resolve;
   });
   const revisions: number[] = [];
-  const key = { route: "settings", target: null, work: "family-editor-retention-check" };
+  const key = {
+    binding: "workspace" as const,
+    route: "settings",
+    target: null,
+    work: "family-editor-retention-check",
+  };
   const buffer = familyEditBuffer(key, async (_patches, revision) => {
     revisions.push(revision);
     if (revisions.length === 1) {

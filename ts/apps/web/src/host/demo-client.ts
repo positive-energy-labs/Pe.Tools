@@ -35,7 +35,7 @@ const familySeed = (): DemoSeed => ({
   route: "family",
   seedAddress: address("C:/demo/live-family.rfa"),
   work: {
-    key: { route: "family", target: null, work: "live" },
+    key: { binding: "workspace" as const, route: "family", target: null, work: "live" },
     revision: 0,
     candidate: { basis: null, fields: {} },
   },
@@ -63,7 +63,7 @@ const projectSeed = (): DemoSeed => ({
   route: "families",
   seedAddress: address("C:/demo/live-project.rvt"),
   work: {
-    key: { route: "families", target: null },
+    key: { binding: "host" as const, route: "families", target: null },
     revision: 0,
     candidate: {
       scope: {

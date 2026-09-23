@@ -474,6 +474,7 @@ test("an unsaved document's Work subscribes under its exact open lifetime", asyn
     const open = renderHook(() => useRoute(manifest, { target: PIN }));
     act(() => inventory(openInventory(null) as never));
     expect(requests).toContainEqual({
+      binding: "open" as const,
       kind: "work",
       route: "document-work-gate",
       target: null,
@@ -488,6 +489,7 @@ test("an unsaved document's Work subscribes under its exact open lifetime", asyn
 
     renderHook(() => useRoute(manifest, { work: "saved-review" }));
     expect(requests).toContainEqual({
+      binding: "workspace" as const,
       kind: "work",
       route: "document-work-gate",
       target: null,
@@ -519,14 +521,15 @@ test("Save As moves the Work key to the Address and carries the open lifetime wi
     act(() => inventory(openInventory("C:\\Models\\Saved.rvt") as never));
     expect(result.current.work.key).toMatchObject({
       target: "C:\\Models\\Saved.rvt",
-      open: { session: "revit", openId: "doc" },
+      from: { session: "revit", openId: "doc" },
     });
     expect(result.current.work.ephemeral).toBe(false);
     expect(requests).toContainEqual({
+      binding: "address" as const,
       kind: "work",
       route: "document-work-gate",
       target: "C:\\Models\\Saved.rvt",
-      open: { session: "revit", openId: "doc" },
+      from: { session: "revit", openId: "doc" },
     });
   } finally {
     cleanup();
@@ -569,6 +572,7 @@ test("the unsaved document closes: the host's discard draws the receipt, the web
           action: "discard",
           route: "document-work-gate",
           scope: {
+            binding: "open" as const,
             route: "document-work-gate",
             target: null,
             open: { session: "revit", openId: "doc" },

@@ -85,7 +85,7 @@ test("actual snapshot read leaves real Work revision and a concurrent authored e
       },
     },
   });
-  const scope = { route: "takeoffs", target: at };
+  const scope = { binding: "address" as const, route: "takeoffs", target: at };
   try {
     await work.apply(scope, "takeoffs", "human", [], 0);
     const before = (await work.read(scope, "takeoffs"))!;

@@ -27,7 +27,7 @@ const family = (
   failure: { kind: "none" },
   originalEvidence: { id: "production-unknown", state: "unknown" },
   work: {
-    key: { route: "family", target: null, work: "production" },
+    key: { binding: "workspace" as const, route: "family", target: null, work: "production" },
     revision: 12,
     candidate: { basis: null, fields: { "/family/name": { staged: { value: "Saved Demo" } } } },
   },
@@ -369,7 +369,12 @@ test("same HTTP router separates production Work and two demo resource owners; r
   const parent = await mkdtemp(join(tmpdir(), "pe-demo-namespaces-"));
   cleanup.push(() => rm(parent, { recursive: true, force: true }));
   const productionFile = join(parent, "production-work.json");
-  const scope = { route: settingsRouteState.route, target: null, work: "production" };
+  const scope = {
+    binding: "workspace" as const,
+    route: settingsRouteState.route,
+    target: null,
+    work: "production",
+  };
   const production = new RouteWorkspace({
     registrations: [{ spec: settingsRouteState, handlers: {} }],
     store: {
@@ -427,7 +432,7 @@ test("same HTTP router separates production Work and two demo resource owners; r
     ).json() as Promise<{
       id: string;
       base: string;
-      scope: { route: string; target: null; work: string };
+      scope: { binding: "workspace"; route: string; target: null; work: string };
     }>;
   const a = await create(),
     b = await create();
@@ -461,7 +466,7 @@ test("demo schedule push files a run in the bound pod with values before and aft
     failure: { kind: "none" },
     originalEvidence: { id: "production-unknown", state: "unknown" },
     work: {
-      key: { route: "families", target: null, work: "production" },
+      key: { binding: "workspace" as const, route: "families", target: null, work: "production" },
       revision: 0,
       candidate: {},
     },
@@ -480,7 +485,12 @@ test("demo schedule push files a run in the bound pod with values before and aft
   });
   expect(read.status, await read.clone().text()).toBe(200);
   const reading = (await read.json()) as { id: string; workspaceId: string };
-  const key = { route: "schedules", target: null, work: reading.workspaceId };
+  const key = {
+    binding: "workspace" as const,
+    route: "schedules",
+    target: null,
+    work: reading.workspaceId,
+  };
   const route = scheduleGridRouteState.route;
   const stage = await f.fetch(
     `/pe/route-state/schedules/apply?work=${encodeURIComponent(reading.workspaceId)}`,

@@ -146,7 +146,7 @@ test("real HTTP owner holds an external leaf while Work edits land; same ID reco
         f.state.setState({ threadId: "resource-work", type: `${route}:${targetKey}`, value }),
     },
   });
-  const scope = { route: "takeoffs", target: at };
+  const scope = { binding: "address" as const, route: "takeoffs", target: at };
   expect(await work.read(scope, "takeoffs")).toBeNull();
   expect(await work.apply(scope, "takeoffs", "human", [], 0)).toMatchObject({
     ok: true,

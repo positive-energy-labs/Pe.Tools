@@ -101,7 +101,11 @@ test("/pods → /family carries the thread, so /family reads the same document",
   expect(requests).toContainEqual({ kind: "thread-head", thread: "T" });
   expect(result.current.resolution).toMatchObject({ kind: "resolved", target: { ref: A } });
   // The /family draft keys on the resolved target (w9-draft); the head is what resolves it.
-  expect(result.current.work.key).toMatchObject({ route: "family", target: TOWER });
+  expect(result.current.work.key).toMatchObject({
+    binding: "address" as const,
+    route: "family",
+    target: TOWER,
+  });
 });
 
 test("/chat → /schedules carries the thread's document", () => {

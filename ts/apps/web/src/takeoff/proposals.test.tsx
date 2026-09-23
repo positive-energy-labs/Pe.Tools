@@ -236,7 +236,7 @@ test("sync is refused in the host's words while a flag has only Pea's verdict", 
     z.rooms.some((r) => r.flags.length),
   )!;
   const room = zone.rooms.find((r) => r.flags.length)!;
-  const key = { route: "takeoffs", target: "C:/m/projectA.rvt" };
+  const key = { binding: "address" as const, route: "takeoffs", target: "C:/m/projectA.rvt" };
   const doc = takeoffsRouteState.schema.parse({
     decisions: Object.fromEntries(
       room.flags.map((flag) => [

@@ -93,7 +93,7 @@ vi.mock("./use-route", async (original) => ({
     }, []);
     const ctx = {
       work: {
-        key: { route: "pods", target: null, work: "w" },
+        key: { binding: "workspace" as const, route: "pods", target: null, work: "w" },
         doc: work.doc,
         revision: work.revision,
       },

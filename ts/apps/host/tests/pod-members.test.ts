@@ -427,7 +427,12 @@ test("composed spec sends the saved read bytes once and keeps saved attribution"
 
 test("settings.write saves reviewed member Work and republishes the new basis", async () => {
   await writeFile(file(), '{"width":1}');
-  const scope = { route: settingsRouteState.route, target: null, work: memberWork(member) };
+  const scope = {
+    binding: "workspace" as const,
+    route: settingsRouteState.route,
+    target: null,
+    work: memberWork(member),
+  };
   const rows = new Map<string, unknown>();
   const work = new RouteWorkspace({
     registrations: [{ spec: settingsRouteState, handlers: {} }],

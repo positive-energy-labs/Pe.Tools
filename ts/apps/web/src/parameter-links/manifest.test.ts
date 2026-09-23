@@ -15,7 +15,7 @@ vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
 import { manifest } from "#/parameter-links/manifest";
 
 const target = { session: "session-1", openId: "document-1" };
-const key = { route: "parameter-links", target: "model.rvt" as const };
+const key = { binding: "address" as const, route: "parameter-links", target: "model.rvt" as const };
 const ctx = {
   target: { kind: "document" as const, ref: target },
   work: { key, doc: { draft: {} }, revision: 7 },

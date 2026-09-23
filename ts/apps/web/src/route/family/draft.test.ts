@@ -50,7 +50,7 @@ const ctx = (doc: FamilyDraft, pod = "") => {
     pages,
     ctx: {
       target: { kind: "document", ref: { session: "s", openId: "o" } },
-      work: { key: { route: "family", target: null }, doc, revision: 1 },
+      work: { key: { binding: "host" as const, route: "family", target: null }, doc, revision: 1 },
       readings: { pods: { state: "ready", observation: [] } },
       page: { stage: "audit", pod, path: "", selection: [], confirming: false, sheet: null },
       setPage: (next: object) => pages.push(next),

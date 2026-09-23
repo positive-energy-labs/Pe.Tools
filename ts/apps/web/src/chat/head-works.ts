@@ -68,14 +68,14 @@ export function useHeadWorks(
 ): HeadWork[] {
   const work = useRouteWork(
     familiesRouteState,
-    address ? { route: "families", target: address } : null,
+    address ? { binding: "address" as const, route: "families", target: address } : null,
   );
   // The host-wide instances Work (a launch Pea may propose) belongs to no document: always read.
   const instances = useRouteWork(instancesRouteState, INSTANCES_WORK);
   // The document's takeoffs Work: its four cell families, each a head Work while it has pending.
   const takeoffs = useRouteWork(
     takeoffsRouteState,
-    address ? { route: "takeoffs", target: address } : null,
+    address ? { binding: "address" as const, route: "takeoffs", target: address } : null,
   );
   // A refused bound write is a foreign write landing first: say it, and offer reload.
   const [conflict, setConflict] = useState(false);

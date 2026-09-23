@@ -1,4 +1,4 @@
-import { ephemeralWorkKey, workKey, type WorkKey } from "@pe/agent-contracts";
+import { bindWork, workKey, workKeySchema, type WorkKey } from "@pe/agent-contracts";
 import { z } from "zod";
 import { OwnerReads, type OwnerValue } from "./owner-read.ts";
 import {
@@ -56,15 +56,15 @@ export interface RouteWorkspaceOptions {
 }
 
 const ENVELOPE_VERSION = 1;
+const OPEN_REGISTER = { targetKey: "open-work", route: "register" };
 // ponytail: fixed cap keeps every envelope read small; revisit only when a real command needs larger replay results.
 /** Store, order, crash barrier, and publication shell around the pure route-document machine. */
 export class RouteWorkspace {
   readonly #registry = new Map<string, RouteWorkspaceRegistration>();
-  readonly #tails = new Map<string, Promise<void>>();
+  // ponytail: serialize this host workspace; use store transactions if parallel writes become necessary.
+  #tail = Promise.resolve();
   readonly #listeners = new Set<(event: RouteWorkspaceEvent) => void>();
   readonly #reads = new OwnerReads();
-  /** Every `open:`-keyed Work this workspace wrote: lifetime id -> route -> the key it wrote. */
-  readonly #openWork = new Map<string, { open: OpenRef; routes: Map<string, WorkKey> }>();
 
   constructor(private readonly options: RouteWorkspaceOptions) {
     for (const registration of options.registrations) {
@@ -102,7 +102,7 @@ export class RouteWorkspace {
     const registration = this.#registry.get(route);
     if (!registration) return null;
     const { spec } = registration;
-    const envelope = await this.#serialized(scope, route, () => this.#load(scope, spec, orEmpty));
+    const envelope = await this.#serialized(() => this.#load(scope, spec, orEmpty));
     if (!envelope) return null;
     return {
       route,
@@ -126,7 +126,7 @@ export class RouteWorkspace {
     const registration = this.#registry.get(route);
     if (!registration) return unknownRoute(route);
 
-    return this.#serialized(scope, route, async () => {
+    return this.#serialized(async () => {
       const emit = (event: Omit<RouteWorkspaceEvent, "type" | "scope" | "route" | "actor">) =>
         this.#publish({ type: "route_workspace", scope, route, actor, ...event });
       const envelope = await this.#load(scope, registration.spec).catch(unreadable);
@@ -179,7 +179,7 @@ export class RouteWorkspace {
     const registration = this.#registry.get(route);
     if (!registration) return unknownRoute(route);
     const { spec, handlers } = registration;
-    return this.#serialized(scope, route, async () => {
+    return this.#serialized(async () => {
       const envelope = await this.#load(scope, spec).catch(unreadable);
       if ("ok" in envelope) return envelope;
       const reject = async (result: RouteStateWriteResult) => {
@@ -262,7 +262,7 @@ export class RouteWorkspace {
       return refuse("refused", "start fresh is human-only", "Ask the user to start fresh.");
     const { spec } = registration;
     const targetKey = workKey(scope);
-    return this.#serialized(scope, route, async () => {
+    return this.#serialized(async () => {
       const raw = await this.options.store.getState({ targetKey, route });
       if (raw == null || readable(raw, spec))
         return refuse("refused", "this route's Work is readable", "Nothing to set aside.");
@@ -360,7 +360,10 @@ export class RouteWorkspace {
     const { store } = this.options;
     const targetKey = workKey(scope);
     const raw = await store.getState({ targetKey, route });
-    const ephemeral = ephemeralWorkKey(scope);
+    const ephemeral =
+      scope.binding === "address" && scope.from
+        ? bindWork(scope.route, null, undefined, scope.from)
+        : null;
     if (raw != null || !ephemeral) return raw;
     const carried = await store.getState({ targetKey: workKey(ephemeral), route });
     if (carried == null) return null;
@@ -375,43 +378,57 @@ export class RouteWorkspace {
    * is removed and its `discard` published with the count the sweep removed. A session missing
    * from `live` is left alone: a detached bridge is not a closed document.
    */
-  async sweepOpen(live: readonly OpenRef[]): Promise<number> {
-    const sessions = new Set(live.map((open) => open.session));
-    const alive = new Set(live.map(lifetime));
-    let removed = 0;
-    for (const [id, held] of this.#openWork) {
-      if (alive.has(id) || !sessions.has(held.open.session)) continue;
-      this.#openWork.delete(id);
-      const entries = [...held.routes];
-      for (const [route, scope] of entries) {
-        await this.#serialized(scope, route, () =>
-          this.options.store.setState({ targetKey: workKey(scope), route, value: null }),
-        );
+  async sweepOpen(
+    live: readonly OpenRef[],
+    connectedSessions = live.map((open) => open.session),
+  ): Promise<number> {
+    return this.#serialized(async () => {
+      const sessions = new Set(connectedSessions);
+      const alive = new Set(live.map(lifetime));
+      const keys = await this.#registeredOpenWork();
+      const keep: typeof keys = [];
+      const discarded: typeof keys = [];
+      const counts = new Map<string, number>();
+      for (const scope of keys) {
+        if (alive.has(lifetime(scope.open)) || !sessions.has(scope.open.session)) {
+          keep.push(scope);
+          continue;
+        }
+        const input = { targetKey: workKey(scope), route: scope.route };
+        if ((await this.options.store.getState(input)) == null) continue;
+        await this.options.store.setState({ ...input, value: null });
+        discarded.push(scope);
+        const id = lifetime(scope.open);
+        counts.set(id, (counts.get(id) ?? 0) + 1);
+      }
+      if (keep.length !== keys.length)
+        await this.options.store.setState({ ...OPEN_REGISTER, value: keep });
+      for (const scope of discarded)
         await this.#publish({
           type: "route_workspace",
           scope,
-          route,
+          route: scope.route,
           actor: "human",
           action: "discard",
           revision: 0,
           ok: true,
-          removed: entries.length,
+          removed: counts.get(lifetime(scope.open))!,
         });
-      }
-      removed += entries.length;
-    }
-    return removed;
+      return discarded.length;
+    });
+  }
+
+  async #registeredOpenWork() {
+    return z
+      .array(workKeySchema.options[1])
+      .parse((await this.options.store.getState(OPEN_REGISTER)) ?? []);
   }
 
   async #persist(scope: WorkKey, route: string, envelope: RouteEnvelope<unknown>): Promise<void> {
-    if (scope.work === undefined && scope.target === null && scope.open !== undefined) {
-      const id = lifetime(scope.open);
-      const held = this.#openWork.get(id) ?? {
-        open: scope.open,
-        routes: new Map<string, WorkKey>(),
-      };
-      held.routes.set(route, scope);
-      this.#openWork.set(id, held);
+    if (scope.binding === "open") {
+      const keys = await this.#registeredOpenWork();
+      if (!keys.some((key) => workKey(key) === workKey(scope)))
+        await this.options.store.setState({ ...OPEN_REGISTER, value: [...keys, scope] });
     }
     await this.options.store.setState({
       targetKey: workKey(scope),
@@ -424,18 +441,13 @@ export class RouteWorkspace {
     for (const listener of this.#listeners) listener(event);
   }
 
-  #serialized<T>(scope: WorkKey, route: string, work: () => Promise<T>): Promise<T> {
-    const key = `${workKey(scope)}\0${route}`;
-    const previous = this.#tails.get(key) ?? Promise.resolve();
-    const run = previous.catch(() => undefined).then(work);
-    const tail = run.then(
+  #serialized<T>(work: () => Promise<T>): Promise<T> {
+    const run = this.#tail.then(work);
+    this.#tail = run.then(
       () => undefined,
       () => undefined,
     );
-    this.#tails.set(key, tail);
-    return run.finally(() => {
-      if (this.#tails.get(key) === tail) this.#tails.delete(key);
-    });
+    return run;
   }
 }
 

@@ -53,38 +53,57 @@ export type RouteWriteAdmission = (
   ctx: { scope: WorkKey; actor: import("./route-doc.ts").RouteActor; prior: unknown },
 ) => Promise<import("./families.ts").FamiliesRefusal | null>;
 
-/**
- * The identity a Work document lives under: its route, the Address it is bound to, an optional
- * named standalone workspace (`?work=<id>`) for Work that is not document-scoped, and the exact
- * open document lifetime it belongs to.
- *
- * Addressed Work outlives a Revit process (section 2, law 6), so it keys by Address. An unsaved
- * document has no Address, so its Work is ephemeral: it keys by `open` — the one lifetime
- * `{ session, openId }` that never recurs — and is gone when that lifetime ends. A key that
- * carries both is an addressed document that was once unsaved; `RouteWorkspace` carries the
- * addressless Work over to the Address once (Save As).
- */
-export const workKeySchema = z.object({
+/** Work has one binding. `from` is the Save As source, never its identity. */
+const workFields = {
   route: z.string().min(1).max(100),
-  target: addressSchema.nullable(),
-  work: z.string().trim().min(1).max(200).optional(),
-  open: documentRefSchema.optional(),
-});
+  target: z.null(),
+  work: z.never().optional(),
+  open: z.never().optional(),
+};
+export const workKeySchema = z.discriminatedUnion("binding", [
+  z.object({
+    ...workFields,
+    binding: z.literal("address"),
+    target: addressSchema,
+    from: documentRefSchema.optional(),
+  }),
+  z.object({ ...workFields, binding: z.literal("open"), open: documentRefSchema }),
+  z.object({
+    ...workFields,
+    binding: z.literal("workspace"),
+    work: z.string().trim().min(1).max(200),
+  }),
+  z.object({ ...workFields, binding: z.literal("host") }),
+]);
 export type WorkKey = z.infer<typeof workKeySchema>;
 
-/** The one key function: the persisted key a Work document lives under. */
-export const workKey = (key: WorkKey): string =>
-  key.work !== undefined
-    ? `${key.route}/workspace:${key.work}`
-    : key.target === null && key.open !== undefined
-      ? `${key.route}/open:${key.open.session}/${key.open.openId}`
-      : `${key.route}/target:${key.target === null ? "" : key.target.replaceAll("/", "\\").toLowerCase()}`;
+/** Construct a binding from the caller's resolved document or explicit workspace. */
+export function bindWork(
+  route: string,
+  target: Address | null,
+  work?: string,
+  open?: z.infer<typeof documentRefSchema>,
+): WorkKey {
+  if (work !== undefined) return { binding: "workspace", route, target: null, work };
+  if (target !== null)
+    return { binding: "address", route, target, ...(open ? { from: open } : {}) };
+  if (open) return { binding: "open", route, target: null, open };
+  return { binding: "host", route, target: null };
+}
 
-/** The addressless key the same document's Work lived under before Save As gave it an Address. */
-export const ephemeralWorkKey = (key: WorkKey): WorkKey | null =>
-  key.work === undefined && key.target !== null && key.open !== undefined
-    ? { route: key.route, target: null, open: key.open }
-    : null;
+/** The one encoder for the persisted identity. */
+export function workKey(key: WorkKey): string {
+  switch (key.binding) {
+    case "workspace":
+      return `${key.route}/workspace:${key.work}`;
+    case "open":
+      return `${key.route}/open:${key.open.session}/${key.open.openId}`;
+    case "address":
+      return `${key.route}/target:${key.target.replaceAll("/", "\\").toLowerCase()}`;
+    case "host":
+      return `${key.route}/target:`;
+  }
+}
 
 /** The document type a spec's schema parses to. */
 export type RouteDocOf<TSpec> =

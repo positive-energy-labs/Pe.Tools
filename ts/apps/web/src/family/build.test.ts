@@ -77,13 +77,14 @@ describe("build ActionHandles — declaration, and the seeded lane's read-only f
     if (typeof familyReading !== "function") throw Error("Family Reading must follow its Work");
     expect(
       familyReading(declared.page!.parse({}), {
+        binding: "workspace" as const,
         route: "family",
-        target: address("C:\\Models\\Example.rfa"),
+        target: null,
         work: "demo",
       }),
     ).toEqual({
       kind: "family-readings",
-      work: { route: "family", target: null, work: "demo" },
+      work: { binding: "workspace" as const, route: "family", target: null, work: "demo" },
     });
 
     // `?demo=build` selects the manifest's build seed, and a seed is FROZEN: use-route refuses

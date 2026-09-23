@@ -19,8 +19,18 @@ test("Instances isolates Work by key; Pea proposes a launch and only a person st
       },
     },
   });
-  const a: WorkKey = { route: "instances", target: null, work: "chat-a" };
-  const b: WorkKey = { route: "instances", target: null, work: "chat-b" };
+  const a: WorkKey = {
+    binding: "workspace" as const,
+    route: "instances",
+    target: null,
+    work: "chat-a",
+  };
+  const b: WorkKey = {
+    binding: "workspace" as const,
+    route: "instances",
+    target: null,
+    work: "chat-b",
+  };
 
   expect(
     await workspace.apply(a, "instances", "agent", [{ path: ["observation"], value: {} }], 0),

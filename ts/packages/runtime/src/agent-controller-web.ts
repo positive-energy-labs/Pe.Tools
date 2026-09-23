@@ -1,6 +1,7 @@
 import type { MastraCompositeStore } from "@mastra/core/storage";
 import {
   addressSchema,
+  bindWork,
   documentRefSchema,
   type CapabilityCatalog,
   type WorkKey,
@@ -335,7 +336,7 @@ function scopeOr400(c: Context, shape: "read" | "write"): WorkKey | Response {
     c.json(shape === "read" ? { error } : { ok: false, kind: "error", error, hint: error }, 400);
   if (work) {
     if (target || work.length > 200) return invalid("Provide exactly one Work key");
-    return { route, target: null, work };
+    return bindWork(route, null, work);
   }
   // `open=<session>/<openId>`: the exact document lifetime. Alone it keys an unsaved document's
   // ephemeral Work; beside a Target it is what a Save As migration carries over from.
@@ -351,11 +352,7 @@ function scopeOr400(c: Context, shape: "read" | "write"): WorkKey | Response {
       return invalid("invalid open document: expected <session>/<openId>");
     ref = parsed.data;
   }
-  const scope = (target: WorkKey["target"]): WorkKey => ({
-    route,
-    target,
-    ...(ref ? { open: ref } : {}),
-  });
+  const scope = (target: WorkKey["target"]): WorkKey => bindWork(route, target, undefined, ref);
   if (!target) return scope(null);
   const parsed = addressSchema.safeParse(target);
   if (!parsed.success) return invalid("invalid Target: expected a document Address");

@@ -10,7 +10,7 @@ import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 export async function partitionFixture(dir: string, target: DocumentRef) {
   const at = address("C:/model.rvt");
-  const scope = { route: "takeoffs", target: at };
+  const scope = { binding: "address" as const, route: "takeoffs", target: at };
   const workFile = join(dir, "work.json");
   const workspace = new RouteWorkspace({
     registrations: [{ spec: takeoffsRouteState, handlers: {} }],

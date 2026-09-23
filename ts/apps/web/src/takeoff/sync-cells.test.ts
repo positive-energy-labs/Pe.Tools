@@ -70,7 +70,7 @@ async function syncFixture() {
     id: "sync-cells",
     at,
     target: { session: "A", openId: "open-A" },
-    scope: { route: "takeoffs", target: at },
+    scope: { binding: "address" as const, route: "takeoffs", target: at },
     work,
     captures,
     journal: new ActionJournal(join(root, "actions.json")),

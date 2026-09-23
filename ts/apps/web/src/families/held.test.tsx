@@ -27,7 +27,7 @@ const row = (familyId: number, familyName: string) => ({
 const ctx = (cells: Record<string, unknown> = {}) => ({
   target: { kind: "document", ref: { session: "s", openId: "o" } },
   work: {
-    key: { route: "families", target: null },
+    key: { binding: "host" as const, route: "families", target: null },
     doc: { scope: {}, cells, excluded: { Beta: { by: "pea" }, Gamma: { by: "person" } } },
     revision: 4,
   },

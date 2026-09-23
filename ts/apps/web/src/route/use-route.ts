@@ -17,6 +17,7 @@ import {
   UNREADABLE_WORK,
   threadHeadSchema,
   workKey,
+  bindWork,
   type Address,
   type DocumentRequest,
   type ExecutionTarget,
@@ -451,7 +452,8 @@ function routeUrl(
   if (key.work !== undefined) url.searchParams.set("work", key.work);
   else {
     if (key.target !== null) url.searchParams.set("target", key.target);
-    if (key.open) url.searchParams.set("open", `${key.open.session}/${key.open.openId}`);
+    const open = key.binding === "address" ? key.from : key.open;
+    if (open) url.searchParams.set("open", `${open.session}/${open.openId}`);
   }
   return url.toString();
 }
@@ -923,17 +925,12 @@ export function useRoute<W, R extends string, P, A extends string>(
   // An unsaved document has no Address, so its Work keys by the one lifetime it belongs to. The
   // ref rides along once the Address exists too, so the host carries that Work over on Save As.
   const key: WorkKey = useMemo(
-    () => ({
-      route: manifest.key,
-      target: resolvedAddress,
-      ...(work !== undefined ? { work } : {}),
-      ...(work === undefined && boundDocument ? { open: boundDocument } : {}),
-    }),
+    () => bindWork(manifest.key, resolvedAddress, work, boundDocument ?? undefined),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- boundDocument is identified by boundRef
     [manifest.key, resolvedAddress, work, boundRef],
   );
   /** An unsaved document's Work: keyed by this lifetime, and gone when it ends. */
-  const ephemeral = key.target === null && key.open !== undefined;
+  const ephemeral = key.binding === "open";
   // A target-owned Work declaration cannot fall back to the shared `route/target:` key while its
   // Address is unresolved. Host/file Work and explicit named workspaces intentionally use null.
   const workNeedsTarget = (

@@ -266,7 +266,12 @@ export async function setup() {
       target,
     )) as ScheduleReading;
   const reading = await read();
-  const scope = { route: "schedules", target: null, work: reading.workspaceId };
+  const scope = {
+    binding: "workspace" as const,
+    route: "schedules",
+    target: null,
+    work: reading.workspaceId,
+  };
   const view = async () =>
     (await fetch(`/pe/route-state/schedules?work=${scope.work}`)).json() as Promise<{
       revision: number;

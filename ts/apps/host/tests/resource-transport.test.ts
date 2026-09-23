@@ -41,7 +41,7 @@ import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
 
 const at = address("C:\\Models\\Transport.rvt");
 const target = { session: "bridge-a", openId: "open-a" };
-const workScope: WorkKey = { route: "test", target: at };
+const workScope: WorkKey = { binding: "address" as const, route: "test", target: at };
 const workRequest: ReadingRequest = { kind: "work", ...workScope };
 const readingRequest: ReadingRequest = { kind: "takeoff-reading", target };
 const receiptRequest: ReadingRequest = { kind: "receipts", target };
@@ -371,7 +371,12 @@ test("actual adapter bounds stalled writes and frame/key limits", async () => {
 test("Family capture publication reaches the actual browser index and releases shared filesystem reads", async () => {
   const o = await owners();
   const b = browser(o.observe);
-  const key: WorkKey = { route: "family", target: null, work: "file-work" };
+  const key: WorkKey = {
+    binding: "workspace" as const,
+    route: "family",
+    target: null,
+    work: "file-work",
+  };
   const request: ReadingRequest = { kind: "family-readings", work: key };
   const updates: ReadingFrameUpdate[] = [];
   const read = vi.spyOn(o.captures, "familyReadings");
@@ -519,7 +524,12 @@ test("oversized and unserializable owner values fail only their resource; real c
   const releaseAtom = registry.mount(atom);
   const failed: ReadingFrameUpdate[] = [],
     healthy: ReadingFrameUpdate[] = [];
-  const healthyScope: WorkKey = { route: "test", target: null, work: "healthy" };
+  const healthyScope: WorkKey = {
+    binding: "workspace" as const,
+    route: "test",
+    target: null,
+    work: "healthy",
+  };
   const healthyRequest: ReadingRequest = { kind: "work", ...healthyScope };
   const releases = [
     b.client.subscribe(workRequest, (value) => failed.push(value)),

@@ -28,7 +28,12 @@ export type InstancesHandle = RouteHandle<InstancesDocument, InstancesReading, o
  * cluster, the chat plugin and `pe_do route:instances.*` must all name the same key; a plugin
  * that invented a Target-keyed WorkKey read an empty document while pea wrote the workspace.
  */
-export const INSTANCES_WORK: WorkKey = { route: "instances", target: null, work: "instances" };
+export const INSTANCES_WORK: WorkKey = {
+  binding: "workspace" as const,
+  route: "instances",
+  target: null,
+  work: "instances",
+};
 
 const READINGS = {
   sessions: { kind: "sdk", read: "sessions" },

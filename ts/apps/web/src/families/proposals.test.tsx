@@ -60,7 +60,7 @@ const staged = (row: typeof fcu | typeof hp): FamilyCellState => ({
 const ctx = (workCells: Record<string, FamilyCellState>) => ({
   target: { kind: "document", ref: { session: "s", openId: "o" } },
   work: {
-    key: { route: "families", target: null },
+    key: { binding: "host" as const, route: "families", target: null },
     doc: { scope: { staged: { value: scope } }, excluded: {}, cells: workCells },
     revision: 2,
   },

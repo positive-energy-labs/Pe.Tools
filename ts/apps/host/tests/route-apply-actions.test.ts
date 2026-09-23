@@ -32,8 +32,8 @@ afterEach(async () => {
 const at = address("C:/Tower.rvt");
 const other = address("C:/Annex.rvt");
 const target = { session: "A", openId: "open-A" };
-const scope = { route: "families", target: at };
-const otherScope = { route: "families", target: other };
+const scope = { binding: "address" as const, route: "families", target: at };
+const otherScope = { binding: "address" as const, route: "families", target: other };
 const profileBytes = JSON.stringify({ patch: { families: {} } });
 const member = (name: string) => ({ pod: "global", path: `settings/${name}` });
 const source = {
@@ -939,7 +939,7 @@ test("a plan whose member the staged cells do not generate, or with no Work basi
 test("/family retires the draft's consumed cells after a proven apply, and keeps a newer edit", async () => {
   const env = await setup();
   env.familyDocument(true);
-  const draftKey = { route: "family", target: at };
+  const draftKey = { binding: "address" as const, route: "family", target: at };
   const reading = JSON.stringify({ Width: 1, Height: 2 });
   const revision = (
     await env.work.apply(

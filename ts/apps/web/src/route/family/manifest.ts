@@ -256,7 +256,9 @@ export const sameSource = (left: PodMemberSource, right: PodMemberSource) =>
 
 /** Family spec readings (parsed documents) belong to the member's Work, not the open Revit file. */
 const familyCaptureWork = (work: WorkKey): WorkKey | null =>
-  work.work ? { route: "family", target: null, work: work.work } : null;
+  work.work
+    ? { binding: "workspace" as const, route: "family", target: null, work: work.work }
+    : null;
 
 const emptyInventory = { sessions: [] } satisfies {
   sessions: readonly BridgeSessionListEntry[];

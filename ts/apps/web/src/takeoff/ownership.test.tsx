@@ -165,6 +165,7 @@ test("the controller prunes dependent scope and the live manifest has no saved-f
   expect(versionRequest).toBeTypeOf("function");
   if (typeof versionRequest === "function") {
     const work = {
+      binding: "address" as const,
       route: "takeoffs",
       target: address("C:\\Models\\projectA.rvt"),
     } satisfies WorkKey;

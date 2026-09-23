@@ -92,8 +92,16 @@ function workspace(
   });
 }
 
-const documentA: WorkKey = { route: "test-route", target: address("C:\\Models\\A.rvt") };
-const documentB: WorkKey = { route: "test-route", target: address("C:\\Models\\B.rvt") };
+const documentA: WorkKey = {
+  binding: "address" as const,
+  route: "test-route",
+  target: address("C:\\Models\\A.rvt"),
+};
+const documentB: WorkKey = {
+  binding: "address" as const,
+  route: "test-route",
+  target: address("C:\\Models\\B.rvt"),
+};
 const queryA = `target=${encodeURIComponent(documentA.target!)}`;
 
 function bind(module: RouteWorkspace, scope: WorkKey = documentA) {
@@ -443,11 +451,17 @@ function deferred<T>() {
 /* ── Addressless Work is ephemeral (design-system ledger, 2026-09-22) ─────────────────────── */
 
 const unsaved: WorkKey = {
+  binding: "open" as const,
   route: "test-route",
   target: null,
   open: { session: "revit", openId: "doc-1" },
 };
-const savedAs: WorkKey = { ...unsaved, target: address("C:\\Models\\Saved.rvt") };
+const savedAs: WorkKey = {
+  binding: "address",
+  route: unsaved.route,
+  target: address("C:\\Models\\Saved.rvt"),
+  from: unsaved.open,
+};
 
 test("an unsaved document's Work keys by its open lifetime and never by the empty target", async () => {
   const { store, state } = memoryStore();
@@ -455,7 +469,8 @@ test("an unsaved document's Work keys by its open lifetime and never by the empt
   expect(
     await bind(module, unsaved).apply("human", [{ path: ["values", "a"], value: "A" }], 0),
   ).toMatchObject({ ok: true });
-  expect([...state.keys()]).toEqual(["test-route/open:revit/doc-1\0test-route"]);
+  expect(state.has("test-route/open:revit/doc-1\0test-route")).toBe(true);
+  expect(state.has("test-route/target:\0test-route")).toBe(false);
   // A second unsaved document in the same session shares nothing with the first.
   const other = { ...unsaved, open: { session: "revit", openId: "doc-2" } };
   expect(await bind(module, other).read()).toBeNull();
@@ -483,11 +498,11 @@ test("an addressed document's own Work is never replaced by a stale addressless 
   const { store } = memoryStore();
   const module = workspace(store);
   await bind(module, unsaved).apply("human", [{ path: ["values", "a"], value: "unsaved" }], 0);
-  await bind(module, { route: "test-route", target: savedAs.target }).apply(
-    "human",
-    [{ path: ["values", "a"], value: "addressed" }],
-    0,
-  );
+  await bind(module, {
+    binding: "address" as const,
+    route: "test-route",
+    target: savedAs.target,
+  }).apply("human", [{ path: ["values", "a"], value: "addressed" }], 0);
   expect((await bind(module, savedAs).read())?.doc).toMatchObject({ values: { a: "addressed" } });
 });
 

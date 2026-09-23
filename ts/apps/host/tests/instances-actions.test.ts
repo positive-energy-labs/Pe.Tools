@@ -13,7 +13,7 @@ afterEach(async () => {
   for (const f of cleanup.splice(0).reverse()) await f();
 });
 
-const scope = { route: "instances", target: null, work: "ws-1" };
+const scope = { binding: "workspace" as const, route: "instances", target: null, work: "ws-1" };
 const session = { id: "dev", process: originalProcess };
 const receiptPath = "C:/receipts/dev.json";
 

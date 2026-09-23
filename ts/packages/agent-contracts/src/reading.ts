@@ -57,7 +57,12 @@ export type SdkReading = z.infer<typeof sdkReadingSchema>;
 
 export const readingRequestSchema = z.discriminatedUnion("kind", [
   sdkReadingSchema,
-  workKeySchema.extend({ kind: z.literal("work") }),
+  z.discriminatedUnion("binding", [
+    workKeySchema.options[0].extend({ kind: z.literal("work") }),
+    workKeySchema.options[1].extend({ kind: z.literal("work") }),
+    workKeySchema.options[2].extend({ kind: z.literal("work") }),
+    workKeySchema.options[3].extend({ kind: z.literal("work") }),
+  ]),
   z.strictObject({ kind: z.literal("thread-head"), thread: z.string().min(1).max(200) }),
   z.strictObject({ kind: z.literal("takeoff-reading"), target: documentRefSchema }),
   /** The current disk identity of one RHVAC project file. */

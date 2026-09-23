@@ -30,7 +30,11 @@ const ref = { session: "s", openId: "o" };
 const source = { pod: seed.page.pod, path: seed.page.path, sha256: "8".repeat(64) };
 const view = (page: Record<string, unknown> = {}) => ({
   target: { kind: "document", ref },
-  work: { key: { route: "families", target: null }, doc: seed.work, revision: 4 },
+  work: {
+    key: { binding: "host" as const, route: "families", target: null },
+    doc: seed.work,
+    revision: 4,
+  },
   readings: { pods: { state: "ready", observation: seed.readings.pods } },
   page: {
     stage: "apply",

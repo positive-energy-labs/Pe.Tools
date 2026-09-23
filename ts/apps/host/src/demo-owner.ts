@@ -19,6 +19,8 @@ import {
   parameterLinksRouteState,
   scheduleGridRouteState,
   type WorkKey,
+  bindWork,
+  workKey,
   type TakeoffSnapshot,
   refusalText,
 } from "@pe/agent-contracts";
@@ -222,8 +224,8 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         : null;
     const openedPath = opened ? await settings.memberPath(opened.member) : null;
     const scope: WorkKey = opened
-      ? { route: settingsRouteState.route, target: null, work: memberWork(opened.member) }
-      : { route: seed.route, target: at };
+      ? bindWork(settingsRouteState.route, null, memberWork(opened.member))
+      : bindWork(seed.route, at);
     const route =
       seed.route === "family"
         ? settingsRouteState.route
@@ -896,12 +898,8 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       "http://demo",
       (url, init) => handle(new Request(url, init)),
     );
-    // A work reading key is the flattened WorkKey plus `kind`, so compare the Work key's own
-    // fields, never the whole request object.
-    const workKeyOf = ({ route, target, work }: WorkKey): WorkKey =>
-      work === undefined ? { route, target } : { route, target, work };
     const localScope = (value: WorkKey) =>
-      canonicalRouteInput(workKeyOf(value)) === canonicalRouteInput(workKeyOf(scope)) ||
+      workKey(value) === workKey(scope) ||
       value.target === at ||
       (value.route === scheduleGridRouteState.route &&
         value.target === null &&
@@ -1086,11 +1084,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         const [, written, operation] = write as unknown as [string, string, "apply" | "command"];
         const target = url.searchParams.get("target");
         const workId = url.searchParams.get("work");
-        const key: WorkKey = {
-          route: written,
-          target: target ? address(target) : null,
-          ...(workId ? { work: workId } : {}),
-        };
+        const key = bindWork(written, target ? address(target) : null, workId ?? undefined);
         if (!routes.has(written) || !localScope(key))
           return json({ ok: false, kind: "error", error: "Work belongs outside this demo" }, 403);
         const body = (await request.json()) as {

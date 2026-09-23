@@ -214,6 +214,9 @@ function sweepClosedDocuments(bridge: RevitBridge["Service"] | undefined, work: 
                 }))
               : [],
           ),
+          sessions.flatMap((session) =>
+            session.connected && session.sessionId ? [session.sessionId] : [],
+          ),
         ),
       )
       .catch(() => undefined);

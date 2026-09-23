@@ -6,7 +6,7 @@ import { hostLoadedFamilies, type HostCall } from "../src/pea/families-admission
 import { createRouteRegistrations } from "../src/pea/routes.ts";
 
 const at = address("c:\\models\\j1.rvt");
-const scope = { route: "families", target: at };
+const scope = { binding: "address" as const, route: "families", target: at };
 // One loaded family, "Casework", with one type. Its element id changes on every reload; its name does not.
 const loaded = [{ familyId: 3573700, familyName: "Casework", types: [{ typeName: "12 X 4" }] }];
 
@@ -193,7 +193,7 @@ function ProjectAWork(familyNames: string[], categoryNames = ["Air Terminals"]) 
       setState: async ({ route, value }) => void saved.set(route, value),
     },
   });
-  const at = { route: "families", target };
+  const at = { binding: "address" as const, route: "families", target };
   const scoped = { categoryNames, familyNames, placementScope: "AllLoaded" };
   return {
     work,
@@ -365,7 +365,7 @@ function seededWork(doc: unknown, host: HostCall = liveHost()) {
       setState: async ({ route, value }) => void saved.set(route, value),
     },
   });
-  return { work, at: { route: "families", target }, calls };
+  return { work, at: { binding: "address" as const, route: "families", target }, calls };
 }
 
 const exhaustScope = {

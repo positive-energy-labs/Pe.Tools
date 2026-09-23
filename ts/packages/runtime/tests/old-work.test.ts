@@ -96,7 +96,7 @@ for (const [spec, saved] of [
   [takeoffsRouteState, oldTakeoffs],
 ] as const) {
   test(`/${spec.route}: old-shape Work is left byte-for-byte and refused in one sentence`, async () => {
-    const scope: WorkKey = { route: spec.route, target };
+    const scope: WorkKey = { binding: "address" as const, route: spec.route, target };
     const bytes = JSON.stringify(saved);
     const state = new Map([[`${workKey(scope)}\0${spec.route}`, JSON.parse(bytes) as unknown]]);
     const setState = vi.fn(async () => {});
@@ -143,7 +143,7 @@ for (const [spec, saved] of [
 }
 
 test("/family: a human-authored proposal refuses in the sentence and stays; Pea's by is derivable", async () => {
-  const scope: WorkKey = { route: "family", target };
+  const scope: WorkKey = { binding: "address" as const, route: "family", target };
   const saved = (by: string) => ({
     version: 1,
     revision: 2,
@@ -181,7 +181,7 @@ test("/family: a human-authored proposal refuses in the sentence and stays; Pea'
 });
 
 test("/families: start fresh sets old Work aside byte-for-byte, refuses Pea, never clobbers an aside", async () => {
-  const scope: WorkKey = { route: "families", target };
+  const scope: WorkKey = { binding: "address" as const, route: "families", target };
   const key = (route: string) => `${workKey(scope)}\0${route}`;
   const state = new Map<string, unknown>();
   const module = new RouteWorkspace({
@@ -223,7 +223,7 @@ test("/families: start fresh sets old Work aside byte-for-byte, refuses Pea, nev
 });
 
 test("/families: salvage carries the old excluded ids over, before and after start fresh, to a person only", async () => {
-  const scope: WorkKey = { route: "families", target };
+  const scope: WorkKey = { binding: "address" as const, route: "families", target };
   const key = (route: string) => `${workKey(scope)} ${route}`;
   const state = new Map<string, unknown>();
   const module = new RouteWorkspace({
@@ -268,7 +268,12 @@ test("/families: salvage carries the old excluded ids over, before and after sta
 });
 
 test("/instances: a pre-cells staged start is set aside by start fresh, never launched or kept", async () => {
-  const scope: WorkKey = { route: "instances", target: null, work: "instances" };
+  const scope: WorkKey = {
+    binding: "workspace" as const,
+    route: "instances",
+    target: null,
+    work: "instances",
+  };
   const key = (route: string) => `${workKey(scope)}\0${route}`;
   const state = new Map<string, unknown>();
   const module = new RouteWorkspace({

@@ -37,7 +37,7 @@ vi.mock("#/route", async (original) => ({
     busy: null,
     failure: null,
     work: {
-      key: { route: "families", target: null },
+      key: { binding: "host" as const, route: "families", target: null },
       doc: server.shown.doc,
       revision: server.shown.revision,
       write: async (patches: RouteStatePatch[], expectedRevision?: number | null) => {
