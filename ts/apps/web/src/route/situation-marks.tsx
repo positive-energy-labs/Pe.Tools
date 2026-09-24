@@ -9,17 +9,24 @@ import { useScopeKeys } from "./keys";
 export function SituationCell({
   io,
   empty,
+  placeholder,
   children,
 }: {
   io?: "r" | "w" | "rw";
   /** Dashed = the slot is declared and holds nothing yet. */
   empty?: boolean;
-  children: ReactNode;
+  /** What an empty slot says when nothing inside it draws its own emptiness (no picker). */
+  placeholder?: string;
+  children?: ReactNode;
 }) {
   return (
     <span className="inline-flex items-baseline" data-empty={empty || undefined}>
       {io ? <sup className="mr-0.5 t-small face-mono text-ink-mute">{io}</sup> : null}
-      {children}
+      {empty && placeholder ? (
+        <span className="seam-border border-b text-ink-2">{placeholder}</span>
+      ) : (
+        children
+      )}
     </span>
   );
 }

@@ -344,8 +344,6 @@ const SITUATIONLESS_TARGET_ROUTES = [
   "data-tables.tsx",
   "instances.tsx",
   "lab.tsx",
-  "parameter-links.tsx",
-  "pods.tsx",
 ];
 
 const WEB_BY_REL = new Map(WEB_PROD_FILES.map((f) => [f.rel, f]));

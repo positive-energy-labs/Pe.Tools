@@ -7,7 +7,6 @@ import { frozenDemo } from "#/host/demo-client";
 import { useEffect, useState } from "react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 
-import { AddressingBar } from "#/components/lang/addressing-bar";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
@@ -15,9 +14,9 @@ import { Pane, PaneSplit } from "#/components/lang/pane";
 import { List } from "#/components/lang/list-popup";
 import { Press } from "#/components/lang/press";
 import { RunsList } from "#/route/runs-list";
-import { Provenance } from "#/components/lang/section";
 import { Surface } from "#/components/lang/surface";
 import {
+  RouteShell,
   defineRoute,
   isSpecOf,
   useRoute,
@@ -25,7 +24,9 @@ import {
   type MemberRef,
   type PodRow,
 } from "#/route";
+import { Situation } from "#/route/situation";
 import { LadderPicker, useDocumentLadder } from "#/route/situation-ladder";
+import { SituationCell } from "#/route/situation-marks";
 import { podHost, usePodList, type Run } from "#/route/pods";
 import { familiesSpec } from "#/families/manifest";
 import { FAMILY_DEMO_PODS, familySpec } from "#/family/manifest";
@@ -44,7 +45,7 @@ import {
 } from "#/route/seeds";
 import { SpecEditor, type DemoSpec } from "#/route/spec-editor";
 
-/** `/pods` acts on no document; it reads the thread head so field options and links carry it. */
+/** `/pods` writes no document; its target is the thread's document, which field options read. */
 const manifest = defineRoute({
   key: "pods",
   name: "Pods",
@@ -163,62 +164,75 @@ export function PodsRouteContent({
     !!demo,
   );
 
+  // A failed pod read is a refusal: a log row, never a page line (N3).
+  const failed = live.state === "failed" ? live.message : null;
+  useEffect(() => {
+    if (failed) handle.note("pod.list", failed, true);
+  }, [failed]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
-    <Surface>
-      <AddressingBar
-        name="pods"
-        sentence={
-          <>
-            {member ? (
-              <span className="face-mono">
-                {row!.name} · {member.path}
-              </span>
-            ) : (
-              <Provenance>no member open</Provenance>
-            )}{" "}
-            options from <LadderPicker ladder={ladder} />
-            {ladder.refusal ? (
-              <span role="status" data-tone="caution">
-                {" "}
-                · {ladder.refusal}
-              </span>
-            ) : null}
-          </>
-        }
-        facts={
-          <>
-            <FactChip title="Installed pods under Documents/Pe.Tools/Pods.">
-              {pods.length} pods
-            </FactChip>
-            {demo ? (
-              <FactChip tone="caution" dashed title="Demo lane: pods and runs are fixture.">
-                fixture
-              </FactChip>
-            ) : null}
-            {product ? (
-              <Link
-                to={product.to}
-                // The spec opens selected in the product route's apply stage; the demo lane keeps
-                // its seed so the link lands on a rendered route.
-                search={
-                  {
-                    stage: "apply",
-                    pod: row!.id,
-                    path: member!.path,
-                    ...(demo ? { demo: "apply" } : {}),
-                  } as never
-                }
-                title={`Open this spec in ${product.def.name}; apply happens there.`}
-              >
-                open in {product.def.name}
-              </Link>
-            ) : null}
-          </>
-        }
-      />
-      {live.state === "failed" ? (
-        <OutcomeLine kind="error" label="pod.list" says={live.message} />
-      ) : null}
+    <Surface
+      head={
+        <RouteShell
+          manifest={manifest}
+          handle={handle}
+          situation={
+            <Situation
+              handle={handle}
+              target={{ session: ladder.sessionWord, document: ladder.docWord }}
+              sentence={
+                <>
+                  <SituationCell io="rw" empty={!member} placeholder="no member open">
+                    <span className="face-mono">
+                      {row?.name} · {member?.path}
+                    </span>
+                  </SituationCell>
+                  {product ? (
+                    <>
+                      {" "}
+                      (
+                      <Link
+                        to={product.to}
+                        // The spec opens selected in the product route's apply stage; the demo
+                        // lane keeps its seed so the link lands on a rendered route.
+                        search={
+                          {
+                            stage: "apply",
+                            pod: row!.id,
+                            path: member!.path,
+                            ...(demo ? { demo: "apply" } : {}),
+                          } as never
+                        }
+                        title={`Open this spec in ${product.def.name}; apply happens there.`}
+                      >
+                        open in {product.def.name}
+                      </Link>
+                      )
+                    </>
+                  ) : null}
+                  , options from <LadderPicker ladder={ladder} />
+                  {ladder.refusal ? (
+                    <span role="status" data-tone="caution">
+                      {" "}
+                      ({ladder.refusal})
+                    </span>
+                  ) : null}
+                  {demo ? (
+                    <>
+                      {" "}
+                      <FactChip tone="caution" dashed title="Demo lane: pods and runs are fixture.">
+                        fixture
+                      </FactChip>
+                    </>
+                  ) : null}
+                  .
+                </>
+              }
+            />
+          }
+        />
+      }
+    >
       <PaneSplit
         axis="horizontal"
         grow

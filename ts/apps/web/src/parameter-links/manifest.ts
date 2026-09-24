@@ -18,7 +18,7 @@ import {
   runSemanticAction,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
-export interface ParameterLinksPage {
+interface ParameterLinksPage {
   view: "links" | "plan";
 }
 
@@ -26,8 +26,8 @@ const parameterLinksPageSchema = z.object({
   view: z.enum(["links", "plan"]).default("links"),
 });
 
-export type ParameterLinksReadingKey = "links" | "receipts" | "inventory";
-export type ParameterLinksAction = "refresh" | "preview" | "previewProposal" | "apply";
+type ParameterLinksReadingKey = "links" | "receipts" | "inventory";
+type ParameterLinksAction = "refresh" | "preview" | "previewProposal" | "apply";
 
 type Ctx = RouteCtx<ParameterLinksDocument, ParameterLinksReadingKey, ParameterLinksPage>;
 
@@ -53,7 +53,7 @@ export const manifest = defineRoute<
 >({
   key: "parameter-links",
   name: "Parameter Links",
-  docs: "Refresh the bound project's parameter links, preview the proposed changes, then apply the reviewed plan.",
+  docs: "Cross-element parameter links: Pea and you co-edit one draft profile of link definitions and assignments. Refresh re-reads the stored links, preview projects the draft's target writes, and the arming strip arms and commits apply.",
   needs: "project",
   work: parameterLinksRouteState,
   readings: {
