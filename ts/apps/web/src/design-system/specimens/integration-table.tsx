@@ -102,15 +102,13 @@ export function RealTable() {
       </p>
       <p className="max-w-[80ch]">
         This table is also the exhibit for two of §01&apos;s laws, because neither can be shown on a
-        static specimen. <strong>A filter&apos;s vocabulary is stable under filtering:</strong> the
-        facet options come from <code>facetOptions</code> reading ALL rows, never the visible
-        subset, so narrowing by scope leaves the value column&apos;s state vocabulary untouched and
-        picking an option can always widen back out — at the price of a chosen option resolving to
-        zero visible rows, which the empty state says. <strong>Sort by domain order:</strong> a{" "}
-        <code>state</code> column that declares no <code>sort</code> falls back to{" "}
-        <code>CELL_STATE_ORDER</code> — drift first, locked last — rather than to the alphabet. The
-        value column below opts out deliberately: it sorts by the VALUE and lets its facet carry the
-        state.
+        static specimen. <strong>A facet is a query field:</strong> every column that declares a{" "}
+        <code>facet</code> is a field of the one query box, and its value suggestions count the rows
+        in the current scope; the field&apos;s chip removes to widen back out.{" "}
+        <strong>Sort by domain order:</strong> a <code>state</code> column that declares no{" "}
+        <code>sort</code> falls back to <code>CELL_STATE_ORDER</code> — drift first, locked last —
+        rather than to the alphabet. The value column below opts out deliberately: it sorts by the
+        VALUE and lets its facet carry the state.
       </p>
 
       <ArtifactFrame

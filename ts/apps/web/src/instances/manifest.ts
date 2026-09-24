@@ -55,6 +55,7 @@ export const instancesManifest = defineRoute({
       actor: "any",
       input: z.void() as unknown as z.ZodType<never>,
       dirties: ["sessions", "inventory", "doctor", "recents"],
+      rereads: "sessions",
       ready: () => null,
       run: async () => {
         for (const request of Object.values(READINGS)) dirty(request);

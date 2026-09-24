@@ -22,18 +22,16 @@ interface ColumnBase<Row> {
   width?: string;
   /** Present ⇒ sortable. Returns the ordering value for a row. */
   sort?: (row: Row) => string | number;
-  /** Present ⇒ filterable. Returns the row's value for this column's select ("" = no value). */
+  /** Present ⇒ a query field (`label=value`); the box suggests its values ("" = no value). */
   facet?: (row: Row) => string;
-  /** Custom filter predicate for multi-valued columns (a row with several flags matching
-   * "any open"/"none"/one flag). Defaults to `facet(row) === value` equality. */
+  /** The field's `=` for multi-valued columns (a row with several flags matching "any"/"none"/one
+   * flag). Defaults to `facet(row)` equality. */
   match?: (row: Row, value: string) => boolean;
-  /** Filter options; derived from the rows' facet values when omitted. */
+  /** The field's whole vocabulary, suggested even where no row in scope holds a value. */
   options?: { value: string; label: string }[];
   /** Lock the column to the left edge while the table scrolls horizontally. Give locked
    * columns a `width`; lock only leading columns — a lock after a scrolling column overlaps. */
   lock?: boolean;
-  /** Label for the filter's "no filter" option. */
-  all?: string;
   /** Free-text search reads this; omitted columns are not searched. */
   search?: (row: Row) => string;
   /** The displayed scalar the query's `Label>1` clauses read. Units belong in text fields. */
@@ -115,9 +113,6 @@ interface SortKey {
   dir: "asc" | "desc";
 }
 
-/** Column filters, keyed by column key. A key is absent when that column is unfiltered. */
-type Filters = Record<string, string>;
-
 /** What the query box can name: fields (a `kind` filters, a `sort` key sorts), rule words, and
  * the rows a query keeps. `TableFrame` derives it from the columns unless a route supplies it. */
 export interface QueryVocabulary {
@@ -130,35 +125,11 @@ export interface QueryVocabulary {
 
 /** Route-ownable table state. Supplying it lets Pea read and drive the exact visible model. */
 export interface TableState {
-  filters: Filters;
   sorts: SortKey[];
   /** The query box's whole text: free words search, `Label>1` narrows a field, `!` negates. */
   query: string;
   /** Column visibility is view state, so column definitions remain stable. */
   hiddenColumns?: string[];
-}
-
-/**
- * Every distinct facet value present in the rows, sorted — the honest vocabulary of the column.
- *
- * INTENTIONAL: `rows` here is ALL rows, never the currently-visible subset. A column's select
- * therefore keeps a STABLE vocabulary as other filters narrow the table — options never vanish
- * or reshuffle under the cursor, and picking one can always widen the scope back out. The price
- * is that a chosen option may resolve to zero visible rows; the empty state says so, which is a
- * better answer than an option that quietly disappeared.
- */
-export function facetOptions<Row>(
-  rows: readonly Row[],
-  col: Column<Row>,
-): { value: string; label: string }[] {
-  if (col.options) return col.options;
-  if (!col.facet) return [];
-  const set = new Set<string>();
-  for (const row of rows) {
-    const v = col.facet(row);
-    if (v !== "") set.add(v);
-  }
-  return [...set].sort().map((v) => ({ value: v, label: v }));
 }
 
 /** The numeric-cell semantics moved into the language with the editor (fit reviews 2026-08-16,

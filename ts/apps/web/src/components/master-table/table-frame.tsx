@@ -12,7 +12,6 @@ import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { NarrowChip } from "#/components/lang/chip";
 import { Press } from "#/components/lang/press";
 import { resolveStateColumn } from "#/components/master-table/master-table-columns";
-import { labelOf } from "#/components/master-table/master-table-header";
 import type { Column, QueryVocabulary, TableState } from "#/components/master-table/model";
 import { ConditionTarget, QueryBox } from "#/components/master-table/query";
 import { selectableKeys, type TableSelection } from "#/components/master-table/table";
@@ -48,8 +47,9 @@ function columnVocabulary<Row>(
   state: TableState,
 ): QueryVocabulary {
   const scope = (query: string) => visibleRows(rows, columns, { ...state, query });
+  const resolved = columns.map(resolveStateColumn);
   return {
-    fields: columns.map(resolveStateColumn).map((column) => ({
+    fields: resolved.map((column) => ({
       label: column.label,
       kind: column.condition?.kind,
       sort: column.sort ? column.key : undefined,
@@ -57,7 +57,7 @@ function columnVocabulary<Row>(
     rules: [],
     count: (query) => scope(query).length,
     values: (label, query) => {
-      const condition = columns.find((column) => column.label === label)?.condition;
+      const condition = resolved.find((column) => column.label === label)?.condition;
       return condition ? conditionValues(scope(query), condition) : [];
     },
   };
@@ -80,7 +80,7 @@ export function TableFrame<Row extends RowData>({
   children,
 }: TableFrameProps<Row>) {
   const visibleColumns = columns.filter((column) => !state.hiddenColumns?.includes(column.key));
-  const conditioned = visibleColumns.some((column) => column.condition);
+  const conditioned = visibleColumns.some((column) => resolveStateColumn(column).condition);
   const [draft, setDraft] = useState("");
   const [box, setBox] = useState<HTMLInputElement | null>(null);
   // A route vocabulary narrowed the rows already; the frame only orders them.
@@ -89,20 +89,12 @@ export function TableFrame<Row extends RowData>({
   );
   const reach = selection ? selectableKeys(selection, shown) : [];
   const selectedShown = reach.filter((key) => selection!.selected.has(key)).length;
-  const filtered = visibleColumns.filter((column) => state.filters[column.key]);
-  const setFilter = (key: string, value: string | null) => {
-    const next = { ...state.filters };
-    if (value === null) delete next[key];
-    else next[key] = value;
-    onStateChange({ ...state, filters: next });
-  };
   const boxed =
     searchPlaceholder !== undefined ||
     query !== undefined ||
     chips !== undefined ||
     conditioned ||
-    Boolean(state.query) ||
-    filtered.length > 0;
+    Boolean(state.query);
   return (
     <ArtifactFrame
       className="flex min-h-0 flex-1 flex-col"
@@ -163,14 +155,6 @@ export function TableFrame<Row extends RowData>({
                 label={chip.label}
                 onRemove={chip.onClear}
                 title="A route-owned filter narrowing this table right now; removing it widens back out."
-              />
-            ))}
-            {filtered.map((column) => (
-              <NarrowChip
-                key={column.key}
-                label={`${column.label}: ${labelOf(column, rows, state.filters[column.key] ?? "")}`}
-                onRemove={() => setFilter(column.key, null)}
-                title="The column's header filter narrowing this table right now; removing it widens back out."
               />
             ))}
           </QueryBox>

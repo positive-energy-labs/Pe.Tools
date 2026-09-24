@@ -123,7 +123,7 @@ export function AtlasTable() {
                 gutter={gutter}
                 empty={
                   rows.length > 0 ? (
-                    <EmptyState story="filter" exit="clear a column filter or the search">
+                    <EmptyState story="filter" exit="clear a query chip">
                       the narrowing hid all {rows.length} rooms in scope
                     </EmptyState>
                   ) : world.zones.some((z) => z.rooms.length > 0) ? (

@@ -3,17 +3,17 @@
  * reshape). `Table` renders exactly `visibleRows(...)`, and every wrapper (the frame's counts and
  * select-all, an export, a summary) reads the same function, so no two readers can disagree.
  *
- * Semantics: a column filter keeps rows whose `match` accepts the value, else whose `facet` equals
- * it; every field clause of the query holds on its column's `condition`, every free word hits a
- * searchable column (`wordMatches`), and a leading `!` negates either; sorts apply in order, each
- * on its column's `sort`, and ties keep the input order.
+ * Semantics: every field clause of the query holds on its column's `condition` (a `facet` column's
+ * is derived, `resolveStateColumn`), every free word hits a searchable column (`wordMatches`), and
+ * a leading `!` negates either; sorts apply in order, each on its column's `sort`, and ties keep
+ * the input order.
  */
 import { useState } from "react";
 
 import { resolveStateColumn } from "#/components/master-table/master-table-columns";
 import type { Column, TableState } from "#/components/master-table/model";
 
-export const emptyTableState = (): TableState => ({ filters: {}, sorts: [], query: "" });
+export const emptyTableState = (): TableState => ({ sorts: [], query: "" });
 
 const WHOLE_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
 export function parseConditionNumber(value: string | number | null | undefined): number | null {
@@ -117,6 +117,10 @@ export function fieldMatches(
 export type QueryRead<Row> = {
   kind: "text" | "number";
   read: (row: Row) => string | number | null;
+  /** A multi-valued field's `=` (a facet column's `match`); `!=` negates it. */
+  match?: (row: Row, value: string) => boolean;
+  /** The whole vocabulary, suggested even at zero rows in scope (a facet column's `options`). */
+  values?: readonly string[];
 };
 
 /** Whether `row` passes every clause: a field clause on `fields` (keyed by lower-case label), a
@@ -132,7 +136,10 @@ export function passes<Row>(
     if (clause.kind === "word") hit = word(row, clause.word.toLowerCase());
     else if (clause.kind === "field") {
       const field = fields.get(clause.label.toLowerCase());
-      hit = field && fieldMatches(field.read(row), field.kind, clause.op, clause.value);
+      hit =
+        field?.match && clause.value && (clause.op === "=" || clause.op === "!=")
+          ? field.match(row, clause.value) === (clause.op === "=")
+          : field && fieldMatches(field.read(row), field.kind, clause.op, clause.value);
     }
     return hit === undefined || hit !== clause.not;
   });
@@ -141,6 +148,14 @@ export function passes<Row>(
 /** A field's distinct values with their counts over `rows`, keyed the way `=` matches
  * (trimmed, case-folded) and offered in the spelling first seen. */
 export function conditionValues<Row>(rows: readonly Row[], field: QueryRead<Row>) {
+  const { match, values } = field;
+  if (values)
+    return values.map((value) => ({
+      value,
+      count: rows.filter((row) =>
+        match ? match(row, value) : fieldMatches(field.read(row), field.kind, "=", value),
+      ).length,
+    }));
   const counts = new Map<string, { value: string; count: number }>();
   for (const row of rows) {
     const value = String(field.read(row) ?? "").trim();
@@ -189,24 +204,19 @@ export function visibleRows<Row>(
     .map(resolveStateColumn);
   const byKey = new Map(resolved.map((column) => [column.key, column]));
   const fields = new Map(
-    columns.flatMap((column) =>
-      column.condition ? [[column.label.toLowerCase(), column.condition] as const] : [],
-    ),
+    columns
+      .map(resolveStateColumn)
+      .flatMap((column) =>
+        column.condition ? [[column.label.toLowerCase(), column.condition] as const] : [],
+      ),
   );
   const clauses = readQuery(state.query);
   const searchable = resolved.filter((column) => column.search);
-  const kept = rows.filter((row) => {
-    for (const [key, value] of Object.entries(state.filters)) {
-      const column = byKey.get(key);
-      // A filter only acts on a column that can be filtered, as the header offers it.
-      if (!column || !(column.match || column.facet)) continue;
-      const hit = column.match ? column.match(row, value) : column.facet?.(row) === value;
-      if (!hit) return false;
-    }
-    return passes(row, clauses, fields, (each, word) =>
+  const kept = rows.filter((row) =>
+    passes(row, clauses, fields, (each, word) =>
       searchable.some((column) => wordMatches(column.search!(each), word)),
-    );
-  });
+    ),
+  );
   const sorts = state.sorts.filter((sort) => byKey.get(sort.key)?.sort);
   if (!sorts.length) return kept;
   return kept

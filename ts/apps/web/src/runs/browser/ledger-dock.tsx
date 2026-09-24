@@ -27,7 +27,6 @@ export function LedgerDock(props: {
   const { runs, pool, curId, prevId, open, onToggle, onPickCur, onPickBaseline } = props;
   const [rows, setRows] = useState<RunRow[] | null>(null);
   const [tableState, setTableState] = useState<TableState>({
-    filters: {},
     sorts: [{ key: "run", dir: "desc" }],
     query: "",
   });
@@ -284,7 +283,6 @@ export function LedgerDock(props: {
         label: "top rejections",
         title: "The run's three loudest rejection reasons with counts — the histogram's head.",
         facet: (row) => row.board.rejectionTop[0]?.[0] ?? "",
-        all: "any loudest",
         cell: (row) => (
           <span className="flex items-center gap-1 px-1">
             {row.board.rejectionTop.map(([reason, count]) => (
