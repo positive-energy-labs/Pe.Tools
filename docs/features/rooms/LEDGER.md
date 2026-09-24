@@ -9,7 +9,7 @@
 - 2026-09-24, a region the user deleted may be redrawn on rerun, because deletion says the shape was wrong, not that no room is there. A hole is drawn, not inferred.
 - 2026-09-24, revision resilience in the first slice is provenance and a `stale` flag per region (source epoch, link versions, wall evidence); refitting edges to moved walls is solver work, not route work.
 - 2026-09-24, every room field (name, type, ceilingFt, people, lightingW, equipSensible, equipLatent, ventilationCfm) is a Revit parameter on the region. The schema is not settled; takeoffs parity is not required.
-- 2026-09-24, `/rooms` is built on `entityRoute` with stages partition, review, history. `/takeoffs` keeps its room code until `/rooms` is proven, then a purge deletes it.
+- 2026-09-24, `/rooms` is built on `defineRoute` on the route kernel with stages partition, review, history. The spec/pod lane of `entityRoute` is skipped until a rooms spec exists (re-openable). `/takeoffs` keeps its room code until `/rooms` is proven, then a purge deletes it.
 - 2026-09-24, one typed write primitive `rooms.draw {view, loops[]}` materializes regions; partition uses it, and Pea gets the same door.
 - 2026-09-24, solver tuning is a `goal` loop under Astra with a strict visual bar: every edge on wall ink, no stairstep runs, no swallowed walls, room count matches the registered plan, judged on full-level renders by fresh eyes. Pivot early over knob tuning.
 

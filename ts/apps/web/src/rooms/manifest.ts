@@ -3,6 +3,7 @@
  * into Work, write the staged cells to Revit. Behavior is here; the page draws it (`route.tsx`).
  */
 import { z } from "zod";
+import type { RoomsPartition } from "@pe/host-contracts/generated";
 import {
   roomEditAddress,
   roomsRouteState,
@@ -11,8 +12,7 @@ import {
   type RoomsRouteDocument,
 } from "@pe/agent-contracts";
 
-import { defineRoute, type Ctx } from "#/route/manifest";
-import type { HostRecord } from "#/route/facts";
+import { defineRoute, semanticActionInput, type Ctx } from "#/route/manifest";
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 import {
   actionResult,
@@ -38,19 +38,15 @@ export type RoomsPage = z.infer<typeof roomsPageSchema>;
 export type RoomsReading = "receipts";
 type RoomsCtx = Ctx<RoomsRouteDocument, RoomsReading, RoomsPage>;
 
-// SHIM: generated rooms ops land at merge. Until `rooms.*` is in `semanticActions`, each verb
-// carries its host record by hand (the contract's says/needs/actor) and dispatches with a cast.
-const record =
-  (says: string): (() => HostRecord) =>
-  () => ({
-    says,
-    needs: "project-document",
-    actor: "any",
-  });
-const dispatch = async (ctx: RoomsCtx, key: string, input: Record<string, unknown>) => {
+const dispatch = async (
+  ctx: RoomsCtx,
+  key: "rooms.partition" | "rooms.write",
+  input: Record<string, unknown>,
+) => {
   if (ctx.target.kind !== "document") throw Error("An open document is required");
-  // SHIM: generated rooms ops land at merge
-  return actionResult(await runSemanticAction(key as never, input, ctx.target.ref));
+  return actionResult(
+    await runSemanticAction(key, semanticActionInput(key, input), ctx.target.ref),
+  );
 };
 
 const stagedKeys = (ctx: RoomsCtx) =>
@@ -80,24 +76,23 @@ export const manifest = defineRoute<
   actions: {
     partition: {
       label: "partition",
-      does: record(
-        "Splits the chosen view's level into room regions; regions a person drew or edited stay, untouched machine regions rebind or go",
-      ),
+      does: "rooms.partition",
       input: none,
       dirties: ["receipts"],
       stage: "partition",
       waitSeconds: NATIVE_APPLY_WAIT_S,
       ready: (ctx) => (ctx.page.view ? null : "Pick a plan view"),
       run: async (ctx) => {
+        // The action's result is the op's response, as the generated catalog declares it.
         const result = (await dispatch(ctx, "rooms.partition", {
           view: ctx.page.view,
           bounds: null,
-        })) as { created?: number; kept?: number; locked?: number; deleted?: number } | undefined;
-        if (result)
-          ctx.note(
-            "partition",
-            `${result.created ?? 0} created · ${result.kept ?? 0} kept · ${result.locked ?? 0} locked · ${result.deleted ?? 0} deleted`,
-          );
+        })) as RoomsPartition.Res.Response;
+        ctx.note(
+          "partition",
+          `${result.created} created · ${result.kept} kept · ${result.locked} locked · ${result.deleted} deleted · ${result.held} held`,
+          result.failures.length > 0,
+        );
         bump(ctx);
       },
     },
@@ -107,7 +102,7 @@ export const manifest = defineRoute<
         const n = stagedKeys(ctx).length;
         return n ? `apply ${n} cell${n === 1 ? "" : "s"}` : "apply";
       },
-      does: record("Writes the staged room fields to their regions in Revit, then reads them back"),
+      does: "rooms.write",
       input: none,
       dirties: ["receipts"],
       stage: "review",

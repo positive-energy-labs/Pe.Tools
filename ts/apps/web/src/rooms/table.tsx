@@ -8,7 +8,6 @@ import {
   roomEditSchema,
   transitionPatches,
   type RoomEditField,
-  type RoomsRegion,
   type RoomsRouteDocument,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
@@ -19,7 +18,7 @@ import { EmptyState } from "#/components/lang/empty";
 import { CellListSelect } from "#/components/lang/list-popup";
 import type { Column, Verdict } from "#/components/master-table/model";
 import { Table } from "#/components/master-table/table";
-import { REGION_INK, regionLabel, regionState, type RoomRow } from "./plan";
+import { REGION_INK, regionLabel, regionState, type RoomRow, type RoomsRegion } from "./plan";
 
 const ROOM_TYPES = roomEditSchema.shape.type.unwrap().options;
 type RoomType = (typeof ROOM_TYPES)[number];

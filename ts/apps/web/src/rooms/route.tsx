@@ -4,13 +4,8 @@
  * receipts in History. The snapshot is one host read keyed on the target and `page.epoch`.
  */
 import { useEffect, useMemo, useState } from "react";
-import {
-  roomsSnapshotSchema,
-  type ActionReceipt,
-  type Reading,
-  type RoomsRouteDocument,
-  type RoomsSnapshot,
-} from "@pe/agent-contracts";
+import type { ActionReceipt, Reading, RoomsRouteDocument } from "@pe/agent-contracts";
+import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
 import type { CellWire } from "#/components/lang/band";
 import { EmptyState } from "#/components/lang/empty";
@@ -19,8 +14,7 @@ import { OutcomeLine } from "#/components/lang/outcome";
 import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
 import { Surface } from "#/components/lang/surface";
-import { callHostDynamic } from "#/host/client";
-import { HOST_QUERY_KEY, previousOf, useHostCall } from "#/readings";
+import { previousOf, useHostOp } from "#/readings";
 import { RouteShell, useRoute, useRouteThread } from "#/route";
 import { Ladder } from "#/route/ladder";
 import { useChooseTarget } from "#/route/shell";
@@ -35,19 +29,20 @@ type Empty = { says: string; exit: string };
 
 /** `rooms.snapshot` from the one document the sentence names. */
 function useRoomsSnapshot(doc: { session: string; openId: string } | null, epoch: number) {
-  const call = useHostCall(
-    async (signal) =>
-      roomsSnapshotSchema.parse(
-        // SHIM: generated rooms ops land at merge
-        await callHostDynamic(
-          "rooms.snapshot",
-          {},
-          { bridgeSessionId: doc?.session, openDocumentId: doc?.openId, signal },
-        ),
-      ),
-    [...HOST_QUERY_KEY, "rooms.snapshot", doc?.session ?? "", doc?.openId ?? "", epoch],
-    doc !== null,
+  const call = useHostOp(
+    "rooms.snapshot",
+    {},
+    {
+      bridgeSessionId: doc?.session,
+      openDocumentId: doc?.openId,
+      enabled: doc !== null,
+    },
   );
+  // Every verb bumps the epoch on success; the snapshot is read again then.
+  const { refresh } = call;
+  useEffect(() => {
+    if (epoch > 0) refresh();
+  }, [epoch, refresh]);
   return { snapshot: call.data ?? null, error: call.error?.message ?? null, pending: call.pending };
 }
 
@@ -203,7 +198,7 @@ function RoomsBody({
   cells,
   wire,
 }: {
-  snapshot: RoomsSnapshot | null;
+  snapshot: RoomsSnapshot.Res.Response | null;
   empty: Empty | null;
   page: RoomsPage;
   setPage: (next: Partial<RoomsPage>) => void;

@@ -3,7 +3,7 @@
  * region's state. Click selects, hover pairs with the table row, a click on empty ground clears.
  */
 import { useMemo } from "react";
-import type { RoomsRegion } from "@pe/agent-contracts";
+import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
@@ -13,6 +13,16 @@ import { token } from "#/lib/token";
 import { PlanImageLayer, type TakeoffPlanImage } from "#/takeoff/level-plan";
 import { pathD } from "#/takeoff/model";
 import { PLAN_REFUSAL, type PlanRefusal } from "#/takeoff/plan-image";
+
+export type RoomsRegion = RoomsSnapshot.Res.RoomsRegion;
+
+/** A wire point as model XY in feet; anything else is not a point, and says so. */
+const xy = (point: readonly number[]): Point2 => {
+  if (point.length !== 2 || !point.every(Number.isFinite))
+    throw Error(`rooms.snapshot point is not model XY: [${point.join(", ")}]`);
+  return [point[0]!, point[1]!];
+};
+const loopOf = (loop: readonly (readonly number[])[]) => loop.map(xy);
 
 export type RegionState = "locked" | "stale" | "held" | "machine";
 
@@ -84,7 +94,7 @@ export function RoomsPlan({
   onHover: (guid: string | null) => void;
 }) {
   const bounds = useMemo(() => {
-    const points: Point2[] = rows.flatMap((row) => row.region.outer);
+    const points: Point2[] = rows.flatMap((row) => loopOf(row.region.outer));
     if (plan) points.push(...planCorners(plan));
     return points.length ? boundsOf(points) : null;
   }, [rows, plan]);
@@ -179,7 +189,7 @@ export function RoomsPlan({
           const { dashed } = REGION_INK[state];
           const on = selected.has(region.guid);
           const hot = hovered === region.guid;
-          const [lx, ly] = frame.toViewport(region.label);
+          const [lx, ly] = frame.toViewport(xy(region.label));
           return (
             <g
               key={region.guid}
@@ -192,7 +202,7 @@ export function RoomsPlan({
               }}
             >
               <path
-                d={pathD([region.outer, ...region.holes], frame)}
+                d={pathD([loopOf(region.outer), ...region.holes.map(loopOf)], frame)}
                 fillRule="evenodd"
                 fill={`color-mix(in srgb, ${ink} ${on ? 30 : hot ? 20 : 8}%, transparent)`}
                 stroke={ink}

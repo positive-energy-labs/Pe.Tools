@@ -1,14 +1,9 @@
 /** /rooms, deterministic: the write payload, the plan's ink order, and the page's defaults. */
 import { expect, test } from "vite-plus/test";
-import {
-  roomEditKey,
-  roomsRouteState,
-  stagedRoomWrites,
-  type RoomsRegion,
-} from "@pe/agent-contracts";
+import { roomEditKey, roomsRouteState, stagedRoomWrites } from "@pe/agent-contracts";
 
 import { manifest } from "./manifest";
-import { REGION_STATES, regionState } from "./plan";
+import { REGION_STATES, regionState, type RoomsRegion } from "./plan";
 import { roomRows, stagePatches } from "./table";
 
 const region = (patch: Partial<RoomsRegion>): RoomsRegion => ({
