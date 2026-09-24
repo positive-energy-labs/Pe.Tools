@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { annotation } from "#/components/anatomy";
 import { modeDepth } from "../depth";
 import { Moments } from "../moments";
@@ -22,9 +23,6 @@ export function Lens({
     moments,
     showEmpty,
     cache,
-    threadScope,
-    targetTone,
-    targetRailColor,
     frameRef,
     scrollerRef,
     chatRef,
@@ -37,28 +35,35 @@ export function Lens({
     bandRefs,
     registerMoment,
     onBandClick,
-    scrollToTail,
   } = useLensModel({ state, mode, sideOpen }); // eslint-disable-line react-hooks/exhaustive-deps
+  const previewRef = useRef<HTMLSpanElement>(null);
 
   return (
     <div {...annotation("frame")} ref={frameRef} data-mode={mode}>
       <div {...annotation("scroller")} ref={scrollerRef}>
         <div {...annotation("grid")}>
-          <div {...annotation("dial")} onClick={onBandClick} aria-label="Timeline">
-            <div
-              aria-hidden="true"
-              title={`to: ${threadScope.defaultTarget === null ? "none" : threadScope.defaultTarget.kind === "named" ? threadScope.defaultTarget.address : threadScope.defaultTarget.ref.openId} r${threadScope.revision}`}
-              style={{
-                position: "absolute",
-                left: 0,
-                top: 0,
-                bottom: 0,
-                width: 2,
-                backgroundColor: targetRailColor,
-                opacity: targetTone === "muted" ? 0.25 : 0.55,
-                zIndex: 1,
-              }}
-            />
+          <div
+            {...annotation("dial")}
+            onClick={onBandClick}
+            onMouseOver={(event) => {
+              // One floating label outside the bands: a band's own opacity would dim it.
+              const label = previewRef.current;
+              const band = (event.target as HTMLElement).closest<HTMLElement>(
+                '[data-annotation="dial-band"]',
+              );
+              const moment = band && moments.find((m) => m.id === band.dataset.key);
+              if (!label) return;
+              label.hidden = !moment;
+              if (!band || !moment) return;
+              const box = band.getBoundingClientRect();
+              label.textContent = `#${moment.turn}${moment.preview ? `  ${moment.preview}` : ""}`;
+              label.style.top = `${box.top + box.height / 2 - event.currentTarget.getBoundingClientRect().top}px`;
+            }}
+            onMouseLeave={() => {
+              if (previewRef.current) previewRef.current.hidden = true;
+            }}
+            aria-label="Timeline"
+          >
             <div {...annotation("dial-strip")} ref={stripRef}>
               {moments.map((moment, index) => (
                 <div
@@ -85,28 +90,7 @@ export function Lens({
             <div {...annotation("reticle-cap")} ref={capBotRef} />
             <div {...annotation("reticle-focal")} ref={csFocalRef} />
             <div {...annotation("caret")} ref={caretRef} />
-            {/* Always present: nothing auto-scrolls any more, so this bar is the only way back
-                to the live tail. It IS the press - no chip inside the rail. */}
-            {moments.length > 0 ? (
-              <span
-                {...annotation("tail")}
-                role="button"
-                tabIndex={0}
-                title="Jump to latest"
-                aria-label="Jump to latest"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  scrollToTail();
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter" && event.key !== " ") return;
-                  event.preventDefault();
-                  scrollToTail();
-                }}
-              >
-                ↓
-              </span>
-            ) : null}
+            <span {...annotation("dial-preview")} ref={previewRef} hidden />
           </div>
 
           <div {...annotation("chat")} ref={chatRef}>

@@ -12,8 +12,8 @@ import { buildTraceCells, ToolCellBody, TraceCellView } from "#/workbench/lens/c
 import { Press } from "#/components/lang/press";
 import { X } from "lucide-react";
 import { chatPluginTitle, type ChatPluginRoute } from "#/workbench/chat-plugins";
-import { useChatPluginHost } from "#/workbench/route-panes";
-import { ComposerHead } from "#/chat/composer-head";
+import { headless, useChatPluginHost } from "#/workbench/route-panes";
+import { ChatCluster, ComposerHead, useChatSituation } from "#/chat/composer-head";
 import { RouteShell, useRoute } from "#/route";
 import { appAtomRegistry } from "#/route/route-owner";
 import { useScopeKeys } from "#/route/keys";
@@ -98,6 +98,7 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
   // The handle is owned here, not inside the shell: Chat has no route head, and its composer
   // head is the Situation, which needs the same handle the shell's chords run through.
   const handle = useRoute(manifest);
+  const situation = useChatSituation(handle);
   const handleRenameThread = (id: string, title: string) => void renameThread(id, title);
   const [deletedThreadIds, setDeletedThreadIds] = useState<ReadonlySet<string>>(() => new Set());
   const handleDeleteThread = async (id: string) => {
@@ -125,7 +126,29 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
     [planIntent, store],
   );
   const focusPath = parseFocus(focus);
-  const host = useChatPluginHost(plugin, currentThreadId, intent, focusPath, pluginOpen);
+  const chrome = plugin ? (
+    <>
+      {focusPath ? (
+        <Press
+          tone="quiet"
+          size="caption"
+          title="Show the whole Work"
+          onClick={() => store.actions.setPlugin(plugin)}
+        >
+          {focusPath.join(" › ")} <X />
+        </Press>
+      ) : null}
+      <Press
+        tone="quiet"
+        size="icon"
+        title="Close workspace"
+        onClick={() => store.actions.setPlugin(undefined)}
+      >
+        <X className="size-4" strokeWidth={1.5} />
+      </Press>
+    </>
+  ) : null;
+  const host = useChatPluginHost(plugin, currentThreadId, intent, focusPath, pluginOpen, chrome);
 
   // Context gauges (cap + OM meters) ride beside the composer now, so the cache view is derived
   // here instead of inside the Lens. userTurns gates the diff baseline (advances on each send).
@@ -182,6 +205,7 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
           flush
           id="transcript"
           title={threads.find((thread) => thread.id === currentThreadId)?.title ?? "thread"}
+          actions={<ChatCluster handle={handle} situation={situation} />}
           boundaryKey={currentThreadId}
           onRetry={retryBody}
         >
@@ -195,7 +219,12 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
         handle={handle}
         topBar={
           <>
-            <ComposerHead handle={handle} status={status} urlTarget={target} />
+            <ComposerHead
+              handle={handle}
+              situation={situation}
+              status={status}
+              urlTarget={target}
+            />
             <ContextRibbon
               breakdown={breakdown}
               cache={cache}
@@ -298,28 +327,8 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
                       title={chatPluginTitle(plugin)}
                       collapsed={!pluginOpen}
                       onCollapsedChange={(collapsed) => store.actions.setPluginOpen(!collapsed)}
-                      actions={
-                        <>
-                          {focusPath ? (
-                            <Press
-                              tone="quiet"
-                              size="caption"
-                              title="Show the whole Work"
-                              onClick={() => store.actions.setPlugin(plugin)}
-                            >
-                              {focusPath.join(" › ")} <X />
-                            </Press>
-                          ) : null}
-                          <Press
-                            tone="quiet"
-                            size="icon"
-                            title="Close workspace"
-                            onClick={() => store.actions.setPlugin(undefined)}
-                          >
-                            <X />
-                          </Press>
-                        </>
-                      }
+                      actions={chrome}
+                      headerless={!headless(plugin)}
                     >
                       <div ref={host.slot} className="contents" />
                     </Pane>

@@ -44,6 +44,7 @@ import { createPeaProductStateStorageProfile } from "./storage/profiles.ts";
 import { createSystemPromptCapture } from "./system-prompt-capture.ts";
 import { createToolListCapture } from "./tool-list-capture.ts";
 import { admitTurn, ScopeStore, type ScopeStateStore } from "./scope-store.ts";
+import { installTurnQueue } from "./turn-queue.ts";
 import { endParkedTurn, expireAsks } from "./thread-state.ts";
 export { messageContents } from "./message-contents.ts";
 import { peaAgentInstructionsFor } from "./pea-instructions.ts";
@@ -550,16 +551,7 @@ export function createPeaSessionAdmission(
     await assertRunAdmitted();
     return steer(input);
   };
-  const followUp = session.followUp.bind(session);
-  session.followUp = async (input) => {
-    await assertRunAdmitted();
-    return followUp(input);
-  };
-  const drainFollowUpQueue = session.drainFollowUpQueue.bind(session);
-  session.drainFollowUpQueue = async (options) => {
-    await assertRunAdmitted();
-    return drainFollowUpQueue(options);
-  };
+  const unsubscribeTurnQueue = installTurnQueue(session, scopes);
   const sendNotificationSignal = session.sendNotificationSignal.bind(session);
   session.sendNotificationSignal = async (input, options) => {
     if (scopedThreadId) throw new Error("Pea web sessions do not support notifications.");
@@ -625,6 +617,7 @@ export function createPeaSessionAdmission(
         permissionGeneration++;
         unsubscribePermissions?.();
         unsubscribeDocumentCleanup();
+        unsubscribeTurnQueue();
         restoreScopedThreadLifecycle?.();
       }
       await permissionQueue;

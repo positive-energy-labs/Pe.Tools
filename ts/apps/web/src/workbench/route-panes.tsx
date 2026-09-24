@@ -9,6 +9,8 @@ import { createPortal } from "react-dom";
 import { LiveScheduleGridWorkspace } from "#/route/schedules/live";
 import { FamilyRouteView } from "#/family/live";
 import { ChatFocus, ChatHosted, ChatPlanIntent } from "#/route/situation-ladder";
+import { HostedChrome } from "#/route/hosted-chrome";
+import { SurfaceInset } from "#/components/lang/surface";
 import { PodsRouteContent } from "#/routes/pods";
 import { FamiliesRouteContent } from "#/routes/families";
 import { ParameterLinksRouteContent } from "#/routes/parameter-links";
@@ -42,6 +44,8 @@ export function useChatPluginHost(
   intent: ContextType<typeof ChatPlanIntent> = null,
   focus: readonly string[] | null = null,
   open = true,
+  /** Close and focus controls; the open route draws them in its own head. */
+  chrome: ReactNode = null,
 ) {
   const [homes, setHomes] = useState<ReadonlyMap<ChatPluginRoute, HTMLElement>>(new Map());
   // Created after mount: the server renders no portals, and a portal's home must outlive the pane.
@@ -62,7 +66,11 @@ export function useChatPluginHost(
       <ChatHosted.Provider value>
         <ChatPlanIntent.Provider value={intent?.route === route ? intent : null}>
           <ChatFocus.Provider value={route === plugin ? focus : null}>
-            <View thread={thread} visible={route === plugin && open} />
+            <HostedChrome.Provider value={route === plugin ? chrome : null}>
+              <SurfaceInset.Provider value={false}>
+                <View thread={thread} visible={route === plugin && open} />
+              </SurfaceInset.Provider>
+            </HostedChrome.Provider>
           </ChatFocus.Provider>
         </ChatPlanIntent.Provider>
       </ChatHosted.Provider>,
@@ -72,6 +80,10 @@ export function useChatPluginHost(
   });
   return { slot, kept };
 }
+
+/** Hosted routes that draw no head of their own keep the pane's rail for their title and close.
+ *  ponytail: a hand list; give pods and parameter-links a RouteShell head and this goes. */
+export const headless = (route: ChatPluginRoute) => route === "pods" || route === "parameter-links";
 
 function HostedInstances() {
   const [target, setTarget] = useState("");

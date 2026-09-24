@@ -13,6 +13,7 @@ import {
   type RuntimeInjectedControllerConfig,
 } from "../src/index.ts";
 import { createPeaRuntime, peaModelAllowlist, peaModels } from "../src/pea-runtime.ts";
+import { turnQueues } from "../src/turn-queue.ts";
 
 const runtimeTestTimeout = 60_000;
 const defaultPeaAgentModelId = "anthropic/claude-opus-5";
@@ -521,22 +522,27 @@ test(
     try {
       const session = runtime.session!;
       await session.thread.create({ title: "permission drift" });
-      vi.spyOn(session.run, "isRunning").mockReturnValue(true);
+      const running = vi.spyOn(session.run, "isRunning").mockReturnValue(true);
       vi.spyOn(session.stream, "isOpen").mockReturnValue(false);
-      const sendMessage = vi.spyOn(session, "sendMessage");
+      const sendSignal = vi.spyOn(session, "sendSignal");
+      const queue = turnQueues.get(session)!;
 
       await session.followUp({ content: "queued before permission drift" });
-      expect(session.followUps.count()).toBe(1);
+      expect(queue.read().items).toHaveLength(1);
       await session.thread.setSetting({
         key: "pea.permissions",
         value: { yolo: false, permissionRules: expectedPermissionRules["read-only"] },
       });
 
-      await expect(session.drainFollowUpQueue()).rejects.toThrow(
-        "Pea permission state did not persist exactly.",
-      );
-      expect(sendMessage).not.toHaveBeenCalled();
-      expect(session.followUps.count()).toBe(1);
+      running.mockReturnValue(false);
+      session.emit({ type: "agent_end", reason: "complete" });
+      await expect(session.drainFollowUpQueue()).resolves.toBe(false);
+      expect(sendSignal).not.toHaveBeenCalled();
+      expect(queue.read()).toMatchObject({
+        items: [{ content: "queued before permission drift" }],
+        paused: true,
+        error: "Pea permission state did not persist exactly.",
+      });
       await expect(runtime.close?.()).resolves.toBeUndefined();
     } finally {
       if (previousStateDirectory === undefined) delete process.env.PE_TOOLS_STATE_DIR;

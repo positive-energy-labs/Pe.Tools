@@ -1,20 +1,13 @@
-import { token } from "#/lib/token";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { useCacheView } from "../world";
 import { useWorkbench } from "../provider";
 import { useCurrentThreadView } from "../thread-view";
-import { useThreadScope } from "#/chat/scope";
 import { selectBreakdown, selectMessages } from "../chat-state";
-import {
-  lensScrollIntent,
-  type LensScrollIntent,
-  scrollTopForIntent,
-  turnAtFocalPoint,
-} from "../model";
+import { scrollTopForIntent, turnAtFocalPoint } from "../model";
 import type { Geom } from "./scale";
-import { FOCAL, HEAD_H, MIN_BAND, SCALE } from "./scale";
-import { TARGET_RAIL_COLOR, buildTraceCells, toMoments } from "./context-strip";
+import { FOCAL, HEAD_H, railLayout, type RailLayout } from "./scale";
+import { buildTraceCells, toMoments } from "./context-strip";
 import type { Mode } from "../depth";
 import type { ChatState } from "../chat-state";
 
@@ -42,12 +35,7 @@ export function useLensModel({
 
   const cache = useCacheView(breakdown, userTurns);
 
-  const { currentThreadId, revit, loading } = useWorkbench();
-  const threadScope = useThreadScope(currentThreadId, revit === true);
-  // The rail is the thread head: a chosen document reads as meta, none as muted.
-  const targetTone = threadScope.defaultTarget === null ? "muted" : "meta";
-
-  const targetRailColor = TARGET_RAIL_COLOR[targetTone] ?? token("ink-mute");
+  const { loading } = useWorkbench();
 
   const frameRef = useRef<HTMLDivElement>(null);
 
@@ -145,12 +133,17 @@ export function useLensModel({
     [setIntent],
   );
 
-  // Jump-to-tail: the one thing that puts the view at the bottom, and only when pressed.
-  const scrollToTail = useCallback(() => {
-    const scroller = scrollerRef.current;
-    if (!scroller) return;
-    landedRef.current = true;
-    scroller.scrollTo({ top: scroller.scrollHeight - scroller.clientHeight, behavior: "smooth" });
+  // Jump-to-tail: the one thing that puts the view at the bottom, and only when pressed. The press
+  // lives in the composer head, which dispatches `pe:focus-tail`.
+  useEffect(() => {
+    const onTail = () => {
+      const scroller = scrollerRef.current;
+      if (!scroller) return;
+      landedRef.current = true;
+      scroller.scrollTo({ top: scroller.scrollHeight - scroller.clientHeight, behavior: "smooth" });
+    };
+    window.addEventListener("pe:focus-tail", onTail);
+    return () => window.removeEventListener("pe:focus-tail", onTail);
   }, []);
 
   // The single scroll controller: candlestick + bands + chat stubs + pinned fisheye cards.
@@ -166,6 +159,8 @@ export function useLensModel({
     const detailKeys = new Set(traceCells.map((cell) => cell.key));
 
     let geom: Geom[] = [];
+    // Doc y → rail y (`railLayout`): the thread fits the rail like a scrollbar; nothing slides.
+    let map: RailLayout = { bands: new Map(), at: () => 0 };
     let cards: { key: string; el: HTMLElement }[] = [];
     // Each tool card is anchored to its inline marker's real doc-y in the chat (measured below).
     // The focal card is the one whose anchor is nearest the focal axis — so scrolling walks the
@@ -203,20 +198,19 @@ export function useLensModel({
     const sync = () => {
       const s = scroller.scrollTop;
       const V = scroller.clientHeight;
-      const focalG = FOCAL * V;
       const fy = FOCAL * V;
 
-      // candlestick: horizontal focal bar + vertical wick (the viewport extent)
-      const wickTop = focalG - SCALE * FOCAL * V;
-      const wickH = SCALE * V;
+      // the reticle: the viewport's extent on the fixed map
+      const wickTop = map.at(s);
+      const wickH = map.at(s + V) - wickTop;
       if (wickRef.current) {
         wickRef.current.style.top = `${wickTop}px`;
         wickRef.current.style.height = `${wickH}px`;
       }
       if (capTopRef.current) capTopRef.current.style.top = `${wickTop}px`;
       if (capBotRef.current) capBotRef.current.style.top = `${wickTop + wickH}px`;
-      if (csFocalRef.current) csFocalRef.current.style.top = `${fy}px`;
-      if (caretRef.current) caretRef.current.style.top = `${fy}px`;
+      if (csFocalRef.current) csFocalRef.current.style.top = `${map.at(s + fy)}px`;
+      if (caretRef.current) caretRef.current.style.top = `${map.at(s + fy)}px`;
 
       // The intent tracks the turn on the focal axis (what a reload reopens). Not before the
       // opening position has landed: a scroll before that is not the user's.
@@ -227,8 +221,6 @@ export function useLensModel({
         if (turn !== undefined && (current.kind !== "turn" || turn !== current.turn))
           setIntent({ kind: "turn", turn });
       }
-
-      strip.style.transform = `translateY(${focalG - SCALE * (s + FOCAL * V)}px)`;
 
       // which stub sits on the focal axis?
       const focalDoc = s + FOCAL * V;
@@ -283,6 +275,7 @@ export function useLensModel({
           : [];
       });
       geomRef.current = geom;
+      map = railLayout(geom, scroller.scrollHeight, scroller.clientHeight);
       // Anchor each tool card to its inline marker's real doc-y in the chat scroll space, so the
       // focal-card pick matches the tool the user sees at the focal axis. `parent` is the
       // enclosing message id, so the focal-message filter in sync() stays consistent.
@@ -309,8 +302,9 @@ export function useLensModel({
       for (const g of geom) {
         const band = bandRefs.current.get(g.key);
         if (!band) continue;
-        band.style.top = `${g.top * SCALE}px`;
-        band.style.height = `${Math.max(MIN_BAND, g.height * SCALE)}px`;
+        const box = map.bands.get(g.key)!;
+        band.style.top = `${box.top}px`;
+        band.style.height = `${box.height}px`;
       }
       const metrics = {
         scrollTop: scroller.scrollTop,
@@ -361,30 +355,6 @@ export function useLensModel({
     const onScroll = () => schedule();
     scroller.addEventListener("scroll", onScroll, { passive: true });
 
-    // Transcript turn-number tags dispatch this (moments.tsx MomentHead): center that turn on the focal
-    // axis — same gesture as tapping its mapdial band.
-    const onFocusTurn = (event: Event) => {
-      const turn = (event as CustomEvent<number>).detail;
-      if (!Number.isFinite(turn)) return;
-      landedRef.current = true;
-      const target: LensScrollIntent = lensScrollIntent(turn);
-      setIntent(target);
-      scroller.scrollTo({
-        top: scrollTopForIntent(
-          target,
-          geomRef.current,
-          {
-            scrollTop: scroller.scrollTop,
-            scrollHeight: scroller.scrollHeight,
-            clientHeight: scroller.clientHeight,
-          },
-          FOCAL,
-        ),
-        behavior: "smooth",
-      });
-    };
-    window.addEventListener("pe:focus-turn", onFocusTurn);
-
     const chat = chatRef.current;
     const trace = traceInnerRef.current;
     // Hovering an inline tool marker targets THAT tool (not the group's first); trace rows direct.
@@ -403,7 +373,6 @@ export function useLensModel({
     return () => {
       ro.disconnect();
       scroller.removeEventListener("scroll", onScroll);
-      window.removeEventListener("pe:focus-turn", onFocusTurn);
       cancelAnimationFrame(raf);
       chat?.removeEventListener("mouseover", onChatOver);
       chat?.removeEventListener("mouseleave", onChatLeave);
@@ -427,9 +396,6 @@ export function useLensModel({
     breakdown,
     userTurns,
     cache,
-    threadScope,
-    targetTone,
-    targetRailColor,
     frameRef,
     scrollerRef,
     chatRef,
@@ -445,6 +411,5 @@ export function useLensModel({
     inspectKey,
     registerMoment,
     onBandClick,
-    scrollToTail,
   };
 }

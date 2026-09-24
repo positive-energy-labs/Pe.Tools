@@ -11,6 +11,7 @@ import {
   type SetStateAction,
 } from "react";
 import { Paperclip, X } from "lucide-react";
+import { QueuedMessages } from "./queued-messages";
 import { ControlChips } from "#/chat/control-chips";
 import { Textarea } from "#/components/lang/textarea";
 import { Pane, type PaneShortcut } from "#/components/lang/pane";
@@ -178,6 +179,7 @@ function Composer({
       headerless
       shortcuts={shortcuts}
     >
+      <QueuedMessages />
       <form ref={formRef} onSubmit={submit} className="relative w-full">
         <ListPopup<SlashCommand>
           anchor="caret"

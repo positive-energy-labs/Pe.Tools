@@ -52,7 +52,7 @@
 /* The transcript owns column 1; its map dial occupies the fixed right rail. */
 [data-annotation="grid"] {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--map, 46px);
+  grid-template-columns: minmax(0, 1fr) var(--map, 23px);
   align-items: start;
 }
 /* all share row 1 — explicit grid-column alone bumps items into separate rows */
@@ -70,10 +70,11 @@
   position: sticky;
   top: 0;
   height: var(--vp, 560px);
-  overflow: hidden;
-  border-left: 0.5px solid var(--pe-line);
-  background: var(--pe-artifact);
-  --pe-on: var(--pe-artifact);
+  /* A bare strip, like a scrollbar: no ground, no border. Clip top/bottom/right only — the turn
+     number and its hover preview spill left over the transcript. */
+  clip-path: inset(0 0 0 -480px);
+  /* above the transcript, so the hover preview covers the chat text instead of mixing with it */
+  z-index: 7;
   touch-action: none;
   user-select: none;
 }
@@ -85,8 +86,8 @@
 }
 [data-annotation="dial-band"] {
   position: absolute;
-  right: 6px;
-  width: 8px;
+  right: 3px;
+  width: 4px;
   cursor: pointer;
   border-radius: 0; /* hard-square segment bars */
   opacity: 0.38;
@@ -95,15 +96,13 @@
     width var(--motion-control) ease,
     background var(--motion-control) ease;
 }
-/* number rides on the band, to its left. Hidden by default; revealed on hover (below) and
-   ALWAYS on the focal band (the reticle readout). Machine-measured: mono, tracked, tabular. */
+/* number rides on the band, to its left, shown ONLY on the focal band (the reticle readout).
+   Machine-measured: mono, tracked, tabular. */
 [data-annotation="dial-band"] [data-annotation="dial-number"] {
   position: absolute;
   /* Anchored to the band's own LEFT edge, not a fixed lane inset: the focal band grows leftward,
      and a fixed inset put the number underneath it.
-     ponytail: ~19px of leftward room beside a focal band in the 46px lane — "#99" fits, a
-     four-character turn clips at the lane's overflow:hidden edge. Widen --map if threads get
-     that long. */
+     It spills over the transcript, so it wears the page ground to stay legible. */
   right: 100%;
   margin-right: 4px;
   top: 50%;
@@ -113,6 +112,8 @@
   letter-spacing: 0.05em;
   font-variant-numeric: tabular-nums;
   color: var(--pe-ink-2);
+  background: var(--pe-page);
+  --pe-on: var(--pe-page);
   white-space: nowrap;
   text-align: right;
   opacity: 0;
@@ -123,18 +124,15 @@
 [data-annotation="dial-band"].in-reticle {
   opacity: 0.85;
 }
-/* hover reveals the turn number on any band */
-[data-annotation="dial-band"]:hover {
-  opacity: 1;
-}
-[data-annotation="dial-band"]:hover [data-annotation="dial-number"] {
-  opacity: 1;
+/* hover EXPANDS the band, no colour change; the preview label names it */
+[data-annotation="dial"] [data-annotation="dial-band"]:hover {
+  width: 10px;
 }
 /* focal = the single band on the focal axis. Emphasis is WIDTH + full strength of the band's OWN
    provenance colour — never a hue swap. */
 [data-annotation="dial-band"].focal {
   opacity: 1;
-  width: 16px;
+  width: 8px;
 }
 /* provenance: "you" is neutral ink (no identity hue — the standing question, answered NO);
    pea wears the agent identity. Focal = the same colour at full strength; non-focal = a wash. */
@@ -158,6 +156,24 @@
   transform: translateY(-50%);
   border: 3px solid transparent;
   border-right-color: var(--pe-caution);
+}
+/* The hover preview: turn number + first sentence, one floating label beside the hovered band. */
+[data-annotation="dial-preview"] {
+  position: absolute;
+  right: 17px;
+  width: max-content;
+  max-width: 440px;
+  transform: translateY(-50%);
+  padding: 3px 8px;
+  border: 0.5px solid var(--pe-line-2);
+  line-height: var(--type-small-line-height);
+  background: var(--pe-page);
+  --pe-on: var(--pe-page);
+  color: var(--pe-ink);
+  font-size: var(--type-small-size);
+  white-space: pre-wrap;
+  pointer-events: none;
+  z-index: 6;
 }
 [data-annotation="dial-band"].focal [data-annotation="dial-number"] {
   opacity: 1;
@@ -202,8 +218,8 @@
 }
 [data-annotation="reticle-wick"] {
   position: absolute;
-  left: 3px;
-  right: 3px;
+  left: 1px;
+  right: 1px;
   border: 1px solid color-mix(in srgb, var(--pe-ink) 70%, transparent);
   border-radius: 0;
   pointer-events: none;
@@ -224,31 +240,6 @@
   pointer-events: none;
   z-index: 5;
 }
-/* jump-to-tail — the rail's footer, always there (nothing auto-scrolls any more, so this is the
-   ONLY way back to the live tail). Full lane width, no border: a bar, not a chip floating in the
-   dial. Within-page navigation, so it wears nav's blue TEXT (never a fill). Hover is the one veil. */
-[data-annotation="tail"] {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 20px;
-  display: grid;
-  place-items: center;
-  border-top: 0.5px solid var(--pe-line);
-  background: var(--pe-artifact);
-  --pe-on: var(--pe-artifact);
-  color: var(--pe-nav);
-  font-family: var(--font-mono);
-  font-size: var(--type-prose-size);
-  line-height: 1;
-  cursor: pointer;
-  z-index: 6;
-}
-[data-annotation="tail"]:hover {
-  background-image: linear-gradient(var(--pe-veil), var(--pe-veil));
-}
-
 /* chat — near plane, the real scroll. The composer floats over the bottom; pad the tail by its
    live height (+ the pb-4 gap below it) so the last turn always clears the input box. */
 [data-annotation="chat"] {
@@ -258,6 +249,8 @@
      A px knob, not `ch`: this box's own font is 10px while the prose inside it is 11px, so `ch`
      here measures the wrong type. 750px is ~135 characters at the measured 5.5px prose character.
      Turn `--chat-measure` if that reads long or short. */
+  /* width:100% or an unbreakable line grows this box to the full measure, under the dial. */
+  width: 100%;
   max-width: var(--chat-measure, 750px);
   margin-inline: auto;
   padding: 14px 20px;

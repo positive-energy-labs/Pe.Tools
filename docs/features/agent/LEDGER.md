@@ -9,6 +9,8 @@ restated here.
 
 ## Decided
 
+- 2026-09-23 — Enter during an active Pea turn queues the message on the host; completion dispatches FIFO through ordinary target admission. Keep Mastra unmodified. Browser proof on Walden chat delivered queued turn 13 after turn 12 completed, with one saved user signal per turn.
+
 - 2026-09-23: A host action is one record, `ActionDefinition` in `packages/agent-contracts/src/semantic-actions.ts`, and `hostActions` is its one key space (workflows, action controls, family and schedule reads, `instances.read`). A browser verb names its record by key (`RouteAction.does`) or picks it at press time (Ops: `opRecord` of the selected operation), and never restates `says`, `needs` or `actor`; a verb no host action backs (a page change, a Work edit) is browser-local and says its own. Verdict kaitpw: "no, host-only" (browser verbs are not host records). Deleted: `browserActionSays`, `opsAction`, the unread `executors` field, the `says`-literal placement guard. The check is the type (`ActionIdentity` in `apps/web/src/route/facts.ts` forbids `does` beside `says`), the `hostActions` key-space count test, and "every host action record is one pe_find row" in `packages/mcps/tests/capabilities.test.ts`.
 - 2026-09-22: Pea operation, workflow, action-control, and temporary-document cleanup calls use shared admission. Keep replay identity checks there so CLI and MCP cannot diverge.
 
@@ -151,6 +153,8 @@ restated here.
 - 2026-08-25 — One object-valued `page/lens-intent` atom for `inspectKey` and `following`: the `Lens` controller wrote fresh identities during its subscribed effect and caused an unbounded React notification loop. Replaced by primitive atoms.
 
 ## Owed
+
+- Persist queued chat messages across host restarts. The current Mastra session queue survives browser refresh and navigation, but remains in memory. Recovery must not replay an ambiguously admitted message.
 - 2026-09-22, the test bar sweep deleted 28 SCAFFOLD test files with no surface replacement. Each behavior they asserted needs a surface test (CDP journey, MCP tool call, host HTTP) or a visible readout. Recover the assertions from git: `chat/composer`, `chat/composer-bank`, `chat/composer-head`, `chat/manifest`, `chat/proposal-head`, `chat/prototype-sentence-model`, `grounded-doc/ambiguous`, `grounded-doc/engine`, `grounded-doc/view/images-pane`, `workbench/ask-lifetime`, `workbench/attachments`, `workbench/chat-plugins`, `workbench/deferred-result`, `workbench/diagram-call`, `workbench/expired-ask`, `workbench/lens/model`, `workbench/lens/thread-body`, `workbench/live-ask`, `workbench/moments-copy`, `workbench/plugin-host`, `workbench/plugin-host-target`, `workbench/prose`, `workbench/provider`, `workbench/provider/thread-stream`, `workbench/record-lines`, `workbench/store`, `workbench/thread-view`, `workbench/tool-images`.
 - Prove Chat attachment retention, plugin-pane continuity, send and proposal flows, and genuine disconnect/reconnect with full resync in the browser. Network emulation that leaves the existing SSE open is not reconnect proof.
 - Prevent Trace from fetching an already expanded tool result again, or prove that the repeat fetch is required. Keep the full original available on expansion; do not add a second result store.

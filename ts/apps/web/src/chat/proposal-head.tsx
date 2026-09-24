@@ -19,7 +19,6 @@ import {
   type CellWire,
   type FanOutOutcome,
 } from "#/components/lang/band";
-import { OutcomeLine } from "#/components/lang/outcome";
 import { Press } from "#/components/lang/press";
 
 export interface HeadWork {
@@ -133,6 +132,7 @@ export function ProposalHead({ asks, works }: { asks: readonly ReactNode[]; work
   );
 }
 
+/** One line per Work: what · the counts (the review toggle) · revision · a refusal · the commit. */
 function WorkLine({ parts }: { parts: HeadWork[] }) {
   const [open, setOpen] = useState(false);
   const work = parts[0]!;
@@ -140,36 +140,50 @@ function WorkLine({ parts }: { parts: HeadWork[] }) {
   const counts = tally(groups.flat());
   return (
     <div className="flex flex-col" data-work={work.id}>
-      <div className="flex flex-wrap items-baseline gap-x-3 py-0.5">
-        <span className="truncate">
-          <b>{work.route}</b> · {work.subject}
+      <div className="flex h-(--item-h) min-w-0 items-center gap-3">
+        <span className="min-w-0 shrink truncate">
+          <b>{work.route}</b> <span className="text-ink-2">· {work.subject}</span>
         </span>
-        <Counts {...counts} />
-        <span className="t-small face-mono text-ink-2">
+        <Press
+          tone="quiet"
+          size="caption"
+          aria-expanded={open}
+          aria-label={`review ${open ? "▴" : "▾"}`}
+          title="Show the changes by group"
+          onClick={() => setOpen(!open)}
+        >
+          <span className="whitespace-nowrap">
+            <Counts {...counts} /> {open ? "▴" : "▾"}
+          </span>
+        </Press>
+        <span className="shrink-0 t-small face-mono text-ink-2">
           {work.wire.revision === null ? "unwritten" : `r${work.wire.revision}`}
           {work.stale ? " · stale" : ""}
           {work.conflict ? " · changed elsewhere" : ""}
         </span>
         {work.conflict && work.reload ? (
-          <Press tone="quiet" size="value" onClick={work.reload}>
+          <Press tone="quiet" size="caption" onClick={work.reload}>
             reload
           </Press>
         ) : null}
-        <span className="ml-auto flex items-baseline gap-2">
-          <Press tone="quiet" size="value" aria-expanded={open} onClick={() => setOpen(!open)}>
-            review {open ? "▴" : "▾"}
-          </Press>
+        <span className="ml-auto flex min-w-0 items-center gap-2">
+          {work.refusal ? (
+            <span
+              className="min-w-0 truncate t-small"
+              data-tone="caution"
+              title={`${work.commit.word} refused: ${work.refusal}`}
+            >
+              {work.refusal}
+            </span>
+          ) : null}
           <ActionButton
-            label={`${work.commit.word}${work.wire.revision === null ? "" : ` r${work.wire.revision}`}`}
+            label={work.commit.word}
             reason={counts.staged ? COMMIT_REASON : "nothing staged"}
             disabled={!counts.staged}
             onClick={work.commit.run}
           />
         </span>
       </div>
-      {work.refusal ? (
-        <OutcomeLine kind="refused" label={`${work.commit.word} refused`} says={work.refusal} />
-      ) : null}
       {open
         ? parts.map((part, index) => <Groups key={part.id} work={part} groups={groups[index]!} />)
         : null}
@@ -283,33 +297,50 @@ function GroupRow({
     void runFanOut(work.wire, work.cells, keys, kind).then(done);
   return (
     <div className="flex flex-col" data-group={label}>
-      <div className="flex flex-wrap items-baseline gap-x-3 py-0.5">
-        <span className="w-[9rem] truncate">{label}</span>
-        {body ? <span className="truncate face-mono">{body}</span> : null}
-        {facts.length ? <span className="t-small text-ink-2">{facts.join(" · ")}</span> : null}
-        <span className="ml-auto flex items-baseline gap-1">
+      <div className="grid h-(--item-h) grid-cols-[minmax(6rem,12rem)_minmax(0,1fr)_auto] items-center gap-2">
+        <span className="truncate">{label}</span>
+        <span className="truncate face-mono" title={[body, ...facts].filter(Boolean).join(" · ")}>
+          {body}
+          {facts.length ? (
+            <span className="t-small text-ink-2">
+              {body ? " · " : ""}
+              {facts.join(" · ")}
+            </span>
+          ) : null}
+        </span>
+        <span className="flex items-center gap-1">
           {verbs && acceptK ? (
-            <ActionButton
-              tone="agent"
-              icon={Check}
-              label={`accept ${acceptK}`}
-              reason={`Stage Pea's proposal on ${acceptK} cells in one write; contested and locked cells are skipped`}
+            <Press
+              tone="quiet"
+              size="caption"
+              aria-label={`accept ${acceptK}`}
+              title={`Stage Pea's proposal on ${acceptK} cells in one write; contested and locked cells are skipped`}
               onClick={() => act("accept")}
-            />
+            >
+              <span className="flex items-center gap-0.5" data-tone="pea">
+                <Check className="size-3" /> {acceptK}
+              </span>
+            </Press>
           ) : null}
           {verbs && denyK ? (
-            <ActionButton
-              icon={X}
-              label={`deny ${denyK}`}
-              reason={`Clear Pea's proposal on ${denyK} cells in one write`}
+            <Press
+              tone="quiet"
+              size="caption"
+              aria-label={`deny ${denyK}`}
+              title={`Clear Pea's proposal on ${denyK} cells in one write`}
               onClick={() => act("deny")}
-            />
+            >
+              <span className="flex items-center gap-0.5">
+                <X className="size-3" /> {denyK}
+              </span>
+            </Press>
           ) : null}
-          <UnstageAll wire={work.wire} cells={work.cells} keys={keys} done={done} />
+          <UnstageAll wire={work.wire} cells={work.cells} keys={keys} done={done} compact />
           <Press
             tone="nav"
-            size="value"
+            size="caption"
             aria-label={`open ${label} in ${work.route}`}
+            title={`Open ${label} in ${work.route}`}
             onClick={() => work.open(group.path)}
           >
             ›
@@ -317,11 +348,13 @@ function GroupRow({
         </span>
       </div>
       {outcome ? (
-        <OutcomeLine
-          kind={outcome.refusal ? "refused" : "receipt"}
-          label={fanOutWord(outcome)}
-          says={outcome.refusal ? "nothing was written" : undefined}
-        />
+        <span
+          className="truncate pl-2 t-small"
+          data-tone={outcome.refusal ? "caution" : "done"}
+          title={outcome.refusal ? "nothing was written" : undefined}
+        >
+          {fanOutWord(outcome)}
+        </span>
       ) : null}
     </div>
   );

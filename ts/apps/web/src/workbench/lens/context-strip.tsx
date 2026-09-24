@@ -19,30 +19,13 @@ import { deferredResultSummary, useDeferredToolResult } from "../deferred-result
 
 export function ContextStrip({ state, depth }: { state: ChatState; depth: "read" | "trace" }) {
   const [open, setOpen] = useState(false);
-  const plan = state.display.tasks ?? [];
   const systemPrompt = state.inspect.systemPrompt;
   const showContext = depth !== "read";
 
-  if (plan.length === 0 && !(showContext && systemPrompt?.content)) return null;
+  if (!(showContext && systemPrompt?.content)) return null;
 
   return (
     <div className="mt-[14px] mr-6 ml-[34px] grid gap-2">
-      {plan.length > 0 ? (
-        <ArtifactFrame head={<span>Plan</span>}>
-          {plan.map((entry) => (
-            <div className={PLAN_ITEM} data-status={entry.status} key={entry.id}>
-              <span
-                className={entry.status === "in_progress" ? "text-ink" : "text-ink-2"}
-                data-tone={entry.status === "completed" ? "done" : undefined}
-              >
-                {entry.status === "completed" ? "✓" : entry.status === "in_progress" ? "▸" : "○"}
-              </span>
-              <span>{entry.content}</span>
-            </div>
-          ))}
-        </ArtifactFrame>
-      ) : null}
-
       {showContext && systemPrompt?.content ? (
         <ArtifactFrame
           head={
@@ -72,9 +55,6 @@ export function ContextStrip({ state, depth }: { state: ChatState; depth: "read"
     </div>
   );
 }
-
-const PLAN_ITEM =
-  "grid grid-cols-[14px_minmax(0,1fr)] gap-1.5 border-b-[0.5px] border-line px-3 py-1.5 t-prose last:border-b-0";
 
 export function TraceCellView({
   cell,
@@ -149,6 +129,7 @@ export function toMoments(messages: ChatMessage[]): Moment[] {
       turn: Math.max(1, turn),
       role: message.role,
       createdAt: message.createdAt,
+      preview: previewOf(message),
     };
   });
 }
@@ -159,6 +140,24 @@ export function buildTraceCells(state: ChatState): TraceCell[] {
     call,
     parentId: call.parentMessageId,
   }));
+}
+
+/** The preview's length: enough to recognise a turn, short enough to stay a glance. */
+const PREVIEW_CHARS = 140;
+
+function previewOf(message: ChatMessage): string | undefined {
+  const text = message.parts.find((part) => part.type === "text")?.text;
+  // ponytail: strips markdown marks by character, not a parse; a link reads as [label](url).
+  const flat = text
+    ?.replace(/[*_`#>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  // A turn that only called tools previews as its calls.
+  const calls = message.parts.flatMap((part) =>
+    part.type === "tool-call" ? [toolTitle(part.call.title)] : [],
+  );
+  if (!flat) return calls.length ? `⌗ ${calls.join(" · ")}`.slice(0, PREVIEW_CHARS) : undefined;
+  return flat.length > PREVIEW_CHARS ? `${flat.slice(0, PREVIEW_CHARS).trimEnd()}…` : flat;
 }
 
 export function formatTime(date?: Date): string | undefined {
@@ -177,11 +176,3 @@ const TOOL_STATUS_COLOR: Record<string, string> = {
 function statusColor(status: string): string {
   return TOOL_STATUS_COLOR[status] ?? token("ink-2");
 }
-
-export const TARGET_RAIL_COLOR: Record<string, string> = {
-  pinned: token("done"),
-  implicit: token("done"),
-  ambiguous: token("caution"),
-  dangling: token("alarm"),
-  muted: token("ink-mute"),
-};

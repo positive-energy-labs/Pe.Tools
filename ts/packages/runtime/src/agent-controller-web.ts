@@ -24,6 +24,7 @@ import {
 import type { ScopeStore } from "./scope-store.ts";
 import { readThreadState, readToolResult, toWireDisplayState } from "./thread-state.ts";
 import { RouteWorkspace, type RouteWorkspaceRegistration } from "./route-workspace.ts";
+import { turnQueues } from "./turn-queue.ts";
 import { RouteViewStore } from "./route-view-store.ts";
 import { readingKey } from "@pe/agent-contracts";
 
@@ -124,6 +125,32 @@ export async function buildAgentControllerApp(
       return c.json(await readThreadState(runtime, await openSession(threadId), threadId));
     } catch (error) {
       return c.json({ error: errorMessage(error) }, 500);
+    }
+  });
+  app.get("/pe/thread/:threadId/queue", async (c) => {
+    const queue = turnQueues.get(await openSession(c.req.param("threadId")));
+    return c.json(queue?.read() ?? { items: [], paused: false });
+  });
+  app.put("/pe/thread/:threadId/queue", async (c) => {
+    const command = z
+      .discriminatedUnion("action", [
+        z.object({ action: z.literal("resume") }),
+        z.object({ action: z.literal("remove"), id: z.string().min(1) }),
+        z.object({
+          action: z.literal("edit"),
+          id: z.string().min(1),
+          content: z.string().trim().min(1),
+        }),
+      ])
+      .safeParse(await c.req.json().catch(() => null));
+    if (!command.success) return c.json({ error: "Invalid queue command" }, 400);
+    const queue = turnQueues.get(await openSession(c.req.param("threadId")));
+    if (!queue) return c.json({ error: "Queue unavailable" }, 503);
+    try {
+      await queue.change(command.data);
+      return c.json(queue.read());
+    } catch (error) {
+      return c.json({ error: errorMessage(error) }, 409);
     }
   });
   app.get("/pe/thread/:threadId/tool-result/:messageId/:toolCallId", async (c) => {

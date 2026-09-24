@@ -64,13 +64,13 @@ export const chatManifest = (
     },
     actions: {
       send: {
-        label: "send",
-        says: "sends the composer's prompt to pea under the thread's admitted target",
+        label: context.display.isRunning || context.display.queuedFollowUps ? "queue" : "send",
+        says: "sends this prompt, or queues it after the active turn, under the thread target",
         needs: "host",
         actor: "human",
         input: promptInput as unknown as z.ZodType<never>,
         dirties: ["head", "receipts"],
-        // At rest the verb asks for a session and an idle Pea. The store-owned composer draft is
+        // The runtime queues active-turn sends. The store-owned composer draft is
         // parsed on the press, so the route holds no second draft.
         ready: (_ctx, input) => {
           if (!context.session) return "Session is not ready";
@@ -79,7 +79,6 @@ export const chatManifest = (
           // A parked ask does not hold the composer: the new turn is how the runtime expires it.
           if (approvals.some((approval) => !isParkedAsk(approval)))
             return "A tool approval is waiting";
-          if (context.display.isRunning && approvals.length === 0) return "Pea is working";
           return input ? CHAT_ACTIONS.send.ready(context, input as PromptInput) : null;
         },
         run: async (_ctx, input) => {

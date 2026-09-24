@@ -8,16 +8,19 @@
 import { useEffect, useRef } from "react";
 import { AskUserPrompt, readQuestion } from "#/chat/ask-prompt";
 import { resolveCallTarget, toolTitle, type TargetResolution } from "@pe/agent-contracts";
-import { Check, X } from "lucide-react";
+import { ArrowDown, Check, X } from "lucide-react";
+import { Popover } from "@base-ui/react/popover";
+import { PopupFrame } from "#/components/lang/list-popup";
 import { useAtomValue } from "@effect/atom-react";
 
 import { ActionButton } from "#/components/lang/action-button";
+import { Press } from "#/components/lang/press";
 import { Rail } from "#/components/lang/rail";
 import { targetInventory } from "#/readings";
 import { Ladder } from "#/route/ladder";
 import { Ledger, PageLog } from "#/route/situation-grids";
 import { useDocumentLadder } from "#/route/situation-ladder";
-import { ChainLamp, Cluster } from "#/route/situation-lamp";
+import { Cluster } from "#/route/situation-lamp";
 import { SituationCell } from "#/route/situation-marks";
 import { parseTarget } from "#/route/route-target";
 import type { ActionHandle, RouteHandle } from "#/route/use-route";
@@ -107,24 +110,11 @@ const documentAddress = (
     : null;
 };
 
-export function ComposerHead({
-  handle,
-  status,
-  urlTarget,
-}: {
-  /** The URL's `?target` pin: a thread with no document takes it once (e2e finding 7). */
-  urlTarget?: string;
-  handle: ChatHandle;
-  /** Thread-level loading/failure. It lives HERE, not in a rail above the transcript: the
-   * Situation already answers "what is bound and how is it", and a rail that appears and
-   * disappears over the chat shifted the whole lane every time it spoke. */
-  status?: { text: string; caution: boolean; detail?: string };
-}) {
-  const { currentThreadId, threads, chat, openThread, resolveApproval, store } = useWorkbench();
-  const isRunning = selectRunStatus(chat) !== "idle";
+/** What both the composer head and the thread head's cluster read: the thread's target and its
+ *  health. Called ONCE per surface (ChatSurface) and handed to both. */
+export function useChatSituation(handle: ChatHandle) {
+  const { currentThreadId, threads } = useWorkbench();
   const head = useThreadScope(currentThreadId, !handle.demo, handle.readings.head);
-  const refusal =
-    head.refusal ?? (handle.outcome?.key === "send" ? handle.outcome.refusal?.message : null);
   const inventory = targetInventory(
     handle.readings.inventory as Parameters<typeof targetInventory>[0],
   );
@@ -139,6 +129,66 @@ export function ComposerHead({
       void head.set({ kind: "open", ref });
     },
   });
+  const health = head.defaultTarget ? complaint(resolution) : null;
+  const threadLabel = threads.find((item) => item.id === currentThreadId)?.title ?? currentThreadId;
+  return { head, inventory, bound, ladder, health, threadLabel };
+}
+
+export type ChatSituation = ReturnType<typeof useChatSituation>;
+
+/** Lamp · gauge · help · theme for Chat — it rides the thread head, not the composer. */
+export function ChatCluster({
+  handle,
+  situation: { head, threadLabel },
+}: {
+  handle: ChatHandle;
+  situation: ChatSituation;
+}) {
+  return (
+    <Cluster
+      handle={handle}
+      // No lamp: the composer sentence names the target, and a hosted route draws its own.
+      lamp={null}
+      state={
+        <>
+          <Ledger
+            rows={[
+              ["thread", threadLabel],
+              [
+                "target",
+                head.defaultTarget
+                  ? `r${head.revision}${head.stale ? " · stale" : ""}`
+                  : "none · Chat runs; Revit operations need a document",
+              ],
+            ]}
+          />
+          <PageLog entries={handle.log} manifest={handle.manifest} />
+        </>
+      }
+    />
+  );
+}
+
+export function ComposerHead({
+  handle,
+  situation,
+  status,
+  urlTarget,
+}: {
+  /** The URL's `?target` pin: a thread with no document takes it once (e2e finding 7). */
+  urlTarget?: string;
+  handle: ChatHandle;
+  situation: ChatSituation;
+  /** Thread-level loading/failure. It lives HERE, not in a rail above the transcript: the
+   * Situation already answers "what is bound and how is it", and a rail that appears and
+   * disappears over the chat shifted the whole lane every time it spoke. */
+  status?: { text: string; caution: boolean; detail?: string };
+}) {
+  const { currentThreadId, threads, chat, openThread, resolveApproval, store } = useWorkbench();
+  const isRunning = selectRunStatus(chat) !== "idle";
+  const { head, inventory, bound, ladder, health, threadLabel } = situation;
+  const refusal =
+    head.refusal ?? (handle.outcome?.key === "send" ? handle.outcome.refusal?.message : null);
   // A new thread under a `?target` address pin binds to the one open document at that address,
   // once per thread: "new" keeps the URL's document. A later clear in the sentence stands.
   const pinned = useRef<string | null>(null);
@@ -179,7 +229,6 @@ export function ComposerHead({
         }
       : level,
   );
-  const health = head.defaultTarget ? complaint(resolution) : null;
   // Live asks only: an expired ask is a transcript record, never a head row.
   const approvals = selectApprovals(chat.display);
   const works = useHeadWorks(documentAddress(inventory, bound), ladder.docWord ?? "document", {
@@ -194,7 +243,6 @@ export function ComposerHead({
   const threadOptions = selectedThread
     ? threads
     : [{ id: currentThreadId, title: currentThreadId, updatedAt: "" }, ...threads];
-  const threadLabel = selectedThread?.title ?? currentThreadId;
   return (
     <section aria-label="Situation" className="flex min-w-0 flex-col" data-testid="composer-head">
       <Rail
@@ -252,33 +300,18 @@ export function ComposerHead({
           </p>
         }
         trail={
-          <Cluster
-            handle={handle}
-            lamp={
-              <ChainLamp
-                handle={handle}
-                health={health}
-                session={ladder.sessionWord}
-                document={ladder.docWord}
-              />
-            }
-            state={
-              <>
-                <Ledger
-                  rows={[
-                    ["thread", threadLabel],
-                    [
-                      "target",
-                      head.defaultTarget
-                        ? `r${head.revision}${head.stale ? " · stale" : ""}`
-                        : "none · Chat runs; Revit operations need a document",
-                    ],
-                  ]}
-                />
-                <PageLog entries={handle.log} manifest={handle.manifest} />
-              </>
-            }
-          />
+          <span className="flex shrink-0 items-center gap-3">
+            <PlanChip tasks={chat.display.tasks ?? []} />
+            <Press
+              tone="quiet"
+              size="icon"
+              title="Jump to the latest turn"
+              aria-label="Jump to latest"
+              onClick={() => window.dispatchEvent(new Event("pe:focus-tail"))}
+            >
+              <ArrowDown className="size-4" />
+            </Press>
+          </span>
         }
       />
       {status?.detail ? (
@@ -353,5 +386,44 @@ export function ComposerHead({
         works={works}
       />
     </section>
+  );
+}
+
+type PlanTask = NonNullable<ChatState["display"]["tasks"]>[number];
+
+/** Pea's plan as one `plan x/y` press in the cluster; the list opens over the lane, never adding
+ *  height to the head. Nothing when pea has no plan. */
+function PlanChip({ tasks }: { tasks: readonly PlanTask[] }) {
+  if (tasks.length === 0) return null;
+  const done = tasks.filter((task) => task.status === "completed").length;
+  return (
+    <Popover.Root>
+      <Popover.Trigger
+        render={<Press tone="quiet" size="caption" />}
+        title="Pea's plan for this run"
+      >
+        <span className="face-mono">
+          plan {done}/{tasks.length}
+        </span>
+      </Popover.Trigger>
+      <PopupFrame side="top" align="end" label="Pea's plan for this run">
+        <div className="grid max-h-(--available-height) w-[32rem] overflow-auto p-1.5 t-small text-ink-2">
+          {tasks.map((task) => (
+            <div
+              key={task.id}
+              className="grid grid-cols-[12px_minmax(0,1fr)] gap-1 px-1 py-0.5"
+              data-status={task.status}
+            >
+              <span data-tone={task.status === "completed" ? "done" : undefined}>
+                {task.status === "completed" ? "✓" : task.status === "in_progress" ? "▸" : "○"}
+              </span>
+              <span className={task.status === "in_progress" ? "text-ink" : undefined}>
+                {task.content}
+              </span>
+            </div>
+          ))}
+        </div>
+      </PopupFrame>
+    </Popover.Root>
   );
 }

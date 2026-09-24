@@ -183,16 +183,8 @@ function CopyMessage({ markdown }: { markdown: string }) {
 function MomentHead({ message, turn }: { message: ChatMessage; turn: number }) {
   const at = message.createdAt;
   return (
-    <div className="mb-1 flex items-center gap-2">
-      <Press
-        type="button"
-        tone="nav"
-        size="label"
-        title={`Center turn ${turn} on the focal axis`}
-        onClick={() => window.dispatchEvent(new CustomEvent("pe:focus-turn", { detail: turn }))}
-      >
-        #{turn}
-      </Press>
+    <h2 className="mb-1 flex items-center gap-2 font-normal">
+      <span className="t-small face-mono text-ink-2">#{turn}</span>
       {message.role === "user" ? (
         <span className="t-small t-upper text-ink-2">you</span>
       ) : (
@@ -203,7 +195,7 @@ function MomentHead({ message, turn }: { message: ChatMessage; turn: number }) {
           {at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
         </span>
       ) : null}
-    </div>
+    </h2>
   );
 }
 

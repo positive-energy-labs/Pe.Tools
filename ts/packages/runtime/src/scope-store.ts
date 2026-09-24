@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { RequestContext } from "@mastra/core/request-context";
 import type { Session } from "@mastra/core/agent-controller";
 import {
@@ -149,6 +150,12 @@ export async function admitTurn(
   const thread = session.thread.requireId();
   const id = crypto.randomUUID();
   await scopes.admit(thread, id, async (head) => {
+    const queuedHead =
+      input.requestContext instanceof RequestContext
+        ? input.requestContext.get("peaQueuedHead")
+        : undefined;
+    if (queuedHead !== undefined && !isDeepStrictEqual(head, queuedHead))
+      throw new Error("Queued message paused because the thread target changed.");
     const turn: Turn = { id, thread, ...head };
     const requestContext =
       input.requestContext instanceof RequestContext ? input.requestContext : new RequestContext();
