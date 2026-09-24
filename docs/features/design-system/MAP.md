@@ -130,6 +130,24 @@ Legacy nouns under review: band, readout, read status, rules.
 28. The document word leaving the sentence is an experiment, kept for now.
 29. `/family` and `/schedules` normalize to the same stages, verbs and wiring as `/families`:
    "families made huge strides in deleting things that shouldnt be options". Owed to the purge pass.
+30. Accept/deny buttons stay on grid cells, proposals and tool approvals, in one colour language
+   everywhere (closes mined V15).
+31. `/param-tables` stays: its ideas feed a coming unification of param tables, data tables and
+   parameter links. Only its head normalizes.
+32. Content rails that browse, never switch the target (pods members, takeoff zones), stay rails.
+   The Chat threads rail stays beside the Ladder palette, "good enough" for now.
+33. One patch is one fragment applied the same way to every family its `select` picks
+   (`FamilyPatch.cs:11-31`). The metadata diff is one row per field: the one "after" and the
+   differing "befores" as counts, expandable to family names. Re-openable default.
+
+## Normalization rules (ruling 29, 2026-09-23 night)
+
+Each rule lands once in the primitives and every route inherits it. N1 a route with a target draws
+the Situation; `AddressingBar` dies. N2 a read verb declares `rereads` by type, so it wears the
+stale mark; hand-drawn refresh buttons die. N3 the log is the only home for receipts and refusals;
+`OutcomeStrip`, `ActionReceipts` and log-like panes die. N4 a column facet is a query field; the
+header `any` dropdown dies. N5 the Ladder is the one target picker. N6 head density: timestamps to
+hover, no band repeats the Work sentence. N7 dead primitives go; knip gets production entries.
 
 ## Built after the mega review (2026-09-23 evening, commits a56b4e96..20f71870 on main)
 
