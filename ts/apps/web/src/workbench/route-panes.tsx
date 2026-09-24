@@ -81,10 +81,6 @@ export function useChatPluginHost(
   return { slot, kept };
 }
 
-/** Hosted routes that draw no head of their own keep the pane's rail for their title and close.
- *  ponytail: a hand list; give pods and parameter-links a RouteShell head and this goes. */
-export const headless = (route: ChatPluginRoute) => route === "pods" || route === "parameter-links";
-
 function HostedInstances() {
   const [target, setTarget] = useState("");
   return <InstancesPage target={target} setTarget={setTarget} />;

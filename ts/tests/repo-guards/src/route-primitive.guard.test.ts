@@ -340,13 +340,7 @@ describe("route primitive guard — no hand-written keymap", () => {
 // ── 9. a target draws the Situation (N1) ─────────────────────────────────────────────────────
 
 /** Ratchet: today's offenders. A new one fails; cutting one over fails until it leaves this list. */
-const SITUATIONLESS_TARGET_ROUTES = [
-  "data-tables.tsx",
-  "instances.tsx",
-  "lab.tsx",
-  "parameter-links.tsx",
-  "pods.tsx",
-];
+const SITUATIONLESS_TARGET_ROUTES: string[] = [];
 
 const WEB_BY_REL = new Map(WEB_PROD_FILES.map((f) => [f.rel, f]));
 const importsOf = (f: Entry): Entry[] =>

@@ -43,16 +43,8 @@ export function AdoptRegions({ store }: { store: TakeoffsController }) {
   const views = store.views;
   const zones = store.world.zones;
   const listed = store.adoptRows;
-  const failure = store.failure;
-  const busy = store.busy?.key ?? null;
-  const refusal = store.handle.actions.adopt.refusal;
-
   const patchRow = (view: string, elementId: number, patch: Partial<AdoptRow>) =>
     store.actions.patchAdopt(view, elementId, patch);
-
-  const picked = listed?.filter((r) => r.checked) ?? [];
-
-  const adopt = () => void store.handle.actions.adopt.run();
 
   return (
     <section aria-label="Adopt zoning regions" className="p-2 whitespace-normal">
@@ -60,16 +52,6 @@ export function AdoptRegions({ store }: { store: TakeoffsController }) {
         tick the designer-drawn regions that are zones. adoption stamps them in place (role, guid,
         name, system tag) — re-adopt to edit. legends are ignored.
       </p>
-      {busy === "adopt" && (
-        <OutcomeLine
-          kind="busy"
-          label="adopting zones"
-          says="Preparing the model and stamping the selected regions."
-        />
-      )}
-      {store.busy === null && failure !== null && (
-        <OutcomeLine kind="error" label="adoption failed" says={failure.message} />
-      )}
       <div className="mt-2 max-h-96 overflow-y-auto">
         {(listed ?? []).map((r) => (
           <Fragment key={`${r.view}:${r.region.elementId}`}>
@@ -154,18 +136,6 @@ export function AdoptRegions({ store }: { store: TakeoffsController }) {
         ) : null}
       </div>
       <div className="mt-2 flex items-center gap-2">
-        <ActionButton
-          tone="commit"
-          label={`stamp ${picked.length} as zoning regions`}
-          disabled={busy !== null || refusal !== null}
-          reason={
-            refusal ??
-            (busy !== null
-              ? `${busy} is in flight`
-              : `Writes role, guid, name and system tag onto ${picked.length} filled region${picked.length === 1 ? "" : "s"} across ${new Set(picked.map((row) => row.view)).size} views. Idempotent: re-adopting edits in place.`)
-          }
-          onClick={adopt}
-        />
         <FactChip title="Zoning Regions already stamped anywhere in this document.">
           {zones.length} already adopted
         </FactChip>

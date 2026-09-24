@@ -45,7 +45,10 @@ export interface SituationProps {
   health?: string | null;
   /** Diagnostic projection of the target selected by the sentence. */
   target: { session: string | null; document: string | null };
-  /** Saved observations have no live target, Work controls, verbs, or route log. */
+  /**
+   * Saved observations have no live target, Work controls, verbs, or route log. The stage word
+   * reads Archived; a route without an archived stage leaves it by choosing a live stage.
+   */
   inspection?: boolean;
   /** A controller transition when changing stage has dependent state. */
   chooseStage?: (stage: string) => void;
@@ -150,8 +153,10 @@ export function Situation({
     Record<string, unknown>,
     (p: Record<string, unknown>) => void,
   ];
-  const stages = handle.manifest.stages ?? [];
-  const stage = typeof page.stage === "string" ? page.stage : null;
+  const declared = handle.manifest.stages ?? [];
+  const archived = inspection && !declared.some((item) => item.key === "archived");
+  const stages = archived ? [{ key: "archived", word: "Archived" }, ...declared] : declared;
+  const stage = archived ? "archived" : typeof page.stage === "string" ? page.stage : null;
   const word = stages.find((item) => item.key === stage)?.word ?? handle.manifest.name;
   const spec = handle.manifest.cells;
   const doc = handle.work.doc as Record<string, Record<string, TrichotomyCellLike>> | null;
@@ -260,7 +265,12 @@ export function Situation({
                           placeholder: "choose a stage",
                           options: stages.map((item) => ({ id: item.key, label: item.word })),
                           picked: (id) => id === stage,
-                          pick: (id) => (chooseStage ? chooseStage(id) : setPage({ stage: id })),
+                          pick: (id) =>
+                            id === stage
+                              ? undefined
+                              : chooseStage
+                                ? chooseStage(id)
+                                : setPage({ stage: id }),
                         },
                       ]}
                     />

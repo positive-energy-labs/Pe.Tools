@@ -101,19 +101,15 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
     refused = false,
     action?: string,
     link?: InspectableRef,
-  ) =>
+    when: NoteWhen = {},
+  ) => {
+    const rows = registry.get(log);
+    if (when.key && rows.some((row) => row.key === when.key)) return;
     registry.set(log, [
-      {
-        at: new Date().toLocaleTimeString([], { hour12: false }),
-        kind,
-        label,
-        says,
-        refused,
-        action,
-        link,
-      },
-      ...registry.get(log).slice(0, 199),
+      { at: clock(when.at), kind, label, says, refused, action, link, key: when.key },
+      ...rows.slice(0, 199),
     ]);
+  };
 
   let stopper: (() => void) | null = null;
   /** The running verb's button word and start, for a busy refusal to name (and say how long). */
@@ -287,6 +283,9 @@ export function createRouteOwner(route: string, registry: AtomRegistry.AtomRegis
     conflict,
     log,
     note,
+    /** A verb-kind row: the one door `useRoute`'s handle and every action context write through. */
+    verbNote: ((label, says, refused = false, link, when) =>
+      note("verb", label, says, refused, undefined, link, when)) satisfies RouteNote,
     dispose() {
       if (disposed) return;
       disposed = true;
@@ -307,7 +306,22 @@ export interface LogEntry {
   readonly action?: string;
   /** What the entry produced, resolved through the manifest's inspectables when drawn. */
   readonly link?: InspectableRef;
+  /** A fact logged once: a second note with the same key is dropped (a reload re-noting a saved read). */
+  readonly key?: string;
 }
+
+/** When the fact happened, when that is not now, and its identity for once-only rows. */
+export type NoteWhen = { readonly at?: Date | string | number; readonly key?: string };
+/** A log row from outside an action (ruling 9): what the person sees in the one log. */
+export type RouteNote = (
+  label: string,
+  says: string,
+  refused?: boolean,
+  link?: InspectableRef,
+  when?: NoteWhen,
+) => void;
+const clock = (at: Date | string | number = new Date()) =>
+  new Date(at).toLocaleTimeString([], { hour12: false });
 
 /** What a bare run lacks: the fields an empty object misses, or "a value" when it is not an object. */
 export const missingFields = (schema: {

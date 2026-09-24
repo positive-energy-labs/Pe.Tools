@@ -1,10 +1,10 @@
 import { PartitionReview } from "#/takeoff/partition-review";
 import { flagShape, flagZone, TakeoffProposalRows } from "#/takeoff/proposals";
 import { useNavigate } from "@tanstack/react-router";
-import { FactChip } from "#/components/lang/chip";
-import { ActionButton } from "#/components/lang/action-button";
+import type { TakeoffCapture, takeoffCaptureSummarySchema } from "@pe/agent-contracts";
+import type { z } from "zod";
 import { Atlas } from "#/takeoff/atlas";
-import { previousOf } from "#/readings";
+import { previousOf, useReading } from "#/readings";
 import { type TakeoffsController } from "#/takeoff/controller";
 import { RouteShell } from "#/route";
 import { Situation } from "#/route/situation";
@@ -133,6 +133,65 @@ function TakeoffHead({ store }: { store: TakeoffsController }) {
   );
 }
 
+/**
+ * A saved capture is Archived: inspection only, no verbs, no Work. The sentence names the capture;
+ * when and where it was taken is hover and ledger (density law). Choosing a stage returns live.
+ */
+function SavedTakeoffHead({
+  store,
+  capture,
+  select,
+}: {
+  store: TakeoffsController;
+  capture: TakeoffCapture;
+  select: (patch: TakeoffViewSelection) => void;
+}) {
+  const many = useReading<readonly z.infer<typeof takeoffCaptureSummarySchema>[]>({
+    kind: "takeoff-saved",
+  });
+  const rows = previousOf(many) ?? [];
+  const from = `${capture.provenance.target.session} / ${capture.provenance.target.openId}`;
+  const title =
+    rows.find((row) => row.id === capture.id)?.title || capture.provenance.target.openId;
+  return (
+    <Situation
+      handle={store.handle}
+      inspection
+      target={{ session: null, document: null }}
+      chooseStage={() => select({ work: undefined, demo: undefined })}
+      sentence={
+        <>
+          takeoff from{" "}
+          <Ladder
+            title={`captured ${capture.capturedAt} from ${from}; does not assert current Revit geometry`}
+            levels={[
+              {
+                key: "saved capture",
+                label: title,
+                placeholder: "choose a saved capture",
+                options: rows.map((row) => ({
+                  id: row.id,
+                  label: row.title || row.id,
+                  sub: row.capturedAt,
+                })),
+                note: many.state === "failed" ? many.message : "no saved captures",
+                picked: (id) => id === capture.id,
+                pick: (id) => select({ work: id }),
+              },
+            ]}
+          />
+          .
+        </>
+      }
+      ledger={[
+        ["captured", capture.capturedAt],
+        ["from", from],
+        ["file", store.r10Path || "none"],
+      ]}
+    />
+  );
+}
+
 export function TakeoffsPage({ store }: { store: TakeoffsController }) {
   const navigate = useNavigate({ from: "/takeoffs" });
   return (
@@ -160,34 +219,9 @@ function TakeoffsView({
   store: TakeoffsController;
   select: (patch: TakeoffViewSelection) => void;
 }) {
-  const r10 = store.r10Path;
-  const failure = store.failure;
   const panel = store.panel;
   const review = store.review;
 
-  const savedHead = store.savedCapture ? (
-    <div>
-      <FactChip title="Explicit saved review; this capture does not assert current Revit geometry">
-        saved review · {store.savedCapture.capturedAt}
-      </FactChip>
-      <span>
-        {store.savedCapture.provenance.target.session} /{" "}
-        {store.savedCapture.provenance.target.openId}
-      </span>
-      {r10 && <span>file: {r10}</span>}
-      {failure && <span role="alert">{failure.message}</span>}
-      <ActionButton
-        label="choose capture"
-        reason="Choose another dated capture"
-        onClick={() => select({ work: undefined })}
-      />
-      <ActionButton
-        label="live"
-        reason="Explicitly return to the selected Revit document"
-        onClick={() => select({ work: undefined, demo: undefined })}
-      />
-    </div>
-  ) : null;
   // Null, not an empty fragment: the band's container pays inset for whatever it holds, so an
   // absent panel must be absent, not an empty strip (annotation, 2026-08-31).
   const readoutBand =
@@ -210,8 +244,6 @@ function TakeoffsView({
         />
       </>
     ) : null;
-  if (store.savedCapture)
-    return <Atlas store={store} headRail={savedHead} readoutBand={readoutBand} />;
   return (
     <Atlas
       store={store}
@@ -220,7 +252,13 @@ function TakeoffsView({
         <RouteShell
           manifest={manifest}
           handle={store.handle}
-          situation={<TakeoffHead store={store} />}
+          situation={
+            store.savedCapture ? (
+              <SavedTakeoffHead store={store} capture={store.savedCapture} select={select} />
+            ) : (
+              <TakeoffHead store={store} />
+            )
+          }
         />
       }
     />

@@ -24,7 +24,6 @@
 import { settingsFieldPointer, transitionPatches } from "@pe/agent-contracts";
 
 import type { RouteStatePatch } from "@pe/agent-contracts";
-import { timeAgo } from "#/lib/utils";
 import type { ConnectorSpec, FamilyModel, FormSpec, ParamSpec } from "#/family/family-model";
 import { paramRef, paramSpec, parameterText } from "#/family/family-model";
 import type { EvidenceSlice } from "#/family/host";
@@ -313,7 +312,6 @@ function projectEvidence(
     return {
       familyName: evidence.familyName,
       worldLabel: evidence.rfaPath ?? evidence.origin,
-      readAgo: timeAgo(evidence.observedAt) || "just now",
       typeNames: Object.keys(captured.types ?? {}),
       values,
       extraParams: Object.keys(reported).filter((name) => !authored.has(name)),
@@ -341,7 +339,6 @@ function projectEvidence(
   return {
     familyName: evidence.familyName,
     worldLabel: evidence.rfaPath ?? evidence.origin,
-    readAgo: timeAgo(evidence.reading.observedAt) || "just now",
     values,
     extraParams: [...reported].filter((name) => !authored.has(name)),
     // A parameter the read did not report is UNREAD, not missing — only a read that saw the whole

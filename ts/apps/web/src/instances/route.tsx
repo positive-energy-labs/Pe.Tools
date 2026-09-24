@@ -1,10 +1,17 @@
 import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 import type { Verdict } from "#/components/master-table/model";
 import { sessionKey, type Inventory, useFleet } from "#/readings";
-import { InstancesWorkspace } from "#/instances/workspace";
-import { OutcomeLine } from "#/components/lang/outcome";
-import { useRoute } from "#/route/use-route";
+import { Surface } from "#/components/lang/surface";
+import { useSessionEvents } from "#/host/world-log";
+import { InstancesCluster } from "#/instances/cluster";
 import { instancesManifest } from "#/instances/manifest";
+import { RouteShell } from "#/route";
+import { Ladder } from "#/route/ladder";
+import { Situation } from "#/route/situation";
+import { SituationCell } from "#/route/situation-marks";
+import { useRoute } from "#/route/use-route";
+
+export type InstancesFleet = ReturnType<typeof useFleet>;
 
 export const YEARS = ["24", "25", "26"];
 
@@ -77,42 +84,69 @@ export function custodyVerdict(world: Inventory): Verdict {
       };
 }
 
+/**
+ * /instances: the Situation over the portable `InstancesCluster`. The sentence names the picked
+ * session (the same pick a fleet row makes); the refresh verb is the manifest's; the one log is
+ * the handle's, where lifecycle receipts, refusals and bridge-observed world events land (N3).
+ */
 export function InstancesPage({
   target,
   setTarget,
-  shell = true,
 }: {
   target: string;
   setTarget: (target: string) => void;
-  /** false when another route mounts this page as its empty body: that route already owns the shell. */
-  shell?: boolean;
 }) {
   const handle = useRoute(instancesManifest, { work: "instances" });
   // The SDK's default census is the live set; the graveyard (`--all`) is not a picker.
   const fleet = useFleet();
-  const censusExceptions = fleet.unreadableReceipts
-    .map((receipt) => `receipt ${receipt.id} · ${receipt.receiptPath} · ${receipt.detail}`)
-    .concat(
-      fleet.processReadErrors.map((error) => `process ${error.candidatePid} · ${error.detail}`),
-    );
+  useSessionEvents(fleet.sessions, (event) =>
+    handle.note(event.label, "bridge-observed world event", event.kind === "gap", undefined, {
+      at: event.atMs,
+    }),
+  );
+  const picked = findSession(fleet.worlds, target);
+  const count = fleet.worlds.length;
   return (
-    <>
-      {censusExceptions.length ? (
-        <aside aria-label="census exceptions" className="mx-auto mt-4 max-w-6xl px-3 py-2">
-          <OutcomeLine
-            kind="advisory"
-            label={`census exceptions${fleet.registryRoot ? ` · registry ${fleet.registryRoot}` : ""}`}
-            says={censusExceptions.join(" · ")}
-          />
-        </aside>
-      ) : null}
-      <InstancesWorkspace
-        handle={handle}
-        target={target}
-        setTarget={setTarget}
-        fleet={fleet}
-        shell={shell}
-      />
-    </>
+    <Surface
+      head={
+        <RouteShell
+          manifest={instancesManifest}
+          handle={handle}
+          situation={
+            <Situation
+              handle={handle}
+              target={{ session: picked ? sessionLabel(picked) : null, document: null }}
+              sentence={
+                <>
+                  {count} session{count === 1 ? "" : "s"} in the census; picked{" "}
+                  <SituationCell io="r" empty={!picked}>
+                    <Ladder
+                      levels={[
+                        {
+                          key: "session",
+                          label: picked ? sessionLabel(picked) : null,
+                          placeholder: "choose a session",
+                          options: fleet.worlds.map((world) => ({
+                            id: sessionTarget(world),
+                            label: sessionLabel(world),
+                            sub: sessionSub(world),
+                          })),
+                          note: fleet.isLoading ? "reading the fleet" : "no live sessions",
+                          picked: (id: string) => id === target,
+                          pick: setTarget,
+                        },
+                      ]}
+                    />
+                  </SituationCell>
+                  .
+                </>
+              }
+            />
+          }
+        />
+      }
+    >
+      <InstancesCluster handle={handle} target={target} setTarget={setTarget} fleet={fleet} />
+    </Surface>
   );
 }

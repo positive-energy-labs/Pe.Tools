@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Eye, RefreshCw, Save } from "lucide-react";
+import { Save } from "lucide-react";
 import { useCallback, useContext, useMemo, useState } from "react";
 
-import type { ParameterLinkProfile, ParameterLinksDocument } from "@pe/agent-contracts";
+import type { ParameterLinkProfile } from "@pe/agent-contracts";
 import {
   familyCaptureSchema,
   parameterLinksReadingSchema,
@@ -11,16 +11,12 @@ import {
   transitionPatches,
 } from "@pe/agent-contracts";
 
-import { AddressingBar } from "#/components/lang/addressing-bar";
 import { ArmingStrip } from "#/components/lang/arming-strip";
 import { FactChip } from "#/components/lang/chip";
-import { HelpTip } from "#/components/lang/help";
-import { OutcomeStrip } from "#/components/lang/outcome-strip";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { ActionButton, ActionGroup } from "#/components/lang/action-button";
+import { ActionButton } from "#/components/lang/action-button";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { Surface } from "#/components/lang/surface";
-import { useHostStatusQuery } from "#/readings";
 import { EvaluationView, RuntimeStatusBar } from "#/parameter-links/Evaluation";
 import { ProfileEditor } from "#/parameter-links/ProfileEditor";
 import { ActivityDisclosure } from "#/components/lang/activity";
@@ -35,17 +31,13 @@ import {
 } from "#/parameter-links/model";
 import { ReviewRow, type CellWire } from "#/components/lang/band";
 import { previousOf } from "#/readings";
-import { useRoute, type RouteHandle } from "#/route";
+import { RouteShell, useRoute } from "#/route";
+import { Situation } from "#/route/situation";
+import { LadderPicker, useDocumentLadder } from "#/route/situation-ladder";
 import type { Reading } from "@pe/agent-contracts";
 import { WorkbenchContext } from "#/workbench/provider/thread-summary";
 
-import {
-  manifest as parameterLinksManifest,
-  type ParameterLinksAction,
-  type ParameterLinksPage,
-  type ParameterLinksReadingKey,
-} from "#/parameter-links/manifest";
-const manifest = parameterLinksManifest;
+import { manifest } from "#/parameter-links/manifest";
 
 /**
  * /parameter-links — the route-native workspace for cross-element parameter links.
@@ -53,7 +45,7 @@ const manifest = parameterLinksManifest;
  * of link definitions + assignments, evaluated against Revit into projected target
  * writes. The draft is edited locally (plain forms) and saved to the shared document;
  * Preview evaluates it without writing; Apply (human-only, freshness-gated) stores it and
- * reconciles the changed target parameters. Mirrors the /family-types route architecture.
+ * reconciles the changed target parameters.
  */
 export const parameterLinksSearch = (
   search: Record<string, unknown>,
@@ -86,18 +78,18 @@ function ParameterLinksRoute() {
 
 /** No seeds: `parameter-links` has no demo lane (spec §7). `?demo=` is inert here. */
 export function ParameterLinksRouteContent({ thread }: { thread?: string } = {}) {
-  const handle = useRoute(manifest, { thread });
-  const workbench = useContext(WorkbenchContext);
-  const resolved = handle.resolution.kind === "resolved" ? handle.resolution.target : null;
-  const ref = resolved?.kind === "document" ? resolved.ref : null;
-  const bridgeConnected = useHostStatusQuery().data?.bridgeIsConnected ?? false;
+  const route = useRoute(manifest, { thread });
+  const ladder = useDocumentLadder(route);
+  const peaActive = useContext(WorkbenchContext)?.isRunning ?? false;
+  const resolved = route.resolution.kind === "resolved" ? route.resolution.target : null;
+  const optionsFrom = resolved?.kind === "document" ? resolved.ref : null;
 
   /**
    * Observations arrive on the route's own Reading, exactly where Family keeps its captures.
    * Nothing here is ever written into the authored draft.
    */
   const latest = useMemo(() => {
-    const rows = previousOf(handle.readings.links as Reading<unknown>);
+    const rows = previousOf(route.readings.links as Reading<unknown>);
     if (!rows) return { reading: null, readingId: null };
     const row = familyCaptureSchema
       .array()
@@ -106,51 +98,10 @@ export function ParameterLinksRouteContent({ thread }: { thread?: string } = {})
     return row && row.reading.kind === "parameter-links"
       ? { reading: parameterLinksReadingSchema.parse(row.reading.value), readingId: row.id }
       : { reading: null, readingId: null };
-  }, [handle.readings]);
+  }, [route.readings]);
+  const reading = latest.reading;
+  const readingId = reading?.evaluated ? latest.readingId : null;
 
-  return (
-    <ParameterLinksWorkspace
-      documentAddress={(ref?.openId ?? "") as import("@pe/agent-contracts").Address}
-      optionsFrom={ref}
-      route={handle}
-      connected={handle.work.revision !== null && bridgeConnected}
-      peaActive={workbench?.isRunning ?? false}
-      reading={latest.reading}
-      readingId={latest.reading?.evaluated ? latest.readingId : null}
-    />
-  );
-}
-
-type ParameterLinksHandle = Pick<
-  RouteHandle<
-    ParameterLinksDocument,
-    ParameterLinksReadingKey,
-    ParameterLinksPage,
-    ParameterLinksAction
-  >,
-  "work" | "actions" | "busy" | "failure"
->;
-
-export function ParameterLinksWorkspace({
-  documentAddress,
-  route,
-  connected,
-  peaActive = false,
-  reading,
-  readingId,
-  fieldOptionsEnabled = true,
-  optionsFrom = null,
-}: {
-  documentAddress: import("@pe/agent-contracts").Address;
-  /** The document the definition cards read their field options from. */
-  optionsFrom?: import("@pe/agent-contracts").DocumentRef | null;
-  route: ParameterLinksHandle;
-  connected: boolean | null;
-  peaActive?: boolean;
-  reading: import("@pe/agent-contracts").ParameterLinksReading | null;
-  readingId: string | null;
-  fieldOptionsEnabled?: boolean;
-}) {
   const document = route.work.doc;
   const savedDraft = document ? stagedParameterProfile(document) : null;
   // Pea's proposed profile, drawn in the band grammar while it differs from what is staged
@@ -221,14 +172,22 @@ export function ParameterLinksWorkspace({
     [route.work, draftBasis],
   );
 
-  const runRead = useCallback(
-    async (name: "refresh" | "preview") => {
-      // Preview evaluates what the document holds, so the buffer must land first — the count
-      // the human approves is then an evaluation of exactly the bytes Apply will send.
-      if (name === "preview" && hasUnsavedEdits && editing && !(await saveDraft(editing))) return;
-      await route.actions[name].run();
-    },
-    [route.actions, editing, hasUnsavedEdits, saveDraft],
+  // Preview evaluates what the document holds, so the buffer lands first: the count the human
+  // approves is then an evaluation of exactly the bytes Apply will send.
+  const preview = route.actions.preview;
+  const handle = useMemo(
+    () => ({
+      ...route,
+      actions: {
+        ...route.actions,
+        preview: {
+          ...preview,
+          run: async () =>
+            hasUnsavedEdits && editing && !(await saveDraft(editing)) ? null : preview.run(),
+        },
+      },
+    }),
+    [route, preview, hasUnsavedEdits, editing, saveDraft],
   );
 
   const runApply = useCallback(async () => {
@@ -239,8 +198,7 @@ export function ParameterLinksWorkspace({
 
   /**
    * THE ARMING STRIP'S STATE (fit reviews, ruled 2026-08-16): the preview→stale→apply gate IS the
-   * arming lifecycle, so it maps onto the
-   * strip's own phases instead of hiding in a hover title —
+   * arming lifecycle, so it maps onto the strip's own phases instead of hiding in a hover title —
    *   · no fresh preview (never run, pea's run, or the draft moved since) → `refused`, and
    *     re-plan IS preview: the only way forward is a fresh projection from this pane;
    *   · preview verified → `arming`: the reason input arms the one commit;
@@ -254,80 +212,77 @@ export function ParameterLinksWorkspace({
           refusal:
             refusal ??
             "apply is unavailable on this surface — open the route against a live document",
-          onReplan: () => void runRead("preview"),
+          onReplan: () => void handle.actions.preview.run(),
         };
 
   return (
-    <Surface>
-      <AddressingBar
-        name="parameter links"
-        sentence={
-          <span className="flex items-center gap-2">
-            <span title="bound Revit document">{documentAddress}</span>
-            {/* The write's safety model lives ON the arming strip below (its one home) — this
-                tip only orients. */}
-            <HelpTip>
-              Cross-element parameter links: pea and you co-edit one draft profile of link
-              definitions + assignments. Preview projects the draft's target writes; the arming
-              strip is where an apply is armed and committed.
-            </HelpTip>
-          </span>
-        }
-        facts={
-          <>
-            <FactChip
-              tone={connected ? "meta" : "caution"}
-              title={
-                connected
-                  ? "route document and host bridge are connected"
-                  : "route document or host bridge is disconnected — commands will fail until it returns"
+    <Surface
+      head={
+        <RouteShell
+          manifest={manifest}
+          handle={handle}
+          situation={
+            <Situation
+              handle={handle}
+              target={{ session: ladder.sessionWord, document: ladder.docWord }}
+              // Apply lives on the arming strip in the profile column: its safety model (plan
+              // freshness · reason · refusal) is the strip's payload, so the row draws the reads.
+              verbs={["refresh", "preview", "previewProposal"]}
+              sentence={
+                <>
+                  links in <LadderPicker ladder={ladder} disabled={route.busy !== null} />
+                  {ladder.refusal ? (
+                    <span role="status" data-tone="caution">
+                      {" "}
+                      ({ladder.refusal})
+                    </span>
+                  ) : null}
+                  .
+                </>
               }
-            >
-              {connected ? "host · connected" : "host · disconnected"}
-            </FactChip>
-            {editing && (
-              <FactChip title="definitions · assignments in the profile being edited">
-                {editing.definitions.length} def · {editing.assignments.length} asn
-              </FactChip>
-            )}
-            {saveConflict && (
-              <FactChip
-                tone="caution"
-                title="the shared document moved while you were editing — your edit is kept, not overwritten"
-              >
-                save conflict
-              </FactChip>
-            )}
-            {hasUnsavedEdits && (
-              <FactChip
-                tone="caution"
-                title="local edits not yet saved to the shared document — save draft (or preview) persists them"
-              >
-                unsaved edits
-              </FactChip>
-            )}
-            {draftDirty && (
-              <FactChip
-                tone="caution"
-                title="the shared draft differs from what Revit stored — apply reconciles them"
-              >
-                draft ≠ stored
-              </FactChip>
-            )}
-            {peaActive && (
-              <FactChip tone="pea" title="pea is editing the shared document right now">
-                pea · working
-              </FactChip>
-            )}
-          </>
-        }
-        // The page-blast verb slot is deliberately EMPTY: apply lives on the ArmingStrip in
-        // the draft column, because the gate's whole safety model (plan freshness · reason ·
-        // refusal) is the strip's payload and a second apply here would be a parallel path.
-      />
-
-      <OutcomeStrip failure={route.failure} />
-
+              work={() => (
+                <span className="flex flex-wrap items-center gap-1.5">
+                  {editing && (
+                    <FactChip title="definitions · assignments in the profile being edited">
+                      {editing.definitions.length} def · {editing.assignments.length} asn
+                    </FactChip>
+                  )}
+                  {saveConflict && (
+                    <FactChip
+                      tone="caution"
+                      title={`the shared document moved while you were editing — your edit is kept, not overwritten: ${saveConflict}`}
+                    >
+                      save conflict
+                    </FactChip>
+                  )}
+                  {hasUnsavedEdits && (
+                    <FactChip
+                      tone="caution"
+                      title="local edits not yet saved to the shared document — save draft (or preview) persists them"
+                    >
+                      unsaved edits
+                    </FactChip>
+                  )}
+                  {draftDirty && (
+                    <FactChip
+                      tone="caution"
+                      title="the shared draft differs from what Revit stored — apply reconciles them"
+                    >
+                      draft ≠ stored
+                    </FactChip>
+                  )}
+                  {peaActive && (
+                    <FactChip tone="pea" title="pea is editing the shared document right now">
+                      pea · working
+                    </FactChip>
+                  )}
+                </span>
+              )}
+            />
+          }
+        />
+      }
+    >
       <PaneSplit
         axis="horizontal"
         grow
@@ -351,54 +306,6 @@ export function ParameterLinksWorkspace({
                 <OutcomeLine kind="busy" label="hydrating route state" />
               ) : (
                 <>
-                  <ActionGroup title="draft" radius="shared document · revit read">
-                    <ActionButton
-                      label="refresh"
-                      icon={RefreshCw}
-                      busy={busy === "refresh"}
-                      disabled={busy != null}
-                      onClick={() => void runRead("refresh")}
-                      reason="Re-read the stored profile, shared draft, and evaluation from the host"
-                    />
-                    <ActionButton
-                      tone="commit"
-                      label="save draft"
-                      icon={Save}
-                      disabled={busy != null || !editing || !hasUnsavedEdits}
-                      onClick={() => {
-                        if (editing) void saveDraft(editing);
-                      }}
-                      reason={
-                        hasUnsavedEdits
-                          ? "Write the local edits onto the shared document, where pea can see them"
-                          : "no unsaved local edits — the shared document already matches"
-                      }
-                    />
-                    <ActionButton
-                      label="preview"
-                      icon={Eye}
-                      busy={busy === "preview"}
-                      disabled={busy != null || !editing}
-                      onClick={() => void runRead("preview")}
-                      reason={
-                        editing
-                          ? "Evaluate the draft against Revit and project its target writes — writes nothing"
-                          : "no profile to preview — add a definition first"
-                      }
-                    />
-                    <ActionButton
-                      label="preview Pea's proposal"
-                      icon={Eye}
-                      busy={busy === "previewProposal"}
-                      disabled={busy != null || profileCell.proposal == null}
-                      onClick={() => void route.actions.previewProposal.run()}
-                      reason={
-                        profileCell.proposal == null
-                          ? "Pea has proposed no profile"
-                          : "Evaluate Pea's proposed profile — a labelled preview that never arms apply"
-                      }
-                    />
-                  </ActionGroup>
                   {reviewingProposal ? (
                     <ReviewRow
                       wire={profileWire}
@@ -424,20 +331,13 @@ export function ParameterLinksWorkspace({
                       )}
                     />
                   ) : null}
-                  {previewingProposal ? (
-                    <OutcomeLine
-                      kind="advisory"
-                      label="preview of Pea's proposal — not staged"
-                      says="accept it to stage it, then preview the staged profile before apply"
-                    />
-                  ) : null}
                   {/* The preview→stale→apply gate, ON the surface. Refused = the plan is stale
-                  (re-plan runs preview); arming =
-                  the reason input is the last gate before the one commit. */}
+                  (re-plan runs preview); arming = the reason input is the last gate before the
+                  one commit. */}
                   {editing != null ? (
                     <ArmingStrip
                       verb="apply"
-                      target={documentAddress}
+                      target={ladder.docWord ?? "no document"}
                       count={evaluation?.changedWriteCount ?? 0}
                       planHash={profileHash(savedDraft)}
                       reason={writeReason}
@@ -449,10 +349,25 @@ export function ParameterLinksWorkspace({
                       onCancel={() => setWriteReason("")}
                     />
                   ) : null}
+                  {/* The editor's own save, as the spec editor carries its own: a Work write of the
+                  buffer, not a route verb. */}
+                  <ActionButton
+                    tone="commit"
+                    label="save draft"
+                    icon={Save}
+                    disabled={busy != null || !editing || !hasUnsavedEdits}
+                    onClick={() => {
+                      if (editing) void saveDraft(editing);
+                    }}
+                    reason={
+                      hasUnsavedEdits
+                        ? "Write the local edits onto the shared document, where pea can see them"
+                        : "no unsaved local edits — the shared document already matches"
+                    }
+                  />
                   <ProfileEditor
                     profile={editing}
                     disabled={busy != null || peaActive}
-                    fieldOptionsEnabled={fieldOptionsEnabled}
                     target={optionsFrom}
                     onChange={onDraftChange}
                   />
@@ -477,7 +392,11 @@ export function ParameterLinksWorkspace({
               />
               <div className="min-h-0 flex-1 overflow-y-auto">
                 {previewingProposal ? (
-                  <OutcomeLine kind="advisory" label="preview of Pea's proposal — not staged" />
+                  <OutcomeLine
+                    kind="advisory"
+                    label="preview of Pea's proposal — not staged"
+                    says="accept it to stage it, then preview the staged profile before apply"
+                  />
                 ) : null}
                 <EvaluationView evaluation={evaluation} />
               </div>

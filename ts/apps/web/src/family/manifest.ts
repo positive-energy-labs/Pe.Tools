@@ -422,6 +422,13 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
       inventory: { kind: "inventory" },
     } as never,
     work: familyDraftRouteState,
+    // A saved Family Reading, as the host serves it: raw JSON, read-only.
+    inspectables: {
+      reading: {
+        label: (id) => id,
+        open: { kind: "href", href: (id) => `/family/readings?id=${encodeURIComponent(id)}` },
+      },
+    },
     page: familyPageSchema,
     actions: {
       read: {

@@ -1,51 +1,32 @@
-import { useAtomValue } from "@effect/atom-react";
 import { createFileRoute } from "@tanstack/react-router";
-import { CheckCheck, List as ListIcon, Plus } from "lucide-react";
-import { useState } from "react";
-import { AddressingBar } from "#/components/lang/addressing-bar";
-import { FactChip } from "#/components/lang/chip";
+import { useEffect, useMemo, useState } from "react";
+import { z } from "zod";
+import { actionAdmissionSchema } from "@pe/agent-contracts";
 import { EmptyState } from "#/components/lang/empty";
-import { HelpTip } from "#/components/lang/help";
-import { OutcomeLine } from "#/components/lang/outcome";
-import { ActionButton } from "#/components/lang/action-button";
-import { List } from "#/components/lang/list-popup";
-import { Pane, PaneSplit } from "#/components/lang/pane";
+import { Pane } from "#/components/lang/pane";
 import { Surface } from "#/components/lang/surface";
-import { callHostRpc } from "#/host/client";
 import { useHostOp } from "#/readings";
-import { RouteShell, defineRoute } from "#/route";
-import { appAtomRegistry } from "#/route/route-owner";
-import { refuse } from "#/route";
-import { createRouteOwner } from "#/route/route-owner";
-import { useRouteOwner } from "#/route/route-owner";
+import { RouteShell, defineRoute, refuse, useRoute, useRouteThread, type Ctx } from "#/route";
+import { Ladder, type Rung } from "#/route/ladder";
+import { routeSearch } from "#/route/route-owner";
+import { useChooseTarget } from "#/route/shell";
+import { Situation } from "#/route/situation";
+import { useDocumentLadder } from "#/route/situation-ladder";
+import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 import { DraftEditor } from "#/data-tables/draft-editor";
+import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 /**
- * /data-tables — author synthetic data tables (data-table.apply).
- * Rail lists existing tables (revit.detail.data-tables); the editor drafts name,
- * columns (heading + Text/Number kind), and rows (stable key + cell values), then
- * upserts in one apply. Missing rows are pruned on apply, so deleting a row here
- * deletes it in Revit.
+ * /data-tables — author synthetic data tables in the document the sentence names. The table is
+ * the ladder's last rung (revit.detail.data-tables, read from that document); the editor drafts
+ * name, columns and rows; `apply` admits one `data-table.apply` against that exact document.
+ * Missing rows are pruned on apply, so deleting a row here deletes it in Revit.
  */
-export const dataTablesSearch = (_search: Record<string, unknown>) => ({});
-
-const manifest = defineRoute({
-  key: "data-tables",
-  name: "Data Tables",
-  docs: "Create or select a data table, edit its columns and rows, then apply the staged definition to Revit.",
-});
-
-function RouteShelledDataTablesFileRoute() {
-  return (
-    <RouteShell manifest={manifest}>
-      <DataTablesFileRoute />
-    </RouteShell>
-  );
-}
+export const dataTablesSearch = routeSearch;
 
 export const Route = createFileRoute("/data-tables")({
   validateSearch: dataTablesSearch,
-  component: RouteShelledDataTablesFileRoute,
+  component: DataTablesRoute,
 });
 
 export type ColumnKind = "Text" | "Number";
@@ -57,9 +38,8 @@ export interface Draft {
   rows: { key: string; values: (string | null)[] }[];
 }
 
-export interface TableHandle {
+interface TableHandle {
   name: string;
-  scheduleId: number;
   columns: { heading: string; kind: ColumnKind }[];
   rows: { key: string; values: (string | null)[] }[];
   placements: { sheetNumber: string }[];
@@ -74,220 +54,203 @@ const draftFrom = (table: TableHandle): Draft => ({
   rows: table.rows.map((row) => ({ key: row.key, values: [...row.values] })),
 });
 
-function DataTablesFileRoute() {
-  return <DataTablesRoute />;
-}
+const blank = (): Draft => ({
+  name: "New Table",
+  isNew: true,
+  columns: [{ heading: "Column 1", kind: "Text" }],
+  rows: [{ key: rowKey(), values: [null] }],
+});
 
-export function DataTablesRoute() {
-  return <LiveDataTablesRoute />;
-}
+type DataTablesCtx = Ctx<never, never, Record<string, never>>;
 
-function LiveDataTablesRoute() {
-  const detail = useHostOp("revit.detail.data-tables", {});
-  return (
-    <DataTablesWorkspace
-      tables={detail.data?.tables ?? []}
-      isLoading={detail.isLoading}
-      isFetching={detail.pending}
-      onRefetch={async () => detail.refresh()}
-      onApply={async (draft) => {
-        const result = await callHostRpc("data-table.apply", {
-          table: {
-            name: draft.name,
-            columns: draft.columns,
-            rows: draft.rows,
-            pruneMissingRows: true,
-          },
-        });
-        return result.warnings ?? [];
-      }}
-    />
+/** The route's two verbs over the open draft; `apply` is admitted against the resolved document. */
+const dataTablesManifest = (draft: Draft | null, setDraft: (next: Draft | null) => void) =>
+  defineRoute<never, never, Record<string, never>, "new" | "apply">({
+    key: "data-tables",
+    name: "Data Tables",
+    needs: "project",
+    docs: "Choose a document and a data table (or start a new one), edit its columns and rows, then apply. Apply upserts by table name and row key, and prunes rows the draft no longer carries: deleting a row here deletes it in Revit.",
+    actions: {
+      new: {
+        label: "new table",
+        says: "Starts a blank draft; nothing exists in Revit until apply",
+        needs: "project",
+        actor: "any",
+        input: z.void() as unknown as z.ZodType<never>,
+        dirties: [],
+        ready: () => null,
+        run: async () => setDraft(blank()),
+      },
+      apply: {
+        label: "apply",
+        labelNow: () => (draft?.name.trim() ? `apply ${draft.name.trim()}` : "apply"),
+        does: () => ({
+          says: "Upserts the draft into the sentence's document by table name and row key; rows the draft no longer carries are pruned",
+          needs: "project-document",
+          actor: "human",
+        }),
+        input: z.void() as unknown as z.ZodType<never>,
+        dirties: [],
+        chord: "Mod+Enter",
+        waitSeconds: NATIVE_APPLY_WAIT_S,
+        ready: () =>
+          !draft
+            ? "choose a table or start a new one first"
+            : draft.name.trim().length === 0
+              ? "name the table first; apply upserts by name"
+              : null,
+        run: async (ctx: DataTablesCtx) => {
+          if (!draft) throw Error("choose a table or start a new one first");
+          if (ctx.target.kind !== "document") throw Error("choose a document");
+          const action = await submitAction(
+            actionAdmissionSchema.parse({
+              id: crypto.randomUUID(),
+              kind: "operation",
+              key: "data-table.apply",
+              actor: "human",
+              destination: ctx.target,
+              input: {
+                table: {
+                  name: draft.name,
+                  columns: draft.columns,
+                  rows: draft.rows,
+                  pruneMissingRows: true,
+                },
+              },
+              bases: {},
+            }),
+            "",
+            NATIVE_APPLY_WAIT_S * 1000,
+          );
+          if (action.state !== "succeeded")
+            throw Error(
+              "error" in action && action.error ? String(action.error) : `apply ${action.state}`,
+            );
+          setDraft({ ...draft, isNew: false });
+          const warnings =
+            (action as unknown as { result?: { warnings?: string[] } }).result?.warnings ?? [];
+          return warnings.length ? refuse("partial", warnings.join(" · ")) : null;
+        },
+      },
+    },
+  });
+
+function DataTablesRoute() {
+  const [chosen] = useChooseTarget();
+  const thread = useRouteThread();
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const manifest = useMemo(() => dataTablesManifest(draft, setDraft), [draft]);
+  const handle = useRoute(manifest, { target: chosen, thread });
+  const ladder = useDocumentLadder(handle);
+  const doc =
+    handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
+      ? handle.resolution.target.ref
+      : null;
+  const docKey = doc ? `${doc.session}:${doc.openId}` : null;
+  // The table list is read from the one document the sentence names, never the active one.
+  const detail = useHostOp(
+    "revit.detail.data-tables",
+    {},
+    { bridgeSessionId: doc?.session, openDocumentId: doc?.openId, enabled: doc !== null },
   );
-}
+  const tables = (detail.data?.tables ?? []) as TableHandle[];
+  // A draft belongs to the document it was opened on.
+  useEffect(() => setDraft(null), [docKey]);
+  // An apply changes the list; it re-reads once the verb lands.
+  const outcome = handle.outcome;
+  useEffect(() => {
+    if (outcome?.key === "apply") detail.refresh();
+  }, [outcome]); // eslint-disable-line react-hooks/exhaustive-deps
 
-function DataTablesWorkspace({
-  tables,
-  initialDraft = null,
-  isLoading = false,
-  isFetching = false,
-  onRefetch,
-  onApply,
-}: {
-  tables: TableHandle[];
-  initialDraft?: Draft | null;
-  isLoading?: boolean;
-  isFetching?: boolean;
-  onRefetch?: () => Promise<void>;
-  onApply?: (draft: Draft) => Promise<string[]>;
-}) {
-  const [draft, setDraft] = useState<Draft | null>(initialDraft);
-  const [railCollapsed, setRailCollapsed] = useState(false);
-  const store = useRouteOwner(() => createRouteOwner("data-tables", appAtomRegistry));
-  const busy = useAtomValue(store.busy)?.key ?? null;
-  const clearFailure = () => store.registry.set(store.failure, null);
-
-  const openTable = (handle: TableHandle) => {
-    clearFailure();
-    setDraft(draftFrom(handle));
+  // The Situation palette is the sentence's ladder; opening it re-lists the tables.
+  const [palette, setPalette] = useState(false);
+  const openPalette = (open: boolean) => {
+    setPalette(open && handle.busy === null);
+    if (open && doc) detail.refresh();
   };
-
-  const newTable = () => {
-    clearFailure();
-    setDraft({
-      name: "New Table",
-      isNew: true,
-      columns: [{ heading: "Column 1", kind: "Text" }],
-      rows: [{ key: rowKey(), values: [null] }],
-    });
+  const tableRung: Rung = {
+    key: "table",
+    label: draft ? draft.name || "untitled" : null,
+    placeholder: "choose a table",
+    options: detail.data
+      ? tables.map((table) => ({
+          id: table.name,
+          label: table.name,
+          sub: [
+            `${table.columns.length}×${table.rows.length}`,
+            table.placements.length
+              ? `on ${table.placements.map((p) => p.sheetNumber).join(", ")}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        }))
+      : null,
+    note: detail.data
+      ? "no data tables in this document; start one with new table"
+      : (detail.error?.message ?? (doc ? "reading data tables…" : "choose a document first")),
+    picked: (id) => draft !== null && !draft.isNew && draft.name === id,
+    pick: (id) => {
+      const table = tables.find((row) => row.name === id);
+      if (table) setDraft(draftFrom(table));
+    },
   };
-
-  const applyDraft = () =>
-    void store
-      .runAction("apply", async () => {
-        if (!draft || !onApply) return null;
-        const warnings = await onApply(draft);
-        setDraft((d) => (d ? { ...d, isNew: false } : d));
-        await onRefetch?.();
-        if (warnings.length) return refuse("partial", warnings.join(" · "));
-        return null;
-      })
-      .catch(() => undefined);
-
-  const applyReason = !onApply
-    ? "fixture review — apply to Revit is unavailable"
-    : !draft
-      ? "open or create a table first"
-      : draft.name.trim().length === 0
-        ? "name the table first — apply upserts by name"
-        : "Upsert this draft into Revit by name + row key; rows missing from the draft are pruned";
 
   return (
-    <Surface>
-      <AddressingBar
-        name="data tables"
-        sentence={
-          <span>
-            <span>{draft ? draft.name : "no table open"}</span>
-            <HelpTip>
-              Data tables are freely editable key schedules whose cells stay addressable by a stable
-              row key. Apply upserts by table name + row key, and prunes rows the draft no longer
-              carries — deleting a row here deletes it in Revit.
-            </HelpTip>
-          </span>
-        }
-        facts={
-          draft ? (
-            <FactChip title="columns × rows in the open draft">
-              {draft.columns.length}×{draft.rows.length}
-            </FactChip>
-          ) : undefined
-        }
-        verb={
-          <ActionButton
-            tone="commit"
-            label="apply to revit"
-            icon={CheckCheck}
-            busy={busy === "apply"}
-            disabled={!onApply || !draft || draft.name.trim().length === 0}
-            onClick={() => applyDraft()}
-            reason={applyReason}
-          />
-        }
-      />
-      <PaneSplit
-        axis="horizontal"
-        grow
-        resize={{
-          target: "start",
-          defaultSize: 248,
-          minSize: 200,
-          persist: "data-tables:rail",
-          collapse: {
-            collapsed: railCollapsed,
-            onCollapsedChange: setRailCollapsed,
-            collapsedSize: 40,
-            collapseBelow: 100,
-          },
-        }}
-        start={
-          <Pane
-            kind="flank"
-            title="tables"
-            meta={`${tables.length} tables`}
-            side="left"
-            collapsed={railCollapsed}
-            onCollapsedChange={setRailCollapsed}
-            actions={
-              <>
-                <ActionButton
-                  label="re-read"
-                  icon={ListIcon}
-                  busy={isFetching}
-                  disabled={!onRefetch}
-                  onClick={() => void onRefetch?.()}
-                  reason={
-                    onRefetch
-                      ? "Re-read every data table from the document"
-                      : "fixture data is already loaded locally"
-                  }
-                />
-                <ActionButton
-                  label="new"
-                  icon={Plus}
-                  onClick={newTable}
-                  reason="Start a blank draft — nothing exists in Revit until apply"
-                />
-              </>
-            }
-          >
-            <List
-              aria-label="data tables"
-              items={tables}
-              keyOf={(t) => t.name}
-              labelOf={(t) => t.name}
-              filter="substring"
-              searchPlaceholder="Filter tables…"
-              empty={
-                isLoading ? (
-                  <OutcomeLine kind="busy" label="reading data tables" />
-                ) : (
-                  <EmptyState story="scope" exit="create one with the new verb above">
-                    no data tables in this document
-                  </EmptyState>
-                )
+    <Surface
+      head={
+        <RouteShell
+          manifest={manifest}
+          handle={handle}
+          situation={
+            <Situation
+              handle={handle}
+              target={{ session: ladder.sessionWord, document: ladder.docWord }}
+              commit="apply"
+              palette={() => openPalette(true)}
+              sentence={
+                <>
+                  data table in{" "}
+                  <Ladder
+                    levels={[...ladder.levels, tableRung]}
+                    disabled={handle.busy !== null}
+                    caution={ladder.lost}
+                    open={palette}
+                    onOpenChange={openPalette}
+                  />
+                  {ladder.refusal ? (
+                    <span role="status" data-tone="caution">
+                      {" "}
+                      ({ladder.refusal})
+                    </span>
+                  ) : null}
+                  .
+                </>
               }
-              onPick={openTable}
-              row={(t) => ({
-                label: t.name,
-                active: draft !== null && !draft.isNew && draft.name === t.name,
-                meta: `${t.columns.length}×${t.rows.length}`,
-                title:
-                  t.placements.length > 0
-                    ? `on ${t.placements.map((p) => p.sheetNumber).join(", ")}`
-                    : undefined,
-              })}
             />
-          </Pane>
-        }
-        end={
-          <Pane kind="content" title={draft?.name ?? "table"} scroll="clip" flush>
-            <div className="min-h-0 min-w-0 flex-1 overflow-auto">
-              {draft ? (
-                <DraftEditor draft={draft} setDraft={setDraft} />
-              ) : (
-                <div className="grid h-full place-items-center">
-                  <EmptyState
-                    story="scope"
-                    exit="pick a table from the rail, or start one with the new verb"
-                  >
-                    no table open
-                  </EmptyState>
-                </div>
-              )}
+          }
+        />
+      }
+    >
+      <Pane
+        kind="content"
+        title={draft?.name ?? "table"}
+        meta={draft ? `${draft.columns.length}×${draft.rows.length}` : undefined}
+        scroll="clip"
+        flush
+      >
+        <div className="min-h-0 min-w-0 flex-1 overflow-auto">
+          {draft ? (
+            <DraftEditor draft={draft} setDraft={setDraft} />
+          ) : (
+            <div className="grid h-full place-items-center">
+              <EmptyState story="scope" exit="choose a table in the sentence, or start a new table">
+                no table open
+              </EmptyState>
             </div>
-          </Pane>
-        }
-      />
+          )}
+        </div>
+      </Pane>
     </Surface>
   );
 }

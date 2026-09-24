@@ -15,7 +15,9 @@ export interface Inspectable {
   label: (id: string) => string;
   open:
     | { kind: "shell"; path: (id: string) => string }
-    | { kind: "route"; to: string; search: (id: string) => Record<string, string> };
+    | { kind: "route"; to: string; search: (id: string) => Record<string, string> }
+    /** A host endpoint the browser opens as a document (raw JSON), outside the app router. */
+    | { kind: "href"; href: (id: string) => string };
 }
 
 /** An inspectable's address, as a log entry or receipt carries it. */
@@ -37,11 +39,18 @@ const MEMBER: Inspectable = {
   },
 };
 
+/** An action receipt, opened in `/ops`, where its recovery controls live. Its id is the action id. */
+const RECEIPT: Inspectable = {
+  label: (id) => `receipt ${id.slice(0, 8)}`,
+  open: { kind: "route", to: "/ops", search: (id) => ({ actionId: id }) },
+};
+
 /** The kinds every route opens, beside the ones its manifest declares. */
 export const inspectableOf = (
   declared: Readonly<Record<string, Inspectable>> | undefined,
   kind: string,
-): Inspectable | undefined => declared?.[kind] ?? (kind === "member" ? MEMBER : undefined);
+): Inspectable | undefined =>
+  declared?.[kind] ?? (kind === "member" ? MEMBER : kind === "receipt" ? RECEIPT : undefined);
 
 /** A capture's receipt: one log row whose label opens the first member it filed. */
 export function noteCaptured(
@@ -98,6 +107,12 @@ export function Inspect({
       <Link to={spec.open.to as never} search={spec.open.search(id) as never}>
         {text}
       </Link>
+    );
+  if (spec.open.kind === "href")
+    return (
+      <a href={spec.open.href(id)} target="_blank" rel="noreferrer">
+        {text}
+      </a>
     );
   const path = spec.open.path(id);
   return (

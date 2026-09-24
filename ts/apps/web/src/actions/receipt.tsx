@@ -1,18 +1,7 @@
 import { actionReceiptSchema, type ActionReceipt } from "@pe/agent-contracts";
-import {
-  peReadings,
-  dirty,
-  previousOf,
-  useHostCall,
-  useAction,
-  useReading,
-  type Readings,
-} from "#/readings";
-import { actionControls, type ActionListFilter, type ActionControlKey } from "@pe/agent-contracts";
-import {
-  controlAction,
-  readScopedActionStatuses,
-} from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { peReadings, dirty, previousOf, useAction, useReading, type Readings } from "#/readings";
+import { actionControls, type ActionControlKey } from "@pe/agent-contracts";
+import { controlAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { ActionButton } from "#/components/lang/action-button";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { Code, stringify } from "#/components/lang/code";
@@ -164,45 +153,5 @@ export function ActionReceiptView({
         )}
       </div>
     </ArtifactFrame>
-  );
-}
-
-/** The one-shot list preserves `lastId`, which the shared Reading request cannot express. */
-export function ActionReceipts({
-  scope,
-  lastId,
-}: {
-  scope: ActionListFilter | null;
-  lastId?: string | null;
-}) {
-  const scopeDeps = [
-    scope?.kind,
-    scope?.workspaceId,
-    scope?.kind === "family" ? scope.target.session : null,
-    scope?.kind === "family" ? scope.target.openId : null,
-  ] as const;
-  const query = useHostCall(
-    (signal) => readScopedActionStatuses(scope!, "", signal, lastId ?? undefined),
-    ["actions", "subject", ...scopeDeps, lastId],
-    scope !== null,
-  );
-  if (!scope) return null;
-  const ids = (query.data ?? []).map((row) => row.id);
-  return (
-    <section aria-label="Actions for this selection">
-      {scope.kind === "family-file" && (
-        <div>Saved file actions; each receipt names its original document lifetime</div>
-      )}
-      {query.isPending ? (
-        <div role="status">Reading actions for this selection</div>
-      ) : query.error ? (
-        <div role="alert">Action list unavailable: {String(query.error)}</div>
-      ) : ids.length === 0 ? (
-        <div>No unresolved actions for this selection</div>
-      ) : null}
-      {(query.data ?? []).map((row) => (
-        <ActionReceiptView key={row.id} id={row.id} />
-      ))}
-    </section>
   );
 }

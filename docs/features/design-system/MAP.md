@@ -39,7 +39,7 @@ Legacy nouns under review: band, readout, read status, rules.
    last-read line, `ChangedInRevit`'s separate button, and the read-issue and verified dialogs.
 3. 2026-09-23, the matrix becomes a Reading by envelope-on-stream, body-on-RPC: the frame carries
    taken-at, changed and a version; the client fetches the body when the version moves. Raising
-   the cap and paging frames were rejected. Lands in a `close` loop after this one; ADR owed then.
+   the cap and paging frames were rejected. ADR 0013.
 4. 2026-09-23, two height rungs: `--head-h` and `--item-h`. The head takes the tall one.
 5. 2026-09-23, read again is not a separate button. The read verb wears the stale mark and the
    `r` chord; a failed apply's flag offers it.
@@ -304,14 +304,11 @@ minimap paint pass in the pea tone. Accept and deny stay on the patch review row
 a types-only parameter with no reading column gets cells but no row.
 
 ## Open
-- The caution tint on a quiet verb button is faint (slice 3 report); a stale verb must read at a
-  glance (house law 3). Kit fix, owed to the ledger at close.
 - Archived reads show their read issues nowhere after slice 3.
 - A staged cell that apply retires logs as "unstaged 1 cell". Target rows say the openId, not
   the document title.
 - A matrix body fetch failure is swallowed; the matrix keeps its last body.
 - `/family` keeps the approximate change mark (`rereads: "work"`).
-- ADR for ruling 3 (envelope on stream, body on RPC).
 
 ## Shapes on the table
 

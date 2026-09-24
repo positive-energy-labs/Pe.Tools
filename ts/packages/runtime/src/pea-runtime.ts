@@ -551,7 +551,7 @@ export function createPeaSessionAdmission(
     await assertRunAdmitted();
     return steer(input);
   };
-  const unsubscribeTurnQueue = installTurnQueue(session, scopes);
+  const turnQueue = installTurnQueue(session, scopes);
   const sendNotificationSignal = session.sendNotificationSignal.bind(session);
   session.sendNotificationSignal = async (input, options) => {
     if (scopedThreadId) throw new Error("Pea web sessions do not support notifications.");
@@ -617,7 +617,7 @@ export function createPeaSessionAdmission(
         permissionGeneration++;
         unsubscribePermissions?.();
         unsubscribeDocumentCleanup();
-        unsubscribeTurnQueue();
+        turnQueue.close();
         restoreScopedThreadLifecycle?.();
       }
       await permissionQueue;

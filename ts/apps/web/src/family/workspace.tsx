@@ -98,18 +98,16 @@
  *
  *   capture live   the kernel's `family.capture` workflow. It files the open family as a NEW
  *                  member, the page lands on it, and the capture's evidence (coverage, the
- *                  unmodeled ledger) shows beside it and feeds the ⇄ live overlay.
+ *                  unmodeled ledger) is a log row and feeds the ⇄ live overlay.
  *   build .rfa     `family.build`. A WRITE that leaves the page and
  *                  the document: it composes the SAVED member host-side and materializes an .rfa.
  *                  Because it reads the saved bytes rather than the table, it is armed rather than
  *                  pressed — the ceremony, its refusals and its receipt live in `#/family/build`.
  */
-import { Link } from "@tanstack/react-router";
+import { useEffect } from "react";
 
 import { ActionButton } from "#/components/lang/action-button";
 import { Code, stringify } from "#/components/lang/code";
-import { FactChip } from "#/components/lang/chip";
-import { OutcomeLine } from "#/components/lang/outcome";
 import { PaneSplit } from "#/components/lang/pane";
 import { buildReceiptSummary } from "#/family/build";
 import type { FamilyStore } from "#/family/store";
@@ -130,10 +128,10 @@ export type FamilyWorkspaceModel = ReturnType<typeof useFamilyWorkspaceModel>;
 
 const noun = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-/** The audit body: the member bar, the capture evidence, then anatomy and table beside the doc. */
+/** The audit body: anatomy and table beside the doc. What it learns is log rows, never bands. */
 export function FamilyWorkspace({ store }: { store: FamilyStore }) {
   const model = useFamilyWorkspaceModel(store);
-  const { readings } = store;
+  useFamilyLog(store);
   return (
     <FamilyWorkspaceProvider value={model}>
       <div className="flex size-full min-h-0 min-w-0 flex-col">
@@ -147,20 +145,6 @@ export function FamilyWorkspace({ store }: { store: FamilyStore }) {
             />
           </div>
         )}
-        <DraftBand />
-        <CaptureEvidence />
-        {readings.length > 0 && (
-          <details>
-            <summary>Saved Family readings</summary>
-            {readings.map((capture) => (
-              <p key={capture.id}>
-                <a href={`/family/readings?id=${capture.id}`}>
-                  {capture.reading.kind} captured {capture.capturedAt} ({capture.provenance.kind})
-                </a>
-              </p>
-            ))}
-          </details>
-        )}
         <FamilyAuditPanes />
       </div>
     </FamilyWorkspaceProvider>
@@ -168,70 +152,58 @@ export function FamilyWorkspace({ store }: { store: FamilyStore }) {
 }
 
 /**
- * What is unsaved and staged on the open member. The member itself is picked in the Situation
- * (the kernel spec picker); a draft that does not parse is said here, beside its edits.
+ * N3/N6: what the audit learns lands in the route's one log, once per new fact. A draft that will
+ * not parse is a refusal row. The latest capture is a row whose hover says what it saw and when,
+ * linked to its unmodeled facts, and each of its issues is a row. Each saved Family Reading is a
+ * row that opens its JSON. `handle.note` is a fresh closure every render, so it is not a dep.
  */
-function DraftBand() {
-  const { store, draft, unsavedCount } = useFamilyWorkspace();
-  const staged = store.buildFacts.stagedCount;
-  const revision = store.review.revision;
+function useFamilyLog(store: FamilyStore) {
+  const { handle } = store;
   const parseError = store.lane.parseError;
-  if (!draft.dirty && !staged && revision === null && parseError == null) return null;
-  return (
-    <div className="hairline-b flex flex-wrap items-baseline gap-3 px-3 py-1.5 t-small">
-      <span className="text-ink-2">family model</span>
-      {parseError != null ? <span data-tone="caution">{parseError}</span> : null}
-      {draft.dirty ? <b>{noun(unsavedCount, "unsaved edit")}</b> : null}
-      {staged ? <b>{noun(staged, "staged field")}</b> : null}
-      {revision !== null ? <span className="face-mono text-ink-mute">r{revision}</span> : null}
-    </div>
-  );
-}
-
-/** What the latest capture saw, beside the member it filed (ruling 2026-09-16). */
-function CaptureEvidence() {
-  const { store } = useFamilyWorkspace();
-  const captured = store.captured;
-  if (!captured) return null;
-  const { member, evidence } = captured;
-  const here =
-    store.member?.pod === member.pod && store.member.path === member.path
-      ? "this member"
-      : `${member.pod} · ${member.path}`;
-  if (!("modelJson" in evidence)) return null;
-  return (
-    <section aria-label="capture evidence" className="hairline-b flex flex-col gap-1 px-3 py-1.5">
-      <div className="flex flex-wrap items-baseline gap-2 t-small">
-        <span className="text-ink-2">
-          captured {evidence.familyName} into {here}
-        </span>
-        {Object.entries(evidence.coverage).map(([section, state]) => (
-          <FactChip key={section} tone={state === "Full" ? "done" : "caution"} title={section}>
-            {section}: {state}
-          </FactChip>
-        ))}
-        {/* The facts themselves are the run's `unmodeled.json`, never the member (law 12). */}
-        <FactChip tone={evidence.unmodeledCount ? "caution" : "done"} title="unmodeled facts">
-          {evidence.run ? (
-            <Link to="/pods" search={{ pod: member.pod, path: `${evidence.run}/unmodeled.json` }}>
-              {noun(evidence.unmodeledCount, "unmodeled fact")}
-            </Link>
-          ) : (
-            noun(evidence.unmodeledCount, "unmodeled fact")
-          )}
-        </FactChip>
-        <span className="face-mono text-ink-mute">{evidence.observedAt}</span>
-      </div>
-      {evidence.issues.map((issue, index) => (
-        <OutcomeLine
-          key={index}
-          kind={issue.severity === "Error" ? "error" : "advisory"}
-          label={issue.code}
-          says={issue.message}
-        />
-      ))}
-    </section>
-  );
+  useEffect(() => {
+    if (parseError != null) handle.note("model", `will not parse: ${parseError}`, true);
+  }, [parseError]); // eslint-disable-line react-hooks/exhaustive-deps
+  const { captured } = store;
+  const evidence = captured && "modelJson" in captured.evidence ? captured.evidence : null;
+  const capturedKey =
+    evidence && `${captured!.member.pod}:${captured!.member.path}:${evidence.observedAt}`;
+  useEffect(() => {
+    if (!captured || !evidence) return;
+    const { member } = captured;
+    const coverage = Object.entries(evidence.coverage).map(
+      ([section, state]) => `${section}: ${state}`,
+    );
+    // The facts themselves are the run's `unmodeled.json`, never the member (law 12).
+    handle.note(
+      `captured ${evidence.familyName}`,
+      [
+        `into ${member.pod} · ${member.path}`,
+        ...coverage,
+        noun(evidence.unmodeledCount, "unmodeled fact"),
+        `observed ${evidence.observedAt}`,
+      ].join(" · "),
+      false,
+      evidence.run
+        ? { kind: "member", id: JSON.stringify([member.pod, `${evidence.run}/unmodeled.json`]) }
+        : undefined,
+      { at: evidence.observedAt, key: `capture:${capturedKey}` },
+    );
+    for (const [index, issue] of evidence.issues.entries())
+      handle.note(issue.code, issue.message, issue.severity === "Error", undefined, {
+        at: evidence.observedAt,
+        key: `capture:${capturedKey}:issue:${index}`,
+      });
+  }, [capturedKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    for (const reading of store.readings)
+      handle.note(
+        `saved ${reading.reading.kind} reading`,
+        `captured ${reading.capturedAt} (${reading.provenance.kind})`,
+        false,
+        { kind: "reading", id: reading.id },
+        { at: reading.capturedAt, key: `reading:${reading.id}` },
+      );
+  }, [store.readings]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 function FamilyAuditPanes() {

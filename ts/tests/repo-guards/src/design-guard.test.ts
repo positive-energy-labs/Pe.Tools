@@ -1081,7 +1081,6 @@ const BAD_RECIPE_GRIDS = [...REQUIRED_RECIPE_GRIDS]
   .sort();
 
 const REQUIRED_SPECIMEN_PATHS = [
-  "#/components/lang/addressing-bar",
   "#/components/lang/arming-strip",
   "#/components/lang/artifact-frame",
   "#/components/lang/cell",
