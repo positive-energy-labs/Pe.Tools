@@ -225,6 +225,10 @@ Legacy nouns under review: band, readout, read status, rules.
 57. "thats what i thought it already was." Archived on `/schedules` and `/family` lists their past
    captures from the host, as `/families` lists its archived readings. An empty Archived stage is
    a bug.
+58. "I like history better." The third stage is History, not Archived: "History of schedule in
+   Chadds". The stage key `archived` becomes `history` in the kernel, the URL and every stage
+   declaration. "Readings" was rejected: it breaks the stage sentence, and a Reading is any Revit
+   observation, the live one included.
 
 ## Entity route shape (ruled 2026-09-24, rulings 34-45; the baton is deleted)
 
