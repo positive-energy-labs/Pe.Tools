@@ -10,10 +10,13 @@ import {
 } from "@pe/agent-contracts";
 import { ReviewRow, WorkStanding, type CellWire } from "#/components/lang/band";
 import { type InstancesHandle } from "#/instances/manifest";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { peReadings, readReading, useHostCall } from "#/readings";
-import { ActionReceipts } from "#/actions/receipt";
-import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import {
+  readScopedActionStatuses,
+  runSemanticAction,
+} from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { FactChip } from "#/components/lang/chip";
 import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 import { EmptyState } from "#/components/lang/empty";
 import { StateCell } from "#/components/lang/cell";
@@ -29,7 +32,6 @@ import { useTableState } from "#/components/master-table/view";
 import type { Column } from "#/components/master-table/model";
 import type { Inventory } from "#/readings";
 import { timeAgo } from "#/lib/utils";
-import type { InstancesFleet } from "#/instances/workspace";
 import {
   YEARS,
   custodyVerdict,
@@ -40,6 +42,7 @@ import {
   sessionLabel,
   sessionSub,
   sessionTarget,
+  type InstancesFleet,
 } from "#/instances/route";
 
 /**
@@ -56,8 +59,6 @@ import {
  * Lane is pinned to `installed` — dev/HR sessions never start from this surface (ruled
  * 2026-09-01, variant E round).
  */
-
-type ClusterEvent = { readonly atMs: number; readonly label: string };
 
 type DocFact = {
   readonly id: string;
@@ -136,8 +137,6 @@ type ClusterProps = {
   fleet: InstancesFleet;
   target: string;
   setTarget: (target: string) => void;
-  /** Settled lifecycle receipts, for a host page's ledger. */
-  onEvent?: (event: ClusterEvent) => void;
   /** Hands the selected document and its exact session pin to an embedding route. */
   onDocument?: (scope: DocumentScope) => void;
   requestedDocument?: string;
@@ -159,7 +158,6 @@ export function InstancesCluster({
   fleet,
   target,
   setTarget,
-  onEvent,
   onDocument,
   requestedDocument,
 }: ClusterProps) {
@@ -277,8 +275,29 @@ export function InstancesCluster({
   const sessionName = localSessionName ?? (stored?.kind === "start" ? stored.name : "");
   const setSessionName = (name: string) => setLocalSessionName(sessionIdOf(name));
   const [busy, setBusy] = useState<string | null>(null);
-  const [lastId, setLastId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // A refusal or a settled launch is a log row; a receipt row opens where recovery lives (N3).
+  const refuse = (label: string, says: string) => route.note(label, says, true);
+  const unresolved = useHostCall(
+    (signal) => readScopedActionStatuses({ kind: "instances", workspaceId }, "", signal),
+    ["actions", "subject", "instances", workspaceId],
+  );
+  const noted = useRef(new Set<string>());
+  useEffect(() => {
+    for (const row of unresolved.data ?? [])
+      if (!noted.current.has(row.id)) {
+        noted.current.add(row.id);
+        route.note(`unresolved ${row.key}`, `action ${row.id} is ${row.state}`, true, {
+          kind: "receipt",
+          id: row.id,
+        });
+      }
+  }, [unresolved.data, route]);
+  // Facts about the drawn census: they sit on the fleet table's head line (ruling 27).
+  const censusExceptions = fleet.unreadableReceipts
+    .map((receipt) => `receipt ${receipt.id} · ${receipt.receiptPath} · ${receipt.detail}`)
+    .concat(
+      fleet.processReadErrors.map((error) => `process ${error.candidatePid} · ${error.detail}`),
+    );
 
   const pickedWorld = findSession(liveWorlds, target);
   const pickedYear = pickedWorld?.row?.year != null ? String(pickedWorld.row.year).slice(-2) : null;
@@ -302,7 +321,6 @@ export function InstancesCluster({
   const runCommand = async (command: "start" | "open" | "restart" | "stop") => {
     if (work.revision === null) return;
     setBusy(command);
-    setError(null);
     try {
       let revision = work.revision;
       if (command === "start" && stored?.kind === "start" && stored.name !== sessionName) {
@@ -339,10 +357,12 @@ export function InstancesCluster({
         command === "start" || command === "open" ? crypto.randomUUID() : undefined,
         30_000,
       );
-      setLastId(row.id);
-      onEvent?.({ atMs: Date.now(), label: `${command}: action ${row.id} (${row.state})` });
+      route.note(`${command} ${row.state}`, `action ${row.id}`, row.state !== "succeeded", {
+        kind: "receipt",
+        id: row.id,
+      });
     } catch (caught) {
-      setError(String(caught));
+      refuse(`${command} refused`, String(caught));
     } finally {
       setBusy(null);
     }
@@ -351,7 +371,6 @@ export function InstancesCluster({
   // own — the world already showing it, else a ready controlled installed world of its year, else
   // a new session of its year.
   const stageDoc = (document: DocFact) => {
-    setError(null);
     if (staged?.doc?.id === document.id) {
       setStaged(null);
       return;
@@ -362,7 +381,7 @@ export function InstancesCluster({
     }
     const year = document.year ?? yearPick;
     if (!year) {
-      setError("Pick a session or Revit year before opening this document.");
+      refuse("stage refused", "Pick a session or Revit year before opening this document.");
       return;
     }
     setStaged({ kind: "start", doc: document, year });
@@ -535,6 +554,17 @@ export function InstancesCluster({
                 state={tableState}
                 onStateChange={setTableState}
                 searchPlaceholder="search sessions"
+                actions={
+                  censusExceptions.length ? (
+                    <FactChip
+                      tone="caution"
+                      title={`${fleet.registryRoot ? `registry ${fleet.registryRoot} · ` : ""}${censusExceptions.join(" · ")}`}
+                    >
+                      {censusExceptions.length} census exception
+                      {censusExceptions.length === 1 ? "" : "s"}
+                    </FactChip>
+                  ) : undefined
+                }
               >
                 <Table
                   rows={visibleWorlds}
@@ -736,9 +766,6 @@ export function InstancesCluster({
                       nothing staged — pick a session above, or click a document row
                     </span>
                   )}
-                  {route.failure ? (
-                    <OutcomeLine kind="error" label={route.failure.message} />
-                  ) : null}
                   {stored?.kind === "open" && !storedWorld ? (
                     <div>
                       <OutcomeLine
@@ -753,8 +780,6 @@ export function InstancesCluster({
                       />
                     </div>
                   ) : null}
-                  {error && <OutcomeLine kind="error" label={error} />}
-                  <ActionReceipts scope={{ kind: "instances", workspaceId }} lastId={lastId} />
                 </div>
               </Pane>
             }
