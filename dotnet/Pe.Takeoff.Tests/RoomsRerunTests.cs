@@ -90,6 +90,24 @@ public sealed class RoomsRerunTests
     }
 
     [Test]
+    public void Held_field_edit_claims_custody_but_noop_does_not()
+    {
+        var provenance = new RegionProvenance(1, Guid.NewGuid(), "machine-run", "source-room", 12)
+            { GeometryHash = "geometry", WallHash = "wall", Flags = ["stale"] };
+        var before = new RoomFields("", "hall", null, null, null, null, null, null);
+        var changed = before with { Name = "Authored Held" };
+        var authored = Rooms.AuthorHeldIfEdited(provenance, before, changed);
+        Assert.Multiple(() => {
+            Assert.That(Rooms.AuthorHeldIfEdited(provenance, before, before), Is.SameAs(provenance));
+            Assert.That(authored.Flags, Does.Contain(Rooms.FlagAuthored));
+            Assert.That(authored.RunId, Is.EqualTo(provenance.RunId));
+            Assert.That(authored.SourceRoomId, Is.EqualTo(provenance.SourceRoomId));
+            Assert.That(authored.GeometryHash, Is.EqualTo(provenance.GeometryHash));
+            Assert.That(authored.WallHash, Is.EqualTo(provenance.WallHash));
+        });
+    }
+
+    [Test]
     public void Geometry_hash_is_hex_sha256_stable_under_sub_micro_noise()
     {
         List<List<double[]>> a = [[[0, 0], [10, 0], [10, 10], [0, 10]]];

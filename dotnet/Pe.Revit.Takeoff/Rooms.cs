@@ -49,6 +49,7 @@ public static class Rooms
 {
     public const string RunDrawn = "drawn";
     public const string FlagStale = "stale";
+    public const string FlagAuthored = "authored";
 
     // FOOTGUN: contract constant, the wall evidence window around a region's bbox.
     private const double WallWindowFt = 1.0;
@@ -85,7 +86,8 @@ public static class Rooms
                 Sqft(fr, loops), outer, loops.Where(loop => !ReferenceEquals(loop, outer)).ToList(),
                 !touched && provenance.Partition is { } p ? [p.LabelX, p.LabelY] : Interior(loops),
                 provenance.RunId, provenance.Partition?.Reason,
-                touched, touched || provenance.RunId == RunDrawn, provenance.Flags.Contains(FlagStale)));
+                touched, touched || provenance.RunId == RunDrawn || provenance.Flags.Contains(FlagAuthored),
+                provenance.Flags.Contains(FlagStale)));
         }
         return new RoomsSnapshotData(levels, regions);
     }
@@ -137,7 +139,8 @@ public static class Rooms
             var region = new ExistingRegion(fr.Id.Value(), guid.Value, loops, Sqft(fr, loops));
             var at = Interior(loops);
             var inside = ZoneScope.ContainsEvenOdd(domainLoops, at[0], at[1]);
-            if (Touched(provenance, loops) || provenance.RunId == RunDrawn || provenance.ZoneGuid != scope || !inside)
+            if (Touched(provenance, loops) || provenance.RunId == RunDrawn || provenance.Flags.Contains(FlagAuthored)
+                || provenance.ZoneGuid != scope || !inside)
             {
                 locked.Add(region);
                 proposals.Add(LockedProposal(region, TakeoffCarriers.ReadRoomFields(fr).Name ?? ""));
@@ -283,8 +286,17 @@ public static class Rooms
         var unknown = request.Regions.FirstOrDefault(r => !byGuid.ContainsKey(r.Guid));
         if (unknown != null) throw new InvalidOperationException($"no Room Region with guid {unknown.Guid:D}");
         foreach (var r in request.Regions)
-            TakeoffCarriers.WriteRoomFields(byGuid[r.Guid], new RoomFields(
+        {
+            var fr = byGuid[r.Guid];
+            var held = TakeoffCarriers.ReadIdentity(fr).Role == TakeoffCarriers.RoleHeldResidue;
+            var before = held ? TakeoffCarriers.ReadRoomFields(fr) : null;
+            TakeoffCarriers.WriteRoomFields(fr, new RoomFields(
                 r.Name, r.Type, r.CeilingFt, r.People, r.LightingW, r.EquipSensible, r.EquipLatent, r.VentilationCfm));
+            if (!held) continue;
+            var provenance = ReadProvenance(fr);
+            var authored = AuthorHeldIfEdited(provenance, before!, TakeoffCarriers.ReadRoomFields(fr));
+            if (!ReferenceEquals(authored, provenance)) TakeoffCarriers.WriteProvenance(fr, authored.ToJson());
+        }
         return new RoomsWriteResult(request.Regions.Count);
     }
 
@@ -326,6 +338,11 @@ public static class Rooms
 
     private static bool Touched(RegionProvenance provenance, List<List<double[]>> loops) =>
         provenance.GeometryHash is { } stored && stored != GeometryHash(loops);
+
+    internal static RegionProvenance AuthorHeldIfEdited(RegionProvenance provenance, RoomFields before, RoomFields after) =>
+        before == after || provenance.Flags.Contains(FlagAuthored)
+            ? provenance
+            : provenance with { Flags = [.. provenance.Flags, FlagAuthored] };
 
     private static RegionProvenance ReadProvenance(FilledRegion fr) =>
         RegionProvenance.FromJson(TakeoffCarriers.ReadProvenance(fr)
