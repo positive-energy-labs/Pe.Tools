@@ -1,11 +1,9 @@
 import { token } from "#/lib/token";
 import { useState } from "react";
-import { AddressingBar } from "#/components/lang/addressing-bar";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { fmtNum, StateCell, type StateCellProps } from "#/components/lang/cell";
 import { FactChip } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
-import { OutcomeLine } from "#/components/lang/outcome";
 import { Switcher } from "#/components/lang/switcher";
 import { ActionButton } from "#/components/lang/action-button";
 import { Pane } from "#/components/lang/pane";
@@ -205,78 +203,14 @@ export function VariantE() {
   return (
     <Surface>
       <Pane kind="content" title="parameter table" scroll="clip" flush>
-        <AddressingBar
-          name="param tables"
-          sentence={
-            <span>
-              <span className="">ProjectA_Clone_Aug_11</span>
-              <span style={muted}>›</span>
-              <span>Mechanical Equipment</span>
-              <span style={muted}>›</span>
-              <span>Main House fan coils</span>
-            </span>
-          }
-          facts={
-            <>
-              <FactChip title="rows and family types in scope — the substrate every lens projects">
-                {FC_UNITS.length} rows · {GROUPS.length} types
-              </FactChip>
-              {stagedRows > 0 ? (
-                <FactChip
-                  tone="caution"
-                  title="unsaved — staged type writes derived from authored-fact edits; apply commits them"
-                >
-                  {applicable.length} type writes · {stagedRows} rows staged
-                </FactChip>
-              ) : null}
-              {driftRows > 0 ? (
-                <FactChip
-                  tone="alarm"
-                  title="the model disagrees with a committed authored fact on these rows"
-                >
-                  {driftRows} rows drift
-                </FactChip>
-              ) : null}
-            </>
-          }
-          verb={
-            <ActionButton
-              tone="commit"
-              label="Apply staged writes"
-              onClick={apply}
-              disabled={applicable.length === 0}
-              reason={
-                applicable.length > 0
-                  ? `Writes ${applicable.length} type parameter${applicable.length === 1 ? "" : "s"} (${stagedRows} rows) in ProjectA_Clone_Aug_11${refusals.length > 0 ? ` — ${refusals.length} target${refusals.length === 1 ? "" : "s"} will refuse (formula-owned)` : ""} · mock, in-memory`
-                  : refusals.length > 0
-                    ? "every staged write refuses — the edited fact only targets formula-owned types"
-                    : "nothing is staged — edit a design fact in the authored lane first"
-              }
-            />
-          }
-          seam={
-            <FactChip
-              dashed
-              title="prototype fixture lane — pulled from ProjectA_Clone_Aug_11 on 2026-08-17; a live host session would replace this"
-            >
-              fixture · ProjectA_Clone_Aug_11
-            </FactChip>
-          }
-        />
-
-        {outcomes.length > 0 ? (
-          <div className="flex flex-col gap-0.5 px-4 py-1">
-            {outcomes.map((o, i) => (
-              <OutcomeLine key={i} kind={o.kind} label={o.label} says={o.says} />
-            ))}
-          </div>
-        ) : null}
-
         <div className="flex min-h-0 flex-1 flex-col">
           <ArtifactFrame
             head={
               <span className="flex w-full items-center gap-3">
-                <span className="">Main House fan coils × PE_* parameters</span>
+                <span>
+                  ProjectA_Clone_Aug_11 <span style={muted}>›</span> Mechanical Equipment{" "}
+                  <span style={muted}>›</span> Main House fan coils × PE_* parameters
+                </span>
                 <HelpTip>
                   One substrate, three lenses. The grid is every fan coil × every attribute; the FOM
                   exhibit and the BOD list are saved projections of the same rows and the same
@@ -308,6 +242,27 @@ export function VariantE() {
                     },
                   ]}
                 />
+                <span className="ml-auto flex items-center gap-2">
+                  <FactChip
+                    dashed
+                    title="prototype fixture lane — pulled from ProjectA_Clone_Aug_11 on 2026-08-17; a live host session would replace this"
+                  >
+                    fixture · ProjectA_Clone_Aug_11
+                  </FactChip>
+                  <ActionButton
+                    tone="commit"
+                    label="Apply staged writes"
+                    onClick={apply}
+                    disabled={applicable.length === 0}
+                    reason={
+                      applicable.length > 0
+                        ? `Writes ${applicable.length} type parameter${applicable.length === 1 ? "" : "s"} (${stagedRows} rows) in ProjectA_Clone_Aug_11${refusals.length > 0 ? ` — ${refusals.length} target${refusals.length === 1 ? "" : "s"} will refuse (formula-owned)` : ""} · mock, in-memory`
+                        : refusals.length > 0
+                          ? "every staged write refuses — the edited fact only targets formula-owned types"
+                          : "nothing is staged — edit a design fact in the authored lane first"
+                    }
+                  />
+                </span>
               </span>
             }
             foot={
@@ -320,9 +275,29 @@ export function VariantE() {
                     {applicable.length} type writes stage {stagedRows} rows
                     {refusals.length > 0 ? ` · ${refusals.length} will refuse` : ""}
                   </span>
+                ) : outcomes[0] ? (
+                  <span
+                    role="status"
+                    title={outcomes
+                      .slice(1)
+                      .map((o) => `${o.label}${o.says ? ` — ${o.says}` : ""}`)
+                      .join(" · ")}
+                    data-tone={outcomes[0].kind === "error" ? "caution" : undefined}
+                    style={outcomes[0].kind === "error" ? undefined : muted}
+                  >
+                    {outcomes[0].label}
+                  </span>
                 ) : (
                   <span style={muted}>no staged writes</span>
                 )}
+                {driftRows > 0 ? (
+                  <span
+                    data-tone="alarm"
+                    title="the model disagrees with a committed authored fact on these rows"
+                  >
+                    {driftRows} rows drift
+                  </span>
+                ) : null}
                 <span className="ml-auto" style={muted}>
                   lens: {lens}
                 </span>
