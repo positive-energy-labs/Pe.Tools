@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import { z } from "zod";
 import { RequestContext } from "@mastra/core/request-context";
 import type { Session } from "@mastra/core/agent-controller";
 import {
@@ -18,6 +19,19 @@ export interface ScopeStateStore {
 }
 
 const scopeType = (threadId: string) => `scope:${threadId}`;
+const queueType = (threadId: string) => `queue:${threadId}`;
+
+/** A queued message as the thread stores it; `dispatching` marks an admission in flight. */
+const storedTurnSchema = z.object({
+  id: z.string(),
+  head: threadHeadSchema,
+  content: z.string(),
+  files: z
+    .array(z.object({ data: z.string(), mediaType: z.string(), filename: z.string().optional() }))
+    .optional(),
+  dispatching: z.boolean(),
+});
+export type StoredTurn = z.infer<typeof storedTurnSchema>;
 
 /**
  * The host-owned default Target per chat thread: one row beside the thread, one revision counter, one
@@ -47,6 +61,20 @@ export class ScopeStore {
     if (raw != null && !parsed.success)
       console.warn(`scope ${threadId}: stored head no longer parses, reading as none`, raw);
     return parsed.data ?? { defaultTarget: null, revision: 0 };
+  }
+
+  /** The thread's queued messages, in the same thread-state store as its head. */
+  async readQueue(threadId: string): Promise<StoredTurn[]> {
+    const raw = await (
+      await this.store()
+    ).getState({ threadId: this.resourceId, type: queueType(threadId) });
+    return z.array(storedTurnSchema).parse(raw ?? []);
+  }
+
+  async writeQueue(threadId: string, value: StoredTurn[]): Promise<void> {
+    await (
+      await this.store()
+    ).setState({ threadId: this.resourceId, type: queueType(threadId), value });
   }
 
   /** Every write says what it read: a stale `expectedRevision` returns the current Head instead. */
@@ -148,12 +176,11 @@ export async function admitTurn(
   input: { content: string; files?: MessageFile[]; requestContext?: unknown },
 ): Promise<void> {
   const thread = session.thread.requireId();
-  const id = crypto.randomUUID();
+  const queued = input.requestContext instanceof RequestContext ? input.requestContext : undefined;
+  // A queued message's turn id is its queue id, so a retry re-saves one user signal, not two.
+  const id = (queued?.get("peaQueuedId") as string | undefined) ?? crypto.randomUUID();
   await scopes.admit(thread, id, async (head) => {
-    const queuedHead =
-      input.requestContext instanceof RequestContext
-        ? input.requestContext.get("peaQueuedHead")
-        : undefined;
+    const queuedHead = queued?.get("peaQueuedHead");
     if (queuedHead !== undefined && !isDeepStrictEqual(head, queuedHead))
       throw new Error("Queued message paused because the thread target changed.");
     const turn: Turn = { id, thread, ...head };
