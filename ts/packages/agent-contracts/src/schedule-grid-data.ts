@@ -62,6 +62,10 @@ export const scheduleColumnSchema = z.object({
   fieldName: z.string(),
   isCalculated: z.boolean().default(false),
   isCombinedParameter: z.boolean().default(false),
+  /** The field's declared spec, as `revit.detail.schedules` sends it (`dataTypeId` is the TypeId). */
+  parameter: z
+    .object({ definition: z.object({ dataTypeId: z.string().nullish() }).nullish() })
+    .nullish(),
 });
 export type ScheduleColumn = z.infer<typeof scheduleColumnSchema>;
 

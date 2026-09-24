@@ -11,7 +11,10 @@ import {
   ListChips,
   ListInput,
   ListPopup,
+  PopupFrame,
 } from "#/components/lang/list-popup";
+import { Popover } from "@base-ui/react/popover";
+import { Press } from "#/components/lang/press";
 import { Row, RowGroupHead, rowRecipe } from "#/components/lang/row";
 import { Table } from "#/components/master-table/table";
 
@@ -68,6 +71,18 @@ export function LangListSpecimens() {
             trigger={<span className="face-mono">String</span>}
             aria-label="popup list"
           />
+          <Popover.Root>
+            <Popover.Trigger render={<Press tone="quiet" size="caption" />}>
+              plan 1/3
+            </Popover.Trigger>
+            <PopupFrame side="top" align="end" label="plain popup">
+              <div className="grid w-64 p-1.5 t-small text-ink-2">
+                <span>✓ read families</span>
+                <span className="text-ink">▸ propose Manufacturer</span>
+                <span>○ apply</span>
+              </div>
+            </PopupFrame>
+          </Popover.Root>
           <Table<{ key: string }>
             label="cell list"
             rows={[{ key: "Width" }]}

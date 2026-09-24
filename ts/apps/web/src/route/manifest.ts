@@ -288,8 +288,8 @@ export interface EntityRouteDef<W, R extends string, P> {
   /** The audit Readings an apply changes in Revit (a new schedule joins the catalog): its
    * completion re-reads them, so the route never shows a pre-apply count. */
   applies?: readonly R[];
-  /** Present = apply is a confirmation over this plan. */
-  plan?: ApplyPlan<W, R, P>;
+  commit?: string; // the Work sentence's verb while staged; default `plan` with a plan lane, else `apply`
+  plan?: ApplyPlan<W, R, P>; // present = apply is a confirmation over this plan
   /**
    * Present = the audit stages edits of its own, and plan generates the spec from them AT THAT
    * MOMENT rather than reading a member the person saved (dogma law 10 still holds: the generated

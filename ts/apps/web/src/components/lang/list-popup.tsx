@@ -57,6 +57,8 @@ export type ListProps<T> = Omit<CollectionOptions<T>, "target"> & {
   footer?: ReactNode | ((level: number) => ReactNode);
   /** Hand the collection to the caller (a table reads its selection, the composer its cursor). */
   onCollection?: (collection: Collection<T>) => void;
+  /** False: group heads carry no member count (a list whose rows already carry a count). */
+  groupCounts?: false;
 };
 
 /** The words a list says instead of rows: one per status, never a blank. */
@@ -102,7 +104,13 @@ export function List<T>(props: ListProps<T>) {
   }, [owner, active, collection.listProps.id]);
   const render = (row: VisibleRow<T>) => {
     if (row.kind === "head")
-      return <RowGroupHead key={row.key} label={row.label} count={row.count} />;
+      return (
+        <RowGroupHead
+          key={row.key}
+          label={row.label}
+          count={props.groupCounts === false ? undefined : row.count}
+        />
+      );
     if (row.kind === "create") {
       const { onClick, ...rest } = collection.rowProps(row.key);
       return (
@@ -194,16 +202,25 @@ type PopupFrameProps = {
   label: string;
   /** An input-owned popup (R14) never takes focus: the owner keeps the caret and the keys. */
   owned?: boolean;
+  side?: "top" | "bottom";
+  align?: "start" | "end";
 };
 
 /** The one popup surface: positioned by Base UI, drawn by the kit. */
-function PopupFrame({ children, anchor, label, owned }: PopupFrameProps) {
+export function PopupFrame({
+  children,
+  anchor,
+  label,
+  owned,
+  side = "bottom",
+  align = "start",
+}: PopupFrameProps) {
   return (
     <Popover.Portal>
       <Popover.Positioner
         anchor={anchor ?? undefined}
-        side="bottom"
-        align="start"
+        side={side}
+        align={align}
         sideOffset={4}
         className="isolate z-popup"
       >
@@ -311,7 +328,10 @@ export function ListPopup<T>({
               list.onPick?.(item, path);
               if (list.select !== "multi") setOpen(false);
             }}
-            onEscape={() => setOpen(false)}
+            onEscape={() => {
+              list.onEscape?.();
+              setOpen(false);
+            }}
           />
         </PopupFrame>
       ) : null}

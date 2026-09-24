@@ -36,6 +36,8 @@ interface ColumnBase<Row> {
   all?: string;
   /** Free-text search reads this; omitted columns are not searched. */
   search?: (row: Row) => string;
+  /** The displayed scalar the query's `Label>1` clauses read. Units belong in text fields. */
+  condition?: { kind: "text" | "number"; read: (row: Row) => string | number | null };
 }
 
 /** A column that draws its own body. The table knows nothing about what the cell says. */
@@ -116,30 +118,21 @@ interface SortKey {
 /** Column filters, keyed by column key. A key is absent when that column is unfiltered. */
 type Filters = Record<string, string>;
 
-/** A word of the query box: `free` is substring search, `unknown` draws a caution chip. */
-export interface QueryToken {
-  text: string;
-  kind: "rule" | "free" | "unknown";
-}
-
-export interface QuerySuggestion {
-  insert: string;
-  label: string;
-  hint: string;
-}
-
-/** A table's query language: the frame draws its box, chips, and suggestions from this alone. */
-export interface QueryGrammar {
-  tokens: (text: string) => QueryToken[];
-  suggest: (text: string, caret: number) => QuerySuggestion[];
-  chip: (token: QueryToken) => { label: string };
+/** What the query box can name: fields (a `kind` filters, a `sort` key sorts), rule words, and
+ * the rows a query keeps. `TableFrame` derives it from the columns unless a route supplies it. */
+export interface QueryVocabulary {
+  fields: readonly { label: string; kind?: "text" | "number"; sort?: string }[];
+  rules: readonly { word: string; label: string }[];
+  count: (query: string) => number;
+  /** A field's distinct values with their counts over the rows `query` keeps (ruling 26). */
+  values: (label: string, query: string) => { value: string; count: number }[];
 }
 
 /** Route-ownable table state. Supplying it lets Pea read and drive the exact visible model. */
 export interface TableState {
   filters: Filters;
   sorts: SortKey[];
-  /** The query box's whole text: free words search; a grammar gives the other tokens meaning. */
+  /** The query box's whole text: free words search, `Label>1` narrows a field, `!` negates. */
   query: string;
   /** Column visibility is view state, so column definitions remain stable. */
   hiddenColumns?: string[];

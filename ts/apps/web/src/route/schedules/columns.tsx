@@ -8,13 +8,33 @@ import {
 } from "@pe/agent-contracts";
 import type { ScheduleGridDocument } from "@pe/agent-contracts";
 import { reviewTransitions, type CellWire } from "#/components/lang/band";
-import type { CellTransition } from "#/components/lang/cell";
+import type { CellTransition, StateCellProps } from "#/components/lang/cell";
 import { cellFromTrichotomy, StateCell } from "#/components/lang/cell";
 import type { Column } from "#/components/master-table/model";
+import { parseConditionNumber } from "#/components/master-table/view";
 import type { ScheduleGridSnapshot as Snapshot } from "@pe/agent-contracts";
 
 type ScheduleRow = Snapshot["rows"][number];
 type Binding = ScheduleRow["bindings"][number];
+
+/** Revit's unitless number specs, by TypeId (the version suffix varies): Integer and Number. */
+const UNITLESS_NUMBER = /^autodesk\.spec(?::spec\.int64|\.aec:number)-/;
+
+/** Search, filters and sorting read the same value the editor displays. */
+export function scheduleShownText(
+  row: ScheduleRow,
+  columnNumber: number,
+  columnIndex: number,
+  cells: ScheduleGridDocument["cells"],
+): string {
+  const cell = cells[scheduleCellKey(row.rowNumber, columnNumber)];
+  const authored = cell?.staged ?? cell?.proposal;
+  return authored
+    ? showCellValue(authored.value)
+    : (row.bindings.find((binding) => binding.columnNumber === columnNumber)?.displayValue ??
+        row.values[columnIndex] ??
+        "");
+}
 
 /** Why a schedule cell refuses writes, or null when its parameter binding takes them. */
 export const scheduleLock = (binding: Binding | undefined): string | null =>
@@ -83,11 +103,99 @@ export function scheduleTransitions(
   ];
 }
 
+/** What writing a schedule cell needs: the Work's cells, its wire, and the grid's edit doors. */
+export interface ScheduleCellWrites {
+  cells: ScheduleGridDocument["cells"];
+  wire: CellWire;
+  stale: readonly StaleCell[];
+  refused: Readonly<Record<string, string>>;
+  stageEdit: (key: string, value: string | MeasuredValue) => Promise<string | void>;
+  parseMeasured: (key: string, text: string) => Promise<MeasuredValue | { refusal: string } | null>;
+}
+
+/**
+ * One schedule cell's full state: value, marks, note, verbs and its edit door. The grid's column
+ * draws it, and the review list draws the SAME cell, so a staged value is refined where it is
+ * reviewed.
+ */
+export function scheduleCellState(
+  { cells, wire, stale, refused, stageEdit, parseMeasured }: ScheduleCellWrites,
+  row: ScheduleRow,
+  columnNumber: number,
+  columnIndex: number,
+): StateCellProps {
+  const key = scheduleCellKey(row.rowNumber, columnNumber);
+  const binding = row.bindings.find((candidate) => candidate.columnNumber === columnNumber);
+  const cell = cells[key] ?? {};
+  const isStaged = cell.staged != null;
+  const isProposal = !isStaged && cell.proposal != null;
+  // Staged over a value a re-read moved (`basis.stale`): drift against what Revit holds now.
+  const staleAt = isStaged ? stale.find((s) => s.key === key) : undefined;
+  const isStale = staleAt != null;
+  const current = binding?.displayValue ?? row.values[columnIndex] ?? "";
+  const shown = isStaged
+    ? showCellValue(cell.staged?.value)
+    : isProposal
+      ? showCellValue(cell.proposal?.value)
+      : current;
+  const lock = scheduleLock(binding);
+  const note =
+    [
+      isStale ? STALE_NOTE : null,
+      !isStale && (isStaged || isProposal) && shown !== current ? `was ${current || "—"}` : null,
+      isProposal
+        ? cell.proposal?.note
+          ? `pea: ${cell.proposal.note}`
+          : "pea proposed this"
+        : null,
+      binding?.isTypeParameter ? "type parameter — shared across every row of this type" : null,
+      binding?.hasMixedValues ? "mixed values across targets" : null,
+      binding
+        ? `param ${binding.parameterName ?? "—"} · ${binding.storageType} · targets [${binding.targetElementIds.join(",")}]`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" · ") || undefined;
+  return {
+    ...cellFromTrichotomy(cell, {
+      value: shown,
+      ...(isStale ? { agree: "drift" as const, modelValue: current, reviewed: staleAt.was } : {}),
+      cap: binding == null ? "nohome" : lock ? "locked" : "editable",
+      capReason: lock ?? undefined,
+      note,
+    }),
+    // A column Revit measures is a measured cell: with no unit of its own, the cell asks
+    // for one rather than letting the push refuse the number later.
+    ...(lock
+      ? {}
+      : binding?.displayUnit
+        ? {
+            measured: {
+              displayUnit: binding.displayUnit,
+              parse: (text: string) => parseMeasured(key, text),
+              // The schedule stages `{ value, unit }` itself: Revit's number and the
+              // unit it was read in go to the apply apart, never as one string.
+              stage: (staged: MeasuredValue) => stageEdit(key, staged),
+            },
+          }
+        : {
+            // Clearing a value is allowed (ruling 1600-3), as far as Revit can hold it:
+            // a text parameter can be empty, a number or an element id cannot.
+            onCommit: (text: string) =>
+              text === "" && binding?.storageType !== "String"
+                ? `a ${binding?.storageType ?? "non-text"} parameter cannot be empty in Revit — type a value`
+                : stageEdit(key, text),
+          }),
+    ...(refused[key] ? { refused: refused[key] } : {}),
+    transitions: scheduleTransitions(wire, key, cell, stale),
+  };
+}
+
 export function useScheduleGridColumns(
   snapshot: Snapshot | null,
   cells: ScheduleGridDocument["cells"],
   wire: CellWire,
-  stageEdit: (key: string, value: string | MeasuredValue) => string | void,
+  stageEdit: (key: string, value: string | MeasuredValue) => Promise<string | void>,
   /** One read-only host parse for a measured cell; a re-read cancels it (resolves null). */
   parseMeasured: (key: string, text: string) => Promise<MeasuredValue | { refusal: string } | null>,
   stale: readonly StaleCell[] = [],
@@ -128,6 +236,11 @@ export function useScheduleGridColumns(
         ]
           .filter(Boolean)
           .join(" · ");
+        const read = (row: ScheduleRow) =>
+          scheduleShownText(row, column.columnNumber, columnIndex, cells);
+        // Number or text is the field's declared spec, never a guess over its values (ruling
+        // 25). Only unitless specs are numbers; a measured column shows units and stays text.
+        const numeric = UNITLESS_NUMBER.test(column.parameter?.definition?.dataTypeId ?? "");
         return {
           key: `c${column.columnNumber}`,
           label: column.headerText || `col ${column.columnNumber}`,
@@ -136,82 +249,17 @@ export function useScheduleGridColumns(
               ? `${column.headerText} · ${column.isCalculated ? "ƒ" : "comb"}`
               : undefined,
           title: kindNote || "Schedule column — values write through the cell's parameter binding.",
-          search: (row) => row.values[columnIndex] ?? "",
-          state: (row) => {
-            const key = scheduleCellKey(row.rowNumber, column.columnNumber);
-            const binding = row.bindings.find(
-              (candidate) => candidate.columnNumber === column.columnNumber,
-            );
-            const cell = cells[key] ?? {};
-            const isStaged = cell.staged != null;
-            const isProposal = !isStaged && cell.proposal != null;
-            // Staged over a value a re-read moved (`basis.stale`): drift against what Revit holds now.
-            const staleAt = isStaged ? stale.find((s) => s.key === key) : undefined;
-            const isStale = staleAt != null;
-            const current = binding?.displayValue ?? row.values[columnIndex] ?? "";
-            const shown = isStaged
-              ? showCellValue(cell.staged?.value)
-              : isProposal
-                ? showCellValue(cell.proposal?.value)
-                : current;
-            const lock = scheduleLock(binding);
-            const note =
-              [
-                isStale ? STALE_NOTE : null,
-                !isStale && (isStaged || isProposal) && shown !== current
-                  ? `was ${current || "—"}`
-                  : null,
-                isProposal
-                  ? cell.proposal?.note
-                    ? `pea: ${cell.proposal.note}`
-                    : "pea proposed this"
-                  : null,
-                binding?.isTypeParameter
-                  ? "type parameter — shared across every row of this type"
-                  : null,
-                binding?.hasMixedValues ? "mixed values across targets" : null,
-                binding
-                  ? `param ${binding.parameterName ?? "—"} · ${binding.storageType} · targets [${binding.targetElementIds.join(",")}]`
-                  : null,
-              ]
-                .filter(Boolean)
-                .join(" · ") || undefined;
-            return {
-              ...cellFromTrichotomy(cell, {
-                value: shown,
-                ...(isStale
-                  ? { agree: "drift" as const, modelValue: current, reviewed: staleAt.was }
-                  : {}),
-                cap: binding == null ? "nohome" : lock ? "locked" : "editable",
-                capReason: lock ?? undefined,
-                note,
-              }),
-              // A column Revit measures is a measured cell: with no unit of its own, the cell asks
-              // for one rather than letting the push refuse the number later.
-              ...(lock
-                ? {}
-                : binding?.displayUnit
-                  ? {
-                      measured: {
-                        displayUnit: binding.displayUnit,
-                        parse: (text: string) => parseMeasured(key, text),
-                        // The schedule stages `{ value, unit }` itself: Revit's number and the
-                        // unit it was read in go to the apply apart, never as one string.
-                        stage: (staged: MeasuredValue) => stageEdit(key, staged),
-                      },
-                    }
-                  : {
-                      // Clearing a value is allowed (ruling 1600-3), as far as Revit can hold it:
-                      // a text parameter can be empty, a number or an element id cannot.
-                      onCommit: (text: string) =>
-                        text === "" && binding?.storageType !== "String"
-                          ? `a ${binding?.storageType ?? "non-text"} parameter cannot be empty in Revit — type a value`
-                          : stageEdit(key, text),
-                    }),
-              ...(refused[key] ? { refused: refused[key] } : {}),
-              transitions: scheduleTransitions(wire, key, cell, stale),
-            };
-          },
+          search: read,
+          sort: (row) =>
+            numeric ? (parseConditionNumber(read(row)) ?? Number.NEGATIVE_INFINITY) : read(row),
+          condition: { kind: numeric ? "number" : "text", read },
+          state: (row) =>
+            scheduleCellState(
+              { cells, wire, stale, refused, stageEdit, parseMeasured },
+              row,
+              column.columnNumber,
+              columnIndex,
+            ),
         };
       }),
     ];

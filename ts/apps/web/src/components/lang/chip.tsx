@@ -81,19 +81,33 @@ export function FactChip({ children, tone = "meta", dashed, title }: FactChipPro
 export interface NarrowChipProps {
   /** The narrowing itself, e.g. "needs a person" or "type: FDCL-611". */
   label: string;
-  /** How many rows this narrowing still admits. Narrowings never hide; they scope. */
-  count: number;
+  /** How many rows this narrowing still admits. Narrowings never hide; they scope. Omitted where
+   * the frame already says it (a condition chip beside "n of m rows"). */
+  count?: number;
   /** Removing widens the view back out. */
   onRemove: () => void;
   /** Required: what this narrowing does to the view. */
   title: string;
   /** A narrowing the grammar could not read: it admits nothing and says so. */
   caution?: boolean;
+  /** Present, the label is a press that reopens the narrowing for editing. */
+  onEdit?: () => void;
+  /** What the narrowing says of `label` (a condition's "> 1"): it truncates only after the label. */
+  detail?: string;
 }
 
 /** A removable narrowing control. Same shell as a fact, one affordance more. */
-export function NarrowChip({ label, count, onRemove, title, caution }: NarrowChipProps) {
+export function NarrowChip({
+  label,
+  count,
+  onRemove,
+  title,
+  caution,
+  onEdit,
+  detail,
+}: NarrowChipProps) {
   const slot = chipRecipe({ tone: caution ? "caution" : "meta" });
+  const said = detail ? `${label} ${detail}` : label;
   return (
     <span
       className={slot.base()}
@@ -101,16 +115,29 @@ export function NarrowChip({ label, count, onRemove, title, caution }: NarrowChi
       data-surface="artifact"
       title={title}
     >
-      {/* One width for every narrowing; the full label rides the title. */}
-      <span className={slot.label({ class: "max-w-[18ch]" })} title={`${label} — ${title}`}>
-        {label}
-      </span>
-      <span className={slot.count()}>{count}</span>
+      {/* One width for every narrowing (the base's cap, ruling 19); the full text rides the title. */}
+      {onEdit ? (
+        <button
+          type="button"
+          className="flex min-w-0 cursor-pointer items-center gap-[5px]"
+          aria-label={said}
+          title={`${said} — click to edit`}
+          onClick={onEdit}
+        >
+          <span className={slot.label()}>{label}</span>
+          {detail && <span className={slot.label({ class: "text-ink" })}>{detail}</span>}
+        </button>
+      ) : (
+        <span className={slot.label()} title={`${said} — ${title}`}>
+          {said}
+        </span>
+      )}
+      {count !== undefined && <span className={slot.count()}>{count}</span>}
       <button
         type="button"
         className={slot.remove()}
         onClick={onRemove}
-        title={`Remove the "${label}" narrowing — widens the view back out`}
+        title={`Remove the "${said}" narrowing — widens the view back out`}
       >
         <X />
       </button>

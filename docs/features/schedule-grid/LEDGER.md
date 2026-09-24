@@ -2,13 +2,15 @@
 
 ## Decided
 - 2026-08-17 — electrical panel-schedule lore consolidated to `GROUNDING-REVIT-ELECTRICAL.md` (from 5 `docs/context/rvt-api` files, 1,666→~150 lines; git history has the long forms).
-- 2026-08-16 — Reviewing lives wholly in the pending strip, not in-grid: the cell grammar forbids icons in data cells and `StateCell` row scale is one clipped line, so per-cell approve/deny had nowhere honest to go. Typing in the grid still stages directly.
+- 2026-09-23 — Schedule proposal/staged review belongs in the Situation head, as on Families. Cell selection supports range fill and focused-cell clipboard actions; editing stages locally and never implicitly pushes to Revit.
+- 2026-09-23 — Schedule undo/redo reverses local review edits, one committed batch per step. Native input undo stays native; a changed target, reading, external Work revision, or push ends the local history so it cannot undo newer model or agent work.
+- 2026-09-23 — Keep global text search alongside explicit column conditions combined with AND. Header controls and editable chips share TableState; filters and value sorting follow the displayed staged/proposed value. Plain numeric fields support ordered comparison; measured-unit comparison requires an explicit unit contract.
 - 2026-08-16 — Typing over a pea proposal SEVERS it and stages your value (the old grid *masked*, blocking edits until review) — "typing beats proposing" (SURFACE-PHILOSOPHY §3) made an actual sever here first.
 - 2026-08-16 — Column-level facts (`isCalculated`, `isCombinedParameter`) ride a header suffix (`· ƒ`, `· comb`) plus the column title — `ColumnBase.reason` was already declined for takeoffs; this route is a second data point, not a re-litigation.
-- 2026-08-16 — Snapshot freshness stays a plain fact chip ("read 4m ago"), no invented staleness threshold: freshness has no subject/threshold in the model, so a schedule read yesterday and one read 4s ago must render alike.
-- 2026-08-16 — Every `state:` column getting its own 7-word facet is accepted as the language default even on wide schedules (12 columns = 12 mostly-"clean" dropdowns); suppressing facets per column would lose the clause's counting.
+- 2026-09-23 — Freshness is the stale mark on the read verb (design-system MAP ruling 5); the "read 4m ago" chip of 2026-08-16 is gone.
+- 2026-09-23 — One query grammar filters by value and by cell state (design-system MAP ruling 22); the per-column `state:` facet of 2026-08-16 is gone.
 
-- 2026-09-22 (C7, user: whole-document mark) — Freshness has teeth: schedule Work records `takenAt`, the host-clock time of the basis Reading (written with `basis`, and by `rebindScheduleWork`); `schedule.grid.push` refuses undispatched when the document's change mark is newer, in one sentence: `Revit changed this document after the read your staged cells rest on; read again, then apply.` `r` (bound by `ChangedInRevit` itself) reads again. Proof: journey `ts/tests/e2e/st4-changed.ts` (demo lane, RED then GREEN), `apps/host/tests/document-marks.test.ts` push case.
+- 2026-09-22 (C7, user: whole-document mark) — Freshness has teeth: schedule Work records `takenAt`, the host-clock time of the basis Reading (written with `basis`, and by `rebindScheduleWork`); `schedule.grid.push` refuses undispatched when the document's change mark is newer, in one sentence: `Revit changed this document after the read your staged cells rest on; read again, then apply.` `r` (bound by the read verb, which wears the stale mark; `ChangedInRevit` is deleted) reads again. Proof: journey `ts/tests/e2e/st4-changed.ts` (demo lane, RED then GREEN), `apps/host/tests/document-marks.test.ts` push case.
 
 ## Tried & rejected
 - 2026-08-16 — Hand-rolled `ScheduleTable`/`Cell`/`CellAction` with trichotomy tint classes (`bg-cat-green/12`, `bg-cat-clay/12`, `bg-destructive/10`), kiln badges and `Input`-in-cell: ~260 LOC deleted for MasterTable + editable `StateCell`; the tints were viz hues carrying state.

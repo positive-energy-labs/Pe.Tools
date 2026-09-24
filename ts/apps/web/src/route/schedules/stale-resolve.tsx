@@ -1,23 +1,20 @@
-import { showCellValue } from "@pe/agent-contracts";
 import { useEffect, useState } from "react";
 import type { RouteStatePatch, ScheduleGridDocument } from "@pe/agent-contracts";
 import type { CellWire } from "#/components/lang/band";
-import { StateCell, cellFromTrichotomy } from "#/components/lang/cell";
 import { Press } from "#/components/lang/press";
-import { STALE_NOTE, scheduleTransitions, staleAnswer } from "./columns";
+import { staleAnswer } from "./columns";
 
 const values = (n: number) => `${n} changed value${n === 1 ? "" : "s"}`;
 
 /**
- * Ask A: the staged cells Revit moved under, each drawn as its own stale cell (A · C · B) with its
- * accept/deny, and the aggregate over them. "Overwrite N changed values" writes every cell's accept
+ * Ask A: the aggregate over the staged cells Revit moved under (each cell answers on its own row
+ * in the review list's "changed in Revit" tab). "Overwrite N changed values" writes every cell's accept
  * in one Work write, then pushes; "Keep Revit's N values" writes every deny. A cell with a Pea
  * proposal beside it is contested: skipped and counted. The same node draws on the band and on the
  * push verb's refusal flag.
  */
 export function StaleResolve({
   doc,
-  current,
   write,
   revision,
   push,
@@ -25,8 +22,6 @@ export function StaleResolve({
   readAgain,
 }: {
   doc: ScheduleGridDocument | null;
-  /** C: what the basis reading says Revit holds at the key. */
-  current: (key: string) => string | null;
   write: CellWire["write"];
   revision: number | null;
   push: () => Promise<unknown>;
@@ -53,7 +48,6 @@ export function StaleResolve({
         </Press>
       </div>
     ) : null;
-  const wire: CellWire = { segment: "cells", write, revision };
   const contested = stale.filter((s) => cells[s.key]!.proposal != null);
   const ready = stale.filter((s) => cells[s.key]!.proposal == null);
   const staged = Object.values(cells).filter((c) => c.staged != null).length;
@@ -73,26 +67,6 @@ export function StaleResolve({
   const n = ready.length;
   return (
     <div className="flex flex-col gap-1 t-prose" data-slot="stale-resolve">
-      <ul aria-label="changed in Revit" className="flex flex-col">
-        {stale.map((s) => {
-          const cell = cells[s.key]!;
-          return (
-            <li key={s.key} className="flex items-baseline gap-2">
-              <span className="face-mono text-ink-mute">{s.key}</span>
-              <StateCell
-                {...cellFromTrichotomy(cell, {
-                  value: showCellValue(cell.staged!.value),
-                  agree: "drift",
-                  modelValue: current(s.key) ?? "",
-                  reviewed: s.was,
-                  note: STALE_NOTE,
-                })}
-                transitions={scheduleTransitions(wire, s.key, cell, stale)}
-              />
-            </li>
-          );
-        })}
-      </ul>
       {n ? (
         <span className="flex flex-wrap items-baseline gap-2">
           <Press

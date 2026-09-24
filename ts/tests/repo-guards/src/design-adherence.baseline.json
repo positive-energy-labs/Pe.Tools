@@ -30,7 +30,7 @@
     }
   },
   "longTitle": {
-    "total": 33,
+    "total": 32,
     "byArea": {
       "components": 4,
       "family": 16,
@@ -38,8 +38,7 @@
       "route": 1,
       "routes": 2,
       "runs": 5,
-      "takeoff": 3,
-      "workbench": 1
+      "takeoff": 3
     }
   },
   "busyState": {
@@ -51,7 +50,7 @@
     }
   },
   "inlineColor": {
-    "total": 80,
+    "total": 79,
     "byArea": {
       "components": 6,
       "design-system": 1,
@@ -64,7 +63,7 @@
       "routes": 1,
       "runs": 27,
       "takeoff": 3,
-      "workbench": 8
+      "workbench": 7
     }
   },
   "rawMeaningColor": {

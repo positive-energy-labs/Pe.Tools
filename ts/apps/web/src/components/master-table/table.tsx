@@ -97,6 +97,10 @@ export interface TableProps<Row extends RowData> {
   maxHeight?: string;
   /** A readout's title, said as the grid's native caption. */
   caption?: ReactNode;
+  cellEdit?: {
+    read: (row: Row, column: string) => string;
+    fill: (cells: readonly { row: Row; column: string }[], text: string) => void;
+  };
 }
 
 export function Table<Row extends RowData>({
@@ -116,6 +120,7 @@ export function Table<Row extends RowData>({
   empty,
   maxHeight,
   caption,
+  cellEdit,
 }: TableProps<Row>) {
   const [own, setOwn] = useState(emptyTableState);
   const state = controlled ?? own;
@@ -233,6 +238,7 @@ export function Table<Row extends RowData>({
             rows={rows}
             filters={state.filters}
             setFilter={setFilter}
+            query={state.query}
             stickyTop={(rowIndex) => rowTops[rowIndex] ?? 0}
             sortCount={table.state.sorting.length}
             gutter={Boolean(gutter)}
@@ -252,12 +258,16 @@ export function Table<Row extends RowData>({
             onRowHover={onRowHover}
             gutter={gutter}
             gutterWidth={GUTTER_PX}
+            cellEdit={cellEdit}
           />
         </table>
         {shownRows.length === 0 && (
           <div className="mx-auto max-w-md p-6 text-center">
             {rows.length > 0 ? (
-              <EmptyState story="filter" exit="clear a chip in the strip above to bring them back">
+              <EmptyState
+                story="filter"
+                exit="clear a chip or search word above to bring them back"
+              >
                 {`all ${rows.length} rows in scope are filtered out`}
               </EmptyState>
             ) : (

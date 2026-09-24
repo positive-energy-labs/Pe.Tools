@@ -108,6 +108,62 @@ Legacy nouns under review: band, readout, read status, rules.
 19. Query chips are right; they need ellipsis truncation.
 20. The proposal sentence is good enough; code is the spec.
 
+## Rulings after the mega review (2026-09-23, eight Opus reports, `.artifacts/runs/review-20260923/SYNTHESIS.md`)
+
+21. The log stays one canonical record per route handle, so agents and the inspector query it. The
+   head draws it collapsed to the newest row with its receipt link and expands to the tabbed column
+   on click. Re-openable: the user has not settled the log's final place ("the log is too busy and
+   low to be immediately user facing, but i wanna keep a central log so that agents can query").
+22. One query grammar. `ConditionBox` folds into `QueryBox`; `pivot-rules.ts` and the families
+   `any` facet die. The step-by-step statement builder (column, operator, value) is the adopted
+   UX: "the ux of building the statement part by part is really really nice". Chips live inside
+   the box. A sort is a chip in the same grammar, so the sort chips return in the box, not a rail.
+   Box height is the open risk; it is measured in the fold round.
+23. Ctrl K is the target picker (the Ladder). The 2026-09-22 line "command palette mirrors route
+   verbs" is superseded: verbs keep buttons and chords. Ctrl K opens on the first unbound rung.
+24. Escape cancels a filter draft, through the list's `onEscape` door, never a hand-rolled handler.
+25. A column's number-or-text kind comes from its binding, never from a guess over its values.
+26. One count in one place: a value suggestion counts rows in the current scope, never the whole
+   schedule; palette group heads carry no count.
+27. The AddressingBar is folded: the Situation sentence names the target; drawn-read facts
+   (truncated, disconnected) live in the table frame's head line.
+28. The document word leaving the sentence is an experiment, kept for now.
+29. `/family` and `/schedules` normalize to the same stages, verbs and wiring as `/families`:
+   "families made huge strides in deleting things that shouldnt be options". Owed to the purge pass.
+
+## Built after the mega review (2026-09-23 evening, commits a56b4e96..20f71870 on main)
+
+- Chat queue and lens (a56b4e96); schedules on the primitives (dc431de3); C# UserSchedules door and
+  the R24 build (3b21157d); guards green (eafa3531); schedules `cells` and PendingStrip gone
+  (614d2014); families patch overlay, the table-replacing preview deleted (37ae102b); one query
+  grammar merged from its worktree (20f71870). Host SURFACE scenarios updated to the folded log,
+  the Ladder pick and the unpinned sentence; 25/25 green in the demo lane.
+- Ruling 21 landed as the folded log; ruling 22 as `QueryBox` with fields, operators, sorts and
+  `!`; rulings 24 to 27 in the same commits. Ruling 29 is still owed to the purge pass.
+
+## Pea control shape (frontier, opened 2026-09-23)
+
+User intent: "pea should be able to no-ask make filters for tables and stuff. and query the page
+state like you can with families. and the proposal lives as route state, so they propose and query
+regardless of user permission. but all the mutating verbs are not available on the public surface."
+Proposed shape, unruled: a route exposes three tiers. Read: page state (target, reading, query,
+Work, log) as one typed view, the families view bridge generalized. Shape: query tokens and
+column visibility, no-ask, browser-local, never a Work edit. Propose: cells into Work with actor
+pea; the person accepts. Mutate: read, apply, push stay off the public surface; only the person's
+verb row reaches them. The tiers are the `RouteAction` record's `actor` and `needs`, not a new API.
+
+## Families patch overlay (frontier, opened 2026-09-23)
+
+User verdict: "proposals (and staged) overlay on the param row and also show in the minimap. metadata
+needs a diff view too." The `proto-patch-review.tsx` preview that replaces the table is KILL.
+Census `.artifacts/runs/review-20260923/C1-families-overlay-census.md`: the cell lane already draws
+proposed (pea wash) and staged (caution square) in place; nothing projects a native FF patch into
+cells. Build: pure `projectPatch(patch, rows, params)` in `families/patch-overlay.ts`, rows for
+parameters the patch creates, read-only projected cells, one `ValueDiff` per metadata field, one
+minimap paint pass in the pea tone. Accept and deny stay on the patch review row. Landed in
+37ae102b (fixture lane only). Open: "accept all" shows for patch-only proposals but acts on cells;
+a types-only parameter with no reading column gets cells but no row.
+
 ## Open
 - The caution tint on a quiet verb button is faint (slice 3 report); a stale verb must read at a
   glance (house law 3). Kit fix, owed to the ledger at close.

@@ -18,6 +18,8 @@ interface RungOption {
   label: string;
   /** A measured fact beside the label (a count, a kind, a path tail). */
   sub?: string;
+  /** The head it lists under (a schedule's category). */
+  group?: string;
 }
 
 export interface Rung {
@@ -46,6 +48,8 @@ export function Ladder({
   caution,
   disabled,
   title,
+  open,
+  onOpenChange,
 }: {
   levels: readonly Rung[];
   /** The bound value was reported by the world, not chosen (house law 8): dashed. */
@@ -54,6 +58,9 @@ export function Ladder({
   caution?: boolean;
   disabled?: boolean;
   title?: string;
+  /** Controlled: the Situation palette (Ctrl K) opens the ladder without its trigger. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const collection = useRef<Collection<Hit> | null>(null);
   const unbound = levels.findIndex((rung) => rung.label === null);
@@ -84,6 +91,8 @@ export function Ladder({
       trigger={word}
       title={title}
       disabled={disabled}
+      open={open}
+      onOpenChange={onOpenChange}
       derived={derived || !complete}
       caution={caution || !complete}
       aria-label={name}
@@ -96,6 +105,9 @@ export function Ladder({
       startLevel={complete ? levels.length - 1 : unbound}
       keyOf={(hit) => `${hit.rung}:${hit.id}`}
       labelOf={(hit) => `${hit.label} ${hit.sub ?? ""}`.trim()}
+      groupOf={(hit) => hit.group}
+      // A rung's rows carry their own measured counts; a head count would be a second number.
+      groupCounts={false}
       filter="substring"
       select="single"
       selected={selected}

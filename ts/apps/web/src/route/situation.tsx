@@ -2,12 +2,13 @@
  * THE SITUATION — the one route head (design-system ledger, 2026-09-13). The name line carries the
  * route's name and, on its right, the CLUSTER: chain lamp, state gauge, help, theme. Under it the
  * board splits long-ways: one sentence (the stage word, then the route's slots joined by the
- * route's own words) and the verb row on the left, the page log on the right, dropping below on a
- * narrow screen. The ledger lives behind the gauge. The verb row projects into a vertical view on
- * its toggle, where each button says why it is refused (or what it does) and what it dispatches.
- * Every verb's outcome grows out of its button as a flag; nothing else in the head moves. Under
- * it: the Work slot (by default one sentence of what is staged and proposed, the aggregates and
- * commit; a route may replace it) and the Work's standing lines (lifetime, lost write, conflict).
+ * route's own words) and the verb row on the left, then the Work review and the page log, dropping
+ * below on a narrow screen. The ledger lives behind the gauge. The verb row projects into a
+ * vertical view on its toggle, where each button says why it is refused (or what it does) and what
+ * it dispatches. Every verb's outcome grows out of its button as a flag; nothing else in the head
+ * moves. The Work column holds the Work slot (by default one sentence of what is staged and
+ * proposed, the aggregates and commit; a route may replace it) and the Work's standing lines
+ * (lifetime, lost write, conflict). The log column folds to its newest row and opens over the grid.
  *
  * The head is an ARTIFACT — a machine-operated object that carries state — so it wears the kit's
  * one enclosure: the name line is the recessed head band, the board sits on artifact ground. Four
@@ -34,6 +35,7 @@ import { Ledger, PageLog } from "./situation-grids";
 import { useChatPlanIntent } from "./situation-ladder";
 import { ChainLamp, Cluster } from "./situation-lamp";
 import { ActionBoard, SituationAction } from "./situation-verbs";
+import { PaletteKey } from "./situation-marks";
 
 export interface SituationProps {
   handle: RouteHandle<any, any, any, any>;
@@ -60,7 +62,7 @@ export interface SituationProps {
    * aggregates and the commit verb). Absent, the sentence alone. A route with cells keeps the
    * sentence and adds beside it: while cells are staged the commit is drawn nowhere else.
    */
-  work?: (summary: WorkSummary, sentence: ReactNode) => ReactNode;
+  work?: WorkRender;
   /** How the default's aggregates write; absent = the Work's own write at the manifest's segment. */
   wire?: CellWire;
   /** Read-only, in the start-fresh confirm: what the set-aside Work carried (a route's salvage). */
@@ -69,6 +71,11 @@ export interface SituationProps {
   onStartedFresh?: () => void;
   /** Lines for the ledger behind the state gauge: what is bound, how fresh, which revision. */
   ledger?: readonly (readonly [string, ReactNode])[];
+  /**
+   * THE SITUATION PALETTE: opens the sentence's target ladder, so switching what the page shows
+   * is one chord from anywhere. Present, Ctrl K is bound and its keycap sits right of the sentence.
+   */
+  palette?: () => void;
 }
 
 /**
@@ -106,6 +113,13 @@ function useDiscardReceipt(handle: RouteHandle<any, any, any, any>, enabled = tr
 
 const NO_CELLS: Record<string, TrichotomyCellLike> = {};
 
+type WorkDraw = (summary: WorkSummary, sentence: ReactNode) => ReactNode;
+/**
+ * The Work slot: the draw alone, or the draw plus display-only cells the summary counts and no
+ * aggregate writes (a native patch projected onto the cells it would write, ruling 14).
+ */
+type WorkRender = WorkDraw | { draw: WorkDraw; counted: Record<string, TrichotomyCellLike> };
+
 type DiscardEvent = {
   type?: string;
   action?: string;
@@ -125,11 +139,12 @@ export function Situation({
   verbs: declaredVerbs,
   chords,
   meter,
-  work,
+  work: slot,
   wire: routeWire,
   startFreshAside,
   onStartedFresh,
   ledger,
+  palette,
 }: SituationProps) {
   const [page, setPage] = handle.page as [
     Record<string, unknown>,
@@ -147,9 +162,16 @@ export function Situation({
     write: handle.work.write,
   };
   const { lockOf } = wire;
+  const work = typeof slot === "function" ? slot : slot?.draw;
+  const counted = typeof slot === "function" ? undefined : slot?.counted;
   const summary = useMemo(
-    () => workSummary(cells, { groupOf: spec?.groupOf ?? (() => []), lockOf }, spec?.nouns),
-    [cells, spec, lockOf],
+    () =>
+      workSummary(
+        counted ? { ...cells, ...counted } : cells,
+        { groupOf: spec?.groupOf ?? (() => []), lockOf },
+        spec?.nouns,
+      ),
+    [cells, counted, spec, lockOf],
   );
   const verbs = Object.entries(handle.actions).filter(
     ([name, action]) =>
@@ -225,31 +247,34 @@ export function Situation({
           </div>
         }
       >
-        {/* the board: sentence and verbs left, log right; the right half wraps under */}
+        {/* the board: sentence and verbs left, Work and log right, one rung tall; they wrap under */}
         <div className="flex flex-wrap gap-x-10 gap-y-1 px-3 pt-2 pb-1">
           <div className="flex min-w-[32rem] flex-[3] flex-col">
-            <p className="mb-1.5 t-prose text-ink-2 [&_b]:font-semibold [&_b]:text-ink">
-              {/* Stages are an optional layer: one stage draws no switcher (ledger 2026-09-22). */}
-              {stages.length > 1 ? (
-                <b>
-                  <Ladder
-                    levels={[
-                      {
-                        key: "stage",
-                        label: word,
-                        placeholder: "choose a stage",
-                        options: stages.map((item) => ({ id: item.key, label: item.word })),
-                        picked: (id) => id === stage,
-                        pick: (id) => (chooseStage ? chooseStage(id) : setPage({ stage: id })),
-                      },
-                    ]}
-                  />
-                </b>
-              ) : (
-                <b>{word}</b>
-              )}{" "}
-              {sentence}
-            </p>
+            <div className="mb-1.5 flex items-baseline justify-between gap-3">
+              <p className="min-w-0 t-prose text-ink-2 [&_b]:font-semibold [&_b]:text-ink">
+                {/* Stages are an optional layer: one stage draws no switcher (ledger 2026-09-22). */}
+                {stages.length > 1 ? (
+                  <b>
+                    <Ladder
+                      levels={[
+                        {
+                          key: "stage",
+                          label: word,
+                          placeholder: "choose a stage",
+                          options: stages.map((item) => ({ id: item.key, label: item.word })),
+                          picked: (id) => id === stage,
+                          pick: (id) => (chooseStage ? chooseStage(id) : setPage({ stage: id })),
+                        },
+                      ]}
+                    />
+                  </b>
+                ) : (
+                  <b>{word}</b>
+                )}{" "}
+                {sentence}
+              </p>
+              {palette ? <PaletteKey open={palette} /> : null}
+            </div>
             {!inspection ? (
               <ActionBoard
                 handle={handle}
@@ -259,40 +284,40 @@ export function Situation({
                 work={meter === false ? null : meterWord}
               />
             ) : null}
-            {/* F-R4-1: the Work slot and the standing lines share ONE fixed
-                block that scrolls itself, so a first stage or a refusal never grows the head and
-                moves the grid under the person (fixture look 12: a refusal moved it 28px). */}
-            {!inspection ? (
-              <div data-slot="situation-band" className="h-16 overflow-y-auto">
-                {work ? work(summary, workLine) : workLine}
-                <WorkStanding
-                  conflict={handle.work.conflict}
-                  unresolved={unresolved as string[]}
-                  lifetime={
-                    handle.work.ephemeral && summary.staged
-                      ? "Unsaved document. This Work lives until it closes. Save to keep it."
-                      : undefined
-                  }
-                  receipt={receipt || undefined}
-                  reload={handle.work.reload}
-                  startFresh={
-                    handle.work.startFresh
-                      ? () =>
-                          void handle.work.startFresh?.().then((refusal) => {
-                            if (!refusal) onStartedFresh?.();
-                          })
-                      : undefined
-                  }
-                  startFreshAside={startFreshAside}
-                />
-              </div>
-            ) : (
-              work?.(summary, null)
-            )}
+            {inspection ? work?.(summary, null) : null}
           </div>
           {!inspection ? (
-            <div className="min-w-[24rem] flex-[2]">
-              <PageLog entries={handle.log} manifest={handle.manifest} />
+            <div
+              data-slot="situation-band"
+              className="h-(--head-h) min-w-0 basis-[20rem] flex-[2] overflow-y-auto"
+            >
+              {work ? work(summary, workLine) : workLine}
+              <WorkStanding
+                conflict={handle.work.conflict}
+                unresolved={unresolved as string[]}
+                lifetime={
+                  handle.work.ephemeral && summary.staged
+                    ? "Unsaved document. This Work lives until it closes. Save to keep it."
+                    : undefined
+                }
+                receipt={receipt || undefined}
+                reload={handle.work.reload}
+                startFresh={
+                  handle.work.startFresh
+                    ? () =>
+                        void handle.work.startFresh?.().then((refusal) => {
+                          if (!refusal) onStartedFresh?.();
+                        })
+                    : undefined
+                }
+                startFreshAside={startFreshAside}
+              />
+            </div>
+          ) : null}
+          {/* the log: folded to its newest row on the head's rung, opened over the grid (ruling 21) */}
+          {!inspection ? (
+            <div className="h-(--head-h) min-w-0 basis-[18rem] flex-[2]">
+              <PageLog entries={handle.log} manifest={handle.manifest} collapsible />
             </div>
           ) : null}
         </div>

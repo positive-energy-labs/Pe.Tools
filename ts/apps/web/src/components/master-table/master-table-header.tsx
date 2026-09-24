@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { useContext, type ReactNode } from "react";
+import { ListFilter } from "lucide-react";
 import type { ReactTable, RowData } from "@tanstack/react-table";
 
 import { Press } from "#/components/lang/press";
@@ -8,6 +9,8 @@ import type { MasterTableFeatures } from "#/components/master-table/tanstack-ada
 import { ListPopup } from "#/components/lang/list-popup";
 import { cn } from "#/lib/utils";
 import { PressContent } from "#/components/anatomy/press-content";
+import { ConditionTarget } from "#/components/master-table/query";
+import { opSaid, readQuery } from "#/components/master-table/view";
 
 type Table<Row extends RowData> = ReactTable<MasterTableFeatures, Row, unknown>;
 
@@ -21,6 +24,7 @@ export function MasterTableHeader<Row extends RowData>({
   rows,
   filters,
   setFilter,
+  query,
   stickyTop,
   sortCount,
   gutter,
@@ -32,6 +36,7 @@ export function MasterTableHeader<Row extends RowData>({
   rows: readonly Row[];
   filters: TableState["filters"];
   setFilter: (key: string, value: string | null) => void;
+  query: string;
   stickyTop: (rowIndex: number) => number;
   sortCount: number;
   gutter: boolean;
@@ -39,6 +44,8 @@ export function MasterTableHeader<Row extends RowData>({
   theadRef: React.RefObject<HTMLTableSectionElement | null>;
 }) {
   const headerGroups = table.getHeaderGroups();
+  const editCondition = useContext(ConditionTarget);
+  const clauses = readQuery(query);
   return (
     <thead ref={theadRef}>
       {headerGroups.map((headerGroup, rowIndex) => (
@@ -66,7 +73,7 @@ export function MasterTableHeader<Row extends RowData>({
                 sortCount={sortCount}
                 onSort={(additive) => header.column.toggleSorting(undefined, additive)}
               >
-                {(column.facet || column.options) && (
+                {(column.facet || column.options) && !(column.condition && editCondition) && (
                   <ColFilter
                     label={column.label}
                     value={filters[column.key] ?? null}
@@ -74,6 +81,20 @@ export function MasterTableHeader<Row extends RowData>({
                     all={column.all ?? "any"}
                     rows={rows}
                     column={column}
+                  />
+                )}
+                {column.condition && editCondition && (
+                  <ConditionPress
+                    said={clauses.flatMap((clause) =>
+                      clause.kind === "field" &&
+                      clause.label.toLowerCase() === column.label.toLowerCase()
+                        ? [
+                            `${clause.not ? "not " : ""}${opSaid(column.condition!.kind, clause.op, clause.value)}`,
+                          ]
+                        : [],
+                    )}
+                    column={column}
+                    onClick={() => editCondition(column.label)}
                   />
                 )}
               </LeafHeader>
@@ -118,6 +139,7 @@ function LeafHeader<Row>({
 }) {
   return (
     <th
+      data-column-key={column.key}
       title={column.title}
       rowSpan={rowSpan}
       style={{ top: stickyTop, left: column.lock ? lockLeft : undefined }}
@@ -153,6 +175,41 @@ function LeafHeader<Row>({
       )}
       {children}
     </th>
+  );
+}
+
+/** The column's way into the query box; pressed, it says what narrows the column right now. */
+function ConditionPress<Row>({
+  said,
+  column,
+  onClick,
+}: {
+  said: readonly string[];
+  column: Column<Row>;
+  onClick: () => void;
+}) {
+  return (
+    <div className="mt-0.5 flex normal-case">
+      <Press
+        type="button"
+        tone="quiet"
+        size="caption"
+        hover="bare"
+        aria-pressed={said.length > 0}
+        aria-label={`filter ${column.label}`}
+        title={
+          said.length
+            ? `Narrowed by ${said.join(" and ")}. Click to add another condition on this column; edit or remove one from its chip in the query box.`
+            : "Filter this column: opens the query box on it, with its operators and values."
+        }
+        onClick={onClick}
+      >
+        <PressContent geometry="block">
+          <ListFilter aria-hidden className="size-3 shrink-0" />
+          {said.length > 0 && <span className="face-mono truncate">{said.join(" · ")}</span>}
+        </PressContent>
+      </Press>
+    </div>
   );
 }
 

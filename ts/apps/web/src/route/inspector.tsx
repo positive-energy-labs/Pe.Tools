@@ -23,6 +23,7 @@ import { OutcomeLine } from "#/components/lang/outcome";
 import { Press } from "#/components/lang/press";
 import { Section } from "#/components/lang/section";
 
+import { PageLog } from "./situation-grids";
 import type { RouteAction } from "./manifest";
 import type { RouteHandle } from "./use-route";
 
@@ -170,6 +171,7 @@ function InspectorBody<W, R extends string, P, A extends string>({
 
   return (
     <div className="flex min-w-0 flex-col gap-3" aria-label={`${manifest.name} route inspector`}>
+      <PageLog entries={handle.log} manifest={manifest} />
       <Section
         label="Target"
         aside={

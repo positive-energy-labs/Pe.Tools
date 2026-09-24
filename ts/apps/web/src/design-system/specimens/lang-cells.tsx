@@ -53,6 +53,13 @@ export function LangCellSpecimens() {
               title="Removing this widens the view."
               onRemove={noop}
             />
+            <NarrowChip
+              label="Count"
+              detail="> 1"
+              title="Click the label to edit; removing it widens the view."
+              onRemove={noop}
+              onEdit={noop}
+            />
             <Tag>door 421</Tag>
           </div>
         )}

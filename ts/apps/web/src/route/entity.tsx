@@ -65,6 +65,7 @@ export function EntityRouteView({
   targetRungs,
   auditPlan,
   output,
+  onPalette,
   children,
 }: {
   def: EntityRouteDef<any, any, any>;
@@ -105,12 +106,20 @@ export function EntityRouteView({
    * to it when it appears; null = no output yet.
    */
   output?: ReactNode;
+  /** The sentence's ladder opened (Ctrl K or its trigger): a rung whose list is marked stale re-lists. */
+  onPalette?: () => void;
   /** The audit. */
   children: ReactNode;
 }) {
   const [page, setPage] = handle.page;
   useEntityUrl(page, url);
   const ladder = useDocumentLadder(handle);
+  // The Situation palette is the sentence's ladder, opened by Ctrl K or its own trigger.
+  const [palette, setPalette] = useState(false);
+  const openPalette = (open: boolean) => {
+    setPalette(open && handle.busy === null);
+    if (open) onPalette?.();
+  };
   const pods = (previousOf(handle.readings.pods) as readonly PodRow[] | undefined) ?? [];
   const pod = pods.find((row) => row.id === page.pod) ?? null;
   const specs = pod?.members.filter((member) => isSpecOf(member.schema, def.schema)) ?? [];
@@ -191,7 +200,7 @@ export function EntityRouteView({
           health={health}
           // With a plan lane the sheet's apply is the one apply button (w8-revit trip 5); the row
           // commits by planning.
-          commit={def.plan || def.staged ? "plan" : "apply"}
+          commit={def.commit ?? (def.plan || def.staged ? "plan" : "apply")}
           verbs={
             page.stage === "audit" && auditPlan === false
               ? stage.verbs.filter((verb) => verb !== "plan")
@@ -203,6 +212,8 @@ export function EntityRouteView({
           wire={wire}
           startFreshAside={startFreshAside}
           onStartedFresh={onStartedFresh}
+          // A page that does not own the URL does not own the chord (Chat's Ctrl K is its own).
+          palette={url && !(ladder.hosted && !targetRungs) ? () => openPalette(true) : undefined}
           sentence={
             <>
               {subject ?? def.entity}
@@ -211,9 +222,16 @@ export function EntityRouteView({
                 <Ladder
                   levels={[...(ladder.hosted ? [] : ladder.levels), ...targetRungs(ladder)]}
                   disabled={handle.busy !== null}
+                  open={palette}
+                  onOpenChange={openPalette}
                 />
               ) : (
-                <LadderPicker ladder={ladder} disabled={handle.busy !== null} />
+                <LadderPicker
+                  ladder={ladder}
+                  disabled={handle.busy !== null}
+                  open={palette}
+                  onOpenChange={openPalette}
+                />
               )}
               {ladder.refusal ? (
                 <span role="status" data-tone="caution">

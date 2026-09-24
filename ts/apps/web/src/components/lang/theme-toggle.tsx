@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Monitor, Moon, Sun } from "lucide-react";
+import { Moon, Sun, SunMoon } from "lucide-react";
 
 import { Press } from "#/components/lang/press";
 
@@ -31,7 +31,7 @@ function applyThemeMode(mode: ThemeMode) {
 }
 
 const NEXT: Record<ThemeMode, ThemeMode> = { light: "dark", dark: "auto", auto: "light" };
-const ICON = { light: Sun, dark: Moon, auto: Monitor } as const;
+const ICON = { light: Sun, dark: Moon, auto: SunMoon } as const;
 const LABEL = { light: "Light", dark: "Dark", auto: "Auto" } as const;
 
 export function ThemeToggle() {
@@ -65,17 +65,10 @@ export function ThemeToggle() {
   const Icon = ICON[mode];
   const label = `Theme: ${LABEL[mode]}${mode === "auto" ? " (system)" : ""}. Click to change.`;
 
-  // `t-small`, not `t-small t-upper`: the canonized label bundle carries CASE, so "Auto" read as "AUTO".
-  // This is a control's own word, not a section head.
+  // Icon only, like every other control in a head cluster; the mode rides the title.
   return (
-    <Press onClick={cycle} aria-label={label} title={label} size="value" tone="neutral">
-      {/* `Press` is `min-w-0` (it is a flex item wherever it sits), so an icon + word in a header
-       * row wrapped to two lines and stood taller than the controls beside it. The glyph and its
-       * word are ONE mark: they ride a nowrap inline row. */}
-      <span className="inline-flex items-center gap-1 whitespace-nowrap">
-        <Icon className="size-3.5" />
-        {LABEL[mode]}
-      </span>
+    <Press onClick={cycle} aria-label={label} title={label} size="icon" tone="quiet">
+      <Icon className="size-4" strokeWidth={1.5} />
     </Press>
   );
 }

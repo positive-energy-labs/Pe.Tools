@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { frozenDemo } from "#/host/demo-client";
 import {
   unstale,
   scheduleCatalogSchema,
   scheduleReadingSchema,
+  scheduleGridDocumentSchema,
   type ScheduleReading,
   type ActionStatus,
   type Reading,
@@ -12,17 +13,22 @@ import {
 } from "@pe/agent-contracts";
 import { changedInRevit, previousOf, useHostStatus } from "#/readings";
 import { refuse, useRoute, type EntitySearch } from "#/route";
-import { KeysNode, manifestChords } from "#/route/keys";
-import { ActionReceiptView } from "#/actions/receipt";
+import { KeysNode, manifestChords, useScopeKeys } from "#/route/keys";
 import { EntityRouteView } from "#/route/entity";
 import { ActionFlag } from "#/route/situation-verbs";
 import { usePodList } from "#/route/pods";
 import { DEMO_SPEC } from "#/route/seeds";
 import { scheduleSpec, schedulesManifest } from "./manifest";
-import { cellText } from "./columns";
 import { StaleResolve } from "./stale-resolve";
-import { ScheduleGridWorkspace, type ScheduleGridState } from "./workspace";
-import { SCHEDULE_STAGES } from "./stage";
+import { ScheduleGridWorkspace, scheduleCellWire, type ScheduleGridState } from "./workspace";
+import { SCHEDULE_STAGES, scheduleRung } from "./stage";
+import { ScheduleReview } from "./review";
+import {
+  advanceScheduleHistory,
+  sameScheduleDoc,
+  scheduleHistoryStep,
+  type ScheduleHistory,
+} from "./history";
 
 const valueOf = <T,>(reading: Reading<unknown>, schema: { parse(value: unknown): T }) => {
   const value = previousOf(reading);
@@ -129,37 +135,102 @@ export function LiveScheduleGridWorkspace({
     hasWork && basisId
       ? retained && saved && retained.id !== basisId && sameRows(saved, retained)
         ? retained
-        : saved
+        : (saved ?? (retained?.id === basisId ? retained : undefined))
       : (retained ?? saved);
   const unresolved = receipts.filter((row) =>
     ["running", "unknown", "incomplete"].includes(row.state),
   );
+  const scope = JSON.stringify([targetKey, page.workspaceId]);
+  const historyRef = useRef<ScheduleHistory | null>(null);
+  if (historyRef.current?.scope !== scope)
+    historyRef.current = {
+      scope,
+      revision: work.revision,
+      undo: [],
+      redo: [],
+      pending: [],
+      replay: null,
+    };
+  const clearHistory = () => {
+    historyRef.current = {
+      scope,
+      revision: work.revision,
+      undo: [],
+      redo: [],
+      pending: [],
+      replay: null,
+    };
+  };
+  useEffect(() => {
+    const history = historyRef.current;
+    if (history?.scope === scope && !advanceScheduleHistory(history, work.doc, work.revision))
+      clearHistory();
+  }, [scope, work.doc, work.revision]);
   const apply = async (patches: RouteStatePatch[], expectedRevision?: number) => {
     if (!shown) return refuse("not-ready", "Read the schedule before editing: Select a schedule");
+    const history = historyRef.current!;
+    const before =
+      history.pending.at(-1)?.after ?? work.doc ?? scheduleGridDocumentSchema.parse({});
+    const hasPendingWork = Object.values(before.cells).some((cell) => cell.staged || cell.proposal);
     const writing = patches.some((patch) => patch.value !== undefined);
     // Staging or unstaging a stale key is the person's answer to it: the key leaves `basis.stale`.
     const restaged = patches.flatMap(({ path: [cells, key, rung] }) =>
       cells === "cells" && rung === "staged" ? [String(key)] : [],
     );
-    return work.write(
-      writing && (!hasWork || !work.doc?.basis)
+    const next: RouteStatePatch[] =
+      writing && (!hasPendingWork || !before.basis)
         ? // not a cell: basis, and when that read was taken
           [
             { path: ["basis"], value: { captureId: shown.id } },
             { path: ["takenAt"], value: shown.capturedAt },
             ...patches,
           ]
-        : [...patches, ...unstale(work.doc, restaged)],
-      expectedRevision,
-    );
+        : [...patches, ...unstale(before, restaged)];
+    const step = scheduleHistoryStep(before, next);
+    if (step && sameScheduleDoc(before, step.after)) return null;
+    if (!step || history.replay) {
+      clearHistory();
+      return work.write(next, expectedRevision ?? work.revision ?? undefined);
+    }
+    history.pending.push(step);
+    const refusal = await work.write(next, expectedRevision ?? work.revision ?? undefined);
+    if (refusal) clearHistory();
+    return refusal;
   };
-  const execute: ScheduleGridState["execute"] = (kind, input = {}) =>
-    handle.actions[kind].run(input);
+  const replayHistory = async (direction: "undo" | "redo") => {
+    const history = historyRef.current!;
+    const step = (direction === "undo" ? history.undo : history.redo).at(-1);
+    if (!step || history.pending.length || history.replay) return;
+    if (
+      history.revision !== work.revision ||
+      !sameScheduleDoc(work.doc, direction === "undo" ? step.after : step.before)
+    ) {
+      clearHistory();
+      handle.note("undo", "Schedule Work changed; the local undo history was cleared.", true);
+      return;
+    }
+    history.replay = { step, direction };
+    const refusal = await work.write(
+      direction === "undo" ? step.inverse : step.forward,
+      work.revision ?? undefined,
+    );
+    if (refusal) {
+      clearHistory();
+      handle.note("undo", refusal.message, true);
+    }
+  };
+  const execute: ScheduleGridState["execute"] = (kind, input = {}) => {
+    clearHistory();
+    return handle.actions[kind].run(input);
+  };
+  useEffect(() => {
+    if (handle.busy?.key === "push" || handle.busy?.key === "refresh") clearHistory();
+  }, [handle.busy?.key]);
   // Freshness is what the envelope says: the host marks a document's Readings changed and this
   // draws the mark. A bridge that is gone says so instead: nothing can be known about a model we
   // are not attached to, and every Reading taken before the detach comes back marked.
   const gridChanged = changedInRevit(handle.readings.work) || changedInRevit(handle.readings.saved);
-  const railChanged = changedInRevit(handle.readings.catalog);
+  const listChanged = changedInRevit(handle.readings.catalog);
   const connected = previousOf(useHostStatus())?.bridgeIsConnected !== false;
   const freshness: ScheduleGridState["freshness"] = !connected
     ? "disconnected"
@@ -171,19 +242,38 @@ export function LiveScheduleGridWorkspace({
     readingError(handle.readings.work) ??
     readingError(handle.readings.saved) ??
     readingError(handle.readings.receipts);
+  // Ruling 9: a failed read and a receipt awaiting recovery are log rows, never page data. Each
+  // notes once per new fact; `handle.note` is a fresh closure every render, so it is not a dep.
+  useEffect(() => {
+    if (readingFailure) handle.note("read", readingFailure, true);
+  }, [readingFailure]); // eslint-disable-line react-hooks/exhaustive-deps
+  const unresolvedKey = unresolved.map((row) => `${row.id}:${row.state}`).join(",");
+  useEffect(() => {
+    for (const row of unresolved)
+      handle.note(`push ${row.state}`, "Recover or resume this receipt before a new push", true, {
+        kind: "receipt",
+        id: row.id,
+      });
+  }, [unresolvedKey]); // eslint-disable-line react-hooks/exhaustive-deps
   /**
    * A pane's focus edge: re-read only when Revit says this document changed since the read was
    * taken. An unmarked pane is left alone, and a pane already focused is never re-read under the
    * hands — this runs on the focus edge only.
    */
-  const focusOf = (pane: "rail" | "grid") => () => {
+  const focusOf = (pane: "list" | "grid") => () => {
     const declared = SCHEDULE_STAGES[page.stage === "archived" ? "audit" : page.stage].panes[pane];
     if (!declared || handle.busy) return;
-    if (!(pane === "grid" ? gridChanged : railChanged)) return;
+    if (!(pane === "grid" ? gridChanged : listChanged)) return;
     if (!declared.reads) return handle.revalidate(declared.draws);
-    if (shown) void handle.actions[declared.reads].run({ scheduleId: shown.snapshot.scheduleId });
+    if (shown) {
+      clearHistory();
+      void handle.actions[declared.reads].run({ scheduleId: shown.snapshot.scheduleId });
+    }
   };
+  const [activeRow, locateRow] = useState<string | null>(null);
   const state: ScheduleGridState = {
+    activeRow,
+    locateRow,
     slice: work.doc,
     revision: work.revision,
     hydrated: work.current || work.revision !== null,
@@ -194,7 +284,7 @@ export function LiveScheduleGridWorkspace({
     busy: handle.busy?.key ?? null,
     blockedBecause: handle.actions.push.refusal,
     refused: page.refused,
-    onFocus: { rail: focusOf("rail"), grid: focusOf("grid") },
+    onFocus: { grid: focusOf("grid") },
     freshness,
     documentScope: target
       ? { bridgeSessionId: target.session, openDocumentId: target.openId }
@@ -204,7 +294,6 @@ export function LiveScheduleGridWorkspace({
   const resolve = (
     <StaleResolve
       doc={work.doc}
-      current={(key) => cellText(shown?.snapshot, key)}
       write={apply}
       revision={work.revision}
       push={() => execute("push")}
@@ -212,15 +301,18 @@ export function LiveScheduleGridWorkspace({
       readAgain={() => execute("refresh")}
     />
   );
+  const auditRef = useRef<HTMLDivElement | null>(null);
   const audit = (
-    <div className="flex size-full min-h-0 min-w-0 flex-col">
-      {readingFailure ? <div role="status">{readingFailure}</div> : null}
-      {/* The one non-empty case: a receipt that needs recovery before a new push. */}
-      {unresolved.map((receipt) => (
-        <ActionReceiptView key={receipt.id} id={receipt.id} />
-      ))}
-      {framed ? null : resolve}
-      {render ? render(state) : <ScheduleGridWorkspace state={state} />}
+    <div ref={auditRef} className="flex size-full min-h-0 min-w-0 flex-col">
+      {framed ? null : <ScheduleReview state={state} staleBar={resolve} />}
+      {render ? (
+        render(state)
+      ) : (
+        <ScheduleGridWorkspace
+          state={state}
+          onRefused={(says) => handle.note("fill", says, true)}
+        />
+      )}
     </div>
   );
   const framedView = (
@@ -231,18 +323,63 @@ export function LiveScheduleGridWorkspace({
         refreshPods={refreshPods}
         fixture={demo ? DEMO_SPEC : undefined}
         url={url}
-        work={() => resolve}
+        wire={scheduleCellWire(state)}
+        work={(_, sentence) => (
+          <>
+            {sentence}
+            <ScheduleReview state={state} staleBar={resolve} />
+          </>
+        )}
         stages={SCHEDULE_STAGES}
+        onPalette={focusOf("list")}
+        targetRungs={() => [
+          scheduleRung(
+            catalog ?? null,
+            shown?.snapshot ?? null,
+            readingError(handle.readings.catalog),
+            execute,
+          ),
+        ]}
       >
         {audit}
       </EntityRouteView>
     </ActionFlag.Provider>
   );
   return (
-    <KeysNode id={handle.manifest.name} keys={framed && url ? manifestChords(handle) : []}>
+    // A chat pane does not own the URL, so its undo keys never bind on /chat's document.
+    <KeysNode
+      id={handle.manifest.name}
+      keys={framed && url ? manifestChords(handle) : []}
+      hidden={!url}
+    >
+      <ScheduleHistoryKeys
+        region={framed ? null : auditRef}
+        undo={() => void replayHistory("undo")}
+        redo={() => void replayHistory("redo")}
+      />
       {framed ? framedView : audit}
     </KeysNode>
   );
+}
+
+function ScheduleHistoryKeys({
+  region,
+  undo,
+  redo,
+}: {
+  region: React.RefObject<HTMLDivElement | null> | null;
+  undo: () => void;
+  redo: () => void;
+}) {
+  useScopeKeys(
+    [
+      { hotkey: "Mod+Z", callback: undo, label: "undo staged schedule edit" },
+      { hotkey: "Mod+Shift+Z", callback: redo, label: "redo staged schedule edit" },
+      { hotkey: "Mod+Y", callback: redo, label: "redo staged schedule edit" },
+    ],
+    region,
+  );
+  return null;
 }
 
 /** The same schedule rows: each row number stands for the same elements in both readings. */

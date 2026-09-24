@@ -49,8 +49,7 @@ import { useRouteTarget, type BindingLost } from "./route-target";
 export interface ActionHandle extends ActionFacts {
   readonly label: string;
   readonly chord?: string;
-  /** The manifest's `ready()` sentence; null = runnable. */
-  readonly refusal: string | null;
+  readonly refusal: string | null; // the manifest's `ready()` sentence; null = runnable
   readonly stage?: string;
   /** Page state the verb carries ("Partition 10"); null = none. */
   readonly count: number | null;
@@ -123,12 +122,11 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
   readonly page: readonly [P, (next: Partial<P>) => void];
   readonly actions: Readonly<Record<A, ActionHandle>>;
   readonly busy: { readonly key: A; readonly seconds: number } | null;
-  /** Stop waiting on the busy action (its flag's stop). */
-  readonly stop: () => void;
+  readonly stop: () => void; // stop waiting on the busy action (its flag's stop)
   readonly failure: Refusal | null;
   readonly outcome: RouteOutcome<A> | null;
-  /** The page log, newest first. */
-  readonly log: readonly LogEntry[];
+  readonly log: readonly LogEntry[]; // the page log, newest first
+  note(label: string, says: string, refused?: boolean, link?: LogEntry["link"]): void; // a log row from outside an action (ruling 9)
   readonly demo: boolean;
   /** Re-acquire these Readings, as a verb's `dirties` would; a pane's focus edge calls it. */
   revalidate(keys: readonly R[]): void;
@@ -591,6 +589,8 @@ export function useRoute<W, R extends string, P, A extends string>(
     failure,
     outcome,
     log,
+    note: (label, says, refused = false, link) =>
+      owner.note("verb", label, says, refused, undefined, link),
     demo: seed !== undefined,
     revalidate: (keys) => {
       for (const [name, , request] of readingAtoms)

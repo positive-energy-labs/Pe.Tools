@@ -235,7 +235,7 @@ export function PaneResizeHandle({
       aria-valuemin={min}
       aria-valuemax={max}
       aria-valuenow={Math.round(value)}
-      data-surface="recess"
+      data-surface="page"
       aria-label="Resize pane"
       title="Drag or use arrow keys to resize · Home or double-click resets"
       onPointerDown={onPointerDown}
@@ -320,7 +320,7 @@ export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitPro
       ref={rootRef}
       data-slot="pane-split"
       data-axis={axis}
-      data-surface="recess"
+      data-surface="page"
       className={paneSplitRecipe({ axis, grow })}
       style={gridStyle}
     >

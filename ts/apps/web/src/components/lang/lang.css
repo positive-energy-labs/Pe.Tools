@@ -1,3 +1,7 @@
+/* Ruling 4: the head's height rung, the tall one beside --item-h. */
+:root {
+  --head-h: calc(var(--item-h) * 5);
+}
 /* Closed semantic tones. Call sites declare state; the language owns its rendering. */
 :where([data-tone="alarm"]) {
   color: var(--pe-alarm);
@@ -411,6 +415,14 @@
   color: var(--pe-ink);
   cursor: pointer;
 }
+/* Each verb wears the mark it answers: accept takes Pea's proposal (pea ink), unstage clears your
+   own staged edit (caution, its square's colour), deny stays neutral. */
+.dl-act[data-kind="accept"] {
+  color: var(--pe-pea-ink);
+}
+.dl-act[data-kind="unstage"] {
+  color: var(--pe-caution);
+}
 .dl-act:hover {
   background-image: var(--fill-veil);
 }
@@ -421,6 +433,14 @@
 .dl-act > svg {
   width: 12px;
   height: 12px;
+}
+/* A review row (`ReviewRow`) is a list for acting: its verbs are always drawn, and the value
+   clears them so it truncates before the overlay instead of under it. */
+.dl-review .dl-cell[data-scale="row"] {
+  padding-right: calc(var(--acts, 0) * (var(--item-h) - 2px) + 4px);
+}
+.dl-review .dl-cell > .dl-acts {
+  display: inline-flex;
 }
 /* in flight: the cell says it is being written, and nothing else about it changes. */
 .dl-cell[aria-busy="true"] {

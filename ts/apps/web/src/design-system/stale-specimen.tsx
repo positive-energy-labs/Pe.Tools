@@ -3,6 +3,8 @@ import type { RouteStatePatch, ScheduleGridDocument } from "@pe/agent-contracts"
 
 import { ActionButton } from "#/components/lang/action-button";
 import { Section } from "#/components/lang/section";
+import { reviewAddresses } from "#/components/lang/band";
+import { ScheduleProposals } from "#/route/schedules/review";
 import { StaleResolve } from "#/route/schedules/stale-resolve";
 
 /** Ask A on the band: the real `StaleResolve` over three stale LOAD cells. */
@@ -38,7 +40,7 @@ const STALE_DOC: ScheduleGridDocument = {
   takenAt: null,
 } as ScheduleGridDocument;
 
-/** The real `StaleResolve` over a fixture Work; writes land locally, the push is simulated. */
+/** The real review list and `StaleResolve` over a fixture Work; writes land locally, the push is simulated. */
 function StaleSpecimen({ say }: { say: (text: string) => void }) {
   const [doc, setDoc] = useState(STALE_DOC);
   const [revision, setRevision] = useState(1);
@@ -63,14 +65,23 @@ function StaleSpecimen({ say }: { say: (text: string) => void }) {
   };
   return (
     <div className="flex flex-col gap-2">
-      <StaleResolve
-        doc={doc}
-        current={(key) => STALE_NOW[key] ?? null}
-        write={write}
-        revision={revision}
-        push={async () => say("SIMULATED · push of the re-staged cells")}
-        unread={0}
-        readAgain={async () => {}}
+      <ScheduleProposals
+        pending={reviewAddresses(doc.cells)}
+        stale={doc.basis?.stale ?? []}
+        staleBar={
+          <StaleResolve
+            doc={doc}
+            write={write}
+            revision={revision}
+            push={async () => say("SIMULATED · push of the re-staged cells")}
+            unread={0}
+            readAgain={async () => {}}
+          />
+        }
+        wire={{ segment: "cells", write, revision }}
+        columnHeader={() => "LOAD"}
+        currentText={(key) => STALE_NOW[key] ?? null}
+        locate={() => {}}
       />
       <span>
         <ActionButton

@@ -26,7 +26,7 @@ This file indexes the unique homes of surface rules. The long rationale is in gi
 
 ## 4 · Layout and addressing
 
-- `AddressingBar`, `TargetingHead`, `MasterTable`, and their specimens hold sentence addressing, visible narrowing, drill-in, fixed controls, and local fact placement.
+- `Situation` (the one route head), `Ladder` (the target picker), `TableFrame` with `MasterTable`, and their specimens hold sentence addressing, visible narrowing, drill-in, fixed controls, and local fact placement.
 - `.agents/skills/lens.house/SKILL.md` laws 1, 4, 7, and 9 hold one meaning, table modes, meaningful frames, and designed empty states.
 - Spatial renderers and their measured/fixture types distinguish surveyed drawings from estimates.
 

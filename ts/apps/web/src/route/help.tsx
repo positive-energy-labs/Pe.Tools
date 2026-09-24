@@ -9,7 +9,7 @@
  */
 import { Fragment, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
-import { Keyboard } from "lucide-react";
+import { CircleHelp } from "lucide-react";
 
 import { Kbd } from "#/components/lang/kbd";
 import { Press } from "#/components/lang/press";
@@ -242,7 +242,7 @@ export function RouteHelpButton({ docs, name }: { docs?: ReactNode; name: string
         render={<Press tone="quiet" size="icon" />}
         title="how this route works — its regions and every key bound right now (Alt+/)"
       >
-        <Keyboard />
+        <CircleHelp className="size-4" strokeWidth={1.5} />
       </DialogPrimitive.Trigger>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Popup className="fixed inset-0 z-modal outline-none">

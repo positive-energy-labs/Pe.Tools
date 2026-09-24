@@ -157,13 +157,23 @@ export function useDocumentLadder(
 export function LadderPicker({
   ladder,
   disabled,
+  open,
+  onOpenChange,
 }: {
   ladder: ReturnType<typeof useDocumentLadder>;
   disabled?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   return ladder.hosted ? (
     <span data-tone={ladder.lost ? "caution" : undefined}>{ladder.docWord ?? "no document"}</span>
   ) : (
-    <Ladder levels={ladder.levels} disabled={disabled} caution={ladder.lost} />
+    <Ladder
+      levels={ladder.levels}
+      disabled={disabled}
+      caution={ladder.lost}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
   );
 }

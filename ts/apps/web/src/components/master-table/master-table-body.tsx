@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
   type KeyboardEvent,
   type MouseEvent,
   type ReactNode,
@@ -23,6 +24,7 @@ import {
   keyDirection,
 } from "#/components/master-table/master-table-state";
 import type { MasterTableFeatures } from "#/components/master-table/tanstack-adapter";
+import { useScopeKeys } from "#/route/keys";
 import { token } from "#/lib/token";
 import { cn } from "#/lib/utils";
 
@@ -47,6 +49,7 @@ interface MasterRowProps<Row extends RowData> {
   onRowHover?: (row: Row | null) => void;
   /** The columns the children were drawn from: a row's cells redraw when the columns do. */
   columns: unknown;
+  draft: unknown;
   children: ReactNode;
 }
 
@@ -61,6 +64,7 @@ function MasterRowView<Row extends RowData>({
   onSelect,
   onRowHover,
   children,
+  draft: _draft,
 }: MasterRowProps<Row>) {
   return (
     <Row
@@ -97,7 +101,8 @@ const MasterRow = memo(
     previous.onRowHover === next.onRowHover &&
     // Cell state often lives in the columns (a route's Work), not the row: without this, a
     // stable row skipped every Work change and a staged cell never showed its mark.
-    previous.columns === next.columns,
+    previous.columns === next.columns &&
+    previous.draft === next.draft,
 ) as typeof MasterRowView;
 
 export function MasterTableBody<Row extends RowData>({
@@ -113,6 +118,7 @@ export function MasterTableBody<Row extends RowData>({
   onRowHover,
   gutter,
   gutterWidth,
+  cellEdit,
 }: {
   table: Table<Row>;
   visibleRows: VisibleRow<Row>[];
@@ -126,8 +132,26 @@ export function MasterTableBody<Row extends RowData>({
   onRowHover?: (row: Row | null) => void;
   gutter?: Gutter<Row>;
   gutterWidth: number;
+  cellEdit?: {
+    read: (row: Row, column: string) => string;
+    fill: (cells: readonly { row: Row; column: string }[], text: string) => void;
+  };
 }) {
   const activeRowRef = useRef<HTMLTableRowElement | null>(null);
+  const selectingEditor = useRef(false);
+  const [draft, setDraft] = useState<{
+    id: string;
+    text: string;
+    targets: { row: Row; column: string }[];
+  } | null>(null);
+  const draftFinished = useRef(false);
+  const finishDraft = (commit: boolean) => {
+    if (!draft || draftFinished.current) return;
+    draftFinished.current = true;
+    if (commit) cellEdit?.fill(draft.targets, draft.text);
+    setDraft(null);
+    hosts.current.get(draft.id)?.current?.focus();
+  };
   // The td is each cell's keyboard host: one stable ref per cell id, handed to whatever the column
   // draws (a StateCell registers its verbs on it). ponytail: never pruned; ids are bounded by rows.
   const hosts = useRef(new Map<string, RefObject<HTMLTableCellElement | null>>());
@@ -164,6 +188,21 @@ export function MasterTableBody<Row extends RowData>({
   );
   const handleGridKey = useCallback(
     (event: KeyboardEvent<HTMLTableCellElement>) => {
+      if (cellEdit && isTypingKey(event) && table.getSelectedCellCount() > 1) {
+        const selected = visibleRows.flatMap((row) =>
+          row
+            .getVisibleCells()
+            .filter((cell) => cell.getIsSelected())
+            .map((cell) => ({
+              row: row.original,
+              column: cell.column.id,
+            })),
+        );
+        draftFinished.current = false;
+        setDraft({ id: event.currentTarget.dataset.cellId!, text: event.key, targets: selected });
+        event.preventDefault();
+        return;
+      }
       if ((event.key === "Enter" || event.key === "F2") && editCell(event.currentTarget))
         return event.preventDefault();
       if (isTypingKey(event) && editCell(event.currentTarget, event.key))
@@ -174,7 +213,7 @@ export function MasterTableBody<Row extends RowData>({
       const moved = moveFrom(event.currentTarget, direction, tab);
       if (!tab || moved) event.preventDefault();
     },
-    [moveFrom],
+    [cellEdit, moveFrom, table, visibleRows],
   );
 
   return (
@@ -199,6 +238,7 @@ export function MasterTableBody<Row extends RowData>({
             onSelect={onSelect ? (event) => onSelect(key, event.shiftKey) : undefined}
             onRowHover={onRowHover}
             columns={columnByKey}
+            draft={draft}
           >
             {gutter && <GutterCell row={tableRow.original} gutter={gutter} width={gutterWidth} />}
             {cells.map((cell, columnIndex) => {
@@ -215,6 +255,7 @@ export function MasterTableBody<Row extends RowData>({
                   {(selection) => (
                     <td
                       ref={hostOf(cell.id)}
+                      data-cell-id={cell.id}
                       role="gridcell"
                       tabIndex={
                         selection & 1 || (isEntryCell && table.getFocusedCell() === undefined)
@@ -224,23 +265,62 @@ export function MasterTableBody<Row extends RowData>({
                       aria-selected={Boolean(selection & 2)}
                       data-master-cell=""
                       onFocus={(event) => {
-                        if (event.target === event.currentTarget)
+                        if (event.target === event.currentTarget && !selectingEditor.current)
                           table.setFocusedCell(tableRow.id, cell.column.id);
                       }}
                       onKeyDown={(event) => {
                         if (event.target === event.currentTarget) handleGridKey(event);
                       }}
+                      onCopy={
+                        cellEdit
+                          ? (event) => {
+                              if (event.target !== event.currentTarget) return;
+                              event.clipboardData.setData(
+                                "text/plain",
+                                cellEdit.read(tableRow.original, cell.column.id),
+                              );
+                              event.preventDefault();
+                            }
+                          : undefined
+                      }
+                      onPaste={
+                        cellEdit
+                          ? (event) => {
+                              if (event.target !== event.currentTarget) return;
+                              const selected = visibleRows.flatMap((row) =>
+                                row
+                                  .getVisibleCells()
+                                  .filter((item) => item.getIsSelected())
+                                  .map((item) => ({
+                                    row: row.original,
+                                    column: item.column.id,
+                                  })),
+                              );
+                              cellEdit.fill(
+                                selected.length > 1
+                                  ? selected
+                                  : [{ row: tableRow.original, column: cell.column.id }],
+                                event.clipboardData.getData("text/plain"),
+                              );
+                              event.preventDefault();
+                            }
+                          : undefined
+                      }
                       onMouseDown={(event) => {
                         // A click SELECTS the cell (F-J3-5a): an idle editor under the pointer
                         // would take the caret and make typing append. The td takes focus; the
                         // first printable key then replaces the value, and a double-click, F2 or
                         // Enter edits in place.
                         const target = event.target as HTMLElement;
-                        if (target.matches(CELL_EDITOR) && document.activeElement !== target) {
+                        const interceptEditor =
+                          target.matches(CELL_EDITOR) && document.activeElement !== target;
+                        if (interceptEditor) {
                           event.preventDefault();
+                          selectingEditor.current = true;
                           event.currentTarget.focus();
+                          selectingEditor.current = false;
                         }
-                        if (!isInteractive(event.target))
+                        if (!isInteractive(event.target) || interceptEditor)
                           cell.getSelectionStartHandler(document)(event);
                       }}
                       onDoubleClick={(event) => {
@@ -252,7 +332,7 @@ export function MasterTableBody<Row extends RowData>({
                       className={cn(
                         // The row rule is drawn INSIDE the cell: a border on a td adds to the row box and put
                         // every list row at 21px (measured, annotation round 2 2026-08-31).
-                        "hairline-b-inset border-l border-line p-0 outline-none first:border-l-0 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-line-2",
+                        "hairline-b-inset relative border-l border-line p-0 outline-none first:border-l-0 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-line-2",
                         selection & 2 && "on-select",
                         column.right && "text-right",
                         column.width,
@@ -273,6 +353,13 @@ export function MasterTableBody<Row extends RowData>({
                           {column.cell(tableRow.original)}
                         </CellHost.Provider>
                       </CellNavigationProvider>
+                      {draft?.id === cell.id && (
+                        <FillDraft
+                          text={draft.text}
+                          onText={(text) => setDraft((current) => current && { ...current, text })}
+                          finish={finishDraft}
+                        />
+                      )}
                     </td>
                   )}
                 </table.Subscribe>
@@ -282,6 +369,49 @@ export function MasterTableBody<Row extends RowData>({
         );
       })}
     </tbody>
+  );
+}
+
+/** The range fill's one input over the focused cell: Enter fills, Escape drops, blur fills. */
+function FillDraft({
+  text,
+  onText,
+  finish,
+}: {
+  text: string;
+  onText: (text: string) => void;
+  finish: (commit: boolean) => void;
+}) {
+  const [input, setInput] = useState<HTMLInputElement | null>(null);
+  useScopeKeys(
+    [
+      {
+        hotkey: "Enter",
+        callback: () => finish(true),
+        label: "fill",
+        options: { ignoreInputs: false },
+      },
+      {
+        hotkey: "Escape",
+        callback: () => finish(false),
+        label: "drop fill",
+        options: { ignoreInputs: false },
+      },
+    ],
+    input,
+  );
+  return (
+    <input
+      ref={setInput}
+      autoFocus
+      aria-label="Fill selected cells"
+      className="absolute inset-0 z-raised size-full bg-on px-1 text-ink"
+      value={text}
+      onChange={(event) => onText(event.target.value)}
+      onBlur={() => finish(true)}
+      // The grid's own keys (arrows, typing) stay out of the draft.
+      onKeyDown={(event) => event.stopPropagation()}
+    />
   );
 }
 

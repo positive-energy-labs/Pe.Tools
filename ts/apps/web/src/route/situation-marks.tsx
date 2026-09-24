@@ -1,6 +1,9 @@
 /** The Situation's marks: a sentence slot and its choice (dotted = operable, dashed = empty). */
 import type { ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
+import { Kbd } from "#/components/lang/kbd";
+import { Press } from "#/components/lang/press";
+import { useScopeKeys } from "./keys";
 
 /** A slot in the sentence: an operable value with its io mark (`r`, `w`, `rw`) as a superscript. */
 export function SituationCell({
@@ -54,5 +57,33 @@ export function SituationChoice({
         </Popover.Positioner>
       </Popover.Portal>
     </Popover.Root>
+  );
+}
+
+/**
+ * THE SITUATION PALETTE's key: Ctrl K, bound on the scope node the head sits in, and its keycap
+ * right of the sentence. Both open the sentence's ladder — switching what the page shows is the
+ * next most important thing to editing it.
+ */
+export function PaletteKey({ open }: { open: () => void }) {
+  useScopeKeys([
+    {
+      hotkey: "Mod+K",
+      callback: open,
+      label: "palette",
+      says: "open the sentence's picker: switch what this page shows",
+      options: { ignoreInputs: false },
+    },
+  ]);
+  return (
+    <Press
+      tone="quiet"
+      size="value"
+      aria-label="Open the palette"
+      title="Switch what this page shows: every rung of the sentence, type to filter (Ctrl K)"
+      onClick={open}
+    >
+      <Kbd mute>Ctrl K</Kbd>
+    </Press>
   );
 }

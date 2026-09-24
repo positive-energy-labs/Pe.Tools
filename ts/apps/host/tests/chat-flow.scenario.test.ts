@@ -333,16 +333,8 @@ test("the browser walks one durable chat lifecycle", async () => {
         revision: 1,
       },
     });
-    // The head's revision lives in the Situation's ledger now (`route/situation.tsx` `Ledger`),
-    // reached through the route-state gauge; `scope-line.tsx` and its testid are gone.
-    const routeState = page
-      .getByTestId("composer-head")
-      .getByRole("button", { name: "Route state" });
-    await routeState.click();
-    await expect
-      .poll(() => page.locator('dt:has-text("target") + dd').innerText(), { timeout: 15_000 })
-      .toBe("r1");
-    await page.keyboard.press("Escape");
+    // The chat lane head carries no route-state gauge (user verdict V10, 2026-09-23: the sentence
+    // and the plugin's own Situation say it); the head revision is proven on the wire above.
     // pe_find under that Target: the map, the connected sessions (none), and the silent sources.
     await driveTurn("FIND_TURN", findFinalText);
     const findBody = JSON.stringify((await readThread()).messages);

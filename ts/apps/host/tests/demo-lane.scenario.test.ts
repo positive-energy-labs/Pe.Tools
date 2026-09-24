@@ -295,9 +295,24 @@ async function landed(page: Page, pattern: RegExp) {
 
 /** The page log drew a row for the verb whose hover says `says`: the row ends in the label, hover says the rest. */
 async function logged(page: Page, label: string, says: string) {
-  const rows = page.locator(`section[aria-label="Situation"] li[title$=" · ${says}"]`);
+  // The head's log is folded to its newest row (MAP ruling 21); any tab press opens the column.
+  const situation = page.locator('section[aria-label="Situation"]');
+  const allTab = situation.getByTitle("all entries");
+  if (await allTab.count()) await allTab.first().click();
+  const rows = situation.locator(`li[title$=" · ${says}"]`);
   const row = rows.filter({ hasText: new RegExp(`${label}$`) });
   await expect.poll(() => row.count(), { timeout: 30_000 }).toBeGreaterThan(0);
+}
+
+/** The table query becomes exactly `text`: every query chip is removed, then its words are typed. */
+async function setQuery(page: Page, text: string) {
+  const box = page.getByRole("combobox", { name: "table query" });
+  const remove = page.locator(
+    '[data-slot="query-box"] [title^="A word of the query"] button[title^="Remove the"]',
+  );
+  while (await remove.count()) await remove.first().click();
+  await box.fill(text ? `${text} ` : "");
+  await box.press("Escape");
 }
 
 /** `/pods` for the member: the run receipt the apply filed, as the page draws it. */
@@ -342,11 +357,15 @@ async function liveLoop(name: string, loop: (page: Page) => Promise<string>) {
 test("live /schedules: capture then apply files a run receipt", async () => {
   const { shown, workflows } = await liveLoop("schedules", async (page) => {
     const pod = await openLive(page, "/schedules", "demo=push&live=1");
-    // The Situation's ladder names the resolved target, not "choose a session".
+    // The Situation's ladder names the resolved target, not "choose a session" (the document word
+    // left the sentence, MAP ruling 28, so the wording is not pinned).
     await expect
       .poll(() => page.locator("body").innerText(), { timeout: 30_000 })
-      .toContain("Auditing schedule in Isolated demo (simulated)");
+      .toContain("Isolated demo (simulated)");
+    expect(await page.locator("body").innerText()).not.toContain("choose a session");
     await page.goto(`${page.url()}&pod=${pod}`, { waitUntil: "domcontentloaded" });
+    // The schedule list is the Situation's Ladder, opened by Ctrl K (MAP rulings 19, 23).
+    await page.getByRole("button", { name: "Open the palette" }).click();
     await page
       .getByRole("option", { name: /DX Fan Coil Unit Schedule/ })
       .first()
@@ -537,8 +556,7 @@ test("/families Archived inspects a saved reading without a target or Revit conn
       )
       .toBe(1);
     const rules = page.getByRole("combobox", { name: "table query" });
-    await rules.fill("live placed");
-    await rules.press("Escape");
+    await setQuery(page, "!absent placed>0");
     await expect
       .poll(() =>
         page.getByRole("columnheader", { name: "Offline diffuser · 24x24", exact: true }).count(),
@@ -547,13 +565,11 @@ test("/families Archived inspects a saved reading without a target or Revit conn
     expect(await page.getByRole("rowheader", { name: "Only unplaced", exact: true }).count()).toBe(
       0,
     );
-    await rules.fill("fams>=2");
-    await rules.press("Escape");
+    await setQuery(page, "fams>=2");
     expect(await page.getByRole("rowheader", { name: "Only unplaced", exact: true }).count()).toBe(
       0,
     );
-    await rules.fill("blank live !Placed_Diffuser-2");
-    await rules.press("Escape");
+    await setQuery(page, "!empty !absent family!=Placed_Diffuser-2");
     expect(
       await page
         .getByRole("columnheader", { name: "Placed_Diffuser-2 · 24x24", exact: true })
@@ -561,7 +577,7 @@ test("/families Archived inspects a saved reading without a target or Revit conn
     ).toBe(0);
     await page
       .getByRole("button", {
-        name: 'Remove the "hide Placed_Diffuser-2" narrowing — widens the view back out',
+        name: 'Remove the "family is not Placed_Diffuser-2" narrowing — widens the view back out',
       })
       .click();
     await expect
@@ -569,17 +585,17 @@ test("/families Archived inspects a saved reading without a target or Revit conn
         page.getByRole("columnheader", { name: "Placed_Diffuser-2 · 24x24", exact: true }).count(),
       )
       .toBe(1);
-    await rules.fill("!Offline%20diffuser");
-    await rules.press("Escape");
+    await setQuery(page, 'family!="Offline diffuser"');
     expect(
       await page
         .getByRole("columnheader", { name: "Offline diffuser · 24x24", exact: true })
         .count(),
     ).toBe(0);
+    // An empty, focused box offers every field (MAP ruling 22).
     await rules.fill("");
-    expect(await page.getByRole("option", { name: /fams>=N/ }).count()).toBe(1);
-    await rules.fill("blank live");
-    await rules.press("Escape");
+    await rules.click();
+    await expect.poll(() => page.getByRole("option", { name: /^fams/ }).count()).toBe(1);
+    await setQuery(page, "!empty !absent");
     const savedCell = page.getByRole("gridcell", {
       name: "Model · Offline diffuser · 24x24",
       exact: true,
@@ -693,7 +709,7 @@ test("live /families: retained readback supports repeat and consecutive family p
     );
     await applySheet(page);
     await expect.poll(() => readbackRequested, { timeout: 30_000 }).toBe(true);
-    await page.getByRole("combobox", { name: "table query" }).fill("blank live p:model");
+    await page.getByRole("combobox", { name: "table query" }).fill("parameter~model ");
     releaseReadback();
     // The owner changes simulated native state; the Host's targeted matrix readback, not the
     // staged input, supplies the value that the table draws after apply.
@@ -702,8 +718,10 @@ test("live /families: retained readback supports repeat and consecutive family p
     await logged(page, "apply 1 family · 1 converged", "no artifacts on disk");
     if (SCRATCH) await page.screenshot({ path: join(SCRATCH, "families-applied.png") });
     await expect
-      .poll(() => page.getByRole("combobox", { name: "table query" }).inputValue())
-      .toBe("blank live p:model");
+      .poll(() =>
+        page.getByRole("button", { name: "parameter contains model", exact: true }).count(),
+      )
+      .toBe(1);
     // The retained post-apply observation keeps the original Work baseline. Plan two separate
     // families from it; applying the first must not make the second plan unusable.
     await type("Fan Coil Unit - Ducted", "FXMQ20", "FXMQ21");

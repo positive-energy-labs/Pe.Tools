@@ -3,7 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { FamiliesWorkspace } from "#/families/workspace";
 import { useFamiliesStore } from "#/families/store";
-import { DEFAULT_FAMILIES_RULES } from "#/families/pivot-rules";
+import { DEFAULT_FAMILIES_QUERY } from "#/families/manifest";
 import { entitySearch, useRouteThread, type EntitySearch } from "#/route";
 import { routeSearch } from "#/route/route-owner";
 
@@ -39,7 +39,7 @@ function FamiliesRoute() {
       target={target}
       thread={thread}
       entry={{ stage, pod, path }}
-      query={query ?? DEFAULT_FAMILIES_RULES}
+      query={query ?? DEFAULT_FAMILIES_QUERY}
       surface="route"
       url
     />
@@ -82,7 +82,7 @@ export function FamiliesRouteContent({
       replace: true,
       search: (previous: Record<string, unknown>) => ({
         ...previous,
-        query: store.table.query === DEFAULT_FAMILIES_RULES ? undefined : store.table.query,
+        query: store.table.query === DEFAULT_FAMILIES_QUERY ? undefined : store.table.query,
       }),
     });
   }, [url, store.table.query, navigate]);

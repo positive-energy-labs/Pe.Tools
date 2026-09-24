@@ -1,5 +1,5 @@
 /** The Situation's cluster: the chain lamp and the state gauge on the name line. */
-import type { ReactNode } from "react";
+import { useContext, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { Gauge } from "lucide-react";
 import { Press } from "#/components/lang/press";
@@ -7,6 +7,7 @@ import { StateDot } from "#/components/master-table/cells";
 import { ThemeToggle } from "#/components/lang/theme-toggle";
 import { RouteHelpButton } from "./help";
 import { FlowMatrix } from "./flow";
+import { HostedChrome } from "./hosted-chrome";
 import { RouteInspector } from "./inspector";
 import { useHostLamp } from "./shell";
 import type { RouteHandle } from "./use-route";
@@ -93,7 +94,7 @@ function StateGauge({
         title="route state: what is bound, what ran, and the route's nouns"
         aria-label="Route state"
       >
-        <Gauge className="size-4" />
+        <Gauge className="size-4" strokeWidth={1.5} />
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="end" sideOffset={6} className="isolate z-popup">
@@ -122,12 +123,14 @@ export function Cluster({
   /** What the state gauge shows above the inspector (Chat hands in its ledger and log). */
   state?: ReactNode;
 }) {
+  const chrome = useContext(HostedChrome);
   return (
-    <span className="flex shrink-0 items-center gap-3">
+    <span className="flex shrink-0 items-center gap-1">
       {lamp}
       <StateGauge handle={handle}>{state}</StateGauge>
       <RouteHelpButton name={handle.manifest.name} docs={handle.manifest.docs} />
       <ThemeToggle />
+      {chrome}
     </span>
   );
 }

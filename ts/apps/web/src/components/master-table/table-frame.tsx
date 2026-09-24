@@ -1,21 +1,22 @@
 /**
  * TABLE FRAME — a table's chrome, as a wrapper (the approved reshape): the box, the scope strip
- * (label, summary, search, modes, select-all, actions) and the filter-chip strip. It holds no
- * table state of its own: it reads the route's `state` and the same `visibleRows(...)` the grid
- * draws, so its counts are the grid's rows. A table that wants no chrome is a bare `Table`.
+ * (label, summary, modes, select-all, actions) and the one query box, where every narrowing is a
+ * chip. It holds no table state of its own: it reads the route's `state` and the same
+ * `visibleRows(...)` the grid draws, so its counts are the grid's rows. A table that wants no
+ * chrome is a bare `Table`.
  */
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { RowData } from "@tanstack/react-table";
 
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { NarrowChip } from "#/components/lang/chip";
-import { Input } from "#/components/lang/input";
 import { Press } from "#/components/lang/press";
+import { resolveStateColumn } from "#/components/master-table/master-table-columns";
 import { labelOf } from "#/components/master-table/master-table-header";
-import type { Column, QueryGrammar, TableState } from "#/components/master-table/model";
-import { QueryBox, QueryChips } from "#/components/master-table/query";
+import type { Column, QueryVocabulary, TableState } from "#/components/master-table/model";
+import { ConditionTarget, QueryBox } from "#/components/master-table/query";
 import { selectableKeys, type TableSelection } from "#/components/master-table/table";
-import { visibleRows } from "#/components/master-table/view";
+import { conditionValues, quoted, visibleRows } from "#/components/master-table/view";
 
 export interface TableFrameProps<Row extends RowData> {
   /** What is in scope, said as the strip's lead. */
@@ -26,19 +27,40 @@ export interface TableFrameProps<Row extends RowData> {
   state: TableState;
   onStateChange: (state: TableState) => void;
   summary?: ReactNode;
-  /** Present, the strip draws a free-text search over the searchable columns. */
+  /** Present, the frame draws the query box even where no column declares a `condition`. */
   searchPlaceholder?: string;
-  /** Present, the search box is the one query box: its tokens chip and its grammar suggests. */
-  query?: { grammar: QueryGrammar };
+  /** A route's own vocabulary, for rows it narrows before the frame sees them (families); absent,
+   * the box names the columns that declare a `condition`. */
+  query?: QueryVocabulary;
   /** Route-owned filters narrowing the rows before the table sees them: one chip each. Present
-   * (even empty), the chip row reserves its line, so a chip appearing never moves the grid. */
+   * (even empty), the box reserves its line, so a chip appearing never moves the grid. */
   chips?: { label: string; onClear: () => void }[];
-  filters?: ReactNode;
   modes?: ReactNode;
   actions?: ReactNode;
   /** Present, the strip offers select-all over the shown rows. */
   selection?: TableSelection;
   children: ReactNode;
+}
+
+function columnVocabulary<Row>(
+  rows: readonly Row[],
+  columns: readonly Column<Row>[],
+  state: TableState,
+): QueryVocabulary {
+  const scope = (query: string) => visibleRows(rows, columns, { ...state, query });
+  return {
+    fields: columns.map(resolveStateColumn).map((column) => ({
+      label: column.label,
+      kind: column.condition?.kind,
+      sort: column.sort ? column.key : undefined,
+    })),
+    rules: [],
+    count: (query) => scope(query).length,
+    values: (label, query) => {
+      const condition = columns.find((column) => column.label === label)?.condition;
+      return condition ? conditionValues(scope(query), condition) : [];
+    },
+  };
 }
 
 export function TableFrame<Row extends RowData>({
@@ -52,16 +74,19 @@ export function TableFrame<Row extends RowData>({
   searchPlaceholder,
   query,
   chips,
-  filters,
   modes,
   actions,
   selection,
   children,
 }: TableFrameProps<Row>) {
   const visibleColumns = columns.filter((column) => !state.hiddenColumns?.includes(column.key));
-  const grammar = query?.grammar;
-  const shown = visibleRows(rows, visibleColumns, state, grammar).map(rowKey);
-  const setQuery = (text: string) => onStateChange({ ...state, query: text });
+  const conditioned = visibleColumns.some((column) => column.condition);
+  const [draft, setDraft] = useState("");
+  const [box, setBox] = useState<HTMLInputElement | null>(null);
+  // A route vocabulary narrowed the rows already; the frame only orders them.
+  const shown = visibleRows(rows, visibleColumns, query ? { ...state, query: "" } : state).map(
+    rowKey,
+  );
   const reach = selection ? selectableKeys(selection, shown) : [];
   const selectedShown = reach.filter((key) => selection!.selected.has(key)).length;
   const filtered = visibleColumns.filter((column) => state.filters[column.key]);
@@ -71,8 +96,13 @@ export function TableFrame<Row extends RowData>({
     else next[key] = value;
     onStateChange({ ...state, filters: next });
   };
-  const narrowed =
-    filters != null || chips !== undefined || Boolean(state.query) || filtered.length > 0;
+  const boxed =
+    searchPlaceholder !== undefined ||
+    query !== undefined ||
+    chips !== undefined ||
+    conditioned ||
+    Boolean(state.query) ||
+    filtered.length > 0;
   return (
     <ArtifactFrame
       className="flex min-h-0 flex-1 flex-col"
@@ -80,35 +110,22 @@ export function TableFrame<Row extends RowData>({
         <>
           <span
             className="t-small t-upper"
-            title="Everything currently in scope. This table is never hidden and never narrowed silently — every filter acting on it is a chip in this strip."
+            title="Everything currently in scope. This table is never hidden and never narrowed silently — every filter acting on it is a chip in its query box."
           >
             {label}
           </span>
           {summary && <span className="face-mono t-small text-ink-2">{summary}</span>}
+          {!query && boxed && (
+            <span className="face-mono t-small text-ink-2">
+              {shown.length === rows.length
+                ? `${rows.length} rows`
+                : `${shown.length} of ${rows.length} rows`}
+            </span>
+          )}
         </>
       }
       headTrail={
         <>
-          {grammar ? (
-            <QueryBox
-              grammar={grammar}
-              text={state.query}
-              onChange={setQuery}
-              placeholder={searchPlaceholder}
-            />
-          ) : (
-            searchPlaceholder && (
-              <div className="w-44">
-                <Input
-                  face="mono"
-                  value={state.query}
-                  onChange={(event) => onStateChange({ ...state, query: event.target.value })}
-                  placeholder={searchPlaceholder}
-                  title="Free-text filter. It reads only the columns that declare themselves searchable, so a match here always points at a visible column."
-                />
-              </div>
-            )
-          )}
           {modes}
           {selection && reach.length > 0 && (
             <Press
@@ -129,61 +146,48 @@ export function TableFrame<Row extends RowData>({
         </>
       }
     >
-      {narrowed && (
-        <div
-          data-slot="table-filters"
-          className="flex min-h-(--item-h) shrink-0 flex-wrap items-center gap-2 px-2 py-1 hairline-b"
-        >
-          {filters}
-          {chips?.map((chip) => (
-            <NarrowChip
-              key={chip.label}
-              label={chip.label}
-              count={shown.length}
-              onRemove={chip.onClear}
-              title="A route-owned filter narrowing this table right now. The count is rows still in scope; removing it widens back out."
-            />
-          ))}
-          {grammar ? (
-            <QueryChips
-              grammar={grammar}
-              text={state.query}
-              onChange={setQuery}
-              count={shown.length}
-            />
-          ) : (
-            state.query && (
+      {boxed && (
+        <div data-slot="table-filters" className="flex shrink-0 items-center px-2 hairline-b">
+          <QueryBox
+            vocabulary={query ?? columnVocabulary(rows, visibleColumns, state)}
+            state={state}
+            onStateChange={onStateChange}
+            draft={draft}
+            onDraft={setDraft}
+            onInput={setBox}
+            placeholder={searchPlaceholder}
+          >
+            {chips?.map((chip) => (
               <NarrowChip
-                label={`search: ${state.query}`}
-                count={shown.length}
-                onRemove={() => onStateChange({ ...state, query: "" })}
-                title="The free-text filter narrowing this table right now. The count is rows still in scope; removing it widens back out."
+                key={chip.label}
+                label={chip.label}
+                onRemove={chip.onClear}
+                title="A route-owned filter narrowing this table right now; removing it widens back out."
               />
-            )
-          )}
-          {filtered.map((column) => (
-            <NarrowChip
-              key={column.key}
-              label={`${column.label}: ${labelOf(column, rows, state.filters[column.key] ?? "")}`}
-              count={shown.length}
-              onRemove={() => setFilter(column.key, null)}
-              title="A column filter narrowing this table right now. The count is rows still in scope; removing it widens back out."
-            />
-          ))}
-          {filtered.length > 0 && (
-            <Press
-              type="button"
-              onClick={() => onStateChange({ ...state, filters: {} })}
-              title="Drop every column filter at once. Filters owned by the route have their own chips and are left alone."
-              tone="quiet"
-              size="label"
-            >
-              clear column filters
-            </Press>
-          )}
+            ))}
+            {filtered.map((column) => (
+              <NarrowChip
+                key={column.key}
+                label={`${column.label}: ${labelOf(column, rows, state.filters[column.key] ?? "")}`}
+                onRemove={() => setFilter(column.key, null)}
+                title="The column's header filter narrowing this table right now; removing it widens back out."
+              />
+            ))}
+          </QueryBox>
         </div>
       )}
-      {children}
+      <ConditionTarget.Provider
+        value={
+          conditioned
+            ? (field) => {
+                setDraft(quoted(field));
+                box?.focus();
+              }
+            : null
+        }
+      >
+        {children}
+      </ConditionTarget.Provider>
     </ArtifactFrame>
   );
 }

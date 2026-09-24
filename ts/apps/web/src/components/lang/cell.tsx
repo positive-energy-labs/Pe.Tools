@@ -387,6 +387,7 @@ export function StateCell(props: StateCellProps) {
                   key={t.kind}
                   type="button"
                   className={slots.act()}
+                  data-kind={t.kind}
                   aria-label={t.kind}
                   title={`${t.reason ?? TRANSITION[t.kind].says} (${TRANSITION[t.kind].key})`}
                   disabled={pending}

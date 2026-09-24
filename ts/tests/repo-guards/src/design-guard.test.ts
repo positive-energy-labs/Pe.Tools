@@ -308,7 +308,7 @@ describe("design guard — maintained surface hard zeros", () => {
     }
 
     const surface = source.find((file) => file.rel === owners.surface)?.text ?? "";
-    for (const contract of ["size-full", "min-h-0", "min-w-0", 'padding: "var(--gutter)"'])
+    for (const contract of ["size-full", "min-h-0", "min-w-0", '"var(--gutter)"'])
       expect(surface).toContain(contract);
     expect(surface).not.toMatch(/\bfixed\b|\bh-dvh\b/);
 

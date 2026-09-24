@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { Undo2 } from "lucide-react";
 import {
   availableTransitions,
   fanOut,
@@ -249,8 +250,9 @@ export function fanOutWord({ kind, covered, skipped, refusal }: FanOutOutcome): 
 }
 
 /**
- * One changed address at card scale: its label, the StateCell carrying its own verbs, and whose
- * staged value it is in words (a compact head has no table to carry that).
+ * One changed address on ONE line, browsable as a list: what · its value at row scale (the
+ * table's own grammar: wash, fold, counter, clipped) · state and origin in one word · the verbs,
+ * always drawn. Facts that do not fit (drift, lock reason, notes) ride the cell's title.
  */
 export function ReviewRow({
   wire,
@@ -260,6 +262,7 @@ export function ReviewRow({
   facts,
   show,
   transitions,
+  editor,
 }: {
   wire: CellWire;
   address: string;
@@ -270,16 +273,27 @@ export function ReviewRow({
   show?: (value: unknown) => string;
   /** The consumer's own verbs for this address, when the contract's defaults don't say it. */
   transitions?: readonly CellTransition[];
+  /**
+   * The table's own cell for this address, editable: drawn in place of the read-only value so a
+   * staged value is refined where it is reviewed. Its verbs are its own.
+   */
+  editor?: ReactNode;
 }) {
   const props = cellFromTrichotomy(cell, facts, show);
+  const verbs = transitions ?? reviewTransitions(wire, address, cell);
+  const by = props.stage === "staged" ? props.stagedBy : "pea";
   return (
-    <div className="grid grid-cols-[9rem_minmax(0,1fr)] items-baseline gap-3 py-2">
-      <span className="truncate">{label}</span>
-      <span className="flex min-w-0 flex-wrap items-baseline gap-2">
-        <StateCell {...props} transitions={transitions ?? reviewTransitions(wire, address, cell)} />
-        {props.stagedBy ? (
-          <span className="t-small text-ink-2">by {props.stagedBy === "pea" ? "Pea" : "you"}</span>
-        ) : null}
+    <div
+      className="dl-review my-px grid h-(--item-h) grid-cols-[minmax(6rem,14rem)_minmax(0,22rem)_7rem] items-center gap-2"
+      style={{ "--acts": verbs.length } as CSSProperties}
+    >
+      <span className="min-w-0 truncate">{label}</span>
+      {editor ?? <StateCell {...props} scale="row" transitions={verbs} />}
+      <span
+        className="truncate t-small face-mono text-ink-2"
+        data-tone={by === "pea" ? "pea" : undefined}
+      >
+        {props.counterValue != null ? "contested" : props.stage} · {by === "pea" ? "pea" : "you"}
       </span>
     </div>
   );
@@ -304,11 +318,14 @@ export function UnstageAll({
   cells,
   keys,
   done,
+  compact,
 }: {
   wire: CellWire;
   cells: Record<string, TrichotomyCellLike>;
   keys: readonly string[];
   done: (outcome: FanOutOutcome) => void;
+  /** An icon and a count, for a one-line row; the words move to the title. */
+  compact?: boolean;
 }) {
   const staged = useMemo(
     () =>
@@ -337,7 +354,16 @@ export function UnstageAll({
   if (!staged) return null;
   return (
     <ActionButton
-      label={armed ? `unstage ${staged} staged? press again` : `unstage all (${staged})`}
+      icon={compact ? Undo2 : undefined}
+      label={
+        armed
+          ? compact
+            ? `${staged}? again`
+            : `unstage ${staged} staged? press again`
+          : compact
+            ? String(staged)
+            : `unstage all (${staged})`
+      }
       reason={
         armed
           ? `Press again to clear your ${staged} staged values in one write; Escape cancels`

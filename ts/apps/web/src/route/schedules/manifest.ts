@@ -108,6 +108,7 @@ export const scheduleSpec: EntityRouteDef<
   capture: "schedule.capture",
   apply: "schedule.apply",
   applies: ["catalog"],
+  commit: "push",
   captureInput: (ctx) => {
     const reading = previousOf(ctx.readings.work);
     return reading === undefined
@@ -122,6 +123,19 @@ export const schedulesManifest = () =>
     scheduleSpec,
     {
       work: scheduleGridRouteState,
+      // Grouped by column, so the Work sentence says "across 3 columns" (ruling 14).
+      cells: {
+        segment: "cells",
+        groupOf: (key) => [String(splitScheduleCellKey(key).columnNumber)],
+        nouns: ["column"],
+      },
+      // A receipt that needs recovery is a log row; its link opens it where recovery lives.
+      inspectables: {
+        receipt: {
+          label: (id) => `receipt ${id.slice(0, 8)}`,
+          open: { kind: "route", to: "/ops", search: (id) => ({ actionId: id }) },
+        },
+      },
       readings: {
         catalog: {
           kind: "schedule-reading",

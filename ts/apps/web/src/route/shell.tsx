@@ -6,7 +6,7 @@
  * The lamp is one `host-status` Reading at 5s (ruling Q5) and the route gate reads the same value.
  * Installer/update UI is NOT here — it moved to `routes/__root.tsx` (ruling Q3).
  */
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
@@ -16,6 +16,7 @@ import { StateDot } from "#/components/master-table/cells";
 import { useHostStatus } from "#/readings";
 
 import { RouteHelpButton } from "./help";
+import { HostedChrome } from "./hosted-chrome";
 import { KeysNode, manifestChords } from "./keys";
 import type { RouteManifest } from "./manifest";
 import { SituationAction } from "./situation-verbs";
@@ -228,6 +229,7 @@ function BaselineShell<W, R extends string, P, A extends string>({
   live,
   children,
 }: ShellProps<W, R, P, A>) {
+  const chrome = useContext(HostedChrome);
   return (
     // The one landmark of the primitive. A route may override the printed head with its own word
     // (chat prints the thread's label), so the shell names itself with the MANIFEST's name: that
@@ -246,6 +248,7 @@ function BaselineShell<W, R extends string, P, A extends string>({
                 {aside}
                 <RouteHelpButton name={manifest.name} docs={manifest.docs} />
                 <HostLamp live={live} />
+                {chrome}
               </span>
             </div>
             {head ?? <ShellVerbs handle={handle} />}
