@@ -236,6 +236,10 @@ Legacy nouns under review: band, readout, read status, rules.
    need the proposal colouring ("all gray is too hard to see") and one row per parameter,
    aggregated across families; accordion folds go: "too many options, too much to click, no
    at-a-glance understanding". B is retired.
+60. Round 2 (E address rows, F column groups, G strip map): "F for sure. promote it." The Work
+   slot is one line per column or parameter: `REFRIGERANT → R-454B · IU-1 IU-2 IU-4 IU-5 · pea ·
+   4 cells ✓ ✕`, row chips that locate their cell, group verdicts, a pea / yours / all switch,
+   no folds. Per-cell verdicts stay on the grid cell. /families lines aggregate across families.
 
 ## Entity route shape (ruled 2026-09-24, rulings 34-45; the baton is deleted)
 
