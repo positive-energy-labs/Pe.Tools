@@ -10,7 +10,7 @@ type R = FamilyReadingKey | EntityReading;
 type A = FamilyAction | EntityAction;
 type Pane = "family" | "spec";
 
-// The family's read writes the draft's reading into Work, so it is the `read` verb.
+// The family's read writes the draft's reading into Work, so it is the hidden `read` verb.
 const family: PaneDecl<R, A> = {
   draws: ["family", "profile", "receipts"],
   verbs: ["stage", "unstage", "accept", "deny"],
@@ -18,16 +18,9 @@ const family: PaneDecl<R, A> = {
 };
 const spec: PaneDecl<R, A> = { draws: ["pods"], verbs: ["save"] };
 
-// Apply is the plan sheet's one button, never the row's.
-const across: readonly A[] = ["capture", "plan"];
-const keys = { read: "R" } as const;
-
+// No chords: the read has no button (ruling 37), and build and apply are two presses each.
 export const FAMILY_STAGES: Readonly<Record<EntityStage, StageDecl<R, A, Pane>>> = {
-  audit: {
-    verbs: ["read", "prepare-build", "cancel-build", "build", ...across],
-    keys,
-    panes: { family },
-  },
-  capture: { verbs: across, keys, panes: { family, spec } },
-  apply: { verbs: across, keys, panes: { family, spec } },
+  audit: { verbs: ["capture"], keys: {}, panes: { family } },
+  apply: { verbs: ["apply", "build"], keys: {}, panes: { family, spec } },
+  archived: { verbs: [], keys: {}, meter: false, panes: { family } },
 };

@@ -38,7 +38,7 @@ export interface HeadWork {
   /** A foreign write refused this Work's last bound write. */
   conflict?: boolean;
   reload?: () => void;
-  /** The route's commit word ("plan"); pressing it opens the pane unscoped and runs it there. */
+  /** The route's commit word ("apply"); pressing it opens the pane unscoped and runs it there. */
   commit: { word: string; run: () => void };
   /** Open the route in the plugin pane, scoped to a group path or unscoped. */
   open: (focus?: readonly string[]) => void;

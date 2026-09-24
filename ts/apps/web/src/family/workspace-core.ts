@@ -325,12 +325,6 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   // writes use the header's reviewed familyfoundry plan/apply, not a direct family editor write.
 
   const capturing = busy?.key === "capture";
-  /** null → unarmed. Carries the token the plan was armed against — the plan hash a drift cites. */
-  const armedBuild = store.armedBuild;
-  const building = busy?.key === "build";
-  /** A latched unknown outcome. Host failures stay on the core's failure channel. */
-  const buildFacts = store.buildFacts;
-  const buildOutcome = store.buildOutcome;
 
   // ── the geometry verbs ────────────────────────────────────────────────────────────────────────
 
@@ -521,10 +515,6 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
     validation,
     validationSays,
     capturing,
-    armedBuild,
-    building,
-    buildFacts,
-    buildOutcome,
     editLiteral,
     editMeta,
     bindTo,

@@ -17,15 +17,11 @@ const matrix: PaneDecl<R, A> = {
 };
 const spec: PaneDecl<R, A> = { draws: ["pods"], verbs: ["save"] };
 
-// Apply is the plan sheet's one button, never the row's.
-const across: readonly A[] = ["plan"];
 const keys = { read: "R" } as const;
 
-export const FAMILIES_STAGES: Readonly<
-  Partial<Record<EntityPage["stage"], StageDecl<R, A, Pane>>>
-> = {
-  audit: { verbs: ["read", ...across], keys, panes: { matrix } },
-  apply: { verbs: ["save-draft", ...across], keys, panes: { matrix, spec } },
+export const FAMILIES_STAGES: Readonly<Record<EntityPage["stage"], StageDecl<R, A, Pane>>> = {
+  audit: { verbs: ["read", "capture"], keys, panes: { matrix } },
+  apply: { verbs: ["apply", "save-draft"], keys, panes: { matrix, spec } },
   archived: {
     verbs: [],
     keys,

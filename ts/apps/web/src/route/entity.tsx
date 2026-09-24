@@ -13,7 +13,14 @@ import { KeysNode, stageChords } from "#/route/keys";
 import { Surface } from "#/components/lang/surface";
 import { previousOf } from "#/readings";
 
-import { isSpecOf, sheetOf, type EntityPage, type EntityRouteDef, type PodRow } from "./manifest";
+import {
+  STALE_PLAN,
+  isSpecOf,
+  sheetOf,
+  type EntityPage,
+  type EntityRouteDef,
+  type PodRow,
+} from "./manifest";
 import { Ladder, type Rung } from "./ladder";
 import { PlanSheetView } from "./plan-sheet";
 import { SpecEditor, type DemoSpec } from "./spec-editor";
@@ -63,8 +70,8 @@ export function EntityRouteView({
   pick,
   stages,
   targetRungs,
-  auditPlan,
   output,
+  review,
   onPalette,
   children,
 }: {
@@ -99,13 +106,13 @@ export function EntityRouteView({
   stages: Readonly<Partial<Record<EntityPage["stage"], StageDecl<string, string>>>>;
   /** Route-owned refinements of the one session/document target picker. */
   targetRungs?: (ladder: ReturnType<typeof useDocumentLadder>) => readonly Rung[];
-  /** The audit shows Plan only once route-owned edits exist. */
-  auditPlan?: boolean;
   /**
    * What the last run put out (ruling 16), in the right pane beside spec and plan. The pane turns
    * to it when it appears; null = no output yet.
    */
   output?: ReactNode;
+  /** A route verb's own sheet (`/family`'s build review), drawn where the plan sheet draws. */
+  review?: { title: string; body: ReactNode } | null;
   /** The sentence's ladder opened (Ctrl K or its trigger): a rung whose list is marked stale re-lists. */
   onPalette?: () => void;
   /** The audit. */
@@ -130,6 +137,13 @@ export function EntityRouteView({
     ? sheetOf(def, { work: handle.work, readings: handle.readings, page } as never)
     : null;
   const closed = { confirming: false, sheet: null };
+  // Re-plan closes the sheet, then presses apply once more: with no sheet open, that press plans.
+  const [replanning, setReplanning] = useState(false);
+  useEffect(() => {
+    if (!replanning || page.confirming) return;
+    setReplanning(false);
+    void handle.actions.apply.run();
+  }, [replanning, page.confirming]); // eslint-disable-line react-hooks/exhaustive-deps
   // A sheet over no spec (the staged cells') draws no spec absence lines (F-B-6).
   const specless = confirming && !page.path;
   // TODO: hide this pane (Pane `hidden`) instead of unmounting it, so it keeps what was typed —
@@ -138,8 +152,10 @@ export function EntityRouteView({
   const [pane, setPane] = useState<"spec" | "output">("spec");
   const hasOutput = output != null;
   useEffect(() => setPane(hasOutput ? "output" : "spec"), [hasOutput]);
-  const showOutput = !confirming && hasOutput && pane === "output";
-  const specHidden = !stage.panes.spec && !confirming && !hasOutput;
+  // A route verb's sheet is the plan sheet's sibling: the plan outranks it, and it outranks output.
+  const sheet = confirming ? null : (review ?? null);
+  const showOutput = !confirming && !sheet && hasOutput && pane === "output";
+  const specHidden = !stage.panes.spec && !confirming && !sheet && !hasOutput;
   const podRelevant = Boolean(def.capture) || page.stage === "apply";
   // Field options come from the document this route acts on, read-only (user verdict, grill 2).
   const optionsFrom =
@@ -198,14 +214,9 @@ export function EntityRouteView({
           handle={handle}
           target={{ session: ladder.sessionWord, document: ladder.docWord }}
           health={health}
-          // With a plan lane the sheet's apply is the one apply button (w8-revit trip 5); the row
-          // commits by planning.
-          commit={def.commit ?? (def.plan || def.staged ? "plan" : "apply")}
-          verbs={
-            page.stage === "audit" && auditPlan === false
-              ? stage.verbs.filter((verb) => verb !== "plan")
-              : stage.verbs
-          }
+          // Apply is the one commit: press 1 plans and opens the sheet, press 2 (row or sheet) sends it.
+          commit="apply"
+          verbs={stage.verbs}
           chords={stage.keys}
           meter={stage.meter}
           work={work}
@@ -279,11 +290,11 @@ export function EntityRouteView({
           specHidden ? null : (
             <Pane
               kind="inspector"
-              title={confirming ? "plan" : showOutput ? "output" : "spec"}
+              title={confirming ? "plan" : sheet ? sheet.title : showOutput ? "output" : "spec"}
               meta={def.entity}
               side="right"
               actions={
-                !confirming && hasOutput ? (
+                !confirming && !sheet && hasOutput ? (
                   <Switcher
                     ariaLabel="right pane"
                     value={pane}
@@ -297,6 +308,7 @@ export function EntityRouteView({
               }
             >
               {showOutput ? output : null}
+              {sheet?.body}
               {confirming ? (
                 <PlanSheetView
                   sheet={view?.sheet ?? null}
@@ -311,10 +323,20 @@ export function EntityRouteView({
                     run: handle.stop,
                   }}
                   replan={{
-                    says: handle.actions.plan.says,
-                    run: () => void handle.actions.plan.run(),
+                    says: "closes this sheet and plans again",
+                    run: () => {
+                      setPage(closed);
+                      setReplanning(true);
+                    },
                   }}
-                  refusal={handle.actions.apply.refusal}
+                  // The sheet's button only sends: a stale or missing plan is re-planned, never sent.
+                  refusal={
+                    !view
+                      ? "the plan no longer describes this spec; re-plan"
+                      : view.stale
+                        ? STALE_PLAN
+                        : handle.actions.apply.refusal
+                  }
                   stale={view?.stale}
                   busy={handle.busy !== null}
                 />

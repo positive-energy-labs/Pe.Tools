@@ -36,12 +36,12 @@ export interface ScheduleGridState {
   apply: (patches: RouteStatePatch[], expectedRevision?: number) => Promise<Refusal | null>;
   /** The running verb; capture and apply run from the Situation and lock the grid too. */
   busy: string | null;
-  /** Why push is unavailable; retained for route seams that inspect readiness. */
+  /** Why apply is unavailable; retained for route seams that inspect readiness. */
   blockedBecause?: string | null;
   snapshot: ScheduleGridSnapshot | null;
   catalog: ScheduleCatalog | null;
-  /** The verbs the panes reach the world through: the grid's read, and the stage's push. */
-  execute: (kind: "refresh" | "push", input?: Record<string, unknown>) => Promise<Refusal | null>;
+  /** The verbs the panes reach the world through: the grid's hidden read, and apply. */
+  execute: (kind: "read" | "apply", input?: Record<string, unknown>) => Promise<Refusal | null>;
   /** The last push's refused cells, by key; each draws on its own cell. */
   refused: Readonly<Record<string, string>>;
   /** Each pane's focus edge, as the stage declares it (`stage.ts`). */

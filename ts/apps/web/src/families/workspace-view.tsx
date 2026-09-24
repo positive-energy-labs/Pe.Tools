@@ -169,6 +169,7 @@ function FamiliesActiveView({ url }: { url?: boolean }) {
     wire,
     overlay,
   } = useFamiliesWorkspace();
+  const subOf = new Map(familyFeed.options?.map((option) => [option.id, option.sub]));
   const categoryCheck = (id: string): boolean | "mixed" => {
     if (!id) {
       if (!draftCategories.length) return false;
@@ -258,7 +259,8 @@ function FamiliesActiveView({ url }: { url?: boolean }) {
           ? null
           : [
               { id: "", label: "all families" },
-              ...draftFamilyNames.map((id) => ({ id, label: id })),
+              // The feed's order: placed first, unplaced sunk; the sub says how many are placed.
+              ...draftFamilyNames.map((id) => ({ id, label: id, sub: subOf.get(id) })),
             ],
       note: familyFeed.state === "loading" ? "resolving families…" : "no families",
       multi: true,
@@ -301,10 +303,6 @@ function FamiliesActiveView({ url }: { url?: boolean }) {
       url={url}
       stages={FAMILIES_STAGES}
       targetRungs={store.page.stage === "audit" ? targetRungs : undefined}
-      auditPlan={
-        store.handle.work.doc?.patch.staged != null ||
-        Object.values(store.cells).some((cell) => cell.staged != null)
-      }
       subject={<>loaded families</>}
       health={matrixIssue?.title ?? null}
       wire={wire}

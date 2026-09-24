@@ -3,6 +3,7 @@ import { useEffect, useMemo } from "react";
 import { frozenDemo } from "#/host/demo-client";
 import type { EntityPage } from "#/route";
 import { EntityRouteView } from "#/route/entity";
+import { BuildStrip } from "#/family/build";
 import { usePodList } from "#/route/pods";
 import { familyFixtures, type AuthoredFamilyName } from "#/family/authored-families";
 import { useFamilyStore } from "#/family/store";
@@ -34,11 +35,30 @@ export function FamilyRouteView({
   const store = useFamilyStore({ target, thread, pods, initial });
   const captureReady = store.handle.actions.capture.refusal === null;
   const readReady = store.handle.actions.read.refusal === null;
-  const unread = store.snapshot === null;
+  // Unread once the Work reading is current: a reload must not read over a draft still loading.
+  const unread = store.snapshot === null && store.handle.work.current;
   useEffect(() => {
-    // The audit is the live family: an empty draft reads it on arrival, no pod needed.
+    // The audit is the live family: an empty draft reads it on arrival, no pod needed. The
+    // `family` Reading stream only observes captures, so this hidden read is its acquisition
+    // until the stream acquires on subscribe (owed: host contract).
     if (unread && readReady) void store.actions.read().catch(() => undefined);
   }, [unread, readReady]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The build review is build's sheet (ruling 45), in the right pane as the plan is apply's.
+  const review = store.armedBuild ? (
+    <BuildStrip
+      armed={store.armedBuild}
+      building={store.handle.busy?.key === "build"}
+      said={store.buildOutcome}
+      refusal={store.handle.actions.build.refusal}
+      facts={store.buildFacts}
+      familyName={store.lane.world.familyName}
+      count={store.lane.world.paramRows.length}
+      onReasonChange={store.actions.setBuildReason}
+      onCommit={() => void store.actions.build().catch(() => undefined)}
+      onCancel={store.actions.cancelBuild}
+      onReplan={store.actions.armBuild}
+    />
+  ) : null;
   useEffect(() => {
     if (capture && captureReady) void store.actions.capture().catch(() => undefined);
     // Once per arrival: the flag names an intent, not a standing order.
@@ -65,6 +85,7 @@ export function FamilyRouteView({
       url={url}
       stages={FAMILY_STAGES}
       pick={(member) => void store.actions.open(member).catch(() => undefined)}
+      review={review ? { title: "build", body: review } : null}
     >
       <FamilyWorkspace store={store} />
     </EntityRouteView>

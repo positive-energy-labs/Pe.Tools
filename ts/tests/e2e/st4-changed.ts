@@ -10,7 +10,7 @@ const CHIP = "changed in Revit";
 
 await journey("ST4", async (page, step) => {
   step("open /schedules in the live demo lane and open the DX Fan Coil schedule");
-  await page.open(`${WEB}/schedules?demo=push&live=1`);
+  await page.open(`${WEB}/schedules?demo=capture&live=1`);
   await page.click(/^DX Fan Coil Unit Schedule/);
   await page.until(() => page.readCell(["2"], "REFRIGERANT"), "the grid");
 

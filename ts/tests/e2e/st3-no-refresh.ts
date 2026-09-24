@@ -4,7 +4,7 @@ import { journey, SITUATION, WEB } from "./cdp.ts";
 
 await journey("ST3", async (page, step) => {
   step("open /schedules in the live demo lane and open the DX Fan Coil schedule");
-  await page.open(`${WEB}/schedules?demo=push&live=1`);
+  await page.open(`${WEB}/schedules?demo=capture&live=1`);
   await page.click(/^DX Fan Coil Unit Schedule/);
   await page.until(() => page.readCell(["2"], "REFRIGERANT"), "the grid");
   for (const name of ["re-list", "list schedules", "re-read"])

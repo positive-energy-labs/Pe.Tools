@@ -454,7 +454,7 @@ export function useRoute<W, R extends string, P, A extends string>(
         const facts = actionFacts(action, ctx as never);
         const handle: ActionHandle = {
           ...facts,
-          label: action.label,
+          label: action.labelNow?.(ctx as never) ?? action.label,
           says: action.saysNow?.(ctx as never) ?? facts.says,
           ...(typeof action.chord === "string" ? { chord: action.chord } : {}),
           ...(action.stage ? { stage: action.stage } : {}),
@@ -486,8 +486,8 @@ export function useRoute<W, R extends string, P, A extends string>(
                 const reason = action.ready(ctx as never, parsed.data as never);
                 if (reason) return refuse("not-ready", reason);
                 const refusal = (await action.run(ctx as never, parsed.data as never)) ?? null;
-                // A partial outcome landed something: what it dirties is stale either way.
-                if (!refusal || refusal.code === "partial")
+                // A partial outcome landed something: stale either way; a planning press, nothing.
+                if (!action.plans?.(ctx as never) && (!refusal || refusal.code === "partial"))
                   for (const reading of action.dirties) {
                     const request = readingAtoms.find(([name]) => name === reading)?.[2];
                     if (request) owner.write(name, `dirty/${reading}`, () => dirty(request));

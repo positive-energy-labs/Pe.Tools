@@ -92,7 +92,7 @@ const familyPageSchema = z.object({
 });
 
 export type FamilyReadingKey = "family" | "profile" | "receipts" | "inventory";
-export type FamilyAction = "read" | "prepare-build" | "cancel-build" | "build";
+export type FamilyAction = "read" | "build";
 
 type Ctx = RouteCtx<FamilyRouteDocument, FamilyReadingKey, FamilyPage>;
 
@@ -109,6 +109,8 @@ export const familySpec: EntityRouteDef<FamilyRouteDocument, FamilyReadingKey, F
   needs: "document",
   // The audit is the live draft; a saved member is opened into it, never required to look.
   specPicker: "apply",
+  // Opening a member puts its bytes in the draft, so staged cells are edits over it.
+  specIsDraft: true,
   // Capture saves the draft as a new member when one was read; with none, it reads Revit and files that.
   captureInput: (ctx) => {
     const spec = ctx.work.doc ? draftSpec(ctx.work.doc) : null;
@@ -318,7 +320,7 @@ export const FAMILY_DEMO_PODS: readonly PodRow[] = [
 const familySeed = (
   name: AuthoredFamilyName,
   view: FamilyPage["view"],
-  stage: "audit" | "capture" | "apply",
+  stage: EntityPage["stage"],
   /** False: the live family with no saved member and no pod bound. */
   saved = true,
 ): Seed<FamilyRouteDocument, FamilyReadingKey | "pods", FamilyPage & EntityPage> => ({
@@ -388,7 +390,23 @@ const absentAuthoringFacts: FamilyAuthoringFacts = {
   current: false,
 };
 
-const buildInput = z.object({ reason: z.string() }).default({ reason: "" });
+const buildInput = z
+  .object({ reason: z.string().default(""), arm: z.boolean().optional() })
+  .default({ reason: "" });
+
+/** The build review, while it still names this document and the current saved profile. */
+const reviewed = (ctx: Ctx) => {
+  const review = ctx.page.buildReview;
+  const profile = profileInputOf(ctx);
+  return review &&
+    profile &&
+    ctx.target.kind === "document" &&
+    ctx.target.ref.session === review.target.session &&
+    ctx.target.ref.openId === review.target.openId &&
+    sameSource(review.source, profile.source)
+    ? review
+    : null;
+};
 
 export const familyManifest = (authoring = absentAuthoringFacts) =>
   entityRoute<FamilyRouteDocument, FamilyReadingKey, FamilyPage, FamilyAction>(familySpec, {
@@ -425,85 +443,40 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
           ]);
         },
       },
-      "prepare-build": {
-        label: "review build",
-        says: "Review the exact saved family profile before building its .rfa.",
-        needs: "document",
-        actor: "human",
-        input: buildInput,
-        dirties: [],
-        requires: { readings: ["profile"] },
-        stage: "audit",
-        ready: (ctx: Ctx) => {
-          if (!profileInputOf(ctx)) return "Wait for the current saved family profile";
-          if (!authoring.current) return "Wait for current authored edits";
-          const refusals = buildRefusals({
-            ...authoring,
-            boundTarget: ctx.target.kind === "document" ? ctx.target.ref.session : "",
-            armedToken: null,
-          });
-          return refusals.map((refusal) => refusal.says).join(" · ") || null;
-        },
-        run: async (ctx: Ctx, input: z.infer<typeof buildInput>) => {
-          const profile = profileInputOf(ctx);
-          if (!profile || ctx.target.kind !== "document")
-            throw Error("The current saved family profile and execution document are required");
-          ctx.setPage({ buildReview: { target: ctx.target.ref, ...profile, ...input } });
-        },
-      },
-      "cancel-build": {
-        label: "cancel build",
-        says: "Dismiss the current reviewed build without changing the family profile.",
-        needs: "host",
-        actor: "human",
-        input: z.void(),
-        dirties: [],
-        stage: "audit",
-        ready: (ctx: Ctx) => (ctx.page.buildReview ? null : "No build is under review"),
-        run: async (ctx: Ctx) => ctx.setPage({ buildReview: null }),
-      },
+      // Ruling 45: press 1 reviews the exact saved profile (build's flag draws it), press 2 builds.
+      // `arm` re-reviews without building (the review's re-plan).
       build: {
         label: "build .rfa",
         does: "family.build",
-        input: z.void(),
+        input: buildInput,
         dirties: ["receipts"],
         requires: { readings: ["profile"] },
-        stage: "audit",
-        ready: (ctx: Ctx) => {
-          const review = ctx.page.buildReview;
-          if (!review) return "Review build first";
+        stage: "apply",
+        plans: (ctx: Ctx) => !reviewed(ctx),
+        ready: (ctx: Ctx, input?: z.infer<typeof buildInput>) => {
           if (!authoring.current) return "Wait for current authored edits";
-          const profile = profileInputOf(ctx);
-          if (
-            ctx.target.kind !== "document" ||
-            ctx.target.ref.session !== review.target.session ||
-            ctx.target.ref.openId !== review.target.openId ||
-            !profile ||
-            !sameSource(review.source, profile.source)
-          )
-            return "Review the current saved family profile";
+          const review = input?.arm ? null : reviewed(ctx);
+          if (!review && !profileInputOf(ctx)) return "Wait for the current saved family profile";
           return (
             buildRefusals({
               ...authoring,
-              boundTarget: ctx.target.ref.session,
-              armedToken: review.source.sha256,
+              boundTarget: ctx.target.kind === "document" ? ctx.target.ref.session : "",
+              armedToken: review?.source.sha256 ?? null,
             })
               .map((refusal) => refusal.says)
               .join(" · ") || null
           );
         },
-        run: async (ctx: Ctx) => {
+        run: async (ctx: Ctx, input: z.infer<typeof buildInput>) => {
           const profile = profileInputOf(ctx);
-          const review = ctx.page.buildReview;
-          if (
-            !profile ||
-            !review ||
-            ctx.target.kind !== "document" ||
-            ctx.target.ref.session !== review.target.session ||
-            ctx.target.ref.openId !== review.target.openId ||
-            !sameSource(review.source, profile.source)
-          )
-            throw Error("The current reviewed family profile is required");
+          if (!profile || ctx.target.kind !== "document")
+            throw Error("The current saved family profile and execution document are required");
+          if (input.arm || !reviewed(ctx)) {
+            ctx.setPage({
+              buildReview: { target: ctx.target.ref, ...profile, reason: input.reason },
+            });
+            return;
+          }
           actionResult(
             await runSemanticAction(
               "family.build",
@@ -517,8 +490,8 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
     } as never,
     seeds: {
       read: familySeed("box", "sheet", "audit", false),
-      build: familySeed("refline", "drill", "audit"),
-      capture: familySeed("bath", "anatomy", "capture"),
+      build: familySeed("refline", "drill", "apply"),
+      capture: familySeed("bath", "anatomy", "audit"),
       apply: familySeed("grd", "sheet", "apply"),
     } as never,
   });

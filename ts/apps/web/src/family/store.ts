@@ -465,8 +465,9 @@ export function useFamilyStore(options: {
         setMemory((c) => ({ ...c, binding: next(value, c.binding) })),
       setPicker: (value: Setter<PickerState>) =>
         setMemory((c) => ({ ...c, picker: next(value, c.picker) })),
-      armBuild: () => handle.actions["prepare-build"].run({ reason: "" }),
-      cancelBuild: () => handle.actions["cancel-build"].run(),
+      armBuild: () =>
+        handle.actions.build.run({ reason: page.buildReview?.reason ?? "", arm: true }),
+      cancelBuild: () => setPage({ buildReview: null }),
       setBuildReason: (reason: string) =>
         setPage({
           buildReview: page.buildReview ? { ...page.buildReview, reason } : null,
