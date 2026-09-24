@@ -280,7 +280,7 @@ hover, no band repeats the Work sentence. N7 dead primitives go; knip gets produ
 - Ruling 21 landed as the folded log; ruling 22 as `QueryBox` with fields, operators, sorts and
   `!`; rulings 24 to 27 in the same commits. Ruling 29 is still owed to the purge pass.
 
-## Pea control shape (frontier, opened 2026-09-23)
+## Pea control shape (opened 2026-09-23, settled by rulings 48-51 on 2026-09-24)
 
 User intent: "pea should be able to no-ask make filters for tables and stuff. and query the page
 state like you can with families. and the proposal lives as route state, so they propose and query
