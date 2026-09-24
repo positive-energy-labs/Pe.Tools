@@ -15,7 +15,6 @@ import {
   type StagedRoomEdit,
   type ModelRoom,
   type ModelZone,
-  type Phase,
   type Reading,
   type TakeoffObservation,
   type TakeoffsRouteDocument,
@@ -51,7 +50,7 @@ const syncReviewSchema = z.object({
 
 /**
  * Route-lifetime action scope. `views`/`zones`/`r10`/`stage` select what route actions mean;
- * `stageFilter` filters the current view. Target changes reset them. `panel` and `syncReview` are
+ * target changes reset them. `panel` and `syncReview` are
  * short-lived review state and every scope transition invalidates them. Standalone room navigation
  * lives in its URL, embedded navigation in its controller, and authored decisions in Work.
  */
@@ -60,7 +59,6 @@ export interface TakeoffPage {
   zones: readonly string[];
   r10: string;
   stage: "adopt" | "audit" | "sync";
-  stageFilter: Phase | null;
   panel: "sync" | null;
   syncReview: z.infer<typeof syncReviewSchema> | null;
 }
@@ -70,10 +68,6 @@ export const takeoffPageSchema = z.object({
   zones: z.array(z.string()).readonly().default([]),
   r10: z.string().default(""),
   stage: z.enum(["adopt", "audit", "sync"]).default("adopt"),
-  stageFilter: z
-    .enum(["declared", "registered", "partitioned", "reviewed", "data", "synced", "drifted"])
-    .nullable()
-    .default(null),
   panel: z.enum(["sync"]).nullable().default(null),
   syncReview: syncReviewSchema.nullable().default(null),
 }) satisfies z.ZodType<TakeoffPage, any, any>;

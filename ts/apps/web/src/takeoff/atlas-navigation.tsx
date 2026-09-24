@@ -1,11 +1,10 @@
 import { Suspense } from "react";
 import { FactChip } from "#/components/lang/chip";
 import { List } from "#/components/lang/list-popup";
-import { Press } from "#/components/lang/press";
 import { StateDot } from "#/components/master-table/cells";
 import { Pane } from "#/components/lang/pane";
 import { fmtNum } from "#/components/master-table/model";
-import { ROOM_STATES, STATE_META, STAGE_BLURB } from "#/takeoff/room-state";
+import { ROOM_STATES, STATE_META } from "#/takeoff/room-state";
 import { onPlan } from "#/takeoff/room-actions";
 import { ZoneStateBar } from "#/takeoff/zone-state-bar";
 import { ZoneThumb } from "#/takeoff/zone-plan";
@@ -13,17 +12,8 @@ import { useAtlasWorkspace } from "#/takeoff/atlas-context";
 import { levelsOf } from "#/takeoff/plan-image";
 
 export function AtlasNavigation() {
-  const {
-    world,
-    stageFilter,
-    zoneKey,
-    setStageFilter,
-    zoneStates,
-    filteredZones,
-    selectZone,
-    stageCounts,
-    scopeShortcuts,
-  } = useAtlasWorkspace();
+  const { world, zoneKey, zoneStates, filteredZones, selectZone, scopeShortcuts } =
+    useAtlasWorkspace();
   return (
     <Suspense fallback={<div className="t-small t-upper p-2 text-ink-2">reading zones…</div>}>
       <Pane
@@ -50,35 +40,6 @@ export function AtlasNavigation() {
           </div>
         </div>
 
-        <div className="hairline-b px-2 py-1.5">
-          <div className="t-small t-upper mb-1">zone pipeline — global filter</div>
-          <List
-            aria-label="zone pipeline"
-            items={stageCounts}
-            keyOf={({ stage }) => stage}
-            labelOf={({ stage }) => stage}
-            empty="no stages"
-            // One stage filters the plan; picking it again shows all.
-            onPick={({ stage }) => setStageFilter(stageFilter === stage ? null : stage)}
-            row={({ stage, n }) => ({
-              lead: (
-                <span className="face-mono w-3">
-                  {stageCounts.findIndex((c) => c.stage === stage) + 1}
-                </span>
-              ),
-              label: <span className="face-mono">{stage}</span>,
-              meta: n,
-              active: stageFilter === stage,
-              title: STAGE_BLURB[stage],
-            })}
-          />
-          {stageFilter && (
-            <Press type="button" tone="quiet" size="caption" onClick={() => setStageFilter(null)}>
-              clear filter — show all {world.zones.length}
-            </Press>
-          )}
-        </div>
-
         <List
           aria-label="zones"
           // Levels in the world's order, each once: many view lanes share a level (29). Each level
@@ -89,7 +50,7 @@ export function AtlasNavigation() {
           keyOf={(z) => z.zone.guid}
           labelOf={(z) => `${z.zone.key} ${z.name}`}
           groupOf={(z) => z.zone.lane.label}
-          empty="no zones match the stage filter"
+          empty="no zones match the query"
           onPick={(z) => selectZone(z.zone.guid === zoneKey ? null : z)}
           row={(z) => {
             const states = zoneStates(z);

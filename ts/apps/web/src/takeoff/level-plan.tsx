@@ -22,7 +22,7 @@ import {
   stateInk,
   type RoomState,
 } from "#/takeoff/room-state";
-import type { Phase, ModelRoom, ModelZone } from "#/takeoff/world";
+import type { ModelRoom, ModelZone } from "#/takeoff/world";
 
 /** A level's plan image and where Revit says its pixels sit in the model. */
 export interface TakeoffPlanImage {
@@ -62,7 +62,7 @@ export function LevelPlan({
   planError,
   planNote,
   zones,
-  stageFilter,
+  shown,
   selectedKey,
   cursor,
   stateOf,
@@ -80,7 +80,8 @@ export function LevelPlan({
   /** Why the plan draws no image though zones are drawn (`planView`): said in the same slot. */
   planNote?: string | null;
   zones: ModelZone[];
-  stageFilter: Phase | null;
+  /** Zones the table's query keeps; the rest dim. null = no query. */
+  shown: ReadonlySet<string> | null;
   selectedKey: string | null;
   cursor: string | null;
   stateOf: (room: ModelRoom) => RoomState;
@@ -158,7 +159,7 @@ export function LevelPlan({
         {plan ? <PlanImageLayer plan={plan} frame={frame} /> : null}
 
         {drawn.map((z) => {
-          const dimmed = stageFilter !== null && z.stage !== stageFilter;
+          const dimmed = shown !== null && !shown.has(z.zone.guid);
           const on = z.zone.key === selectedKey;
           const rgb = `rgb(${z.zone.color})`;
           const [zoneLabelX, zoneLabelY] = frame.toViewport([

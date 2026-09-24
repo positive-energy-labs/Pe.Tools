@@ -70,11 +70,15 @@ export function SavedTakeoffsView({
   );
   return (
     <main className="min-h-screen px-6 py-4">
-      <RouteShell manifest={savedManifest} />
-      <ActionButton
-        label="live"
-        reason="Explicitly return to document selection in Revit"
-        onClick={() => select({ work: undefined })}
+      <RouteShell
+        manifest={savedManifest}
+        head={
+          <ActionButton
+            label="live"
+            reason="Explicitly return to document selection in Revit"
+            onClick={() => select({ work: undefined })}
+          />
+        }
       />
       {capture && reading.state !== "failed" ? (
         <p>Reading saved capture…</p>
@@ -96,13 +100,6 @@ export function SavedTakeoffsView({
             meta: row.capturedAt,
             title: `Review ${row.document}; captured from ${row.provenance.target.session} / ${row.provenance.target.openId}`,
           })}
-        />
-      )}
-      {capture && (
-        <ActionButton
-          label="choose capture"
-          reason="Return to saved captures"
-          onClick={() => select({ work: undefined })}
         />
       )}
     </main>
