@@ -12,7 +12,7 @@ import { buildTraceCells, ToolCellBody, TraceCellView } from "#/workbench/lens/c
 import { Press } from "#/components/lang/press";
 import { X } from "lucide-react";
 import { chatPluginTitle, type ChatPluginRoute } from "#/workbench/chat-plugins";
-import { headless, useChatPluginHost } from "#/workbench/route-panes";
+import { useChatPluginHost } from "#/workbench/route-panes";
 import { ChatCluster, ComposerHead, useChatSituation } from "#/chat/composer-head";
 import { RouteShell, useRoute } from "#/route";
 import { appAtomRegistry } from "#/route/route-owner";
@@ -328,7 +328,7 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
                       collapsed={!pluginOpen}
                       onCollapsedChange={(collapsed) => store.actions.setPluginOpen(!collapsed)}
                       actions={chrome}
-                      headerless={!headless(plugin)}
+                      headerless
                     >
                       <div ref={host.slot} className="contents" />
                     </Pane>

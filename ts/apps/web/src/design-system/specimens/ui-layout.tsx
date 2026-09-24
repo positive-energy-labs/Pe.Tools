@@ -2,7 +2,6 @@ import { Pane, PaneSplit, paneRecipe } from "#/components/lang/pane";
 import { PaneResizeHandle, paneSplitRecipe } from "#/components/lang/pane-resize";
 import { Switch, switchRecipe } from "#/components/lang/switch";
 import { Tooltip, UiTooltipProvider, tooltipRecipe } from "#/components/lang/tooltip";
-import { OutcomeStrip } from "#/components/lang/outcome-strip";
 import { Surface } from "#/components/lang/surface";
 import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
 
@@ -86,9 +85,6 @@ export function UiLayoutSpecimens() {
           </UiTooltipProvider>
         )}
       />
-      <SpecimenFrame name="OutcomeStrip" importPath="#/components/lang/outcome-strip">
-        <OutcomeStrip standing={<span>standing</span>} />
-      </SpecimenFrame>
     </>
   );
 }
