@@ -33,7 +33,7 @@ export function FamiliesMatrix() {
         this archived read contains no families
       </EmptyState>
     ) : (
-      <EmptyState story="filter" exit="clear a rule or column filter">
+      <EmptyState story="filter" exit="clear a query chip">
         the narrowing hid all {totalTypes} types in this read
       </EmptyState>
     )
@@ -75,7 +75,7 @@ export function FamiliesMatrix() {
       the applied scope resolved to no families
     </EmptyState>
   ) : (
-    <EmptyState story="filter" exit="clear a rule or column filter">
+    <EmptyState story="filter" exit="clear a query chip">
       the narrowing hid all {totalTypes} types in scope
     </EmptyState>
   );

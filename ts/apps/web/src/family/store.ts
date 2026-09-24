@@ -56,7 +56,7 @@ export type Binding = { slug: string; property: string } | null;
 type ArmedBuild = { token: string | null; reason: string } | null;
 export type PickerState = { open: string | null; level: string | null; query: string };
 
-const emptyTable = (): TableState => ({ filters: {}, sorts: [], query: "" });
+const emptyTable = (): TableState => ({ sorts: [], query: "" });
 
 /* ── Page memory ───────────────────────────────────────────────────────────── */
 

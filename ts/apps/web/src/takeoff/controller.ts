@@ -188,36 +188,6 @@ export const ATLAS_COLUMN_SEMANTICS = {
   },
 } as const satisfies Readonly<Record<string, AtlasColumnSemantics>>;
 
-type AtlasColumnKey = keyof typeof ATLAS_COLUMN_SEMANTICS;
-const atlasColumnSemantics = (key: string): AtlasColumnSemantics | undefined =>
-  ATLAS_COLUMN_SEMANTICS[key as AtlasColumnKey];
-
-const atlasFacet = (row: AtlasRow, key: string): string | undefined =>
-  atlasColumnSemantics(key)?.facet?.(row);
-
-const atlasSortValue = (
-  row: AtlasRow,
-  key: string,
-  fieldsMode: "columns" | "panel",
-): string | number | undefined => {
-  const semantics = atlasColumnSemantics(key);
-  if (!semantics) return undefined;
-  if (
-    fieldsMode === "panel" &&
-    ["ceil", "people", "lightingW", "equipSensible", "equipLatent", "ventilationCfm"].includes(key)
-  )
-    return undefined;
-  return semantics.sort(row);
-};
-
-const compare = (a: string | number | undefined, b: string | number | undefined): number => {
-  if (a === b) return 0;
-  if (a === undefined) return -1;
-  if (b === undefined) return 1;
-  if (typeof a === "number" && typeof b === "number") return a - b;
-  return String(a) < String(b) ? -1 : 1;
-};
-
 /** Authority geometry plus the staged room edits the Work doc carries. */
 function stagedModel(
   authority: TakeoffModel,
@@ -251,37 +221,6 @@ function atlasRows(
       return { zone, room, open, state: atlasRoomState(room, open.length) };
     }),
   );
-}
-
-export function visibleRowKeys(
-  rows: readonly AtlasRow[],
-  state: import("#/components/master-table/model").TableState,
-  fieldsMode: "columns" | "panel",
-): readonly string[] {
-  const query = state.query.trim().toLowerCase();
-  return rows
-    .filter(
-      (row) =>
-        (!query ||
-          [row.zone.zone.key, row.room.name, row.room.type].some((value) =>
-            value.toLowerCase().includes(query),
-          )) &&
-        Object.entries(state.filters).every(
-          ([key, value]) =>
-            atlasColumnSemantics(key)?.match?.(row, value) ?? atlasFacet(row, key) === value,
-        ),
-    )
-    .sort((left, right) => {
-      for (const sort of state.sorts) {
-        const order = compare(
-          atlasSortValue(left, sort.key, fieldsMode),
-          atlasSortValue(right, sort.key, fieldsMode),
-        );
-        if (order !== 0) return sort.dir === "desc" ? -order : order;
-      }
-      return 0;
-    })
-    .map((row) => row.room.guid);
 }
 
 /** A stamped designer region carries provenance; an unstamped one is named from the view. */

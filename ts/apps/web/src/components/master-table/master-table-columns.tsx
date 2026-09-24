@@ -6,13 +6,31 @@ import {
 } from "#/components/lang/cell";
 import { VerdictCell } from "#/components/master-table/cells";
 import type { Column, ValueColumn } from "#/components/master-table/model";
+import type { QueryRead } from "#/components/master-table/view";
 
 export type ResolvedColumn<Row> = ValueColumn<Row> & {
+  condition?: QueryRead<Row>;
   readState?: (row: Row) => StateCellProps;
   readWord?: (row: Row) => string;
 };
 
+/** A column as the table reads it: its body drawn, and a facet column's query field (MAP N4). */
 export function resolveStateColumn<Row>(column: Column<Row>): ResolvedColumn<Row> {
+  const body = resolveBody(column);
+  if (body.condition || !(body.facet || body.options)) return body;
+  const facet = body.facet;
+  return {
+    ...body,
+    condition: {
+      kind: "text",
+      read: (row: Row) => facet?.(row) ?? null,
+      match: body.match,
+      values: body.options?.map((option) => option.value),
+    },
+  };
+}
+
+function resolveBody<Row>(column: Column<Row>): ResolvedColumn<Row> {
   if (column.verdict !== undefined) {
     const verdict = column.verdict;
     return {

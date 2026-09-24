@@ -238,7 +238,7 @@ export function FamilyWorkspaceTable() {
               no parameters in this profile — nothing to audit
             </EmptyState>
           ) : (
-            <EmptyState story="filter" exit="clear a column filter or the search">
+            <EmptyState story="filter" exit="clear a query chip">
               the narrowing hid all {rows.length} rows
             </EmptyState>
           )
@@ -284,7 +284,7 @@ export function FamilyWorkspaceTable() {
         rowClassName={rowTint}
         empty={
           rows.some((row) => row.kind === "profile") ? (
-            <EmptyState story="filter" exit="clear a column filter or the search">
+            <EmptyState story="filter" exit="clear a query chip">
               the narrowing hid every parameter at this type
             </EmptyState>
           ) : (

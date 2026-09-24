@@ -68,8 +68,9 @@ export const manifest = defineRoute<
       says: "Read the stored parameter links of the bound project without evaluating the draft.",
       needs: "project",
       actor: "any",
-      input: z.void(),
+      input: z.void() as never,
       dirties: ["links"],
+      rereads: "links",
       ready: () => null,
       run: (ctx: Ctx) => read(ctx, false),
     },
@@ -78,7 +79,7 @@ export const manifest = defineRoute<
       says: "Evaluate the shared draft and project its exact target writes.",
       needs: "project",
       actor: "any",
-      input: z.void(),
+      input: z.void() as never,
       dirties: ["links"],
       requires: { work: true },
       ready: (ctx: Ctx) =>
@@ -90,7 +91,7 @@ export const manifest = defineRoute<
       says: "Evaluate Pea's proposed profile — a labelled preview that never arms apply.",
       needs: "project",
       actor: "any",
-      input: z.void(),
+      input: z.void() as never,
       dirties: ["links"],
       requires: { work: true },
       ready: (ctx: Ctx) => (ctx.work.doc?.profile.proposal ? null : "Pea has proposed no profile"),
@@ -118,5 +119,5 @@ export const manifest = defineRoute<
         );
       },
     },
-  } as never,
+  },
 });

@@ -1,4 +1,8 @@
-import { takeoffEditAddress, takeoffsRouteState } from "@pe/agent-contracts";
+import {
+  takeoffEditAddress,
+  takeoffsRouteState,
+  type TakeoffsRouteDocument,
+} from "@pe/agent-contracts";
 
 import { defineRoute } from "#/route/manifest";
 import {
@@ -6,10 +10,16 @@ import {
   takeoffPageSchema,
   takeoffSeeds,
   type TakeoffPage,
+  type TakeoffReadingKey,
 } from "#/takeoff/actions";
 
 /** The static Takeoffs contract. Behavior lives in actions; mounted state lives in the controller. */
-export const manifest = defineRoute({
+export const manifest = defineRoute<
+  TakeoffsRouteDocument,
+  TakeoffReadingKey,
+  TakeoffPage,
+  keyof typeof takeoffActions
+>({
   key: "takeoffs",
   name: "Takeoffs",
   docs: "Choose a project input, adopt its zones, then audit and synchronize the resulting takeoff readings before using them downstream.",
@@ -33,6 +43,6 @@ export const manifest = defineRoute({
     { key: "audit", word: "Auditing rooms" },
     { key: "sync", word: "Syncing RHVAC" },
   ],
-  actions: takeoffActions as never,
+  actions: takeoffActions,
   seeds: takeoffSeeds as never,
 });

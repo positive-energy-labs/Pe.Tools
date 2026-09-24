@@ -77,7 +77,7 @@ export type RouteAction<W, R extends string, P, I = void> = ActionIdentity<W, R,
   input: z.ZodType<I>;
   /** Browser Reading keys invalidated on success; semantic actions name Host and Pea resources. */
   dirties: readonly R[];
-  /** What this verb reads again: a Reading key, or `work` for the Work's own read. Revit's change mark there makes it stale. */
+  /** What this verb reads again (a Reading key, or `work`); Revit's change mark there makes it stale. A `read`/`refresh` verb must declare it (ruling 5). */
   rereads?: R | "work";
   /**
    * How long this verb may stay in flight before it ends as "stopped: no answer after Ns" and
@@ -121,7 +121,10 @@ export interface RouteManifest<W, R extends string, P, A extends string> {
   page?: z.ZodType<P>;
   /** The stages a route works in; `word` is the first word of the Situation ("Auditing rooms"). */
   stages?: readonly { key: string; word: string }[];
-  actions?: Readonly<Record<A, RouteAction<W, R, P, never>>>;
+  actions?: {
+    readonly [K in A]: RouteAction<W, R, P, never> &
+      (K extends "read" | "refresh" ? { rereads: R | "work" } : unknown);
+  };
   views?: readonly View<R>[];
   seeds?: Readonly<Partial<Record<A, Seed<W, R, P>>>>;
   docs?: ReactNode;
@@ -136,10 +139,7 @@ export const defineRoute = <W, const R extends string, P, const A extends string
 export const emptyManifest = (
   key: string,
   name: string,
-): RouteManifest<never, never, never, never> => ({
-  key,
-  name,
-});
+): RouteManifest<never, never, never, never> => ({ key, name });
 
 /* ── The entity route kernel ─────────────────────────────────────────────────── */
 

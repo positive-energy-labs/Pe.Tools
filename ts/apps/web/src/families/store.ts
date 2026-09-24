@@ -56,7 +56,7 @@ export interface FamiliesPageMemory {
 }
 
 const EMPTY_MEMORY: FamiliesPageMemory = {
-  table: { filters: {}, sorts: [], query: "" },
+  table: { sorts: [], query: "" },
   picker: { open: null, level: null, query: "" },
 };
 

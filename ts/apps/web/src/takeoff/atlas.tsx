@@ -2,11 +2,11 @@ import { takeoffDecisionKey } from "@pe/agent-contracts";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 
 import type { TableState } from "#/components/master-table/model";
+import { visibleRows as viewRows } from "#/components/master-table/view";
 import { useTableChips } from "#/components/anatomy";
 import type { PaneShortcut } from "#/components/lang/pane";
 import {
   atlasRoomState,
-  visibleRowKeys,
   type AtlasRow as Row,
   type TakeoffsController,
 } from "#/takeoff/controller";
@@ -61,15 +61,22 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
   const [planOpen, setPlanOpen] = useState(true);
   const [statsOpen, setStatsOpen] = useState(false);
   const [tableState, setTableState] = useState<TableState>({
-    filters: {},
     sorts: [],
     query: "",
   });
   const rows = store.atlasRows;
-  const visibleKeys = useMemo(
-    () => visibleRowKeys(rows, tableState, fieldsMode),
-    [rows, tableState, fieldsMode],
+  const flagVocabulary = useMemo(() => {
+    const set = new Set<string>();
+    for (const z of world.zones) for (const r of z.rooms) for (const f of r.flags) set.add(f);
+    return [...set].sort();
+  }, [world]);
+  const columns = useAtlasColumns({ actions, fieldsMode, flagVocabulary, store });
+  // The grid's own view: the query's facet fields narrow these keys as they narrow the grid.
+  const visibleRows = useMemo(
+    () => viewRows(rows, columns, tableState),
+    [rows, columns, tableState],
   );
+  const visibleKeys = useMemo(() => visibleRows.map((row) => row.room.guid), [visibleRows]);
   const decided = store.decisions;
   // ponytail: one plan pane draws the first bound view; add comparison panes only if demanded.
   const firstBoundLane = world.lanes.find((lane) => lane.view === views[0]);
@@ -121,18 +128,7 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     [store],
   );
 
-  const visibleRows = useMemo(() => {
-    const byGuid = new Map(rows.map((r) => [r.room.guid, r]));
-    return visibleKeys.map((key) => byGuid.get(key)).filter((r): r is Row => r !== undefined);
-  }, [rows, visibleKeys]);
-
   const cursorRow = rows.find((r) => r.room.guid === cursor) ?? null;
-
-  const flagVocabulary = useMemo(() => {
-    const set = new Set<string>();
-    for (const z of world.zones) for (const r of z.rooms) for (const f of r.flags) set.add(f);
-    return [...set].sort();
-  }, [world]);
 
   const decide = (room: ModelRoom, flag: string, verb: Verdict) => {
     actions.decide(room, flag, verb);
@@ -195,8 +191,6 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
   };
   const focusRoom = (z: ModelZone, room: string) =>
     store.actions.focusRoom(z.zone.guid, room, z.zone.lane.label);
-
-  const columns = useAtlasColumns({ actions, fieldsMode, flagVocabulary, store });
 
   const chips = useTableChips({
     planScope: selected

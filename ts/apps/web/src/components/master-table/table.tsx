@@ -1,6 +1,6 @@
 /**
  * TABLE — the one grid (the approved reshape, `table-primitive-explainer.md`): rows, columns, the
- * view state (sort, filters, query) and selection. It draws NO chrome: the box, the scope strip,
+ * view state (sort, query) and selection. It draws NO chrome: the box, the scope strip,
  * the search input and the filter chips are `TableFrame`, a wrapper, drawn only when a table wants
  * them. A readout without a frame is simply a `Table` with no `TableFrame` — there is no density
  * flag.
@@ -206,14 +206,6 @@ export function Table<Row extends RowData>({
     return () => observer.disconnect();
   }, [columns]);
 
-  const setFilter = (key: string, value: string | null) =>
-    update((current) => {
-      const filters = { ...current.filters };
-      if (value === null) delete filters[key];
-      else filters[key] = value;
-      return { ...current, filters };
-    });
-
   return (
     <>
       <div
@@ -235,9 +227,6 @@ export function Table<Row extends RowData>({
           <MasterTableHeader
             table={table}
             columnByKey={columnByKey}
-            rows={rows}
-            filters={state.filters}
-            setFilter={setFilter}
             query={state.query}
             stickyTop={(rowIndex) => rowTops[rowIndex] ?? 0}
             sortCount={table.state.sorting.length}

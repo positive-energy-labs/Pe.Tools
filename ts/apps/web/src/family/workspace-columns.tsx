@@ -3,6 +3,7 @@ import { ActionButton } from "#/components/lang/action-button";
 import { ListPopup } from "#/components/lang/list-popup";
 import { ReadCell, StateDot, VERDICT_INK, VerdictCell } from "#/components/master-table/cells";
 import type { Column, TableState, Verdict } from "#/components/master-table/model";
+import { visibleRows } from "#/components/master-table/view";
 import {
   AGREEMENT_TONE,
   MARK,
@@ -189,38 +190,10 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [world, draft, saved, overlay, stageType, binding, consumers, tableState]);
 
-  // ponytail: family still derives order in the component; G7 cutover owed
-  const firstGhostKey = useMemo(() => {
-    const byKey = new Map(columns.map((column) => [column.key, column]));
-    const query = tableState.query.trim().toLowerCase();
-    return (
-      [...rows]
-        .filter(
-          (row) =>
-            (!query ||
-              columns.some((column) => column.search?.(row).toLowerCase().includes(query))) &&
-            Object.entries(tableState.filters).every(([key, value]) => {
-              const column = byKey.get(key);
-              return column?.match?.(row, value) ?? column?.facet?.(row) === value;
-            }),
-        )
-        .sort((left, right) => {
-          for (const sort of tableState.sorts) {
-            const read = byKey.get(sort.key)?.sort;
-            if (!read) continue;
-            const before = read(left);
-            const after = read(right);
-            const order =
-              typeof before === "number" && typeof after === "number"
-                ? before - after
-                : String(before).localeCompare(String(after));
-            if (order !== 0) return sort.dir === "desc" ? -order : order;
-          }
-          return 0;
-        })
-        .find((row) => row.kind === "ghost")?.key ?? null
-    );
-  }, [columns, rows, tableState]);
+  const firstGhostKey = useMemo(
+    () => visibleRows(rows, columns, tableState).find((row) => row.kind === "ghost")?.key ?? null,
+    [columns, rows, tableState],
+  );
 
   /**
    * THE DRILL-IN, on the same primitive. Same Table, same identity cell, same editable type
@@ -243,7 +216,6 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
         group: "SPINE",
         width: "w-16",
         facet: (row) => agreementOf(world, draft, row, typeName),
-        all: "any agreement",
         title:
           "The seam. Every verb on this page is a crossing between the two sides, so the verdict is read here rather than hunted for in either column.",
         cell: (row) => {
