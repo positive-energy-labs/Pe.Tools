@@ -52,7 +52,7 @@ export const pressRecipe = tv({
 });
 
 export type PressProps = Omit<React.ComponentProps<"button">, "className" | "size"> &
-  VariantProps<typeof pressRecipe>;
+  VariantProps<typeof pressRecipe> & { "data-tone"?: string };
 
 export function Press({ type, tone, size, state, hover, frame, ...props }: PressProps) {
   return (
@@ -60,7 +60,10 @@ export function Press({ type, tone, size, state, hover, frame, ...props }: Press
       type={type ?? "button"}
       className={pressRecipe({ tone, size, state, hover, frame })}
       data-tone={tone === "agent" ? "pea" : undefined}
-      data-wash={tone === "agent" ? "" : undefined}
+      // A press that wears caution (a stale read verb, a refused verb) takes the tone's edge and
+      // wash, as the agent tone does: tinted ink alone on a quiet press did not read at a glance
+      // (house law 3, MAP slice 3).
+      data-wash={tone === "agent" || props["data-tone"] === "caution" ? "" : undefined}
       data-selected={state === "selected" ? "" : undefined}
       {...props}
     />

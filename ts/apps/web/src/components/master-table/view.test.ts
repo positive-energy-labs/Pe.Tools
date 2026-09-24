@@ -2,7 +2,7 @@ import { expect, test } from "vite-plus/test";
 
 import { resolveStateColumn } from "#/components/master-table/master-table-columns";
 import type { Column } from "#/components/master-table/model";
-import { conditionValues, visibleRows } from "#/components/master-table/view";
+import { conditionValues, visibleRows, wordMatches } from "#/components/master-table/view";
 
 interface Room {
   id: string;
@@ -47,4 +47,12 @@ test("a facet field suggests its values with counts over the rows in scope (ruli
     { value: "tiny", count: 0 },
     { value: "tall", count: 0 },
   ]);
+});
+
+test("a numeric free word reads the cell's sign and comma thousands groups", () => {
+  expect(wordMatches("-4", "-4")).toBe(true);
+  expect(wordMatches("-4", "4")).toBe(false);
+  expect(wordMatches("1,200", "200")).toBe(false);
+  expect(wordMatches("1,200", "1200")).toBe(true);
+  expect(wordMatches("12,34", "1234")).toBe(false);
 });
