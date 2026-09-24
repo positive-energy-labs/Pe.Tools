@@ -5023,6 +5023,115 @@ export namespace RevitResolveUnitValue {
   }
 }
 
+/** Draw one locked Room Region from loops on a plan view. */
+export namespace RoomsDraw {
+  export namespace Req {
+    export interface Request {
+      view: string;
+      loops: number[][][];
+      name?: null | string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      elementId: number;
+      guid: string;
+    }
+  }
+}
+
+/** Partition one plan view's level inside bounds or the view crop, keeping locked and matched Room Regions, in one transaction. */
+export namespace RoomsPartition {
+  export namespace Req {
+    export interface Request {
+      view: string;
+      bounds?: number[][] | null;
+      runId?: null | string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      level: string;
+      runId: string;
+      created: number;
+      kept: number;
+      locked: number;
+      deleted: number;
+      held: number;
+      failures: string[];
+      hold?: null | string;
+      ms: number;
+    }
+  }
+}
+
+/** Read plan-view levels and every Room Region on them with its room fields, geometry, and locked, touched, and stale state. */
+export namespace RoomsSnapshot {
+  export namespace Req {
+    export interface Request {}
+  }
+  export namespace Res {
+    export interface Response {
+      levels: RoomsLevel[];
+      regions: RoomsRegion[];
+    }
+    export interface RoomsLevel {
+      name: string;
+      elevation: number;
+      views: string[];
+    }
+    export interface RoomsRegion {
+      elementId: number;
+      guid: string;
+      view: string;
+      level: string;
+      role: string;
+      name: string;
+      type: string;
+      ceilingFt?: null | number;
+      people?: null | number;
+      lightingW?: null | number;
+      equipSensible?: null | number;
+      equipLatent?: null | number;
+      ventilationCfm?: null | number;
+      sqft: number;
+      outer: number[][];
+      holes: number[][][];
+      label: number[];
+      runId: string;
+      reason?: null | string;
+      touched: boolean;
+      locked: boolean;
+      stale: boolean;
+    }
+  }
+}
+
+/** Write the given room fields onto Room Regions by guid. */
+export namespace RoomsWrite {
+  export namespace Req {
+    export interface Request {
+      regions: RoomsWriteRegion[];
+    }
+    export interface RoomsWriteRegion {
+      guid: string;
+      name?: null | string;
+      type?: null | string;
+      ceilingFt?: null | number;
+      people?: null | number;
+      lightingW?: null | number;
+      equipSensible?: null | number;
+      equipLatent?: null | number;
+      ventilationCfm?: null | number;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      written: number;
+    }
+  }
+}
+
 /** Create a new schedule from a saved schedule spec and write the run receipt into the source pod. Never edits an existing schedule. */
 export namespace ScheduleApply {
   export namespace Req {
@@ -5514,7 +5623,7 @@ export namespace TakeoffsCandidates {
 /** Bind the next missing Takeoff carrier for the requested stage in one transaction. */
 export namespace TakeoffsInitializeCarrier {
   export namespace Req {
-    export type TakeoffCarrierStage = "Adoption" | "Materialization";
+    export type TakeoffCarrierStage = "Adoption" | "Materialization" | "Rooms";
 
     export interface Request {
       stage?: TakeoffCarrierStage;
@@ -5666,7 +5775,7 @@ export namespace TakeoffsSnapshot {
     export interface Request {}
   }
   export namespace Res {
-    export type TakeoffCarrierStage = "Adoption" | "Materialization";
+    export type TakeoffCarrierStage = "Adoption" | "Materialization" | "Rooms";
     /**
      * Where a set of model points sits against a view's model crop. Outside means it can never draw under that view's image.
      */
@@ -5803,6 +5912,10 @@ export interface HostOps {
   "revit.matrix.schedule-profiles": { request: RevitMatrixScheduleProfiles.Req.Request; response: RevitMatrixScheduleProfiles.Res.Response };
   "revit.resolve.references": { request: RevitResolveReferences.Req.Request; response: RevitResolveReferences.Res.Response };
   "revit.resolve.unit-value": { request: RevitResolveUnitValue.Req.Request; response: RevitResolveUnitValue.Res.Response };
+  "rooms.draw": { request: RoomsDraw.Req.Request; response: RoomsDraw.Res.Response };
+  "rooms.partition": { request: RoomsPartition.Req.Request; response: RoomsPartition.Res.Response };
+  "rooms.snapshot": { request: RoomsSnapshot.Req.Request; response: RoomsSnapshot.Res.Response };
+  "rooms.write": { request: RoomsWrite.Req.Request; response: RoomsWrite.Res.Response };
   "schedule.apply": { request: ScheduleApply.Req.Request; response: ScheduleApply.Res.Response };
   "schedule.capture": { request: ScheduleCapture.Req.Request; response: ScheduleCapture.Res.Response };
   "schedule.cells.apply": { request: ScheduleCellsApply.Req.Request; response: ScheduleCellsApply.Res.Response };
@@ -5871,6 +5984,10 @@ export const hostOpKeys = [
   "revit.matrix.schedule-profiles",
   "revit.resolve.references",
   "revit.resolve.unit-value",
+  "rooms.draw",
+  "rooms.partition",
+  "rooms.snapshot",
+  "rooms.write",
   "schedule.apply",
   "schedule.capture",
   "schedule.cells.apply",
