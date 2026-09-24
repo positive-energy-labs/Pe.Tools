@@ -341,7 +341,6 @@ describe("route primitive guard — no hand-written keymap", () => {
 
 /** Ratchet: today's offenders. A new one fails; cutting one over fails until it leaves this list. */
 const SITUATIONLESS_TARGET_ROUTES = [
-  "data-tables.tsx",
   "instances.tsx",
   "lab.tsx",
   "parameter-links.tsx",
