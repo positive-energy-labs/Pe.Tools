@@ -229,6 +229,13 @@ Legacy nouns under review: band, readout, read status, rules.
    Chadds". The stage key `archived` becomes `history` in the kernel, the URL and every stage
    declaration. "Readings" was rejected: it breaks the stage sentence, and a Reading is any Revit
    observation, the live one included.
+59. Work slot protoui round 1 (A tabs+ledger rows, B one at a time, C grouped by column, D the
+   row is the grid cell). "A is nicest", but you "can't rly tell what row/col of the main table
+   its on"; D's table is "too verbose/busy" though its width fits more. Merge A and D. C is
+   "maybe promising" but its families layout overlapped. The families proposals ("metadata")
+   need the proposal colouring ("all gray is too hard to see") and one row per parameter,
+   aggregated across families; accordion folds go: "too many options, too much to click, no
+   at-a-glance understanding". B is retired.
 
 ## Entity route shape (ruled 2026-09-24, rulings 34-45; the baton is deleted)
 
