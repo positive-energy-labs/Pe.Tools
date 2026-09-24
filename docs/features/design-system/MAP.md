@@ -220,6 +220,11 @@ Legacy nouns under review: band, readout, read status, rules.
    renderer (the right-pane inspector, `?inspect=<kind>:<id>`, shape S4). A kind with no renderer,
    and every file as a second action, opens in the host's default app. The link is one kit
    primitive; no surface draws a path, receipt id or reading id as text.
+56. The `/families` capture verb is deleted until families capture lands in the parameter metadata
+   pane (rulings 49, 53).
+57. "thats what i thought it already was." Archived on `/schedules` and `/family` lists their past
+   captures from the host, as `/families` lists its archived readings. An empty Archived stage is
+   a bug.
 
 ## Entity route shape (ruled 2026-09-24, rulings 34-45; the baton is deleted)
 
