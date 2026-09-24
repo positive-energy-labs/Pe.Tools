@@ -111,6 +111,7 @@ design-system ledger, not restated here.
 - 2026-08-16 — (/settings) Hand-rolled busy/error state per command: replaced by `useVerb`, which serializes open/re-read/validate/save.
 
 ## Owed
+- No check builds `Debug.R24` (net48). Main was red for R24 from c6f1d2bb until 2026-09-23 on three sites (`SkipLast`, `double.IsFinite`, `IReadOnlySet<T>`) and nothing noticed. Add one R24 build to the deterministic lane or drop the R24 configuration.
 
 - 2026-09-23, three web tests pin contracts outside a lane (`design-system/rhvac-native.integration`, `families/staged`, `runs/review`) and thirteen web scaffold tests remain; the test-bar ceiling is 16. Move or delete each, then delete `SCAFFOLD_CEILING` and assert zero.
 - 2026-09-22, the test bar sweep deleted 18 SCAFFOLD test files with no surface replacement. Each behavior they asserted needs a surface test (CDP journey, MCP tool call, host HTTP) or a visible readout. Recover the assertions from git: `host-call-wait`, `host/client`, `host/familyfoundry`, `host/tests/action-export`, `host/tests/bridge-session`, `host/tests/dev-identity`, `host/tests/dev-watch`, `host/tests/dispatch`, `host/tests/executor-outcomes`, `host/tests/gateway`, `host/tests/no-revit`, `host/tests/partition-operation`, `host/tests/pod-consumer`, `host/tests/resource-transport`, `host/tests/rhvac-ops`, `host/tests/saved-capture-text`, `readings`, `readings-host-call`.

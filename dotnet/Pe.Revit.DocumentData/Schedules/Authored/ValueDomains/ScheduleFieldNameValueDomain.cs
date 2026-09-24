@@ -7,11 +7,7 @@ public static class ScheduleFieldNameValueDomain {
         if (doc == null || doc.IsFamilyDocument)
             return [];
 
-        var schedules = new FilteredElementCollector(doc)
-            .OfClass(typeof(ViewSchedule))
-            .Cast<ViewSchedule>()
-            .Where(schedule => !schedule.IsTemplate)
-            .Where(schedule => !schedule.Name.Contains("<Revision Schedule>", StringComparison.OrdinalIgnoreCase));
+        var schedules = doc.UserSchedules().Where(schedule => !schedule.IsTemplate);
 
         if (!string.IsNullOrWhiteSpace(categoryName)) {
             schedules = schedules.Where(schedule =>

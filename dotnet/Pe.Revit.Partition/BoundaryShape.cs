@@ -31,7 +31,7 @@ internal static class BoundaryShape {
                     if (chain.IsClosed || chain.NumPoints < 3) continue;
                     var fitted = Fit(chain, walls, tolerance, input.Knobs.CloseFt + input.Knobs.InkHalfWidthFt);
                     if (fitted is null) continue;
-                    var changes = chain.Coordinates.Skip(1).SkipLast(1)
+                    var changes = chain.Coordinates.Skip(1).Take(chain.NumPoints - 2)
                         .ToDictionary(c => c, _ => (Coordinate?)null);
                     foreach (var (original, replacement) in fitted) changes[original] = replacement;
                     var a = Replace(result[i], changes);

@@ -1,3 +1,4 @@
+using Pe.Revit.DocumentData.Schedules;
 using Autodesk.Revit.DB.Electrical;
 using Pe.Revit.DocumentData.AgentContext;
 using Pe.Revit.DocumentData.Electrical;
@@ -311,8 +312,7 @@ internal sealed class RevitDataRequestService {
 
         if (request.Query?.Kind == ScheduleQueryKind.CurrentActiveView &&
             activeScheduleView is not null &&
-            (activeScheduleView.IsTemplate ||
-             activeScheduleView.Name.Contains("<Revision Schedule>", StringComparison.OrdinalIgnoreCase))) {
+            (activeScheduleView.IsTemplate || !document.TryGetUserSchedule(activeScheduleView.Id, out _))) {
             throw BridgeOperationExceptions.Conflict(
                 "Active view is not a supported non-template schedule view.",
                 [

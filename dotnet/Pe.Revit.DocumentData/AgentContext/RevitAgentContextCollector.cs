@@ -1,3 +1,4 @@
+using Pe.Revit.DocumentData.Schedules;
 using Pe.Shared.RevitData;
 using Serilog;
 using System.Diagnostics;
@@ -621,7 +622,7 @@ public static class RevitAgentContextCollector {
     internal static RevitAgentBrowserSummary CreateBrowserSummary(Document document) => new(
         new FilteredElementCollector(document).OfClass(typeof(View)).Cast<View>().Count(view => !view.IsTemplate),
         new FilteredElementCollector(document).OfClass(typeof(ViewSheet)).Cast<ViewSheet>().Count(sheet => !sheet.IsTemplate),
-        new FilteredElementCollector(document).OfClass(typeof(ViewSchedule)).Cast<ViewSchedule>().Count(schedule => !schedule.IsTemplate),
+        document.UserSchedules().Count(schedule => !schedule.IsTemplate),
         new FilteredElementCollector(document).OfClass(typeof(Family)).Count()
     );
 

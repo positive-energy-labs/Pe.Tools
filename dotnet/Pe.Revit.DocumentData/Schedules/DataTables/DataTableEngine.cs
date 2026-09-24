@@ -33,11 +33,7 @@ public static class DataTableEngine {
 
     public static DataTableDetailData CollectAll(Document document, DataTableDetailRequest request) {
         var issues = new List<RevitDataIssue>();
-        var schedules = new FilteredElementCollector(document)
-            .OfClass(typeof(ViewSchedule))
-            .Cast<ViewSchedule>()
-            .Where(schedule => IsDataTableSchedule(document, schedule))
-            .ToList();
+        var schedules = document.UserSchedules().Where(schedule => IsDataTableSchedule(document, schedule)).ToList();
 
         if (request.Names.Count > 0) {
             var wanted = request.Names.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -128,9 +124,7 @@ public static class DataTableEngine {
     }
 
     public static ViewSchedule? FindDataTableSchedule(Document document, string name) =>
-        new FilteredElementCollector(document)
-            .OfClass(typeof(ViewSchedule))
-            .Cast<ViewSchedule>()
+        document.UserSchedules()
             .FirstOrDefault(schedule =>
                 string.Equals(schedule.Name, name, StringComparison.OrdinalIgnoreCase) &&
                 IsDataTableSchedule(document, schedule));

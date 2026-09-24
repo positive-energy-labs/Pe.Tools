@@ -47,11 +47,8 @@ public static partial class ScheduleCatalogCollector {
             : ProjectBrowserCollectedIndex.Empty);
         var requireVisibleBodyRows = request?.IsEmpty != null;
 
-        var allEntries = TimePhase("entries", () => new FilteredElementCollector(doc)
-            .OfClass(typeof(ViewSchedule))
-            .Cast<ViewSchedule>()
+        var allEntries = TimePhase("entries", () => doc.UserSchedules()
             .Where(schedule => includeTemplates || !schedule.IsTemplate)
-            .Where(schedule => !schedule.Name.Contains("<Revision Schedule>", StringComparison.OrdinalIgnoreCase))
             .Where(schedule => MatchesPreProjectionFilter(schedule, categoryNames, scheduleNames, customParameterFilters, request))
             .OrderBy(schedule => schedule.Name, StringComparer.OrdinalIgnoreCase)
             .Select(schedule => TryCollectEntry(doc, schedule, projection, issues, requireVisibleBodyRows))
@@ -316,11 +313,8 @@ public static partial class ScheduleCatalogCollector {
             View = RevitDataResultView.Handles,
             IncludeSheetPlacements = true
         };
-        return TimePhase("sheet-filter-diagnostics", () => new FilteredElementCollector(doc)
-            .OfClass(typeof(ViewSchedule))
-            .Cast<ViewSchedule>()
+        return TimePhase("sheet-filter-diagnostics", () => doc.UserSchedules()
             .Where(schedule => request.IncludeTemplates || !schedule.IsTemplate)
-            .Where(schedule => !schedule.Name.Contains("<Revision Schedule>", StringComparison.OrdinalIgnoreCase))
             .OrderBy(schedule => schedule.Name, StringComparer.OrdinalIgnoreCase)
             .Select(schedule => TryCollectEntry(doc, schedule, diagnosticProjection, diagnosticIssues))
             .Where(entry => entry != null)

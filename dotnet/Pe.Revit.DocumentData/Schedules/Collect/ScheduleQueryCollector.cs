@@ -103,7 +103,7 @@ public static class ScheduleQueryCollector {
         View? activeView,
         List<RevitDataIssue> issues
     ) {
-        if (activeView is ViewSchedule schedule && !schedule.IsTemplate && !IsRevisionSchedule(schedule)) {
+        if (activeView != null && activeView.Document.TryGetUserSchedule(activeView.Id, out var schedule) && !schedule.IsTemplate) {
             return new QueryResolution(
                 ScheduleQueryKind.CurrentActiveView,
                 1,
@@ -136,7 +136,7 @@ public static class ScheduleQueryCollector {
             .ToList();
 
         foreach (var scheduleId in scheduleIds) {
-            var schedule = doc.GetElement(scheduleId.ToElementId()) as ViewSchedule;
+            var schedule = doc.TryGetUserSchedule(scheduleId.ToElementId(), out var found) ? found : null;
             _ = TryAddResolvedSchedule(
                 schedules,
                 seenIds,
@@ -149,7 +149,7 @@ public static class ScheduleQueryCollector {
         }
 
         foreach (var scheduleUniqueId in scheduleUniqueIds) {
-            var schedule = doc.GetElement(scheduleUniqueId) as ViewSchedule;
+            var schedule = doc.GetElement(scheduleUniqueId) is { } element && doc.TryGetUserSchedule(element.Id, out var found) ? found : null;
             _ = TryAddResolvedSchedule(
                 schedules,
                 seenIds,
@@ -178,7 +178,7 @@ public static class ScheduleQueryCollector {
             .Select(value => value.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
-        var candidates = CollectQueryableSchedules(doc);
+        var candidates = doc.UserSchedules().Where(schedule => !schedule.IsTemplate).ToList();
         var schedules = new List<ViewSchedule>();
         var seenIds = new HashSet<long>();
 
@@ -945,14 +945,6 @@ public static class ScheduleQueryCollector {
         return Math.Abs(left - right) <= scale * 1e-6;
     }
 
-    private static List<ViewSchedule> CollectQueryableSchedules(Document doc) =>
-        new FilteredElementCollector(doc)
-            .OfClass(typeof(ViewSchedule))
-            .Cast<ViewSchedule>()
-            .Where(schedule => !schedule.IsTemplate)
-            .Where(schedule => !IsRevisionSchedule(schedule))
-            .ToList();
-
     private static bool TryAddResolvedSchedule(
         List<ViewSchedule> schedules,
         HashSet<long> seenIds,
@@ -962,7 +954,7 @@ public static class ScheduleQueryCollector {
         string notFoundMessage,
         string elementName
     ) {
-        if (schedule == null || schedule.IsTemplate || IsRevisionSchedule(schedule)) {
+        if (schedule == null || schedule.IsTemplate) {
             issues.Add(ScheduleCollectorSupport.Warning(notFoundCode, notFoundMessage, elementName));
             return false;
         }
@@ -972,9 +964,6 @@ public static class ScheduleQueryCollector {
 
         return true;
     }
-
-    private static bool IsRevisionSchedule(ViewSchedule schedule) =>
-        schedule.Name.Contains("<Revision Schedule>", StringComparison.OrdinalIgnoreCase);
 
     private sealed record QueryResolution(
         ScheduleQueryKind QueryKind,

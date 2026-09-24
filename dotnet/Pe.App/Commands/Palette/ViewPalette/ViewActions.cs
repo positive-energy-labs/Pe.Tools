@@ -1,3 +1,4 @@
+using Pe.Revit.DocumentData.Schedules;
 using Autodesk.Revit.UI;
 using Pe.App.Services;
 using Pe.Revit.Extensions.RvtUiApplication;
@@ -50,12 +51,7 @@ internal static class ViewActions {
     ///     Collects only schedules (excluding revision schedules).
     /// </summary>
     internal static IEnumerable<UnifiedViewItem> CollectSchedules(Document doc, SheetLookupCache sheetCache) {
-        var schedules = new FilteredElementCollector(doc)
-            .OfClass(typeof(ViewSchedule))
-            .Cast<ViewSchedule>()
-            .Where(s => !s.Name.Contains("<Revision Schedule>"));
-
-        foreach (var schedule in schedules)
+        foreach (var schedule in doc.UserSchedules())
             yield return new UnifiedViewItem(schedule, ViewItemType.Schedule, sheetCache);
     }
 

@@ -35,10 +35,7 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
             var storage = RuntimeStorageClient.Default.Module(ScheduleManagerSettingsRegistration.ModuleKey);
 
             // Collect all schedules in the document
-            var serializeItems = new FilteredElementCollector(doc)
-                .OfClass(typeof(ViewSchedule))
-                .Cast<ViewSchedule>()
-                .Where(s => !s.Name.Contains("<Revision Schedule>"))
+            var serializeItems = doc.UserSchedules()
                 .OrderBy(s => s.Name)
                 .Select(s => new ScheduleSerializePaletteItem(s))
                 .ToList();

@@ -27,7 +27,7 @@ internal static class ScheduleBridgeOps {
     [Op("schedule.capture", Does = "Capture one schedule's definition (fields, sort/group, filters, header groups, view template) as a schedule spec. Never captures cell values.", Title = "Capture Schedule", Finds = ["schedule", "capture", "spec", "definition"], Cost = OpCost.Bounded)]
     private static Task<ScheduleSpecCaptureData> Capture(ScheduleSpecCaptureRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => {
-            if (document.Value.GetElement(request.ScheduleId.ToElementId()) is not ViewSchedule schedule)
+            if (!document.Value.TryGetUserSchedule(request.ScheduleId.ToElementId(), out var schedule))
                 throw BridgeOperationExceptions.BadRequest($"Element id {request.ScheduleId} is not a schedule.");
             return new ScheduleSpecCaptureData(schedule.Name, CaptureSpec(schedule));
         }, cancellationToken);

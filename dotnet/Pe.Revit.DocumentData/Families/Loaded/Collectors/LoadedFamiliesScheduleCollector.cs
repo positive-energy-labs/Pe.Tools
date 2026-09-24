@@ -1,3 +1,4 @@
+using Pe.Revit.DocumentData.Schedules;
 using Pe.Revit.DocumentData.Families.Loaded.Models;
 using Pe.Revit.DocumentData.Schedules.Apply;
 using Serilog;
@@ -173,13 +174,10 @@ public static class LoadedFamiliesScheduleCollector {
         Document doc,
         ElementId categoryId
     ) =>
-        new FilteredElementCollector(doc)
-            .OfClass(typeof(ViewSchedule))
-            .Cast<ViewSchedule>()
+        doc.UserSchedules()
             .Where(schedule => !schedule.IsTemplate)
             .Where(schedule => schedule.Definition != null)
             .Where(schedule => schedule.Definition.CategoryId == categoryId)
-            .Where(schedule => !schedule.Name.Contains("<Revision Schedule>", StringComparison.OrdinalIgnoreCase))
             .OrderBy(schedule => schedule.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 

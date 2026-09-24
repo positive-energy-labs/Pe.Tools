@@ -26,8 +26,7 @@ public static class ScheduleCellApplier {
         if (edits.Count == 0)
             return new ScheduleCellApplyData(0, 0, request.DryRun, [], []);
 
-        var schedule = document.GetElement(request.ScheduleId.ToElementId()) as ViewSchedule;
-        if (schedule == null || !string.Equals(schedule.UniqueId, request.ScheduleUniqueId, StringComparison.Ordinal))
+        if (!document.TryGetUserSchedule(request.ScheduleId.ToElementId(), out var schedule) || !string.Equals(schedule.UniqueId, request.ScheduleUniqueId, StringComparison.Ordinal))
             throw new ArgumentException("Schedule id and uniqueId must resolve to the same schedule.", nameof(request));
 
         if (request.DryRun)

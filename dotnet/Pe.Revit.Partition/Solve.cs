@@ -389,7 +389,7 @@ public static class Solve {
     public static Geometry GeometryOf(IReadOnlyList<double[]> loops) {
         Geometry result = Gf.CreatePolygon();
         foreach (var xy in loops) {
-            if (xy.Length < 6 || xy.Length % 2 != 0 || xy.Any(v => !double.IsFinite(v)))
+            if (xy.Length < 6 || xy.Length % 2 != 0 || xy.Any(v => double.IsNaN(v) || double.IsInfinity(v)))
                 throw new PartitionException("invalid boundary coordinates");
             var points = Enumerable.Range(0, xy.Length / 2).Select(i => new Coordinate(xy[2*i], xy[2*i+1])).ToList();
             if (!points[0].Equals2D(points[^1])) points.Add(points[0].Copy());

@@ -267,7 +267,7 @@ public static class ParametersServiceCache {
 public sealed record CurrentParametersResolution(
     string CollectionId,
     string Digest,
-    IReadOnlySet<string> ResourceIds,
+    IReadOnlyCollection<string> ResourceIds,
     IReadOnlyList<ParametersApi.Parameters.ParametersResult> Definitions
 );
 

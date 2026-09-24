@@ -1,3 +1,4 @@
+using Pe.Revit.DocumentData.Schedules;
 using Pe.Shared.RevitData;
 
 namespace Pe.Revit.DocumentData.ProjectBrowser;
@@ -130,11 +131,8 @@ public static class ProjectBrowserCollector {
             .ThenBy(sheet => sheet.Name, IgnoreCase)
             .Cast<Element>()
             .ToList(),
-        ProjectBrowserSection.Schedules => new FilteredElementCollector(document)
-            .OfClass(typeof(ViewSchedule))
-            .Cast<ViewSchedule>()
+        ProjectBrowserSection.Schedules => document.UserSchedules()
             .Where(schedule => !schedule.IsTemplate)
-            .Where(schedule => !schedule.Name.Contains("<Revision Schedule>", StringComparison.OrdinalIgnoreCase))
             .OrderBy(schedule => schedule.Name, IgnoreCase)
             .Cast<Element>()
             .ToList(),

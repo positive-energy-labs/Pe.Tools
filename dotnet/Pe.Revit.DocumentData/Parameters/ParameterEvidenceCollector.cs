@@ -1,4 +1,5 @@
 using Pe.Revit.DocumentData.Families.Loaded.Collectors;
+using Pe.Revit.DocumentData.Schedules;
 using Pe.Revit.DocumentData.Schedules.Collect;
 using Pe.Shared.RevitData;
 using Serilog;
@@ -22,11 +23,7 @@ public static class ParameterEvidenceCollector {
             ))
             .ToList();
 
-        var schedules = new FilteredElementCollector(doc)
-            .OfClass(typeof(ViewSchedule))
-            .Cast<ViewSchedule>()
-            .Where(schedule => !schedule.IsTemplate)
-            .ToList();
+        var schedules = doc.UserSchedules().Where(schedule => !schedule.IsTemplate).ToList();
         var scheduleFields = new List<ParameterScheduleFieldEvidence>();
         foreach (var schedule in schedules) {
             try {
