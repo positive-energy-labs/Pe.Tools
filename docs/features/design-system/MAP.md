@@ -238,6 +238,29 @@ Build order (Wave B, held until now):
 4. `/families`: Archived from the kernel; pickers list once and sink unplaced (ruling 44); capture declared.
 5. Work slot `protoui`: V14 one-line rows with tabs; the log's weight (ruling 39).
 
+## Owed after the entity-route wave (merged 51552a70, 2026-09-24)
+
+Proof lane of the wave: deterministic (vp check, web unit tests, repo guards) and demo lane
+(`apps/host/tests/demo-lane.scenario.test.ts`, 25/25). Nothing was seen in a real browser or a Revit
+session. The unsquashed step commits are at tag `entity-route-20260924-unsquashed`.
+
+- `/family` keeps a hidden arrival read: the `family-readings` stream only observes captures
+  (`host/resource-adapters.ts`, `observeFamily`), so it cannot acquire a family by itself. The stale
+  mark has no reread surface while the read verb is hidden. Owed to the host: acquire on subscribe.
+- `/schedules` apply over staged cells is one press: `schedule.grid.push` has no dry run. It lost
+  the push precondition `requires.work`; `staged.ready` and the host's revision base still refuse a
+  stale write.
+- Ruling 52 (`/family` one-press apply) and rulings 48-51 (Pea surface) are ruled, not built.
+- `/families` declares a `capture` verb (`families.capture`, human only). Ruling 49 defers families
+  capture to the parameter metadata pane; the verb is live until that is ruled.
+- Archived is an empty stage on `/schedules` and `/family`; their past captures exist on the host.
+- Ruling 43: one plan call over every staged families draft.
+- Browser journeys `tests/e2e/st3-no-refresh.ts`, `st4-changed.ts` and `j6.ts` still assert push,
+  `read schedule` and `plan`. Not run.
+- Knip is red on main before this wave: `fieldMatches`, `MetadataControl`, three `Overlay*` types.
+- Resource links (rulings 54, 55): `route/inspect.tsx` has three open policies (`route`, `shell`,
+  and `href`, raw JSON in a new tab, from wave B). The in-app inspector replaces `href`.
+
 ## Normalization rules (ruling 29, 2026-09-23 night)
 
 Each rule lands once in the primitives and every route inherits it. N1 a route with a target draws
