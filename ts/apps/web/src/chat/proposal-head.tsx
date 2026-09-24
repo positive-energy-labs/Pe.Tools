@@ -6,7 +6,6 @@
  * It never lists cells and never draws a confirmation sheet.
  */
 import { useMemo, useState, type ReactNode } from "react";
-import { Check, X } from "lucide-react";
 import { fanOut, type CellGroup, type TrichotomyCellLike } from "@pe/agent-contracts";
 
 import { ActionButton } from "#/components/lang/action-button";
@@ -20,6 +19,7 @@ import {
   type FanOutOutcome,
 } from "#/components/lang/band";
 import { Press } from "#/components/lang/press";
+import { Verdict } from "#/components/lang/verdict";
 
 export interface HeadWork {
   id: string;
@@ -310,30 +310,24 @@ function GroupRow({
         </span>
         <span className="flex items-center gap-1">
           {verbs && acceptK ? (
-            <Press
-              tone="quiet"
-              size="caption"
+            <Verdict
+              kind="accept"
               aria-label={`accept ${acceptK}`}
               title={`Stage Pea's proposal on ${acceptK} cells in one write; contested and locked cells are skipped`}
               onClick={() => act("accept")}
             >
-              <span className="flex items-center gap-0.5" data-tone="pea">
-                <Check className="size-3" /> {acceptK}
-              </span>
-            </Press>
+              {acceptK}
+            </Verdict>
           ) : null}
           {verbs && denyK ? (
-            <Press
-              tone="quiet"
-              size="caption"
+            <Verdict
+              kind="deny"
               aria-label={`deny ${denyK}`}
               title={`Clear Pea's proposal on ${denyK} cells in one write`}
               onClick={() => act("deny")}
             >
-              <span className="flex items-center gap-0.5">
-                <X className="size-3" /> {denyK}
-              </span>
-            </Press>
+              {denyK}
+            </Verdict>
           ) : null}
           <UnstageAll wire={work.wire} cells={work.cells} keys={keys} done={done} compact />
           <Press

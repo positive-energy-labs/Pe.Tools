@@ -91,7 +91,7 @@ interface VerbBase {
   busy?: boolean;
 }
 
-export type ActionButtonProps =
+type ActionButtonProps =
   | (VerbBase & {
       tone?: "act" | "commit" | "agent";
       icon?: LucideIcon;
@@ -172,7 +172,7 @@ export function ActionButton(props: ActionButtonProps) {
   );
 }
 
-export interface ActionGroupProps {
+interface ActionGroupProps {
   /** What this group of verbs has in common, e.g. "writes beyond the page". */
   title: string;
   /** The blast radius in words, e.g. "document · model · external". Grouping's whole payload. */

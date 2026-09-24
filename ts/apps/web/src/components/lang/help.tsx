@@ -35,7 +35,7 @@ export const helpTipRecipe = tv({
   },
 });
 
-export interface HelpTipProps {
+interface HelpTipProps {
   /** The orientation prose. A few sentences at most — a HelpTip is not a manual. */
   children: React.ReactNode;
 }

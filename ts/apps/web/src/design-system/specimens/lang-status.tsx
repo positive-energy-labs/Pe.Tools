@@ -1,4 +1,4 @@
-import { ActivityDisclosure, ActivityRow } from "#/components/lang/activity";
+import { ActivityDisclosure } from "#/components/lang/activity";
 import { FactChip } from "#/components/lang/chip";
 import { CoverageBar, coverageBarRecipe } from "#/components/lang/coverage-bar";
 import { EmptyState, emptyStateRecipe } from "#/components/lang/empty";
@@ -14,13 +14,10 @@ const noop = () => {};
 export function LangStatusSpecimens() {
   return (
     <>
-      <SpecimenFrame
-        name="ActivityDisclosure · ActivityRow"
-        importPath="#/components/lang/activity"
-      >
+      <SpecimenFrame name="ActivityDisclosure" importPath="#/components/lang/activity">
         <ActivityDisclosure summary="2 unresolved" tone="caution">
-          <ActivityRow label="lost write" says="the document moved on before the apply landed" />
-          <ActivityRow label="reading families" says="waiting on the session" tone="meta" />
+          <div>lost write: the document moved on before the apply landed</div>
+          <div className="text-ink-2">reading families: waiting on the session</div>
         </ActivityDisclosure>
       </SpecimenFrame>
       <RecipeGrid

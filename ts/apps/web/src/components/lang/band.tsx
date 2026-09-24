@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { Undo2 } from "lucide-react";
 import {
   availableTransitions,
   fanOut,
@@ -22,10 +21,10 @@ import {
   type StateCellProps,
 } from "#/components/lang/cell";
 import { Press } from "#/components/lang/press";
-import { ActionButton } from "#/components/lang/action-button";
+import { Verdict } from "#/components/lang/verdict";
 import { useScopeKeys } from "#/route/keys";
 
-export interface WorkStandingProps {
+interface WorkStandingProps {
   conflict?: boolean;
   unresolved?: readonly string[];
   /** One standing line about this Work's own lifetime; not a toast, it stays while it holds. */
@@ -353,18 +352,9 @@ export function UnstageAll({
   ]);
   if (!staged) return null;
   return (
-    <ActionButton
-      icon={compact ? Undo2 : undefined}
-      label={
-        armed
-          ? compact
-            ? `${staged}? again`
-            : `unstage ${staged} staged? press again`
-          : compact
-            ? String(staged)
-            : `unstage all (${staged})`
-      }
-      reason={
+    <Verdict
+      kind="unstage"
+      title={
         armed
           ? `Press again to clear your ${staged} staged values in one write; Escape cancels`
           : `Clear your ${staged} staged values in one write (asks first); Pea's proposals stay`
@@ -374,7 +364,15 @@ export function UnstageAll({
         setArmed(false);
         void runFanOut(wire, cells, keys, "unstage").then(done);
       }}
-    />
+    >
+      {armed
+        ? compact
+          ? `${staged}? again`
+          : `unstage ${staged} staged? press again`
+        : compact
+          ? String(staged)
+          : `unstage all (${staged})`}
+    </Verdict>
   );
 }
 
@@ -469,17 +467,20 @@ export function WorkSentence({
       <span className="ml-auto flex items-baseline gap-1">
         {proposed ? (
           <>
-            <ActionButton
-              tone="agent"
-              label="accept all"
-              reason="Accept every open proposal in one write; cells you staged are skipped. Nothing reaches Revit until apply."
+            <Verdict
+              kind="accept"
+              title="Accept every open proposal in one write; cells you staged are skipped. Nothing reaches Revit until apply."
               onClick={() => all("accept")}
-            />
-            <ActionButton
-              label="deny all"
-              reason="Clear every open proposal in one write. Staged values stay."
+            >
+              accept all
+            </Verdict>
+            <Verdict
+              kind="deny"
+              title="Clear every open proposal in one write. Staged values stay."
               onClick={() => all("deny")}
-            />
+            >
+              deny all
+            </Verdict>
           </>
         ) : null}
         <UnstageAll wire={wire} cells={cells} keys={keys} done={setOutcome} />

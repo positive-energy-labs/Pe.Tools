@@ -68,7 +68,7 @@ const OUTCOME_ICON: Record<OutcomeKind, LucideIcon> = {
   error: TriangleAlert,
 };
 
-export interface OutcomeLineProps {
+interface OutcomeLineProps {
   kind: OutcomeKind;
   /** What happened, in machine terms — mono, tabular, coloured by kind. */
   label: string;

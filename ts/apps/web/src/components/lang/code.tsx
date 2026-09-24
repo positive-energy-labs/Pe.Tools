@@ -84,7 +84,7 @@ function holdsGrammar(tag: string): boolean {
 const TOKENIZE_LIMIT = 64 * 1024;
 const FRAME_CLASS = "not-prose";
 
-export interface CodeProps {
+interface CodeProps {
   code: string;
   /**
    * The payload's own language tag, verbatim — a fence's `csharp` or `text`. The head says it as

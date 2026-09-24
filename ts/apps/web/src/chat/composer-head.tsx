@@ -8,13 +8,14 @@
 import { useEffect, useRef } from "react";
 import { AskUserPrompt, readQuestion } from "#/chat/ask-prompt";
 import { resolveCallTarget, toolTitle, type TargetResolution } from "@pe/agent-contracts";
-import { ArrowDown, Check, X } from "lucide-react";
+import { ArrowDown, X } from "lucide-react";
 import { Popover } from "@base-ui/react/popover";
 import { PopupFrame } from "#/components/lang/list-popup";
 import { useAtomValue } from "@effect/atom-react";
 
 import { ActionButton } from "#/components/lang/action-button";
 import { Press } from "#/components/lang/press";
+import { Verdict } from "#/components/lang/verdict";
 import { Rail } from "#/components/lang/rail";
 import { targetInventory } from "#/readings";
 import { Ladder } from "#/route/ladder";
@@ -365,12 +366,10 @@ export function ComposerHead({
               : APPROVAL_OPTIONS.map((option) => {
                   const allow = option.kind.startsWith("allow");
                   return (
-                    <ActionButton
+                    <Verdict
                       key={option.id}
-                      tone={allow ? "commit" : "act"}
-                      icon={allow ? Check : X}
-                      label={option.label}
-                      reason={
+                      kind={allow ? "accept" : "deny"}
+                      title={
                         allow
                           ? `Let pea run ${toolTitle(approval.toolName)} — the call executes against the live target`
                           : `Refuse this ${toolTitle(approval.toolName)} call — pea continues without it`
@@ -378,7 +377,9 @@ export function ComposerHead({
                       onClick={() => {
                         void resolveApproval(approval.toolCallId, option.id);
                       }}
-                    />
+                    >
+                      {option.label}
+                    </Verdict>
                   );
                 })}
           </div>

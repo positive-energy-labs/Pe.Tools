@@ -403,36 +403,48 @@
 .dl-cell[aria-busy="true"] > .dl-acts {
   display: inline-flex;
 }
-.dl-act {
+/* THE REVIEW VERBS (`Verdict`, ruling 30): one mark wherever accept, deny and unstage draw. Each
+   wears the mark it answers: accept takes Pea's proposal (pea ink), unstage clears your own staged
+   edit (caution, its square's colour), deny stays neutral. Hover is the one veil. */
+.dl-verdict {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: calc(var(--item-h) - 2px);
-  height: 100%;
-  padding: 0;
+  gap: 3px;
+  height: var(--item-h);
+  padding: 0 6px;
   border: 0;
   background: transparent;
   color: var(--pe-ink);
+  font-size: var(--type-small-size);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
   cursor: pointer;
 }
-/* Each verb wears the mark it answers: accept takes Pea's proposal (pea ink), unstage clears your
-   own staged edit (caution, its square's colour), deny stays neutral. */
-.dl-act[data-kind="accept"] {
+.dl-verdict[data-kind="accept"] {
   color: var(--pe-pea-ink);
 }
-.dl-act[data-kind="unstage"] {
+.dl-verdict[data-kind="unstage"] {
   color: var(--pe-caution);
 }
-.dl-act:hover {
+.dl-verdict:hover,
+.dl-verdict:focus-visible {
   background-image: var(--fill-veil);
 }
-.dl-act:disabled {
+.dl-verdict:disabled {
   color: var(--pe-ink-2);
   cursor: progress;
 }
-.dl-act > svg {
+.dl-verdict > svg {
   width: 12px;
   height: 12px;
+  flex-shrink: 0;
+}
+/* In a cell's overlay the verb is a square the height of the row. */
+.dl-acts > .dl-verdict {
+  width: calc(var(--item-h) - 2px);
+  height: 100%;
+  padding: 0;
 }
 /* A review row (`ReviewRow`) is a list for acting: its verbs are always drawn, and the value
    clears them so it truncates before the overlay instead of under it. */

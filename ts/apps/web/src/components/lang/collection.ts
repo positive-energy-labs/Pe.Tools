@@ -11,7 +11,7 @@ import { useId, useMemo, useState } from "react";
 
 import { useScopeKeys, type ScopeKey } from "#/route/keys";
 
-export type FilterMode = "none" | "substring" | "fuzzy";
+type FilterMode = "none" | "substring" | "fuzzy";
 type SelectMode = "none" | "single" | "multi";
 /** Empty (nothing in scope) is not no-match (the query hid everything): two exits (R17). */
 type CollectionStatus = "ready" | "empty" | "no-match" | "pending" | "failed" | "refused";

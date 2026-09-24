@@ -13,10 +13,6 @@ export interface FocalGeometry {
 
 export type LensScrollIntent = { kind: "turn"; turn: number } | { kind: "tail" };
 
-export function lensScrollIntent(turn?: number): LensScrollIntent {
-  return typeof turn === "number" ? { kind: "turn", turn } : { kind: "tail" };
-}
-
 export function scrollTopForIntent(
   intent: LensScrollIntent,
   geometry: FocalGeometry[],

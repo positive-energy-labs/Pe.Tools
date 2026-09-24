@@ -13,9 +13,7 @@ export const dialogRecipe = tv({
     content:
       "fixed top-1/2 left-1/2 z-modal grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg text-ink ring-1 ring-line outline-none sm:max-w-lg",
     header: "flex flex-col gap-1",
-    footer: "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
     title: "t-title",
-    description: "text-ink-2 *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-ink",
   },
   variants: {
     // A dialog whose body is one self-padding surface (the command palette) takes no chrome of
@@ -27,10 +25,6 @@ export const dialogRecipe = tv({
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
-}
-
-function DialogTrigger({ ...props }: Omit<DialogPrimitive.Trigger.Props, "className">) {
-  return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />;
 }
 
 function DialogPortal({ ...props }: DialogPrimitive.Portal.Props) {
@@ -88,15 +82,4 @@ function DialogTitle(props: Omit<DialogPrimitive.Title.Props, "className">) {
   return <DialogPrimitive.Title data-slot="dialog-title" className={title()} {...props} />;
 }
 
-function DialogDescription(props: Omit<DialogPrimitive.Description.Props, "className">) {
-  const { description } = dialogRecipe();
-  return (
-    <DialogPrimitive.Description
-      data-slot="dialog-description"
-      className={description()}
-      {...props}
-    />
-  );
-}
-
-export { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger };
+export { Dialog, DialogContent, DialogHeader, DialogTitle };

@@ -1,13 +1,4 @@
-import { Search } from "lucide-react";
-
 import { Input, inputRecipe } from "#/components/lang/input";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-  inputGroupRecipe,
-} from "#/components/lang/input-group";
 import { Label, labelRecipe } from "#/components/lang/label";
 import { Textarea, textareaRecipe } from "#/components/lang/textarea";
 import { RecipeGrid } from "./recipe-grid";
@@ -27,28 +18,6 @@ export function UiInputSpecimens() {
             placeholder="search params"
             defaultChecked={props.kind === "check" ? true : undefined}
           />
-        )}
-      />
-      <RecipeGrid
-        name="InputGroup"
-        importPath="#/components/lang/input-group"
-        recipe={inputGroupRecipe}
-        render={(props) => (
-          <div className="w-56">
-            <InputGroup>
-              <InputGroupAddon
-                align={props.align as "inline-start" | "inline-end" | "block-start" | "block-end"}
-              >
-                <InputGroupButton
-                  size={props.size as "xs" | "sm" | "icon-xs" | "icon-sm"}
-                  aria-label="search"
-                >
-                  <Search />
-                </InputGroupButton>
-              </InputGroupAddon>
-              <InputGroupInput placeholder="search" />
-            </InputGroup>
-          </div>
         )}
       />
       <RecipeGrid

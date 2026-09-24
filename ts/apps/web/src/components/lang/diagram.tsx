@@ -14,7 +14,7 @@
 import { useEffect, useState } from "react";
 import { tokenRef } from "#/lib/token";
 
-export type DiagramResult = { svg: string } | { error: string };
+type DiagramResult = { svg: string } | { error: string };
 
 /** The types `beautiful-mermaid` draws; anything else stays source (`gantt`, `pie`, `mindmap`…). */
 const SUPPORTED =

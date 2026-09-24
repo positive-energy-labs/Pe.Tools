@@ -24,7 +24,7 @@
       "entry": ["src/index.ts", "src/dev.ts", "scripts/*.{ts,mjs}"]
     },
     "apps/web": {
-      "entry": ["src/routes/**/*.{ts,tsx}", "scripts/*"]
+      "entry": ["src/routes/**/*.{ts,tsx}!", "scripts/*"]
     },
     "packages/factory": {
       "entry": ["actuators/*.ts", "sensors/*.ts"]
