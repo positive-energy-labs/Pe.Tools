@@ -41,7 +41,7 @@ function planViewport(frame: AffineFrame) {
 }
 
 /** The one plan image layer, under the zones, in the zones' coordinate frame. */
-function PlanImageLayer({ plan, frame }: { plan: TakeoffPlanImage; frame: AffineFrame }) {
+export function PlanImageLayer({ plan, frame }: { plan: TakeoffPlanImage; frame: AffineFrame }) {
   const { registration } = plan;
   return (
     <image

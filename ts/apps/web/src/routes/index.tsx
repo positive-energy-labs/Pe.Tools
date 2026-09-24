@@ -5,6 +5,7 @@ import {
   FlaskConical,
   Boxes,
   History,
+  LayoutDashboard,
   LayoutGrid,
   Link2,
   Map,
@@ -60,6 +61,14 @@ const TOOLS = [
     icon: Map,
     description:
       "The takeoff atlas — zones on the plan, rooms in the table, Manual J data through to a synced RHVAC .r10.",
+  },
+  {
+    to: "/rooms",
+    title: "Rooms",
+    label: "Manual J",
+    icon: LayoutDashboard,
+    description:
+      "Split a level's plan view into room regions, stage each room's name, type and loads, and write them to the regions in Revit.",
   },
   {
     to: "/grilles",
