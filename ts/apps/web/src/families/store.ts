@@ -69,14 +69,18 @@ const next = <A>(value: Setter<A>, previous: A): A =>
 
 /** The option-list shape the pickers read. `feed()` and its `Atom.swr` runtime are deleted. */
 export interface OptionList {
-  readonly options: readonly { id: string; label: string; categoryName?: string | null }[] | null;
+  readonly options:
+    | readonly { id: string; label: string; categoryName?: string | null; sub?: string }[]
+    | null;
   readonly state: "loading" | "ready" | "error";
   readonly lane: "read";
   readonly stale: boolean;
 }
 
 const asFeed = (call: {
-  data?: readonly string[] | readonly { id: string; label: string; categoryName: string | null }[];
+  data?:
+    | readonly string[]
+    | readonly { id: string; label: string; categoryName: string | null; sub?: string }[];
   error?: Error;
   isPending: boolean;
 }): OptionList => ({
@@ -212,7 +216,7 @@ export function useFamiliesStore(
       ...(!draftTouched.current &&
       !draft.categories.length &&
       draft.families === null &&
-      draft.placement === "AllLoaded"
+      draft.placement === "PlacedOnly"
         ? {
             draft: {
               categories: [...retainedReading.filter.categoryNames],
@@ -290,23 +294,31 @@ export function useFamiliesStore(
     ["categories", documentTarget?.session, documentTarget?.openId],
     documentTarget !== null && page.stage !== "archived",
   );
+  // Listed once per document (ruling 42); the draft's categories and placement filter it here.
   const familyCall = useHostCall(
-    () => host.families(documentTarget!, draft),
-    [
-      "families",
-      documentTarget?.session,
-      documentTarget?.openId,
-      draft.placement,
-      draft.categories.join("|"),
-    ],
-    documentTarget !== null && page.stage !== "archived" && draft.categories.length > 0,
+    () => host.families(documentTarget!),
+    ["families", documentTarget?.session, documentTarget?.openId],
+    documentTarget !== null && page.stage !== "archived",
   );
+  const categoryKey = draft.categories.join("|");
   // FOOTGUN: base-ui `Combobox items` must keep identity between renders; a fresh `options`
   // array each render re-runs its store effect and React throws "Maximum update depth exceeded".
   const feeds = useMemo(
     () => ({
       category: asFeed(categoryCall),
-      family: asFeed(familyCall),
+      family: asFeed({
+        ...familyCall,
+        data: draft.categories.length
+          ? familyCall.data
+              ?.filter(
+                (family) =>
+                  draft.categories.includes(family.categoryName ?? "") &&
+                  (draft.placement === "AllLoaded" ||
+                    (draft.placement === "PlacedOnly") === family.placedInstanceCount > 0),
+              )
+              .map((family) => ({ ...family, sub: `${family.placedInstanceCount} placed` }))
+          : undefined,
+      }),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the call objects are rebuilt each render; their fields are the identity
     [
@@ -316,6 +328,8 @@ export function useFamiliesStore(
       familyCall.data,
       familyCall.error,
       familyCall.isPending,
+      categoryKey,
+      draft.placement,
     ],
   );
 

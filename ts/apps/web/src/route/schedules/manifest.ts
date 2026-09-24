@@ -5,9 +5,7 @@ import {
   scheduleGridRouteState,
   scheduleReadingSchema,
   scheduleReads,
-  semanticActions,
   splitScheduleCellKey,
-  stagedEntries,
   type ActionStatus,
   type ScheduleGridDocument,
   type WorkKey,
@@ -17,7 +15,6 @@ import {
   entityRoute,
   refuse,
   HOST_READ_WAIT_S,
-  NATIVE_APPLY_WAIT_S,
   type Ctx as RouteCtx,
   type EntityRouteDef,
 } from "#/route";
@@ -30,7 +27,7 @@ import {
 } from "../../../../../packages/mcps/src/shared/takeoff-action-client";
 
 export type ScheduleGridReading = "catalog" | "work" | "saved" | "receipts";
-export type ScheduleGridAction = "refresh" | "push";
+export type ScheduleGridAction = "read";
 
 /** Route-owned identity discovered by a schedule read. */
 export interface ScheduleGridPage {
@@ -94,7 +91,53 @@ const reopened = (ctx: Ctx) => {
 const statuses = (ctx: Ctx): ActionStatus[] =>
   (previousOf(ctx.readings.receipts) as ActionStatus[] | undefined) ?? [];
 
-/** `/schedules`, declared once: the grid is the audit, `push` writes cells, `apply` writes a spec. */
+/** Apply over staged cells (ruling 41): `schedule.grid.push`, its readback, and the rebind. */
+async function pushStaged(ctx: Ctx) {
+  ctx.setPage({ refused: {} });
+  // The run lands in the pod the route has bound; with none, in the action receipt.
+  const pod = (ctx.page as { pod?: string | null }).pod ?? undefined;
+  const row = await runSemanticAction("schedule.grid.push", pod ? { pod } : {}, targetOf(ctx), {
+    work: { key: ctx.work.key as WorkKey, revision: ctx.work.revision! },
+  });
+  // The host's lifetime refusal, by its code (a race past `ready`).
+  if (
+    row.state === "failed" &&
+    row.issues?.some((issue) => issue.code === "binding-lifetime-closed")
+  )
+    return refuse("not-ready", REOPENED);
+  const result = actionResult(row) as {
+    readback?: unknown;
+    applied?: number;
+    failures?: { key: string; error: string; code?: string }[];
+    readbackError?: string;
+  };
+  if (result.readback) {
+    const reading = scheduleReadingSchema.parse(result.readback);
+    ctx.setPage({ workspaceId: reading.workspaceId, captureId: reading.id });
+  }
+  // A stale refusal whose readback failed has no C on screen: the flag reads again first.
+  ctx.setPage({
+    unread: result.readbackError
+      ? (result.failures ?? []).filter((f) => REFUSAL_WORD[f.code ?? ""] === "stale").length
+      : 0,
+  });
+  if (result.readbackError) throw Error(result.readbackError);
+  // Some cells landed and some were refused: an outcome, not a failure. Returned, so the verb's
+  // dirties re-read the grid; the readback already rebound the basis to what Revit holds.
+  // Each refusal draws on its cell; the log says the count and the first cell.
+  const failures = result.failures ?? [];
+  if (!failures.length) return null;
+  ctx.setPage({ refused: Object.fromEntries(failures.map((f) => [f.key, refusalNote(f)])) });
+  return {
+    ...refuse(
+      result.applied ? "partial" : "not-ready",
+      `${failures.length} refused · ${cellLabel(ctx, failures[0]!.key)}`,
+    ),
+    cells: failures.map((f) => f.key),
+  };
+}
+
+/** `/schedules`, declared once: the grid is the audit; `apply` writes staged cells, else a spec. */
 export const scheduleSpec: EntityRouteDef<
   ScheduleGridDocument,
   ScheduleGridReading,
@@ -107,15 +150,28 @@ export const scheduleSpec: EntityRouteDef<
   schema: "/schemas/settings/CmdScheduleManager/schedules.json",
   capture: "schedule.capture",
   apply: "schedule.apply",
-  applies: ["catalog"],
-  commit: "push",
+  applies: ["catalog", "work", "saved", "receipts"],
+  staged: {
+    cells: (ctx) => ctx.work.doc?.cells ?? {},
+    ready: (ctx) =>
+      statuses(ctx).some((row) => ["running", "unknown", "incomplete"].includes(row.state))
+        ? "Recover or resume the original receipt before a new apply"
+        : !ctx.page.workspaceId || !ctx.work.doc?.basis || ctx.work.revision === null
+          ? "Review the exact schedule binding first"
+          : (["saved", "receipts"] as const).find((key) => ctx.readings[key].state !== "ready")
+            ? "Wait for the schedule and its receipts to finish reading"
+            : reopened(ctx)
+              ? REOPENED
+              : null,
+    apply: (ctx) => pushStaged(ctx),
+  },
   captureInput: (ctx) => {
     const reading = previousOf(ctx.readings.work);
     return reading === undefined
       ? "open a schedule in the grid first"
       : { scheduleId: scheduleReadingSchema.parse(reading).snapshot.scheduleId };
   },
-  docs: "Audit a project schedule as a grid and push staged cell values, capture its definition into a pod as a spec, or apply a saved spec as a new schedule.",
+  docs: "Audit a project schedule as a grid, apply staged cell values to Revit, capture its definition into a pod as a spec, or apply a saved spec as a new schedule.",
 };
 
 export const schedulesManifest = () =>
@@ -160,10 +216,12 @@ export const schedulesManifest = () =>
       },
       page: scheduleGridPage,
       actions: {
-        refresh: {
+        // No button and no chord (ruling 37): the Ladder pick and the stale grid's focus run it.
+        read: {
           label: "read schedule",
           waitSeconds: HOST_READ_WAIT_S,
           says: "reads the selected schedule from Revit into a fresh capture",
+          visible: false,
           needs: "document",
           actor: "human",
           input: scheduleReads["schedule.grid.snapshot"].input.prefault(
@@ -204,79 +262,6 @@ export const schedulesManifest = () =>
               captureId: reading.id,
               unread: 0,
             });
-          },
-        },
-        push: {
-          label: "push",
-          waitSeconds: NATIVE_APPLY_WAIT_S,
-          does: "schedule.grid.push",
-          input: semanticActions["schedule.grid.push"].input as never,
-          dirties: ["work", "saved", "receipts"],
-          requires: { work: true, readings: ["saved", "receipts"] },
-          // The verb carries its operand: how many staged cells it writes.
-          count: (ctx: Ctx) => stagedEntries(ctx.work.doc?.cells ?? {}).length || null,
-          ready: (ctx: Ctx) =>
-            statuses(ctx).some((row) => ["running", "unknown", "incomplete"].includes(row.state))
-              ? "Recover or resume the original receipt before a new apply"
-              : !ctx.page.workspaceId || !ctx.work.doc?.basis || ctx.work.revision === null
-                ? "Review the exact schedule binding first"
-                : !stagedEntries(ctx.work.doc.cells).length
-                  ? "Stage a cell first: accept a proposal or type into a cell"
-                  : reopened(ctx)
-                    ? REOPENED
-                    : null,
-          run: async (ctx: Ctx) => {
-            ctx.setPage({ refused: {} });
-            // The run lands in the pod the route has bound; with none, in the action receipt.
-            const pod = (ctx.page as { pod?: string | null }).pod ?? undefined;
-            const row = await runSemanticAction(
-              "schedule.grid.push",
-              pod ? { pod } : {},
-              targetOf(ctx),
-              { work: { key: ctx.work.key as WorkKey, revision: ctx.work.revision! } },
-            );
-            // The host's lifetime refusal, by its code (a race past `ready`).
-            if (
-              row.state === "failed" &&
-              row.issues?.some((issue) => issue.code === "binding-lifetime-closed")
-            )
-              return refuse("not-ready", REOPENED);
-            const result = actionResult(row) as {
-              readback?: unknown;
-              applied?: number;
-              failures?: { key: string; error: string; code?: string }[];
-              readbackError?: string;
-            };
-            if (result.readback) {
-              const reading = scheduleReadingSchema.parse(result.readback);
-              ctx.setPage({
-                workspaceId: reading.workspaceId,
-                captureId: reading.id,
-              });
-            }
-            // A stale refusal whose readback failed has no C on screen: the flag reads again first.
-            ctx.setPage({
-              unread: result.readbackError
-                ? (result.failures ?? []).filter((f) => REFUSAL_WORD[f.code ?? ""] === "stale")
-                    .length
-                : 0,
-            });
-            if (result.readbackError) throw Error(result.readbackError);
-            // Some cells landed and some were refused: an outcome, not a failure. Returned, so the
-            // verb's dirties re-read the grid; the readback already rebound the basis to what Revit holds.
-            // Each refusal draws on its cell; the log says the count and the first cell.
-            const failures = result.failures ?? [];
-            if (!failures.length) return null;
-            ctx.setPage({
-              refused: Object.fromEntries(failures.map((f) => [f.key, refusalNote(f)])),
-            });
-            return {
-              ...refuse(
-                result.applied ? "partial" : "not-ready",
-                `${failures.length} refused · ${cellLabel(ctx, failures[0]!.key)}`,
-              ),
-              cells: failures.map((f) => f.key),
-            };
           },
         },
       },
@@ -322,23 +307,23 @@ const DEMO_CATALOG = {
   ],
 };
 
-const demoSeed = (title: string, page: Record<string, unknown>) => ({
+const demoSeed = (title: string, page: Record<string, unknown>, staged = true) => ({
   title,
   target: { kind: "document", ref: DEMO_TARGET },
   work: {
     basis: { captureId: DEMO_CAPTURE },
-    cells: { "3::1": { proposal: null, staged: { value: "R-454B" } } },
+    cells: staged ? { "3::1": { proposal: null, staged: { value: "R-454B" } } } : {},
   },
   readings: { catalog: DEMO_CATALOG, work: DEMO_READING, saved: DEMO_READING, pods: DEMO_PODS },
   page: { workspaceId: "demo-schedule", captureId: DEMO_CAPTURE, target: DEMO_TARGET, ...page },
 });
 
-/** `?demo=push` audits the grid; `?demo=apply` opens a saved spec beside it. */
+/** `?demo=capture` audits the grid with a staged cell; `?demo=apply` opens a saved spec beside it. */
 export const SCHEDULE_SEEDS = {
-  push: demoSeed("a schedule in the grid with one staged cell", { stage: "audit" }),
-  apply: demoSeed("a saved schedule spec beside the grid", {
-    stage: "apply",
-    pod: "mech-standards",
-    path: DEMO_SPEC_PATH,
-  }),
+  capture: demoSeed("a schedule in the grid with one staged cell", { stage: "audit" }),
+  apply: demoSeed(
+    "a saved schedule spec beside the grid",
+    { stage: "apply", pod: "mech-standards", path: DEMO_SPEC_PATH },
+    false,
+  ),
 };

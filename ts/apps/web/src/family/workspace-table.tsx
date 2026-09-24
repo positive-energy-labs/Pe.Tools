@@ -6,7 +6,7 @@ import { ActionButton } from "#/components/lang/action-button";
 import { Table } from "#/components/master-table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
 import { Pane } from "#/components/lang/pane";
-import { BuildStrip, BUILD_ACTION, buildOutputPath } from "#/family/build";
+
 import { OVERLAY_LABEL, OVERLAY_TITLE, type PRow } from "#/family/model";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 import { cn } from "#/lib/utils";
@@ -35,16 +35,11 @@ export function FamilyWorkspaceTable() {
     openProposals,
     captureAll,
     capturing,
-    armedBuild,
-    building,
-    buildFacts,
-    buildOutcome,
     columns,
     firstGhostKey,
     drillColumns,
   } = useFamilyWorkspace();
   const captureRefusal = store.handle.actions.capture.refusal;
-  const prepareBuildRefusal = store.handle.actions["prepare-build"].refusal;
 
   const rowTint = (row: PRow) => {
     const focused =
@@ -128,19 +123,6 @@ export function FamilyWorkspaceTable() {
           (lane.document == null
             ? "The fixture lane has no session behind it — its live readings are checked into `src/family/world.ts`. Open a real family.json to read Revit."
             : "Re-read the family open in Revit and re-stamp the evidence — this is what the ⇄ live overlay and the drift marks are readings OF. It moves nothing into the profile: that is capture all, under the overlay. Refuses in Revit's own words if no family document is active there.")
-        }
-      />
-      <ActionButton
-        label={BUILD_ACTION}
-        tone="commit"
-        busy={building}
-        disabled={lane.document == null || building || prepareBuildRefusal != null}
-        onClick={store.actions.armBuild}
-        reason={
-          prepareBuildRefusal ??
-          (lane.document == null
-            ? "Nothing to build — this page is reading its declared fixture, which has no file behind it. Pick a document in the sentence first."
-            : `Materialize ${lane.document.relativePath} into a real .rfa inside Revit, at ${buildOutputPath(lane.document.relativePath)}. Pressing this arms the ceremony above the table — it does not build. The strip states which family, from which revision, to which path, and refuses out loud if the file on disk is not the file this table is showing.`)
         }
       />
     </>
@@ -326,24 +308,6 @@ export function FamilyWorkspaceTable() {
               : "Every type side by side — the spread across types is the audit."
       }
     >
-      {/* THE CEREMONY SLOT. It sits inside the pane that owns the crossing, above the table it is
-          about, and it is EMPTY until the verb arms it — "never hover-height" (settled law)
-          means the reason, the refusals and the receipt all get room at strip scale. The build is a
-          whole-family write, so the slot is the same in the drill-in: no type is on the plan. */}
-      <BuildStrip
-        className="mx-2 mt-2"
-        armed={armedBuild}
-        building={building}
-        said={buildOutcome}
-        refusal={store.handle.actions.build.refusal}
-        facts={buildFacts}
-        familyName={world.familyName}
-        count={world.paramRows.length}
-        onReasonChange={store.actions.setBuildReason}
-        onCommit={() => void store.actions.build().catch(() => undefined)}
-        onCancel={store.actions.cancelBuild}
-        onReplan={store.actions.armBuild}
-      />
       {drillIn ?? crossType}
     </Pane>
   );

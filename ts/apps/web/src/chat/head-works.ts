@@ -160,7 +160,7 @@ export function useHeadWorks(
       setConflict(false);
       work.reload();
     },
-    commit: { word: "plan", run: () => exits.planIn("families") },
+    commit: { word: "apply", run: () => exits.planIn("families") },
     open: (focus?: readonly string[]) => exits.open("families", focus),
     line: `families:${address}`,
     ...(exits.planRefusal?.route === "families" ? { refusal: exits.planRefusal.message } : {}),

@@ -46,6 +46,6 @@ test("Ctrl K opens the schedule list by category, and a pick reads that schedule
   expect(screen.getByText("Mechanical Equipment")).toBeTruthy();
   expect(screen.getByText("4 rows")).toBeTruthy();
   await act(async () => fireEvent.click(screen.getByText("AHU Schedule")));
-  expect(reads).toEqual([["refresh", { scheduleId: 7 }]]);
+  expect(reads).toEqual([["read", { scheduleId: 7 }]]);
   expect(screen.queryByText("Door Schedule")).toBeNull();
 });

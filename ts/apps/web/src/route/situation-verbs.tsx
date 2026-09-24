@@ -11,7 +11,7 @@ import type { ActionHandle, RouteHandle } from "./use-route";
 
 const DONE_FADE_MS = 5000;
 
-/** Route content a verb's refusal flag draws under its message, by verb name (ask A: push's stale cells). */
+/** A verb's standing question, by verb name, drawn in its flag (ruling 39: apply's stale cells). */
 export const ActionFlag = createContext<Readonly<Record<string, ReactNode>>>({});
 
 /** A verb button with its flag: refused persists until Esc or the next press; busy counts; done fades. */
@@ -38,15 +38,17 @@ export function SituationAction({
     const timer = setTimeout(() => setFaded(outcome.at), DONE_FADE_MS);
     return () => clearTimeout(timer);
   }, [outcome]);
+  const flag = useContext(ActionFlag)[name];
+  // A route's standing question for this verb (schedules' stale resolve) holds its popover open.
   const shown =
     busy !== null ||
+    flag !== undefined ||
     (outcome !== null &&
       dismissed !== outcome.at &&
       // A refusal that names cells draws on those cells; the verb only tints.
       (outcome.refusal !== null ? !outcome.refusal.cells?.length : faded !== outcome.at));
   const refusedNow = Boolean(outcome?.refusal) && dismissed !== outcome?.at;
   const stopped = action.refusal !== null || (handle.busy !== null && busy === null);
-  const flag = useContext(ActionFlag)[name];
   // The read verb wears Revit's change mark on what it reads (MAP ruling 5); never a second button.
   const rereads = (handle.manifest.actions as Record<string, { rereads?: string } | undefined>)?.[
     name
@@ -119,6 +121,8 @@ export function SituationAction({
                   ) : null}
                   {flag}
                 </span>
+              ) : flag !== undefined ? (
+                flag
               ) : outcome?.stopped ? (
                 <span className="text-ink-2">{action.label} · stopped waiting; see the log</span>
               ) : (

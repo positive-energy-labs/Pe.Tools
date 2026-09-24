@@ -4,7 +4,7 @@ import { ArmingStrip, type ArmingState } from "#/components/lang/arming-strip";
 import { OutcomeLine } from "#/components/lang/outcome";
 
 /** The commit label, shared by the verb that arms and the strip that commits. */
-export const BUILD_ACTION = "build .rfa";
+const BUILD_ACTION = "build .rfa";
 
 type BuildRefusalCode =
   | "no-document"
@@ -77,7 +77,7 @@ export interface BuildFacts {
 }
 
 /** The host freezes the actual action-ID output path at admission. */
-export function buildOutputPath(_relativePath: string): string {
+function buildOutputPath(_relativePath: string): string {
   return ".artifacts/tmp/family/<action-id-sha256>.rfa";
 }
 

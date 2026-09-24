@@ -216,7 +216,7 @@ for (const { path, manifest } of ROUTES)
           // A verb's name is its label and its count; body buttons may share the first word.
           const verb = head
             .first()
-            .getByRole("button", { name: new RegExp(`^${spec.label}(?: ?d+)?$`) })
+            .getByRole("button", { name: new RegExp(`^${spec.label}(?: .+)?$`) })
             .first();
           if ((await verb.count()) === 0) continue;
           checked += 1;
@@ -356,7 +356,7 @@ async function liveLoop(name: string, loop: (page: Page) => Promise<string>) {
 
 test("live /schedules: capture then apply files a run receipt", async () => {
   const { shown, workflows } = await liveLoop("schedules", async (page) => {
-    const pod = await openLive(page, "/schedules", "demo=push&live=1");
+    const pod = await openLive(page, "/schedules", "demo=capture&live=1");
     // The Situation's ladder names the resolved target, not "choose a session" (the document word
     // left the sentence, MAP ruling 28, so the wording is not pinned).
     await expect
@@ -372,8 +372,10 @@ test("live /schedules: capture then apply files a run receipt", async () => {
       .click();
     await run(page, "capture schedule");
     const path = await landed(page, /^settings\/schedules\/schedule-481223-.*\.json$/);
-    await run(page, "apply schedule");
-    await logged(page, "apply schedule", "ran");
+    // Apply is an Applying verb; with no cell staged it names the opened spec (ruling 41).
+    await page.goto(`${page.url()}&stage=apply`, { waitUntil: "domcontentloaded" });
+    await run(page, "apply spec");
+    await logged(page, "apply", "ran");
     return receiptOnPods(page, pod, path, "schedule.apply");
   });
   expect(shown).toContain("Succeeded");
@@ -382,7 +384,7 @@ test("live /schedules: capture then apply files a run receipt", async () => {
   expect(workflows).toEqual(["schedule.capture", "schedule.apply"]);
 }, 180_000);
 
-test("live /family: capture, plan, apply files a run receipt", async () => {
+test("live /family: capture, then apply twice (plan, send) files a run receipt", async () => {
   const { shown, workflows } = await liveLoop("family", async (page) => {
     const pod = await openLive(page, "/family", "demo=capture&live=1");
     await page.goto(`${page.url()}&pod=${pod}`, { waitUntil: "domcontentloaded" });
@@ -391,10 +393,12 @@ test("live /family: capture, plan, apply files a run receipt", async () => {
     // The capture's receipt is a log row whose label opens the member it filed.
     await logged(page, "captured 1 family", path);
     if (SCRATCH) await page.screenshot({ path: join(SCRATCH, "family-captured.png") });
-    await run(page, "plan");
+    // Apply is an Applying verb: press 1 plans and opens the sheet (ruling 35).
+    await page.goto(`${page.url()}&stage=apply`, { waitUntil: "domcontentloaded" });
+    await run(page, "apply");
     await applySheet(page);
     // The log prints the verb the user pressed, never the action key (w4-revit defect 9).
-    await logged(page, "apply family", "ran");
+    await logged(page, "apply", "ran");
     // The owner answers the lamp's host-status read, so the head names no broken host.
     expect(await page.locator("body").innerText()).not.toContain("unreachable");
     return receiptOnPods(page, pod, path, "family.apply");
@@ -402,8 +406,8 @@ test("live /family: capture, plan, apply files a run receipt", async () => {
   expect(shown).toContain("Succeeded");
   // The capture filed a run of its own on this member: that run holds the unmodeled facts.
   expect(shown).toContain("family.capture");
-  // The first capture is the audit's live read into the draft (no pod); the second saves the draft.
-  expect(workflows).toEqual(["family.capture", "family.capture", "family.plan", "family.apply"]);
+  // The seeded draft already holds a reading, so arrival reads nothing; the one capture saves it.
+  expect(workflows).toEqual(["family.capture", "family.plan", "family.apply"]);
 }, 180_000);
 
 async function readMechanicalFamilies(page: Page, expectedValue = "Fan Coil Unit - Ducted model") {
@@ -453,7 +457,7 @@ test("live /families: explicit read retains the last matrix while the next scope
       .click();
     await expect
       .poll(() => count("revit.catalog.loaded-families"), { timeout: 10_000 })
-      .toBe(idle.catalog + 1);
+      .toBe(idle.catalog);
     await page.waitForTimeout(3_000);
     const afterScope = {
       catalog: count("revit.catalog.loaded-families"),
@@ -483,9 +487,9 @@ test("live /families: explicit read retains the last matrix while the next scope
     afterRead: number;
     afterDraftChange: number;
   };
-  expect(idle!.catalog).toBe(0);
+  expect(idle!.catalog).toBe(1);
   expect(idle!.matrix).toBe(0);
-  expect(afterScope).toEqual({ ...idle, catalog: 1 });
+  expect(afterScope).toEqual(idle);
   expect(afterRead).toBe(1);
   expect(afterDraftChange).toBe(1);
 }, 180_000);
@@ -690,7 +694,7 @@ test("live /families: retained readback supports repeat and consecutive family p
     await expectModelValue(page, "Heat Pump - Split", "Heat Pump - Split model");
     if (SCRATCH)
       await page.screenshot({ path: join(SCRATCH, "families-table-staged.png"), fullPage: true });
-    await run(page, "plan");
+    await run(page, "apply");
     if (SCRATCH)
       await page.screenshot({ path: join(SCRATCH, "families-table-plan.png"), fullPage: true });
     let releaseReadback!: () => void;
@@ -727,7 +731,7 @@ test("live /families: retained readback supports repeat and consecutive family p
     await type("Fan Coil Unit - Ducted", "FXMQ20", "FXMQ21");
     await type("Heat Pump - Split", "Heat Pump - Split model", "RXL31");
     await band(0, 2);
-    await run(page, "plan");
+    await run(page, "apply");
     await applySheet(page);
     await expectModelValue(page, "Fan Coil Unit - Ducted", "FXMQ21");
     await expectModelValue(page, "Heat Pump - Split", "RXL31");
@@ -735,7 +739,7 @@ test("live /families: retained readback supports repeat and consecutive family p
     expect(fullReads).toBe(1);
     // Plan filed no spec nobody authored: the page names no member.
     expect(new URL(page.url()).searchParams.get("path") ?? "").toBe("");
-    await logged(page, "apply families", "ran");
+    await logged(page, "apply", "ran");
     // The applied, unchanged staged cell retired: the sentence is gone; the receipt is the record.
     await band(0, 0);
     // The run is filed under the draft's name; `/pods` browses members, and none was filed.

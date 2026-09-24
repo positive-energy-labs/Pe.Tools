@@ -76,12 +76,18 @@ export async function archivedFamiliesObservation(id: string): Promise<FamiliesO
   return body as FamiliesObservation;
 }
 
+/** One loaded family as the picker lists it; `placedInstanceCount` ranks it (ruling 44). */
+interface FamilyOption {
+  id: string;
+  label: string;
+  categoryName: string | null;
+  placedInstanceCount: number;
+}
+
 export interface FamiliesHost {
   categories(target: DocumentRef): Promise<string[]>;
-  families(
-    target: DocumentRef,
-    draft: FamiliesDraft,
-  ): Promise<{ id: string; label: string; categoryName: string | null }[]>;
+  /** Every loaded family, once per document; the draft filters them in the page. */
+  families(target: DocumentRef): Promise<FamilyOption[]>;
   /** Every loaded family's name by its current element id, whatever the scope. */
   namesById(target: DocumentRef): Promise<Map<number, string>>;
 }
@@ -97,26 +103,26 @@ export function createLiveFamiliesHost(): FamiliesHost {
       })) as FieldOptionsData;
       return result.items.map((item) => item.value).sort((a, b) => a.localeCompare(b));
     },
-    async families(target, draft) {
+    async families(target) {
       const result = await callHostRpc(
         "revit.catalog.loaded-families",
-        {
-          filter: {
-            categoryNames: draft.categories,
-            placementScope: draft.placement,
-          },
-          budget: { maxEntries: 5000 },
-        },
+        { filter: {}, budget: { maxEntries: 5000 } },
         { bridgeSessionId: target.session, openDocumentId: target.openId },
       );
+      // Placed families first, unplaced sunk under them; the Ladder keeps this order.
       return result.families
         .filter((family) => family.familyName.trim())
         .map((family) => ({
           id: family.familyName,
           label: family.familyName,
           categoryName: family.categoryName ?? null,
+          placedInstanceCount: family.placedInstanceCount,
         }))
-        .sort((a, b) => a.label.localeCompare(b.label));
+        .sort(
+          (a, b) =>
+            Number(!a.placedInstanceCount) - Number(!b.placedInstanceCount) ||
+            a.label.localeCompare(b.label),
+        );
     },
     async namesById(target) {
       const result = await callHostRpc(

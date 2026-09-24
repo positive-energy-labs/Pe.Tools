@@ -176,9 +176,6 @@ export function Situation({
   const verbs = Object.entries(handle.actions).filter(
     ([name, action]) =>
       (declaredVerbs ? declaredVerbs.includes(name) : !action.stage || action.stage === stage) &&
-      !(handle.manifest.actions as Record<string, { sheet?: true; visible?: false }> | undefined)?.[
-        name
-      ]?.sheet &&
       (handle.manifest.actions as Record<string, { visible?: false }> | undefined)?.[name]
         ?.visible !== false &&
       // The commit verb is drawn once: in the Work sentence while something is staged, else here.

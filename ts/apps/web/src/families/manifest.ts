@@ -16,6 +16,7 @@ import {
 import { FF_SPEC_SCHEMA, ffPlanRow } from "#/host/familyfoundry";
 import { FAMILY_MODEL_SCHEMA } from "#/family/manifest";
 import {
+  ARCHIVED,
   admissionPlan,
   byPlan,
   documentOf,
@@ -60,13 +61,14 @@ export interface FamiliesPage {
 }
 
 const familiesPageSchema = z.object({
+  // A newly bound document drafts its placed families (ruling 44): the cheaper, relevant read.
   draft: z
     .object({
-      placement: z.enum(["AllLoaded", "PlacedOnly", "UnplacedOnly"]).default("AllLoaded"),
+      placement: z.enum(["AllLoaded", "PlacedOnly", "UnplacedOnly"]).default("PlacedOnly"),
       categories: z.array(z.string()).default([]),
       families: z.array(z.string()).nullable().default(null),
     })
-    .default({ placement: "AllLoaded", categories: [], families: null }),
+    .default({ placement: "PlacedOnly", categories: [], families: null }),
   reading: z
     .object({
       document: z.object({ session: z.string(), openId: z.string() }),
@@ -197,8 +199,14 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
     schema: [FF_SPEC_SCHEMA, FAMILY_MODEL_SCHEMA],
     apply: "families.apply",
     applies: ["matrix"],
+    read: "explicit",
+    // Capture files every family the reading on screen holds, one member each.
+    capture: "families.capture",
+    captureInput: (ctx) => {
+      const ids = ctx.page.reading?.result.families.map((family) => family.familyId) ?? [];
+      return ids.length ? { familyIds: ids } : "read families first";
+    },
     targetReady: (ctx) => {
-      if (ctx.page.stage === "archived") return "Archived readings are inspection only";
       if (ctx.work.doc?.patch.staged && stagedDrafts(ctx.work.doc.cells).length)
         return "Stage either a native Family Foundry patch or per-type cells, not both";
       if (ctx.work.doc?.patch.staged && !ctx.work.doc.scope.staged)
@@ -297,7 +305,7 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
     docs: "Read loaded families on request, stage reviewed per-type values or a native Family Foundry patch, then plan those exact bytes or a saved Pod member and apply the confirmed families.",
   };
 
-const familiesRoute = entityRoute<
+export const manifest = entityRoute<
   FamiliesRouteDocument,
   FamiliesReadingKey,
   FamiliesPage,
@@ -347,9 +355,7 @@ const familiesRoute = entityRoute<
       stage: "audit",
       count: (ctx) => ctx.page.draft.families?.length || null,
       ready: (ctx) =>
-        ((ctx.page as FamiliesPage & EntityPage).stage === "archived"
-          ? "Archived readings are inspection only"
-          : null) ??
+        ((ctx.page as FamiliesPage & EntityPage).stage === "archived" ? ARCHIVED : null) ??
         ctx.work.refusal ??
         (!ctx.page.draft.categories.length
           ? "choose a category first"
@@ -407,7 +413,7 @@ const familiesRoute = entityRoute<
       count: (ctx) => stagedDrafts(ctx.work.doc?.cells ?? {}).length || null,
       ready: (ctx) =>
         (ctx.page as FamiliesPage & EntityPage).stage === "archived"
-          ? "Archived readings are inspection only"
+          ? ARCHIVED
           : !stagedDrafts(ctx.work.doc?.cells ?? {}).length
             ? "nothing is staged to save"
             : (ctx.page as unknown as EntityPage).pod
@@ -424,8 +430,3 @@ const familiesRoute = entityRoute<
   },
   seeds: FAMILIES_SEEDS as never,
 });
-
-export const manifest = {
-  ...familiesRoute,
-  stages: [...(familiesRoute.stages ?? []), { key: "archived", word: "Archived" }],
-};

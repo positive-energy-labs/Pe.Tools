@@ -224,7 +224,7 @@ export function LiveScheduleGridWorkspace({
     return handle.actions[kind].run(input);
   };
   useEffect(() => {
-    if (handle.busy?.key === "push" || handle.busy?.key === "refresh") clearHistory();
+    if (handle.busy?.key === "apply" || handle.busy?.key === "read") clearHistory();
   }, [handle.busy?.key]);
   // Freshness is what the envelope says: the host marks a document's Readings changed and this
   // draws the mark. A bridge that is gone says so instead: nothing can be known about a model we
@@ -261,7 +261,7 @@ export function LiveScheduleGridWorkspace({
    * hands — this runs on the focus edge only.
    */
   const focusOf = (pane: "list" | "grid") => () => {
-    const declared = SCHEDULE_STAGES[page.stage === "archived" ? "audit" : page.stage].panes[pane];
+    const declared = SCHEDULE_STAGES[page.stage].panes[pane];
     if (!declared || handle.busy) return;
     if (!(pane === "grid" ? gridChanged : listChanged)) return;
     if (!declared.reads) return handle.revalidate(declared.draws);
@@ -282,7 +282,7 @@ export function LiveScheduleGridWorkspace({
     snapshot: shown?.snapshot ?? null,
     catalog: catalog ?? null,
     busy: handle.busy?.key ?? null,
-    blockedBecause: handle.actions.push.refusal,
+    blockedBecause: handle.actions.apply.refusal,
     refused: page.refused,
     onFocus: { grid: focusOf("grid") },
     freshness,
@@ -296,11 +296,13 @@ export function LiveScheduleGridWorkspace({
       doc={work.doc}
       write={apply}
       revision={work.revision}
-      push={() => execute("push")}
+      push={() => execute("apply")}
       unread={page.unread}
-      readAgain={() => execute("refresh")}
+      readAgain={() => execute("read")}
     />
   );
+  // Stale resolve is apply's question (ruling 39): it stands on apply's flag while it has one.
+  const staleStaged = (work.doc?.basis?.stale ?? []).some((s) => work.doc?.cells[s.key]?.staged);
   const auditRef = useRef<HTMLDivElement | null>(null);
   const audit = (
     <div ref={auditRef} className="flex size-full min-h-0 min-w-0 flex-col">
@@ -316,7 +318,7 @@ export function LiveScheduleGridWorkspace({
     </div>
   );
   const framedView = (
-    <ActionFlag.Provider value={{ push: resolve }}>
+    <ActionFlag.Provider value={staleStaged || page.unread ? { apply: resolve } : {}}>
       <EntityRouteView
         def={scheduleSpec}
         handle={handle as never}
@@ -327,7 +329,7 @@ export function LiveScheduleGridWorkspace({
         work={(_, sentence) => (
           <>
             {sentence}
-            <ScheduleReview state={state} staleBar={resolve} />
+            <ScheduleReview state={state} />
           </>
         )}
         stages={SCHEDULE_STAGES}

@@ -18,27 +18,25 @@ const list: PaneDecl<R, A> = { draws: ["catalog"], verbs: [] };
 const grid: PaneDecl<R, A> = {
   draws: ["work", "saved", "receipts"],
   verbs: ["stage", "unstage", "accept", "deny"],
-  // The grid's read files a capture, so it is the `refresh` verb run by the pane (ruled 2026-09-22).
-  reads: "refresh",
+  // The grid's read files a capture, so it is the hidden `read` verb the pane runs (ruled 2026-09-22).
+  reads: "read",
 };
 // Revealing this pane moves no focus (ledger 2026-09-22).
 const spec: PaneDecl<R, A> = { draws: ["pods"], verbs: ["save"] };
 
-const verbs: readonly A[] = ["refresh", "push", "capture", "apply"];
-// Push binds Mod+Enter — the one chord that writes to Revit (ledger 2026-09-22).
-const keys = { refresh: "R", push: "Mod+Enter" } as const;
-// Push is a stage verb: the stage node binds this chord (`route/keys.tsx` `stageChords`), so it is
-// live only while a stage of this route draws, and the manifest carries no chord for it.
+// Apply binds Mod+Enter, the one chord that writes to Revit (ledger 2026-09-22), in the stage node
+// (`route/keys.tsx` `stageChords`), so it is live only while a stage of this route draws.
+const keys = { apply: "Mod+Enter" } as const;
 
 export const SCHEDULE_STAGES: Readonly<Record<EntityStage, StageDecl<R, A, Pane>>> = {
-  audit: { verbs, keys, panes: { list, grid }, meter: false },
-  capture: { verbs, keys, panes: { list, grid, spec }, meter: false },
-  apply: { verbs, keys, panes: { list, grid, spec }, meter: false },
+  audit: { verbs: ["capture"], keys, panes: { list, grid }, meter: false },
+  apply: { verbs: ["apply"], keys, panes: { list, grid, spec }, meter: false },
+  archived: { verbs: [], keys: {}, panes: {}, meter: false },
 };
 
 /**
- * The sentence ladder's last rung: every schedule in the document, by category. A pick reads it
- * into the grid (`refresh`), exactly as the rail it replaced did; Ctrl K opens it from anywhere.
+ * The sentence ladder's last rung: every schedule in the document, by category. A pick runs the
+ * hidden `read`: a schedule's workspace id is minted by its first read, and the Readings follow it.
  */
 export const scheduleRung = (
   catalog: ScheduleCatalog | null,
@@ -67,6 +65,6 @@ export const scheduleRung = (
   picked: (id) => id === String(open?.scheduleId),
   pick: (id) => {
     const entry = catalog?.schedules.find((row) => String(row.scheduleId) === id);
-    if (entry) void execute("refresh", { scheduleId: entry.scheduleId });
+    if (entry) void execute("read", { scheduleId: entry.scheduleId });
   },
 });
