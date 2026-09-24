@@ -10,6 +10,7 @@ import {
   familiesRouteState,
   familyDraftRouteState,
   parameterLinksRouteState,
+  roomsRouteState,
   scheduleGridRouteState,
   settingsRouteState,
   takeoffsRouteState,
@@ -48,5 +49,6 @@ export function createRouteRegistrations(
     entry(settingsRouteState),
     entry(scheduleGridRouteState),
     entry(takeoffsRouteState),
+    entry(roomsRouteState),
   ];
 }
