@@ -7,6 +7,7 @@ import { RunStrip } from "./zone-card";
 import { HeaderScores } from "./no-scores";
 import type { RunBrowserModel } from "./model";
 
+/** The body's first line under the shell's Runs head: the board, the A/B verbs and the run strip. */
 export function RunBrowserHeader({ model }: { model: RunBrowserModel }) {
   const {
     linkNote,
@@ -33,12 +34,11 @@ export function RunBrowserHeader({ model }: { model: RunBrowserModel }) {
   } = model;
   const hasOverlay = model.reportCur?.Zones.some((zone) => zone.Ink || zone.Seals || zone.Close);
   return (
-    <header
+    <div
       className="flex shrink-0 flex-col gap-1.5 px-4 py-2"
       style={{ borderColor: token("line-2") }}
     >
       <div className="flex flex-wrap items-baseline gap-3">
-        <h1 className="">runs</h1>
         {linkNote && (
           <span
             className=""
@@ -148,6 +148,6 @@ export function RunBrowserHeader({ model }: { model: RunBrowserModel }) {
         onPickCur={pickCur}
         onPickBaseline={pickBaseline}
       />
-    </header>
+    </div>
   );
 }

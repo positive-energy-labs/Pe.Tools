@@ -127,9 +127,9 @@ export function AtlasTable() {
                       the narrowing hid all {rows.length} rooms in scope
                     </EmptyState>
                   ) : world.zones.some((z) => z.rooms.length > 0) ? (
-                    <EmptyState story="filter" exit="widen the rail filter or press Esc">
-                      no rooms in this scope — the rail filter or the plan selection narrowed past
-                      every partitioned zone
+                    <EmptyState story="filter" exit="press Esc to clear the plan scope">
+                      no rooms in this scope — the plan selection narrowed past every partitioned
+                      zone
                     </EmptyState>
                   ) : (
                     <EmptyState

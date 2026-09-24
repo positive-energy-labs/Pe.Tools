@@ -202,18 +202,12 @@ function stagedModel(
   };
 }
 
+/** Every zone's rooms; the atlas narrows them by its plan scope and the table's one query. */
 function atlasRows(
   world: TakeoffModel,
-  page: { zoneKey: string | null; stageFilter: TakeoffModel["zones"][number]["stage"] | null },
   decisions: Readonly<Record<string, "accept" | "dismiss">>,
 ): readonly AtlasRow[] {
-  const selected = page.zoneKey
-    ? world.zones.find((zone) => zone.zone.guid === page.zoneKey)
-    : undefined;
-  const zones = selected
-    ? [selected]
-    : world.zones.filter((zone) => page.stageFilter === null || zone.stage === page.stageFilter);
-  return zones.flatMap((zone) =>
+  return world.zones.flatMap((zone) =>
     zone.rooms.map((room) => {
       const open = room.flags.filter(
         (flag) => decisions[takeoffDecisionKey(room.guid, flag)] === undefined,
@@ -340,10 +334,7 @@ export function useTakeoffsController(options: {
     () => (candidates ? adoptDrafts(candidates, adoptPatches) : null),
     [candidates, adoptPatches],
   );
-  const rows = useMemo(
-    () => atlasRows(world, { zoneKey: navigation.zone, stageFilter: page.stageFilter }, decisions),
-    [world, navigation.zone, page.stageFilter, decisions],
-  );
+  const rows = useMemo(() => atlasRows(world, decisions), [world, decisions]);
   const plan = useMemo(
     () => syncPlan(authority, page.zones, staged, decisions),
     [authority, page.zones, staged, decisions],
@@ -418,10 +409,6 @@ export function useTakeoffsController(options: {
       chooseR10: (r10: string) => setPage({ r10, panel: null, syncReview: null }),
       chooseStage: (stage: TakeoffSelection["stage"]) =>
         setPage({ stage, panel: null, syncReview: null }),
-      filterStage: (stageFilter: typeof page.stageFilter) => {
-        setPage({ stageFilter });
-        setNavigation({ zone: null, room: null });
-      },
       chooseLevel: (level: string) => setNavigation({ level, zone: null, room: null }),
       chooseZone: (zone: string | null, level?: string) => {
         const changesScope = zone !== null && !page.zones.includes(zone);
@@ -443,7 +430,6 @@ export function useTakeoffsController(options: {
       resetTarget: () => {
         setPage({
           ...EMPTY_TAKEOFF_SELECTION,
-          stageFilter: null,
           panel: null,
           syncReview: null,
         });
@@ -564,7 +550,6 @@ export function useTakeoffsController(options: {
     r10Path: page.r10,
     stage: page.stage,
     zoneKey: navigation.zone,
-    stageFilter: page.stageFilter,
     level: navigation.level,
     cursor: navigation.room,
     decisions: decisions,

@@ -16,7 +16,7 @@ export function AtlasVisual() {
     busy,
     geoReady,
     actions,
-    stageFilter,
+    queriedZones,
     zoneKey,
     cursor,
     planOpen,
@@ -115,7 +115,7 @@ export function AtlasVisual() {
           planError={planImage.error}
           planNote={planImage.note}
           zones={levelZones}
-          stageFilter={stageFilter}
+          shown={queriedZones}
           selectedKey={zoneKey}
           cursor={cursor}
           stateOf={stateOf}

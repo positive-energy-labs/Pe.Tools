@@ -10,13 +10,7 @@ import {
   type AtlasRow as Row,
   type TakeoffsController,
 } from "#/takeoff/controller";
-import {
-  STAGE_ORDER,
-  type RoomEdit,
-  type Phase,
-  type ModelRoom,
-  type ModelZone,
-} from "#/takeoff/world";
+import { type RoomEdit, type ModelRoom, type ModelZone } from "#/takeoff/world";
 import { AtlasProvider } from "#/takeoff/atlas-context";
 import { AtlasWorkspace } from "#/takeoff/atlas-workspace";
 import { useAtlasColumns } from "#/takeoff/atlas-columns";
@@ -52,7 +46,6 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
   const snapshot = store.snapshot;
   const geoReady = snapshot?.state === "ready";
   const actions = useMemo(() => createAtlasActions(store), [store]);
-  const stageFilter = store.stageFilter;
   const zoneKey = store.zoneKey;
   const pageLevel = store.level;
   const cursor = store.cursor;
@@ -64,7 +57,11 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     sorts: [],
     query: "",
   });
-  const rows = store.atlasRows;
+  const all = store.atlasRows;
+  const rows = useMemo(
+    () => (zoneKey ? all.filter((row) => row.zone.zone.guid === zoneKey) : all),
+    [all, zoneKey],
+  );
   const flagVocabulary = useMemo(() => {
     const set = new Set<string>();
     for (const z of world.zones) for (const r of z.rooms) for (const f of r.flags) set.add(f);
@@ -100,7 +97,6 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
   );
   const image = usePlanImage(store.handle.resolution, pick.view);
   const planImage = { ...image, error: image.error ?? ownerCrops.error, note: pick.note ?? null };
-  const setStageFilter = (value: Phase | null) => store.actions.filterStage(value);
   const setLevel = useCallback((value: string) => store.actions.chooseLevel(value), [store]);
   const setCursor = useCallback((value: string | null) => store.actions.chooseRoom(value), [store]);
 
@@ -111,9 +107,17 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
   const zoneStates = (z: ModelZone) => z.rooms.map((r) => stateOf(r));
   const zoneCalls = (z: ModelZone) => zoneStates(z).filter((s) => s === "call").length;
 
+  // The table's one query narrows the zones rail and dims the plan too; a stage is a query field.
+  const queriedZones = useMemo(
+    () =>
+      tableState.query.trim()
+        ? new Set(viewRows(all, columns, tableState).map((row) => row.zone.zone.guid))
+        : null,
+    [all, columns, tableState],
+  );
   const filteredZones = useMemo(
-    () => world.zones.filter((z) => stageFilter === null || z.stage === stageFilter),
-    [world, stageFilter],
+    () => (queriedZones ? world.zones.filter((z) => queriedZones.has(z.zone.guid)) : world.zones),
+    [world, queriedZones],
   );
 
   const selected = zoneKey ? (world.zones.find((z) => z.zone.guid === zoneKey) ?? null) : null;
@@ -196,15 +200,8 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     planScope: selected
       ? { label: `plan scope: ${selected.zone.key}`, onClear: () => selectZone(null) }
       : null,
-    rail: stageFilter
-      ? { label: `rail: ${stageFilter}`, onClear: () => setStageFilter(null) }
-      : null,
   });
 
-  const stageCounts = STAGE_ORDER.map((s) => ({
-    stage: s,
-    n: world.zones.filter((z) => z.stage === s).length,
-  }));
   const scopeCalls = visibleRows.filter((r) => r.state === "call").length;
   const scopeSqft = visibleRows.reduce((s, r) => s + r.room.sqft, 0);
 
@@ -225,7 +222,7 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     geoReady,
     geometry: snapshot,
     actions,
-    stageFilter,
+    queriedZones,
     zoneKey,
     cursor,
     fieldsMode,
@@ -237,7 +234,6 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     visibleKeys,
     level,
     planImage,
-    setStageFilter,
     setLevel,
     setPlanOpen,
     setStatsOpen,
@@ -260,7 +256,6 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     clearScope,
     columns,
     chips,
-    stageCounts,
     scopeCalls,
     scopeSqft,
     proposedUrl: `${proposedUrl.pathname}${proposedUrl.search}`,
