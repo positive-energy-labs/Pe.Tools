@@ -178,6 +178,10 @@ test("millwork in Model AND Count > 1, through the query box, the header, and it
   box.focus();
   fireEvent.change(box, { target: { value: "mod" } });
   expect(shown()).toBe(4);
+  // The typed word leads the list with its hit count, so Enter keeps it (MAP ruling 47).
+  expect(within(screen.getByRole("listbox")).getAllByRole("option")[0]?.textContent).toContain(
+    "search “mod” in any field",
+  );
   // Real fields only: the row-number gutter is not offered, and has no filter press.
   fireEvent.change(box, { target: { value: "" } });
   expect(within(screen.getByRole("listbox")).queryByText("#")).toBeNull();

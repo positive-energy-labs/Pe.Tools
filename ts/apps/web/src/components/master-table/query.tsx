@@ -188,16 +188,8 @@ export function QueryBox({
         prefix: each.label.toLowerCase().startsWith(needle),
         take: () => type(`${neg}${quoted(each.label)}`),
       }));
+    // The typed word is row one with its hit count, so Enter keeps it (MAP ruling 47).
     picks = [
-      ...offered.filter((each) => each.prefix),
-      ...rules
-        .filter((each) => each.word.startsWith(needle))
-        .map((each) => ({
-          key: `rule:${each.word}`,
-          label: `${neg}${each.word}`,
-          hint: each.label,
-          take: () => commit(`${neg}${each.word}`),
-        })),
       ...(clause.kind === "word" && !rules.some((each) => each.word === needle)
         ? [
             {
@@ -208,6 +200,15 @@ export function QueryBox({
             },
           ]
         : []),
+      ...offered.filter((each) => each.prefix),
+      ...rules
+        .filter((each) => each.word.startsWith(needle))
+        .map((each) => ({
+          key: `rule:${each.word}`,
+          label: `${neg}${each.word}`,
+          hint: each.label,
+          take: () => commit(`${neg}${each.word}`),
+        })),
       ...offered.filter((each) => !each.prefix),
     ];
   }
@@ -313,8 +314,12 @@ export function QueryBox({
         // Enter takes the highlighted suggestion, else the top one, at every step.
         cursor={picks.some((each) => each.key === cursor) ? cursor : (picks[0]?.key ?? null)}
         onCursorChange={setCursor}
+        // Tab completes to the first suggestion; the typed row is what Enter already keeps.
         onTab={() => {
-          const entry = picks.find((each) => each.key === cursor) ?? picks[0];
+          const entry =
+            picks.find((each) => each.key === cursor && each.key !== "search") ??
+            picks.find((each) => each.key !== "search") ??
+            picks[0];
           entry?.take();
           return Boolean(entry);
         }}

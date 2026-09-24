@@ -157,6 +157,56 @@ Legacy nouns under review: band, readout, read status, rules.
 40. Rulings 34-39 supersede the stage and verb proposals the coordinator made on 2026-09-23 night
    (capture in Applying, a separate plan step). The entity-route stage and verb shape goes to a
    dedicated demiurge session: `.artifacts/handoffs/2026-09-24-entity-route-demiurge.md`.
+41. 2026-09-24, entity-route demiurge round 1: "I want the ux to mostly b a schedule editor. And
+   since it would then become the natural home for schedule related stuff I thought definition
+   apply/capture fit well." `/schedules` stays the one home for a schedule's cells and its
+   definition; no separate route, nothing moves to `/pods`. Its one `apply` verb consumes staged
+   cells when any are staged (today's push), else the opened definition spec. The button names its
+   object ("apply 21 cells", "apply spec <name>") and refuses when both are present.
+42. "Yes to read being the only explicit." `read families` is the one explicit read verb on any
+   entity route; every other Reading is automatic and the stale mark is its reread. The families
+   category and family pickers stop reaching Revit on every change; they list once per document.
+43. Press 1 of apply on `/families` plans one `families.plan` hop per staged family; accepted for
+   now ("if the difference is big fix", it is seconds and one summed receipt). Owed: one plan call
+   over every staged draft, so one press is one journal row.
+44. "The picker needs to grow a callback to sort to bottom certain items ... if I'm in Chadds and 50
+   mech fans r loaded but only 10 placed, the picker should reflect this. It'll make more
+   performant reads the default path, and this irrelevance retaking is a good ux practice." A
+   picker rung ranks by relevance: a route supplies a sink rule and the Ladder keeps the route's
+   order, never re-sorting. First consumer: the families family rung sinks unplaced families under
+   the placed ones and shows the placed count as the option's sub; the default read scope is the
+   placed families. `placedInstanceCount` is already on the catalog entry.
+45. "Yes family build is an applying verb." On `/family`, `build .rfa` sits beside `apply` on
+   Applying: press 1 reviews the exact saved spec, press 2 builds it to a new .rfa. The separate
+   `review build` and `cancel build` verbs are deleted; the review is build's sheet, as the plan is
+   apply's.
+46. "The picker scroll boxes everywhere seem not to keep selection in view when navigating with
+   arrow keys." The active row of every list picker scrolls into view on arrow keys. The one list
+   is `components/lang/list-popup.tsx` (Ladder, QueryBox fields, palette); it has no
+   scroll-into-view today. A bug, fixed once in that file.
+47. "In the search box the pickers first item should always be whatever the user has typed, this
+   way when they press return it selects that one and not the first suggestion ... This would also
+   be a good opportunity to display the number of items it hits so I can explore partial matches."
+   In a list picker with a text box, the first row is the typed text itself, and Enter picks it;
+   suggestions follow. That row shows how many items the text matches, so a partial match is a
+   thing a person can pick and explore. Exact match is never silently substituted.
+
+## Entity route shape (ruled 2026-09-24, rulings 34-45; the baton is deleted)
+
+One kernel, three consumers. Stages Auditing, Applying, Archived on every entity route.
+
+| Stage | Revit | Work | Pod | Row verbs |
+|---|---|---|---|---|
+| Auditing | read, automatic; `read families` is the one explicit read | stage, unstage, accept, deny | `capture` files Reading plus staged as a spec (optional) | read (families only), capture |
+| Applying | press 1 plans, press 2 applies, then readback | staged is the input; consumed cells retire | an opened spec is the input when nothing is staged | apply, save draft; `/family` adds build .rfa |
+| Archived | none | none | none | none |
+
+Build order (Wave B, held until now):
+1. Kernel: `entityRoute` emits the three stages always, no `capture` stage, no `plan` verb, apply plans on press 1; capture is an Auditing verb on all three; `commit` and `push` die; stale resolve draws on apply's flag; a def declares `read: "explicit"` or gets none.
+2. `/schedules`: apply names its object (ruling 41); `read schedule` and R die; the Ladder pick subscribes.
+3. `/family`: arrival auto-capture and R die; build on Applying with its review as press 1 (ruling 45).
+4. `/families`: Archived from the kernel; pickers list once and sink unplaced (ruling 44); capture declared.
+5. Work slot `protoui`: V14 one-line rows with tabs; the log's weight (ruling 39).
 
 ## Normalization rules (ruling 29, 2026-09-23 night)
 

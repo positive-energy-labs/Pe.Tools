@@ -7,7 +7,7 @@
  *
  * Identity is by key, never by object (R16): rebuilt item arrays are fine.
  */
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 
 import { useScopeKeys, type ScopeKey } from "#/route/keys";
 
@@ -386,6 +386,11 @@ export function useCollection<T>(options: CollectionOptions<T>) {
   useScopeKeys(keys, options.target);
 
   const optionId = (key: string) => `${listId}-${key.replace(/[^\w-]/g, "_")}`;
+  // The cursored row stays in view as the keys move it (MAP ruling 46).
+  const cursorId = cursor ? optionId(cursor.key) : null;
+  useEffect(() => {
+    if (cursorId) document.getElementById(cursorId)?.scrollIntoView?.({ block: "nearest" });
+  }, [cursorId]);
   return {
     query,
     /** Typing resets the cursor to the top hit. */
