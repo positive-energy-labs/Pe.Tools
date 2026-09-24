@@ -15,7 +15,9 @@ export interface Inspectable {
   label: (id: string) => string;
   open:
     | { kind: "shell"; path: (id: string) => string }
-    | { kind: "route"; to: string; search: (id: string) => Record<string, string> };
+    | { kind: "route"; to: string; search: (id: string) => Record<string, string> }
+    /** A host endpoint the browser opens as a document (raw JSON), outside the app router. */
+    | { kind: "href"; href: (id: string) => string };
 }
 
 /** An inspectable's address, as a log entry or receipt carries it. */
@@ -98,6 +100,12 @@ export function Inspect({
       <Link to={spec.open.to as never} search={spec.open.search(id) as never}>
         {text}
       </Link>
+    );
+  if (spec.open.kind === "href")
+    return (
+      <a href={spec.open.href(id)} target="_blank" rel="noreferrer">
+        {text}
+      </a>
     );
   const path = spec.open.path(id);
   return (
