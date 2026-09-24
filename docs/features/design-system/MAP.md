@@ -140,6 +140,24 @@ Legacy nouns under review: band, readout, read status, rules.
    (`FamilyPatch.cs:11-31`). The metadata diff is one row per field: the one "after" and the
    differing "befores" as counts, expandable to family names. Re-openable default.
 
+34. 2026-09-23 night, "the three stages should be audit, apply, archive. like families!!!" Every
+   entity route has the stages Auditing, Applying, Archived. Capture is not a stage.
+35. "plan should be implicit prep step on apply. so u must press apply twice." There is no plan
+   verb. The first apply press plans; the second press applies.
+36. "schedules has the exact same verbs" as families. Push is not its own verb; it is apply.
+37. "schedules and family should not get explicit read verb buttons, nor actually plan." Whether
+   families keeps its `read families` button is not ruled.
+38. "capture should only exist as an optional verb u can use in the audit stage to save
+   persistently."
+39. The Work slot on /schedules is "a mess": the proposal interface is "too scrunched to be
+   reviewable"; the log's visual weight is wrong; push is drawn in the Work slot but is a verb;
+   stale resolve (Overwrite N / Keep Revit's N) sits in the proposal area, "the wrong
+   responsibility split". It belongs to the apply verb: an enabled verb, or buttons in the apply
+   verb's action popover.
+40. Rulings 34-39 supersede the stage and verb proposals the coordinator made on 2026-09-23 night
+   (capture in Applying, a separate plan step). The entity-route stage and verb shape goes to a
+   dedicated demiurge session: `.artifacts/handoffs/2026-09-24-entity-route-demiurge.md`.
+
 ## Normalization rules (ruling 29, 2026-09-23 night)
 
 Each rule lands once in the primitives and every route inherits it. N1 a route with a target draws
