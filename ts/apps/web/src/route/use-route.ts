@@ -33,6 +33,7 @@ import { useThreadScope } from "#/chat/scope";
 import {
   ActionRefusal,
   type LogEntry,
+  type RouteNote,
   type Slice,
   appAtomRegistry,
   createRouteOwner,
@@ -126,7 +127,7 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
   readonly failure: Refusal | null;
   readonly outcome: RouteOutcome<A> | null;
   readonly log: readonly LogEntry[]; // the page log, newest first
-  note(label: string, says: string, refused?: boolean, link?: LogEntry["link"]): void; // a log row from outside an action (ruling 9)
+  readonly note: RouteNote;
   readonly demo: boolean;
   /** Re-acquire these Readings, as a verb's `dirties` would; a pane's focus edge calls it. */
   revalidate(keys: readonly R[]): void;
@@ -411,8 +412,7 @@ export function useRoute<W, R extends string, P, A extends string>(
       },
       readings,
       page,
-      note: (label: string, says: string, refused = false, link?: LogEntry["link"]) =>
-        owner.note("verb", label, says, refused, undefined, link),
+      note: owner.verbNote,
       call: (operation: string, input?: unknown) =>
         callHostDynamic(operation, input, targetHeaders(ctx.target)),
       // Bound to the action's snapshot, through the queue: it follows this owner's own landed
@@ -589,8 +589,7 @@ export function useRoute<W, R extends string, P, A extends string>(
     failure,
     outcome,
     log,
-    note: (label, says, refused = false, link) =>
-      owner.note("verb", label, says, refused, undefined, link),
+    note: owner.verbNote,
     demo: seed !== undefined,
     revalidate: (keys) => {
       for (const [name, , request] of readingAtoms)

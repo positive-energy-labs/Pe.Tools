@@ -104,7 +104,7 @@
  *                  Because it reads the saved bytes rather than the table, it is armed rather than
  *                  pressed — the ceremony, its refusals and its receipt live in `#/family/build`.
  */
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 
 import { ActionButton } from "#/components/lang/action-button";
 import { Code, stringify } from "#/components/lang/code";
@@ -186,22 +186,23 @@ function useFamilyLog(store: FamilyStore) {
       evidence.run
         ? { kind: "member", id: JSON.stringify([member.pod, `${evidence.run}/unmodeled.json`]) }
         : undefined,
+      { at: evidence.observedAt, key: `capture:${capturedKey}` },
     );
-    for (const issue of evidence.issues)
-      handle.note(issue.code, issue.message, issue.severity === "Error");
+    for (const [index, issue] of evidence.issues.entries())
+      handle.note(issue.code, issue.message, issue.severity === "Error", undefined, {
+        at: evidence.observedAt,
+        key: `capture:${capturedKey}:issue:${index}`,
+      });
   }, [capturedKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const noted = useRef(new Set<string>());
   useEffect(() => {
-    for (const reading of store.readings) {
-      if (noted.current.has(reading.id)) continue;
-      noted.current.add(reading.id);
+    for (const reading of store.readings)
       handle.note(
         `saved ${reading.reading.kind} reading`,
         `captured ${reading.capturedAt} (${reading.provenance.kind})`,
         false,
         { kind: "reading", id: reading.id },
+        { at: reading.capturedAt, key: `reading:${reading.id}` },
       );
-    }
   }, [store.readings]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 

@@ -185,13 +185,6 @@ export const schedulesManifest = () =>
         groupOf: (key) => [String(splitScheduleCellKey(key).columnNumber)],
         nouns: ["column"],
       },
-      // A receipt that needs recovery is a log row; its link opens it where recovery lives.
-      inspectables: {
-        receipt: {
-          label: (id) => `receipt ${id.slice(0, 8)}`,
-          open: { kind: "route", to: "/ops", search: (id) => ({ actionId: id }) },
-        },
-      },
       readings: {
         catalog: {
           kind: "schedule-reading",

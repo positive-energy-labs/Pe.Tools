@@ -100,7 +100,9 @@ export function InstancesPage({
   // The SDK's default census is the live set; the graveyard (`--all`) is not a picker.
   const fleet = useFleet();
   useSessionEvents(fleet.sessions, (event) =>
-    handle.note(event.label, "bridge-observed world event", event.kind === "gap"),
+    handle.note(event.label, "bridge-observed world event", event.kind === "gap", undefined, {
+      at: event.atMs,
+    }),
   );
   const picked = findSession(fleet.worlds, target);
   const count = fleet.worlds.length;

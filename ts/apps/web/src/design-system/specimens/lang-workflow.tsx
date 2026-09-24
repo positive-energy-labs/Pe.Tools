@@ -1,7 +1,6 @@
 import type { TrichotomyCellLike } from "@pe/agent-contracts";
 import { Save } from "lucide-react";
 
-import { AddressingBar, addressingBarRecipe } from "#/components/lang/addressing-bar";
 import { ArmingStrip, armingStripRecipe } from "#/components/lang/arming-strip";
 import { ArtifactFrame, artifactFrameRecipe } from "#/components/lang/artifact-frame";
 import {
@@ -14,7 +13,7 @@ import {
   type CellWire,
 } from "#/components/lang/band";
 import { StateCell } from "#/components/lang/cell";
-import { FactChip, Tag } from "#/components/lang/chip";
+import { Tag } from "#/components/lang/chip";
 import { Kbd } from "#/components/lang/kbd";
 import { ActionButton } from "#/components/lang/action-button";
 import { Verdict } from "#/components/lang/verdict";
@@ -88,35 +87,6 @@ export function LangWorkflowSpecimens() {
           reload={noop}
         />
       </SpecimenFrame>
-      <RecipeGrid
-        name="AddressingBar"
-        importPath="#/components/lang/addressing-bar"
-        recipe={addressingBarRecipe}
-        render={() => (
-          <AddressingBar
-            name="family"
-            sentence={<span>editing profiles/door.pea.json</span>}
-            facts={
-              <FactChip tone="caution" title="Two edits are not on disk.">
-                unsaved draft · 2
-              </FactChip>
-            }
-            verb={
-              <ActionButton
-                tone="commit"
-                label="save profile"
-                reason="Writes the profile"
-                onClick={noop}
-              />
-            }
-            seam={
-              <FactChip dashed title="Fixture data; no document is connected.">
-                fixture
-              </FactChip>
-            }
-          />
-        )}
-      />
       <RecipeGrid
         name="ArmingStrip"
         importPath="#/components/lang/arming-strip"
