@@ -99,10 +99,16 @@ public sealed record PartitionAnswer(
     double Ms
 );
 
+/// <summary>
+///     The domain is the Zoning Region <see cref="ZoneRegion" />, or, when <see cref="Loops" /> is set,
+///     those host-feet loops (even-odd) on the ViewPlan <see cref="View" />, which gives level and phase.
+/// </summary>
 public sealed record PartitionRequest(
     long ZoneRegion,
     Enclosure? Enclosure = null,
-    Knobs? Knobs = null
+    Knobs? Knobs = null,
+    double[][]? Loops = null,
+    long? View = null
 );
 
 /// <summary>Thrown when the partition stops being a partition. These never Hold; they throw.</summary>

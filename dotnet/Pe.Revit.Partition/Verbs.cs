@@ -28,7 +28,13 @@ public static class Verbs {
 
     public static PartitionAnswer Partition(Document document, PartitionRequest request) {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var input = Capture(document, request);
+        var result = Run(document, Capture(document, request));
+        return result with { Ms = Math.Round(sw.Elapsed.TotalMilliseconds, 3) };
+    }
+
+    /// <summary>Solve an already captured input; callers that need the captured slices capture first.</summary>
+    public static PartitionAnswer Run(Document document, PartitionInput input) {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         ProbeAnswer Probe(double x, double y) {
             var answer = SpaceVerbs.Probe(document, new XYZ(x, y, input.LevelZ + KneeLoFt), purpose: ProbePurpose.RoomHeights);
             RequireStamp(answer.Stamp, input.Knee.Stamp, document.GetDocumentKey(), "probe");
@@ -52,15 +58,30 @@ public static class Verbs {
 
         // Stage 1, scope. The Zoning Region is a FilledRegion; its loop is the domain and the
         // accounting denominator, and its level comes from the view it is drawn on.
-        if (document.GetElement(request.ZoneRegion.ToElementId()) is not FilledRegion region)
-            throw new PartitionException($"element {request.ZoneRegion} is not a FilledRegion");
+        double[][] loops;
+        View view;
+        Level level;
+        if (request.Loops is { } given) {
+            // Level scope: the caller's loops are the domain; the plan view gives level and phase.
+            if (request.View is not { } viewId || document.GetElement(viewId.ToElementId()) is not ViewPlan plan
+                || plan.IsTemplate || plan.GenLevel is null)
+                throw new PartitionException($"view {request.View} is not a non-template ViewPlan with a level");
+            if (given.Length == 0 || given.Any(l => l is null || l.Length < 6 || l.Length % 2 != 0 || l.Any(v => !Finite(v))))
+                throw new PartitionException("malformed capture: domain loops must be finite x,y rings of three or more points");
+            loops = given;
+            view = plan;
+            level = plan.GenLevel;
+        } else {
+            if (document.GetElement(request.ZoneRegion.ToElementId()) is not FilledRegion region)
+                throw new PartitionException($"element {request.ZoneRegion} is not a FilledRegion");
 
-        var loops = region.GetBoundaries().Select(cl => Loop(cl, Transform.Identity, $"zone {region.Id}")).ToArray();
-        if (loops.Length == 0) throw new PartitionException($"malformed capture: zone {region.Id} has no boundaries");
-        if (document.GetElement(region.OwnerViewId) is not View view)
-            throw new PartitionException($"malformed capture: zone {region.Id} has no owner view");
-        var level = view.GenLevel ?? document.GetElement(region.LevelId) as Level
-            ?? throw new PartitionException($"malformed capture: zone {region.Id} resolves to no level");
+            loops = region.GetBoundaries().Select(cl => Loop(cl, Transform.Identity, $"zone {region.Id}")).ToArray();
+            if (loops.Length == 0) throw new PartitionException($"malformed capture: zone {region.Id} has no boundaries");
+            view = document.GetElement(region.OwnerViewId) as View
+                ?? throw new PartitionException($"malformed capture: zone {region.Id} has no owner view");
+            level = view.GenLevel ?? document.GetElement(region.LevelId) as Level
+                ?? throw new PartitionException($"malformed capture: zone {region.Id} resolves to no level");
+        }
         var levelZ = level.ProjectElevation;
         if (!Finite(levelZ)) throw new PartitionException("malformed capture: nonfinite level elevation");
         var phaseId = PhaseId(view, BuiltInParameter.VIEW_PHASE);

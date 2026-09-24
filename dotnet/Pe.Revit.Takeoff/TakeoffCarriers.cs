@@ -22,6 +22,14 @@ public static class TakeoffCarriers
     internal static readonly Guid RegistryGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9004");
     internal static readonly Guid RoomTypeGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9005");
 
+    internal static readonly Guid RoomNameGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9006");
+    internal static readonly Guid CeilingFtGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9007");
+    internal static readonly Guid PeopleGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9008");
+    internal static readonly Guid LightingWGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9009");
+    internal static readonly Guid EquipSensibleGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c900a");
+    internal static readonly Guid EquipLatentGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c900b");
+    internal static readonly Guid VentilationCfmGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c900c");
+
     public const string RoleZoningRegion = "zoning-region";
     public const string RoleRoomRegion = "room-region";
     public const string RoleHeldResidue = "held-residue";
@@ -49,6 +57,20 @@ public static class TakeoffCarriers
             Description: "Takeoffs room classification used by Manual J assists.",
             Guid: RoomTypeGuid),
         BuiltInCategory.OST_DetailComponents);
+
+    private static Carrier RoomField(string name, ForgeTypeId spec, Guid guid, string description) =>
+        new(new SharedDefinitionSpec(name, spec, Description: description, Guid: guid), BuiltInCategory.OST_DetailComponents);
+
+    private static readonly IReadOnlyList<Carrier> RoomFieldCarriers =
+    [
+        RoomField("PE_M___RoomName", SpecTypeId.String.Text, RoomNameGuid, "Rooms room name."),
+        RoomField("PE_M___CeilingFt", SpecTypeId.Number, CeilingFtGuid, "Rooms ceiling height, feet."),
+        RoomField("PE_M___People", SpecTypeId.Number, PeopleGuid, "Rooms occupant count."),
+        RoomField("PE_M___LightingW", SpecTypeId.Number, LightingWGuid, "Rooms lighting load, watts."),
+        RoomField("PE_M___EquipSensible", SpecTypeId.Number, EquipSensibleGuid, "Rooms equipment sensible load."),
+        RoomField("PE_M___EquipLatent", SpecTypeId.Number, EquipLatentGuid, "Rooms equipment latent load."),
+        RoomField("PE_M___VentilationCfm", SpecTypeId.Number, VentilationCfmGuid, "Rooms ventilation, cfm."),
+    ];
 
     public static TakeoffCarrierPreflight Preflight(
         Document document,
@@ -99,6 +121,7 @@ public static class TakeoffCarriers
     {
         TakeoffCarrierStage.Adoption => AdoptionCarriers,
         TakeoffCarrierStage.Materialization => [.. AdoptionCarriers, RoomTypeCarrier],
+        TakeoffCarrierStage.Rooms => [.. AdoptionCarriers, RoomTypeCarrier, .. RoomFieldCarriers],
         _ => throw new ArgumentOutOfRangeException(nameof(stage), stage, null),
     };
 
@@ -134,6 +157,33 @@ public static class TakeoffCarriers
 
     public static string ReadRoomType(FilledRegion region) =>
         region.get_Parameter(RoomTypeGuid)?.AsString() is { Length: > 0 } value ? value : "hall";
+
+    public static RoomFields ReadRoomFields(FilledRegion region) => new(
+        region.get_Parameter(RoomNameGuid)?.AsString() ?? "",
+        ReadRoomType(region),
+        Number(region, CeilingFtGuid), Number(region, PeopleGuid), Number(region, LightingWGuid),
+        Number(region, EquipSensibleGuid), Number(region, EquipLatentGuid), Number(region, VentilationCfmGuid));
+
+    // Writes only the fields that are set; null means "not given", never "clear".
+    public static void WriteRoomFields(FilledRegion region, RoomFields fields)
+    {
+        if (fields.Name != null) Set(region, RoomNameGuid, fields.Name);
+        if (fields.Type != null) WriteRoomType(region, fields.Type);
+        foreach (var (guid, value) in new[] {
+                     (CeilingFtGuid, fields.CeilingFt), (PeopleGuid, fields.People), (LightingWGuid, fields.LightingW),
+                     (EquipSensibleGuid, fields.EquipSensible), (EquipLatentGuid, fields.EquipLatent),
+                     (VentilationCfmGuid, fields.VentilationCfm) })
+        {
+            if (value is not { } v) continue;
+            var parameter = region.get_Parameter(guid)
+                            ?? throw new InvalidOperationException($"carrier {guid} is not bound on {region.Id} — initialize the Rooms carriers first.");
+            if (parameter.IsReadOnly || !parameter.Set(v))
+                throw new InvalidOperationException($"Revit rejected carrier write {guid} on {region.Id}.");
+        }
+    }
+
+    private static double? Number(FilledRegion region, Guid guid) =>
+        region.get_Parameter(guid) is { HasValue: true } p ? p.AsDouble() : null;
 
     // Absent blob = empty registry (a model that never registered a System). Any stored blob that
     // fails the codec throws — fail closed, never proceed against a half-read registry.
@@ -171,3 +221,13 @@ public sealed class TakeoffCarrierPrerequisiteException(TakeoffCarrierPreflight 
 {
     public TakeoffCarrierPreflight Preflight { get; } = preflight;
 }
+
+public sealed record RoomFields(
+    string? Name = null,
+    string? Type = null,
+    double? CeilingFt = null,
+    double? People = null,
+    double? LightingW = null,
+    double? EquipSensible = null,
+    double? EquipLatent = null,
+    double? VentilationCfm = null);

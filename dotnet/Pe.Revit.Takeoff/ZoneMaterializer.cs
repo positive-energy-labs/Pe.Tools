@@ -21,6 +21,11 @@ public sealed record RegionProvenance(
     [JsonProperty("r10")]
     public TakeoffRhvacLink? Rhvac { get; init; }
 
+    // /rooms: SHA256 hex of the region's own loops at creation, and of the knee-slice evidence under it.
+    // Older blobs read both as null (Version stays 1).
+    public string? GeometryHash { get; init; }
+    public string? WallHash { get; init; }
+
     [JsonProperty("flags")]
     public List<string> Flags { get; init; } = [];
 

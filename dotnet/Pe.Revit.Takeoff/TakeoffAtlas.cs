@@ -258,7 +258,7 @@ public static class TakeoffAtlas
         return new TakeoffWriteResult(elementId, check.ZoneGuid, blob.Length, blob);
     }
 
-    private static ViewPlan FindView(Document doc, string name) =>
+    internal static ViewPlan FindView(Document doc, string name) =>
         new FilteredElementCollector(doc).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
             .FirstOrDefault(v => !v.IsTemplate && v.Name == name)
         ?? throw new InvalidOperationException($"no ViewPlan named '{name}'");

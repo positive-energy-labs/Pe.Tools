@@ -5,6 +5,7 @@ public enum TakeoffCarrierStage
 {
     Adoption,
     Materialization,
+    Rooms,
 }
 public sealed record TakeoffCarrierPreflight(
     TakeoffCarrierStage Stage,
@@ -123,3 +124,60 @@ public sealed record TakeoffRhvacLink(
 public sealed record TakeoffRhvacLinkWrite(long ElementId, TakeoffRhvacLink Link);
 public sealed record TakeoffRhvacLinksRequest(List<TakeoffRhvacLinkWrite> Writes);
 public sealed record TakeoffRhvacLinksData(IReadOnlyList<TakeoffWriteResult> Writes);
+
+// /rooms (docs/features/rooms/LEDGER.md). A Room Region on a level-scoped plan view; same carriers as takeoffs
+// plus the seven room fields. Loops are [x,y] host feet, outer CCW, even-odd holes.
+public sealed record RoomsLevel(string Name, double Elevation, IReadOnlyList<string> Views);
+public sealed record RoomsRegion(
+    long ElementId,
+    Guid Guid,
+    string View,
+    string Level,
+    string Role,
+    string Name,
+    string Type,
+    double? CeilingFt,
+    double? People,
+    double? LightingW,
+    double? EquipSensible,
+    double? EquipLatent,
+    double? VentilationCfm,
+    double Sqft,
+    List<double[]> Outer,
+    List<List<double[]>> Holes,
+    double[] Label,
+    string RunId,
+    string? Reason,
+    bool Touched,
+    bool Locked,
+    bool Stale);
+public sealed record RoomsSnapshotData(IReadOnlyList<RoomsLevel> Levels, IReadOnlyList<RoomsRegion> Regions);
+
+public sealed record RoomsPartitionRequest(string View, List<double[]>? Bounds = null, string? RunId = null);
+public sealed record RoomsPartitionResult(
+    string Level,
+    string RunId,
+    int Created,
+    int Kept,
+    int Locked,
+    int Deleted,
+    int Held,
+    IReadOnlyList<string> Failures,
+    string? Hold,
+    double Ms);
+
+public sealed record RoomsDrawRequest(string View, List<List<double[]>> Loops, string? Name = null);
+public sealed record RoomsDrawResult(long ElementId, Guid Guid);
+
+public sealed record RoomsWriteRegion(
+    Guid Guid,
+    string? Name = null,
+    string? Type = null,
+    double? CeilingFt = null,
+    double? People = null,
+    double? LightingW = null,
+    double? EquipSensible = null,
+    double? EquipLatent = null,
+    double? VentilationCfm = null);
+public sealed record RoomsWriteRequest(List<RoomsWriteRegion> Regions);
+public sealed record RoomsWriteResult(int Written);
