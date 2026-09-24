@@ -109,7 +109,6 @@ export interface ProtoLiveValue {
 export interface ProtoLive {
   familyName: string;
   worldLabel: string;
-  readAgo: string;
   /** Captured types, including types with no reported literal values. */
   typeNames?: string[];
   /** paramName → typeName → live value */
