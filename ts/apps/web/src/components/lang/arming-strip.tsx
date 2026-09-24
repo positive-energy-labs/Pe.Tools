@@ -75,7 +75,7 @@ export type ArmingState =
   /** The plan no longer matches the model. The only way forward is a fresh plan. */
   | { phase: "refused"; refusal: string; onReplan: () => void };
 
-export interface ArmingStripProps {
+interface ArmingStripProps {
   /** The verb being armed, e.g. "apply to Revit". Shown, and used as the commit label. */
   verb: string;
   /** What the write addresses, e.g. "Overhead Coiling Door 421 · 3 types". */

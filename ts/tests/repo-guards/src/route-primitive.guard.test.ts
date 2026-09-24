@@ -30,6 +30,11 @@
  *                                 route/keys.tsx: every chord is bound by `useScopeKeys` on a
  *                                 scope node, so help can say which region owns it and a hidden
  *                                 node can switch it off (ledger 2026-09-22).
+ *  9. a target draws the Situation N1 (MAP ruling 29): a routes/*.tsx whose own module or a direct
+ *                                 import names a target (a route-level `needs` of document,
+ *                                 project, family or session; an AddressingBar; a `target` search
+ *                                 param) reaches a `<Situation` through its import closure. Held
+ *                                 as a ratchet on the current offenders.
  * =============================================================================================
  */
 import { execFileSync } from "node:child_process";
@@ -329,5 +334,59 @@ describe("route primitive guard — no hand-written keymap", () => {
       offences.length,
       `Hand-written keymap string found outside route/keys.tsx (fable §6, one authority for chord rendering):\n${list(offences)}`,
     ).toBe(0);
+  });
+});
+
+// ── 9. a target draws the Situation (N1) ─────────────────────────────────────────────────────
+
+/** Ratchet: today's offenders. A new one fails; cutting one over fails until it leaves this list. */
+const SITUATIONLESS_TARGET_ROUTES = [
+  "data-tables.tsx",
+  "instances.tsx",
+  "lab.tsx",
+  "parameter-links.tsx",
+  "pods.tsx",
+];
+
+const WEB_BY_REL = new Map(WEB_PROD_FILES.map((f) => [f.rel, f]));
+const importsOf = (f: Entry): Entry[] =>
+  [...f.text.matchAll(/(?:import|export)\s[^;]*?from\s+["']([^"']+)["']/g)].flatMap((m) => {
+    const spec = m[1] ?? "";
+    const base = spec.startsWith("#/")
+      ? spec.slice(2)
+      : spec.startsWith(".")
+        ? join(dirname(f.rel), spec).replaceAll("\\", "/")
+        : null;
+    if (base == null) return [];
+    const hit = ["", ".tsx", ".ts", "/index.ts", "/index.tsx"]
+      .map((ext) => WEB_BY_REL.get(base + ext))
+      .find(Boolean);
+    return hit ? [hit] : [];
+  });
+const TARGET_MARK =
+  /needs: "(?:document|project|family|session)"|<AddressingBar\b|\btarget: typeof search\.target/;
+
+describe("route primitive guard — a target draws the Situation (N1)", () => {
+  it("every targeted route reaches a <Situation>; the offender list only shrinks", () => {
+    const offenders = WEB_PROD_FILES.filter((f) =>
+      /^routes\/(?!__|design-system)[^/]+\.tsx$/.test(f.rel),
+    )
+      .filter((route) => [route, ...importsOf(route)].some((f) => TARGET_MARK.test(f.text)))
+      .filter((route) => {
+        const seen = new Set<Entry>();
+        const walk = (f: Entry): void => {
+          if (seen.has(f)) return;
+          seen.add(f);
+          importsOf(f).forEach(walk);
+        };
+        walk(route);
+        return ![...seen].some((f) => /<Situation(?![A-Za-z])/.test(f.text));
+      })
+      .map((f) => f.rel.slice("routes/".length))
+      .sort();
+    expect(
+      offenders,
+      "A route with a target draws the Situation (N1). New offender: cut it over. Removed one: drop it from SITUATIONLESS_TARGET_ROUTES.",
+    ).toEqual(SITUATIONLESS_TARGET_ROUTES);
   });
 });

@@ -26,27 +26,3 @@ export function ActivityDisclosure({
     </details>
   );
 }
-
-/**
- * One unresolved-or-busy line. `says` wraps in full — an expanded reason is never clamped to one
- * line and never hidden behind hover.
- */
-export function ActivityRow({
-  label,
-  says,
-  tone,
-  children,
-}: {
-  label: string;
-  says?: string;
-  tone?: "caution" | "meta";
-  children?: ReactNode;
-}) {
-  return (
-    <div className="min-w-0 space-y-0.5" data-tone={tone}>
-      <div className="min-w-0">{label}</div>
-      {says ? <div className="min-w-0 break-words whitespace-pre-wrap">{says}</div> : null}
-      {children}
-    </div>
-  );
-}

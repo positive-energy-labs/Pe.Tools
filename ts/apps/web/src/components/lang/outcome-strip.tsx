@@ -9,7 +9,7 @@ import { OutcomeLine } from "#/components/lang/outcome";
 import type { Refusal } from "#/route";
 
 /** What a route card reports about the last thing it ran. */
-export interface OutcomeFailure {
+interface OutcomeFailure {
   kind: "error" | "refused" | "advisory" | "partial";
   action: string;
   message: string;

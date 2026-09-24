@@ -56,7 +56,7 @@ export const paneRecipe = tv({
   defaultVariants: { flush: false },
 });
 
-export interface PaneProps extends Pick<VariantProps<typeof paneRecipe>, "flush" | "scroll"> {
+interface PaneProps extends Pick<VariantProps<typeof paneRecipe>, "flush" | "scroll"> {
   kind: PaneKind;
   id?: string;
   shortcuts?: readonly PaneShortcut[];

@@ -31,7 +31,7 @@ export const artifactFrameRecipe = tv({
   },
 });
 
-export interface ArtifactFrameProps {
+interface ArtifactFrameProps {
   /** Recessed band across the top — the object's name and its machine-measured facts. */
   head?: React.ReactNode;
   headTrail?: React.ReactNode;

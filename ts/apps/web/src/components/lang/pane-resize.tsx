@@ -251,7 +251,7 @@ export function PaneResizeHandle({
   );
 }
 
-export interface PaneSplitProps {
+interface PaneSplitProps {
   axis: "horizontal" | "vertical";
   start: ReactNode;
   end: ReactNode;

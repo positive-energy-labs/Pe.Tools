@@ -22,7 +22,7 @@ export type CellCommit = (
   text: string,
 ) => string | void | Promise<string | CellRefusal | null | void>;
 
-export interface StateCellBase {
+interface StateCellBase {
   /** The value as shown. Long values are expected — the grammar is built around them. */
   value: React.ReactNode;
   /**
@@ -186,7 +186,7 @@ export const unitWord = (unit: MeasuredDisplayUnit): string | null =>
   unit.symbol || unit.label || null;
 
 /** What one commit into a measured cell does — decided before anything is called. */
-export type MeasuredCommit =
+type MeasuredCommit =
   | { kind: "stage"; staged: MeasuredValue }
   | { kind: "parse"; text: string }
   | { kind: "refuse"; reason: string };
@@ -345,7 +345,7 @@ export const CELL_STATE_ORDER = [
   "clean",
   "locked",
 ] as const;
-export type CellStateName = (typeof CELL_STATE_ORDER)[number];
+type CellStateName = (typeof CELL_STATE_ORDER)[number];
 
 /**
  * The precedence collapsed to one word — the vocabulary a table can facet, count and group by.

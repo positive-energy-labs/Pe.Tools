@@ -37,7 +37,7 @@ type RowParts = Omit<RowState, "cursor" | "selected"> & {
   onMouseLeave?: () => void;
 };
 
-export type ListProps<T> = Omit<CollectionOptions<T>, "target"> & {
+type ListProps<T> = Omit<CollectionOptions<T>, "target"> & {
   row: (item: T) => RowParts;
   "aria-label": string;
   /** Show a search input when the list is filterable and holds more than this many items. */
@@ -253,7 +253,7 @@ const TRIGGER_FACE = {
     "flex min-h-(--control-h) w-full min-w-0 cursor-pointer items-center justify-between gap-1 rounded-md border border-line bg-line/20 px-2 t-small dark:bg-line/30",
 } as const;
 
-export type TriggerFace = keyof typeof TRIGGER_FACE;
+type TriggerFace = keyof typeof TRIGGER_FACE;
 
 /** A popup list opened by a trigger or anchored to a caret the caller owns. */
 export function ListPopup<T>({

@@ -1,21 +1,11 @@
 import { Press } from "#/components/lang/press";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-  cardRecipe,
-} from "#/components/lang/card";
+import { useState } from "react";
+import { Card, cardRecipe } from "#/components/lang/card";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   dialogRecipe,
 } from "#/components/lang/dialog";
 import { ValueDiff, valueDiffRecipe } from "#/components/lang/value-diff";
@@ -42,17 +32,7 @@ export function UiSurfaceSpecimens() {
         render={() => (
           <div className="w-80">
             <Card>
-              <CardHeader>
-                <div>
-                  <CardTitle>Overhead Coiling Door 421</CardTitle>
-                  <CardDescription>13 params</CardDescription>
-                </div>
-                <CardAction>
-                  <Press size="label">open</Press>
-                </CardAction>
-              </CardHeader>
-              <CardContent>content</CardContent>
-              <CardFooter>footer</CardFooter>
+              <span className="t-title p-5">Overhead Coiling Door 421</span>
             </Card>
           </div>
         )}
@@ -61,19 +41,7 @@ export function UiSurfaceSpecimens() {
         name="Dialog"
         importPath="#/components/lang/dialog"
         recipe={dialogRecipe}
-        render={() => (
-          <Dialog>
-            <DialogTrigger render={<Press size="label" />}>open dialog</DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Dialog</DialogTitle>
-                <DialogDescription>
-                  Backdrop, portal, close, escape, and click-outside.
-                </DialogDescription>
-              </DialogHeader>
-            </DialogContent>
-          </Dialog>
-        )}
+        render={() => <DialogSpecimen />}
       />
       <RecipeGrid
         name="ValueDiff"
@@ -81,6 +49,24 @@ export function UiSurfaceSpecimens() {
         recipe={valueDiffRecipe}
         render={() => <ValueDiff from="100 VA" to="150 VA" />}
       />
+    </>
+  );
+}
+
+function DialogSpecimen() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Press size="label" onClick={() => setOpen(true)}>
+        open dialog
+      </Press>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Backdrop, portal, close, escape, and click-outside</DialogTitle>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

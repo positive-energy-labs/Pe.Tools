@@ -17,6 +17,7 @@ import { StateCell } from "#/components/lang/cell";
 import { FactChip, Tag } from "#/components/lang/chip";
 import { Kbd } from "#/components/lang/kbd";
 import { ActionButton } from "#/components/lang/action-button";
+import { Verdict } from "#/components/lang/verdict";
 import { ARMING_SPECIMEN } from "#/design-system/specimens-data";
 
 import { RecipeGrid, SpecimenFrame, type GridVariantProps } from "./recipe-grid";
@@ -41,6 +42,22 @@ export function LangWorkflowSpecimens() {
         <div className="flex items-center gap-2">
           <Kbd>⌘K</Kbd>
           <Kbd mute>Esc</Kbd>
+        </div>
+      </SpecimenFrame>
+      <SpecimenFrame name="Verdict" importPath="#/components/lang/verdict">
+        <div className="flex items-center gap-1">
+          <Verdict kind="accept" title="Stage Pea's proposal" onClick={noop} />
+          <Verdict kind="deny" title="Clear Pea's proposal" onClick={noop} />
+          <Verdict kind="unstage" title="Clear the staged value" onClick={noop} />
+          <Verdict kind="accept" title="Stage Pea's proposal on 3 cells" onClick={noop}>
+            3
+          </Verdict>
+          <Verdict kind="deny" title="Refuse this call" onClick={noop}>
+            deny
+          </Verdict>
+          <Verdict kind="accept" title="in flight" disabled onClick={noop}>
+            accept
+          </Verdict>
         </div>
       </SpecimenFrame>
       <SpecimenFrame

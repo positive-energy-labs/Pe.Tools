@@ -52,7 +52,7 @@ export const chipRecipe = tv({
 /** The meaning roles a fact may wear. No chip-only hues exist, by design. */
 type FactTone = "meta" | "caution" | "done" | "alarm" | "pea";
 
-export interface FactChipProps {
+interface FactChipProps {
   children: React.ReactNode;
   /** `meta` (the default) is the neutral machine-measured fact — most chips are this. */
   tone?: FactTone;
@@ -78,7 +78,7 @@ export function FactChip({ children, tone = "meta", dashed, title }: FactChipPro
   );
 }
 
-export interface NarrowChipProps {
+interface NarrowChipProps {
   /** The narrowing itself, e.g. "needs a person" or "type: FDCL-611". */
   label: string;
   /** How many rows this narrowing still admits. Narrowings never hide; they scope. Omitted where

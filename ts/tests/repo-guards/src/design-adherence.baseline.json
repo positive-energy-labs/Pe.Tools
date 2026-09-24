@@ -23,9 +23,9 @@
     }
   },
   "opacityDim": {
-    "total": 10,
+    "total": 9,
     "byArea": {
-      "components": 8,
+      "components": 7,
       "family": 2
     }
   },

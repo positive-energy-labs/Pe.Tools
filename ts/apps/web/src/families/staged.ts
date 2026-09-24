@@ -1,7 +1,6 @@
 /** Keyed `/families` cells and the Family Foundry drafts staged cells generate. */
 import {
   familyCellAddress,
-  familyCellKey,
   familyStagedPatch,
   type FamilyCellAddress,
   type FamilyCellState,
@@ -14,11 +13,6 @@ export const familiesGroupOf = (key: string): string[] => {
   const { parameter, familyName, typeName } = familyCellAddress(key);
   return [parameter, familyName, typeName];
 };
-
-export const cellAt = (
-  cells: Record<string, FamilyCellState>,
-  address: FamilyCellAddress,
-): FamilyCellState | undefined => cells[familyCellKey(address)];
 
 export interface FamilyCellEntry extends FamilyCellAddress {
   key: string;

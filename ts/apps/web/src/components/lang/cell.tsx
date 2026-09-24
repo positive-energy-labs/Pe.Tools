@@ -38,12 +38,11 @@ import {
   useTransition,
   type RefObject,
 } from "react";
-import { Check, Undo2, X, type LucideIcon } from "lucide-react";
 
 import { tv } from "#/lib/tv";
 import { useScopeKeys } from "#/route/keys";
 
-import { ActionButton } from "./action-button";
+import { Verdict } from "./verdict";
 import "./lang.css";
 
 export const stateCellRecipe = tv({
@@ -55,7 +54,6 @@ export const stateCellRecipe = tv({
     unsettled: "dl-sq",
     refusal: "dl-refuse",
     acts: "dl-acts",
-    act: "dl-act",
     ghost: "dl-ghost",
     foot: "dl-foot",
     citation: "dl-cite",
@@ -98,10 +96,10 @@ export type {
 } from "./cell-state";
 
 /** Each kind's glyph, key and plain sentence. The caller's `reason` overrides the sentence. */
-const TRANSITION: Record<CellTransitionKind, { icon: LucideIcon; key: string; says: string }> = {
-  accept: { icon: Check, key: "a", says: "Stage Pea's proposal" },
-  deny: { icon: X, key: "d", says: "Clear Pea's proposal" },
-  unstage: { icon: Undo2, key: "u", says: "Clear the staged value" },
+const TRANSITION: Record<CellTransitionKind, { key: string; says: string }> = {
+  accept: { key: "a", says: "Stage Pea's proposal" },
+  deny: { key: "d", says: "Clear Pea's proposal" },
+  unstage: { key: "u", says: "Clear the staged value" },
 };
 
 /**
@@ -380,26 +378,18 @@ export function StateCell(props: StateCellProps) {
         ) : null}
         {hasTransitions ? (
           <span className={slots.acts()}>
-            {transitions.map((t) => {
-              const Icon = TRANSITION[t.kind].icon;
-              return (
-                <button
-                  key={t.kind}
-                  type="button"
-                  className={slots.act()}
-                  data-kind={t.kind}
-                  aria-label={t.kind}
-                  title={`${t.reason ?? TRANSITION[t.kind].says} (${TRANSITION[t.kind].key})`}
-                  disabled={pending}
-                  tabIndex={-1}
-                  // the verb must never take the caret from the input it overlays
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => fire(t)}
-                >
-                  <Icon />
-                </button>
-              );
-            })}
+            {transitions.map((t) => (
+              <Verdict
+                key={t.kind}
+                kind={t.kind}
+                title={`${t.reason ?? TRANSITION[t.kind].says} (${TRANSITION[t.kind].key})`}
+                disabled={pending}
+                tabIndex={-1}
+                // the verb must never take the caret from the input it overlays
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => fire(t)}
+              />
+            ))}
           </span>
         ) : null}
         {keys}
@@ -483,15 +473,15 @@ export function StateCell(props: StateCellProps) {
           </span>
         ) : null}
         {transitions.map((t) => (
-          <ActionButton
+          <Verdict
             key={t.kind}
-            tone={t.kind === "accept" ? "agent" : "act"}
-            icon={TRANSITION[t.kind].icon}
-            label={t.kind}
-            reason={t.reason ?? TRANSITION[t.kind].says}
-            busy={pending}
+            kind={t.kind}
+            title={t.reason ?? TRANSITION[t.kind].says}
+            disabled={pending}
             onClick={() => fire(t)}
-          />
+          >
+            {t.kind}
+          </Verdict>
         ))}
         {refusalNote != null ? (
           <button
