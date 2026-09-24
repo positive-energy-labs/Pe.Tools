@@ -31,6 +31,9 @@ export interface ActionDefinition {
 }
 
 const item = z.object({ elementId: z.number().int(), name: z.string(), systemTag: z.string() });
+const point = z.tuple([z.number(), z.number()]);
+const loop = z.array(point).min(3);
+const roomNumber = z.number().optional();
 const definitions = {
   "takeoffs.initialize": {
     says: "Write the shared parameters this document is missing before any takeoff runs.",
@@ -67,6 +70,47 @@ const definitions = {
     actor: "any",
     input: z.object({ path: z.string().min(1), zones: z.array(z.string()).default([]) }),
     dirties: ["snapshot", "rhvac-open"],
+  },
+  "rooms.partition": {
+    says: "Partition one plan view's level inside bounds or its crop, keeping locked and matched rooms.",
+    needs: "project-document",
+    actor: "any",
+    input: z.object({ view: z.string().min(1), bounds: loop.nullable().optional() }),
+    dirties: ["snapshot"],
+  },
+  "rooms.draw": {
+    says: "Draw one locked room region from loops on a plan view.",
+    needs: "project-document",
+    actor: "any",
+    input: z.object({
+      view: z.string().min(1),
+      loops: z.array(loop).min(1),
+      name: z.string().nullable().optional(),
+    }),
+    dirties: ["snapshot"],
+  },
+  "rooms.write": {
+    says: "Write the given room fields onto room regions by guid.",
+    needs: "project-document",
+    actor: "any",
+    input: z.object({
+      regions: z
+        .array(
+          z.object({
+            guid: z.string().min(1),
+            name: z.string().optional(),
+            type: z.string().optional(),
+            ceilingFt: roomNumber,
+            people: roomNumber,
+            lightingW: roomNumber,
+            equipSensible: roomNumber,
+            equipLatent: roomNumber,
+            ventilationCfm: roomNumber,
+          }),
+        )
+        .min(1),
+    }),
+    dirties: ["snapshot"],
   },
 } as const;
 export const takeoffActions = definitions;

@@ -199,6 +199,16 @@ export async function admitTakeoffAction(
           const value = await native(key, { ...admission.input, runId: admission.id });
           return { value, target: { session: target.session, document: null } };
         }
+        if (key === "rooms.partition") {
+          await prepare("Rooms");
+          const value = await native(key, { ...admission.input, runId: admission.id });
+          return { value, target: { session: target.session, document: null } };
+        }
+        if (key === "rooms.draw" || key === "rooms.write") {
+          await prepare("Rooms");
+          const value = await native(key, admission.input);
+          return { value, target: { session: target.session, document: null } };
+        }
         const input = takeoffActions["takeoffs.sync"].input.parse(admission.input);
         const selected = new Set(input.zones);
         const zones = capture!.snapshot.world.zones.filter(
