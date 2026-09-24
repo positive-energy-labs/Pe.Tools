@@ -37,11 +37,18 @@ const MEMBER: Inspectable = {
   },
 };
 
+/** An action receipt, opened in `/ops`, where its recovery controls live. Its id is the action id. */
+const RECEIPT: Inspectable = {
+  label: (id) => `receipt ${id.slice(0, 8)}`,
+  open: { kind: "route", to: "/ops", search: (id) => ({ actionId: id }) },
+};
+
 /** The kinds every route opens, beside the ones its manifest declares. */
 export const inspectableOf = (
   declared: Readonly<Record<string, Inspectable>> | undefined,
   kind: string,
-): Inspectable | undefined => declared?.[kind] ?? (kind === "member" ? MEMBER : undefined);
+): Inspectable | undefined =>
+  declared?.[kind] ?? (kind === "member" ? MEMBER : kind === "receipt" ? RECEIPT : undefined);
 
 /** A capture's receipt: one log row whose label opens the first member it filed. */
 export function noteCaptured(

@@ -117,7 +117,7 @@ export interface RouteManifest<W, R extends string, P, A extends string> {
    * Chat summarize them by. `nouns` names the path's depths, singular ("parameter", "family").
    */
   cells?: { segment: string; groupOf: (key: string) => string[]; nouns: readonly string[] };
-  /** What its verbs produce, by kind, and how each opens; `member` is built in (`inspect.tsx`). */
+  /** What its verbs produce, by kind, and how each opens; `member` and `receipt` are built in (`inspect.tsx`). */
   inspectables?: Readonly<Record<string, Inspectable>>;
   readings?: Readonly<Record<R, ReadingSpec<P>>>;
   page?: z.ZodType<P>;

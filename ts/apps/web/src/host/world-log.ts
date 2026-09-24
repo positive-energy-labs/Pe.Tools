@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 
 import type { SessionInventory } from "#/readings";
 import { previousOf, useHostEvents, useHostStatus } from "#/readings";
@@ -24,8 +24,6 @@ export interface SessionEvent {
   sessionId: string;
   label: string;
 }
-
-const LOG_CAP = 100;
 
 function toWorldEvent(event: HostEvent, sessions: SessionInventory[]): SessionEvent | null {
   const base = { atMs: event.atMs, sessionId: event.sessionId };
@@ -69,20 +67,22 @@ function toWorldEvent(event: HostEvent, sessions: SessionInventory[]): SessionEv
 }
 
 /**
- * Broker-fed world history. Timestamps are host publish time, not tab observation time.
+ * Broker-fed world history, one event at a time, for a route to write into its one log. `atMs` is
+ * host publish time, not tab observation time.
  */
-export function useSessionLog(sessions: SessionInventory[]): SessionEvent[] {
+export function useSessionEvents(
+  sessions: SessionInventory[],
+  onEvent: (event: SessionEvent) => void,
+): void {
   const revit = previousOf(useHostStatus())?.capabilities.revit === true;
-  // Label enrichment only — the stream must not reopen on session-list churn.
-  const sessionsRef = useRef(sessions);
-  sessionsRef.current = sessions;
-  const [log, setLog] = useState<SessionEvent[]>([]);
+  // Label enrichment and the sink only: the stream must not reopen on session-list churn.
+  const latest = useRef({ sessions, onEvent });
+  latest.current = { sessions, onEvent };
   useHostEvents<HostEvent>(
     revit,
     useCallback((event) => {
-      const world = toWorldEvent(event, sessionsRef.current);
-      if (world) setLog((current) => [...current.slice(-(LOG_CAP - 1)), world]);
+      const world = toWorldEvent(event, latest.current.sessions);
+      if (world) latest.current.onEvent(world);
     }, []),
   );
-  return log;
 }

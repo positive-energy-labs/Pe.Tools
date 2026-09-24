@@ -1,7 +1,6 @@
 import { type ComponentType, useCallback, useEffect, useState } from "react";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Provenance } from "#/components/lang/section";
-import { ActionButton } from "#/components/lang/action-button";
 import { callHostRpc } from "#/host/client";
 import type { HostSessionScope, OpCallArgs, OpKey } from "@pe/host-contracts/operation-types";
 
@@ -29,13 +28,11 @@ export type SyntheticOp = {
 
 type DepStatus = { alias: string; key: string; ok: boolean; error?: string; elapsedMs: number };
 
-export function SyntheticRunner({
-  op,
-  bridgeSessionId,
-}: {
-  op: SyntheticOp;
-  bridgeSessionId?: string;
-}) {
+/**
+ * One glance's gathered deps. `runAll` is the route's `refresh` verb (the lab manifest); it answers
+ * the required deps that failed, so the verb's flag and the log can say so.
+ */
+export function useSynthetic(op: SyntheticOp | undefined, bridgeSessionId?: string) {
   const [results, setResults] = useState<Record<string, unknown>>();
   const [statuses, setStatuses] = useState<DepStatus[]>([]);
   const [observedAtMs, setObservedAtMs] = useState(0);
@@ -50,7 +47,8 @@ export function SyntheticRunner({
     [bridgeSessionId],
   );
 
-  const runAll = useCallback(async () => {
+  const runAll = useCallback(async (): Promise<DepStatus[]> => {
+    if (!op) return [];
     setRunning(true);
     const settled = await Promise.all(
       op.deps.map(async (dep) => {
@@ -71,29 +69,42 @@ export function SyntheticRunner({
     for (const item of settled) {
       if (!("error" in item)) next[item.dep.as ?? item.dep.key] = item.data;
     }
-    setStatuses(
-      settled.map((item) => ({
-        alias: item.dep.as ?? item.dep.key,
-        key: item.dep.key,
-        ok: !("error" in item),
-        error: "error" in item ? item.error : undefined,
-        elapsedMs: item.elapsedMs,
-      })),
-    );
+    const nextStatuses = settled.map((item) => ({
+      alias: item.dep.as ?? item.dep.key,
+      key: item.dep.key,
+      ok: !("error" in item),
+      error: "error" in item ? item.error : undefined,
+      elapsedMs: item.elapsedMs,
+    }));
+    setStatuses(nextStatuses);
     setResults(next);
     setObservedAtMs(Date.now());
     setRunning(false);
+    return failedOf(op, nextStatuses);
   }, [op, call]);
 
   useEffect(() => {
     void runAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [op.key, bridgeSessionId]);
+  }, [op?.key, bridgeSessionId]);
 
-  const failedRequired = statuses.filter(
+  return { results, statuses, observedAtMs, running, call, runAll };
+}
+
+const failedOf = (op: SyntheticOp, statuses: readonly DepStatus[]) =>
+  statuses.filter(
     (status) =>
       !status.ok && !op.deps.find((dep) => (dep.as ?? dep.key) === status.alias)?.optional,
   );
+
+export function SyntheticGlance({
+  op,
+  glance: { results, statuses, observedAtMs, running, call },
+}: {
+  op: SyntheticOp;
+  glance: ReturnType<typeof useSynthetic>;
+}) {
+  const failedRequired = failedOf(op, statuses);
   const View = op.View;
 
   return (
@@ -114,21 +125,13 @@ export function SyntheticRunner({
         <View results={results} observedAtMs={observedAtMs} call={call} />
       )}
       {results && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <ActionButton
-            label="refresh"
-            onClick={() => void runAll()}
-            busy={running}
-            reason="re-run every dep of this glance against the live host"
-          />
-          <Provenance>
-            composed from{" "}
-            {statuses
-              .map((status) => `${status.key} ${status.ok ? `${status.elapsedMs}ms` : "✕"}`)
-              .join(" · ")}{" "}
-            · obs {observedAtMs ? new Date(observedAtMs).toLocaleTimeString() : "—"}
-          </Provenance>
-        </div>
+        <Provenance>
+          composed from{" "}
+          {statuses
+            .map((status) => `${status.key} ${status.ok ? `${status.elapsedMs}ms` : "✕"}`)
+            .join(" · ")}{" "}
+          · obs {observedAtMs ? new Date(observedAtMs).toLocaleTimeString() : "—"}
+        </Provenance>
       )}
     </div>
   );
