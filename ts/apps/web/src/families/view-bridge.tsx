@@ -6,7 +6,7 @@ import {
   publishFamiliesView,
   releaseFamiliesView,
 } from "#/host/families-view";
-import { applyRules, buildPivot, suggestionsFor } from "./pivot-rules";
+import { applyFamiliesQuery, buildPivot, FAMILIES_QUERY_HELP } from "./pivot";
 import type { FamiliesWorkspaceModel } from "./workspace";
 
 type Intent = {
@@ -17,7 +17,7 @@ type Intent = {
   revision: number;
   query: string;
 };
-const ruleHelp = suggestionsFor("", [], []);
+const ruleHelp = FAMILIES_QUERY_HELP;
 
 /** The mounted view's short lived address for Pea. No Page field enters authored Work. */
 export function FamiliesViewBridge({
@@ -48,7 +48,7 @@ export function FamiliesViewBridge({
   const query = tableState.query ?? "";
   const pivot = useMemo(() => buildPivot(rows, params, families), [rows, params, families]);
   const counts = useMemo(() => {
-    const filtered = applyRules(query, pivot.pivotRows, pivot.pivotFamilies);
+    const filtered = applyFamiliesQuery(query, pivot.pivotRows, pivot.pivotFamilies);
     return {
       families: filtered.shownFamilies.length,
       types: filtered.shownFamilies.reduce((sum, family) => sum + family.types, 0),

@@ -26,6 +26,7 @@ import { familyCellEntries } from "#/families/staged";
 import { familyVerdicts } from "#/families/verdict";
 import { typeRowKey } from "#/families/picks";
 import { FamiliesViewBridge } from "./view-bridge";
+import { projectPatch } from "./patch-overlay";
 
 const NO_CELLS: Record<string, FamilyCellState> = {};
 const NO_EXCLUDED = new Set<string>();
@@ -191,6 +192,9 @@ function useFamiliesWorkspaceModel(
   // A measured cell's one call, owned by this matrix Reading: a re-read aborts what is in flight.
   const parse = useMeasuredParse(families, store.documentScope);
   const live = useLiveCells(cells, wire);
+  // The native patch drawn on the reading it would land on; an archived reading ignores Work.
+  const patch = archived ? undefined : store.handle.work.doc?.patch;
+  const overlay = useMemo(() => projectPatch(patch ?? {}, rows, params), [patch, rows, params]);
 
   const stagedFamilies = useMemo(
     () => new Set(staged.map((entry) => entry.familyName)).size,
@@ -288,6 +292,7 @@ function useFamiliesWorkspaceModel(
     familyState,
     wire,
     live,
+    overlay,
     parse,
     chips,
     includedPlanned,

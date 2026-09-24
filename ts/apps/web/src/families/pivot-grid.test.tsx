@@ -2,8 +2,8 @@
 import { act, fireEvent, render } from "@testing-library/react";
 import { expect, test, vi } from "vite-plus/test";
 
-import { TypeGrid } from "#/families/pivot-grid";
-import { applyRules, buildPivot, type PivotRow } from "#/families/pivot-rules";
+import { TypeGrid, identityWidth } from "#/families/pivot-grid";
+import { applyFamiliesQuery, buildPivot, type PivotRow } from "#/families/pivot";
 import type { ParamColumn, TypeRow } from "#/families/matrix-columns";
 import type { FamilySnapshotRecord } from "#/host/loaded-families-view";
 
@@ -41,7 +41,7 @@ const family = (name: string, typeNames: string[]) =>
     placedInstanceCount: 1,
   }) as FamilySnapshotRecord;
 
-test("blank and numeric rules count only shown types; whitespace is empty but 0 and No are filled", () => {
+test("!empty and numeric clauses count only shown types; whitespace is empty but 0 and No are filled", () => {
   const types = [
     type("A", "one", { w: "  " }, { w: "Family" }),
     type("A", "two", { w: "No" }, { w: "Family" }),
@@ -53,7 +53,7 @@ test("blank and numeric rules count only shown types; whitespace is empty but 0 
     [family("A", ["one", "two"]), family("B", ["one"])],
   );
   expect(
-    applyRules("blank f:A", pivotRows, pivotFamilies).shownRows.map((row) => [
+    applyFamiliesQuery("!empty family~A", pivotRows, pivotFamilies).shownRows.map((row) => [
       row.key,
       row.families,
       row.filled,
@@ -61,15 +61,25 @@ test("blank and numeric rules count only shown types; whitespace is empty but 0 
     ]),
   ).toEqual([["w", 1, 1, 2]]);
   expect(
-    applyRules("blank f:B", pivotRows, pivotFamilies).shownRows.map((row) => [row.key, row.filled]),
+    applyFamiliesQuery("!empty family~B", pivotRows, pivotFamilies).shownRows.map((row) => [
+      row.key,
+      row.filled,
+    ]),
   ).toEqual([
     ["w", 1],
     ["flow", 1],
   ]);
-  expect(applyRules("filled>=2 f:A", pivotRows, pivotFamilies).shownRows).toEqual([]);
-  expect(applyRules("fams>=2", pivotRows, pivotFamilies).shownRows.map((row) => row.key)).toEqual([
-    "w",
-  ]);
+  expect(applyFamiliesQuery("filled>=2 family~A", pivotRows, pivotFamilies).shownRows).toEqual([]);
+  expect(
+    applyFamiliesQuery("fams>=2", pivotRows, pivotFamilies).shownRows.map((row) => row.key),
+  ).toEqual(["w"]);
+  // `!` negates a rule; a family clause narrows the type columns, and rows recount over them.
+  const names = (query: string) => {
+    const shown = applyFamiliesQuery(query, pivotRows, pivotFamilies);
+    return [shown.shownFamilies.map((each) => each.name), shown.shownRows.map((row) => row.key)];
+  };
+  expect(names("family!=B !absent")).toEqual([["A"], ["w"]]);
+  expect(names("parameter=flow !valueless")).toEqual([["B"], ["flow"]]);
 });
 
 test("511 type columns mount a bounded window and expose direct editable cells", async () => {
@@ -111,8 +121,12 @@ test("511 type columns mount a bounded window and expose direct editable cells",
   );
   expect(
     view.getByRole("grid", { name: "parameters × family types" }).getAttribute("aria-colcount"),
-  ).toBe("515");
+  ).toBe("512");
   expect(view.container.querySelectorAll('[role="gridcell"]').length).toBeLessThan(500);
+  expect(view.getAllByRole("rowheader").length).toBe(
+    view.container.querySelectorAll("[aria-rowindex]").length,
+  );
+  expect(view.getByRole("button", { name: "Metadata for p0" })).not.toBeNull();
   const input = view.container.querySelector<HTMLInputElement>(
     '[aria-label="p0 · A · type 0"] input',
   )!;
@@ -139,19 +153,19 @@ test("511 type columns mount a bounded window and expose direct editable cells",
     },
   });
   await act(async () => {
-    grid.scrollLeft = 464 + 500 * 112;
+    grid.scrollLeft = identityWidth + 500 * 112;
     fireEvent.scroll(grid);
     await new Promise((resolve) => setTimeout(resolve, 40));
   });
   expect(view.getByRole("columnheader", { name: "A · type 500" })).not.toBeNull();
   expect(view.container.querySelector<HTMLElement>('[title="A"]')?.style.left).toBe(
-    `${grid.scrollLeft + 464}px`,
+    `${grid.scrollLeft + identityWidth}px`,
   );
   expect(view.container.querySelector('[aria-label="p0 · A · type 500"] input')).not.toBeNull();
   expect(view.container.querySelectorAll('[role="gridcell"]').length).toBeLessThan(500);
 
   await act(async () => {
-    grid.scrollLeft = 464 + 250 * 112;
+    grid.scrollLeft = identityWidth + 250 * 112;
     fireEvent.scroll(grid);
     await new Promise((resolve) => setTimeout(resolve, 40));
   });
@@ -165,7 +179,7 @@ test("511 type columns mount a bounded window and expose direct editable cells",
     await new Promise((resolve) => setTimeout(resolve, 40));
   });
   expect(document.activeElement?.closest('[aria-label="p0 · A · type 262"]')).not.toBeNull();
-  expect(grid.scrollLeft).toBeGreaterThan(464 + 250 * 112);
+  expect(grid.scrollLeft).toBeGreaterThan(identityWidth + 250 * 112);
 
   await act(async () => {
     grid.scrollLeft = 0;

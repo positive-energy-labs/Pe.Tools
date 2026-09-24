@@ -178,6 +178,31 @@ const staged: FamiliesRouteDocument = familiesRouteState.schema.parse({
       staged: null,
     },
   },
+  // Pea's native patch: a new alias parameter, a tooltip, and one explicit type cell. It projects
+  // onto the param rows and the minimap; accept and deny sit on its review row.
+  patch: {
+    proposal: {
+      value: {
+        path: "patches/model-code.json",
+        content: JSON.stringify({
+          $schema: "http://localhost:5150/schemas/settings/FamilyFoundry/patches.json",
+          select: { names: ["Fan Coil Unit - Ducted", "Air Handler"] },
+          patch: {
+            parameters: {
+              PE_G___ModelCode: {
+                formula: "PE_G___Model",
+                dataType: "autodesk.spec:spec.string-2.0.0",
+                tooltip: "The model code schedules read",
+              },
+              PE_G___Manufacturer: { isInstance: true, tooltip: "The manufacturer of record" },
+            },
+            types: { "AHU-1": { PE_G___Model: "AHU-12" } },
+          },
+        }),
+      },
+      note: "alias the model into a schedule code",
+    },
+  },
 });
 
 /**
@@ -191,7 +216,7 @@ export const FAMILIES_SEEDS = {
     sheet: { entries: plan.map((row) => ({ ...ffPlanRow(row), plan: "demo-plan" })) },
   }),
   edit: seed(
-    "two cell proposals across two families, one staged; plan generates the spec from the staged one",
+    "two cell proposals across two families, one staged, and a native patch proposal; plan generates the spec from the staged one",
     { stage: "apply" },
     {},
     staged,

@@ -40,7 +40,9 @@ import { FAMILIES_SEEDS } from "./seeds";
 import { podHost } from "#/route/pods";
 import type { Inspectable } from "#/route/inspect";
 import { familiesGroupOf, stagedDrafts } from "./staged";
-import { DEFAULT_FAMILIES_RULES } from "./pivot-rules";
+
+/** The families view opens on parameters that hold a value somewhere in the shown types. */
+export const DEFAULT_FAMILIES_QUERY = "!empty !absent";
 
 export interface FamiliesPage {
   /** The next read's scope. Picker changes never issue a matrix read. */
@@ -87,7 +89,7 @@ const familiesPageSchema = z.object({
     })
     .nullable()
     .default(null),
-  query: z.string().default(DEFAULT_FAMILIES_RULES),
+  query: z.string().default(DEFAULT_FAMILIES_QUERY),
   carryOver: z.boolean().default(false),
 });
 

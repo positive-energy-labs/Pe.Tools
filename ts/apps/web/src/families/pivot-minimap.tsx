@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 
-import { filledValue, type PivotRow } from "#/families/pivot-rules";
+import { filledValue, type PivotRow } from "#/families/pivot";
 import type { TypeRow } from "#/families/matrix-columns";
 import { Press } from "#/components/lang/press";
+import { familyCellKey } from "@pe/agent-contracts";
+import type { PatchOverlay } from "#/families/patch-overlay";
 
 /** A fixed, uniformly scaled thumbnail. Scroll updates touch only the viewport DOM box. */
 export function PivotMinimap({
   rows,
   types,
+  overlay,
   scroller,
   open,
   onOpenChange,
@@ -18,6 +21,8 @@ export function PivotMinimap({
 }: {
   rows: readonly PivotRow[];
   types: readonly TypeRow[];
+  /** The native patch's projected cells: proposed in the pea tone, staged in caution. */
+  overlay?: PatchOverlay;
   scroller: RefObject<HTMLDivElement | null>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -64,7 +69,19 @@ export function PivotMinimap({
     const paper = canvas.current;
     const context = paper?.getContext("2d");
     if (!context || !paper) return;
-    const palette = getComputedStyle(paper);
+    // Tokens are `light-dark(...)`, which a canvas fillStyle refuses; the computed color resolves them.
+    const computed = getComputedStyle(paper);
+    const resolved = new Map<string, string>();
+    const palette = {
+      getPropertyValue: (token: string) => {
+        if (!resolved.has(token)) {
+          paper.style.color = `var(${token})`;
+          resolved.set(token, computed.color);
+          paper.style.color = "";
+        }
+        return resolved.get(token)!;
+      },
+    };
     context.clearRect(0, 0, w, h);
     context.fillStyle = palette.getPropertyValue("--pe-recess").trim();
     context.fillRect(0, 0, identityWidth * scale, h);
@@ -84,7 +101,44 @@ export function PivotMinimap({
         );
       }),
     );
-  }, [rows, types, scroller, open, identityWidth, typeWidth, rowHeight, headerHeight, size]);
+    // The patch pass paints absent cells too: a parameter the patch creates is absent everywhere.
+    const tone = {
+      proposal: palette.getPropertyValue("--pe-pea").trim(),
+      staged: palette.getPropertyValue("--pe-caution").trim(),
+    };
+    if (overlay)
+      rows.forEach((row, y) =>
+        types.forEach((type, x) => {
+          const cell =
+            overlay.cells[
+              familyCellKey({
+                familyName: type.familyName,
+                typeName: type.typeName,
+                parameter: row.name,
+              })
+            ];
+          if (!cell) return;
+          context.fillStyle = cell.staged ? tone.staged : tone.proposal;
+          context.fillRect(
+            (identityWidth + x * typeWidth) * scale,
+            (headerHeight + y * rowHeight) * scale,
+            Math.max(0.6, typeWidth * scale),
+            Math.max(0.6, rowHeight * scale),
+          );
+        }),
+      );
+  }, [
+    rows,
+    types,
+    overlay,
+    scroller,
+    open,
+    identityWidth,
+    typeWidth,
+    rowHeight,
+    headerHeight,
+    size,
+  ]);
   useEffect(() => {
     if (!open) return;
     const el = scroller.current;

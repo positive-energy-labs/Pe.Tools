@@ -17,27 +17,52 @@ import {
   type ParamColumn,
   type TypeRow,
 } from "#/families/matrix-columns";
-import type { PivotFamily, PivotRow } from "#/families/pivot-rules";
+import type { PivotFamily, PivotRow } from "#/families/pivot";
 import type { FamiliesStore } from "#/families/store";
 import type { MeasuredAnswer } from "#/host/measured-parse";
-import type { MeasuredDisplayUnit } from "@pe/agent-contracts";
+import { familyCellKey, type MeasuredDisplayUnit } from "@pe/agent-contracts";
+import { cellFromTrichotomy, StateCell } from "#/components/lang/cell";
 
-export const GRID = { identity: [224, 112, 48, 80], type: 112, row: 24, header: 52 } as const;
-export const identityWidth = GRID.identity.reduce((sum, width) => sum + width, 0);
+export const GRID = { identity: 336, type: 112, row: 24, header: 52 } as const;
+export const identityWidth = GRID.identity;
 const OVERSCAN = 3;
 
+import { ParameterMetadata, type ParameterMetadataRecord } from "./parameter-metadata";
+import type { OverlayCell, PatchOverlay } from "./patch-overlay";
+
+const HOW = {
+  type: "an explicit type cell",
+  uniform: "the parameter's uniform value",
+  alias: "a direct formula alias, read from its source in this type",
+  formula: "a formula, not evaluated here",
+} as const;
+
+/** A cell the native patch writes: drawn in place, read-only; accept and deny sit on the patch's review row. */
+function ProjectedCell({ cell, current }: { cell: OverlayCell; current: string }) {
+  const shown = (cell.staged ?? cell.proposal)!;
+  const rung = cell.staged ? "staged" : "proposed";
+  return (
+    <StateCell
+      {...cellFromTrichotomy(cell, {
+        value: shown.value,
+        note: `The native patch (${rung}) writes ${current || "(blank)"} → ${shown.value} by ${HOW[shown.how]}. Review it on the patch row; nothing has reached Revit.`,
+        scale: "row",
+      })}
+      placeholder={current}
+    />
+  );
+}
+
 export interface TypeGridEdit {
+  metadata?: ReadonlyMap<string, readonly ParameterMetadataRecord[]>;
   params: ReadonlyMap<string, ParamColumn>;
   live: LiveCells;
   propose: FamiliesStore["actions"]["propose"];
   parse?: (unit: MeasuredDisplayUnit | null | undefined, text: string) => Promise<MeasuredAnswer>;
   readOnly: boolean;
+  /** The native patch projected on this reading; absent on an archived reading. */
+  overlay?: PatchOverlay;
 }
-
-const headers = ["parameter", "kind", "fams", "filled"];
-const starts = GRID.identity.map((_, index) =>
-  GRID.identity.slice(0, index).reduce((sum, width) => sum + width, 0),
-);
 
 export const TypeGrid = memo(function TypeGrid({
   rows,
@@ -190,7 +215,7 @@ export const TypeGrid = memo(function TypeGrid({
         role="grid"
         aria-label="parameters × family types"
         aria-rowcount={rows.length + 1}
-        aria-colcount={types.length + headers.length}
+        aria-colcount={types.length + 1}
       >
         <div
           style={{
@@ -210,25 +235,22 @@ export const TypeGrid = memo(function TypeGrid({
               height: GRID.header,
             }}
           >
-            {headers.map((header, index) => (
-              <div
-                key={header}
-                role="columnheader"
-                className="z-popup t-small t-upper border-b px-2"
-                data-surface="recess"
-                style={{
-                  position: "sticky",
-                  left: starts[index],
-                  top: 0,
-                  display: "inline-flex",
-                  alignItems: "end",
-                  width: GRID.identity[index],
-                  height: GRID.header,
-                }}
-              >
-                {header}
-              </div>
-            ))}
+            <div
+              role="columnheader"
+              className="z-popup t-small t-upper border-b px-2"
+              data-surface="recess"
+              style={{
+                position: "sticky",
+                left: 0,
+                top: 0,
+                display: "inline-flex",
+                alignItems: "end",
+                width: identityWidth,
+                height: GRID.header,
+              }}
+            >
+              parameter
+            </div>
             {groups
               .filter((group) => group.start < colEnd && group.start + group.count > colStart)
               .map((group) => (
@@ -264,7 +286,7 @@ export const TypeGrid = memo(function TypeGrid({
               <div
                 key={type.key}
                 role="columnheader"
-                aria-colindex={headers.length + colStart + offset + 1}
+                aria-colindex={colStart + offset + 2}
                 aria-label={`${type.familyName} · ${type.typeName}`}
                 className="t-small truncate border-b border-l px-1"
                 data-surface="recess"
@@ -283,12 +305,6 @@ export const TypeGrid = memo(function TypeGrid({
           </div>
           {visibleRows.map((row, rowOffset) => {
             const rowIndex = rowStart + rowOffset;
-            const values = [
-              row.name,
-              row.kind,
-              String(row.families),
-              `${row.filled}/${row.present}`,
-            ];
             return (
               <div
                 key={row.key}
@@ -303,32 +319,49 @@ export const TypeGrid = memo(function TypeGrid({
                   height: GRID.row,
                 }}
               >
-                {values.map((value, index) => (
-                  <div
-                    key={headers[index]}
-                    role="rowheader"
-                    className="z-raised border-b"
-                    data-surface="recess"
-                    style={{
-                      position: "sticky",
-                      left: starts[index],
-                      display: "inline-block",
-                      width: GRID.identity[index],
-                      height: GRID.row,
-                    }}
-                  >
-                    <ReadCell value={value} reason={row.key} />
+                <div
+                  role="rowheader"
+                  className="z-raised flex items-center border-b"
+                  data-surface="recess"
+                  style={{ position: "sticky", left: 0, width: identityWidth, height: GRID.row }}
+                >
+                  <div className="min-w-0 flex-1">
+                    <ReadCell value={row.name} reason={row.key} />
                   </div>
-                ))}
+                  {row.kind === "new" && (
+                    <span
+                      className="t-small shrink-0 px-1"
+                      data-tone="pea"
+                      title="The native patch creates this parameter; the reading has none by this name."
+                    >
+                      new
+                    </span>
+                  )}
+                  <div className="shrink-0 pr-1">
+                    <ParameterMetadata
+                      row={row}
+                      records={edit.metadata?.get(row.key) ?? []}
+                      patch={edit.overlay?.parameters[row.name]}
+                    />
+                  </div>
+                </div>
                 {visibleTypes.map((type, offset) => {
                   const colIndex = colStart + offset;
                   const scope = type.scopes[row.key];
                   const present = scope && scope !== "Unresolved";
+                  const projected =
+                    edit.overlay?.cells[
+                      familyCellKey({
+                        familyName: type.familyName,
+                        typeName: type.typeName,
+                        parameter: row.name,
+                      })
+                    ];
                   return (
                     <div
                       key={type.key}
                       role="gridcell"
-                      aria-colindex={headers.length + colIndex + 1}
+                      aria-colindex={colIndex + 2}
                       aria-label={`${row.name} · ${type.familyName} · ${type.typeName}`}
                       data-grid-row={rowIndex}
                       data-grid-col={colIndex}
@@ -342,7 +375,12 @@ export const TypeGrid = memo(function TypeGrid({
                         height: GRID.row,
                       }}
                     >
-                      {!present ? (
+                      {projected && !edit.readOnly ? (
+                        <ProjectedCell
+                          cell={projected}
+                          current={present ? (type.values[row.key] ?? "") : ""}
+                        />
+                      ) : !present ? (
                         <ReadCell
                           value="∅"
                           reason="parameter absent from this type"

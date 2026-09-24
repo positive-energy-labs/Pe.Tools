@@ -12,6 +12,7 @@ import { familyCellEntries } from "#/families/staged";
 import type { SalvagedExclusion } from "#/families/store";
 import { filterWords } from "#/families/scope-band";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
+import { ParamCell } from "#/families/matrix-columns";
 import { ARTIFACT } from "#/families/manifest";
 import { Inspect } from "#/route/inspect";
 import { cn } from "#/lib/utils";
@@ -125,7 +126,7 @@ export function FamiliesReceipts() {
  * a large matrix. Its counts and aggregates are the Situation's Work sentence. Plan reads staged cells.
  */
 export function FamiliesProposalsBand() {
-  const { cells, rows, params, wire, plan, store } = useFamiliesWorkspace();
+  const { cells, rows, params, wire, plan, store, live, parse } = useFamiliesWorkspace();
   const patch = store.handle.work.doc?.patch ?? ({} as FamiliesPatchCell);
   const patchSource = (patch.staged ?? patch.proposal)?.value;
   // A plan row with no resolved id (no `hashKey`) is a name the host refused, in its own words.
@@ -166,7 +167,7 @@ export function FamiliesProposalsBand() {
                 <summary>
                   Review exact {rung} patch · {patch[rung]!.value.path}
                 </summary>
-                <pre className="max-h-64 overflow-auto whitespace-pre-wrap face-mono">
+                <pre className="whitespace-pre-wrap break-words face-mono">
                   {patch[rung]!.value.content}
                 </pre>
               </details>
@@ -203,6 +204,22 @@ export function FamiliesProposalsBand() {
               ),
             }}
             show={showFamilyCell}
+            editor={(() => {
+              // The matrix's own cell, editable: refine a staged value where it is reviewed.
+              const row = rows.find(
+                (r) => r.familyName === entry.familyName && r.typeName === entry.typeName,
+              );
+              const col = params.find((param) => param.name === entry.parameter);
+              return row && col ? (
+                <ParamCell
+                  row={row}
+                  col={col}
+                  live={live}
+                  propose={store.actions.propose}
+                  parse={parse}
+                />
+              ) : undefined;
+            })()}
           />
           {/* Orphaned: the plan could not resolve this family by name. Clearing stays free. */}
           {orphans.has(entry.familyName) ? (

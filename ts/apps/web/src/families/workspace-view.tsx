@@ -1,7 +1,7 @@
 import { plural } from "#/components/lang/band";
 import { Pane } from "#/components/lang/pane";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Surface } from "#/components/lang/surface";
 import { Switcher } from "#/components/lang/switcher";
 import { FamiliesMatrix } from "#/families/matrix";
@@ -54,18 +54,22 @@ function FamiliesArchivedView({ url }: { url?: boolean }) {
     | undefined;
   const sessions = inventoryOf(observed?.sessions ?? []);
   const selected = list.find((read) => read.id === selectedId);
+  const [palette, setPalette] = useState(false);
   return (
     <Surface
       head={
         <Situation
           handle={store.handle}
           inspection
+          palette={url ? () => setPalette(true) : undefined}
           target={{ session: null, document: null }}
           chooseStage={(stage) => store.setPage({ stage: stage as "audit" | "apply" | "archived" })}
           sentence={
             <>
               families from{" "}
               <Ladder
+                open={palette}
+                onOpenChange={setPalette}
                 levels={[
                   {
                     key: "past read",
@@ -163,6 +167,7 @@ function FamiliesActiveView({ url }: { url?: boolean }) {
     setDraftCategories,
     setPickedFamilies,
     wire,
+    overlay,
   } = useFamiliesWorkspace();
   const categoryCheck = (id: string): boolean | "mixed" => {
     if (!id) {
@@ -305,14 +310,18 @@ function FamiliesActiveView({ url }: { url?: boolean }) {
       wire={wire}
       output={store.applyData ? <FamiliesReceipts /> : null}
       // The Work sentence, then what the Work carries beside its cells.
-      work={(_, sentence) => (
-        <>
-          {sentence}
-          <FamiliesCarryOverLine />
-          <FamiliesScopeProposal />
-          <FamiliesProposalsBand />
-        </>
-      )}
+      work={{
+        // The patch's projected cells count in the sentence; accept and deny stay on its review row.
+        counted: overlay.cells,
+        draw: (_, sentence) => (
+          <>
+            {sentence}
+            <FamiliesCarryOverLine />
+            <FamiliesScopeProposal />
+            <FamiliesProposalsBand />
+          </>
+        ),
+      }}
       startFreshAside={<SalvagedExclusions />}
       onStartedFresh={store.actions.startedFresh}
       hold={(id) => {
