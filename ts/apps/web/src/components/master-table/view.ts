@@ -171,14 +171,21 @@ export function conditionValues<Row>(rows: readonly Row[], field: QueryRead<Row>
   );
 }
 
+/** A cell number: signed unless the minus follows a word character ("A-104" holds 104), and
+ * "1,200" is one number only when every comma group is exactly three digits. */
+const CELL_NUMBER = /(?:(?<!\w)-)?(?:(?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)(?:\.\d+)?|\.\d+)/g;
+
 /**
  * A free word that is a number matches a cell holding that number, never a digit run inside a
- * longer one: "4" finds "4", "4.0", "4 ea" and "Level 4", not "14", "0.4" or "A-104".
+ * longer one: "4" finds "4", "4.0", "4 ea" and "Level 4", not "14", "0.4", "-4" or "A-104";
+ * "1200" finds "1,200" and "200" does not.
  */
 export function wordMatches(text: string, word: string): boolean {
   const number = parseConditionNumber(word);
   if (number == null) return text.toLowerCase().includes(word);
-  return (text.match(/\d+(?:\.\d+)?|\.\d+/g) ?? []).some((each) => Number(each) === number);
+  return (text.match(CELL_NUMBER) ?? []).some(
+    (each) => Number(each.replaceAll(",", "")) === number,
+  );
 }
 
 /** Uncontrolled table state a route can still read: the frame's search and the grid share it. */

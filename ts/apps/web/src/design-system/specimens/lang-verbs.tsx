@@ -9,15 +9,16 @@ import { RecipeGrid } from "./recipe-grid";
 
 const noop = () => {};
 
-/** A read verb whose Work Revit changed since the read: the verb wears the mark, no second button. */
-const staleHandle = {
-  manifest: { actions: { read: { rereads: "work" } } },
-  readings: {},
-  work: { changed: true },
-  outcome: null,
-  busy: null,
-  stop: noop,
-} as never;
+/** A read verb, fresh or with Work Revit changed since the read: stale, the verb wears the mark. */
+const handleOf = (changed: boolean) =>
+  ({
+    manifest: { actions: { read: { rereads: "work" } } },
+    readings: {},
+    work: { changed },
+    outcome: null,
+    busy: null,
+    stop: noop,
+  }) as never;
 const readVerb = {
   label: "read families",
   says: "Read the drafted families from this exact document.",
@@ -75,8 +76,11 @@ export function LangPressSpecimens() {
           );
         }}
       />
-      <Section label="SituationAction · stale">
-        <SituationAction handle={staleHandle} name="read" action={readVerb} chord="R" />
+      <Section label="SituationAction · fresh · stale (caution edge and wash)">
+        <span className="inline-flex gap-2">
+          <SituationAction handle={handleOf(false)} name="read" action={readVerb} chord="R" />
+          <SituationAction handle={handleOf(true)} name="read" action={readVerb} chord="R" />
+        </span>
       </Section>
     </>
   );

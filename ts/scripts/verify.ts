@@ -9,6 +9,8 @@
  *  3. test     every package's own `test` script, so web and host keep their lane setup.
  *  4. guards   ts/tests/repo-guards, serialized (fileParallelism: false in its vite config).
  *              The ops-catalog guard reads the committed drift hash and never builds dotnet.
+ *  5. r24      compile Pe.App as Debug.R24 (net48) and nothing else: no Revit, no deploy. CI builds
+ *              R23 and R25, so a net8-only API (`SkipLast`, `IReadOnlySet<T>`) went red here unseen.
  */
 import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
@@ -33,6 +35,11 @@ const steps: [name: string, cwd: string, cmd: string[]][] = [
     ],
   ],
   ["guards", resolve(TS, "tests/repo-guards"), ["vp", "test"]],
+  [
+    "r24",
+    resolve(TS, ".."),
+    ["dotnet", "build", "dotnet/Pe.App/Pe.App.csproj", "-c", "Debug.R24", "-v:q", "-nologo"],
+  ],
 ];
 
 for (const [name, cwd, [bin, ...args]] of steps) {
