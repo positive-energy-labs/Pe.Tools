@@ -190,6 +190,36 @@ Legacy nouns under review: band, readout, read status, rules.
    In a list picker with a text box, the first row is the typed text itself, and Enter picks it;
    suggestions follow. That row shows how many items the text matches, so a partial match is a
    thing a person can pick and explore. Exact match is never silently substituted.
+48. 2026-09-24, Pea surface normalization: "yes i agree with your simplest pattern basically." Every
+   entity route gives Pea the same four tiers. Read: `route:<name>.view`, the mounted view (the
+   families view bridge, moved into the kernel). Shape: Pea sets the query and visible columns
+   without asking. Propose: proposal cells only. Mutate: apply stays human-only everywhere.
+   "not very useful for family, but useful for schedules": the view is built for all three.
+49. "capture into pod should be possible for all three." Capture is Pea-callable on `/family` and
+   `/schedules` now. On `/families` it is deferred: "im not rly sure what this means in practice
+   and it may be defered until we make some sort of table overlay that allows editing the param
+   definitions. i feel like the metadata press is prob the place for this." Families capture waits
+   for parameter-definition editing, likely in the parameter metadata pane.
+50. "plan should always be allow[ed]." Plan changes nothing, so Pea may call it on every route
+   (`families.plan` moves from human to any). "only families needs a plan": whether `/family`
+   keeps its two-press apply is open.
+51. The schedule catalog carries each schedule's UniqueId (or its Work key), so Pea and the
+   schedule picker address a schedule's Work without a Revit read. C# catalog operation and its
+   contract change.
+52. "yes i say one press, bc the preview u get is functionally the same as looking at ur staged
+   edits." `/family` apply is one press: it plans and applies in one run and stops if the plan
+   refuses. `/families` is the only route with a two-press apply.
+53. The families definition editing and families capture (ruling 49) live in the parameter
+   metadata pane.
+54. "yes, just the same way executing a script shows a receipt link too. i think this should be a
+   general rule for route stuff maybe?" Every thing a verb produces or cites carries a link, on
+   every surface: the page log, the Work slot, the plan sheet, and Pea's chat messages. A route
+   verb's result says what it produced by address, never by a bare path or id.
+55. "render in app if we have the infra for it. open in default app is general purpose and
+   fallback. but this is a critical ui primitive too." A link opens in the app when its kind has a
+   renderer (the right-pane inspector, `?inspect=<kind>:<id>`, shape S4). A kind with no renderer,
+   and every file as a second action, opens in the host's default app. The link is one kit
+   primitive; no surface draws a path, receipt id or reading id as text.
 
 ## Entity route shape (ruled 2026-09-24, rulings 34-45; the baton is deleted)
 
