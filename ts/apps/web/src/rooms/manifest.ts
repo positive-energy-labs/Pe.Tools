@@ -44,9 +44,11 @@ const dispatch = async (
   input: Record<string, unknown>,
 ) => {
   if (ctx.target.kind !== "document") throw Error("An open document is required");
-  return actionResult(
+  // The host answers `{ value, target }` for every rooms action (takeoff-actions.ts); the value is the op's response.
+  const answer = actionResult(
     await runSemanticAction(key, semanticActionInput(key, input), ctx.target.ref),
-  );
+  ) as { value?: unknown };
+  return answer.value ?? answer;
 };
 
 const stagedKeys = (ctx: RoomsCtx) =>
