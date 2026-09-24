@@ -23,6 +23,7 @@ import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as ParamTablesRouteImport } from "./routes/param-tables";
 import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
 import { Route as PodsRouteImport } from "./routes/pods";
+import { Route as RoomsRouteImport } from "./routes/rooms";
 import { Route as RunsRouteImport } from "./routes/runs";
 import { Route as SchedulesRouteImport } from "./routes/schedules";
 import { Route as TakeoffsRouteImport } from "./routes/takeoffs";
@@ -106,6 +107,11 @@ const PodsRoute = PodsRouteImport.update({
   path: "/pods",
   getParentRoute: () => rootRouteImport,
 } as any);
+const RoomsRoute = RoomsRouteImport.update({
+  id: "/rooms",
+  path: "/rooms",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const RunsRoute = RunsRouteImport.update({
   id: "/runs",
   path: "/runs",
@@ -182,6 +188,7 @@ export interface FileRoutesByFullPath {
   "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
   "/pods": typeof PodsRoute;
+  "/rooms": typeof RoomsRoute;
   "/runs": typeof RunsRoute;
   "/schedules": typeof SchedulesRoute;
   "/takeoffs": typeof TakeoffsRoute;
@@ -210,6 +217,7 @@ export interface FileRoutesByTo {
   "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
   "/pods": typeof PodsRoute;
+  "/rooms": typeof RoomsRoute;
   "/runs": typeof RunsRoute;
   "/schedules": typeof SchedulesRoute;
   "/takeoffs": typeof TakeoffsRoute;
@@ -239,6 +247,7 @@ export interface FileRoutesById {
   "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
   "/pods": typeof PodsRoute;
+  "/rooms": typeof RoomsRoute;
   "/runs": typeof RunsRoute;
   "/schedules": typeof SchedulesRoute;
   "/takeoffs": typeof TakeoffsRoute;
@@ -269,6 +278,7 @@ export interface FileRouteTypes {
     | "/param-tables"
     | "/parameter-links"
     | "/pods"
+    | "/rooms"
     | "/runs"
     | "/schedules"
     | "/takeoffs"
@@ -297,6 +307,7 @@ export interface FileRouteTypes {
     | "/param-tables"
     | "/parameter-links"
     | "/pods"
+    | "/rooms"
     | "/runs"
     | "/schedules"
     | "/takeoffs"
@@ -325,6 +336,7 @@ export interface FileRouteTypes {
     | "/param-tables"
     | "/parameter-links"
     | "/pods"
+    | "/rooms"
     | "/runs"
     | "/schedules"
     | "/takeoffs"
@@ -354,6 +366,7 @@ export interface RootRouteChildren {
   ParamTablesRoute: typeof ParamTablesRoute;
   ParameterLinksRoute: typeof ParameterLinksRoute;
   PodsRoute: typeof PodsRoute;
+  RoomsRoute: typeof RoomsRoute;
   RunsRoute: typeof RunsRoute;
   SchedulesRoute: typeof SchedulesRoute;
   TakeoffsRoute: typeof TakeoffsRoute;
@@ -465,6 +478,13 @@ declare module "@tanstack/react-router" {
       path: "/pods";
       fullPath: "/pods";
       preLoaderRoute: typeof PodsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/rooms": {
+      id: "/rooms";
+      path: "/rooms";
+      fullPath: "/rooms";
+      preLoaderRoute: typeof RoomsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/runs": {
@@ -580,6 +600,7 @@ const rootRouteChildren: RootRouteChildren = {
   ParamTablesRoute: ParamTablesRoute,
   ParameterLinksRoute: ParameterLinksRoute,
   PodsRoute: PodsRoute,
+  RoomsRoute: RoomsRoute,
   RunsRoute: RunsRoute,
   SchedulesRoute: SchedulesRoute,
   TakeoffsRoute: TakeoffsRoute,

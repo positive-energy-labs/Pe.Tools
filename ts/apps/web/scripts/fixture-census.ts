@@ -18,6 +18,7 @@ const canonicalFixtures: Record<
   "/instances": { canonicalReviewUrl: "/instances?demo=refresh", fixtureKind: "demo-fixture" },
   "/ops": { canonicalReviewUrl: "/ops", fixtureKind: "live-route" },
   "/parameter-links": { canonicalReviewUrl: "/parameter-links", fixtureKind: "live-route" },
+  "/rooms": { canonicalReviewUrl: "/rooms", fixtureKind: "live-route" },
   "/runs": { canonicalReviewUrl: "/runs", fixtureKind: "live-route" },
   "/pods": { canonicalReviewUrl: "/pods?demo=browse", fixtureKind: "demo-fixture" },
   "/schedules": { canonicalReviewUrl: "/schedules?demo=apply", fixtureKind: "demo-fixture" },

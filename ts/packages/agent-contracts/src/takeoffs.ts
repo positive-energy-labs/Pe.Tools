@@ -10,7 +10,7 @@ const pointSchema = z.tuple([z.number(), z.number()]);
 const worldLoopsSchema = z
   .array(z.array(z.tuple([z.number(), z.number()]).readonly()).readonly())
   .readonly();
-const roomEditSchema = z.object({
+export const roomEditSchema = z.object({
   name: z.string().optional(),
   type: z
     .enum([

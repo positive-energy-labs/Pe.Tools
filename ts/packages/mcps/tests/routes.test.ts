@@ -13,6 +13,7 @@ test("route registry lists exactly the retained collaborative routes", () => {
     "instances",
     "parameter-links",
     "pods",
+    "rooms",
     "schedules",
     "takeoffs",
   ]);
