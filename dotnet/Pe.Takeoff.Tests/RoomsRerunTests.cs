@@ -108,6 +108,22 @@ public sealed class RoomsRerunTests
     }
 
     [Test]
+    public void Designation_reads_interior_walls_first_and_area_only_without_evidence()
+    {
+        List<List<double[]>> fill = [[[0, 0], [20, 0], [20, 20], [0, 20]]];
+        double[] crossing = [10, 0, 10, 20];
+        double[] onEdge = [0, 0, 20, 0];
+        List<List<double[]>> big = [[[0, 0], [20, 0], [20, 20], [0, 20]]];
+        List<List<double[]>> small = [[[0, 0], [10, 0], [10, 10], [0, 10]]];
+        Assert.Multiple(() => {
+            Assert.That(Rooms.Designate([crossing], fill, 400), Is.EqualTo(TakeoffCarriers.RoleZoningRegion));
+            Assert.That(Rooms.Designate([onEdge], fill, 400), Is.EqualTo(TakeoffCarriers.RoleRoomRegion));
+            Assert.That(Rooms.Designate([], big, 400), Is.EqualTo(TakeoffCarriers.RoleZoningRegion));
+            Assert.That(Rooms.Designate([], small, 100), Is.EqualTo(TakeoffCarriers.RoleRoomRegion));
+        });
+    }
+
+    [Test]
     public void Geometry_hash_is_hex_sha256_stable_under_sub_micro_noise()
     {
         List<List<double[]>> a = [[[0, 0], [10, 0], [10, 10], [0, 10]]];

@@ -261,8 +261,8 @@ function RoomsBody({
             onHover={setHovered}
             empty={
               empty ?? {
-                says: "no room regions in this document",
-                exit: "press partition to split the chosen view's level into rooms",
+                says: "no zones or room regions in this document",
+                exit: "draw a zone on the chosen view in Revit, then press partition",
               }
             }
           />

@@ -125,8 +125,10 @@ public sealed record TakeoffRhvacLinkWrite(long ElementId, TakeoffRhvacLink Link
 public sealed record TakeoffRhvacLinksRequest(List<TakeoffRhvacLinkWrite> Writes);
 public sealed record TakeoffRhvacLinksData(IReadOnlyList<TakeoffWriteResult> Writes);
 
-// /rooms (docs/features/rooms/LEDGER.md). A Room Region on a level-scoped plan view; same carriers as takeoffs
-// plus the seven room fields. Loops are [x,y] host feet, outer CCW, even-odd holes.
+// /rooms (docs/features/rooms/LEDGER.md). A zone, room, or held region on a level-scoped plan view; same carriers
+// as takeoffs plus the seven room fields. Loops are [x,y] host feet, outer CCW, even-odd holes.
+// Role is "zone" | "room" | "held". Zone is the parent zone's guid (null = not in a zone on this view).
+// Designation is "person" | "inferred" for hand-drawn regions, null for machine regions.
 public sealed record RoomsLevel(string Name, double Elevation, IReadOnlyList<string> Views);
 public sealed record RoomsRegion(
     long ElementId,
@@ -134,6 +136,8 @@ public sealed record RoomsRegion(
     string View,
     string Level,
     string Role,
+    Guid? Zone,
+    string? Designation,
     string Name,
     string Type,
     double? CeilingFt,
@@ -153,10 +157,11 @@ public sealed record RoomsRegion(
     bool Stale);
 public sealed record RoomsSnapshotData(IReadOnlyList<RoomsLevel> Levels, IReadOnlyList<RoomsRegion> Regions);
 
-public sealed record RoomsPartitionRequest(string View, List<double[]>? Bounds = null, string? RunId = null);
+public sealed record RoomsPartitionRequest(string View, string? RunId = null);
 public sealed record RoomsPartitionResult(
     string Level,
     string RunId,
+    int Zones,
     int Created,
     int Kept,
     int Locked,
@@ -166,7 +171,8 @@ public sealed record RoomsPartitionResult(
     string? Hold,
     double Ms);
 
-public sealed record RoomsDrawRequest(string View, List<List<double[]>> Loops, string? Name = null);
+// Role is "room" (default) or "zone".
+public sealed record RoomsDrawRequest(string View, List<List<double[]>> Loops, string? Name = null, string? Role = null);
 public sealed record RoomsDrawResult(long ElementId, Guid Guid);
 
 public sealed record RoomsWriteRegion(
@@ -178,6 +184,7 @@ public sealed record RoomsWriteRegion(
     double? LightingW = null,
     double? EquipSensible = null,
     double? EquipLatent = null,
-    double? VentilationCfm = null);
+    double? VentilationCfm = null,
+    string? Role = null);
 public sealed record RoomsWriteRequest(List<RoomsWriteRegion> Regions);
 public sealed record RoomsWriteResult(int Written);

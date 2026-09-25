@@ -1,5 +1,5 @@
 /**
- * The rooms table: one row per Room Region. Every edit stages a Work cell (`transitionPatches`)
+ * The rooms table: one row per zone, room and held region. Every edit stages a Work cell (`transitionPatches`)
  * against what the region holds in Revit; nothing is written until `apply`.
  */
 import { useMemo } from "react";
@@ -18,10 +18,19 @@ import { EmptyState } from "#/components/lang/empty";
 import { CellListSelect } from "#/components/lang/list-popup";
 import type { Column, Verdict } from "#/components/master-table/model";
 import { Table } from "#/components/master-table/table";
-import { REGION_INK, regionLabel, regionState, type RoomRow, type RoomsRegion } from "./plan";
+import {
+  REGION_INK,
+  regionLabel,
+  regionState,
+  unassigned,
+  type RoomRow,
+  type RoomsRegion,
+} from "./plan";
 
 const ROOM_TYPES = roomEditSchema.shape.type.unwrap().options;
 type RoomType = (typeof ROOM_TYPES)[number];
+const ROLES = roomEditSchema.shape.role.unwrap().options;
+type Role = (typeof ROLES)[number];
 type Cells = RoomsRouteDocument["edits"];
 
 const NUMBERS = [
@@ -33,15 +42,33 @@ const NUMBERS = [
   ["ventilationCfm", "vent", "ventilation, CFM"],
 ] as const satisfies readonly (readonly [RoomEditField, string, string])[];
 
-/** Level (in the snapshot's level order) then area, largest first; `R{n}` counts in that order. */
+/**
+ * Level (in the snapshot's level order), then zones, their rooms zone by zone, unassigned rooms,
+ * held; area largest first within each. `R{n}` counts in that order.
+ */
 export function roomRows(regions: readonly RoomsRegion[], levels: readonly string[]): RoomRow[] {
   const rank = (level: string) => {
     const at = levels.indexOf(level);
     return at < 0 ? levels.length : at;
   };
+  const zones = regions
+    .filter((region) => region.role === "zone")
+    .sort((a, b) => b.sqft - a.sqft)
+    .map((zone) => zone.guid);
+  const zoneAt = (guid: string | null | undefined) => {
+    const at = guid == null ? -1 : zones.indexOf(guid);
+    return at < 0 ? zones.length : at;
+  };
+  const group = (region: RoomsRegion) =>
+    region.role === "zone" ? 0 : region.role === "held" ? 3 : unassigned(region) ? 2 : 1;
   return [...regions]
     .sort(
-      (a, b) => rank(a.level) - rank(b.level) || a.level.localeCompare(b.level) || b.sqft - a.sqft,
+      (a, b) =>
+        rank(a.level) - rank(b.level) ||
+        a.level.localeCompare(b.level) ||
+        group(a) - group(b) ||
+        zoneAt(a.zone) - zoneAt(b.zone) ||
+        b.sqft - a.sqft,
     )
     .map((region, index) => ({ region, label: regionLabel(region, index) }));
 }
@@ -54,7 +81,8 @@ export const stagePatches = (
   value: string | number,
 ): RouteStatePatch[] => {
   const key = roomEditKey(region.guid, field);
-  const held = region[field];
+  // A designation no person chose has no baseline: staging the same role confirms it as a person's.
+  const held = field === "role" && region.designation !== "person" ? undefined : region[field];
   return transitionPatches(["edits"], key, cells[key] ?? {}, {
     kind: "stage",
     rung: { value },
@@ -66,7 +94,13 @@ export const stagePatches = (
 const shown = (value: string | number | null | undefined) =>
   value === null || value === undefined ? "" : String(value);
 
-const VERDICT_TONE = { locked: "ink", stale: "caution", held: "mute", machine: "mute" } as const;
+const VERDICT_TONE = {
+  zone: "mute",
+  locked: "ink",
+  stale: "caution",
+  held: "mute",
+  machine: "mute",
+} as const;
 
 export function RoomsTable({
   rows,
@@ -88,6 +122,13 @@ export function RoomsTable({
   empty: { says: string; exit: string };
 }) {
   const columns = useMemo<Column<RoomRow>[]>(() => {
+    const zoneLabels = new Map(
+      rows.filter((row) => row.region.role === "zone").map((row) => [row.region.guid, row.label]),
+    );
+    const zoneOf = (region: RoomsRegion) =>
+      region.role === "zone"
+        ? ""
+        : ((region.zone == null ? undefined : zoneLabels.get(region.zone)) ?? "unassigned");
     const stage = (region: RoomsRegion, field: RoomEditField, value: string | number) =>
       wire.write(stagePatches(cells, region, field, value)).then((refusal) => refusal?.message);
     const cellOf = (row: RoomRow, field: RoomEditField, numeric: boolean): StateCellProps => {
@@ -120,12 +161,58 @@ export function RoomsTable({
         cell: (row) => <span className="block truncate px-(--item-pad-x)">{row.region.level}</span>,
       },
       {
+        key: "zone",
+        label: "zone",
+        title: "the zone this region belongs to; unassigned rooms are outside every zone",
+        width: "w-24",
+        sort: (row) => zoneOf(row.region),
+        facet: (row) => zoneOf(row.region) || "—",
+        cell: (row) => (
+          <span className="block truncate px-(--item-pad-x)">{zoneOf(row.region) || "—"}</span>
+        ),
+      },
+      {
         key: "name",
         label: "name",
         width: "min-w-36",
         search: (row) => `${row.label} ${row.region.name}`,
         sort: (row) => row.label,
         state: (row) => ({ ...cellOf(row, "name", false), placeholder: row.label }),
+      },
+      {
+        key: "role",
+        label: "role",
+        title: "room or zone; a person's choice locks it, else partition inferred it from walls",
+        width: "w-20",
+        facet: (row) => row.region.role,
+        options: ROLES.map((role) => ({ value: role, label: role })),
+        cell: (row) => {
+          if (row.region.role === "held")
+            return <span className="block px-(--item-pad-x)">held</span>;
+          const key = roomEditKey(row.region.guid, "role");
+          const cell = cells[key];
+          const value = shown(cell?.staged?.value ?? row.region.role);
+          return (
+            <CellListSelect<Role>
+              aria-label={`${row.label} role`}
+              value={value}
+              display={cell?.staged ? <b>{value}</b> : value}
+              title={
+                cell?.staged
+                  ? `staged · Revit holds ${row.region.role}`
+                  : `${row.region.designation ?? "machine"} designation`
+              }
+              items={ROLES}
+              keyOf={(role) => role}
+              labelOf={(role) => role}
+              empty="no roles"
+              select="single"
+              selected={[value]}
+              onPick={(role) => void stage(row.region, "role", role)}
+              row={(role) => ({ label: role })}
+            />
+          );
+        },
       },
       {
         key: "type",
@@ -191,7 +278,7 @@ export function RoomsTable({
         },
       },
     ];
-  }, [cells, wire]);
+  }, [cells, wire, rows]);
 
   return (
     <Table

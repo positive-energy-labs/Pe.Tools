@@ -5023,13 +5023,14 @@ export namespace RevitResolveUnitValue {
   }
 }
 
-/** Draw one locked Room Region from loops on a plan view. */
+/** Draw one room or zone region from loops on a plan view; a person's designation, so a room is locked. */
 export namespace RoomsDraw {
   export namespace Req {
     export interface Request {
       view: string;
       loops: number[][][];
       name?: null | string;
+      role?: null | string;
     }
   }
   export namespace Res {
@@ -5040,12 +5041,11 @@ export namespace RoomsDraw {
   }
 }
 
-/** Partition one plan view's level inside bounds or the view crop, keeping locked and matched Room Regions, in one transaction. */
+/** Partition each zone drawn on one plan view into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction. */
 export namespace RoomsPartition {
   export namespace Req {
     export interface Request {
       view: string;
-      bounds?: number[][] | null;
       runId?: null | string;
     }
   }
@@ -5053,6 +5053,7 @@ export namespace RoomsPartition {
     export interface Response {
       level: string;
       runId: string;
+      zones: number;
       created: number;
       kept: number;
       locked: number;
@@ -5065,7 +5066,7 @@ export namespace RoomsPartition {
   }
 }
 
-/** Read plan-view levels and every Room Region on them with its room fields, geometry, and locked, touched, and stale state. */
+/** Read plan-view levels and every zone, room, and held region on them with its parent zone, designation, room fields, geometry, and locked, touched, and stale state. */
 export namespace RoomsSnapshot {
   export namespace Req {
     export interface Request {}
@@ -5086,6 +5087,8 @@ export namespace RoomsSnapshot {
       view: string;
       level: string;
       role: string;
+      zone?: null | string;
+      designation?: null | string;
       name: string;
       type: string;
       ceilingFt?: null | number;
@@ -5107,7 +5110,7 @@ export namespace RoomsSnapshot {
   }
 }
 
-/** Write the given room fields onto Room Regions by guid. */
+/** Write the given room fields, and a person's room or zone designation, onto regions by guid. */
 export namespace RoomsWrite {
   export namespace Req {
     export interface Request {
@@ -5123,6 +5126,7 @@ export namespace RoomsWrite {
       equipSensible?: null | number;
       equipLatent?: null | number;
       ventilationCfm?: null | number;
+      role?: null | string;
     }
   }
   export namespace Res {

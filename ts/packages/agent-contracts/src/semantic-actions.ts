@@ -72,25 +72,26 @@ const definitions = {
     dirties: ["snapshot", "rhvac-open"],
   },
   "rooms.partition": {
-    says: "Partition one plan view's level inside bounds or its crop, keeping locked and matched rooms.",
+    says: "Partition every zone drawn on one plan view into rooms, keeping locked and matched rooms.",
     needs: "project-document",
     actor: "any",
-    input: z.object({ view: z.string().min(1), bounds: loop.nullable().optional() }),
+    input: z.object({ view: z.string().min(1) }),
     dirties: ["snapshot"],
   },
   "rooms.draw": {
-    says: "Draw one locked room region from loops on a plan view.",
+    says: "Draw one room (locked) or zone region from loops on a plan view.",
     needs: "project-document",
     actor: "any",
     input: z.object({
       view: z.string().min(1),
       loops: z.array(loop).min(1),
       name: z.string().nullable().optional(),
+      role: z.enum(["room", "zone"]).optional(),
     }),
     dirties: ["snapshot"],
   },
   "rooms.write": {
-    says: "Write the given room fields onto room regions by guid.",
+    says: "Write the given room fields, and a person's room or zone designation, onto regions by guid.",
     needs: "project-document",
     actor: "any",
     input: z.object({
@@ -106,6 +107,7 @@ const definitions = {
             equipSensible: roomNumber,
             equipLatent: roomNumber,
             ventilationCfm: roomNumber,
+            role: z.enum(["room", "zone"]).optional(),
           }),
         )
         .min(1),

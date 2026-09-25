@@ -1,6 +1,6 @@
 /**
- * The rooms plan: the view's registered plan image under one path per Room Region, inked by the
- * region's state. Click selects, hover pairs with the table row, a click on empty ground clears.
+ * The rooms plan: the view's registered plan image under one path per zone, room and held region,
+ * inked by the region's state. Click selects, hover pairs with the table row, a click on empty ground clears.
  */
 import { useMemo } from "react";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
@@ -24,35 +24,67 @@ const xy = (point: readonly number[]): Point2 => {
 };
 const loopOf = (loop: readonly (readonly number[])[]) => loop.map(xy);
 
-export type RegionState = "locked" | "stale" | "held" | "machine";
+export type RegionState = "zone" | "locked" | "stale" | "held" | "machine" | "unassigned";
+
+/** The legend order. Unassigned is not an ink: it counts rooms outside every zone. */
+export const REGION_STATES = ["zone", "locked", "stale", "held", "machine", "unassigned"] as const;
 
 /** The ink order: the first that holds wins. A person's region outranks a stale one. */
-export const REGION_STATES = ["locked", "stale", "held", "machine"] as const;
+export const regionState = (
+  region: Pick<RoomsRegion, "locked" | "stale" | "role">,
+): Exclude<RegionState, "unassigned"> =>
+  region.role === "zone"
+    ? "zone"
+    : region.locked
+      ? "locked"
+      : region.stale
+        ? "stale"
+        : region.role === "held"
+          ? "held"
+          : "machine";
 
-export const regionState = (region: Pick<RoomsRegion, "locked" | "stale" | "role">): RegionState =>
-  region.locked ? "locked" : region.stale ? "stale" : region.role === "held" ? "held" : "machine";
+/** A room no zone on its view contains: partition never touches it. */
+export const unassigned = (region: Pick<RoomsRegion, "role" | "zone">) =>
+  region.role === "room" && region.zone == null;
 
-/** Each state's ink role and what it means. Held is absent ink, dashed void: residue, not a room. */
-export const REGION_INK: Record<RegionState, { ink: string; dashed: boolean; says: string }> = {
+/**
+ * Each state's ink role, dash and what it means. A zone is a reference boundary, unfilled: scope,
+ * not a room. Held is absent ink, dashed void: residue, not a room. Unassigned has no ink of its
+ * own; the room wears its state's.
+ */
+export const REGION_INK: Record<
+  RegionState,
+  { ink: string | null; dash: "dash-reference" | "dash-void" | null; says: string }
+> = {
+  zone: {
+    ink: "ink-mute",
+    dash: "dash-reference",
+    says: "a zone: partition splits it into rooms around the rooms already in it",
+  },
   locked: {
     ink: "ink",
-    dashed: false,
-    says: "a person drew or edited this region; partition keeps it as drawn",
+    dash: null,
+    says: "a person drew, edited or designated this region; partition keeps it as drawn",
   },
   stale: {
     ink: "caution",
-    dashed: false,
+    dash: null,
     says: "the walls under this region moved since it was drawn",
   },
   held: {
     ink: "ink-mute",
-    dashed: true,
+    dash: "dash-void",
     says: "held residue: area partition could not place in a room",
   },
   machine: {
     ink: "ink-2",
-    dashed: false,
+    dash: null,
     says: "drawn by partition and untouched since",
+  },
+  unassigned: {
+    ink: null,
+    dash: null,
+    says: "a room outside every zone, drawn in its state's ink; partition never touches it",
   },
 };
 
@@ -99,8 +131,18 @@ export function RoomsPlan({
     return points.length ? boundsOf(points) : null;
   }, [rows, plan]);
   const counts = useMemo(() => {
-    const n: Record<RegionState, number> = { locked: 0, stale: 0, held: 0, machine: 0 };
-    for (const row of rows) n[regionState(row.region)] += 1;
+    const n: Record<RegionState, number> = {
+      zone: 0,
+      locked: 0,
+      stale: 0,
+      held: 0,
+      machine: 0,
+      unassigned: 0,
+    };
+    for (const row of rows) {
+      n[regionState(row.region)] += 1;
+      if (unassigned(row.region)) n.unassigned += 1;
+    }
     return n;
   }, [rows]);
 
@@ -113,17 +155,19 @@ export function RoomsPlan({
           title={REGION_INK[state].says}
         >
           <span className="flex items-center gap-1">
-            <svg aria-hidden width="10" height="10" viewBox="0 0 10 10">
-              <rect
-                x="1"
-                y="1"
-                width="8"
-                height="8"
-                fill="none"
-                stroke={token(REGION_INK[state].ink)}
-                className={REGION_INK[state].dashed ? "dash-void" : undefined}
-              />
-            </svg>
+            {REGION_INK[state].ink ? (
+              <svg aria-hidden width="10" height="10" viewBox="0 0 10 10">
+                <rect
+                  x="1"
+                  y="1"
+                  width="8"
+                  height="8"
+                  fill="none"
+                  stroke={token(REGION_INK[state].ink!)}
+                  className={REGION_INK[state].dash ?? undefined}
+                />
+              </svg>
+            ) : null}
             {state} <span className="face-mono">{counts[state]}</span>
           </span>
         </FactChip>
@@ -149,9 +193,9 @@ export function RoomsPlan({
         <div className="flex flex-1 items-center justify-center px-4">
           <EmptyState
             story="scope"
-            exit={empty?.exit ?? "press partition to split this view's level into rooms"}
+            exit={empty?.exit ?? "draw a zone on this view in Revit, then press partition"}
           >
-            {empty?.says ?? "no room regions and no plan image on this view yet"}
+            {empty?.says ?? "no zones, rooms or plan image on this view yet"}
           </EmptyState>
         </div>
       </div>
@@ -185,8 +229,9 @@ export function RoomsPlan({
         {plan ? <PlanImageLayer plan={plan} frame={frame} /> : null}
         {rows.map(({ region, label }) => {
           const state = regionState(region);
-          const ink = token(REGION_INK[state].ink);
-          const { dashed } = REGION_INK[state];
+          const ink = token(REGION_INK[state].ink!);
+          const { dash } = REGION_INK[state];
+          const loose = unassigned(region);
           const on = selected.has(region.guid);
           const hot = hovered === region.guid;
           const [lx, ly] = frame.toViewport(xy(region.label));
@@ -194,6 +239,7 @@ export function RoomsPlan({
             <g
               key={region.guid}
               data-state={state}
+              data-unassigned={loose || undefined}
               onMouseEnter={() => onHover(region.guid)}
               onMouseLeave={() => onHover(null)}
               onClick={(event) => {
@@ -204,15 +250,19 @@ export function RoomsPlan({
               <path
                 d={pathD([loopOf(region.outer), ...region.holes.map(loopOf)], frame)}
                 fillRule="evenodd"
-                fill={`color-mix(in srgb, ${ink} ${on ? 30 : hot ? 20 : 8}%, transparent)`}
+                fill={
+                  state === "zone"
+                    ? "none"
+                    : `color-mix(in srgb, ${ink} ${on ? 30 : hot ? 20 : 8}%, transparent)`
+                }
                 stroke={ink}
                 strokeWidth={on ? 2.5 : state === "locked" ? 1.75 : 1}
-                className={dashed ? "dash-void" : undefined}
+                className={dash ?? undefined}
                 vectorEffect="non-scaling-stroke"
               >
-                <title>{`${label} · ${region.sqft.toFixed(0)} sf · ${state}`}</title>
+                <title>{`${label} · ${region.sqft.toFixed(0)} sf · ${state}${loose ? " · unassigned" : ""}`}</title>
               </path>
-              {state !== "held" ? (
+              {state !== "held" && state !== "zone" ? (
                 <text
                   x={lx}
                   y={ly}

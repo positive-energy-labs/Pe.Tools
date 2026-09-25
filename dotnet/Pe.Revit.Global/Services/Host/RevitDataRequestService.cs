@@ -77,19 +77,19 @@ internal sealed class RevitDataRequestService {
             document => new TakeoffRhvacLinksData(TakeoffAtlas.LinkRhvacBatch(document, request)),
             "Pe Link Takeoff Rooms to RHVAC");
 
-    [Op("rooms.snapshot", Does = "Read plan-view levels and every Room Region on them with its room fields, geometry, and locked, touched, and stale state.", Title = "Get Rooms Snapshot", Finds = ["rooms", "snapshot", "levels", "room-regions", "filled-regions"], Cost = OpCost.Bounded)]
+    [Op("rooms.snapshot", Does = "Read plan-view levels and every zone, room, and held region on them with its parent zone, designation, room fields, geometry, and locked, touched, and stale state.", Title = "Get Rooms Snapshot", Finds = ["rooms", "snapshot", "levels", "room-regions", "filled-regions"], Cost = OpCost.Bounded)]
     private static RoomsSnapshotData GetRoomsSnapshotCore(NoRequest _, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, Rooms.Snapshot);
 
-    [Op("rooms.partition", Does = "Partition one plan view's level inside bounds or the view crop, keeping locked and matched Room Regions, in one transaction.", Title = "Partition Rooms", Finds = ["rooms", "partition", "level", "room-regions", "materialize"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation)]
+    [Op("rooms.partition", Does = "Partition each zone drawn on one plan view into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction.", Title = "Partition Rooms", Finds = ["rooms", "partition", "level", "room-regions", "materialize"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static RoomsPartitionResult PartitionRoomsCore(RoomsPartitionRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document => Rooms.Partition(document, request), "Pe Partition Rooms");
 
-    [Op("rooms.draw", Does = "Draw one locked Room Region from loops on a plan view.", Title = "Draw Room Region", Finds = ["rooms", "draw", "room-regions", "filled-regions", "loops"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation)]
+    [Op("rooms.draw", Does = "Draw one room or zone region from loops on a plan view; a person's designation, so a room is locked.", Title = "Draw Room Region", Finds = ["rooms", "draw", "room-regions", "filled-regions", "loops"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static RoomsDrawResult DrawRoomCore(RoomsDrawRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document => Rooms.Draw(document, request), "Pe Draw Room Region");
 
-    [Op("rooms.write", Does = "Write the given room fields onto Room Regions by guid.", Title = "Write Room Fields", Finds = ["rooms", "write", "room-regions", "fields", "parameters"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation)]
+    [Op("rooms.write", Does = "Write the given room fields, and a person's room or zone designation, onto regions by guid.", Title = "Write Room Fields", Finds = ["rooms", "write", "room-regions", "fields", "parameters"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static RoomsWriteResult WriteRoomsCore(RoomsWriteRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document => Rooms.Write(document, request), "Pe Write Room Fields");
 

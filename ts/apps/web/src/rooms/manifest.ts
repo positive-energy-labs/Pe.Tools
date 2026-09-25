@@ -64,7 +64,7 @@ export const manifest = defineRoute<
 >({
   key: "rooms",
   name: "Rooms",
-  docs: "Split one level's plan view into room regions, stage each room's name, type and Manual J fields, then apply them to the regions in Revit.",
+  docs: "Split the zones drawn on one level's plan view into room regions, stage each room's name, type and Manual J fields, then apply them to the regions in Revit.",
   needs: "project",
   work: roomsRouteState,
   cells: {
@@ -88,11 +88,10 @@ export const manifest = defineRoute<
         // The action's result is the op's response, as the generated catalog declares it.
         const result = (await dispatch(ctx, "rooms.partition", {
           view: ctx.page.view,
-          bounds: null,
         })) as RoomsPartition.Res.Response;
         ctx.note(
           "partition",
-          `${result.created} created · ${result.kept} kept · ${result.locked} locked · ${result.deleted} deleted · ${result.held} held`,
+          `${result.zones} zones · ${result.created} created · ${result.kept} kept · ${result.locked} locked · ${result.deleted} deleted · ${result.held} held`,
           result.failures.length > 0,
         );
         bump(ctx);

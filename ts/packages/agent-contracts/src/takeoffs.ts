@@ -34,6 +34,8 @@ export const roomEditSchema = z.object({
   equipSensible: z.number().optional(),
   equipLatent: z.number().optional(),
   ventilationCfm: z.number().optional(),
+  /** /rooms only: a person's designation of a hand-drawn region. */
+  role: z.enum(["room", "zone"]).optional(),
 });
 
 const modelViewSchema = z.object({
