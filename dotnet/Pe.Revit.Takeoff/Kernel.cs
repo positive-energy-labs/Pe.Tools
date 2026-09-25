@@ -1,3 +1,6 @@
+using NetTopologySuite.Geometries;
+using NetTopologySuite.Operation.Overlay.Snap;
+
 namespace Pe.Revit.Takeoff;
 
 // The pure geometry the surviving takeoff path still needs, lifted out of the raster before it was
@@ -31,22 +34,40 @@ public static class Kernel
     public const double WeldFt = 0.01;
     public const double SpikeFt = 0.005;
 
-    // The rings a FilledRegion is made from, cleaned; a hole that cleans to nothing is dropped, an outer throws.
-    public static List<CurveLoop> ToLoops(List<double[]> outer, IEnumerable<List<double[]>> holes, double z = 0)
+    public const double MinRingSqft = 1.0;
+
+    // The rings a FilledRegion is made from; empty when nothing is buildable (every part under MinRingSqft).
+    public static List<CurveLoop> ToLoops(List<double[]> outer, IEnumerable<List<double[]>> holes, double z = 0) =>
+        Rings(outer, holes).Select(r => ToLoop(r, z)).ToList();
+
+    private static CurveLoop ToLoop(List<double[]> ring, double z)
     {
-        var loops = new List<CurveLoop> { ToLoop(CleanRing(outer), z) };
-        loops.AddRange(holes.Select(CleanRing).Where(h => h.Count >= 3).Select(h => ToLoop(h, z)));
-        return loops;
+        var cl = new CurveLoop();
+        for (int i = 0; i < ring.Count; i++)
+            cl.Append(Line.CreateBound(new XYZ(ring[i][0], ring[i][1], z),
+                new XYZ(ring[(i + 1) % ring.Count][0], ring[(i + 1) % ring.Count][1], z)));
+        return cl;
     }
 
-    private static CurveLoop ToLoop(List<double[]> clean, double z)
+    // FOOTGUN: Revit refuses a hole that touches its outer ring (Chadds Main 27022a9d R02, 2026-09-25: an 18 sf hole
+    // filling a notch of the outer, 2.7e-5 ft off two of its edges). Such a hole is snapped to the outer and
+    // subtracted, which can split the face; every cleaned ring, part or hole, under MinRingSqft is dropped (a 0 sf
+    // face of three collinear points on a zone edge builds nothing).
+    public static List<List<double[]>> Rings(List<double[]> outer, IEnumerable<List<double[]>> holes)
     {
-        if (clean.Count < 3) throw new InvalidOperationException("degenerate loop");
-        var cl = new CurveLoop();
-        for (int i = 0; i < clean.Count; i++)
-            cl.Append(Line.CreateBound(new XYZ(clean[i][0], clean[i][1], z),
-                new XYZ(clean[(i + 1) % clean.Count][0], clean[(i + 1) % clean.Count][1], z)));
-        return cl;
+        var f = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
+        LinearRing Ring(List<double[]> r) => f.CreateLinearRing([.. r.Select(p => new Coordinate(p[0], p[1])), new Coordinate(r[0][0], r[0][1])]);
+        var shell = CleanRing(outer);
+        if (Math.Abs(Shoelace(shell)) < MinRingSqft) return [];
+        var inner = holes.Select(CleanRing).Where(h => Math.Abs(Shoelace(h)) >= MinRingSqft).ToList();
+        var touching = inner.Where(h => Ring(shell).Distance(Ring(h)) <= WeldFt).ToList();
+        Geometry face = f.CreatePolygon(Ring(shell), [.. inner.Except(touching).Select(Ring)]);
+        foreach (var h in touching)
+            face = face.Difference(new GeometrySnapper(f.CreatePolygon(Ring(h))).SnapTo(face, WeldFt));
+        return Enumerable.Range(0, face.NumGeometries).Select(i => (Polygon)face.GetGeometryN(i))
+            .SelectMany(p => p.InteriorRings.Prepend(p.Shell))
+            .Select(r => CleanRing([.. r.Coordinates.SkipLast(1).Select(c => new[] { c.X, c.Y })]))
+            .Where(r => Math.Abs(Shoelace(r)) >= MinRingSqft).ToList();
     }
 
     // Pure: welds points within WeldFt (the closing point too) and drops vertices within SpikeFt of their

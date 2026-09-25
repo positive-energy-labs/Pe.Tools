@@ -148,6 +148,7 @@ public static class ZoneMaterializer
             try
             {
                 var loops = Kernel.ToLoops(room.Polygon, room.Holes, elevation);
+                if (loops.Count == 0) continue;   // under 1 sf: nothing to draw
                 var region = FilledRegion.Create(doc, frType.Id, view.Id, loops);
                 TakeoffCarriers.WriteIdentity(region, TakeoffCarriers.RoleRoomRegion, Guid.NewGuid());
                 TakeoffCarriers.WriteProvenance(region,
@@ -170,6 +171,7 @@ public static class ZoneMaterializer
                 try
                 {
                     var loops = Kernel.ToLoops(residue.Polygon, residue.Holes, elevation);
+                    if (loops.Count == 0) continue;   // under 1 sf: nothing to draw
                     var region = FilledRegion.Create(doc, frType.Id, view.Id, loops);
                     TakeoffCarriers.WriteIdentity(region, TakeoffCarriers.RoleHeldResidue, Guid.NewGuid());
                     TakeoffCarriers.WriteProvenance(region,

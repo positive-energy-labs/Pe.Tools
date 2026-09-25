@@ -414,11 +414,12 @@ public static class Rooms
                     zoneProvenance, zoneGuid, sole, GeometryHash(TakeoffAtlas.Boundaries(zoneFr))).ToJson());
             }
 
+            var unbuildable = new List<ResidueResult>();
             foreach (var room in plan.Create)
             {
                 try
                 {
-                    var fr = Create(doc, frType, view, elevation, room.Polygon, room.Holes);
+                    if (Create(doc, frType, view, elevation, room.Polygon, room.Holes) is not { } fr) continue;
                     TakeoffCarriers.WriteIdentity(fr, TakeoffCarriers.RoleRoomRegion, Guid.NewGuid());
                     TakeoffCarriers.WriteRoomType(fr, "hall");
                     if (ProposedName(room, "") is { } name)
@@ -427,17 +428,21 @@ public static class Rooms
                         { Flags = room.Flags.ToList(), Partition = room.Partition }, true));
                     createdRooms++;
                 }
-                catch (Exception ex)
+                catch (Exception) when (room.Partition is { } face)
                 {
-                    // Drop, don't mangle: a room Revit rejects stays visible as a failure, never bent.
-                    failures.Add($"{label} {room.Id}: {ex.Message}");
+                    // A room Revit refuses is held unbuildable-loop, drawn from its outer ring; only a second refusal fails.
+                    unbuildable.Add(new ResidueResult {
+                        Partition = face with { Disposition = Pe.Revit.Partition.Disposition.Held, Reason = Pe.Revit.Partition.Reasons.UnbuildableLoop },
+                        Id = room.Id, Reason = ResidueReason.Held, RawSqft = room.RawSqft, LabelX = room.LabelX, LabelY = room.LabelY,
+                        Polygon = room.Polygon,
+                    });
                 }
             }
-            foreach (var residue in plan.CreateHeld)
+            foreach (var residue in plan.CreateHeld.Concat(unbuildable))
             {
                 try
                 {
-                    var fr = Create(doc, frType, view, elevation, residue.Polygon, residue.Holes);
+                    if (Create(doc, frType, view, elevation, residue.Polygon, residue.Holes) is not { } fr) continue;
                     TakeoffCarriers.WriteIdentity(fr, TakeoffCarriers.RoleHeldResidue, Guid.NewGuid());
                     created.Add((fr, new RegionProvenance(1, zoneGuid, runId, residue.Id, residue.RawSqft)
                         { Partition = residue.Partition }, false));
@@ -477,7 +482,8 @@ public static class Rooms
             throw new InvalidOperationException("draw needs one or more loops of three or more points");
         var outer = request.Loops.OrderByDescending(loop => Math.Abs(Kernel.Shoelace(loop))).First();
         var fr = Create(doc, RegionType(doc), view, view.GenLevel.ProjectElevation, outer,
-            request.Loops.Where(loop => !ReferenceEquals(loop, outer)).ToList());
+            request.Loops.Where(loop => !ReferenceEquals(loop, outer)).ToList())
+            ?? throw new InvalidOperationException("draw loops are under 1 sf");
         var guid = Guid.NewGuid();
         TakeoffCarriers.WriteIdentity(fr, role, guid);
         if (request.Name != null) TakeoffCarriers.WriteRoomFields(fr, new RoomFields(Name: request.Name));
@@ -546,7 +552,8 @@ public static class Rooms
         var plan = RoomsMerge.Plan(view.Id.Value(), members);
         var fields = TakeoffCarriers.ReadRoomFields(byGuid[plan.Largest.Guid].Fr);
 
-        var merged = Create(doc, RegionType(doc), view, view.GenLevel.ProjectElevation, plan.Outer, plan.Holes);
+        var merged = Create(doc, RegionType(doc), view, view.GenLevel.ProjectElevation, plan.Outer, plan.Holes)
+            ?? throw new InvalidOperationException("merged loops are under 1 sf");
         var mergedGuid = Guid.NewGuid();
         TakeoffCarriers.WriteIdentity(merged, TakeoffCarriers.RoleRoomRegion, mergedGuid);
         TakeoffCarriers.WriteRoomFields(merged, fields with { Name = request.Name ?? fields.Name });
@@ -697,11 +704,10 @@ public static class Rooms
         fr.get_Parameter(BuiltInParameter.HOST_AREA_COMPUTED)?.AsDouble()
         ?? new ZoneScope { Loops = loops }.ExactGeometry().Area;
 
-    private static FilledRegion Create(Document doc, FilledRegionType type, View view, double elevation,
-        List<double[]> outer, IEnumerable<List<double[]>> holes)
-    {
-        return FilledRegion.Create(doc, type.Id, view.Id, Kernel.ToLoops(outer, holes, elevation));
-    }
+    // Null when nothing is buildable: every ring under Kernel.MinRingSqft, 0 sf in the accounting.
+    private static FilledRegion? Create(Document doc, FilledRegionType type, View view, double elevation,
+        List<double[]> outer, IEnumerable<List<double[]>> holes) =>
+        Kernel.ToLoops(outer, holes, elevation) is { Count: > 0 } loops ? FilledRegion.Create(doc, type.Id, view.Id, loops) : null;
 
     private static (List<RoomResult> Rooms, List<ResidueResult> Residues) Results(Pe.Revit.Partition.PartitionAnswer answer)
     {

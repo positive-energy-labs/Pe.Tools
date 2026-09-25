@@ -165,4 +165,5 @@ public static class Reasons {
     public const string TooNarrow = "too-narrow";
     public const string Wall = "wall";
     public const string NativeOverlap = "native-overlap";
+    public const string UnbuildableLoop = "unbuildable-loop";
 }
