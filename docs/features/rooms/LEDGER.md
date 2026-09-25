@@ -31,6 +31,7 @@
 - 2026-09-25, kaitpw: a hand-drawn zone edge is a wall. A zone that solves to one face is redesignated a room itself, with no child region; a region is conceptually both zone and room for Manual J.
 - 2026-09-25, kaitpw: solve quality is judged on shape, never on room count; small closely spaced interior rooms weigh little; kaitpw will hand-draw truth rooms on hard views once the capture path exists. Solve renders must be at least partly transparent.
 - 2026-09-25, kaitpw: the multi-document verification set is project-a (Chadds), Duryee, and project-c (Riverbend).
+- 2026-09-25, Claude (W4, Opus, `28e4f053` on its worktree branch, deterministic only, Takeoff tests 57/57): a zone with no locked room inside whose solve yields one face covering 99 percent flips to `room-region` itself, keeps its guid, and its machine children are deleted; a `person`-flagged zone never flips (else a person re-declaring it would loop); the architect proposal's name fills an empty `PE_M___RoomName` on created and kept rooms; regions use a find-or-create filled region type `PE Rooms` (solid pale fill, masking off, looked up by name so a person's restyle survives reruns). Revit's FilledRegionType has no opacity: see-through depends on Revit drawing model lines over a non-masking fill. Unproven in session; rooms3 owes the fill check and the 741 sf garage flip.
 
 ## Tried & rejected
 
