@@ -7,12 +7,13 @@ public sealed record Enclosure(Filter Solids, Filter Ribbons) {
     /// <summary>
     ///     Native walls and the project-a IFC enclosure categories plus the DWG layers that draw
     ///     enclosure. The full DWG layer set over-partitions by the millwork width — on Main Level#09
-    ///     millwork out-footprints walls 245 sqft to 185.
+    ///     millwork out-footprints walls 245 sqft to 185. Doors never become rails (Rails.From takes Walls only);
+    ///     their knee pieces are door evidence that makes a gap a Door (OpeningEvidence.From).
     /// </summary>
     public static readonly Enclosure Default = new(
         new Filter(
             [SourceKind.Host, SourceKind.RevitLink, SourceKind.IfcLink],
-            ["Walls", "Generic Models", "Structural Framing", "Columns"],
+            ["Walls", "Generic Models", "Structural Framing", "Columns", "Doors"],
             [PrimKind.Solid, PrimKind.Mesh]),
         new Filter(
             null, null,
@@ -39,8 +40,15 @@ public enum Disposition { Accepted, Held, Void, Excluded }
 /// <summary>One shared boundary between two rooms and how much raw ink backs it.</summary>
 public sealed record SharedEdge(int Other, double LengthFt, double Support);
 
-/// <summary>Architectural Room boundaries in host feet. All flat XY loops use even-odd semantics.</summary>
-public sealed record RoomProposal(string SourceKey, string Name, string Number, double[][] Loops);
+/// <summary>
+///     Architectural Room boundaries in host feet, or a person's locked room region (SourceKey starts with
+///     <see cref="LockedPrefix" />). All flat XY loops use even-odd semantics.
+/// </summary>
+public sealed record RoomProposal(string SourceKey, string Name, string Number, double[][] Loops) {
+    public const string LockedPrefix = "locked|";
+
+    public bool IsLocked => this.SourceKey.StartsWith(LockedPrefix, StringComparison.Ordinal);
+}
 
 /// <summary>Original CAD evidence for the two solver slabs. Null means not captured, never empty-complete.</summary>
 public sealed record OriginalCurveEvidence(OriginalCurvesAnswer Knee, OriginalCurvesAnswer Header);

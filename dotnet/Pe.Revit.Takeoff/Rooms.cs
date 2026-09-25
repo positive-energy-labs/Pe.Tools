@@ -21,13 +21,13 @@ public sealed record RoomsPlan(
 /// </summary>
 public static class RoomsRerun
 {
-    public const string LockedPrefix = "locked|";
+    public const string LockedPrefix = Pe.Revit.Partition.RoomProposal.LockedPrefix;
 
     // FOOTGUN: brief constant (rails W4, 2026-09-25), not measured: one accepted face this share of the zone is the zone.
     public const double SoleFaceShare = 0.99;
 
     public static bool IsLocked(Pe.Revit.Partition.Room? room) =>
-        room?.Proposal?.SourceKey.StartsWith(LockedPrefix, StringComparison.Ordinal) == true;
+        room?.Proposal?.IsLocked == true;
 
     public static RoomsPlan Plan(
         IReadOnlyList<ExistingRegion> existing,

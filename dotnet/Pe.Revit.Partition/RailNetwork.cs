@@ -63,7 +63,7 @@ public static partial class Rails {
     private const double WallInkMin = 0.6;
 
     // FOOTGUN: faces narrower than this are wall thickness or zone-edge strips, absorbed by a neighbour.
-    private const double MinFaceWidthFt = 1.0;
+    public const double MinFaceWidthFt = 1.0;
 
     // FOOTGUN: a rail whose axis, where inside the zone, lies within half its thickness plus this of the zone edge is envelope.
     // It stays a rail but faces meet its outer face; the band from there to the zone edge is wall, not room.
@@ -342,11 +342,14 @@ public static partial class Rails {
     /// <summary>
     ///     Length of a face's boundary on no wall, closed gap, door or headed bar, or zone edge: a floating edge.
     ///     A door or headed bar counts as enclosure because it separates rooms (ruling 1); a cased bar floats.
+    ///     <paramref name="also" /> is further enclosure linework, such as locked rooms' edges.
     /// </summary>
-    public static Func<Geometry, double> Floating(RailNetwork net) {
-        var enclosure = UnaryUnionNG.Union((Geometry)Gf.CreateMultiLineString(net.Segments
+    public static Func<Geometry, double> Floating(RailNetwork net, Geometry? also = null) {
+        Geometry lines = Gf.CreateMultiLineString(net.Segments
             .Where(s => s.Kind != SegKind.Cased && Len(s.A, s.B) > 1e-9)
-            .Select(s => Gf.CreateLineString([new Coordinate(s.A[0], s.A[1]), new Coordinate(s.B[0], s.B[1])])).ToArray()), Grid).Buffer(1e-3);
+            .Select(s => Gf.CreateLineString([new Coordinate(s.A[0], s.A[1]), new Coordinate(s.B[0], s.B[1])])).ToArray());
+        if (also is not null) lines = lines.Union(also);
+        var enclosure = UnaryUnionNG.Union(lines, Grid).Buffer(1e-3);
         return g => OverlayNGRobust.Overlay(g.Boundary, enclosure, NetTopologySuite.Operation.Overlay.SpatialFunction.Difference).Length;
     }
 

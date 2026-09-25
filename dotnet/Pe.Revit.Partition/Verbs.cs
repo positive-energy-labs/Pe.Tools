@@ -41,7 +41,7 @@ public static class Verbs {
             return answer;
         }
 
-        var result = Solve.Run(input, Probe);
+        var result = Solve.RunRails(input, Probe);
         RequireCurrent(document, input.Knee.Stamp);
         sw.Stop();
         return result with { Ms = Math.Round(sw.Elapsed.TotalMilliseconds, 3) };

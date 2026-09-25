@@ -95,27 +95,72 @@ public static class Solve {
     private const double MinRailRoomSqft = 6.0;
 
     /// <summary>
-    ///     Rooms from the rail network instead of stages 3 to 5. Same accounting and <c>Shape()</c>;
-    ///     native proposals are not honoured yet. Not wired into the verb.
+    ///     Rooms from the rail network instead of stages 3 to 5; the partition verb's solver. Same accounting and
+    ///     <c>Shape()</c>. Locked proposals (a person's room regions, from Rooms.cs) are carried through whole as
+    ///     Solve.Run carries native proposals, so they survive a rerun; the rail faces fill the rest of the zone.
+    ///     Architect proposals are not honoured yet: the rails decide every unlocked room.
     /// </summary>
     public static PartitionAnswer RunRails(PartitionInput input, Func<double, double, ProbeAnswer> probe) {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var zone = GeometryOf(input.ZoneLoops);
+        var locked = input.Proposals.Where(p => p.IsLocked)
+            .Select(p => (Proposal: p, Geom: IntersectArea(GeometryOf(p.Loops), zone)))
+            .Where(p => !p.Geom.IsEmpty && p.Geom.Area > AreaTolSqft).ToList();
+        var overlaps = new List<Geometry>();
+        for (var i = 0; i < locked.Count; i++)
+            for (var j = i + 1; j < locked.Count; j++) {
+                var overlap = IntersectArea(locked[i].Geom, locked[j].Geom);
+                if (overlap.Area > AreaTolSqft) overlaps.Add(overlap);
+            }
+        var contested = UnionOf(overlaps);
+        var taken = UnionOf(locked.Select(p => p.Geom).ToList());
         var net = Rails.Network(Rails.From(input).Concat(Rails.Studs(input)).ToList(), input.ZoneLoops, OpeningEvidence.From(input));
         var faces = Rails.Faces(net);
-        // Rooms, then bands too wide to be wall (held), then envelope bands (excluded wall).
-        var wide = faces.Bands.Select(b => (b, w: Rails.Width(b))).Where(x => x.w > Rails.BandHoldFt).ToList();
-        var shapes = faces.Rooms.Concat(wide.Select(x => x.b)).Concat(faces.Bands.Except(wide.Select(x => x.b))).Cast<Geometry>().ToList();
-        var roomCount = faces.Rooms.Count + wide.Count;
+        var lockedParts = locked.SelectMany(p => Polys(p.Geom.Difference(contested)).Select(g => (Geom: (Geometry)g, p.Proposal))).ToList();
+        List<Polygon> Free(IEnumerable<Polygon> parts) => taken.IsEmpty ? parts.ToList() : parts.SelectMany(f => Polys(f.Difference(taken))).ToList();
+        // A rail room clipped by a locked room leaves scraps where the person's edge runs beside a rail. A clipped
+        // piece thinner than a face goes to the locked room it borders longest, as Rails.Faces absorbs thin faces;
+        // Rooms.cs never redraws a locked room, so the scrap is accounted and never drawn.
+        var free = new List<Polygon>();
+        foreach (var f in faces.Rooms) {
+            var parts = Free([f]);
+            if (parts.Count == 1 && Math.Abs(parts[0].Area - f.Area) <= AreaTolSqft) { free.Add(parts[0]); continue; }
+            foreach (var part in parts) {
+                var (best, len) = (-1, 1e-6);
+                if (part.Buffer(-Rails.MinFaceWidthFt / 2).IsEmpty)
+                    for (var k = 0; k < lockedParts.Count; k++) {
+                        var shared = lockedParts[k].Geom.Boundary.Intersection(part.Boundary).Length;
+                        if (shared > len) (best, len) = (k, shared);
+                    }
+                if (best < 0) free.Add(part);
+                else lockedParts[best] = (UnionOf([lockedParts[best].Geom, part]), lockedParts[best].Proposal);
+            }
+        }
+        var bands = Free(faces.Bands);
+        // Locked rooms, rail rooms, bands too wide to be wall (held), locked overlaps (held), then envelope bands (excluded wall).
+        var wide = bands.Select(b => (b, w: Rails.Width(b))).Where(x => x.w > Rails.BandHoldFt).ToList();
+        var shapes = new List<Geometry>();
+        var proposals = new List<RoomProposal?>();
+        foreach (var (geom, proposal) in lockedParts)
+            foreach (var part in Polys(geom)) { shapes.Add(part); proposals.Add(proposal); }
+        var wideStart = shapes.Count + free.Count;
+        foreach (var part in free.Concat(wide.Select(x => x.b))) { shapes.Add(part); proposals.Add(null); }
+        var conflictStart = shapes.Count;
+        foreach (var part in Polys(contested)) { shapes.Add(part); proposals.Add(null); }
+        var roomCount = shapes.Count;
+        foreach (var part in bands.Except(wide.Select(x => x.b))) { shapes.Add(part); proposals.Add(null); }
         AssertCoverage(shapes, zone, "rails partition", true);
-        var backing = Reach(Buffered(input.Knee, input.Knobs.InkHalfWidthFt), Buffered(input.Header, input.Knobs.InkHalfWidthFt), input.Knobs);
-        var floating = Rails.Floating(net);
+        // A locked room's edge is a person's wall, as the zone edge is: it backs its neighbours and never floats.
+        var knee = Buffered(input.Knee, input.Knobs.InkHalfWidthFt);
+        if (!taken.IsEmpty) knee = UnionOf([knee, taken.Boundary.Buffer(input.Knobs.InkHalfWidthFt, BufferQuadSegs)]);
+        var backing = Reach(knee, Buffered(input.Header, input.Knobs.InkHalfWidthFt), input.Knobs);
+        var floating = Rails.Floating(net, taken.IsEmpty ? null : taken.Boundary);
         // A face bounded only by rails, bars and the zone edge is a room however small, down to a closet's floor.
         string? Small(Geometry g) => g.Area < MinRailRoomSqft ? Reasons.TooSmallTiny
             : g.Area < input.Knobs.MinRoomSqft && floating(g) > SampleFt ? Reasons.TooSmallFloating : null;
-        var rooms = Shape(shapes, shapes.Select(_ => (RoomProposal?)null).ToList(), roomCount, roomCount, probe, backing, zone, input.LevelZ, input.Knobs, null, Small).ToList();
+        var rooms = Shape(shapes, proposals, roomCount, conflictStart, probe, backing, zone, input.LevelZ, input.Knobs, null, Small).ToList();
         for (var k = 0; k < wide.Count; k++)
-            rooms[faces.Rooms.Count + k] = rooms[faces.Rooms.Count + k] with { Disposition = Disposition.Held, Reason = $"envelope-band-{wide[k].w:0.0}ft" };
+            rooms[wideStart + k] = rooms[wideStart + k] with { Disposition = Disposition.Held, Reason = $"envelope-band-{wide[k].w:0.0}ft" };
         var acc = new Accounting(zone.Area,
             rooms.Where(r => r.Disposition == Disposition.Accepted).Sum(r => r.AreaSqft),
             rooms.Where(r => r.Disposition == Disposition.Held).Sum(r => r.AreaSqft),

@@ -173,11 +173,13 @@ public sealed class RailNetworkTests {
         [x0, y0, x1, y0, x1, y0, x0, y0], [x0, y1, x1, y1, x1, y1, x0, y1],
         [x0, y0, x0, y1, x0, y1, x0, y0], [x1, y0, x1, y1, x1, y1, x1, y0]];
 
-    private static PartitionAnswer RunRails(double[] zone, params double[][][] walls) {
+    private static PartitionAnswer RunRails(double[] zone, params double[][][] walls) => RunRails(zone, [], walls);
+
+    private static PartitionAnswer RunRails(double[] zone, RoomProposal[] proposals, params double[][][] walls) {
         var stamp = new Stamp("doc", 0, Stamp.HostInternalFt, DateTime.UnixEpoch, [], true, new Resolved([], [], [], [], []));
         var elements = walls.Select((w, k) => new SliceElement(new Handle("doc", k + 1, "u" + (k + 1), null, "Walls", PrimKind.Solid), w)).ToList();
         var knee = new SliceAnswer(stamp, new Searched(0, 0, 0, 0, 0), elements, elements.Sum(e => e.Pieces.Count), 0);
-        var input = new PartitionInput(knee, knee with { Elements = [] }, [zone], 0, Knobs.Default, [], "test", [], null);
+        var input = new PartitionInput(knee, knee with { Elements = [] }, [zone], 0, Knobs.Default, [], "test", proposals, null);
         var answer = Pe.Revit.Partition.Solve.RunRails(input, (_, _) => new ProbeAnswer(stamp, knee.Searched,
             new ProbeHit(H, 0, 0), new ProbeHit(H, 9, 9), 20, 0));
         var acc = answer.Accounting;
@@ -205,6 +207,29 @@ public sealed class RailNetworkTests {
         Assert.That(held.Reason, Is.EqualTo("envelope-band-3.0ft"));
         Assert.That(held.AreaSqft, Is.EqualTo((0.5 * 10) + (3 * 3)).Within(1e-6));
         Assert.That(answer.Rooms.Where(r => r.Disposition == Disposition.Accepted).Sum(r => r.AreaSqft), Is.EqualTo(19.5 * 10).Within(1e-6));
+    }
+
+    [Test]
+    public void Locked_room_survives_the_rails_solve_and_architect_proposals_do_not_steer_it() {
+        // A person's locked 4x4 room in the west room's south-east corner, and an architect Room over the east room.
+        var locked = new RoomProposal(RoomProposal.LockedPrefix + "g", "Closet", "", [Box(6, 0, 10, 4)]);
+        var architect = new RoomProposal("host|Room|1", "Bed", "1", [Box(12, 2, 18, 8)]);
+        var answer = RunRails(Box(0, 0, 20, 10), [locked, architect], Slab(9.75, 0, 10.25, 10));
+        var kept = answer.Rooms.Single(r => r.Proposal is { IsLocked: true });
+        Assert.That(kept.Disposition, Is.EqualTo(Disposition.Accepted), "a locked edge is a person's wall: never floating, always backed");
+        Assert.That(kept.AreaSqft, Is.EqualTo(16).Within(1e-6));
+        Assert.That(answer.Rooms.Any(r => r.Proposal == architect), Is.False, "architect proposals are not honoured by rails yet");
+        Assert.That(answer.Rooms.Where(r => r.Disposition == Disposition.Accepted && r.Proposal is null).Select(r => r.AreaSqft),
+            Is.EquivalentTo(new[] { 84.0, 100.0 }).Using<double>((a, b) => Math.Abs(a - b) < 1e-6), "the rails fill the rest of the zone");
+    }
+
+    [Test]
+    public void Scrap_cut_off_between_a_locked_edge_and_a_rail_goes_to_the_locked_room() {
+        // The person drew the west room 0.2 ft short of the divider axis: the strip between is no room of its own.
+        var locked = new RoomProposal(RoomProposal.LockedPrefix + "g", "West", "", [Box(0, 0, 9.8, 10)]);
+        var answer = RunRails(Box(0, 0, 20, 10), [locked], Slab(9.75, 0, 10.25, 10));
+        Assert.That(answer.Rooms.Single(r => r.Proposal is { IsLocked: true }).AreaSqft, Is.EqualTo(100).Within(1e-6));
+        Assert.That(answer.Rooms.Where(r => r.Proposal is null).Select(r => r.AreaSqft), Is.EquivalentTo(new[] { 100.0 }).Using<double>((a, b) => Math.Abs(a - b) < 1e-6));
     }
 
     [TestCase(3.0, 4.0, Disposition.Accepted, null)]

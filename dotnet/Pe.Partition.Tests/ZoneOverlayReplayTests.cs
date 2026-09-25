@@ -3,7 +3,7 @@ using Pe.Revit.Partition;
 
 namespace Pe.Partition.Tests;
 
-// Throwaway diagnostic: replays one zone's solve from a level capture (knee, header) with the zone loops
+// Throwaway diagnostic: replays one zone's rails solve (the verb's solver) from a level capture (knee, header) with the zone loops
 // Rooms.Partition dumped on failure. PE_ROOMS_ZONE_DUMP = the dump json, PE_ROOMS_LEVEL_INPUT = a captured
 // PartitionInput of the same level; skipped otherwise. Probes throw a marker: reaching a probe means every
 // overlay before Shape() survived.
@@ -24,7 +24,7 @@ public sealed class ZoneOverlayReplayTests
         TestContext.Out.WriteLine($"knee pieces={input.Knee.Elements.Sum(e => e.Pieces.Count)} zone area={Solve.GeometryOf(dump.ZoneLoops).Area:F1}");
         try
         {
-            var answer = Solve.Run(input, (_, _) => throw new ProbeReached());
+            var answer = Solve.RunRails(input, (_, _) => throw new ProbeReached());
             TestContext.Out.WriteLine($"no probe needed: rooms={answer.Rooms.Count} hold={answer.Hold}");
         }
         catch (ProbeReached) { TestContext.Out.WriteLine("reached probes: overlays survived"); }
