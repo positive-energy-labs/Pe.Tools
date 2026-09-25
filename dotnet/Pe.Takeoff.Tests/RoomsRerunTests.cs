@@ -133,6 +133,41 @@ public sealed class RoomsRerunTests
         });
     }
 
+    [Test]
+    public void Flipped_zone_is_an_accepted_room_with_no_held_reason()
+    {
+        // Duryee's garage (w9 snapshot): flipped from a zone-edge-only held face, it still read reason zone-edge-only.
+        var held = new Pe.Revit.Partition.Room(0, Pe.Revit.Partition.Disposition.Held, Pe.Revit.Partition.Reasons.ZoneEdgeOnly,
+            [], 737.2, 5, 6, 0, 0, 9, []);
+        var sole = new RoomResult { Id = "R01", RawSqft = 737.2, Partition = held };
+        var zone = new RegionProvenance(1, Guid.Empty, Rooms.RunDrawn, "", 0);
+        var flipped = RoomsRerun.Redesignated(zone, Guid.NewGuid(), sole, "hash");
+        Assert.Multiple(() => {
+            Assert.That(flipped.Partition!.Reason, Is.Null);
+            Assert.That(flipped.Partition.Disposition, Is.EqualTo(Pe.Revit.Partition.Disposition.Accepted));
+            Assert.That(flipped.Partition.AreaSqft, Is.EqualTo(737.2));
+            Assert.That(flipped.RunId, Is.EqualTo(Rooms.RunDrawn), "the person's edge stays a locked room on the next run");
+            Assert.That(flipped.GeometryHash, Is.EqualTo("hash"));
+        });
+    }
+
+    [Test]
+    public void Flipped_zone_is_its_own_zone_not_unassigned()
+    {
+        // The w9 snapshot read the garage with no zone (the level scope guid), so /rooms called it unassigned.
+        var guid = Guid.NewGuid();
+        var sole = new RoomResult { Id = "R01", RawSqft = 99.5 };
+        var flipped = RoomsRerun.Redesignated(new RegionProvenance(1, Guid.NewGuid(), Rooms.RunDrawn, "", 0), guid, sole, "h");
+        var live = Guid.NewGuid();
+        var scope = new RegionProvenance(1, Guid.NewGuid(), Rooms.RunDrawn, "", 0);
+        Assert.Multiple(() => {
+            Assert.That(flipped.ZoneGuid, Is.EqualTo(guid));
+            Assert.That(RoomsRerun.ZoneOf(guid, flipped, _ => false), Is.EqualTo(guid));
+            Assert.That(RoomsRerun.ZoneOf(Guid.NewGuid(), scope with { ZoneGuid = live }, z => z == live), Is.EqualTo(live));
+            Assert.That(RoomsRerun.ZoneOf(Guid.NewGuid(), scope, _ => false), Is.Null, "a drawn room outside every zone stays unassigned");
+        });
+    }
+
     // Duryee Level 1, zone 6692266, the 719.4 sf great room (rails d243ad92): FilledRegion.Create refused it
     // (R14) because a vertex at (-11.72, 263.20) runs 0.19 ft out and back along one line, off it by 1e-7 ft.
     private static readonly double[] GreatRoom = [11.3746, 244.5652, 11.3746, 242.0716, 11.3746, 241.9882, 10.1454, 241.9882, 10.1454, 241.4959, 0.5048, 241.4959, 0.5048, 241.4825, 0.5048, 240.6492, 0.7965, 240.6492, 0.7965, 240.6491713945681, 0.7964729869935696, 240.6491713945681, 0.7964729869935546, 231.24561085079318, -14.8358, 231.2456108507932, -14.8358, 236.4724, -14.8566, 236.4724, -14.8566, 241.6169, -14.8358, 241.6169, -14.8358, 245.2701, -13.9483, 245.2701, -12.9541, 245.2701, -12.1668, 245.2701, -12.1668, 245.27010826882997, -12.166789243457357, 245.27010826882997, -12.166789243457357, 245.3944, -12.0583, 245.3944, -12.0583, 247.9777, -11.85, 247.9777, -11.8469, 248.2389, -11.777, 254.1791, -11.985373326699953, 254.1791, -11.985373326699948, 256.7624, -11.985373326699948, 257.05167149407714, -11.9854, 257.05167149407714, -11.9854, 257.0517, -12.9541, 257.0517, -17.4237, 257.0517, -17.6203, 257.0517, -17.6203, 264.1763, -17.6203, 267.5116, -17.6203, 269.2064, -17.6091, 269.2064, -14.2408, 269.2064, -14.1575, 269.2064, -14.1575, 269.1647, -14.095, 269.1647, -14.095, 268.9564, -14.095, 263.1194, -11.9075, 263.1194, -11.777, 263.1194, -11.5325, 263.1194, -11.5325, 263.2027, -11.7188, 263.2027, -11.7188, 263.2027130713546, 1.3067701280541666, 263.2027130713546, 1.306770128054168, 263.7287547390284, 1.3068, 263.7287547390284, 10.2288, 263.7287547390283, 10.4788, 263.7287547390283, 10.4788, 263.3434, 10.4788, 254.8225, 10.4788, 254.5308, 10.3746, 254.5308, 10.3746, 252.8892, 10.3746, 248.9637, 10.3746, 248.754, 10.3746, 248.3892, 10.3746, 245.3892, 10.3746, 244.7944, 11.3746, 244.7944];

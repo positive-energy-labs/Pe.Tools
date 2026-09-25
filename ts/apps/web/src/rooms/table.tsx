@@ -123,7 +123,10 @@ export function RoomsTable({
 }) {
   const columns = useMemo<Column<RoomRow>[]>(() => {
     const zoneLabels = new Map(
-      rows.filter((row) => row.region.role === "zone").map((row) => [row.region.guid, row.label]),
+      // A zone that flipped to a room is its own zone.
+      rows
+        .filter((row) => row.region.role === "zone" || row.region.zone === row.region.guid)
+        .map((row) => [row.region.guid, row.label]),
     );
     const zoneOf = (region: RoomsRegion) =>
       region.role === "zone"

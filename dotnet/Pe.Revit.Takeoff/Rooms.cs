@@ -37,6 +37,23 @@ public static class RoomsRerun
             _ => null,
         };
 
+    /// <summary>
+    ///     The provenance a zone takes when it flips to a room: it is its own zone (a region is both zone and
+    ///     room for Manual J), its sole face is a room, not a held residue, and the run id stays drawn so the
+    ///     next run keeps the person's edge as a locked room.
+    /// </summary>
+    public static RegionProvenance Redesignated(RegionProvenance zone, Guid zoneGuid, RoomResult sole, string geometryHash) =>
+        zone with
+        {
+            ZoneGuid = zoneGuid,
+            Partition = sole.Partition is { } p ? p with { Disposition = Pe.Revit.Partition.Disposition.Accepted, Reason = null } : null,
+            GeometryHash = zone.GeometryHash ?? geometryHash,
+        };
+
+    /// <summary>The zone a room reads under: a live zone on its view, or itself when it was a zone that flipped.</summary>
+    public static Guid? ZoneOf(Guid guid, RegionProvenance provenance, Func<Guid, bool> isLiveZone) =>
+        provenance.ZoneGuid == guid || isLiveZone(provenance.ZoneGuid) ? provenance.ZoneGuid : null;
+
     public static bool IsLocked(Pe.Revit.Partition.Room? room) =>
         room?.Proposal?.IsLocked == true;
 
@@ -126,7 +143,7 @@ public static class Rooms
                     TakeoffCarriers.RoleRoomRegion => "room",
                     _ => "held",
                 },
-                zones.Contains((view.Id.Value(), provenance.ZoneGuid)) ? provenance.ZoneGuid : null,
+                RoomsRerun.ZoneOf(guid, provenance, zone => zones.Contains((view.Id.Value(), zone))),
                 provenance.Flags.Contains(FlagPerson) ? "person" : provenance.RunId == RunDrawn ? "inferred" : null,
                 fields.Name ?? "", fields.Type ?? "hall",
                 fields.CeilingFt, fields.People, fields.LightingW,
@@ -322,16 +339,12 @@ public static class Rooms
             {
                 var zoneProvenance = ReadProvenance(zoneFr, TakeoffCarriers.RoleZoningRegion);
                 TakeoffCarriers.WriteIdentity(zoneFr, TakeoffCarriers.RoleRoomRegion, zoneGuid);
+                if (zoneFr.GetTypeId() != frType.Id) zoneFr.ChangeTypeId(frType.Id);
                 if (ProposedName(sole, TakeoffCarriers.ReadRoomFields(zoneFr).Name!) is { } name)
                     TakeoffCarriers.WriteRoomFields(zoneFr, new RoomFields(Name: name));
-                // The run id stays (drawn), so the next run keeps the person's edge as a locked room; the person
-                // flag is already absent, since a declared zone never gets here.
-                TakeoffCarriers.WriteProvenance(zoneFr, (zoneProvenance with
-                {
-                    ZoneGuid = scope,
-                    Partition = sole.Partition,
-                    GeometryHash = zoneProvenance.GeometryHash ?? GeometryHash(TakeoffAtlas.Boundaries(zoneFr)),
-                }).ToJson());
+                // The person flag is already absent, since a declared zone never gets here.
+                TakeoffCarriers.WriteProvenance(zoneFr, RoomsRerun.Redesignated(
+                    zoneProvenance, zoneGuid, sole, GeometryHash(TakeoffAtlas.Boundaries(zoneFr))).ToJson());
             }
 
             foreach (var room in plan.Create)

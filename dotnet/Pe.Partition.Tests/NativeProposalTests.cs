@@ -1,6 +1,8 @@
+using System.IO.Compression;
 using NetTopologySuite.Geometries;
 using NetTopologySuite.IO;
 using NetTopologySuite.Operation.Union;
+using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using Pe.Revit.Partition;
 using Pe.Revit.Space;
@@ -88,6 +90,29 @@ public sealed class NativeProposalTests {
         var room = Run(proposal.Loops, [proposal], floor, ceiling).Rooms.Single();
         Assert.That((room.Disposition, room.Reason), Is.EqualTo((disposition, reason)));
         Assert.That(room.Proposal, Is.SameAs(proposal));
+    }
+
+    [Test]
+    public void The_rails_verb_adopts_every_architect_room_at_the_recorded_blob_area() {
+        // Riverbend (project-c): TakeoffAtlas.Partition adopts architect Rooms. `answer` is the blob solver's recorded
+        // answer; heights are faked, adoption is geometry. An architect room comes back at its own area, as a locked one.
+        var directory = PrivateFixtures.Dir("project-c/partition/live");
+        JToken Load(string name) {
+            using var gzip = new GZipStream(File.OpenRead(Path.Combine(directory, name + ".json.gz")), CompressionMode.Decompress);
+            return JToken.Parse(new StreamReader(gzip).ReadToEnd());
+        }
+        var input = Load("partition-input").ToObject<PartitionInput>()!;
+        var recorded = Load("answer")["Rooms"]!.Where(r => r["Proposal"]?.Type == JTokenType.Object)
+            .GroupBy(r => (string)r["Proposal"]!["SourceKey"]!).ToDictionary(g => g.Key, g => g.Sum(r => (double)r["AreaSqft"]!));
+        Assert.That(recorded, Has.Count.EqualTo(10), "the fixture carries ten architect Rooms");
+        var answer = Solve.RunRails(input, (_, _) => new ProbeAnswer(input.Knee.Stamp, input.Knee.Searched, null, null, 0, 0));
+        var adopted = answer.Rooms.Where(r => r.Proposal != null).GroupBy(r => r.Proposal!.SourceKey)
+            .ToDictionary(g => g.Key, g => g.Sum(r => r.AreaSqft));
+        Assert.That(adopted.Keys, Is.EquivalentTo(recorded.Keys));
+        Assert.Multiple(() => {
+            foreach (var (key, sqft) in recorded)
+                Assert.That(adopted[key], Is.EqualTo(sqft).Within(0.1), key[^8..]);
+        });
     }
 
     private static PartitionAnswer Run(double[][] zone, IReadOnlyList<RoomProposal> proposals,

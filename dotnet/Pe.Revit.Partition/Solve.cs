@@ -34,31 +34,32 @@ public static class Solve {
     private const double MinRailRoomSqft = 6.0;
 
     /// <summary>
-    ///     Rooms from the rail network; the partition verb's solver. Locked proposals (a person's room regions,
-    ///     from Rooms.cs) are carried through whole, so they survive a rerun; the rail faces fill the rest of the zone.
-    ///     Architect proposals are not honoured yet: the rails decide every unlocked room.
+    ///     Rooms from the rail network; the partition verb's solver. Proposals are carried through whole: a person's
+    ///     locked room regions (from Rooms.cs), so they survive a rerun, and architect Rooms, adopted as blob Solve.Run
+    ///     adopted them. The rail faces fill the rest of the zone.
     /// </summary>
     public static PartitionAnswer RunRails(PartitionInput input, Func<double, double, ProbeAnswer> probe) {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var zone = GeometryOf(input.ZoneLoops);
-        var locked = input.Proposals.Where(p => p.IsLocked)
+        var proposed = input.Proposals
             .Select(p => (Proposal: p, Geom: IntersectArea(GeometryOf(p.Loops), zone)))
             .Where(p => !p.Geom.IsEmpty && p.Geom.Area > AreaTolSqft).ToList();
         var overlaps = new List<Geometry>();
-        for (var i = 0; i < locked.Count; i++)
-            for (var j = i + 1; j < locked.Count; j++) {
-                var overlap = IntersectArea(locked[i].Geom, locked[j].Geom);
+        for (var i = 0; i < proposed.Count; i++)
+            for (var j = i + 1; j < proposed.Count; j++) {
+                var overlap = IntersectArea(proposed[i].Geom, proposed[j].Geom);
                 if (overlap.Area > AreaTolSqft) overlaps.Add(overlap);
             }
         var contested = UnionOf(overlaps);
-        var taken = UnionOf(locked.Select(p => p.Geom).ToList());
+        var taken = UnionOf(proposed.Select(p => p.Geom).ToList());
         var net = Rails.Network(Rails.From(input).Concat(Rails.Studs(input)).ToList(), input.ZoneLoops, OpeningEvidence.From(input));
         var faces = Rails.Faces(net);
-        var lockedParts = locked.SelectMany(p => Polys(p.Geom.Difference(contested)).Select(g => (Geom: (Geometry)g, p.Proposal))).ToList();
+        var proposedParts = proposed.SelectMany(p => Polys(p.Geom.Difference(contested)).Select(g => (Geom: (Geometry)g, p.Proposal))).ToList();
         List<Polygon> Free(IEnumerable<Polygon> parts) => taken.IsEmpty ? parts.ToList() : parts.SelectMany(f => Polys(f.Difference(taken))).ToList();
         // A rail room clipped by a locked room leaves scraps where the person's edge runs beside a rail. A clipped
         // piece thinner than a face goes to the locked room it borders longest, as Rails.Faces absorbs thin faces;
-        // Rooms.cs never redraws a locked room, so the scrap is accounted and never drawn.
+        // Rooms.cs never redraws a locked room, so the scrap is accounted and never drawn. An architect Room keeps
+        // its own area: Riverbend's 92 sf corridor 111-E swallowed 70 sf of neighbouring scraps when it took them.
         var free = new List<Polygon>();
         foreach (var f in faces.Rooms) {
             var parts = Free([f]);
@@ -66,20 +67,21 @@ public static class Solve {
             foreach (var part in parts) {
                 var (best, len) = (-1, 1e-6);
                 if (part.Buffer(-Rails.MinFaceWidthFt / 2).IsEmpty)
-                    for (var k = 0; k < lockedParts.Count; k++) {
-                        var shared = lockedParts[k].Geom.Boundary.Intersection(part.Boundary).Length;
+                    for (var k = 0; k < proposedParts.Count; k++) {
+                        if (!proposedParts[k].Proposal.IsLocked) continue;
+                        var shared = proposedParts[k].Geom.Boundary.Intersection(part.Boundary).Length;
                         if (shared > len) (best, len) = (k, shared);
                     }
                 if (best < 0) free.Add(part);
-                else lockedParts[best] = (UnionOf([lockedParts[best].Geom, part]), lockedParts[best].Proposal);
+                else proposedParts[best] = (UnionOf([proposedParts[best].Geom, part]), proposedParts[best].Proposal);
             }
         }
         var bands = Free(faces.Bands);
-        // Locked rooms, rail rooms, bands too wide to be wall (held), locked overlaps (held), then envelope bands (excluded wall).
+        // Proposed rooms, rail rooms, bands too wide to be wall (held), proposal overlaps (held), then envelope bands (excluded wall).
         var wide = bands.Select(b => (b, w: Rails.Width(b))).Where(x => x.w > Rails.BandHoldFt).ToList();
         var shapes = new List<Geometry>();
         var proposals = new List<RoomProposal?>();
-        foreach (var (geom, proposal) in lockedParts)
+        foreach (var (geom, proposal) in proposedParts)
             foreach (var part in Polys(geom)) { shapes.Add(part); proposals.Add(proposal); }
         var wideStart = shapes.Count + free.Count;
         foreach (var part in free.Concat(wide.Select(x => x.b))) { shapes.Add(part); proposals.Add(null); }
@@ -88,7 +90,7 @@ public static class Solve {
         var roomCount = shapes.Count;
         foreach (var part in bands.Except(wide.Select(x => x.b))) { shapes.Add(part); proposals.Add(null); }
         AssertCoverage(shapes, zone, "rails partition", true);
-        // A locked room's edge is a person's wall, as the zone edge is: it backs its neighbours and never floats.
+        // A proposed room's edge is a wall, as the zone edge is: it backs its neighbours and never floats.
         var knee = Buffered(input.Knee, input.Knobs.InkHalfWidthFt);
         if (!taken.IsEmpty) knee = UnionOf([knee, taken.Boundary.Buffer(input.Knobs.InkHalfWidthFt, BufferQuadSegs)]);
         var backing = Reach(knee, Buffered(input.Header, input.Knobs.InkHalfWidthFt), input.Knobs);

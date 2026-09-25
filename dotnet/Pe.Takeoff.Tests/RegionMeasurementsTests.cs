@@ -37,6 +37,20 @@ public class RegionMeasurementsTests
             Is.EqualTo("unmeasured"));
     }
 
+    [Test]
+    public void A_flipped_zone_scopes_itself_and_a_live_zone_still_scopes_its_rooms()
+    {
+        // Duryee's garage flipped to a room is its own zone: no Zoning Region carries its guid, and the snapshot
+        // threw on the missing zone. Its scope is its own shape.
+        List<List<double[]>> garage = [Square(0, 0, 27)];
+        List<List<double[]>> room = [Square(0, 0, 10)];
+        Assert.Multiple(() => {
+            Assert.That(RegionMeasurements.ScopeKey(0, null, [garage]), Is.EqualTo(RegionMeasurements.GeometryKey(0, [garage])));
+            Assert.That(RegionMeasurements.ScopeKey(0, garage, [room]), Is.EqualTo(RegionMeasurements.GeometryKey(0, [garage, room])));
+            Assert.That(RegionMeasurements.ScopeKey(0, null, [room]), Is.Not.EqualTo(RegionMeasurements.ScopeKey(0, garage, [room])));
+        });
+    }
+
     // Legacy carrier keys are old human dismissals: no migrator, no silent discard. Both rewrite shapes the native paths use
     // (remeasure's `with` and materialization-failure's Flags.Add) must hand them back untouched.
     [Test]

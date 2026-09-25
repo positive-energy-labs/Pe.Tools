@@ -210,17 +210,22 @@ public sealed class RailNetworkTests {
     }
 
     [Test]
-    public void Locked_room_survives_the_rails_solve_and_architect_proposals_do_not_steer_it() {
-        // A person's locked 4x4 room in the west room's south-east corner, and an architect Room over the east room.
+    public void Locked_room_survives_the_rails_solve_and_an_architect_room_is_adopted_whole() {
+        // A person's locked 4x4 room in the west room's south-east corner, and an architect Room inside the east room.
         var locked = new RoomProposal(RoomProposal.LockedPrefix + "g", "Closet", "", [Box(6, 0, 10, 4)]);
         var architect = new RoomProposal("host|Room|1", "Bed", "1", [Box(12, 2, 18, 8)]);
         var answer = RunRails(Box(0, 0, 20, 10), [locked, architect], Slab(9.75, 0, 10.25, 10));
-        var kept = answer.Rooms.Single(r => r.Proposal is { IsLocked: true });
-        Assert.That(kept.Disposition, Is.EqualTo(Disposition.Accepted), "a locked edge is a person's wall: never floating, always backed");
-        Assert.That(kept.AreaSqft, Is.EqualTo(16).Within(1e-6));
-        Assert.That(answer.Rooms.Any(r => r.Proposal == architect), Is.False, "architect proposals are not honoured by rails yet");
-        Assert.That(answer.Rooms.Where(r => r.Disposition == Disposition.Accepted && r.Proposal is null).Select(r => r.AreaSqft),
-            Is.EquivalentTo(new[] { 84.0, 100.0 }).Using<double>((a, b) => Math.Abs(a - b) < 1e-6), "the rails fill the rest of the zone");
+        var kept = answer.Rooms.Single(r => ReferenceEquals(r.Proposal, locked));
+        var bed = answer.Rooms.Single(r => ReferenceEquals(r.Proposal, architect));
+        Assert.Multiple(() => {
+            Assert.That(kept.Disposition, Is.EqualTo(Disposition.Accepted), "a locked edge is a person's wall: never floating, always backed");
+            Assert.That(kept.AreaSqft, Is.EqualTo(16).Within(1e-6));
+            Assert.That(bed.Disposition, Is.EqualTo(Disposition.Accepted));
+            Assert.That(bed.AreaSqft, Is.EqualTo(36).Within(1e-6));
+            Assert.That(answer.Rooms.Where(r => r.Proposal is null).Select(r => (r.Disposition, r.Reason, Math.Round(r.AreaSqft, 6))),
+                Is.EquivalentTo(new[] { (Disposition.Accepted, (string?)null, 84.0), (Disposition.Held, Reasons.TooNarrow, 64.0) }),
+                "the rails fill the rest; the 2 ft ring round the bed is too narrow to be a room");
+        });
     }
 
     [Test]

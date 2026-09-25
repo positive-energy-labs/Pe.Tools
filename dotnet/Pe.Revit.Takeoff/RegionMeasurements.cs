@@ -23,18 +23,23 @@ internal static class RegionMeasurements
             elevation.ToString("R", CultureInfo.InvariantCulture) + "|" + string.Join("|", shapes))));
     }
 
+    // A room's zone need not be a live Zoning Region: a zone that flipped to a room is its own zone, and a drawn room
+    // outside every zone carries the level scope guid. Then the regions sharing that guid are the whole scope.
     internal static string ScopeKey(Document doc, View view, Guid zoneGuid)
     {
         var zone = new FilteredElementCollector(doc).OfClass(typeof(FilledRegion)).Cast<FilledRegion>()
-            .Single(fr => TakeoffCarriers.ReadIdentity(fr) == (TakeoffCarriers.RoleZoningRegion, zoneGuid));
-        if (zone.OwnerViewId != view.Id)
+            .SingleOrDefault(fr => TakeoffCarriers.ReadIdentity(fr) == (TakeoffCarriers.RoleZoningRegion, zoneGuid));
+        if (zone != null && zone.OwnerViewId != view.Id)
             throw new InvalidOperationException("Zoning Region and Room Region views disagree");
         var regions = ZoneMaterializer.ReadExisting(doc, view, zoneGuid, TakeoffCarriers.RoleRoomRegion)
             .Concat(ZoneMaterializer.ReadExisting(doc, view, zoneGuid, TakeoffCarriers.RoleHeldResidue));
-        return GeometryKey(view.GenLevel?.ProjectElevation
+        return ScopeKey(view.GenLevel?.ProjectElevation
             ?? throw new InvalidOperationException("Takeoff view has no level"),
-            new[] { TakeoffAtlas.Boundaries(zone) }.Concat(regions.Select(r => r.Loops)));
+            zone == null ? null : TakeoffAtlas.Boundaries(zone), regions.Select(r => r.Loops));
     }
+
+    internal static string ScopeKey(double elevation, List<List<double[]>>? zone, IEnumerable<List<List<double[]>>> regions) =>
+        GeometryKey(elevation, (zone == null ? [] : new[] { zone }).Concat(regions));
 
     internal static TakeoffRegionAnalysis Read(RegionProvenance provenance, string geometryKey)
     {
