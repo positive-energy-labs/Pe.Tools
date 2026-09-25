@@ -45,17 +45,17 @@
 ## Tried & rejected
 
 ## Owed
-- Prove branch `rails` (`d243ad92`) in session rooms3 on Duryee: see-through fill, the 741 sf garage flipping to a room, Door count in the census after a capture with Doors, locked rooms surviving a rerun, bar item 6 (rerun stability). Then merge to main.
+- Session reproof of main `0b57eafa` on Duryee: flipped garage on the `PE Rooms` type with an empty reason, rooms.snapshot and the takeoffs snapshot succeeding after the flip (both compile-only so far).
+- The flipped garage still reads `locked: true` (run id `drawn` so the rerun keeps it); decide whether a redesignated zone is a machine region with its own keep rule.
+- `pnpm verify` on main is red on main's own `check` (two `ts/apps/host` files unformatted) and knip (8 unused exports in `apps/web`); neither is rails work.
+- Ruling: a 16 sf hole inside a locked room is an accepted room under rails (Courtyard test); confirm or hold.
 - Rulings owed: framing footprints as a rail source on IFC-framed models (project-a is under-partitioned without it); whether a hall corridor joining an open living area through cased gaps is what a designer draws.
-- Rails must carry non-locked architect proposals (takeoffs' adoption on project-c depends on it); recapture project-c, whose fixtures hold no solver geometry.
+- Recapture project-c, whose fixtures hold no solver geometry.
 - kaitpw draws truth on `Rooms Truth - <level>` views: project-a Main Level (ML09 zone) and Duryee Level 1 first; then the truth metric gets its first number.
-- The 38 sqft room that flips to held on an identical rerun (Duryee 1231 sqft zone): find the nondeterminism (reclaim seeds coincide where faces share a boundary; `FindIndex` takes the first) before bar item 6 can pass.
 - Merge Astra's `rooms-astra` ledger lines (waves 0 to 6) into this ledger; the branches diverged at `82509742` and Astra's product graft `ad180f8f` is already on main.
 - `repo-guards/action-authority.guard.test.ts` wants a renderer or a `rawByDesign` entry for the four `rooms.*` ops; it was red before designation and still is.
 - Re-judge Astra's killed wave 1 reclaim candidate `98430675` on zone domains: it was killed for crop defects that no longer exist.
 - Ask a PE mechanical designer what makes a space its own CFM unit (bath exhaust, closet, open plan) before the merge policy is tuned toward it.
-- The 0 sqft held residues and 5 sqft slivers inside zones (two 5 sqft held pieces in the Duryee 1231 sqft zone): the materializer must drop or repair slivers before `FilledRegion.Create`. The crop-rectangle residue is gone with designation.
-- `pnpm verify` has not run on the rooms merge; only package tests, checks, compile R25 and the deterministic Takeoff tests have.
 - The plan image lands only after the second snapshot read; the first paint draws regions with no underlay.
 - A test bed project with every architectural link kind (native RVT link, IFC link, DWG import) and zones drawn and ready, so solver claims stop resting on project-a alone. kaitpw, 2026-09-24.
 - Purge `/takeoffs` room management once `/rooms` is proven in a session.
