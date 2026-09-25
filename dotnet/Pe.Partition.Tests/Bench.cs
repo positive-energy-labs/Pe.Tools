@@ -37,14 +37,8 @@ public sealed class Bench {
     private const string DuryeeZones = @"C:\Users\kaitp\source\repos\Pe.Tools-astra\.artifacts\runs\rooms-astra\r0\duryee-locked.json";
 
     [Test]
-    public void Baseline() => Run("", Solve.Run);
-
-    /// <summary>The rails solver on the same fixtures; its run sorts after a same-second baseline, so the delta reads blob to rails.</summary>
-    [Test]
-    public void RailsSolve() => Run("-rails", Solve.RunRails);
-
-    private static void Run(string tag, Func<PartitionInput, Func<double, double, ProbeAnswer>, PartitionAnswer> solve) {
-        var run = Path.Combine(RepoRoot, ".artifacts", "runs", "bench", DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + tag);
+    public void RailsSolve() {
+        var run = Path.Combine(RepoRoot, ".artifacts", "runs", "bench", DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-rails");
         Directory.CreateDirectory(run);
         foreach (var (name, inputs) in Fixtures()) {
             var dir = Path.Combine(run, name);
@@ -57,7 +51,7 @@ public sealed class Bench {
                 var z = input.LevelZ;
                 ProbeAnswer Probe(double x, double y) => new(input.Knee.Stamp, input.Knee.Searched,
                     new ProbeHit(Stub, 0.0, z), new ProbeHit(Stub, 9.0, z + 9.0), 200.0, 0.0);
-                answers.Add(solve(input, Probe));
+                answers.Add(Solve.RunRails(input, Probe));
             }
             File.WriteAllText(Path.Combine(dir, "answer.json"), JsonConvert.SerializeObject(new {
                 Zones = inputs.Select(i => i.ZoneLoops).ToArray(),

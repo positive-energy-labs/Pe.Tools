@@ -1,14 +1,12 @@
 using NetTopologySuite.Geometries;
-using NetTopologySuite.Triangulate;
 using Pe.Revit.Space;
 
 namespace Pe.Revit.Partition;
 
 /// <summary>
 ///     The pure core: slice pieces plus a zone loop in, a partition out. No Document, no Revit call,
-///     same answer for the same input. Ported from the Python reference in
-///     <c>.artifacts/runs/takeoff-geom-20260906/solve-lines</c> and <c>solve-union</c>; the buffer,
-///     close, difference and Voronoi reclaim are that recipe, not a re-derivation.
+///     same answer for the same input. The rail network decides the rooms; this class carries locked
+///     proposals, dispositions, support and accounting.
 /// </summary>
 public static class Solve {
     // Constants, not knobs. Each names the line that measured it.
@@ -23,9 +21,6 @@ public static class Solve {
     // FOOTGUN: boundary sampling pitch for support and ink-backing. solve_lines.py SAMPLE_FT.
     private const double SampleFt = 0.25;
 
-    // FOOTGUN: seed spacing along a face boundary for the reclaim Voronoi. rails.py DENSIFY_FT.
-    private const double DensifyFt = 0.4;
-
     // FOOTGUN: accounting closes here or the solve throws. Domain law, ledger.
     private const double AreaTolSqft = 1e-6;
 
@@ -34,70 +29,13 @@ public static class Solve {
 
     private static readonly GeometryFactory Gf = new NetTopologySuite.NtsGeometryServices(GeometryOverlay.NG).CreateGeometryFactory();
 
-    public static PartitionAnswer Run(PartitionInput input, Func<double, double, ProbeAnswer> probe) {
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        var knee = input.Knee;
-        var knobs = input.Knobs;
-        var zone = GeometryOf(input.ZoneLoops);
-        var native = input.Proposals.Select(p => (Proposal: p, Geom: IntersectArea(GeometryOf(p.Loops), zone)))
-            .Where(p => !p.Geom.IsEmpty && p.Geom.Area > AreaTolSqft).ToList();
-        var overlaps = new List<Geometry>();
-        for (var i = 0; i < native.Count; i++)
-            for (var j = i + 1; j < native.Count; j++) {
-                var overlap = IntersectArea(native[i].Geom, native[j].Geom);
-                if (overlap.Area > AreaTolSqft) overlaps.Add(overlap);
-            }
-        var contested = UnionOf(overlaps);
-        var remainder = Area(zone.Difference(UnionOf(native.Select(p => p.Geom).ToList())));
-        var kneeRaw = Buffered(knee, knobs.InkHalfWidthFt);
-        var headerRaw = Buffered(input.Header, knobs.InkHalfWidthFt);
-        var backing = Reach(kneeRaw, headerRaw, knobs);
-        var noInk = IntersectArea(UnionOf([kneeRaw, headerRaw]), remainder).IsEmpty;
-        var generated = new List<Geometry>();
-        Geometry excluded = Gf.CreatePolygon();
-        if (!remainder.IsEmpty) {
-            if (noInk) generated.AddRange(Polys(remainder));
-            else {
-                var ink = IntersectArea(UnionOf([Close(kneeRaw, knobs.CloseFt), Close(headerRaw, knobs.CloseFt)]), remainder);
-                var faces = Polys(remainder.Difference(ink)).OrderByDescending(p => p.Area).ToList();
-                var wall = Area(remainder.Difference(UnionOf(faces.Cast<Geometry>().ToList())));
-                generated = Reclaim(faces, wall, out excluded);
-                Merge(generated, backing, knobs);
-                generated = Rectify(generated, input);
-            }
-        }
-        var shapes = new List<Geometry>();
-        var proposals = new List<RoomProposal?>();
-        foreach (var proposal in native)
-            foreach (var part in Polys(proposal.Geom.Difference(contested))) { shapes.Add(part); proposals.Add(proposal.Proposal); }
-        foreach (var part in generated.SelectMany(Polys)) { shapes.Add(part); proposals.Add(null); }
-        var conflictStart = shapes.Count;
-        foreach (var part in Polys(contested)) { shapes.Add(part); proposals.Add(null); }
-        var roomCount = shapes.Count;
-        foreach (var part in Polys(excluded)) { shapes.Add(part); proposals.Add(null); }
-        AssertCoverage(shapes, zone, "final partition", true);
-        var rooms = Shape(shapes, proposals, roomCount, conflictStart, probe, backing, zone, input.LevelZ, knobs,
-            noInk ? input.NoEnclosureDetail ?? Reasons.NoEnclosure : null);
-        var acc = new Accounting(zone.Area,
-            rooms.Where(r => r.Disposition == Disposition.Accepted).Sum(r => r.AreaSqft),
-            rooms.Where(r => r.Disposition == Disposition.Held).Sum(r => r.AreaSqft),
-            rooms.Where(r => r.Disposition == Disposition.Void).Sum(r => r.AreaSqft),
-            rooms.Where(r => r.Disposition == Disposition.Excluded).Sum(r => r.AreaSqft));
-        if (Math.Abs(acc.ZoneSqft - acc.Accepted - acc.Held - acc.Void - acc.Excluded) > AreaTolSqft)
-            throw new PartitionException("serialized partition accounting does not close");
-        return new PartitionAnswer(knee.Stamp, knee.Searched, knobs, rooms, acc,
-            noInk && native.Count == 0 ? input.NoEnclosureDetail ?? Reasons.NoEnclosure : null,
-            input.Resolved, input.EnclosureSource, Math.Round(sw.Elapsed.TotalMilliseconds, 3));
-    }
-
     // FOOTGUN: smallest rail-bounded face kept as a room. Duryee's closets are 11, 20 and 22 sf; under this is a
     // chase or a junction scrap even when every edge is on a rail.
     private const double MinRailRoomSqft = 6.0;
 
     /// <summary>
-    ///     Rooms from the rail network instead of stages 3 to 5; the partition verb's solver. Same accounting and
-    ///     <c>Shape()</c>. Locked proposals (a person's room regions, from Rooms.cs) are carried through whole as
-    ///     Solve.Run carries native proposals, so they survive a rerun; the rail faces fill the rest of the zone.
+    ///     Rooms from the rail network; the partition verb's solver. Locked proposals (a person's room regions,
+    ///     from Rooms.cs) are carried through whole, so they survive a rerun; the rail faces fill the rest of the zone.
     ///     Architect proposals are not honoured yet: the rails decide every unlocked room.
     /// </summary>
     public static PartitionAnswer RunRails(PartitionInput input, Func<double, double, ProbeAnswer> probe) {
@@ -158,7 +96,7 @@ public static class Solve {
         // A face bounded only by rails, bars and the zone edge is a room however small, down to a closet's floor.
         string? Small(Geometry g) => g.Area < MinRailRoomSqft ? Reasons.TooSmallTiny
             : g.Area < input.Knobs.MinRoomSqft && floating(g) > SampleFt ? Reasons.TooSmallFloating : null;
-        var rooms = Shape(shapes, proposals, roomCount, conflictStart, probe, backing, zone, input.LevelZ, input.Knobs, null, Small).ToList();
+        var rooms = Shape(shapes, proposals, roomCount, conflictStart, probe, backing, zone, input.LevelZ, input.Knobs, Small).ToList();
         for (var k = 0; k < wide.Count; k++)
             rooms[wideStart + k] = rooms[wideStart + k] with { Disposition = Disposition.Held, Reason = $"envelope-band-{wide[k].w:0.0}ft" };
         var acc = new Accounting(zone.Area,
@@ -172,7 +110,7 @@ public static class Solve {
             input.Resolved, input.EnclosureSource, Math.Round(sw.Elapsed.TotalMilliseconds, 3));
     }
 
-    // ---------------------------------------------------------------- stage 3
+    // ---------------------------------------------------------------- ink
 
     private static Geometry Buffered(SliceAnswer band, double half) {
         var parts = new List<Geometry>();
@@ -195,118 +133,7 @@ public static class Solve {
         return hull is NetTopologySuite.Geometries.Point ? null : hull;
     }
 
-    /// <summary>Morphological closing. FOOTGUN: 0.75 ft on 0.125 ft ink seals at most a 0.83 ft gap,
-    /// so a 16 in stud bay closes and a 3 ft doorway never does. solve-union REPORT.md.</summary>
-    private static Geometry Close(Geometry fp, double d) =>
-        fp.IsEmpty ? fp : fp.Buffer(d, CloseQuadSegs).Buffer(-d, CloseQuadSegs);
-
-    // ---------------------------------------------------------------- stage 5
-
-    /// <summary>
-    ///     Voronoi of densified face boundaries, restricted to the wall footprint. Every wall point
-    ///     goes to the face whose boundary is nearest, which is the medial split. Wall components
-    ///     that claim no seed are returned as unclaimed area and become Excluded <c>wall</c>.
-    /// </summary>
-    private static List<Geometry> Reclaim(List<Polygon> faces, Geometry wall, out Geometry unclaimed) {
-        unclaimed = wall;
-        if (faces.Count == 0) return [];
-        if (wall.IsEmpty || wall.Area <= AreaTolSqft) return faces.Cast<Geometry>().ToList();
-
-        var seeds = new List<Coordinate>();
-        var owner = new List<int>();
-        for (var i = 0; i < faces.Count; i++) {
-            var ring = Gf.CreateLineString(faces[i].ExteriorRing.Coordinates);
-            var n = Math.Max(4, (int)(ring.Length / DensifyFt));
-            var ind = new NetTopologySuite.LinearReferencing.LengthIndexedLine(ring);
-            for (var k = 0; k < n; k++) {
-                seeds.Add(ind.ExtractPoint(ring.Length * k / n));
-                owner.Add(i);
-            }
-        }
-
-        var vb = new VoronoiDiagramBuilder();
-        vb.SetSites(seeds);
-        var env = wall.EnvelopeInternal.Copy();
-        env.ExpandBy(5.0);
-        vb.ClipEnvelope = env;
-        var cells = vb.GetDiagram(Gf);
-
-        var buckets = new List<Geometry>[faces.Count];
-        for (var i = 0; i < faces.Count; i++) buckets[i] = [];
-        for (var c = 0; c < cells.NumGeometries; c++) {
-            var cell = cells.GetGeometryN(c);
-            // VoronoiDiagramBuilder tags each cell with its site coordinate.
-            if (cell.UserData is not Coordinate site) continue;
-            var idx = seeds.FindIndex(s => s.Equals2D(site));
-            if (idx < 0) continue;
-            // FOOTGUN: VoronoiDiagramBuilder can hand back a self-intersecting cell (Duryee Level 1, hand-drawn
-            // zone 6692266: cell invalid at (19.0464, 246.6770)); the plain overlay then throws `Ring edge missing`.
-            // Fix the cell, never the wall, so the medial split keeps its seeds.
-            var piece = IntersectArea(cell.IsValid ? cell : NetTopologySuite.Geometries.Utilities.GeometryFixer.Fix(cell), wall);
-
-            if (piece.IsEmpty || piece.Area <= 0) continue;
-            buckets[owner[idx]].Add(piece);
-        }
-
-        var grown = new List<Geometry>(faces.Count);
-        for (var i = 0; i < faces.Count; i++) {
-            if (buckets[i].Count == 0) {
-                grown.Add(faces[i]);
-                continue;
-            }
-
-            var g = UnionOf([faces[i], .. buckets[i]]);
-            grown.Add(g);
-        }
-
-        // Bucket unions may round a shared vertex by a few ULPs. Snap only invalid neighbours
-        // to shared coordinates at 1e-9 ft; this does not relax the geometric area checks.
-        var invalid = NetTopologySuite.Coverage.CoverageValidator.Validate(grown.ToArray());
-        for (var i = 0; i < grown.Count; i++)
-            for (var j = i + 1; j < grown.Count; j++) {
-                if (invalid[i] is null || invalid[j] is null
-                    || !grown[i].EnvelopeInternal.Intersects(grown[j].EnvelopeInternal)) continue;
-                var snapped = NetTopologySuite.Operation.Overlay.Snap.GeometrySnapper.Snap(grown[i], grown[j], 1e-9);
-                grown[i] = snapped[0];
-                grown[j] = snapped[1];
-            }
-        if (!NetTopologySuite.Coverage.CoverageValidator.IsValid(grown.ToArray()))
-            throw new PartitionException("reclaimed faces do not have matching shared boundaries");
-        unclaimed = Area(wall.Difference(UnionOf(grown)));
-        return grown;
-    }
-
     // ---------------------------------------------------------------- stages 7 and 8
-
-    private static void Merge(List<Geometry> live, Backing backing, Knobs knobs) {
-        var moved = true;
-        while (moved) {
-            moved = false;
-            for (var i = 0; i < live.Count && !moved; i++)
-                for (var j = i + 1; j < live.Count && !moved; j++) {
-                    var shared = SharedLine(live[i], live[j]);
-                    if (shared is null || shared.Length <= SampleFt
-                        || Support(shared, backing, knobs) >= knobs.MinBoundarySupport) continue;
-                    Absorb(live, i, j);
-                    moved = true;
-                }
-            if (moved) continue;
-            for (var i = 0; i < live.Count && !moved; i++) {
-                var g = live[i];
-                if (g.Area >= knobs.MinRoomSqft && !g.Buffer(-knobs.MinFeatureWidthFt / 2.0, CloseQuadSegs).IsEmpty) continue;
-                var neighbours = Enumerable.Range(0, live.Count).Where(j => j != i
-                    && SharedLine(g, live[j]) is { Length: > SampleFt }).ToList();
-                if (neighbours.Count != 1) continue;
-                Absorb(live, Math.Min(i, neighbours[0]), Math.Max(i, neighbours[0]));
-                moved = true;
-            }
-        }
-    }
-
-    private static void Absorb(List<Geometry> live, int keep, int drop) {
-        live[keep] = UnionOf([live[keep], live[drop]]);
-        live.RemoveAt(drop);
-    }
 
     private static IReadOnlyList<Room> Shape(
         List<Geometry> shapes,
@@ -318,8 +145,7 @@ public static class Solve {
         Geometry zone,
         double levelZ,
         Knobs knobs,
-        string? noEnclosure,
-        Func<Geometry, string?>? small = null
+        Func<Geometry, string?> small
     ) {
         var zoneEdge = zone.Boundary.Buffer(ZoneEdgeExemptFt, CloseQuadSegs);
         var rooms = new List<Room>(shapes.Count);
@@ -348,12 +174,11 @@ public static class Solve {
             var d = Disposition.Accepted;
             if (i >= roomCount) { d = Disposition.Excluded; reason = Reasons.Wall; }
             else if (i >= conflictStart) { d = Disposition.Held; reason = "native-overlap"; }
-            else if (noEnclosure is not null && proposals[i] is null) { d = Disposition.Held; reason = noEnclosure; }
             else if (proposals[i] is null && (own.IsEmpty || own.Length <= SampleFt)) { d = Disposition.Held; reason = Reasons.ZoneEdgeOnly; }
             else if (floor is not { } fz || Math.Abs(fz - levelZ) > knobs.FloorTolFt) { d = Disposition.Held; reason = Reasons.NoFloor; }
             else if (ceiling is null) { d = Disposition.Held; reason = Reasons.NoCeiling; }
             else if (ceiling is { } cz && cz - floor!.Value < knobs.MinHeadroomFt) { d = Disposition.Void; reason = Reasons.LowHeadroom; }
-            else if ((small is null ? g.Area < knobs.MinRoomSqft ? Reasons.TooSmall : null : small(g)) is { } why) { d = Disposition.Held; reason = why; }
+            else if (small(g) is { } why) { d = Disposition.Held; reason = why; }
             else if (g.Buffer(-knobs.MinFeatureWidthFt / 2.0, CloseQuadSegs).IsEmpty) { d = Disposition.Held; reason = Reasons.TooNarrow; }
             else if (proposals[i] is null && backed < knobs.InkBackedAcceptMin) { d = Disposition.Held; reason = Reasons.Unbacked; }
 
@@ -367,21 +192,6 @@ public static class Solve {
         }
 
         return rooms;
-    }
-
-    /// <summary>
-    ///     Simplify the coverage, then fit supported local wall directions on shared chains.
-    ///     Both stages edit shared boundaries together; independent room-loop edits tear coverage.
-    /// </summary>
-    private static List<Geometry> Rectify(List<Geometry> shapes, PartitionInput input) {
-        if (shapes.Count == 0) return shapes;
-        var coverage = shapes.ToArray();
-        if (!NetTopologySuite.Coverage.CoverageValidator.IsValid(coverage))
-            throw new PartitionException("cannot simplify unmatched shared boundaries");
-        var simplified = NetTopologySuite.Coverage.CoverageSimplifier.SimplifyInner(coverage, input.Knobs.InkHalfWidthFt * 2.0);
-        if (!NetTopologySuite.Coverage.CoverageValidator.IsValid(simplified))
-            throw new PartitionException("simplification broke shared boundaries");
-        return BoundaryShape.Regularize(simplified, input).ToList();
     }
 
     // ---------------------------------------------------------------- support and audits

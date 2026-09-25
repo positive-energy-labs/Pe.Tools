@@ -16,37 +16,38 @@ public sealed class NativeProposalTests {
         new Searched(0, 0, 0, 0, 0), [], 0, 0);
 
     [Test]
-    public void Courtyard_proposal_preserves_identity_and_holds_every_missing_component() {
-        var proposal = new RoomProposal("doc|link-instance|room-7", "Courtyard room", "7",
+    public void Courtyard_proposal_preserves_identity_and_its_walled_courtyard_is_a_room() {
+        var proposal = new RoomProposal(RoomProposal.LockedPrefix + "doc|link-instance|room-7", "Courtyard room", "7",
             [Box(2, 2, 18, 18), Box(8, 8, 12, 12)]);
         var answer = Run([Box(0, 0, 20, 20), Box(30, 0, 40, 10)], [proposal]);
         var native = answer.Rooms.Single(r => r.Proposal is not null);
-        var held = answer.Rooms.Where(r => r.Proposal is null).ToArray();
-        var expectedNative = new WKTReader().Read(
-            "POLYGON ((2 2,18 2,18 18,2 18,2 2),(8 8,12 8,12 12,8 12,8 8))");
-        var expectedHeld = new WKTReader().Read(
-            "MULTIPOLYGON (((0 0,20 0,20 20,0 20,0 0),(2 2,18 2,18 18,2 18,2 2))," +
-            "((8 8,12 8,12 12,8 12,8 8)),((30 0,40 0,40 10,30 10,30 0)))");
+        var reader = new WKTReader();
+        var expectedNative = reader.Read("POLYGON ((2 2,18 2,18 18,2 18,2 2),(8 8,12 8,12 12,8 12,8 8))");
+        var courtyard = reader.Read("POLYGON ((8 8,12 8,12 12,8 12,8 8))");
+        var expectedHeld = reader.Read(
+            "MULTIPOLYGON (((0 0,20 0,20 20,0 20,0 0),(2 2,18 2,18 18,2 18,2 2)),((30 0,40 0,40 10,30 10,30 0)))");
+        var rest = answer.Rooms.Where(r => r.Proposal is null).ToArray();
+        var held = rest.Where(r => r.Disposition == Disposition.Held).ToArray();
 
         Assert.Multiple(() => {
             Assert.That(native.Proposal, Is.SameAs(proposal));
-            Assert.That(native.Proposal!.SourceKey, Is.EqualTo("doc|link-instance|room-7"));
             Assert.That(native.Disposition, Is.EqualTo(Disposition.Accepted));
             Assert.That(native.Holes, Has.Count.EqualTo(1));
             Assert.That(Polygon(native).SymmetricDifference(expectedNative).Area, Is.Zero);
-            Assert.That(held, Has.Length.EqualTo(3));
-            Assert.That(held.All(r => r.Disposition == Disposition.Held && r.Reason == "unit: empty enclosure"), Is.True);
+            // A locked room's edge is a person's wall, so the hole it rings is a room, not an empty enclosure.
+            Assert.That(Polygon(rest.Single(r => r.Disposition == Disposition.Accepted)).SymmetricDifference(courtyard).Area, Is.Zero);
+            Assert.That(held.Select(r => r.Reason), Is.EquivalentTo(new[] { Reasons.TooNarrow, Reasons.ZoneEdgeOnly }));
             Assert.That(UnaryUnionOp.Union(held.Select(r => (Geometry)Polygon(r)).ToList())
                 .SymmetricDifference(expectedHeld).Area, Is.Zero);
-            Assert.That(answer.Accounting, Is.EqualTo(new Accounting(500, 240, 260, 0, 0)));
+            Assert.That(answer.Accounting, Is.EqualTo(new Accounting(500, 256, 244, 0, 0)));
         });
-        AssertPartition(answer, expectedNative.Union(expectedHeld));
+        AssertPartition(answer, expectedNative.Union(courtyard).Union(expectedHeld));
     }
 
     [Test]
     public void Overlapping_native_proposals_hold_the_contested_area_without_assigning_first_winner() {
-        var a = new RoomProposal("room-a", "A", "1", [Box(2, 2, 12, 12)]);
-        var b = new RoomProposal("room-b", "B", "2", [Box(8, 8, 18, 18)]);
+        var a = new RoomProposal(RoomProposal.LockedPrefix + "room-a", "A", "1", [Box(2, 2, 12, 12)]);
+        var b = new RoomProposal(RoomProposal.LockedPrefix + "room-b", "B", "2", [Box(8, 8, 18, 18)]);
         foreach (var order in new[] { new[] { a, b }, new[] { b, a } }) {
             var answer = Run([Box(0, 0, 20, 20)], order);
             var conflict = answer.Rooms.Single(r => r.Reason == "native-overlap");
@@ -62,7 +63,7 @@ public sealed class NativeProposalTests {
     public void Valid_outside_proposal_does_not_change_inside_coverage() {
         var zone = new[] { Box(0, 0, 20, 20) };
         var baseline = Run(zone, []);
-        var outside = new RoomProposal("outside-room", "Outside", "9", [Box(30, 0, 40, 10)]);
+        var outside = new RoomProposal(RoomProposal.LockedPrefix + "outside-room", "Outside", "9", [Box(30, 0, 40, 10)]);
         var answer = Run(zone, [outside]);
 
         Assert.Multiple(() => {
@@ -83,7 +84,7 @@ public sealed class NativeProposalTests {
     [TestCase(0.0, 9.0, Disposition.Accepted, null)]
     public void Missing_height_evidence_is_reviewable_and_only_measured_low_headroom_is_void(
         double? floor, double? ceiling, Disposition disposition, string? reason) {
-        var proposal = new RoomProposal("unit-room", "Unit room", "1", [Box(0, 0, 20, 20)]);
+        var proposal = new RoomProposal(RoomProposal.LockedPrefix + "unit-room", "Unit room", "1", [Box(0, 0, 20, 20)]);
         var room = Run(proposal.Loops, [proposal], floor, ceiling).Rooms.Single();
         Assert.That((room.Disposition, room.Reason), Is.EqualTo((disposition, reason)));
         Assert.That(room.Proposal, Is.SameAs(proposal));
@@ -101,7 +102,7 @@ public sealed class NativeProposalTests {
                 ceiling is { } c ? new ProbeHit(handle, c - 3.5, c) : null, 200, 0,
                 ProbePurpose.RoomHeights);
         }
-        var answer = Solve.Run(new PartitionInput(Empty, Empty, zone, 0, Knobs.Default,
+        var answer = Solve.RunRails(new PartitionInput(Empty, Empty, zone, 0, Knobs.Default,
             [Gate, Gate, Gate, Gate], "unit-domain", proposals, "unit: empty enclosure"), Probe);
         Assert.That(queries, Is.EqualTo(answer.Rooms.Where(r => r.Disposition != Disposition.Excluded)
             .Select(r => (r.LabelX, r.LabelY)).ToArray()), "probe requests must equal final labels exactly");
