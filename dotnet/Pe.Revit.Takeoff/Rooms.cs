@@ -26,6 +26,17 @@ public static class RoomsRerun
     // FOOTGUN: brief constant (rails W4, 2026-09-25), not measured: one accepted face this share of the zone is the zone.
     public const double SoleFaceShare = 0.99;
 
+    private static RoomResult? SoleFace(IReadOnlyList<RoomResult> accepted, IReadOnlyList<ResidueResult> held) =>
+        (accepted, held) switch
+        {
+            ([var room], _) => room,
+            ([], [var residue]) => new RoomResult {
+                Partition = residue.Partition, Id = residue.Id, RawSqft = residue.RawSqft, LabelX = residue.LabelX,
+                LabelY = residue.LabelY, MeanCeilingFt = residue.MeanCeilingFt, Polygon = residue.Polygon, Holes = residue.Holes,
+            },
+            _ => null,
+        };
+
     public static bool IsLocked(Pe.Revit.Partition.Room? room) =>
         room?.Proposal?.IsLocked == true;
 
@@ -41,7 +52,8 @@ public static class RoomsRerun
         if (existing.Concat(existingHeld).Any(r => lockedIds.Contains(r.ElementId)))
             throw new InvalidOperationException("a locked region is also a rerun candidate");
         // zoneSqft is null when a person declared the zone: the declaration wins and it never becomes a room.
-        if (locked.Count == 0 && accepted is [var only] && only.RawSqft >= SoleFaceShare * zoneSqft)
+        // The sole face may be held (Duryee's garage is held zone-edge-only): the zone is the room either way.
+        if (locked.Count == 0 && SoleFace(accepted, held) is { } only && only.RawSqft >= SoleFaceShare * zoneSqft)
             return new RoomsPlan([], [], [.. existing, .. existingHeld], [], [], only);
         var rebind = ZoneMaterializer.Rebind(accepted.Where(r => !IsLocked(r.Partition)).ToList(), existing);
         return new RoomsPlan(
@@ -565,9 +577,7 @@ public static class Rooms
     private static FilledRegion Create(Document doc, FilledRegionType type, View view, double elevation,
         List<double[]> outer, IEnumerable<List<double[]>> holes)
     {
-        var loops = new List<CurveLoop> { Kernel.ToLoop(outer, elevation) };
-        loops.AddRange(holes.Select(hole => Kernel.ToLoop(hole, elevation)));
-        return FilledRegion.Create(doc, type.Id, view.Id, loops);
+        return FilledRegion.Create(doc, type.Id, view.Id, Kernel.ToLoops(outer, holes, elevation));
     }
 
     private static (List<RoomResult> Rooms, List<ResidueResult> Residues) Results(Pe.Revit.Partition.PartitionAnswer answer)

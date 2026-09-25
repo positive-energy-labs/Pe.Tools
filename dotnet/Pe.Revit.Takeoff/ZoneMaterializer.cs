@@ -143,8 +143,7 @@ public static class ZoneMaterializer
         {
             try
             {
-                var loops = new List<CurveLoop> { Kernel.ToLoop(room.Polygon, elevation) };
-                loops.AddRange(room.Holes.Select(hole => Kernel.ToLoop(hole, elevation)));
+                var loops = Kernel.ToLoops(room.Polygon, room.Holes, elevation);
                 var region = FilledRegion.Create(doc, frType.Id, view.Id, loops);
                 TakeoffCarriers.WriteIdentity(region, TakeoffCarriers.RoleRoomRegion, Guid.NewGuid());
                 TakeoffCarriers.WriteProvenance(region,
@@ -166,8 +165,7 @@ public static class ZoneMaterializer
             {
                 try
                 {
-                    var loops = new List<CurveLoop> { Kernel.ToLoop(residue.Polygon, elevation) };
-                    loops.AddRange(residue.Holes.Select(hole => Kernel.ToLoop(hole, elevation)));
+                    var loops = Kernel.ToLoops(residue.Polygon, residue.Holes, elevation);
                     var region = FilledRegion.Create(doc, frType.Id, view.Id, loops);
                     TakeoffCarriers.WriteIdentity(region, TakeoffCarriers.RoleHeldResidue, Guid.NewGuid());
                     TakeoffCarriers.WriteProvenance(region,
