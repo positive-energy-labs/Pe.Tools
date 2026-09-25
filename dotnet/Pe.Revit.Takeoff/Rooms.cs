@@ -176,7 +176,9 @@ public static class Rooms
             if (role == null)
             {
                 var drawn = new ExistingRegion(fr.Id.Value(), guid ?? Guid.NewGuid(), loops, Sqft(fr, loops));
-                var designated = Designate(knee, loops, drawn.Sqft);
+                string designated;
+                try { designated = Designate(knee, loops, drawn.Sqft); }
+                catch (Exception ex) { throw new InvalidOperationException($"designate {fr.Id}: {ex.GetType().Name} {ex.Message}", ex); }
                 adopt.Add((fr, designated, drawn));
                 if (designated == TakeoffCarriers.RoleZoningRegion)
                     zones.Add((fr, drawn.Guid, loops, drawn.Guid.ToString("N").Substring(0, 8)));
@@ -205,6 +207,7 @@ public static class Rooms
 
         var solved = new List<(Guid Zone, string Label, RoomsPlan Plan)>();
         var holds = new List<string>();
+        var failures = new List<string>();
         foreach (var zone in zones.OrderBy(z => z.Fr.Id.Value()))
         {
             var lockedIn = locked.Where(r =>
@@ -221,7 +224,19 @@ public static class Rooms
                     .. lockedIn.Select(r => LockedProposal(r.Region, TakeoffCarriers.ReadRoomFields(r.Fr).Name ?? "")),
                 ],
             };
-            var answer = PartitionVerbs.Run(doc, input);
+            Pe.Revit.Partition.PartitionAnswer answer;
+            try { answer = PartitionVerbs.Run(doc, input); }
+            catch (Exception ex) when (ex is not Pe.Revit.Partition.PartitionException)
+            {
+                // One zone's topology failure names itself and leaves the other zones solved.
+                var frame = new System.Diagnostics.StackTrace(ex).GetFrames()?.Select(f => f.GetMethod()?.DeclaringType?.Name + "." + f.GetMethod()?.Name)
+                    .FirstOrDefault(m => m.StartsWith("Solve.") || m.StartsWith("Rooms."));
+                // Diagnostic dump: the exact solver inputs of the failed zone, replayable without Revit.
+                var dump = Path.Combine(Path.GetTempPath(), $"pe-rooms-{zone.Label}.json");
+                File.WriteAllText(dump, Newtonsoft.Json.JsonConvert.SerializeObject(new { input.ZoneLoops, input.Proposals }));
+                failures.Add($"{zone.Label}: {ex.GetType().Name} {ex.Message} at {frame ?? "?"} (inputs {dump})");
+                continue;
+            }
             if (answer.Hold != null) holds.Add($"{zone.Label}: {answer.Hold}");
             var (accepted, residues) = Results(answer);
             var mine = machine.Where(r => r.Provenance.ZoneGuid == zone.Guid).ToList();
@@ -232,7 +247,6 @@ public static class Rooms
         }
 
         double elevation = level.ProjectElevation;
-        var failures = new List<string>();
         var frType = new FilteredElementCollector(doc).OfClass(typeof(FilledRegionType))
             .Cast<FilledRegionType>().First();
 

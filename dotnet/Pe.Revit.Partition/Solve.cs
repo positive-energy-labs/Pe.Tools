@@ -157,7 +157,10 @@ public static class Solve {
             if (cell.UserData is not Coordinate site) continue;
             var idx = seeds.FindIndex(s => s.Equals2D(site));
             if (idx < 0) continue;
-            var piece = IntersectArea(cell, wall);
+            // FOOTGUN: VoronoiDiagramBuilder can hand back a self-intersecting cell (Duryee Level 1, hand-drawn
+            // zone 6692266: cell invalid at (19.0464, 246.6770)); the plain overlay then throws `Ring edge missing`.
+            // Fix the cell, never the wall, so the medial split keeps its seeds.
+            var piece = IntersectArea(cell.IsValid ? cell : NetTopologySuite.Geometries.Utilities.GeometryFixer.Fix(cell), wall);
 
             if (piece.IsEmpty || piece.Area <= 0) continue;
             buckets[owner[idx]].Add(piece);
