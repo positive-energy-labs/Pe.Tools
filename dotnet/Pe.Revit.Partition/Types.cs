@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using NetTopologySuite.Geometries;
 using Newtonsoft.Json;
 using Pe.Revit.Space;
 
@@ -23,7 +24,7 @@ public sealed record Enclosure(Filter Solids, Filter Ribbons) {
             ["A_WALL*", "A_DOOR*", "A_GLAZ*", "A_STAR*"]));
 }
 
-/// <summary>The nine, and <see cref="FramingRails" />: stud rows become rails (Rails.Framing); off only for the bench's comparison row. Everything else is a constant with a FOOTGUN naming the line that measured it.</summary>
+/// <summary>The eight, and <see cref="FramingRails" />: stud rows become rails (Rails.Framing); off only for the bench's comparison row. Everything else is a constant with a FOOTGUN naming the line that measured it.</summary>
 public sealed record Knobs(
     double InkHalfWidthFt = 0.125,
     double CloseFt = 0.75,
@@ -31,7 +32,6 @@ public sealed record Knobs(
     double MinHeadroomFt = 6.0,
     double MinRoomSqft = 30.0,
     double MinFeatureWidthFt = 2.5,
-    double MinBoundarySupport = 0.35,
     double InkBackedAcceptMin = 0.5,
     // FOOTGUN: Newtonsoft fills a missing creator parameter with default(bool), not this default; every capture
     // predating the knob would solve without framing. Populate reads DefaultValue instead.
@@ -72,8 +72,31 @@ public sealed record PartitionInput(
     IReadOnlyList<Resolved> Resolved,
     string EnclosureSource,
     IReadOnlyList<RoomProposal> Proposals,
-    string? NoEnclosureDetail,
     OriginalCurveEvidence? OriginalCurves = null
+);
+
+/// <summary>What a face is to layer 1: a proposed or rail room, a proposal overlap, or an envelope band.</summary>
+public enum FaceKind { Room, Contested, Band }
+
+/// <summary>
+///     Layer 1's word on one face (<see cref="Solve.Faces" />): its shape and measurements, no judgment.
+///     <see cref="BandWidthFt" /> is set for bands; <see cref="FloatingFt" /> for rooms; <see cref="FloorZ" /> and
+///     <see cref="CeilingZ" /> for probed faces. <see cref="Backed" /> is the ink-backed share of the face's own boundary.
+/// </summary>
+public sealed record FaceFacts(
+    Polygon Shape,
+    RoomProposal? Proposal,
+    FaceKind Kind,
+    double? BandWidthFt,
+    bool OwnEdgeEmpty,
+    double? FloorZ,
+    double? CeilingZ,
+    double? FloatingFt,
+    bool Narrow,
+    double Backed,
+    double LabelX,
+    double LabelY,
+    IReadOnlyList<SharedEdge> Shared
 );
 
 /// <summary>One face of the partition. Loop is a closed CCW ring x0,y0,x1,y1,... in host feet.</summary>
@@ -141,4 +164,5 @@ public static class Reasons {
     public const string TooSmallTiny = "too-small-under-6sf";
     public const string TooNarrow = "too-narrow";
     public const string Wall = "wall";
+    public const string NativeOverlap = "native-overlap";
 }

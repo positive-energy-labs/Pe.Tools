@@ -51,9 +51,9 @@ public static class Verbs {
     public static PartitionInput Capture(Document document, PartitionRequest request) {
         var knobs = request.Knobs ?? Knobs.Default;
         if (new[] { knobs.InkHalfWidthFt, knobs.CloseFt, knobs.FloorTolFt, knobs.MinHeadroomFt,
-                knobs.MinRoomSqft, knobs.MinFeatureWidthFt, knobs.MinBoundarySupport, knobs.InkBackedAcceptMin }
+                knobs.MinRoomSqft, knobs.MinFeatureWidthFt, knobs.InkBackedAcceptMin }
             .Any(v => !Finite(v) || v < 0)
-            || knobs.InkHalfWidthFt == 0 || knobs.MinBoundarySupport > 1 || knobs.InkBackedAcceptMin > 1)
+            || knobs.InkHalfWidthFt == 0 || knobs.InkBackedAcceptMin > 1)
             throw new PartitionException("malformed capture: invalid partition knobs");
 
         // Stage 1, scope. The Zoning Region is a FilledRegion; its loop is the domain and the
@@ -112,10 +112,8 @@ public static class Verbs {
         RequireStamp(originalKnee.Stamp, knee.Solids.Stamp, document.GetDocumentKey(), "original knee curves");
         RequireStamp(originalHeader.Stamp, knee.Solids.Stamp, document.GetDocumentKey(), "original header curves");
         var proposals = Proposals(document, level, phaseId, knee.Solids.Stamp, clip);
-        var detail = knee.Merged.Pieces == 0 && header.Merged.Pieces == 0
-            ? HoldWithCensus(document, clip, source, knee.Solids.Stamp) : null;
         RequireCurrent(document, knee.Solids.Stamp);
-        return new PartitionInput(knee.Merged, header.Merged, loops, levelZ, knobs, gates, source, proposals, detail,
+        return new PartitionInput(knee.Merged, header.Merged, loops, levelZ, knobs, gates, source, proposals,
             new OriginalCurveEvidence(originalKnee, originalHeader));
     }
 
@@ -259,29 +257,5 @@ public static class Verbs {
             s.Pieces + r.Pieces,
             Math.Round(s.Ms + r.Ms, 3));
         return new BandSlices(s, r, merged);
-    }
-
-    /// <summary>
-    ///     Ledger ruling (4): a zone with no enclosure is held whole, and the hold reason carries the
-    ///     Space census inside the zone box by source, category and layer so a reader can see whether
-    ///     to fix the enclosure list or link a DWG. Unfiltered on purpose — the point is to show what
-    ///     IS there, not what the gate let through.
-    /// </summary>
-    private static string HoldWithCensus(Document doc, Aabb clip, string enclosureSource, Stamp expected) {
-        var box = new Aabb(clip.MinX, clip.MinY, -1e9, clip.MaxX, clip.MaxY, 1e9);
-        var all = new Filter(null, null, [PrimKind.Solid, PrimKind.Mesh, PrimKind.Curve2D]);
-        var c = SpaceVerbs.Census(doc, box, all);
-        RequireStamp(c.Stamp, expected, doc.GetDocumentKey(), "census");
-
-        var top = c.Buckets
-            .OrderByDescending(b => b.Triangles)
-            .Take(10)
-            .Select(b => $"{b.Source}/{b.Category}{(b.Layer is null ? "" : "/" + b.Layer)} "
-                + $"({b.Kind}) {b.Elements}e {b.Triangles}t");
-        var names = string.Join("; ", top);
-        return Reasons.NoEnclosure
-            + "; " + enclosureSource
-            + "; nothing the enclosure names is inside this zone. What is there, top ten by triangle: "
-            + (string.IsNullOrEmpty(names) ? "nothing at all — the zone box is empty in the soup" : names);
     }
 }

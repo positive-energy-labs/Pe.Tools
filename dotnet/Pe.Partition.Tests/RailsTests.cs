@@ -11,7 +11,7 @@ public sealed class RailsTests {
     private static PartitionInput Input(params SliceElement[] elements) {
         var stamp = new Stamp("doc", 0, Stamp.HostInternalFt, DateTime.UnixEpoch, [], true, new Resolved([], [], [], [], []));
         var knee = new SliceAnswer(stamp, new Searched(0, 0, 0, 0, 0), elements, elements.Sum(e => e.Pieces.Count), 0);
-        return new PartitionInput(knee, knee with { Elements = [] }, [], 0, Knobs.Default, [], "test", [], null);
+        return new PartitionInput(knee, knee with { Elements = [] }, [], 0, Knobs.Default, [], "test", []);
     }
 
     private static Func<double, double, double[]> Rot(double degrees) => (x, y) => {

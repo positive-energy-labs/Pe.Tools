@@ -77,14 +77,9 @@ public static partial class Rails {
     // It stays a rail but faces meet its outer face; the band from there to the zone edge is wall, not room.
     private const double EnvelopeFt = 1.5;
 
-    // FOOTGUN: widest envelope band (outer face to zone edge) counted as excluded wall. Duryee Level 1's thirteen
-    // bands measure 0.23 to 1.26 ft (the 6693266 west bay is 1.0 ft); project-a live's widest is 1.46 ft. A wider
-    // band means the person drew the zone off the wall, and it is held with its width.
-    public const double BandHoldFt = 2.5;
-
     // How far behind an envelope outer face a band may reach: the envelope reach plus the hold width. A face on the
     // outer side mostly beyond this is a room the probe leaked into, not a band.
-    private const double ShadowFt = EnvelopeFt + BandHoldFt;
+    private const double ShadowFt = EnvelopeFt + Judge.BandHoldFt;
 
     // Snap-rounding grid for noding. Extended rail ends land on a target axis only to rounding error.
     private static readonly PrecisionModel Grid = new(1e4);
@@ -279,11 +274,10 @@ public static partial class Rails {
     }
 
     /// <summary>
-    ///     Polygonize the noded network inside the zone, set aside the bands outside envelope rails' outer faces,
-    ///     merge the rest across cased openings, absorb faces thinner than <see cref="MinFaceWidthFt" />.
-    ///     Rooms and bands tile the zone.
+    ///     The noded network polygonized inside the zone, before any join or absorption, and which faces are bands:
+    ///     just outside an envelope rail's outer face.
     /// </summary>
-    public static RailFaces Faces(RailNetwork net) {
+    public static (List<Polygon> Faces, bool[] Band) RawFaces(RailNetwork net) {
         var zone = Solve.GeometryOf(net.ZoneLoops);
         var lines = Gf.CreateMultiLineString(net.Segments.Where(s => Len(s.A, s.B) > 1e-9)
             .Select(s => Gf.CreateLineString([new Coordinate(s.A[0], s.A[1]), new Coordinate(s.B[0], s.B[1])])).ToArray());
@@ -312,7 +306,16 @@ public static partial class Rails {
                     && OverlayNGRobust.Overlay(faces[o], shadow, NetTopologySuite.Operation.Overlay.SpatialFunction.Intersection).Area >= 0.9 * faces[o].Area)
                     band[o] = true;
             }
+        return (faces, band);
+    }
 
+    /// <summary>
+    ///     <see cref="RawFaces" />, merged across cased and headed openings, then faces thinner than
+    ///     <see cref="MinFaceWidthFt" /> absorbed. Rooms and bands tile the zone.
+    /// </summary>
+    public static RailFaces Faces(RailNetwork net) {
+        var (faces, band) = RawFaces(net);
+        int FaceAt(double x, double y) => faces.FindIndex(f => f.Contains(Gf.CreatePoint(new Coordinate(x, y))));
         var parent = Enumerable.Range(0, faces.Count).ToArray();
         int Find(int i) => parent[i] == i ? i : parent[i] = Find(parent[i]);
         // A cased or headed bar joins every pair of faces facing each other across it, probed along its whole length:

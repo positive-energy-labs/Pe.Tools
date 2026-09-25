@@ -190,7 +190,7 @@ public sealed class RailNetworkTests {
         var stamp = new Stamp("doc", 0, Stamp.HostInternalFt, DateTime.UnixEpoch, [], true, new Resolved([], [], [], [], []));
         var elements = walls.Select((w, k) => new SliceElement(new Handle("doc", k + 1, "u" + (k + 1), null, "Walls", PrimKind.Solid), w)).ToList();
         var knee = new SliceAnswer(stamp, new Searched(0, 0, 0, 0, 0), elements, elements.Sum(e => e.Pieces.Count), 0);
-        var input = new PartitionInput(knee, knee with { Elements = [] }, [zone], 0, Knobs.Default, [], "test", proposals, null);
+        var input = new PartitionInput(knee, knee with { Elements = [] }, [zone], 0, Knobs.Default, [], "test", proposals);
         var answer = Pe.Revit.Partition.Solve.RunRails(input, (_, _) => new ProbeAnswer(stamp, knee.Searched,
             new ProbeHit(H, 0, 0), new ProbeHit(H, 9, 9), 20, 0));
         var acc = answer.Accounting;

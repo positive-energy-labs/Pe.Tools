@@ -103,7 +103,7 @@ public sealed class Main09Tests {
             200.0, 0.0);
 
         var answer = Solve.RunRails(new PartitionInput(knee, header, [loop], levelZ, Knobs.Default,
-            [knee.Stamp.Resolved], "historical synthetic fixture", [], null), Probe);
+            [knee.Stamp.Resolved], "historical synthetic fixture", []), Probe);
 
         var acc = answer.Accounting;
         var residual = acc.ZoneSqft - (acc.Accepted + acc.Held + acc.Void + acc.Excluded);

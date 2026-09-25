@@ -128,7 +128,7 @@ public sealed class NativeProposalTests {
                 ProbePurpose.RoomHeights);
         }
         var answer = Solve.RunRails(new PartitionInput(Empty, Empty, zone, 0, Knobs.Default,
-            [Gate, Gate, Gate, Gate], "unit-domain", proposals, "unit: empty enclosure"), Probe);
+            [Gate, Gate, Gate, Gate], "unit-domain", proposals), Probe);
         Assert.That(queries, Is.EqualTo(answer.Rooms.Where(r => r.Disposition != Disposition.Excluded)
             .Select(r => (r.LabelX, r.LabelY)).ToArray()), "probe requests must equal final labels exactly");
         return answer;

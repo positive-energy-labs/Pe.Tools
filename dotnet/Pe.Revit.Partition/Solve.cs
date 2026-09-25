@@ -5,8 +5,8 @@ namespace Pe.Revit.Partition;
 
 /// <summary>
 ///     The pure core: slice pieces plus a zone loop in, a partition out. No Document, no Revit call,
-///     same answer for the same input. The rail network decides the rooms; this class carries locked
-///     proposals, dispositions, support and accounting.
+///     same answer for the same input. The rail network decides the faces; this class carries locked
+///     proposals, measurements and accounting, and <see cref="Judge" /> the dispositions.
 /// </summary>
 public static class Solve {
     // Constants, not knobs. Each names the line that measured it.
@@ -19,7 +19,7 @@ public static class Solve {
     private const double HeaderOnlyRunFt = 4.0;
 
     // FOOTGUN: boundary sampling pitch for support and ink-backing. solve_lines.py SAMPLE_FT.
-    private const double SampleFt = 0.25;
+    internal const double SampleFt = 0.25;
 
     // FOOTGUN: accounting closes here or the solve throws. Domain law, ledger.
     private const double AreaTolSqft = 1e-6;
@@ -29,17 +29,39 @@ public static class Solve {
 
     private static readonly GeometryFactory Gf = new NetTopologySuite.NtsGeometryServices(GeometryOverlay.NG).CreateGeometryFactory();
 
-    // FOOTGUN: smallest rail-bounded face kept as a room. Duryee's closets are 11, 20 and 22 sf; under this is a
-    // chase or a junction scrap even when every edge is on a rail.
-    private const double MinRailRoomSqft = 6.0;
-
     /// <summary>
-    ///     Rooms from the rail network; the partition verb's solver. Proposals are carried through whole: a person's
-    ///     locked room regions (from Rooms.cs), so they survive a rerun, and architect Rooms, adopted as blob Solve.Run
-    ///     adopted them. The rail faces fill the rest of the zone.
+    ///     Rooms from the rail network; the partition verb's solver. Layer 1 (<see cref="Faces" />) partitions by
+    ///     geometry, layer 2 (<see cref="Judge.Dispose" />) disposes each face; accounting closes or the solve throws.
     /// </summary>
     public static PartitionAnswer RunRails(PartitionInput input, Func<double, double, ProbeAnswer> probe) {
         var sw = System.Diagnostics.Stopwatch.StartNew();
+        var rooms = Faces(input, probe).Select((f, i) => {
+            var (d, reason) = Judge.Dispose(f, input.LevelZ, input.Knobs);
+            return new Room(i, d, reason, Loop(f.Shape), Math.Round(f.Shape.Area, 9), f.LabelX, f.LabelY, Math.Round(f.Backed, 6),
+                f.FloorZ, f.CeilingZ, f.Shared, Enumerable.Range(0, f.Shape.NumInteriorRings)
+                    .Select(f.Shape.GetInteriorRingN)
+                    // Overlay can leave collinear triangles that Revit rejects as boundaries.
+                    .Where(h => Math.Round(Gf.CreatePolygon(h.Coordinates).Area, 9) > 0)
+                    .Select(h => Flat(h.Coordinates)).ToArray(), f.Proposal);
+        }).ToList();
+        var acc = new Accounting(GeometryOf(input.ZoneLoops).Area,
+            rooms.Where(r => r.Disposition == Disposition.Accepted).Sum(r => r.AreaSqft),
+            rooms.Where(r => r.Disposition == Disposition.Held).Sum(r => r.AreaSqft),
+            rooms.Where(r => r.Disposition == Disposition.Void).Sum(r => r.AreaSqft),
+            rooms.Where(r => r.Disposition == Disposition.Excluded).Sum(r => r.AreaSqft));
+        if (Math.Abs(acc.ZoneSqft - acc.Accepted - acc.Held - acc.Void - acc.Excluded) > AreaTolSqft)
+            throw new PartitionException("serialized partition accounting does not close");
+        return new PartitionAnswer(input.Knee.Stamp, input.Knee.Searched, input.Knobs, rooms, acc, null,
+            input.Resolved, input.EnclosureSource, Math.Round(sw.Elapsed.TotalMilliseconds, 3));
+    }
+
+    /// <summary>
+    ///     Layer 1: the zone tiled by geometry alone, each face with its measurements and no judgment. Proposals are
+    ///     carried through whole: a person's locked room regions (from Rooms.cs), so they survive a rerun, and architect
+    ///     Rooms, adopted. The rail faces fill the rest of the zone. Order is the answer's Room.Index: proposed rooms,
+    ///     rail rooms, bands too wide to be wall, proposal overlaps, then envelope bands.
+    /// </summary>
+    public static IReadOnlyList<FaceFacts> Faces(PartitionInput input, Func<double, double, ProbeAnswer> probe) {
         var zone = GeometryOf(input.ZoneLoops);
         var proposed = input.Proposals
             .Select(p => (Proposal: p, Geom: IntersectArea(GeometryOf(p.Loops), zone)))
@@ -76,40 +98,47 @@ public static class Solve {
                 else proposedParts[best] = (UnionOf([proposedParts[best].Geom, part]), proposedParts[best].Proposal);
             }
         }
-        var bands = Free(faces.Bands);
-        // Proposed rooms, rail rooms, bands too wide to be wall (held), proposal overlaps (held), then envelope bands (excluded wall).
-        var wide = bands.Select(b => (b, w: Rails.Width(b))).Where(x => x.w > Rails.BandHoldFt).ToList();
-        var shapes = new List<Geometry>();
-        var proposals = new List<RoomProposal?>();
+        var bands = Free(faces.Bands).Select(b => (Shape: b, Width: Rails.Width(b))).ToList();
+        // ponytail: index order and the probe set still split bands at Judge.BandHoldFt, so Room.Index and probe calls
+        // stay as they were; a pure layer 1 would order and probe every band alike.
+        var wide = bands.Where(x => x.Width > Judge.BandHoldFt).ToList();
+        var layout = new List<(Polygon Shape, RoomProposal? Proposal, FaceKind Kind, double? Width)>();
         foreach (var (geom, proposal) in proposedParts)
-            foreach (var part in Polys(geom)) { shapes.Add(part); proposals.Add(proposal); }
-        var wideStart = shapes.Count + free.Count;
-        foreach (var part in free.Concat(wide.Select(x => x.b))) { shapes.Add(part); proposals.Add(null); }
-        var conflictStart = shapes.Count;
-        foreach (var part in Polys(contested)) { shapes.Add(part); proposals.Add(null); }
-        var roomCount = shapes.Count;
-        foreach (var part in bands.Except(wide.Select(x => x.b))) { shapes.Add(part); proposals.Add(null); }
+            foreach (var part in Polys(geom)) layout.Add((part, proposal, FaceKind.Room, null));
+        foreach (var part in free) layout.Add((part, null, FaceKind.Room, null));
+        foreach (var b in wide) layout.Add((b.Shape, null, FaceKind.Band, b.Width));
+        foreach (var part in Polys(contested)) layout.Add((part, null, FaceKind.Contested, null));
+        var probed = layout.Count;
+        foreach (var b in bands.Except(wide)) layout.Add((b.Shape, null, FaceKind.Band, b.Width));
+        var shapes = layout.Select(x => (Geometry)x.Shape).ToList();
         AssertCoverage(shapes, zone, "rails partition", true);
         // A proposed room's edge is a wall, as the zone edge is: it backs its neighbours and never floats.
-        var knee = Buffered(input.Knee, input.Knobs.InkHalfWidthFt);
-        if (!taken.IsEmpty) knee = UnionOf([knee, taken.Boundary.Buffer(input.Knobs.InkHalfWidthFt, BufferQuadSegs)]);
-        var backing = Reach(knee, Buffered(input.Header, input.Knobs.InkHalfWidthFt), input.Knobs);
+        var knobs = input.Knobs;
+        var knee = Buffered(input.Knee, knobs.InkHalfWidthFt);
+        if (!taken.IsEmpty) knee = UnionOf([knee, taken.Boundary.Buffer(knobs.InkHalfWidthFt, BufferQuadSegs)]);
+        var backing = Reach(knee, Buffered(input.Header, knobs.InkHalfWidthFt), knobs);
         var floating = Rails.Floating(net, taken.IsEmpty ? null : taken.Boundary);
-        // A face bounded only by rails, bars and the zone edge is a room however small, down to a closet's floor.
-        string? Small(Geometry g) => g.Area < MinRailRoomSqft ? Reasons.TooSmallTiny
-            : g.Area < input.Knobs.MinRoomSqft && floating(g) > SampleFt ? Reasons.TooSmallFloating : null;
-        var rooms = Shape(shapes, proposals, roomCount, conflictStart, probe, backing, zone, input.LevelZ, input.Knobs, Small).ToList();
-        for (var k = 0; k < wide.Count; k++)
-            rooms[wideStart + k] = rooms[wideStart + k] with { Disposition = Disposition.Held, Reason = $"envelope-band-{wide[k].w:0.0}ft" };
-        var acc = new Accounting(zone.Area,
-            rooms.Where(r => r.Disposition == Disposition.Accepted).Sum(r => r.AreaSqft),
-            rooms.Where(r => r.Disposition == Disposition.Held).Sum(r => r.AreaSqft),
-            rooms.Where(r => r.Disposition == Disposition.Void).Sum(r => r.AreaSqft),
-            rooms.Where(r => r.Disposition == Disposition.Excluded).Sum(r => r.AreaSqft));
-        if (Math.Abs(acc.ZoneSqft - acc.Accepted - acc.Held - acc.Void - acc.Excluded) > AreaTolSqft)
-            throw new PartitionException("serialized partition accounting does not close");
-        return new PartitionAnswer(input.Knee.Stamp, input.Knee.Searched, input.Knobs, rooms, acc, null,
-            input.Resolved, input.EnclosureSource, Math.Round(sw.Elapsed.TotalMilliseconds, 3));
+        var zoneEdge = zone.Boundary.Buffer(ZoneEdgeExemptFt, CloseQuadSegs);
+        var facts = new List<FaceFacts>(layout.Count);
+        for (var i = 0; i < layout.Count; i++) {
+            var (g, proposal, kind, width) = layout[i];
+            var shared = new List<SharedEdge>();
+            for (var j = 0; j < shapes.Count; j++) {
+                if (j == i) continue;
+                var s = SharedLine(g, shapes[j]);
+                if (s is null || s.Length <= SampleFt) continue;
+                shared.Add(new SharedEdge(j, Math.Round(s.Length, 6), Math.Round(Support(s, backing, knobs), 6)));
+            }
+            // The face's own boundary is what is not zone edge.
+            var own = g.Boundary.Difference(zoneEdge);
+            var ownEmpty = own.IsEmpty || own.Length <= SampleFt;
+            var label = g.InteriorPoint;
+            var hit = i < probed ? probe(label.X, label.Y) : null;
+            facts.Add(new FaceFacts(g, proposal, kind, width, ownEmpty, hit?.Floor?.Z, hit?.Ceiling?.Z,
+                kind == FaceKind.Room ? floating(g) : null, g.Buffer(-knobs.MinFeatureWidthFt / 2.0, CloseQuadSegs).IsEmpty,
+                ownEmpty ? 0.0 : Support(own, backing, knobs), label.X, label.Y, shared));
+        }
+        return facts;
     }
 
     // ---------------------------------------------------------------- ink
@@ -133,67 +162,6 @@ public static class Solve {
         for (var i = 0; i < n; i++) cs[i] = new Coordinate(xy[i * 2], xy[(i * 2) + 1]);
         var hull = Gf.CreateMultiPointFromCoords(cs).ConvexHull();
         return hull is NetTopologySuite.Geometries.Point ? null : hull;
-    }
-
-    // ---------------------------------------------------------------- stages 7 and 8
-
-    private static IReadOnlyList<Room> Shape(
-        List<Geometry> shapes,
-        List<RoomProposal?> proposals,
-        int roomCount,
-        int conflictStart,
-        Func<double, double, ProbeAnswer> probe,
-        Backing backing,
-        Geometry zone,
-        double levelZ,
-        Knobs knobs,
-        Func<Geometry, string?> small
-    ) {
-        var zoneEdge = zone.Boundary.Buffer(ZoneEdgeExemptFt, CloseQuadSegs);
-        var rooms = new List<Room>(shapes.Count);
-        for (var i = 0; i < shapes.Count; i++) {
-            var g = shapes[i];
-            var shared = new List<SharedEdge>();
-            for (var j = 0; j < shapes.Count; j++) {
-                if (j == i) continue;
-                var s = SharedLine(g, shapes[j]);
-                if (s is null || s.Length <= SampleFt) continue;
-                shared.Add(new SharedEdge(j, Math.Round(s.Length, 6),
-                    Math.Round(Support(s, backing, knobs), 6)));
-            }
-
-            // The room's own boundary is what is not zone edge.
-            var own = g.Boundary.Difference(zoneEdge);
-            var backed = own.IsEmpty || own.Length <= SampleFt
-                ? 0.0
-                : Support(own, backing, knobs);
-
-            var label = g.InteriorPoint;
-            var hit = i < roomCount ? probe(label.X, label.Y) : null;
-            var floor = hit?.Floor?.Z;
-            var ceiling = hit?.Ceiling?.Z;
-            string? reason = null;
-            var d = Disposition.Accepted;
-            if (i >= roomCount) { d = Disposition.Excluded; reason = Reasons.Wall; }
-            else if (i >= conflictStart) { d = Disposition.Held; reason = "native-overlap"; }
-            else if (proposals[i] is null && (own.IsEmpty || own.Length <= SampleFt)) { d = Disposition.Held; reason = Reasons.ZoneEdgeOnly; }
-            else if (floor is not { } fz || Math.Abs(fz - levelZ) > knobs.FloorTolFt) { d = Disposition.Held; reason = Reasons.NoFloor; }
-            else if (ceiling is null) { d = Disposition.Held; reason = Reasons.NoCeiling; }
-            else if (ceiling is { } cz && cz - floor!.Value < knobs.MinHeadroomFt) { d = Disposition.Void; reason = Reasons.LowHeadroom; }
-            else if (small(g) is { } why) { d = Disposition.Held; reason = why; }
-            else if (g.Buffer(-knobs.MinFeatureWidthFt / 2.0, CloseQuadSegs).IsEmpty) { d = Disposition.Held; reason = Reasons.TooNarrow; }
-            else if (proposals[i] is null && backed < knobs.InkBackedAcceptMin) { d = Disposition.Held; reason = Reasons.Unbacked; }
-
-            rooms.Add(new Room(i, d, reason, Loop(g), Math.Round(g.Area, 9),
-                label.X, label.Y, Math.Round(backed, 6), floor, ceiling, shared,
-                Enumerable.Range(0, ((Polygon)g).NumInteriorRings)
-                    .Select(h => ((Polygon)g).GetInteriorRingN(h))
-                    // Overlay can leave collinear triangles that Revit rejects as boundaries.
-                    .Where(h => Math.Round(Gf.CreatePolygon(h.Coordinates).Area, 9) > 0)
-                    .Select(h => Flat(h.Coordinates)).ToArray(), proposals[i]));
-        }
-
-        return rooms;
     }
 
     // ---------------------------------------------------------------- support and audits
@@ -318,7 +286,7 @@ public static class Solve {
         NetTopologySuite.Geometries.Utilities.PolygonExtracter.GetPolygons(g)
             .Cast<Polygon>().Where(p => !p.IsEmpty).ToList();
 
-    private static double[] Loop(Geometry g) => Flat(((Polygon)g).ExteriorRing.Coordinates);
+    private static double[] Loop(Polygon g) => Flat(g.ExteriorRing.Coordinates);
 
     private static double[] Flat(Coordinate[] coordinates) => coordinates.Take(coordinates.Length - 1)
         .SelectMany(p => new[] { p.X, p.Y }).ToArray();

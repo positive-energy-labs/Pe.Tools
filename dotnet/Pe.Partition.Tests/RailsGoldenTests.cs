@@ -98,7 +98,7 @@ public sealed class RailsGoldenTests {
         var knee = Load("knee.json");
         var zone = JObject.Parse(File.ReadAllText(Path.Combine(dir, "zone.json")));
         return new PartitionInput(knee, Load("header.json"), [zone["loop"]!.Select(v => (double)v!).ToArray()], (double)zone["levelZ"]!,
-            Knobs.Default, [knee.Stamp.Resolved], "historical synthetic fixture", [], null);
+            Knobs.Default, [knee.Stamp.Resolved], "historical synthetic fixture", []);
     }
 
     // Duryee Level 1's doors capture over the five hand-drawn zones, as the bench solves them.
