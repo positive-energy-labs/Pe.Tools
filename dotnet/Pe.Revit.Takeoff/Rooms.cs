@@ -113,7 +113,7 @@ public static class Rooms
                 Sqft(fr, loops), outer, loops.Where(loop => !ReferenceEquals(loop, outer)).ToList(),
                 !touched && provenance.Partition is { } p ? [p.LabelX, p.LabelY] : Interior(loops),
                 provenance.RunId, provenance.Partition?.Reason,
-                touched, role == TakeoffCarriers.RoleRoomRegion && Locked(provenance, loops),
+                touched, role != TakeoffCarriers.RoleZoningRegion && Locked(provenance, loops),   // an authored held row reads locked too (Astra ad180f8f)
                 provenance.Flags.Contains(FlagStale)));
         }
         return new RoomsSnapshotData(levels, regions);
