@@ -3,7 +3,7 @@
     python eval/partition/render.py .artifacts/runs/bench/<stamp>
 
 Per fixture: knee ink grey, header ink lighter, zone black, accepted faces at 35 percent fill with a
-1 px edge, held faces dashed, slivers (under 15 sf) red, truth rooms (when the truth file exists)
+1 px edge, held faces dashed, slivers (accepted or held under 15 sf) red, truth rooms (when the truth file exists)
 in blue. Partly transparent by ruling: edges are judged against the walls under them.
 """
 import json
@@ -14,7 +14,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 sys.path.insert(0, str(Path(__file__).parent))
-from metrics import TRUTH, SLIVER_SQFT, pts  # noqa: E402
+from metrics import TRUTH, is_sliver, pts  # noqa: E402
 
 LONG_PX = 2400
 MARGIN_FT = 3.0
@@ -47,7 +47,7 @@ def render(fixture_dir, truth_root):
     fd = ImageDraw.Draw(faces)
     for i, r in enumerate(answer["Rooms"]):
         ring = [px(p) for p in pts(r["Loop"])]
-        if r["AreaSqft"] < SLIVER_SQFT:
+        if is_sliver(r):
             fd.polygon(ring, fill=(220, 30, 30, 200), outline=(160, 0, 0, 255))
         elif r["Disposition"] == "Accepted":
             fd.polygon(ring, fill=FILL[i % len(FILL)] + (90,), outline=(20, 20, 20, 255))

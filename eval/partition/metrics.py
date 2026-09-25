@@ -186,8 +186,13 @@ def edge_metrics(rooms, zones, ink):
     }
 
 
+def is_sliver(r):
+    """A room piece under 15 sf, accepted or held. Excluded wall bands and void are not rooms and never slivers."""
+    return r["Disposition"] in ("Accepted", "Held") and r["AreaSqft"] < SLIVER_SQFT
+
+
 def piece_metrics(rooms, zones):
-    slivers = [r for r in rooms if r["AreaSqft"] < SLIVER_SQFT]
+    slivers = [r for r in rooms if is_sliver(r)]
     zone_area = sum(area(pts(loop)) for z in zones for loop in z)  # loops are even-odd; holes rare, ponytail
     return {
         "slivers": len(slivers), "sliver_sf": round(sum(r["AreaSqft"] for r in slivers), 2),
@@ -293,8 +298,16 @@ def table(rows, previous=None):
 def main(run):
     run = Path(run)
     truth_root = Path(os.environ.get("PE_PRIVATE_FIXTURES") or Path(__file__).resolve().parents[2] / ".private" / "fixtures")
-    rows = {d.name: measure(d, truth_root) for d in sorted(run.iterdir()) if (d / "answer.json").is_file()}
+    fixtures = [d for d in sorted(run.iterdir()) if (d / "answer.json").is_file()]
+    rows = {d.name: measure(d, truth_root) for d in fixtures}
     out = f"# bench {run.name}\n\n{table(rows)}\n"
+    held = ["| fixture | zone | zone sf | held sf | reason |", "|---|---|---|---|---|"]
+    for d in fixtures:
+        answer = json.loads((d / "answer.json").read_text())
+        for r in sorted((r for r in answer["Rooms"] if r["Disposition"] == "Held"), key=lambda r: (r["Zone"], -r["AreaSqft"])):
+            zone_sf = sum(area(pts(loop)) for loop in answer["Zones"][r["Zone"]])
+            held.append(f"| {d.name} | {r['Zone']} | {zone_sf:.0f} | {r['AreaSqft']:.1f} | {r['Reason']} |")
+    out += "\n## held\n\n" + "\n".join(held) + "\n"
     prior = [d for d in sorted(run.parent.iterdir()) if d.name < run.name and any((d / f / "metrics.json").is_file() for f in rows)]
     if prior:
         previous = {f: json.loads((prior[-1] / f / "metrics.json").read_text()) for f in rows if (prior[-1] / f / "metrics.json").is_file()}
