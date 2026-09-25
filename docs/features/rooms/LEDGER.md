@@ -49,13 +49,14 @@
 - 2026-09-25, kaitpw: two layers, kept separate. Layer 1 partitions by geometry alone (walls, doors, openings, framing, zone edges). Layer 2 applies engineering judgment (function splits, load-unit grouping, size rules). Layer 2 is not codified for combining rooms; combining is a UI action the engineer performs on layer 1 output. Splitting a large room by function stays a candidate for layer 2 (labels exist: room tags, IFC space names, DWG text, RHVAC names; ASHRAE ties latent, lighting and ventilation loads to space type).
 - 2026-09-25, kaitpw: interstitial space (a leftover triangle, a strip beside a utility closet) has no objectively correct owner; it is folded into a neighbour or ignored. The truth metric must not punish either choice heavily.
 - 2026-09-25, Claude (planner, read-only): label sources for a function split. Riverbend's RVT link carries named Revit Rooms (15 live, 9 level2) already captured as proposals. Chadds and Duryee carry no IfcSpace (0 in every archived IFC), DWG text never enters the capture (`Ingest.cs` keeps curves only), and Duryee's fixture shows 0 proposals (live count owed). The engineer's named takeoff polygons registered to host feet are the label source for those two. Seam audit: layer 2 is the held-too-small rules, too-narrow, envelope band width, and the zone flip; everything else including the open-gap joins is layer 1.
+- 2026-09-25, Claude (Opus, main `7214e76a`, deterministic + typecheck, not yet run in Revit): `rooms.merge { view, guids, name? }` unions two or more room or held regions of one zone into one `PE Rooms` region, provenance `drawn` with flags `person` and `merged` and `MergedFrom`, so reruns keep it and clip faces under it; fields and RHVAC link from the largest member; sources deleted. Refuses zones, cross-zone sets, different RHVAC links, and unions that are not one polygon (0.01 ft weld). Review gets shift-click multi-select and a `merge` action. Guards 105/105: the five rooms ops are `rawByDesign`, closing the action-authority red.
 
 ## Tried & rejected
 - 2026-09-25, size-gated opening joins (`JoinBelowSf`, branch `join-gate` `839acea7`, unmerged): Duryee's Living, Dining, Kitchen and Nook are one 662 sf face with no rail between them, so no join threshold splits them; thresholds 80 to 400 sf score exactly as off (0.355 / 10.3 ft). Cutting an open plan needs non-wall evidence (island, ceiling change, designer's hand), not a join rule.
 
 ## Owed
 - Seam audit: name which rules in `RailNetwork.cs`/`Solve.cs` are layer 1 (geometry) and which are layer 2 (judgment: held-too-small, envelope band width, cased and headed joins, single-face flip), and move layer 2 behind one boundary so the UI merge and future function splits sit on it. No behaviour change.
-- UI merge of rooms in `/rooms` review: census what exists, make merge a first-class, locked, rerun-stable action.
+- Prove `rooms.merge` in a session: merge two Duryee rooms, rerun, the union survives and neighbours hold.
 - Split-by-function: design against Riverbend's linked Rooms and the registered takeoff polygons; count Duryee's live proposals in a session.
 - Revisions: takeoff-vs-model edge disagreement on Duryee (pantry, powder) is the first concrete case for the revision story; capture it as a fixture.
 - Open plans: rails leaves Living, Dining, Kitchen and Nook as one room (no wall between them); takeoff and RHVAC cut them. Until the CFM-unit question is answered, the designer cuts by hand and the cut is locked on rerun. Candidate non-wall dividers to evaluate later: casework islands, ceiling height changes, floor finish edges.
@@ -68,7 +69,6 @@
 - Chadds' bath/closet suite merges through five 3 to 8 ft gaps with no door ink; the project-a fixtures predate Doors in the enclosure; recapture project-a with Doors, then rescore.
 - kaitpw draws truth on `Rooms Truth - <level>` views: project-a Main Level (ML09 zone) and Duryee Level 1 first; then the truth metric gets its first number.
 - Merge Astra's `rooms-astra` ledger lines (waves 0 to 6) into this ledger; the branches diverged at `82509742` and Astra's product graft `ad180f8f` is already on main.
-- `repo-guards/action-authority.guard.test.ts` wants a renderer or a `rawByDesign` entry for the four `rooms.*` ops; it was red before designation and still is.
 - Re-judge Astra's killed wave 1 reclaim candidate `98430675` on zone domains: it was killed for crop defects that no longer exist.
 - Ask a PE mechanical designer what makes a space its own CFM unit (bath exhaust, closet, open plan) before the merge policy is tuned toward it.
 - The plan image lands only after the second snapshot read; the first paint draws regions with no underlay.
