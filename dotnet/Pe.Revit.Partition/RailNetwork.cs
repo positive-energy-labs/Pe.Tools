@@ -91,7 +91,10 @@ public static partial class Rails {
         // the zone, or that runs across the edge rather than along it (a return stub), is dropped.
         var live = new List<Rail>();
         var outs = new List<double[]?>();
-        foreach (var r in rails.Where(r => Len(r.A, r.B) > 1e-6 && env.Intersects(new Envelope(r.A[0], r.B[0], r.A[1], r.B[1])))) {
+        // FOOTGUN: rail order is capture order, and the first-match choices below (Onto, facing-end pairs) follow it.
+        // A geometric order keeps a rerun whose capture lists the same walls differently on the same network.
+        foreach (var r in rails.Where(r => Len(r.A, r.B) > 1e-6 && env.Intersects(new Envelope(r.A[0], r.B[0], r.A[1], r.B[1])))
+                     .OrderBy(r => r.A[0]).ThenBy(r => r.A[1]).ThenBy(r => r.B[0]).ThenBy(r => r.B[1]).ThenBy(r => r.ThicknessFt)) {
             var (t, n) = (r.ThicknessFt / 2, Math.Max(10, (int)Math.Ceiling(Len(r.A, r.B))));
             var all = Enumerable.Range(0, n + 1).Select(k => Gf.CreatePoint(new Coordinate(
                 r.A[0] + ((r.B[0] - r.A[0]) * k / n), r.A[1] + ((r.B[1] - r.A[1]) * k / n)))).ToList();
