@@ -485,7 +485,7 @@ public static class Verbs {
             bool Floor(Tri t) => Wants(t.Prim) && (purpose == ProbePurpose.Obstructions
                 || HeightRoles.Floor(prims[t.Prim].HeightRole, t, levelZs));
             bool Overhead(Tri t) => Wants(t.Prim) && (purpose == ProbePurpose.Obstructions
-                || HeightRoles.Overhead(prims[t.Prim].HeightRole, t));
+                || HeightRoles.Overhead(prims[t.Prim].HeightRole));
 
             if (p.Bvh.FirstHitAlongRay(at, new XYZ(0, 0, -1), maxDistanceFt, Floor, out var dd, out var ti)
                 && (down is null || dd < down.DistanceFt)) {

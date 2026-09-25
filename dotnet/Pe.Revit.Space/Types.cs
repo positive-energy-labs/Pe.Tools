@@ -11,17 +11,19 @@ public enum SourceKind { Host, RevitLink, IfcLink }
 
 /// <summary>
 ///     Architectural height authority, independent of collision geometry. None means never a height.
-///     <see cref="ByGeometry" /> is an element with no category role (an IFC proxy slab is a nameless Generic Model)
-///     whose horizontal triangles answer for it, per <see cref="HeightRoles" />.
+///     <see cref="ByGeometry" /> is an element with no category role (an IFC proxy slab or roof is a nameless Generic
+///     Model) whose triangles answer for it, per <see cref="HeightRoles" />.
 /// </summary>
 [Flags]
 public enum HeightRole { None = 0, Floor = 1, Overhead = 2, ByGeometry = 4 }
 
 public static class HeightRoles {
-    // FOOTGUN: a triangle within 5 degrees of flat is horizontal; one within 0.5 ft of a level plane is a floor.
-    // Chadds Main Level's IFC slab top reads z -0.0 at level 0; the island closet's Return Air duct top is at 0.25.
+    // FOOTGUN: a floor is a triangle within 5 degrees of flat from 1.5 ft below a level plane (Knobs.FloorTolFt; Chadds
+    // has sunken proxy slabs at -0.45 to -1.19) to 0.5 ft above it (the island closet's Return Air duct top is at 0.25,
+    // and MEP is excluded anyway). Chadds Main Level's IFC slab top reads z -0.0 at level 0.
     private static readonly float FlatCos = (float)Math.Cos(5.0 * Math.PI / 180.0);
-    public const double LevelTolFt = 0.5;
+    public const double BelowLevelFt = 1.5;
+    public const double AboveLevelFt = 0.5;
 
     // MEP runs and devices sit on and under slabs; their flat faces are never the room's floor or ceiling.
     // Ids, not the enum: this class stays pure so it runs without RevitAPI loaded.
@@ -46,6 +48,8 @@ public static class HeightRoles {
     };
 
     // Winding is not trusted, so facing is not read: a ray down meets a slab's top first, a ray up its underside.
+    // Overhead reads no slope at all: Chadds' vaulted IFC roof undersides slope 9.5 to 33.7 degrees and are the
+    // ceiling, whose height at a point is where the ray meets it.
     private static bool Flat(Tri t) {
         var n = Vector3.Cross(t.B - t.A, t.C - t.A);
         return Math.Abs(n.Z) >= FlatCos * n.Length();
@@ -55,11 +59,10 @@ public static class HeightRoles {
         if ((role & HeightRole.Floor) != 0) return true;
         if ((role & HeightRole.ByGeometry) == 0 || !Flat(t)) return false;
         var z = (t.A.Z + t.B.Z + t.C.Z) / 3.0;
-        return levelZs.Any(l => Math.Abs(z - l) <= LevelTolFt);
+        return levelZs.Any(l => z >= l - BelowLevelFt && z <= l + AboveLevelFt);
     }
 
-    public static bool Overhead(HeightRole role, Tri t) =>
-        (role & HeightRole.Overhead) != 0 || ((role & HeightRole.ByGeometry) != 0 && Flat(t));
+    public static bool Overhead(HeightRole role) => (role & (HeightRole.Overhead | HeightRole.ByGeometry)) != 0;
 }
 
 public enum ProbePurpose { Obstructions, RoomHeights }
