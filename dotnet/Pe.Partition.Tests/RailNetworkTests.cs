@@ -86,7 +86,7 @@ public sealed class RailNetworkTests {
 
     [TestCase(false, false, SegKind.Cased, 1)]
     [TestCase(true, false, SegKind.Door, 2)]
-    [TestCase(false, true, SegKind.Headed, 2)]
+    [TestCase(false, true, SegKind.Headed, 1)]
     public void Three_foot_gap_is_an_opening_not_a_wall(bool doorInk, bool headerInk, SegKind kind, int faceCount) {
         var ev = new OpeningEvidence(doorInk ? [[10, 3.6, 12.5, 3.6]] : [],
             headerInk ? [[9.75, 3, 9.75, 7], [10.25, 3, 10.25, 7]] : [], []);

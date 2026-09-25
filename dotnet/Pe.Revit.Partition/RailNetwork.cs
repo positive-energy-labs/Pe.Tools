@@ -13,8 +13,8 @@ public enum SegKind { Wall, Zone, Closed, Door, Headed, Cased }
 public sealed record RailSegment(double[] A, double[] B, SegKind Kind, double[]? Out = null);
 
 /// <summary>
-///     A gap in the rail network. Door (door ink in the gap) and Headed (wall ink over the gap in the
-///     header band, door unknown) separate rooms; Cased (neither) joins them. Closed is a gap that knee
+///     A gap in the rail network. Door (door ink in the gap) separates rooms; Headed (wall ink over the
+///     gap in the header band, door unknown) and Cased (neither) join them, kept apart for the census. Closed is a gap that knee
 ///     wall ink fills though no rail was extracted there: a wall, not an opening, counted for the census.
 ///     WidthFt is face to face.
 /// </summary>
@@ -295,9 +295,9 @@ public static partial class Rails {
 
         var parent = Enumerable.Range(0, faces.Count).ToArray();
         int Find(int i) => parent[i] == i ? i : parent[i] = Find(parent[i]);
-        // A cased bar joins every pair of faces facing each other across it, probed along its whole length:
+        // A cased or headed bar joins every pair of faces facing each other across it, probed along its whole length:
         // a bar's midpoint can land on a third face that meets the bar end-on.
-        foreach (var o in net.Openings.Where(o => o.Kind == SegKind.Cased)) {
+        foreach (var o in net.Openings.Where(o => o.Kind is SegKind.Cased or SegKind.Headed)) {
             var l = Len(o.A, o.B);
             if (l < 1e-9) continue;
             var (nx, ny) = (-(o.B[1] - o.A[1]) / l * 0.02, (o.B[0] - o.A[0]) / l * 0.02);
@@ -343,13 +343,13 @@ public static partial class Rails {
     }
 
     /// <summary>
-    ///     Length of a face's boundary on no wall, closed gap, door or headed bar, or zone edge: a floating edge.
-    ///     A door or headed bar counts as enclosure because it separates rooms (ruling 1); a cased bar floats.
+    ///     Length of a face's boundary on no wall, closed gap, door bar, or zone edge: a floating edge.
+    ///     A door bar counts as enclosure because it separates rooms; a cased or headed bar joins them and floats.
     ///     <paramref name="also" /> is further enclosure linework, such as locked rooms' edges.
     /// </summary>
     public static Func<Geometry, double> Floating(RailNetwork net, Geometry? also = null) {
         Geometry lines = Gf.CreateMultiLineString(net.Segments
-            .Where(s => s.Kind != SegKind.Cased && Len(s.A, s.B) > 1e-9)
+            .Where(s => s.Kind is not (SegKind.Cased or SegKind.Headed) && Len(s.A, s.B) > 1e-9)
             .Select(s => Gf.CreateLineString([new Coordinate(s.A[0], s.A[1]), new Coordinate(s.B[0], s.B[1])])).ToArray());
         if (also is not null) lines = lines.Union(also);
         var enclosure = UnaryUnionNG.Union(lines, Grid).Buffer(1e-3);
