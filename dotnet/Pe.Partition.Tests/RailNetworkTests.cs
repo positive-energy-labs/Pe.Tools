@@ -39,7 +39,7 @@ public sealed class RailNetworkTests {
     public void L_of_rooms_door_separates_and_cased_opening_joins() {
         // L zone: a 30x10 bar with a 10x20 arm up its left end. Exterior rails sit 0.25 ft inside the zone edge.
         var zone = new double[] { 0, 0, 30, 0, 30, 10, 10, 10, 10, 30, 0, 30 };
-        var door = new OpeningEvidence([[10.1, 3.2, 12.5, 3.2]], [], []);   // a door leaf drawn open from the jamb
+        var door = new OpeningEvidence([[10.1, 3.2, 12.5, 3.2]], [], [], []);   // a door leaf drawn open from the jamb
         var (net, faces) = Solve(zone, door,
             R(0.25, 0.25, 29.75, 0.25), R(29.75, 0.25, 29.75, 9.75), R(29.75, 9.75, 10.25, 9.75),
             R(10.25, 9.75, 10.25, 29.75), R(10.25, 29.75, 0.25, 29.75), R(0.25, 29.75, 0.25, 0.25),
@@ -89,7 +89,7 @@ public sealed class RailNetworkTests {
     [TestCase(false, true, SegKind.Headed, 1)]
     public void Three_foot_gap_is_an_opening_not_a_wall(bool doorInk, bool headerInk, SegKind kind, int faceCount) {
         var ev = new OpeningEvidence(doorInk ? [[10, 3.6, 12.5, 3.6]] : [],
-            headerInk ? [[9.75, 3, 9.75, 7], [10.25, 3, 10.25, 7]] : [], []);
+            headerInk ? [[9.75, 3, 9.75, 7], [10.25, 3, 10.25, 7]] : [], [], []);
         var (net, faces) = Solve(Box(0, 0, 20, 10), ev, R(10, 0, 10, 3.5), R(10, 6.5, 10, 10));
         Assert.That(net.Openings, Has.Count.EqualTo(1));
         Assert.That(net.Openings[0].Kind, Is.EqualTo(kind));
@@ -97,9 +97,20 @@ public sealed class RailNetworkTests {
         Assert.That(faces, Has.Count.EqualTo(faceCount));
     }
 
+    [TestCase(0.5)]
+    [TestCase(1.0)]
+    public void Door_panel_standing_off_the_wall_face_is_still_a_door(double clear) {
+        // IFC panels sit beside the wall plane: a 3 x 0.2 ft panel spanning the 3 ft gap, clear of the 0.5 ft wall's face.
+        var x = 10.25 + clear;
+        var panel = new[] { x, 3.5, x + 0.2, 3.5, x + 0.2, 6.5, x, 6.5 };
+        var (net, faces) = Solve(Box(0, 0, 20, 10), new OpeningEvidence([panel], [], [], [panel]), R(10, 0, 10, 3.5), R(10, 6.5, 10, 10));
+        Assert.That(net.Openings.Single().Kind, Is.EqualTo(SegKind.Door));
+        Assert.That(faces, Has.Count.EqualTo(2));
+    }
+
     [Test]
     public void Gap_filled_by_wall_ink_without_a_rail_is_wall_not_opening() {
-        var ev = new OpeningEvidence([], [], [[9.75, 3.5, 9.75, 6.5], [10.25, 3.5, 10.25, 6.5]]);
+        var ev = new OpeningEvidence([], [], [[9.75, 3.5, 9.75, 6.5], [10.25, 3.5, 10.25, 6.5]], []);
         var (net, faces) = Solve(Box(0, 0, 20, 10), ev, R(10, 0, 10, 3.5), R(10, 6.5, 10, 10));
         Assert.That(net.Openings.Single().Kind, Is.EqualTo(SegKind.Closed));
         Assert.That(faces, Has.Count.EqualTo(2));
@@ -108,7 +119,7 @@ public sealed class RailNetworkTests {
     [Test]
     public void Wall_stopping_short_of_a_cross_wall_is_an_opening() {
         // The door sits at the room corner: the partition ends 3 ft short of the corridor wall's face.
-        var ev = new OpeningEvidence([[10, 5, 12, 5]], [], []);
+        var ev = new OpeningEvidence([[10, 5, 12, 5]], [], [], []);
         var (net, faces) = Solve(Box(0, 0, 20, 10), ev, R(0, 7, 20, 7), R(10, 0, 10, 3.75));
         Assert.That(net.Openings.Single().Kind, Is.EqualTo(SegKind.Door));
         Assert.That(net.Openings.Single().WidthFt, Is.EqualTo(3).Within(1e-9));

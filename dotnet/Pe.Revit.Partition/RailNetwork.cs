@@ -20,9 +20,12 @@ public sealed record RailSegment(double[] A, double[] B, SegKind Kind, double[]?
 /// </summary>
 public sealed record Opening(double[] A, double[] B, double WidthFt, SegKind Kind, int DoorPieces, double HeaderFraction, double WallFraction);
 
-/// <summary>Door ink (DWG A_DOOR* layers, Doors category), header-band wall ink, and knee wall ink, as slice pieces.</summary>
-public sealed record OpeningEvidence(IReadOnlyList<double[]> Doors, IReadOnlyList<double[]> Headers, IReadOnlyList<double[]> Walls) {
-    public static readonly OpeningEvidence None = new([], [], []);
+/// <summary>
+///     Door ink (DWG A_DOOR* layers, Doors category), header-band wall ink, and knee wall ink, as slice pieces.
+///     Leaves are the Doors category's knee elements whole, each one flat x,y point list: a panel read by its footprint.
+/// </summary>
+public sealed record OpeningEvidence(IReadOnlyList<double[]> Doors, IReadOnlyList<double[]> Headers, IReadOnlyList<double[]> Walls, IReadOnlyList<double[]> Leaves) {
+    public static readonly OpeningEvidence None = new([], [], [], []);
 
     public static OpeningEvidence From(PartitionInput input) => new(
         input.Knee.Elements.Concat(input.Header.Elements)
@@ -35,7 +38,8 @@ public sealed record OpeningEvidence(IReadOnlyList<double[]> Doors, IReadOnlyLis
         input.Knee.Elements.Where(e => e.Handle.Kind == PrimKind.Curve2D
                 ? e.Handle.Layer is { } l && (l.StartsWith("A_WALL", StringComparison.OrdinalIgnoreCase) || l.StartsWith("A_GLAZ", StringComparison.OrdinalIgnoreCase))
                 : e.Handle.Category is "Walls" or "Structural Framing")
-            .SelectMany(e => e.Pieces).ToList());
+            .SelectMany(e => e.Pieces).ToList(),
+        input.Knee.Elements.Where(e => e.Handle.Category == "Doors").Select(e => e.Pieces.SelectMany(p => p).ToArray()).ToList());
 }
 
 public sealed record RailNetwork(IReadOnlyList<RailSegment> Segments, IReadOnlyList<Opening> Openings, double[][] ZoneLoops);
@@ -54,6 +58,10 @@ public static partial class Rails {
 
     // FOOTGUN: collinear-end tolerance for an opening, and the band past the wall face searched for door ink.
     private const double ParallelDeg = 3.0, DoorBandFt = 0.5;
+
+    // FOOTGUN: reach from a gap's axis, past its wall thickness, to a door leaf that spans the gap. IFC panels sit off
+    // the wall plane: Duryee Level 1 door 1310394 lies 1.24 ft from its 0.58 ft wall's axis, 0.95 ft clear of the face.
+    private const double LeafFt = 1.0;
 
     // FOOTGUN: fraction of a gap that header wall ink must cover to call it headed.
     private const double HeaderMin = 0.8;
@@ -138,6 +146,18 @@ public static partial class Rails {
             var line = Gf.CreateLineString([new Coordinate(a[0], a[1]), new Coordinate(b[0], b[1])]);
             var band = line.Buffer((t / 2) + DoorBandFt, new NetTopologySuite.Operation.Buffer.BufferParameters { EndCapStyle = NetTopologySuite.Operation.Buffer.EndCapStyle.Flat });
             var doorPieces = doors.Query(band.EnvelopeInternal).Count(g => g.Intersects(band));
+            // A leaf beside the gap: its projection on the axis covers half its width and it lies within t + LeafFt of the axis.
+            var (gl, u) = (Len(a, b), new[] { (b[0] - a[0]) / Len(a, b), (b[1] - a[1]) / Len(a, b) });
+            doorPieces += evidence.Leaves.Count(xy => {
+                var (lo, hi, near) = (double.MaxValue, double.MinValue, double.MaxValue);
+                for (var k = 0; k < xy.Length / 2; k++) {
+                    var (vx, vy) = (xy[2 * k] - a[0], xy[(2 * k) + 1] - a[1]);
+                    var s = (vx * u[0]) + (vy * u[1]);
+                    (lo, hi, near) = (Math.Min(lo, s), Math.Max(hi, s), Math.Min(near, Math.Abs((u[0] * vy) - (u[1] * vx))));
+                }
+                var (fa, fb) = Farthest(xy);
+                return near <= t + LeafFt && Math.Min(hi, gl) - Math.Max(lo, 0) >= 0.5 * Len(fa, fb);
+            });
             double Cover(STRtree<Geometry> ink, double lo, double hi) {
                 var n = Math.Max(2, (int)(line.Length * (hi - lo) / 0.25));
                 var covered = 0;
