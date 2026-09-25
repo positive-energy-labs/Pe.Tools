@@ -292,12 +292,19 @@ public static partial class Rails {
 
         var parent = Enumerable.Range(0, faces.Count).ToArray();
         int Find(int i) => parent[i] == i ? i : parent[i] = Find(parent[i]);
+        // A cased bar joins every pair of faces facing each other across it, probed along its whole length:
+        // a bar's midpoint can land on a third face that meets the bar end-on.
         foreach (var o in net.Openings.Where(o => o.Kind == SegKind.Cased)) {
             var l = Len(o.A, o.B);
-            var (mx, my, nx, ny) = ((o.A[0] + o.B[0]) / 2, (o.A[1] + o.B[1]) / 2, -(o.B[1] - o.A[1]) / l * 0.02, (o.B[0] - o.A[0]) / l * 0.02);
-            var i = faces.FindIndex(f => f.Contains(Gf.CreatePoint(new Coordinate(mx + nx, my + ny))));
-            var j = faces.FindIndex(f => f.Contains(Gf.CreatePoint(new Coordinate(mx - nx, my - ny))));
-            if (i >= 0 && j >= 0 && !band[i] && !band[j]) parent[Find(i)] = Find(j);
+            if (l < 1e-9) continue;
+            var (nx, ny) = (-(o.B[1] - o.A[1]) / l * 0.02, (o.B[0] - o.A[0]) / l * 0.02);
+            var n = Math.Max(1, (int)Math.Ceiling(l / 0.25));
+            for (var k = 0; k < n; k++) {
+                var f = (k + 0.5) / n;
+                var (mx, my) = (o.A[0] + ((o.B[0] - o.A[0]) * f), o.A[1] + ((o.B[1] - o.A[1]) * f));
+                var (i, j) = (FaceAt(mx + nx, my + ny), FaceAt(mx - nx, my - ny));
+                if (i >= 0 && j >= 0 && i != j && !band[i] && !band[j]) parent[Find(i)] = Find(j);
+            }
         }
         var live = faces.Select((f, i) => (f, r: Find(i))).Where(x => !band[x.r]).GroupBy(x => x.r)
             .SelectMany(g => Polys(OverlayNGRobust.Union(g.Select(x => (Geometry)x.f).ToList()))).ToList();

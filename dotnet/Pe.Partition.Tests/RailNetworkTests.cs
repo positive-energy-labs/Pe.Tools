@@ -142,6 +142,21 @@ public sealed class RailNetworkTests {
     }
 
     [Test]
+    public void Cased_bar_joins_every_face_along_it_not_only_at_its_midpoint() {
+        // An 8 ft cased bar on y 10 from x 4 to 12. Below it a wall at x 6 splits an alcove (x 0..6) from a room whose
+        // edge carries the bar's midpoint (x 8): the alcove faces the hall above only along x 4..6.
+        var zone = Box(0, 0, 20, 20);
+        var z = Enumerable.Range(0, 4).Select(k => new RailSegment([zone[2 * k], zone[(2 * k) + 1]], [zone[(2 * k + 2) % 8], zone[(2 * k + 3) % 8]], SegKind.Zone));
+        var bar = new Opening([4, 10], [12, 10], 8, SegKind.Cased, 0, 0, 0);
+        var net = new RailNetwork([.. z,
+            new RailSegment([0, 10], [4, 10], SegKind.Wall), new RailSegment([12, 10], [20, 10], SegKind.Wall),
+            new RailSegment([6, 0], [6, 10], SegKind.Wall), new RailSegment(bar.A, bar.B, SegKind.Cased)], [bar], [zone]);
+        var (rooms, bands) = Rails.Faces(net);
+        Assert.That(bands, Is.Empty);
+        Assert.That(rooms.Single().Area, Is.EqualTo(400).Within(1e-6), "alcove, midpoint room and hall are one room");
+    }
+
+    [Test]
     public void Cased_bar_is_a_floating_edge_and_a_wall_is_not() {
         var net = Rails.Network([R(10, 0, 10, 3.5), R(10, 6.5, 10, 10)], [Box(0, 0, 20, 10)], OpeningEvidence.None);
         var floating = Rails.Floating(net);
