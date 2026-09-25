@@ -15,8 +15,8 @@ public sealed record Rail(double[] A, double[] B, double ThicknessFt, string Sou
 ///     Rails from the knee slab, pure. A rail is two parallel face lines, so a wall's own geometry
 ///     decides axis and thickness, a door opening in a wall leaves a gap between two rails, and a
 ///     bent wall yields one rail per leg. Only enclosure evidence is read: the Walls category and
-///     DWG layers <c>A_WALL*</c> and <c>A_GLAZ*</c>. Generic Models, Structural Framing, Columns
-///     and door or stair layers never become rails, whatever their shape.
+///     DWG layers <c>A_WALL*</c> and <c>A_GLAZ*</c>, and with <see cref="Knobs.FramingRails" /> rows of Structural
+///     Framing studs. Generic Models, Columns and door or stair layers never become rails, whatever their shape.
 /// </summary>
 public static partial class Rails {
     public const string Wall = "wall";
@@ -66,6 +66,7 @@ public static partial class Rails {
             }
         }
         rails.AddRange(Pair(dwg, Dwg));
+        if (input.Knobs.FramingRails) rails.AddRange(FramingRails(input, rails));
         return rails;
     }
 

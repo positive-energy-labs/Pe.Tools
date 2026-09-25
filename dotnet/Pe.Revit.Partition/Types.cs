@@ -21,7 +21,7 @@ public sealed record Enclosure(Filter Solids, Filter Ribbons) {
             ["A_WALL*", "A_DOOR*", "A_GLAZ*", "A_STAR*"]));
 }
 
-/// <summary>The nine. Everything else is a constant with a FOOTGUN naming the line that measured it.</summary>
+/// <summary>The nine, and <see cref="FramingRails" />: stud rows become rails (Rails.Framing), an experiment, off by default. Everything else is a constant with a FOOTGUN naming the line that measured it.</summary>
 public sealed record Knobs(
     double InkHalfWidthFt = 0.125,
     double CloseFt = 0.75,
@@ -30,7 +30,8 @@ public sealed record Knobs(
     double MinRoomSqft = 30.0,
     double MinFeatureWidthFt = 2.5,
     double MinBoundarySupport = 0.35,
-    double InkBackedAcceptMin = 0.5
+    double InkBackedAcceptMin = 0.5,
+    bool FramingRails = false
 ) {
     public static readonly Knobs Default = new();
 }

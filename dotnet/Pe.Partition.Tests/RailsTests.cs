@@ -101,6 +101,31 @@ public sealed class RailsTests {
         Assert.That(rails, Is.Empty);
     }
 
+    [Test]
+    public void Stud_rows_become_framing_rails_split_at_openings_and_dropped_on_walls() {
+        var f = Rot(33);
+        var id = 10L;
+        // A 2x6 stud cut: 0.125 ft along the wall, 0.46 ft deep across it.
+        SliceElement Stud(string category, double x, double y) => new(H(category, id: id++), [Box(f, x - 0.0625, y - 0.23, x + 0.0625, y + 0.23)]);
+        IEnumerable<SliceElement> Row(string category, double y, params double[] xs) => xs.Select(x => Stud(category, x, y));
+        var sixteen = Enumerable.Range(0, 7).Select(k => k * 4 / 3.0).ToArray();
+        var input = Input([
+            .. Row("Structural Framing", 0, [.. sixteen, 11, 11 + (4 / 3.0), 11 + (8 / 3.0)]), // 3 ft door gap
+            .. Row("Structural Framing", 10, 0, 2, 4, 6), // 24 in on centre
+            .. Row("Structural Framing", 20, 0, 0.1), // jamb pack
+            .. Row("Generic Models", 30, sixteen), // stud-shaped millwork
+            .. Row("Structural Framing", 40, sixteen), // on a modeled wall
+            new SliceElement(H("Walls", id: 1), [Face(f, -1, 39.77, 10, 39.77), Face(f, -1, 40.23, 10, 40.23)])]);
+        Assert.That(Rails.From(input).Count(r => r.Source == Rails.Framing), Is.Zero, "off by default");
+        var framing = Rails.From(input with { Knobs = input.Knobs with { FramingRails = true } })
+            .Where(r => r.Source == Rails.Framing).OrderBy(r => Rot(-33)(r.A[0], r.A[1])[1]).ThenBy(r => Math.Min(Rot(-33)(r.A[0], r.A[1])[0], Rot(-33)(r.B[0], r.B[1])[0])).ToList();
+        Assert.That(framing, Has.Count.EqualTo(3));
+        Along(framing[0], f, -0.0625, 0, 8.0625, 0);
+        Along(framing[1], f, 10.9375, 0, 13.6667 + 0.0625, 0);
+        Along(framing[2], f, -0.0625, 10, 6.0625, 10);
+        Assert.That(framing.All(r => Math.Abs(r.ThicknessFt - 0.46) < 0.002), Is.True, "thickness is the stud depth");
+    }
+
     private sealed record Box2(double[] A, double[] B);
 
     /// <summary>

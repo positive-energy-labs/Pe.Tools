@@ -36,9 +36,12 @@ public sealed class Bench {
     private static string DuryeeInput => Path.Combine(PrivateFixtures.Dir("duryee/partition"), "duryee-level-input.json");
     private static string DuryeeZones => Path.Combine(PrivateFixtures.Dir("duryee/partition"), "duryee-locked.json");
 
+    // PE_FRAMING_RAILS=1 turns Knobs.FramingRails on for every fixture; the run directory says which.
+    private static bool FramingOn => Environment.GetEnvironmentVariable("PE_FRAMING_RAILS") == "1";
+
     [Test]
     public void RailsSolve() {
-        var run = Path.Combine(RepoRoot, ".artifacts", "runs", "bench", DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-rails");
+        var run = Path.Combine(RepoRoot, ".artifacts", "runs", "bench", DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + (FramingOn ? "-rails-framing" : "-rails"));
         Directory.CreateDirectory(run);
         foreach (var (name, inputs) in Fixtures()) {
             var dir = Path.Combine(run, name);
@@ -47,7 +50,7 @@ public sealed class Bench {
             foreach (var captured in inputs) {
                 // The bench measures the solver's own shape. Architect proposals are adopted, not solved, so they
                 // are stripped; the Duryee session ran with none (zone-0d5e3ccb-inputs.json) and this matches it.
-                var input = captured with { Proposals = [] };
+                var input = captured with { Proposals = [], Knobs = captured.Knobs with { FramingRails = FramingOn } };
                 var z = input.LevelZ;
                 ProbeAnswer Probe(double x, double y) => new(input.Knee.Stamp, input.Knee.Searched,
                     new ProbeHit(Stub, 0.0, z), new ProbeHit(Stub, 9.0, z + 9.0), 200.0, 0.0);
@@ -64,7 +67,9 @@ public sealed class Bench {
                 Knee = inputs[0].Knee.Elements.SelectMany(e => e.Pieces).ToArray(),
                 Header = inputs[0].Header.Elements.SelectMany(e => e.Pieces).ToArray(),
             }));
-            TestContext.Out.WriteLine($"{name}: {answers.Sum(a => a.Rooms.Count)} rooms in {answers.Sum(a => a.Ms):F0} ms");
+            var rails = Rails.From(inputs[0] with { Knobs = inputs[0].Knobs with { FramingRails = FramingOn } });
+            TestContext.Out.WriteLine($"{name}: {answers.Sum(a => a.Rooms.Count)} rooms in {answers.Sum(a => a.Ms):F0} ms, "
+                + $"{rails.Count} rails ({rails.Count(r => r.Source == Rails.Framing)} framing)");
         }
         Python("metrics.py", run);
         Python("render.py", run);

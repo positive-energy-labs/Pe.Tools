@@ -52,7 +52,7 @@ public static class Solve {
             }
         var contested = UnionOf(overlaps);
         var taken = UnionOf(proposed.Select(p => p.Geom).ToList());
-        var net = Rails.Network(Rails.From(input).Concat(Rails.Studs(input)).ToList(), input.ZoneLoops, OpeningEvidence.From(input));
+        var net = Rails.Network(Rails.From(input), input.ZoneLoops, OpeningEvidence.From(input));
         var faces = Rails.Faces(net);
         var proposedParts = proposed.SelectMany(p => Polys(p.Geom.Difference(contested)).Select(g => (Geom: (Geometry)g, p.Proposal))).ToList();
         List<Polygon> Free(IEnumerable<Polygon> parts) => taken.IsEmpty ? parts.ToList() : parts.SelectMany(f => Polys(f.Difference(taken))).ToList();
