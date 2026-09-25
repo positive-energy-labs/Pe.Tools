@@ -12,11 +12,11 @@
 using Autodesk.Revit.DB;
 using System.Collections.Generic;
 using System.Linq;
-const string Prefix = "Rooms Truth - ";
+var Prefixes = new[] { "Rooms Truth - ", "Room Truth - " };   // kaitpw named the first one singular
 var role = new Guid("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9001");   // TakeoffCarriers.RoleGuid: ours carry it, truth does not
 var views = new List<object>();
 foreach (var view in new FilteredElementCollector(doc).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
-             .Where(v => !v.IsTemplate && v.Name.StartsWith(Prefix)))
+             .Where(v => !v.IsTemplate && Prefixes.Any(p => v.Name.StartsWith(p))))
 {
     var rooms = new List<object>();
     foreach (var fr in new FilteredElementCollector(doc, view.Id).OfClass(typeof(FilledRegion)).Cast<FilledRegion>())
@@ -29,7 +29,7 @@ foreach (var view in new FilteredElementCollector(doc).OfClass(typeof(ViewPlan))
         if (loops.Count > 0) rooms.Add(new { elementId = fr.Id.Value, loops });
     }
     views.Add(new {
-        view = view.Name, level = view.Name.Substring(Prefix.Length), levelZ = view.GenLevel?.Elevation,
+        view = view.Name, level = view.Name.Substring(Prefixes.First(p => view.Name.StartsWith(p)).Length), levelZ = view.GenLevel?.Elevation,
         document = doc.PathName, capturedUtc = DateTime.UtcNow, rooms
     });
 }
