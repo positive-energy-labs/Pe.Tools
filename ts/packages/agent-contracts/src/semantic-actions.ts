@@ -114,6 +114,17 @@ const definitions = {
     }),
     dirties: ["snapshot"],
   },
+  "rooms.merge": {
+    says: "Combine two or more touching rooms of one zone on one plan view into one locked room.",
+    needs: "project-document",
+    actor: "any",
+    input: z.object({
+      view: z.string().min(1),
+      guids: z.array(z.string().min(1)).min(2),
+      name: z.string().nullable().optional(),
+    }),
+    dirties: ["snapshot"],
+  },
 } as const;
 export const takeoffActions = definitions;
 export const semanticActions = {

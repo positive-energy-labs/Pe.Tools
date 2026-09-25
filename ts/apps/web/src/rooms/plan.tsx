@@ -122,7 +122,8 @@ export function RoomsPlan({
   empty: { says: string; exit: string } | null;
   selected: ReadonlySet<string>;
   hovered: string | null;
-  onSelect: (guid: string | null) => void;
+  /** A click selects one region; a shift-click adds or removes it (merge takes two or more). */
+  onSelect: (guid: string | null, add: boolean) => void;
   onHover: (guid: string | null) => void;
 }) {
   const bounds = useMemo(() => {
@@ -224,7 +225,7 @@ export function RoomsPlan({
           width={viewport.width}
           height={viewport.height}
           fill="transparent"
-          onClick={() => onSelect(null)}
+          onClick={() => onSelect(null, false)}
         />
         {plan ? <PlanImageLayer plan={plan} frame={frame} /> : null}
         {rows.map(({ region, label }) => {
@@ -244,7 +245,7 @@ export function RoomsPlan({
               onMouseLeave={() => onHover(null)}
               onClick={(event) => {
                 event.stopPropagation();
-                onSelect(region.guid);
+                onSelect(region.guid, event.shiftKey);
               }}
             >
               <path

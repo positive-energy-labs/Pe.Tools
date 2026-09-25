@@ -188,3 +188,7 @@ public sealed record RoomsWriteRegion(
     string? Role = null);
 public sealed record RoomsWriteRequest(List<RoomsWriteRegion> Regions);
 public sealed record RoomsWriteResult(int Written);
+
+// Combine two or more rooms or held regions of one zone on one view into one locked Room Region; the sources are deleted.
+public sealed record RoomsMergeRequest(string View, List<Guid> Guids, string? Name = null);
+public sealed record RoomsMergeResult(long ElementId, Guid Guid, IReadOnlyList<Guid> Merged, double Sqft);

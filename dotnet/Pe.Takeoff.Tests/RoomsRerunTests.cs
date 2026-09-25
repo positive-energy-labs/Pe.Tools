@@ -78,6 +78,33 @@ public sealed class RoomsRerunTests
     }
 
     [Test]
+    public void Merged_region_is_locked_and_never_redrawn()
+    {
+        // A person merged two 10x10 rooms into one 20x10 region; the rerun solves the zone again around it.
+        var merged = Region(9, 0, 0, 20, 10);
+        var plan0 = RoomsMerge.Plan(1, [
+            new MergeMember(Guid.NewGuid(), 1, "room-region", Guid.Empty, 100, Region(1, 0, 0, 10, 10).Loops, null),
+            new MergeMember(Guid.NewGuid(), 1, "room-region", Guid.Empty, 100, Region(2, 10, 0, 20, 10).Loops, null),
+        ]);
+        var provenance = RoomsMerge.Provenance(plan0, [Guid.NewGuid(), Guid.NewGuid()], 200, Rooms.GeometryHash(merged.Loops));
+        var neighbour = Region(3, 20, 0, 30, 10);
+        var echo = Room("R01", 10, 5, 200, RoomsRerun.LockedPrefix + merged.Guid.ToString("D"));
+        var again = Room("R02", 25, 5, 100);
+        var plan = RoomsRerun.Plan([neighbour], [], [merged], [echo, again], [], 300);
+        Assert.Multiple(() => {
+            Assert.That(Rooms.Locked(provenance, merged.Loops), Is.True, "a merged region is a locked room on every rerun");
+            Assert.That(RegionProvenance.FromJson(provenance.ToJson()).MergedFrom, Has.Count.EqualTo(2));
+            Assert.That(provenance.Flags, Is.EquivalentTo(new[] { Rooms.FlagPerson, Rooms.FlagMerged }));
+            Assert.That(plan.Locked.Single(), Is.SameAs(merged));
+            Assert.That(plan.Keep.Single().Region, Is.SameAs(neighbour), "the neighbour comes out unchanged");
+            Assert.That(plan.Create, Is.Empty);
+            Assert.That(plan.Delete, Is.Empty);
+            Assert.That(plan.Redesignate, Is.Null);
+            Assert.That(new RegionProvenance(1, Guid.Empty, "run", "", 0).ToJson(), Does.Not.Contain("mergedFrom"));
+        });
+    }
+
+    [Test]
     public void Held_residue_is_deleted_and_redrawn()
     {
         var oldHeld = Region(3, 0, 0, 4, 4);

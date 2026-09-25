@@ -5041,6 +5041,25 @@ export namespace RoomsDraw {
   }
 }
 
+/** Combine two or more rooms or held regions of one zone on one plan view into one locked Room Region, keeping the largest member's fields and RHVAC link and deleting the sources. */
+export namespace RoomsMerge {
+  export namespace Req {
+    export interface Request {
+      view: string;
+      guids: string[];
+      name?: null | string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      elementId: number;
+      guid: string;
+      merged: string[];
+      sqft: number;
+    }
+  }
+}
+
 /** Partition each zone drawn on one plan view into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction. */
 export namespace RoomsPartition {
   export namespace Req {
@@ -5917,6 +5936,7 @@ export interface HostOps {
   "revit.resolve.references": { request: RevitResolveReferences.Req.Request; response: RevitResolveReferences.Res.Response };
   "revit.resolve.unit-value": { request: RevitResolveUnitValue.Req.Request; response: RevitResolveUnitValue.Res.Response };
   "rooms.draw": { request: RoomsDraw.Req.Request; response: RoomsDraw.Res.Response };
+  "rooms.merge": { request: RoomsMerge.Req.Request; response: RoomsMerge.Res.Response };
   "rooms.partition": { request: RoomsPartition.Req.Request; response: RoomsPartition.Res.Response };
   "rooms.snapshot": { request: RoomsSnapshot.Req.Request; response: RoomsSnapshot.Res.Response };
   "rooms.write": { request: RoomsWrite.Req.Request; response: RoomsWrite.Res.Response };
@@ -5989,6 +6009,7 @@ export const hostOpKeys = [
   "revit.resolve.references",
   "revit.resolve.unit-value",
   "rooms.draw",
+  "rooms.merge",
   "rooms.partition",
   "rooms.snapshot",
   "rooms.write",

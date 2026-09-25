@@ -93,6 +93,10 @@ internal sealed class RevitDataRequestService {
     private static RoomsWriteResult WriteRoomsCore(RoomsWriteRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document => Rooms.Write(document, request), "Pe Write Room Fields");
 
+    [Op("rooms.merge", Does = "Combine two or more rooms or held regions of one zone on one plan view into one locked Room Region, keeping the largest member's fields and RHVAC link and deleting the sources.", Title = "Merge Room Regions", Finds = ["rooms", "merge", "combine", "room-regions", "filled-regions"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation)]
+    private static RoomsMergeResult MergeRoomsCore(RoomsMergeRequest request, ProjectDocument activeDocument) =>
+        RunTakeoff(activeDocument.Value, document => Rooms.Merge(document, request), "Pe Merge Room Regions");
+
     [Op("revit.apply.parameters-service-cache.refresh", Does = "Refresh the global APS Parameters Service cache through the connected Revit runtime.", Title = "Refresh Parameters Service Cache", Finds = ["aps", "parameters", "cache", "refresh", "parameter-service"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
     private static Task<ParametersServiceCacheData> RefreshParametersServiceCacheCore(
         NoRequest _,

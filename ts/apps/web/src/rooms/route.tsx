@@ -238,7 +238,17 @@ function RoomsBody({
             empty={empty}
             selected={selected}
             hovered={hovered}
-            onSelect={(guid) => setPage({ selected: guid ? [guid] : [] })}
+            onSelect={(guid, add) =>
+              setPage({
+                selected: !guid
+                  ? []
+                  : !add
+                    ? [guid]
+                    : selected.has(guid)
+                      ? page.selected.filter((item) => item !== guid)
+                      : [...page.selected, guid],
+              })
+            }
             onHover={setHovered}
           />
         </Pane>

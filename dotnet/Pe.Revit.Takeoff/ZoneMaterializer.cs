@@ -29,6 +29,10 @@ public sealed record RegionProvenance(
     [JsonProperty("flags")]
     public List<string> Flags { get; init; } = [];
 
+    // rooms.merge: the regions a person combined into this one. Absent on every other region.
+    [JsonProperty("mergedFrom", NullValueHandling = NullValueHandling.Ignore)]
+    public List<Guid>? MergedFrom { get; init; }
+
     // Unknown carrier keys, including legacy `resolutions` (old human dismissals), survive read-modify-write untouched.
     // Nothing reads them; no migrator, no silent discard.
     [JsonExtensionData]

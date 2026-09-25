@@ -3,7 +3,7 @@
  * into Work, write the staged cells to Revit. Behavior is here; the page draws it (`route.tsx`).
  */
 import { z } from "zod";
-import type { RoomsPartition } from "@pe/host-contracts/generated";
+import type { RoomsMerge, RoomsPartition } from "@pe/host-contracts/generated";
 import {
   roomEditAddress,
   roomsRouteState,
@@ -40,7 +40,7 @@ type RoomsCtx = Ctx<RoomsRouteDocument, RoomsReading, RoomsPage>;
 
 const dispatch = async (
   ctx: RoomsCtx,
-  key: "rooms.partition" | "rooms.write",
+  key: "rooms.partition" | "rooms.write" | "rooms.merge",
   input: Record<string, unknown>,
 ) => {
   if (ctx.target.kind !== "document") throw Error("An open document is required");
@@ -60,7 +60,7 @@ export const manifest = defineRoute<
   RoomsRouteDocument,
   RoomsReading,
   RoomsPage,
-  "partition" | "apply" | "refresh"
+  "partition" | "apply" | "merge" | "refresh"
 >({
   key: "rooms",
   name: "Rooms",
@@ -124,6 +124,31 @@ export const manifest = defineRoute<
         );
         bump(ctx);
         return refusal;
+      },
+    },
+    merge: {
+      label: "merge",
+      labelNow: (ctx) => (ctx.page.selected.length > 1 ? `merge ${ctx.page.selected.length}` : "merge"),
+      does: "rooms.merge",
+      input: none,
+      dirties: ["receipts"],
+      stage: "review",
+      waitSeconds: NATIVE_APPLY_WAIT_S,
+      count: (ctx) => (ctx.page.selected.length > 1 ? ctx.page.selected.length : null),
+      ready: (ctx) =>
+        !ctx.page.view
+          ? "Pick a plan view"
+          : ctx.page.selected.length < 2
+            ? "Shift-click two or more rooms"
+            : null,
+      run: async (ctx) => {
+        // The merged room is locked: every later partition keeps it and redraws only its neighbours.
+        const result = (await dispatch(ctx, "rooms.merge", {
+          view: ctx.page.view,
+          guids: ctx.page.selected,
+        })) as RoomsMerge.Res.Response;
+        ctx.note("merge", `${result.merged.length} rooms merged · ${result.sqft.toFixed(0)} sf`);
+        ctx.setPage({ selected: [result.guid], epoch: ctx.page.epoch + 1 });
       },
     },
     refresh: {

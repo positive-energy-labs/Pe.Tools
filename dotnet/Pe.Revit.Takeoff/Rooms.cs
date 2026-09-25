@@ -82,6 +82,72 @@ public static class RoomsRerun
     }
 }
 
+/// <summary>One region a person asked to merge, as read off Revit. Zone is its zone by RoomsRerun.ZoneOf.</summary>
+public sealed record MergeMember(
+    Guid Guid, long View, string Role, Guid? Zone, double Sqft, List<List<double[]>> Loops, TakeoffRhvacLink? Rhvac);
+
+public sealed record MergePlan(
+    List<double[]> Outer, List<List<double[]>> Holes, Guid Zone, MergeMember Largest, TakeoffRhvacLink? Rhvac);
+
+/// <summary>
+///     rooms.merge (docs/features/rooms/LEDGER.md, 2026-09-25), pure: rooms and held regions of one zone on one
+///     view, at most one RHVAC link among them, whose union is one polygon.
+/// </summary>
+public static class RoomsMerge
+{
+    // FOOTGUN: contract constant (Kernel.WeldFt): two regions Revit stored along one edge meet within it, so the
+    // union closes a seam this wide. A wall's width between two rooms stays open and the merge is refused.
+    private const double SeamFt = Kernel.WeldFt;
+
+    public static MergePlan Plan(long view, IReadOnlyList<MergeMember> members)
+    {
+        if (members.Count < 2) throw new InvalidOperationException("rooms.merge needs two or more regions");
+        if (members.Select(m => m.Guid).Distinct().Count() != members.Count)
+            throw new InvalidOperationException("rooms.merge names a region twice");
+        if (members.FirstOrDefault(m => m.View != view) is { } off)
+            throw new InvalidOperationException($"region {off.Guid:D} is not on the merge view");
+        if (members.FirstOrDefault(m => m.Role is not (TakeoffCarriers.RoleRoomRegion or TakeoffCarriers.RoleHeldResidue)) is { } zone)
+            throw new InvalidOperationException($"region {zone.Guid:D} is a zone; rooms.merge takes rooms and held regions");
+        if (members.FirstOrDefault(m => m.Zone == null) is { } loose)
+            throw new InvalidOperationException($"region {loose.Guid:D} is in no zone");
+        if (members.Select(m => m.Zone).Distinct().Count() != 1)
+            throw new InvalidOperationException("rooms.merge takes regions of one zone");
+        var links = members.Where(m => m.Rhvac != null).GroupBy(m => (m.Rhvac!.Identifier, m.Rhvac.FileIdentity)).ToList();
+        if (links.Count > 1)
+            throw new InvalidOperationException("the regions carry different RHVAC links; unlink all but one first");
+        var (outer, holes) = Union(members.Select(m => m.Loops));
+        var largest = members.OrderByDescending(m => m.Sqft).First();
+        // The largest member's link, else the one link a smaller member carries: a merge never drops a link.
+        return new MergePlan(outer, holes, members[0].Zone!.Value, largest, largest.Rhvac ?? links.SingleOrDefault()?.First().Rhvac);
+    }
+
+    /// <summary>Drawn and a person's, so every rerun reads it locked; it keeps the one link and names what it replaced.</summary>
+    public static RegionProvenance Provenance(MergePlan plan, IReadOnlyList<Guid> merged, double sqft, string geometryHash) =>
+        new(1, plan.Zone, Rooms.RunDrawn, "", sqft)
+        {
+            GeometryHash = geometryHash, Flags = [Rooms.FlagPerson, Rooms.FlagMerged], MergedFrom = [.. merged], Rhvac = plan.Rhvac,
+        };
+
+    /// <summary>The one polygon the regions make, outer CCW and holes CW; throws when they do not touch.</summary>
+    public static (List<double[]> Outer, List<List<double[]>> Holes) Union(IEnumerable<List<List<double[]>>> members)
+    {
+        var parts = members.Select(loops => new ZoneScope { Loops = loops }.ExactGeometry()).ToList();
+        var union = NetTopologySuite.Operation.OverlayNG.OverlayNGRobust.Union(parts[0].Factory.BuildGeometry(parts));
+        var mitre = new NetTopologySuite.Operation.Buffer.BufferParameters { JoinStyle = NetTopologySuite.Operation.Buffer.JoinStyle.Mitre };
+        var closed = union.Buffer(SeamFt, mitre).Buffer(-SeamFt, mitre);
+        if (closed is not NetTopologySuite.Geometries.Polygon polygon)
+            throw new InvalidOperationException($"the regions do not make one polygon ({closed.NumGeometries} pieces); merge rooms that touch");
+        return (Ring(polygon.Shell, ccw: true), polygon.Holes.Select(hole => Ring(hole, ccw: false)).ToList());
+    }
+
+    private static List<double[]> Ring(NetTopologySuite.Geometries.LinearRing ring, bool ccw)
+    {
+        var points = ring.Coordinates.Take(ring.Coordinates.Length - 1).Select(c => new[] { c.X, c.Y }).ToList();
+        if (NetTopologySuite.Algorithm.Orientation.IsCCW(ring.CoordinateSequence) != ccw) points.Reverse();
+        return points;
+    }
+}
+
 /// <summary>Bodies of the rooms.* ops. Callers own the transaction.</summary>
 public static class Rooms
 {
@@ -89,6 +155,7 @@ public static class Rooms
     public const string FlagStale = "stale";
     public const string FlagAuthored = "authored";
     public const string FlagPerson = "person";
+    public const string FlagMerged = "merged";
 
     // FOOTGUN: contract constant, the wall evidence window around a region's bbox.
     private const double WallWindowFt = 1.0;
@@ -428,20 +495,10 @@ public static class Rooms
         if (request.Regions is not { Count: > 0 }) throw new InvalidOperationException("rooms.write needs regions");
         if (request.Regions.Select(r => r.Guid).Distinct().Count() != request.Regions.Count)
             throw new InvalidOperationException("rooms.write names a region twice");
-        var byGuid = new Dictionary<Guid, FilledRegion>();
-        foreach (var fr in new FilteredElementCollector(doc).OfClass(typeof(FilledRegion)).Cast<FilledRegion>())
-        {
-            var (role, guid) = TakeoffCarriers.ReadIdentity(fr);
-            if (guid != null && role is TakeoffCarriers.RoleZoningRegion or TakeoffCarriers.RoleRoomRegion
-                    or TakeoffCarriers.RoleHeldResidue)
-                byGuid[guid.Value] = fr;
-        }
-        var unknown = request.Regions.FirstOrDefault(r => !byGuid.ContainsKey(r.Guid));
-        if (unknown != null) throw new InvalidOperationException($"no Room Region with guid {unknown.Guid:D}");
+        var byGuid = Resolve(doc, request.Regions.Select(r => r.Guid));
         foreach (var r in request.Regions)
         {
-            var fr = byGuid[r.Guid];
-            var current = TakeoffCarriers.ReadIdentity(fr).Role!;
+            var (fr, current) = byGuid[r.Guid];
             var held = current == TakeoffCarriers.RoleHeldResidue;
             if (r.Role != null && held)
                 throw new InvalidOperationException($"held residue {r.Guid:D} takes no room or zone designation");
@@ -463,6 +520,59 @@ public static class Rooms
             if (!ReferenceEquals(authored, heldProvenance)) TakeoffCarriers.WriteProvenance(fr, authored.ToJson());
         }
         return new RoomsWriteResult(request.Regions.Count);
+    }
+
+    /// <summary>
+    ///     A person combines rooms (rooms LEDGER 2026-09-25): one drawn, person-flagged Room Region replaces them,
+    ///     so every rerun keeps it locked and clips the faces under it. Fields come from the largest member.
+    /// </summary>
+    public static RoomsMergeResult Merge(Document doc, RoomsMergeRequest request)
+    {
+        TakeoffCarriers.Require(doc, TakeoffCarrierStage.Rooms);
+        var view = LevelView(doc, request.View);
+        var guids = request.Guids ?? [];
+        var byGuid = Resolve(doc, guids);
+        var zones = byGuid.Where(r => r.Value.Role == TakeoffCarriers.RoleZoningRegion)
+            .Select(r => (r.Value.Fr.OwnerViewId.Value(), r.Key)).ToHashSet();
+        var members = guids.Select(guid =>
+        {
+            var (fr, role) = byGuid[guid];
+            var provenance = ReadProvenance(fr, role);
+            var loops = TakeoffAtlas.Boundaries(fr);
+            var owner = fr.OwnerViewId.Value();
+            return new MergeMember(guid, owner, role, RoomsRerun.ZoneOf(guid, provenance, zone => zones.Contains((owner, zone))),
+                Sqft(fr, loops), loops, provenance.Rhvac);
+        }).ToList();
+        var plan = RoomsMerge.Plan(view.Id.Value(), members);
+        var fields = TakeoffCarriers.ReadRoomFields(byGuid[plan.Largest.Guid].Fr);
+
+        var merged = Create(doc, RegionType(doc), view, view.GenLevel.ProjectElevation, plan.Outer, plan.Holes);
+        var mergedGuid = Guid.NewGuid();
+        TakeoffCarriers.WriteIdentity(merged, TakeoffCarriers.RoleRoomRegion, mergedGuid);
+        TakeoffCarriers.WriteRoomFields(merged, fields with { Name = request.Name ?? fields.Name });
+        doc.Delete(guids.Select(guid => byGuid[guid].Fr.Id).ToList());
+        doc.Regenerate();
+        var stored = TakeoffAtlas.Boundaries(merged);
+        var sqft = Sqft(merged, stored);
+        // WallHash stays null: no Space build here; the next partition records it.
+        TakeoffCarriers.WriteProvenance(merged, RoomsMerge.Provenance(plan, guids, sqft, GeometryHash(stored)).ToJson());
+        return new RoomsMergeResult(merged.Id.Value(), mergedGuid, guids, sqft);
+    }
+
+    /// <summary>Our zone, room, and held regions by guid, the whole document; throws naming a guid that is none of them.</summary>
+    private static Dictionary<Guid, (FilledRegion Fr, string Role)> Resolve(Document doc, IEnumerable<Guid> guids)
+    {
+        var byGuid = new Dictionary<Guid, (FilledRegion Fr, string Role)>();
+        foreach (var fr in new FilteredElementCollector(doc).OfClass(typeof(FilledRegion)).Cast<FilledRegion>())
+        {
+            var (role, guid) = TakeoffCarriers.ReadIdentity(fr);
+            if (guid != null && role is TakeoffCarriers.RoleZoningRegion or TakeoffCarriers.RoleRoomRegion
+                    or TakeoffCarriers.RoleHeldResidue)
+                byGuid[guid.Value] = (fr, role!);
+        }
+        foreach (var guid in guids)
+            if (!byGuid.ContainsKey(guid)) throw new InvalidOperationException($"no Room Region with guid {guid:D}");
+        return byGuid;
     }
 
     // ---------------------------------------------------------------- hashes (pure)
@@ -505,7 +615,7 @@ public static class Rooms
         provenance.GeometryHash is { } stored && stored != GeometryHash(loops);
 
     /// <summary>Kept as drawn and handed to the solver as a proposal: touched, drawn, or a person's.</summary>
-    private static bool Locked(RegionProvenance provenance, List<List<double[]>> loops) =>
+    internal static bool Locked(RegionProvenance provenance, List<List<double[]>> loops) =>
         Touched(provenance, loops) || provenance.RunId == RunDrawn
         || provenance.Flags.Contains(FlagAuthored) || provenance.Flags.Contains(FlagPerson);
 

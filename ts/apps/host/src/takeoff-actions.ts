@@ -204,7 +204,7 @@ export async function admitTakeoffAction(
           const value = await native(key, { ...admission.input, runId: admission.id });
           return { value, target: { session: target.session, document: null } };
         }
-        if (key === "rooms.draw" || key === "rooms.write") {
+        if (key === "rooms.draw" || key === "rooms.write" || key === "rooms.merge") {
           await prepare("Rooms");
           const value = await native(key, admission.input);
           return { value, target: { session: target.session, document: null } };
