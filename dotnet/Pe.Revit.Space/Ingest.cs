@@ -81,11 +81,7 @@ internal static class Ingest {
             sawSolid ? PrimKind.Solid : PrimKind.Mesh,
             box,
             count,
-            HeightRole: e.Category?.ToBuiltInCategory() switch {
-                BuiltInCategory.OST_Floors => HeightRole.Floor | HeightRole.Overhead,
-                BuiltInCategory.OST_Ceilings or BuiltInCategory.OST_Roofs => HeightRole.Overhead,
-                _ => HeightRole.None
-            });
+            HeightRole: HeightRoles.Of(e.Category?.Id.Value(), e is ImportInstance));
     }
 
     /// <summary>

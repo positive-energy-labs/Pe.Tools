@@ -238,7 +238,7 @@ internal sealed class Bvh {
         XYZ origin,
         XYZ direction,
         double maxDistance,
-        Func<int, bool>? wants,
+        Func<Tri, bool>? wants,
         out double distance,
         out int triangle
     ) {
@@ -271,7 +271,7 @@ internal sealed class Bvh {
                 for (var k = node.Start; k < node.Start + node.Count; k++) {
                     var ti = this._order[k];
                     var t = this._tris[ti];
-                    if (wants is not null && !wants(t.Prim)) continue;
+                    if (wants is not null && !wants(t)) continue;
                     if (!Geom.Pierces(origin, end, t, out var s, out _)) continue;
                     var d = s * maxDistance;
                     if (d >= best) continue;

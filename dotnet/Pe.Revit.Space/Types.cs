@@ -9,9 +9,58 @@ public enum PrimKind { Solid, Mesh, Curve2D }
 /// <summary>Which document a partition reads. One partition per source.</summary>
 public enum SourceKind { Host, RevitLink, IfcLink }
 
-/// <summary>Architectural height authority, independent of collision geometry. None means unclassified.</summary>
+/// <summary>
+///     Architectural height authority, independent of collision geometry. None means never a height.
+///     <see cref="ByGeometry" /> is an element with no category role (an IFC proxy slab is a nameless Generic Model)
+///     whose horizontal triangles answer for it, per <see cref="HeightRoles" />.
+/// </summary>
 [Flags]
-public enum HeightRole { None = 0, Floor = 1, Overhead = 2 }
+public enum HeightRole { None = 0, Floor = 1, Overhead = 2, ByGeometry = 4 }
+
+public static class HeightRoles {
+    // FOOTGUN: a triangle within 5 degrees of flat is horizontal; one within 0.5 ft of a level plane is a floor.
+    // Chadds Main Level's IFC slab top reads z -0.0 at level 0; the island closet's Return Air duct top is at 0.25.
+    private static readonly float FlatCos = (float)Math.Cos(5.0 * Math.PI / 180.0);
+    public const double LevelTolFt = 0.5;
+
+    // MEP runs and devices sit on and under slabs; their flat faces are never the room's floor or ceiling.
+    // Ids, not the enum: this class stays pure so it runs without RevitAPI loaded.
+    private static readonly HashSet<long> Mep = [
+        (long)BuiltInCategory.OST_DuctCurves, (long)BuiltInCategory.OST_FlexDuctCurves, (long)BuiltInCategory.OST_DuctFitting,
+        (long)BuiltInCategory.OST_DuctAccessory, (long)BuiltInCategory.OST_DuctTerminal, (long)BuiltInCategory.OST_DuctInsulations,
+        (long)BuiltInCategory.OST_DuctLinings, (long)BuiltInCategory.OST_PipeCurves, (long)BuiltInCategory.OST_FlexPipeCurves,
+        (long)BuiltInCategory.OST_PipeFitting, (long)BuiltInCategory.OST_PipeAccessory, (long)BuiltInCategory.OST_PipeInsulations,
+        (long)BuiltInCategory.OST_Conduit, (long)BuiltInCategory.OST_ConduitFitting, (long)BuiltInCategory.OST_CableTray,
+        (long)BuiltInCategory.OST_CableTrayFitting, (long)BuiltInCategory.OST_MechanicalEquipment,
+        (long)BuiltInCategory.OST_ElectricalEquipment, (long)BuiltInCategory.OST_ElectricalFixtures,
+        (long)BuiltInCategory.OST_LightingFixtures, (long)BuiltInCategory.OST_LightingDevices,
+        (long)BuiltInCategory.OST_PlumbingFixtures, (long)BuiltInCategory.OST_PlumbingEquipment, (long)BuiltInCategory.OST_Sprinklers,
+    ];
+
+    /// <summary>Native Floors, Ceilings and Roofs by category; a DWG import and MEP never; anything else by geometry.</summary>
+    public static HeightRole Of(long? categoryId, bool import) => categoryId switch {
+        (long)BuiltInCategory.OST_Floors => HeightRole.Floor | HeightRole.Overhead,
+        (long)BuiltInCategory.OST_Ceilings or (long)BuiltInCategory.OST_Roofs => HeightRole.Overhead,
+        _ when import || categoryId is not { } c || Mep.Contains(c) => HeightRole.None,
+        _ => HeightRole.ByGeometry
+    };
+
+    // Winding is not trusted, so facing is not read: a ray down meets a slab's top first, a ray up its underside.
+    private static bool Flat(Tri t) {
+        var n = Vector3.Cross(t.B - t.A, t.C - t.A);
+        return Math.Abs(n.Z) >= FlatCos * n.Length();
+    }
+
+    public static bool Floor(HeightRole role, Tri t, IReadOnlyList<double> levelZs) {
+        if ((role & HeightRole.Floor) != 0) return true;
+        if ((role & HeightRole.ByGeometry) == 0 || !Flat(t)) return false;
+        var z = (t.A.Z + t.B.Z + t.C.Z) / 3.0;
+        return levelZs.Any(l => Math.Abs(z - l) <= LevelTolFt);
+    }
+
+    public static bool Overhead(HeightRole role, Tri t) =>
+        (role & HeightRole.Overhead) != 0 || ((role & HeightRole.ByGeometry) != 0 && Flat(t));
+}
 
 public enum ProbePurpose { Obstructions, RoomHeights }
 

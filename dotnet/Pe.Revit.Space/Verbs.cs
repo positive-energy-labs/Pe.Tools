@@ -474,16 +474,18 @@ public static class Verbs {
         var cats = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var candidates = 0;
         ProbeHit? down = null, up = null;
+        var levelZs = new FilteredElementCollector(document).OfClass(typeof(Level)).Cast<Level>()
+            .Select(l => l.ProjectElevation).ToList();
 
         foreach (var p in touched) {
             candidates += p.Prims.Length;
             var prims = p.Prims;
             bool Wants(int pi) => filter.Wants(prims[pi]);
 
-            bool Floor(int pi) => Wants(pi) && (purpose == ProbePurpose.Obstructions
-                || (prims[pi].HeightRole & HeightRole.Floor) != 0);
-            bool Overhead(int pi) => Wants(pi) && (purpose == ProbePurpose.Obstructions
-                || (prims[pi].HeightRole & HeightRole.Overhead) != 0);
+            bool Floor(Tri t) => Wants(t.Prim) && (purpose == ProbePurpose.Obstructions
+                || HeightRoles.Floor(prims[t.Prim].HeightRole, t, levelZs));
+            bool Overhead(Tri t) => Wants(t.Prim) && (purpose == ProbePurpose.Obstructions
+                || HeightRoles.Overhead(prims[t.Prim].HeightRole, t));
 
             if (p.Bvh.FirstHitAlongRay(at, new XYZ(0, 0, -1), maxDistanceFt, Floor, out var dd, out var ti)
                 && (down is null || dd < down.DistanceFt)) {
