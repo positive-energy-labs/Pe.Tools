@@ -34,6 +34,7 @@ TRUTH_SAMPLE_FT = 0.25  # boundary sample pitch for the truth Hausdorff
 TRUTH = {
     "project-a-live": "project-a/truth/Main Level.json",
     "project-a-main-09": "project-a/truth/Main Level.json",
+    "project-a-main-09-doors": "project-a/truth/Main Level.json",
     "project-c-live": "project-c/truth/Level 2.json",
     "project-c-level2": "project-c/truth/Level 2.json",
     "duryee-level1": "duryee/truth/Level 1.json",

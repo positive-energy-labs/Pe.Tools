@@ -79,6 +79,9 @@ public sealed class Bench {
     private static IEnumerable<(string Name, PartitionInput[] Inputs)> Fixtures() {
         yield return ("project-a-live", [Gz("project-a/partition/live")]);
         yield return ("project-a-main-09", [Main09()]);
+        // Main Level#09 recaptured 2026-09-25 from the Chadds (Recovery) file with Enclosure.Default (Doors included).
+        // That file links the March IFC and 03.12 DWG, not the 07.28 set main-09 came from: a different model state.
+        yield return ("project-a-main-09-doors", [Gz("project-a/partition/main-09-doors")]);
         yield return ("project-c-live", [Gz("project-c/partition/live")]);
         yield return ("project-c-level2", [Gz("project-c/partition/level2")]);
         yield return ("duryee-level1", Duryee());
