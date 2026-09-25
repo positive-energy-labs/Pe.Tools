@@ -56,6 +56,8 @@
 - 2026-09-25, size-gated opening joins (`JoinBelowSf`, branch `join-gate` `839acea7`, unmerged): Duryee's Living, Dining, Kitchen and Nook are one 662 sf face with no rail between them, so no join threshold splits them; thresholds 80 to 400 sf score exactly as off (0.355 / 10.3 ft). Cutting an open plan needs non-wall evidence (island, ceiling change, designer's hand), not a join rule.
 
 ## Owed
+- Chadds has never had a floor hit: height roles come only from Revit category (`Pe.Revit.Space/Ingest.cs:84-87`), and the IFC link imports slabs as Generic Models, so every face holds `no-floor` (red test `NoFloorTests.cs` on branch `nofloor`, 13 of 18 faces). The bench fakes the floor at the level and cannot see it. Fix pending a live read of the slabs' IFC class; fallback ruling: a declared level plane counts as the floor when the probe answers null.
+- kaitpw's local Chadds file links the March 2026 IFC and DWGs; the current architecture is only in the cloud central. Chadds truth and captures are against March until a cloud-central capture is taken (borrows, no-save close).
 - A refused `rooms.merge` (cross-zone) reports outcome `unknown` with the right message; it should report `refused` so the next submit is not blocked.
 - Split-by-function: design against Riverbend's linked Rooms and the registered takeoff polygons; count Duryee's live proposals in a session.
 - Revisions: takeoff-vs-model edge disagreement on Duryee (pantry, powder) is the first concrete case for the revision story; capture it as a fixture.
