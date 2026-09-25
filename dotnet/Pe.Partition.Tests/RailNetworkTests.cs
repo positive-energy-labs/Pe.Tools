@@ -15,9 +15,9 @@ public sealed class RailNetworkTests {
 
     private static (RailNetwork Net, IReadOnlyList<Polygon> Faces) Solve(double[] zone, OpeningEvidence? ev, params Rail[] rails) {
         var net = Rails.Network(rails, [zone], ev ?? OpeningEvidence.None);
-        var faces = Rails.Faces(net);
+        var (faces, bands) = Rails.Faces(net);
         var domain = Pe.Revit.Partition.Solve.GeometryOf([zone]);
-        Assert.That(faces.Sum(f => f.Area), Is.EqualTo(domain.Area).Within(1e-6), "faces must tile the zone");
+        Assert.That(faces.Sum(f => f.Area) + bands.Sum(b => b.Area), Is.EqualTo(domain.Area).Within(1e-6), "rooms and bands must tile the zone");
         for (var i = 0; i < faces.Count; i++)
             for (var j = i + 1; j < faces.Count; j++)
                 Assert.That(faces[i].Intersection(faces[j]).Area, Is.LessThan(1e-6), $"overlap {i}/{j}");
@@ -114,5 +114,92 @@ public sealed class RailNetworkTests {
         Assert.That(net.Openings.Single().WidthFt, Is.EqualTo(3).Within(1e-9));
         Assert.That(faces, Has.Count.EqualTo(3));
         AllOrthogonal(faces);
+    }
+
+    [Test]
+    public void Envelope_rail_bounds_rooms_at_its_outer_face_and_the_band_is_set_aside() {
+        // West envelope wall on x 0.75..1.25 (axis 1.0), zone edge at x 0; a cross wall stops at its inner face.
+        var net = Rails.Network([R(1.0, 0, 1.0, 10), R(1.25, 5, 20, 5)], [Box(0, 0, 20, 10)], OpeningEvidence.None);
+        var (rooms, bands) = Rails.Faces(net);
+        Assert.That(rooms, Has.Count.EqualTo(2));
+        Assert.That(bands, Has.Count.EqualTo(1));
+        Assert.That(bands[0].Area, Is.EqualTo(0.75 * 10).Within(1e-6), "band runs from the outer face to the zone edge");
+        Assert.That(Rails.Width(bands[0]), Is.EqualTo(0.75).Within(0.02));
+        Assert.That(At(rooms, 5, 2).Area, Is.EqualTo(19.25 * 5).Within(1e-6), "room runs to the outer face, wall thickness included");
+        Assert.That(At(rooms, 5, 2).Coordinates.Any(c => c.Distance(new Coordinate(0.75, 5)) < 1e-6), Is.True, "cross wall runs on to the outer face");
+        AllOrthogonal(rooms);
+    }
+
+    [Test]
+    public void Collinear_envelope_rails_with_a_gap_keep_the_band_out_of_the_room() {
+        // A cased 3 ft gap in the envelope: the bar stays on the axis between the caps, the cased join takes the jamb
+        // behind it into the room, and the bands behind the rails never merge with the room.
+        var net = Rails.Network([R(1.0, 0, 1.0, 3.5), R(1.0, 6.5, 1.0, 10)], [Box(0, 0, 20, 10)], OpeningEvidence.None);
+        var (rooms, bands) = Rails.Faces(net);
+        Assert.That(net.Openings.Single().Kind, Is.EqualTo(SegKind.Cased));
+        Assert.That(rooms.Single().Area, Is.EqualTo((19.25 * 10) + (0.75 * 3)).Within(1e-6));
+        Assert.That(bands.Sum(b => b.Area), Is.EqualTo(0.75 * 7).Within(1e-6));
+    }
+
+    [Test]
+    public void Cased_bar_is_a_floating_edge_and_a_wall_is_not() {
+        var net = Rails.Network([R(10, 0, 10, 3.5), R(10, 6.5, 10, 10)], [Box(0, 0, 20, 10)], OpeningEvidence.None);
+        var floating = Rails.Floating(net);
+        var f = new GeometryFactory();
+        Polygon Rect(double x0, double y0, double x1, double y1) => f.CreatePolygon([new(x0, y0), new(x1, y0), new(x1, y1), new(x0, y1), new(x0, y0)]);
+        Assert.That(floating(Rect(0, 0, 10, 10)), Is.EqualTo(3).Within(0.01), "the 3 ft cased bar floats");
+        Assert.That(floating(Rect(0, 0, 10, 3.5)), Is.EqualTo(10).Within(0.01), "a cut across the room floats");
+    }
+
+    // ---------------------------------------------------------------- Solve.RunRails on synthetic wall pieces
+
+    /// <summary>A wall as its two long faces and end caps; vertical faces project to degenerate rings, as Duryee's IFC pieces do.</summary>
+    private static double[][] Slab(double x0, double y0, double x1, double y1) => [
+        [x0, y0, x1, y0, x1, y0, x0, y0], [x0, y1, x1, y1, x1, y1, x0, y1],
+        [x0, y0, x0, y1, x0, y1, x0, y0], [x1, y0, x1, y1, x1, y1, x1, y0]];
+
+    private static PartitionAnswer RunRails(double[] zone, params double[][][] walls) {
+        var stamp = new Stamp("doc", 0, Stamp.HostInternalFt, DateTime.UnixEpoch, [], true, new Resolved([], [], [], [], []));
+        var elements = walls.Select((w, k) => new SliceElement(new Handle("doc", k + 1, "u" + (k + 1), null, "Walls", PrimKind.Solid), w)).ToList();
+        var knee = new SliceAnswer(stamp, new Searched(0, 0, 0, 0, 0), elements, elements.Sum(e => e.Pieces.Count), 0);
+        var input = new PartitionInput(knee, knee with { Elements = [] }, [zone], 0, Knobs.Default, [], "test", [], null);
+        var answer = Pe.Revit.Partition.Solve.RunRails(input, (_, _) => new ProbeAnswer(stamp, knee.Searched,
+            new ProbeHit(H, 0, 0), new ProbeHit(H, 9, 9), 20, 0));
+        var acc = answer.Accounting;
+        Assert.That(acc.Accepted + acc.Held + acc.Void + acc.Excluded, Is.EqualTo(acc.ZoneSqft).Within(1e-6), "accounting closes");
+        return answer;
+    }
+
+    [Test]
+    public void Envelope_band_under_the_hold_width_is_excluded_wall() {
+        // West wall faces at x 0.5 and 1.0; the zone edge is drawn 0.5 ft outside the wall. A divider at x 10 gives
+        // the rooms an edge of their own (a lone face is zone-edge-only).
+        var answer = RunRails(Box(0, 0, 20, 10), Slab(0.5, 0, 1.0, 10), Slab(9.75, 0, 10.25, 10));
+        var band = answer.Rooms.Single(r => r.Disposition == Disposition.Excluded);
+        Assert.That(band.Reason, Is.EqualTo(Reasons.Wall));
+        Assert.That(band.AreaSqft, Is.EqualTo(0.5 * 10).Within(1e-6));
+        Assert.That(answer.Rooms.Where(r => r.Disposition == Disposition.Accepted).Select(r => r.AreaSqft), Is.EquivalentTo(new[] { 95.0, 100.0 }).Using<double>((a, b) => Math.Abs(a - b) < 1e-6));
+    }
+
+    [Test]
+    public void Envelope_band_wider_than_the_hold_width_is_held_with_its_width() {
+        // The zone edge bulges 3 ft out past the west wall for 3 ft: the person drew the zone off the wall.
+        var zone = new double[] { 0, 0, 20, 0, 20, 10, 0, 10, 0, 6.5, -3, 6.5, -3, 3.5, 0, 3.5 };
+        var answer = RunRails(zone, Slab(0.5, 0, 1.0, 10), Slab(9.75, 0, 10.25, 10));
+        var held = answer.Rooms.Single(r => r.Disposition == Disposition.Held);
+        Assert.That(held.Reason, Is.EqualTo("envelope-band-3.0ft"));
+        Assert.That(held.AreaSqft, Is.EqualTo((0.5 * 10) + (3 * 3)).Within(1e-6));
+        Assert.That(answer.Rooms.Where(r => r.Disposition == Disposition.Accepted).Sum(r => r.AreaSqft), Is.EqualTo(19.5 * 10).Within(1e-6));
+    }
+
+    [TestCase(3.0, 4.0, Disposition.Accepted, null)]
+    [TestCase(2.0, 2.5, Disposition.Held, Reasons.TooSmallTiny)]
+    public void Rail_bounded_closet_is_a_room_down_to_six_square_feet(double w, double h, Disposition expected, string? reason) {
+        // A closet on the south zone edge at x 8: wall axes at x 8, x 8 + w and y h; the zone edge closes it.
+        var answer = RunRails(Box(0, 0, 20, 10),
+            Slab(7.75, 0, 8.25, h + 0.25), Slab(7.75 + w, 0, 8.25 + w, h + 0.25), Slab(8.25, h - 0.25, 7.75 + w, h + 0.25));
+        var closet = answer.Rooms.Single(r => Math.Abs(r.AreaSqft - (w * h)) < 1e-6);
+        Assert.That(closet.Disposition, Is.EqualTo(expected));
+        Assert.That(closet.Reason, Is.EqualTo(reason));
     }
 }

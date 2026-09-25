@@ -123,6 +123,8 @@ public static class Reasons {
     public const string NoCeiling = "no-ceiling";
     public const string LowHeadroom = "low-headroom";
     public const string TooSmall = "too-small";
+    public const string TooSmallFloating = "too-small-floating-edge";
+    public const string TooSmallTiny = "too-small-under-6sf";
     public const string TooNarrow = "too-narrow";
     public const string Wall = "wall";
 }

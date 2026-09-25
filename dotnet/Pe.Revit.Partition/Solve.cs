@@ -90,6 +90,10 @@ public static class Solve {
             input.Resolved, input.EnclosureSource, Math.Round(sw.Elapsed.TotalMilliseconds, 3));
     }
 
+    // FOOTGUN: smallest rail-bounded face kept as a room. Duryee's closets are 11, 20 and 22 sf; under this is a
+    // chase or a junction scrap even when every edge is on a rail.
+    private const double MinRailRoomSqft = 6.0;
+
     /// <summary>
     ///     Rooms from the rail network instead of stages 3 to 5. Same accounting and <c>Shape()</c>;
     ///     native proposals are not honoured yet. Not wired into the verb.
@@ -98,10 +102,20 @@ public static class Solve {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var zone = GeometryOf(input.ZoneLoops);
         var net = Rails.Network(Rails.From(input).Concat(Rails.Studs(input)).ToList(), input.ZoneLoops, OpeningEvidence.From(input));
-        var shapes = Rails.Faces(net).Cast<Geometry>().ToList();
+        var faces = Rails.Faces(net);
+        // Rooms, then bands too wide to be wall (held), then envelope bands (excluded wall).
+        var wide = faces.Bands.Select(b => (b, w: Rails.Width(b))).Where(x => x.w > Rails.BandHoldFt).ToList();
+        var shapes = faces.Rooms.Concat(wide.Select(x => x.b)).Concat(faces.Bands.Except(wide.Select(x => x.b))).Cast<Geometry>().ToList();
+        var roomCount = faces.Rooms.Count + wide.Count;
         AssertCoverage(shapes, zone, "rails partition", true);
         var backing = Reach(Buffered(input.Knee, input.Knobs.InkHalfWidthFt), Buffered(input.Header, input.Knobs.InkHalfWidthFt), input.Knobs);
-        var rooms = Shape(shapes, shapes.Select(_ => (RoomProposal?)null).ToList(), shapes.Count, shapes.Count, probe, backing, zone, input.LevelZ, input.Knobs, null);
+        var floating = Rails.Floating(net);
+        // A face bounded only by rails, bars and the zone edge is a room however small, down to a closet's floor.
+        string? Small(Geometry g) => g.Area < MinRailRoomSqft ? Reasons.TooSmallTiny
+            : g.Area < input.Knobs.MinRoomSqft && floating(g) > SampleFt ? Reasons.TooSmallFloating : null;
+        var rooms = Shape(shapes, shapes.Select(_ => (RoomProposal?)null).ToList(), roomCount, roomCount, probe, backing, zone, input.LevelZ, input.Knobs, null, Small).ToList();
+        for (var k = 0; k < wide.Count; k++)
+            rooms[faces.Rooms.Count + k] = rooms[faces.Rooms.Count + k] with { Disposition = Disposition.Held, Reason = $"envelope-band-{wide[k].w:0.0}ft" };
         var acc = new Accounting(zone.Area,
             rooms.Where(r => r.Disposition == Disposition.Accepted).Sum(r => r.AreaSqft),
             rooms.Where(r => r.Disposition == Disposition.Held).Sum(r => r.AreaSqft),
@@ -259,7 +273,8 @@ public static class Solve {
         Geometry zone,
         double levelZ,
         Knobs knobs,
-        string? noEnclosure
+        string? noEnclosure,
+        Func<Geometry, string?>? small = null
     ) {
         var zoneEdge = zone.Boundary.Buffer(ZoneEdgeExemptFt, CloseQuadSegs);
         var rooms = new List<Room>(shapes.Count);
@@ -293,7 +308,7 @@ public static class Solve {
             else if (floor is not { } fz || Math.Abs(fz - levelZ) > knobs.FloorTolFt) { d = Disposition.Held; reason = Reasons.NoFloor; }
             else if (ceiling is null) { d = Disposition.Held; reason = Reasons.NoCeiling; }
             else if (ceiling is { } cz && cz - floor!.Value < knobs.MinHeadroomFt) { d = Disposition.Void; reason = Reasons.LowHeadroom; }
-            else if (g.Area < knobs.MinRoomSqft) { d = Disposition.Held; reason = Reasons.TooSmall; }
+            else if ((small is null ? g.Area < knobs.MinRoomSqft ? Reasons.TooSmall : null : small(g)) is { } why) { d = Disposition.Held; reason = why; }
             else if (g.Buffer(-knobs.MinFeatureWidthFt / 2.0, CloseQuadSegs).IsEmpty) { d = Disposition.Held; reason = Reasons.TooNarrow; }
             else if (proposals[i] is null && backed < knobs.InkBackedAcceptMin) { d = Disposition.Held; reason = Reasons.Unbacked; }
 

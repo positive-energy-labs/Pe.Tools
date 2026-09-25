@@ -1,11 +1,11 @@
-"""Render RailsRun data from .artifacts/runs/rails/w2/data: faces 35% fill, 1 px edges over capture ink, rails blue,
+"""Render RailsRun data from .artifacts/runs/rails/<argv[1] or w2>/data: faces 35% fill, 1 px edges over capture ink, rails blue, envelope outer faces cyan with ticks toward the zone edge,
 openings door red / headed orange / cased green / wall-ink purple. Also prints the opening census. W3 metrics.py owns the scores."""
 import json, math, sys, glob, os
 from collections import Counter
 from PIL import Image, ImageDraw
 from shapely.geometry import Polygon, LineString
 
-HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".artifacts", "runs", "rails", "w2")
+HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".artifacts", "runs", "rails", sys.argv[1] if len(sys.argv) > 1 else "w2")
 PAL = [(31, 119, 180), (255, 127, 14), (44, 160, 44), (214, 39, 40), (148, 103, 189), (140, 86, 75), (227, 119, 194), (23, 190, 207), (188, 189, 34)]
 OPEN = {"Door": (220, 0, 0), "Headed": (255, 140, 0), "Cased": (0, 170, 0), "Closed": (150, 0, 200)}
 
@@ -83,6 +83,13 @@ def render(d, path):
         g.line([P(*p) for p in z + z[:1]], fill=(0, 0, 0), width=1)
     for sgm in d["segments"]:
         if sgm["Kind"] == "Closed": g.line([P(*sgm["A"]), P(*sgm["B"])], fill=OPEN["Closed"], width=2)
+    for sgm in d["segments"]:
+        if sgm.get("Out"):
+            (ax, ay), (bx, by), (ox, oy) = sgm["A"], sgm["B"], sgm["Out"]
+            g.line([P(ax, ay), P(bx, by)], fill=(0, 200, 220), width=2)
+            for f in (0.25, 0.5, 0.75):
+                mx, my = ax + (bx - ax) * f, ay + (by - ay) * f
+                g.line([P(mx, my), P(mx + ox * 0.6, my + oy * 0.6)], fill=(0, 200, 220), width=2)
     for op in d["openings"]:
         g.line([P(*op["A"]), P(*op["B"])], fill=OPEN[op["Kind"]], width=3)
     img.convert("RGB").save(path)
@@ -102,7 +109,7 @@ for f in sorted(glob.glob(os.path.join(HERE, "data", "*.json"))):
                      zoneSqft=round(d["accounting"]["ZoneSqft"], 1), axes=peaks, **{k: round(v, 3) for k, v in m.items()},
                      openings=dict(census), closed=sum(1 for s in d["segments"] if s["Kind"] == "Closed"),
                      widthP50=widths[len(widths) // 2] if widths else None, ms=d["ms"],
-                     openingRows=[(o["Kind"], o["WidthFt"], o["DoorPieces"], o["HeaderFraction"]) for o in d["openings"]]))
+                     openingRows=[(o["Kind"], o["WidthFt"], o["DoorPieces"], o["HeaderFraction"], o["WallFraction"], o["A"], o["B"]) for o in d["openings"]]))
 json.dump(rows, open(os.path.join(HERE, "metrics.json"), "w"), indent=1, default=str)
 for r in rows:
     print(r["name"], "rooms", r["rooms"], "acc", r["accepted"], dict(r["held"]), "zone", r["zoneSqft"], "axes", r["axes"],

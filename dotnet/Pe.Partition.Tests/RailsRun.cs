@@ -10,7 +10,7 @@ namespace Pe.Partition.Tests;
 
 /// <summary>
 ///     Runs <see cref="Solve.RunRails" /> on Duryee Level 1's five hand-drawn zones and project-a live, and
-///     writes rails, network, openings, rooms and ink to <c>.artifacts/runs/rails/w2/data</c> for
+///     writes rails, network, openings, rooms and ink to <c>.artifacts/runs/rails/$PE_RAILS_RUN/data</c> (default w2) for
 ///     <c>eval/partition/network.py</c>. Probes are stubbed (floor at level, ceiling 9 ft up): Duryee has none captured
 ///     and project-a's recorded probes sit at the old solver's label points.
 /// </summary>
@@ -19,7 +19,7 @@ public sealed class RailsRun {
     private static string Main => Path.GetFullPath(Path.Combine(PrivateFixtures.Root, "..", ".."));
 
     private static string Out([CallerFilePath] string here = "") =>
-        Directory.CreateDirectory(Path.Combine(Path.GetDirectoryName(here)!, "..", "..", ".artifacts", "runs", "rails", "w2", "data")).FullName;
+        Directory.CreateDirectory(Path.Combine(Path.GetDirectoryName(here)!, "..", "..", ".artifacts", "runs", "rails", Environment.GetEnvironmentVariable("PE_RAILS_RUN") ?? "w2", "data")).FullName;
 
     private static IEnumerable<TestCaseData> Cases() {
         yield return new TestCaseData("project-a-live", null).SetName("project-a-live");
@@ -61,7 +61,7 @@ public sealed class RailsRun {
             ["ms"] = ms,
             ["zone"] = JToken.FromObject(input.ZoneLoops),
             ["rails"] = JToken.FromObject(rails.Where(r => Near([.. r.A, .. r.B])).Select(r => new { r.A, r.B, r.ThicknessFt, r.Source })),
-            ["segments"] = JToken.FromObject(net.Segments.Select(s => new { s.A, s.B, Kind = s.Kind.ToString() })),
+            ["segments"] = JToken.FromObject(net.Segments.Select(s => new { s.A, s.B, Kind = s.Kind.ToString(), s.Out })),
             ["openings"] = JToken.FromObject(net.Openings.Select(o => new { o.A, o.B, o.WidthFt, Kind = o.Kind.ToString(), o.DoorPieces, o.HeaderFraction, o.WallFraction })),
             ["rooms"] = JToken.FromObject(answer.Rooms.Select(r => new { r.Loop, r.Holes, Disposition = r.Disposition.ToString(), r.Reason, r.AreaSqft })),
             ["accounting"] = JToken.FromObject(answer.Accounting),
