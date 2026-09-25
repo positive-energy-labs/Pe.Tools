@@ -34,7 +34,7 @@ public sealed class RoomsRerunTests
     [Test]
     public void First_run_creates_every_room_and_residue()
     {
-        var plan = RoomsRerun.Plan([], [], [], [Room("R01", 5, 5, 100), Room("R02", 15, 5, 100)], [Residue("R03")]);
+        var plan = RoomsRerun.Plan([], [], [], [Room("R01", 5, 5, 100), Room("R02", 15, 5, 100)], [Residue("R03")], null);
         Assert.Multiple(() => {
             Assert.That(plan.Create.Select(r => r.Id), Is.EqualTo(new[] { "R01", "R02" }));
             Assert.That(plan.CreateHeld.Select(r => r.Id), Is.EqualTo(new[] { "R03" }));
@@ -50,7 +50,7 @@ public sealed class RoomsRerunTests
         var gone = Region(2, 20, 0, 30, 10);
         var kept = Room("R01", 5, 5, 100);
         var fresh = Room("R02", 45, 5, 100);
-        var plan = RoomsRerun.Plan([matched, gone], [], [], [kept, fresh], []);
+        var plan = RoomsRerun.Plan([matched, gone], [], [], [kept, fresh], [], null);
         Assert.Multiple(() => {
             Assert.That(plan.Keep.Single().Room, Is.SameAs(kept));
             Assert.That(plan.Keep.Single().Region, Is.SameAs(matched));
@@ -66,7 +66,7 @@ public sealed class RoomsRerunTests
         var echo = Room("R01", 5, 5, 100, RoomsRerun.LockedPrefix + locked.Guid.ToString("D"));
         var heldEcho = Residue("R02", RoomsRerun.LockedPrefix + Guid.NewGuid().ToString("D"));
         var native = Room("R03", 15, 5, 100, "host|host|room-unique-id");
-        var plan = RoomsRerun.Plan([], [], [locked], [echo, native], [heldEcho]);
+        var plan = RoomsRerun.Plan([], [], [locked], [echo, native], [heldEcho], null);
         Assert.Multiple(() => {
             Assert.That(plan.Locked.Single(), Is.SameAs(locked));
             Assert.That(plan.Delete, Is.Empty);
@@ -74,7 +74,7 @@ public sealed class RoomsRerunTests
             Assert.That(plan.Create.Single(), Is.SameAs(native));
             Assert.That(plan.CreateHeld, Is.Empty);
         });
-        Assert.Throws<InvalidOperationException>(() => RoomsRerun.Plan([locked], [], [locked], [], []));
+        Assert.Throws<InvalidOperationException>(() => RoomsRerun.Plan([locked], [], [locked], [], [], null));
     }
 
     [Test]
@@ -82,10 +82,50 @@ public sealed class RoomsRerunTests
     {
         var oldHeld = Region(3, 0, 0, 4, 4);
         var newHeld = Residue("R05");
-        var plan = RoomsRerun.Plan([], [oldHeld], [], [], [newHeld]);
+        var plan = RoomsRerun.Plan([], [oldHeld], [], [], [newHeld], null);
         Assert.Multiple(() => {
             Assert.That(plan.Delete.Single(), Is.SameAs(oldHeld));
             Assert.That(plan.CreateHeld.Single(), Is.SameAs(newHeld));
+        });
+    }
+
+    [Test]
+    public void Zone_that_solves_to_one_face_is_the_room_and_its_machine_children_go()
+    {
+        var child = Region(1, 0, 0, 10, 10);
+        var oldHeld = Region(2, 10, 0, 11, 10);
+        var sole = Room("R01", 5, 5, 99.5);
+        var plan = RoomsRerun.Plan([child], [oldHeld], [], [sole], [Residue("R02")], 100);
+        Assert.Multiple(() => {
+            Assert.That(plan.Redesignate, Is.SameAs(sole));
+            Assert.That(plan.Delete, Is.EqualTo(new[] { child, oldHeld }));
+            Assert.That(plan.Create, Is.Empty);
+            Assert.That(plan.CreateHeld, Is.Empty);
+            Assert.That(plan.Keep, Is.Empty);
+        });
+        // Under the share, two faces, a person's room inside, or a person's zone: the zone stays a zone.
+        var locked = Region(3, 0, 0, 2, 2);
+        Assert.Multiple(() => {
+            Assert.That(RoomsRerun.Plan([], [], [], [Room("R01", 5, 5, 98)], [], 100).Redesignate, Is.Null);
+            Assert.That(RoomsRerun.Plan([], [], [], [sole, Room("R02", 1, 1, 0.5)], [], 100).Redesignate, Is.Null);
+            Assert.That(RoomsRerun.Plan([], [], [locked], [sole], [], 100).Redesignate, Is.Null);
+            Assert.That(RoomsRerun.Plan([], [], [], [sole], [], null).Redesignate, Is.Null);
+        });
+    }
+
+    [Test]
+    public void Architect_name_fills_an_empty_name_and_never_overwrites()
+    {
+        RoomResult Named(string name) => new()
+        {
+            Partition = new Pe.Revit.Partition.Room(0, Pe.Revit.Partition.Disposition.Accepted, null, [], 100, 0, 0,
+                1, null, null, [], Proposal: new Pe.Revit.Partition.RoomProposal("host|host|x", name, "101", [])),
+        };
+        Assert.Multiple(() => {
+            Assert.That(Rooms.ProposedName(Named("Kitchen"), ""), Is.EqualTo("Kitchen"));
+            Assert.That(Rooms.ProposedName(Named("Kitchen"), "Pantry"), Is.Null);
+            Assert.That(Rooms.ProposedName(Named(""), ""), Is.Null);
+            Assert.That(Rooms.ProposedName(Room("R01", 0, 0, 100), ""), Is.Null);
         });
     }
 

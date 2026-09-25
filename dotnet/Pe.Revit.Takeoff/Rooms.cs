@@ -10,16 +10,21 @@ public sealed record RoomsPlan(
     IReadOnlyList<(RoomResult Room, ExistingRegion Region)> Keep,
     IReadOnlyList<ExistingRegion> Delete,
     IReadOnlyList<RoomResult> Create,
-    IReadOnlyList<ResidueResult> CreateHeld);
+    IReadOnlyList<ResidueResult> CreateHeld,
+    RoomResult? Redesignate = null);
 
 /// <summary>
 ///     The rerun rule (docs/features/rooms/LEDGER.md), pure. Locked regions are kept and never
 ///     created again; untouched machine regions rebind by geometry and are kept or deleted; new
-///     rooms are created; untouched held residues are deleted and redrawn.
+///     rooms are created; untouched held residues are deleted and redrawn. A zone that solves to one
+///     face is redesignated a room itself: every machine child is deleted and nothing is created.
 /// </summary>
 public static class RoomsRerun
 {
     public const string LockedPrefix = "locked|";
+
+    // FOOTGUN: brief constant (rails W4, 2026-09-25), not measured: one accepted face this share of the zone is the zone.
+    public const double SoleFaceShare = 0.99;
 
     public static bool IsLocked(Pe.Revit.Partition.Room? room) =>
         room?.Proposal?.SourceKey.StartsWith(LockedPrefix, StringComparison.Ordinal) == true;
@@ -29,11 +34,15 @@ public static class RoomsRerun
         IReadOnlyList<ExistingRegion> existingHeld,
         IReadOnlyList<ExistingRegion> locked,
         IReadOnlyList<RoomResult> accepted,
-        IReadOnlyList<ResidueResult> held)
+        IReadOnlyList<ResidueResult> held,
+        double? zoneSqft)
     {
         var lockedIds = locked.Select(r => r.ElementId).ToHashSet();
         if (existing.Concat(existingHeld).Any(r => lockedIds.Contains(r.ElementId)))
             throw new InvalidOperationException("a locked region is also a rerun candidate");
+        // zoneSqft is null when a person declared the zone: the declaration wins and it never becomes a room.
+        if (locked.Count == 0 && accepted is [var only] && only.RawSqft >= SoleFaceShare * zoneSqft)
+            return new RoomsPlan([], [], [.. existing, .. existingHeld], [], [], only);
         var rebind = ZoneMaterializer.Rebind(accepted.Where(r => !IsLocked(r.Partition)).ToList(), existing);
         return new RoomsPlan(
             locked,
@@ -168,7 +177,7 @@ public static class Rooms
         var knee = captured.Knee.Elements.SelectMany(e => e.Pieces).ToList();
 
         // Designate and classify in memory; nothing is written until every zone is solved.
-        var zones = new List<(FilledRegion Fr, Guid Guid, List<List<double[]>> Loops, string Label)>();
+        var zones = new List<(FilledRegion Fr, Guid Guid, List<List<double[]>> Loops, string Label, bool Declared)>();
         var rooms = new List<(FilledRegion Fr, bool Held, ExistingRegion Region, RegionProvenance Provenance)>();
         var adopt = new List<(FilledRegion Fr, string Role, ExistingRegion Region)>();
         foreach (var (fr, loops, (role, guid)) in onView)
@@ -181,7 +190,7 @@ public static class Rooms
                 catch (Exception ex) { throw new InvalidOperationException($"designate {fr.Id}: {ex.GetType().Name} {ex.Message}", ex); }
                 adopt.Add((fr, designated, drawn));
                 if (designated == TakeoffCarriers.RoleZoningRegion)
-                    zones.Add((fr, drawn.Guid, loops, drawn.Guid.ToString("N").Substring(0, 8)));
+                    zones.Add((fr, drawn.Guid, loops, drawn.Guid.ToString("N").Substring(0, 8), false));
                 else
                     rooms.Add((fr, false, drawn, new RegionProvenance(1, scope, RunDrawn, "", drawn.Sqft)));
                 continue;
@@ -190,7 +199,8 @@ public static class Rooms
             if (role == TakeoffCarriers.RoleZoningRegion)
                 zones.Add((fr, guid.Value, loops, TakeoffCarriers.ReadRoomFields(fr).Name is { Length: > 0 } name
                     ? name
-                    : guid.Value.ToString("N").Substring(0, 8)));
+                    : guid.Value.ToString("N").Substring(0, 8),
+                    ReadProvenance(fr, role).Flags.Contains(FlagPerson)));
             else if (role is TakeoffCarriers.RoleRoomRegion or TakeoffCarriers.RoleHeldResidue)
                 rooms.Add((fr, role == TakeoffCarriers.RoleHeldResidue,
                     new ExistingRegion(fr.Id.Value(), guid.Value, loops, Sqft(fr, loops)), ReadProvenance(fr, role)));
@@ -205,7 +215,7 @@ public static class Rooms
         var orphans = machine.Where(r => r.Provenance.ZoneGuid != scope && !zoneGuids.Contains(r.Provenance.ZoneGuid))
             .Select(r => r.Region).ToList();
 
-        var solved = new List<(Guid Zone, string Label, RoomsPlan Plan)>();
+        var solved = new List<(FilledRegion Zone, Guid Guid, string Label, RoomsPlan Plan)>();
         var holds = new List<string>();
         var failures = new List<string>();
         foreach (var zone in zones.OrderBy(z => z.Fr.Id.Value()))
@@ -240,15 +250,15 @@ public static class Rooms
             if (answer.Hold != null) holds.Add($"{zone.Label}: {answer.Hold}");
             var (accepted, residues) = Results(answer);
             var mine = machine.Where(r => r.Provenance.ZoneGuid == zone.Guid).ToList();
-            solved.Add((zone.Guid, zone.Label, RoomsRerun.Plan(
+            solved.Add((zone.Fr, zone.Guid, zone.Label, RoomsRerun.Plan(
                 mine.Where(r => !r.Held).Select(r => r.Region).ToList(),
                 mine.Where(r => r.Held).Select(r => r.Region).ToList(),
-                lockedIn.Select(r => r.Region).ToList(), accepted, residues)));
+                lockedIn.Select(r => r.Region).ToList(), accepted, residues,
+                zone.Declared ? null : answer.Accounting.ZoneSqft)));
         }
 
         double elevation = level.ProjectElevation;
-        var frType = new FilteredElementCollector(doc).OfClass(typeof(FilledRegionType))
-            .Cast<FilledRegionType>().First();
+        var frType = RegionType(doc);
 
         foreach (var (fr, role, drawn) in adopt)
         {
@@ -264,15 +274,19 @@ public static class Rooms
 
         var created = new List<(FilledRegion Fr, RegionProvenance Provenance, bool Room)>();
         int createdRooms = 0, createdHeld = 0;
-        foreach (var (zoneGuid, label, plan) in solved)
+        foreach (var (zoneFr, zoneGuid, label, plan) in solved)
         {
             // Kept regions: geometry stays; the run id moves for machine regions, a locked room inside the zone
             // joins it, and the wall evidence under every region decides the stale flag.
-            var kept = plan.Keep.Select(k => (k.Region, Machine: true))
-                .Concat(plan.Locked.Select(r => (Region: r, Machine: false)));
-            foreach (var (region, isMachine) in kept)
+            var kept = plan.Keep.Select(k => (k.Region, Room: (RoomResult?)k.Room))
+                .Concat(plan.Locked.Select(r => (Region: r, Room: (RoomResult?)null)));
+            foreach (var (region, room) in kept)
             {
                 var fr = (FilledRegion)doc.GetElement(region.ElementId.ToElementId());
+                var isMachine = room != null;
+                if (isMachine && fr.GetTypeId() != frType.Id) fr.ChangeTypeId(frType.Id);
+                if (room != null && ProposedName(room, TakeoffCarriers.ReadRoomFields(fr).Name!) is { } name)
+                    TakeoffCarriers.WriteRoomFields(fr, new RoomFields(Name: name));
                 var provenance = ReadProvenance(fr, TakeoffCarriers.ReadIdentity(fr).Role);
                 var wall = WallHash(knee, region.Loops);
                 var flags = provenance.Flags.Where(f => f != FlagStale).ToList();
@@ -290,6 +304,24 @@ public static class Rooms
             if (plan.Delete.Count > 0)
                 doc.Delete(plan.Delete.Select(r => r.ElementId.ToElementId()).ToList());
 
+            // ponytail: a redesignated zone is not itemized in the result (Created stays 0). Ceiling: the log
+            // row reads it as deletions only.
+            if (plan.Redesignate is { } sole)
+            {
+                var zoneProvenance = ReadProvenance(zoneFr, TakeoffCarriers.RoleZoningRegion);
+                TakeoffCarriers.WriteIdentity(zoneFr, TakeoffCarriers.RoleRoomRegion, zoneGuid);
+                if (ProposedName(sole, TakeoffCarriers.ReadRoomFields(zoneFr).Name!) is { } name)
+                    TakeoffCarriers.WriteRoomFields(zoneFr, new RoomFields(Name: name));
+                // The run id stays (drawn), so the next run keeps the person's edge as a locked room; the person
+                // flag is already absent, since a declared zone never gets here.
+                TakeoffCarriers.WriteProvenance(zoneFr, (zoneProvenance with
+                {
+                    ZoneGuid = scope,
+                    Partition = sole.Partition,
+                    GeometryHash = zoneProvenance.GeometryHash ?? GeometryHash(TakeoffAtlas.Boundaries(zoneFr)),
+                }).ToJson());
+            }
+
             foreach (var room in plan.Create)
             {
                 try
@@ -297,8 +329,8 @@ public static class Rooms
                     var fr = Create(doc, frType, view, elevation, room.Polygon, room.Holes);
                     TakeoffCarriers.WriteIdentity(fr, TakeoffCarriers.RoleRoomRegion, Guid.NewGuid());
                     TakeoffCarriers.WriteRoomType(fr, "hall");
-                    if (room.Partition?.Proposal is { Name.Length: > 0 } proposal)
-                        TakeoffCarriers.WriteRoomFields(fr, new RoomFields(Name: proposal.Name));
+                    if (ProposedName(room, "") is { } name)
+                        TakeoffCarriers.WriteRoomFields(fr, new RoomFields(Name: name));
                     created.Add((fr, new RegionProvenance(1, zoneGuid, runId, room.Id, room.RawSqft)
                         { Flags = room.Flags.ToList(), Partition = room.Partition }, true));
                     createdRooms++;
@@ -352,9 +384,7 @@ public static class Rooms
         if (request.Loops is not { Count: > 0 } || request.Loops.Any(loop => loop is not { Count: >= 3 }))
             throw new InvalidOperationException("draw needs one or more loops of three or more points");
         var outer = request.Loops.OrderByDescending(loop => Math.Abs(Kernel.Shoelace(loop))).First();
-        var frType = new FilteredElementCollector(doc).OfClass(typeof(FilledRegionType))
-            .Cast<FilledRegionType>().First();
-        var fr = Create(doc, frType, view, view.GenLevel.ProjectElevation, outer,
+        var fr = Create(doc, RegionType(doc), view, view.GenLevel.ProjectElevation, outer,
             request.Loops.Where(loop => !ReferenceEquals(loop, outer)).ToList());
         var guid = Guid.NewGuid();
         TakeoffCarriers.WriteIdentity(fr, role, guid);
@@ -453,6 +483,29 @@ public static class Rooms
     private static bool Locked(RegionProvenance provenance, List<List<double[]>> loops) =>
         Touched(provenance, loops) || provenance.RunId == RunDrawn
         || provenance.Flags.Contains(FlagAuthored) || provenance.Flags.Contains(FlagPerson);
+
+    /// <summary>The architect's name for an accepted face, when the region's name field is still empty.</summary>
+    public static string? ProposedName(RoomResult room, string current) =>
+        current.Length == 0 && room.Partition?.Proposal is { Name.Length: > 0 } proposal ? proposal.Name : null;
+
+    public const string RegionTypeName = "PE Rooms";
+
+    // Found by name, so a rerun reuses it and a person's restyle of it sticks. Solid fill that does not mask:
+    // Revit draws the model's lines and edges over it, so a room's edge can be judged against its walls.
+    // ponytail: renaming the type makes the next run create a fresh one; no opacity knob exists on FilledRegionType.
+    private static FilledRegionType RegionType(Document doc)
+    {
+        var types = new FilteredElementCollector(doc).OfClass(typeof(FilledRegionType)).Cast<FilledRegionType>().ToList();
+        if (types.FirstOrDefault(t => t.Name == RegionTypeName) is { } existing) return existing;
+        var type = (FilledRegionType)types.First().Duplicate(RegionTypeName);
+        type.ForegroundPatternId = new FilteredElementCollector(doc).OfClass(typeof(FillPatternElement))
+            .Cast<FillPatternElement>()
+            .First(fp => fp.GetFillPattern() is { IsSolidFill: true, Target: FillPatternTarget.Drafting }).Id;
+        type.ForegroundPatternColor = new Color(200, 225, 255);
+        type.BackgroundPatternId = ElementId.InvalidElementId;
+        type.IsMasking = false;
+        return type;
+    }
 
     private static string RoleOf(string designation) => designation switch
     {
