@@ -43,7 +43,7 @@ public sealed class RailsRun {
 
         // As the bench does: the solver's own shape. Duryee's level capture carries the Astra session's locked hand
         // fills of these very zones, which RunRails now honours as locked rooms.
-        input = input with { Proposals = [], Knobs = input.Knobs with { FramingRails = Environment.GetEnvironmentVariable("PE_FRAMING_RAILS") == "1" } };
+        input = input with { Proposals = [], Knobs = input.Knobs with { FramingRails = Environment.GetEnvironmentVariable("PE_FRAMING_RAILS") != "0" } };
         var stamp = input.Knee.Stamp;
         ProbeAnswer Probe(double x, double y) => new(stamp, input.Knee.Searched,
             new ProbeHit(input.Knee.Elements[0].Handle, 0, input.LevelZ), new ProbeHit(input.Knee.Elements[0].Handle, 9, input.LevelZ + 9), 20, 0);

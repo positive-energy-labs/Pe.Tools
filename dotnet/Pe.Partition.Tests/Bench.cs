@@ -36,12 +36,12 @@ public sealed class Bench {
     private static string DuryeeInput => Path.Combine(PrivateFixtures.Dir("duryee/partition"), "duryee-level-input.json");
     private static string DuryeeZones => Path.Combine(PrivateFixtures.Dir("duryee/partition"), "duryee-locked.json");
 
-    // PE_FRAMING_RAILS=1 turns Knobs.FramingRails on for every fixture; the run directory says which.
-    private static bool FramingOn => Environment.GetEnvironmentVariable("PE_FRAMING_RAILS") == "1";
+    // PE_FRAMING_RAILS=0 turns Knobs.FramingRails off for every fixture; the run directory says which.
+    private static bool FramingOn => Environment.GetEnvironmentVariable("PE_FRAMING_RAILS") != "0";
 
     [Test]
     public void RailsSolve() {
-        var run = Path.Combine(RepoRoot, ".artifacts", "runs", "bench", DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + (FramingOn ? "-rails-framing" : "-rails"));
+        var run = Path.Combine(RepoRoot, ".artifacts", "runs", "bench", DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + (FramingOn ? "-rails" : "-rails-noframing"));
         Directory.CreateDirectory(run);
         foreach (var (name, inputs) in Fixtures()) {
             var dir = Path.Combine(run, name);

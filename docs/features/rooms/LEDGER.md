@@ -55,6 +55,7 @@
 - Ruling: a 16 sf hole inside a locked room is an accepted room under rails (Courtyard test); confirm or hold.
 - Rulings owed: framing footprints as a rail source on IFC-framed models (project-a is under-partitioned without it); whether a hall corridor joining an open living area through cased gaps is what a designer draws.
 - Recapture project-c, whose fixtures hold no solver geometry.
+- Chadds' bath/closet suite merges through five 3 to 8 ft gaps with no door ink; the project-a fixtures predate Doors in the enclosure; recapture project-a with Doors, then rescore.
 - kaitpw draws truth on `Rooms Truth - <level>` views: project-a Main Level (ML09 zone) and Duryee Level 1 first; then the truth metric gets its first number.
 - Merge Astra's `rooms-astra` ledger lines (waves 0 to 6) into this ledger; the branches diverged at `82509742` and Astra's product graft `ad180f8f` is already on main.
 - `repo-guards/action-authority.guard.test.ts` wants a renderer or a `rawByDesign` entry for the four `rooms.*` ops; it was red before designation and still is.

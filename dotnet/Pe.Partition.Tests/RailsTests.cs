@@ -116,14 +116,15 @@ public sealed class RailsTests {
             .. Row("Generic Models", 30, sixteen), // stud-shaped millwork
             .. Row("Structural Framing", 40, sixteen), // on a modeled wall
             new SliceElement(H("Walls", id: 1), [Face(f, -1, 39.77, 10, 39.77), Face(f, -1, 40.23, 10, 40.23)])]);
-        Assert.That(Rails.From(input).Count(r => r.Source == Rails.Framing), Is.Zero, "off by default");
-        var framing = Rails.From(input with { Knobs = input.Knobs with { FramingRails = true } })
+        Assert.That(Rails.From(input with { Knobs = input.Knobs with { FramingRails = false } }).Count(r => r.Source == Rails.Framing), Is.Zero, "off");
+        var framing = Rails.From(input)
             .Where(r => r.Source == Rails.Framing).OrderBy(r => Rot(-33)(r.A[0], r.A[1])[1]).ThenBy(r => Math.Min(Rot(-33)(r.A[0], r.A[1])[0], Rot(-33)(r.B[0], r.B[1])[0])).ToList();
         Assert.That(framing, Has.Count.EqualTo(3));
         Along(framing[0], f, -0.0625, 0, 8.0625, 0);
         Along(framing[1], f, 10.9375, 0, 13.6667 + 0.0625, 0);
         Along(framing[2], f, -0.0625, 10, 6.0625, 10);
         Assert.That(framing.All(r => Math.Abs(r.ThicknessFt - 0.46) < 0.002), Is.True, "thickness is the stud depth");
+        Assert.That(Newtonsoft.Json.JsonConvert.DeserializeObject<Knobs>("{\"CloseFt\":0.75}")!.FramingRails, Is.True, "a capture without the knob");
     }
 
     private sealed record Box2(double[] A, double[] B);
