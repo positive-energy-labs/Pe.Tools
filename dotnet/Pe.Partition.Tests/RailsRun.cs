@@ -11,8 +11,8 @@ namespace Pe.Partition.Tests;
 /// <summary>
 ///     Runs <see cref="Solve.RunRails" /> on Duryee Level 1's five hand-drawn zones and project-a live, and
 ///     writes rails, network, openings, rooms and ink to <c>.artifacts/runs/rails/$PE_RAILS_RUN/data</c> (default w2) for
-///     <c>eval/partition/network.py</c>. Probes are stubbed (floor at level, ceiling 9 ft up): Duryee has none captured
-///     and project-a's recorded probes sit at the old solver's label points.
+///     <c>eval/partition/network.py</c>. Probes replay the fixture's session recording where it has the point, else
+///     the stub (floor at level, ceiling 9 ft up); see <see cref="RecordedProbes" />.
 /// </summary>
 [Explicit, Category("RailsRun")]
 public sealed class RailsRun {
@@ -44,11 +44,9 @@ public sealed class RailsRun {
         // As the bench does: the solver's own shape. Duryee's level capture carries the Astra session's locked hand
         // fills of these very zones, which RunRails now honours as locked rooms.
         input = input with { Proposals = [], Knobs = input.Knobs with { FramingRails = Environment.GetEnvironmentVariable("PE_FRAMING_RAILS") != "0" } };
-        var stamp = input.Knee.Stamp;
-        ProbeAnswer Probe(double x, double y) => new(stamp, input.Knee.Searched,
-            new ProbeHit(input.Knee.Elements[0].Handle, 0, input.LevelZ), new ProbeHit(input.Knee.Elements[0].Handle, 9, input.LevelZ + 9), 20, 0);
+        var probes = RecordedProbes.For(duryeeZone is null ? "project-a/partition/live" : "duryee/partition");
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var answer = Solve.RunRails(input, Probe);
+        var answer = Solve.RunRails(input, probes.For(input));
         var ms = sw.ElapsedMilliseconds;
         var rails = Rails.From(input);
         var net = Rails.Network(rails, input.ZoneLoops, OpeningEvidence.From(input));

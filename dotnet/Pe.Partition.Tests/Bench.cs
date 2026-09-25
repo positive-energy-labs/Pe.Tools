@@ -15,15 +15,13 @@ namespace Pe.Partition.Tests;
 ///     <c>eval/partition/metrics.py</c> (metrics.json, tables, delta against the previous run) and
 ///     <c>eval/partition/render.py</c> (one PNG per fixture). Explicit: it is a bench, not a gate.
 ///     <para>
-///         Probes are stubbed (floor at the level, ceiling 9 ft over it) so dispositions come from
-///         geometry alone; the bench judges shape, never floors. Duryee is the five hand-drawn zones
+///         Probes replay a session recording (<see cref="RecordedProbes" />) when the fixture has one, else
+///         they are stubbed (floor at the level, ceiling 9 ft over it). Duryee is the five hand-drawn zones
 ///         of Mechanical Zoning Plan - Level 1, solved one at a time and concatenated.
 ///     </para>
 /// </summary>
 [TestFixture, Explicit("bench: writes .artifacts/runs/bench and needs python with PIL")]
 public sealed class Bench {
-    private static readonly Handle Stub = new("stub", 0, "", null, "Detail Items", PrimKind.Solid, null, null);
-
     private static string RepoRoot {
         get {
             var dir = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
@@ -43,7 +41,8 @@ public sealed class Bench {
     public void RailsSolve() {
         var run = Path.Combine(RepoRoot, ".artifacts", "runs", "bench", DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + (FramingOn ? "-rails" : "-rails-noframing"));
         Directory.CreateDirectory(run);
-        foreach (var (name, inputs) in Fixtures()) {
+        foreach (var (name, inputs, probeDir) in Fixtures()) {
+            var probes = RecordedProbes.For(probeDir);
             var dir = Path.Combine(run, name);
             Directory.CreateDirectory(dir);
             var answers = new List<PartitionAnswer>();
@@ -51,10 +50,7 @@ public sealed class Bench {
                 // The bench measures the solver's own shape. Architect proposals are adopted, not solved, so they
                 // are stripped; the Duryee session ran with none (zone-0d5e3ccb-inputs.json) and this matches it.
                 var input = captured with { Proposals = [], Knobs = captured.Knobs with { FramingRails = FramingOn } };
-                var z = input.LevelZ;
-                ProbeAnswer Probe(double x, double y) => new(input.Knee.Stamp, input.Knee.Searched,
-                    new ProbeHit(Stub, 0.0, z), new ProbeHit(Stub, 9.0, z + 9.0), 200.0, 0.0);
-                answers.Add(Solve.RunRails(input, Probe));
+                answers.Add(Solve.RunRails(input, probes.For(input)));
             }
             File.WriteAllText(Path.Combine(dir, "answer.json"), JsonConvert.SerializeObject(new {
                 Zones = inputs.Select(i => i.ZoneLoops).ToArray(),
@@ -69,22 +65,23 @@ public sealed class Bench {
             }));
             var rails = Rails.From(inputs[0] with { Knobs = inputs[0].Knobs with { FramingRails = FramingOn } });
             TestContext.Out.WriteLine($"{name}: {answers.Sum(a => a.Rooms.Count)} rooms in {answers.Sum(a => a.Ms):F0} ms, "
-                + $"{rails.Count} rails ({rails.Count(r => r.Source == Rails.Framing)} framing)");
+                + $"{rails.Count} rails ({rails.Count(r => r.Source == Rails.Framing)} framing), "
+                + (probes.Recorded ? $"probes {probes.Hits} recorded, {probes.Misses} stubbed" : "probes stubbed"));
         }
         Python("metrics.py", run);
         Python("render.py", run);
         TestContext.Out.WriteLine(run);
     }
 
-    private static IEnumerable<(string Name, PartitionInput[] Inputs)> Fixtures() {
-        yield return ("project-a-live", [Gz("project-a/partition/live")]);
-        yield return ("project-a-main-09", [Main09()]);
+    private static IEnumerable<(string Name, PartitionInput[] Inputs, string? ProbeDir)> Fixtures() {
+        yield return ("project-a-live", [Gz("project-a/partition/live")], "project-a/partition/live");
+        yield return ("project-a-main-09", [Main09()], null);
         // Main Level#09 recaptured 2026-09-25 from the Chadds (Recovery) file with Enclosure.Default (Doors included).
         // That file links the March IFC and 03.12 DWG, not the 07.28 set main-09 came from: a different model state.
-        yield return ("project-a-main-09-doors", [Gz("project-a/partition/main-09-doors")]);
-        yield return ("project-c-live", [Gz("project-c/partition/live")]);
-        yield return ("project-c-level2", [Gz("project-c/partition/level2")]);
-        yield return ("duryee-level1", Duryee());
+        yield return ("project-a-main-09-doors", [Gz("project-a/partition/main-09-doors")], "project-a/partition/main-09-doors");
+        yield return ("project-c-live", [Gz("project-c/partition/live")], "project-c/partition/live");
+        yield return ("project-c-level2", [Gz("project-c/partition/level2")], null);
+        yield return ("duryee-level1", Duryee(), "duryee/partition");
     }
 
     private static PartitionInput Gz(string fixture) {
