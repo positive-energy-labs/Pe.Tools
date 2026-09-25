@@ -16,8 +16,6 @@ namespace Pe.Partition.Tests;
 /// </summary>
 [Explicit, Category("RailsRun")]
 public sealed class RailsRun {
-    private static string Main => Path.GetFullPath(Path.Combine(PrivateFixtures.Root, "..", ".."));
-
     private static string Out([CallerFilePath] string here = "") =>
         Directory.CreateDirectory(Path.Combine(Path.GetDirectoryName(here)!, "..", "..", ".artifacts", "runs", "rails", Environment.GetEnvironmentVariable("PE_RAILS_RUN") ?? "w2", "data")).FullName;
 
@@ -31,9 +29,8 @@ public sealed class RailsRun {
     public void Run(string name, long? duryeeZone) {
         PartitionInput input;
         if (duryeeZone is { } id) {
-            var level = Path.Combine(Main, ".artifacts", "runs", "rooms-designation", "duryee-level-input.json");
-            var locked = Path.Combine(Main, "..", "Pe.Tools-astra", ".artifacts", "runs", "rooms-astra", "r0", "duryee-locked.json");
-            if (!File.Exists(level) || !File.Exists(locked)) Assert.Ignore("Duryee capture absent");
+            var level = Path.Combine(PrivateFixtures.Dir("duryee/partition"), "duryee-level-input.json");
+            var locked = Path.Combine(PrivateFixtures.Dir("duryee/partition"), "duryee-locked.json");
             input = JsonConvert.DeserializeObject<PartitionInput>(File.ReadAllText(level))!;
             var zone = JArray.Parse(File.ReadAllText(locked)).Single(z => (long)z["ElementId"]! == id);
             double[] Flat(JToken ring) => ring.SelectMany(p => new[] { (double)p[0]!, (double)p[1]! }).ToArray();

@@ -11,8 +11,8 @@ namespace Pe.Partition.Tests;
 ///     person would by materialising them; run 2 returns each locked room whole and every other room as run 1 drew it.
 /// </summary>
 public sealed class RailsRerunTests {
-    private const string DuryeeInput = @"C:\Users\kaitp\source\repos\Pe.Tools\.artifacts\runs\rooms-designation\duryee-level-input.json";
-    private const string DuryeeZones = @"C:\Users\kaitp\source\repos\Pe.Tools-astra\.artifacts\runs\rooms-astra\r0\duryee-locked.json";
+    private static string DuryeeInput => Path.Combine(PrivateFixtures.Dir("duryee/partition"), "duryee-level-input.json");
+    private static string DuryeeZones => Path.Combine(PrivateFixtures.Dir("duryee/partition"), "duryee-locked.json");
     private static readonly Handle Stub = new("stub", 0, "", null, "Detail Items", PrimKind.Solid, null, null);
 
     private static IEnumerable<TestCaseData> Zones() {
@@ -24,7 +24,6 @@ public sealed class RailsRerunTests {
             new ProbeHit(Stub, 0.0, input.LevelZ), new ProbeHit(Stub, 9.0, input.LevelZ + 9.0), 200.0, 0.0));
 
     private static PartitionInput Load(long id) {
-        if (!File.Exists(DuryeeInput) || !File.Exists(DuryeeZones)) Assert.Ignore("Duryee capture absent");
         var level = JsonConvert.DeserializeObject<PartitionInput>(File.ReadAllText(DuryeeInput))!;
         var zone = JArray.Parse(File.ReadAllText(DuryeeZones)).Single(z => (long)z["ElementId"]! == id);
         return level with { ZoneLoops = [zone["Outer"]!.SelectMany(p => new[] { (double)p[0]!, (double)p[1]! }).ToArray()], Proposals = [] };

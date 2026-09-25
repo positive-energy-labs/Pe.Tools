@@ -236,14 +236,17 @@ def truth_metrics(rooms, zones, truth):
     boundary Hausdorff against the best-overlapping drawn room, weighted by reference area. No count anywhere."""
     refs = [[pts(l) for l in r["loops"]] for r in truth["rooms"]]
     cands = [[pts(r["Loop"])] + [pts(h) for h in (r.get("Holes") or [])] for r in drawn(rooms)]
-    zone_loops = [pts(loop) for z in zones for loop in z]
+    zone_rings = [[pts(loop) for loop in z] for z in zones]  # one even-odd raster per zone, OR'd: zones are siblings, not holes
     rows, wsum, wsym, whaus = [], 0.0, 0.0, 0.0
     for ref in refs:
         xs = [x for x, _ in ref[0]]; ys = [y for _, y in ref[0]]
         box = (min(xs) - 2, min(ys) - 2, max(xs) + 2, max(ys) + 2)
         ref_img = raster(ref, box)
         ref_area = count(ref_img)
-        if count(ImageChops.logical_and(ref_img, raster(zone_loops, box))) < 0.5 * ref_area:
+        zone_img = raster([], box)
+        for z in zone_rings:
+            zone_img = ImageChops.logical_or(zone_img, raster(z, box))
+        if count(ImageChops.logical_and(ref_img, zone_img)) < 0.5 * ref_area:
             continue
         best, best_img, best_overlap = None, None, 0.0
         for k, cand in enumerate(cands):

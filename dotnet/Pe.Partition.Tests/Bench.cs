@@ -32,9 +32,9 @@ public sealed class Bench {
         }
     }
 
-    // ponytail: Duryee lives in the main checkout's .artifacts and Astra's worktree, not in .private. Read-only.
-    private const string DuryeeInput = @"C:\Users\kaitp\source\repos\Pe.Tools\.artifacts\runs\rooms-designation\duryee-level-input.json";
-    private const string DuryeeZones = @"C:\Users\kaitp\source\repos\Pe.Tools-astra\.artifacts\runs\rooms-astra\r0\duryee-locked.json";
+    // Duryee Level 1: the doors capture (the input the w11 session solved) and the five hand-drawn zones.
+    private static string DuryeeInput => Path.Combine(PrivateFixtures.Dir("duryee/partition"), "duryee-level-input.json");
+    private static string DuryeeZones => Path.Combine(PrivateFixtures.Dir("duryee/partition"), "duryee-locked.json");
 
     [Test]
     public void RailsSolve() {
@@ -96,7 +96,6 @@ public sealed class Bench {
     }
 
     private static PartitionInput[] Duryee() {
-        if (!File.Exists(DuryeeInput) || !File.Exists(DuryeeZones)) Assert.Ignore($"Duryee capture absent: {DuryeeInput}, {DuryeeZones}");
         var level = JsonConvert.DeserializeObject<PartitionInput>(File.ReadAllText(DuryeeInput))!;
         // The five hand fills (the 100 sf Pantry is a room, not a zone). Solved as zones: a person's zone edge is a wall.
         return JArray.Parse(File.ReadAllText(DuryeeZones))
