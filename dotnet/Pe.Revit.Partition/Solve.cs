@@ -90,6 +90,29 @@ public static class Solve {
             input.Resolved, input.EnclosureSource, Math.Round(sw.Elapsed.TotalMilliseconds, 3));
     }
 
+    /// <summary>
+    ///     Rooms from the rail network instead of stages 3 to 5. Same accounting and <c>Shape()</c>;
+    ///     native proposals are not honoured yet. Not wired into the verb.
+    /// </summary>
+    public static PartitionAnswer RunRails(PartitionInput input, Func<double, double, ProbeAnswer> probe) {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var zone = GeometryOf(input.ZoneLoops);
+        var net = Rails.Network(Rails.From(input).Concat(Rails.Studs(input)).ToList(), input.ZoneLoops, OpeningEvidence.From(input));
+        var shapes = Rails.Faces(net).Cast<Geometry>().ToList();
+        AssertCoverage(shapes, zone, "rails partition", true);
+        var backing = Reach(Buffered(input.Knee, input.Knobs.InkHalfWidthFt), Buffered(input.Header, input.Knobs.InkHalfWidthFt), input.Knobs);
+        var rooms = Shape(shapes, shapes.Select(_ => (RoomProposal?)null).ToList(), shapes.Count, shapes.Count, probe, backing, zone, input.LevelZ, input.Knobs, null);
+        var acc = new Accounting(zone.Area,
+            rooms.Where(r => r.Disposition == Disposition.Accepted).Sum(r => r.AreaSqft),
+            rooms.Where(r => r.Disposition == Disposition.Held).Sum(r => r.AreaSqft),
+            rooms.Where(r => r.Disposition == Disposition.Void).Sum(r => r.AreaSqft),
+            rooms.Where(r => r.Disposition == Disposition.Excluded).Sum(r => r.AreaSqft));
+        if (Math.Abs(acc.ZoneSqft - acc.Accepted - acc.Held - acc.Void - acc.Excluded) > AreaTolSqft)
+            throw new PartitionException("serialized partition accounting does not close");
+        return new PartitionAnswer(input.Knee.Stamp, input.Knee.Searched, input.Knobs, rooms, acc, null,
+            input.Resolved, input.EnclosureSource, Math.Round(sw.Elapsed.TotalMilliseconds, 3));
+    }
+
     // ---------------------------------------------------------------- stage 3
 
     private static Geometry Buffered(SliceAnswer band, double half) {

@@ -1,0 +1,267 @@
+using NetTopologySuite.Geometries;
+using NetTopologySuite.Index.Strtree;
+using NetTopologySuite.Operation.OverlayNG;
+using NetTopologySuite.Operation.Polygonize;
+using Pe.Revit.Space;
+
+namespace Pe.Revit.Partition;
+
+/// <summary>Wall is a rail axis, Zone a zone edge, Closed a bridged gap of a wall's thickness scale; the rest are openings.</summary>
+public enum SegKind { Wall, Zone, Closed, Door, Headed, Cased }
+
+public sealed record RailSegment(double[] A, double[] B, SegKind Kind);
+
+/// <summary>
+///     A gap in the rail network. Door (door ink in the gap) and Headed (wall ink over the gap in the
+///     header band, door unknown) separate rooms; Cased (neither) joins them. Closed is a gap that knee
+///     wall ink fills though no rail was extracted there: a wall, not an opening, counted for the census.
+///     WidthFt is face to face.
+/// </summary>
+public sealed record Opening(double[] A, double[] B, double WidthFt, SegKind Kind, int DoorPieces, double HeaderFraction, double WallFraction);
+
+/// <summary>Door ink (DWG A_DOOR* layers, Doors category), header-band wall ink, and knee wall ink, as slice pieces.</summary>
+public sealed record OpeningEvidence(IReadOnlyList<double[]> Doors, IReadOnlyList<double[]> Headers, IReadOnlyList<double[]> Walls) {
+    public static readonly OpeningEvidence None = new([], [], []);
+
+    public static OpeningEvidence From(PartitionInput input) => new(
+        input.Knee.Elements.Concat(input.Header.Elements)
+            .Where(e => e.Handle.Category == "Doors" || (e.Handle.Kind == PrimKind.Curve2D
+                && e.Handle.Layer?.StartsWith("A_DOOR", StringComparison.OrdinalIgnoreCase) == true))
+            .SelectMany(e => e.Pieces).ToList(),
+        // DWG ribbons run the full storey, so only modeled walls count as a header.
+        input.Header.Elements.Where(e => e.Handle.Kind != PrimKind.Curve2D && e.Handle.Category == "Walls")
+            .SelectMany(e => e.Pieces).ToList(),
+        input.Knee.Elements.Where(e => e.Handle.Kind == PrimKind.Curve2D
+                ? e.Handle.Layer is { } l && (l.StartsWith("A_WALL", StringComparison.OrdinalIgnoreCase) || l.StartsWith("A_GLAZ", StringComparison.OrdinalIgnoreCase))
+                : e.Handle.Category is "Walls" or "Structural Framing")
+            .SelectMany(e => e.Pieces).ToList());
+}
+
+public sealed record RailNetwork(IReadOnlyList<RailSegment> Segments, IReadOnlyList<Opening> Openings, double[][] ZoneLoops);
+
+public static partial class Rails {
+    // FOOTGUN: junction reach, face to face. Brief: "gap up to about 1 ft, the wall thickness scale";
+    // the synthetic 1 ft gap closes and the 3 ft gap does not.
+    private const double CloseFt = 1.0;
+
+    // FOOTGUN: widest gap read as an opening. A cased opening or double door is under 10 ft; a longer
+    // gap is open plan and stays a dangle.
+    private const double MaxOpeningFt = 10.0;
+
+    // FOOTGUN: collinear-end tolerance for an opening, and the band past the wall face searched for door ink.
+    private const double ParallelDeg = 3.0, DoorBandFt = 0.5;
+
+    // FOOTGUN: fraction of a gap that header wall ink must cover to call it headed.
+    private const double HeaderMin = 0.8;
+
+    // FOOTGUN: fraction of a gap's middle 80 percent that knee wall ink must cover to call it wall.
+    // project-a stud rows and DWG wall lines leave rail-less wall runs that otherwise read as cased openings.
+    private const double WallInkMin = 0.6;
+
+    // FOOTGUN: faces narrower than this are wall thickness or zone-edge strips, absorbed by a neighbour.
+    private const double MinFaceWidthFt = 1.0;
+
+    // FOOTGUN: a rail whose whole axis lies within half its thickness plus this of the zone edge is the
+    // envelope the zone edge already draws (ruling: zone edge is a wall); it is dropped so no strip face forms.
+    private const double EnvelopeFt = 1.5;
+
+    // Snap-rounding grid for noding. Extended rail ends land on a target axis only to rounding error.
+    private static readonly PrecisionModel Grid = new(1e4);
+    private static readonly GeometryFactory Gf = new NetTopologySuite.NtsGeometryServices(GeometryOverlay.NG).CreateGeometryFactory();
+
+    public static RailNetwork Network(IReadOnlyList<Rail> rails, double[][] zoneLoops, OpeningEvidence evidence) {
+        var zone = Solve.GeometryOf(zoneLoops);
+        var env = zone.EnvelopeInternal.Copy();
+        env.ExpandBy(MaxOpeningFt);
+        var live = rails.Where(r => Len(r.A, r.B) > 1e-6
+            && env.Intersects(new Envelope(r.A[0], r.B[0], r.A[1], r.B[1]))
+            && !Enumerable.Range(0, 11).All(k => zone.Boundary.Distance(Gf.CreatePoint(new Coordinate(
+                r.A[0] + ((r.B[0] - r.A[0]) * k / 10), r.A[1] + ((r.B[1] - r.A[1]) * k / 10)))) <= (r.ThicknessFt / 2) + EnvelopeFt)).ToList();
+        var ends = new double[live.Count * 2][];
+        for (var i = 0; i < live.Count; i++) { ends[2 * i] = live[i].A.ToArray(); ends[(2 * i) + 1] = live[i].B.ToArray(); }
+        double[] P(int e) => e % 2 == 0 ? live[e / 2].A : live[e / 2].B;
+        double[] U(int e) { var (p, q) = (P(e), P(e ^ 1)); var l = Len(p, q); return [(p[0] - q[0]) / l, (p[1] - q[1]) / l]; }
+        double T(int e) => live[e / 2].ThicknessFt;
+        var zoneEdges = zoneLoops.SelectMany(xy => Enumerable.Range(0, xy.Length / 2).Select(k =>
+            (A: new[] { xy[2 * k], xy[(2 * k) + 1] }, B: new[] { xy[(2 * k + 2) % xy.Length], xy[(2 * k + 3) % xy.Length] }))).ToList();
+        var doors = Index(evidence.Doors);
+        var headers = Index(evidence.Headers);
+        var walls = Index(evidence.Walls);
+        var segs = new List<RailSegment>();
+        var openings = new List<Opening>();
+        var used = new bool[ends.Length];
+
+        void Gap(double[] a, double[] b, double width, double t) {
+            if (width <= CloseFt) { segs.Add(new RailSegment(a, b, SegKind.Closed)); return; }
+            var line = Gf.CreateLineString([new Coordinate(a[0], a[1]), new Coordinate(b[0], b[1])]);
+            var band = line.Buffer((t / 2) + DoorBandFt, new NetTopologySuite.Operation.Buffer.BufferParameters { EndCapStyle = NetTopologySuite.Operation.Buffer.EndCapStyle.Flat });
+            var doorPieces = doors.Query(band.EnvelopeInternal).Count(g => g.Intersects(band));
+            double Cover(STRtree<Geometry> ink, double lo, double hi) {
+                var n = Math.Max(2, (int)(line.Length * (hi - lo) / 0.25));
+                var covered = 0;
+                for (var k = 0; k < n; k++) {
+                    var f = lo + ((hi - lo) * (k + 0.5) / n);
+                    var pt = Gf.CreatePoint(new Coordinate(a[0] + ((b[0] - a[0]) * f), a[1] + ((b[1] - a[1]) * f)));
+                    var probe = pt.EnvelopeInternal.Copy();
+                    probe.ExpandBy((t / 2) + 0.1);
+                    if (ink.Query(probe).Any(g => g.Distance(pt) <= (t / 2) + 0.1)) covered++;
+                }
+                return (double)covered / n;
+            }
+            var header = Cover(headers, 0, 1);
+            var wall = Cover(walls, 0.1, 0.9);
+            var kind = wall >= WallInkMin ? SegKind.Closed : doorPieces > 0 ? SegKind.Door : header >= HeaderMin ? SegKind.Headed : SegKind.Cased;
+            segs.Add(new RailSegment(a, b, kind));
+            openings.Add(new Opening(a, b, Math.Round(width, 4), kind, doorPieces, Math.Round(header, 3), Math.Round(wall, 3)));
+        }
+
+        // Collinear facing ends: a closed gap or an opening, nearest first.
+        var cos = Math.Cos(ParallelDeg * Math.PI / 180);
+        var pairs = new List<(double Along, int E1, int E2)>();
+        for (var e1 = 0; e1 < ends.Length; e1++)
+            for (var e2 = e1 + 1; e2 < ends.Length; e2++) {
+                if (e1 / 2 == e2 / 2) continue;
+                var (u1, u2) = (U(e1), U(e2));
+                if ((u1[0] * u2[0]) + (u1[1] * u2[1]) > -cos) continue;
+                var v = new[] { P(e2)[0] - P(e1)[0], P(e2)[1] - P(e1)[1] };
+                var along = (v[0] * u1[0]) + (v[1] * u1[1]);
+                var tmax = Math.Max(T(e1), T(e2));
+                if (Math.Abs((u1[0] * v[1]) - (u1[1] * v[0])) > (tmax / 2) + 0.05 || along < -tmax || along > MaxOpeningFt) continue;
+                if (along > CloseFt && live.Where((r, k) => k != e1 / 2 && k != e2 / 2)
+                        .Any(r => RaySeg(P(e1), u1, r.A, r.B) is { S: > 0, W: >= 0 and <= 1 } h && h.S < along)) continue;
+                pairs.Add((along, e1, e2));
+            }
+        foreach (var (along, e1, e2) in pairs.OrderBy(p => p.Along)) {
+            if (used[e1] || used[e2]) continue;
+            used[e1] = used[e2] = true;
+            Gap(P(e1), P(e2), Math.Max(0, along), Math.Max(T(e1), T(e2)));
+        }
+
+        // Every other end: extend to the axis it nearly reaches, or bridge an opening to it.
+        for (var e = 0; e < ends.Length; e++) {
+            if (used[e]) continue;
+            var (p, u) = (P(e), U(e));
+            var best = (S: double.MaxValue, T: 0.0, Q: (double[]?)null, OnExt: false);
+            var joined = false;
+            for (var j = 0; j < live.Count && !joined; j++) {
+                if (j == e / 2) continue;
+                var r = live[j];
+                var d = new[] { (r.B[0] - r.A[0]) / Len(r.A, r.B), (r.B[1] - r.A[1]) / Len(r.A, r.B) };
+                var a = new[] { r.A[0] - (d[0] * CloseFt), r.A[1] - (d[1] * CloseFt) };
+                var b = new[] { r.B[0] + (d[0] * CloseFt), r.B[1] + (d[1] * CloseFt) };
+                if (RaySeg(p, u, a, b) is not { } h || h.W < 0 || h.W > 1) continue;
+                var onExt = h.W * Len(a, b) < CloseFt || (1 - h.W) * Len(a, b) < CloseFt;
+                // The end already sits inside this wall past its axis: noding joins them.
+                if (!onExt && h.S <= 1e-9 && h.S >= -((r.ThicknessFt / 2) + 0.05)) { joined = true; continue; }
+                if (h.S <= 1e-9 || h.S >= best.S) continue;
+                var gap = Math.Max(0, h.S - (r.ThicknessFt / 2));
+                if (gap > (onExt ? CloseFt : MaxOpeningFt)) continue;
+                best = (h.S, r.ThicknessFt, onExt ? (Len(r.A, Along(p, u, h.S)) < Len(r.B, Along(p, u, h.S)) ? r.A : r.B) : null, onExt);
+            }
+            if (joined) continue;
+            foreach (var (a, b) in zoneEdges)
+                if (RaySeg(p, u, a, b) is { S: > 1e-9, W: >= 0 and <= 1 } h && h.S < best.S && h.S <= MaxOpeningFt)
+                    best = (h.S, 0.0, null, false);
+            if (best.S == double.MaxValue) continue;
+            var hit = Along(p, u, best.S);
+            var width = Math.Max(0, best.S - (best.T / 2));
+            if (width <= CloseFt) {
+                ends[e] = hit;
+                if (best.Q is { } q) segs.Add(new RailSegment(q, hit, SegKind.Closed));
+            } else Gap(p, hit, width, T(e));
+        }
+
+        for (var i = 0; i < live.Count; i++) segs.Add(new RailSegment(ends[2 * i], ends[(2 * i) + 1], SegKind.Wall));
+        segs.AddRange(zoneEdges.Select(z => new RailSegment(z.A, z.B, SegKind.Zone)));
+        return new RailNetwork(segs, openings, zoneLoops);
+    }
+
+    /// <summary>
+    ///     Polygonize the noded network inside the zone, merge faces across cased openings, absorb faces
+    ///     thinner than <see cref="MinFaceWidthFt" />. The result tiles the zone.
+    /// </summary>
+    public static IReadOnlyList<Polygon> Faces(RailNetwork net) {
+        var zone = Solve.GeometryOf(net.ZoneLoops);
+        var lines = Gf.CreateMultiLineString(net.Segments.Where(s => Len(s.A, s.B) > 1e-9)
+            .Select(s => Gf.CreateLineString([new Coordinate(s.A[0], s.A[1]), new Coordinate(s.B[0], s.B[1])])).ToArray());
+        var noded = UnaryUnionNG.Union((Geometry)lines, Grid);
+        var polygonizer = new Polygonizer();
+        polygonizer.Add(noded);
+        var faces = polygonizer.GetPolygons().Cast<Polygon>()
+            .Where(f => zone.Contains(f.InteriorPoint))
+            .SelectMany(f => Polys(OverlayNGRobust.Overlay(f, zone, NetTopologySuite.Operation.Overlay.SpatialFunction.Intersection))).ToList();
+        faces.AddRange(Polys(OverlayNGRobust.Overlay(zone, OverlayNGRobust.Union(faces.Cast<Geometry>().ToList()), NetTopologySuite.Operation.Overlay.SpatialFunction.Difference)));
+
+        var parent = Enumerable.Range(0, faces.Count).ToArray();
+        int Find(int i) => parent[i] == i ? i : parent[i] = Find(parent[i]);
+        foreach (var o in net.Openings.Where(o => o.Kind == SegKind.Cased)) {
+            var l = Len(o.A, o.B);
+            var (mx, my, nx, ny) = ((o.A[0] + o.B[0]) / 2, (o.A[1] + o.B[1]) / 2, -(o.B[1] - o.A[1]) / l * 0.02, (o.B[0] - o.A[0]) / l * 0.02);
+            var i = faces.FindIndex(f => f.Contains(Gf.CreatePoint(new Coordinate(mx + nx, my + ny))));
+            var j = faces.FindIndex(f => f.Contains(Gf.CreatePoint(new Coordinate(mx - nx, my - ny))));
+            if (i >= 0 && j >= 0) parent[Find(i)] = Find(j);
+        }
+        var live = faces.Select((f, i) => (f, r: Find(i))).GroupBy(x => x.r)
+            .SelectMany(g => Polys(OverlayNGRobust.Union(g.Select(x => (Geometry)x.f).ToList()))).ToList();
+
+        for (var moved = true; moved;) {
+            moved = false;
+            for (var i = 0; i < live.Count && !moved; i++) {
+                if (!live[i].Buffer(-MinFaceWidthFt / 2).IsEmpty) continue;
+                var (best, len) = (-1, 1e-6);
+                for (var j = 0; j < live.Count; j++) {
+                    if (j == i || !live[i].EnvelopeInternal.Intersects(live[j].EnvelopeInternal)) continue;
+                    var shared = live[i].Boundary.Intersection(live[j].Boundary).Length;
+                    if (shared > len) (best, len) = (j, shared);
+                }
+                if (best < 0) continue;
+                var merged = Polys(OverlayNGRobust.Union([live[i], live[best]]));
+                live.RemoveAt(Math.Max(i, best));
+                live.RemoveAt(Math.Min(i, best));
+                live.AddRange(merged);
+                moved = true;
+            }
+        }
+        return live;
+    }
+
+    private static STRtree<Geometry> Index(IReadOnlyList<double[]> pieces) {
+        var tree = new STRtree<Geometry>();
+        foreach (var xy in pieces) {
+            var (a, b) = Farthest(xy);
+            var g = Gf.CreateLineString([new Coordinate(a[0], a[1]), new Coordinate(b[0], b[1])]);
+            tree.Insert(g.EnvelopeInternal, g);
+        }
+        tree.Build();
+        return tree;
+    }
+
+    private static (double[] A, double[] B) Farthest(double[] xy) {
+        var n = xy.Length / 2;
+        var (bi, bj, best) = (0, 0, -1.0);
+        for (var i = 0; i < n; i++)
+            for (var j = i + 1; j < n; j++) {
+                var d = D2([xy[2 * i], xy[(2 * i) + 1]], [xy[2 * j], xy[(2 * j) + 1]]);
+                if (d > best) (bi, bj, best) = (i, j, d);
+            }
+        return ([xy[2 * bi], xy[(2 * bi) + 1]], [xy[2 * bj], xy[(2 * bj) + 1]]);
+    }
+
+    private static double D2(double[] a, double[] b) => ((a[0] - b[0]) * (a[0] - b[0])) + ((a[1] - b[1]) * (a[1] - b[1]));
+
+    private static double Len(double[] a, double[] b) => Math.Sqrt(D2(a, b));
+
+    /// <summary>p + s u = a + w (b - a). Null when parallel.</summary>
+    private static (double S, double W)? RaySeg(double[] p, double[] u, double[] a, double[] b) {
+        var d = new[] { b[0] - a[0], b[1] - a[1] };
+        var den = (u[0] * d[1]) - (u[1] * d[0]);
+        if (Math.Abs(den) < 1e-9 * Len(a, b)) return null;
+        var q = new[] { a[0] - p[0], a[1] - p[1] };
+        return (((q[0] * d[1]) - (q[1] * d[0])) / den, ((q[0] * u[1]) - (q[1] * u[0])) / den);
+    }
+
+    private static double[] Along(double[] p, double[] u, double s) => [p[0] + (u[0] * s), p[1] + (u[1] * s)];
+
+    private static List<Polygon> Polys(Geometry g) =>
+        NetTopologySuite.Geometries.Utilities.PolygonExtracter.GetPolygons(g).Cast<Polygon>().Where(p => !p.IsEmpty && p.Area > 1e-9).ToList();
+}

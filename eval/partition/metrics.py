@@ -284,7 +284,7 @@ def table(rows, previous=None):
             v = m.get(c)
             cell = "-" if v is None else fmt.format(v)
             if previous and c in previous.get(name, {}) and v is not None and previous[name][c] is not None:
-                cell = "{:+.3f}".format(v - previous[name][c]) if not isinstance(v, int) else "{:+d}".format(v - previous[name][c])
+                cell = "{:+.3f}".format(v - previous[name][c]) if not (isinstance(v, int) and isinstance(previous[name][c], int)) else "{:+d}".format(v - previous[name][c])
             cells.append(cell)
         lines.append("| " + " | ".join(cells) + " |")
     return "\n".join(lines)

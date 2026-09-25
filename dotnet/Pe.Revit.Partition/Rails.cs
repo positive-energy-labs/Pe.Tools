@@ -18,7 +18,7 @@ public sealed record Rail(double[] A, double[] B, double ThicknessFt, string Sou
 ///     DWG layers <c>A_WALL*</c> and <c>A_GLAZ*</c>. Generic Models, Structural Framing, Columns
 ///     and door or stair layers never become rails, whatever their shape.
 /// </summary>
-public static class Rails {
+public static partial class Rails {
     public const string Wall = "wall";
     public const string Dwg = "dwg";
 
