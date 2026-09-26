@@ -72,6 +72,7 @@
 - 2026-09-25, size-gated opening joins (`JoinBelowSf`, branch `join-gate` `839acea7`, unmerged): Duryee's Living, Dining, Kitchen and Nook are one 662 sf face with no rail between them, so no join threshold splits them; thresholds 80 to 400 sf score exactly as off (0.355 / 10.3 ft). Cutting an open plan needs non-wall evidence (island, ceiling change, designer's hand), not a join rule.
 
 ## Owed
+- Ruling owed, rejected rooms ("not a room" mark). Recommended: the face becomes held with reason `rejected`; folding it into a neighbour is a lasso merge (`rooms.merge` already takes held regions). Delete was considered and argued against: it clashes with the 2026-09-24 deletion ruling (deleted means redraw) and breaks the zone's accounting. A standing rejection stores the rejected polygon and matches future faces by overlap (intersection over union): above about 0.6 apply, about 0.2 to 0.6 raise a stale card, below that close as gone. It lives in `Judge`.
 - D1 follow-up: save each face's outline, disposition and reason in the trace so the faces layer draws shapes; two layer toggles in one tick race on the URL.
 - Focus links: the route's session and document binding is not in the URL, so `/rooms?focus=R12` cannot be opened cold; a target in the URL or persisted route state is a route-kernel ruling.
 - The exported view image carries Revit's own `PE Rooms` fill (bright green for machine rooms), doubled by the canvas overlay; decide whether the export hides the region type or keeps Revit's picture as is.
