@@ -60,7 +60,15 @@ const pods = {
       name: "Sheet tools",
       version: "1.0.0",
       folder: "sheets",
-      entrypoints: [{ id: "rename", sourcePath: "src/Rename.cs", name: "Rename sheets" }],
+      entrypoints: [
+        { id: "rename", sourcePath: "src/Rename.cs", name: "Rename sheets" },
+        {
+          id: "own",
+          sourcePath: "src/Own.cs",
+          name: "Own transactions",
+          permissionMode: "NoTransaction",
+        },
+      ],
       members: [],
       diagnostics: [],
     },
@@ -850,6 +858,32 @@ test("the doors ride the host under the turn Target and name the revision and re
       actor: "agent",
       input: { sourcePath: "src/Rename.cs", workspaceKey: "sheets" },
     });
+    // Undeclared keeps the host default: no mode is sent.
+    expect(calls.at(-1)?.body).not.toHaveProperty("input.permissionMode");
+
+    // Catalog row and dispatch read the same declaration: an omitted mode runs as declared...
+    const ownRow = catalog().capabilities.find((row) => row.key === "pod:sheets.own");
+    expect(ownRow?.description).toContain("Declares NoTransaction");
+    expect(ownRow?.description).not.toContain("WriteTransaction to keep edits");
+    expect(ownRow?.mutates).toBe(true);
+    const own = (await run(peDo, { key: "pod:sheets.own", timeoutSeconds: 30 })) as { ok: boolean };
+    expect(own.ok).toBe(true);
+    expect(calls.at(-1)?.body).toMatchObject({
+      key: "scripting.execute",
+      input: { sourcePath: "src/Own.cs", workspaceKey: "sheets", permissionMode: "NoTransaction" },
+    });
+    // ...and an explicit incompatible mode is refused with the reason, before any action is posted.
+    const posted = calls.length;
+    const refused = (await run(peDo, {
+      key: "pod:sheets.own",
+      input: { permissionMode: "ReadOnly" },
+      timeoutSeconds: 30,
+    })) as { isError: boolean; content: string };
+    expect(refused.isError).toBe(true);
+    expect(refused.content).toContain("declares NoTransaction; ReadOnly is incompatible");
+    expect(calls.slice(posted).some((call) => call.url.pathname === "/actions" && call.body)).toBe(
+      false,
+    );
 
     const human = (await run(peDo, { key: "workflow:instances.stop", timeoutSeconds: 30 })) as {
       isError: boolean;

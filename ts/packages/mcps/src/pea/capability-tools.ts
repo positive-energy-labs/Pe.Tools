@@ -61,6 +61,7 @@ import type { RevitCatalogLoadedFamilies } from "@pe/host-contracts/generated";
 import { coerceJsonObject } from "../shared/coerce.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
 import { bundledPeaSkills } from "./skills.ts";
+import { podPermissionMode } from "./capabilities.ts";
 import { ownedTurnDocuments } from "./owned-documents.ts";
 export { ownedTurnDocuments } from "./owned-documents.ts";
 
@@ -280,22 +281,27 @@ async function executeTool(
         )
           throw Error("Original Pod admission cannot be identified");
         const manifest = JSON.parse(decodeCapturedManifest(encoded)) as {
-          entrypoints: { id: string; sourcePath: string }[];
+          entrypoints: { id: string; sourcePath: string; permissionMode?: unknown }[];
         };
-        const source = manifest.entrypoints.find(
-          (entry) => entry.id === pod.entrypoint,
-        )?.sourcePath;
+        const entry = manifest.entrypoints.find((value) => value.id === pod.entrypoint);
+        const source = entry?.sourcePath;
         if (
           pod.workspace !== original.request.workspaceKey ||
           source?.replaceAll("\\", "/").trim().toLowerCase() !==
             String(original.request.sourcePath).replaceAll("\\", "/").trim().toLowerCase()
         )
           throw Error("Original Pod entrypoint conflicts");
+        const mode = podPermissionMode(
+          entry?.permissionMode as Parameters<typeof podPermissionMode>[0],
+          (payload as Record<string, unknown>).permissionMode,
+        );
+        if ("refusal" in mode) throw Error(mode.refusal);
         key = "scripting.execute";
         payload = {
           ...payload,
           workspaceKey: pod.workspace,
           sourcePath: original.request.sourcePath,
+          ...(mode.mode ? { permissionMode: mode.mode } : {}),
         };
       }
       const requested = input.target;
@@ -564,14 +570,18 @@ async function dispatch(
         timeoutMs: input.timeoutSeconds * 1000,
       });
       const pods = await caller.call("pod.list");
-      const sourcePath = pods.pods
+      const entry = pods.pods
         .find((value) => value.folder === pod.workspace)
-        ?.entrypoints.find((entry) => entry.id === pod.entrypoint)?.sourcePath;
+        ?.entrypoints.find((value) => value.id === pod.entrypoint);
+      const sourcePath = entry?.sourcePath;
       if (!sourcePath) throw Error("Declared Pod entrypoint unavailable");
+      const mode = podPermissionMode(entry.permissionMode, payload.permissionMode);
+      if ("refusal" in mode) throw Error(mode.refusal);
       const result = await caller.callOperation("scripting.execute", {
         ...payload,
         workspaceKey: pod.workspace,
         sourcePath,
+        ...(mode.mode ? { permissionMode: mode.mode } : {}),
       });
       return {
         ok: result.ok,

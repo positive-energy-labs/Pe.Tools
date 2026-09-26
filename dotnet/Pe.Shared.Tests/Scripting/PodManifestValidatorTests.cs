@@ -14,6 +14,21 @@ public sealed class PodManifestValidatorTests {
     }
 
     [Test]
+    public void Entrypoint_permission_mode_is_declared_or_rejected() {
+        static PodManifestValidationResult With(string mode) => PodManifestValidator.ValidateJson(
+            $$"""{"schemaVersion":2,"id":"own","name":"Own","version":"1","entrypoints":[{"id":"run","sourcePath":"src/Run.cs"{{mode}}}]}""");
+
+        Assert.That(With("").Manifest!.Entrypoints.Single().PermissionMode, Is.Null);
+        Assert.That(With(",\"permissionMode\":\"NoTransaction\"").Manifest!.Entrypoints.Single().PermissionMode,
+            Is.EqualTo(Pe.Shared.HostContracts.Scripting.ScriptPermissionMode.NoTransaction));
+        foreach (var bad in new[] { "notransaction", "2", "Rollback" }) {
+            var result = With($",\"permissionMode\":\"{bad}\"");
+            Assert.That(result.Success, Is.False, bad);
+            Assert.That(result.Diagnostics.Single().Message, Does.Contain("permissionMode"), bad);
+        }
+    }
+
+    [Test]
     public void Valid_manifest_loads_entrypoints() {
         var result = PodManifestValidator.ValidateJson(
             """

@@ -23,7 +23,9 @@ import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   isTsOnlyOperationKey,
   type HostOpResponse,
+  isScriptPermissionMode,
   type PodList,
+  type ScriptPermissionMode,
 } from "@pe/host-contracts/operation-types";
 import type { Capability, CapabilityCatalog, RouteStateSpec } from "@pe/agent-contracts";
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
@@ -234,7 +236,7 @@ function podRows(pod: PodList["pods"][number]): Capability[] {
     kind: "pod",
     title: `${pod.name}: ${entry.name ?? entry.id}`,
     description:
-      `${entry.description ?? ""} Pod button the user presses in Revit's Do palette; runs ${entry.sourcePath} in-process through the public scripting.execute operation; its receipt belongs to the host journal. Defaults to ReadOnly (changes rolled back); pass permissionMode WriteTransaction to keep edits.`.trim(),
+      `${entry.description ?? ""} Pod button the user presses in Revit's Do palette; runs ${entry.sourcePath} in-process through the public scripting.execute operation; its receipt belongs to the host journal. ${podModeSentence(entry.permissionMode)}`.trim(),
     needs: "document",
     mutates: true,
     actor: "any",
@@ -242,6 +244,39 @@ function podRows(pod: PodList["pods"][number]): Capability[] {
     source: "pod.json",
     rank: 1,
   }));
+}
+
+function podModeSentence(declared: ScriptPermissionMode | null | undefined): string {
+  switch (declared) {
+    case "NoTransaction":
+      return "Declares NoTransaction: the Pod owns its transactions and rollback; omit permissionMode (ReadOnly and WriteTransaction are refused because their host transaction blocks the Pod's own).";
+    case "WriteTransaction":
+      return "Declares WriteTransaction: omitting permissionMode keeps edits in one host-owned transaction; pass ReadOnly to discard changes.";
+    case "ReadOnly":
+      return "Declares ReadOnly (changes rolled back); pass permissionMode WriteTransaction to keep edits.";
+    default:
+      return "Defaults to ReadOnly (changes rolled back); pass permissionMode WriteTransaction to keep edits.";
+  }
+}
+
+/**
+ * The mode a pod dispatch sends. An omitted mode takes the entrypoint's declaration; an undeclared
+ * entrypoint sends nothing (the host default, ReadOnly). An explicit mode is kept unless exactly one
+ * side is NoTransaction: a host transaction blocks a Pod that owns its transactions, and a Pod that
+ * expects one would run with no transaction at all.
+ */
+export function podPermissionMode(
+  declared: ScriptPermissionMode | null | undefined,
+  requested: unknown,
+): { mode: ScriptPermissionMode | undefined } | { refusal: string } {
+  if (requested != null && !isScriptPermissionMode(requested))
+    return { refusal: `Unknown permissionMode ${JSON.stringify(requested)}.` };
+  if (requested == null) return { mode: declared ?? undefined };
+  if (declared && (declared === "NoTransaction") !== (requested === "NoTransaction"))
+    return {
+      refusal: `This Pod entrypoint declares ${declared}; ${requested} is incompatible. Omit permissionMode to run it as declared.`,
+    };
+  return { mode: requested };
 }
 
 const podInputSchema = z.toJSONSchema(

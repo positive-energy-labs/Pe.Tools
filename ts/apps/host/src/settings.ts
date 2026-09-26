@@ -17,6 +17,7 @@ import type {
   PodRunSource,
   PodRunsRequest,
 } from "@pe/host-contracts/operation-types";
+import { isScriptPermissionMode, scriptPermissionModes } from "@pe/host-contracts/operation-types";
 import type {
   PodMemberCompose,
   SettingsSchema,
@@ -536,6 +537,7 @@ const readManifests = Effect.fnUntraced(function* (root: string) {
                       sourcePath: e.sourcePath,
                       name: typeof e.name === "string" ? e.name : null,
                       description: typeof e.description === "string" ? e.description : null,
+                      ...(e.permissionMode == null ? {} : { permissionMode: entrypointMode(e) }),
                     },
                   ]
                 : [],
@@ -548,6 +550,14 @@ const readManifests = Effect.fnUntraced(function* (root: string) {
   }
   return { pods, unreadable };
 });
+
+/** A declared mode must be one the C# contract knows; a bad one makes the whole pod unreadable, as in PodManifestValidator. */
+function entrypointMode(entry: Record<string, unknown>) {
+  if (isScriptPermissionMode(entry.permissionMode)) return entry.permissionMode;
+  throw Error(
+    `pod.json entrypoint '${String(entry.id)}' permissionMode must be one of ${scriptPermissionModes.join(", ")}.`,
+  );
+}
 
 const listMembers: (
   folder: string,

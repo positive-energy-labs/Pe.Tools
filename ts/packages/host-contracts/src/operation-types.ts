@@ -3,7 +3,7 @@ import {
   hostRuntimeAssemblyDataSchema,
   type HostOperationDefinition,
 } from "./contracts/index.js";
-import { hostOpKeys, type HostOps } from "./generated/host-ops.generated.js";
+import { hostOpKeys, type HostOps, type ScriptingExecute } from "./generated/host-ops.generated.js";
 import { Schema } from "effect";
 
 /** Bridge op keys, sourced from the checked-in live-session typegen output. */
@@ -138,6 +138,17 @@ export const memberIssueSchema = Schema.Struct({
 });
 export type MemberIssue = Schema.Schema.Type<typeof memberIssueSchema>;
 
+/** The generated C# `ScriptPermissionMode`, as runtime literals; the Record keeps the list exhaustive. */
+export type ScriptPermissionMode = ScriptingExecute.Req.ScriptPermissionMode;
+const scriptPermissionModeSet = {
+  ReadOnly: true,
+  WriteTransaction: true,
+  NoTransaction: true,
+} as const satisfies Record<ScriptPermissionMode, true>;
+export const scriptPermissionModes = Object.keys(scriptPermissionModeSet) as ScriptPermissionMode[];
+export const isScriptPermissionMode = (value: unknown): value is ScriptPermissionMode =>
+  typeof value === "string" && Object.hasOwn(scriptPermissionModeSet, value);
+
 export const podListResponseSchema = Schema.Struct({
   pods: Schema.Array(
     Schema.Struct({
@@ -151,6 +162,8 @@ export const podListResponseSchema = Schema.Struct({
           sourcePath: Schema.String,
           name: Schema.optional(Schema.NullOr(Schema.String)),
           description: Schema.optional(Schema.NullOr(Schema.String)),
+          /** Declared by pod.json; absent means the host default (ReadOnly). */
+          permissionMode: Schema.optional(Schema.NullOr(Schema.Literals(scriptPermissionModes))),
         }),
       ),
       members: Schema.Array(

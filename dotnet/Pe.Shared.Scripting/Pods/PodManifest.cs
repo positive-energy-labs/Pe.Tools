@@ -16,11 +16,15 @@ public sealed record PodManifest(
     IReadOnlyList<PodEntrypoint> Entrypoints
 );
 
+/// <param name="PermissionMode">
+///     Declared mode for dispatchers that let the caller omit one; null keeps the host default (ReadOnly).
+/// </param>
 public sealed record PodEntrypoint(
     string Id,
     string SourcePath,
     string? Name,
-    string? Description
+    string? Description,
+    ScriptPermissionMode? PermissionMode = null
 );
 
 public sealed record PodManifestValidationResult(
@@ -47,7 +51,8 @@ public static class PodManifestValidator {
         "id",
         "sourcePath",
         "name",
-        "description"
+        "description",
+        "permissionMode"
     };
 
     public static PodManifestValidationResult ValidateJson(string json) {
@@ -181,10 +186,22 @@ public static class PodManifestValidator {
 
             var name = ReadOptionalString(obj, "name", diagnostics);
             var description = ReadOptionalString(obj, "description", diagnostics);
+            var permissionMode = ReadOptionalString(obj, "permissionMode", diagnostics) switch {
+                null => (ScriptPermissionMode?)null,
+                var value when Enum.GetNames(typeof(ScriptPermissionMode)).Contains(value, StringComparer.Ordinal) =>
+                    (ScriptPermissionMode)Enum.Parse(typeof(ScriptPermissionMode), value),
+                var value => AddModeError(diagnostics, index, value)
+            };
             if (id is not null && sourcePath is not null)
-                entrypoints.Add(new PodEntrypoint(id, sourcePath, name, description));
+                entrypoints.Add(new PodEntrypoint(id, sourcePath, name, description, permissionMode));
         }
 
         return entrypoints;
+    }
+
+    private static ScriptPermissionMode? AddModeError(List<ScriptDiagnostic> diagnostics, int index, string value) {
+        diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage,
+            $"pod.json entrypoints[{index}].permissionMode '{value}' must be one of {string.Join(", ", Enum.GetNames(typeof(ScriptPermissionMode)))}."));
+        return null;
     }
 }
