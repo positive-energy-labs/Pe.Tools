@@ -36,8 +36,9 @@ public static class Solve {
     public static PartitionAnswer RunRails(PartitionInput input, Func<double, double, ProbeAnswer> probe) {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var layer1 = Faces(input, probe);
+        var rejected = (input.Rejected ?? []).Select(r => GeometryOf([r])).ToList();
         var rooms = layer1.Facts.Select((f, i) => {
-            var (d, reason) = Judge.Dispose(f, input.LevelZ, input.Knobs);
+            var (d, reason) = Judge.Dispose(f, input.LevelZ, input.Knobs, rejected);
             return new Room(i, d, reason, Loop(f.Shape), Math.Round(f.Shape.Area, 9), f.LabelX, f.LabelY, Math.Round(f.Backed, 6),
                 f.FloorZ, f.CeilingZ, f.Shared, Enumerable.Range(0, f.Shape.NumInteriorRings)
                     .Select(f.Shape.GetInteriorRingN)

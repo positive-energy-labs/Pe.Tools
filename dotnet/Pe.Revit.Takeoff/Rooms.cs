@@ -325,6 +325,7 @@ public static class Rooms
             var input = captured with
             {
                 ZoneLoops = zone.Loops.Select(Flat).ToArray(),
+                Rejected = request.Rejected?.Select(r => Flat([.. r])).ToList(),
                 Proposals =
                 [
                     .. captured.Proposals,

@@ -75,7 +75,8 @@ const definitions = {
     says: "Partition every zone drawn on one plan view into rooms, keeping locked and matched rooms.",
     needs: "project-document",
     actor: "any",
-    input: z.object({ view: z.string().min(1) }),
+    // rejected: standing "not a room" rings (model feet, outer only); a face at IoU >= 0.6 is held `rejected`.
+    input: z.object({ view: z.string().min(1), rejected: z.array(loop).optional() }),
     dirties: ["snapshot"],
   },
   "rooms.draw": {

@@ -5066,6 +5066,7 @@ export namespace RoomsPartition {
     export interface Request {
       view: string;
       runId?: null | string;
+      rejected?: number[][][] | null;
     }
   }
   export namespace Res {
