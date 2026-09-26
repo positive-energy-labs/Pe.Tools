@@ -224,7 +224,15 @@ public static class Verbs {
                     dropped.Add($"{key}: {fault} boundary");
                     continue;
                 }
-                result.Add(new RoomProposal(key, room.Name, room.Number, loops.Select(l => l.Ring!).ToArray()));
+                var rings = loops.Select(l => l.Ring!).ToArray();
+                // Solve builds this same even-odd area per proposal (Solve.cs:76); a Room whose rings cancel or
+                // self-intersect (Manuella Level 1 and 2, 2026-09-26) would throw there and kill the level.
+                try { Solve.GeometryOf(rings); }
+                catch (PartitionException ex) {
+                    dropped.Add($"{key}: {ex.Message}");
+                    continue;
+                }
+                result.Add(new RoomProposal(key, room.Name, room.Number, rings));
             }
         }
 
