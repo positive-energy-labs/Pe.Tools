@@ -22,6 +22,7 @@ import { Situation } from "#/route/situation";
 import { useDocumentLadder } from "#/route/situation-ladder";
 import { usePlanImage } from "#/takeoff/plan-image";
 import { manifest, type RoomsPage } from "./manifest";
+import { layersOf, NO_TRACE, type Layer, type TraceRead } from "./layers";
 import { focusOf, RoomsPlan } from "./plan";
 import { roomRows, RoomsTable } from "./table";
 
@@ -46,14 +47,55 @@ function useRoomsSnapshot(doc: { session: string; openId: string } | null, epoch
   return { snapshot: call.data ?? null, error: call.error?.message ?? null, pending: call.pending };
 }
 
+/**
+ * `rooms.trace` for one view: read once per target, view and epoch (every verb that dirties the
+ * receipts bumps the epoch). No run on the view yet is an empty state, not an error.
+ */
+function useRoomsTrace(
+  doc: { session: string; openId: string } | null,
+  view: string,
+  epoch: number,
+): TraceRead {
+  const call = useHostOp(
+    "rooms.trace",
+    { view },
+    {
+      bridgeSessionId: doc?.session,
+      openDocumentId: doc?.openId,
+      enabled: doc !== null && view !== "",
+    },
+  );
+  const { refresh } = call;
+  useEffect(() => {
+    if (epoch > 0) refresh();
+  }, [epoch, refresh]);
+  const error = call.error?.message ?? null;
+  return {
+    data: call.data ?? null,
+    none: !error
+      ? null
+      : NO_TRACE.test(error)
+        ? "no trace for this view"
+        : `rooms.trace failed: ${error}`,
+  };
+}
+
+/** Revit's exporter clamps an image's long side to 8000 px; ask for all of it so zoom stays sharp. */
+const PLAN_PX = 8000;
+
 export function RoomsRoute({
   view: urlView,
   focus,
+  layers,
+  setLayers,
   setView,
 }: {
   view: string;
   /** The URL's `focus`: region labels, comma separated. */
   focus: string;
+  /** The URL's `layers`: solver layers, comma separated. */
+  layers: string;
+  setLayers: (next: string) => void;
   setView: (view: string) => void;
 }) {
   const [chosen] = useChooseTarget();
@@ -66,7 +108,8 @@ export function RoomsRoute({
       ? handle.resolution.target.ref
       : null;
   const { snapshot, error, pending } = useRoomsSnapshot(doc, page.epoch);
-  const plan = usePlanImage(handle.resolution, page.view || undefined);
+  const plan = usePlanImage(handle.resolution, page.view || undefined, PLAN_PX);
+  const trace = useRoomsTrace(doc, page.view, page.epoch);
   const [hovered, setHovered] = useState<string | null>(null);
 
   // The view is the URL's too, so a link lands on the same plan.
@@ -181,6 +224,9 @@ export function RoomsRoute({
           setPage={setPage}
           focus={focus}
           plan={plan}
+          trace={trace}
+          layers={layersOf(layers)}
+          setLayers={setLayers}
           hovered={hovered}
           setHovered={setHovered}
           cells={handle.work.doc?.edits ?? {}}
@@ -198,6 +244,9 @@ function RoomsBody({
   setPage,
   focus,
   plan,
+  trace,
+  layers,
+  setLayers,
   hovered,
   setHovered,
   cells,
@@ -209,6 +258,9 @@ function RoomsBody({
   setPage: (next: Partial<RoomsPage>) => void;
   focus: string;
   plan: ReturnType<typeof usePlanImage>;
+  trace: TraceRead;
+  layers: Layer[];
+  setLayers: (next: string) => void;
   hovered: string | null;
   setHovered: (guid: string | null) => void;
   cells: RoomsRouteDocument["edits"];
@@ -267,6 +319,9 @@ function RoomsBody({
               })
             }
             onHover={setHovered}
+            trace={trace}
+            layers={layers}
+            setLayers={setLayers}
           />
         </Pane>
       }

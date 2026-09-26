@@ -1,11 +1,25 @@
+// @vitest-environment jsdom
 /**
- * /rooms, deterministic: the write payload, the plan's ink order, callout placement, focus, and
- * the page's defaults.
+ * /rooms, deterministic: the write payload, the plan's ink order, callout placement, focus, the
+ * page's defaults, and the solver layers drawn from a trace.
  */
-import { expect, test } from "vite-plus/test";
+import { cleanup, render } from "@testing-library/react";
+import { afterEach, expect, test } from "vite-plus/test";
 import { roomEditKey, roomsRouteState, stagedRoomWrites } from "@pe/agent-contracts";
 
 import { holdsPin, PIN_R, placeCallouts, type CalloutItem } from "./callouts";
+import fixture from "./fixtures/trace.json";
+import zoneFile from "./fixtures/zone-8bcfb891.json";
+import {
+  LAYERS,
+  layersOf,
+  NO_TRACE,
+  railsOf,
+  toggleLayer,
+  TraceFaces,
+  TraceLayers,
+  type TraceData,
+} from "./layers";
 import { manifest } from "./manifest";
 import {
   fitView,
@@ -235,4 +249,70 @@ test("the manifest parses an empty page", () => {
     epoch: 0,
   });
   expect(manifest.stages!.map((stage) => stage.key)).toEqual(["partition", "review", "history"]);
+});
+
+afterEach(cleanup);
+
+const trace = fixture as TraceData;
+const drawn = (data: TraceData, on = [...LAYERS]) => {
+  const { container } = render(
+    <>
+      <svg>
+        <TraceLayers trace={data} on={on} toWorld={([x, y]) => [x * 4, -y * 4]} pxPerFt={4} />
+      </svg>
+      <TraceFaces trace={data} />
+    </>,
+  );
+  const count = (selector: string) => container.querySelectorAll(selector).length;
+  const kinds = (attr: string) =>
+    [...container.querySelectorAll(`[${attr}]`)]
+      .map((node) => node.getAttribute(attr)!)
+      .sort((a, b) => a.localeCompare(b));
+  return { count, kinds };
+};
+
+test("the trace draws each rail once, openings by kind, the network and one chip per face", () => {
+  const { count, kinds } = drawn(trace);
+  // Both zone files carry the capture's six rails; the plan draws them once.
+  expect(count("[data-rail]")).toBe(6);
+  expect(kinds("data-opening")).toEqual(["Cased", "Door", "Headed"]);
+  expect(count("[data-segment]")).toBe(6);
+  expect(kinds("data-face")).toEqual(["Band", "Room"]);
+});
+
+test("a layer off draws nothing of it", () => {
+  const { count } = drawn(trace, ["openings"]);
+  expect(count("[data-rail]")).toBe(0);
+  expect(count("[data-segment]")).toBe(0);
+  expect(count("[data-opening]")).toBe(3);
+});
+
+test("a real zone file with no walls captured draws no rails and its one face", () => {
+  const { count, kinds } = drawn({ runId: "75b2c926", zones: [zoneFile] } as TraceData);
+  expect(count("[data-rail]")).toBe(0);
+  expect(count("[data-segment]")).toBe(8);
+  expect(kinds("data-face")).toEqual(["Room"]);
+});
+
+test("rails deduplicate by (A, B), and a reversed rail is its own", () => {
+  const [zone] = trace.zones;
+  const reversed = { ...zone!.trace.rails[0]!, a: [20, 0], b: [0, 0] };
+  const twice: TraceData = {
+    runId: "r",
+    zones: [zone!, { ...zone!, trace: { ...zone!.trace, rails: [reversed] } }],
+  };
+  expect(railsOf(twice)).toHaveLength(7);
+});
+
+test("layers read from and write to the URL in legend order", () => {
+  expect(layersOf("faces,rails,bogus")).toEqual(["rails", "faces"]);
+  expect(layersOf("")).toEqual([]);
+  expect(toggleLayer(["faces"], "rails")).toBe("rails,faces");
+  expect(toggleLayer(["rails"], "rails")).toBe("");
+});
+
+test("the host's no-run errors are the empty state; others are errors", () => {
+  expect(NO_TRACE.test("no rooms.partition run has traced a zone on 'L1 - Rooms'")).toBe(true);
+  expect(NO_TRACE.test("run 'abc' traced no zone on 'L1 - Rooms'")).toBe(true);
+  expect(NO_TRACE.test("view 'L1' is not a plan view")).toBe(false);
 });

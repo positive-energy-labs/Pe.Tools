@@ -8,6 +8,7 @@ import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react"
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
 import { FactChip } from "#/components/lang/chip";
+import { Press } from "#/components/lang/press";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import {
@@ -22,6 +23,15 @@ import { token } from "#/lib/token";
 import { PlanImageLayer, type TakeoffPlanImage } from "#/takeoff/level-plan";
 import { pathD } from "#/takeoff/model";
 import { PLAN_REFUSAL, type PlanRefusal } from "#/takeoff/plan-image";
+import {
+  LAYER_SAYS,
+  LAYERS,
+  toggleLayer,
+  TraceFaces,
+  TraceLayers,
+  type Layer,
+  type TraceRead,
+} from "./layers";
 import { CALLOUT_FONT_PX, holdsPin, PIN_R, placeCallouts, type CalloutItem } from "./callouts";
 
 export type RoomsRegion = RoomsSnapshot.Res.RoomsRegion;
@@ -166,6 +176,9 @@ export function RoomsPlan({
   focusMissing,
   onSelect,
   onHover,
+  trace,
+  layers,
+  setLayers,
 }: {
   /** The regions on the drawn view, labelled as the table labels them. */
   rows: readonly RoomRow[];
@@ -183,6 +196,11 @@ export function RoomsPlan({
   /** A click selects one region; a shift-click adds or removes it (merge takes two or more). */
   onSelect: (guid: string | null, add: boolean) => void;
   onHover: (guid: string | null) => void;
+  /** `rooms.trace` for the drawn view; `none` names why there is nothing to draw. */
+  trace: TraceRead;
+  /** The URL's layers, on; `setLayers` writes the URL's `layers` back. */
+  layers: readonly Layer[];
+  setLayers: (next: string) => void;
 }) {
   const bounds = useMemo(() => {
     const points: Point2[] = rows.flatMap((row) => loopOf(row.region.outer));
@@ -235,7 +253,9 @@ export function RoomsPlan({
     const fit: Bounds2 = plan
       ? boundsOf(planCorners(plan).map(frame.toViewport))
       : { minX: 0, minY: 0, maxX: width, maxY: height };
-    return { frame, width, height, shapes, fit };
+    const [ox] = frame.toViewport([0, 0]);
+    const [fx] = frame.toViewport([1, 0]);
+    return { frame, width, height, shapes, fit, pxPerFt: Math.abs(fx - ox) };
   }, [bounds, rows, plan]);
 
   const [host, setHost] = useState<HTMLDivElement | null>(null);
@@ -349,11 +369,33 @@ export function RoomsPlan({
           </span>
         </FactChip>
       ))}
+      {LAYERS.map((layer) => {
+        const on = layers.includes(layer);
+        return (
+          <Press
+            key={layer}
+            type="button"
+            frame="line"
+            size="caption"
+            state={on ? "selected" : "rest"}
+            aria-pressed={on}
+            disabled={!trace.data}
+            title={trace.data ? LAYER_SAYS[layer] : (trace.none ?? "reading the trace")}
+            onClick={() => setLayers(toggleLayer(layers, layer))}
+          >
+            {layer}
+          </Press>
+        );
+      })}
+      {!trace.data && trace.none ? (
+        <FactChip title="partition this view to write a trace">{trace.none}</FactChip>
+      ) : null}
     </div>
   );
 
   const notice = (
     <>
+      {trace.data && layers.includes("faces") ? <TraceFaces trace={trace.data} /> : null}
       {planRefusal ? (
         <OutcomeLine
           kind="refused"
@@ -477,6 +519,14 @@ export function RoomsPlan({
                 </path>
               );
             })}
+            {trace.data ? (
+              <TraceLayers
+                trace={trace.data}
+                on={layers}
+                toWorld={world.frame.toViewport}
+                pxPerFt={world.pxPerFt}
+              />
+            ) : null}
           </svg>
         </div>
         {size ? (

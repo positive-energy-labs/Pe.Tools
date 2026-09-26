@@ -1,0 +1,194 @@
+{
+  "runId": "fixture-run",
+  "zones": [
+    {
+      "zoneGuid": "00000000-0000-0000-0000-00000000000a",
+      "label": "zone-a",
+      "trace": {
+        "rails": [
+          {
+            "a": [0, 0],
+            "b": [20, 0],
+            "thicknessFt": 0.5,
+            "source": "wall",
+            "elementId": 101,
+            "category": "Walls",
+            "layer": null
+          },
+          {
+            "a": [20, 0],
+            "b": [20, 10],
+            "thicknessFt": 0.5,
+            "source": "wall",
+            "elementId": 102,
+            "category": "Walls",
+            "layer": null
+          },
+          {
+            "a": [20, 10],
+            "b": [0, 10],
+            "thicknessFt": 0.5,
+            "source": "wall",
+            "elementId": 103,
+            "category": "Walls",
+            "layer": null
+          },
+          {
+            "a": [0, 10],
+            "b": [0, 0],
+            "thicknessFt": 0.5,
+            "source": "wall",
+            "elementId": 104,
+            "category": "Walls",
+            "layer": null
+          },
+          {
+            "a": [10, 0],
+            "b": [10, 10],
+            "thicknessFt": 0.375,
+            "source": "wall",
+            "elementId": 105,
+            "category": "Walls",
+            "layer": null
+          },
+          {
+            "a": [10, 5],
+            "b": [20, 5],
+            "thicknessFt": 0.375,
+            "source": "link",
+            "elementId": 106,
+            "category": "Walls",
+            "layer": "A-WALL"
+          }
+        ],
+        "segments": [
+          { "a": [0, 0], "b": [10, 0], "kind": "Zone" },
+          { "a": [10, 0], "b": [10, 4], "kind": "Wall" },
+          { "a": [10, 4], "b": [10, 7], "kind": "Door" },
+          { "a": [10, 7], "b": [10, 10], "kind": "Wall" }
+        ],
+        "openings": [
+          {
+            "a": [10, 4],
+            "b": [10, 7],
+            "widthFt": 3,
+            "kind": "Door",
+            "doorPieces": 2,
+            "headerFraction": 0.9,
+            "wallFraction": 0.1
+          },
+          {
+            "a": [3, 10],
+            "b": [6, 10],
+            "widthFt": 3,
+            "kind": "Headed",
+            "doorPieces": 0,
+            "headerFraction": 0.8,
+            "wallFraction": 0.2
+          }
+        ],
+        "faces": [
+          {
+            "index": 0,
+            "kind": "Room",
+            "bandWidthFt": null,
+            "ownEdgeEmpty": false,
+            "floatingFt": 0,
+            "narrow": false,
+            "backed": 0.92
+          }
+        ]
+      },
+      "accounting": { "zoneSqft": 100, "accepted": 100, "held": 0, "void": 0, "excluded": 0 }
+    },
+    {
+      "zoneGuid": "00000000-0000-0000-0000-00000000000b",
+      "label": "zone-b",
+      "trace": {
+        "rails": [
+          {
+            "a": [0, 0],
+            "b": [20, 0],
+            "thicknessFt": 0.5,
+            "source": "wall",
+            "elementId": 101,
+            "category": "Walls",
+            "layer": null
+          },
+          {
+            "a": [20, 0],
+            "b": [20, 10],
+            "thicknessFt": 0.5,
+            "source": "wall",
+            "elementId": 102,
+            "category": "Walls",
+            "layer": null
+          },
+          {
+            "a": [20, 10],
+            "b": [0, 10],
+            "thicknessFt": 0.5,
+            "source": "wall",
+            "elementId": 103,
+            "category": "Walls",
+            "layer": null
+          },
+          {
+            "a": [0, 10],
+            "b": [0, 0],
+            "thicknessFt": 0.5,
+            "source": "wall",
+            "elementId": 104,
+            "category": "Walls",
+            "layer": null
+          },
+          {
+            "a": [10, 0],
+            "b": [10, 10],
+            "thicknessFt": 0.375,
+            "source": "wall",
+            "elementId": 105,
+            "category": "Walls",
+            "layer": null
+          },
+          {
+            "a": [10, 5],
+            "b": [20, 5],
+            "thicknessFt": 0.375,
+            "source": "link",
+            "elementId": 106,
+            "category": "Walls",
+            "layer": "A-WALL"
+          }
+        ],
+        "segments": [
+          { "a": [10, 0], "b": [20, 0], "kind": "Zone" },
+          { "a": [14, 5], "b": [17, 5], "kind": "Closed" }
+        ],
+        "openings": [
+          {
+            "a": [14, 5],
+            "b": [17, 5],
+            "widthFt": 3,
+            "kind": "Cased",
+            "doorPieces": 0,
+            "headerFraction": 0.6,
+            "wallFraction": 0.3
+          }
+        ],
+        "faces": [
+          {
+            "index": 0,
+            "kind": "Band",
+            "bandWidthFt": 1.2,
+            "ownEdgeEmpty": false,
+            "floatingFt": 0.4,
+            "narrow": true,
+            "backed": 0.5
+          }
+        ]
+      },
+      "accounting": { "zoneSqft": 100, "accepted": 60, "held": 40, "void": 0, "excluded": 0 }
+    }
+  ]
+}
