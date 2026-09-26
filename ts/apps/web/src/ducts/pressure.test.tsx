@@ -6,6 +6,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { applyPatches, ductsRouteState, type DuctsRouteDocument } from "@pe/agent-contracts";
 import { NumericAssumptions } from "./assumptions";
+import { Pane } from "#/components/lang/pane";
 import { ENCODINGS, strokeOf } from "./encoding";
 import { savedReading } from "./host";
 import { PRESSURE_ISSUE_KINDS } from "./issues";
@@ -444,4 +445,17 @@ test("pressure issues collapse by kind, retain unscoped diagnostics and select e
   expect(rendered.container.querySelector("summary")?.textContent).toContain(
     "assumed fitting loss · 1",
   );
+});
+
+test("a pressure disclosure keeps its pointer target when its pane gains focus", () => {
+  const rendered = render(
+    <Pane kind="content" title="pressure">
+      <PressureIssues pressure={pressure} snapshot={snapshot} group="g1" />
+    </Pane>,
+  );
+  const summary = rendered.container.querySelector("summary")!;
+  fireEvent.pointerDown(summary.querySelector("span")!);
+  expect(document.activeElement).not.toBe(rendered.container.querySelector("section"));
+  fireEvent.click(summary);
+  expect(summary.parentElement!.hasAttribute("open")).toBe(true);
 });

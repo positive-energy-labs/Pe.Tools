@@ -397,7 +397,7 @@ test("Families view Pea doors require a mounted pane and return an exact retaine
       });
     }
     if (url.pathname === "/pe/route-view/families/set-query") {
-      expect(JSON.parse(String(init?.body))).toMatchObject({
+      expect(JSON.parse(init?.body as string)).toMatchObject({
         thread: turn.thread,
         instance,
         revision: 2,
