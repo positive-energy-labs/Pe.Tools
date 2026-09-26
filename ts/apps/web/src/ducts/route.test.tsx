@@ -9,7 +9,12 @@ import {
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
-import { ductsRouteState, readingKey, readingRequestSchema } from "@pe/agent-contracts";
+import {
+  applyPatches,
+  ductsRouteState,
+  readingKey,
+  readingRequestSchema,
+} from "@pe/agent-contracts";
 import { Route } from "#/routes/ducts";
 import { ChatHosted } from "#/route/situation-ladder";
 import type { DuctsSnapshot } from "@pe/host-contracts/generated";
@@ -201,6 +206,21 @@ beforeEach(() => {
     },
   );
   vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+    if (url.includes("/route-state/ducts/apply") && typeof init?.body === "string") {
+      const { patches, expectedRevision } = JSON.parse(init.body);
+      const result = applyPatches(
+        ductsRouteState,
+        { version: 1, revision, doc: work },
+        "human",
+        patches,
+        expectedRevision,
+      );
+      if (!result.ok) return Response.json(result);
+      work = result.envelope.doc;
+      revision = result.envelope.revision;
+      queueMicrotask(() => workListeners.forEach((emit) => emit()));
+      return Response.json({ ok: true, revision });
+    }
     if (
       url === "/call" &&
       typeof init?.body === "string" &&
@@ -353,6 +373,66 @@ test("a Work revision reads staged values only and fences an older response", as
     release(Response.json({ ...old, document: { ...old.document, elapsedMs: 999999 } })),
   );
   expect(screen.getByRole("region", { name: "Ducts route" }).textContent).not.toContain("999999");
+});
+
+test("staging fan static through the ledger changes the request and the pressure budget readout", async () => {
+  work = ductsRouteState.schema.parse({
+    assumptions: {
+      "fan-static:100": { proposal: { value: { kind: "fan-static", inWg: 0.9 } } },
+    },
+  });
+  reply = async (request) => {
+    const result = response(request);
+    const fan = request.assumptions?.values["fan-static:100"]?.inWg;
+    if (result.pressure) {
+      result.pressure.assumptionsUsed = [
+        {
+          id: "fan:100",
+          value: fan == null ? "unknown" : String(fan),
+          source: fan == null ? "Default" : "User",
+          reason: "staged Work fan rating",
+        },
+      ];
+      result.pressure.groups = [
+        {
+          groupId: "g1",
+          isWalkable: true,
+          criticalPathIncludesComponents: true,
+          assumptionsUsed: ["fan:100"],
+          totalEffectiveLengthFt: 200,
+          availableStaticInWg: fan == null ? null : fan - 0.1,
+          frictionRateInWgPer100Ft: fan == null ? null : (fan - 0.1) / 2,
+          marginInWg: fan == null ? null : fan - 0.3,
+        },
+      ];
+    }
+    return Response.json(result);
+  };
+  await mount("&group=g1&view=ledger");
+  expect(screen.getByRole("button", { name: /^available static: unknown/ })).toBeTruthy();
+  expect(requests.at(-1)!.request.assumptions?.values).toEqual({});
+  const input = screen.getByRole("spinbutton", { name: "fan-static:100" });
+  fireEvent.change(input, { target: { value: "0.5" } });
+  fireEvent.click(
+    within(input.closest("[data-assumption]") as HTMLElement).getByRole("button", {
+      name: "stage",
+    }),
+  );
+  await waitFor(() =>
+    expect(requests.at(-1)!.request.assumptions).toEqual({
+      revision: 1,
+      values: { "fan-static:100": { kind: "fan-static", inWg: 0.5 } },
+    }),
+  );
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: /^available static: 0.400/ })).toBeTruthy(),
+  );
+  expect(screen.getByRole("button", { name: /^friction rate: 0.200/ })).toBeTruthy();
+  expect(screen.getByRole("button", { name: /^margin: 0.200/ })).toBeTruthy();
+  expect(work.assumptions["fan-static:100"]?.proposal?.value).toEqual({
+    kind: "fan-static",
+    inWg: 0.9,
+  });
 });
 
 test("a group change fences late geometry and the hosted sentence names its document", async () => {

@@ -88,6 +88,109 @@ export const ISSUE_KINDS: Record<IssueKind, IssueKindInfo> = {
   ),
 };
 
+/** Solver diagnostics stay separate from captured model issues and never change snapshot readiness. */
+export const PRESSURE_ISSUE_KINDS: Record<string, IssueKindInfo> = {
+  "missing-connector": kind(
+    "missing connector",
+    "A referenced connector is absent.",
+    "walkable",
+    1,
+  ),
+  "self-loop": kind("self loop", "A part connects to itself.", "walkable", 2),
+  "no-unique-root-path": kind(
+    "no unique root",
+    "No unique equipment path reaches this subtree.",
+    "walkable",
+    3,
+  ),
+  "multiple-root-ports": kind(
+    "many root ports",
+    "Flow cannot be assigned to one root port.",
+    "walkable",
+    4,
+  ),
+  "unknown-demand": kind(
+    "unknown demand",
+    "Only the known terminal demand is calculated.",
+    "walkable",
+    5,
+  ),
+  "cycle-boundary": kind("cycle boundary", "Demand through the cycle is unknown.", "walkable", 6),
+  "unresolved-open-end": kind("unresolved end", "An open end has unknown demand.", "walkable", 7),
+  "invalid-segment": kind(
+    "invalid duct",
+    "Dimensions or roughness prevent a friction calculation.",
+    "walkable",
+    8,
+  ),
+  "unknown-tap-position": kind(
+    "unknown tap",
+    "The tap cannot be placed along the duct.",
+    "walkable",
+    9,
+  ),
+  "invalid-fitting-size": kind(
+    "invalid fitting",
+    "The fitting reference area is missing.",
+    "walkable",
+    10,
+  ),
+  "no-terminal-path": kind(
+    "no terminal path",
+    "No terminal has a unique root path.",
+    "walkable",
+    11,
+  ),
+  "unknown-flex-compression": kind(
+    "flex compression",
+    "A compression multiplier is needed for the installation.",
+    "budgetable",
+    1,
+  ),
+  "unknown-component-drop": kind(
+    "unknown component drop",
+    "Rated external loss at design flow is absent.",
+    "budgetable",
+    2,
+  ),
+  "unknown-fan-static": kind(
+    "unknown fan static",
+    "Rated fan static at design flow is absent.",
+    "budgetable",
+    3,
+  ),
+  "mixed-classification": kind(
+    "mixed circuit",
+    "A mixed classification cannot define one fan circuit.",
+    "budgetable",
+    4,
+  ),
+  "incomplete-circuit": kind(
+    "incomplete circuit",
+    "Full TEL needs complete supply and return paths, or one exhaust group.",
+    "budgetable",
+    5,
+  ),
+  "noncircular-laminar": kind(
+    "laminar approximation",
+    "Hydraulic diameter approximates noncircular laminar friction.",
+    "none",
+    1,
+  ),
+  "transitional-flow": kind(
+    "transition approximation",
+    "Friction interpolates through the unstable transition region.",
+    "none",
+    2,
+  ),
+  "unmatched-fitting": kind(
+    "assumed fitting loss",
+    "One velocity head is assumed; it is not a rated coefficient or an upper bound.",
+    "none",
+    3,
+  ),
+};
+
 /** The table's issue column: the kind's word in its class's tone. */
 export const issueVerdict = (issueKind: IssueKind) => {
   const info = ISSUE_KINDS[issueKind];

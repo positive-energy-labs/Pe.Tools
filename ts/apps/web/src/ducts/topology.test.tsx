@@ -8,7 +8,8 @@ import { cleanup, render } from "@testing-library/react";
 import { afterEach, expect, it } from "vite-plus/test";
 import { applyPatches, ductsRouteState, type DuctsRouteDocument } from "@pe/agent-contracts";
 
-import { DuctsLedger, verdictPatches } from "./ledger";
+import { DuctsLedger } from "./ledger";
+import { verdictPatches } from "./assumptions";
 import type { DuctsPage } from "./manifest";
 import { readiness, type DuctSnapshot } from "./readiness";
 import { chainsOf, groupTree, runsOf } from "./topology";
@@ -263,7 +264,7 @@ it("the ledger lists the runs longest first, and its issue row offers the open-e
   const text = view.container.textContent ?? "";
   expect(text).toContain("4 · longest");
   expect(text).toContain("1 Elbow · 1 Tee");
-  expect(text).toContain("30.0 ft straight");
+  expect(text).toContain("Manual D budget unavailable: no pressure receipt");
   expect(text).not.toContain("failed to load");
   for (const word of ["capped", "connect", "ignore", "unset"])
     expect(view.getByRole("group", { name: `assumption for ${OPEN}` }).textContent).toContain(word);

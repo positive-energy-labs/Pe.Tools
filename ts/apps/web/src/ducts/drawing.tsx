@@ -16,6 +16,7 @@ import {
   strokeOf,
   type DuctNode,
   type Encoding,
+  type EncodingFacts,
   type Issue,
   type Segment,
   type SegmentFacts,
@@ -24,7 +25,7 @@ import {
 /** Model feet [x, y, z] to drawing feet [x, y-down]. */
 export type Project = (point: readonly number[]) => Point2;
 
-export interface NodeFacts {
+export interface NodeFacts extends EncodingFacts {
   node: DuctNode;
   issues: readonly Issue[];
 }
@@ -139,6 +140,7 @@ export function DuctDrawing({
   encoding,
   fitKey,
   selected,
+  critical,
   hovered,
   issue,
   onHover,
@@ -154,6 +156,7 @@ export function DuctDrawing({
   /** The view refits when this changes (a new group, level or yaw step), never on a refresh. */
   fitKey: string;
   selected: ReadonlySet<number>;
+  critical?: ReadonlySet<number>;
   hovered: number | null;
   issue: string;
   onHover: (id: number | null) => void;
@@ -218,7 +221,9 @@ export function DuctDrawing({
     const nodes = scene.nodes.map((facts) => ({
       facts,
       at: project(facts.node.point),
-      ink: nodeInk(encoding, facts.issues),
+      stroke: encoding.nodes
+        ? strokeOf(encoding, facts)
+        : { ink: nodeInk(encoding, facts.issues), dash: null },
     }));
     const issues = scene.issues.map((item) => ({ issue: item, at: project(item.point!) }));
     const points = [
@@ -326,7 +331,21 @@ export function DuctDrawing({
               const id = facts.segment.id;
               const back = halo(id);
               return (
-                <g key={id} data-segment={id} data-selected={selected.has(id) ? "" : undefined}>
+                <g
+                  key={id}
+                  data-segment={id}
+                  data-critical={critical?.has(id) ? "" : undefined}
+                  data-selected={selected.has(id) ? "" : undefined}
+                >
+                  {critical?.has(id) ? (
+                    <path
+                      d={path}
+                      fill="none"
+                      stroke={token("ink")}
+                      strokeWidth={stroke.width + 4}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ) : null}
                   {back ? (
                     <path
                       d={path}
@@ -383,7 +402,7 @@ export function DuctDrawing({
               </g>
             );
           })}
-          {drawn.nodes.map(({ facts, at, ink }) => {
+          {drawn.nodes.map(({ facts, at, stroke }) => {
             const [x, y] = screen(at);
             const id = facts.node.id;
             const back = halo(id);
@@ -392,6 +411,7 @@ export function DuctDrawing({
                 key={id}
                 data-node={facts.node.kind}
                 data-node-id={id}
+                data-critical={critical?.has(id) ? "" : undefined}
                 data-selected={selected.has(id) ? "" : undefined}
                 transform={`translate(${x} ${y})`}
                 style={{ cursor: "pointer" }}
@@ -400,7 +420,15 @@ export function DuctDrawing({
                 onClick={click(() => onSelect(id))}
               >
                 {back ? <circle r={GLYPH * 2.5} fill={back} /> : null}
-                <Glyph kind={facts.node.kind} ink={ink} />
+                {critical?.has(id) || stroke.dash ? (
+                  <circle
+                    r={GLYPH * 1.7}
+                    fill="none"
+                    stroke={stroke.dash ? stroke.ink : token("ink")}
+                    className={stroke.dash ? DASH_CLASS[stroke.dash] : undefined}
+                  />
+                ) : null}
+                <Glyph kind={facts.node.kind} ink={stroke.ink} />
               </g>
             );
           })}

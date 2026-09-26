@@ -8,6 +8,7 @@ import type { ReactNode } from "react";
 import type { DuctDrawing, NodeFacts, Scene } from "./drawing";
 import type { DuctNode, Issue, Segment, SegmentFacts } from "./encoding";
 import type { DuctSnapshot } from "./readiness";
+import { pressurePoints } from "./pressure";
 
 type Level = DuctSnapshot["levels"][number];
 
@@ -64,16 +65,22 @@ export function sceneOf(
   group: string,
   keepLevel: (levelId: number | null) => boolean,
 ): Scene {
+  const pressure = pressurePoints(index.snapshot, group);
   const segments: SegmentFacts[] = (index.segmentsOf.get(group) ?? [])
     .filter((segment) => keepLevel(segment.levelId ?? null))
     .map((segment) => ({
       segment,
       derivedCfm: index.flows.get(segment.id) ?? null,
       issues: index.issuesOf.get(segment.id) ?? [],
+      pressure: pressure.get(segment.id),
     }));
   const nodes: NodeFacts[] = (index.nodesOf.get(group) ?? [])
     .filter((node) => keepLevel(node.levelId ?? null))
-    .map((node) => ({ node, issues: index.issuesOf.get(node.id) ?? [] }));
+    .map((node) => ({
+      node,
+      issues: index.issuesOf.get(node.id) ?? [],
+      pressure: pressure.get(node.id),
+    }));
   const issues = group
     ? index.snapshot.issues.filter(
         (issue) => issue.groupId === group && issue.point && keepLevel(index.levelOf(issue)),

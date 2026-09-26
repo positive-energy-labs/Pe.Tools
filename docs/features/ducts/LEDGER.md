@@ -21,13 +21,13 @@ The `/ducts` route shows a Revit duct network and its metadata on a real project
 - 2026-09-26, the bounded reader validates staged assumptions against the full capture, then solves only the selected group. It retains index metadata during a group read, but drops prior elements immediately and fences publication by document lifetime, group and Work revision.
 
 ## Tried & rejected
+- 2026-09-26, a staged fan alone cannot complete the saved g8079765 or g8761260 Manual D budget: the bounded solve contains only supply, and component drops remain unknown. The pressure UI displays solver nulls and the missing circuit inputs; it does not synthesize a return run or a budget.
 - 2026-09-26, Colebrook parity with Revit's saved section losses: 45 of 50 match, and 5 do not. All 50 match Altshul-Tsal, so Chadds's duct settings most likely select Altshul-Tsal. Production stays on Colebrook, and Altshul-Tsal lives in a diagnostic test only.
 - 2026-09-26, trusting Revit's calculated duct values: 0 of 4571 fittings on Chadds have a pressure drop, because the loss method is "ASHRAE Table" with no table chosen. Revit gives a critical path on 9 of 335 systems, with friction only. Use it as a test oracle, not as a result.
 - 2026-09-26, feeding the whole Chadds `ducts.snapshot` to Pea in real `/chat`: the 7,736,648-byte `pe_read` result exceeded `openai/gpt-5.6-terra`'s context window before any answer or proposal. Thread `90c33808-d3d3-4043-bc17-a1d8806eeddf`; human staging and unstaging worked in the same Chat pane.
 
 ## Owed
 - Promote the cited research (`.artifacts/research/mep-networks/A-D`, `H`) into `docs/features/ducts/RESEARCH.md` before the artifacts are swept.
-- Add a `pressure-drop` entry to the encoding table from the bounded reading's `pressure` result.
 - Confirm the captured `document.frictionMethod` on a fresh native read; the saved Altshul-Tsal match remains an inference.
 - A root assumption (equipment pass-through, or naming the root port) for the 73 multi-root groups. The `assumptions` Work schema has no key for it yet.
 - Stop session `ductsdev` (`pe-revit session stop --id ductsdev`) when the streams finish.

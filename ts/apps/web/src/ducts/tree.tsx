@@ -15,6 +15,8 @@ import { ISSUE_KINDS, IssueLegend, type IssueKind } from "./issues";
 import type { DuctsPage } from "./manifest";
 import type { DuctSnapshot } from "./readiness";
 import { chainsOf, groupTree, terminalCfm, type Chain, type GroupTree } from "./topology";
+import { groupPressure } from "./pressure";
+import { PressureNumber } from "./pressure-facts";
 
 const COL = 168;
 const ROW = 40;
@@ -41,7 +43,11 @@ export interface TreeLayout {
 }
 
 /** Deterministic tidy layout: x by vertex depth, y by leaf slot, first child on its parent's row. */
-export function layoutTree(tree: GroupTree, chains: Chain[]): TreeLayout {
+export function layoutTree(
+  tree: GroupTree,
+  chains: Chain[],
+  critical: readonly number[] = [],
+): TreeLayout {
   const below = new Map<number | null, Chain[]>();
   for (const chain of chains) below.set(chain.from, [...(below.get(chain.from) ?? []), chain]);
   // A subtree's reach: its farthest terminal first (so the critical-path stand-in runs along the
@@ -63,7 +69,12 @@ export function layoutTree(tree: GroupTree, chains: Chain[]): TreeLayout {
   const ordered = (from: number | null) =>
     [...(below.get(from) ?? [])].sort((a, b) => {
       const [ra, rb] = [farthest(a), farthest(b)];
-      return rb[0] - ra[0] || rb[1] - ra[1] || a.to - b.to;
+      return (
+        Number(critical.includes(b.to)) - Number(critical.includes(a.to)) ||
+        rb[0] - ra[0] ||
+        rb[1] - ra[1] ||
+        a.to - b.to
+      );
     });
 
   const placed: Placed[] = [];
@@ -108,6 +119,8 @@ export function DuctsTree({
     [snapshot, page.group],
   );
   const selected = page.selected ? Number(page.selected) : null;
+  const pressure = snapshot?.pressure;
+  const critical = snapshot ? groupPressure(snapshot, page.group)?.criticalPath : null;
   // The chain a selected fold member sits in unfolds: its members become vertices.
   const base = useMemo(() => (tree ? chainsOf(tree) : []), [tree]);
   const unfold = useMemo(() => {
@@ -115,7 +128,10 @@ export function DuctsTree({
     return new Set(hit?.members ?? []);
   }, [base, selected]);
   const chains = useMemo(() => (tree ? chainsOf(tree, unfold) : []), [tree, unfold]);
-  const layout = useMemo(() => (tree ? layoutTree(tree, chains) : null), [tree, chains]);
+  const layout = useMemo(
+    () => (tree ? layoutTree(tree, chains, critical?.path) : null),
+    [tree, chains, critical],
+  );
 
   if (empty || !snapshot || !tree || !layout)
     return (
@@ -128,7 +144,7 @@ export function DuctsTree({
 
   const maxCfm = Math.max(1, ...chains.map((c) => c.cfm ?? 0));
   const widthOf = (cfm: number | null) => (cfm == null ? 1 : 1.5 + 7 * Math.sqrt(cfm / maxCfm));
-  const onLongest = new Set(tree.longest);
+  const onLongest = new Set(pressure ? (critical?.path ?? []) : tree.longest);
   const longestFt = tree.longest.length ? tree.dist.get(tree.longest.at(-1)!)! : null;
   const flowed = chains.some((c) => c.cfm != null);
   const equipment = snapshot.nodes.find((n) => n.id === tree.root?.equipment);
@@ -153,9 +169,25 @@ export function DuctsTree({
             {flowed
               ? "."
               : "; this group has none (C# sums flow only for one-port groups with no loop), so every edge is a hairline."}{" "}
-            {longestFt != null
-              ? `The dark run is the longest developed length, ${fmt(longestFt, 1)} ft of straight duct: the stand-in for the critical path until a loss solver adds fitting losses.`
-              : "No terminal is reached from the root, so there is no longest run."}
+            {critical && pressure ? (
+              <>
+                The dark run is the solver's critical path to {critical.terminalId}
+                {critical.isComplete ? "" : " (partial)"}:{" "}
+                <PressureNumber
+                  label="critical duct and fitting loss"
+                  value={critical.ductLossInWg}
+                  pressure={pressure}
+                  ids={critical.assumptionsUsed}
+                />{" "}
+                duct and fitting loss.
+              </>
+            ) : pressure ? (
+              "No solver critical path reaches a terminal."
+            ) : longestFt != null ? (
+              `The dark run is the longest developed length, ${fmt(longestFt, 1)} ft of straight duct: the stand-in for the critical path until a loss solver adds fitting losses.`
+            ) : (
+              "No terminal is reached from the root, so there is no longest run."
+            )}
           </span>
           <IssueLegend />
         </div>
@@ -203,6 +235,7 @@ export function DuctsTree({
                 <g
                   key={chain.to}
                   data-element={chain.members[0]}
+                  data-critical={critical && long ? "" : undefined}
                   className="cursor-pointer"
                   onClick={() => pick(chain.members[0]!)}
                 >
@@ -251,7 +284,12 @@ export function DuctsTree({
                     x={x2}
                     y={y2}
                     hot={selected === chain.to}
-                    far={tree.longest.at(-1) === chain.to}
+                    far={
+                      pressure
+                        ? critical?.terminalId === chain.to
+                        : tree.longest.at(-1) === chain.to
+                    }
+                    pathWord={pressure ? "critical path" : "longest run"}
                   />
                 </g>
               );
@@ -289,6 +327,7 @@ function Vertex({
   y,
   hot,
   far,
+  pathWord,
 }: {
   tree: GroupTree;
   id: number;
@@ -296,6 +335,7 @@ function Vertex({
   y: number;
   hot: boolean;
   far: boolean;
+  pathWord: string;
 }) {
   const part = tree.parts.get(id)!;
   const kind = part.node?.kind;
@@ -305,8 +345,8 @@ function Vertex({
   const label =
     kind === "terminal"
       ? cfm != null
-        ? `${fmt(cfm)} cfm design · ${id}${far ? ` · longest run ${fmt(tree.dist.get(id)!, 1)} ft` : ""}`
-        : `no design flow · ${id}${far ? " · longest run" : ""}`
+        ? `${fmt(cfm)} cfm design · ${id}${far ? ` · ${pathWord}` : ""}`
+        : `no design flow · ${id}${far ? ` · ${pathWord}` : ""}`
       : kind === "cap"
         ? `cap · ${id}`
         : null;
