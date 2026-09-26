@@ -56,17 +56,40 @@ const defaultPeaAgentModelId = "anthropic/claude-opus-5";
 
 /** The whole model world Pea offers, in display order. Edit this list to change the picker. */
 export const peaModelAllowlist = [
+  "openai/gpt-6-sol",
   "openai/gpt-5.6-terra",
   "openai/gpt-5.6-sol",
   "openai/gpt-5.6-luna",
   "openai/gpt-5.6",
   "anthropic/claude-fable-5",
+  "anthropic/claude-opus-5-5",
   "anthropic/claude-opus-5",
 ];
 
+// Mastra's pinned catalog predates these IDs. Borrow provider auth only; no model capability claim.
+const newModelCatalogFallbacks = {
+  "openai/gpt-6-sol": "openai/gpt-5.6-sol",
+  "anthropic/claude-opus-5-5": "anthropic/claude-opus-5",
+} as const;
+
 /** Narrow the gateway catalog (models.dev, ~13k ids) to the allowlist, allowlist order. */
 export function peaModels(catalog: AvailableModel[]): AvailableModel[] {
-  return peaModelAllowlist.flatMap((id) => catalog.find((model) => model.id === id) ?? []);
+  return peaModelAllowlist.flatMap((id) => {
+    const found = catalog.find((model) => model.id === id);
+    if (found) return found;
+    const siblingId = newModelCatalogFallbacks[id as keyof typeof newModelCatalogFallbacks];
+    const sibling = catalog.find((model) => model.id === siblingId);
+    return sibling
+      ? {
+          id,
+          provider: sibling.provider,
+          modelName: id.split("/")[1]!,
+          hasApiKey: sibling.hasApiKey,
+          apiKeyEnvVar: sibling.apiKeyEnvVar,
+          useCount: 0,
+        }
+      : [];
+  });
 }
 
 const peaAgentName = "Pea Revit Agent";

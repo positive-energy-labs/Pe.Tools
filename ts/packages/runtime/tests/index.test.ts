@@ -649,11 +649,23 @@ test("the model picker's world is the allowlist, in allowlist order", () => {
       useCount: 0,
     }));
   const narrowed = peaModels(
-    catalog(["anthropic/claude-sonnet-5", "anthropic/claude-opus-5", "openai/gpt-5.6-terra"]),
+    catalog([
+      "anthropic/claude-sonnet-5",
+      "anthropic/claude-opus-5",
+      "openai/gpt-5.6-sol",
+      "openai/gpt-5.6-terra",
+    ]),
   );
   expect(narrowed.map((model) => model.id)).toEqual([
+    "openai/gpt-6-sol",
     "openai/gpt-5.6-terra",
+    "openai/gpt-5.6-sol",
+    "anthropic/claude-opus-5-5",
     "anthropic/claude-opus-5",
   ]);
+  expect(narrowed.find((model) => model.id === "openai/gpt-6-sol")?.hasApiKey).toBe(false);
+  expect(narrowed.find((model) => model.id === "anthropic/claude-opus-5-5")?.provider).toBe(
+    "anthropic",
+  );
   expect(peaModelAllowlist).toContain(defaultPeaAgentModelId);
 });
