@@ -23,6 +23,7 @@ The `/ducts` route shows a Revit duct network and its metadata on a real project
 - Promote the cited research (`.artifacts/research/mep-networks/A-D`, `H`) into `docs/features/ducts/RESEARCH.md` before the artifacts are swept.
 - Pass-2 pressure-loss solver: Darcy-Weisbach on straight segments, a fitting C table keyed on PartType, angle, r/D and area ratio, and the Manual D budget.
 - A root assumption (equipment pass-through, or naming the root port) for the 73 multi-root groups. The `assumptions` Work schema has no key for it yet.
-- A route render test on the level of `rooms.test.tsx`, and the `r24` Pe.App net48 compile of `ducts-backend`.
+- Finish the `r24` Pe.App net48 compile: integration reaches the unchanged `Pe.Revit.Takeoff/Kernel.cs:69` use of `SkipLast`, which net48 does not provide. Route rendering and cross-view selection now have deterministic checks.
+- Remove the residual `C:/Users/kaitp/source/repos/Pe.Tools-ducts-baseline-int` directory: `git worktree remove` unregistered it but could not empty it; automatic approval review blocked the follow-up recursive deletion.
 - Stop session `ductsdev` (`pe-revit session stop --id ductsdev`) when the streams finish.
 - kaitpw verdict: which of the four variants (S1 plan, S2 isometric, T1 schematic tree, T2 table ledger) survive as views.
