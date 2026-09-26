@@ -53,7 +53,7 @@ export const ductsRouteState = {
   route: "ducts",
   title: "Ducts",
   description:
-    "A person's assumptions that make duct networks solvable, one cell per key: an issue id from ducts.snapshot holds a verdict (capped, connect, ignore); flex-roughness:<flex type> (ft), fan-static:<equipment id> (in-wg) and component-drop:<family> (in-wg) hold overrides. Pea may propose; a person stages. Nothing is written to Revit.",
+    "Explain why a duct group is blocked and propose assumptions that make it walkable. Start with op:ducts.snapshot input {} to confirm the group in the current document index, even when the person supplies a group id. Then read the selected group. If only the group has been read, read the index before proposing. Read this Work and its revision, then use route:ducts.propose to write assumptions/<issue id>/proposal cells; a person stages them. An issue id from the snapshot holds a verdict (capped, connect, ignore); flex-roughness:<flex type> (ft), fan-static:<equipment id> (in-wg) and component-drop:<family> (in-wg) hold overrides. Work binds to the Chat's exact open document, including unsaved documents. Nothing is written to Revit.",
   schema: ductsDocumentSchema,
   agentWriteMask: [["assumptions", "*", "proposal"]],
   commands: {},

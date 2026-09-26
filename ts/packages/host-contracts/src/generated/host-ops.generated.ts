@@ -167,7 +167,7 @@ export namespace DocumentTemporaryStatus {
   }
 }
 
-/** Call without group to list groups; call with group to inspect one. The default is a compact document index with counts, readiness facts and bounds, without elements or pressure. A group adds only its nodes, segments, flows, issues and Colebrook pressure. Optional assumptions {revision, values} are staged Work only; the reading and pressure echo the revision. context:true adds decimated geometry for web views; agents should omit context. Read-only. */
+/** Explain why a duct group is blocked or walkable from its network topology and demand. First call with input {} (group omitted) to confirm the group in the current document index, even when the person supplies a group id. Then call with that group. The index has counts, readiness facts and bounds without elements or pressure; a group adds only its nodes, segments, flows, issues and Colebrook pressure. To propose assumptions, read route:ducts and use route:ducts.propose for proposal cells; a person stages them. This project-document read works on an exact open unsaved document without activating it. Optional assumptions {revision, values} are staged Work only; the reading and pressure echo the revision. context:true adds decimated geometry for web views; agents should omit context. Read-only. */
 export namespace DuctsSnapshot {
   export namespace Req {
     /**
