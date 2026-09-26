@@ -94,7 +94,7 @@ export function opSaid(kind: "text" | "number", op: QueryOp, value: string) {
 }
 
 /** A field clause against one cell: text compares trimmed and case-folded, numbers as numbers. */
-export function fieldMatches(
+function fieldMatches(
   raw: string | number | null,
   kind: "text" | "number",
   op: QueryOp,

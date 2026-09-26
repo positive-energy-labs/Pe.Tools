@@ -811,9 +811,6 @@ export function useHostOp<K extends OpKey>(key: K, ...args: OpCallArgs<K, HostQu
   );
 }
 
-export const useHostStatusQuery = (options?: HostQueryOptions) =>
-  useHostOp("host.status", undefined, options);
-
 /** A value domain's options (the `revit.catalog.field-options` answer). */
 export type FieldOptionsData = HostOpResponse<"revit.catalog.field-options">;
 

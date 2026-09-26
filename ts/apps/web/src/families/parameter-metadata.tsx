@@ -9,7 +9,7 @@ import { ValueDiff } from "#/components/lang/value-diff";
 
 export type ParameterMetadataRecord = { family: string; parameter: FamilyParameterSnapshot };
 
-export function MetadataControl({
+function MetadataControl({
   name,
   proposed = false,
   children,
