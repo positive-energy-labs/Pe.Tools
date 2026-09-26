@@ -1,5 +1,6 @@
 /**
- * /rooms Work: the seven room fields plus type on each Room Region, one cell per [guid, field].
+ * /rooms Work: the seven room fields plus type on each Room Region, one cell per [guid, field];
+ * feedback marks as trichotomy cells (Pea proposes, a person stages); and rungless notes.
  * Region and op shapes are the generated host catalog's (`@pe/host-contracts/generated`).
  */
 import { z } from "zod";
@@ -29,6 +30,33 @@ export const roomEditAddress = (key: string) => {
   return address;
 };
 
+const point = z.tuple([z.number(), z.number()]);
+/** Where feedback points: model feet on one plan view of one level. R-numbers are display only. */
+const anchorSchema = (minPoints: number) =>
+  z.strictObject({ view: z.string(), level: z.string(), polygon: z.array(point).min(minPoints) });
+
+/**
+ * A feedback mark. `run` is the partition run it was drawn against; its glyph (passing, failing,
+ * stale, gone) is derived on read against the newest run and never stored.
+ */
+export const markSchema = z.strictObject({
+  kind: z.enum(["merge", "reject", "wall", "split"]),
+  anchor: anchorSchema(3),
+  run: z.string(),
+  guids: z.array(z.string()).optional(),
+  note: z.string().optional(),
+});
+export type Mark = z.infer<typeof markSchema>;
+
+/** A note is not a proposal: no rungs, writable by Pea and a person, never accepted or denied. */
+export const noteSchema = z.strictObject({
+  anchor: anchorSchema(1),
+  text: z.string(),
+  by: z.enum(["pea", "person"]),
+  at: z.iso.datetime(),
+});
+export type RoomsNote = z.infer<typeof noteSchema>;
+
 export const roomsDocumentSchema = z
   .strictObject({
     edits: z
@@ -39,6 +67,8 @@ export const roomsDocumentSchema = z
         trichotomyCellSchema(z.union([z.string(), z.number()])),
       )
       .default({}),
+    marks: z.record(z.string(), trichotomyCellSchema(markSchema)).default({}),
+    notes: z.record(z.string(), noteSchema).default({}),
   })
   .superRefine((doc, ctx) => {
     for (const [key, cell] of Object.entries(doc.edits)) {
@@ -77,8 +107,12 @@ export const roomsRouteState = {
   route: "rooms",
   title: "Rooms",
   description:
-    "A person's staged room fields (name, type, ceiling, people, lighting, equipment, ventilation), one cell per [region guid, field]. Pea may propose; a person stages, and rooms.write reads staged values only. Regions and geometry are read from rooms.snapshot.",
+    "A person's staged room fields (name, type, ceiling, people, lighting, equipment, ventilation), one cell per [region guid, field]. Pea may propose; a person stages, and rooms.write reads staged values only. Feedback marks (merge, reject, wall, split) are cells keyed by id with a model-feet anchor and the run they were drawn against: Pea proposes, a person stages. Notes are rungless anchored text either may write. Regions and geometry are read from rooms.snapshot.",
   schema: roomsDocumentSchema,
-  agentWriteMask: [["edits", "*", "proposal"]],
+  agentWriteMask: [
+    ["edits", "*", "proposal"],
+    ["marks", "*", "proposal"],
+    ["notes", "*"],
+  ],
   commands: {},
 } satisfies RouteStateSpec<typeof roomsDocumentSchema>;
