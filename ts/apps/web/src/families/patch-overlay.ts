@@ -9,10 +9,10 @@ import { familyCellKey, type FamiliesPatchCell } from "@pe/agent-contracts";
 import type { ParamSpec } from "#/family/family-model";
 import type { ParamColumn, TypeRow } from "./matrix-columns";
 
-export type OverlayRung = "proposal" | "staged";
+type OverlayRung = "proposal" | "staged";
 /** How the patch reaches this cell: an explicit `types` entry, a uniform `value`, a direct alias, or a formula. */
-export type OverlayHow = "type" | "uniform" | "alias" | "formula";
-export interface OverlayValue {
+type OverlayHow = "type" | "uniform" | "alias" | "formula";
+interface OverlayValue {
   value: string;
   how: OverlayHow;
 }

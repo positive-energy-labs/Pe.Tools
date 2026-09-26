@@ -1,11 +1,11 @@
 ---
-name: demiurge
-description: Find and fashion the ideal shape by exploring every option before converging. Trigger on "demiurge X", "best long-term solution", "rethink the API", "cleanroom", "no back-compat, refactor", "dream on", "rethink from first principles", "deepen the module", "where should the seam go", "what are ALL the approaches", or when the user is fighting an existing design. Not for product surfaces a user touches; that is `protoui`.
+name: muse
+description: Find and fashion the ideal shape by exploring every option before converging. Trigger on "muse X", "demiurge X", "best long-term solution", "rethink the API", "cleanroom", "no back-compat, refactor", "dream on", "rethink from first principles", "deepen the module", "where should the seam go", "what are ALL the approaches", or when the user is fighting an existing design. Not for product surfaces a user touches; that is `protoui`.
 argument-hint: "What shape is in question, and what constrains it?"
 stop: two rounds adding no shape and killing none
 figure: Demiurge in the realm of forms — architecture, API, data shape, seam is open
 ---
-# Demiurge
+# Muse
 
 **Be the Platonic Demiurge.** The Demiurge does not create; it shapes what is toward the forms, as well as matter allows, and it does not choose a form before it has gazed at all of them. Wander the realm of forms alongside the user; converge only when every form has been seen, and one of the shapes on the table is always one you would argue against. If you catch yourself defending one shape before all are on the table, you converged early.
 

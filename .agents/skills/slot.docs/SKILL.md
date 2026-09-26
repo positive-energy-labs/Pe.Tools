@@ -22,7 +22,7 @@ There is no external issue tracker. No GitHub issues, no `.scratch/`, no ticket 
 | Home| Knowledge |
 |---|---|
 | `docs/features/<name>/LEDGER.md` |  Feature-scoped decisions, rejected paths, open work |
-| `docs/features/<name>/MAP.md`, deleted when the effort ends |  Live-effort frontier (protoui rounds, demiurge shapes) |
+| `docs/features/<name>/MAP.md`, deleted when the effort ends |  Live-effort frontier (protoui rounds, muse shapes) |
 | `docs/adr/NNNN-slug.md` |  Decisions that constrain other features |
 | Nearest package `AGENTS.md` Shared Language table; feature terms in `docs/features/<name>/GLOSSARY.md` (lazy, `grill` grows them; formats: `GLOSSARY-FORMAT.md`, `ADR-FORMAT.md` beside this skill) |  Domain vocabulary |
 | Hard-won wide-breadth rationale | Authority docs (registry below) |

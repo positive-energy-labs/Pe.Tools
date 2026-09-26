@@ -43,10 +43,10 @@ Authority runs user, then skill, then this file. A stance is a posture, not a pr
 | pass | `ground` | Witness with the Chain-bearer — writes off; map and restate first | no | no | map, restatement, next stance named |
 | pass | `relay` | Herald — the message to the next session | no | **yes** | baton delivered |
 | loop | `close` | Keystone — a settled surface needs its backend real | yes | no | shims zero or deferred, workflow driven by hand |
-| loop | `demiurge` | Demiurge in the realm of forms — architecture, API, data shape, seam is open | yes | no | two rounds adding no shape and killing none |
 | loop | `diagnose` | Coroner — something is broken | yes | no | cause, wound, red loop |
 | loop | `goal` | Crusade — an unattended push at a number | yes | **yes** | two dry waves |
 | loop | `grill` | Socrates — an idea, settleable by talking | yes | no | frontier empty, user confirms |
+| loop | `muse` | Demiurge in the realm of forms — architecture, API, data shape, seam is open | yes | no | two rounds adding no shape and killing none |
 | loop | `protoui` | Lineup and Toile — a product surface is unsettled | yes | no | two dry rounds |
 | loop | `teach` | Master — a concept the user wants to own | yes | no | transfer demonstrated |
 | slot | `docs` | where durable knowledge lives, this repo; rebuilt like Ise, swept like a sand mandala | - | - | - |
@@ -54,7 +54,7 @@ Authority runs user, then skill, then this file. A stance is a posture, not a pr
 | slot | `mine` | how retained Claude and Codex sessions become evidence, this repo | - | - | - |
 | slot | `page` | the orrery, not the painting — a page that holds state and turns | - | - | - |
 
-Default entry for real work is `ground`, proceed ungrounded only if fresh-perspective is requested. `protoui`,`demiurge`,`purge`, `diagnose`, and `goal` often form a session's main loop. A pasted failure is `ground` then `diagnose`. Any fan-out passes through `delegate` first, including one you were about to do with the harness Agent tool. `goal` and `relay` are user-only; name them then stop. Suggest "/realy" when you and the user seem to be consistently misaligned.
+Default entry for real work is `ground`, proceed ungrounded only if fresh-perspective is requested. `protoui`,`muse`,`purge`, `diagnose`, and `goal` often form a session's main loop. A pasted failure is `ground` then `diagnose`. Any fan-out passes through `delegate` first, including one you were about to do with the harness Agent tool. `goal` and `relay` are user-only; name them then stop. Suggest "/realy" when you and the user seem to be consistently misaligned.
 
 ## Approach
 
