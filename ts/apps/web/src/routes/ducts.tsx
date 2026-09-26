@@ -2,7 +2,13 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { routeSearch } from "#/route/route-owner";
 import { DuctsRoute } from "#/ducts/route";
 
-const text = (value: unknown) => (typeof value === "string" && value ? value : undefined);
+// The router parses a numeric-looking value (`selected=8081605`, `level=5765339`) as a number.
+const text = (value: unknown) =>
+  typeof value === "number"
+    ? String(value)
+    : typeof value === "string" && value
+      ? value
+      : undefined;
 
 export const Route = createFileRoute("/ducts")({
   validateSearch: (search: Record<string, unknown>) => ({
