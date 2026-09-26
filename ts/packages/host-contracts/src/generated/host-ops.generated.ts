@@ -378,6 +378,10 @@ export namespace DuctsSnapshot {
       direction: string;
       classification?: null | string;
       connectedTo?: null | DuctRef;
+      /**
+       * The captured peer's group when that peer is outside this reading. ConnectedTo retains its identity; this is not an open end or missing peer.
+       */
+      outsideGroup?: null | string;
     }
     /**
      * What a connector touches: an element id and that element's connector index.

@@ -89,7 +89,7 @@ public static class DuctPressureSolver {
             var seen = new HashSet<(long, int, long, int)>();
             foreach (var p in parts.Values)
             foreach (var c in p.Ports) {
-                if (c.ConnectedTo is not { } to) continue;
+                if (c.ConnectedTo is not { } to || c.OutsideGroup is not null) continue;
                 var gid = groupOf.TryGetValue(p.Id, out var g) ? g : "";
                 if (!parts.TryGetValue(to.ElementId, out var other) || other.Ports.FirstOrDefault(x => x.Index == to.Connector) is not { } oc) {
                     Issue("missing-connector", gid, p.Id, $"Connector {c.Index} points to absent {to.ElementId}:{to.Connector}.");
@@ -503,7 +503,8 @@ public static class DuctPressureSolver {
                     var peers = network.Groups.Where(g => g.Id != group.Id && g.RootIds.Count == 1 && g.RootIds[0] == root.Id).ToList();
                     var complement = peers.Where(g => g.Classifications.Count == 1 && g.Classifications[0].IndexOf(supply ? "Return" : "Supply", StringComparison.OrdinalIgnoreCase) >= 0).ToList();
                     var circuitPaths = new List<List<TerminalPressure>> { paths };
-                    var circuitComplete = walkable;
+                    var outsideGroup = root.Connectors.Any(c => c.OutsideGroup != null);
+                    var circuitComplete = walkable && !outsideGroup;
                     if (supply || ret) {
                         if (complement.Count == 1 && !peers.Any(g => g.Classifications.SequenceEqual(group.Classifications))) {
                             var other = complement[0];
@@ -514,7 +515,9 @@ public static class DuctPressureSolver {
                             dependencies.AddRange(otherPaths.SelectMany(p => p.AssumptionsUsed));
                         } else circuitComplete = false;
                     } else if (!exhaust || peers.Any(g => g.Classifications.SequenceEqual(group.Classifications))) circuitComplete = false;
-                    if (!circuitComplete) Issue("incomplete-circuit", group.Id, root.Id, "Full TEL and fan margin need unambiguous, complete supply plus return paths, or one exhaust group.");
+                    if (!circuitComplete) Issue(outsideGroup ? "outside-group" : "incomplete-circuit", group.Id, root.Id,
+                        outsideGroup ? "Full TEL and fan margin need the peer groups outside this reading."
+                            : "Full TEL and fan margin need unambiguous, complete supply plus return paths, or one exhaust group.");
                     if (circuitComplete) {
                         tel = circuitPaths.Sum(side => side.Max(p => p.EffectiveLengthFt));
                         // A root-level entry represents additional external components absent from the graph, not fan internal losses.

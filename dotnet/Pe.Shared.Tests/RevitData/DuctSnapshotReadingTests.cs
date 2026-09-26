@@ -17,14 +17,19 @@ public sealed class DuctSnapshotReadingTests {
     private static string Json(object value) => JsonConvert.SerializeObject(value, Wire);
     private static int Bytes(object value) => Encoding.UTF8.GetByteCount(Json(value));
 
-    [Test]
-    public void Index_omits_elements_and_pressure_and_group_solves_only_its_graph_even_with_a_shared_root() {
+    [TestCase("Exhaust Air", "Exhaust Air")]
+    [TestCase("Supply Air", "Return Air")]
+    public void Index_omits_elements_and_group_pressure_preserves_sibling_circuit_evidence(string firstClass, string secondClass) {
         var first = DuctPressureBackendTests.Network();
+        first = first with {
+            Nodes = first.Nodes.Select(n => n with { Classification = firstClass }).ToArray(),
+            Segments = first.Segments.Select(s => s with { Classification = firstClass }).ToArray()
+        };
         var fan = first.Nodes.Single(n => n.Kind == DuctNodeKind.Equipment);
         var secondTerminal = first.Nodes.Single(n => n.Kind == DuctNodeKind.Terminal) with {
-            Id = 3, Connectors = [first.Nodes[1].Connectors[0] with { ConnectedTo = new(20, 1) }]
+            Id = 3, Classification = secondClass, Connectors = [first.Nodes[1].Connectors[0] with { ConnectedTo = new(20, 1) }]
         };
-        var secondSegment = first.Segments[0] with { Id = 20, Polyline = [[20, 0, 0], [30, 0, 0]], Connectors = [
+        var secondSegment = first.Segments[0] with { Id = 20, Classification = secondClass, Polyline = [[20, 0, 0], [30, 0, 0]], Connectors = [
             first.Segments[0].Connectors[0] with { ConnectedTo = new(fan.Id, 1) },
             first.Segments[0].Connectors[1] with { ConnectedTo = new(3, 0) }]
         };
@@ -48,7 +53,11 @@ public sealed class DuctSnapshotReadingTests {
             ["fan-static:1"] = new(DuctAssumptionKind.FanStatic, InWg: .5)
         });
         var read = DuctSnapshotReader.Read(capture, new() { Group = group.Id, Context = true, Assumptions = staged });
+        var full = DuctPressureAssessment.Assess(capture, staged).Pressure!;
         Assert.Multiple(() => {
+            Assert.That(read.Pressure!.Issues, Is.EquivalentTo(full.Issues.Where(i => i.GroupId == group.Id)),
+                "A retained fan port into another captured group is a boundary, never a missing connector.");
+            Assert.That(Json(read.Pressure.Groups.Single()), Is.EqualTo(Json(full.Groups.Single(g => g.GroupId == group.Id))));
             Assert.That(read.Segments!.Select(s => s.Id), Is.EqualTo(new[] { 10L }));
             Assert.That(read.Nodes!.Select(n => n.Id), Is.EquivalentTo(new[] { 1L, 2L }));
             Assert.That(read.Issues!.All(i => i.GroupId == group.Id), Is.True);
@@ -63,6 +72,24 @@ public sealed class DuctSnapshotReadingTests {
         });
         // Document Work can include a valid judgment for the unselected group.
         var sibling = DuctSnapshotReader.Read(capture, new() { Group = "g3", Assumptions = staged });
+        Assert.That(sibling.Pressure!.Issues, Is.EquivalentTo(full.Issues.Where(i => i.GroupId == "g3")));
+        var boundary = read.Nodes!.Single(n => n.Id == fan.Id).Connectors.Single(c => c.Index == 1);
+        Assert.That(boundary.OutsideGroup, Is.EqualTo("g3"));
+        Assert.That(boundary.ConnectedTo, Is.EqualTo(new DuctRef(20, 0)));
+        Assert.That(capture.Nodes.Single(n => n.Id == fan.Id).Connectors.All(c => c.OutsideGroup is null), Is.True);
+        var boundedSolve = DuctPressureAssessment.Assess(capture with {
+            Nodes = read.Nodes, Segments = read.Segments!, Groups = [group], Flows = read.Flows!, Issues = read.Issues!
+        }, staged).Pressure!;
+        Assert.That(boundedSolve.Issues.Any(i => i.Code == "missing-connector"), Is.False);
+        Assert.That(boundedSolve.Groups.Single().TotalEffectiveLengthFt, Is.Null,
+            "A standalone partial graph cannot establish a full fan circuit across its boundary.");
+        // A real missing connector on an existing sibling element must not be hidden as a boundary.
+        var broken = capture with { Nodes = capture.Nodes.Select(n => n.Id == fan.Id
+            ? n with { Connectors = n.Connectors.Select(c => c.Index == 1 ? c with { ConnectedTo = new(20, 99) } : c).ToArray() }
+            : n).ToArray() };
+        var brokenRead = DuctSnapshotReader.Read(broken, new() { Group = group.Id });
+        Assert.That(brokenRead.Nodes!.Single(n => n.Id == fan.Id).Connectors.Single(c => c.Index == 1).OutsideGroup, Is.Null);
+        Assert.That(brokenRead.Pressure!.Issues.Any(i => i.Code == "missing-connector" && i.ElementId == fan.Id), Is.True);
         Assert.That(sibling.Pressure!.Groups.Select(g => g.GroupId), Is.EqualTo(new[] { "g3" }));
         Assert.That(DuctSnapshotReader.Read(capture, new() { Context = true }).Context!.Single().Polylines, Has.Count.EqualTo(2));
         var ungrouped = capture with { Segments = [..capture.Segments, secondSegment with { Id = 30, GroupId = null }] };

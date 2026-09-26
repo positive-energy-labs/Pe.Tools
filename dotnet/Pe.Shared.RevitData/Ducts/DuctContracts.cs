@@ -133,7 +133,10 @@ public sealed record DuctConnector(
     double? FlowCfm,
     string Direction,
     string? Classification,
-    DuctRef? ConnectedTo);
+    DuctRef? ConnectedTo) {
+    /// <summary>The captured peer's group when that peer is outside this reading. ConnectedTo retains its identity; this is not an open end or missing peer.</summary>
+    public string? OutsideGroup { get; init; }
+}
 
 /// <summary>One stated or reported value with its unit and provenance.</summary>
 public sealed record DuctFact(string Key, double? Value, string? Text, string Unit, DuctProvenance Provenance);

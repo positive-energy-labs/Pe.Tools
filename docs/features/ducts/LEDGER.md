@@ -18,7 +18,7 @@ The `/ducts` route shows a Revit duct network and its metadata on a real project
 - 2026-09-26, counsel ruling, re-openable: `ignore` resolves an open end and the advisory kinds only. A loop, no-root or multi-root issue needs a structural answer and always blocks.
 - 2026-09-26, the pass-2 solver is pure C# (`ducts-solver` ec782eb6, `Pe.Shared.RevitData/Ducts`): it uses Colebrook friction, the hydraulic diameter `Dh = 4A/P`, and ASHRAE fitting rows with a citation each. An unmatched fitting gets the named default `assumed-one-velocity-head` (C = 1) and an issue, never 0.
 - 2026-09-26, counsel ruling, re-openable: the route consumes the solver through `ducts.snapshot({ group, assumptions })`. Porting the solver to TS would duplicate tap splitting, coefficient choice and budgeting.
-- 2026-09-26, the bounded reader validates staged assumptions against the full capture, then solves only the selected group. It retains index metadata during a group read, but drops prior elements immediately and fences publication by document lifetime, group and Work revision.
+- 2026-09-26, the reader validates staged assumptions and solves the full capture before returning the selected group's pressure. Fan budgets need sibling supply/return evidence; slicing first fabricated missing connectors and changed circuit issues. Retained connectors name existing excluded peers with `outsideGroup`. Index reads still omit pressure and elements.
 
 ## Tried & rejected
 - 2026-09-26, Colebrook parity with Revit's saved section losses: 45 of 50 match, and 5 do not. All 50 match Altshul-Tsal, so Chadds's duct settings most likely select Altshul-Tsal. Production stays on Colebrook, and Altshul-Tsal lives in a diagnostic test only.

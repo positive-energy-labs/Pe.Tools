@@ -72,17 +72,41 @@ public static class DuctSnapshotReader {
                     g.Select(s => Decimate(s.Polyline)).ToArray())).ToArray() : null
         };
         if (selected is null) return reading;
+        DuctConnector Boundary(DuctConnector connector) {
+            if (connector.ConnectedTo is not { } peer) return connector;
+            nodes.TryGetValue(peer.ElementId, out var node);
+            segments.TryGetValue(peer.ElementId, out var segment);
+            var group = node?.GroupId ?? segment?.GroupId;
+            var ports = node?.Connectors ?? segment?.Connectors;
+            // Only an existing captured peer is a boundary. Broken references remain defects.
+            return group != null && group != selected.Id && ports?.Any(p => p.Index == peer.Connector) == true
+                ? connector with { OutsideGroup = group } : connector;
+        }
         var own = snapshot with {
             Groups = [selected],
-            Nodes = snapshot.Nodes.Where(n => n.GroupId == selected.Id || selected.RootIds.Contains(n.Id)).ToArray(),
-            Segments = segmentsOf[selected.Id].ToArray(),
+            Nodes = snapshot.Nodes.Where(n => n.GroupId == selected.Id || selected.RootIds.Contains(n.Id))
+                .Select(n => n with { Connectors = n.Connectors.Select(Boundary).ToArray() }).ToArray(),
+            Segments = segmentsOf[selected.Id].Select(s => s with { Connectors = s.Connectors.Select(Boundary).ToArray() }).ToArray(),
             Flows = snapshot.Flows.Where(f => segments[f.SegmentId].GroupId == selected.Id).ToArray(),
             Issues = issuesOf[selected.Id].ToArray(), Pressure = null
         };
-        // The analysis is already captured. Re-analyzing retained equipment ports could invent sibling groups.
-        var pressure = DuctPressureSolver.Solve(new DuctNetwork.Analysis(own.Nodes, own.Segments, own.Groups, own.Flows, own.Issues), assumptions);
+        // Fan budgets depend on sibling supply/return groups. Solve the capture before bounding the response.
+        var full = DuctPressureSolver.Solve(new DuctNetwork.Analysis(snapshot.Nodes, snapshot.Segments, snapshot.Groups, snapshot.Flows, snapshot.Issues), assumptions);
+        var pressure = full with {
+            Segments = full.Segments.Where(s => s.GroupId == selected.Id).ToArray(),
+            Fittings = full.Fittings.Where(f => f.GroupId == selected.Id).ToArray(),
+            Terminals = full.Terminals.Where(t => t.GroupId == selected.Id).ToArray(),
+            Groups = full.Groups.Where(g => g.GroupId == selected.Id).ToArray(),
+            Issues = full.Issues.Where(i => i.GroupId == selected.Id || i.GroupId == "" &&
+                (own.Nodes.Any(n => n.Id == i.ElementId) || own.Segments.Any(s => s.Id == i.ElementId))).ToArray()
+        };
+        var used = new HashSet<string>(pressure.Segments.SelectMany(s => s.AssumptionsUsed)
+            .Concat(pressure.Fittings.SelectMany(f => f.AssumptionsUsed))
+            .Concat(pressure.Terminals.SelectMany(t => t.AssumptionsUsed))
+            .Concat(pressure.Groups.SelectMany(g => g.AssumptionsUsed)));
         return reading with { Nodes = own.Nodes, Segments = own.Segments, Flows = own.Flows, Issues = own.Issues,
-            Pressure = pressure with { AssumptionRevision = request.Assumptions?.Revision } };
+            Pressure = pressure with { AssumptionRevision = request.Assumptions?.Revision,
+                AssumptionsUsed = full.AssumptionsUsed.Where(a => used.Contains(a.Id)).ToArray() } };
     }
 
     private static DuctBounds? Bounds(IEnumerable<double[]> points) {
