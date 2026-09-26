@@ -5,9 +5,17 @@
 import { expect, test } from "vite-plus/test";
 import { roomEditKey, roomsRouteState, stagedRoomWrites } from "@pe/agent-contracts";
 
-import { placeCallouts, type CalloutItem } from "./callouts";
+import { holdsPin, PIN_R, placeCallouts, type CalloutItem } from "./callouts";
 import { manifest } from "./manifest";
-import { focusOf, REGION_STATES, regionState, unassigned, type RoomsRegion } from "./plan";
+import {
+  fitView,
+  focusOf,
+  REGION_STATES,
+  regionState,
+  unassigned,
+  WORLD_PX_PER_FT,
+  type RoomsRegion,
+} from "./plan";
 import { roomRows, stagePatches } from "./table";
 
 const region = (patch: Partial<RoomsRegion>): RoomsRegion => ({
@@ -184,6 +192,39 @@ test("callouts: a region that fits keeps its pin on its anchor; an off-screen an
     10,
   );
   expect(placed.map((c) => [c.label, c.pin, c.leader])).toEqual([["Office", [100, 100], false]]);
+});
+
+test("callouts: a 10 by 10 ft room at 4 px/ft and scale 1.5 holds its own pin", () => {
+  const side = 10 * WORLD_PX_PER_FT * 1.5;
+  expect(side).toBe(60);
+  expect(holdsPin(side, PIN_R)).toBe(true);
+  const [pin] = placeCallouts(
+    [{ label: "R4", anchor: [250, 390], text: "100 sf", fits: holdsPin(side, PIN_R) }],
+    { width: 500, height: 780 },
+    PIN_R,
+  );
+  expect([pin!.pin, pin!.leader]).toEqual([[250, 390], false]);
+});
+
+test("fit: Duryee L1's crop on a 500 by 780 pane lets a 60 sf room hold its pin; zoomed out it leaves", () => {
+  // w16 vi-duryee registration: 72.96 by 84.72 ft. The world is WORLD_PX_PER_FT exactly, so the
+  // fitted box is the crop in feet times that density.
+  const crop = {
+    w: 39.94513006599976 + 33.01686225247103,
+    h: 298.30982822975227 - 213.5918297887348,
+  };
+  const box = { minX: 0, minY: 0, maxX: crop.w * WORLD_PX_PER_FT, maxY: crop.h * WORLD_PX_PER_FT };
+  const { scale } = fitView(box, { width: 500, height: 780 }, 0);
+  expect(scale).toBeCloseTo(1.713, 3);
+  const room = (s: number): CalloutItem => ({
+    label: "R7",
+    anchor: [250, 390],
+    text: "60 sf",
+    fits: holdsPin(6 * WORLD_PX_PER_FT * s, PIN_R), // 6 by 10 ft
+  });
+  const at = (s: number) => placeCallouts([room(s)], { width: 500, height: 780 }, PIN_R)[0]!;
+  expect(at(scale).leader).toBe(false);
+  expect(at(scale * 0.3).leader).toBe(true);
 });
 
 test("the manifest parses an empty page", () => {

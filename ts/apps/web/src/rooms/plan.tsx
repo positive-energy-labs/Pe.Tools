@@ -1,5 +1,5 @@
 /**
- * The rooms plan: Revit's picture of the view (contrast-lifted, never redrawn) under one path per
+ * The rooms plan: Revit's picture of the view (as exported, never redrawn) under one path per
  * zone, room and held region, inked by the region's state, on a pan-zoom canvas. Every room and
  * held region wears a numbered callout whose label is the table's. Click selects, shift-click adds,
  * hover pairs with the table row, a click on empty ground clears; wheel zooms at the cursor.
@@ -22,7 +22,7 @@ import { token } from "#/lib/token";
 import { PlanImageLayer, type TakeoffPlanImage } from "#/takeoff/level-plan";
 import { pathD } from "#/takeoff/model";
 import { PLAN_REFUSAL, type PlanRefusal } from "#/takeoff/plan-image";
-import { calloutFont, placeCallouts, type CalloutItem } from "./callouts";
+import { CALLOUT_FONT_PX, holdsPin, PIN_R, placeCallouts, type CalloutItem } from "./callouts";
 
 export type RoomsRegion = RoomsSnapshot.Res.RoomsRegion;
 
@@ -129,31 +129,18 @@ const planCorners = (plan: TakeoffPlanImage): Point2[] => {
 };
 
 // ponytail: the world is drawn at 4 px per foot; zoom 0.02 to 24 spans 0.08 to 96 screen px per foot.
-const WORLD_PX_PER_FT = 4;
+export const WORLD_PX_PER_FT = 4;
 const ZOOM = [0.02, 24] as const;
 const CLICK_PX = 5;
-const PIN_R = 10;
 const ZOOM_PAD_PX = 48;
 /** w16's fill: alpha 70/255 of the state ink. */
 const FILL_PCT = 27;
 const FILL_HOT_PCT = 40;
-/**
- * The contrast lift, `takeoff/visual-law.json` substrate.plan as the deleted `/runs` plan painter applied it: black point
- * 205 and white point 248 stretch to 0 and 255; the plan reads at full strength inside zones and
- * 0.45 outside.
- */
-const BLACK_POINT = 205;
-const WHITE_POINT = 248;
-const INSIDE_ZONE_OPACITY = 1;
-const OUTSIDE_ZONE_OPACITY = 0.45;
-const STRETCH = 255 / (WHITE_POINT - BLACK_POINT);
-const CONTRAST = 1 + (2 * STRETCH * BLACK_POINT) / 255;
-const PLAN_FILTER = `brightness(${STRETCH / CONTRAST}) contrast(${CONTRAST})`;
 
 type View = { scale: number; tx: number; ty: number };
 
 /** The view that fits a world-px box in the pane, centred, with `pad` screen px around it. */
-const fitView = (box: Bounds2, size: Viewport2, pad: number): View => {
+export const fitView = (box: Bounds2, size: Viewport2, pad: number): View => {
   const w = Math.max(box.maxX - box.minX, 1);
   const h = Math.max(box.maxY - box.minY, 1);
   const scale = Math.min(
@@ -243,12 +230,13 @@ export function RoomsPlan({
         anchor: frame.toViewport(xy(region.label)),
       };
     });
-    const zones = shapes
-      .filter((shape) => shape.state === "zone")
-      .map((shape) => shape.d)
-      .join(" ");
-    return { frame, width, height, shapes, zones };
-  }, [bounds, rows]);
+    // Fit to Revit's crop when there is one: a region far outside it stays drawn and pannable, but
+    // never squeezes the plan into a strip.
+    const fit: Bounds2 = plan
+      ? boundsOf(planCorners(plan).map(frame.toViewport))
+      : { minX: 0, minY: 0, maxX: width, maxY: height };
+    return { frame, width, height, shapes, fit };
+  }, [bounds, rows, plan]);
 
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const [size, setSize] = useState<Viewport2 | null>(null);
@@ -294,7 +282,7 @@ export function RoomsPlan({
   useEffect(() => {
     if (!world || !size || fitted.current === fitKey) return;
     fitted.current = fitKey;
-    setView(fitView({ minX: 0, minY: 0, maxX: world.width, maxY: world.height }, size, 0));
+    setView(fitView(world.fit, size, 0));
   }, [world, size, fitKey]);
 
   // Focus: zoom to the named regions' union once, when they are drawn.
@@ -327,8 +315,7 @@ export function RoomsPlan({
         label,
         anchor: toScreen(anchor),
         text: `${region.sqft.toFixed(0)} sf${region.role === "held" && region.reason ? ` · ${region.reason}` : ""}`,
-        // ponytail: a polygon holds its pin when its screen box is four pin radii on its short side.
-        fits: Math.min(box.maxX - box.minX, box.maxY - box.minY) * view.scale >= 4 * PIN_R,
+        fits: holdsPin(Math.min(box.maxX - box.minX, box.maxY - box.minY) * view.scale, PIN_R),
       }));
     return placeCallouts(items, size, PIN_R).map((callout) => ({
       ...callout,
@@ -412,8 +399,7 @@ export function RoomsPlan({
     transformOrigin: "0 0",
     ...({ "--sw": String(1 / view.scale) } as CSSProperties),
   };
-  const planLayer = plan ? <PlanImageLayer plan={plan} frame={world.frame} /> : null;
-  const font = calloutFont(PIN_R);
+  const font = CALLOUT_FONT_PX;
 
   return (
     <div className="flex size-full min-h-0 flex-col">
@@ -456,27 +442,7 @@ export function RoomsPlan({
             aria-label="rooms plan"
           >
             <title>Room regions on the plan view</title>
-            {planLayer ? (
-              <>
-                <defs>
-                  <clipPath id="rooms-plan-zones">
-                    <path d={world.zones} clipRule="evenodd" />
-                  </clipPath>
-                </defs>
-                <g opacity={OUTSIDE_ZONE_OPACITY} style={{ filter: PLAN_FILTER }}>
-                  {planLayer}
-                </g>
-                {world.zones ? (
-                  <g
-                    clipPath="url(#rooms-plan-zones)"
-                    opacity={INSIDE_ZONE_OPACITY}
-                    style={{ filter: PLAN_FILTER }}
-                  >
-                    {planLayer}
-                  </g>
-                ) : null}
-              </>
-            ) : null}
+            {plan ? <PlanImageLayer plan={plan} frame={world.frame} /> : null}
             {world.shapes.map(({ region, label, state, d }) => {
               const ink = token(REGION_INK[state].ink!);
               const on = selected.has(region.guid);

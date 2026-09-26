@@ -42,8 +42,14 @@ const COMPASS = [
 ] as const;
 // ponytail: text width is estimated at 0.6 em per character, not measured in the DOM.
 const CHAR_EM = 0.6;
-/** The callout type size for a pin radius. */
-export const calloutFont = (pinRadiusPx: number) => pinRadiusPx * 1.1;
+/** Screen-constant pin radius and callout type, px. */
+export const PIN_R = 11;
+export const CALLOUT_FONT_PX = 11;
+
+// ponytail: a polygon holds its pin when its short side on screen clears the pin's diameter plus 4 px a side.
+/** Whether a polygon whose screen box has short side `shortSidePx` holds its own pin. */
+export const holdsPin = (shortSidePx: number, pinRadiusPx: number) =>
+  shortSidePx >= 2 * pinRadiusPx + 8;
 
 const overlaps = (a: Callout["box"], b: Callout["box"]) =>
   !(a[2] < b[0] || a[0] > b[2] || a[3] < b[1] || a[1] > b[3]);
@@ -54,7 +60,7 @@ export function placeCallouts(
   pinRadiusPx: number,
 ): Callout[] {
   const r = pinRadiusPx;
-  const charPx = CHAR_EM * calloutFont(r);
+  const charPx = CHAR_EM * CALLOUT_FONT_PX;
   const placed: Callout[] = [];
   for (const item of items) {
     const [ax, ay] = item.anchor;
