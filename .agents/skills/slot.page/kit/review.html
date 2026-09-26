@@ -1,0 +1,331 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>review · spatial review</title><style>
+:root{--ink:#1b1f24;--paper:#f7f6f2;--rule:#d8d5cc;--muted:#6b6f76;--fill:#ebe8df;--agent:#0f766e;--you:#c026d3;--bad:#e11d48;--ok:#15803d;--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;--sans:system-ui,"Segoe UI",sans-serif}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--paper);color:var(--ink);font:13px/1.4 var(--sans)}
+button{font:inherit;color:inherit;background:#fff;border:1px solid var(--rule);border-radius:3px;padding:2px 8px;cursor:pointer}button:hover{background:var(--fill)}
+button.on{background:var(--ink);color:#fff;border-color:var(--ink)}button:disabled{opacity:.45;cursor:not-allowed}
+input,textarea{font:inherit;border:1px solid var(--rule);border-radius:3px;padding:2px 6px;background:#fff}input.bad{border-color:var(--bad)}
+.mono{font-family:var(--mono);font-size:12px}.muted{color:var(--muted)}.small{font-size:11.5px}.sp{flex:1}
+.h{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:10px 0 4px}
+.sg{font:700 13px var(--sans);display:inline-block;width:14px;text-align:center}
+.si{border:1px dashed var(--muted);padding:0 5px;font:11px var(--mono);color:var(--muted);cursor:help}
+.empty{color:var(--muted);padding:8px 4px}.link{text-decoration:underline dotted;cursor:pointer}
+#top{display:flex;align-items:center;gap:10px;padding:6px 10px;border-bottom:1px solid var(--rule)}#top h1{font-size:14px;margin:0;font-weight:600}
+dialog#kmodal{width:min(1100px,94vw);height:86vh;padding:0;border:1px solid var(--ink);background:var(--paper);color:var(--ink)}
+dialog#kmodal[open]{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto 1fr}
+#kmodal header{grid-column:1/3;display:flex;gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--rule)}
+#kmodal section{overflow:auto;padding:8px 12px;min-height:0}#kmodal section+section{border-left:1px solid var(--rule)}
+#kmodal pre{font:11px/1.45 var(--mono);white-space:pre-wrap;margin:0}.rb{border-bottom:1px solid var(--rule);padding:6px 0}
+/* page */
+#app{display:grid;grid-template-rows:auto 1fr auto;height:100vh;overflow:hidden}
+#mid{display:grid;grid-template-columns:320px minmax(0,1fr);min-height:0}
+#side{border-right:1px solid var(--rule);overflow:auto;padding:0 10px 10px}
+#plan{position:relative;overflow:hidden;background:#fff;cursor:grab;touch-action:none}#svg{position:absolute;inset:0;width:100%;height:100%;user-select:none}
+#foot{display:flex;gap:14px;align-items:center;padding:4px 10px;border-top:1px solid var(--rule);font-size:11px;white-space:nowrap;overflow:hidden}
+.fl{display:flex;gap:2px;padding:8px 0 6px;position:sticky;top:0;background:var(--paper);z-index:1;border-bottom:1px solid var(--rule)}.fl button{padding:1px 5px;font:11px var(--mono)}
+.rw{display:grid;grid-template-columns:72px 1fr;gap:8px;align-items:center;padding:4px;border-bottom:1px solid var(--rule);cursor:pointer}
+.rw:hover{background:var(--fill)}.rw.sel{background:var(--fill);outline:1.5px solid var(--ink);outline-offset:-1.5px}
+.th{width:72px;height:54px;border:1px solid var(--rule);background:#fff;display:block}.th.none{display:grid;place-items:center;color:var(--muted)}
+.rl{display:flex;gap:5px;align-items:baseline;min-width:0}.lt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lt.ref{color:var(--bad)}
+.tg{font:600 10.5px var(--mono);border:1.5px solid var(--ink);padding:0 3px}.tg.you{border-radius:8px}
+#proj{position:absolute;z-index:4;width:330px;display:none;border:1px solid var(--ink);background:#fff}#proj.hover{pointer-events:none}
+.cd{display:grid;grid-template-columns:110px 1fr;gap:8px;padding:7px}.cd .th{width:110px;height:82px}.cd .lt{white-space:normal}
+.acts{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}.acts .x{margin-left:auto;border-color:transparent}
+.nt{width:100%;margin-top:5px;font-size:12px}.more{font:11px var(--mono);padding:2px 8px;border-top:1px solid var(--rule);color:var(--muted)}
+.mini{position:absolute;right:8px;bottom:8px;width:180px;height:120px;background:#fff;border:1px solid var(--ink);z-index:3;cursor:pointer}.mini svg{width:100%;height:100%}
+</style></head><body>
+<div id="app">
+  <div id="top"><h1 id="ttl"></h1><span id="prov"></span><input id="find" class="mono" style="width:150px" placeholder="id, or x, y">
+    <span class="sp"></span><button id="runb"></button><button id="send" style="border-color:var(--ink);font-weight:600" title="Writes a verdicts file with every sent and accepted card, then shows what the agent will do with it. Changes no card state.">send to agent</button></div>
+  <div id="mid"><div id="side"></div><div id="plan"><svg id="svg"><g id="cam"><g id="world"></g></g><g id="scr"></g></svg><div id="proj"></div><div class="mini" title="click to centre there"><svg id="mini"></svg></div></div></div>
+  <div id="foot"><span id="ro" class="mono"></span><span class="sp"></span><span class="small muted">drag pans · wheel zooms · click a counted thing pins its card · double-click leaves a note · Esc unpins</span></div>
+</div>
+<svg width="0" height="0" style="position:absolute"><defs><g id="base"></g></defs></svg>
+
+<!-- DATA: build.py replaces this block from a JSON file. Everything below derives from it. -->
+<script type="application/json" id="data">
+{"meta":{"title":"review · rooms on Level 1","standIn":true,"source":"hand-written fixture","replaces":"a rendered view image plus solved regions and questions from a real run snapshot","units":"ft"},
+ "image":{"id":"L1 plan view","href":"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='400'><rect width='600' height='400' fill='%23fff'/><g fill='none' stroke='%238a8a8a' stroke-width='4'><rect x='0' y='0' width='200' height='200'/><rect x='200' y='0' width='250' height='200'/><rect x='450' y='0' width='150' height='100'/><rect x='450' y='100' width='150' height='100'/><rect x='0' y='200' width='600' height='60'/><rect x='0' y='260' width='350' height='140'/><rect x='350' y='260' width='250' height='140'/><rect x='280' y='300' width='40' height='40' stroke-dasharray='6 4'/></g><g font-family='sans-serif' font-size='13' fill='%239a9a9a' text-anchor='middle'><text x='100.0' y='118.0'>Office</text><text x='325.0' y='118.0'>Conference</text><text x='525.0' y='68.0'>Storage</text><text x='525.0' y='168.0'>Storage</text><text x='300.0' y='248.0'>Corridor</text><text x='175.0' y='348.0'>Open office</text><text x='475.0' y='348.0'>Break</text></g></svg>",
+   "w":600,"h":400,"corners":{"topLeft":[0,40],"topRight":[60,40],"bottomLeft":[0,0]}},
+ "run":"S0",
+ "roles":{"room":{"stroke":"#e0701b","t":"room (solve)"},"held":{"stroke":"#9b2335","dash":"4 3","t":"held (solve)"}},
+ "things":[
+  {"id":"R-101","name":"Office","role":"room","outer":[[0,20],[20,20],[20,40],[0,40]]},
+  {"id":"R-102","name":"Conference","role":"room","outer":[[20,20],[45,20],[45,40],[20,40]]},
+  {"id":"R-103","name":"Storage","role":"room","outer":[[45,30],[60,30],[60,40],[45,40]]},
+  {"id":"R-104","name":"Storage","role":"room","outer":[[45,20],[60,20],[60,30],[45,30]]},
+  {"id":"R-105","name":"Corridor","role":"room","outer":[[0,14],[60,14],[60,20],[0,20]]},
+  {"id":"R-106","name":"Open office","role":"room","outer":[[0,0],[35,0],[35,14],[0,14]]},
+  {"id":"R-107","name":"Break","role":"room","outer":[[35,0],[60,0],[60,14],[35,14]]},
+  {"id":"H-1","name":"shaft","role":"held","outer":[[28,6],[32,6],[32,10],[28,10]]}],
+ "cards":[
+  {"id":"q1","by":"agent","state":"proposed","things":["R-103","R-104"],"title":"R-103 + R-104 read as one room","ask":"No wall between them at y = 30 ft. Merge?","evidence":"s0-snapshot.json · run S0","op":{"name":"rooms.merge","status":"built","source":"stand-in"}},
+  {"id":"q2","by":"agent","state":"proposed","things":["R-105"],"title":"R-105 is 6 ft wide: corridor or room?","ask":"Keep it a room, or hold it?","evidence":"s0-snapshot.json · width from the outline"},
+  {"id":"q3","by":"agent","state":"accepted","things":["R-106"],"title":"R-106 boundary follows a furniture line","proposal":"move the boundary to the wall at x = 35 ft"},
+  {"id":"k1","by":"me","state":"draft","things":["R-101"],"pt":[8,33],"title":"door swing reads as a wall"},
+  {"id":"k2","by":"me","state":"draft","things":["R-106","R-107"],"title":"merge R-106 + R-107","op":{"name":"rooms.merge","status":"refused","msg":"rooms.merge takes regions of one zone","source":"stand-in"}},
+  {"id":"k3","by":"me","state":"sent","things":["R-102"],"title":"split R-102 at x = 32 ft"},
+  {"id":"k4","by":"me","state":"accepted","things":["R-107"],"title":"R-107 is one room","proposal":"confirm R-107 as solved"}],
+ "replies":{"k1":"ledger line: a door swing drawn as a wall","k3":"rooms.split R-102 at x = 32 ft (not built)"},
+ "nextRun":{"name":"S1","standIn":true,"changed":["R-102"],"gone":["R-104"],"checks":{"q3":{"pass":true,"why":"boundary sits on the wall at x = 35 ft"},"k4":{"pass":false,"why":"R-107 came back as two faces"}}}}
+</script>
+
+<script>
+/* ==== kernel v1 · identical in every kit page · copy, never import ==== */
+const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const DATA = JSON.parse($('#data').textContent);
+const assert = (ok, msg) => { if (!ok) throw new Error('walk: ' + msg); return msg; };
+// A page is reduce(state, event) folded over an event log. Only `view` keys ride the URL hash, so a link locates a thing.
+function Kernel({ page, init, reduce, render, view = [], verdicts, readback }) {
+  const read = all => { const q = new URLSearchParams(location.hash.slice(1)), v = {}; for (const key of view) if (all || q.has(key)) v[key] = q.get(key); return v; };
+  const R = (s, e) => e.type !== 'nav' ? reduce(s, e) : Object.keys(e.view).some(key => s[key] !== e.view[key]) ? { ...s, ...e.view } : s;
+  const k = { page, log: [], base: { ...init, ...read(false) } };
+  k.state = k.base;
+  const sync = () => {
+    const q = new URLSearchParams(); for (const key of view) if (k.state[key] != null && k.state[key] !== '') q.set(key, k.state[key]);
+    const h = q.toString(); if (location.hash.slice(1) !== h) history.replaceState(null, '', location.pathname + location.search + (h ? '#' + h : ''));
+    render(k.state, k);
+  };
+  // an event the reducer refuses (returns the same state) is not logged
+  k.fire = ev => { const next = R(k.state, ev); if (next === k.state) return false; k.log.push(ev); k.state = next; sync(); return true; };
+  k.undo = () => { if (!k.log.length) return false; k.log.pop(); k.state = k.log.reduce(R, k.base); sync(); return true; };
+  k.replay = (events, from = init) => { k.base = from; k.log = []; k.state = from; for (const e of events) { const n = R(k.state, e); if (n !== k.state) { k.log.push(e); k.state = n; } } sync(); };
+  k.at = n => k.log.slice(0, n).reduce(R, k.base);
+  k.exportVerdicts = () => {
+    const d = new Date(), items = verdicts(k.state), file = `${page}-verdicts-${d.toISOString().replace(/[-:]/g, '').slice(0, 15)}.json`;
+    const payload = { schema: 'pe.page.verdicts/1', page, file, createdAt: d.toISOString(), data: DATA.meta, view: Object.fromEntries(view.map(v => [v, k.state[v] ?? null])), items, log: k.log };
+    if (!window.__check) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })); a.download = file; a.click(); }
+    const rb = readback(items, k.state), m = $('#kmodal');
+    m.innerHTML = `<header><b class="mono">${esc(file)}</b><span class="muted small">${window.__check ? 'not downloaded (check run)' : 'downloaded'} · ${items.length} items · the agent reads this file, not the chat</span><span class="sp"></span><button onclick="this.closest('dialog').close()">close (Esc)</button></header>
+      <section><div class="h">What the agent will do with it</div>${rb.map(r => `<div class="rb"><span class="mono">${esc(r.id)}</span> ${esc(r.what)}<div class="small">found: ${esc(r.found)}</div><div class="small">next: ${esc(r.next)}${r.approval ? ' <b>(needs your approval)</b>' : ''}</div></div>`).join('') || '<div class="empty">nothing to send: no item is in a sendable state yet</div>'}</section>
+      <section><div class="h">JSON</div><pre>${esc(JSON.stringify(payload, null, 2))}</pre></section>`;
+    if (!m.open) m.showModal(); return payload;
+  };
+  addEventListener('hashchange', () => k.fire({ type: 'nav', view: read(true) }));
+  document.body.insertAdjacentHTML('beforeend', '<dialog id="kmodal"></dialog>');
+  const m = DATA.meta || {}, p = $('#prov');
+  if (p) p.outerHTML = m.standIn ? `<span id="prov" class="si" title="${esc('stand-in data; replace with ' + (m.replaces || 'real artifacts') + ' via build.py')}">fixture · stand-in</span>`
+    : `<span id="prov" class="mono muted" title="${esc(m.source)}">built ${esc(m.builtAt)} · ${esc(m.source)}</span>`;
+  window.__kit = k; sync(); return k;
+}
+function copyMd(md, out) { out.textContent = md; out.hidden = false; return navigator.clipboard ? navigator.clipboard.writeText(md).then(() => 'copied', () => 'shown below; copy by hand') : Promise.resolve('shown below; copy by hand'); }
+/* ==== end kernel ==== */
+</script>
+
+<script>
+// ---- the lifecycle: one glyph + colour per state, on the row, the card, the badge, the pin and the minimap ----
+const ST = {
+  draft: { g: '○', c: '#c026d3', t: 'draft · yours, not sent. Next: send.' },
+  sent: { g: '▷', c: '#0f766e', t: "sent · the agent's move. Next: it proposes." },
+  proposed: { g: '◆', c: '#c026d3', t: 'proposed · the agent answered. Next: accept or reject.' },
+  accepted: { g: '●', c: '#1b1f24', t: "accepted · the run's move. Next: a rerun applies it and its check passes or fails." },
+  pass: { g: '✓', c: '#15803d', t: 'passing · the rerun honoured it. Nothing to do.' },
+  fail: { g: '✗', c: '#e11d48', t: 'failing · the rerun did not honour it. Next: reopen hands it back to the agent.' },
+  stale: { g: '◐', c: '#6b6f76', t: 'stale · its thing changed shape under it. Next: reopen and redraw.' },
+  gone: { g: '⊘', c: '#6b6f76', t: 'gone · its thing is gone in the new run. Next: reopen and re-place, or delete.' } };
+const ORDER = Object.keys(ST), INBOX = ['proposed', 'fail', 'draft', 'stale', 'gone', 'sent', 'accepted', 'pass'];
+// verbs per state: [verb, next state (null removes), what it means]. Verbs live on the card only.
+const VERBS = {
+  draft: [['send', 'sent', 'hand it to the agent; it rides the next "send to agent" file'], ['delete', null, 'remove this draft']],
+  sent: [['recall', 'draft', 'take it back before the agent answers']],
+  proposed: [['accept', 'accepted', 'approve it; the next run applies it and checks it'], ['reject', 'draft', 'none of this; say why, then send again']],
+  accepted: [['reopen', 'proposed', 'withdraw your approval']], fail: [['reopen', 'sent', 'hand it back to the agent to fix']],
+  stale: [['reopen', 'draft', 'redraw it against the new run'], ['delete', null, 'remove it']],
+  gone: [['reopen', 'draft', 're-place it on the new run'], ['delete', null, 'remove it']], pass: [] };
+
+// ---- geometry, in model units (y up) ----
+const T = Object.fromEntries(DATA.things.map(t => [t.id, t])), U = DATA.meta.units || 'units';
+const bounds = pts => pts.reduce((b, [x, y]) => [Math.min(b[0], x), Math.min(b[1], y), Math.max(b[2], x), Math.max(b[3], y)], [Infinity, Infinity, -Infinity, -Infinity]);
+const centre = b => [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2], rnd = p => p.map(v => Math.round(v * 100) / 100), f1 = v => (Math.round(v * 10) / 10).toString();
+const area = P => Math.abs(P.reduce((a, p, i) => { const q = P[(i + 1) % P.length]; return a + p[0] * q[1] - q[0] * p[1]; }, 0) / 2);
+const pip = ([x, y], P) => { let o = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) if ((P[i][1] > y) !== (P[j][1] > y) && x < (P[j][0] - P[i][0]) * (y - P[i][1]) / (P[j][1] - P[i][1]) + P[i][0]) o = !o; return o; };
+const HIT = [...DATA.things].sort((a, b) => area(a.outer) - area(b.outer));
+const thingAt = p => HIT.find(t => pip(p, t.outer)) || null;
+const labelPt = t => t.at || centre(bounds(t.outer)), ring = P => 'M' + P.map(p => p.join(' ')).join('L') + 'Z';
+const placed = c => c.things.length > 0 || !!c.pt;
+const cardBounds = c => bounds(c.things.flatMap(id => T[id] ? T[id].outer : []).concat(c.pt ? [c.pt] : []));
+const cardPt = c => c.pt || centre(cardBounds(c));
+const IM = DATA.image, CO = IM.corners, allB = bounds(DATA.things.flatMap(t => t.outer).concat([CO.topLeft, CO.topRight, CO.bottomLeft]));
+
+// ---- the pure module ----
+const init = { cards: DATA.cards.map(c => ({ note: '', proposal: null, ...c })), run: DATA.run, seq: 0, pin: null, filter: null, at: null };
+function judge(c, R) {   // the next run is the world's move: gone > stale > check
+  const hit = key => c.things.some(id => (R[key] || []).includes(id));
+  if (['pass', 'fail'].includes(c.state)) return c;
+  if (hit('gone')) return { ...c, state: 'gone', why: c.things.filter(id => R.gone.includes(id)).join(', ') + ' gone in ' + R.name };
+  if (hit('changed')) return { ...c, state: 'stale', why: c.things.filter(id => R.changed.includes(id)).join(', ') + ' changed shape in ' + R.name };
+  const ck = (R.checks || {})[c.id]; if (c.state === 'accepted' && ck) return { ...c, state: ck.pass ? 'pass' : 'fail', why: ck.why };
+  return c;
+}
+function reduce(s, e) {
+  const c = s.cards.find(x => x.id === e.id), put = patch => ({ ...s, cards: s.cards.map(x => x === c ? { ...x, ...patch } : x) });
+  switch (e.type) {
+    case 'pin': return (e.id ?? null) === s.pin || (e.id && !c) ? s : { ...s, pin: e.id ?? null };
+    case 'filter': return ST[e.state] ? { ...s, filter: s.filter === e.state ? null : e.state } : s;
+    case 'locate': return e.at === s.at ? s : { ...s, at: e.at };
+    case 'note': { const id = 'n' + (s.seq + 1);
+      return { ...s, seq: s.seq + 1, pin: id, cards: [...s.cards, { id, by: 'me', state: 'draft', things: e.thing ? [e.thing] : [], pt: e.pt, title: 'note', note: '', proposal: null }] }; }
+    case 'text': return c && c.state === 'draft' && c.note !== e.note ? put({ note: e.note }) : s;
+    case 'verb': { const v = c && (VERBS[c.state] || []).find(v => v[0] === e.verb);
+      if (!v || (!v[1] && c.by !== 'me') || (e.verb === 'send' && c.op?.status === 'refused')) return s;
+      if (!v[1]) return { ...s, pin: s.pin === c.id ? null : s.pin, cards: s.cards.filter(x => x !== c) };
+      return put({ state: v[1], why: null, ...(e.verb === 'reject' ? { proposal: null } : {}) }); }
+    case 'agent': return c && c.state === 'sent' ? put({ state: 'proposed', proposal: e.proposal, standIn: !!e.standIn }) : s;
+    case 'run': { const R = DATA.nextRun; return !R || s.run === R.name ? s : { ...s, run: R.name, cards: s.cards.map(x => judge(x, R)) }; }
+  }
+  return s;
+}
+
+// ---- words: one line visible, the rest in hover ----
+const glyph = st => `<b class="sg" style="color:${ST[st].c}" title="${esc(ST[st].t)}">${ST[st].g}</b>`;
+const tag = c => `<span class="tg ${c.by === 'me' ? 'you' : ''}" title="${c.by === 'me' ? 'from you' : 'from the agent'}">${esc(c.id)}</span>`;
+const refused = c => c.state === 'draft' && c.op?.status === 'refused';
+function lineOf(c) { if (c.why) return c.why; if (refused(c)) return c.op.msg; if (c.proposal && !['draft', 'sent'].includes(c.state)) return c.proposal; return c.note || c.ask || c.title; }
+function titleOf(c) {
+  const L = [c.title]; if (c.ask) L.push(c.ask); if (c.evidence) L.push('evidence: ' + c.evidence); if (c.note) L.push('your note: ' + c.note);
+  if (c.proposal) L.push('agent proposes: ' + c.proposal + (c.standIn ? ' (stand-in reply: the agent is simulated)' : ''));
+  if (c.op) L.push(`op: ${c.op.name} · ${c.op.status}${c.op.msg ? ' · ' + c.op.msg : ''}${c.op.source === 'stand-in' ? ' (stand-in rule)' : ''}`);
+  L.push(placed(c) ? `on ${c.things.join(' + ') || 'no thing'} · centre ${rnd(cardPt(c)).join(', ')} ${U}` : 'no place yet');
+  return esc(L.join('\n')); }
+const lineHTML = c => `<span class="lt ${refused(c) ? 'ref' : ''}" title="${titleOf(c)}">${esc(lineOf(c))}</span>`;
+function thumb(c) {
+  if (!placed(c)) return `<div class="th none" title="no place yet">·</div>`;
+  const b = cardBounds(c), pad = Math.max(b[2] - b[0], b[3] - b[1]) * .25 + 3, col = ST[c.state].c;
+  return `<svg class="th" viewBox="${[b[0] - pad, -(b[3] + pad), b[2] - b[0] + 2 * pad, b[3] - b[1] + 2 * pad].join(' ')}" data-pin="${c.id}"><g transform="scale(1,-1)"><use href="#base"/>
+    ${c.things.filter(id => T[id]).map(id => `<path d="${ring(T[id].outer)}" fill="${col}" fill-opacity=".28" stroke="${col}" stroke-width="2" vector-effect="non-scaling-stroke"/>`).join('')}
+    ${c.pt ? `<circle cx="${c.pt[0]}" cy="${c.pt[1]}" r="${pad * .18}" fill="${col}"/>` : ''}</g></svg>`; }
+function cardHTML(c) {
+  const vs = (VERBS[c.state] || []).filter(v => v[1] || c.by === 'me');
+  return `<div class="cd">${thumb(c)}<div><div class="rl">${glyph(c.state)}${tag(c)}${c.standIn ? '<span class="si" title="the agent is simulated in this page">stand-in</span>' : ''}${c.op?.source === 'stand-in' ? '<span class="si" title="this op rule is invented; the real rule replaces it">rule stand-in</span>' : ''}</div>
+    <div>${lineHTML(c)}</div>${c.state === 'draft' ? `<input class="nt" data-id="${c.id}" placeholder="why (optional)" value="${esc(c.note)}">` : ''}
+    <div class="acts">${vs.map(([v, to, t]) => `<button data-verb="${v}" data-id="${c.id}" ${v === 'send' && refused(c) ? 'disabled' : ''} title="${esc(`${c.state} → ${to || 'removed'}: ${t}` + (v === 'send' && refused(c) ? '. Refused: ' + c.op.msg : ''))}">${v}</button>`).join('')}<button class="x" data-pin="" title="close (Esc)">×</button></div></div></div>`; }
+
+// ---- camera (ephemeral; not part of state) ----
+const svg = $('#svg'), cam = { s: 1, tx: 0, ty: 0 };
+const toS = ([x, y]) => [cam.tx + x * cam.s, cam.ty - y * cam.s], toW = ([u, v]) => [(u - cam.tx) / cam.s, (cam.ty - v) / cam.s];
+const size = () => { const r = svg.getBoundingClientRect(); return [r.width || 800, r.height || 500]; };
+const local = e => { const r = svg.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+function fit(b, pad = 60) { const [w, h] = size(); cam.s = Math.min((w - 2 * pad) / Math.max(b[2] - b[0], 1), (h - 2 * pad) / Math.max(b[3] - b[1], 1)); const [cx, cy] = centre(b); cam.tx = w / 2 - cx * cam.s; cam.ty = h / 2 + cy * cam.s; view(); }
+function view() { $('#cam').setAttribute('transform', `translate(${cam.tx} ${cam.ty}) scale(${cam.s} ${-cam.s})`); if (S) { drawScreen(); drawMini(); placeProj(); } }
+$('#base').innerHTML = `<image href="${esc(IM.href)}" width="${IM.w}" height="${IM.h}" preserveAspectRatio="none" transform="matrix(${(CO.topRight[0] - CO.topLeft[0]) / IM.w},${(CO.topRight[1] - CO.topLeft[1]) / IM.w},${(CO.bottomLeft[0] - CO.topLeft[0]) / IM.h},${(CO.bottomLeft[1] - CO.topLeft[1]) / IM.h},${CO.topLeft[0]},${CO.topLeft[1]})"/>`
+  + DATA.things.map(t => { const r = DATA.roles[t.role] || {}; return `<path d="${ring(t.outer)}" fill="none" stroke="${r.stroke || '#1b1f24'}" ${r.dash ? `stroke-dasharray="${r.dash}"` : ''} stroke-width="1.5" vector-effect="non-scaling-stroke"/>`; }).join('');
+
+// ---- render: everything visible derives from S ----
+let S = null, FC = new Map(), hover = null, lastPin, lastAt;
+const vis = c => !S.filter || c.state === S.filter;
+function render(s) {
+  S = s; FC = new Map(); for (const c of s.cards.filter(vis)) for (const id of c.things) if (T[id]) FC.set(id, [...(FC.get(id) || []), c]);
+  $('#ttl').textContent = DATA.meta.title || 'review';
+  const R = DATA.nextRun; $('#runb').textContent = s.run === R?.name ? `run ${s.run}` : 'next run'; $('#runb').className = s.run === R?.name ? 'on' : ''; $('#runb').disabled = !R || s.run === R.name;
+  $('#runb').title = R ? `${R.standIn ? 'Stand-in: ' : ''}the next run (${R.name}) arrives. The world's move, not a card verb: gone and changed things break anchors, accepted cards get checked.` : 'no next run in the data';
+  drawSide(s); drawWorld(s);
+  if (s.pin !== lastPin) { lastPin = s.pin; const c = s.cards.find(x => x.id === s.pin); if (c && placed(c)) { const b = cardBounds(c); fit([b[0] - 6, b[1] - 6, b[2] + 6, b[3] + 6], 90); } }
+  if (s.at !== lastAt) { lastAt = s.at; const p = parseAt(s.at); if (p) { const [w, h] = size(); cam.tx = w / 2 - p[0] * cam.s; cam.ty = h / 2 + p[1] * cam.s; } }
+  view(); drawProj();
+}
+function drawSide(s) {
+  const n = Object.fromEntries(ORDER.map(st => [st, s.cards.filter(c => c.state === st).length])), list = s.cards.filter(vis).sort((a, b) => INBOX.indexOf(a.state) - INBOX.indexOf(b.state));
+  $('#side').innerHTML = `<div class="fl">${ORDER.map(st => `<button data-filter="${st}" class="${s.filter === st ? 'on' : ''}" title="${esc(ST[st].t + ' Click to show only these.')}"><b style="color:${s.filter === st ? '#fff' : ST[st].c}">${ST[st].g}</b>${n[st]}</button>`).join('')}</div>`
+    + (list.length ? list.map(c => `<div class="rw ${s.pin === c.id ? 'sel' : ''}" data-pin="${c.id}">${thumb(c)}<div class="rl">${glyph(c.state)}${tag(c)}${lineHTML(c)}</div></div>`).join('')
+      : s.filter ? `<div class="empty">none ${ST[s.filter].g} · <span class="link" data-filter="${s.filter}">show all</span></div>` : '<div class="empty">no cards yet · double-click the plan to leave a note</div>');
+  $('#side .rw.sel')?.scrollIntoView({ block: 'nearest' });
+}
+function drawWorld(s) { const c = s.cards.find(x => x.id === s.pin), col = c && ST[c.state].c;
+  $('#world').innerHTML = '<use href="#base"/>' + (c ? c.things.filter(id => T[id]).map(id => `<path d="${ring(T[id].outer)}" fill="${col}" fill-opacity=".18" stroke="${col}" stroke-width="3" vector-effect="non-scaling-stroke"/>`).join('') : ''); }
+const parseAt = a => { const m = /^\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*$/.exec(a || ''); return m ? [+m[1], +m[2]] : null; };
+function drawScreen() {   // ids, count badges, note pins, the located point: fixed pixel size
+  let s = '';
+  for (const t of DATA.things) { const [x, y] = toS(labelPt(t)); s += `<text x="${x}" y="${y + 4}" text-anchor="middle" style="font:10.5px var(--mono);fill:#6b6f76">${esc(t.id)}</text>`; }
+  for (const [id, L] of FC) { const [x, y] = toS(labelPt(T[id])), n = {}; for (const c of L) n[c.state] = (n[c.state] || 0) + 1; const cells = ORDER.filter(st => n[st]); let cx = x - cells.length * 13;
+    for (const st of cells) { s += `<g><title>${esc(ST[st].t)}</title><rect x="${cx}" y="${y - 24}" width="26" height="15" style="fill:${ST[st].c}"/><text x="${cx + 13}" y="${y - 13}" text-anchor="middle" style="font:700 10.5px var(--mono);fill:#fff">${ST[st].g}${n[st]}</text></g>`; cx += 26; } }
+  for (const c of S.cards.filter(c => c.pt && vis(c))) { const [x, y] = toS(c.pt); s += `<circle cx="${x}" cy="${y}" r="6" style="fill:${ST[c.state].c};stroke:#fff;stroke-width:2" data-pin="${c.id}"><title>${esc(c.id + ' · ' + ST[c.state].t)}</title></circle>`; }
+  const p = parseAt(S.at); if (p) { const [x, y] = toS(p); s += `<path d="M${x - 12} ${y}H${x + 12}M${x} ${y - 12}V${y + 12}" style="stroke:#1b1f24;stroke-width:1.5"/><text x="${x + 8}" y="${y - 8}" style="font:11px var(--mono)">${esc(p.join(', '))} ${U}</text>`; }
+  $('#scr').innerHTML = s;
+}
+function drawMini() {
+  const k = Math.min(172 / (allB[2] - allB[0]), 112 / (allB[3] - allB[1])), m = ([x, y]) => [4 + (x - allB[0]) * k, 4 + (allB[3] - y) * k], [w, h] = size();
+  const a = m(toW([0, 0])), b = m(toW([w, h]));
+  let s = DATA.things.map(t => `<path d="M${t.outer.map(p => m(p).join(' ')).join('L')}Z" fill="none" stroke="#b8b6ad"/>`).join('') + `<rect x="${a[0]}" y="${a[1]}" width="${b[0] - a[0]}" height="${b[1] - a[1]}" fill="none" stroke="#1b1f24"/>`;
+  let off = 0; for (const c of S.cards.filter(c => placed(c) && vis(c))) { const [u, v] = toS(cardPt(c)); if (u >= 0 && v >= 0 && u <= w && v <= h) continue; off++; const [x, y] = m(cardPt(c));
+    s += c.by === 'me' ? `<circle cx="${x}" cy="${y}" r="3.6" fill="${ST[c.state].c}" stroke="#fff"/>` : `<rect x="${x - 3.5}" y="${y - 3.5}" width="7" height="7" fill="${ST[c.state].c}" stroke="#fff"/>`; }
+  $('#mini').innerHTML = s + (off ? `<text x="4" y="116" style="font:600 9.5px var(--mono)"><title>${off} cards off-screen</title>${off} ↗</text>` : '');
+  $('#mini').dataset.k = k;
+}
+// ---- projection: the pinned card (verbs) or the hovered thing's cards (read-only), beside its thing ----
+const proj = $('#proj');
+function projList() { if (S.pin) return [S.cards.find(c => c.id === S.pin)].filter(Boolean); return hover ? FC.get(hover) || [] : []; }
+function drawProj() { const L = projList(); if (!L.length) { proj.style.display = 'none'; return; }
+  proj.className = S.pin ? '' : 'hover'; proj.innerHTML = cardHTML(L[0]) + (L.length > 1 ? `<div class="more" title="more cards here; click the thing to cycle">+${L.length - 1}</div>` : ''); proj.style.display = 'block'; placeProj(); }
+function placeProj() { const c = projList()[0]; if (!c || proj.style.display !== 'block') return; const [w, h] = size();
+  if (!placed(c)) { proj.style.left = '8px'; proj.style.top = '8px'; return; }
+  const b = S.pin ? cardBounds(c) : bounds(T[hover].outer), [x0, y0] = toS([b[0], b[3]]), [x1] = toS([b[2], b[1]]);
+  let x = x1 + 14; if (x + 330 > w - 6) x = x0 - 344; if (x < 6) x = Math.max(6, Math.min(w - 336, x1 + 14));
+  proj.style.left = x + 'px'; proj.style.top = Math.max(8, Math.min(y0, h - proj.offsetHeight - 136)) + 'px'; }
+
+// ---- export: sent and accepted cards; the readback says what the agent will do ----
+function verdicts(s) {
+  return s.cards.filter(c => c.state === 'sent' || c.state === 'accepted').map(c => ({ id: c.id, from: c.by === 'me' ? 'user' : 'agent', title: c.title, state: c.state, glyph: ST[c.state].g,
+    note: c.note || null, proposal: c.proposal || null, proposalStandIn: !!c.standIn, op: c.op || null,
+    anchor: placed(c) ? { things: c.things, point: c.pt || null, centre: rnd(cardPt(c)), units: U, run: s.run, image: IM.id } : null,
+    act: c.state === 'sent' ? 'answer with a proposal on this card; changes nothing in the model' : `stage ${c.op?.name || 'the accepted proposal'}; it applies on the next run, then its check passes or fails` }));
+}
+function readback(items) {
+  return items.map(it => { const a = it.anchor, t = a && thingAt(a.centre);
+    return { id: it.id, what: it.title, approval: it.state === 'sent',
+      found: a ? `${a.things.filter(id => T[id]).length}/${a.things.length} things in this snapshot (run ${a.run}); centre (${a.centre.join(', ')}) ${a.units} lands in ${t ? t.id + ' ' + t.name : 'no thing'}. If ids churn, the ${a.units} geometry is the fallback.` : 'unplaced: the agent can read the words but not find the place; it will ask you to place it',
+      next: it.act }; });
+}
+
+// ---- wiring: DOM events become kernel events; nothing mutates state directly ----
+const k = Kernel({ page: 'review', init, reduce, render, view: ['pin', 'filter', 'at'], verdicts, readback });
+function standIn(id) { if (window.__check) return; setTimeout(() => k.fire({ type: 'agent', id, standIn: true, proposal: (DATA.replies || {})[id] || 'stand-in: the agent would answer here' }), 900); }
+document.addEventListener('click', e => { const b = e.target.closest('[data-verb],[data-pin],[data-filter]'); if (!b || e.target.closest('dialog')) return;
+  if (b.dataset.verb) { if (k.fire({ type: 'verb', id: b.dataset.id, verb: b.dataset.verb }) && b.dataset.verb === 'send') standIn(b.dataset.id); }
+  else if (b.dataset.filter) k.fire({ type: 'filter', state: b.dataset.filter });
+  else if (b.dataset.pin != null && !b.closest('#plan svg#svg')) k.fire({ type: 'pin', id: b.dataset.pin || null }); });
+document.addEventListener('change', e => { if (e.target.classList.contains('nt')) k.fire({ type: 'text', id: e.target.dataset.id, note: e.target.value }); });
+$('#runb').onclick = () => k.fire({ type: 'run' }); $('#send').onclick = () => k.exportVerdicts();
+$('#find').addEventListener('keydown', e => { if (e.key !== 'Enter') return; const v = e.target.value.trim(), t = T[v], p = parseAt(v);
+  e.target.classList.toggle('bad', !t && !p); e.target.title = !t && !p ? `no thing ${v} here; try an id (${DATA.things[0].id}) or "x, y" in ${U}` : '';
+  if (t || p) k.fire({ type: 'locate', at: rnd(t ? labelPt(t) : p).join(',') }); });
+$('.mini').onclick = e => { const r = $('#mini').getBoundingClientRect(), kk = +$('#mini').dataset.k; k.fire({ type: 'locate', at: rnd([allB[0] + (e.clientX - r.left - 4) / kk, allB[3] - (e.clientY - r.top - 4) / kk]).join(',') }); };
+let drag = null;
+svg.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, tx: cam.tx, ty: cam.ty, moved: false }; svg.setPointerCapture(e.pointerId); });
+svg.addEventListener('pointermove', e => { const p = toW(local(e));
+  if (drag) { const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.hypot(dx, dy) > 3) drag.moved = true; if (drag.moved) { cam.tx = drag.tx + dx; cam.ty = drag.ty + dy; view(); } return; }
+  const t = thingAt(p); $('#ro').textContent = `x ${f1(p[0])}  y ${f1(p[1])} ${U} · ${t ? t.id + ' ' + t.name + ' · ' + t.role : 'no thing'} · ${IM.id}`;
+  const h = t && FC.has(t.id) ? t.id : null; if (h !== hover) { hover = h; if (!S.pin) drawProj(); } });
+svg.addEventListener('pointerup', e => { const d = drag; drag = null; if (!d || d.moved) return; const pin = e.target.closest('[data-pin]'); if (pin) return k.fire({ type: 'pin', id: pin.dataset.pin });
+  const t = thingAt(toW(local(e))), L = t && FC.get(t.id); if (!L) return k.fire({ type: 'pin', id: null });
+  const i = L.findIndex(c => c.id === S.pin); k.fire({ type: 'pin', id: L[(i + 1) % L.length].id }); });
+svg.addEventListener('pointerleave', () => { if (hover) { hover = null; if (!S.pin) drawProj(); } });
+svg.addEventListener('dblclick', e => { const p = rnd(toW(local(e))); k.fire({ type: 'note', pt: p, thing: thingAt(p)?.id || null }); });
+svg.addEventListener('wheel', e => { e.preventDefault(); const [u, v] = local(e), f = Math.exp(-e.deltaY * .0015); cam.tx = u - (u - cam.tx) * f; cam.ty = v - (v - cam.ty) * f; cam.s *= f; view(); }, { passive: false });
+addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#kmodal').open && !/INPUT/.test(e.target.tagName)) k.fire({ type: 'pin', id: null }); });
+addEventListener('resize', () => fit(allB));
+if (!S.pin && !S.at) fit(allB);
+
+// ---- the walk: the main transitions, fired through the DOM where a user would, asserted on state ----
+window.__walk = () => {
+  const out = [], C = id => k.state.cards.find(c => c.id === id); k.replay([]); fit(allB);
+  out.push(assert($$('#side .rw').length === DATA.cards.length, 'inbox lists every card'));
+  $('#side .rw[data-pin="q1"]').click();
+  out.push(assert(k.state.pin === 'q1' && location.hash.includes('pin=q1') && proj.style.display === 'block', 'row click pins q1; the URL and the plan carry it'));
+  $('#proj [data-verb="accept"]').click(); out.push(assert(C('q1').state === 'accepted', 'accept on the card: ◆ → ●'));
+  $('#side .rw[data-pin="k1"]').click(); $('#proj [data-verb="send"]').click(); out.push(assert(C('k1').state === 'sent', 'send: ○ → ▷'));
+  k.fire({ type: 'agent', id: 'k1', proposal: DATA.replies.k1, standIn: true }); out.push(assert(C('k1').state === 'proposed' && C('k1').standIn, 'stand-in agent answers: ▷ → ◆, marked stand-in'));
+  $('#side .rw[data-pin="k2"]').click(); out.push(assert($('#proj [data-verb="send"]').disabled && !k.fire({ type: 'verb', id: 'k2', verb: 'send' }), 'refused op: send is disabled and the reducer refuses it'));
+  out.push(assert(!k.fire({ type: 'verb', id: 'q2', verb: 'delete' }), 'agent cards cannot be deleted'));
+  $('.fl [data-filter="proposed"]').click(); out.push(assert($$('#side .rw').length === k.state.cards.filter(c => c.state === 'proposed').length && location.hash.includes('filter=proposed'), 'filter ◆ shows only proposed rows'));
+  $('.fl [data-filter="proposed"]').click();
+  $('#find').value = 'R-101'; $('#find').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' })); out.push(assert(k.state.at === '10,30', 'find R-101 locates its label point'));
+  k.fire({ type: 'note', pt: [5, 5], thing: 'R-106' }); out.push(assert(k.state.cards.at(-1).state === 'draft' && k.state.pin === k.state.cards.at(-1).id, 'a note lands as a pinned draft'));
+  $('#runb').click();
+  out.push(assert(C('q1').state === 'gone' && C('k3').state === 'stale' && C('q3').state === 'pass' && C('k4').state === 'fail', 'next run: ⊘ gone, ◐ stale, ✓ pass, ✗ fail'));
+  $('#side .rw[data-pin="k4"]').click(); $('#proj [data-verb="reopen"]').click(); out.push(assert(C('k4').state === 'sent', 'reopen a failure: ✗ → ▷'));
+  const n = k.log.length; k.undo(); out.push(assert(k.log.length === n - 1 && C('k4').state === 'fail', 'undo steps back one event'));
+  const p = k.exportVerdicts(); $('#kmodal').close(); $('#send').click(); const opened = $('#kmodal').open; $('#kmodal').close();
+  out.push(assert(p.items.length === k.state.cards.filter(c => ['sent', 'accepted'].includes(c.state)).length && p.items.every(i => i.anchor) && opened && $$('#kmodal .rb').length === p.items.length, 'export: typed items with anchors, one readback row each'));
+  $('#find').value = ''; k.replay([]); return out;
+};
+</script></body></html>

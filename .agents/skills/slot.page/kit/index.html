@@ -1,0 +1,27 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>page kit · disposable HTML for agent and user</title><style>
+:root{--ink:#1b1f24;--paper:#f7f6f2;--rule:#d8d5cc;--muted:#6b6f76;--bad:#e11d48;--mono:ui-monospace,"Cascadia Mono",Consolas,monospace}
+body{margin:0;background:var(--paper);color:var(--ink);font:14px/1.5 system-ui,"Segoe UI",sans-serif}main{max-width:980px;margin:0 auto;padding:22px 26px 60px}
+h1{font-size:19px;margin:0 0 2px}h2{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:26px 0 6px;border-bottom:1px solid var(--rule);padding-bottom:3px}
+table{border-collapse:collapse;width:100%}td,th{text-align:left;vertical-align:top;padding:6px 8px;border-bottom:1px solid var(--rule)}th{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+a{color:var(--ink)}.mono,code{font:12.5px var(--mono)}.muted{color:var(--muted)}.small{font-size:12.5px}.no{border-left:3px solid var(--bad);padding:4px 10px}
+</style></head><body><main>
+<h1>Page kit · four disposable templates</h1>
+<div class="muted small">One file each, opens by double-click, no server. Every visible thing derives from a pure <code>reduce(state, event)</code> over an event log; view state rides the URL hash; <b>send to agent</b> writes a typed verdicts file and shows what the agent will do with it.</div>
+
+<h2>Pick one</h2>
+<table><tr><th>template</th><th>use it when</th><th>try</th></tr>
+<tr><td class="mono"><a href="review.html">review</a></td><td>the talk is about <b>places</b>: claims, questions or marks anchored on a picture in model units, each with a lifecycle (○ ▷ ◆ ● ✓ ✗ ◐ ⊘) the user moves on the card.</td><td class="small"><a href="review.html#pin=q1">pinned q1</a> · <a href="review.html#filter=proposed">only ◆</a></td></tr>
+<tr><td class="mono"><a href="diagram.html">diagram</a></td><td>the talk is about <b>how a system fits together</b>: owners, edges, facts with proof marks, and a named flow walked one edge at a time.</td><td class="small"><a href="diagram.html#focus=agent">focus agent</a> · <a href="diagram.html#flow=approve&amp;step=5">flow, step 6</a></td></tr>
+<tr><td class="mono"><a href="lineup.html">lineup</a></td><td>the talk is a <b>choice</b>: two to four variants of one thing on the same data, pros and cons each, and a numbered rulings sheet that copies as markdown.</td><td class="small"><a href="lineup.html#sel=R-103">R-103 in all four</a> · <a href="lineup.html#v=C&amp;mode=one">C alone</a></td></tr>
+<tr><td class="mono"><a href="sandbox.html">sandbox</a></td><td>the question is <b>does this interaction model hold</b>: the value is behaviour, not visuals. States, guarded events, a trace with undo, time travel and replay, invariants that turn red.</td><td class="small"><a href="sandbox.html#sc=edit+after+approve">a red invariant</a> · <a href="sandbox.html#sc=double+propose&amp;at=1">step 1 of a trace</a></td></tr>
+</table>
+<p class="no"><b>Not HTML at all</b> when the demo would have to reimplement the product's own complex live state (the situation head is the example): prototype on the real route instead, where the state is already true.</p>
+
+<h2>Make one real</h2>
+<table>
+<tr><td class="mono">1</td><td>Copy a template. Replace its fixture with real data: <code>python build.py review.html data.json out.html</code>. The JSON comes from a small extractor run over real artifacts, never typed by hand; build fails fast when a key the template reads is missing, stamps provenance, and inlines local images.</td></tr>
+<tr><td class="mono">2</td><td>Keep the product's real rules and messages where they are known. Anything invented carries <code>standIn</code> and is drawn with the dashed stand-in mark, naming what replaces it.</td></tr>
+<tr><td class="mono">3</td><td>Edit the pure module first (lifecycle, verbs, <code>reduce</code>, or the sandbox's MACHINE block), then the drawing. Never mutate state outside <code>reduce</code>.</td></tr>
+<tr><td class="mono">4</td><td>Prove it headless: <code>python check.py out.html</code> fails on any JS error and runs the page's own <code>window.__walk()</code>. The template walks assert fixture ids; adapt the walk to your data, or use <code>--no-walk</code> for errors only. With no arguments it checks all four templates and that their kernels are still identical.</td></tr>
+</table>
+</main></body></html>

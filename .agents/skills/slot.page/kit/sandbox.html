@@ -1,0 +1,226 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>sandbox · does this interaction model hold</title><style>
+:root{--ink:#1b1f24;--paper:#f7f6f2;--rule:#d8d5cc;--muted:#6b6f76;--fill:#ebe8df;--agent:#0f766e;--you:#c026d3;--bad:#e11d48;--ok:#15803d;--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;--sans:system-ui,"Segoe UI",sans-serif}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--paper);color:var(--ink);font:13px/1.4 var(--sans)}
+button{font:inherit;color:inherit;background:#fff;border:1px solid var(--rule);border-radius:3px;padding:2px 8px;cursor:pointer}button:hover{background:var(--fill)}
+button.on{background:var(--ink);color:#fff;border-color:var(--ink)}button:disabled{opacity:.45;cursor:not-allowed}
+input,textarea{font:inherit;border:1px solid var(--rule);border-radius:3px;padding:2px 6px;background:#fff}input.bad{border-color:var(--bad)}
+.mono{font-family:var(--mono);font-size:12px}.muted{color:var(--muted)}.small{font-size:11.5px}.sp{flex:1}
+.h{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:10px 0 4px}
+.sg{font:700 13px var(--sans);display:inline-block;width:14px;text-align:center}
+.si{border:1px dashed var(--muted);padding:0 5px;font:11px var(--mono);color:var(--muted);cursor:help}
+.empty{color:var(--muted);padding:8px 4px}.link{text-decoration:underline dotted;cursor:pointer}
+#top{display:flex;align-items:center;gap:10px;padding:6px 10px;border-bottom:1px solid var(--rule)}#top h1{font-size:14px;margin:0;font-weight:600}
+dialog#kmodal{width:min(1100px,94vw);height:86vh;padding:0;border:1px solid var(--ink);background:var(--paper);color:var(--ink)}
+dialog#kmodal[open]{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto 1fr}
+#kmodal header{grid-column:1/3;display:flex;gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--rule)}
+#kmodal section{overflow:auto;padding:8px 12px;min-height:0}#kmodal section+section{border-left:1px solid var(--rule)}
+#kmodal pre{font:11px/1.45 var(--mono);white-space:pre-wrap;margin:0}.rb{border-bottom:1px solid var(--rule);padding:6px 0}
+/* page */
+#app{display:grid;grid-template-rows:auto auto 1fr;height:100vh;overflow:hidden}
+#past{display:none;padding:4px 10px;background:var(--ink);color:#fff;font-size:12px}#past button{margin-left:8px}
+#mid{grid-row:3;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 360px;min-height:0}
+#mid>div{overflow:auto;padding:0 12px 12px;min-width:0}#mid>div+div{border-left:1px solid var(--rule)}
+.row{display:grid;grid-template-columns:18px 34px 1fr auto;gap:6px;align-items:baseline;padding:4px;border-bottom:1px solid var(--rule);cursor:pointer}
+.row:hover{background:var(--fill)}.row.sel{background:var(--fill);outline:1.5px solid var(--ink);outline-offset:-1.5px}
+.evs{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}.why{font-size:11.5px;color:var(--muted);margin:1px 0}
+.rule{display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:baseline;padding:4px 0}
+.inv{display:grid;grid-template-columns:18px 1fr;gap:6px;padding:6px 0;border-bottom:1px solid var(--rule)}.inv.bad{color:var(--bad)}.inv .small{color:var(--muted)}
+.tr{display:grid;grid-template-columns:28px 64px 1fr auto;gap:6px;padding:3px 4px;border-bottom:1px solid var(--rule);cursor:pointer;font-size:12px}
+.tr:hover{background:var(--fill)}.tr.cur{outline:1.5px solid var(--ink);outline-offset:-1.5px}.tr.after{opacity:.35}.tr.brk{box-shadow:inset 3px 0 var(--bad)}
+.chip{border-radius:10px;padding:0 9px;margin:3px 4px 0 0}
+</style></head><body>
+<div id="app">
+  <div id="top"><h1 id="ttl"></h1><span id="prov"></span><span id="scs"></span><span class="sp"></span>
+    <button id="undo" title="step back past the last model event">undo</button><button id="replay" title="re-run the trace from the start through reduce; the end state must match">replay</button>
+    <button id="send" style="border-color:var(--ink);font-weight:600" title="Writes the trace, every invariant's result and your verdict, then shows what the agent will do.">send to agent</button></div>
+  <div id="past"></div>
+  <div id="mid"><div id="world"></div><div id="trace"></div><div id="judge"></div></div>
+</div>
+
+<!-- DATA: build.py replaces this block from a JSON file. The machine itself is the MACHINE block below. -->
+<script type="application/json" id="data">
+{"meta":{"title":"sandbox · staged approval of agent proposals","standIn":true,"source":"hand-written fixture","replaces":"real targets from a document snapshot and the rule set the product actually ships"},
+ "targets":["W-12 wall","D-7 door","R-104 room"],
+ "rules":{"editKeepsApproval":{"on":true,"t":"an edit to an approved proposal keeps its approval"},"oneLivePerTarget":{"on":false,"t":"propose is refused while the target already has a live proposal"}},
+ "scenarios":[
+  {"name":"happy path","events":[{"type":"propose","target":"W-12 wall"},{"type":"do","ev":"approve","id":"p1"},{"type":"do","ev":"apply","id":"p1"}]},
+  {"name":"edit after approve","events":[{"type":"propose","target":"D-7 door"},{"type":"do","ev":"approve","id":"p1"},{"type":"do","ev":"edit","id":"p1"},{"type":"do","ev":"apply","id":"p1"}]},
+  {"name":"double propose","events":[{"type":"propose","target":"R-104 room"},{"type":"propose","target":"R-104 room"}]},
+  {"name":"drift, then restage","rules":{"editKeepsApproval":false},"events":[{"type":"propose","target":"W-12 wall"},{"type":"do","ev":"approve","id":"p1"},{"type":"do","ev":"drift","id":"p1"},{"type":"do","ev":"restage","id":"p1"},{"type":"do","ev":"approve","id":"p1"},{"type":"do","ev":"apply","id":"p1"}]}]}
+</script>
+
+<script>
+/* ==== kernel v1 · identical in every kit page · copy, never import ==== */
+const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const DATA = JSON.parse($('#data').textContent);
+const assert = (ok, msg) => { if (!ok) throw new Error('walk: ' + msg); return msg; };
+// A page is reduce(state, event) folded over an event log. Only `view` keys ride the URL hash, so a link locates a thing.
+function Kernel({ page, init, reduce, render, view = [], verdicts, readback }) {
+  const read = all => { const q = new URLSearchParams(location.hash.slice(1)), v = {}; for (const key of view) if (all || q.has(key)) v[key] = q.get(key); return v; };
+  const R = (s, e) => e.type !== 'nav' ? reduce(s, e) : Object.keys(e.view).some(key => s[key] !== e.view[key]) ? { ...s, ...e.view } : s;
+  const k = { page, log: [], base: { ...init, ...read(false) } };
+  k.state = k.base;
+  const sync = () => {
+    const q = new URLSearchParams(); for (const key of view) if (k.state[key] != null && k.state[key] !== '') q.set(key, k.state[key]);
+    const h = q.toString(); if (location.hash.slice(1) !== h) history.replaceState(null, '', location.pathname + location.search + (h ? '#' + h : ''));
+    render(k.state, k);
+  };
+  // an event the reducer refuses (returns the same state) is not logged
+  k.fire = ev => { const next = R(k.state, ev); if (next === k.state) return false; k.log.push(ev); k.state = next; sync(); return true; };
+  k.undo = () => { if (!k.log.length) return false; k.log.pop(); k.state = k.log.reduce(R, k.base); sync(); return true; };
+  k.replay = (events, from = init) => { k.base = from; k.log = []; k.state = from; for (const e of events) { const n = R(k.state, e); if (n !== k.state) { k.log.push(e); k.state = n; } } sync(); };
+  k.at = n => k.log.slice(0, n).reduce(R, k.base);
+  k.exportVerdicts = () => {
+    const d = new Date(), items = verdicts(k.state), file = `${page}-verdicts-${d.toISOString().replace(/[-:]/g, '').slice(0, 15)}.json`;
+    const payload = { schema: 'pe.page.verdicts/1', page, file, createdAt: d.toISOString(), data: DATA.meta, view: Object.fromEntries(view.map(v => [v, k.state[v] ?? null])), items, log: k.log };
+    if (!window.__check) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })); a.download = file; a.click(); }
+    const rb = readback(items, k.state), m = $('#kmodal');
+    m.innerHTML = `<header><b class="mono">${esc(file)}</b><span class="muted small">${window.__check ? 'not downloaded (check run)' : 'downloaded'} · ${items.length} items · the agent reads this file, not the chat</span><span class="sp"></span><button onclick="this.closest('dialog').close()">close (Esc)</button></header>
+      <section><div class="h">What the agent will do with it</div>${rb.map(r => `<div class="rb"><span class="mono">${esc(r.id)}</span> ${esc(r.what)}<div class="small">found: ${esc(r.found)}</div><div class="small">next: ${esc(r.next)}${r.approval ? ' <b>(needs your approval)</b>' : ''}</div></div>`).join('') || '<div class="empty">nothing to send: no item is in a sendable state yet</div>'}</section>
+      <section><div class="h">JSON</div><pre>${esc(JSON.stringify(payload, null, 2))}</pre></section>`;
+    if (!m.open) m.showModal(); return payload;
+  };
+  addEventListener('hashchange', () => k.fire({ type: 'nav', view: read(true) }));
+  document.body.insertAdjacentHTML('beforeend', '<dialog id="kmodal"></dialog>');
+  const m = DATA.meta || {}, p = $('#prov');
+  if (p) p.outerHTML = m.standIn ? `<span id="prov" class="si" title="${esc('stand-in data; replace with ' + (m.replaces || 'real artifacts') + ' via build.py')}">fixture · stand-in</span>`
+    : `<span id="prov" class="mono muted" title="${esc(m.source)}">built ${esc(m.builtAt)} · ${esc(m.source)}</span>`;
+  window.__kit = k; sync(); return k;
+}
+function copyMd(md, out) { out.textContent = md; out.hidden = false; return navigator.clipboard ? navigator.clipboard.writeText(md).then(() => 'copied', () => 'shown below; copy by hand') : Promise.resolve('shown below; copy by hand'); }
+/* ==== end kernel ==== */
+</script>
+
+<script>
+// ==== MACHINE · the interaction model under test. Edit this block; the panel, trace, invariants and export all derive from it. ====
+const STATES = {
+  proposed: { g: '◆', c: '#c026d3', t: 'proposed · the agent staged it; the model is unchanged. Your move.' },
+  approved: { g: '●', c: '#1b1f24', t: 'approved · you said yes to one version; not applied yet. The harness moves.' },
+  applied: { g: '✓', c: '#15803d', t: 'applied · committed to the model.' },
+  rejected: { g: '✗', c: '#e11d48', t: 'rejected · you said no; kept for the record.' },
+  stale: { g: '◐', c: '#6b6f76', t: 'stale · the model changed under it; its approval is void.' } };
+const LIVE = ['proposed', 'approved'];
+// each event: the states it may fire from, who moves, and the patch it makes (rules r are part of the model)
+const EVENTS = {
+  approve: { from: ['proposed'], who: 'you', t: 'say yes to this version', go: p => ({ st: 'approved', approvedVer: p.ver }) },
+  edit: { from: ['proposed', 'approved'], who: 'you', t: 'change it; bumps the version', go: (p, r) => r.editKeepsApproval ? { ver: p.ver + 1 } : { st: 'proposed', ver: p.ver + 1, approvedVer: null } },
+  reject: { from: ['proposed', 'approved'], who: 'you', t: 'say no', go: () => ({ st: 'rejected', approvedVer: null }) },
+  apply: { from: ['approved'], who: 'harness', t: 'commit the approved proposal', go: p => ({ st: 'applied', appliedVer: p.ver }) },
+  drift: { from: ['proposed', 'approved'], who: 'world', t: 'someone else changed the target', go: () => ({ st: 'stale', approvedVer: null }) },
+  restage: { from: ['stale', 'rejected'], who: 'agent', t: 'stage a fresh version on the current model', go: p => ({ st: 'proposed', ver: p.ver + 1, approvedVer: null }) } };
+const live = (w, target) => w.props.filter(p => p.target === target && LIVE.includes(p.st));
+// a guard returns why an event is refused, or null
+function guard(w, e) {
+  if (e.type === 'propose') return !DATA.targets.includes(e.target) ? `no target ${e.target}` : w.rules.oneLivePerTarget && live(w, e.target).length ? `refused: ${e.target} already has live ${live(w, e.target).map(p => p.id).join(', ')}` : null;
+  if (e.type === 'do') { const p = w.props.find(p => p.id === e.id), E = EVENTS[e.ev]; if (!p || !E) return `no ${e.ev ? 'proposal ' + e.id : 'event'}`;
+    return E.from.includes(p.st) ? null : `${e.ev} needs ${E.from.join(' or ')}; ${p.id} is ${p.st}`; }
+  if (e.type === 'rule') return w.rules[e.name] === undefined ? `no rule ${e.name}` : null;
+  return null;
+}
+// invariants: each returns its violations in a world (empty = holds)
+const INVARIANTS = [
+  { id: 'I1', t: 'nothing applies without approval of the version that applied', test: w => w.props.filter(p => p.st === 'applied' && p.appliedVer !== p.approvedVer).map(p => `${p.id} applied v${p.appliedVer} but v${p.approvedVer} was approved`) },
+  { id: 'I2', t: 'at most one live proposal per target', test: w => DATA.targets.filter(t => live(w, t).length > 1).map(t => `${t}: ${live(w, t).map(p => p.id).join(' + ')} both live`) },
+  { id: 'I3', t: 'a stale or rejected proposal holds no approval', test: w => w.props.filter(p => ['stale', 'rejected'].includes(p.st) && p.approvedVer != null).map(p => `${p.id} is ${p.st} but still approved`) }];
+// ==== end MACHINE ====
+
+// ---- the pure module: model events change the world; view events only move the eye ----
+const MODEL = ['propose', 'do', 'rule'], isModel = e => MODEL.includes(e.type);
+const RULES0 = Object.fromEntries(Object.entries(DATA.rules).map(([k, r]) => [k, r.on]));
+const init = { props: [], seq: 0, rules: RULES0, sel: null, at: null, sc: null, verdict: null, note: '' };
+function reduce(s, e) {
+  if (isModel(e) && (s.at != null || guard(s, e))) return s;
+  switch (e.type) {
+    case 'propose': { const id = 'p' + (s.seq + 1); return { ...s, seq: s.seq + 1, sel: id, props: [...s.props, { id, target: e.target, st: 'proposed', ver: 1, approvedVer: null, appliedVer: null }] }; }
+    case 'do': return { ...s, props: s.props.map(p => p.id === e.id ? { ...p, ...EVENTS[e.ev].go(p, s.rules) } : p) };
+    case 'rule': return { ...s, rules: { ...s.rules, [e.name]: !s.rules[e.name] } };
+    case 'sel': return (e.id ?? null) === s.sel ? s : { ...s, sel: e.id ?? null };
+    case 'at': return (e.at ?? null) === s.at ? s : { ...s, at: e.at ?? null };
+    case 'verdict': return { ...s, verdict: s.verdict === e.pick ? null : e.pick };
+    case 'note': return s.note === e.note ? s : { ...s, note: e.note };
+  }
+  return s;
+}
+const trace = k => k.log.filter(isModel);
+const worldAt = (k, n) => trace(k).slice(0, n).reduce(reduce, { ...k.base, at: null });
+const model = w => JSON.stringify({ props: w.props, rules: w.rules, seq: w.seq });
+function firstBreak(k, inv) { const T = trace(k); for (let n = 0; n <= T.length; n++) if (inv.test(worldAt(k, n)).length) return n; return null; }
+function label(e) { return e.type === 'propose' ? `propose on ${e.target}` : e.type === 'rule' ? `toggle rule ${e.name}` : `${e.ev} ${e.id}`; }
+function who(e) { return e.type === 'propose' ? 'agent' : e.type === 'rule' ? 'you (rule)' : EVENTS[e.ev].who; }
+
+// ---- render ----
+const g = st => `<b class="sg" style="color:${STATES[st].c}" title="${esc(STATES[st].t)}">${STATES[st].g}</b>`;
+let replayNote = '';
+function render(s, k) {
+  const T = trace(k), n = s.at != null ? Math.min(+s.at, T.length) : T.length, w = s.at != null ? worldAt(k, n) : s, past = s.at != null;
+  $('#ttl').textContent = DATA.meta.title || 'sandbox';
+  $('#scs').innerHTML = (DATA.scenarios || []).map(x => `<button data-sc="${esc(x.name)}" class="${s.sc === x.name ? 'on' : ''}" title="load this trace: ${x.events.map(label).join(' · ')}">${esc(x.name)}</button>`).join(' ');
+  $('#past').style.display = past ? 'block' : 'none'; $('#past').innerHTML = past ? `viewing the world after step ${n} of ${T.length}; events are off until you return <button data-at="">back to live</button>` : '';
+  $('#undo').disabled = !T.length;
+  // world: proposals, the selected one's events with reasons, targets, rules
+  const p = w.props.find(x => x.id === s.sel);
+  $('#world').innerHTML = `<div class="h">proposals · ${w.props.length}</div>${w.props.map(x => `<div class="row ${x.id === s.sel ? 'sel' : ''}" data-sel="${x.id}">${g(x.st)}<span class="mono">${x.id}</span><span>${esc(x.target)}</span><span class="mono small muted" title="version · approved version · applied version">v${x.ver}${x.approvedVer != null ? ' · ok v' + x.approvedVer : ''}${x.appliedVer != null ? ' · in v' + x.appliedVer : ''}</span></div>`).join('') || '<div class="empty">none yet · propose on a target below, or load a scenario above</div>'}
+    ${p ? `<div class="h">events on ${p.id} (${esc(STATES[p.st].t.split(' · ')[0])})</div><div class="evs">${Object.entries(EVENTS).map(([ev, E]) => { const why = past ? 'viewing the past' : guard(w, { type: 'do', ev, id: p.id });
+      return `<button data-ev="${ev}" data-id="${p.id}" ${why ? 'disabled' : ''} title="${esc(E.who + ': ' + E.t + (why ? ' · ' + why : ''))}">${ev}</button>`; }).join('')}</div>
+      ${Object.keys(EVENTS).map(ev => guard(w, { type: 'do', ev, id: p.id })).filter(Boolean).map(r => `<div class="why">${esc(r)}</div>`).join('')}` : ''}
+    <div class="h">targets</div><div class="evs">${DATA.targets.map(t => { const why = past ? 'viewing the past' : guard(w, { type: 'propose', target: t }); return `<button data-propose="${esc(t)}" ${why ? 'disabled' : ''} title="${esc('agent stages a proposal on ' + t + (why ? ' · ' + why : ''))}">propose on ${esc(t)}</button>`; }).join('')}</div>
+    <div class="h">rules under test</div>${Object.entries(DATA.rules).map(([name, r]) => `<div class="rule"><button data-rule="${name}" class="${w.rules[name] ? 'on' : ''}" ${past ? 'disabled' : ''} title="toggle; logged as a model event">${w.rules[name] ? 'on' : 'off'}</button><span>${esc(r.t)} <span class="mono small muted">${name}</span></span></div>`).join('')}`;
+  // trace: model events only; click a step to see the world after it
+  const brk = new Set(INVARIANTS.map(inv => firstBreak(k, inv)).filter(x => x));
+  $('#trace').innerHTML = `<div class="h">trace · ${T.length} events${s.sc ? ' · from ' + esc(s.sc) : ''}</div><div class="tr ${n === 0 && past ? 'cur' : ''}" data-at="0"><span class="mono">0</span><span></span><span class="muted">start</span><span></span></div>
+    ${T.map((e, i) => { const before = worldAt(k, i), after = worldAt(k, i + 1), id = e.id || after.props.at(-1)?.id, a = before.props.find(x => x.id === id), b = after.props.find(x => x.id === id);
+      return `<div class="tr ${past && i + 1 === n ? 'cur' : ''} ${past && i + 1 > n ? 'after' : ''} ${brk.has(i + 1) ? 'brk' : ''}" data-at="${i + 1}" title="${brk.has(i + 1) ? 'an invariant first breaks here' : 'see the world after this step'}"><span class="mono">${i + 1}</span><span class="mono muted">${esc(who(e))}</span><span>${esc(label(e))}</span><span>${e.type === 'rule' ? '' : (a ? g(a.st) : '·') + '→' + (b ? g(b.st) : '·')}</span></div>`; }).join('')}
+    <div class="small muted" style="margin-top:6px">${esc(replayNote)}</div>`;
+  // judge: invariants on the shown world, then your verdict
+  $('#judge').innerHTML = `<div class="h">invariants${past ? ' · at step ' + n : ''}</div>${INVARIANTS.map(inv => { const v = inv.test(w), fb = firstBreak(k, inv);
+      return `<div class="inv ${v.length ? 'bad' : ''}" data-inv="${inv.id}"><b class="sg" style="color:${v.length ? 'var(--bad)' : 'var(--ok)'}">${v.length ? '✗' : '✓'}</b><div><span class="mono">${inv.id}</span> ${esc(inv.t)}${v.map(x => `<div class="small">${esc(x)}</div>`).join('')}${fb ? `<div class="small">first breaks at <span class="link" data-at="${fb}">step ${fb}</span></div>` : ''}</div></div>`; }).join('')}
+    <div class="h">does this model hold?</div>${['holds', 'breaks', 'unsure'].map(v => `<button class="chip ${s.verdict === v ? 'on' : ''}" data-verdict="${v}">${v}</button>`).join('')}
+    <input id="note" style="width:100%;margin-top:6px" placeholder="why (optional)" value="${esc(s.note)}">`;
+}
+
+// ---- export: the trace, each invariant's result, your verdict ----
+function verdicts(s) { const k = window.__kit, T = trace(k), end = worldAt(k, T.length);
+  return [{ kind: 'verdict', pick: s.verdict, note: s.note || null, rules: end.rules, scenario: s.sc },
+    ...INVARIANTS.map(inv => ({ kind: 'invariant', id: inv.id, text: inv.t, holds: !inv.test(end).length, violations: inv.test(end), firstBreak: firstBreak(k, inv), breakingEvent: firstBreak(k, inv) ? T[firstBreak(k, inv) - 1] : null })),
+    { kind: 'trace', events: T.map((e, i) => ({ step: i + 1, who: who(e), event: label(e), raw: e })) }]; }
+function readback(items) { return items.filter(it => it.kind !== 'trace').map(it => it.kind === 'verdict'
+  ? { id: 'verdict', what: `you say the model ${it.pick || '(no verdict yet)'}`, found: `rules ${Object.entries(it.rules).map(([k, v]) => k + '=' + v).join(', ')}${it.scenario ? ' · scenario ' + it.scenario : ''}`, next: it.pick === 'breaks' ? 'propose a guard or rule change for each broken invariant, then rerun this trace to show it green' : it.pick === 'holds' ? 'promote this machine into the typed contract as drawn' : 'ask what would settle it', approval: it.pick === 'holds' }
+  : { id: it.id, what: it.text, found: it.holds ? 'holds at the end of the trace' : `breaks at step ${it.firstBreak} (${label(it.breakingEvent)}): ${it.violations.join('; ')}`, next: it.holds ? 'nothing' : 'name the transition that let it break and propose the smallest guard that stops it', approval: false }); }
+
+// ---- wiring ----
+const k = Kernel({ page: 'sandbox', init, reduce, render, view: ['sel', 'at', 'sc'], verdicts, readback });
+function loadScenario(name, keep = {}) { const sc = DATA.scenarios.find(x => x.name === name); if (!sc) return; replayNote = '';
+  k.replay(sc.events, { ...init, rules: { ...RULES0, ...(sc.rules || {}) }, sc: name }); for (const [key, v] of Object.entries(keep)) if (v != null) k.fire({ type: key, [key === 'sel' ? 'id' : 'at']: v }); }
+function undo() { while (k.log.length && !isModel(k.log.at(-1))) k.undo(); k.undo(); replayNote = ''; render(k.state, k); }
+function replay() { const T = trace(k), before = model(worldAt(k, T.length)), view = { sel: k.state.sel, verdict: k.state.verdict, note: k.state.note }; k.replay(T, { ...k.base, at: null });
+  if (view.sel) k.fire({ type: 'sel', id: view.sel }); if (view.verdict) k.fire({ type: 'verdict', pick: view.verdict }); if (view.note) k.fire({ type: 'note', note: view.note }); const same = model(k.state) === before; replayNote = `replayed ${T.length} events from the start: ${same ? 'same end state ✓' : 'DIFFERENT end state ✗ (reduce is not pure)'}`; render(k.state, k); return same; }
+document.addEventListener('click', e => { if (e.target.closest('dialog')) return; const b = e.target.closest('[data-sc],[data-sel],[data-ev],[data-propose],[data-rule],[data-at],[data-verdict]'); if (!b || b.disabled) return; const d = b.dataset;
+  if (d.sc) loadScenario(d.sc); else if (d.ev) k.fire({ type: 'do', ev: d.ev, id: d.id }); else if (d.propose) k.fire({ type: 'propose', target: d.propose });
+  else if (d.rule) k.fire({ type: 'rule', name: d.rule }); else if (d.at != null) k.fire({ type: 'at', at: d.at === '' || +d.at === trace(k).length ? null : d.at });
+  else if (d.verdict) k.fire({ type: 'verdict', pick: d.verdict }); else if (d.sel) k.fire({ type: 'sel', id: k.state.sel === d.sel ? null : d.sel }); });
+document.addEventListener('change', e => { if (e.target.id === 'note') k.fire({ type: 'note', note: e.target.value }); });
+$('#undo').onclick = undo; $('#replay').onclick = replay; $('#send').onclick = () => k.exportVerdicts();
+addEventListener('keydown', e => { if (/INPUT/.test(e.target.tagName) || $('#kmodal').open) return; if (e.key === 'Escape') k.fire({ type: 'at', at: null }); if (e.key === 'z' && e.ctrlKey) undo(); });
+if (k.state.sc) loadScenario(k.state.sc, { sel: k.state.sel, at: k.state.at });   // a link like #sc=double+propose&at=2 locates a step
+
+// ---- the walk ----
+window.__walk = () => {
+  const out = [], P = id => k.state.props.find(p => p.id === id), bad = id => $(`.inv[data-inv="${id}"]`).classList.contains('bad'); k.replay([]); replayNote = '';
+  $(`[data-propose="${DATA.targets[1]}"]`).click(); out.push(assert(P('p1')?.st === 'proposed' && k.state.sel === 'p1', 'propose: a new ◆ proposal, selected'));
+  out.push(assert($('[data-ev="apply"]').disabled && /apply needs approved/.test($('#world').textContent), 'apply is refused before approval, and says why without a hover'));
+  $('[data-ev="approve"]').click(); $('[data-ev="edit"]').click();
+  out.push(assert(P('p1').st === 'approved' && P('p1').ver === 2 && P('p1').approvedVer === 1, 'edit with editKeepsApproval on: still ●, now v2, approval is for v1'));
+  $('[data-ev="apply"]').click(); out.push(assert(P('p1').st === 'applied' && bad('I1') && !bad('I2') && !bad('I3'), 'apply: I1 turns red (v2 applied, v1 approved); I2 and I3 hold'));
+  out.push(assert(firstBreak(k, INVARIANTS[0]) === 4 && $('.tr.brk')?.dataset.at === '4', 'the trace marks step 4 as the first break'));
+  $('.tr[data-at="2"]').click(); out.push(assert(k.state.at === '2' && location.hash.includes('at=2') && !bad('I1') && $('[data-propose]').disabled, 'time travel to step 2: I1 green there, events off'));
+  dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); out.push(assert(k.state.at === null, 'Esc returns to live'));
+  $('#undo').click(); out.push(assert(P('p1').st === 'approved' && !bad('I1') && trace(k).length === 3, 'undo steps back past the apply; I1 green again'));
+  $('[data-rule="editKeepsApproval"]').click(); $('[data-ev="edit"]').click(); out.push(assert(P('p1').st === 'proposed' && P('p1').approvedVer === null, 'rule off: an edit drops the approval'));
+  out.push(assert(replay() && /same end state/.test($('#trace').textContent), 'replay: the trace re-runs to the same end state'));
+  $('[data-sc="double propose"]').click(); out.push(assert(bad('I2') && location.hash.includes('sc=double') && trace(k).length === 2, 'scenario "double propose": I2 red, the URL names it'));
+  $('[data-verdict="breaks"]').click(); const p = k.exportVerdicts(); $('#kmodal').close();
+  out.push(assert(p.items[0].pick === 'breaks' && p.items.some(i => i.id === 'I2' && !i.holds && i.firstBreak === 2) && $$('#kmodal .rb').length === 1 + INVARIANTS.length, 'export: verdict, each invariant with its first break, the trace'));
+  k.replay([]); replayNote = ''; render(k.state, k); return out;
+};
+</script></body></html>
