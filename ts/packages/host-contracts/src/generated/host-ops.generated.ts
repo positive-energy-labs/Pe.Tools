@@ -167,6 +167,192 @@ export namespace DocumentTemporaryStatus {
   }
 }
 
+/** Read every duct network in the project: ducts, flex, fittings, accessories, terminals and HVAC equipment with their connectors, grouped by topology with equipment cut out, plus pass-1 terminal flow, issues (open ends, loops, stubs, roots, missing flow, fan static and component drops) and the query behind each layer. Read-only. */
+export namespace DuctsSnapshot {
+  export namespace Req {
+    export interface Request {}
+  }
+  export namespace Res {
+    export type DuctNodeKind = "equipment" | "terminal" | "fitting" | "accessory" | "cap";
+    export type DuctShape = "round" | "rectangular" | "oval" | "other";
+    /**
+     * Where a value came from. The route prints it beside the value.
+     */
+    export type DuctProvenance = "geometry" | "revit-reported" | "revit-default" | "designer-stated" | "derived";
+    export type DuctSegmentKind = "duct" | "flex";
+    export type DuctIssueKind =
+      | "open-end"
+      | "loop"
+      | "stub"
+      | "mixed-classification"
+      | "implausible-size"
+      | "default-flex-roughness"
+      | "no-fan-static"
+      | "no-component-drop"
+      | "no-terminal-flow"
+      | "no-root"
+      | "multi-root";
+
+    export interface Response {
+      document: DuctDocument;
+      levels: DuctLevel[];
+      groups: DuctGroup[];
+      nodes: DuctNode[];
+      segments: DuctSegment[];
+      flows: DuctFlow[];
+      issues: DuctIssue[];
+      layers: DuctLayer[];
+    }
+    /**
+     * The document read, when, and how long the read took.
+     */
+    export interface DuctDocument {
+      title: string;
+      readAt: string;
+      elapsedMs: number;
+    }
+    /**
+     * A level; ElevationFt is Level.ProjectElevation (geometry frame), never Level.Elevation.
+     */
+    export interface DuctLevel {
+      id: number;
+      name: string;
+      elevationFt: number;
+    }
+    /**
+     * A connected duct network with equipment cut out: the unit a solver runs on. Id is "g" plus the smallest
+     * element id in it, stable while that element exists. RootIds are the equipment it hangs off.
+     *
+     */
+    export interface DuctGroup {
+      id: string;
+      rootIds: number[];
+      classifications: string[];
+      systemNames: string[];
+      terminalCount: number;
+      elementCount: number;
+      loops: number;
+      issueIds: string[];
+    }
+    export interface DuctNode {
+      id: number;
+      kind: DuctNodeKind;
+      category: string;
+      family?: null | string;
+      type?: null | string;
+      partType?: null | string;
+      levelId?: number | null;
+      point: number[];
+      groupId?: null | string;
+      systemName?: null | string;
+      classification?: null | string;
+      connectors: DuctConnector[];
+      facts: DuctFact[];
+    }
+    /**
+     * One physical HVAC connector. Kind is "end" or "curve" (a tap on a duct's side). Direction is Revit's
+     * (in, out, bidirectional); flow direction for the solver comes from the root, never from this.
+     *
+     */
+    export interface DuctConnector {
+      index: number;
+      kind: string;
+      point: number[];
+      shape: DuctShape;
+      size: string;
+      diameterIn?: null | number;
+      widthIn?: null | number;
+      heightIn?: null | number;
+      flowCfm?: null | number;
+      direction: string;
+      classification?: null | string;
+      connectedTo?: null | DuctRef;
+    }
+    /**
+     * What a connector touches: an element id and that element's connector index.
+     */
+    export interface DuctRef {
+      elementId: number;
+      connector: number;
+    }
+    /**
+     * One stated or reported value with its unit and provenance.
+     */
+    export interface DuctFact {
+      key: string;
+      value?: null | number;
+      text?: null | string;
+      unit: string;
+      provenance: DuctProvenance;
+    }
+    export interface DuctSegment {
+      id: number;
+      kind: DuctSegmentKind;
+      type?: null | string;
+      shape: DuctShape;
+      size: string;
+      diameterIn?: null | number;
+      widthIn?: null | number;
+      heightIn?: null | number;
+      lengthFt: number;
+      polyline: number[][];
+      levelId?: number | null;
+      groupId?: null | string;
+      systemName?: null | string;
+      classification?: null | string;
+      roughness: DuctRoughness;
+      revit: DuctRevitValues;
+      connectors: DuctConnector[];
+    }
+    export interface DuctRoughness {
+      valueFt: number;
+      provenance: DuctProvenance;
+    }
+    /**
+     * What Revit reports on the segment. Partial in most models; a check, never an input.
+     */
+    export interface DuctRevitValues {
+      flowCfm?: null | number;
+      velocityFpm?: null | number;
+      frictionInWgPer100Ft?: null | number;
+      pressureDropInWg?: null | number;
+    }
+    /**
+     * Pass-1 flow: terminal design flow summed up the tree from the single root. At a tapped duct it is the upstream-end flow.
+     */
+    export interface DuctFlow {
+      segmentId: number;
+      cfm: number;
+      provenance: DuctProvenance;
+    }
+    /**
+     * Id is "kind:elementId" (open ends add ":connector"); an assumption verdict keys on it.
+     */
+    export interface DuctIssue {
+      id: string;
+      kind: DuctIssueKind;
+      elementId?: number | null;
+      point?: number[] | null;
+      groupId: string;
+      note: string;
+    }
+    /**
+     * One real query, printed verbatim in Query, and how much of the model it answered.
+     */
+    export interface DuctLayer {
+      key: string;
+      title: string;
+      query: string;
+      coverage: DuctCoverage;
+      provenance: DuctProvenance;
+    }
+    export interface DuctCoverage {
+      have: number;
+      of: number;
+    }
+  }
+}
+
 /** Reconcile explicit loaded families to a saved spec or supplied draft, refusing plan drift per family and any family reloaded since the plan (its name now resolves to another id), and write the run receipt beside its operation output. */
 export namespace FamiliesApply {
   export namespace Req {
@@ -5958,6 +6144,7 @@ export interface HostOps {
   "data-table.apply": { request: DataTableApply.Req.Request; response: DataTableApply.Res.Response };
   "document.temporary.release": { request: DocumentTemporaryRelease.Req.Request; response: DocumentTemporaryRelease.Res.Response };
   "document.temporary.status": { request: DocumentTemporaryStatus.Req.Request; response: DocumentTemporaryStatus.Res.Response };
+  "ducts.snapshot": { request: DuctsSnapshot.Req.Request; response: DuctsSnapshot.Res.Response };
   "families.apply": { request: FamiliesApply.Req.Request; response: FamiliesApply.Res.Response };
   "families.capture": { request: FamiliesCapture.Req.Request; response: FamiliesCapture.Res.Response };
   "families.plan": { request: FamiliesPlan.Req.Request; response: FamiliesPlan.Res.Response };
@@ -6032,6 +6219,7 @@ export const hostOpKeys = [
   "data-table.apply",
   "document.temporary.release",
   "document.temporary.status",
+  "ducts.snapshot",
   "families.apply",
   "families.capture",
   "families.plan",

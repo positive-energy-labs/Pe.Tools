@@ -8,6 +8,7 @@ import { manifest as families } from "#/families/manifest";
 import { familyManifest } from "#/family/manifest";
 import { instancesManifest } from "#/instances/manifest";
 import { manifest as parameterLinks } from "#/parameter-links/manifest";
+import { manifest as ducts } from "#/ducts/manifest";
 import { manifest as rooms } from "#/rooms/manifest";
 import { schedulesManifest } from "#/route/schedules/manifest";
 import { manifest as pods } from "#/routes/pods";
@@ -23,6 +24,7 @@ export const CHAT_PLUGINS = {
   "parameter-links": parameterLinks,
   schedules: schedulesManifest(),
   rooms,
+  ducts,
 } as const;
 
 export type ChatPluginRoute = keyof typeof CHAT_PLUGINS;
