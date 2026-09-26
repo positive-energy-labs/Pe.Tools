@@ -238,8 +238,7 @@ export function DuctsTables({
   ) =>
     rows.filter(
       (row) =>
-        (!page.group || row.groupId === page.group) &&
-        (!page.level || String(row.levelId ?? "") === page.level),
+        row.groupId === page.group && (!page.level || String(row.levelId ?? "") === page.level),
     );
   const segments = useMemo(
     () =>
@@ -247,7 +246,7 @@ export function DuctsTables({
     [snapshot, flows, page.group, page.level], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const issues = useMemo(
-    () => (snapshot?.issues ?? []).filter((i) => !page.group || i.groupId === page.group),
+    () => (snapshot?.issues ?? []).filter((i) => i.groupId === page.group),
     [snapshot, page.group],
   );
   const on = useMemo(() => new Set(page.layers), [page.layers]);
@@ -258,6 +257,12 @@ export function DuctsTables({
       {empty.says}
     </EmptyState>
   ) : undefined;
+  // Segments and issues are the subject's: the whole document is thousands of rows (project-a 4141 + 1938).
+  const pick = none ?? (
+    <EmptyState story="scope" exit="choose a group in the groups table or the sentence">
+      no group chosen
+    </EmptyState>
+  );
 
   return (
     <PaneSplit
@@ -320,7 +325,7 @@ export function DuctsTables({
                     rowKey={(s) => String(s.id)}
                     activeKey={page.selected || null}
                     onRowClick={(s) => setPage({ selected: String(s.id) })}
-                    empty={none}
+                    empty={pick}
                   />
                 </Pane>
               }
@@ -341,7 +346,7 @@ export function DuctsTables({
                     onRowClick={(i) =>
                       setPage({ selected: i.elementId == null ? "" : String(i.elementId) })
                     }
-                    empty={none}
+                    empty={pick}
                   />
                 </Pane>
               }

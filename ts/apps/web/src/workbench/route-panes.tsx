@@ -17,6 +17,7 @@ import { ParameterLinksRouteContent } from "#/routes/parameter-links";
 import { TakeoffsPane } from "#/takeoff/pane";
 import { InstancesPage } from "#/instances/route";
 import { RoomsRoute } from "#/rooms/route";
+import { DuctsRoute, type DuctsSearch } from "#/ducts/route";
 import type { ChatPluginRoute } from "./chat-plugins";
 
 type View = (props: { thread: string; visible: boolean }) => ReactNode;
@@ -32,6 +33,7 @@ const views: Record<ChatPluginRoute, View> = {
   "parameter-links": ({ thread }) => <ParameterLinksRouteContent thread={thread} />,
   schedules: ({ thread }) => <LiveScheduleGridWorkspace framed url={false} thread={thread} />,
   rooms: () => <HostedRooms />,
+  ducts: () => <HostedDucts />,
 };
 
 /**
@@ -93,6 +95,20 @@ function HostedRooms() {
   const [layers, setLayers] = useState("");
   return (
     <RoomsRoute view={view} focus="" layers={layers} setLayers={setLayers} setView={setView} />
+  );
+}
+
+/** A hosted view owns no URL: the page's URL half lives in local state. */
+function HostedDucts() {
+  const [search, setSearch] = useState<DuctsSearch>({
+    view: "",
+    group: "",
+    level: "",
+    layers: "",
+    selected: "",
+  });
+  return (
+    <DuctsRoute search={search} setSearch={(next) => setSearch((was) => ({ ...was, ...next }))} />
   );
 }
 
