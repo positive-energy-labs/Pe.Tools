@@ -11,8 +11,8 @@ import { ductOverrideKey, type DuctAssumption, type DuctsRouteDocument } from "@
 import type { DuctsSnapshot } from "@pe/host-contracts/generated";
 
 export type DuctSnapshot = DuctsSnapshot.Res.Response;
-export type DuctIssue = DuctSnapshot["issues"][number];
-export type Readiness = "blocked" | "walkable" | "budgetable";
+type DuctIssue = DuctSnapshot["issues"][number];
+type Readiness = "blocked" | "walkable" | "budgetable";
 
 export interface GroupReadiness {
   level: Readiness;

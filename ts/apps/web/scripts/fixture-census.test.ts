@@ -30,6 +30,7 @@ describe("fixture census", () => {
     });
     expect(census.nonFixtureLiveRoutes.map(({ route }) => route)).toEqual([
       "/data-tables",
+      "/ducts",
       "/ops",
       "/parameter-links",
       "/rooms",
