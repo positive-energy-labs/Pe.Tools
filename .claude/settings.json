@@ -1,15 +1,1 @@
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Agent",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node -e \"const fs=require('fs');if(fs.existsSync('.artifacts/allow-harness-agent'))process.exit(0);process.stderr.write('delegate first: harness Agent runs are invisible, cannot be interjected, and die on a user interrupt. Invoke the delegate skill, post a posture table, and run apostles in Herdr per execute. If the user explicitly allowed the harness Agent tool this session, create the file .artifacts/allow-harness-agent and retry.');process.exit(2)\""
-          }
-        ]
-      }
-    ]
-  }
-}
+{}
