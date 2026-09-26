@@ -74,6 +74,7 @@
 - 2026-09-25, size-gated opening joins (`JoinBelowSf`, branch `join-gate` `839acea7`, unmerged): Duryee's Living, Dining, Kitchen and Nook are one 662 sf face with no rail between them, so no join threshold splits them; thresholds 80 to 400 sf score exactly as off (0.355 / 10.3 ft). Cutting an open plan needs non-wall evidence (island, ceiling change, designer's hand), not a join rule.
 
 ## Owed
+- Every rerun gives every held face a new element id with identical geometry (Duryee 3 of 3, Chadds 35 of 35). Any card, check or rejection anchored by id alone is orphaned on the next run; anchor by geometry, or keep held ids stable across a rerun.
 - D1 follow-up: save each face's outline, disposition and reason in the trace so the faces layer draws shapes; two layer toggles in one tick race on the URL.
 - Focus links: the route's session and document binding is not in the URL, so `/rooms?focus=R12` cannot be opened cold; a target in the URL or persisted route state is a route-kernel ruling.
 - The exported view image carries Revit's own `PE Rooms` fill (bright green for machine rooms), doubled by the canvas overlay; decide whether the export hides the region type or keeps Revit's picture as is.
