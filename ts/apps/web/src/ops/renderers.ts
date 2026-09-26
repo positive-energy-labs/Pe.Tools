@@ -43,6 +43,7 @@ export const rawByDesign = [
   "data-table.apply",
   "document.temporary.release",
   "document.temporary.status",
+  "ducts.snapshot",
   "families.apply",
   "families.capture",
   "families.plan",

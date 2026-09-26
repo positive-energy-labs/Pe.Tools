@@ -11,6 +11,42 @@ import type { RouteStateSpec } from "./route-state.ts";
 import { instancesRouteState } from "./instances.ts";
 import { parameterLinksRouteState } from "./parameter-links.ts";
 import { roomsRouteState } from "./rooms.ts";
+import { ductsRouteState } from "./ducts.ts";
+
+it("ducts: Pea proposes an assumption, cannot stage it, and a key holding the wrong kind refuses", () => {
+  const spec = ductsRouteState as unknown as RouteStateSpec<z.ZodType>;
+  const envelope: RouteEnvelope<unknown> = { version: 1, revision: 0, doc: spec.schema.parse({}) };
+  const capped = { kind: "verdict", verdict: "capped" };
+  const key = "open-end:g12:345:1";
+  const propose = transitionPatches(
+    ["assumptions"],
+    key,
+    {},
+    { kind: "propose", rung: { value: capped } },
+  );
+  expect(applyPatches(spec, envelope, "agent", propose, 0)).toMatchObject({ ok: true });
+  const stage = transitionPatches(
+    ["assumptions"],
+    key,
+    {},
+    { kind: "stage", rung: { value: capped } },
+  );
+  expect(applyPatches(spec, envelope, "agent", stage, 0)).toMatchObject({
+    ok: false,
+    kind: "refused",
+  });
+  expect(applyPatches(spec, envelope, "human", stage, 0)).toMatchObject({ ok: true });
+  const wrong = transitionPatches(
+    ["assumptions"],
+    "fan-static:6034271",
+    {},
+    {
+      kind: "stage",
+      rung: { value: capped },
+    },
+  );
+  expect(applyPatches(spec, envelope, "human", wrong, 0)).toMatchObject({ ok: false });
+});
 
 it("schedules: Pea proposes a grid cell through the shared contract and cannot stage it", () => {
   const envelope: RouteEnvelope<unknown> = {

@@ -259,7 +259,7 @@ export function Pane({
           onPointerDownCapture={(event) => {
             const target = event.target as HTMLElement;
             const focusable = target.closest<HTMLElement>(
-              "a,button,input,select,textarea,[contenteditable='true'],[tabindex]",
+              "a,button,input,select,textarea,summary,[contenteditable='true'],[tabindex]",
             );
             if (!focusable || focusable === event.currentTarget) event.currentTarget.focus();
           }}

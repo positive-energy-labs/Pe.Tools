@@ -30,6 +30,7 @@ describe("fixture census", () => {
     });
     expect(census.nonFixtureLiveRoutes.map(({ route }) => route)).toEqual([
       "/data-tables",
+      "/ducts",
       "/ops",
       "/parameter-links",
       "/rooms",
@@ -40,7 +41,8 @@ describe("fixture census", () => {
       fixtureKind: "prototype-fixture",
     });
     expect(census.missingReviewUrls).toEqual([]);
-    expect(census.missingCanonicalFixtures).toBe(4);
+    // /ducts (2026-09-26) is live-route debt: its fixture is a private client snapshot (PE_DUCTS_FIXTURE), not a ?demo seed.
+    expect(census.missingCanonicalFixtures).toBe(5);
   });
 
   it("uses real manifest seed names for every demo review URL", () => {

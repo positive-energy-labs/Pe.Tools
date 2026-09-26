@@ -7,6 +7,7 @@ export * from "./trichotomy.ts";
 export * from "./family.ts";
 export * from "./families.ts";
 export * from "./takeoffs.ts";
+export * from "./ducts.ts";
 export * from "./rooms.ts";
 export * from "./parameter-links.ts";
 export * from "./settings.ts";

@@ -28,6 +28,7 @@ using Pe.Revit.Loader.Documents;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
+using Pe.Shared.RevitData.Ducts;
 using Pe.Shared.RevitData.Families;
 using Pe.Shared.RevitData.Schedules;
 using Pe.Shared.RevitData.Takeoffs;
@@ -81,7 +82,17 @@ internal sealed class RevitDataRequestService {
     private static RoomsSnapshotData GetRoomsSnapshotCore(NoRequest _, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, Rooms.Snapshot);
 
-    [Op("rooms.trace", Does = "Read the solver's layer 1 for each zone on one plan view from a rooms.partition run, the newest when runId is absent: rails, network segments by kind, openings with their evidence, per-face facts before judgment, and accounting.", Title = "Get Rooms Solver Trace", Finds = ["rooms", "trace", "partition", "rails", "openings", "solver"], Cost = OpCost.Bounded)]
+    [Op("ducts.snapshot", Does = "Explain why a duct group is blocked or walkable from its network topology and demand. First call with input {} (group omitted) to confirm the group in the current document index, even when the person supplies a group id. Then call with that group. The index has counts, readiness facts and bounds without elements or pressure; a group adds only its nodes, segments, flows, issues and Colebrook pressure. To propose assumptions, read route:ducts and use route:ducts.propose for proposal cells; a person stages them. This project-document read works on an exact open unsaved document without activating it. Optional assumptions {revision, values} are staged Work only; the reading and pressure echo the revision. context:true adds decimated geometry for web views; agents should omit context. Read-only.", Title = "Get Duct Snapshot", Finds = ["ducts", "snapshot", "networks", "hvac", "connectors", "flow", "pressure"], Cost = OpCost.Bounded)]
+    private static DuctSnapshotReading GetDuctSnapshotCore(DuctSnapshotRequest request, ProjectDocument activeDocument) {
+        var snapshot = Lib.Mep.DuctSnapshots.Snapshot(activeDocument.Value);
+        try {
+            return DuctSnapshotReader.Read(snapshot, request);
+        } catch (ArgumentException ex) {
+            throw BridgeOperationExceptions.BadRequest(ex.Message);
+        }
+    }
+
+    [Op("rooms.trace",Does = "Read the solver's layer 1 for each zone on one plan view from a rooms.partition run, the newest when runId is absent: rails, network segments by kind, openings with their evidence, per-face facts before judgment, and accounting.", Title = "Get Rooms Solver Trace", Finds = ["rooms", "trace", "partition", "rails", "openings", "solver"], Cost = OpCost.Bounded)]
     private static RoomsTraceData GetRoomsTraceCore(RoomsTraceRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document => Rooms.Trace(document, request));
 

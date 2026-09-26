@@ -8,6 +8,7 @@ const routes = () =>
 /** The registry is authored Work: every route here owns a route-state document an agent can stage. */
 test("route registry lists exactly the retained collaborative routes", () => {
   expect([...routes()].sort()).toEqual([
+    "ducts",
     "families",
     "family",
     "instances",

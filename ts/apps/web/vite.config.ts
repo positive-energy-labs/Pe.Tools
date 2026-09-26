@@ -1,3 +1,4 @@
+import { dirname } from "node:path";
 import { familyFixturesDir } from "./checkout-paths.ts";
 import { devHostProxy } from "./dev-proxy.ts";
 import react from "@vitejs/plugin-react";
@@ -24,7 +25,15 @@ const config = defineConfig(({ mode }) => {
     if (rootEnv[key] && !process.env[key]) process.env[key] = rootEnv[key];
   }
 
+  // Dev-only reading source for /ducts: a saved `ducts.snapshot` (`src/ducts/route.tsx`).
+  const ductsFixture = mode === "development" ? process.env.PE_DUCTS_FIXTURE : undefined;
+
   return {
+    define: {
+      "import.meta.env.VITE_DUCTS_FIXTURE": JSON.stringify(
+        ductsFixture ? `/@fs/${ductsFixture.replaceAll("\\", "/")}` : "",
+      ),
+    },
     plugins: [
       tanstackStart({
         router: {
@@ -52,7 +61,11 @@ const config = defineConfig(({ mode }) => {
     ],
     server: {
       fs: {
-        allow: [searchForWorkspaceRoot(import.meta.dirname), familyFixturesDir],
+        allow: [
+          searchForWorkspaceRoot(import.meta.dirname),
+          familyFixturesDir,
+          ...(ductsFixture ? [dirname(ductsFixture)] : []),
+        ],
       },
       proxy: process.env.PE_TOOLS_HOST_BASE_URL
         ? devHostProxy(process.env.PE_TOOLS_HOST_BASE_URL)

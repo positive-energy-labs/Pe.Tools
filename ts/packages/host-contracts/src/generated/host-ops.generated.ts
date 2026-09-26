@@ -167,6 +167,444 @@ export namespace DocumentTemporaryStatus {
   }
 }
 
+/** Explain why a duct group is blocked or walkable from its network topology and demand. First call with input {} (group omitted) to confirm the group in the current document index, even when the person supplies a group id. Then call with that group. The index has counts, readiness facts and bounds without elements or pressure; a group adds only its nodes, segments, flows, issues and Colebrook pressure. To propose assumptions, read route:ducts and use route:ducts.propose for proposal cells; a person stages them. This project-document read works on an exact open unsaved document without activating it. Optional assumptions {revision, values} are staged Work only; the reading and pressure echo the revision. context:true adds decimated geometry for web views; agents should omit context. Read-only. */
+export namespace DuctsSnapshot {
+  export namespace Req {
+    /**
+     * The existing ducts Work value kinds. Each kind requires its matching unit field or verdict.
+     */
+    export type DuctAssumptionKind = "verdict" | "fan-static" | "component-drop" | "flex-roughness";
+    /**
+     * A disconnected port is either sealed at zero flow, deliberately excluded at zero flow, or needs a physical connection.
+     */
+    export type OpenEndVerdict = "capped" | "ignore" | "connect";
+
+    /**
+     * Call without group to list groups; call with group to inspect one. Context is geometry for web views only.
+     */
+    export interface Request {
+      /**
+       * Omit to read the document index. Supply an exact groups[].id to read and solve only that group.
+       */
+      group?: null | string;
+      /**
+       * Staged Work revision and values. Proposals are not assumptions. The reading echoes the revision.
+       */
+      assumptions?: null | DuctStagedAssumptions;
+      /**
+       * Include decimated polylines per level for the rest of the document. Web views use true; agents omit it.
+       */
+      context?: boolean;
+    }
+    /**
+     * Exact staged Work values, not proposal cells or the whole trichotomy document. Revision is the Work revision
+     * captured with these values; the pressure result echoes it so callers can fence stale results.
+     */
+    export interface DuctStagedAssumptions {
+      revision: number;
+      values: {
+        [k: string]: DuctWorkAssumption;
+      };
+    }
+    /**
+     * A staged value in the existing Work grammar. FanStatic/ComponentDrop require only InWg (finite, nonnegative),
+     * FlexRoughness requires only Ft (finite, positive), Verdict requires only capped/connect/ignore.
+     */
+    export interface DuctWorkAssumption {
+      kind: DuctAssumptionKind;
+      inWg?: null | number;
+      ft?: null | number;
+      verdict?: null | OpenEndVerdict;
+    }
+  }
+  export namespace Res {
+    /**
+     * Where a value came from. The route prints it beside the value.
+     */
+    export type DuctProvenance = "geometry" | "revit-reported" | "revit-default" | "designer-stated" | "derived";
+    export type DuctIssueKind =
+      | "open-end"
+      | "loop"
+      | "stub"
+      | "mixed-classification"
+      | "implausible-size"
+      | "default-flex-roughness"
+      | "no-fan-static"
+      | "no-component-drop"
+      | "no-terminal-flow"
+      | "no-root"
+      | "multi-root"
+      | "high-velocity";
+    export type DuctNodeKind = "equipment" | "terminal" | "fitting" | "accessory" | "cap";
+    export type DuctShape = "round" | "rectangular" | "oval" | "other";
+    /**
+     * Construction class supported by captured evidence or an author; PartType alone cannot establish it.
+     */
+    export type FittingConstruction = "unknown" | "smooth-round" | "mitered" | "vaned" | "simple-junction" | "transition";
+    export type DuctSegmentKind = "duct" | "flex";
+    /**
+     * The fitting leg, relative to the equipment root. Return/exhaust junctions converge in the opposite direction.
+     */
+    export type FittingPath = "Bend" | "Straight" | "Branch";
+    /**
+     * Who supplied a solver assumption. Defaults describe a scenario, never measured equipment performance.
+     */
+    export type AssumptionSource = "User" | "Default";
+
+    /**
+     * A bounded document index. Element payload and pressure exist only for Group; Context is opt-in geometry.
+     */
+    export interface Response {
+      document: DuctDocument;
+      levels: DuctLevel[];
+      layers: DuctLayer[];
+      groups: DuctGroupIndex[];
+      group?: null | string;
+      assumptionRevision?: number | null;
+      nodes?: DuctNode[] | null;
+      segments?: DuctSegment[] | null;
+      flows?: DuctFlow[] | null;
+      issues?: DuctIssue[] | null;
+      pressure?: null | DuctPressureResult;
+      context?: DuctContextLevel[] | null;
+    }
+    /**
+     * The document read, when, and how long the read took.
+     */
+    export interface DuctDocument {
+      title: string;
+      readAt: string;
+      elapsedMs: number;
+      /**
+       * The document's selected Revit duct friction calculator, not the solver's Colebrook method.
+       */
+      frictionMethod?: null | DuctFrictionMethod;
+    }
+    /**
+     * Identity reported by DuctSettings.GetPressLossCalculationServerInfo; null identity means unavailable.
+     */
+    export interface DuctFrictionMethod {
+      serverId?: null | string;
+      name?: null | string;
+      description?: null | string;
+      provenance: DuctProvenance;
+      evidence: string;
+    }
+    /**
+     * A level; ElevationFt is Level.ProjectElevation (geometry frame), never Level.Elevation.
+     */
+    export interface DuctLevel {
+      id: number;
+      name: string;
+      elevationFt: number;
+    }
+    /**
+     * One real query, printed verbatim in Query, and how much of the model it answered.
+     */
+    export interface DuctLayer {
+      key: string;
+      title: string;
+      query: string;
+      coverage: DuctCoverage;
+      provenance: DuctProvenance;
+    }
+    export interface DuctCoverage {
+      have: number;
+      of: number;
+    }
+    /**
+     * Counts and readiness evidence, without element records or issue handles. Root names correspond to RootIds.
+     */
+    export interface DuctGroupIndex {
+      id: string;
+      rootIds: number[];
+      rootNames: string[];
+      classifications: string[];
+      systemNames: string[];
+      terminalCount: number;
+      elementCount: number;
+      segmentCount: number;
+      loops: number;
+      designCfm: number;
+      bounds?: null | DuctBounds;
+      issueCounts: DuctIssueCount[];
+    }
+    export interface DuctBounds {
+      min: number[];
+      max: number[];
+    }
+    /**
+     * Captured issue count and the count still unanswered by staged Work; the web taxonomy owns readiness labels.
+     */
+    export interface DuctIssueCount {
+      kind: DuctIssueKind;
+      count: number;
+      open: number;
+    }
+    export interface DuctNode {
+      id: number;
+      kind: DuctNodeKind;
+      category: string;
+      family?: null | string;
+      type?: null | string;
+      partType?: null | string;
+      levelId?: number | null;
+      point: number[];
+      groupId?: null | string;
+      systemName?: null | string;
+      classification?: null | string;
+      connectors: DuctConnector[];
+      facts: DuctFact[];
+      /**
+       * Construction and dimensions with evidence; absent in older saved captures and non-fitting nodes.
+       */
+      fittingGeometry?: null | FittingGeometry;
+    }
+    /**
+     * One physical HVAC connector. Kind is "end" or "curve" (a tap on a duct's side). Direction is Revit's
+     * (in, out, bidirectional); flow direction for the solver comes from the root, never from this.
+     *
+     */
+    export interface DuctConnector {
+      index: number;
+      kind: string;
+      point: number[];
+      shape: DuctShape;
+      size: string;
+      diameterIn?: null | number;
+      widthIn?: null | number;
+      heightIn?: null | number;
+      flowCfm?: null | number;
+      direction: string;
+      classification?: null | string;
+      connectedTo?: null | DuctRef;
+      /**
+       * The captured peer's group when that peer is outside this reading. ConnectedTo retains its identity; this is not an open end or missing peer.
+       */
+      outsideGroup?: null | string;
+    }
+    /**
+     * What a connector touches: an element id and that element's connector index.
+     */
+    export interface DuctRef {
+      elementId: number;
+      connector: number;
+    }
+    /**
+     * One stated or reported value with its unit and provenance.
+     */
+    export interface DuctFact {
+      key: string;
+      value?: null | number;
+      text?: null | string;
+      unit: string;
+      provenance: DuctProvenance;
+    }
+    /**
+     * Centerline r/D and construction evidence used to select a coefficient row; junctions also carry per-port areas.
+     */
+    export interface FittingGeometry {
+      angleDegrees: DuctEvidenceOfNullableDouble;
+      radiusOverDiameter: DuctEvidenceOfNullableDouble;
+      construction: DuctEvidenceOfFittingConstruction;
+      connectorAreas: FittingConnectorArea[];
+    }
+    /**
+     * A captured or derived value and the exact evidence supporting it. Null values explicitly mean unknown.
+     */
+    export interface DuctEvidenceOfNullableDouble {
+      value?: null | number;
+      provenance: DuctProvenance;
+      evidence: string;
+    }
+    /**
+     * A captured or derived value and the exact evidence supporting it. Null values explicitly mean unknown.
+     */
+    export interface DuctEvidenceOfFittingConstruction {
+      value: FittingConstruction;
+      provenance: DuctProvenance;
+      evidence: string;
+    }
+    /**
+     * Area in square feet of one physical connector, keyed by its stable index within the part.
+     */
+    export interface FittingConnectorArea {
+      connector: number;
+      areaFt2: DuctEvidenceOfNullableDouble;
+    }
+    export interface DuctSegment {
+      id: number;
+      kind: DuctSegmentKind;
+      type?: null | string;
+      shape: DuctShape;
+      size: string;
+      diameterIn?: null | number;
+      widthIn?: null | number;
+      heightIn?: null | number;
+      lengthFt: number;
+      polyline: number[][];
+      levelId?: number | null;
+      groupId?: null | string;
+      systemName?: null | string;
+      classification?: null | string;
+      roughness: DuctRoughness;
+      revit: DuctRevitValues;
+      connectors: DuctConnector[];
+    }
+    export interface DuctRoughness {
+      valueFt: number;
+      provenance: DuctProvenance;
+    }
+    /**
+     * What Revit reports on the segment. Partial in most models; a check, never an input.
+     */
+    export interface DuctRevitValues {
+      flowCfm?: null | number;
+      velocityFpm?: null | number;
+      frictionInWgPer100Ft?: null | number;
+      pressureDropInWg?: null | number;
+    }
+    /**
+     * Pass-1 flow: terminal design flow summed up the tree from the single root. At a tapped duct it is the upstream-end flow.
+     */
+    export interface DuctFlow {
+      segmentId: number;
+      cfm: number;
+      provenance: DuctProvenance;
+    }
+    /**
+     * Id is "kind:groupId[:elementId[:connector]]"; an assumption verdict keys on the exact captured handle.
+     */
+    export interface DuctIssue {
+      id: string;
+      kind: DuctIssueKind;
+      elementId?: number | null;
+      point?: number[] | null;
+      groupId: string;
+      note: string;
+    }
+    /**
+     * Complete solve receipt: local results, group budgets, issues, and the exact assumptions consumed.
+     */
+    export interface DuctPressureResult {
+      segments: SegmentPressure[];
+      fittings: FittingPressure[];
+      terminals: TerminalPressure[];
+      groups: GroupPressure[];
+      issues: PressureIssue[];
+      assumptionsUsed: UsedAssumption[];
+      /**
+       * The caller's staged Work revision used for this solve; null when no staged assumptions were supplied.
+       */
+      assumptionRevision?: number | null;
+    }
+    /**
+     * One constant-flow interval of a segment. Tap positions are distances along the stored polyline, scaled to LengthFt.
+     * Multiple intervals preserve flow changes at taps. Incomplete rows carry only the known subtree demand.
+     */
+    export interface SegmentPressure {
+      segmentId: number;
+      groupId: string;
+      startFt: number;
+      endFt: number;
+      flowCfm: number;
+      friction: DuctFriction;
+      isComplete: boolean;
+      assumptionsUsed: string[];
+    }
+    /**
+     * Darcy-Weisbach results. Hydraulic diameter is 4A/P; velocity uses actual area, not equivalent round sizing diameter.
+     */
+    export interface DuctFriction {
+      velocityFpm: number;
+      reynoldsNumber: number;
+      frictionFactor: number;
+      hydraulicDiameterFt: number;
+      velocityPressureInWg: number;
+      frictionInWgPer100Ft: number;
+      pressureDropInWg: number;
+    }
+    /**
+     * A fitting's loss on one path, referenced to the named outlet velocity pressure. Junctions have separate leg results.
+     */
+    export interface FittingPressure {
+      fittingId: number;
+      outletConnector: number;
+      groupId: string;
+      path: FittingPath;
+      flowRatio: number;
+      areaRatio: number;
+      coefficient: number;
+      pressureDropInWg: number;
+      equivalentLengthFt: number;
+      coefficientRow: string;
+      isComplete: boolean;
+      assumptionsUsed: string[];
+    }
+    /**
+     * A root-to-terminal path. DuctLossInWg includes ducts and fittings; component loss is separate for the static budget.
+     * A null total means at least one component is unknown. IsComplete describes topology, demand, geometry and compression.
+     */
+    export interface TerminalPressure {
+      terminalId: number;
+      rootId: number;
+      groupId: string;
+      path: number[];
+      ductLossInWg: number;
+      componentLossInWg?: null | number;
+      totalLossInWg?: null | number;
+      effectiveLengthFt: number;
+      isComplete: boolean;
+      assumptionsUsed: string[];
+    }
+    /**
+     * Group pressure assessment. CriticalPath is the highest total-loss path when component drops are known, otherwise
+     * the highest known duct-loss path (CriticalPathIncludesComponents=false). PathEffectiveLengthFt is this group's
+     * longest effective run, which can differ from its highest-loss run. TotalEffectiveLengthFt is the combined longest
+     * supply plus return run, or the single exhaust run. Unpaired/ambiguous supply-return circuits have no full TEL or budget.
+     * ASP subtracts the largest component loss on each side and the root's external components once. Margin uses the
+     * highest combined total path loss; it does not add losses from parallel branches.
+     */
+    export interface GroupPressure {
+      groupId: string;
+      isWalkable: boolean;
+      criticalPath?: null | TerminalPressure;
+      criticalPathIncludesComponents: boolean;
+      pathEffectiveLengthFt?: null | number;
+      totalEffectiveLengthFt?: null | number;
+      availableStaticInWg?: null | number;
+      frictionRateInWgPer100Ft?: null | number;
+      marginInWg?: null | number;
+      assumptionsUsed: string[];
+    }
+    /**
+     * A pressure-specific issue, separate from the unchanged ducts.snapshot issue taxonomy.
+     */
+    export interface PressureIssue {
+      code: string;
+      groupId: string;
+      elementId?: number | null;
+      reason: string;
+    }
+    /**
+     * A materialized assumption dependency. Every result holds IDs into the solve's AssumptionsUsed list.
+     */
+    export interface UsedAssumption {
+      id: string;
+      value: string;
+      source: AssumptionSource;
+      reason: string;
+    }
+    /**
+     * Geometry only, grouped by level. Coordinates are model feet rounded to 0.01 ft; short stubs are omitted.
+     */
+    export interface DuctContextLevel {
+      levelId?: number | null;
+      polylines: number[][][];
+    }
+  }
+}
+
 /** Reconcile explicit loaded families to a saved spec or supplied draft, refusing plan drift per family and any family reloaded since the plan (its name now resolves to another id), and write the run receipt beside its operation output. */
 export namespace FamiliesApply {
   export namespace Req {
@@ -5958,6 +6396,7 @@ export interface HostOps {
   "data-table.apply": { request: DataTableApply.Req.Request; response: DataTableApply.Res.Response };
   "document.temporary.release": { request: DocumentTemporaryRelease.Req.Request; response: DocumentTemporaryRelease.Res.Response };
   "document.temporary.status": { request: DocumentTemporaryStatus.Req.Request; response: DocumentTemporaryStatus.Res.Response };
+  "ducts.snapshot": { request: DuctsSnapshot.Req.Request; response: DuctsSnapshot.Res.Response };
   "families.apply": { request: FamiliesApply.Req.Request; response: FamiliesApply.Res.Response };
   "families.capture": { request: FamiliesCapture.Req.Request; response: FamiliesCapture.Res.Response };
   "families.plan": { request: FamiliesPlan.Req.Request; response: FamiliesPlan.Res.Response };
@@ -6032,6 +6471,7 @@ export const hostOpKeys = [
   "data-table.apply",
   "document.temporary.release",
   "document.temporary.status",
+  "ducts.snapshot",
   "families.apply",
   "families.capture",
   "families.plan",
