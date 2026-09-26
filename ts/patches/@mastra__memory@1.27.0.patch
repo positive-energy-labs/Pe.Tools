@@ -1,0 +1,182 @@
+diff --git a/dist/src-CxkQ-ICG.cjs b/dist/src-CxkQ-ICG.cjs
+index 1b23f73fca9a1f4a9b505e542f1877caf6ee24f2..84eceec95907d40c0ba9483090158eb478ac5e0c 100644
+--- a/dist/src-CxkQ-ICG.cjs
++++ b/dist/src-CxkQ-ICG.cjs
+@@ -18601,7 +18601,10 @@ function formatObserverMessage(msg, counter, options) {
+ 				const { value: resultForObserver } = resolveToolResultValue(part, inv.result);
+ 				const { resultWithoutAttachments, attachments: extractedAttachments } = extractToolResultAttachments(resultForObserver, counter, attachmentFilter);
+ 				if (extractedAttachments.length > 0) attachments.push(...extractedAttachments);
+-				pushLine(`Tool Result ${inv.toolName}`, maybeTruncate(formatToolResultForObserver(resultWithoutAttachments, { maxTokens: maxToolResultTokens }), maxLen), partCreatedAt);
++				const fullResult = stringifyToolResult(resultWithoutAttachments);
++				const excerpt = maybeTruncate(truncateStringByTokens(fullResult, maxToolResultTokens), maxLen);
++				const reference = excerpt === fullResult ? "" : `\n[Excerpt only. Full tool result remains stored at thread ${msg.threadId}, message ${msg.id}, tool call ${inv.toolCallId}.]`;
++				pushLine(`Tool Result ${inv.toolName}`, excerpt + reference, partCreatedAt);
+ 				return;
+ 			}
+ 			pushLine(`Tool Call ${inv.toolName}`, maybeTruncate(JSON.stringify(inv.args, null, 2), maxLen), partCreatedAt);
+@@ -19367,18 +19370,68 @@ var ObserverRunner = class {
+ 			memory: this.memory,
+ 			requestContext: options?.requestContext
+ 		});
+-		const temporaryMemory = activeExtractors.filter((extractor) => extractor.mode === "structured").length > 0 ? await createTemporaryOmMemoryContext("structured-observer") : void 0;
+-		const agent = temporaryMemory ? this.createAgent(resolvedModel.model, false, temporaryMemory.memory, activeExtractors) : this.createAgent(resolvedModel.model, false, void 0, activeExtractors);
+-		const internalRequestContext = withOmInternalThreadId(options?.requestContext, agent.id);
++		// Pe.Tools: the threshold starts observation; it does not limit a long thread's input.
++		// Bound the actual formatted request and retain complete stored messages/results.
++		const maxObserverInputBytes = 64 * 1024;
++		const maxObserverToolTokens = 1500;
++		const priorLimit = 4e3;
++		const boundedPrior = (prior) => { const value = prior ?? ""; return value.length <= priorLimit ? value : `[Earlier observations remain stored; recent excerpt follows.]\n${value.slice(-priorLimit)}`; };
++		const prior = boundedPrior(existingObservations);
++		const priorWasTruncated = prior !== existingObservations;
+ 		const attachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, options?.requestContext);
+-		const observerMessages = [{
++		const boundedSystemPrompt = buildObserverSystemPrompt(false, this.observationConfig.instruction, this.observationConfig.threadTitle, activeExtractors);
++		const makeObserverMessages = (batch, batchPrior) => [{
+ 			role: "user",
+-			content: buildObserverTaskPrompt(existingObservations, {
++			content: buildObserverTaskPrompt(batchPrior, {
+ 				...options,
++				wasTruncated: priorWasTruncated || options?.wasTruncated,
+ 				includeThreadTitle: this.observationConfig.threadTitle,
+ 				extractors: activeExtractors
+ 			})
+-		}, buildObserverHistoryMessage(messagesToObserve, { attachmentFilter })];
++		}, buildObserverHistoryMessage(batch, {
++			attachmentFilter,
++			maxToolResultTokens: maxObserverToolTokens
++		})];
++		const requestBytes = (batch, batchPrior) => Buffer.byteLength(JSON.stringify([boundedSystemPrompt, makeObserverMessages(batch, batchPrior)]), "utf8");
++		if (!options?._boundedBatch && messagesToObserve.length > 1) {
++			const batches = [];
++			let batch = [];
++			for (const message of messagesToObserve) {
++				if (batch.length > 0 && requestBytes([...batch, message], prior) > maxObserverInputBytes - 6 * 1024) {
++					batches.push(batch);
++					batch = [];
++				}
++				batch.push(message);
++			}
++			if (batch.length > 0) batches.push(batch);
++			if (batches.length > 1) {
++				const observations = [];
++				let combinedValues;
++				let combinedFailures;
++				let combinedUsage;
++				let finalResult;
++				for (const nextBatch of batches) {
++					const nextPrior = boundedPrior([existingObservations, ...observations].filter(Boolean).join("\n"));
++					const result = await this.call(nextPrior, nextBatch, abortSignal, { ...options, _boundedBatch: true, wasTruncated: priorWasTruncated || nextPrior.length < [existingObservations, ...observations].filter(Boolean).join("\n").length });
++					if (result.observations) observations.push(result.observations);
++					combinedValues = mergeExtractedValues(combinedValues, result.extractedValues);
++					combinedFailures = mergeExtractionFailures(combinedFailures, result.extractionFailures);
++					if (result.usage) combinedUsage = {
++						inputTokens: (combinedUsage?.inputTokens ?? 0) + (result.usage.inputTokens ?? 0),
++						outputTokens: (combinedUsage?.outputTokens ?? 0) + (result.usage.outputTokens ?? 0),
++						totalTokens: (combinedUsage?.totalTokens ?? 0) + (result.usage.totalTokens ?? 0)
++					};
++					finalResult = result;
++				}
++				return { ...finalResult, observations: observations.join("\n"), extractedValues: combinedValues, extractionFailures: combinedFailures, usage: combinedUsage };
++			}
++		}
++		const observerMessages = makeObserverMessages(messagesToObserve, prior);
++		const formattedBytes = Buffer.byteLength(JSON.stringify([boundedSystemPrompt, observerMessages]), "utf8");
++		if (formattedBytes > maxObserverInputBytes) throw new Error(`Observer input exceeds ${maxObserverInputBytes} UTF-8 bytes after formatting (${formattedBytes} bytes; message ${messagesToObserve[0]?.id ?? "unknown"}). Stored messages were not marked observed.`);
++		const temporaryMemory = activeExtractors.filter((extractor) => extractor.mode === "structured").length > 0 ? await createTemporaryOmMemoryContext("structured-observer") : void 0;
++		const agent = temporaryMemory ? this.createAgent(resolvedModel.model, false, temporaryMemory.memory, activeExtractors) : this.createAgent(resolvedModel.model, false, void 0, activeExtractors);
++		const internalRequestContext = withOmInternalThreadId(options?.requestContext, agent.id);
+ 		const doGenerate = async () => {
+ 			return withRetry(() => withOmTracingSpan({
+ 				phase: "observer",
+diff --git a/dist/src-aTfbkxBl.js b/dist/src-aTfbkxBl.js
+index f8d08bbb9a72216cc882e4f65e9e51af31e8d36c..4e71ba31459fc4af024c0de3383933987d6cc915 100644
+--- a/dist/src-aTfbkxBl.js
++++ b/dist/src-aTfbkxBl.js
+@@ -18580,7 +18580,10 @@ function formatObserverMessage(msg, counter, options) {
+ 				const { value: resultForObserver } = resolveToolResultValue(part, inv.result);
+ 				const { resultWithoutAttachments, attachments: extractedAttachments } = extractToolResultAttachments(resultForObserver, counter, attachmentFilter);
+ 				if (extractedAttachments.length > 0) attachments.push(...extractedAttachments);
+-				pushLine(`Tool Result ${inv.toolName}`, maybeTruncate(formatToolResultForObserver(resultWithoutAttachments, { maxTokens: maxToolResultTokens }), maxLen), partCreatedAt);
++				const fullResult = stringifyToolResult(resultWithoutAttachments);
++				const excerpt = maybeTruncate(truncateStringByTokens(fullResult, maxToolResultTokens), maxLen);
++				const reference = excerpt === fullResult ? "" : `\n[Excerpt only. Full tool result remains stored at thread ${msg.threadId}, message ${msg.id}, tool call ${inv.toolCallId}.]`;
++				pushLine(`Tool Result ${inv.toolName}`, excerpt + reference, partCreatedAt);
+ 				return;
+ 			}
+ 			pushLine(`Tool Call ${inv.toolName}`, maybeTruncate(JSON.stringify(inv.args, null, 2), maxLen), partCreatedAt);
+@@ -19346,18 +19349,68 @@ var ObserverRunner = class {
+ 			memory: this.memory,
+ 			requestContext: options?.requestContext
+ 		});
+-		const temporaryMemory = activeExtractors.filter((extractor) => extractor.mode === "structured").length > 0 ? await createTemporaryOmMemoryContext("structured-observer") : void 0;
+-		const agent = temporaryMemory ? this.createAgent(resolvedModel.model, false, temporaryMemory.memory, activeExtractors) : this.createAgent(resolvedModel.model, false, void 0, activeExtractors);
+-		const internalRequestContext = withOmInternalThreadId(options?.requestContext, agent.id);
++		// Pe.Tools: the threshold starts observation; it does not limit a long thread's input.
++		// Bound the actual formatted request and retain complete stored messages/results.
++		const maxObserverInputBytes = 64 * 1024;
++		const maxObserverToolTokens = 1500;
++		const priorLimit = 4e3;
++		const boundedPrior = (prior) => { const value = prior ?? ""; return value.length <= priorLimit ? value : `[Earlier observations remain stored; recent excerpt follows.]\n${value.slice(-priorLimit)}`; };
++		const prior = boundedPrior(existingObservations);
++		const priorWasTruncated = prior !== existingObservations;
+ 		const attachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, options?.requestContext);
+-		const observerMessages = [{
++		const boundedSystemPrompt = buildObserverSystemPrompt(false, this.observationConfig.instruction, this.observationConfig.threadTitle, activeExtractors);
++		const makeObserverMessages = (batch, batchPrior) => [{
+ 			role: "user",
+-			content: buildObserverTaskPrompt(existingObservations, {
++			content: buildObserverTaskPrompt(batchPrior, {
+ 				...options,
++				wasTruncated: priorWasTruncated || options?.wasTruncated,
+ 				includeThreadTitle: this.observationConfig.threadTitle,
+ 				extractors: activeExtractors
+ 			})
+-		}, buildObserverHistoryMessage(messagesToObserve, { attachmentFilter })];
++		}, buildObserverHistoryMessage(batch, {
++			attachmentFilter,
++			maxToolResultTokens: maxObserverToolTokens
++		})];
++		const requestBytes = (batch, batchPrior) => Buffer.byteLength(JSON.stringify([boundedSystemPrompt, makeObserverMessages(batch, batchPrior)]), "utf8");
++		if (!options?._boundedBatch && messagesToObserve.length > 1) {
++			const batches = [];
++			let batch = [];
++			for (const message of messagesToObserve) {
++				if (batch.length > 0 && requestBytes([...batch, message], prior) > maxObserverInputBytes - 6 * 1024) {
++					batches.push(batch);
++					batch = [];
++				}
++				batch.push(message);
++			}
++			if (batch.length > 0) batches.push(batch);
++			if (batches.length > 1) {
++				const observations = [];
++				let combinedValues;
++				let combinedFailures;
++				let combinedUsage;
++				let finalResult;
++				for (const nextBatch of batches) {
++					const nextPrior = boundedPrior([existingObservations, ...observations].filter(Boolean).join("\n"));
++					const result = await this.call(nextPrior, nextBatch, abortSignal, { ...options, _boundedBatch: true, wasTruncated: priorWasTruncated || nextPrior.length < [existingObservations, ...observations].filter(Boolean).join("\n").length });
++					if (result.observations) observations.push(result.observations);
++					combinedValues = mergeExtractedValues(combinedValues, result.extractedValues);
++					combinedFailures = mergeExtractionFailures(combinedFailures, result.extractionFailures);
++					if (result.usage) combinedUsage = {
++						inputTokens: (combinedUsage?.inputTokens ?? 0) + (result.usage.inputTokens ?? 0),
++						outputTokens: (combinedUsage?.outputTokens ?? 0) + (result.usage.outputTokens ?? 0),
++						totalTokens: (combinedUsage?.totalTokens ?? 0) + (result.usage.totalTokens ?? 0)
++					};
++					finalResult = result;
++				}
++				return { ...finalResult, observations: observations.join("\n"), extractedValues: combinedValues, extractionFailures: combinedFailures, usage: combinedUsage };
++			}
++		}
++		const observerMessages = makeObserverMessages(messagesToObserve, prior);
++		const formattedBytes = Buffer.byteLength(JSON.stringify([boundedSystemPrompt, observerMessages]), "utf8");
++		if (formattedBytes > maxObserverInputBytes) throw new Error(`Observer input exceeds ${maxObserverInputBytes} UTF-8 bytes after formatting (${formattedBytes} bytes; message ${messagesToObserve[0]?.id ?? "unknown"}). Stored messages were not marked observed.`);
++		const temporaryMemory = activeExtractors.filter((extractor) => extractor.mode === "structured").length > 0 ? await createTemporaryOmMemoryContext("structured-observer") : void 0;
++		const agent = temporaryMemory ? this.createAgent(resolvedModel.model, false, temporaryMemory.memory, activeExtractors) : this.createAgent(resolvedModel.model, false, void 0, activeExtractors);
++		const internalRequestContext = withOmInternalThreadId(options?.requestContext, agent.id);
+ 		const doGenerate = async () => {
+ 			return withRetry(() => withOmTracingSpan({
+ 				phase: "observer",

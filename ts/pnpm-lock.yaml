@@ -44,6 +44,7 @@ pnpmfileChecksum: sha256-o67yEFBwLUO/jgHp2d9DPtNvgEAEkiWkBOmIRuxfqV0=
 
 patchedDependencies:
   '@mastra/core@1.61.0': a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee
+  '@mastra/memory@1.27.0': c199315aaaa97ecaa60c86db7a80a3579ac4c9ce5afbfbbe3efef06d67554da1
   '@mastra/server@1.61.0': d41abfdb11ac17341d0c2ad1bc267a64c2c161782462d2c23f7bd1a4e0a44427
   vite-plus@0.2.1: ec4550f35894920e3b7936089232d1d01a00fdf491b57911927884cde8bc5a09
 
@@ -390,7 +391,7 @@ importers:
         version: 1.21.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)
       '@mastra/memory':
         specifier: 1.27.0
-        version: 1.27.0(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
+        version: 1.27.0(patch_hash=c199315aaaa97ecaa60c86db7a80a3579ac4c9ce5afbfbbe3efef06d67554da1)(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
       '@pe/agent-contracts':
         specifier: workspace:*
         version: link:../agent-contracts
@@ -7664,7 +7665,7 @@ snapshots:
       '@mastra/github-signals': 0.2.5(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
       '@mastra/libsql': 1.21.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)
       '@mastra/mcp': 1.17.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(express@5.2.1)(hono@4.12.24)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.3.6)
-      '@mastra/memory': 1.27.0(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
+      '@mastra/memory': 1.27.0(patch_hash=c199315aaaa97ecaa60c86db7a80a3579ac4c9ce5afbfbbe3efef06d67554da1)(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
       '@mastra/observability': 1.17.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
       '@mastra/pg': 1.21.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
       '@mastra/schema-compat': 1.3.7(zod@4.3.6)
@@ -7719,7 +7720,7 @@ snapshots:
       '@mastra/github-signals': 0.2.5(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
       '@mastra/libsql': 1.21.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)
       '@mastra/mcp': 1.17.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(express@5.2.1)(hono@4.12.8)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.3.6)
-      '@mastra/memory': 1.27.0(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
+      '@mastra/memory': 1.27.0(patch_hash=c199315aaaa97ecaa60c86db7a80a3579ac4c9ce5afbfbbe3efef06d67554da1)(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
       '@mastra/observability': 1.17.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
       '@mastra/pg': 1.21.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
       '@mastra/schema-compat': 1.3.7(zod@4.3.6)
@@ -7900,7 +7901,7 @@ snapshots:
       - supports-color
       - zod
 
-  '@mastra/memory@1.27.0(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))':
+  '@mastra/memory@1.27.0(patch_hash=c199315aaaa97ecaa60c86db7a80a3579ac4c9ce5afbfbbe3efef06d67554da1)(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))':
     dependencies:
       '@mastra/core': 1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
       '@mastra/schema-compat': 1.3.7(zod@4.4.3)
@@ -11026,7 +11027,7 @@ snapshots:
       '@mastra/github-signals': 0.2.5(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
       '@mastra/libsql': 1.21.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)
       '@mastra/mcp': 1.17.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(express@5.2.1)(hono@4.12.8)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.3.6)
-      '@mastra/memory': 1.27.0(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
+      '@mastra/memory': 1.27.0(patch_hash=c199315aaaa97ecaa60c86db7a80a3579ac4c9ce5afbfbbe3efef06d67554da1)(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
       '@mastra/observability': 1.17.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
       '@mastra/pg': 1.21.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
       '@mastra/schema-compat': 1.3.7(zod@4.3.6)
@@ -11089,7 +11090,7 @@ snapshots:
       '@mastra/github-signals': 0.2.5(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
       '@mastra/libsql': 1.21.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(bufferutil@4.1.0)
       '@mastra/mcp': 1.17.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(express@5.2.1)(hono@4.12.8)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.3.6)
-      '@mastra/memory': 1.27.0(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
+      '@mastra/memory': 1.27.0(patch_hash=c199315aaaa97ecaa60c86db7a80a3579ac4c9ce5afbfbbe3efef06d67554da1)(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
       '@mastra/observability': 1.17.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))(zod@4.3.6)
       '@mastra/pg': 1.21.1(@mastra/core@1.61.0(patch_hash=a6bed3f81e49d90872775c956619f83852da1296f77143e27aee2065bf989cee)(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6))
       '@mastra/schema-compat': 1.3.7(zod@4.3.6)

@@ -27,6 +27,8 @@ patchedDependencies:
   # and releasing a detached suspended thread run on abort (E2E-J5; pinned by runtime ask-new-turn-web.test.ts).
   # Also: ask_user reads a selectionMode with no options as a free-text ask, not a refusal (F-H6-1; runtime ask-lifetime.test.ts).
   "@mastra/core@1.61.0": patches/@mastra__core@1.61.0.patch
+  # SHIM: Remove when upstream bounds formatted single-thread observer input and preserves complete-message progress.
+  '@mastra/memory@1.27.0': patches/@mastra__memory@1.27.0.patch
   # SHIM: Remove when upstream server treats explicit rename/delete/clone routes as target-thread operations.
   "@mastra/server@1.61.0": patches/@mastra__server@1.61.0.patch
   vite-plus@0.2.1: patches/vite-plus@0.2.1.patch
