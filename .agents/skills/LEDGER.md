@@ -74,7 +74,7 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 
 ### 2026-09-25 reshape (Claude Opus 5.5, kaitpw: "reshape the skills as you see fit")
 
-- New slot `page`: disposable HTML as a working surface, with a starter kit (`kit/review.html`, `diagram.html`, `lineup.html`, `sandbox.html`, `build.py`, `check.py`). Source: kaitpw rated `.artifacts/poc-feedback/` and `.artifacts/poc-flow/` the best HTML he has received, and named the usual failure: pure visuals with no underlying state. The slot's laws are the properties those pages had: replayed data, one pure reducer, locatable names, one typed export with a readback, real refusals, glyph-and-colour state, a numbered rulings sheet, a headless walk before report. It refuses pages that would fake the product's own live state (kaitpw's example: the situation head).
+- New slot `page`: disposable HTML as a working surface, with a starter kit (`kit/review.html`, `diagram.html`, `lineup.html`, `sandbox.html`, `build.py`, `check.py`). Source: kaitpw rated `.artifacts/poc-feedback/` and `.artifacts/poc-flow/` the best HTML he has received, and named the usual failure: pure visuals with no underlying state. The slot's laws are the properties those pages had: replayed data, one pure reducer, locatable names, one typed export with a readback, real refusals, glyph-and-colour state, a numbered rulings sheet, a headless walk before report. It refuses pages that would fake the product's own live state (kaitpw's example: the situation head). PROVEN[cold agent, `.artifacts/orchestration-map/orchestration-map.html`, `e85a60a3`, 2026-09-25]: an Opus agent given only `page` and four sources started from `kit/diagram.html`, built the data with a script, marked unverified claims, and passed `kit/check.py` (12 walk steps). Not yet judged by kaitpw by hand.
 - `protoui` loses its repo-shaped mechanics: mounting, the switcher bar and cleanup move to `execute` under Prototype mechanics; isolated HTML variants move to `page`. This cleared `protoui`'s two check failures.
 - `index` gains the anchor law (name a place only with a link, a searchable id, or a marked picture), and its artifact register routes pages to `page`. `prove` gains: suspect the instrument when a number does not move or moves too far. `diagnose` gains: a delegated diagnosis lands a fix only under its brief's stated gate. `execute` gains the Revit custody line for opening documents for the person.
 
@@ -93,7 +93,6 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 
 ## Owed
 
-- Fresh-agent proof of the 2026-09-25 reshape: a cold agent given only `page` builds a page that passes `kit/check.py` and has a reducer, an export and locatable names.
 - `delegate` brief template (worktree, files owned and owned by others, custody, proof lane, report cap, never push or stash): held back because `lens.delegate/SKILL.md` carries kaitpw's uncommitted edits.
 - Pre-existing check failures: `lens.house` still has a `## Parlance` section; `~/.claude/skills/synced` is a stray in the user-global dir (deletion needs kaitpw).
 
