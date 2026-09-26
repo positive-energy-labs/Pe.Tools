@@ -87,3 +87,33 @@ test("F-H6-5: a families scope proposal shows in the head as its own Families gr
   expect(native?.cells.patch?.proposal?.value).toEqual(patch.proposal.value);
   expect(native?.groupOf("patch")).toEqual(["native FF patch"]);
 });
+
+test("rooms' manifest-declared edits cells are a head Work while one has a proposal", () => {
+  const next = new Map<string, Parameters<typeof peReadings.subscribe>[1]>();
+  vi.spyOn(peReadings, "subscribe").mockImplementation((request, emit) => {
+    if (request.kind === "work" && (request as { route?: string }).route === "rooms")
+      next.set(readingKey(request), emit);
+    return () => {};
+  });
+  const open = vi.fn();
+  const { result } = renderHook(() =>
+    useHeadWorks(address("C:/Models/Rooms.rvt"), "Rooms model", { open, planIn: vi.fn() }),
+  );
+  const key = JSON.stringify(["room-guid-1", "name"]);
+  const emit = (revision: number, edits: Record<string, unknown>) =>
+    act(() => {
+      for (const [id, send] of next)
+        send({ kind: "snapshot", key: id, value: { revision, doc: { edits } } } as never);
+    });
+  emit(1, { [key]: {} });
+  expect(result.current.find((work) => work.route === "Rooms")).toBeUndefined();
+  emit(2, { [key]: { proposal: { value: "Office 101" } } });
+  const rooms = result.current.find((work) => work.route === "Rooms");
+  expect(rooms).toBeDefined();
+  expect(rooms!.subject).toBe("Rooms model");
+  expect(rooms!.wire.segment).toBe("edits");
+  expect(rooms!.groupOf(key)).toEqual(["room-guid-1"]);
+  expect(rooms!.commit.word).toBe("open");
+  rooms!.open(["room-guid-1"]);
+  expect(open).toHaveBeenCalledWith("rooms", ["room-guid-1"]);
+});

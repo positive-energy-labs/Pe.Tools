@@ -46,7 +46,7 @@ import {
 import { SpecEditor, type DemoSpec } from "#/route/spec-editor";
 
 /** `/pods` writes no document; its target is the thread's document, which field options read. */
-const manifest = defineRoute({
+export const manifest = defineRoute({
   key: "pods",
   name: "Pods",
   needs: "document",

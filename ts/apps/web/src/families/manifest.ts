@@ -10,8 +10,11 @@ import {
   ffPlanEntrySchema,
   workKey,
   type ActionReceipt,
+  type AppliedFilter,
   type FamiliesRouteDocument,
+  type PodDraftSource,
 } from "@pe/agent-contracts";
+import { filterWords } from "./scope-band";
 
 import { FF_SPEC_SCHEMA, ffPlanRow } from "#/host/familyfoundry";
 import { FAMILY_MODEL_SCHEMA } from "#/family/manifest";
@@ -312,7 +315,39 @@ export const manifest = entityRoute<
   "read" | "save-draft" | "set-query"
 >(familiesSpec, {
   work: familiesRouteState,
-  cells: { segment: "cells", groupOf: familiesGroupOf, nouns: ["parameter", "family"] },
+  cells: [
+    // The audited scope is a root cell Pea proposes (F-J1-10): its own group, beside the cells.
+    {
+      segment: null,
+      key: "scope",
+      groupOf: () => ["scope"],
+      show: (value) => filterWords(value as AppliedFilter),
+      commit: "plan",
+      focus: false,
+    },
+    {
+      segment: null,
+      key: "patch",
+      groupOf: () => ["native FF patch"],
+      // Exact bytes are reviewed in Families.
+      show: (value) => {
+        const source = value as PodDraftSource;
+        return `${source.path} · ${source.content.length} characters`;
+      },
+      commit: "plan",
+      focus: false,
+    },
+    {
+      segment: "cells",
+      groupOf: familiesGroupOf,
+      nouns: ["parameter", "family"],
+      show: (value) =>
+        String(
+          typeof value === "object" && value !== null && "value" in value ? value.value : value,
+        ),
+      commit: "plan",
+    },
+  ],
   // An apply's artifact bundle, on disk: opened in the host's default app, never copied.
   inspectables: { artifact: ARTIFACT },
   readings: {

@@ -25,6 +25,7 @@ import {
   previousOf,
   targetInventory,
 } from "#/readings";
+import { situationCells } from "./cells";
 import { DEFAULT_WAIT_S, type RouteManifest } from "./manifest";
 import { actionFacts, staticNeed, type ActionFacts } from "./facts";
 import { callHostDynamic } from "#/host/client";
@@ -358,7 +359,7 @@ export function useRoute<W, R extends string, P, A extends string>(
   usePageLogNotes(owner, {
     target: boundKey,
     stage: manifest.stages?.find((item) => item.key === stage)?.word,
-    work: { slice: doc, segment: manifest.cells?.segment },
+    work: { slice: doc, segment: situationCells(manifest.cells)?.segment },
     lost: bindingLost,
   });
 

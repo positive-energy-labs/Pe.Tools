@@ -29,6 +29,7 @@ import {
   type WorkSummary,
 } from "#/components/lang/band";
 import { useHostEvents } from "#/readings";
+import { situationCells } from "./cells";
 import { Ladder } from "./ladder";
 import type { ActionHandle, RouteHandle } from "./use-route";
 import { Ledger, PageLog } from "./situation-grids";
@@ -158,7 +159,7 @@ export function Situation({
   const stages = archived ? [{ key: "archived", word: "Archived" }, ...declared] : declared;
   const stage = archived ? "archived" : typeof page.stage === "string" ? page.stage : null;
   const word = stages.find((item) => item.key === stage)?.word ?? handle.manifest.name;
-  const spec = handle.manifest.cells;
+  const spec = situationCells(handle.manifest.cells);
   const doc = handle.work.doc as Record<string, Record<string, TrichotomyCellLike>> | null;
   const cells = (spec && doc?.[spec.segment]) || NO_CELLS;
   const wire: CellWire = routeWire ?? {

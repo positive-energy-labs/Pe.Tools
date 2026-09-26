@@ -29,6 +29,7 @@ import {
 } from "@pe/agent-contracts";
 import type { ActionIdentity } from "./facts";
 import type { Refusal } from "./refusal";
+import type { Cells } from "./cells";
 
 export const semanticActionInput = (
   key: SemanticActionKey,
@@ -112,11 +113,10 @@ export interface RouteManifest<W, R extends string, P, A extends string> {
   name: string;
   needs?: "session" | "document" | "project" | "family";
   work?: WorkSpec<W>;
-  /**
-   * The Work's trichotomy cells: the segment holding them, and the group path the Situation and
-   * Chat summarize them by. `nouns` names the path's depths, singular ("parameter", "family").
-   */
-  cells?: { segment: string; groupOf: (key: string) => string[]; nouns: readonly string[] };
+  /** The Chat head's Work key: absent = the thread document's Address, null = none it can name. */
+  workKey?: WorkKey | null;
+  /** The Work's trichotomy cell families; the Situation reads the first keyed, the head all. */
+  cells?: readonly Cells<W>[];
   /** What its verbs produce, by kind, and how each opens; `member` and `receipt` are built in (`inspect.tsx`). */
   inspectables?: Readonly<Record<string, Inspectable>>;
   readings?: Readonly<Record<R, ReadingSpec<P>>>;
@@ -443,7 +443,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
   def: EntityRouteDef<W, R, P>,
   audit: Pick<
     RouteManifest<W, R, P, A>,
-    "work" | "cells" | "inspectables" | "readings" | "page" | "actions" | "seeds"
+    "work" | "workKey" | "cells" | "inspectables" | "readings" | "page" | "actions" | "seeds"
   > = {},
 ): RouteManifest<W, R | EntityReading, P & EntityPage, A | EntityAction> {
   const plan = def.plan as ApplyPlan<unknown, string, object> | undefined;
@@ -578,6 +578,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
     needs: def.needs ?? "project",
     stages: ENTITY_STAGES,
     work: audit.work,
+    workKey: audit.workKey,
     cells: audit.cells,
     inspectables: audit.inspectables,
     // `pods` is provided by the route's owner (a live `pod.list`, or the seed); never subscribed.
