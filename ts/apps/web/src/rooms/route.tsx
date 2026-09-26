@@ -4,7 +4,14 @@
  * receipts in History. The snapshot is one host read keyed on the target and `page.epoch`.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ActionReceipt, Reading, RoomsRouteDocument } from "@pe/agent-contracts";
+import {
+  transitionPatches,
+  type ActionReceipt,
+  type Mark,
+  type Reading,
+  type RoomsNote,
+  type RoomsRouteDocument,
+} from "@pe/agent-contracts";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
 import type { CellWire } from "#/components/lang/band";
@@ -21,7 +28,13 @@ import { useChooseTarget } from "#/route/shell";
 import { Situation } from "#/route/situation";
 import { useDocumentLadder } from "#/route/situation-ladder";
 import { usePlanImage } from "#/takeoff/plan-image";
+import type { Point2 } from "#/lib/affine-frame";
+import type { ActionHandle } from "#/route/use-route";
+import { cardsMarkdown, coverage, inboxCards, newestRun, type Card } from "./cards";
+import { cardLine, cardMoves, FeedbackCard, RoomsInbox } from "./inbox";
 import { manifest, type RoomsPage } from "./manifest";
+import { RoomsSketch, type Drop } from "./sketch";
+import { snapPlan } from "./snap";
 import { layersOf, NO_TRACE, type Layer, type TraceRead } from "./layers";
 import { focusOf, RoomsPlan } from "./plan";
 import { roomRows, RoomsTable } from "./table";
@@ -229,8 +242,9 @@ export function RoomsRoute({
           setLayers={setLayers}
           hovered={hovered}
           setHovered={setHovered}
-          cells={handle.work.doc?.edits ?? {}}
+          doc={handle.work.doc}
           wire={{ segment: "edits", revision: handle.work.revision, write: handle.work.write }}
+          applyMark={handle.actions.applyMark}
         />
       )}
     </Surface>
@@ -249,8 +263,9 @@ function RoomsBody({
   setLayers,
   hovered,
   setHovered,
-  cells,
+  doc,
   wire,
+  applyMark,
 }: {
   snapshot: RoomsSnapshot.Res.Response | null;
   empty: Empty | null;
@@ -263,8 +278,9 @@ function RoomsBody({
   setLayers: (next: string) => void;
   hovered: string | null;
   setHovered: (guid: string | null) => void;
-  cells: RoomsRouteDocument["edits"];
+  doc: RoomsRouteDocument | null;
   wire: CellWire;
+  applyMark: ActionHandle;
 }) {
   const levelNames = useMemo(
     () =>
@@ -290,6 +306,92 @@ function RoomsBody({
   }, [focused, focus, zoomTo]); // eslint-disable-line react-hooks/exhaustive-deps
   const image = plan.image && "plan" in plan.image ? plan.image.plan : null;
   const refusal = plan.image && "refusal" in plan.image ? plan.image.refusal : null;
+
+  // Feedback: the inbox and the plan's marks read one derived list; the pin is the only local state.
+  const review = page.stage === "review";
+  const [pinned, setPinned] = useState<string | null>(null);
+  const cards = useMemo(
+    () => (doc && snapshot && page.view ? inboxCards(doc, snapshot, page.view) : []),
+    [doc, snapshot, page.view],
+  );
+  const labels = useMemo(() => new Map(rows.map((row) => [row.region.guid, row.label])), [rows]);
+  const labelOf = (guid: string) => labels.get(guid);
+  const regions = useMemo(
+    () => onView.map((row) => row.region).filter((region) => region.role !== "zone"),
+    [onView],
+  );
+  const level = snapshot?.levels.find((item) => item.views.includes(page.view))?.name ?? "";
+  const newId = (prefix: string) => `${prefix}${Date.now().toString(36).slice(-6)}`;
+  const onDrop = async (drop: Drop) => {
+    if (!snapshot) return "the snapshot is not read yet";
+    const mark: Mark = {
+      kind: drop.kind,
+      anchor: { view: page.view, level, polygon: drop.polygon.map(([x, y]) => [x, y]) },
+      run: newestRun(snapshot, page.view) ?? "none",
+      guids: drop.kind === "reject" ? [drop.guid] : coverage(drop.polygon, regions),
+    };
+    const id = newId("m");
+    const refused = await wire.write(
+      transitionPatches(["marks"], id, {}, { kind: "stage", rung: { value: mark } }),
+    );
+    if (!refused) setPinned(id);
+    return refused?.message ?? null;
+  };
+  const onNote = async ([x, y]: Point2, text: string) => {
+    const note: RoomsNote = {
+      anchor: { view: page.view, level, polygon: [[x, y]] },
+      text,
+      by: "person",
+      at: new Date().toISOString(),
+    };
+    return (await wire.write([{ path: ["notes", newId("n")], value: note }]))?.message ?? null;
+  };
+  const apply = {
+    refusal: (id: string) =>
+      applyMark.refusal ??
+      ((doc?.marks[id]?.staged?.value?.guids?.length ?? 0) < 2
+        ? "the mark covers fewer than two regions"
+        : null),
+    run: async (id: string) => {
+      const refused = await applyMark.run({ id });
+      return refused ? { code: "refused", message: refused.message } : null;
+    },
+  };
+  const card = (item: Card, live: boolean) => (
+    <FeedbackCard
+      card={item}
+      line={cardLine(item, labelOf)}
+      regions={regions}
+      verbs={live ? cardMoves(item, wire, apply) : null}
+      onClose={() => setPinned(null)}
+    />
+  );
+  const regionsPane = (
+    <Pane
+      kind="content"
+      title="regions"
+      meta={snapshot ? `${rows.length}` : undefined}
+      scroll="clip"
+      flush
+    >
+      <RoomsTable
+        rows={rows}
+        cells={doc?.edits ?? {}}
+        wire={wire}
+        selected={selected}
+        hovered={hovered}
+        onSelect={(guids) => setPage({ selected: [...guids] })}
+        onHover={setHovered}
+        empty={
+          empty ?? {
+            says: "no zones or room regions in this document",
+            exit: "draw a zone on the chosen view in Revit, then press partition",
+          }
+        }
+      />
+    </Pane>
+  );
+
   return (
     <PaneSplit
       axis="horizontal"
@@ -307,7 +409,10 @@ function RoomsBody({
             hovered={hovered}
             zoomTo={zoomTo}
             focusMissing={snapshot ? focused.missing : []}
-            onSelect={(guid, add) =>
+            onSelect={(guid, add) => {
+              // A click on a room with cards pins its first; a click on ground unpins.
+              if (!add)
+                setPinned(guid ? (cards.find((c) => c.guids.includes(guid))?.id ?? null) : null);
               setPage({
                 selected: !guid
                   ? []
@@ -316,39 +421,60 @@ function RoomsBody({
                     : selected.has(guid)
                       ? page.selected.filter((item) => item !== guid)
                       : [...page.selected, guid],
-              })
-            }
+              });
+            }}
             onHover={setHovered}
             trace={trace}
             layers={layers}
             setLayers={setLayers}
+            overlay={
+              review
+                ? (geo) => (
+                    <RoomsSketch
+                      geo={geo}
+                      cards={cards}
+                      regions={regions}
+                      hovered={hovered}
+                      pinned={pinned}
+                      setPinned={setPinned}
+                      card={card}
+                      onDrop={onDrop}
+                      onNote={onNote}
+                    />
+                  )
+                : undefined
+            }
           />
         </Pane>
       }
       end={
-        <Pane
-          kind="content"
-          title="regions"
-          meta={snapshot ? `${rows.length}` : undefined}
-          scroll="clip"
-          flush
-        >
-          <RoomsTable
-            rows={rows}
-            cells={cells}
-            wire={wire}
-            selected={selected}
-            hovered={hovered}
-            onSelect={(guids) => setPage({ selected: [...guids] })}
-            onHover={setHovered}
-            empty={
-              empty ?? {
-                says: "no zones or room regions in this document",
-                exit: "draw a zone on the chosen view in Revit, then press partition",
-              }
+        review ? (
+          <PaneSplit
+            axis="vertical"
+            grow
+            resize={{
+              target: "start",
+              defaultSize: 260,
+              minSize: 120,
+              persist: "pe.rooms.inboxHeight",
+            }}
+            start={
+              <RoomsInbox
+                cards={cards}
+                regions={regions}
+                labelOf={labelOf}
+                pinned={pinned}
+                onPin={setPinned}
+                onHover={setHovered}
+                markdown={() => (doc && snapshot ? cardsMarkdown(doc, snapshot) : "")}
+                snap={() => snapPlan(page.view)}
+              />
             }
+            end={regionsPane}
           />
-        </Pane>
+        ) : (
+          regionsPane
+        )
       }
     />
   );

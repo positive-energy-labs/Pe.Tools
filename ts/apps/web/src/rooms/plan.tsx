@@ -4,7 +4,7 @@
  * held region wears a numbered callout whose label is the table's. Click selects, shift-click adds,
  * hover pairs with the table row, a click on empty ground clears; wheel zooms at the cursor.
  */
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
 import { FactChip } from "#/components/lang/chip";
@@ -33,6 +33,7 @@ import {
   type TraceRead,
 } from "./layers";
 import { CALLOUT_FONT_PX, holdsPin, PIN_R, placeCallouts, type CalloutItem } from "./callouts";
+import type { PlanGeo } from "./sketch";
 
 export type RoomsRegion = RoomsSnapshot.Res.RoomsRegion;
 
@@ -179,7 +180,10 @@ export function RoomsPlan({
   trace,
   layers,
   setLayers,
+  overlay,
 }: {
+  /** Drawn over the plan in screen px (the feedback layer), given the plan's frame. */
+  overlay?: (geo: PlanGeo) => ReactNode;
   /** The regions on the drawn view, labelled as the table labels them. */
   rows: readonly RoomRow[];
   plan: TakeoffPlanImage | null;
@@ -343,6 +347,24 @@ export function RoomsPlan({
     }));
   }, [world, size, view]);
 
+  const geo = useMemo((): PlanGeo | null => {
+    if (!world || !size) return null;
+    const [ox, oy] = world.frame.toViewport([0, 0]);
+    const [ux, uy] = world.frame.toViewport([1, 1]);
+    return {
+      size,
+      toScreen: (ft) => {
+        const [x, y] = world.frame.toViewport(ft);
+        return [x * view.scale + view.tx, y * view.scale + view.ty];
+      },
+      toFeet: ([x, y]) => [
+        ((x - view.tx) / view.scale - ox) / (ux - ox),
+        ((y - view.ty) / view.scale - oy) / (uy - oy),
+      ],
+      pins: new Map(callouts.map((callout) => [callout.guid, callout.pin])),
+    };
+  }, [world, size, view, callouts]);
+
   const legend = (
     <div className="flex flex-wrap items-center gap-1 px-1 py-1" aria-label="plan legend">
       {REGION_STATES.map((state) => (
@@ -449,6 +471,7 @@ export function RoomsPlan({
       {notice}
       <div
         ref={setHost}
+        data-rooms-plan=""
         className="relative min-h-0 flex-1 overflow-hidden"
         style={{ cursor: dragging ? "grabbing" : "grab", touchAction: "none" }}
         onPointerDown={(event) => {
@@ -614,6 +637,7 @@ export function RoomsPlan({
             })}
           </svg>
         ) : null}
+        {geo && overlay ? overlay(geo) : null}
       </div>
     </div>
   );

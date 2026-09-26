@@ -9,18 +9,61 @@ import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 type Snapshot = RoomsSnapshot.Res.Response;
 type Region = RoomsSnapshot.Res.RoomsRegion;
 type Loop = readonly (readonly number[])[];
+type Point = readonly [number, number];
 export type MarkCell = RoomsRouteDocument["marks"][string];
 export type MarkState = "proposed" | "accepted" | "pass" | "fail" | "stale" | "gone";
+/** A card's state: a mark's derived glyph, or a note, which has no rungs. */
+export type CardState = MarkState | "note";
 
-const MARK_GLYPH: Record<MarkState, string> = {
-  proposed: "◆",
-  accepted: "●",
-  pass: "✓",
-  fail: "✗",
-  stale: "◐",
-  gone: "⊘",
+/** Inbox order: what wants a person first; passing last among marks; notes after every mark. */
+export const CARD_STATES = [
+  "proposed",
+  "fail",
+  "stale",
+  "gone",
+  "accepted",
+  "pass",
+  "note",
+] as const satisfies readonly CardState[];
+const STATE_ORDER: readonly CardState[] = CARD_STATES;
+
+/** Each state's glyph, its tone (null = plain ink) and what it means, then its next move. */
+export const CARD_META: Record<
+  CardState,
+  { glyph: string; tone: "pea" | "done" | "alarm" | "caution" | null; says: string }
+> = {
+  proposed: {
+    glyph: "◆",
+    tone: "pea",
+    says: "proposed · Pea's mark, not staged. Next: accept stages it, reject drops it.",
+  },
+  accepted: {
+    glyph: "●",
+    tone: null,
+    says: "accepted · staged against the newest run. Next: a rerun honours it or not.",
+  },
+  pass: { glyph: "✓", tone: "done", says: "passing · the newest run honours it. Nothing to do." },
+  fail: {
+    glyph: "✗",
+    tone: "alarm",
+    says: "failing · the newest run does not honour it. Next: redraw it or delete it.",
+  },
+  stale: {
+    glyph: "◐",
+    tone: "caution",
+    says: "stale · the region under it changed shape. Next: redraw it or delete it.",
+  },
+  gone: {
+    glyph: "⊘",
+    tone: null,
+    says: "gone · no region of the newest run lies under it. Next: delete it.",
+  },
+  note: {
+    glyph: "✎",
+    tone: null,
+    says: "note · text on a place, never staged. Next: delete it once read.",
+  },
 };
-const STATE_ORDER: MarkState[] = ["proposed", "fail", "stale", "gone", "accepted", "pass"];
 /** The run id Revit stamps on hand-drawn regions: never a partition run. */
 const DRAWN = "drawn";
 
@@ -40,7 +83,7 @@ export function newestRun(snapshot: Snapshot, view: string): string | null {
   return best?.[0] ?? null;
 }
 
-const inLoop = (x: number, y: number, loop: Loop) => {
+export const inLoop = (x: number, y: number, loop: Loop) => {
   let inside = false;
   for (let i = 0, j = loop.length - 1; i < loop.length; j = i++) {
     const [xi = 0, yi = 0] = loop[i]!;
@@ -49,7 +92,7 @@ const inLoop = (x: number, y: number, loop: Loop) => {
   }
   return inside;
 };
-const shoelace = (loop: Loop) =>
+export const shoelace = (loop: Loop) =>
   Math.abs(
     loop.reduce((sum, [x = 0, y = 0], i) => {
       const [nx = 0, ny = 0] = loop[(i + 1) % loop.length]!;
@@ -135,7 +178,7 @@ export function cardsMarkdown(doc: RoomsRouteDocument, snapshot: Snapshot): stri
     const state = markState(cell, snapshot);
     const labels = (mark.guids ?? []).map(label).filter((name) => name !== null);
     const parts = [
-      `${MARK_GLYPH[state]} ${state}`,
+      `${CARD_META[state].glyph} ${state}`,
       `${mark.kind} ${id}`,
       `${mark.anchor.level} at ${centroid(mark.anchor.polygon)} ft`,
       `${shoelace(mark.anchor.polygon).toFixed(0)} sf`,
@@ -167,4 +210,95 @@ export function cardsMarkdown(doc: RoomsRouteDocument, snapshot: Snapshot): stri
     );
   });
   return ["# Rooms feedback", ...sections].join("\n\n") + "\n";
+}
+
+/** One inbox card: a mark or a note on one view. Its state is derived on read, never stored. */
+export interface Card {
+  id: string;
+  state: CardState;
+  /** Pea (a mark with a proposal rung, a note by Pea) or a person. */
+  by: "pea" | "person";
+  kind: Mark["kind"] | "note";
+  polygon: Loop;
+  /** The regions it concerns: the mark's guids, else the regions under its first point. */
+  guids: string[];
+  sqft: number;
+  text: string;
+  cell?: MarkCell;
+}
+
+/** The inbox for one view: its marks and notes in `CARD_STATES` order, then by id. */
+export function inboxCards(doc: RoomsRouteDocument, snapshot: Snapshot, view: string): Card[] {
+  const regions = snapshot.regions.filter((r) => r.view === view && r.role !== "zone");
+  const under = ([x = 0, y = 0]: readonly number[]) =>
+    regions.filter((r) => inLoop(x, y, r.outer)).map((r) => r.guid);
+  const cards: Card[] = [];
+  for (const [id, cell] of Object.entries(doc.marks)) {
+    const mark = cell.staged?.value ?? cell.proposal?.value;
+    if (!mark || mark.anchor.view !== view) continue;
+    const polygon = mark.anchor.polygon;
+    cards.push({
+      id,
+      state: markState(cell, snapshot),
+      by: cell.proposal ? "pea" : "person",
+      kind: mark.kind,
+      polygon,
+      guids: mark.guids ?? under(polygon[0]!),
+      sqft: shoelace(polygon),
+      text: mark.note ?? "",
+      cell,
+    });
+  }
+  for (const [id, note] of Object.entries(doc.notes)) {
+    if (note.anchor.view !== view) continue;
+    const polygon = note.anchor.polygon;
+    cards.push({
+      id,
+      state: "note",
+      by: note.by,
+      kind: "note",
+      polygon,
+      guids: under(polygon[0]!),
+      sqft: polygon.length > 2 ? shoelace(polygon) : 0,
+      text: note.text,
+    });
+  }
+  const rank = (card: Card) => STATE_ORDER.indexOf(card.state);
+  return cards.sort((a, b) => rank(a) - rank(b) || byText(a.id, b.id));
+}
+
+/** The regions a drawn polygon covers at least half of, by sampled area (V6's `coverage`). */
+export function coverage(polygon: Loop, regions: readonly Region[]): string[] {
+  const [x0, y0, x1, y1] = box(polygon);
+  const step = Math.max(0.25, Math.sqrt((x1 - x0) * (y1 - y0)) / 60);
+  const hits = new Map<string, number>();
+  for (let x = x0 + step / 2; x < x1; x += step)
+    for (let y = y0 + step / 2; y < y1; y += step) {
+      if (!inLoop(x, y, polygon)) continue;
+      const hit = regions.find(
+        (r) => r.role !== "zone" && inLoop(x, y, r.outer) && !r.holes.some((h) => inLoop(x, y, h)),
+      );
+      if (hit) hits.set(hit.guid, (hits.get(hit.guid) ?? 0) + 1);
+    }
+  return regions
+    .filter((r) => ((hits.get(r.guid) ?? 0) * step * step) / Math.max(r.sqft, 1e-9) >= 0.5)
+    .map((r) => r.guid);
+}
+
+/** Ramer-Douglas-Peucker: drop every point within `eps` of its chord. */
+export function rdp<P extends Point>(points: readonly P[], eps: number): P[] {
+  if (points.length < 3) return [...points];
+  const a = points[0]!;
+  const b = points.at(-1)!;
+  const length = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1e-9;
+  let far = 0;
+  let at = 0;
+  for (let i = 1; i < points.length - 1; i++) {
+    const [x, y] = points[i]!;
+    const d = Math.abs((b[1] - a[1]) * x - (b[0] - a[0]) * y + b[0] * a[1] - b[1] * a[0]) / length;
+    if (d > far) [far, at] = [d, i];
+  }
+  return far > eps
+    ? [...rdp(points.slice(0, at + 1), eps).slice(0, -1), ...rdp(points.slice(at), eps)]
+    : [a, b];
 }

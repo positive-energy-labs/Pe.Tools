@@ -9,6 +9,7 @@ import {
   roomsRouteState,
   stagedRoomWrites,
   transitionPatches,
+  type Mark,
   type RoomsRouteDocument,
 } from "@pe/agent-contracts";
 
@@ -19,13 +20,13 @@ import {
   runSemanticAction,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
-export const ROOMS_STAGES = [
+const ROOMS_STAGES = [
   { key: "partition", word: "Partitioning rooms" },
   { key: "review", word: "Reviewing rooms" },
   { key: "history", word: "History" },
 ] as const;
 
-export const roomsPageSchema = z.object({
+const roomsPageSchema = z.object({
   stage: z.enum(["partition", "review", "history"]).default("partition"),
   /** The plan view partition runs on; its level is the level. Empty = none chosen. */
   view: z.string().default(""),
@@ -60,14 +61,23 @@ export const manifest = defineRoute<
   RoomsRouteDocument,
   RoomsReading,
   RoomsPage,
-  "partition" | "apply" | "merge" | "refresh"
+  "partition" | "apply" | "merge" | "applyMark" | "refresh"
 >({
   key: "rooms",
   name: "Rooms",
   docs: "Split the zones drawn on one level's plan view into room regions, stage each room's name, type and Manual J fields, then apply them to the regions in Revit.",
   needs: "project",
   work: roomsRouteState,
-  cells: [{ segment: "edits", groupOf: (key) => [roomEditAddress(key).guid], nouns: ["room"] }],
+  cells: [
+    { segment: "edits", groupOf: (key) => [roomEditAddress(key).guid], nouns: ["room"] },
+    {
+      segment: "marks",
+      groupOf: (key) => [key],
+      nouns: ["mark"],
+      noun: "room marks",
+      show: (value) => (value as Mark).kind,
+    },
+  ],
   readings: { receipts: { kind: "receipts", target: { session: "", openId: "" } } } as never,
   page: roomsPageSchema,
   stages: ROOMS_STAGES,
@@ -82,8 +92,14 @@ export const manifest = defineRoute<
       ready: (ctx) => (ctx.page.view ? null : "Pick a plan view"),
       run: async (ctx) => {
         // The action's result is the op's response, as the generated catalog declares it.
+        // A person's standing rejections ride every partition of their view.
+        const rejected = Object.values(ctx.work.doc?.marks ?? {})
+          .map((cell) => cell.staged?.value)
+          .filter((mark) => mark?.kind === "reject" && mark.anchor.view === ctx.page.view)
+          .map((mark) => mark!.anchor.polygon);
         const result = (await dispatch(ctx, "rooms.partition", {
           view: ctx.page.view,
+          ...(rejected.length ? { rejected } : {}),
         })) as RoomsPartition.Res.Response;
         ctx.note(
           "partition",
@@ -146,6 +162,39 @@ export const manifest = defineRoute<
         })) as RoomsMerge.Res.Response;
         ctx.note("merge", `${result.merged.length} rooms merged · ${result.sqft.toFixed(0)} sf`);
         ctx.setPage({ selected: [result.guid], epoch: ctx.page.epoch + 1 });
+      },
+    },
+    applyMark: {
+      label: "apply mark",
+      does: "rooms.merge",
+      input: z.object({ id: z.string() }) as unknown as z.ZodType<never>,
+      dirties: ["receipts"],
+      stage: "review",
+      visible: false,
+      waitSeconds: NATIVE_APPLY_WAIT_S,
+      // Without an input this answers for the verb at large (the handle's refusal); a card asks with its id.
+      ready: (ctx, input) => {
+        const id = (input as { id: string } | undefined)?.id;
+        if (id === undefined) return null;
+        const mark = ctx.work.doc?.marks[id]?.staged?.value;
+        return mark?.kind !== "merge"
+          ? "Not a staged merge mark"
+          : (mark.guids?.length ?? 0) < 2
+            ? "The mark covers fewer than two regions"
+            : null;
+      },
+      run: async (ctx, input) => {
+        const { id } = input as { id: string };
+        const mark = ctx.work.doc!.marks[id]!.staged!.value!;
+        const result = (await dispatch(ctx, "rooms.merge", {
+          view: mark.anchor.view,
+          guids: mark.guids,
+        })) as RoomsMerge.Res.Response;
+        ctx.note(
+          "merge",
+          `${id} · ${result.merged.length} rooms merged · ${result.sqft.toFixed(0)} sf`,
+        );
+        bump(ctx);
       },
     },
     refresh: {
