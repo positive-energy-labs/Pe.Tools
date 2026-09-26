@@ -192,3 +192,24 @@ public sealed record RoomsWriteResult(int Written);
 // Combine two or more rooms or held regions of one zone on one view into one locked Room Region; the sources are deleted.
 public sealed record RoomsMergeRequest(string View, List<Guid> Guids, string? Name = null);
 public sealed record RoomsMergeResult(long ElementId, Guid Guid, IReadOnlyList<Guid> Merged, double Sqft);
+
+// The solver's layer 1 per zone, as rooms.partition persisted it (<state>/rooms/<runId>/<zoneGuid>.json). The wire
+// mirror of Pe.Revit.Partition's Trace and Accounting, read back by name; Pe.Partition.Tests holds the round trip.
+// Points are [x,y] host feet. Face Index is the partition answer's Room.Index, not a region guid.
+public enum RoomsSegKind { Wall, Zone, Closed, Door, Headed, Cased }
+public enum RoomsFaceKind { Room, Contested, Band }
+public sealed record RoomsTraceRail(double[] A, double[] B, double ThicknessFt, string Source, long ElementId, string Category, string? Layer);
+public sealed record RoomsTraceSegment(double[] A, double[] B, RoomsSegKind Kind);
+public sealed record RoomsTraceOpening(double[] A, double[] B, double WidthFt, RoomsSegKind Kind, int DoorPieces, double HeaderFraction, double WallFraction);
+public sealed record RoomsTraceFace(int Index, RoomsFaceKind Kind, double? BandWidthFt, bool OwnEdgeEmpty, double? FloatingFt, bool Narrow, double Backed);
+public sealed record RoomsTrace(
+    IReadOnlyList<RoomsTraceRail> Rails,
+    IReadOnlyList<RoomsTraceSegment> Segments,
+    IReadOnlyList<RoomsTraceOpening> Openings,
+    IReadOnlyList<RoomsTraceFace> Faces);
+public sealed record RoomsTraceAccounting(double ZoneSqft, double Accepted, double Held, double Void, double Excluded);
+public sealed record RoomsZoneTrace(Guid ZoneGuid, string Label, RoomsTrace Trace, RoomsTraceAccounting Accounting);
+
+// RunId null reads the newest run that traced a zone on the view.
+public sealed record RoomsTraceRequest(string View, string? RunId = null);
+public sealed record RoomsTraceData(string RunId, IReadOnlyList<RoomsZoneTrace> Zones);

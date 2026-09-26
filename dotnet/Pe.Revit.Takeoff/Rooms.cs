@@ -254,6 +254,7 @@ public static class Rooms
         var level = view.GenLevel;
         var runId = string.IsNullOrWhiteSpace(request.RunId) ? Guid.NewGuid().ToString("N") : request.RunId!;
         if (runId == RunDrawn) throw new InvalidOperationException($"runId '{RunDrawn}' is reserved");
+        RequireRunId(runId);
         var scope = ScopeGuid(level);
         var onView = new FilteredElementCollector(doc, view.Id).OfClass(typeof(FilledRegion)).Cast<FilledRegion>()
             .OrderBy(fr => fr.Id.Value())
@@ -343,6 +344,8 @@ public static class Rooms
                 failures.Add($"{zone.Label}: {ex.GetType().Name} {ex.Message} at {frame ?? "?"} (inputs {dump})");
                 continue;
             }
+            // Layer 1's trace stands for the solve that ran, whether or not the materialization below lands.
+            WriteTrace(runId, zone.Guid, zone.Label, answer);
             if (answer.Hold != null) holds.Add($"{zone.Label}: {answer.Hold}");
             var (accepted, residues) = Results(answer);
             var mine = machine.Where(r => r.Provenance.ZoneGuid == zone.Guid).ToList();
@@ -471,6 +474,57 @@ public static class Rooms
             solved.Sum(s => s.Plan.Keep.Count), solved.Sum(s => s.Plan.Locked.Count),
             orphans.Count + solved.Sum(s => s.Plan.Delete.Count), createdHeld, failures,
             holds.Count > 0 ? string.Join("; ", holds) : null, Math.Round(sw.Elapsed.TotalMilliseconds, 3));
+    }
+
+    // ---------------------------------------------------------------- traces: <state>/rooms/<runId>/<zoneGuid:N>.json
+
+    private static readonly Newtonsoft.Json.JsonSerializerSettings TraceJson = new()
+    {
+        ContractResolver = new Newtonsoft.Json.Serialization.CamelCasePropertyNamesContractResolver(),
+        Converters = [new Newtonsoft.Json.Converters.StringEnumConverter()],
+    };
+
+    private static string TraceRoot => new Pe.Shared.StorageRuntime.ModuleStorage("rooms").State().DirectoryPath;
+
+    private static void RequireRunId(string runId)
+    {
+        if (runId is "." or ".." || runId.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            throw new InvalidOperationException($"runId '{runId}' is not a folder name");
+    }
+
+    private static void WriteTrace(string runId, Guid zone, string label, Pe.Revit.Partition.PartitionAnswer answer)
+    {
+        var dir = Directory.CreateDirectory(Path.Combine(TraceRoot, runId)).FullName;
+        File.WriteAllText(Path.Combine(dir, zone.ToString("N") + ".json"), Newtonsoft.Json.JsonConvert.SerializeObject(
+            new { ZoneGuid = zone, Label = label, answer.Trace, answer.Accounting }, TraceJson));
+    }
+
+    /// <summary>
+    ///     rooms.trace: layer 1 per zone for one run on a view. The view's regions name the zones; a run without
+    ///     runId is the one whose trace of those zones was written last.
+    /// </summary>
+    public static RoomsTraceData Trace(Document doc, RoomsTraceRequest request)
+    {
+        var view = LevelView(doc, request.View);
+        var files = new FilteredElementCollector(doc, view.Id).OfClass(typeof(FilledRegion)).Cast<FilledRegion>()
+            .Select(fr => TakeoffCarriers.ReadIdentity(fr).Guid).OfType<Guid>()
+            .Select(g => g.ToString("N") + ".json").ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (request.RunId != null) RequireRunId(request.RunId);
+        var runs = request.RunId != null
+            ? [new DirectoryInfo(Path.Combine(TraceRoot, request.RunId))]
+            : new DirectoryInfo(TraceRoot).EnumerateDirectories().ToList();
+        var run = runs.Where(d => d.Exists)
+            .Select(d => (Dir: d, Files: d.EnumerateFiles("*.json").Where(f => files.Contains(f.Name)).ToList()))
+            .Where(r => r.Files.Count > 0)
+            .OrderByDescending(r => r.Files.Max(f => f.LastWriteTimeUtc))
+            .FirstOrDefault();
+        if (run.Dir == null)
+            throw new InvalidOperationException(request.RunId != null
+                ? $"run '{request.RunId}' traced no zone on '{view.Name}'"
+                : $"no rooms.partition run has traced a zone on '{view.Name}'");
+        return new RoomsTraceData(run.Dir.Name, run.Files.OrderBy(f => f.Name, StringComparer.Ordinal)
+            .Select(f => Newtonsoft.Json.JsonConvert.DeserializeObject<RoomsZoneTrace>(File.ReadAllText(f.FullName), TraceJson)!)
+            .ToList());
     }
 
     public static RoomsDrawResult Draw(Document doc, RoomsDrawRequest request)

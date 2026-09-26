@@ -81,7 +81,11 @@ internal sealed class RevitDataRequestService {
     private static RoomsSnapshotData GetRoomsSnapshotCore(NoRequest _, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, Rooms.Snapshot);
 
-    [Op("rooms.partition", Does = "Partition each zone drawn on one plan view into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction.", Title = "Partition Rooms", Finds = ["rooms", "partition", "level", "room-regions", "materialize"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation)]
+    [Op("rooms.trace", Does = "Read the solver's layer 1 for each zone on one plan view from a rooms.partition run, the newest when runId is absent: rails, network segments by kind, openings with their evidence, per-face facts before judgment, and accounting.", Title = "Get Rooms Solver Trace", Finds = ["rooms", "trace", "partition", "rails", "openings", "solver"], Cost = OpCost.Bounded)]
+    private static RoomsTraceData GetRoomsTraceCore(RoomsTraceRequest request, ProjectDocument activeDocument) =>
+        RunTakeoff(activeDocument.Value, document => Rooms.Trace(document, request));
+
+    [Op("rooms.partition",Does = "Partition each zone drawn on one plan view into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction.", Title = "Partition Rooms", Finds = ["rooms", "partition", "level", "room-regions", "materialize"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static RoomsPartitionResult PartitionRoomsCore(RoomsPartitionRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document => Rooms.Partition(document, request), "Pe Partition Rooms");
 

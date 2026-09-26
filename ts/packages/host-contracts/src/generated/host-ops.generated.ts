@@ -5129,6 +5129,76 @@ export namespace RoomsSnapshot {
   }
 }
 
+/** Read the solver's layer 1 for each zone on one plan view from a rooms.partition run, the newest when runId is absent: rails, network segments by kind, openings with their evidence, per-face facts before judgment, and accounting. */
+export namespace RoomsTrace {
+  export namespace Req {
+    export interface Request {
+      view: string;
+      runId?: null | string;
+    }
+  }
+  export namespace Res {
+    export type RoomsSegKind = "Wall" | "Zone" | "Closed" | "Door" | "Headed" | "Cased";
+    export type RoomsFaceKind = "Room" | "Contested" | "Band";
+
+    export interface Response {
+      runId: string;
+      zones: RoomsZoneTrace[];
+    }
+    export interface RoomsZoneTrace {
+      zoneGuid: string;
+      label: string;
+      trace: RoomsTrace;
+      accounting: RoomsTraceAccounting;
+    }
+    export interface RoomsTrace {
+      rails: RoomsTraceRail[];
+      segments: RoomsTraceSegment[];
+      openings: RoomsTraceOpening[];
+      faces: RoomsTraceFace[];
+    }
+    export interface RoomsTraceRail {
+      a: number[];
+      b: number[];
+      thicknessFt: number;
+      source: string;
+      elementId: number;
+      category: string;
+      layer?: null | string;
+    }
+    export interface RoomsTraceSegment {
+      a: number[];
+      b: number[];
+      kind: RoomsSegKind;
+    }
+    export interface RoomsTraceOpening {
+      a: number[];
+      b: number[];
+      widthFt: number;
+      kind: RoomsSegKind;
+      doorPieces: number;
+      headerFraction: number;
+      wallFraction: number;
+    }
+    export interface RoomsTraceFace {
+      index: number;
+      kind: RoomsFaceKind;
+      bandWidthFt?: null | number;
+      ownEdgeEmpty: boolean;
+      floatingFt?: null | number;
+      narrow: boolean;
+      backed: number;
+    }
+    export interface RoomsTraceAccounting {
+      zoneSqft: number;
+      accepted: number;
+      held: number;
+      void: number;
+      excluded: number;
+    }
+  }
+}
+
 /** Write the given room fields, and a person's room or zone designation, onto regions by guid. */
 export namespace RoomsWrite {
   export namespace Req {
@@ -5939,6 +6009,7 @@ export interface HostOps {
   "rooms.merge": { request: RoomsMerge.Req.Request; response: RoomsMerge.Res.Response };
   "rooms.partition": { request: RoomsPartition.Req.Request; response: RoomsPartition.Res.Response };
   "rooms.snapshot": { request: RoomsSnapshot.Req.Request; response: RoomsSnapshot.Res.Response };
+  "rooms.trace": { request: RoomsTrace.Req.Request; response: RoomsTrace.Res.Response };
   "rooms.write": { request: RoomsWrite.Req.Request; response: RoomsWrite.Res.Response };
   "schedule.apply": { request: ScheduleApply.Req.Request; response: ScheduleApply.Res.Response };
   "schedule.capture": { request: ScheduleCapture.Req.Request; response: ScheduleCapture.Res.Response };
@@ -6012,6 +6083,7 @@ export const hostOpKeys = [
   "rooms.merge",
   "rooms.partition",
   "rooms.snapshot",
+  "rooms.trace",
   "rooms.write",
   "schedule.apply",
   "schedule.capture",
