@@ -10,6 +10,10 @@ namespace Pe.Shared.Tests.RevitData;
 [TestFixture]
 public sealed class DuctPressureTests {
     private static Assumption<T> User<T>(T value) => new(value, AssumptionSource.User, "Hand-case design input");
+    private static FittingGeometry Geometry(double angle, double radius, FittingConstruction construction) => new(
+        new(angle, DuctProvenance.DesignerStated, "Hand-case angle"),
+        new(radius, DuctProvenance.DesignerStated, "Hand-case r/D"),
+        new(construction, DuctProvenance.DesignerStated, "Hand-case construction"), []);
     private static Assumptions Budget => new() { DefaultFanExternalStatic = User<double?>(.5), DefaultComponentDrop = User<double?>(0) };
     private static DuctConnector Port(int index, long? to, int toPort, double x, double y = 0, double diameter = 8, string kind = "end") =>
         new(index, kind, [x, y, 0], DuctShape.Round, "", diameter, null, null, null, "bidirectional", null,
@@ -56,7 +60,7 @@ public sealed class DuctPressureTests {
             Node(2, DuctNodeKind.Terminal, 11, 11, [Port(0, 11, 1, 11, 11)], 200)
         };
         var ducts = new[] { Duct(10, 10, Port(0, 1, 0, 0), Port(1, 20, 0, 10)), Duct(11, 10, Port(0, 20, 1, 11, 1), Port(1, 2, 0, 11, 11)) };
-        var assumptions = Budget with { FittingGeometry = new Dictionary<long, Assumption<FittingGeometry>> { [20] = User(new FittingGeometry(90, 1.5, FittingConstruction.SmoothRound)) } };
+        var assumptions = Budget with { FittingGeometry = new Dictionary<long, Assumption<FittingGeometry>> { [20] = User(Geometry(90, 1.5, FittingConstruction.SmoothRound)) } };
         var solved = DuctPressureSolver.Solve(DuctNetwork.Analyze(nodes, ducts), assumptions);
         var fitting = solved.Fittings.Single();
         Assert.Multiple(() => {
@@ -66,6 +70,11 @@ public sealed class DuctPressureTests {
             Assert.That(fitting.AssumptionsUsed, Does.Contain("geometry:20"));
             Assert.That(solved.Issues.Any(i => i.Code == "unmatched-fitting"), Is.False);
         });
+        // The captured geometry path must select the same row without an authored geometry override.
+        var capturedNodes = nodes.Select(n => n.Id == 20 ? n with { FittingGeometry = assumptions.FittingGeometry[20].Value } : n).ToArray();
+        var captured = DuctPressureSolver.Solve(DuctNetwork.Analyze(capturedNodes, ducts), Budget);
+        Assert.That(captured.Fittings.Single().Coefficient, Is.EqualTo(fitting.Coefficient));
+        Assert.That(captured.Fittings.Single().CoefficientRow, Is.EqualTo(fitting.CoefficientRow));
     }
 
     private static DuctNetwork.Analysis Split(double mainLength = 5, double branchLength = 40) {
@@ -84,7 +93,7 @@ public sealed class DuctPressureTests {
         return DuctNetwork.Analyze(nodes, ducts);
     }
     private static Assumptions TeeAssumptions => Budget with {
-        FittingGeometry = new Dictionary<long, Assumption<FittingGeometry>> { [20] = User(new FittingGeometry(90, 1, FittingConstruction.SimpleJunction)) }
+        FittingGeometry = new Dictionary<long, Assumption<FittingGeometry>> { [20] = User(Geometry(90, 1, FittingConstruction.SimpleJunction)) }
     };
 
     [Test]

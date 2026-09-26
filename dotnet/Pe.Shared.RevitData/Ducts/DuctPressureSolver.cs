@@ -9,7 +9,7 @@ namespace Pe.Shared.RevitData.Ducts;
 /// Known demand in an incomplete subtree is reported as a partial calculation, never as a balanced network solution.
 /// </summary>
 public static class DuctPressureSolver {
-    /// <summary>Read the unchanged ducts.snapshot JSON payload (not a host response envelope).</summary>
+    /// <summary>Read the ducts.snapshot JSON payload (not a host response envelope).</summary>
     public static DuctSnapshotData ReadSnapshot(string json) =>
         JsonConvert.DeserializeObject<DuctSnapshotData>(json)
         ?? throw new ArgumentException("Expected a ducts.snapshot payload.", nameof(json));
@@ -76,8 +76,9 @@ public static class DuctPressureSolver {
             foreach (var v in assumptions.OpenEnds.Values)
                 if (!Enum.IsDefined(typeof(OpenEndVerdict), v.Value)) throw new ArgumentException("Unknown open-end verdict.");
             foreach (var g in assumptions.FittingGeometry.Values)
-                if (!DuctPressurePhysics.Nonnegative(g.Value.AngleDegrees) || g.Value.AngleDegrees > 180 || !DuctPressurePhysics.Positive(g.Value.RadiusOverDiameter))
-                    throw new ArgumentException("Fitting geometry requires a finite angle from 0 to 180 and positive r/D.");
+                if (g.Value.AngleDegrees.Value is { } a && (!DuctPressurePhysics.Nonnegative(a) || a > 180) ||
+                    g.Value.RadiusOverDiameter.Value is { } r && !DuctPressurePhysics.Positive(r))
+                    throw new ArgumentException("Fitting geometry requires a finite angle from 0 to 180 and positive r/D when known.");
         }
 
         private void Issue(string code, string group, long? id, string reason) => issues.Add(new(code, group, id, reason));
@@ -376,14 +377,14 @@ public static class DuctPressureSolver {
             var path = FittingPath.Bend;
             var flowRatio = walk.Flow[node.Id] > 0 ? walk.Flow[child] / walk.Flow[node.Id] : 0;
             var areaRatio = local.Value.AreaFt2 / common.Value.AreaFt2;
-            double? angle = DuctNetwork.Fact(node, "angle");
-            double? radius = DuctNetwork.Fact(node, "radiusOverDiameter");
-            var construction = FittingConstruction.Unknown;
+            double? angle = node.FittingGeometry?.AngleDegrees.Value ?? DuctNetwork.Fact(node, "angle");
+            double? radius = node.FittingGeometry?.RadiusOverDiameter.Value;
+            var construction = node.FittingGeometry?.Construction.Value ?? FittingConstruction.Unknown;
             if (assumptions.FittingGeometry.TryGetValue(node.Id, out var geometry)) {
                 deps.Add(Use($"geometry:{node.Id}", geometry));
-                angle = geometry.Value.AngleDegrees;
-                radius = geometry.Value.RadiusOverDiameter;
-                construction = geometry.Value.Construction;
+                angle = geometry.Value.AngleDegrees.Value;
+                radius = geometry.Value.RadiusOverDiameter.Value;
+                construction = geometry.Value.Construction.Value;
             }
             var otherAreaRatio = 1.0;
             if (children.Count > 1) {

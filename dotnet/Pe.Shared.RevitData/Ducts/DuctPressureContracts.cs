@@ -1,3 +1,7 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using System.Runtime.Serialization;
+
 namespace Pe.Shared.RevitData.Ducts;
 
 /// <summary>Who supplied a solver assumption. Defaults describe a scenario, never measured equipment performance.</summary>
@@ -10,7 +14,12 @@ public sealed record Assumption<T>(T Value, AssumptionSource Source, string Reas
 public enum FlexCompression { FullyExtended, Compressed, Unknown }
 
 /// <summary>A disconnected port is either sealed at zero flow, deliberately excluded at zero flow, or needs a physical connection.</summary>
-public enum OpenEndVerdict { Capped, Ignore, Connect }
+[JsonConverter(typeof(StringEnumConverter))]
+public enum OpenEndVerdict {
+    [EnumMember(Value = "capped")] Capped,
+    [EnumMember(Value = "ignore")] Ignore,
+    [EnumMember(Value = "connect")] Connect
+}
 
 /// <summary>The fitting leg, relative to the equipment root. Return/exhaust junctions converge in the opposite direction.</summary>
 public enum FittingPath { Bend, Straight, Branch }
@@ -18,14 +27,29 @@ public enum FittingPath { Bend, Straight, Branch }
 /// <summary>Portable fitting types recognized by the pressure solver. Other parts use the explicit fallback coefficient.</summary>
 public enum PressurePartType { Other, Elbow, Tee, LateralTee, Transition, Union }
 
-/// <summary>Construction class established by the author; PartType alone cannot distinguish a smooth elbow from a mitered one.</summary>
-public enum FittingConstruction { Unknown, SmoothRound, SimpleJunction }
+/// <summary>Construction class supported by captured evidence or an author; PartType alone cannot establish it.</summary>
+[JsonConverter(typeof(StringEnumConverter))]
+public enum FittingConstruction {
+    [EnumMember(Value = "unknown")] Unknown,
+    [EnumMember(Value = "smooth-round")] SmoothRound,
+    [EnumMember(Value = "mitered")] Mitered,
+    [EnumMember(Value = "vaned")] Vaned,
+    [EnumMember(Value = "simple-junction")] SimpleJunction,
+    [EnumMember(Value = "transition")] Transition
+}
 
 /// <summary>A fitting outlet in the root-to-terminal walk, or a disconnected physical connector.</summary>
 public sealed record PressurePort(long ElementId, int Connector);
 
-/// <summary>Geometry absent from the snapshot. RadiusOverDiameter is centerline bend radius divided by duct diameter.</summary>
-public sealed record FittingGeometry(double AngleDegrees, double RadiusOverDiameter, FittingConstruction Construction = FittingConstruction.Unknown);
+/// <summary>A captured or derived value and the exact evidence supporting it. Null values explicitly mean unknown.</summary>
+public sealed record DuctEvidence<T>(T Value, DuctProvenance Provenance, string Evidence);
+
+/// <summary>Area in square feet of one physical connector, keyed by its stable index within the part.</summary>
+public sealed record FittingConnectorArea(int Connector, DuctEvidence<double?> AreaFt2);
+
+/// <summary>Centerline r/D and construction evidence used to select a coefficient row; junctions also carry per-port areas.</summary>
+public sealed record FittingGeometry(DuctEvidence<double?> AngleDegrees, DuctEvidence<double?> RadiusOverDiameter,
+    DuctEvidence<FittingConstruction> Construction, IReadOnlyList<FittingConnectorArea> ConnectorAreas);
 
 /// <summary>
 /// Missing design inputs. Element component drops override family drops; explicit zero is allowed.
@@ -115,4 +139,7 @@ public sealed record GroupPressure(string GroupId, bool IsWalkable, TerminalPres
 /// <summary>Complete solve receipt: local results, group budgets, issues, and the exact assumptions consumed.</summary>
 public sealed record DuctPressureResult(IReadOnlyList<SegmentPressure> Segments, IReadOnlyList<FittingPressure> Fittings,
     IReadOnlyList<TerminalPressure> Terminals, IReadOnlyList<GroupPressure> Groups,
-    IReadOnlyList<PressureIssue> Issues, IReadOnlyList<UsedAssumption> AssumptionsUsed);
+    IReadOnlyList<PressureIssue> Issues, IReadOnlyList<UsedAssumption> AssumptionsUsed) {
+    /// <summary>The caller's staged Work revision used for this solve; null when no staged assumptions were supplied.</summary>
+    public long? AssumptionRevision { get; init; }
+}

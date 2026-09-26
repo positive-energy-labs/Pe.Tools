@@ -82,10 +82,20 @@ public sealed record DuctSnapshotData(
     IReadOnlyList<DuctSegment> Segments,
     IReadOnlyList<DuctFlow> Flows,
     IReadOnlyList<DuctIssue> Issues,
-    IReadOnlyList<DuctLayer> Layers);
+    IReadOnlyList<DuctLayer> Layers) {
+    /// <summary>Pressure assessment of this capture. Older saved captures have no pressure result.</summary>
+    public DuctPressureResult? Pressure { get; init; }
+}
 
 /// <summary>The document read, when, and how long the read took.</summary>
-public sealed record DuctDocument(string Title, DateTimeOffset ReadAt, long ElapsedMs);
+public sealed record DuctDocument(string Title, DateTimeOffset ReadAt, long ElapsedMs) {
+    /// <summary>The document's selected Revit duct friction calculator, not the solver's Colebrook method.</summary>
+    public DuctFrictionMethod? FrictionMethod { get; init; }
+}
+
+/// <summary>Identity reported by DuctSettings.GetPressLossCalculationServerInfo; null identity means unavailable.</summary>
+public sealed record DuctFrictionMethod(string? ServerId, string? Name, string? Description,
+    DuctProvenance Provenance, string Evidence);
 
 /// <summary>A level; ElevationFt is Level.ProjectElevation (geometry frame), never Level.Elevation.</summary>
 public sealed record DuctLevel(long Id, string Name, double ElevationFt);
@@ -141,7 +151,10 @@ public sealed record DuctNode(
     string? SystemName,
     string? Classification,
     IReadOnlyList<DuctConnector> Connectors,
-    IReadOnlyList<DuctFact> Facts);
+    IReadOnlyList<DuctFact> Facts) {
+    /// <summary>Construction and dimensions with evidence; absent in older saved captures and non-fitting nodes.</summary>
+    public FittingGeometry? FittingGeometry { get; init; }
+}
 
 public sealed record DuctRoughness(double ValueFt, DuctProvenance Provenance);
 
@@ -174,7 +187,7 @@ public sealed record DuctSegment(
 /// <summary>Pass-1 flow: terminal design flow summed up the tree from the single root. At a tapped duct it is the upstream-end flow.</summary>
 public sealed record DuctFlow(long SegmentId, double Cfm, DuctProvenance Provenance);
 
-/// <summary>Id is "kind:elementId" (open ends add ":connector"); an assumption verdict keys on it.</summary>
+/// <summary>Id is "kind:groupId[:elementId[:connector]]"; an assumption verdict keys on the exact captured handle.</summary>
 public sealed record DuctIssue(
     string Id,
     DuctIssueKind Kind,
