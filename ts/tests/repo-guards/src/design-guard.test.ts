@@ -348,7 +348,7 @@ describe("design guard — maintained surface hard zeros", () => {
 
   it("no raw numeric dash pattern in maintained web JSON (roles only)", () => {
     // A data file may NAME a dash role; base.css is the only place that says what it looks like.
-    // `runs/visual-law.json` carried `dash: [6, 4]` while the web surface had moved to
+    // `takeoff/visual-law.json` (then under `runs/`) carried `dash: [6, 4]` while the web surface had moved to
     // `--dash-reference`, so its Python co-consumer drew a different boundary than /runs did.
     // The law names `dashRole` now, and both surfaces resolve the number from base.css.
     const re = /"(?:dash|dasharray|strokeDasharray|dashPattern)"\s*:\s*(?:\[[^\]]*\]|"[^"]*")/g;

@@ -112,14 +112,19 @@ export const levelsOf = (lanes: readonly { label: string }[]): string[] => [
   ...new Set(lanes.map((lane) => lane.label)),
 ];
 
-export function usePlanImage(resolution: TargetResolution, view: string | undefined) {
+/** `pixelSize`: the exported image's long side; absent, the host's default. */
+export function usePlanImage(
+  resolution: TargetResolution,
+  view: string | undefined,
+  pixelSize?: number,
+) {
   const document =
     resolution.kind === "resolved" && resolution.target.kind === "document"
       ? resolution.target.ref
       : undefined;
   const call = useHostOp(
     "revit.context.view-image",
-    { target: { name: view ?? "" } },
+    { target: { name: view ?? "" }, ...(pixelSize ? { pixelSize } : {}) },
     {
       bridgeSessionId: document?.session,
       openDocumentId: document?.openId,

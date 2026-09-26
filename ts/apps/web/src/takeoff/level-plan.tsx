@@ -11,7 +11,6 @@ import {
   type Bounds2,
   unionBounds,
 } from "#/lib/affine-frame";
-import { planCanvasTransform, type PlanRegistration } from "#/runs/world";
 import { loopBounds, pathD } from "#/takeoff/model";
 import { PLAN_MIN_SQFT, onPlan } from "#/takeoff/room-actions";
 import {
@@ -23,6 +22,30 @@ import {
   type RoomState,
 } from "#/takeoff/room-state";
 import type { ModelRoom, ModelZone } from "#/takeoff/world";
+
+/** Revit's plan export: pixel size and where three corners sit in model feet. */
+type PlanRegistration = {
+  imageSha256?: string;
+  width: number;
+  height: number;
+  topLeft: [number, number];
+  topRight: [number, number];
+  bottomLeft: [number, number];
+};
+
+function planCanvasTransform(
+  plan: PlanRegistration,
+  vp: { minX: number; maxY: number; pxPerFt: number },
+): [number, number, number, number, number, number] {
+  return [
+    ((plan.topRight[0] - plan.topLeft[0]) * vp.pxPerFt) / plan.width,
+    (-(plan.topRight[1] - plan.topLeft[1]) * vp.pxPerFt) / plan.width,
+    ((plan.bottomLeft[0] - plan.topLeft[0]) * vp.pxPerFt) / plan.height,
+    (-(plan.bottomLeft[1] - plan.topLeft[1]) * vp.pxPerFt) / plan.height,
+    (plan.topLeft[0] - vp.minX) * vp.pxPerFt,
+    (vp.maxY - plan.topLeft[1]) * vp.pxPerFt,
+  ];
+}
 
 /** A level's plan image and where Revit says its pixels sit in the model. */
 export interface TakeoffPlanImage {

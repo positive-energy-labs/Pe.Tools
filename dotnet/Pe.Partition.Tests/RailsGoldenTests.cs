@@ -60,6 +60,27 @@ public sealed class RailsGoldenTests {
         Assert.That(hash, Is.EqualTo(want), $"{name}: rails solve output changed");
     }
 
+    /// <summary>Layer 1's trace on a Duryee zone: rails, a door-scale opening, a face per room; it reads back as the wire contract.</summary>
+    [Test]
+    public void Duryee_trace_carries_layer_one() {
+        var answer = Run(Inputs("duryee-level1").First());
+        var trace = answer.Trace;
+        TestContext.Out.WriteLine($"rails {trace.Rails.Count} segments {trace.Segments.Count} openings "
+            + string.Join(' ', trace.Openings.GroupBy(o => o.Kind).Select(g => $"{g.Key}={g.Count()}")) + $" faces {trace.Faces.Count}");
+        Assert.That(trace.Rails, Is.Not.Empty);
+        Assert.That(trace.Openings.Count(o => o.Kind is SegKind.Door or SegKind.Headed or SegKind.Cased), Is.GreaterThan(0));
+        Assert.That(trace.Faces.Select(f => f.Index), Is.EqualTo(answer.Rooms.Select(r => r.Index)));
+
+        var settings = new JsonSerializerSettings {
+            ContractResolver = new Newtonsoft.Json.Serialization.CamelCasePropertyNamesContractResolver(),
+            Converters = [new Newtonsoft.Json.Converters.StringEnumConverter()],
+        };
+        var wire = JsonConvert.DeserializeObject<Pe.Shared.RevitData.Takeoffs.RoomsZoneTrace>(JsonConvert.SerializeObject(
+            new { ZoneGuid = Guid.Empty, Label = "z", trace, answer.Accounting }, settings), settings)!;
+        Assert.That(JsonConvert.SerializeObject(wire.Trace, settings), Is.EqualTo(JsonConvert.SerializeObject(trace, settings)));
+        Assert.That(wire.Accounting.ZoneSqft, Is.EqualTo(answer.Accounting.ZoneSqft));
+    }
+
     private static PartitionAnswer Run(PartitionInput input) =>
         Solve.RunRails(input, (_, _) => new ProbeAnswer(input.Knee.Stamp, input.Knee.Searched,
             new ProbeHit(Stub, 0.0, input.LevelZ), new ProbeHit(Stub, 9.0, input.LevelZ + 9.0), 200.0, 0.0));

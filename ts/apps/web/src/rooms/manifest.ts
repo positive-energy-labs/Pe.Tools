@@ -128,7 +128,8 @@ export const manifest = defineRoute<
     },
     merge: {
       label: "merge",
-      labelNow: (ctx) => (ctx.page.selected.length > 1 ? `merge ${ctx.page.selected.length}` : "merge"),
+      labelNow: (ctx) =>
+        ctx.page.selected.length > 1 ? `merge ${ctx.page.selected.length}` : "merge",
       does: "rooms.merge",
       input: none,
       dirties: ["receipts"],
