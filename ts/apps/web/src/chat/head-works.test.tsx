@@ -82,6 +82,8 @@ test("F-H6-5: a families scope proposal shows in the head as its own Families gr
   expect(scoped!.wire.segment).toBeNull();
   expect(scoped!.groupOf("scope")).toEqual(["scope"]);
   expect(scoped!.show?.(filter)).toContain("LBP15A");
+  scoped!.open(["scope"]);
+  expect(open).toHaveBeenLastCalledWith("families", ["scope"]);
   const native = families.find((work) => "patch" in work.cells);
   expect(native?.wire.segment).toBeNull();
   expect(native?.cells.patch?.proposal?.value).toEqual(patch.proposal.value);

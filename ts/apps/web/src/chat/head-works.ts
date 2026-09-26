@@ -102,7 +102,7 @@ export function useHeadWorks(
           commit: plan
             ? { word: "apply", run: () => exits.planIn(route) }
             : { word: "open", run: () => exits.open(route) },
-          open: (focus) => exits.open(route, head.focus === false ? undefined : focus),
+          open: (focus) => exits.open(route, focus),
           // A planned Work commits whole: all its cells are one head line (F-B-4).
           ...(plan ? { line: `${route}:${JSON.stringify(key)}` } : {}),
           ...(exits.planRefusal?.route === route ? { refusal: exits.planRefusal.message } : {}),

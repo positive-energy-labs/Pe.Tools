@@ -323,7 +323,6 @@ export const manifest = entityRoute<
       groupOf: () => ["scope"],
       show: (value) => filterWords(value as AppliedFilter),
       commit: "plan",
-      focus: false,
     },
     {
       segment: null,
@@ -332,10 +331,23 @@ export const manifest = entityRoute<
       // Exact bytes are reviewed in Families.
       show: (value) => {
         const source = value as PodDraftSource;
-        return `${source.path} · ${source.content.length} characters`;
+        try {
+          const patch = JSON.parse(source.content);
+          const names = patch?.select?.names;
+          const parameters = patch?.patch?.parameters;
+          if (
+            Array.isArray(names) &&
+            parameters &&
+            typeof parameters === "object" &&
+            !Array.isArray(parameters)
+          )
+            return `${Object.keys(parameters).join(", ")} · ${names.length} named families`;
+        } catch {
+          // Invalid source is still reviewable; the route owns validation.
+        }
+        return source.path;
       },
       commit: "plan",
-      focus: false,
     },
     {
       segment: "cells",

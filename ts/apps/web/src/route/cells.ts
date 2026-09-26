@@ -13,8 +13,6 @@ export interface Cells<W> {
   show?: (value: unknown) => string;
   /** The head's commit: `open` the route (default), or `plan` there ("apply", one per Work). */
   commit?: "open" | "plan";
-  /** false = the head opens the route unscoped: a root cell heads the pane and matches no row. */
-  focus?: false;
   /** Why the head may not write these patches (only the route can), else null. */
   admit?(doc: W, patches: readonly RouteStatePatch[]): { code: string; message: string } | null;
 }
