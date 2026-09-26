@@ -3,7 +3,7 @@
  * document, the level and the view; the body is the plan beside the table, or the route's
  * receipts in History. The snapshot is one host read keyed on the target and `page.epoch`.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ActionReceipt, Reading, RoomsRouteDocument } from "@pe/agent-contracts";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
@@ -22,7 +22,7 @@ import { Situation } from "#/route/situation";
 import { useDocumentLadder } from "#/route/situation-ladder";
 import { usePlanImage } from "#/takeoff/plan-image";
 import { manifest, type RoomsPage } from "./manifest";
-import { RoomsPlan } from "./plan";
+import { focusOf, RoomsPlan } from "./plan";
 import { roomRows, RoomsTable } from "./table";
 
 type Empty = { says: string; exit: string };
@@ -48,9 +48,12 @@ function useRoomsSnapshot(doc: { session: string; openId: string } | null, epoch
 
 export function RoomsRoute({
   view: urlView,
+  focus,
   setView,
 }: {
   view: string;
+  /** The URL's `focus`: region labels, comma separated. */
+  focus: string;
   setView: (view: string) => void;
 }) {
   const [chosen] = useChooseTarget();
@@ -176,6 +179,7 @@ export function RoomsRoute({
           empty={empty}
           page={page}
           setPage={setPage}
+          focus={focus}
           plan={plan}
           hovered={hovered}
           setHovered={setHovered}
@@ -192,6 +196,7 @@ function RoomsBody({
   empty,
   page,
   setPage,
+  focus,
   plan,
   hovered,
   setHovered,
@@ -202,6 +207,7 @@ function RoomsBody({
   empty: Empty | null;
   page: RoomsPage;
   setPage: (next: Partial<RoomsPage>) => void;
+  focus: string;
   plan: ReturnType<typeof usePlanImage>;
   hovered: string | null;
   setHovered: (guid: string | null) => void;
@@ -221,6 +227,15 @@ function RoomsBody({
     [rows, page.view],
   );
   const selected = useMemo(() => new Set(page.selected), [page.selected]);
+  // Focus selects its regions (and their view) once, when the snapshot first holds them.
+  const focused = useMemo(() => focusOf(rows, focus), [rows, focus]);
+  const zoomTo = useMemo(() => focused.rows.map((row) => row.region.guid), [focused]);
+  const applied = useRef("");
+  useEffect(() => {
+    if (!focused.rows.length || applied.current === focus) return;
+    applied.current = focus;
+    setPage({ view: focused.rows[0]!.region.view, selected: zoomTo });
+  }, [focused, focus, zoomTo]); // eslint-disable-line react-hooks/exhaustive-deps
   const image = plan.image && "plan" in plan.image ? plan.image.plan : null;
   const refusal = plan.image && "refusal" in plan.image ? plan.image.refusal : null;
   return (
@@ -238,6 +253,8 @@ function RoomsBody({
             empty={empty}
             selected={selected}
             hovered={hovered}
+            zoomTo={zoomTo}
+            focusMissing={snapshot ? focused.missing : []}
             onSelect={(guid, add) =>
               setPage({
                 selected: !guid

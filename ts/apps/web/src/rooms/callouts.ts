@@ -78,7 +78,14 @@ export function placeCallouts(
         if (box[0] < 0 || box[1] < 0 || box[2] > viewportPx.width || box[3] > viewportPx.height)
           continue;
         if (placed.some((other) => overlaps(box, other.box))) continue;
-        found = { label: item.label, anchor: item.anchor, pin: [cx, cy], leader: ring > 0, pinWidth, box };
+        found = {
+          label: item.label,
+          anchor: item.anchor,
+          pin: [cx, cy],
+          leader: ring > 0,
+          pinWidth,
+          box,
+        };
         break;
       }
       if (found) break;

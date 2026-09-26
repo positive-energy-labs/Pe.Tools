@@ -1,9 +1,13 @@
-/** /rooms, deterministic: the write payload, the plan's ink order, and the page's defaults. */
+/**
+ * /rooms, deterministic: the write payload, the plan's ink order, callout placement, focus, and
+ * the page's defaults.
+ */
 import { expect, test } from "vite-plus/test";
 import { roomEditKey, roomsRouteState, stagedRoomWrites } from "@pe/agent-contracts";
 
+import { placeCallouts, type CalloutItem } from "./callouts";
 import { manifest } from "./manifest";
-import { REGION_STATES, regionState, unassigned, type RoomsRegion } from "./plan";
+import { focusOf, REGION_STATES, regionState, unassigned, type RoomsRegion } from "./plan";
 import { roomRows, stagePatches } from "./table";
 
 const region = (patch: Partial<RoomsRegion>): RoomsRegion => ({
@@ -133,6 +137,53 @@ test("rows sort by level order, then area largest first; unnamed regions label R
     ["m1", "Den"],
     ["u1", "R3"],
   ]);
+});
+
+test("focus names rows by the table's labels and says which labels no region wears", () => {
+  const rows = roomRows(
+    [
+      region({ guid: "m1", sqft: 20, name: "Den" }),
+      region({ guid: "m2", sqft: 80 }),
+      region({ guid: "h", role: "held", sqft: 5 }),
+    ],
+    ["Main Level"],
+  );
+  const focus = focusOf(rows, " R1, Den ,R9,R1");
+  expect(focus.rows.map((row) => row.region.guid)).toEqual(["m2", "m1"]);
+  expect(focus.missing).toEqual(["R9"]);
+  expect(focusOf(rows, "").rows).toEqual([]);
+});
+
+test("callouts: three small overlapping regions each leave on a leader to a free box", () => {
+  const items: CalloutItem[] = [
+    { label: "R1", anchor: [200, 150], text: "13 sf", fits: false },
+    { label: "R2", anchor: [204, 152], text: "11 sf", fits: false },
+    { label: "R3", anchor: [198, 156], text: "5 sf · too-small-under-6sf", fits: false },
+  ];
+  const placed = placeCallouts(items, { width: 400, height: 300 }, 10);
+  expect(placed.map((c) => [c.label, c.pin, c.leader])).toEqual([
+    ["R1", [224, 126], true],
+    ["R2", [228, 176], true],
+    ["R3", [134, 92], true],
+  ]);
+  for (const [i, a] of placed.entries())
+    for (const b of placed.slice(i + 1))
+      expect(
+        a.box[2] < b.box[0] || a.box[0] > b.box[2] || a.box[3] < b.box[1] || a.box[1] > b.box[3],
+      ).toBe(true);
+  expect(placeCallouts(items, { width: 400, height: 300 }, 10)).toEqual(placed);
+});
+
+test("callouts: a region that fits keeps its pin on its anchor; an off-screen anchor draws none", () => {
+  const placed = placeCallouts(
+    [
+      { label: "Office", anchor: [100, 100], text: "240 sf", fits: true },
+      { label: "R9", anchor: [-5, 100], text: "20 sf", fits: true },
+    ],
+    { width: 400, height: 300 },
+    10,
+  );
+  expect(placed.map((c) => [c.label, c.pin, c.leader])).toEqual([["Office", [100, 100], false]]);
 });
 
 test("the manifest parses an empty page", () => {
