@@ -157,7 +157,9 @@ public sealed record RoomsRegion(
     bool Stale);
 public sealed record RoomsSnapshotData(IReadOnlyList<RoomsLevel> Levels, IReadOnlyList<RoomsRegion> Regions);
 
-public sealed record RoomsPartitionRequest(string View, string? RunId = null);
+// Rejected: a person's standing "not a room" marks, each an outer ring of x y points in model feet on the view. A face
+// overlapping one at IoU 0.6 or more is held as rejected instead of becoming a room.
+public sealed record RoomsPartitionRequest(string View, string? RunId = null, IReadOnlyList<double[][]>? Rejected = null);
 public sealed record RoomsPartitionResult(
     string Level,
     string RunId,

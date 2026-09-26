@@ -1,3 +1,5 @@
+using NetTopologySuite.Geometries;
+
 namespace Pe.Revit.Partition;
 
 /// <summary>
@@ -14,7 +16,10 @@ public static class Judge {
     // chase or a junction scrap even when every edge is on a rail.
     private const double MinRailRoomSqft = 6.0;
 
-    public static (Disposition Disposition, string? Reason) Dispose(FaceFacts f, double levelZ, Knobs knobs) {
+    // Rooms ledger 2026-09-25: a person's standing rejection applies to a face overlapping it at about 0.6 IoU or more.
+    public const double RejectedIou = 0.6;
+
+    public static (Disposition Disposition, string? Reason) Dispose(FaceFacts f, double levelZ, Knobs knobs, IReadOnlyList<Geometry> rejected) {
         if (f.Kind == FaceKind.Band)
             return f.BandWidthFt is { } w && w > BandHoldFt ? (Disposition.Held, $"envelope-band-{w:0.0}ft") : (Disposition.Excluded, Reasons.Wall);
         if (f.Kind == FaceKind.Contested) return (Disposition.Held, Reasons.NativeOverlap);
@@ -27,6 +32,14 @@ public static class Judge {
         if (f.Shape.Area < knobs.MinRoomSqft && f.FloatingFt > Solve.SampleFt) return (Disposition.Held, Reasons.TooSmallFloating);
         if (f.Narrow) return (Disposition.Held, Reasons.TooNarrow);
         if (f.Proposal is null && f.Backed < knobs.InkBackedAcceptMin) return (Disposition.Held, Reasons.Unbacked);
+        // Last: only a face that would otherwise be a room is held for "not a room"; a held face keeps its first reason.
+        if (rejected.Any(r => Iou(f.Shape, r) >= RejectedIou)) return (Disposition.Held, Reasons.Rejected);
         return (Disposition.Accepted, null);
+    }
+
+    private static double Iou(Geometry a, Geometry b) {
+        if (!a.EnvelopeInternal.Intersects(b.EnvelopeInternal)) return 0;
+        var i = a.Intersection(b).Area;
+        return i / (a.Area + b.Area - i);
     }
 }
