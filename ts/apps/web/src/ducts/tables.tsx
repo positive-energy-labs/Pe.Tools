@@ -23,7 +23,7 @@ type SegmentRow = Segment & { derivedCfm: number | null };
 const num = (value: number | null | undefined, digits = 0) =>
   value == null ? "" : value.toFixed(digits);
 
-const READY = {
+export const READY = {
   blocked: {
     word: "blocked",
     tone: "alarm",
@@ -331,7 +331,7 @@ export function DuctsTables({
                     columns={SEGMENT_COLUMNS}
                     rowKey={(s) => String(s.id)}
                     activeKey={page.selected || null}
-                    onRowClick={(s) => setPage({ selected: String(s.id) })}
+                    onRowClick={(s) => setPage({ selected: String(s.id), issue: "" })}
                     empty={pick}
                   />
                 </Pane>
@@ -350,9 +350,12 @@ export function DuctsTables({
                     rows={issues}
                     columns={ISSUE_COLUMNS}
                     rowKey={(i) => i.id}
-                    activeKey={page.selected || null}
+                    activeKey={page.issue || null}
                     onRowClick={(i) =>
-                      setPage({ selected: i.elementId == null ? "" : String(i.elementId) })
+                      setPage({
+                        issue: i.id,
+                        selected: i.elementId == null ? "" : String(i.elementId),
+                      })
                     }
                     empty={pick}
                   />
