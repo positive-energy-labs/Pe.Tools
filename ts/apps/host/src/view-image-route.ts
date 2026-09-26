@@ -11,7 +11,10 @@ import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http
  */
 const viewImageRoots = async (tmp = tmpdir()): Promise<string[]> => {
   const entries = await readdir(tmp, { withFileTypes: true }).catch(() => []);
-  return [join(tmp, "pe-view-captures"), ...entries.filter((e) => e.isDirectory()).map((e) => join(tmp, e.name, "pe-view-captures"))];
+  return [
+    join(tmp, "pe-view-captures"),
+    ...entries.filter((e) => e.isDirectory()).map((e) => join(tmp, e.name, "pe-view-captures")),
+  ];
 };
 
 const shaPattern = /^\/view-image\/([0-9a-f]{64})\.png$/;
