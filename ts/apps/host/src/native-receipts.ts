@@ -59,16 +59,56 @@ export const nativeReceiptArgs = (
     key,
   });
 };
+/** A bridge registration that now serves the original's SDK session from another process. */
+export type Successor = {
+  readonly sdkSessionId: string;
+  readonly pid: number;
+  readonly processStartUtcUnixMs: number | null;
+};
 export async function readNativeReceipt(
   step: ActionStep,
   original: NativeProcess,
   read: SdkReceiptReader = run,
+  successor?: Successor,
 ): Promise<{ step: ActionStep; evidence: unknown }> {
   const args = nativeReceiptArgs(step.id, original, step.key);
   const evidence = await sdkResult<OpResult>(args, read);
   const result = evidence.result;
   const receipt = receiptSchema.safeParse(result.receipt);
   const unchanged = () => ({ step, evidence });
+  const codes = evidence.diagnostics.map((diagnostic) => diagnostic.code);
+  const replaced =
+    successor !== undefined &&
+    (successor.pid !== original.pid ||
+      successor.processStartUtcUnixMs !== Date.parse(original.processStartUtc));
+  // The original process can never answer: the SDK saw it die, or it cannot read the pid
+  // (Win32 error 31 after a crash) while the same SDK session re-registered as another process.
+  const gone =
+    result.requestId === step.id &&
+    ((result.state === "abandoned" &&
+      codes.includes("op.process-dead") &&
+      !codes.includes("op.superseded-terminal")) ||
+      (result.state === "pending" && codes.includes("op.liveness-unknown") && replaced));
+  if (gone)
+    return {
+      step: {
+        id: step.id,
+        key: step.key,
+        kind: step.kind,
+        input: step.input,
+        state: "failed",
+        error: `Revit process ${original.pid} ended before '${step.key}' recorded an outcome`,
+        status: 503,
+        evidence: {
+          result: {
+            process: original,
+            sdk: { state: result.state, diagnostics: evidence.diagnostics },
+            ...(replaced ? { successor } : {}),
+          },
+        },
+      },
+      evidence: { sdk: evidence, ...(replaced ? { successor } : {}) },
+    };
   if (
     result.state !== "completed" ||
     result.requestId !== step.id ||

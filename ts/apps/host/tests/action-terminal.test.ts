@@ -12,6 +12,8 @@ import { afterEach, expect, test } from "vite-plus/test";
 import type { ActionReceipt, ActionStep } from "@pe/agent-contracts";
 import { ActionIncomplete, ActionJournal } from "../src/action-journal.ts";
 import { BridgeError } from "../src/bridge.ts";
+import { readNativeReceipt } from "../src/native-receipts.ts";
+import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 
 type Outcome = "succeeded" | "failed" | "dispatchedFailure" | "cancelled" | "unknown";
 type End = "return" | "rethrow" | "incomplete" | "hostError";
@@ -242,4 +244,120 @@ const restarts: [ActionStep["state"][], boolean, Terminal][] = [
 ];
 test.each(restarts)("restart with steps %j, prepared %s", async (steps, prepared, expected) => {
   expect(terminal(await restart(steps, prepared))).toEqual(expected);
+});
+
+// Hazard 3 (headless research, 2026-09-26): a crashed script's unknown action refused every action
+// on the host, for every session, and recovery could not settle it because the SDK read the dead
+// pid as unreadable (Win32 error 31) rather than dead.
+const onDocument = (id: string, session: string, openId: string) => ({
+  ...admission(id),
+  kind: "operation" as const,
+  key: "scripting.execute",
+  destination: { kind: "document" as const, ref: { session, openId } },
+});
+const nativeLeaf = async () => ({ kind: "native-leaf", process: originalProcess });
+async function crashedOn(journal: ActionJournal, session: string, openId: string) {
+  const id = randomUUID();
+  await journal.admit(onDocument(id, session, openId), nativeLeaf, async (execution) =>
+    execution.step("native", "scripting.execute", {}, async () => answer("unknown")),
+  );
+  expect((await journal.wait(id)).state).toBe("unknown");
+  return id;
+}
+const admitOn = (journal: ActionJournal, session: string, openId: string) =>
+  journal.admit(onDocument(randomUUID(), session, openId), nativeLeaf, async () => "done");
+
+test("an unknown action on session A, document X does not block session B, document Y", async () => {
+  const journal = new ActionJournal(await journalPath());
+  await crashedOn(journal, "session-a", "doc-x");
+  const other = await admitOn(journal, "session-b", "doc-y");
+  expect((await journal.wait(other.id)).state).toBe("succeeded");
+  // Another document on the same session is a different destination too.
+  const sibling = await admitOn(journal, "session-a", "doc-y");
+  expect((await journal.wait(sibling.id)).state).toBe("succeeded");
+});
+
+test("an unknown action on session A, document X blocks A/X and a session-wide action on A", async () => {
+  const journal = new ActionJournal(await journalPath());
+  const crashed = await crashedOn(journal, "session-a", "doc-x");
+  await expect(admitOn(journal, "session-a", "doc-x")).rejects.toThrow(
+    `action '${crashed}' is unknown; recover that attempt`,
+  );
+  await expect(
+    journal.admit(
+      {
+        ...onDocument(randomUUID(), "session-a", "doc-x"),
+        destination: { kind: "session", session: "session-a" },
+      },
+      nativeLeaf,
+      async () => "done",
+    ),
+  ).rejects.toThrow(/recover that attempt/);
+});
+
+const sdkRead = (state: string, codes: string[]) => async (args: readonly string[]) => {
+  const requestId = args[args.indexOf("result") + 1]!;
+  const envelope = JSON.parse(sdkEnvelope({ state, requestId, receipt: null, response: null }));
+  envelope.diagnostics = codes.map((code) => ({ code, detail: code, fix: null }));
+  return JSON.stringify(envelope);
+};
+const gone: [string, Parameters<typeof sdkRead>, boolean][] = [
+  // Wave-1 SDK verdict: the incarnation is dead.
+  ["the SDK reports the process dead", ["abandoned", ["op.process-dead"]], false],
+  // Until then: unreadable pid, but the same SDK session re-registered as a new process.
+  [
+    "liveness is unknown and the session reconnected as a new pid",
+    ["pending", ["op.liveness-unknown"]],
+    true,
+  ],
+];
+test.each(gone)("recovery settles failed when %s", async (_, [state, codes], successor) => {
+  const journal = new ActionJournal(await journalPath());
+  const id = await crashedOn(journal, "session-a", "doc-x");
+  const recovered = await journal.recover(id, (step) =>
+    readNativeReceipt(
+      step,
+      originalProcess,
+      sdkRead(state, codes),
+      successor
+        ? { sdkSessionId: "agent-1", pid: originalProcess.pid + 1, processStartUtcUnixMs: 5000 }
+        : undefined,
+    ),
+  );
+  expect(recovered).toMatchObject({
+    state: "failed",
+    status: 503,
+    error: `Revit process ${originalProcess.pid} ended before 'scripting.execute' recorded an outcome`,
+    evidence: { result: { process: originalProcess, sdk: { state } } },
+  });
+  expect(recovered).not.toHaveProperty("notDispatched");
+  // Settled, so it no longer blocks its own destination.
+  const next = await admitOn(journal, "session-a", "doc-x");
+  expect((await journal.wait(next.id)).state).toBe("succeeded");
+});
+
+test("unreadable liveness without a successor process stays unknown", async () => {
+  const journal = new ActionJournal(await journalPath());
+  const id = await crashedOn(journal, "session-a", "doc-x");
+  for (const successor of [
+    undefined,
+    // The session re-registered from the SAME process: nothing proves it died.
+    {
+      sdkSessionId: "agent-1",
+      pid: originalProcess.pid,
+      processStartUtcUnixMs: Date.parse(originalProcess.processStartUtc),
+    },
+  ])
+    expect(
+      (
+        await journal.recover(id, (step) =>
+          readNativeReceipt(
+            step,
+            originalProcess,
+            sdkRead("pending", ["op.liveness-unknown"]),
+            successor,
+          ),
+        )
+      ).state,
+    ).toBe("unknown");
 });

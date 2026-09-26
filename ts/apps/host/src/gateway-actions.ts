@@ -183,6 +183,8 @@ export async function admitGatewayAction(
       return {
         kind: "native-leaf",
         process,
+        // The SDK session outlives its process; recovery reads a re-registration under it as a successor.
+        sdkSession: session.sdkSessionId,
         actor,
         script,
       };
@@ -252,11 +254,35 @@ function temporarySucceeded(value: unknown): boolean {
   const status = value && typeof value === "object" && "status" in value ? value.status : undefined;
   return status === "acquired" || status === "borrowed" || status === "released";
 }
-export const recoverGatewayAction = (id: string, owner: ActionJournal, sdk?: SdkReceiptReader) =>
+/** The bridge session now serving the original's SDK session, whatever process it runs in. */
+async function successorOf(bridge: RevitBridge["Service"] | undefined, sdkSession: unknown) {
+  if (!bridge || typeof sdkSession !== "string") return undefined;
+  const view = (await Effect.runPromise(bridge.list)).find(
+    (s) => s.connected && s.sdkSessionId === sdkSession && s.processId !== undefined,
+  );
+  return view
+    ? {
+        sdkSessionId: sdkSession,
+        pid: view.processId!,
+        processStartUtcUnixMs: view.processStartUtcUnixMs ?? null,
+      }
+    : undefined;
+}
+export const recoverGatewayAction = (
+  id: string,
+  owner: ActionJournal,
+  sdk?: SdkReceiptReader,
+  bridge?: RevitBridge["Service"],
+) =>
   owner.recover(id, async (step, prepared) => {
-    const value = prepared as { kind?: string; process?: unknown };
+    const value = prepared as { kind?: string; process?: unknown; sdkSession?: unknown };
     if (value.kind !== "native-leaf") throw Error("This action has no native receipt recovery");
-    const read = await readNativeReceipt(step, nativeProcessSchema.parse(value.process), sdk);
+    const read = await readNativeReceipt(
+      step,
+      nativeProcessSchema.parse(value.process),
+      sdk,
+      await successorOf(bridge, value.sdkSession),
+    );
     return isTemporary(step.key) &&
       read.step.state === "succeeded" &&
       !temporarySucceeded(read.step.result)
