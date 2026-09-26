@@ -22,6 +22,8 @@ import type { DuctSnapshot, GroupReadiness } from "./readiness";
 import { indexOf, type DuctIndex } from "./scene";
 import { READY } from "./tables";
 import { groupTree, runsOf } from "./topology";
+import { groupPressure } from "./pressure";
+import { PressureFacts, PressureIssues } from "./pressure-facts";
 
 function EncodingBand({
   encoding,
@@ -128,6 +130,9 @@ function Spatial({
   const view = page.view === "iso" ? iso : plan;
   const selected = page.selected ? Number(page.selected) : null;
   const tree = useMemo(() => groupTree(index.snapshot, page.group), [index, page.group]);
+  const pressure = index.snapshot.pressure;
+  const criticalPath = groupPressure(index.snapshot, page.group)?.criticalPath;
+  const critical = new Set(pressure ? (criticalPath?.path ?? []) : tree.longest);
   const selection = useMemo(
     () =>
       new Set(
@@ -176,6 +181,16 @@ function Spatial({
                   </FactChip>
                 )}
                 <GlyphKey />
+                <FactChip
+                  dashed={!criticalPath}
+                  title="Outline marks the critical path or the longest-run stand-in"
+                >
+                  {criticalPath
+                    ? `outlined: critical path to ${criticalPath.terminalId}${criticalPath.isComplete ? "" : " (partial)"}`
+                    : pressure
+                      ? "no solver critical path"
+                      : "outlined: longest run (stand-in)"}
+                </FactChip>
               </div>
               <EncodingBand
                 encoding={encoding}
@@ -192,6 +207,7 @@ function Spatial({
               encoding={encoding}
               fitKey={view.fitKey}
               selected={selection}
+              critical={critical}
               hovered={hovered}
               issue={page.issue}
               onHover={setHovered}
@@ -222,6 +238,20 @@ function Spatial({
                   : `element ${shown} is not drawn in this view`}
               </p>
             )}
+            {pressure ? (
+              <>
+                {shown != null ? (
+                  <PressureFacts point={segment?.pressure ?? node?.pressure} pressure={pressure} />
+                ) : null}
+                <PressureIssues
+                  pressure={pressure}
+                  snapshot={index.snapshot}
+                  group={page.group}
+                  element={shown ?? undefined}
+                  select={(id) => setPage({ selected: String(id), issue: "" })}
+                />
+              </>
+            ) : null}
             {pickedIssue ? (
               <p data-picked-issue={pickedIssue.id}>
                 selected issue <span className="face-mono">{pickedIssue.id}</span>:{" "}

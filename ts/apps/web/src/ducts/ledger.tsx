@@ -6,17 +6,14 @@
  * keys); nothing is written to Revit, and readiness re-derives from what is staged.
  */
 import { useContext, useMemo } from "react";
-import {
-  transitionPatches,
-  type DuctAssumption,
-  type DuctsRouteDocument,
-  type RouteStatePatch,
-} from "@pe/agent-contracts";
+import { type DuctsRouteDocument, type RouteStatePatch } from "@pe/agent-contracts";
 
+import { AssumptionCell, NumericAssumptions } from "./assumptions";
+import { PressureBudget, PressureIssues } from "./pressure-facts";
+import { groupPressure } from "./pressure";
 import { EmptyState } from "#/components/lang/empty";
 import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
-import { Switcher } from "#/components/lang/switcher";
 import type { Column } from "#/components/master-table/model";
 import { Table } from "#/components/master-table/table";
 import { tokenRef } from "#/lib/token";
@@ -28,8 +25,6 @@ import { READY } from "./tables";
 import { groupTree, runsOf, type GroupTree, type Run } from "./topology";
 
 type Issue = DuctSnapshot["issues"][number];
-type Verdict = Extract<DuctAssumption, { kind: "verdict" }>["verdict"];
-type Choice = Verdict | "unset";
 
 const num = (value: number | null | undefined, digits = 0) =>
   value == null ? "" : value.toFixed(digits);
@@ -63,37 +58,6 @@ const countIssues = (issues: readonly Issue[]) => {
   for (const issue of issues) counts.set(issue.kind, (counts.get(issue.kind) ?? 0) + 1);
   return counts;
 };
-
-/** The verdicts an issue kind can take: open ends all three; the rest that `ignore` resolves. */
-const CHOICES: Partial<Record<IssueKind, readonly Verdict[]>> = {
-  "open-end": ["capped", "connect", "ignore"],
-  "no-terminal-flow": ["ignore"],
-  "default-flex-roughness": ["ignore"],
-};
-const CHOICE_TITLE: Record<Choice, string> = {
-  capped: "Capped: this end carries no flow. Resolves the open end.",
-  connect: "Connect: the model must be fixed in Revit. Does not resolve the open end.",
-  ignore: "Ignore: leave this out of the walk. Resolves it.",
-  unset: "No staged answer.",
-};
-
-/** The patches one verdict choice makes on an issue's cell: stage it, or unstage for `unset`. */
-export const verdictPatches = (
-  doc: DuctsRouteDocument | null,
-  issueId: string,
-  choice: Choice,
-): RouteStatePatch[] =>
-  transitionPatches(
-    ["assumptions"],
-    issueId,
-    doc?.assumptions[issueId] ?? {},
-    choice === "unset"
-      ? { kind: "unstage" }
-      : { kind: "stage", rung: { value: { kind: "verdict", verdict: choice } } },
-  );
-
-const verdictAt = (value: DuctAssumption | undefined) =>
-  value?.kind === "verdict" ? value.verdict : null;
 
 type GroupRow = DuctSnapshot["groups"][number] & {
   readiness: GroupReadiness;
@@ -219,7 +183,8 @@ export function DuctsLedger({
       key: "terminal",
       label: "run to terminal",
       width: "w-32",
-      cell: (r) => (r.longest ? `${r.terminal} · longest` : String(r.terminal)),
+      cell: (r) =>
+        `${r.terminal}${snapshot?.pressure ? (critical?.terminalId === r.terminal ? " · critical" : "") : r.longest ? " · longest" : ""}`,
       search: (r) => String(r.terminal),
     },
     {
@@ -321,9 +286,7 @@ export function DuctsLedger({
       no group chosen
     </EmptyState>
   );
-  const equipment = snapshot?.nodes.find((n) => n.id === tree?.root?.equipment);
-  const esp = equipment?.facts.find((f) => f.key === "externalStatic")?.value;
-  const longest = runs.find((r) => r.longest);
+  const critical = snapshot ? groupPressure(snapshot, page.group)?.criticalPath : null;
 
   return (
     <PaneSplit
@@ -375,16 +338,10 @@ export function DuctsLedger({
               scroll="clip"
               flush
             >
-              {tree ? (
-                <p className="px-2 py-1 t-small text-ink-2">
-                  {tree.rootWord}. Manual D: friction rate = available static × 100 / total
-                  effective length of the critical run. Available static ={" "}
-                  {esp != null ? `${esp} in-wg fan static` : "fan static (not stated)"} minus
-                  component drops. Total effective length ={" "}
-                  {longest ? `${num(longest.developedFt, 1)} ft straight` : "no run"} plus the
-                  fittings' equivalent length, which needs the loss solver, so no friction rate is
-                  drawn.
-                </p>
+              {tree && snapshot ? (
+                <div className="px-2 py-1 t-small">
+                  <PressureBudget snapshot={snapshot} group={page.group} />
+                </div>
               ) : null}
               <Table
                 label="duct runs"
@@ -435,61 +392,30 @@ export function DuctsLedger({
           end={
             <Pane
               kind="content"
-              title="plan"
+              title="assumptions and pressure"
               meta={active ? `run to ${active.terminal}` : undefined}
             >
-              {tree ? <MiniMap tree={tree} run={active} selected={selected} /> : pick}
+              {tree && snapshot ? (
+                <div className="flex flex-col gap-3">
+                  <NumericAssumptions snapshot={snapshot} group={page.group} work={work} />
+                  {snapshot.pressure ? (
+                    <PressureIssues
+                      pressure={snapshot.pressure}
+                      snapshot={snapshot}
+                      group={page.group}
+                      select={(id) => setPage({ selected: String(id), issue: "" })}
+                    />
+                  ) : null}
+                  <MiniMap tree={tree} run={active} selected={selected} />
+                </div>
+              ) : (
+                pick
+              )}
             </Pane>
           }
         />
       }
     />
-  );
-}
-
-/** The staged verdict of one issue, and its editor where a verdict can answer it. */
-function AssumptionCell({
-  issue,
-  work,
-}: {
-  issue: Issue;
-  work: { doc: DuctsRouteDocument | null; write: (patch: RouteStatePatch[]) => Promise<unknown> };
-}) {
-  const cell = work.doc?.assumptions[issue.id];
-  const staged = verdictAt(cell?.staged?.value);
-  const proposed = verdictAt(cell?.proposal?.value);
-  const choices = CHOICES[issue.kind];
-  if (!choices) {
-    const info = ISSUE_KINDS[issue.kind];
-    return (
-      <span className="text-ink-mute">
-        {info.blocks === "budgetable"
-          ? "needs an override value"
-          : info.blocks === "walkable"
-            ? "needs a structural answer"
-            : ""}
-      </span>
-    );
-  }
-  const options = [...choices, "unset" as const].map((value) => ({
-    value,
-    label: value,
-    title: CHOICE_TITLE[value],
-  }));
-  return (
-    <span className="flex flex-wrap items-center gap-1">
-      <Switcher<Choice>
-        ariaLabel={`assumption for ${issue.id}`}
-        options={options}
-        value={staged ?? "unset"}
-        onChange={(choice) => void work.write(verdictPatches(work.doc, issue.id, choice))}
-      />
-      {proposed && proposed !== staged ? (
-        <span data-tone="pea" title="Pea proposed this; choose it to stage it">
-          Pea: {proposed}
-        </span>
-      ) : null}
-    </span>
   );
 }
 

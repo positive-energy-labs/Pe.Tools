@@ -10,17 +10,23 @@ import { token } from "#/lib/token";
 import { VERDICT_INK } from "#/components/master-table/cells";
 import { ISSUE_KINDS, type Blocks } from "./issues";
 import type { DuctSnapshot } from "./readiness";
+import type { PressurePoint } from "./pressure";
 
 export type Segment = DuctSnapshot["segments"][number];
 export type DuctNode = DuctSnapshot["nodes"][number];
 export type Issue = DuctSnapshot["issues"][number];
 
 /** What an encoding may read about one drawn segment. */
-export interface SegmentFacts {
-  segment: Segment;
+export interface EncodingFacts {
+  segment?: Segment;
   /** Pass-1 flow (derived), or null where pass 1 did not reach. */
-  derivedCfm: number | null;
+  derivedCfm?: number | null;
   issues: readonly Issue[];
+  pressure?: PressurePoint;
+}
+export interface SegmentFacts extends EncodingFacts {
+  segment: Segment;
+  derivedCfm: number | null;
 }
 
 export interface Stroke {
@@ -43,7 +49,8 @@ export interface Encoding {
   layer: string | null;
   /** Bins in legend order. */
   bins: Record<string, Bin>;
-  bin: (facts: SegmentFacts) => string;
+  bin: (facts: EncodingFacts) => string;
+  nodes?: boolean;
 }
 
 /** The registered dash classes (base.css), by role. */
@@ -64,7 +71,7 @@ function sequential(
   unit: string,
   edges: readonly number[],
   missing: string,
-  read: (facts: SegmentFacts) => number | null | undefined,
+  read: (facts: EncodingFacts) => number | null | undefined,
   digits = 0,
 ): Pick<Encoding, "bins" | "bin"> {
   const f = (n: number) => n.toFixed(digits);
@@ -178,7 +185,7 @@ export const ENCODINGS = {
       "fpm",
       [400, 700, 1000, 1500, 2000],
       "Revit reports no velocity: the segment is outside a calculated system",
-      ({ segment }) => segment.revit.velocityFpm,
+      ({ segment }) => segment?.revit.velocityFpm,
     ),
   },
   "revit-pressure-drop": {
@@ -190,7 +197,35 @@ export const ENCODINGS = {
       "in-wg",
       [0.005, 0.01, 0.02, 0.05],
       "Revit reports no pressure drop on this segment",
-      ({ segment }) => segment.revit.pressureDropInWg,
+      ({ segment }) => segment?.revit.pressureDropInWg,
+      3,
+    ),
+  },
+  "pressure-drop": {
+    label: "pressure drop",
+    says: "Solver duct interval losses summed per segment; maximum outlet loss per fitting. Inspect individual intervals and legs in facts. Partial results are labelled there.",
+    layer: null,
+    nodes: true,
+    ...sequential(
+      "viz-5",
+      "in-wg",
+      [0.005, 0.01, 0.02, 0.05],
+      "The solver has no local loss for this element",
+      ({ pressure }) => pressure?.drop,
+      3,
+    ),
+  },
+  "pressure-at-point": {
+    label: "pressure at point",
+    says: "Cumulative duct and fitting loss from the root to the farthest reached outlet of each element, excluding rated component drops. This is loss, not remaining static pressure.",
+    layer: null,
+    nodes: true,
+    ...sequential(
+      "viz-5",
+      "in-wg",
+      [0.02, 0.05, 0.1, 0.25],
+      "No solver terminal path establishes cumulative loss here",
+      ({ pressure }) => pressure?.atPoint,
       3,
     ),
   },
@@ -216,7 +251,7 @@ export const ENCODINGS = {
       },
     },
     bin: ({ segment, derivedCfm }) =>
-      segment.revit.flowCfm != null
+      segment?.revit.flowCfm != null
         ? "revit-reported"
         : derivedCfm != null
           ? "derived"
@@ -230,7 +265,7 @@ export const ENCODING_KEYS = Object.keys(ENCODINGS) as EncodingKey[];
 export const encodingOf = (key: string): Encoding =>
   ENCODINGS[(key in ENCODINGS ? key : "health") as EncodingKey];
 
-export const strokeOf = (encoding: Encoding, facts: SegmentFacts): Stroke =>
+export const strokeOf = (encoding: Encoding, facts: EncodingFacts): Stroke =>
   encoding.bins[encoding.bin(facts)]!.stroke;
 
 /** A node glyph's ink: its worst issue class under health, else plain. */

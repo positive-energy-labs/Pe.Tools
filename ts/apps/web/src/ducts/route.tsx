@@ -7,7 +7,7 @@
 import { useEffect, useMemo } from "react";
 
 import { Surface } from "#/components/lang/surface";
-import { SAVED, useDuctSnapshot } from "./host";
+import { SAVED, useDuctSnapshot, useSavedWork } from "./host";
 import { RouteShell, useRoute, useRouteThread } from "#/route";
 import { Ladder } from "#/route/ladder";
 import { useChooseTarget } from "#/route/shell";
@@ -64,7 +64,9 @@ export function DuctsRoute({
     handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
       ? handle.resolution.target.ref
       : null;
-  const { snapshot, error, pending } = useDuctSnapshot(doc, page.epoch, page.group, handle.work);
+  const savedWork = useSavedWork(page.group);
+  const work = SAVED ? savedWork : handle.work;
+  const { snapshot, error, pending } = useDuctSnapshot(doc, page.epoch, page.group, work);
 
   // The URL carries the view, subject, level, layers and selection, so a link lands on the same place.
   useEffect(() => {
@@ -90,8 +92,8 @@ export function DuctsRoute({
   }, [page.view, page.group, page.level, page.selected, page.issue, page.encoding, page.layers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ready = useMemo(
-    () => (snapshot ? readiness(snapshot, handle.work.doc) : {}),
-    [snapshot, handle.work.doc],
+    () => (snapshot ? readiness(snapshot, work.doc) : {}),
+    [snapshot, work.doc],
   );
   const groups = snapshot?.groups ?? [];
   const levels = snapshot?.levels ?? [];
@@ -109,7 +111,7 @@ export function DuctsRoute({
 
   const sentence = (
     <>
-      on <LadderPicker ladder={ladder} disabled={busy} />
+      on {SAVED ? "saved pressure fixture" : <LadderPicker ladder={ladder} disabled={busy} />}
       {", "}
       <Ladder
         levels={[
@@ -223,7 +225,7 @@ export function DuctsRoute({
           page={page}
           setPage={setPage}
           empty={empty}
-          work={{ doc: handle.work.doc, write: handle.work.write }}
+          work={{ doc: work.doc, write: work.write }}
         />
       ) : page.view === "plan" || page.view === "iso" ? (
         <DuctsSpatial

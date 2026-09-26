@@ -126,6 +126,26 @@ public sealed class DuctSnapshotReadingTests {
             Directory.CreateDirectory(output);
             File.WriteAllText(Path.Combine(output, "bounded-sizes.json"), JsonConvert.SerializeObject(summary, Formatting.Indented));
             File.WriteAllText(Path.Combine(output, "bounded-index.json"), Json(context));
+            // Browser fixtures use the production shaper, including staged assumptions. No client solver.
+            var scenarios = new List<object>();
+            foreach (var id in new[] { "g8079765", "g8761260", "g6293931" }) {
+                var group = snapshot.Groups.Single(g => g.Id == id);
+                var values = new Dictionary<string, DuctWorkAssumption>();
+                void Save() {
+                    var request = new DuctSnapshotRequest { Group = id, Context = true,
+                        Assumptions = new(scenarios.Count, new Dictionary<string, DuctWorkAssumption>(values)) };
+                    var response = DuctSnapshotReader.Read(snapshot, request);
+                    Assert.That(response.Pressure!.AssumptionRevision, Is.EqualTo(request.Assumptions.Revision));
+                    scenarios.Add(new { request, response });
+                }
+                Save();
+                foreach (var root in group.RootIds) {
+                    values.Clear();
+                    values[$"fan-static:{root}"] = new(DuctAssumptionKind.FanStatic, InWg: .5);
+                    Save();
+                }
+            }
+            File.WriteAllText(Path.Combine(output, "pressure-fixtures.json"), Json(new { index = context, scenarios }));
         }
         TestContext.WriteLine(Json(summary));
         Assert.That(Bytes(index), Is.LessThan(200_000), "Pea's default document index must remain bounded.");
