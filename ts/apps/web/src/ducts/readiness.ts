@@ -12,7 +12,12 @@ import type { DuctsSnapshot } from "@pe/host-contracts/generated";
 
 import { ISSUE_KINDS } from "./issues";
 
-export type DuctSnapshot = DuctsSnapshot.Res.Response;
+export type DuctSnapshot = DuctsSnapshot.Res.Response & {
+  nodes: NonNullable<DuctsSnapshot.Res.Response["nodes"]>;
+  segments: NonNullable<DuctsSnapshot.Res.Response["segments"]>;
+  flows: NonNullable<DuctsSnapshot.Res.Response["flows"]>;
+  issues: NonNullable<DuctsSnapshot.Res.Response["issues"]>;
+};
 type DuctIssue = DuctSnapshot["issues"][number];
 type Readiness = "blocked" | "walkable" | "budgetable";
 
@@ -32,7 +37,6 @@ export function readiness(
   snapshot: DuctSnapshot,
   doc: DuctsRouteDocument | null,
 ): Record<string, GroupReadiness> {
-  const issues = new Map(snapshot.issues.map((issue) => [issue.id, issue]));
   const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
   const segments = new Map(snapshot.segments.map((segment) => [segment.id, segment]));
   const verdict = (issue: DuctIssue) => {
@@ -70,10 +74,19 @@ export function readiness(
 
   return Object.fromEntries(
     snapshot.groups.map((group) => {
-      const own = group.issueIds.flatMap((id) => issues.get(id) ?? []);
+      const own = snapshot.issues.filter((issue) => issue.groupId === group.id);
       const walk = own.filter(open("walkable")).map((issue) => issue.id);
       const budget = own.filter(open("budgetable")).map((issue) => issue.id);
-      const level: Readiness = walk.length ? "blocked" : budget.length ? "walkable" : "budgetable";
+      const count = (blocks: "walkable" | "budgetable") =>
+        group.issueCounts
+          .filter((c) => ISSUE_KINDS[c.kind].blocks === blocks)
+          .reduce((n, c) => n + c.open, 0);
+      const loaded = snapshot.group === group.id;
+      const level: Readiness = (loaded ? walk.length : count("walkable"))
+        ? "blocked"
+        : (loaded ? budget.length : count("budgetable"))
+          ? "walkable"
+          : "budgetable";
       return [group.id, { level, walk, budget }];
     }),
   );

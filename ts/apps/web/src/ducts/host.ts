@@ -1,13 +1,15 @@
 /**
  * The one place /ducts reaches the host: the `ducts.snapshot` read, and its dev-only saved source.
- * `PE_DUCTS_FIXTURE=<snapshot.json>` at `vp dev` (vite.config.ts) makes the route read a saved
- * snapshot instead of the host, so a view can be built with no Revit.
+ * `PE_DUCTS_FIXTURE=<bounded-reading.json>` at `vp dev` makes the route read a saved index or
+ * group reading instead of the host, so that reading can be viewed with no Revit.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { DuctsRouteDocument } from "@pe/agent-contracts";
+import type { DuctsSnapshot } from "@pe/host-contracts/generated";
 
-import { useHostOp } from "#/readings";
+import { useHostCall } from "#/readings";
+import { callHostRpc } from "#/host/client";
 import { NATIVE_READ_WAIT_S } from "#/route/waits";
-import type { DuctSnapshot } from "./readiness";
 
 /** The saved snapshot's URL in dev, else undefined. */
 export const SAVED: string | undefined = import.meta.env.DEV
@@ -15,14 +17,14 @@ export const SAVED: string | undefined = import.meta.env.DEV
   : undefined;
 
 function useSaved(epoch: number) {
-  const [state, setState] = useState<{ data?: DuctSnapshot; error?: string }>({});
+  const [state, setState] = useState<{ data?: DuctsSnapshot.Res.Response; error?: string }>({});
   useEffect(() => {
     if (!SAVED) return;
     let live = true;
     fetch(SAVED)
       .then((response) => (response.ok ? response.json() : Promise.reject(`${response.status}`)))
       .then(
-        (data: DuctSnapshot) => live && setState({ data }),
+        (data: DuctsSnapshot.Res.Response) => live && setState({ data }),
         (error: unknown) =>
           live && setState({ error: `saved snapshot ${SAVED}: ${String(error)}` }),
       );
@@ -42,23 +44,68 @@ export function useDuctSnapshot(
   doc: { session: string; openId: string } | null,
   epoch: number,
   group: string,
+  work: { doc: DuctsRouteDocument | null; revision: number | null; current: boolean },
 ) {
-  const call = useHostOp(
-    "ducts.snapshot",
-    {},
-    {
-      bridgeSessionId: doc?.session,
-      openDocumentId: doc?.openId,
-      enabled: doc !== null && !SAVED,
-      waitSeconds: NATIVE_READ_WAIT_S,
+  const request: DuctsSnapshot.Req.Request = {
+    ...(group ? { group } : {}),
+    context: true,
+    assumptions: {
+      revision: work.revision ?? 0,
+      values: Object.fromEntries(
+        Object.entries(work.doc?.assumptions ?? {}).flatMap(([key, cell]) =>
+          cell.staged ? [[key, cell.staged.value]] : [],
+        ),
+      ),
     },
+  };
+  const call = useHostCall(
+    async (signal) => {
+      const result = await callHostRpc("ducts.snapshot", request, {
+        bridgeSessionId: doc?.session,
+        openDocumentId: doc?.openId,
+        signal,
+      });
+      if (
+        result.assumptionRevision !== request.assumptions!.revision ||
+        (result.group ?? "") !== group ||
+        (group && result.pressure?.assumptionRevision !== request.assumptions!.revision)
+      )
+        throw Error("The ducts reading does not match the requested group and Work revision.");
+      return result;
+    },
+    [doc?.session, doc?.openId, JSON.stringify(request), epoch, work.current],
+    doc !== null && work.current && !SAVED,
+    NATIVE_READ_WAIT_S,
   );
-  // A new target is a new request (its deps change); a new subject or a refresh reads again.
-  const { refresh } = call;
-  useEffect(() => {
-    if (epoch > 0 || group) refresh();
-  }, [epoch, group, refresh]);
   const saved = useSaved(epoch);
-  if (SAVED) return saved;
-  return { snapshot: call.data ?? null, error: call.error?.message ?? null, pending: call.pending };
+  // Keep only the index while a group changes, so another group remains selectable during the read.
+  // A target or Work change drops it immediately, including A -> B -> A lifetimes.
+  const indexKey = JSON.stringify([doc, request.assumptions, work.current]);
+  const index = useRef<{ key: string; data?: DuctsSnapshot.Res.Response }>({ key: indexKey });
+  if (index.current.key !== indexKey) index.current = { key: indexKey };
+  if (call.data) {
+    const { document, levels, layers, groups, assumptionRevision } = call.data;
+    index.current.data = { document, levels, layers, groups, assumptionRevision };
+  }
+  const data = SAVED
+    ? saved.snapshot
+    : (call.data ?? (call.pending ? index.current.data : undefined));
+  const snapshot = useMemo(
+    () =>
+      data
+        ? {
+            ...data,
+            nodes: data.nodes ?? [],
+            segments: data.segments ?? [],
+            flows: data.flows ?? [],
+            issues: data.issues ?? [],
+          }
+        : null,
+    [data],
+  );
+  return {
+    snapshot,
+    error: SAVED ? saved.error : (call.error?.message ?? null),
+    pending: SAVED ? saved.pending : call.pending,
+  };
 }

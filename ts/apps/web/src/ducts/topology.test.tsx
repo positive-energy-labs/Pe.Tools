@@ -101,6 +101,7 @@ const flow = (cfm: number) =>
 
 const OPEN = "open-end:g1:9:1";
 const snapshot = {
+  group: "g1",
   document: { title: "t", readAt: "2026-09-26T00:00:00Z", elapsedMs: 1 },
   levels: [],
   groups: [
@@ -112,7 +113,10 @@ const snapshot = {
       terminalCount: 2,
       elementCount: 9,
       loops: 0,
-      issueIds: [OPEN],
+      rootNames: ["AHU"],
+      segmentCount: 5,
+      designCfm: 250,
+      issueCounts: [{ kind: "open-end", count: 1, open: 1 }],
     },
   ],
   nodes: [

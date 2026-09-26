@@ -99,8 +99,8 @@ const GROUP_COLUMNS: Column<GroupRow>[] = [
     label: "issues",
     right: true,
     width: "w-16",
-    cell: (g) => g.issueIds.length,
-    sort: (g) => g.issueIds.length,
+    cell: (g) => g.issueCounts.reduce((n, c) => n + c.count, 0),
+    sort: (g) => g.issueCounts.reduce((n, c) => n + c.count, 0),
   },
 ];
 

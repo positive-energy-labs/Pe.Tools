@@ -35,7 +35,7 @@ public static class DuctSnapshots {
 
         var analysis = DuctNetwork.Analyze(nodes, segments);
         return new DuctSnapshotData(
-            new DuctDocument(doc.Title, readAt, clock.ElapsedMilliseconds),
+            new DuctDocument(doc.Title, readAt, clock.ElapsedMilliseconds) { FrictionMethod = FrictionMethod(doc) },
             levels,
             analysis.Groups,
             analysis.Nodes,
@@ -85,6 +85,14 @@ public static class DuctSnapshots {
 
     private static DuctNode Node(Document doc, Element e, DuctNodeKind kind) {
         var fi = e as FamilyInstance;
+        var connectors = Hvac(e).Select(Connector).ToList();
+        var partType = (fi?.MEPModel as MechanicalFitting)?.PartType.ToString();
+        var geometry = kind is DuctNodeKind.Fitting or DuctNodeKind.Cap
+            ? DuctFittingGeometry.Classify(partType, fi?.Symbol?.FamilyName, fi?.Symbol?.Name, connectors,
+                GeometryParameter(e, "Angle", SpecTypeId.Angle, 180 / Math.PI),
+                GeometryParameter(e, "Center Radius", SpecTypeId.Length),
+                GeometryParameter(e, "Duct Radius", SpecTypeId.Length))
+            : null;
         var facts = new List<DuctFact>();
         switch (kind) {
             case DuctNodeKind.Terminal:
@@ -98,8 +106,8 @@ public static class DuctSnapshots {
                 facts.Add(Fact(DuctNetwork.ExternalStatic, Converted(Named(e, "PE_M_Fan_ExternalStaticPressure"), UnitTypeId.InchesOfWater60DegreesFahrenheit), "in-wg", DuctProvenance.DesignerStated));
                 facts.Add(Fact("fanFlow", Converted(Named(e, "PE_M_Fan_AirFlow"), UnitTypeId.CubicFeetPerMinute), "cfm", DuctProvenance.DesignerStated));
                 break;
-            case DuctNodeKind.Fitting when e.LookupParameter("Angle") is { HasValue: true, StorageType: StorageType.Double } angle:
-                facts.Add(new DuctFact("angle", R(angle.AsDouble() * 180 / Math.PI), null, "deg", DuctProvenance.Geometry));
+            case DuctNodeKind.Fitting when geometry?.AngleDegrees.Value is { } angle:
+                facts.Add(new DuctFact("angle", R(angle), null, "deg", DuctProvenance.Geometry));
                 break;
         }
         var levelId = e.LevelId != ElementId.InvalidElementId
@@ -111,14 +119,31 @@ public static class DuctSnapshots {
             e.Category?.Name ?? "",
             fi?.Symbol?.FamilyName,
             fi?.Symbol?.Name,
-            (fi?.MEPModel as MechanicalFitting)?.PartType.ToString(),
+            partType,
             levelId is { } id && id != ElementId.InvalidElementId ? id.Value : null,
             Where(e),
             null,
             Text(e, BuiltInParameter.RBS_SYSTEM_NAME_PARAM),
             Text(e, BuiltInParameter.RBS_SYSTEM_CLASSIFICATION_PARAM),
-            Hvac(e).Select(Connector).ToList(),
-            facts.Where(f => f.Value is not null || f.Text is not null).ToList());
+            connectors,
+            facts.Where(f => f.Value is not null || f.Text is not null).ToList()) { FittingGeometry = geometry };
+    }
+
+    private static DuctEvidence<double?> GeometryParameter(Element e, string name, ForgeTypeId spec, double scale = 1) {
+        var own = e.LookupParameter(name);
+        var parameter = own is { HasValue: true } ? own : (e as FamilyInstance)?.Symbol?.LookupParameter(name);
+        var source = (ReferenceEquals(parameter, own) ? "instance." : "type.") + name;
+        return parameter is { HasValue: true, StorageType: StorageType.Double } && parameter.Definition.GetDataType() == spec
+            ? new(parameter.AsDouble() * scale, DuctProvenance.Geometry, source)
+            : new(null, DuctProvenance.Geometry, name + " absent or wrong parameter spec");
+    }
+
+    private static DuctFrictionMethod FrictionMethod(Document doc) {
+        const string query = "DuctSettings.GetDuctSettings(doc).GetPressLossCalculationServerInfo()";
+        var info = Try(() => DuctSettings.GetDuctSettings(doc).GetPressLossCalculationServerInfo());
+        return info is null
+            ? new(null, null, null, DuctProvenance.RevitReported, query + " unavailable")
+            : new(info.ServerId.ToString(), info.ServerName, info.Description, DuctProvenance.RevitReported, query);
     }
 
     private static IReadOnlyList<DuctLayer> Layers(DuctNetwork.Analysis a) {

@@ -21,6 +21,7 @@ const issue = (id: string, kind: DuctSnapshot["issues"][number]["kind"], element
 
 /** One supply group off AHU 9: an open end, an accessory with no drop, an AHU with no fan static. */
 const snapshot = {
+  group: "g1",
   document: { title: "t", readAt: "2026-09-26T00:00:00Z", elapsedMs: 1 },
   levels: [],
   groups: [
@@ -32,7 +33,10 @@ const snapshot = {
       terminalCount: 1,
       elementCount: 4,
       loops: 0,
-      issueIds: ["open-end:g1:2:1", "no-component-drop:g1:3", "no-fan-static:g1:9"],
+      rootNames: ["AHU"],
+      segmentCount: 0,
+      designCfm: 0,
+      issueCounts: [],
     },
   ],
   nodes: [

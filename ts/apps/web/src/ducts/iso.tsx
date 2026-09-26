@@ -33,7 +33,7 @@ export const isoProject = (yaw: number, pivot: readonly number[], stretch: numbe
   };
 };
 
-const centre = (segments: readonly Segment[]) => {
+const centre = (segments: readonly Pick<Segment, "polyline">[]) => {
   const lo = [Infinity, Infinity, Infinity];
   const hi = [-Infinity, -Infinity, -Infinity];
   for (const segment of segments)
@@ -42,11 +42,11 @@ const centre = (segments: readonly Segment[]) => {
         lo[i] = Math.min(lo[i]!, point[i]!);
         hi[i] = Math.max(hi[i]!, point[i]!);
       }
-  return lo.map((v, i) => (v + hi[i]!) / 2);
+  return lo.map((v, i) => (Number.isFinite(v) ? (v + hi[i]!) / 2 : 0));
 };
 
 /** The plan grid the ducts run on, in degrees mod 90: the length-weighted mean of 4θ. */
-export const gridAngle = (segments: readonly Segment[]) => {
+export const gridAngle = (segments: readonly Pick<Segment, "polyline">[]) => {
   let c = 0;
   let s = 0;
   for (const { polyline } of segments) {
@@ -70,20 +70,14 @@ export function useIso(index: DuctIndex, page: Pick<DuctsPage, "group">): Spatia
   const drag = useRef({ dx: 0, frame: 0 });
   const [stretch, setStretch] = useState<number>(Z_STRETCH[0]);
 
-  const scene = useMemo(() => {
-    const byLevel = new Map<number | null, Segment[]>();
-    for (const segment of index.snapshot.segments) {
-      if (segment.groupId === page.group) continue;
-      const key = segment.levelId ?? null;
-      const list = byLevel.get(key);
-      if (list) list.push(segment);
-      else byLevel.set(key, [segment]);
-    }
-    return sceneOf(index, page.group, () => true, [...byLevel.values()]);
-  }, [index, page.group]);
+  const scene = useMemo(() => sceneOf(index, page.group, () => true), [index, page.group]);
   const { pivot, grid } = useMemo(() => {
     const own = index.segmentsOf.get(page.group);
-    const pool = own?.length ? own : index.snapshot.segments;
+    const pool = own?.length
+      ? own
+      : (index.snapshot.context ?? []).flatMap((level) =>
+          level.polylines.map((polyline) => ({ polyline })),
+        );
     return { pivot: centre(pool), grid: gridAngle(pool) };
   }, [index, page.group]);
   const yaw = 45 - grid + turned;

@@ -58,18 +58,17 @@ const underlay = (box: Bounds2) => <Grid box={box} />;
 export function usePlan(index: DuctIndex, page: Pick<DuctsPage, "group" | "level">): SpatialView {
   return useMemo(() => {
     const own = index.segmentsOf.get(page.group) ?? [];
-    const pool = own.length ? own : index.snapshot.segments;
     const tally = new Map<number, number>();
-    for (const segment of pool)
+    for (const segment of own)
       if (segment.levelId != null)
         tally.set(segment.levelId, (tally.get(segment.levelId) ?? 0) + 1);
+    if (!own.length)
+      for (const level of index.snapshot.context ?? [])
+        if (level.levelId != null) tally.set(level.levelId, level.polylines.length);
     const busiest = [...tally].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
     const levelId = page.level ? Number(page.level) : busiest;
     const level = index.levels.find((item) => item.id === levelId) ?? null;
-    const context = index.snapshot.segments.filter(
-      (segment) => segment.levelId === levelId && segment.groupId !== page.group,
-    );
-    const scene = sceneOf(index, page.group, (id) => id === levelId, [context]);
+    const scene = sceneOf(index, page.group, (id) => id === levelId);
     const elsewhere = own.length - scene.segments.length;
     return {
       label: "plan",

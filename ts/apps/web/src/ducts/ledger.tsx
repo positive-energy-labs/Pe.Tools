@@ -5,7 +5,7 @@
  * drawn dark. Assumptions stage into the `assumptions` Work only (Pea may propose the same
  * keys); nothing is written to Revit, and readiness re-derives from what is staged.
  */
-import { useMemo } from "react";
+import { useContext, useMemo } from "react";
 import {
   transitionPatches,
   type DuctAssumption,
@@ -20,11 +20,12 @@ import { Switcher } from "#/components/lang/switcher";
 import type { Column } from "#/components/master-table/model";
 import { Table } from "#/components/master-table/table";
 import { tokenRef } from "#/lib/token";
+import { ChatHosted } from "#/route/situation-ladder";
 import { ISSUE_KINDS, IssueLegend, issueVerdict, type Blocks, type IssueKind } from "./issues";
 import type { DuctsPage } from "./manifest";
 import type { DuctSnapshot, GroupReadiness } from "./readiness";
 import { READY } from "./tables";
-import { groupTree, runsOf, terminalCfm, type GroupTree, type Run } from "./topology";
+import { groupTree, runsOf, type GroupTree, type Run } from "./topology";
 
 type Issue = DuctSnapshot["issues"][number];
 type Verdict = Extract<DuctAssumption, { kind: "verdict" }>["verdict"];
@@ -42,9 +43,7 @@ const KIND_ORDER = (Object.keys(ISSUE_KINDS) as IssueKind[]).sort(
 );
 
 /** Issue counts by kind, each in its kind's tone: `3 open end · 1 loop`. */
-function KindCounts({ issues }: { issues: readonly Issue[] }) {
-  const counts = new Map<IssueKind, number>();
-  for (const issue of issues) counts.set(issue.kind, (counts.get(issue.kind) ?? 0) + 1);
+function KindCounts({ counts }: { counts: ReadonlyMap<IssueKind, number> }) {
   const kinds = KIND_ORDER.filter((kind) => counts.has(kind));
   if (!kinds.length) return <span className="text-ink-mute">none</span>;
   return (
@@ -58,6 +57,12 @@ function KindCounts({ issues }: { issues: readonly Issue[] }) {
     </span>
   );
 }
+
+const countIssues = (issues: readonly Issue[]) => {
+  const counts = new Map<IssueKind, number>();
+  for (const issue of issues) counts.set(issue.kind, (counts.get(issue.kind) ?? 0) + 1);
+  return counts;
+};
 
 /** The verdicts an issue kind can take: open ends all three; the rest that `ignore` resolves. */
 const CHOICES: Partial<Record<IssueKind, readonly Verdict[]>> = {
@@ -94,7 +99,6 @@ type GroupRow = DuctSnapshot["groups"][number] & {
   readiness: GroupReadiness;
   cfm: number;
   longestFt: number | null;
-  own: Issue[];
 };
 
 export function DuctsLedger({
@@ -112,36 +116,32 @@ export function DuctsLedger({
   empty: { says: string; exit: string } | null;
   work: { doc: DuctsRouteDocument | null; write: (patch: RouteStatePatch[]) => Promise<unknown> };
 }) {
+  const hosted = useContext(ChatHosted);
   const issuesByGroup = useMemo(() => {
     const map = new Map<string, Issue[]>();
     for (const issue of snapshot?.issues ?? [])
       map.set(issue.groupId, [...(map.get(issue.groupId) ?? []), issue]);
     return map;
   }, [snapshot]);
-  // Terminal cfm and longest run per group: one tree per group, built once per snapshot.
-  const trees = useMemo(() => {
-    const map = new Map<string, GroupTree>();
-    for (const g of snapshot?.groups ?? []) map.set(g.id, groupTree(snapshot!, g.id));
-    return map;
-  }, [snapshot]);
+  const tree = useMemo(
+    () => (snapshot?.group === page.group && page.group ? groupTree(snapshot, page.group) : null),
+    [snapshot, page.group],
+  );
   const groups = useMemo<GroupRow[]>(
     () =>
       (snapshot?.groups ?? []).map((g) => {
-        const tree = trees.get(g.id)!;
         return {
           ...g,
           readiness: ready[g.id]!,
-          cfm: tree.terminals.reduce(
-            (sum, t) => sum + (terminalCfm(tree.parts.get(t)!.node) ?? 0),
-            0,
-          ),
-          longestFt: tree.longest.length ? tree.dist.get(tree.longest.at(-1)!)! : null,
-          own: issuesByGroup.get(g.id) ?? [],
+          cfm: g.designCfm,
+          longestFt:
+            g.id === page.group && tree?.longest.length
+              ? tree.dist.get(tree.longest.at(-1)!)!
+              : null,
         };
       }),
-    [snapshot, trees, ready, issuesByGroup],
+    [snapshot, tree, ready, page.group],
   );
-  const tree = page.group ? (trees.get(page.group) ?? null) : null;
   const runs = useMemo(() => (tree ? runsOf(tree) : []), [tree]);
   const selected = page.selected ? Number(page.selected) : null;
   const active =
@@ -209,8 +209,8 @@ export function DuctsLedger({
     {
       key: "issues",
       label: "issues by kind",
-      cell: (g) => <KindCounts issues={g.own} />,
-      sort: (g) => g.own.length,
+      cell: (g) => <KindCounts counts={new Map(g.issueCounts.map((c) => [c.kind, c.count]))} />,
+      sort: (g) => g.issueCounts.reduce((n, c) => n + c.count, 0),
     },
   ];
 
@@ -265,7 +265,7 @@ export function DuctsLedger({
     {
       key: "issues",
       label: "issues on the run",
-      cell: (r) => <KindCounts issues={r.issues} />,
+      cell: (r) => <KindCounts counts={countIssues(r.issues)} />,
       sort: (r) => r.issues.length,
     },
   ];
@@ -337,13 +337,14 @@ export function DuctsLedger({
       }}
       start={
         <PaneSplit
-          axis="horizontal"
+          axis={hosted ? "vertical" : "horizontal"}
           grow
           resize={{
             target: "end",
-            defaultSize: 760,
-            minSize: 360,
-            persist: "pe.ducts.ledgerRunsWidth",
+            defaultSize: hosted ? 240 : 760,
+            minSize: hosted ? 120 : 360,
+            minOtherSize: 120,
+            persist: hosted ? undefined : "pe.ducts.ledgerRunsWidth",
           }}
           start={
             <Pane
@@ -400,13 +401,14 @@ export function DuctsLedger({
       }
       end={
         <PaneSplit
-          axis="horizontal"
+          axis={hosted ? "vertical" : "horizontal"}
           grow
           resize={{
             target: "end",
-            defaultSize: 360,
-            minSize: 200,
-            persist: "pe.ducts.ledgerMapWidth",
+            defaultSize: hosted ? 120 : 360,
+            minSize: hosted ? 80 : 200,
+            minOtherSize: 160,
+            persist: hosted ? undefined : "pe.ducts.ledgerMapWidth",
           }}
           start={
             <Pane
@@ -475,7 +477,7 @@ function AssumptionCell({
     title: CHOICE_TITLE[value],
   }));
   return (
-    <span className="flex items-center gap-1">
+    <span className="flex flex-wrap items-center gap-1">
       <Switcher<Choice>
         ariaLabel={`assumption for ${issue.id}`}
         options={options}

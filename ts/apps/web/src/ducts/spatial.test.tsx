@@ -83,6 +83,7 @@ const issues: Issue[] = KINDS.map((kind, i) => ({
 }));
 
 const slice = {
+  group: "g1",
   document: { title: "slice", readAt: "2026-09-26T00:00:00Z", elapsedMs: 1 },
   levels: [
     { id: L1, name: "Level 1", elevationFt: 0 },
@@ -97,7 +98,10 @@ const slice = {
       terminalCount: 1,
       elementCount: 9,
       loops: 0,
-      issueIds: issues.map((issue) => issue.id),
+      rootNames: ["AHU"],
+      segmentCount: 4,
+      designCfm: 150,
+      issueCounts: issues.map((issue) => ({ kind: issue.kind, count: 1, open: 1 })),
     },
     {
       id: "g2",
@@ -107,7 +111,10 @@ const slice = {
       terminalCount: 0,
       elementCount: 1,
       loops: 0,
-      issueIds: [],
+      rootNames: [],
+      segmentCount: 0,
+      designCfm: 0,
+      issueCounts: [],
     },
   ],
   nodes: (["equipment", "terminal", "fitting", "accessory", "cap"] as const).map((kind, i) => ({
@@ -125,7 +132,17 @@ const slice = {
     segment(101, [20, 0, 1], [20, 20, 1]),
     segment(102, [20, 20, 1], [20, 20, 13], { lengthFt: 12 }),
     segment(103, [20, 20, 13], [40, 20, 13], { levelId: L2 }),
-    segment(500, [0, 40, 1], [30, 40, 1], { groupId: "g2", systemName: "RA 1" }),
+  ],
+  context: [
+    {
+      levelId: L1,
+      polylines: [
+        [
+          [0, 40, 1],
+          [30, 40, 1],
+        ],
+      ],
+    },
   ],
   flows: [{ segmentId: 101, cfm: 150, provenance: "derived" }],
   issues,

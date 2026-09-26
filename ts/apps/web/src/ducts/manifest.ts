@@ -1,5 +1,5 @@
 /**
- * The static /ducts contract: read every duct network of one document, choose one as the subject,
+ * The static /ducts contract: list a document's duct groups, choose one as the subject,
  * and stage the assumptions that make it solvable. Read-only toward Revit: the one fetch verb is
  * `refresh`, the one Reading is `ducts` (`ducts.snapshot`), and Work holds assumptions only.
  * Readiness under those assumptions is derived (`readiness.ts`), never stored.
@@ -55,7 +55,7 @@ export const manifest = defineRoute<DuctsRouteDocument, DuctsReading, DuctsPage,
       },
     },
   ],
-  // The snapshot is one host read the route owns (`route.tsx`), keyed on target, subject and epoch.
+  // The host read keys on the document lifetime, group, Work revision and refresh epoch.
   readings: { ducts: () => null },
   page: ductsPageSchema,
   stages: DUCTS_STAGES,

@@ -35,7 +35,7 @@ export interface Scene {
   /** Issues with a point; each is one marker. */
   issues: readonly Issue[];
   /** Faint context, one entry per level: the other groups' segments there. */
-  context: readonly (readonly Segment[])[];
+  context: readonly (readonly Pick<Segment, "polyline">[])[];
 }
 
 type View = { scale: number; tx: number; ty: number };
@@ -47,10 +47,9 @@ const RISER_FT = 0.25;
 const GLYPH = 4;
 const MARK = 5;
 
-const d = (segments: readonly Segment[], project: Project, skip?: (s: Segment) => boolean) => {
+const d = (segments: readonly Pick<Segment, "polyline">[], project: Project) => {
   let out = "";
   for (const segment of segments) {
-    if (skip?.(segment)) continue;
     segment.polyline.forEach((point, i) => {
       const [x, y] = project(point);
       out += `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`;
@@ -64,8 +63,6 @@ const span = (segment: Segment, project: Project) => {
   const b = project(segment.polyline.at(-1)!);
   return Math.hypot(b[0] - a[0], b[1] - a[1]);
 };
-/** Context is decimated: runs under 2 ft (stubs, fitting-to-fitting pieces) never draw faint. */
-const tiny = (segment: Segment) => segment.lengthFt < 2;
 
 const fitView = (box: Bounds2, size: Viewport2): View => {
   const w = Math.max(box.maxX - box.minX, 1);
@@ -217,7 +214,7 @@ export function DuctDrawing({
         riser: riser ? project(facts.segment.polyline[0]!) : null,
       };
     });
-    const context = scene.context.map((level) => d(level, project, tiny));
+    const context = scene.context.map((level) => d(level, project));
     const nodes = scene.nodes.map((facts) => ({
       facts,
       at: project(facts.node.point),

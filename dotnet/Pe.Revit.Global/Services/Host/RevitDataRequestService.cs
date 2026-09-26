@@ -82,9 +82,15 @@ internal sealed class RevitDataRequestService {
     private static RoomsSnapshotData GetRoomsSnapshotCore(NoRequest _, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, Rooms.Snapshot);
 
-    [Op("ducts.snapshot", Does = "Read every duct network in the project: ducts, flex, fittings, accessories, terminals and HVAC equipment with their connectors, grouped by topology with equipment cut out, plus pass-1 terminal flow, issues (open ends, loops, stubs, roots, missing flow, fan static and component drops) and the query behind each layer. Read-only.", Title = "Get Duct Snapshot", Finds = ["ducts", "snapshot", "networks", "hvac", "connectors", "flow", "pressure"], Cost = OpCost.Bounded)]
-    private static DuctSnapshotData GetDuctSnapshotCore(NoRequest _, ProjectDocument activeDocument) =>
-        Lib.Mep.DuctSnapshots.Snapshot(activeDocument.Value);
+    [Op("ducts.snapshot", Does = "Call without group to list groups; call with group to inspect one. The default is a compact document index with counts, readiness facts and bounds, without elements or pressure. A group adds only its nodes, segments, flows, issues and Colebrook pressure. Optional assumptions {revision, values} are staged Work only; the reading and pressure echo the revision. context:true adds decimated geometry for web views; agents should omit context. Read-only.", Title = "Get Duct Snapshot", Finds = ["ducts", "snapshot", "networks", "hvac", "connectors", "flow", "pressure"], Cost = OpCost.Bounded)]
+    private static DuctSnapshotReading GetDuctSnapshotCore(DuctSnapshotRequest request, ProjectDocument activeDocument) {
+        var snapshot = Lib.Mep.DuctSnapshots.Snapshot(activeDocument.Value);
+        try {
+            return DuctSnapshotReader.Read(snapshot, request);
+        } catch (ArgumentException ex) {
+            throw BridgeOperationExceptions.BadRequest(ex.Message);
+        }
+    }
 
     [Op("rooms.trace",Does = "Read the solver's layer 1 for each zone on one plan view from a rooms.partition run, the newest when runId is absent: rails, network segments by kind, openings with their evidence, per-face facts before judgment, and accounting.", Title = "Get Rooms Solver Trace", Finds = ["rooms", "trace", "partition", "rails", "openings", "solver"], Cost = OpCost.Bounded)]
     private static RoomsTraceData GetRoomsTraceCore(RoomsTraceRequest request, ProjectDocument activeDocument) =>

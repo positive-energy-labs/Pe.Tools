@@ -63,7 +63,6 @@ export function sceneOf(
   index: DuctIndex,
   group: string,
   keepLevel: (levelId: number | null) => boolean,
-  context: readonly (readonly Segment[])[],
 ): Scene {
   const segments: SegmentFacts[] = (index.segmentsOf.get(group) ?? [])
     .filter((segment) => keepLevel(segment.levelId ?? null))
@@ -80,6 +79,9 @@ export function sceneOf(
         (issue) => issue.groupId === group && issue.point && keepLevel(index.levelOf(issue)),
       )
     : [];
+  const context = (index.snapshot.context ?? [])
+    .filter((level) => keepLevel(level.levelId ?? null))
+    .map((level) => level.polylines.map((polyline) => ({ polyline })));
   return { segments, nodes, issues, context };
 }
 

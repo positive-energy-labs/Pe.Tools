@@ -12,7 +12,7 @@ import { RouteShell, useRoute, useRouteThread } from "#/route";
 import { Ladder } from "#/route/ladder";
 import { useChooseTarget } from "#/route/shell";
 import { Situation } from "#/route/situation";
-import { useDocumentLadder } from "#/route/situation-ladder";
+import { LadderPicker, useDocumentLadder } from "#/route/situation-ladder";
 import { manifest, type DuctsPage } from "./manifest";
 import { readiness, type DuctSnapshot } from "./readiness";
 import { DuctsLedger } from "./ledger";
@@ -64,7 +64,7 @@ export function DuctsRoute({
     handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
       ? handle.resolution.target.ref
       : null;
-  const { snapshot, error, pending } = useDuctSnapshot(doc, page.epoch, page.group);
+  const { snapshot, error, pending } = useDuctSnapshot(doc, page.epoch, page.group, handle.work);
 
   // The URL carries the view, subject, level, layers and selection, so a link lands on the same place.
   useEffect(() => {
@@ -109,7 +109,7 @@ export function DuctsRoute({
 
   const sentence = (
     <>
-      on <Ladder levels={ladder.levels} disabled={busy} caution={ladder.lost} />
+      on <LadderPicker ladder={ladder} disabled={busy} />
       {", "}
       <Ladder
         levels={[

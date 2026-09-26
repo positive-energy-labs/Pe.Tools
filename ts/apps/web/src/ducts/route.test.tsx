@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /** Deterministic route proof: fixture transport, real route/page owner, head and all five views. */
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import {
   createMemoryHistory,
@@ -11,9 +11,16 @@ import {
 } from "@tanstack/react-router";
 import { ductsRouteState, readingKey, readingRequestSchema } from "@pe/agent-contracts";
 import { Route } from "#/routes/ducts";
+import { ChatHosted } from "#/route/situation-ladder";
+import type { DuctsSnapshot } from "@pe/host-contracts/generated";
 import type { DuctSnapshot } from "./readiness";
 
-const work = ductsRouteState.schema.parse({ assumptions: {} });
+let work = ductsRouteState.schema.parse({ assumptions: {} });
+let revision = 0;
+type Request = DuctsSnapshot.Req.Request;
+const requests: { request: Request; openId: string | null }[] = [];
+const workListeners = new Set<() => void>();
+let reply: (request: Request) => Promise<Response>;
 const links = [
   [100, 1],
   [1, 2],
@@ -35,6 +42,7 @@ const connectors = (id: number) =>
       connectedTo: { elementId: pair.find((other) => other !== id)!, connector: 0 },
     }));
 const snapshot: DuctSnapshot = {
+  group: "g1",
   document: { title: "Duct route slice", readAt: "2026-09-26T00:00:00Z", elapsedMs: 1 },
   levels: [{ id: 30, name: "Level 1", elevationFt: 0 }],
   groups: [
@@ -46,7 +54,23 @@ const snapshot: DuctSnapshot = {
       terminalCount: 2,
       elementCount: 6,
       loops: 0,
-      issueIds: [],
+      rootNames: [],
+      segmentCount: 0,
+      designCfm: 0,
+      issueCounts: [],
+    },
+    {
+      id: "g2",
+      rootIds: [],
+      rootNames: [],
+      classifications: [],
+      systemNames: [],
+      terminalCount: 0,
+      elementCount: 1,
+      segmentCount: 1,
+      designCfm: 0,
+      loops: 0,
+      issueCounts: [{ kind: "no-root", count: 1, open: 1 }],
     },
   ],
   nodes: [100, 2, 4, 6].map((id) => ({
@@ -81,6 +105,43 @@ const snapshot: DuctSnapshot = {
   layers: [],
 };
 
+const response = (request: Request): DuctsSnapshot.Res.Response => ({
+  document: snapshot.document,
+  groups: snapshot.groups,
+  levels: snapshot.levels,
+  layers: [],
+  assumptionRevision: request.assumptions?.revision,
+  context: [
+    {
+      levelId: 30,
+      polylines: [
+        [
+          [0, 20, 0],
+          [20, 20, 0],
+        ],
+      ],
+    },
+  ],
+  ...(request.group
+    ? {
+        group: request.group,
+        nodes: request.group === "g1" ? snapshot.nodes : [],
+        segments: request.group === "g1" ? snapshot.segments : [],
+        flows: [],
+        issues: [],
+        pressure: {
+          assumptionRevision: request.assumptions?.revision,
+          segments: [],
+          fittings: [],
+          terminals: [],
+          groups: [],
+          issues: [],
+          assumptionsUsed: [],
+        },
+      }
+    : {}),
+});
+
 const inventory = {
   sessions: [
     {
@@ -95,6 +156,11 @@ const inventory = {
 };
 
 beforeEach(() => {
+  work = ductsRouteState.schema.parse({ assumptions: {} });
+  revision = 0;
+  requests.length = 0;
+  workListeners.clear();
+  reply = async (request) => Response.json(response(request));
   // Fixture transport only: the route still resolves its target and reads through the production wire.
   vi.stubGlobal(
     "EventSource",
@@ -109,16 +175,23 @@ beforeEach(() => {
           const keys: unknown[] = JSON.parse(new URL(url).searchParams.get("keys")!);
           for (const raw of keys) {
             const request = readingRequestSchema.parse(raw);
-            const value =
-              request.kind === "inventory"
-                ? inventory
-                : request.kind === "work"
-                  ? { doc: work, revision: 0 }
-                  : undefined;
-            if (value !== undefined)
-              this.onmessage?.({
-                data: JSON.stringify({ kind: "snapshot", key: readingKey(request), value }),
+            const emit = () => {
+              const value =
+                request.kind === "inventory"
+                  ? inventory
+                  : request.kind === "work"
+                    ? { doc: work, revision }
+                    : undefined;
+              if (value !== undefined)
+                this.onmessage?.({
+                  data: JSON.stringify({ kind: "snapshot", key: readingKey(request), value }),
+                });
+            };
+            if (request.kind === "work")
+              workListeners.add(() => {
+                if (!this.closed) emit();
               });
+            emit();
           }
         });
       }
@@ -132,8 +205,11 @@ beforeEach(() => {
       url === "/call" &&
       typeof init?.body === "string" &&
       JSON.parse(init.body).key === "ducts.snapshot"
-    )
-      return Response.json(snapshot);
+    ) {
+      const request = JSON.parse(init.body).request as Request;
+      requests.push({ request, openId: new Headers(init.headers).get("x-pe-open-document-id") });
+      return reply(request);
+    }
     throw Error(`Unexpected fixture request: ${url}`);
   });
   vi.stubGlobal(
@@ -155,10 +231,16 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  inventory.sessions[0]!.openDocuments.splice(1);
   vi.unstubAllGlobals();
 });
 
-async function mount() {
+async function mount(
+  search = "&group=g1&view=iso",
+  hosted = false,
+  target = "slice",
+  thread = "fixture",
+) {
   const root = createRootRoute();
   const route = createRoute({
     getParentRoute: () => root,
@@ -169,14 +251,17 @@ async function mount() {
   const router = createRouter({
     routeTree: root.addChildren([route]),
     history: createMemoryHistory({
-      initialEntries: ["/ducts?target=slice&thread=fixture&group=g1&view=iso"],
+      initialEntries: [`/ducts?target=${target}&thread=${thread}${search}`],
     }),
   });
   await router.load();
-  const rendered = render(<RouterProvider router={router} />);
-  await waitFor(() =>
-    expect(rendered.container.querySelector('[data-segment="3"]')).not.toBeNull(),
+  const rendered = render(
+    <ChatHosted.Provider value={hosted}>
+      <RouterProvider router={router} />
+    </ChatHosted.Provider>,
   );
+  await waitFor(() => expect(requests.length).toBeGreaterThan(0));
+  await waitFor(() => expect(screen.queryByText("reading ducts…")).toBeNull());
   return { ...rendered, router };
 }
 
@@ -205,6 +290,133 @@ test("the route sentence, refresh and every view mount from the same snapshot", 
   }
   expect(router.state.location.search.group).toBe("g1");
 }, 20000);
+
+test("document reads an index with context; group picks, clear and refresh each read their scope", async () => {
+  const { container, router } = await mount("&view=iso");
+  expect(requests.at(-1)?.request).toEqual({
+    context: true,
+    assumptions: { revision: 0, values: {} },
+  });
+  expect(container.querySelector("[data-segment]")).toBeNull();
+  expect(container.querySelector("[data-context]")).not.toBeNull();
+  await view("ledger");
+  expect(screen.getByLabelText("duct groups ledger").textContent).toContain("no root");
+  fireEvent.click(
+    within(screen.getByLabelText("duct groups ledger")).getByText("g1").closest("tr")!,
+  );
+  await waitFor(() => expect(requests.at(-1)?.request.group).toBe("g1"));
+  await waitFor(() => expect(screen.getByLabelText("duct runs").textContent).toContain("4"));
+  fireEvent.click(
+    within(screen.getByLabelText("duct groups ledger")).getByText("g1").closest("tr")!,
+  );
+  await waitFor(() => expect(router.state.location.search.group ?? "").toBe(""));
+  await waitFor(() => expect(requests.at(-1)?.request.group).toBeUndefined());
+  const count = requests.length;
+  fireEvent.click(screen.getByRole("button", { name: /^refresh/ }));
+  await waitFor(() => expect(requests.length).toBe(count + 1));
+  expect(requests.at(-1)?.request.group).toBeUndefined();
+});
+
+test("a Work revision reads staged values only and fences an older response", async () => {
+  const { container } = await mount();
+  let release: (value: Response) => void = () => {};
+  reply = (request) =>
+    request.assumptions?.revision === 1
+      ? new Promise((resolve) => {
+          release = resolve;
+        })
+      : Promise.resolve(Response.json(response(request)));
+  work = ductsRouteState.schema.parse({
+    assumptions: {
+      "fan-static:100": { staged: { value: { kind: "fan-static", inWg: 0.5 } } },
+      "component-drop:AHU": { proposal: { value: { kind: "component-drop", inWg: 0.1 } } },
+    },
+  });
+  act(() => {
+    revision = 1;
+    workListeners.forEach((emit) => emit());
+  });
+  await waitFor(() =>
+    expect(requests.at(-1)?.request.assumptions).toEqual({
+      revision: 1,
+      values: { "fan-static:100": { kind: "fan-static", inWg: 0.5 } },
+    }),
+  );
+  const old = response(requests.at(-1)!.request);
+  act(() => {
+    revision = 2;
+    workListeners.forEach((emit) => emit());
+  });
+  await waitFor(() => expect(requests.at(-1)?.request.assumptions?.revision).toBe(2));
+  await waitFor(() => expect(container.querySelector('[data-segment="3"]')).not.toBeNull());
+  await act(async () =>
+    release(Response.json({ ...old, document: { ...old.document, elapsedMs: 999999 } })),
+  );
+  expect(screen.getByRole("region", { name: "Ducts route" }).textContent).not.toContain("999999");
+});
+
+test("a group change fences late geometry and the hosted sentence names its document", async () => {
+  const { container } = await mount("&view=ledger", true);
+  expect(screen.getByRole("region", { name: "Ducts route" }).textContent).toContain(
+    "on Duct route slice",
+  );
+  expect(container.querySelectorAll('[data-axis="horizontal"]')).toHaveLength(0);
+  let release: (value: Response) => void = () => {};
+  reply = (request) =>
+    request.group === "g1"
+      ? new Promise((resolve) => {
+          release = resolve;
+        })
+      : Promise.resolve(Response.json(response(request)));
+  fireEvent.click(
+    within(screen.getByLabelText("duct groups ledger")).getByText("g1").closest("tr")!,
+  );
+  await waitFor(() => expect(requests.at(-1)?.request.group).toBe("g1"));
+  const old = response(requests.at(-1)!.request);
+  fireEvent.click(
+    within(screen.getByLabelText("duct groups ledger")).getByText("g2").closest("tr")!,
+  );
+  await waitFor(() => expect(requests.at(-1)?.request.group).toBe("g2"));
+  await act(async () =>
+    release(Response.json({ ...old, document: { ...old.document, elapsedMs: 999999 } })),
+  );
+  expect(screen.getByRole("region", { name: "Ducts route" }).textContent).not.toContain("999999");
+  expect(screen.getByLabelText("duct runs").querySelector("[data-active]")).toBeNull();
+});
+
+test("an exact document lifetime change fences a pending read, including returning to the first document", async () => {
+  inventory.sessions[0]!.openDocuments.push({
+    openId: "doc2",
+    title: "Second document",
+    address: null,
+    isFamilyDocument: false,
+  });
+  const target = encodeURIComponent(
+    JSON.stringify({ kind: "open", ref: { session: "slice", openId: "doc" } }),
+  );
+  await mount("&group=g1&view=ledger", false, target, "");
+  let release: (value: Response) => void = () => {};
+  reply = () =>
+    new Promise((resolve) => {
+      release = resolve;
+    });
+  fireEvent.click(screen.getByRole("button", { name: /^refresh/ }));
+  await waitFor(() => expect(requests.length).toBe(2));
+  const old = response(requests.at(-1)!.request);
+  reply = async (request) => Response.json(response(request));
+  const pick = async (title: string) => {
+    fireEvent.click(screen.getByRole("button", { name: "Choose document" }));
+    fireEvent.click(await screen.findByRole("option", { name: new RegExp(title) }));
+  };
+  await pick("Second document");
+  await waitFor(() => expect(requests.at(-1)?.openId).toBe("doc2"));
+  await pick("Duct route slice");
+  await waitFor(() => expect(requests.at(-1)?.openId).toBe("doc"));
+  await act(async () =>
+    release(Response.json({ ...old, document: { ...old.document, elapsedMs: 999999 } })),
+  );
+  expect(screen.getByRole("region", { name: "Ducts route" }).textContent).not.toContain("999999");
+});
 
 test("page selection follows iso to tables and ledger, and a ledger run lights plan and iso", async () => {
   const { container, router } = await mount();
