@@ -111,7 +111,10 @@ export function findCapabilities(
   const filtered = rows.filter(
     (row) =>
       (query.kind === undefined || row.kind === query.kind) &&
-      (query.needs === undefined || row.needs === query.needs) &&
+      (query.needs === undefined ||
+        row.needs === query.needs ||
+        (query.needs === "document" &&
+          (row.needs === "project-document" || row.needs === "family-document"))) &&
       (query.mutates === undefined || row.mutates === query.mutates),
   );
   const scored = filtered

@@ -17,6 +17,18 @@ import { bodyText } from "./body-text.ts";
 
 const ops = [
   {
+    key: "ducts.snapshot",
+    description: "Read a duct group.",
+    needs: "project-document" as const,
+    intent: "Read" as const,
+  },
+  {
+    key: "family.snapshot",
+    description: "Read a family.",
+    needs: "family-document" as const,
+    intent: "Read" as const,
+  },
+  {
     key: "revit.catalog.loaded-families",
     displayName: "Loaded families",
     description: "Inventory of loaded families.",
@@ -143,6 +155,27 @@ test("pe_find maps every kind and ranks and filters visible rows", async () => {
       (row) => row.needs === "project-document",
     ),
   ).toBe(true);
+});
+
+test("document discovery includes project and family refinements, while specific needs remain exact", async () => {
+  const documents = (await find({ needs: "document" })).matches;
+  expect(documents.map((row) => row.key)).toEqual(
+    expect.arrayContaining(["op:ducts.snapshot", "op:family.snapshot", "op:scripting.execute"]),
+  );
+  expect(
+    documents.every((row) =>
+      ["document", "project-document", "family-document"].includes(row.needs),
+    ),
+  ).toBe(true);
+  for (const needs of ["project-document", "family-document", "session", "nothing"]) {
+    const rows = (await find({ needs })).matches;
+    if (needs !== "session") expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => row.needs === needs)).toBe(true);
+  }
+  expect(
+    (await find({ query: "duct group", kind: "op", needs: "document", mutates: false })).matches[0]
+      ?.key,
+  ).toBe("op:ducts.snapshot");
 });
 
 test("F-H6-3: plan and capture over loaded families are human verbs; Pea never finds or runs them", async () => {

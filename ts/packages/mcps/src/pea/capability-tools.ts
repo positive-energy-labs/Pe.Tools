@@ -144,7 +144,11 @@ export const peFind = createTool({
   inputSchema: z.object({
     query: z.string().optional().describe("Keywords describing what you need."),
     kind: capabilityKindSchema.optional(),
-    needs: capabilityNeedsSchema.optional(),
+    needs: capabilityNeedsSchema
+      .optional()
+      .describe(
+        "document includes project-document and family-document capabilities. Other needs match exactly. This filters requirements, not current availability.",
+      ),
     mutates: z.boolean().optional(),
     limit: z.number().int().min(1).max(50).default(8),
   }),
