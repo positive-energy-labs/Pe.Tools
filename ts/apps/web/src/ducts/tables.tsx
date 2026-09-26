@@ -9,6 +9,7 @@ import { Table } from "#/components/master-table/table";
 import { EmptyState } from "#/components/lang/empty";
 import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
+import { ISSUE_KINDS, IssueLegend, issueVerdict } from "./issues";
 import type { DuctsPage } from "./manifest";
 import type { DuctSnapshot, GroupReadiness } from "./readiness";
 
@@ -166,7 +167,13 @@ const SEGMENT_COLUMNS: Column<SegmentRow>[] = [
 ];
 
 const ISSUE_COLUMNS: Column<Issue>[] = [
-  { key: "kind", label: "issue", width: "w-40", cell: (i) => i.kind, facet: (i) => i.kind },
+  {
+    key: "kind",
+    label: "issue",
+    width: "w-40",
+    verdict: (i) => issueVerdict(i.kind),
+    facet: (i) => ISSUE_KINDS[i.kind].label,
+  },
   {
     key: "element",
     label: "element",
@@ -207,7 +214,7 @@ const LAYER_COLUMNS = (on: ReadonlySet<string>): Column<Layer>[] => [
   {
     key: "query",
     label: "query",
-    cell: (l) => <span className="font-mono">{l.query}</span>,
+    cell: (l) => l.query,
     search: (l) => l.query,
   },
 ];
@@ -337,6 +344,7 @@ export function DuctsTables({
                   scroll="clip"
                   flush
                 >
+                  <IssueLegend />
                   <Table
                     label="duct issues"
                     rows={issues}

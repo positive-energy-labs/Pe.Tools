@@ -12,6 +12,8 @@ public static class DuctNetwork {
     public const string ExternalStatic = "externalStatic";
     /// <summary>Accessory pressure drop, in-wg.</summary>
     public const string PressureDrop = "pressureDrop";
+    /// <summary>The advisory line for Revit-reported velocity, fpm.</summary>
+    public const double HighVelocityFpm = 2000;
 
     public sealed record Analysis(
         IReadOnlyList<DuctNode> Nodes,
@@ -115,6 +117,8 @@ public static class DuctNetwork {
                 if (seg is null) continue;
                 if (seg.Kind == DuctSegmentKind.Duct && seg.LengthFt < 0.25)
                     Add(DuctIssueKind.Stub, x, Mid(seg), $"{seg.LengthFt * 12:0.##} in long");
+                if (seg.Revit.VelocityFpm >= HighVelocityFpm)
+                    Add(DuctIssueKind.HighVelocity, x, Mid(seg), $"{seg.Revit.VelocityFpm:0} fpm (Revit)");
                 if (Implausible(seg)) Add(DuctIssueKind.ImplausibleSize, x, Mid(seg), seg.Size);
                 if (seg.Kind == DuctSegmentKind.Flex && seg.Roughness.Provenance == DuctProvenance.RevitDefault)
                     Add(DuctIssueKind.DefaultFlexRoughness, x, Mid(seg), $"type {seg.Type} roughness {seg.Roughness.ValueFt} ft is the rigid default");

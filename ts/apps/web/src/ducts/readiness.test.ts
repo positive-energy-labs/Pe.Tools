@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, it } from "vite-plus/test";
 import {
   applyPatches,
@@ -6,6 +7,7 @@ import {
   type DuctsRouteDocument,
 } from "@pe/agent-contracts";
 
+import { ISSUE_KINDS } from "./issues";
 import { readiness, type DuctSnapshot } from "./readiness";
 
 const issue = (id: string, kind: DuctSnapshot["issues"][number]["kind"], elementId: number) => ({
@@ -96,4 +98,17 @@ it("a group climbs from blocked to walkable to budgetable as a person stages ass
   doc = stage(doc, "fan-static:9", { kind: "fan-static", inWg: 0.5 });
   doc = stage(doc, "component-drop:Damper", { kind: "component-drop", inWg: 0.05 });
   expect(readiness(snapshot, doc).g1).toEqual({ level: "budgetable", walk: [], budget: [] });
+});
+
+it("every issue kind the C# enum can emit has one taxonomy entry, and no entry is orphaned", () => {
+  const source = readFileSync(
+    new URL("../../../../../dotnet/Pe.Shared.RevitData/Ducts/DuctContracts.cs", import.meta.url),
+    "utf8",
+  );
+  const body = source.slice(source.indexOf("enum DuctIssueKind"));
+  const emitted = [...body.slice(0, body.indexOf("}")).matchAll(/EnumMember\(Value = "([^"]+)"\)/g)]
+    .map((match) => match[1])
+    .sort();
+  expect(emitted.length).toBeGreaterThan(0);
+  expect(Object.keys(ISSUE_KINDS).sort()).toEqual(emitted);
 });

@@ -191,7 +191,8 @@ export namespace DuctsSnapshot {
       | "no-component-drop"
       | "no-terminal-flow"
       | "no-root"
-      | "multi-root";
+      | "multi-root"
+      | "high-velocity";
 
     export interface Response {
       document: DuctDocument;

@@ -165,7 +165,7 @@ public static class DuctSnapshots {
                 "OST_DuctTerminal instances: FamilyInstance.Space (Number Name)",
                 new(terminals.Count(t => t.Facts.Any(f => f.Key == "space")), terminals.Count), DuctProvenance.Geometry),
             new("issues", "Issues",
-                "DuctNetwork.Analyze over the topology layer: open ends (caps excluded), loops, stubs under 3 in, implausible sizes, default flex roughness, roots, missing terminal flow, fan static and component drops",
+                "DuctNetwork.Analyze over the topology layer: open ends (caps excluded), loops, stubs under 3 in, implausible sizes, default flex roughness, roots, missing terminal flow, fan static and component drops, and Revit velocity of 2000 fpm or more",
                 new(a.Groups.Count(g => !issueGroups.Contains(g.Id)), a.Groups.Count), DuctProvenance.Derived)
         ];
     }

@@ -10,6 +10,8 @@
 import { ductOverrideKey, type DuctAssumption, type DuctsRouteDocument } from "@pe/agent-contracts";
 import type { DuctsSnapshot } from "@pe/host-contracts/generated";
 
+import { ISSUE_KINDS } from "./issues";
+
 export type DuctSnapshot = DuctsSnapshot.Res.Response;
 type DuctIssue = DuctSnapshot["issues"][number];
 type Readiness = "blocked" | "walkable" | "budgetable";
@@ -42,42 +44,35 @@ export function readiness(
     subject: string | number | null | undefined,
   ) => subject != null && staged(doc, ductOverrideKey(kind, subject)) !== undefined;
 
-  const walkBlocks = (issue: DuctIssue) => {
-    switch (issue.kind) {
-      case "no-root":
-      case "multi-root":
-      case "loop":
-        return true;
-      case "open-end":
-        return verdict(issue) !== "capped" && verdict(issue) !== "ignore";
-      case "no-terminal-flow":
-        return verdict(issue) !== "ignore";
-      default:
-        return false;
-    }
-  };
-  const budgetBlocks = (issue: DuctIssue) => {
+  /** Whether a staged assumption answers the issue. What an issue blocks is `ISSUE_KINDS`'. */
+  const resolved = (issue: DuctIssue) => {
     const element = issue.elementId ?? null;
     switch (issue.kind) {
+      case "open-end":
+        return verdict(issue) === "capped" || verdict(issue) === "ignore";
+      case "no-terminal-flow":
+        return verdict(issue) === "ignore";
       case "no-fan-static":
-        return !override("fan-static", element);
+        return override("fan-static", element);
       case "no-component-drop":
-        return !override("component-drop", element === null ? null : nodes.get(element)?.family);
+        return override("component-drop", element === null ? null : nodes.get(element)?.family);
       case "default-flex-roughness":
         return (
-          verdict(issue) !== "ignore" &&
-          !override("flex-roughness", element === null ? null : segments.get(element)?.type)
+          verdict(issue) === "ignore" ||
+          override("flex-roughness", element === null ? null : segments.get(element)?.type)
         );
       default:
         return false;
     }
   };
+  const open = (blocks: "walkable" | "budgetable") => (issue: DuctIssue) =>
+    ISSUE_KINDS[issue.kind].blocks === blocks && !resolved(issue);
 
   return Object.fromEntries(
     snapshot.groups.map((group) => {
       const own = group.issueIds.flatMap((id) => issues.get(id) ?? []);
-      const walk = own.filter(walkBlocks).map((issue) => issue.id);
-      const budget = own.filter(budgetBlocks).map((issue) => issue.id);
+      const walk = own.filter(open("walkable")).map((issue) => issue.id);
+      const budget = own.filter(open("budgetable")).map((issue) => issue.id);
       const level: Readiness = walk.length ? "blocked" : budget.length ? "walkable" : "budgetable";
       return [group.id, { level, walk, budget }];
     }),

@@ -69,7 +69,9 @@ public enum DuctIssueKind {
     /// <summary>A group with terminals and no equipment port.</summary>
     [EnumMember(Value = "no-root")] NoRoot,
     /// <summary>A group attached to more than one equipment port.</summary>
-    [EnumMember(Value = "multi-root")] MultiRoot
+    [EnumMember(Value = "multi-root")] MultiRoot,
+    /// <summary>A segment whose Revit-reported velocity is 2000 fpm or more.</summary>
+    [EnumMember(Value = "high-velocity")] HighVelocity
 }
 
 public sealed record DuctSnapshotData(

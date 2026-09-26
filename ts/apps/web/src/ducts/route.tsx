@@ -4,16 +4,15 @@
  * default). The snapshot is one `ducts.snapshot` read keyed on the target and `page.epoch`;
  * targeting a document or choosing a group reads it again with no press.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 
 import { Surface } from "#/components/lang/surface";
-import { useHostOp } from "#/readings";
+import { SAVED, useDuctSnapshot } from "./host";
 import { RouteShell, useRoute, useRouteThread } from "#/route";
 import { Ladder } from "#/route/ladder";
 import { useChooseTarget } from "#/route/shell";
 import { Situation } from "#/route/situation";
 import { useDocumentLadder } from "#/route/situation-ladder";
-import { NATIVE_READ_WAIT_S } from "#/route/waits";
 import { manifest, type DuctsPage } from "./manifest";
 import { readiness, type DuctSnapshot } from "./readiness";
 import { DuctsTables } from "./tables";
@@ -22,62 +21,6 @@ import { DuctsTables } from "./tables";
 export type DuctsSearch = Pick<DuctsPage, "view" | "group" | "level" | "selected"> & {
   layers: string;
 };
-
-/**
- * Dev-only reading source: `PE_DUCTS_FIXTURE=<snapshot.json>` at `vp dev` makes the route read a
- * saved snapshot instead of the host, so a view can be built with no Revit (vite.config.ts).
- */
-const FIXTURE: string | undefined = import.meta.env.DEV
-  ? (import.meta.env.VITE_DUCTS_FIXTURE as string | undefined) || undefined
-  : undefined;
-
-function useFixture(epoch: number) {
-  const [state, setState] = useState<{ data?: DuctSnapshot; error?: string }>({});
-  useEffect(() => {
-    if (!FIXTURE) return;
-    let live = true;
-    fetch(FIXTURE)
-      .then((response) => (response.ok ? response.json() : Promise.reject(`${response.status}`)))
-      .then(
-        (data: DuctSnapshot) => live && setState({ data }),
-        (error: unknown) => live && setState({ error: `fixture ${FIXTURE}: ${String(error)}` }),
-      );
-    return () => {
-      live = false;
-    };
-  }, [epoch]);
-  return {
-    snapshot: state.data ?? null,
-    error: state.error ?? null,
-    pending: !state.data && !state.error,
-  };
-}
-
-/** `ducts.snapshot` of the one document the sentence names, read again when the subject changes. */
-function useDuctSnapshot(
-  doc: { session: string; openId: string } | null,
-  epoch: number,
-  group: string,
-) {
-  const call = useHostOp(
-    "ducts.snapshot",
-    {},
-    {
-      bridgeSessionId: doc?.session,
-      openDocumentId: doc?.openId,
-      enabled: doc !== null && !FIXTURE,
-      waitSeconds: NATIVE_READ_WAIT_S,
-    },
-  );
-  // A new target is a new request (its deps change); a new subject or a refresh reads again.
-  const { refresh } = call;
-  useEffect(() => {
-    if (epoch > 0 || group) refresh();
-  }, [epoch, group, refresh]);
-  const fixture = useFixture(epoch);
-  if (FIXTURE) return fixture;
-  return { snapshot: call.data ?? null, error: call.error?.message ?? null, pending: call.pending };
-}
 
 const layerWord = (keys: readonly string[], snapshot: DuctSnapshot | null) =>
   keys.length === 0
@@ -136,7 +79,7 @@ export function DuctsRoute({
   const group = groups.find((item) => item.id === page.group) ?? null;
   const level = levels.find((item) => String(item.id) === page.level) ?? null;
   const read =
-    !doc && !FIXTURE
+    !doc && !SAVED
       ? "choose a document first"
       : error
         ? `ducts.snapshot failed: ${error}`
@@ -194,7 +137,7 @@ export function DuctsRoute({
   );
 
   const empty =
-    !doc && !FIXTURE
+    !doc && !SAVED
       ? { says: "no document bound", exit: "choose a document in the sentence" }
       : error
         ? { says: `ducts.snapshot failed: ${error}`, exit: "refresh once the host answers" }
@@ -213,7 +156,7 @@ export function DuctsRoute({
               handle={handle}
               target={{
                 session: ladder.sessionWord,
-                document: FIXTURE ? "fixture" : ladder.docWord,
+                document: SAVED ? "saved snapshot" : ladder.docWord,
               }}
               sentence={sentence}
               ledger={[
@@ -227,7 +170,7 @@ export function DuctsRoute({
                         ? "reading"
                         : "none",
                 ],
-                ["source", FIXTURE ? "fixture" : "host"],
+                ["source", SAVED ? "saved" : "host"],
               ]}
             />
           }
