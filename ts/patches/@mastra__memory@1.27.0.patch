@@ -1,5 +1,5 @@
 diff --git a/dist/src-CxkQ-ICG.cjs b/dist/src-CxkQ-ICG.cjs
-index 1b23f73fca9a1f4a9b505e542f1877caf6ee24f2..84eceec95907d40c0ba9483090158eb478ac5e0c 100644
+index 1b23f73fca9a1f4a9b505e542f1877caf6ee24f2..1410d62a1533f4bae44e96bbd33b8bb7ddda1b4c 100644
 --- a/dist/src-CxkQ-ICG.cjs
 +++ b/dist/src-CxkQ-ICG.cjs
 @@ -18601,7 +18601,10 @@ function formatObserverMessage(msg, counter, options) {
@@ -14,7 +14,7 @@ index 1b23f73fca9a1f4a9b505e542f1877caf6ee24f2..84eceec95907d40c0ba9483090158eb4
  				return;
  			}
  			pushLine(`Tool Call ${inv.toolName}`, maybeTruncate(JSON.stringify(inv.args, null, 2), maxLen), partCreatedAt);
-@@ -19367,18 +19370,68 @@ var ObserverRunner = class {
+@@ -19367,18 +19370,82 @@ var ObserverRunner = class {
  			memory: this.memory,
  			requestContext: options?.requestContext
  		});
@@ -27,8 +27,8 @@ index 1b23f73fca9a1f4a9b505e542f1877caf6ee24f2..84eceec95907d40c0ba9483090158eb4
 +		const maxObserverToolTokens = 1500;
 +		const priorLimit = 4e3;
 +		const boundedPrior = (prior) => { const value = prior ?? ""; return value.length <= priorLimit ? value : `[Earlier observations remain stored; recent excerpt follows.]\n${value.slice(-priorLimit)}`; };
-+		const prior = boundedPrior(existingObservations);
-+		const priorWasTruncated = prior !== existingObservations;
++		let prior = existingObservations ?? "";
++		let priorWasTruncated = false;
  		const attachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, options?.requestContext);
 -		const observerMessages = [{
 +		const boundedSystemPrompt = buildObserverSystemPrompt(false, this.observationConfig.instruction, this.observationConfig.threadTitle, activeExtractors);
@@ -65,8 +65,18 @@ index 1b23f73fca9a1f4a9b505e542f1877caf6ee24f2..84eceec95907d40c0ba9483090158eb4
 +				let combinedUsage;
 +				let finalResult;
 +				for (const nextBatch of batches) {
-+					const nextPrior = boundedPrior([existingObservations, ...observations].filter(Boolean).join("\n"));
-+					const result = await this.call(nextPrior, nextBatch, abortSignal, { ...options, _boundedBatch: true, wasTruncated: priorWasTruncated || nextPrior.length < [existingObservations, ...observations].filter(Boolean).join("\n").length });
++					const carryover = observations.join("\n");
++					const completePrior = [prior, carryover].filter(Boolean).join("\n");
++					let nextPrior = completePrior;
++					if (requestBytes(nextBatch, nextPrior) > maxObserverInputBytes - 1024) {
++						if (requestBytes(nextBatch, prior) <= maxObserverInputBytes - 1024) nextPrior = prior;
++						else {
++							const recentPrior = boundedPrior(prior);
++							const withCarryover = [recentPrior, carryover.slice(-1e3)].filter(Boolean).join("\n");
++							nextPrior = requestBytes(nextBatch, withCarryover) <= maxObserverInputBytes - 1024 ? withCarryover : recentPrior;
++						}
++					}
++					const result = await this.call(nextPrior, nextBatch, abortSignal, { ...options, _boundedBatch: true, wasTruncated: nextPrior !== completePrior });
 +					if (result.observations) observations.push(result.observations);
 +					combinedValues = mergeExtractedValues(combinedValues, result.extractedValues);
 +					combinedFailures = mergeExtractionFailures(combinedFailures, result.extractionFailures);
@@ -80,6 +90,10 @@ index 1b23f73fca9a1f4a9b505e542f1877caf6ee24f2..84eceec95907d40c0ba9483090158eb4
 +				return { ...finalResult, observations: observations.join("\n"), extractedValues: combinedValues, extractionFailures: combinedFailures, usage: combinedUsage };
 +			}
 +		}
++		if (prior && requestBytes(messagesToObserve, prior) > maxObserverInputBytes) {
++			prior = boundedPrior(prior);
++			priorWasTruncated = true;
++		}
 +		const observerMessages = makeObserverMessages(messagesToObserve, prior);
 +		const formattedBytes = Buffer.byteLength(JSON.stringify([boundedSystemPrompt, observerMessages]), "utf8");
 +		if (formattedBytes > maxObserverInputBytes) throw new Error(`Observer input exceeds ${maxObserverInputBytes} UTF-8 bytes after formatting (${formattedBytes} bytes; message ${messagesToObserve[0]?.id ?? "unknown"}). Stored messages were not marked observed.`);
@@ -90,7 +104,7 @@ index 1b23f73fca9a1f4a9b505e542f1877caf6ee24f2..84eceec95907d40c0ba9483090158eb4
  			return withRetry(() => withOmTracingSpan({
  				phase: "observer",
 diff --git a/dist/src-aTfbkxBl.js b/dist/src-aTfbkxBl.js
-index f8d08bbb9a72216cc882e4f65e9e51af31e8d36c..4e71ba31459fc4af024c0de3383933987d6cc915 100644
+index f8d08bbb9a72216cc882e4f65e9e51af31e8d36c..8892ff262e9b7870244db363483c0fe50b795785 100644
 --- a/dist/src-aTfbkxBl.js
 +++ b/dist/src-aTfbkxBl.js
 @@ -18580,7 +18580,10 @@ function formatObserverMessage(msg, counter, options) {
@@ -105,7 +119,7 @@ index f8d08bbb9a72216cc882e4f65e9e51af31e8d36c..4e71ba31459fc4af024c0de338393398
  				return;
  			}
  			pushLine(`Tool Call ${inv.toolName}`, maybeTruncate(JSON.stringify(inv.args, null, 2), maxLen), partCreatedAt);
-@@ -19346,18 +19349,68 @@ var ObserverRunner = class {
+@@ -19346,18 +19349,82 @@ var ObserverRunner = class {
  			memory: this.memory,
  			requestContext: options?.requestContext
  		});
@@ -118,8 +132,8 @@ index f8d08bbb9a72216cc882e4f65e9e51af31e8d36c..4e71ba31459fc4af024c0de338393398
 +		const maxObserverToolTokens = 1500;
 +		const priorLimit = 4e3;
 +		const boundedPrior = (prior) => { const value = prior ?? ""; return value.length <= priorLimit ? value : `[Earlier observations remain stored; recent excerpt follows.]\n${value.slice(-priorLimit)}`; };
-+		const prior = boundedPrior(existingObservations);
-+		const priorWasTruncated = prior !== existingObservations;
++		let prior = existingObservations ?? "";
++		let priorWasTruncated = false;
  		const attachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, options?.requestContext);
 -		const observerMessages = [{
 +		const boundedSystemPrompt = buildObserverSystemPrompt(false, this.observationConfig.instruction, this.observationConfig.threadTitle, activeExtractors);
@@ -156,8 +170,18 @@ index f8d08bbb9a72216cc882e4f65e9e51af31e8d36c..4e71ba31459fc4af024c0de338393398
 +				let combinedUsage;
 +				let finalResult;
 +				for (const nextBatch of batches) {
-+					const nextPrior = boundedPrior([existingObservations, ...observations].filter(Boolean).join("\n"));
-+					const result = await this.call(nextPrior, nextBatch, abortSignal, { ...options, _boundedBatch: true, wasTruncated: priorWasTruncated || nextPrior.length < [existingObservations, ...observations].filter(Boolean).join("\n").length });
++					const carryover = observations.join("\n");
++					const completePrior = [prior, carryover].filter(Boolean).join("\n");
++					let nextPrior = completePrior;
++					if (requestBytes(nextBatch, nextPrior) > maxObserverInputBytes - 1024) {
++						if (requestBytes(nextBatch, prior) <= maxObserverInputBytes - 1024) nextPrior = prior;
++						else {
++							const recentPrior = boundedPrior(prior);
++							const withCarryover = [recentPrior, carryover.slice(-1e3)].filter(Boolean).join("\n");
++							nextPrior = requestBytes(nextBatch, withCarryover) <= maxObserverInputBytes - 1024 ? withCarryover : recentPrior;
++						}
++					}
++					const result = await this.call(nextPrior, nextBatch, abortSignal, { ...options, _boundedBatch: true, wasTruncated: nextPrior !== completePrior });
 +					if (result.observations) observations.push(result.observations);
 +					combinedValues = mergeExtractedValues(combinedValues, result.extractedValues);
 +					combinedFailures = mergeExtractionFailures(combinedFailures, result.extractionFailures);
@@ -170,6 +194,10 @@ index f8d08bbb9a72216cc882e4f65e9e51af31e8d36c..4e71ba31459fc4af024c0de338393398
 +				}
 +				return { ...finalResult, observations: observations.join("\n"), extractedValues: combinedValues, extractionFailures: combinedFailures, usage: combinedUsage };
 +			}
++		}
++		if (prior && requestBytes(messagesToObserve, prior) > maxObserverInputBytes) {
++			prior = boundedPrior(prior);
++			priorWasTruncated = true;
 +		}
 +		const observerMessages = makeObserverMessages(messagesToObserve, prior);
 +		const formattedBytes = Buffer.byteLength(JSON.stringify([boundedSystemPrompt, observerMessages]), "utf8");

@@ -58,10 +58,21 @@ function observerHarness(failOnCall?: number) {
 }
 
 describe("Mastra single-thread observer input patch", () => {
+  test("keeps complete prior observations when the request fits", async () => {
+    const { om, requests } = observerHarness();
+    const prior = `oldest-fact ${"durable detail ".repeat(350)} newest-fact`;
+    await om.observer.call(prior, [toolMessage(0, 1_000)] as never);
+    expect(requests).toHaveLength(1);
+    const prompt = JSON.stringify(requests[0]);
+    expect(prompt).toContain("oldest-fact");
+    expect(prompt).toContain("newest-fact");
+  });
+
   test("batches complete tool results, bounds formatted requests, and cites omitted originals", async () => {
     const { om, requests } = observerHarness();
+    const prior = `oldest-fact ${"durable detail ".repeat(350)} newest-fact`;
     const result = await om.observer.call(
-      "",
+      prior,
       Array.from({ length: 24 }, (_, i) => toolMessage(i)) as never,
     );
 
@@ -69,6 +80,11 @@ describe("Mastra single-thread observer input patch", () => {
     const systemPrompt = om.observer.lastExchange?.systemPrompt;
     expect(systemPrompt).toBeTruthy();
     const serialized = requests.map((request) => JSON.stringify(request));
+    expect(
+      serialized.every(
+        (request) => request.includes("oldest-fact") && request.includes("newest-fact"),
+      ),
+    ).toBe(true);
     for (const request of requests) {
       expect(
         Buffer.byteLength(JSON.stringify([systemPrompt, request]), "utf8"),
