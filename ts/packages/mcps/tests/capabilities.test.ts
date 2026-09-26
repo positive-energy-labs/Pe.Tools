@@ -434,73 +434,84 @@ test("pe_find reads native capabilities under an exact-open turn Target", async 
   );
 });
 
-test("an exact-open turn Target reads and writes route Work under its document's Address (E2E-J1)", async () => {
-  // The browser keys Families Work by the Chat document's Address; a Pea read that dropped the
-  // Address hit the Target-less key, found no Work, and reported "unknown route 'families'".
-  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
-  const projectA = "C:\\Models\\projectA.rvt";
-  const routeCalls: URL[] = [];
-  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
-    const url = new URL(input instanceof Request ? input.url : String(input));
-    if (typeof init?.body === "string" && JSON.parse(init.body).key === "bridge.sessions.list")
-      return Response.json({
-        sessions: [
-          {
-            sessionId: "b1",
-            connected: true,
-            openDocuments: [{ openId: "project-a", address: projectA, isFamilyDocument: false }],
-          },
-        ],
-      });
-    if (url.pathname === "/pe/capabilities") return Response.json(catalog());
-    if (!url.pathname.includes("/route-state/")) throw Error(`unexpected ${url.pathname}`);
-    routeCalls.push(url);
-    return url.searchParams.get("target") === projectA
-      ? Response.json({ route: "families", revision: 2, doc: {}, ok: true })
-      : Response.json({ error: "unknown route 'families'" }, { status: 404 });
-  });
-  const open: Turn = {
-    ...turn,
-    defaultTarget: { kind: "open", ref: { session: "b1", openId: "project-a" } },
-  };
-  try {
-    const read = (await run(peRead, { key: "route:families", timeoutSeconds: 30 }, open)) as {
-      ok: boolean;
-      target: unknown;
-      result: { revision: number };
+test.each([
+  ["families", "C:\\Models\\projectA.rvt"],
+  ["families", null],
+  ["ducts", null],
+])(
+  "an exact-open turn Target reads and writes %s Work with Address %s (E2E-J1)",
+  async (route, projectA) => {
+    // Match the browser's binding, including the open lifetime used for unsaved Work and Save As.
+    vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
+    const routeCalls: URL[] = [];
+    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      if (typeof init?.body === "string" && JSON.parse(init.body).key === "bridge.sessions.list")
+        return Response.json({
+          sessions: [
+            {
+              sessionId: "b1",
+              connected: true,
+              openDocuments: [{ openId: "project-a", address: projectA, isFamilyDocument: false }],
+            },
+          ],
+        });
+      if (url.pathname === "/pe/capabilities") return Response.json(catalog());
+      if (!url.pathname.includes("/route-state/")) throw Error(`unexpected ${url.pathname}`);
+      routeCalls.push(url);
+      return url.searchParams.get("target") === projectA &&
+        url.searchParams.get("open") === "b1/project-a"
+        ? Response.json({ route, revision: 2, doc: {}, ok: true })
+        : Response.json({ error: `unknown route '${route}'` }, { status: 404 });
+    });
+    const open: Turn = {
+      ...turn,
+      defaultTarget: { kind: "open", ref: { session: "b1", openId: "project-a" } },
     };
-    expect(read).toMatchObject({ ok: true, result: { revision: 2 } });
-    expect(read.target).toEqual({ session: "b1", document: projectA });
-    const proposed = (await run(
-      peDo,
-      {
-        key: "route:families.propose",
-        input: { patches: [{ path: ["intent"], value: "x" }] },
-        expectedRevision: 2,
-        timeoutSeconds: 30,
-      },
-      open,
-    )) as { ok: boolean };
-    expect(proposed.ok).toBe(true);
-    expect(routeCalls.map((url) => url.searchParams.get("target"))).toEqual([projectA, projectA]);
+    try {
+      const read = (await run(peRead, { key: `route:${route}`, timeoutSeconds: 30 }, open)) as {
+        ok: boolean;
+        target: unknown;
+        result: { revision: number };
+      };
+      expect(read).toMatchObject({ ok: true, result: { revision: 2 } });
+      expect(read.target).toEqual({ session: "b1", document: projectA });
+      const proposed = (await run(
+        peDo,
+        {
+          key: `route:${route}.propose`,
+          input: { patches: [{ path: ["intent"], value: "x" }] },
+          expectedRevision: 2,
+          timeoutSeconds: 30,
+        },
+        open,
+      )) as { ok: boolean };
+      expect(proposed.ok).toBe(true);
+      expect(routeCalls.map((url) => url.searchParams.get("target"))).toEqual([projectA, projectA]);
+      expect(routeCalls.map((url) => url.searchParams.get("open"))).toEqual([
+        "b1/project-a",
+        "b1/project-a",
+      ]);
 
-    // A Chat document that closed has no Address to key by: refuse, never read Target-less Work.
-    const gone = (await run(
-      peRead,
-      { key: "route:families", timeoutSeconds: 30 },
-      {
-        ...open,
-        defaultTarget: { kind: "open", ref: { session: "b1", openId: "closed" } },
-      },
-    )) as { isError?: boolean; content?: string };
-    expect(gone.isError).toBe(true);
-    expect(gone.content).toContain("no longer open");
-    expect(routeCalls).toHaveLength(2);
-  } finally {
-    vi.unstubAllGlobals();
-    vi.unstubAllEnvs();
-  }
-});
+      // A closed lifetime refuses; an unsaved document is not a closed lifetime.
+      const gone = (await run(
+        peRead,
+        { key: `route:${route}`, timeoutSeconds: 30 },
+        {
+          ...open,
+          defaultTarget: { kind: "open", ref: { session: "b1", openId: "closed" } },
+        },
+      )) as { isError?: boolean; content?: string };
+      expect(gone.isError).toBe(true);
+      expect(gone.content).toContain("no longer open");
+      expect(gone.content).not.toContain("has no Address");
+      expect(routeCalls).toHaveLength(2);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  },
+);
 
 test("an explicit document detour leaves the next call on the frozen turn default", async () => {
   vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
