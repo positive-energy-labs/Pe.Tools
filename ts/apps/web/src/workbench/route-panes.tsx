@@ -16,6 +16,7 @@ import { FamiliesRouteContent } from "#/routes/families";
 import { ParameterLinksRouteContent } from "#/routes/parameter-links";
 import { TakeoffsPane } from "#/takeoff/pane";
 import { InstancesPage } from "#/instances/route";
+import { RoomsRoute } from "#/rooms/route";
 import type { ChatPluginRoute } from "./chat-plugins";
 
 type View = (props: { thread: string; visible: boolean }) => ReactNode;
@@ -30,6 +31,7 @@ const views: Record<ChatPluginRoute, View> = {
   pods: ({ thread }) => <HostedPods thread={thread} />,
   "parameter-links": ({ thread }) => <ParameterLinksRouteContent thread={thread} />,
   schedules: ({ thread }) => <LiveScheduleGridWorkspace framed url={false} thread={thread} />,
+  rooms: () => <HostedRooms />,
 };
 
 /**
@@ -84,6 +86,14 @@ export function useChatPluginHost(
 function HostedInstances() {
   const [target, setTarget] = useState("");
   return <InstancesPage target={target} setTarget={setTarget} />;
+}
+
+function HostedRooms() {
+  const [view, setView] = useState("");
+  const [layers, setLayers] = useState("");
+  return (
+    <RoomsRoute view={view} focus="" layers={layers} setLayers={setLayers} setView={setView} />
+  );
 }
 
 function HostedPods({ thread }: { thread: string }) {

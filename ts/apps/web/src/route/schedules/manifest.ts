@@ -180,11 +180,15 @@ export const schedulesManifest = () =>
     {
       work: scheduleGridRouteState,
       // Grouped by column, so the Work sentence says "across 3 columns" (ruling 14).
-      cells: {
-        segment: "cells",
-        groupOf: (key) => [String(splitScheduleCellKey(key).columnNumber)],
-        nouns: ["column"],
-      },
+      cells: [
+        {
+          segment: "cells",
+          groupOf: (key) => [String(splitScheduleCellKey(key).columnNumber)],
+          nouns: ["column"],
+        },
+      ],
+      // Keyed by a schedule workspace id, which no document names: the Chat head cannot read it.
+      workKey: null,
       readings: {
         catalog: {
           kind: "schedule-reading",

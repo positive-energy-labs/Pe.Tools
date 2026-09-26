@@ -1,46 +1,46 @@
 /**
- * The routes Chat hosts in its plugin pane, and the one transcript record a Pea call that wrote
- * their Work leaves. Views live in `route-panes.tsx`; this stays data so the Chat URL schema can
- * import it without the route views.
+ * The routes Chat hosts in its plugin pane, by their manifests, and the one transcript record a
+ * Pea call that wrote their Work leaves. Views live in `route-panes.tsx`.
  */
-import {
-  actionControls,
-  familiesRouteState,
-  familyDraftRouteState,
-  instancesRouteState,
-  parameterLinksRouteState,
-  routeCallOf,
-  scheduleGridRouteState,
-  semanticActions,
-  settingsRouteState,
-  takeoffsRouteState,
-} from "@pe/agent-contracts";
+import { actionControls, routeCallOf, semanticActions } from "@pe/agent-contracts";
 
-export const CHAT_PLUGIN_ROUTES = [
-  "instances",
-  "takeoffs",
-  "family",
-  "families",
-  "pods",
-  "parameter-links",
-  "schedules",
-] as const;
+import { manifest as families } from "#/families/manifest";
+import { familyManifest } from "#/family/manifest";
+import { instancesManifest } from "#/instances/manifest";
+import { manifest as parameterLinks } from "#/parameter-links/manifest";
+import { manifest as rooms } from "#/rooms/manifest";
+import { schedulesManifest } from "#/route/schedules/manifest";
+import { manifest as pods } from "#/routes/pods";
+import { manifest as takeoffs } from "#/takeoff/manifest";
 
-export type ChatPluginRoute = (typeof CHAT_PLUGIN_ROUTES)[number];
+/** Every plugin route's manifest, by its key; the order is the pane's. */
+export const CHAT_PLUGINS = {
+  instances: instancesManifest,
+  takeoffs,
+  family: familyManifest(),
+  families,
+  pods,
+  "parameter-links": parameterLinks,
+  schedules: schedulesManifest(),
+  rooms,
+} as const;
 
-const titles = Object.fromEntries(
-  [
-    instancesRouteState,
-    takeoffsRouteState,
-    familyDraftRouteState,
-    familiesRouteState,
-    settingsRouteState,
-    parameterLinksRouteState,
-    scheduleGridRouteState,
-  ].map((spec) => [spec.route, spec.title]),
-) as Record<ChatPluginRoute, string>;
+export type ChatPluginRoute = keyof typeof CHAT_PLUGINS;
 
-export const chatPluginTitle = (route: ChatPluginRoute) => titles[route];
+export const CHAT_PLUGIN_ROUTES = Object.keys(CHAT_PLUGINS) as [
+  ChatPluginRoute,
+  ...ChatPluginRoute[],
+];
+
+for (const route of CHAT_PLUGIN_ROUTES)
+  if (CHAT_PLUGINS[route].key !== route)
+    throw new Error(`chat plugin ${route} holds the ${CHAT_PLUGINS[route].key} manifest`);
+
+/** The Work's title where the route owns one ("Schedule Grid"), else the route's name. */
+export const chatPluginTitle = (route: ChatPluginRoute) => {
+  const manifest: { name: string; work?: { title: string } } = CHAT_PLUGINS[route];
+  return manifest.work?.title ?? manifest.name;
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);

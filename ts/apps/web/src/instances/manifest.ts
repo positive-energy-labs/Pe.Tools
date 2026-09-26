@@ -10,8 +10,8 @@ import { z } from "zod";
 import {
   instancesRouteState,
   type InstancesDocument,
+  type InstancesLaunch,
   type ReadingRequest,
-  type WorkKey,
 } from "@pe/agent-contracts";
 
 import { defineRoute } from "#/route/manifest";
@@ -21,18 +21,6 @@ import { INSTANCES_SEEDS } from "#/instances/seeds";
 
 export type InstancesReading = "sessions" | "inventory" | "doctor" | "recents";
 export type InstancesHandle = RouteHandle<InstancesDocument, InstancesReading, object, "refresh">;
-
-/**
- * Instances Work is ONE shared workspace, not a document (spec §7). Declared here because the
- * cluster, the chat plugin and `pe_do route:instances.*` must all name the same key; a plugin
- * that invented a Target-keyed WorkKey read an empty document while pea wrote the workspace.
- */
-export const INSTANCES_WORK: WorkKey = {
-  binding: "workspace" as const,
-  route: "instances",
-  target: null,
-  work: "instances",
-};
 
 const READINGS = {
   sessions: { kind: "sdk", read: "sessions" },
@@ -46,6 +34,22 @@ export const instancesManifest = defineRoute({
   name: "Instances",
   docs: "Refresh the SDK census to inspect available sessions, installed years, diagnostics and recent documents before starting or recovering a session.",
   work: instancesRouteState,
+  // ONE shared workspace, not a document (spec §7): the cluster, the chat plugin and
+  // `pe_do route:instances.*` must all name this key; a Target-keyed one reads an empty document.
+  workKey: { binding: "workspace", route: "instances", target: null, work: "instances" },
+  // The launch Pea may propose sits at the Work's root.
+  cells: [
+    {
+      segment: null,
+      key: "launch",
+      groupOf: () => ["launch"],
+      noun: "Revit sessions",
+      show: (value) => {
+        const launch = value as InstancesLaunch;
+        return launch.kind === "open" ? `open ${launch.document}` : `start ${launch.year}`;
+      },
+    },
+  ],
   readings: READINGS,
   actions: {
     refresh: {

@@ -67,11 +67,7 @@ export const manifest = defineRoute<
   docs: "Split the zones drawn on one level's plan view into room regions, stage each room's name, type and Manual J fields, then apply them to the regions in Revit.",
   needs: "project",
   work: roomsRouteState,
-  cells: {
-    segment: "edits",
-    groupOf: (key: string) => [roomEditAddress(key).guid],
-    nouns: ["room"],
-  },
+  cells: [{ segment: "edits", groupOf: (key) => [roomEditAddress(key).guid], nouns: ["room"] }],
   readings: { receipts: { kind: "receipts", target: { session: "", openId: "" } } } as never,
   page: roomsPageSchema,
   stages: ROOMS_STAGES,
