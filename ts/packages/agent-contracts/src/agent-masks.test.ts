@@ -10,6 +10,7 @@ import { applyPatches, type RouteEnvelope } from "./route-doc.ts";
 import type { RouteStateSpec } from "./route-state.ts";
 import { instancesRouteState } from "./instances.ts";
 import { parameterLinksRouteState } from "./parameter-links.ts";
+import { roomsRouteState } from "./rooms.ts";
 
 it("schedules: Pea proposes a grid cell through the shared contract and cannot stage it", () => {
   const envelope: RouteEnvelope<unknown> = {
@@ -81,4 +82,58 @@ it("parameter-links: Pea proposes a profile on the one cell and cannot stage it"
   expect(applyPatches(spec, envelope, "human", stage, 0)).toMatchObject({ ok: true });
   // The pre-cells `{ draft }` shape is not read: strict rejection, never a silent strip.
   expect(spec.schema.safeParse({ draft: value }).success).toBe(false);
+});
+
+it("rooms: Pea proposes a mark and writes a note, cannot stage the mark, and a bad mark refuses", () => {
+  const spec = roomsRouteState as unknown as RouteStateSpec<z.ZodType>;
+  const envelope: RouteEnvelope<unknown> = { version: 1, revision: 0, doc: spec.schema.parse({}) };
+  const anchor = { view: "L1 - Rooms", level: "L1" };
+  const value = {
+    kind: "merge",
+    anchor: {
+      ...anchor,
+      polygon: [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+      ],
+    },
+    run: "r1",
+  };
+  const propose = transitionPatches(["marks"], "m1", {}, { kind: "propose", rung: { value } });
+  expect(applyPatches(spec, envelope, "agent", propose, 0)).toMatchObject({ ok: true });
+  const stage = transitionPatches(["marks"], "m1", {}, { kind: "stage", rung: { value } });
+  expect(applyPatches(spec, envelope, "agent", stage, 0)).toMatchObject({
+    ok: false,
+    kind: "refused",
+  });
+  expect(applyPatches(spec, envelope, "human", stage, 0)).toMatchObject({ ok: true });
+  const note = {
+    anchor: { ...anchor, polygon: [[5, 5]] },
+    text: "open plan",
+    by: "pea",
+    at: "2026-09-25T12:00:00Z",
+  };
+  expect(
+    applyPatches(spec, envelope, "agent", [{ path: ["notes", "n1"], value: note }], 0),
+  ).toMatchObject({ ok: true });
+  // A mark needs a polygon of three points and a known kind; a note has no rungs.
+  const bad = {
+    ...value,
+    anchor: {
+      ...anchor,
+      polygon: [
+        [0, 0],
+        [10, 0],
+      ],
+    },
+  };
+  expect(spec.schema.safeParse({ marks: { m1: { staged: { value: bad } } } }).success).toBe(false);
+  expect(
+    spec.schema.safeParse({ marks: { m1: { staged: { value: { ...value, kind: "delete" } } } } })
+      .success,
+  ).toBe(false);
+  expect(spec.schema.safeParse({ notes: { n1: { proposal: { value: note } } } }).success).toBe(
+    false,
+  );
 });
