@@ -92,11 +92,11 @@ public static class DuctSnapshots {
                 if (Space(fi) is { } space) facts.Add(new DuctFact("space", null, space, "", DuctProvenance.Geometry));
                 break;
             case DuctNodeKind.Accessory:
-                facts.Add(Fact(DuctNetwork.PressureDrop, Converted(e.LookupParameter("Pressure Drop"), UnitTypeId.InchesOfWater60DegreesFahrenheit), "in-wg", DuctProvenance.DesignerStated));
+                facts.Add(Fact(DuctNetwork.PressureDrop, Converted(Named(e, "Pressure Drop"), UnitTypeId.InchesOfWater60DegreesFahrenheit), "in-wg", DuctProvenance.DesignerStated));
                 break;
             case DuctNodeKind.Equipment:
-                facts.Add(Fact(DuctNetwork.ExternalStatic, Converted(e.LookupParameter("PE_M_Fan_ExternalStaticPressure"), UnitTypeId.InchesOfWater60DegreesFahrenheit), "in-wg", DuctProvenance.DesignerStated));
-                facts.Add(Fact("fanFlow", Converted(e.LookupParameter("PE_M_Fan_AirFlow"), UnitTypeId.CubicFeetPerMinute), "cfm", DuctProvenance.DesignerStated));
+                facts.Add(Fact(DuctNetwork.ExternalStatic, Converted(Named(e, "PE_M_Fan_ExternalStaticPressure"), UnitTypeId.InchesOfWater60DegreesFahrenheit), "in-wg", DuctProvenance.DesignerStated));
+                facts.Add(Fact("fanFlow", Converted(Named(e, "PE_M_Fan_AirFlow"), UnitTypeId.CubicFeetPerMinute), "cfm", DuctProvenance.DesignerStated));
                 break;
             case DuctNodeKind.Fitting when e.LookupParameter("Angle") is { HasValue: true, StorageType: StorageType.Double } angle:
                 facts.Add(new DuctFact("angle", R(angle.AsDouble() * 180 / Math.PI), null, "deg", DuctProvenance.Geometry));
@@ -153,10 +153,10 @@ public static class DuctSnapshots {
                 "DuctNetwork.PassOne: terminal design flow summed up the tree from the one equipment port of each loop-free group",
                 new(a.Flows.Count, segs.Count), DuctProvenance.Derived),
             new("fan-static", "Fan external static",
-                "OST_MechanicalEquipment with HVAC connectors: LookupParameter(\"PE_M_Fan_ExternalStaticPressure\") (InchesOfWater60DegreesFahrenheit), LookupParameter(\"PE_M_Fan_AirFlow\")",
+                "OST_MechanicalEquipment with HVAC connectors: LookupParameter(\"PE_M_Fan_ExternalStaticPressure\") (InchesOfWater60DegreesFahrenheit) and LookupParameter(\"PE_M_Fan_AirFlow\") on the instance, else on its FamilySymbol",
                 new(equipment.Count(e => DuctNetwork.Fact(e, DuctNetwork.ExternalStatic) > 0), equipment.Count), DuctProvenance.DesignerStated),
             new("component-drop", "Component pressure drop",
-                "OST_DuctAccessory instances: LookupParameter(\"Pressure Drop\") (InchesOfWater60DegreesFahrenheit)",
+                "OST_DuctAccessory instances: LookupParameter(\"Pressure Drop\") (InchesOfWater60DegreesFahrenheit) on the instance, else on its FamilySymbol",
                 new(accessories.Count(e => DuctNetwork.Fact(e, DuctNetwork.PressureDrop) > 0), accessories.Count), DuctProvenance.DesignerStated),
             new("systems", "Systems and labels",
                 "every element: RBS_SYSTEM_NAME_PARAM, RBS_SYSTEM_CLASSIFICATION_PARAM",
@@ -226,6 +226,10 @@ public static class DuctSnapshots {
         e.Location is LocationPoint lp ? P(lp.Point)
         : e.get_BoundingBox(null) is { } box ? P((box.Min + box.Max) / 2)
         : [0, 0, 0];
+
+    // FOOTGUN: project-a states fan static on the type (Panasonic DBF-DEDPV, SunTherm MUA); an instance-only lookup reads none.
+    private static Parameter? Named(Element e, string name) =>
+        e.LookupParameter(name) is { HasValue: true } own ? own : (e as FamilyInstance)?.Symbol?.LookupParameter(name);
 
     private static DuctFact Fact(string key, double? value, string unit, DuctProvenance provenance) =>
         new(key, value, null, unit, provenance);
