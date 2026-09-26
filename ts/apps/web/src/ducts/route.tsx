@@ -15,7 +15,16 @@ import { Situation } from "#/route/situation";
 import { useDocumentLadder } from "#/route/situation-ladder";
 import { manifest, type DuctsPage } from "./manifest";
 import { readiness, type DuctSnapshot } from "./readiness";
+import { DuctsLedger } from "./ledger";
 import { DuctsTables } from "./tables";
+import { DuctsTree } from "./tree";
+
+/** The views `page.view` keys; "" is the tables. */
+const VIEWS = [
+  { id: "", label: "tables", sub: "groups, segments, issues and layers" },
+  { id: "tree", label: "tree", sub: "one-line schematic from the root to each terminal" },
+  { id: "ledger", label: "ledger", sub: "the Manual D worksheet: runs, issues and assumptions" },
+] as const;
 
 /** The URL half of the page; the rest (epoch, stage) is ephemeral. */
 export type DuctsSearch = Pick<DuctsPage, "view" | "group" | "level" | "selected"> & {
@@ -131,6 +140,24 @@ export function DuctsRoute({
         ]}
         disabled={busy}
       />
+      {", as "}
+      <Ladder
+        levels={[
+          {
+            key: "view",
+            label: VIEWS.find((item) => item.id === page.view)?.label ?? page.view,
+            placeholder: "tables",
+            options: VIEWS.map((item) => ({
+              id: item.id || "tables",
+              label: item.label,
+              sub: item.sub,
+            })),
+            picked: (id) => id === (page.view || "tables"),
+            pick: (id) => setPage({ view: id === "tables" ? "" : id }),
+          },
+        ]}
+        disabled={busy}
+      />
       {", drawing "}
       {layerWord(page.layers, snapshot) ?? "no layers"}.
     </>
@@ -177,7 +204,26 @@ export function DuctsRoute({
         />
       }
     >
-      <DuctsTables snapshot={snapshot} ready={ready} page={page} setPage={setPage} empty={empty} />
+      {page.view === "tree" ? (
+        <DuctsTree snapshot={snapshot} page={page} setPage={setPage} empty={empty} />
+      ) : page.view === "ledger" ? (
+        <DuctsLedger
+          snapshot={snapshot}
+          ready={ready}
+          page={page}
+          setPage={setPage}
+          empty={empty}
+          work={{ doc: handle.work.doc, write: handle.work.write }}
+        />
+      ) : (
+        <DuctsTables
+          snapshot={snapshot}
+          ready={ready}
+          page={page}
+          setPage={setPage}
+          empty={empty}
+        />
+      )}
     </Surface>
   );
 }
