@@ -133,7 +133,28 @@ public sealed record PartitionAnswer(
     string? Hold,
     IReadOnlyList<Resolved> Resolved,
     string EnclosureSource,
-    double Ms
+    double Ms,
+    Trace Trace
+);
+
+/// <summary>A rail as layer 1 saw it (<see cref="Rail" />), flattened to its element's id, category and layer.</summary>
+public sealed record TraceRail(double[] A, double[] B, double ThicknessFt, string Source, long ElementId, string Category, string? Layer);
+
+/// <summary>One segment of the rail network (<see cref="RailSegment" />) by kind.</summary>
+public sealed record TraceSegment(double[] A, double[] B, SegKind Kind);
+
+/// <summary>
+///     A face's layer-1 facts before <see cref="Judge" />. <see cref="Index" /> is the answer's <see cref="Room.Index" />,
+///     which carries the loop, disposition, reason, floor and ceiling.
+/// </summary>
+public sealed record TraceFace(int Index, FaceKind Kind, double? BandWidthFt, bool OwnEdgeEmpty, double? FloatingFt, bool Narrow, double Backed);
+
+/// <summary>Layer 1's output, always filled: the rails, the network by kind, the openings with their evidence, and each face's facts.</summary>
+public sealed record Trace(
+    IReadOnlyList<TraceRail> Rails,
+    IReadOnlyList<TraceSegment> Segments,
+    IReadOnlyList<Opening> Openings,
+    IReadOnlyList<TraceFace> Faces
 );
 
 /// <summary>

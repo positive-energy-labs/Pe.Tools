@@ -35,7 +35,8 @@ public static class Solve {
     /// </summary>
     public static PartitionAnswer RunRails(PartitionInput input, Func<double, double, ProbeAnswer> probe) {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var rooms = Faces(input, probe).Select((f, i) => {
+        var layer1 = Faces(input, probe);
+        var rooms = layer1.Facts.Select((f, i) => {
             var (d, reason) = Judge.Dispose(f, input.LevelZ, input.Knobs);
             return new Room(i, d, reason, Loop(f.Shape), Math.Round(f.Shape.Area, 9), f.LabelX, f.LabelY, Math.Round(f.Backed, 6),
                 f.FloorZ, f.CeilingZ, f.Shared, Enumerable.Range(0, f.Shape.NumInteriorRings)
@@ -51,17 +52,24 @@ public static class Solve {
             rooms.Where(r => r.Disposition == Disposition.Excluded).Sum(r => r.AreaSqft));
         if (Math.Abs(acc.ZoneSqft - acc.Accepted - acc.Held - acc.Void - acc.Excluded) > AreaTolSqft)
             throw new PartitionException("serialized partition accounting does not close");
+        var trace = new Trace(
+            layer1.Rails.Select(r => new TraceRail(r.A, r.B, r.ThicknessFt, r.Source, r.Handle.ElementId, r.Handle.Category, r.Handle.Layer)).ToList(),
+            layer1.Network.Segments.Select(s => new TraceSegment(s.A, s.B, s.Kind)).ToList(),
+            layer1.Network.Openings,
+            layer1.Facts.Select((f, i) => new TraceFace(i, f.Kind, f.BandWidthFt, f.OwnEdgeEmpty, f.FloatingFt, f.Narrow, Math.Round(f.Backed, 6))).ToList());
         return new PartitionAnswer(input.Knee.Stamp, input.Knee.Searched, input.Knobs, rooms, acc, null,
-            input.Resolved, input.EnclosureSource, Math.Round(sw.Elapsed.TotalMilliseconds, 3));
+            input.Resolved, input.EnclosureSource, Math.Round(sw.Elapsed.TotalMilliseconds, 3), trace);
     }
 
     /// <summary>
     ///     Layer 1: the zone tiled by geometry alone, each face with its measurements and no judgment. Proposals are
     ///     carried through whole: a person's locked room regions (from Rooms.cs), so they survive a rerun, and architect
     ///     Rooms, adopted. The rail faces fill the rest of the zone. Order is the answer's Room.Index: proposed rooms,
-    ///     rail rooms, bands too wide to be wall, proposal overlaps, then envelope bands.
+    ///     rail rooms, bands too wide to be wall, proposal overlaps, then envelope bands. The rails and the network it
+    ///     built come back beside the facts for the answer's <see cref="Trace" />.
     /// </summary>
-    public static IReadOnlyList<FaceFacts> Faces(PartitionInput input, Func<double, double, ProbeAnswer> probe) {
+    public static (IReadOnlyList<FaceFacts> Facts, IReadOnlyList<Rail> Rails, RailNetwork Network) Faces(
+        PartitionInput input, Func<double, double, ProbeAnswer> probe) {
         var zone = GeometryOf(input.ZoneLoops);
         var proposed = input.Proposals
             .Select(p => (Proposal: p, Geom: IntersectArea(GeometryOf(p.Loops), zone)))
@@ -74,7 +82,8 @@ public static class Solve {
             }
         var contested = UnionOf(overlaps);
         var taken = UnionOf(proposed.Select(p => p.Geom).ToList());
-        var net = Rails.Network(Rails.From(input), input.ZoneLoops, OpeningEvidence.From(input));
+        var rails = Rails.From(input);
+        var net = Rails.Network(rails, input.ZoneLoops, OpeningEvidence.From(input));
         var faces = Rails.Faces(net);
         var proposedParts = proposed.SelectMany(p => Polys(p.Geom.Difference(contested)).Select(g => (Geom: (Geometry)g, p.Proposal))).ToList();
         List<Polygon> Free(IEnumerable<Polygon> parts) => taken.IsEmpty ? parts.ToList() : parts.SelectMany(f => Polys(f.Difference(taken))).ToList();
@@ -138,7 +147,7 @@ public static class Solve {
                 kind == FaceKind.Room ? floating(g) : null, g.Buffer(-knobs.MinFeatureWidthFt / 2.0, CloseQuadSegs).IsEmpty,
                 ownEmpty ? 0.0 : Support(own, backing, knobs), label.X, label.Y, shared));
         }
-        return facts;
+        return (facts, rails, net);
     }
 
     // ---------------------------------------------------------------- ink
