@@ -5,7 +5,7 @@
  * another group as context), and the encoding table inks health from `ISSUE_KINDS` alone.
  */
 import { existsSync, readFileSync } from "node:fs";
-import { cleanup, render } from "@testing-library/react";
+import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeAll, expect, it } from "vite-plus/test";
 import { ductsRouteState } from "@pe/agent-contracts";
 
@@ -24,11 +24,17 @@ import type { DuctsPage } from "./manifest";
 import { readiness, type DuctSnapshot } from "./readiness";
 import { DuctsSpatial } from "./spatial";
 
+let resizeDrawing: (width: number, height: number) => void;
 beforeAll(() => {
   // jsdom lays nothing out; the drawing sizes itself from its observer.
   globalThis.ResizeObserver = class {
     constructor(private readonly callback: ResizeObserverCallback) {}
     observe() {
+      resizeDrawing = (width, height) =>
+        this.callback(
+          [{ contentRect: { width, height } } as ResizeObserverEntry],
+          this as unknown as ResizeObserver,
+        );
       this.callback(
         [{ contentRect: { width: 800, height: 600 } } as ResizeObserverEntry],
         this as unknown as ResizeObserver,
@@ -183,6 +189,15 @@ it("the isometric draws the subject on every level, with the other group as fain
   expect(root.querySelector("[data-riser]")).toBeNull();
   expect(root.querySelectorAll("[data-context]").length).toBeGreaterThan(0);
   expect(kindsDrawn(root)).toEqual(new Set(KINDS));
+});
+
+it("the drawing refits when the facts pane changes its available size", () => {
+  const root = draw(slice, { view: "iso" });
+  const matrix = () => root.querySelector('g[transform^="matrix"]')!.getAttribute("transform");
+  const before = matrix();
+  act(() => resizeDrawing(400, 600));
+  expect(root.querySelector('svg[aria-label="isometric"]')!.getAttribute("width")).toBe("400");
+  expect(matrix()).not.toBe(before);
 });
 
 it("health inks every ISSUE_KINDS entry in its class's tone, and every encoding bins every segment", () => {

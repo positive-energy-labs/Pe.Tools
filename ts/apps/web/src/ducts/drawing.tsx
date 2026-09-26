@@ -242,8 +242,10 @@ export function DuctDrawing({
 
   const fitted = useRef("");
   useEffect(() => {
-    if (!size || !drawn.box || fitted.current === fitKey) return;
-    fitted.current = fitKey;
+    if (!size || !drawn.box) return;
+    const key = `${fitKey}|${size.width}|${size.height}`;
+    if (fitted.current === key) return;
+    fitted.current = key;
     setView(fitView(drawn.box, size));
   }, [size, drawn.box, fitKey]);
 
