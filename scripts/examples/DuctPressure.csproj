@@ -1,0 +1,13 @@
+<Project Sdk="Pe.Revit.Sdk">
+  <PropertyGroup>
+    <PeProjectKind>RevitLibrary</PeProjectKind>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="DuctPressure.cs" />
+    <ProjectReference Include="../../dotnet/Pe.Revit.Global/Pe.Revit.Global.csproj" />
+    <ProjectReference Include="../../dotnet/Pe.Revit.Scripting/Pe.Revit.Scripting.csproj" />
+    <ProjectReference Include="../../dotnet/Pe.Shared.RevitData/Pe.Shared.RevitData.csproj" />
+  </ItemGroup>
+</Project>
