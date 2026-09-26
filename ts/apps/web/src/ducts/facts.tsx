@@ -14,7 +14,7 @@ function Rows({ rows }: { rows: readonly Row[] }) {
   return (
     <dl className="grid grid-cols-[auto_1fr_auto] gap-x-3">
       {rows.map(([label, value, source]) => (
-        <div key={label} className="contents">
+        <div key={`${label}:${source}`} className="contents">
           <dt className="text-ink-2">{label}</dt>
           <dd className={value == null ? "text-ink-mute" : "face-mono"}>{value ?? "missing"}</dd>
           <dd className="text-ink-mute">{value == null ? "" : source}</dd>

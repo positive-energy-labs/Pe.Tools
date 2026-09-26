@@ -23,6 +23,7 @@ import { tokenRef } from "#/lib/token";
 import { ISSUE_KINDS, IssueLegend, issueVerdict, type Blocks, type IssueKind } from "./issues";
 import type { DuctsPage } from "./manifest";
 import type { DuctSnapshot, GroupReadiness } from "./readiness";
+import { READY } from "./tables";
 import { groupTree, runsOf, terminalCfm, type GroupTree, type Run } from "./topology";
 
 type Issue = DuctSnapshot["issues"][number];
@@ -31,24 +32,6 @@ type Choice = Verdict | "unset";
 
 const num = (value: number | null | undefined, digits = 0) =>
   value == null ? "" : value.toFixed(digits);
-
-const READY = {
-  blocked: {
-    word: "blocked",
-    tone: "alarm",
-    note: "a walk from the root cannot reach every terminal",
-  },
-  walkable: {
-    word: "walkable",
-    tone: "caution",
-    note: "walkable; fan static or component drops unknown",
-  },
-  budgetable: {
-    word: "budgetable",
-    tone: "done",
-    note: "walkable, and every static and drop is known",
-  },
-} as const;
 
 const CLASS_ORDER: readonly Blocks[] = ["walkable", "budgetable", "none"];
 /** Kinds in class-then-shade order, so counts read the same everywhere. */
@@ -377,7 +360,7 @@ export function DuctsLedger({
                 rowKey={(g) => g.id}
                 activeKey={page.group || null}
                 onRowClick={(g) =>
-                  setPage({ group: page.group === g.id ? "" : g.id, selected: "" })
+                  setPage({ group: page.group === g.id ? "" : g.id, selected: "", issue: "" })
                 }
                 empty={none}
               />
@@ -408,7 +391,7 @@ export function DuctsLedger({
                 columns={runColumns}
                 rowKey={(r) => String(r.terminal)}
                 activeKey={active ? String(active.terminal) : null}
-                onRowClick={(r) => setPage({ selected: String(r.terminal) })}
+                onRowClick={(r) => setPage({ selected: String(r.terminal), issue: "" })}
                 empty={pick}
               />
             </Pane>
@@ -439,9 +422,9 @@ export function DuctsLedger({
                 rows={issues}
                 columns={issueColumns}
                 rowKey={(i) => i.id}
-                activeKey={page.selected || null}
+                activeKey={page.issue || null}
                 onRowClick={(i) =>
-                  setPage({ selected: i.elementId == null ? "" : String(i.elementId) })
+                  setPage({ selected: i.elementId == null ? "" : String(i.elementId), issue: i.id })
                 }
                 empty={pick}
               />

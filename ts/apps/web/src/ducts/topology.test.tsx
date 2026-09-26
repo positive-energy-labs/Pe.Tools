@@ -156,6 +156,8 @@ const page = (patch: Partial<DuctsPage> = {}): DuctsPage => ({
   level: "",
   layers: [],
   selected: "",
+  issue: "",
+  encoding: "health",
   epoch: 0,
   ...patch,
 });

@@ -301,7 +301,7 @@ export function DuctsTables({
                 rowKey={(g) => g.id}
                 activeKey={page.group || null}
                 onRowClick={(g) =>
-                  setPage({ group: page.group === g.id ? "" : g.id, selected: "" })
+                  setPage({ group: page.group === g.id ? "" : g.id, selected: "", issue: "" })
                 }
                 empty={none}
               />

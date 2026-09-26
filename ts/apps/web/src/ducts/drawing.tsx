@@ -156,7 +156,7 @@ export function DuctDrawing({
   encoding: Encoding;
   /** The view refits when this changes (a new group, level or yaw step), never on a refresh. */
   fitKey: string;
-  selected: number | null;
+  selected: ReadonlySet<number>;
   hovered: number | null;
   issue: string;
   onHover: (id: number | null) => void;
@@ -261,7 +261,7 @@ export function DuctDrawing({
     if (dragDist.current < CLICK_PX) run();
   };
   const halo = (id: number) =>
-    id === selected ? token("select") : id === hovered ? token("veil") : null;
+    selected.has(id) ? token("select") : id === hovered ? token("veil") : null;
 
   return (
     <div
@@ -327,7 +327,7 @@ export function DuctDrawing({
               const id = facts.segment.id;
               const back = halo(id);
               return (
-                <g key={id} data-segment={id}>
+                <g key={id} data-segment={id} data-selected={selected.has(id) ? "" : undefined}>
                   {back ? (
                     <path
                       d={path}
@@ -371,6 +371,7 @@ export function DuctDrawing({
               <g
                 key={`r${id}`}
                 data-riser={id}
+                data-selected={selected.has(id) ? "" : undefined}
                 transform={`translate(${x} ${y})`}
                 style={{ cursor: "pointer" }}
                 onMouseEnter={() => onHover(id)}
@@ -391,6 +392,8 @@ export function DuctDrawing({
               <g
                 key={id}
                 data-node={facts.node.kind}
+                data-node-id={id}
+                data-selected={selected.has(id) ? "" : undefined}
                 transform={`translate(${x} ${y})`}
                 style={{ cursor: "pointer" }}
                 onMouseEnter={() => onHover(id)}

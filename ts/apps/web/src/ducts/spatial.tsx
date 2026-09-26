@@ -21,6 +21,7 @@ import { usePlan } from "./plan";
 import type { DuctSnapshot, GroupReadiness } from "./readiness";
 import { indexOf, type DuctIndex } from "./scene";
 import { READY } from "./tables";
+import { groupTree, runsOf } from "./topology";
 
 function EncodingBand({
   encoding,
@@ -126,6 +127,16 @@ function Spatial({
   const iso = useIso(index, page);
   const view = page.view === "iso" ? iso : plan;
   const selected = page.selected ? Number(page.selected) : null;
+  const tree = useMemo(() => groupTree(index.snapshot, page.group), [index, page.group]);
+  const selection = useMemo(
+    () =>
+      new Set(
+        selected == null
+          ? []
+          : (runsOf(tree).find((run) => run.terminal === selected)?.path ?? [selected]),
+      ),
+    [tree, selected],
+  );
   const readiness = page.group ? ready[page.group] : undefined;
   const shown = hovered ?? selected;
   const pickedIssue = page.issue
@@ -180,7 +191,7 @@ function Spatial({
               scene={view.scene}
               encoding={encoding}
               fitKey={view.fitKey}
-              selected={selected}
+              selected={selection}
               hovered={hovered}
               issue={page.issue}
               onHover={setHovered}
