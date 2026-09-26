@@ -133,7 +133,10 @@ public static class DuctSnapshots {
         var own = e.LookupParameter(name);
         var parameter = own is { HasValue: true } ? own : (e as FamilyInstance)?.Symbol?.LookupParameter(name);
         var source = (ReferenceEquals(parameter, own) ? "instance." : "type.") + name;
-        return parameter is { HasValue: true, StorageType: StorageType.Double } && parameter.Definition.GetDataType() == spec
+        // FOOTGUN: Round Elbow 12767100, type "1 D", stores both radii as DuctSize (internal feet), r/D = 1.
+        // scripts/examples/DuctRadiusProof.cs exercises this native witness through Snapshot.
+        return parameter is { HasValue: true, StorageType: StorageType.Double } &&
+            (parameter.Definition.GetDataType() == spec || spec == SpecTypeId.Length && parameter.Definition.GetDataType() == SpecTypeId.DuctSize)
             ? new(parameter.AsDouble() * scale, DuctProvenance.Geometry, source)
             : new(null, DuctProvenance.Geometry, name + " absent or wrong parameter spec");
     }
