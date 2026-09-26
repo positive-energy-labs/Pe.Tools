@@ -70,6 +70,7 @@ dotnet tool run pe-revit -- <command> --json
 - Terminal `dotnet build` and `publish` are isolated compile or artifact lanes. Raw `dotnet test` is forbidden for Revit-backed projects.
 - `install status` reports the installed product. The MSI is the only installer: there is no `converge`/`remove` verb and no self-update from the host.
 - Never use `Stop-Process`, `taskkill`, or direct Revit launch. `pe-revit session` owns controlled Revit lifecycle. Never mutate installed product state without explicit authority.
+- Opening a `.rvt` by file association joins whatever Revit is running, including an SDK snapshot session with add-ins quarantined. Never open a document for the person while `session list` shows a controlled session; the person launches their own Revit first. A delegated agent stops only the session id it started, and reports the person's Revit pid alive before and after (2026-09-25: a stopped snapshot took the person's unsaved work with it).
 
 ## Host, web, Pea, and browser
 
@@ -80,6 +81,36 @@ dotnet tool run pe-revit -- <command> --json
 - Discover host operations before calling them. Put structured requests in a file; do not pass JSON through PowerShell quoting. A mutation script ends with an independent read-back.
 - Show a picture to the person with a markdown image whose absolute path uses forward slashes: `![x](C:/Users/.../out.png)`. A backslash path does not render in the T3 chat (2026-09-26). Put the backslash path in a code block beside it for copying.
 - Use the in-app browser preview for route proof. Inspect console, network, visible state, and the route's receipts. If browser automation is unavailable or broken, report the browser claim as unproven and prove only the lower lane.
+
+## Prototype mechanics
+
+The mechanics `protoui` names and `execute` owns.
+
+### Mounting
+
+Prefer an existing host page. Variants render on the same route, gated by `?variant=`; data fetching, params, and auth stay, only the rendered subtree swaps. A throwaway route (project routing conventions, named `prototype-*`) is a last resort; an empty route hides problems a populated one exposes.
+
+```tsx
+const variant = searchParams.get('variant') ?? 'A';
+return (
+  <>
+    {variant === 'A' && <VariantA {...data} />}
+    {variant === 'B' && <VariantB {...data} />}
+    {variant === 'C' && <VariantC {...data} />}
+    <PrototypeSwitcher variants={['A','B','C']} current={variant} />
+  </>
+);
+```
+
+Shared `<Header>` fine; shared `<Layout>` defeats the point.
+
+### Switcher bar
+
+Fixed *bottom-centre*, *constant-width* pill: ← arrow, `B — Sidebar layout` label, → arrow, wrapping. Arrows update the URL param via the router (shareable, reload-stable). Arrow keys cycle too, except when an input, textarea, or contenteditable is focused. Visually alien to the page so it reads as not-the-design. Gated out of production builds. One shared component, with the project's shared UI.
+
+### Cleanup
+
+Winner folds into canon, rewritten to prod standard. Losers, switcher, and throwaway routes leave main; the full round only kept on a throwaway branch if the user's verdicts lacked confidence.
 
 ## Worktrees and Herdr
 

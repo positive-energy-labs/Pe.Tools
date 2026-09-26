@@ -24,6 +24,7 @@ Mode: a claim leaves your hands as PROVEN, FALSIFIED, or UNPROVEN, never as "sho
 - Re-run, don't read. Run every proof a report states before you accept its verdict.
 - A finding you do not pay for is not a finding. The fix list is the next work down the same line, before any new shape; a report nobody pays is a report the next round finds again.
 - Rank by consequence, not by count. One wrong invariant outranks twenty nits; report nits only when asked. The user decides the ranking.
+- Suspect the instrument first when a number does not move after a change that should move it, or moves further than the change can explain. Audit the metric, the fixture, and any stub in the loop before crediting or blaming the work.
 - Name what survives.
 - A hang or timeout is a diagnostic boundary, not a failure; name it, do not retry blind.
 - Report state as PROVEN / BLOCKED / OPEN, each with its stake.

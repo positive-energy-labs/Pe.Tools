@@ -30,34 +30,4 @@ Round: build variants, user decides, record the verdict, reshape. `grill` on wha
 
 User verdicts are the top signal. Losing the layout argument while winning the product argument is normal. Persist per `docs`: frontier and per-round verdicts live; settled law promotes; the winner is rewritten to canon, never promoted as-is, or captured as a chimera; the round's losers are thrown away.
 
-Mounting, the switcher bar, isolated-file variants, and cleanup are mechanics: `execute` owns them, under the lane that serves the surface.
-
-## Mounting [scope: repo]
-
-Prefer an existing host page. Variants render on the same route, gated by `?variant=`; data fetching, params, and auth stay, only the rendered subtree swaps. A throwaway route (project routing conventions, named `prototype-*`) is a last resort; an empty route hides problems a populated one exposes.
-
-```tsx
-const variant = searchParams.get('variant') ?? 'A';
-return (
-  <>
-    {variant === 'A' && <VariantA {...data} />}
-    {variant === 'B' && <VariantB {...data} />}
-    {variant === 'C' && <VariantC {...data} />}
-    <PrototypeSwitcher variants={['A','B','C']} current={variant} />
-  </>
-);
-```
-
-Shared `<Header>` fine; shared `<Layout>` defeats the point.
-
-## Switcher bar [scope: repo]
-
-Fixed *bottom-centre*, *constant-width* pill: ← arrow, `B — Sidebar layout` label, → arrow, wrapping. Arrows update the URL param via the router (shareable, reload-stable). Arrow keys cycle too, except when an input, textarea, or contenteditable is focused. Visually alien to the page so it reads as not-the-design. Gated out of production builds. One shared component, with the project's shared UI.
-
-## Isolated HTML variants [scope: repo]
-
-For component-ey questions (a widget, an idiom, an interaction in isolation): one file, no framework, no server, opens by double-click, survives being emailed. Domain language on every label. Title and one-line question at top, variants side by side or tabbed. Real logic in a pure `<script>` module the page calls into; the shell is throwaway.
-
-## Cleanup [scope: repo]
-
-Winner folds into canon, rewritten to prod standard. Losers, switcher, and throwaway routes leave main; the full round only kept on a throwaway branch if the user's verdicts lacked confidence.
+Mounting, the switcher bar, and cleanup are mechanics that `execute` owns, under the lane that serves the surface. A standalone page variant, for a question about one widget or interaction, is `page`.

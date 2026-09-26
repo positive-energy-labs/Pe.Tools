@@ -19,4 +19,5 @@ Mode: no fix until the cause is named and reproduced.
 - Instrument before you reason, when writes are authorized. A log line at the seam beats an hour of reading. Remove the instruments after. A read-only diagnosis reasons from runs and reads and names the seam it would have instrumented.
 - A hang or timeout is a boundary, not a failure; name what it was waiting on.
 - Speak the domain's words: read the glossary and ADRs `docs` names for the area before you name the cause.
+- A delegated diagnosis lands a fix only under a gate its brief states, a line count and "obviously right"; above the gate it reports the cause and the red loop and stops.
 - Report the cause, the wound (`path:line`, trace, run), the red loop, and the smallest fix that turns it green. The user decides the fix; a regression test pins it only when the loop was hard to build.

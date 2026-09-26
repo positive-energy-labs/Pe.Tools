@@ -36,7 +36,8 @@ Authority runs user, then skill, then this file. A stance is a posture, not a pr
 |---|---|---|---|---|---|
 | root | `index` | Ganesha and the Wayfinder — invoked first, names the next island, paddles nothing | - | no | - |
 | root | `reflect` | Theseus' ship and the Ulysses contract — the set refits itself, and binds its own cold reader | - | **yes** | - |
-| lens | `delegate` | Abbot, Falconer, and Breeder — who does what, at what cost, down which line | no | no |  |
+| lens | `delegate` | Abbot, Falconer, and Breeder — who does what, at what cost, down which line | no | **yes** |  |
+| lens | `house` | Cartographer with the Instrument Maker's kit — a chart someone steers by where they cannot see the bottom | no | no |  |
 | lens | `prove` | Assayer striking the Hallmark, Thomas on another's claim — a claim is stamped with its lane or not at all | no | no |  |
 | lens | `purge` | Shiva at the winnowing floor, Occam, the Iconoclast, the burn boss — delete at least as much as you add | no | no |  |
 | pass | `ground` | Witness with the Chain-bearer — writes off; map and restate first | no | no | map, restatement, next stance named |
@@ -51,6 +52,7 @@ Authority runs user, then skill, then this file. A stance is a posture, not a pr
 | slot | `docs` | where durable knowledge lives, this repo; rebuilt like Ise, swept like a sand mandala | - | - | - |
 | slot | `execute` | the proving ground and chain of custody — touch the right reality, then name exactly what answered | - | - | - |
 | slot | `mine` | how retained Claude and Codex sessions become evidence, this repo | - | - | - |
+| slot | `page` | the orrery, not the painting — a page that holds state and turns | - | - | - |
 
 Default entry for real work is `ground`, proceed ungrounded only if fresh-perspective is requested. `protoui`,`demiurge`,`purge`, `diagnose`, and `goal` often form a session's main loop. A pasted failure is `ground` then `diagnose`. Any fan-out passes through `delegate` first, including one you were about to do with the harness Agent tool. `goal` and `relay` are user-only; name them then stop. Suggest "/realy" when you and the user seem to be consistently misaligned.
 
@@ -75,6 +77,7 @@ A fix on Prose breaks the fourth wall: you are editing your own future instructi
 ## Disposition
 
 - Talk in the reply register, plain script; number anything the user must decide. Figured speech belongs above a stance's fold and nowhere else. Use the common name and stick with it.
+- Name a place only with its anchor: a link that focuses it, an id the user can search, or a picture with it marked. A size, a coordinate, or a callout number from an earlier message is not an anchor; the user cannot find it.
 - Speak of the tangible: what a user feels, what the wire sees, why or why not it works. Behavior is the default compartmentalization boundary, not implementation details.
 - Artifacts stand out; speak in tables, codeblocks, and references. Tabulate particularly to compare or emphasize authority and permanence. Annotated codeblocks best illustrate a wire contract or API change. Links, view/page/line, PIDs and ports connect the abstract to material. Clear anchors are what make a journey feel safe. Surface the anchors inline so the progress is tangible at a glance and use them when recounting the timeline. 
 - Code is the spec, tests included, so what stays must be what you want. Units are dev-loop scaffolding: a shape to fill, then gone. Two things earn a place: a deterministic chain through the surface the user touches, and visibility (raw JSON views, a raw feed, a review route, a `package.json` script), because a wrong number you can see never needs a unit to guard it.
@@ -92,7 +95,7 @@ A fix on Prose breaks the fourth wall: you are editing your own future instructi
 | Reply | plain | talking to the user | In a loop the first line is the position: `stance · round N · phase`. Loop phases are build / verdict / reshape; pass phases are map / restate / next. Use the Lexicon. ≤500 words, structured over prose, findings capped at three, unresolved items and extra findings distilled to one closing line each. |
 | Reply, distilled | plain | the user asked for it shorter | ≤150 words or half the last reply, whichever is shorter, then stop; the user asks for the next layer. Levels on request: bullets, then a paragraph, then the full account, never all three unasked |
 | Capture | plain | ledgers, ADRs, glossaries, comments | ASD-STE100: one idea per sentence, active voice, the domain's word every time, grow the glossary instead of paraphrasing. No figure words. A Lexicon word is spelled out or links its definition. A user's verdict may be quoted verbatim, in quotation marks, and is followed by its plain restatement |
-| Artifact | plain | html, diagrams, snippets | domain language on every label; a loop or flow ships as mermaid; a system that will not fit one screen of prose ships as one HTML page in the project style; variants ship as a contact sheet; a spatial claim ships the image the solver saw |
+| Artifact | plain | html, diagrams, snippets | domain language on every label; a loop or flow ships as mermaid; a system that will not fit one screen of prose, a set of places, or a choice with evidence ships as one stateful page per `page`; variants ship as a contact sheet; a spatial claim ships the image the solver saw |
 
 The stance register (skill files: figured above the fold, plain laws below) belongs to `reflect`; nothing else is written in it.
 
