@@ -13,7 +13,7 @@ const DUCTS_STAGES = [{ key: "survey", word: "Surveying ducts" }] as const;
 
 const ductsPageSchema = z.object({
   stage: z.enum(["survey"]).default("survey"),
-  /** The view the body draws; the default is the tables. Variants add keys. */
+  /** The view the body draws: "" the tables, `plan` one level, `iso` every level. */
   view: z.string().default(""),
   /** The subject: one group id (`g<smallest element id>`); empty = the whole document. */
   group: z.string().default(""),
@@ -23,6 +23,10 @@ const ductsPageSchema = z.object({
   layers: z.array(z.string()).default([]),
   /** The selected element id as a string; empty = none. */
   selected: z.string().default(""),
+  /** The selected issue id (it may name no element: no-root, multi-root); empty = none. */
+  issue: z.string().default(""),
+  /** The spatial views' encoding, a key of `ENCODINGS` (`encoding.tsx`). */
+  encoding: z.string().default("health"),
   /** Bumped by `refresh`; the snapshot read keys on it. */
   epoch: z.number().default(0),
 });

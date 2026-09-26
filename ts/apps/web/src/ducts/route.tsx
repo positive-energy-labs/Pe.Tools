@@ -16,6 +16,7 @@ import { useDocumentLadder } from "#/route/situation-ladder";
 import { manifest, type DuctsPage } from "./manifest";
 import { readiness, type DuctSnapshot } from "./readiness";
 import { DuctsLedger } from "./ledger";
+import { DuctsSpatial } from "./spatial";
 import { DuctsTables } from "./tables";
 import { DuctsTree } from "./tree";
 
@@ -24,10 +25,15 @@ const VIEWS = [
   { id: "", label: "tables", sub: "groups, segments, issues and layers" },
   { id: "tree", label: "tree", sub: "one-line schematic from the root to each terminal" },
   { id: "ledger", label: "ledger", sub: "the Manual D worksheet: runs, issues and assumptions" },
+  { id: "plan", label: "a plan", sub: "the network on one level" },
+  { id: "iso", label: "an isometric", sub: "the network across every level" },
 ] as const;
 
 /** The URL half of the page; the rest (epoch, stage) is ephemeral. */
-export type DuctsSearch = Pick<DuctsPage, "view" | "group" | "level" | "selected"> & {
+export type DuctsSearch = Pick<
+  DuctsPage,
+  "view" | "group" | "level" | "selected" | "issue" | "encoding"
+> & {
   layers: string;
 };
 
@@ -68,6 +74,8 @@ export function DuctsRoute({
       page.group !== search.group ||
       page.level !== search.level ||
       page.selected !== search.selected ||
+      page.issue !== search.issue ||
+      page.encoding !== search.encoding ||
       layers !== search.layers
     )
       setSearch({
@@ -75,9 +83,11 @@ export function DuctsRoute({
         group: page.group,
         level: page.level,
         selected: page.selected,
+        issue: page.issue,
+        encoding: page.encoding,
         layers,
       });
-  }, [page.view, page.group, page.level, page.selected, page.layers]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page.view, page.group, page.level, page.selected, page.issue, page.encoding, page.layers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ready = useMemo(
     () => (snapshot ? readiness(snapshot, handle.work.doc) : {}),
@@ -118,7 +128,7 @@ export function DuctsRoute({
               : null,
             note: read,
             picked: (id) => id === page.group,
-            pick: (id) => setPage({ group: id === page.group ? "" : id, selected: "" }),
+            pick: (id) => setPage({ group: id === page.group ? "" : id, selected: "", issue: "" }),
           },
         ]}
         disabled={busy}
@@ -214,6 +224,14 @@ export function DuctsRoute({
           setPage={setPage}
           empty={empty}
           work={{ doc: handle.work.doc, write: handle.work.write }}
+        />
+      ) : page.view === "plan" || page.view === "iso" ? (
+        <DuctsSpatial
+          snapshot={snapshot}
+          ready={ready}
+          page={page}
+          setPage={setPage}
+          empty={empty}
         />
       ) : (
         <DuctsTables
