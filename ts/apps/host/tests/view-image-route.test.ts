@@ -15,10 +15,13 @@ const sha = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 
 async function serve() {
   const root = await mkdtemp(join(tmpdir(), "pe-view-image-test-"));
-  const web = HttpRouter.toWebHandler(viewImageRoute(async () => [root]), {
-    disableLogger: true,
-    memoMap: Layer.makeMemoMapUnsafe(),
-  });
+  const web = HttpRouter.toWebHandler(
+    viewImageRoute(async () => [root]),
+    {
+      disableLogger: true,
+      memoMap: Layer.makeMemoMapUnsafe(),
+    },
+  );
   cleanup.push(
     () => rm(root, { recursive: true, force: true }),
     () => web.dispose(),
