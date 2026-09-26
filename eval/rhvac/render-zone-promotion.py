@@ -1,7 +1,7 @@
 """Render law-bound verdict and forensic views from an offline takeoff report."""
 
-# COUPLING: ts/apps/web/src/runs/visual-law.json is the single visual-law
-# declaration shared with the /runs TypeScript renderer. Do not restate its values here.
+# COUPLING: ts/apps/web/src/takeoff/visual-law.json is the single visual-law
+# declaration shared with the takeoff partition review. Do not restate its values here.
 
 import argparse
 import colorsys
@@ -19,10 +19,10 @@ import overlay
 
 
 LAW_PATH = (Path(__file__).resolve().parents[2]
-            / "ts/apps/web/src/runs/visual-law.json")
+            / "ts/apps/web/src/takeoff/visual-law.json")
 
 # base.css is the ONLY numeric dash authority (ruling 2026-08-28). The visual law names a
-# semantic role; both this renderer and the /runs TypeScript surface resolve the pattern from
+# semantic role; both this renderer and the web takeoff review resolve the pattern from
 # here, so the two can no longer drift the way they did before 2026-08-23.
 BASE_CSS_PATH = (Path(__file__).resolve().parents[2]
                  / "ts/apps/web/src/base.css")
