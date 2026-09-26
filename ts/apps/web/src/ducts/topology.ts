@@ -16,14 +16,14 @@ type Connector = Node["connectors"][number];
 type Issue = DuctSnapshot["issues"][number];
 
 /** An equipment port and the group element it feeds; a stand-in root has no port. */
-export interface RootPort {
+interface RootPort {
   equipment: number | null;
   port: number | null;
   element: number;
 }
 
 /** One group element: a node (fitting, terminal, …) or a segment (duct, flex). */
-export interface Part {
+interface Part {
   id: number;
   node: Node | null;
   segment: Segment | null;
@@ -189,7 +189,7 @@ export function groupTree(snapshot: DuctSnapshot, groupId: string): GroupTree {
 }
 
 /** Root to `id`, inclusive. */
-export const pathTo = (parent: ReadonlyMap<number, number | null>, id: number) => {
+const pathTo = (parent: ReadonlyMap<number, number | null>, id: number) => {
   const path = [id];
   for (let up = parent.get(id); up != null; up = parent.get(up)) path.unshift(up);
   return path;

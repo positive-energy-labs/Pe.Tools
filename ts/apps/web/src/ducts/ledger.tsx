@@ -20,7 +20,7 @@ import { Switcher } from "#/components/lang/switcher";
 import type { Column } from "#/components/master-table/model";
 import { Table } from "#/components/master-table/table";
 import { tokenRef } from "#/lib/token";
-import { ISSUE_KINDS, IssueLegend, issueVerdict, type IssueKind } from "./issues";
+import { ISSUE_KINDS, IssueLegend, issueVerdict, type Blocks, type IssueKind } from "./issues";
 import type { DuctsPage } from "./manifest";
 import type { DuctSnapshot, GroupReadiness } from "./readiness";
 import { groupTree, runsOf, terminalCfm, type GroupTree, type Run } from "./topology";
@@ -50,11 +50,11 @@ const READY = {
   },
 } as const;
 
+const CLASS_ORDER: readonly Blocks[] = ["walkable", "budgetable", "none"];
 /** Kinds in class-then-shade order, so counts read the same everywhere. */
 const KIND_ORDER = (Object.keys(ISSUE_KINDS) as IssueKind[]).sort(
   (a, b) =>
-    ["walkable", "budgetable", "none"].indexOf(ISSUE_KINDS[a].blocks) -
-      ["walkable", "budgetable", "none"].indexOf(ISSUE_KINDS[b].blocks) ||
+    CLASS_ORDER.indexOf(ISSUE_KINDS[a].blocks) - CLASS_ORDER.indexOf(ISSUE_KINDS[b].blocks) ||
     ISSUE_KINDS[a].color.shade - ISSUE_KINDS[b].color.shade,
 );
 
@@ -167,12 +167,10 @@ export function DuctsLedger({
     null;
   const readiness = page.group ? ready[page.group] : undefined;
   const open = new Set([...(readiness?.walk ?? []), ...(readiness?.budget ?? [])]);
-  // What still holds the group back first, in taxonomy order; answered and advisory after.
+  // Taxonomy order (walk blockers, budget blockers, advisory). Never by answer: a row must not
+  // move under the hand that just answered it.
   const issues = [...(page.group ? (issuesByGroup.get(page.group) ?? []) : [])].sort(
-    (a, b) =>
-      Number(open.has(b.id)) - Number(open.has(a.id)) ||
-      KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) ||
-      a.id.localeCompare(b.id),
+    (a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || a.id.localeCompare(b.id),
   );
 
   const groupColumns: Column<GroupRow>[] = [
@@ -455,13 +453,7 @@ export function DuctsLedger({
               title="plan"
               meta={active ? `run to ${active.terminal}` : undefined}
             >
-              {tree ? (
-                <MiniMap tree={tree} run={active} selected={selected} />
-              ) : (
-                <EmptyState story="scope" exit="choose a group">
-                  no group to draw
-                </EmptyState>
-              )}
+              {tree ? <MiniMap tree={tree} run={active} selected={selected} /> : pick}
             </Pane>
           }
         />

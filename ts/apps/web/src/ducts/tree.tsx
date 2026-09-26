@@ -22,7 +22,7 @@ const PAD = 24;
 const ROOT_W = 132;
 
 /** A tone's ink role: `mute` is the one tone with no role of its own name. */
-export const inkOf = (tone: VerdictTone) => tokenRef(tone === "mute" ? "ink-mute" : tone);
+const inkOf = (tone: VerdictTone) => tokenRef(tone === "mute" ? "ink-mute" : tone);
 const issueInk = (kind: IssueKind) => inkOf(ISSUE_KINDS[kind].color.tone);
 
 interface Placed {
@@ -44,17 +44,27 @@ export interface TreeLayout {
 export function layoutTree(tree: GroupTree, chains: Chain[]): TreeLayout {
   const below = new Map<number | null, Chain[]>();
   for (const chain of chains) below.set(chain.from, [...(below.get(chain.from) ?? []), chain]);
-  const reach = new Map<number, number>();
-  const farthest = (chain: Chain): number => {
+  // A subtree's reach: its farthest terminal first (so the critical-path stand-in runs along the
+  // top row), then its farthest leaf of any kind (open ends and caps have no terminal).
+  const reach = new Map<number, [number, number]>();
+  const farthest = (chain: Chain): [number, number] => {
     const known = reach.get(chain.to);
-    if (known != null) return known;
-    const kids = below.get(chain.to) ?? [];
-    const value = kids.length ? Math.max(...kids.map(farthest)) : tree.dist.get(chain.to)!;
+    if (known) return known;
+    const kids = (below.get(chain.to) ?? []).map(farthest);
+    const own = tree.dist.get(chain.to)!;
+    const terminal = tree.parts.get(chain.to)!.node?.kind === "terminal" ? own : -1;
+    const value: [number, number] = [
+      Math.max(terminal, ...kids.map((k) => k[0])),
+      Math.max(own, ...kids.map((k) => k[1])),
+    ];
     reach.set(chain.to, value);
     return value;
   };
   const ordered = (from: number | null) =>
-    [...(below.get(from) ?? [])].sort((a, b) => farthest(b) - farthest(a) || a.to - b.to);
+    [...(below.get(from) ?? [])].sort((a, b) => {
+      const [ra, rb] = [farthest(a), farthest(b)];
+      return rb[0] - ra[0] || rb[1] - ra[1] || a.to - b.to;
+    });
 
   const placed: Placed[] = [];
   const at = new Map<number, [number, number]>();
