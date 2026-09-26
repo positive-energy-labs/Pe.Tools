@@ -4,7 +4,7 @@
  * projection pivots on the subject's centre, so turning never throws it off screen. Vertical is
  * true scale unless the band says otherwise; a riser is a vertical line of its own length.
  */
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { FactChip } from "#/components/lang/chip";
 import { Press } from "#/components/lang/press";
@@ -67,6 +67,7 @@ export function useIso(index: DuctIndex, page: Pick<DuctsPage, "group">): Spatia
   // Turns are offsets from the group's own grid set on the diagonal, so its ducts never run
   // straight into the screen (where depth would read as a riser).
   const [turned, setTurned] = useState(0);
+  const drag = useRef({ dx: 0, frame: 0 });
   const [stretch, setStretch] = useState<number>(Z_STRETCH[0]);
 
   const scene = useMemo(() => {
@@ -98,7 +99,14 @@ export function useIso(index: DuctIndex, page: Pick<DuctsPage, "group">): Spatia
     fitKey: `iso|${page.group}|${stretch}`,
     onDrag: (dx, _dy, shift) => {
       if (shift) return false;
-      setTurned((t) => t + dx * DEG_PER_PX);
+      // Coalesced to one turn per frame, however fast the pointer reports.
+      drag.current.dx += dx;
+      if (!drag.current.frame)
+        drag.current.frame = requestAnimationFrame(() => {
+          const by = drag.current.dx * DEG_PER_PX;
+          drag.current = { dx: 0, frame: 0 };
+          setTurned((t) => t + by);
+        });
       return true;
     },
     band: (

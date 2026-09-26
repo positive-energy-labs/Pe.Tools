@@ -53,7 +53,7 @@ const d = (segments: readonly Segment[], project: Project, skip?: (s: Segment) =
     if (skip?.(segment)) continue;
     segment.polyline.forEach((point, i) => {
       const [x, y] = project(point);
-      out += `${i ? "L" : "M"}${x.toFixed(2)} ${y.toFixed(2)}`;
+      out += `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`;
     });
   }
   return out;
@@ -64,8 +64,8 @@ const span = (segment: Segment, project: Project) => {
   const b = project(segment.polyline.at(-1)!);
   return Math.hypot(b[0] - a[0], b[1] - a[1]);
 };
-/** Context drops what cannot show at any zoom: connector stubs under 6 in. */
-const tiny = (segment: Segment) => segment.lengthFt < 0.5;
+/** Context is decimated: runs under 2 ft (stubs, fitting-to-fitting pieces) never draw faint. */
+const tiny = (segment: Segment) => segment.lengthFt < 2;
 
 const fitView = (box: Bounds2, size: Viewport2): View => {
   const w = Math.max(box.maxX - box.minX, 1);
