@@ -30,7 +30,7 @@ export interface Stroke {
   dash: DashRole | null;
 }
 
-export interface Bin {
+interface Bin {
   word: string;
   says: string;
   stroke: Stroke;
@@ -45,6 +45,13 @@ export interface Encoding {
   bins: Record<string, Bin>;
   bin: (facts: SegmentFacts) => string;
 }
+
+/** The registered dash classes (base.css), by role. */
+export const DASH_CLASS: Record<DashRole, string> = {
+  seam: "dash-seam",
+  reference: "dash-reference",
+  void: "dash-void",
+};
 
 /** Missing data is drawn, never blank: a thin dashed mute line says "no value here". */
 const MISSING: Stroke = { ink: VERDICT_INK.mute, width: 1.25, dash: "void" };
@@ -90,14 +97,14 @@ function sequential(
 
 /** The worst `blocks` class among a set of issues, in readiness order. */
 const WORST: readonly Blocks[] = ["walkable", "budgetable", "none"];
-export const worstBlocks = (issues: readonly Issue[]): Blocks | null =>
+const worstBlocks = (issues: readonly Issue[]): Blocks | null =>
   WORST.find((blocks) => issues.some((issue) => ISSUE_KINDS[issue.kind].blocks === blocks)) ?? null;
 
 /** One ink per `blocks` class, taken from the class's `ISSUE_KINDS` tone. */
 const blocksInk = (blocks: Blocks) =>
   VERDICT_INK[Object.values(ISSUE_KINDS).find((info) => info.blocks === blocks)!.color.tone];
 
-export const CLEAN_INK = VERDICT_INK.ink;
+const CLEAN_INK = VERDICT_INK.ink;
 
 const flowWidths = [1.5, 2.5, 4, 6, 8] as const;
 const FLOW_EDGES = [100, 300, 600, 1200] as const;

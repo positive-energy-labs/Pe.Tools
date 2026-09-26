@@ -10,9 +10,9 @@ import { EmptyState } from "#/components/lang/empty";
 import { FactChip } from "#/components/lang/chip";
 import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
-import { Press } from "#/components/lang/press";
+import { Switcher } from "#/components/lang/switcher";
 import { DuctDrawing, GlyphKey, type Scene } from "./drawing";
-import { ENCODING_KEYS, ENCODINGS, encodingOf, type Encoding } from "./encoding";
+import { DASH_CLASS, ENCODING_KEYS, ENCODINGS, encodingOf, type Encoding } from "./encoding";
 import { NodeFactsView, SegmentFactsView } from "./facts";
 import { IssueLegend } from "./issues";
 import { useIso } from "./iso";
@@ -43,20 +43,16 @@ function EncodingBand({
   const layer = encoding.layer ? snapshot.layers.find((l) => l.key === encoding.layer) : null;
   return (
     <div className="flex flex-wrap items-center gap-1" aria-label="encoding legend">
-      {ENCODING_KEYS.map((key) => (
-        <Press
-          key={key}
-          type="button"
-          frame="line"
-          size="caption"
-          state={key === encodingKey ? "selected" : "rest"}
-          aria-pressed={key === encodingKey}
-          title={ENCODINGS[key].says}
-          onClick={() => pick(key)}
-        >
-          {ENCODINGS[key].label}
-        </Press>
-      ))}
+      <Switcher
+        ariaLabel="encoding"
+        value={encodingKey}
+        onChange={pick}
+        options={ENCODING_KEYS.map((key) => ({
+          value: key,
+          label: ENCODINGS[key].label,
+          title: ENCODINGS[key].says,
+        }))}
+      />
       {Object.entries(encoding.bins).map(([key, bin]) => (
         <FactChip key={key} title={bin.says}>
           <span className="flex items-center gap-1" data-bin={key}>
@@ -68,7 +64,7 @@ function EncodingBand({
                 y2="5"
                 stroke={bin.stroke.ink}
                 strokeWidth={Math.min(bin.stroke.width, 8)}
-                className={bin.stroke.dash ? `dash-${bin.stroke.dash}` : undefined}
+                className={bin.stroke.dash ? DASH_CLASS[bin.stroke.dash] : undefined}
               />
             </svg>
             {bin.word} <span className="face-mono">{counts.get(key) ?? 0}</span>
@@ -159,7 +155,7 @@ function Spatial({
                 {readiness ? (
                   <FactChip
                     tone={READY[readiness.level].tone}
-                    title={`${page.group}: ${READY[readiness.level].note}; ${readiness.walk.length} open issues block walking, ${readiness.budget.length} block the budget`}
+                    title={`${READY[readiness.level].note}; open blockers: walking/budget`}
                   >
                     {READY[readiness.level].word} {readiness.walk.length}/{readiness.budget.length}
                   </FactChip>

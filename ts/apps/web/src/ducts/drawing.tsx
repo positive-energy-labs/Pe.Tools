@@ -10,6 +10,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { boundsOf, type Bounds2, type Point2, type Viewport2 } from "#/lib/affine-frame";
 import { token } from "#/lib/token";
 import {
+  DASH_CLASS,
   issueInk,
   nodeInk,
   strokeOf,
@@ -66,7 +67,7 @@ const span = (segment: Segment, project: Project) => {
 /** Context drops what cannot show at any zoom: connector stubs under 6 in. */
 const tiny = (segment: Segment) => segment.lengthFt < 0.5;
 
-export const fitView = (box: Bounds2, size: Viewport2): View => {
+const fitView = (box: Bounds2, size: Viewport2): View => {
   const w = Math.max(box.maxX - box.minX, 1);
   const h = Math.max(box.maxY - box.minY, 1);
   const scale = Math.min(
@@ -104,7 +105,7 @@ function Glyph({ kind, ink }: { kind: DuctNode["kind"]; ink: string }) {
   }
 }
 
-export const NODE_GLYPHS: readonly { kind: DuctNode["kind"]; word: string }[] = [
+const NODE_GLYPHS: readonly { kind: DuctNode["kind"]; word: string }[] = [
   { kind: "equipment", word: "equipment" },
   { kind: "terminal", word: "terminal" },
   { kind: "accessory", word: "accessory" },
@@ -343,7 +344,7 @@ export function DuctDrawing({
                     stroke={stroke.ink}
                     strokeWidth={stroke.width}
                     strokeLinecap="round"
-                    className={stroke.dash ? `dash-${stroke.dash}` : undefined}
+                    className={stroke.dash ? DASH_CLASS[stroke.dash] : undefined}
                     vectorEffect="non-scaling-stroke"
                   />
                   <path

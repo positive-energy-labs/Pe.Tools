@@ -7,6 +7,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, beforeAll, expect, it } from "vite-plus/test";
+import { ductsRouteState } from "@pe/agent-contracts";
 
 import { VERDICT_INK } from "#/components/master-table/cells";
 import {
@@ -133,6 +134,9 @@ const slice = {
   ],
 } as DuctSnapshot;
 
+/** No staged assumption: the Work as the contract parses an empty document. */
+const EMPTY_WORK = ductsRouteState.schema.parse({ assumptions: {} });
+
 const page = (patch: Partial<DuctsPage>): DuctsPage => ({
   stage: "survey",
   view: "plan",
@@ -150,7 +154,7 @@ const draw = (snapshot: DuctSnapshot, patch: Partial<DuctsPage>) =>
   render(
     <DuctsSpatial
       snapshot={snapshot}
-      ready={readiness(snapshot, null)}
+      ready={readiness(snapshot, EMPTY_WORK)}
       page={page(patch)}
       setPage={() => {}}
       empty={null}
