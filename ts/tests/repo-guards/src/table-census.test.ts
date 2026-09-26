@@ -24,9 +24,6 @@ const DOMAIN: Record<string, string> = {
   "param-tables/variants/variant-e/fom-lens.tsx":
     "a printed-sheet exhibit with merged header cells",
   "design-system/action-demo-catalogue.tsx": "a specimen page's plain seed index",
-  // Re-checked (r3): it IS data, but `Table` is a focusable grid with an entry tab stop; a
-  // pointer-events-none peek over the plan must take no focus at all.
-  "runs/browser/zone-peek.tsx": "a transient, unfocusable floater laid over the drawing",
   "workbench/prose.tsx": "GFM tables in prose; the markdown renderer owns them",
 };
 

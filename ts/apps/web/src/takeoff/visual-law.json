@@ -1,5 +1,5 @@
 {
-  "$comment": "The takeoff review visual law. ONE declaration, two consumers: apps/web/src/runs/palette.ts (the /runs screen and its PNG export) and eval/rhvac/render-zone-promotion.py (the offline agent-review renderer). Neither may hold a colour or a layer rule the other cannot see. Before this file existed the two surfaces had already diverged: /runs deleted the invented-closure dither at feedback round 2 ('read as confusion, not honesty') and the python renderer kept drawing it, so the human and the delegated eyes were judging different claims.",
+  "$comment": "The takeoff review visual law. ONE declaration, two consumers: apps/web/src/takeoff/partition-review.tsx (the partition review on the web) and eval/rhvac/render-zone-promotion.py (the offline agent-review renderer). Neither may hold a colour or a layer rule the other cannot see. Before this file existed the two surfaces had already diverged: /runs deleted the invented-closure dither at feedback round 2 ('read as confusion, not honesty') and the python renderer kept drawing it, so the human and the delegated eyes were judging different claims.",
   "version": 1,
   "laws": [
     "The VERDICT render draws only what the solver claims exists, over what is actually there. Nothing invented. No input layer except the zone outline.",

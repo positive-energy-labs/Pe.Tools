@@ -6,13 +6,12 @@
     }
   },
   "hostBelowRoute": {
-    "total": 9,
+    "total": 7,
     "byArea": {
       "chat": 1,
       "grounded-doc": 1,
       "lab": 2,
       "(root)": 1,
-      "runs": 2,
       "workbench": 2
     }
   },
@@ -30,27 +29,25 @@
     }
   },
   "longTitle": {
-    "total": 31,
+    "total": 26,
     "byArea": {
       "components": 3,
       "family": 16,
       "grounded-doc": 1,
       "route": 1,
       "routes": 2,
-      "runs": 5,
       "takeoff": 3
     }
   },
   "busyState": {
-    "total": 3,
+    "total": 2,
     "byArea": {
       "instances": 1,
-      "lab": 1,
-      "runs": 1
+      "lab": 1
     }
   },
   "inlineColor": {
-    "total": 79,
+    "total": 52,
     "byArea": {
       "components": 6,
       "design-system": 1,
@@ -61,7 +58,6 @@
       "ops": 14,
       "param-tables": 3,
       "routes": 1,
-      "runs": 27,
       "takeoff": 3,
       "workbench": 7
     }
@@ -75,9 +71,9 @@
     "byArea": {}
   },
   "fatRoute": {
-    "total": 10,
+    "total": 9,
     "byArea": {
-      "routes": 10
+      "routes": 9
     }
   }
 }

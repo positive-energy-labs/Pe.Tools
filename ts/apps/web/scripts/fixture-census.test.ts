@@ -33,7 +33,6 @@ describe("fixture census", () => {
       "/ops",
       "/parameter-links",
       "/rooms",
-      "/runs",
     ]);
     expect(census.classifiedPrototypeRoutes).toContainEqual({
       route: "/lab",
@@ -41,7 +40,7 @@ describe("fixture census", () => {
       fixtureKind: "prototype-fixture",
     });
     expect(census.missingReviewUrls).toEqual([]);
-    expect(census.missingCanonicalFixtures).toBe(5);
+    expect(census.missingCanonicalFixtures).toBe(4);
   });
 
   it("uses real manifest seed names for every demo review URL", () => {

@@ -138,9 +138,9 @@ const ZOOM_PAD_PX = 48;
 const FILL_PCT = 27;
 const FILL_HOT_PCT = 40;
 /**
- * The contrast lift, `runs/visual-law.json` substrate.plan as `paintPlan` applies it: black point
+ * The contrast lift, `takeoff/visual-law.json` substrate.plan as the deleted `/runs` plan painter applied it: black point
  * 205 and white point 248 stretch to 0 and 255; the plan reads at full strength inside zones and
- * 0.45 outside. Copied, not imported: `runs/` is to be deleted.
+ * 0.45 outside.
  */
 const BLACK_POINT = 205;
 const WHITE_POINT = 248;

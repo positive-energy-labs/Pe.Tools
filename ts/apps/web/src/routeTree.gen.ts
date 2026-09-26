@@ -24,17 +24,14 @@ import { Route as ParamTablesRouteImport } from "./routes/param-tables";
 import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
 import { Route as PodsRouteImport } from "./routes/pods";
 import { Route as RoomsRouteImport } from "./routes/rooms";
-import { Route as RunsRouteImport } from "./routes/runs";
 import { Route as SchedulesRouteImport } from "./routes/schedules";
 import { Route as TakeoffsRouteImport } from "./routes/takeoffs";
-import { Route as ApiRunsExportRouteImport } from "./routes/api/runs-export";
 import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
 import { Route as DesignSystemBandRouteImport } from "./routes/design-system_.band";
 import { Route as DesignSystemListRouteImport } from "./routes/design-system_.list";
 import { Route as DesignSystemPopoversRouteImport } from "./routes/design-system_.popovers";
 import { Route as DesignSystemSwatchRouteImport } from "./routes/design-system_.swatch";
 import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
-import { Route as ApiRunsDataSplatRouteImport } from "./routes/api/runs-data.$";
 import { Route as ApiPdfAuditParseParseIdRouteImport } from "./routes/api/pdf-audit/parse.$parseId";
 
 const IndexRoute = IndexRouteImport.update({
@@ -112,11 +109,6 @@ const RoomsRoute = RoomsRouteImport.update({
   path: "/rooms",
   getParentRoute: () => rootRouteImport,
 } as any);
-const RunsRoute = RunsRouteImport.update({
-  id: "/runs",
-  path: "/runs",
-  getParentRoute: () => rootRouteImport,
-} as any);
 const SchedulesRoute = SchedulesRouteImport.update({
   id: "/schedules",
   path: "/schedules",
@@ -125,11 +117,6 @@ const SchedulesRoute = SchedulesRouteImport.update({
 const TakeoffsRoute = TakeoffsRouteImport.update({
   id: "/takeoffs",
   path: "/takeoffs",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ApiRunsExportRoute = ApiRunsExportRouteImport.update({
-  id: "/api/runs-export",
-  path: "/api/runs-export",
   getParentRoute: () => rootRouteImport,
 } as any);
 const DesignSystemArmingRoute = DesignSystemArmingRouteImport.update({
@@ -162,11 +149,6 @@ const ApiPdfAuditParseRoute = ApiPdfAuditParseRouteImport.update({
   path: "/api/pdf-audit/parse",
   getParentRoute: () => rootRouteImport,
 } as any);
-const ApiRunsDataSplatRoute = ApiRunsDataSplatRouteImport.update({
-  id: "/api/runs-data/$",
-  path: "/api/runs-data/$",
-  getParentRoute: () => rootRouteImport,
-} as any);
 const ApiPdfAuditParseParseIdRoute = ApiPdfAuditParseParseIdRouteImport.update({
   id: "/$parseId",
   path: "/$parseId",
@@ -189,17 +171,14 @@ export interface FileRoutesByFullPath {
   "/parameter-links": typeof ParameterLinksRoute;
   "/pods": typeof PodsRoute;
   "/rooms": typeof RoomsRoute;
-  "/runs": typeof RunsRoute;
   "/schedules": typeof SchedulesRoute;
   "/takeoffs": typeof TakeoffsRoute;
-  "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
   "/design-system/list": typeof DesignSystemListRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
   "/design-system/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
-  "/api/runs-data/$": typeof ApiRunsDataSplatRoute;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
 export interface FileRoutesByTo {
@@ -218,17 +197,14 @@ export interface FileRoutesByTo {
   "/parameter-links": typeof ParameterLinksRoute;
   "/pods": typeof PodsRoute;
   "/rooms": typeof RoomsRoute;
-  "/runs": typeof RunsRoute;
   "/schedules": typeof SchedulesRoute;
   "/takeoffs": typeof TakeoffsRoute;
-  "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
   "/design-system/list": typeof DesignSystemListRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
   "/design-system/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
-  "/api/runs-data/$": typeof ApiRunsDataSplatRoute;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
 export interface FileRoutesById {
@@ -248,17 +224,14 @@ export interface FileRoutesById {
   "/parameter-links": typeof ParameterLinksRoute;
   "/pods": typeof PodsRoute;
   "/rooms": typeof RoomsRoute;
-  "/runs": typeof RunsRoute;
   "/schedules": typeof SchedulesRoute;
   "/takeoffs": typeof TakeoffsRoute;
-  "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system_/arming": typeof DesignSystemArmingRoute;
   "/design-system_/band": typeof DesignSystemBandRoute;
   "/design-system_/list": typeof DesignSystemListRoute;
   "/design-system_/popovers": typeof DesignSystemPopoversRoute;
   "/design-system_/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
-  "/api/runs-data/$": typeof ApiRunsDataSplatRoute;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
 export interface FileRouteTypes {
@@ -279,17 +252,14 @@ export interface FileRouteTypes {
     | "/parameter-links"
     | "/pods"
     | "/rooms"
-    | "/runs"
     | "/schedules"
     | "/takeoffs"
-    | "/api/runs-export"
     | "/design-system/arming"
     | "/design-system/band"
     | "/design-system/list"
     | "/design-system/popovers"
     | "/design-system/swatch"
     | "/api/pdf-audit/parse"
-    | "/api/runs-data/$"
     | "/api/pdf-audit/parse/$parseId";
   fileRoutesByTo: FileRoutesByTo;
   to:
@@ -308,17 +278,14 @@ export interface FileRouteTypes {
     | "/parameter-links"
     | "/pods"
     | "/rooms"
-    | "/runs"
     | "/schedules"
     | "/takeoffs"
-    | "/api/runs-export"
     | "/design-system/arming"
     | "/design-system/band"
     | "/design-system/list"
     | "/design-system/popovers"
     | "/design-system/swatch"
     | "/api/pdf-audit/parse"
-    | "/api/runs-data/$"
     | "/api/pdf-audit/parse/$parseId";
   id:
     | "__root__"
@@ -337,17 +304,14 @@ export interface FileRouteTypes {
     | "/parameter-links"
     | "/pods"
     | "/rooms"
-    | "/runs"
     | "/schedules"
     | "/takeoffs"
-    | "/api/runs-export"
     | "/design-system_/arming"
     | "/design-system_/band"
     | "/design-system_/list"
     | "/design-system_/popovers"
     | "/design-system_/swatch"
     | "/api/pdf-audit/parse"
-    | "/api/runs-data/$"
     | "/api/pdf-audit/parse/$parseId";
   fileRoutesById: FileRoutesById;
 }
@@ -367,17 +331,14 @@ export interface RootRouteChildren {
   ParameterLinksRoute: typeof ParameterLinksRoute;
   PodsRoute: typeof PodsRoute;
   RoomsRoute: typeof RoomsRoute;
-  RunsRoute: typeof RunsRoute;
   SchedulesRoute: typeof SchedulesRoute;
   TakeoffsRoute: typeof TakeoffsRoute;
-  ApiRunsExportRoute: typeof ApiRunsExportRoute;
   DesignSystemArmingRoute: typeof DesignSystemArmingRoute;
   DesignSystemBandRoute: typeof DesignSystemBandRoute;
   DesignSystemListRoute: typeof DesignSystemListRoute;
   DesignSystemPopoversRoute: typeof DesignSystemPopoversRoute;
   DesignSystemSwatchRoute: typeof DesignSystemSwatchRoute;
   ApiPdfAuditParseRoute: typeof ApiPdfAuditParseRouteWithChildren;
-  ApiRunsDataSplatRoute: typeof ApiRunsDataSplatRoute;
 }
 
 declare module "@tanstack/react-router" {
@@ -487,13 +448,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof RoomsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/runs": {
-      id: "/runs";
-      path: "/runs";
-      fullPath: "/runs";
-      preLoaderRoute: typeof RunsRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
     "/schedules": {
       id: "/schedules";
       path: "/schedules";
@@ -506,13 +460,6 @@ declare module "@tanstack/react-router" {
       path: "/takeoffs";
       fullPath: "/takeoffs";
       preLoaderRoute: typeof TakeoffsRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/api/runs-export": {
-      id: "/api/runs-export";
-      path: "/api/runs-export";
-      fullPath: "/api/runs-export";
-      preLoaderRoute: typeof ApiRunsExportRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/design-system_/arming": {
@@ -557,13 +504,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ApiPdfAuditParseRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/api/runs-data/$": {
-      id: "/api/runs-data/$";
-      path: "/api/runs-data/$";
-      fullPath: "/api/runs-data/$";
-      preLoaderRoute: typeof ApiRunsDataSplatRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
     "/api/pdf-audit/parse/$parseId": {
       id: "/api/pdf-audit/parse/$parseId";
       path: "/$parseId";
@@ -601,17 +541,14 @@ const rootRouteChildren: RootRouteChildren = {
   ParameterLinksRoute: ParameterLinksRoute,
   PodsRoute: PodsRoute,
   RoomsRoute: RoomsRoute,
-  RunsRoute: RunsRoute,
   SchedulesRoute: SchedulesRoute,
   TakeoffsRoute: TakeoffsRoute,
-  ApiRunsExportRoute: ApiRunsExportRoute,
   DesignSystemArmingRoute: DesignSystemArmingRoute,
   DesignSystemBandRoute: DesignSystemBandRoute,
   DesignSystemListRoute: DesignSystemListRoute,
   DesignSystemPopoversRoute: DesignSystemPopoversRoute,
   DesignSystemSwatchRoute: DesignSystemSwatchRoute,
   ApiPdfAuditParseRoute: ApiPdfAuditParseRouteWithChildren,
-  ApiRunsDataSplatRoute: ApiRunsDataSplatRoute,
 };
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
