@@ -3,6 +3,7 @@ name: reflect
 description: "Maintain or port the skill set itself: write or edit a stance, change the taxonomy, set up in a new repo. Trigger on \"reflect\", \"write a skill\", \"edit this skill\", \"new stance\", \"port the skills\", \"install the skillset\". Not for using a skill on real work; that is `index`."
 argument-hint: "What is being written, edited, or ported?"
 figure: Theseus' ship and the Ulysses contract — the set refits itself, and binds its own cold reader
+prevents: "set drift: a skill edited by feel, never run cold"
 disable-model-invocation: true
 scope: skills
 ---

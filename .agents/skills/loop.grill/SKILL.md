@@ -4,6 +4,7 @@ description: Interview the user until the idea is settled. Trigger on "grill me"
 argument-hint: "What idea, and what is already settled?"
 stop: frontier empty, user confirms
 figure: Socrates — an idea, settleable by talking
+prevents: "decisions made for the user: a plan built on verdicts never given"
 ---
 # Grill
 

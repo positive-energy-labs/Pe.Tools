@@ -2,6 +2,7 @@
 name: docs
 description: Where every kind of durable knowledge lives in this repo. Trigger on "capture", "record this", "ledger", "ADR", "owed", "save this durably", "write it up", "where should this go", before writing any markdown, or when another skill needs a persistence home. Runbook, not a stance; the single source all other skills defer to. Formats for ADRs and glossaries live beside it.
 figure: where durable knowledge lives, this repo; rebuilt like Ise, swept like a sand mandala
+prevents: "lost decisions: verdicts in chat, nowhere else"
 scope: repo
 ---
 

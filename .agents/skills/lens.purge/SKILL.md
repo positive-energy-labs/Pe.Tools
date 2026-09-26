@@ -3,6 +3,7 @@ name: purge
 description: Delete first, then fix. Trigger on "purge", "prune", "delete then fix", "LOC down", "gut it", "too much code", "no back compat", "aggressive deletion", "stay occam", "what can we delete", "fewer comments", "squash", "fold", "harvest", "canonicalize", "census what exists", "no legacy", or whenever a change would add code to a place that already has too much. Not for greenfield shape; that is `muse`.
 argument-hint: "What is bloated, and what must still work after?"
 figure: Shiva at the winnowing floor, Occam, the Iconoclast, the burn boss — delete at least as much as you add
+prevents: "bloat: adding to a place that already has too much"
 ---
 # Purge
 
@@ -18,6 +19,7 @@ Mode: the diff must delete at least as much as it adds. If it cannot, say why be
 
 ## Laws
 
+- Measure before a migration: repetition, standards violations, the dependency graph, and who breaks. The numbers set the order of the cuts.
 - Delete, then fix. Read the compile errors as the list of what was load-bearing. Do not write a shim before the deletion.
 - Count literal LOC. Fewer files, fewer hops, fewer identities. An abstraction that serves one caller is a caller with extra steps.
 - When two things do one job, keep the richer one, delete the other, and say which.

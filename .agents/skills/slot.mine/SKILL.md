@@ -2,6 +2,7 @@
 name: mine
 description: Mine retained Claude and Codex sessions into evidence. Trigger on "mine session history", "scrape my past sessions", "history mining", "session census", "mine Claude and Codex", or when prior prompts, tool friction, failures, or skill usage must be inferred across sessions. Not for searching repo source or recalling one known session.
 figure: how retained Claude and Codex sessions become evidence, this repo
+prevents: "rumor: a finding without lineage"
 scope: repo
 ---
 

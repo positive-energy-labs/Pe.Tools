@@ -2,6 +2,7 @@
 name: index
 description: Use at *every* session start. Contains writing style, speaking registers, stance/task routing, approach, and disposition for Pe.Tools. Trigger on "index", "whats open", "teach me the dev loop", "reorient/reposture", "sorry, quick tanget...", "where do we start", "which skill", "lets pivot", "phase this out", "write me...", at the start of any non-trivial effort, or when chaining phases. *Always* in tandem with `docs` for capture/memory and `execute` for how to run anything. 
 figure: Ganesha and the Wayfinder — invoked first, names the next island, paddles nothing
+prevents: "the skipped hop: work begun without a route named"
 ---
 # Index
 
@@ -13,48 +14,32 @@ The dispatcher. The user states intent; you pick the route and **drive it**: inv
 
 Authority runs user, then skill, then this file. A stance is a posture, not a prescription: it leaves room for what the user asks, and where a user verdict and a law collide, the verdict wins and the law is named. Stances are often taught at the extreme, adapt adherence to the circumstance.
 
-## Why this exists, the failure modes it prevents
-
-| Failure | Stance that prevents it |
-|---|---|
-| Wrong work: building before the intent was restated | `ground`, then `grill` |
-| Wrong product: canonizing a surface nobody felt | `protoui` on real data; the UI's demands shape the backend |
-| Plausible, not real: "done" on a mock, a count, a screenshot | `prove` stamps the lane; `close` strikes every shim |
-| Believed testimony: another agent's "verified" taken as fact | `prove`, on their claim |
-| Guessed fix: a diff before a cause | `diagnose` |
-| Bloat: adding to a place that already has too much | `purge` |
-| Lost decisions: verdicts in chat, nowhere else | `docs` ledgers, ADRs, glossaries |
-| Context rot: one session carrying everything, counsel building | `delegate` posture table; `relay` at the boundary |
-| Wheel-spinning: the same wave sent twice at a plateau | `goal` form: number, eye, dry rule |
-| Wall of text: the user drowns | the distilled register below |
-
 ## Grammar
 
-*Root*s frame the set itself, *loop*s are workflows, *pass*es are one-time asks, *lens*es stack on top, and *slot*s hold repo rules and repo-specific information. Exactly one loop or pass owns the route at a time; the full kind semantics live in `reflect`.
+*Root*s frame the set itself, *loop*s are workflows, *pass*es are one-time asks, *lens*es stack on top, and *slot*s hold repo rules and repo-specific information. Exactly one loop or pass owns the route at a time; the full kind semantics live in `reflect`. Prevents names the failure each stance stops; `AGENTS.md` projects the same column as its always-on routing table.
 
-| Kind | Stance | Figure/It is | Rounds | User-only | Stop |
-|---|---|---|---|---|---|
-| root | `index` | Ganesha and the Wayfinder — invoked first, names the next island, paddles nothing | - | no | - |
-| root | `reflect` | Theseus' ship and the Ulysses contract — the set refits itself, and binds its own cold reader | - | **yes** | - |
-| lens | `delegate` | Abbot, Falconer, and Breeder — who does what, at what cost, down which line | no | **yes** |  |
-| lens | `house` | Cartographer with the Instrument Maker's kit — a chart someone steers by where they cannot see the bottom | no | no |  |
-| lens | `prove` | Assayer striking the Hallmark, Thomas on another's claim — a claim is stamped with its lane or not at all | no | no |  |
-| lens | `purge` | Shiva at the winnowing floor, Occam, the Iconoclast, the burn boss — delete at least as much as you add | no | no |  |
-| pass | `ground` | Witness with the Chain-bearer — writes off; map and restate first | no | no | map, restatement, next stance named |
-| pass | `relay` | Herald — the message to the next session | no | **yes** | baton delivered |
-| loop | `close` | Keystone — a settled surface needs its backend real | yes | no | shims zero or deferred, workflow driven by hand |
-| loop | `diagnose` | Coroner — something is broken | yes | no | cause, wound, red loop |
-| loop | `goal` | Crusade — an unattended push at a number | yes | **yes** | two dry waves |
-| loop | `grill` | Socrates — an idea, settleable by talking | yes | no | frontier empty, user confirms |
-| loop | `muse` | Demiurge in the realm of forms — architecture, API, data shape, seam is open | yes | no | two rounds adding no shape and killing none |
-| loop | `protoui` | Lineup and Toile — a product surface is unsettled | yes | no | two dry rounds |
-| loop | `teach` | Master — a concept the user wants to own | yes | no | transfer demonstrated |
-| slot | `docs` | where durable knowledge lives, this repo; rebuilt like Ise, swept like a sand mandala | - | - | - |
-| slot | `execute` | the proving ground and chain of custody — touch the right reality, then name exactly what answered | - | - | - |
-| slot | `mine` | how retained Claude and Codex sessions become evidence, this repo | - | - | - |
-| slot | `page` | the orrery, not the painting — a page that holds state and turns | - | - | - |
+| Kind | Stance | Figure/It is | Prevents | Rounds | User-only | Stop |
+|---|---|---|---|---|---|---|
+| root | `index` | Ganesha and the Wayfinder — invoked first, names the next island, paddles nothing | the skipped hop: work begun without a route named | - | no | - |
+| root | `reflect` | Theseus' ship and the Ulysses contract — the set refits itself, and binds its own cold reader | set drift: a skill edited by feel, never run cold | - | **yes** | - |
+| lens | `delegate` | Abbot, Falconer, and Breeder — who does what, at what cost, down which line | context rot: one session carrying everything, counsel building | no | **yes** |  |
+| lens | `house` | Cartographer with the Instrument Maker's kit — a chart someone steers by where they cannot see the bottom | templated surfaces: a screen that fits no house | no | no |  |
+| lens | `prove` | Assayer striking the Hallmark, Thomas on another's claim — a claim is stamped with its lane or not at all | plausible, not real: done on a mock, a count, a screenshot, or another agent's word | no | no |  |
+| lens | `purge` | Shiva at the winnowing floor, Occam, the Iconoclast, the burn boss — delete at least as much as you add | bloat: adding to a place that already has too much | no | no |  |
+| pass | `relay` | Herald — the message to the next session | the dropped baton: the next session re-derives what this one knew | no | **yes** | baton delivered |
+| loop | `close` | Keystone — a settled surface needs its backend real | shims for done: a settled surface over a fake backend | yes | no | shims zero or deferred, workflow driven by hand |
+| loop | `diagnose` | Coroner — something is broken | guessed fix: a diff before a cause | yes | no | cause, wound, red loop |
+| loop | `goal` | Crusade — an unattended push at a number | wheel-spinning: the same wave sent twice at a plateau | yes | **yes** | two dry waves |
+| loop | `grill` | Socrates — an idea, settleable by talking | decisions made for the user: a plan built on verdicts never given | yes | no | frontier empty, user confirms |
+| loop | `muse` | Demiurge in the realm of forms — architecture, API, data shape, seam is open | first shape kept: a seam settled before the alternatives were seen | yes | no | two rounds adding no shape and killing none |
+| loop | `protoui` | Lineup and Toile — a product surface is unsettled | wrong product: canonizing a surface nobody felt | yes | no | two dry rounds |
+| loop | `teach` | Master — a concept the user wants to own | the answer handed over: the user owns nothing | yes | no | transfer demonstrated |
+| slot | `docs` | where durable knowledge lives, this repo; rebuilt like Ise, swept like a sand mandala | lost decisions: verdicts in chat, nowhere else | - | - | - |
+| slot | `execute` | the proving ground and chain of custody — touch the right reality, then name exactly what answered | the wrong reality: a claim proved on a lane that cannot falsify it | - | - | - |
+| slot | `mine` | how retained Claude and Codex sessions become evidence, this repo | rumor: a finding without lineage | - | - | - |
+| slot | `page` | the orrery, not the painting — a page that holds state and turns | the painting: a page with no state behind it | - | - | - |
 
-Default entry for real work is `ground`, proceed ungrounded only if fresh-perspective is requested. `protoui`,`muse`,`purge`, `diagnose`, and `goal` often form a session's main loop. A pasted failure is `ground` then `diagnose`. Any fan-out passes through `delegate` first, including one you were about to do with the harness Agent tool. `goal` and `relay` are user-only; name them then stop. Suggest "/realy" when you and the user seem to be consistently misaligned.
+Real work starts with two accounts (`AGENTS.md`, Always): the ask restated, then what the terrain shows. `protoui`, `muse`, `purge`, `diagnose`, and `goal` often form a session's main loop. A pasted failure is `diagnose`. `delegate`, `goal` and `relay` are user-only; name them then stop. Suggest "/realy" when you and the user seem to be consistently misaligned.
 
 ## Approach
 
@@ -142,8 +127,8 @@ Shared words, the only home for figure aliases. Each is a rule compressed to a n
 | **proof lane** | Which kind of run proves a claim; `execute` names them; the stamp is `PROVEN[lane, where, commit, when]` |
 | **canon** | Production code, where the winners are rewritten to. `protoui` calls it the good cloth |
 | **census** | The list of what exists and who uses it, made before any deletion, shim strike, or fan-out. `purge` calls it the firebreak |
-| **artifact** | The thing a pass or loop hands over at its stop. Each stance names its kind: `ground` map, `relay` baton, `prove` stamp, `diagnose` cause, `teach` the piece, an agent its report |
-| **stake** | Evidence a reader can open: `path:line`, a command with its output, a commit. `ground` calls it benchmark and bearing |
+| **artifact** | The thing a pass or loop hands over at its stop. Each stance names its kind: `relay` baton, `prove` stamp, `diagnose` cause, `teach` the piece, an agent its report |
+| **stake** | Evidence a reader can open: `path:line`, a command with its output, a commit |
 | **epitaph** | What would kill a candidate, written before it advances |
 | **agent** | A subagent; `delegate` sends it. Figures call it apostle, bird, sheep, builder, pilgrim, runner; the law says agent |
 | **line** | One agent and every prompt sent down it; a follow-up goes down the line that read the terrain, never to a fresh agent. `delegate` calls it jesses |

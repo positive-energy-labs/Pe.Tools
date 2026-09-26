@@ -78,6 +78,14 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 - `protoui` loses its repo-shaped mechanics: mounting, the switcher bar and cleanup move to `execute` under Prototype mechanics; isolated HTML variants move to `page`. This cleared `protoui`'s two check failures.
 - `index` gains the anchor law (name a place only with a link, a searchable id, or a marked picture), and its artifact register routes pages to `page`. `prove` gains: suspect the instrument when a number does not move or moves too far. `diagnose` gains: a delegated diagnosis lands a fix only under its brief's stated gate. `execute` gains the Revit custody line for opening documents for the person.
 
+### 2026-09-26 always-on and routing (Claude Opus 5.5, kaitpw rulings)
+
+- `AGENTS.md` is the one always-on file for every harness. It opens with an Always block (two accounts, anchors, stamps, boundaries, cheap delegation with Herdr only when the user must see the agent, Revit custody, leave it better) and a routing table keyed by the failure about to be committed. `CLAUDE.md` is a one-line `@AGENTS.md` bridge until Claude Code's native `AGENTS.md` support is switched on; its posture text moved into `AGENTS.md`. kaitpw: a hop from an entry file to a resource is forgettable, and the hook route was rejected.
+- Every skill carries `prevents:`, the failure it stops, quoted because the value holds a colon. `check.py` projects it into the index table and into the `AGENTS.md` routing table, and fails any frontmatter value with an unquoted ": " (an unquoted one silently dropped every description on 2026-09-26).
+- `ground` is deleted. kaitpw: grounding is what models do anyway, and asking for it is enough. Two accounts moved to Always 1; measuring before a migration moved to `purge`.
+- `demiurge` is `muse`. The harness-Agent guard hook is gone; `delegate` defaults to the cheapest capable model (Astra 6, Opus 5.5 and Sol 6 are close) and drops its harness ban; `execute` scopes Herdr to the three cases.
+- A section headed `[scope: repo]` is a stance's inlined hot path and `check.py` skips it for purity. `protoui` takes its mounting, switcher and cleanup mechanics back from `execute` (the 2026-09-25 move made them a forgettable hop).
+
 ## Tried & rejected
 
 - 2026-08-31, encyclopedic `slot.execute`: 265 lines mixed stable proof choices with a beta-specific CLI manual, incident fixes, prototype mechanics, browser fallbacks, and the full Herdr protocol. A cold reader could not find the next command. The rewrite keeps lane choice, custody, safety boundaries, and authoritative entrypoints inline; git holds the killed laws, and caveats return only when they change a repeated decision.
@@ -93,6 +101,10 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 
 ## Owed
 
+- Delete the `CLAUDE.md` bridge when Claude Code's native `AGENTS.md` support is switched on, or the file loads twice.
+- `AGENTS.md` is 2,975 words always-on, about double the 1,500 target. Candidates: Proof Lanes and Executing code duplicate `execute`; Shared Language and Living Memory are package glossary and C# style; Critical Entry Points is a map.
+- Descriptions: one sentence of situation, three to five verbatim phrases marked as examples, and the not-for line; routing weight moves to the failure table.
+- `root.index` still names `triangulate` in places; it is `protoui` now.
 - `delegate` brief template (worktree, files owned and owned by others, custody, proof lane, report cap, never push or stash): held back because `lens.delegate/SKILL.md` carries kaitpw's uncommitted edits.
 - Pre-existing check failures: `lens.house` still has a `## Parlance` section; `~/.claude/skills/synced` is a stray in the user-global dir (deletion needs kaitpw).
 

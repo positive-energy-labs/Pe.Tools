@@ -3,6 +3,8 @@ name: delegate
 description: Who does what, at what cost. Trigger on "delegate", "fan out", "subagents", "swarm", "send off some agents", "fresh context", "research this", "apostles", "you stay the orchestrator", "conserve limits", or before any fan-out, including one you were about to do with the harness Agent tool. Not the mechanics of running agents; that is `execute`.
 argument-hint: "How big is the session, what needs your eyes, what can leave your context?"
 figure: Abbot, Falconer, and Breeder — who does what, at what cost, down which line
+prevents: "context rot: one session carrying everything, counsel building"
+disable-model-invocation: true
 ---
 # Delegate
 
@@ -10,16 +12,15 @@ figure: Abbot, Falconer, and Breeder — who does what, at what cost, down which
 
 **Also be the Falconer.** The falconer hunts nothing; the bird does. The regalia are the laws: the **hood** stays on until the cast, so the bird sees only the quarry you show it; the **jesses** hold it to one flight and one edge; the **bells** ring while it is out of sight, so a bird you cannot hear is a bird you have lost; the **creance** is the training line, the time box; the **lure** is what brings it back, a report, not a conversation; and the **mews** rest a bird between flights, so a bird that has flown this ground is flown again before a new one is manned. A bird primed on the hunt is the worst judge of the kill; judgment flies down a clean line. Lines are kept apart so nothing crosses that you did not cross on purpose.
 
-**Be the Breeder only on a settled base.** A cross is paid for once the clean lines have read and disagreed, never before; there is no envelope to push until a line has proven a trait. Then matricize on purpose across lines, models, roots, and harnesses, and keep the odd but good branch as an ortet for the next cultivar. A broken paradigm is not bred out of; it gets a new founder, and that is `demiurge`, not a fan-out.
+**Be the Breeder only on a settled base.** A cross is paid for once the clean lines have read and disagreed, never before; there is no envelope to push until a line has proven a trait. Then matricize on purpose across lines, models, roots, and harnesses, and keep the odd but good branch as an ortet for the next cultivar. A broken paradigm is not bred out of; it gets a new founder, and that is `muse`, not a fan-out.
 
 Mode: no fan-out without a posture table first. Task, who (model and thinking), why. You are a row in it.
 
 ## Laws
 
 - Delegate when any of these holds: the task needs 20+ tool calls, the goal is unambiguous, you want a fresh perspective, the work is parallel and non-overlapping, or it would break your train of thought. The bigger the session or the lower your limits, the more work leaves your context.
-- Every mission is bounded and specified. Give the agent an edge (stop condition, time box, report file) and make the important choices before you send it. Send unbounded work to the model with taste. An agent that lacks a choice returns a question, not a guess. The model table below ranks them; read it always if you are Fable 5.
+- Every mission is bounded and specified. Give the agent an edge (stop condition, time box, report file) and make the important choices before you send it. Send unbounded work to the model with taste. An agent that lacks a choice returns a question, not a guess.
 - Send one ask per turn. Four questions in one prompt return one averaged answer, and no part of it belongs to its question. Send the follow-up down the same line.
-- Run agents on the observable runner `execute` names, never on the harness Agent tool. Harness runs are invisible, cannot be interjected, and die on a user interrupt.
 - Make the shared base once (research, fixture, scaffold) and hand it to every agent.
 - Send instrument-first missions. "Census before fix; the census is deliverable #1 even if nothing else lands" beats fix-first every time.
 - Every agent writes a report file the user can open. Never relay a result by paraphrase alone; paraphrase is Telephone.
@@ -32,16 +33,8 @@ Mode: no fan-out without a posture table first. Task, who (model and thinking), 
 - One writing line, one tree. Two lines editing one checkout means every claim must be pinned to a commit, and a proof taken while another line was mid-write proves nothing.
 - Leave it better than you found it. Before a fan-out is reported done, retire every spent runner, server, watcher, and line; what cannot be retired is one Owed line. Let go of any resource no foreseeable future needs. An anti-pattern seen on the way is one Owed line, not a fix.
 
-# Models (Scope: `repo`)
+## Models [scope: repo]
 
-Cost: price per task. Taste: opinions, pretty code, UI/UX, architecture, decisions. Intelligence: full marks on a big but bounded and/or specified task without derailing. Bounded: a supplied edge. Specified: the important choices supplied.
-
-| Model | Cost | Taste | Intelligence | Use for | Notes |
-|--|--|--|--|--|--|
-| Fable 5 | 10 | 9 | 7 | Design, aesthetics, decisions. Only for unbounded AND unspecified work, or an important design opinion. | Low or medium thinking. Never in parallel. |
-| Opus 5 | 6 | 6 | 3 | Initial implementations, **bounded**. Or UI. Talks like it is intelligent, is not; derails on the first tangent not forbidden. | Medium or high thinking. Small task, forbid going beyond it. |
-| Codex (GPT-5.6) | 2 | 4 | 9 | Foot soldier: migrations, brute force, long slogs, compile smashing, censuses. Goal quantifiable AND choices specified. | Codex TOML sets model and thinking (5.6 high). Takes you at face value, no interpretation. Best for swarms and goal loops. |
-
-Imitating intelligence is half the battle: a seemingly insightful opinion can give you a new idea, and pretty architecture is a base that only needs filling in. Different providers give different perspectives; anything below GPT-5.6 and Opus 5 is fair game for cheap perspective.
+Astra 6, Opus 5.5 and Sol 6 are close in capability, so the choice matters less than it did. Default to the cheapest model that can do the task. Fable 5.1 is for taste: design, UX and architecture opinion, never an implementation line. A second provider on a panel buys a different reading, not a better one.
 
 Research agents: primary sources only (official docs, source, specs), one claim one citation, findings go where `docs` says. Clone third-party source locally and sync before reading; grep beats the web.

@@ -2,6 +2,7 @@
 name: execute
 description: "How code runs and claims are proven in Pe.Tools. Trigger on \"run\", \"test\", \"build\", \"prove it\", \"which lane\", \"worktree\", \"herdr\", \"spin up\", \"dev server\", \"background this\", or before a Revit session, browser check, long process, or proof claim. Runbook, not a route; unexplained failures belong to `diagnose`."
 figure: the proving ground and chain of custody — touch the right reality, then name exactly what answered
+prevents: "the wrong reality: a claim proved on a lane that cannot falsify it"
 scope: repo
 ---
 
@@ -32,7 +33,7 @@ scope: repo
 | Host and web | VitePlus through the `vp` command or package scripts |
 | Pea and host operations | `pea`, after verifying which checkout and host lane it resolved |
 | Browser | the harness's in-app preview first |
-| Agents and long-lived processes | `.agents/skills/slot.execute/herdr.ps1` from PowerShell |
+| Agents | the harness Agent tool by default; `.agents/skills/slot.execute/herdr.ps1` only when the user must see or talk to the agent, the work needs its own thread to revisit, or one agent hands off to another |
 
 ## Proof lanes
 
@@ -75,42 +76,12 @@ dotnet tool run pe-revit -- <command> --json
 ## Host, web, Pea, and browser
 
 - `pnpm verify` from `ts` is the one proof of a change: workspace check, knip, every package's tests, then the repo guards, serialized, full output. Nothing else is a named proof entrypoint.
-- Run host or web dev servers in Herdr. Ports are dynamic; read the service receipt under `%LOCALAPPDATA%\Positive Energy\Pe.Tools\state\service\` instead of assuming one.
+- Run host or web dev servers as background processes; use Herdr only when the user needs the pane. Ports are dynamic; read the service receipt under `%LOCALAPPDATA%\Positive Energy\Pe.Tools\state\service\` instead of assuming one.
 - The generated contract in `packages/host-contracts/src/vendor/generated/pe-revit-contract.ts` owns `pe-revit` argv and envelopes. Do not hand-write either.
 - `pea` is checkout-pinned. Read the checkout and host URL it reports before treating its answer as evidence, especially from a worktree.
 - Discover host operations before calling them. Put structured requests in a file; do not pass JSON through PowerShell quoting. A mutation script ends with an independent read-back.
 - Show a picture to the person with a markdown image whose absolute path uses forward slashes: `![x](C:/Users/.../out.png)`. A backslash path does not render in the T3 chat (2026-09-26). Put the backslash path in a code block beside it for copying.
 - Use the in-app browser preview for route proof. Inspect console, network, visible state, and the route's receipts. If browser automation is unavailable or broken, report the browser claim as unproven and prove only the lower lane.
-
-## Prototype mechanics
-
-The mechanics `protoui` names and `execute` owns.
-
-### Mounting
-
-Prefer an existing host page. Variants render on the same route, gated by `?variant=`; data fetching, params, and auth stay, only the rendered subtree swaps. A throwaway route (project routing conventions, named `prototype-*`) is a last resort; an empty route hides problems a populated one exposes.
-
-```tsx
-const variant = searchParams.get('variant') ?? 'A';
-return (
-  <>
-    {variant === 'A' && <VariantA {...data} />}
-    {variant === 'B' && <VariantB {...data} />}
-    {variant === 'C' && <VariantC {...data} />}
-    <PrototypeSwitcher variants={['A','B','C']} current={variant} />
-  </>
-);
-```
-
-Shared `<Header>` fine; shared `<Layout>` defeats the point.
-
-### Switcher bar
-
-Fixed *bottom-centre*, *constant-width* pill: ← arrow, `B — Sidebar layout` label, → arrow, wrapping. Arrows update the URL param via the router (shareable, reload-stable). Arrow keys cycle too, except when an input, textarea, or contenteditable is focused. Visually alien to the page so it reads as not-the-design. Gated out of production builds. One shared component, with the project's shared UI.
-
-### Cleanup
-
-Winner folds into canon, rewritten to prod standard. Losers, switcher, and throwaway routes leave main; the full round only kept on a throwaway branch if the user's verdicts lacked confidence.
 
 ## Worktrees and Herdr
 
@@ -119,7 +90,7 @@ Winner folds into canon, rewritten to prod standard. Losers, switcher, and throw
 - A fresh worktree has no `eng/sdk-feed` (gitignored). Copy the pinned `.nupkg` files from `Pe.Revit.Sdk\.artifacts\feed` or the main checkout; never junction or symlink them (a junction let `git worktree remove --force` empty the main checkout's feed, 2026-09-22). The `sdk-feed` repo guard fails until the pinned family is present.
 - Bare `pe-revit` on PATH is the product shim. Run `dotnet tool run pe-revit -- dev link` once from any checkout so the shim's dev lane runs the pinned tool of whatever cwd you are in (SDK beta.163); `dotnet tool run pe-revit -- <verb>` is the same tool without the shim.
 - Never `git stash` in a worktree. `refs/stash` is shared by every worktree of one repo; parallel lanes pop each other's work. Baseline with a throwaway worktree or `git diff > file`.
-- Herdr is PowerShell. Use one named Herdr session per worktree. Parse its returned session, workspace, tab, and pane IDs; never infer focus.
+- Herdr is for agents and processes the user must see; otherwise it is ceremony (kaitpw, 2026-09-26). Herdr is PowerShell. Use one named Herdr session per worktree. Parse its returned session, workspace, tab, and pane IDs; never infer focus.
 - Before first use, resolve `herdr` with `Get-Command herdr`. If it is absent, set `HERDR_BIN` to the executable or report the agent lane unavailable; do not retry the wrapper unchanged.
 
 ```powershell

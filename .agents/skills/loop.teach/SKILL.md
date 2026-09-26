@@ -4,6 +4,7 @@ description: Teach a concept the user wants to own. Trigger on "teach me", "I wa
 argument-hint: "What concept, and what will they do with it?"
 stop: transfer demonstrated
 figure: Master — a concept the user wants to own
+prevents: "the answer handed over: the user owns nothing"
 ---
 # Teach
 

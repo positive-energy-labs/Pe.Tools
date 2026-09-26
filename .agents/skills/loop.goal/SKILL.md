@@ -5,6 +5,7 @@ disable-model-invocation: true
 argument-hint: "What number, what eye, what may never be done to move it?"
 stop: two dry waves
 figure: Crusade — an unattended push at a number
+prevents: "wheel-spinning: the same wave sent twice at a plateau"
 ---
 # Goal
 

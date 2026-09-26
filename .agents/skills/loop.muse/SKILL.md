@@ -4,6 +4,7 @@ description: Find and fashion the ideal shape by exploring every option before c
 argument-hint: "What shape is in question, and what constrains it?"
 stop: two rounds adding no shape and killing none
 figure: Demiurge in the realm of forms — architecture, API, data shape, seam is open
+prevents: "first shape kept: a seam settled before the alternatives were seen"
 ---
 # Muse
 

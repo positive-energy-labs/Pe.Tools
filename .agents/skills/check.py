@@ -87,25 +87,44 @@ def main():
         fail('root.index', 'missing')
     else:
         order = {k: i for i, k in enumerate(('root', 'lens', 'pass', 'loop', 'slot'))}
-        want = ['| Kind | Stance | Figure/It is | Rounds | User-only | Stop |', '|---|---|---|---|---|---|']
+        want = ['| Kind | Stance | Figure/It is | Prevents | Rounds | User-only | Stop |', '|---|---|---|---|---|---|---|']
+        routes = ['| About to commit | Stance |', '|---|---|']
         for d, (kind, name, text) in sorted(skills.items(), key=lambda kv: (order[kv[1][0]], kv[0])):
             fm = frontmatter(text) or ''
-            figure, stop = field(fm, 'figure'), field(fm, 'stop')
+            figure, stop, prevents = field(fm, 'figure'), field(fm, 'stop'), field(fm, 'prevents')
+            prevents = prevents.strip('"') if prevents else prevents
             if not figure:
                 fail(d, 'no frontmatter figure:; the index table projects it')
+            if not prevents:
+                fail(d, 'no frontmatter prevents:; the index table and AGENTS.md routing project it')
+            elif kind != 'root':
+                routes.append('| %s | `%s` |' % (prevents, name))
             if kind in ('pass', 'loop') and not stop:
                 fail(d, 'a %s with no frontmatter stop:' % kind)
             if kind == 'slot' and field(fm, 'scope') not in ('skills', 'repo'):
                 fail(d, 'a slot needs scope: skills | repo')
             user_only = '**yes**' if field(fm, 'disable-model-invocation') == 'true' else 'no'
             if kind == 'slot':
-                want.append('| slot | `%s` | %s | - | - | - |' % (name, figure))
+                want.append('| slot | `%s` | %s | %s | - | - | - |' % (name, figure, prevents))
             elif kind == 'root':
-                want.append('| root | `%s` | %s | - | %s | - |' % (name, figure, user_only))
+                want.append('| root | `%s` | %s | %s | - | %s | - |' % (name, figure, prevents, user_only))
             else:
-                want.append('| %s | `%s` | %s | %s | %s | %s |' % (
-                    kind, name, figure, 'yes' if kind == 'loop' else 'no', user_only, stop or ''))
+                want.append('| %s | `%s` | %s | %s | %s | %s | %s |' % (
+                    kind, name, figure, prevents, 'yes' if kind == 'loop' else 'no', user_only, stop or ''))
         want = '\n'.join(want)
+        # AGENTS.md carries the same failures as its always-on routing table, between markers
+        agents = os.path.join(os.path.dirname(os.path.dirname(HERE)), 'AGENTS.md')
+        a = read(agents)
+        rt = re.search(r'(<!-- routing:start -->\n).*?(\n<!-- routing:end -->)', a, re.S)
+        rwant = '\n'.join(routes)
+        if not rt:
+            fail('AGENTS.md', 'no <!-- routing:start --> / <!-- routing:end --> markers to project into')
+        elif rt.group(0) != rt.group(1) + rwant + rt.group(2):
+            if do_fix:
+                io.open(agents, 'w', encoding='utf-8', newline='\n').write(a.replace(rt.group(0), rt.group(1) + rwant + rt.group(2)))
+                fixes.append('rewrote the AGENTS.md routing table from frontmatter')
+            else:
+                fail('AGENTS.md', 'routing table differs from frontmatter projection; run --fix')
         tbl = re.search(r'^\| Kind \| Stance.*?(?=\n\n)', idx[2], re.S | re.M)
         if not tbl:
             fail('root.index', 'no `| Kind | Stance |` table to project into')
@@ -117,11 +136,20 @@ def main():
             else:
                 fail('root.index', 'table differs from frontmatter projection; run --fix')
 
+    # 4b. an unquoted frontmatter value holding ": " is invalid YAML; the harness then drops the skill's description silently
+    for d, (kind, name, text) in sorted(skills.items()):
+        for line in (frontmatter(text) or '').splitlines():
+            m = re.match(r'^([a-z-]+):\s+(.*)$', line)
+            if m and not m.group(2).startswith(('"', "'")) and ': ' in m.group(2):
+                fail(d, 'frontmatter %s: holds an unquoted ": "; quote the value or the skill loses its description' % m.group(1))
+
     # 5. only slot.* may name this repo, its tools, or its paths
     for d, (kind, name, text) in sorted(skills.items()):
         if kind == 'slot':
             continue
         body = text[text.index('---', 3) + 3:] if frontmatter(text) else text
+        # a section headed `[scope: repo]` is the stance's inlined hot path for this repo; purity skips it
+        body = re.sub(r'^(#+) [^\n]*\[scope: repo\][^\n]*\n.*?(?=^#{1,6} (?![^\n]*\[scope: repo\])|\Z)', '', body, flags=re.S | re.M)
         # satellites beside the stance are held to the same purity; a non-md satellite is mechanics by definition
         for sat in glob.glob(os.path.join(HERE, d, '*')):
             if sat.endswith('SKILL.md'):

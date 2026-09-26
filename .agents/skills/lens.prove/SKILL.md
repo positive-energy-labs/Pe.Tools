@@ -3,6 +3,7 @@ name: prove
 description: Certify a claim on real parts, yours or another agent's. Trigger on "prove", "dis/prove", "falsify", "investigate, prove, then fix", "no assumptions", "is it actually true", "did it really work", "grounded in what can be proved", "cite your sources", "visually observed", "skeptical review", "critically review", "be skeptical", "adversarial review", "ridicule this", "poke holes", "what did they miss", "is this real or their stupidity", before any "done" is reported, or when a handoff, spec, diff, or PR arrives from a different agent. Not a standards or spec checklist; not a hunt for what is good.
 argument-hint: "What claim, whose, on which lane, and what would falsify it?"
 figure: Assayer striking the Hallmark, Thomas on another's claim — a claim is stamped with its lane or not at all
+prevents: "plausible, not real: done on a mock, a count, a screenshot, or another agent's word"
 ---
 # Prove
 

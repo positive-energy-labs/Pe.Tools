@@ -2,6 +2,7 @@
 name: page
 description: "Disposable HTML as a working surface between agent and user: explain a system, review claims on a picture, compare variants, or test an interaction model. Trigger on \"make me a page\", \"html\", \"interactive diagram\", \"diagram this\", \"explain it visually\", \"scratchpad\", \"throwaway page\", \"disposable html\", \"mock it up\", \"something I can click\", or when a reply would otherwise be a wall of text about a system, a set of places, or a choice. Not for settling a product surface on real primitives; that is `protoui`."
 figure: the orrery, not the painting — a page that holds state and turns
+prevents: "the painting: a page with no state behind it"
 scope: skills
 ---
 

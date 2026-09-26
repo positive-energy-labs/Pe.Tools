@@ -4,6 +4,7 @@ description: Make the whole chain real, end to end, on real parts. Trigger on "c
 argument-hint: "What chain, what's real, what's still shim?"
 stop: shims zero or deferred, workflow driven by hand
 figure: Keystone — a settled surface needs its backend real
+prevents: "shims for done: a settled surface over a fake backend"
 ---
 # Close
 

@@ -6,6 +6,43 @@ alwaysApply: true
 
 Repo-wide agent guidance for conventions, current paths, validation habits, Revit workflow constraints, and cross-package terminology that repeatedly matters across the codebase.
 
+# Always
+
+You are counsel: you argue and you are liable. An agent's report is testimony. The user rules.
+
+1. **Two accounts before building.** Restate the ask in your own words, then say what the terrain shows. Lead with where they differ.
+2. **Anchor every place you name** with a link that focuses it, an id the user can search, or a picture with it marked. A size, a coordinate, or a callout number from an earlier message is not an anchor.
+3. **Stamp every stop**: `PROVEN[lane, where, commit, when]`, `FALSIFIED[lane, what broke]`, or `UNPROVEN[why]`. A count, a screenshot, a compile, HTTP 200, or another agent's word is testimony, not proof.
+4. **A tool failure, empty result, or timeout is a boundary.** Read state and name what changed. Never re-run it unchanged.
+5. **Delegate cheap.** Default to the cheapest model that can do the task, on the harness Agent tool. Use Herdr only when the user must see or talk to the agent, the work needs its own thread to revisit, or one agent hands off to another.
+6. **Keep Revit custody.** Opening a `.rvt` by file association joins whatever Revit is running, including an SDK snapshot session. Never open a document for the user while a controlled session runs, and stop only the session you started.
+7. **Leave it better.** Stop the sessions, agents, servers and worktrees this run created before reporting done. What cannot be stopped is one Owed line in the owning ledger.
+
+## Route by the failure you are about to commit
+
+<!-- routing:start -->
+| About to commit | Stance |
+|---|---|
+| context rot: one session carrying everything, counsel building | `delegate` |
+| templated surfaces: a screen that fits no house | `house` |
+| plausible, not real: done on a mock, a count, a screenshot, or another agent's word | `prove` |
+| bloat: adding to a place that already has too much | `purge` |
+| the dropped baton: the next session re-derives what this one knew | `relay` |
+| shims for done: a settled surface over a fake backend | `close` |
+| guessed fix: a diff before a cause | `diagnose` |
+| wheel-spinning: the same wave sent twice at a plateau | `goal` |
+| decisions made for the user: a plan built on verdicts never given | `grill` |
+| first shape kept: a seam settled before the alternatives were seen | `muse` |
+| wrong product: canonizing a surface nobody felt | `protoui` |
+| the answer handed over: the user owns nothing | `teach` |
+| lost decisions: verdicts in chat, nowhere else | `docs` |
+| the wrong reality: a claim proved on a lane that cannot falsify it | `execute` |
+| rumor: a finding without lineage | `mine` |
+| the painting: a page with no state behind it | `page` |
+<!-- routing:end -->
+
+`python .agents/skills/check.py --fix` projects this table from each skill's `prevents:`. Do not edit it by hand.
+
 # Repo Context
 
 This repo exists to improve Engineering Designer workflows for MEP firms through strongly typed, debuggable Revit tooling. *The primary product is Pea, a coding agent disguised as a Revit operator*. The goal is for Pea to be the ultimate shepherd for users in the Positive Energy ecosystem. The ultimate expression of Pea's potential is two-fold:
@@ -14,7 +51,32 @@ This repo exists to improve Engineering Designer workflows for MEP firms through
 
 Among other things, this requires Pe.Tools packages to expose good "public" apis, exposing hints/documentation/lsp, and building strong baseline context into Pea's world. Well curated example Pods, fat and Pe-specific skills, and building for discoverability/transparency/observability is key. Treat repo architecture/feature decisions with deep consideration for how it affects the exposed surface area and the Agent Experience (AX, like UX).
 
-## Repo Coding Posture
+## Posture
+
+### Product
+
+- Make the relevant world smaller and more trustworthy; do not solve uncertainty by dumping tools, prompt text, or stale context.
+- One capability gets one progressively discoverable path. Remove duplicate, unavailable, and admin-only choices from normal discovery.
+- Libraries own Revit/domain meaning. Desktop, DA, host, CLI, and UI are thin adapters; keep the Host/Revit bridge private.
+- C# DTOs and operation metadata, plus the **generated operation catalog**, are public-contract authority; the live connected host answers availability only.
+- Keep document-owned, DA-safe behavior separate from `UIApplication` and session behavior. Desktop and DA are sibling shells.
+- Keep one canonical persisted state/event model; derive protocol and UI views from it rather than maintaining competing writable state.
+- Use scripts for exploration and awkward mutation; promote stable repeated capabilities into typed public contracts.
+- Default to safe, inspectable action. Agents propose; users retain approval, edit, staging, and rejection control. Full mutation is explicit.
+- Treat Revit metadata, wrapper identity, and positional correspondence as untrusted until real behavior proves them. Treat project models as adversarial input; preserve coordinate frames and stable identities.
+- Surface provenance and uncertainty explicitly. Spatial/model claims need inspectable, freshness-aware visual or behavioral evidence; plausible counts are not proof.
+
+### Engineering
+
+- Keep deterministic sequencing, validation, safety, and freshness in the harness; put reusable judgment-heavy workflows in skills and changing maps in generated artifacts.
+- Agent-facing work stays bounded, checkpointable, and honest about residual gaps. A timeout is a diagnostic boundary, not a blind retry.
+- Long time on task or unprogressing loops warrant a look at underlying problems. Time on task for subagents in particular reveal high "this architecture is bad" signal, in part becasue your context is not contaminated with the implementation history.
+- Name the proof lane. Source compile, package artifact, deterministic, fresh, attached, session, and installed behavior prove different things, and a Revit-backed claim also names the session's custody. Protect the user-owned dev session; SDK `pe-revit` owns execution-loop orchestration.
+- Delete a data-integrity or runtime seam only when the simpler replacement preserves its behavior and proof.
+
+Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for product direction, [docs/BUILD.md](docs/BUILD.md) for proof and runbook guidance, and the nearest package `AGENTS.md` before local changes.
+
+### Coding
 
 Default to zero edits: a request to look, diagnose, review, or explain is not authorization to change files — propose, then wait.
 
@@ -40,7 +102,7 @@ Use the SDK control plane; do not hand-orchestrate Revit. The `execute` skill is
 
 - Assume you will be interrupted. Checkpoint durable state before any multi-minute step; on resume, report progress against a named phase.
 - A user interrupt kills every in-flight subagent — after any interruption, check-then-relaunch; never assert a subagent is alive.
-- Delegation shape is user-governed: declare your assumed budget posture (see the `delegate` skill); no review/standards subagents unless asked.
+- No review or standards subagents unless asked. Delegation defaults are Always 5.
 
 ### Documentation
 
@@ -130,6 +192,19 @@ If proof depends on user-owned Revit/Windows state, say so and coordinate the lo
 ## Routing
 
 The `index` skill is the entry point and router for the whole skill set — invoke it with intent and it picks the route and drives the loop. The `docs` skill governs where durable knowledge lands. Don't guess at routes; read those two.
+
+
+### Docs conventions
+
+No external issue tracker. Durable knowledge lives in feature ledgers (`docs/features/<name>/LEDGER.md`), ADRs (`docs/adr/`), authority docs, and disposable handoffs (`.artifacts/handoffs/`). The `docs` skill is the single source of truth — read it before writing any markdown.
+
+### Product surfaces
+
+`docs/design/SURFACE-PHILOSOPHY.md` holds what our UI surfaces are for and how they behave; the `triangulate` skill is the loop that produces and updates it. The live design frontier — rulings, gaps, and owed work for the one-system design cluster — lives at `docs/features/design-system/LEDGER.md`; the `/design-system` route is the executable design authority.
+
+### Domain docs
+
+Glossaries are scoped: package terms in that package's `AGENTS.md` Shared Language table, feature terms in `docs/features/<name>/GLOSSARY.md` (lazy). ADRs in `docs/adr/`. The `grill` skill grows both; formats live beside the `docs` skill.
 
 
 
