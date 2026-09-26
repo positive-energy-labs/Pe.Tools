@@ -74,12 +74,13 @@ export function layoutTree(tree: GroupTree, chains: Chain[]): TreeLayout {
   return {
     placed,
     at,
-    width: ROOT_W + deepest * COL + 200,
+    width: ROOT_W + deepest * COL + 340,
     height: PAD * 2 + Math.max(slot - 1, 0) * ROW + 24,
   };
 }
 
 const fmt = (value: number, digits = 0) => value.toFixed(digits);
+const clip = (text: string, n: number) => (text.length > n ? `${text.slice(0, n - 1)}…` : text);
 
 export function DuctsTree({
   snapshot,
@@ -161,6 +162,7 @@ export function DuctsTree({
               className="cursor-pointer"
               aria-label="root"
             >
+              <title>{tree.rootWord}</title>
               <rect
                 x={4}
                 y={rootY - 12}
@@ -171,7 +173,10 @@ export function DuctsTree({
                 className={tree.rooted === "port" ? undefined : "dash-reference"}
               />
               <text x={10} y={rootY} dominantBaseline="central" fill={tokenRef("ink")}>
-                {equipment ? (equipment.family ?? `equipment ${equipment.id}`) : "stand-in root"}
+                {clip(
+                  equipment ? (equipment.family ?? `equipment ${equipment.id}`) : "stand-in root",
+                  16,
+                )}
               </text>
             </g>
             {layout.placed.map(({ chain, x1, y1, x2, y2 }) => {
@@ -206,7 +211,7 @@ export function DuctsTree({
                     d={d}
                     fill="none"
                     stroke={tokenRef(long ? "ink" : "ink-mute")}
-                    strokeWidth={widthOf(chain.cfm)}
+                    strokeWidth={widthOf(chain.cfm) + (long ? 1.5 : 0)}
                   />
                   <text x={labelX} y={y2 - 6} fill={tokenRef("ink-2")}>
                     {[
@@ -230,7 +235,14 @@ export function DuctsTree({
                       <title>{`${ISSUE_KINDS[kind].label}: ${ISSUE_KINDS[kind].what}`}</title>
                     </circle>
                   ))}
-                  <Vertex tree={tree} id={chain.to} x={x2} y={y2} hot={selected === chain.to} />
+                  <Vertex
+                    tree={tree}
+                    id={chain.to}
+                    x={x2}
+                    y={y2}
+                    hot={selected === chain.to}
+                    far={tree.longest.at(-1) === chain.to}
+                  />
                 </g>
               );
             })}
@@ -266,12 +278,14 @@ function Vertex({
   x,
   y,
   hot,
+  far,
 }: {
   tree: GroupTree;
   id: number;
   x: number;
   y: number;
   hot: boolean;
+  far: boolean;
 }) {
   const part = tree.parts.get(id)!;
   const kind = part.node?.kind;
@@ -281,8 +295,8 @@ function Vertex({
   const label =
     kind === "terminal"
       ? cfm != null
-        ? `${fmt(cfm)} cfm design · ${id}`
-        : `no design flow · ${id}`
+        ? `${fmt(cfm)} cfm design · ${id}${far ? ` · longest run ${fmt(tree.dist.get(id)!, 1)} ft` : ""}`
+        : `no design flow · ${id}${far ? " · longest run" : ""}`
       : kind === "cap"
         ? `cap · ${id}`
         : null;

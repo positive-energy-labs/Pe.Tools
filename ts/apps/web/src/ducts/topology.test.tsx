@@ -16,7 +16,8 @@ import { DuctsTree, layoutTree } from "./tree";
 
 afterEach(cleanup);
 // jsdom lays nothing out; the table scrolls its active row into view on mount.
-Element.prototype.scrollIntoView ??= function () {};
+if (!("scrollIntoView" in Element.prototype))
+  Object.defineProperty(Element.prototype, "scrollIntoView", { value: () => {} });
 
 type Node = DuctSnapshot["nodes"][number];
 type Segment = DuctSnapshot["segments"][number];
@@ -163,7 +164,7 @@ it("roots the tree at the one port, folds straight runs, and finds the longest d
   const tree = groupTree(snapshot, "g1");
   expect(tree.root).toEqual({ equipment: 100, port: 0, element: 1 });
   expect(tree.rooted).toBe("port");
-  expect(tree.terminals.sort()).toEqual([4, 8]);
+  expect([...tree.terminals].sort((a, b) => a - b)).toEqual([4, 8]);
   // Duct 3 (20 ft) beats duct 5 + duct 7 (13 ft) from the tee: 30 ft against 23 ft.
   expect(tree.longest).toEqual([1, 2, 3, 4]);
   expect(tree.dist.get(4)).toBe(30);

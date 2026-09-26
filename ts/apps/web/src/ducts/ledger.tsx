@@ -165,9 +165,15 @@ export function DuctsLedger({
     runs.find((r) => r.terminal === selected) ??
     runs.find((r) => selected != null && r.path.includes(selected)) ??
     null;
-  const issues = page.group ? (issuesByGroup.get(page.group) ?? []) : [];
   const readiness = page.group ? ready[page.group] : undefined;
   const open = new Set([...(readiness?.walk ?? []), ...(readiness?.budget ?? [])]);
+  // What still holds the group back first, in taxonomy order; answered and advisory after.
+  const issues = [...(page.group ? (issuesByGroup.get(page.group) ?? []) : [])].sort(
+    (a, b) =>
+      Number(open.has(b.id)) - Number(open.has(a.id)) ||
+      KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) ||
+      a.id.localeCompare(b.id),
+  );
 
   const groupColumns: Column<GroupRow>[] = [
     {
@@ -484,7 +490,7 @@ function AssumptionCell({
           ? "needs an override value"
           : info.blocks === "walkable"
             ? "needs a structural answer"
-            : "advisory"}
+            : ""}
       </span>
     );
   }
