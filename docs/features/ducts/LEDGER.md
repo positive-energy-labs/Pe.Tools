@@ -17,9 +17,11 @@ The `/ducts` route shows a Revit duct network and its metadata on a real project
 - 2026-09-26, counsel ruling, re-openable: `ignore` resolves an open end and the advisory kinds only. A loop, no-root or multi-root issue needs a structural answer and always blocks.
 
 ## Tried & rejected
+- 2026-09-26, feeding the whole Chadds `ducts.snapshot` to Pea in real `/chat`: the 7,736,648-byte `pe_read` result exceeded `openai/gpt-5.6-terra`'s context window before any answer or proposal. Thread `90c33808-d3d3-4043-bc17-a1d8806eeddf`; human staging and unstaging worked in the same Chat pane.
 - 2026-09-26, trusting Revit's calculated duct values: 0 of 4571 fittings on Chadds have a pressure drop, because the loss method is "ASHRAE Table" with no table chosen. Revit gives a critical path on 9 of 335 systems, with friction only. Use it as a test oracle, not as a result.
 
 ## Owed
+- Bound the ducts reading Pea consumes before repeating the Chat proposal proof. The current `NoRequest` snapshot and `pe_read` input have no group/result filter; resolve the contract or agent-reading ownership first. Proposal landing and human acceptance remain unproven.
 - Promote the cited research (`.artifacts/research/mep-networks/A-D`, `H`) into `docs/features/ducts/RESEARCH.md` before the artifacts are swept.
 - Pass-2 pressure-loss solver: Darcy-Weisbach on straight segments, a fitting C table keyed on PartType, angle, r/D and area ratio, and the Manual D budget.
 - A root assumption (equipment pass-through, or naming the root port) for the 73 multi-root groups. The `assumptions` Work schema has no key for it yet.
