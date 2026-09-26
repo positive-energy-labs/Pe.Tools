@@ -62,7 +62,7 @@ public static class DuctNetwork {
                 if (groupOf.ContainsKey(x)) continue;
                 groupOf[x] = "";
                 ids.Add(x);
-                foreach (var y in adj[x]) {
+                foreach (var y in adj[x].OrderBy(y => y)) {
                     if (!seenEdges.Add((Math.Min(x, y), Math.Max(x, y)))) continue;
                     if (groupOf.ContainsKey(y) || parent.ContainsKey(y)) closers.Add(y);
                     else {
@@ -84,7 +84,8 @@ public static class DuctNetwork {
             var ids = members[i];
             var gid = groupOf[ids[0]];
             var set = new HashSet<long>(ids);
-            var ports = attach.Where(a => set.Contains(a.element)).ToList();
+            var ports = attach.Where(a => set.Contains(a.element))
+                .OrderBy(a => a.element).ThenBy(a => a.equipment).ThenBy(a => a.port).ToList();
             var roots = ports.Select(a => a.equipment).Distinct().OrderBy(x => x).ToList();
             var edges = ids.Sum(x => adj[x].Count) / 2;
             var loops = edges - ids.Count + 1;
@@ -123,7 +124,7 @@ public static class DuctNetwork {
                 if (seg.Kind == DuctSegmentKind.Flex && seg.Roughness.Provenance == DuctProvenance.RevitDefault)
                     Add(DuctIssueKind.DefaultFlexRoughness, x, Mid(seg), $"type {seg.Type} roughness {seg.Roughness.ValueFt} ft is the rigid default");
             }
-            foreach (var x in loopClosers[i].Distinct())
+            foreach (var x in loopClosers[i].Distinct().OrderBy(x => x))
                 Add(DuctIssueKind.Loop, x, Point(x), "closes a loop");
             if (classes.Count > 1) Add(DuctIssueKind.MixedClassification, null, null, string.Join(", ", classes));
             if (ports.Count == 0) Add(DuctIssueKind.NoRoot, null, null, terminals > 0 ? "terminals but no equipment port" : "no equipment port and no terminal");
@@ -162,7 +163,7 @@ public static class DuctNetwork {
         while (stack.Count > 0) {
             var x = stack.Pop();
             order.Add(x);
-            foreach (var y in adj[x].Where(y => !parent.ContainsKey(y))) {
+            foreach (var y in adj[x].OrderBy(y => y).Where(y => !parent.ContainsKey(y))) {
                 parent[y] = x;
                 stack.Push(y);
             }

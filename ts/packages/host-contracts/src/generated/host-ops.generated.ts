@@ -167,6 +167,58 @@ export namespace DocumentTemporaryStatus {
   }
 }
 
+/** Read full-precision physical HVAC connector geometry for 1 to 32 explicit element IDs in this exact open project document. Returns connector IDs, origin and raw connector frame in host-model feet (BasisZ is approach orientation, not airflow), shape and inches, connected state, and all physical peer IDs. Use before scripting exact duct connections and reread after regeneration; it does not report design flow or collision clearance. */
+export namespace DuctsPorts {
+  export namespace Req {
+    /**
+     * Inspect only these known project elements. IDs belong to the current exact open document.
+     */
+    export interface Request {
+      elementIds: number[];
+    }
+  }
+  export namespace Res {
+    export type DuctShape = "round" | "rectangular" | "oval" | "other";
+
+    /**
+     * Exact live port geometry in host-model internal feet; read connector IDs again after regeneration.
+     */
+    export interface Response {
+      documentTitle: string;
+      readAtUtc: string;
+      elements: DuctPortElement[];
+    }
+    export interface DuctPortElement {
+      elementId: number;
+      ports: DuctPhysicalPort[];
+    }
+    /**
+     * One physical HVAC End/Curve port. Raw connector axes; BasisZ is approach orientation, not airflow direction.
+     */
+    export interface DuctPhysicalPort {
+      connectorId: number;
+      kind: string;
+      originFt: number[];
+      basisX: number[];
+      basisY: number[];
+      basisZ: number[];
+      shape: DuctShape;
+      diameterIn?: null | number;
+      widthIn?: null | number;
+      heightIn?: null | number;
+      isConnected: boolean;
+      physicalPeers: DuctRef[];
+    }
+    /**
+     * What a connector touches: an element id and that element's connector index.
+     */
+    export interface DuctRef {
+      elementId: number;
+      connector: number;
+    }
+  }
+}
+
 /** Explain why a duct group is blocked or walkable from its network topology and demand. First call with input {} (group omitted) to confirm the group in the current document index, even when the person supplies a group id. Then call with that group. The index has counts, readiness facts and bounds without elements or pressure; a group adds only its nodes, segments, flows, issues and Colebrook pressure. To propose assumptions, read route:ducts and use route:ducts.propose for proposal cells; a person stages them. This project-document read works on an exact open unsaved document without activating it. Optional assumptions {revision, values} are staged Work only; the reading and pressure echo the revision. context:true adds decimated geometry for web views; agents should omit context. Read-only. */
 export namespace DuctsSnapshot {
   export namespace Req {
@@ -6396,6 +6448,7 @@ export interface HostOps {
   "data-table.apply": { request: DataTableApply.Req.Request; response: DataTableApply.Res.Response };
   "document.temporary.release": { request: DocumentTemporaryRelease.Req.Request; response: DocumentTemporaryRelease.Res.Response };
   "document.temporary.status": { request: DocumentTemporaryStatus.Req.Request; response: DocumentTemporaryStatus.Res.Response };
+  "ducts.ports": { request: DuctsPorts.Req.Request; response: DuctsPorts.Res.Response };
   "ducts.snapshot": { request: DuctsSnapshot.Req.Request; response: DuctsSnapshot.Res.Response };
   "families.apply": { request: FamiliesApply.Req.Request; response: FamiliesApply.Res.Response };
   "families.capture": { request: FamiliesCapture.Req.Request; response: FamiliesCapture.Res.Response };
@@ -6471,6 +6524,7 @@ export const hostOpKeys = [
   "data-table.apply",
   "document.temporary.release",
   "document.temporary.status",
+  "ducts.ports",
   "ducts.snapshot",
   "families.apply",
   "families.capture",

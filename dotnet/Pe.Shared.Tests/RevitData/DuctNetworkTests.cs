@@ -61,4 +61,19 @@ public sealed class DuctNetworkTests {
         Assert.That(a.Flows, Is.Empty);
         Assert.That(a.Issues.Select(i => i.Kind), Is.EquivalentTo(new[] { DuctIssueKind.Loop, DuctIssueKind.Stub, DuctIssueKind.NoRoot }));
     }
+
+    [Test]
+    public void Loop_witness_is_stable_when_collector_and_connector_order_change() {
+        var segments = new[] {
+            Duct(10, 5, Port(1, 11, 2), Port(2, 12, 1)),
+            Duct(11, 5, Port(1, 12, 2), Port(2, 10, 1)),
+            Duct(12, 5, Port(1, 10, 2), Port(2, 11, 1))
+        };
+        var reversed = segments.AsEnumerable().Reverse()
+            .Select(s => s with { Connectors = s.Connectors.Reverse().ToArray() }).ToArray();
+        var first = DuctNetwork.Analyze([], segments);
+        var second = DuctNetwork.Analyze([], reversed);
+        Assert.That(second.Issues.Where(i => i.Kind == DuctIssueKind.Loop).Select(i => i.Id),
+            Is.EqualTo(first.Issues.Where(i => i.Kind == DuctIssueKind.Loop).Select(i => i.Id)));
+    }
 }

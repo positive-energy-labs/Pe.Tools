@@ -92,6 +92,15 @@ internal sealed class RevitDataRequestService {
         }
     }
 
+    [Op("ducts.ports", Does = "Read full-precision physical HVAC connector geometry for 1 to 32 explicit element IDs in this exact open project document. Returns connector IDs, origin and raw connector frame in host-model feet (BasisZ is approach orientation, not airflow), shape and inches, connected state, and all physical peer IDs. Use before scripting exact duct connections and reread after regeneration; it does not report design flow or collision clearance.", Title = "Inspect Duct Ports", Finds = ["ducts", "ports", "connectors", "equipment", "terminals", "geometry"], Cost = OpCost.Bounded, Example = "{ \"elementIds\": [6049638, 6894092] }")]
+    private static DuctPortsData GetDuctPortsCore(DuctPortsRequest request, ProjectDocument activeDocument) {
+        IReadOnlyList<long> ids;
+        try { ids = request.UniqueElementIds(); }
+        catch (ArgumentException ex) { throw BridgeOperationExceptions.BadRequest(ex.Message); }
+        try { return Lib.Mep.DuctPorts.Read(activeDocument.Value, ids); }
+        catch (ArgumentException ex) { throw BridgeOperationExceptions.BadRequest(ex.Message); }
+    }
+
     [Op("rooms.trace",Does = "Read the solver's layer 1 for each zone on one plan view from a rooms.partition run, the newest when runId is absent: rails, network segments by kind, openings with their evidence, per-face facts before judgment, and accounting.", Title = "Get Rooms Solver Trace", Finds = ["rooms", "trace", "partition", "rails", "openings", "solver"], Cost = OpCost.Bounded)]
     private static RoomsTraceData GetRoomsTraceCore(RoomsTraceRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document => Rooms.Trace(document, request));

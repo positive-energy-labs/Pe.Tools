@@ -35,13 +35,14 @@ export {
 const sessionOf = (target: DocumentRequest | null | undefined): string | undefined =>
   target ? (target.kind === "open" ? target.ref.session : target.session) : undefined;
 
-const captureView = createCaptureViewTool(
-  (context) =>
-    new HostRpcCaller({
-      hostBaseUrl: peaHostBaseUrl(),
-      bridgeSessionId: sessionOf(turnOf(context)?.defaultTarget),
-    }),
-);
+const captureView = createCaptureViewTool((context) => {
+  const target = turnOf(context)?.defaultTarget;
+  return new HostRpcCaller({
+    hostBaseUrl: peaHostBaseUrl(),
+    bridgeSessionId: sessionOf(target),
+    openDocumentId: target?.kind === "open" ? target.ref.openId : undefined,
+  });
+});
 
 /**
  * Pea's product surface: three capability doors over ONE catalog (`pe_find` ranks it, `pe_read`

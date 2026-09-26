@@ -3,6 +3,8 @@
 The `/ducts` route shows a Revit duct network and its metadata on a real project. It is read-only. It teaches the physics and prepares a pressure-loss judgment.
 
 ## Decided
+- 2026-09-26, user supersedes the zero-clash acceptance gate: a connected, correctly sized run within its cap counts when Pea clearly reports remaining clashes for engineer review. Aim to avoid clashes and record severity separately; do not label unknown coverage clear. Designer CFM, no unintended changes, independent read-back and no human geometric rescue remain hard requirements.
+- 2026-09-26, user clarification for duct-modeling experiments: check hard clashes against loaded architectural IFC and host geometry; do not invent a minimum clearance. Tight fits are expected. Unloaded links, service access and unspecified insulation allowances remain unverified; the local snapshot does not certify the evolving ACC coordination model.
 - 2026-09-26, the unit of truth is the connector graph, not `MEPSystem`. On Chadds, 45 connected groups carry more than one system name and 31 mix supply, return and exhaust (census H).
 - 2026-09-26, residential correctness has no single unit: room loads (Manual J), equipment capacity (Manual S), the critical path against available static pressure (Manual D), and the outlet (Manual T). Every check is a sum of demand from the terminals to the root, then a sum of loss from the root to the terminals.
 - 2026-09-26, kaitpw: build `/ducts` as two work streams with two variants each, all on one shared backend. The verbs stay minimal: one op `ducts.snapshot` and one fetch verb `refresh`. Targeting a document or a group revalidates it with no press.
