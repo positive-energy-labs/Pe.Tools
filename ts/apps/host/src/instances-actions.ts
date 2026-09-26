@@ -75,7 +75,16 @@ const NOT_DISPATCHED = new Set([
   "op.rejected",
   "session.bad-invocation",
   "doc.bad-invocation",
+  // Refused before any effect (SDK beta.164): cold hr would drop documents, the file's Revit year
+  // matches no session, or a background session was asked for a window.
+  "session.hr-would-drop",
+  "session.year-mismatch",
+  "session.no-sessions-for-year",
+  "doc.revit-year-mismatch",
+  "doc.background-no-window",
 ]);
+/** Said beside a success, never instead of one: the verb ran and its result stands. */
+const ADVISORY = new Set(["doc.file-year-unread"]);
 
 /** Recorded per step: the expectation and the verb argv, with the request file named symbolically. */
 type StepInput = Omit<MutationRequestFile, "requestId"> & { readonly argv: readonly string[] };
@@ -273,9 +282,10 @@ export async function admitInstancesAction(
         const envelope = parsePeRevitEnvelope(await read(args), args, peRevitLauncher());
         const blocking = envelope.diagnostics.find((d: Diagnostic) => NOT_DISPATCHED.has(d.code));
         if (blocking) throw refuse(`${blocking.code}: ${blocking.detail}`, envelope.result);
-        if (envelope.diagnostics.length)
+        const failures = envelope.diagnostics.filter((d: Diagnostic) => !ADVISORY.has(d.code));
+        if (failures.length)
           throw new BridgeError(
-            envelope.diagnostics.map((d: Diagnostic) => `${d.code}: ${d.detail}`).join("; "),
+            failures.map((d: Diagnostic) => `${d.code}: ${d.detail}`).join("; "),
             502,
             { result: envelope.result },
           );
