@@ -1,6 +1,6 @@
 ---
 name: close
-description: Make the whole chain real, end to end, on real parts. Trigger on "close the chain", "finish the backend", "promote this prototype", "make it real", "cutover", or when a surface is settled and its backend is still shims. Not for choosing between shapes; that is `demiurge`.
+description: Make the whole chain real, end to end, on real parts. Trigger on "close the chain", "finish the backend", "promote this prototype", "make it real", "cutover", or when a surface is settled and its backend is still shims. Not for choosing between shapes; that is `muse`.
 argument-hint: "What chain, what's real, what's still shim?"
 stop: shims zero or deferred, workflow driven by hand
 figure: Keystone — a settled surface needs its backend real
@@ -11,7 +11,7 @@ figure: Keystone — a settled surface needs its backend real
 
 The chain is the workflow, not the surface. The UI espouses a UX; services have wants of their own. Both count.
 
-When the backend shape is still open, settle it first, comparable, in `demiurge`; a state model is settled by a button-driven demo anyone can *feel*. Close begins when one shape has won.
+When the backend shape is still open, settle it first, comparable, in `muse`; a state model is settled by a button-driven demo anyone can *feel*. Close begins when one shape has won.
 
 ## Loop
 
