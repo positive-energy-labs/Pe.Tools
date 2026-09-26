@@ -23,8 +23,13 @@ public static class Verbs {
     // FOOTGUN: xy clip margin around the zone loop, SHAPE.md stage 2.
     private const double ClipMarginFt = 2.0;
 
-    // FOOTGUN: curve tessellation for a non-linear zone boundary segment.
+    // FOOTGUN: exact-plane checks on link transforms and level elevations.
     private const double LoopTolFt = 1e-9;
+
+    // FOOTGUN: boundary endpoints within this distance join. Basis: Revit's Application.VertexTolerance ("two points
+    // within this distance are considered coincident"), commonly 0.0005233 ft; a live Room boundary has shown a
+    // 3.9e-4 ft gap between consecutive segments, and 1e-9 refused it. Far under the 1/8 in shortest real segment.
+    internal const double JoinTolFt = 0.0005233;
 
     public static PartitionAnswer Partition(Document document, PartitionRequest request) {
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -75,7 +80,11 @@ public static class Verbs {
             if (document.GetElement(request.ZoneRegion.ToElementId()) is not FilledRegion region)
                 throw new PartitionException($"element {request.ZoneRegion} is not a FilledRegion");
 
-            loops = region.GetBoundaries().Select(cl => Loop(cl, Transform.Identity, $"zone {region.Id}")).ToArray();
+            // The zone is the user's fill: a bad zone loop stays fatal.
+            loops = region.GetBoundaries().Select(cl => Loop(cl, Transform.Identity) switch {
+                ({ } ring, _) => ring,
+                (_, var fault) => throw new PartitionException($"malformed capture: {fault} boundary for zone {region.Id}")
+            }).ToArray();
             if (loops.Length == 0) throw new PartitionException($"malformed capture: zone {region.Id} has no boundaries");
             view = document.GetElement(region.OwnerViewId) as View
                 ?? throw new PartitionException($"malformed capture: zone {region.Id} has no owner view");
@@ -111,38 +120,44 @@ public static class Verbs {
         var originalHeader = SpaceVerbs.OriginalCurves(document, levelZ + HeaderLoFt, levelZ + HeaderHiFt, clip, declared.Ribbons);
         RequireStamp(originalKnee.Stamp, knee.Solids.Stamp, document.GetDocumentKey(), "original knee curves");
         RequireStamp(originalHeader.Stamp, knee.Solids.Stamp, document.GetDocumentKey(), "original header curves");
-        var proposals = Proposals(document, level, phaseId, knee.Solids.Stamp, clip);
+        var (proposals, dropped) = Proposals(document, level, phaseId, knee.Solids.Stamp, clip);
         RequireCurrent(document, knee.Solids.Stamp);
         return new PartitionInput(knee.Merged, header.Merged, loops, levelZ, knobs, gates, source, proposals,
-            new OriginalCurveEvidence(originalKnee, originalHeader));
+            new OriginalCurveEvidence(originalKnee, originalHeader), Dropped: dropped);
     }
 
     // ---------------------------------------------------------------- stage 1
 
-    private static double[] Loop(IEnumerable<Curve> curves, Transform transform, string owner) {
+    private static (double[]? Ring, string? Fault) Loop(IEnumerable<Curve> curves, Transform transform) =>
+        Ring(curves.Select(c => c.Tessellate().Select(transform.OfPoint).Select(p => (p.X, p.Y, p.Z)).ToList()));
+
+    /// <summary>
+    ///     Joins boundary segments, each a tessellated polyline in boundary order, into one flat x,y ring, or names
+    ///     the fault: <c>disconnected</c>, <c>nonfinite</c>, or <c>open or empty</c>. Never repairs geometry.
+    /// </summary>
+    internal static (double[]? Ring, string? Fault) Ring(IEnumerable<IReadOnlyList<(double X, double Y, double Z)>> segments) {
         var points = new List<double>();
-        XYZ? first = null, last = null;
-        foreach (var curve in curves) {
-            var vertices = curve.Tessellate();
-            if (vertices.Count < 2 || (last is not null && last.DistanceTo(transform.OfPoint(vertices[0])) > LoopTolFt))
-                throw new PartitionException($"malformed capture: disconnected boundary for {owner}");
-            foreach (var vertex in vertices) {
-                var p = transform.OfPoint(vertex);
-                if (!Finite(p.X) || !Finite(p.Y) || !Finite(p.Z))
-                    throw new PartitionException($"malformed capture: nonfinite boundary for {owner}");
+        (double X, double Y, double Z)? first = null, last = null;
+        foreach (var vertices in segments) {
+            if (vertices.Count < 2 || (last is { } l && Distance(l, vertices[0]) > JoinTolFt)) return (null, "disconnected");
+            foreach (var p in vertices) {
+                if (!Finite(p.X) || !Finite(p.Y) || !Finite(p.Z)) return (null, "nonfinite");
                 first ??= p;
                 last = p;
-                if (points.Count >= 2 && Math.Abs(points[^2] - p.X) < LoopTolFt
-                    && Math.Abs(points[^1] - p.Y) < LoopTolFt) continue;
+                if (points.Count >= 2 && Math.Abs(points[^2] - p.X) < JoinTolFt
+                    && Math.Abs(points[^1] - p.Y) < JoinTolFt) continue;
                 points.Add(p.X);
                 points.Add(p.Y);
             }
         }
-        if (first is null || last is null || first.DistanceTo(last) > LoopTolFt || points.Count < 8)
-            throw new PartitionException($"malformed capture: open or empty boundary for {owner}");
+        if (first is null || last is null || Distance(first.Value, last.Value) > JoinTolFt || points.Count < 8)
+            return (null, "open or empty");
         points.RemoveRange(points.Count - 2, 2);
-        return points.ToArray();
+        return (points.ToArray(), null);
     }
+
+    private static double Distance((double X, double Y, double Z) a, (double X, double Y, double Z) b) =>
+        Math.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y) + (a.Z - b.Z) * (a.Z - b.Z));
 
     private static ElementId PhaseId(Element element, BuiltInParameter parameter) {
         var p = element.get_Parameter(parameter);
@@ -152,8 +167,9 @@ public static class Verbs {
         return phase.Id;
     }
 
-    private static IReadOnlyList<RoomProposal> Proposals(Document host, Level level, ElementId phase, Stamp stamp, Aabb clip) {
+    private static (IReadOnlyList<RoomProposal>, IReadOnlyList<string>) Proposals(Document host, Level level, ElementId phase, Stamp stamp, Aabb clip) {
         var result = new List<RoomProposal>();
+        var dropped = new List<string>();
         Collect(host, null, Transform.Identity);
         var sources = 1;
         foreach (var link in new FilteredElementCollector(host).OfClass(typeof(RevitLinkInstance))
@@ -165,7 +181,7 @@ public static class Verbs {
         }
         if (stamp.Sources.Count != sources)
             throw new PartitionException("stale capture: loaded source inventory differs from Space build");
-        return result;
+        return (result, dropped);
 
         void Collect(Document doc, RevitLinkInstance? link, Transform transform) {
             var documentKey = doc.GetDocumentKey();
@@ -201,9 +217,14 @@ public static class Verbs {
                 // The host plus link instance resolves the source even when Revit gives a loaded link no path.
                 var key = $"{Uri.EscapeDataString(stamp.HostDocumentKey)}|{Uri.EscapeDataString(link?.UniqueId ?? "host")}|{Uri.EscapeDataString(room.UniqueId)}";
                 var boundaries = room.GetBoundarySegments(options);
-                var loops = boundaries?.Select(b => Loop(b.Select(s => s.GetCurve()), transform, key)).ToArray() ?? [];
-                // Empty, self-intersecting, or conflicting proposal topology belongs to Solve; do not repair or drop it here.
-                result.Add(new RoomProposal(key, room.Name, room.Number, loops));
+                var loops = boundaries?.Select(b => Loop(b.Select(s => s.GetCurve()), transform)).ToArray() ?? [];
+                // A proposal is advice: a loop that does not close drops that proposal, named, and the run goes on.
+                // Empty, self-intersecting, or conflicting proposal topology belongs to Solve; do not repair it here.
+                if (loops.FirstOrDefault(l => l.Ring is null).Fault is { } fault) {
+                    dropped.Add($"{key}: {fault} boundary");
+                    continue;
+                }
+                result.Add(new RoomProposal(key, room.Name, room.Number, loops.Select(l => l.Ring!).ToArray()));
             }
         }
 

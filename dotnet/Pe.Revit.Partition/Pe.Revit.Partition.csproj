@@ -13,6 +13,7 @@
 
     <ItemGroup>
         <PackageReference Include="NetTopologySuite" Version="2.6.0"/>
+        <InternalsVisibleTo Include="Pe.Partition.Tests"/>
     </ItemGroup>
 
     <ItemGroup>

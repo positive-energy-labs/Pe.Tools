@@ -15,6 +15,7 @@ Tests and scripts resolve the root from `PE_PRIVATE_FIXTURES`, defaulting to `<r
 | `fixtures/project-c/partition/live`, `level2` | Partition captures | recaptured |
 | `fixtures/project-d/partition`, `truth` | Partition solver captures: whole-level doors input, locked zones, probes; hand-drawn and takeoff truth | recaptured; truth from kaitpw and the takeoff PDFs |
 | `fixtures/families/hcb/HCB.rfa` | Mechanical-equipment family: three extrusions on unnamed planes, two face-centred duct connectors, one electrical; read by `FamilyModelCaptureTests` | kaitpw, 2026-10-06 field capture |
+| `fixtures/project-d/partition/room-boundary.json`, `fixtures/project-e/partition/room-boundary.json` | Live Room boundary dumps: a closed loop with a sub-tolerance joint gap, and an open-plan open loop (`BoundaryRingTests`) | mileage run 2026-09-26 |
 | `rewrite/` | inputs for the 2026-09 history rewrite | disposable after the rewrite |
 | `banned-names.txt` | the client and person names the example-Pod hygiene tests refuse, one per line; the names are the secret, so the list never ships | kaitpw; `ts/apps/host/tests/banned-names.ts` reads it and skips when absent |
 | `sdk-feed/` | optional home for the local NuGet feed if it leaves `eng/sdk-feed` | NuGet |

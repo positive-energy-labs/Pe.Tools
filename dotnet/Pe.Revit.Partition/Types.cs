@@ -62,7 +62,8 @@ public sealed record OriginalCurveEvidence(OriginalCurvesAnswer Knee, OriginalCu
 /// <summary>
 ///     Captured inputs to the one solver. ZoneLoops retains every boundary in host feet with
 ///     even-odd semantics. Resolved contains knee solids, knee ribbons, header solids, header ribbons. Rejected holds a
-///     person's standing "not a room" rings (flat x,y host feet), matched in <see cref="Judge" />.
+///     person's standing "not a room" rings (flat x,y host feet), matched in <see cref="Judge" />. Dropped names each
+///     native Room proposal whose boundary would not close, by source key and fault.
 /// </summary>
 public sealed record PartitionInput(
     SliceAnswer Knee,
@@ -74,7 +75,8 @@ public sealed record PartitionInput(
     string EnclosureSource,
     IReadOnlyList<RoomProposal> Proposals,
     OriginalCurveEvidence? OriginalCurves = null,
-    IReadOnlyList<double[]>? Rejected = null
+    IReadOnlyList<double[]>? Rejected = null,
+    IReadOnlyList<string>? Dropped = null
 );
 
 /// <summary>What a face is to layer 1: a proposed or rail room, a proposal overlap, or an envelope band.</summary>
