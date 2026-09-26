@@ -86,6 +86,12 @@ export function PressureIssues({
     (i) =>
       (i.groupId === group || i.groupId === "") && (element == null || i.elementId === element),
   );
+  const kinds = new Map<string, Pressure["issues"]>();
+  for (const issue of issues) {
+    const rows = kinds.get(issue.code) ?? [];
+    rows.push(issue);
+    kinds.set(issue.code, rows);
+  }
   const boundaries = [...snapshot.nodes, ...snapshot.segments]
     .filter((part) => element == null || part.id === element)
     .flatMap((part) =>
@@ -104,20 +110,33 @@ export function PressureIssues({
       ))}
       <p>Pressure issues · {issues.length}</p>
       <ul>
-        {issues.map((issue, i) => {
-          const info = PRESSURE_ISSUE_KINDS[issue.code];
+        {[...kinds].map(([code, rows]) => {
+          const info = PRESSURE_ISSUE_KINDS[code];
           return (
-            <li key={`${issue.code}:${issue.elementId}:${i}`}>
-              <span data-tone={info?.color.tone ?? "caution"}>{info?.label ?? issue.code}</span>
-              {" · "}
-              {issue.elementId != null && select ? (
-                <Press size="caption" onClick={() => select(issue.elementId!)}>
-                  {issue.elementId}
-                </Press>
-              ) : (
-                issue.elementId
-              )}{" "}
-              {issue.reason}
+            <li key={code}>
+              <details data-pressure-kind={code}>
+                <summary className="cursor-pointer">
+                  <span data-tone={info?.color.tone ?? "caution"}>{info?.label ?? code}</span>
+                  {" · "}
+                  <span className="face-mono">{rows.length}</span>
+                  {" · "}
+                  {info?.what ?? "Unrecognized solver diagnostic; expand for details."}
+                </summary>
+                <ul className="pl-3">
+                  {rows.map((issue, i) => (
+                    <li key={`${issue.elementId}:${i}`}>
+                      {issue.elementId != null && select ? (
+                        <Press size="caption" onClick={() => select(issue.elementId!)}>
+                          {issue.elementId}
+                        </Press>
+                      ) : (
+                        issue.elementId
+                      )}{" "}
+                      {issue.reason}
+                    </li>
+                  ))}
+                </ul>
+              </details>
             </li>
           );
         })}

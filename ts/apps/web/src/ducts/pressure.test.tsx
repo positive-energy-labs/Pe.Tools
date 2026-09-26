@@ -416,3 +416,32 @@ test("excluded peers and standalone solver boundaries are neutral scope facts", 
   expect(rendered.container.querySelector('[data-tone="alarm"], [data-tone="caution"]')).toBeNull();
   expect(rendered.container.textContent).not.toContain("missing connector");
 });
+
+test("pressure issues collapse by kind, retain unscoped diagnostics and select expanded elements", () => {
+  const p = structuredClone(pressure);
+  p.issues.push(
+    { code: "unmatched-fitting", groupId: "g1", elementId: 3, reason: "Second fitting." },
+    { code: "missing-connector", groupId: "", elementId: 100, reason: "Unscoped port." },
+    { code: "unmatched-fitting", groupId: "g2", elementId: 9, reason: "Other group." },
+  );
+  const select = vi.fn();
+  const rendered = render(
+    <PressureIssues pressure={p} snapshot={snapshot} group="g1" select={select} />,
+  );
+  const kinds = rendered.container.querySelectorAll("details");
+  expect(kinds).toHaveLength(2);
+  expect([...kinds].every((kind) => !kind.open)).toBe(true);
+  const fitting = kinds[0]!;
+  expect(fitting.querySelector("summary")?.textContent).toContain(
+    "assumed fitting loss · 2 · One velocity head is assumed",
+  );
+  fireEvent.click(fitting.querySelector("summary")!);
+  expect(fitting.open).toBe(true);
+  fireEvent.click(within(fitting).getByRole("button", { name: "3" }));
+  expect(select).toHaveBeenCalledWith(3);
+  expect(rendered.container.textContent).not.toContain("Other group.");
+  rendered.rerender(<PressureIssues pressure={p} snapshot={snapshot} group="g1" element={3} />);
+  expect(rendered.container.querySelector("summary")?.textContent).toContain(
+    "assumed fitting loss · 1",
+  );
+});
