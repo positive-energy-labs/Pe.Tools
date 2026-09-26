@@ -78,6 +78,7 @@ dotnet tool run pe-revit -- <command> --json
 - The generated contract in `packages/host-contracts/src/vendor/generated/pe-revit-contract.ts` owns `pe-revit` argv and envelopes. Do not hand-write either.
 - `pea` is checkout-pinned. Read the checkout and host URL it reports before treating its answer as evidence, especially from a worktree.
 - Discover host operations before calling them. Put structured requests in a file; do not pass JSON through PowerShell quoting. A mutation script ends with an independent read-back.
+- Show a picture to the person with a markdown image whose absolute path uses forward slashes: `![x](C:/Users/.../out.png)`. A backslash path does not render in the T3 chat (2026-09-26). Put the backslash path in a code block beside it for copying.
 - Use the in-app browser preview for route proof. Inspect console, network, visible state, and the route's receipts. If browser automation is unavailable or broken, report the browser claim as unproven and prove only the lower lane.
 
 ## Worktrees and Herdr
