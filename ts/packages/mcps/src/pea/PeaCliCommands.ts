@@ -284,10 +284,17 @@ export class PeaCliCommands {
           type: "number",
           description: "Cooperative execution timeout in seconds (host default 600).",
         },
+        json: {
+          type: "boolean",
+          description:
+            "Print the whole result (status, executionId, output, data, diagnostics) as one JSON object on stdout.",
+          default: false,
+        },
       },
       toKebab: true,
       examples: [
         "pea script execute --file scratch\\Probe.cs",
+        "pea script execute --file scratch\\Probe.cs --json",
         "pea script execute --source-path src\\SampleScript.cs",
         "pea script execute --source-path src\\Fix.cs --permission-mode WriteTransaction",
         "Get-Content .\\Probe.cs | pea script execute --stdin --source-name Probe.cs",
@@ -311,7 +318,9 @@ export class PeaCliCommands {
           permissionMode: parseCliPermissionMode(ctx.values.permissionMode),
           timeoutSeconds,
         } satisfies ScriptExecuteInput);
-        writeScriptExecution(result);
+        if (result.status !== "Succeeded") process.exitCode = 1;
+        if (ctx.values.json) process.stdout.write(`${JSON.stringify(result)}\n`);
+        else writeScriptExecution(result);
       },
     });
   }
@@ -538,7 +547,6 @@ function writeLogs(logs: HostOpResponse<"logs.tail">) {
 }
 
 function writeScriptExecution(result: HostOpResponse<"scripting.execute">) {
-  if (result.status !== "Succeeded") process.exitCode = 1;
   console.log(`status    ${result.status}`);
   console.log(`execution ${result.executionId}`);
   console.log(`revit     ${result.revitVersion}`);

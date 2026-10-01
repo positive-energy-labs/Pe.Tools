@@ -78,3 +78,49 @@ test.each(statuses)("pea script execute maps %s to the process exit code", async
     tools.mockRestore();
   }
 });
+
+test("pea script execute --json prints the whole result as one JSON object", async () => {
+  const originalExitCode = process.exitCode;
+  const commands = new PeaCliCommands({ hostBaseUrl: "http://host.test" });
+  const result = {
+    status: "RuntimeFailed" as const,
+    executionId: "execution-1",
+    diagnostics: [
+      { stage: "resolve", severity: "Info" as const, message: "resolved 3 references" },
+      { stage: "runtime", severity: "Warning" as const, message: "one duct had no level" },
+    ],
+    output: "hello\n",
+    revitVersion: "2025",
+    targetFramework: "net8.0-windows",
+    data: { ducts: [1, 2] },
+  };
+  const scripting = { execute: vi.fn(async () => result) };
+  const tools = vi
+    .spyOn(
+      commands as unknown as { createScriptingTools: () => typeof scripting },
+      "createScriptingTools",
+    )
+    .mockReturnValue(scripting);
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+  try {
+    process.exitCode = 0;
+    const command = commands.scriptCommand();
+    await cli(["execute", "--script-content", "WriteLine(1);", "--json"], command, {
+      subCommands: command.subCommands,
+    });
+
+    expect(log).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    expect(stdout).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(stdout.mock.calls[0]![0]))).toEqual(result);
+    expect(process.exitCode).toBe(1);
+  } finally {
+    process.exitCode = originalExitCode;
+    stdout.mockRestore();
+    error.mockRestore();
+    log.mockRestore();
+    tools.mockRestore();
+  }
+});
