@@ -67,6 +67,7 @@ export const rawByDesign = [
   "pod.member.write",
   "pod.runs",
   "revit.apply.command.execute",
+  "revit.apply.elements.show",
   "revit.apply.parameter-links",
   "revit.apply.parameter-values",
   "revit.apply.parameters-service-cache.refresh",

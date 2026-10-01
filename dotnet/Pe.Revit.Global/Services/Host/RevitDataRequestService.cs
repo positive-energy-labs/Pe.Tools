@@ -111,8 +111,8 @@ internal sealed class RevitDataRequestService {
 
     [Op("revit.apply.command.execute", Does = "Search Revit ribbon/postable commands by name and execute one by command id — the same discovery and PostCommand machinery as the command palette. Call with searchText to list candidates without executing, then commandId to post.", Title = "Execute Ribbon Command", Finds = ["command", "execute", "postable", "ribbon", "palette", "post", "trigger"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"searchText\": \"sheet\" }", Thread = OpThread.Revit)]
     private static RibbonCommandExecuteData ExecuteRibbonCommandCore(RibbonCommandExecuteRequest request, RevitDocument activeDocument) {
-        var document = activeDocument.Value;
-        var uiApp = RequireDocumentUi(document);
+        // Ribbon commands act on the active window, so even discovery (CanExecute) reads it.
+        var uiApp = RequireUi(activeDocument.Value, "window for ribbon commands").Application;
 
         if (!string.IsNullOrWhiteSpace(request.CommandId)) {
             var (posted, error) = Lib.Commands.Execute(uiApp, request.CommandId!);
@@ -269,9 +269,11 @@ internal sealed class RevitDataRequestService {
     [Op("revit.detail.sheets", Does = "Read minimal native sheet anchors for extractor and scripting workflows: sheet identity, placed views, placed schedules, title blocks, sheet-owned text, and provenance.", Title = "Get Sheet Details", Finds = ["sheets", "sheet-anchors", "printed-context", "viewports", "schedule-placement", "title-blocks", "text-notes", "extractor-boundary"], Cost = OpCost.Bounded, Example = "{ \"references\": { \"currentActiveSheet\": true }, \"projection\": { \"view\": \"Anchors\", \"includeTextNotes\": true, \"includeBoundingBoxes\": true }, \"budget\": { \"maxEntries\": 1, \"maxSamplesPerEntry\": 80 } }")]
     private SheetDetailData GetSheetDetailsCore(SheetDetailRequest request, RevitDocument activeDocument) {
         var document = activeDocument.Value;
+        // Omitted references mean the current active sheet (SheetDetailCollector).
+        var ui = UiFor(document, request.References?.CurrentActiveSheet ?? true, "active sheet");
 
         try {
-            return SheetDetailCollector.Collect(document, RequireDocumentUi(document).GetActiveView(), request, DocShadow.For(document));
+            return SheetDetailCollector.Collect(document, ui?.ActiveView, request, DocShadow.For(document));
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "SheetDetailsException",
@@ -284,9 +286,9 @@ internal sealed class RevitDataRequestService {
     [Op("revit.matrix.schedule-profiles", Does = "Read schedule profile projections from the active document.", Title = "Get Schedule Profiles Query", Finds = ["schedules", "profiles", "query", "projection", "authored-schedule-shape"], Cost = OpCost.Expensive, Tier = OpTier.Expert, Example = "{ \"query\": { \"kind\": \"CurrentActiveView\" } }")]
     private ScheduleProfilesQueryData GetScheduleProfilesQueryCore(ScheduleProfilesQueryRequest request, RevitDocument activeDocument) {
         var document = activeDocument.Value;
-        var uiApp = RequireDocumentUi(document);
-        if (request.Query?.Kind == ScheduleProfilesQueryKind.CurrentActiveView &&
-            uiApp.GetActiveView() is not ViewSchedule) {
+        var readsActiveView = request.Query?.Kind == ScheduleProfilesQueryKind.CurrentActiveView;
+        var activeView = UiFor(document, readsActiveView, "active view")?.ActiveView;
+        if (readsActiveView && activeView is not ViewSchedule) {
             throw BridgeOperationExceptions.Conflict(
                 "Active view is not a schedule view.",
                 [
@@ -301,11 +303,7 @@ internal sealed class RevitDataRequestService {
         }
 
         try {
-            return ScheduleProfileQueryCollector.Collect(
-                document,
-                request.Query,
-                uiApp.GetActiveView()
-            );
+            return ScheduleProfileQueryCollector.Collect(document, request.Query, activeView);
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "ScheduleProfilesQueryException",
@@ -318,7 +316,8 @@ internal sealed class RevitDataRequestService {
     [Op("revit.detail.schedules", Does = "Read schedule rows and field values from the active document.", Title = "Get Schedule Query", Finds = ["schedules", "query", "rows", "values", "detail"], Cost = OpCost.Bounded, Example = "{ \"query\": { \"kind\": \"ScheduleReferences\", \"scheduleIds\": [12345], \"projection\": { \"view\": \"Handles\" }, \"budget\": { \"maxEntries\": 1, \"maxRowsPerEntry\": 0 } } }")]
     private ScheduleQueryData GetScheduleQueryCore(ScheduleQueryRequest request, RevitDocument activeDocument) {
         var document = activeDocument.Value;
-        var activeScheduleView = RequireDocumentUi(document).GetActiveView() as ViewSchedule;
+        var activeScheduleView = UiFor(document, request.Query?.Kind == ScheduleQueryKind.CurrentActiveView, "active view")
+            ?.ActiveView as ViewSchedule;
         if (request.Query?.Kind == ScheduleQueryKind.CurrentActiveView &&
             activeScheduleView == null) {
             throw BridgeOperationExceptions.Conflict(
@@ -480,14 +479,10 @@ internal sealed class RevitDataRequestService {
     [Op("revit.matrix.schedule-coverage", Does = "Read bounded element-to-schedule coverage counts and samples from the active document, including active-view-visible or explicit-handle scopes.", Title = "Get Schedule Coverage Matrix", Finds = ["schedules", "coverage", "matrix", "elements", "handles", "active-view-visible", "explicit-handles", "visible-equipment", "printed-context"], Cost = OpCost.Expensive, Example = "{ \"scope\": \"ViewReferences\", \"viewIds\": [12345, 67890], \"categoryNames\": [\"Mechanical Equipment\"], \"scheduleRoleScope\": \"IssuedOrWorking\", \"scheduleFilter\": { \"scheduleNameContains\": \"Equipment\", \"placementScope\": \"PlacedOnly\", \"projection\": { \"view\": \"Handles\", \"includeSheetPlacements\": true }, \"budget\": { \"maxEntries\": 25 } }, \"includeMissingElementHandles\": true, \"includeMatchedScheduleNames\": true, \"budget\": { \"maxEntries\": 250, \"maxSamplesPerEntry\": 0 } }")]
     private ScheduleCoverageData GetScheduleCoverageCore(ScheduleCoverageRequest request, RevitDocument activeDocument) {
         var document = activeDocument.Value;
+        var ui = UiFor(document, request.Scope == RevitElementScope.ActiveViewVisible, "active view");
 
         try {
-            return ScheduleCoverageCollector.Collect(
-                document,
-                request,
-                RequireDocumentUi(document).GetActiveView(),
-                DocShadow.For(document)
-            );
+            return ScheduleCoverageCollector.Collect(document, request, ui?.ActiveView, DocShadow.For(document));
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "ScheduleCoverageException",
@@ -508,13 +503,10 @@ internal sealed class RevitDataRequestService {
         }
 
         var document = activeDocument.Value;
+        var ui = UiFor(document, ReadsUi(request.Scope), "active view and selection");
 
         try {
-            return ParameterCoverageCollector.Collect(
-                document,
-                request,
-                RequireDocumentUi(document).GetActiveUIDocument()?.Selection.GetElementIds().ToList()
-            );
+            return ParameterCoverageCollector.Collect(document, request, SelectionOf(ui));
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "ParameterCoverageException",
@@ -550,14 +542,10 @@ internal sealed class RevitDataRequestService {
         }
 
         var document = activeDocument.Value;
+        var ui = UiFor(document, ReadsUi(request.Scope), "active view and selection");
         try {
             var primitives = DocShadow.For(document).GetParameterEvidencePrimitives(document, request.UseCache);
-            return ParameterEvidenceCollector.Collect(
-                document,
-                request,
-                primitives,
-                RequireDocumentUi(document).GetActiveUIDocument()?.Selection.GetElementIds().ToList()
-            );
+            return ParameterEvidenceCollector.Collect(document, request, primitives, SelectionOf(ui));
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "ParameterEvidenceException",
@@ -688,13 +676,11 @@ internal sealed class RevitDataRequestService {
         RevitDocument activeDocument
     ) {
         var document = activeDocument.Value;
+        var readsSelection = (request.Query?.Kind ?? ElementContextQueryKind.CurrentSelection) == ElementContextQueryKind.CurrentSelection;
+        var ui = UiFor(document, readsSelection, "selection");
 
         try {
-            return ElementContextCollector.Collect(
-                document,
-                request.Query,
-                RequireDocumentUi(document).GetActiveUIDocument()?.Selection.GetElementIds().ToList()
-            );
+            return ElementContextCollector.Collect(document, request.Query, SelectionOf(ui));
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "ElementContextQueryException",
@@ -746,9 +732,9 @@ internal sealed class RevitDataRequestService {
         RevitDocument activeDocument
     ) {
         var document = activeDocument.Value;
-        var activeView = RequireDocumentUi(document).GetActiveView();
-        if (request.Query?.Kind == ElectricalPanelSchedulesQueryKind.CurrentActiveView &&
-            activeView is not PanelScheduleView) {
+        var readsActiveView = request.Query?.Kind == ElectricalPanelSchedulesQueryKind.CurrentActiveView;
+        var activeView = UiFor(document, readsActiveView, "active view")?.ActiveView;
+        if (readsActiveView && activeView is not PanelScheduleView) {
             throw BridgeOperationExceptions.Conflict(
                 "Active view is not a panel schedule view.",
                 [
@@ -842,8 +828,9 @@ internal sealed class RevitDataRequestService {
 
     [Op("family.open", Does = "Open a loaded family from the active project in the Revit family editor and activate it (saves to a scratch .rfa to make activation possible).", Title = "Open Family In Editor", Finds = ["family-editor", "family", "open", "edit-family", "activate"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private FamilyOpenData OpenFamilyCore(FamilyOpenRequest request, ProjectDocument activeDocument) {
+        // EditFamily reads only the source document, so it may be inactive or headless; the family opens in a new window.
         var document = activeDocument.Value;
-        var uiApp = RequireDocumentUi(document);
+        var uiApp = RevitUiSession.CurrentUIApplication;
 
         var family = request.FamilyId is { } familyId
             ? document.GetElement(familyId.ToElementId()) as Family
@@ -940,9 +927,7 @@ internal sealed class RevitDataRequestService {
     private static GlanceModelData GetGlanceModelCore(NoRequest _, RevitDocument activeDocument) {
         var document = activeDocument.Value;
         try {
-            var documentSummary = CreateDocumentSessionContext().ActiveDocument
-                ?? throw new InvalidOperationException("Active document summary unavailable.");
-            return GlanceModelCollector.Collect(document, documentSummary);
+            return GlanceModelCollector.Collect(document, CreateDocumentSummary(document, ActiveUi(document)?.Document));
         } catch (BridgeOperationException) {
             throw;
         } catch (Exception ex) {
@@ -958,10 +943,7 @@ internal sealed class RevitDataRequestService {
     private static GlanceAttentionData GetGlanceAttentionCore(NoRequest _, RevitDocument activeDocument) {
         var document = activeDocument.Value;
         try {
-            return GlanceAttentionCollector.Collect(
-                document,
-                RequireDocumentUi(document).GetActiveView()
-            );
+            return GlanceAttentionCollector.Collect(document, RequireUi(document, "screen (active view)").ActiveView);
         } catch (BridgeOperationException) {
             throw;
         } catch (Exception ex) {
@@ -977,12 +959,14 @@ internal sealed class RevitDataRequestService {
     private RevitAgentContextSummaryData GetRevitAgentContextSummaryCore(NoRequest _, RevitDocument activeDocument) {
         var document = activeDocument.Value;
         try {
-            var uiApp = RequireDocumentUi(document);
+            // A headless or inactive document answers its document-owned part; Document.IsHeadless says why the rest is empty.
+            var ui = ActiveUi(document);
             return RevitAgentContextCollector.CollectSummary(
                 document,
+                CreateDocumentSummary(document, ui?.Document),
                 CreateDocumentSessionContext(),
-                uiApp.GetActiveView(),
-                uiApp.GetActiveUIDocument()?.Selection.GetElementIds().ToList()
+                ui?.ActiveView,
+                SelectionOf(ui)
             );
         } catch (BridgeOperationException) {
             throw;
@@ -1002,13 +986,9 @@ internal sealed class RevitDataRequestService {
     ) {
         var document = activeDocument.Value;
         try {
-            var uiApp = RequireDocumentUi(document);
-            return RevitAgentContextCollector.Resolve(
-                document,
-                uiApp.GetActiveView(),
-                uiApp.GetActiveUIDocument()?.Selection.GetElementIds().ToList(),
-                request
-            );
+            // "this view" and "selected" resolve only on the active document; names and numbers resolve on any.
+            var ui = ActiveUi(document);
+            return RevitAgentContextCollector.Resolve(document, ui?.ActiveView, SelectionOf(ui), request);
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "RevitAgentContextResolveException",
@@ -1031,12 +1011,9 @@ internal sealed class RevitDataRequestService {
         RevitDocument activeDocument
     ) {
         var document = activeDocument.Value;
+        var ui = UiFor(document, request.Scope == RevitAgentVisibleContextScope.ActiveViewVisible, "active view");
         try {
-            return RevitAgentContextCollector.CollectVisibleContext(
-                document,
-                RequireDocumentUi(document).GetActiveView(),
-                request
-            );
+            return RevitAgentContextCollector.CollectVisibleContext(document, ui?.ActiveView, request);
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "RevitAgentVisibleContextException",
@@ -1052,12 +1029,9 @@ internal sealed class RevitDataRequestService {
         RevitDocument activeDocument
     ) {
         var document = activeDocument.Value;
+        var ui = UiFor(document, request.Scope == RevitAgentViewRenderingScope.ActiveView, "active view");
         try {
-            return RevitAgentContextCollector.CollectViewRenderingState(
-                document,
-                RequireDocumentUi(document).GetActiveView(),
-                request
-            );
+            return RevitAgentContextCollector.CollectViewRenderingState(document, ui?.ActiveView, request);
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "RevitAgentViewRenderingStateException",
@@ -1104,6 +1078,48 @@ internal sealed class RevitDataRequestService {
         }
     }
 
+    [Op("revit.apply.elements.show", Does = "Show elements to the person at the window: select them and zoom the active view, or the given view, to their extents. Answers which ids it showed, which were missing, and the view. Changes selection and zoom only, never the model. Needs the active windowed document; a headless document refuses.", Title = "Show Elements", Finds = ["show", "select", "selection", "zoom", "focus", "point-at", "highlight", "find", "navigate", "elements", "view"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Tier = OpTier.Default, Example = "{ \"elementIds\": [12345, 67890] }")]
+    private static RevitShowElementsData ShowElementsCore(RevitShowElementsRequest request, RevitDocument activeDocument) {
+        var document = activeDocument.Value;
+        var requested = (request.ElementIds ?? []).Distinct().ToList();
+        if (requested.Count == 0)
+            throw BridgeOperationExceptions.BadRequest("Name at least one element.",
+                [BridgeOperationExceptions.Issue("$.elementIds", "ElementIdsEmpty", "elementIds is empty.",
+                    "Pass element ids from a handle-returning op such as revit.context.visible-summary.")]);
+
+        var ui = RequireUi(document, "window to show elements in");
+        var view = request.ViewId is { } viewId ? document.GetElement(viewId.ToElementId()) as View : null;
+        if (request.ViewId is not null && view is null or { IsTemplate: true } or ViewSchedule)
+            throw BridgeOperationExceptions.Conflict("The view cannot show elements.",
+                [BridgeOperationExceptions.Issue("$.viewId", "ViewNotGraphical",
+                    $"{request.ViewId} is not a graphical, non-template view in '{document.Title}'.",
+                    "Omit viewId for the active view, or pass a plan, section, 3D view, or sheet id.")]);
+
+        var shown = requested.Where(id => document.GetElement(id.ToElementId()) != null).ToList();
+        var missing = requested.Except(shown).ToList();
+        if (shown.Count == 0)
+            throw BridgeOperationExceptions.Conflict("None of the elements exist in this document.",
+                [BridgeOperationExceptions.Issue("$.elementIds", "ElementsNotFound",
+                    $"No element in '{document.Title}' has the ids {string.Join(", ", missing)}.",
+                    "Read fresh ids from this document and retry.")]);
+
+        BoundingBoxXYZ? box;
+        try {
+            box = ui.SelectAndZoom(shown.Select(id => id.ToElementId()).ToList(), view);
+        } catch (Autodesk.Revit.Exceptions.InvalidOperationException ex) {
+            throw BridgeOperationExceptions.Conflict("Revit could not show the elements.",
+                [BridgeOperationExceptions.Issue("$", "ShowElementsRefused", ex.Message,
+                    "Close any modal dialog or edit mode in Revit and retry.")]);
+        }
+
+        var target = ui.ActiveView;
+        var note = box is null
+            ? $"Selected {shown.Count}; none has a bounding box, so '{target.Name}' did not zoom."
+            : $"Selected {shown.Count} and zoomed '{target.Name}' to them.";
+        if (missing.Count != 0) note += $" {missing.Count} id(s) not found.";
+        return new RevitShowElementsData(shown, missing, target.Id.Value(), target.Name, note);
+    }
+
     private static BridgeOperationException CaptureTargetError() => BridgeOperationExceptions.Conflict(
         "No exportable view.",
         [
@@ -1120,7 +1136,7 @@ internal sealed class RevitDataRequestService {
     private static Element? ResolveCaptureTarget(DbDocument document, RevitViewImageTarget? target) {
         Element? element;
         if (target is null || target.Id is null && string.IsNullOrWhiteSpace(target.UniqueId) && string.IsNullOrWhiteSpace(target.Name)) {
-            element = RequireDocumentUi(document).GetActiveView();
+            element = RequireUi(document, "active view").ActiveView;
         } else if (target.Id is { } id) {
             element = document.GetElement(id.ToElementId());
         } else if (!string.IsNullOrWhiteSpace(target.UniqueId)) {
@@ -1225,7 +1241,7 @@ internal sealed class RevitDataRequestService {
         if (focus.ElementIds is { Count: > 0 } explicitIds) {
             ids = explicitIds.Select(id => id.ToElementId()).ToList();
         } else if (focus.Selection) {
-            ids = RequireDocumentUi(document).GetActiveUIDocument()?.Selection.GetElementIds().ToList() ?? [];
+            ids = SelectionOf(RequireUi(document, "selection"))!;
             if (ids.Count == 0) throw FocusError("EmptySelection", "Nothing is selected in Revit.");
         } else if (!string.IsNullOrWhiteSpace(focus.ScopeBox)) {
             var scopeBox = new FilteredElementCollector(document)
@@ -1238,26 +1254,8 @@ internal sealed class RevitDataRequestService {
             throw FocusError("EmptyFocus", "Set exactly one of focus.elementIds, focus.selection, or focus.scopeBox.");
         }
 
-        BoundingBoxXYZ? union = null;
-        foreach (var id in ids) {
-            // View-specific bbox first (respects visibility); model bbox as fallback.
-            var box = document.GetElement(id)?.get_BoundingBox(view) ?? document.GetElement(id)?.get_BoundingBox(null);
-            if (box is null) continue;
-            if (union is null) {
-                union = new BoundingBoxXYZ {
-                    Transform = Transform.Identity,
-                    Min = box.Transform.OfPoint(box.Min),
-                    Max = box.Transform.OfPoint(box.Max)
-                };
-            } else {
-                var min = box.Transform.OfPoint(box.Min);
-                var max = box.Transform.OfPoint(box.Max);
-                union.Min = new XYZ(Math.Min(union.Min.X, min.X), Math.Min(union.Min.Y, min.Y), Math.Min(union.Min.Z, min.Z));
-                union.Max = new XYZ(Math.Max(union.Max.X, max.X), Math.Max(union.Max.Y, max.Y), Math.Max(union.Max.Z, max.Z));
-            }
-        }
-
-        return union ?? throw FocusError("NoFocusGeometry", "None of the focus elements have a bounding box in this view.");
+        return document.UnionBoundingBox(ids, view)
+               ?? throw FocusError("NoFocusGeometry", "None of the focus elements have a bounding box in this view.");
     }
 
     private static BridgeOperationException FocusError(string code, string detail) =>
@@ -1289,12 +1287,37 @@ internal sealed class RevitDataRequestService {
         return (request.Filter ?? new LoadedFamiliesFilter()) with { CategoryNames = categoryNames };
     }
 
-    private static UIApplication RequireDocumentUi(DbDocument document) {
-        var uiApp = RevitUiSession.CurrentUIApplication;
-        if (uiApp.GetActiveDocument()?.Equals(document) != true)
-            throw BridgeOperationExceptions.Conflict("This operation needs the selected document to be active. Activate it and retry.");
-        return uiApp;
-    }
+    /// <summary>The document's UI when it is the active document, else null. Document-owned branches pass it through for context only.</summary>
+    private static UIDocument? ActiveUi(DbDocument document) =>
+        RevitUiSession.CurrentUIApplication.GetActiveUIDocumentFor(document);
+
+    /// <summary>
+    ///     UI state (active view, selection, window) for a request branch that reads it. A headless document has
+    ///     none and can never be activated, so its refusal names the document-owned way instead.
+    /// </summary>
+    private static UIDocument RequireUi(DbDocument document, string reads) =>
+        ActiveUi(document) ?? throw (document.IsHeadless()
+            ? BridgeOperationExceptions.Conflict(
+                $"'{document.Title}' is headless (open with no window), so it has no {reads}.",
+                [BridgeOperationExceptions.Issue("$", "DocumentHeadless",
+                    $"This request reads the {reads}, which only the active windowed document has; a headless document cannot be activated.",
+                    "Name explicit element, view, or sheet ids in the request, or run `pea script execute` against this document.")])
+            : BridgeOperationExceptions.Conflict(
+                $"This request reads the {reads}, and '{document.Title}' is not the active document.",
+                [BridgeOperationExceptions.Issue("$", "DocumentNotActive",
+                    $"Only the active document has a {reads}.",
+                    "Activate its window in Revit and retry, or name explicit element, view, or sheet ids in the request.")]));
+
+    /// <summary>UI for a request: required when the branch reads UI state, optional context otherwise.</summary>
+    private static UIDocument? UiFor(DbDocument document, bool readsUi, string reads) =>
+        readsUi ? RequireUi(document, reads) : ActiveUi(document);
+
+    private static List<ElementId>? SelectionOf(UIDocument? ui) => ui?.Selection.GetElementIds().ToList();
+
+    // The coverage and evidence collectors read Document.ActiveView for ActiveViewVisible, which is null on a
+    // headless document, and they would answer for the whole document with only a warning.
+    private static bool ReadsUi(RevitElementScope scope) =>
+        scope is RevitElementScope.ActiveViewVisible or RevitElementScope.CurrentSelection;
 
     private static RevitDocumentSessionContextData CreateDocumentSessionContext() {
         // ponytail: still enumerates on the API thread inside the request queue. The tracker's
@@ -1332,6 +1355,7 @@ internal sealed class RevitDataRequestService {
             document.IsFamilyDocument,
             document.IsWorkshared,
             string.Equals(documentKey, activeDocumentKey, StringComparison.OrdinalIgnoreCase),
+            document.IsHeadless(),
             document.IsModifiable,
             document.IsReadOnly,
             document.IsModelInCloud,

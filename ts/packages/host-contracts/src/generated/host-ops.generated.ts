@@ -1005,6 +1005,52 @@ export namespace RevitApplyCommandExecute {
   }
 }
 
+/** Show elements to the person at the window: select them and zoom the active view, or the given view, to their extents. Answers which ids it showed, which were missing, and the view. Changes selection and zoom only, never the model. Needs the active windowed document; a headless document refuses. */
+export namespace RevitApplyElementsShow {
+  export namespace Req {
+    /**
+     * Request for revit.apply.elements.show: select elements and zoom a view to them, for the person at the window.
+     */
+    export interface Request {
+      /**
+       * Element ids to select and zoom to, from any handle-returning op.
+       */
+      elementIds: number[];
+      /**
+       * Graphical view to activate and zoom; omit for the active view.
+       */
+      viewId?: number | null;
+    }
+  }
+  export namespace Res {
+    /**
+     * What revit.apply.elements.show selected, what it could not find, and the view it zoomed.
+     */
+    export interface Response {
+      /**
+       * Ids now selected.
+       */
+      shown: number[];
+      /**
+       * Requested ids with no element in this document.
+       */
+      missing: number[];
+      /**
+       * The view that now shows them.
+       */
+      viewId: number;
+      /**
+       * That view's name.
+       */
+      viewName: string;
+      /**
+       * One line on what happened.
+       */
+      note: string;
+    }
+  }
+}
+
 /** Preview or atomically replace the model-owned parameter-link profile and reconcile its changed target values. */
 export namespace RevitApplyParameterLinks {
   export namespace Req {
@@ -2697,6 +2743,10 @@ export namespace RevitContextDocumentSession {
       isFamilyDocument: boolean;
       isWorkshared: boolean;
       isActive: boolean;
+      /**
+       * Open with no window: no active view or selection, and Revit cannot activate it. Ops that read UI state refuse it; document-owned ops answer.
+       */
+      isHeadless: boolean;
       isModifiable: boolean;
       isReadOnly: boolean;
       isModelInCloud: boolean;
@@ -2735,17 +2785,15 @@ export namespace RevitContextSummary {
       | "SearchMatch";
 
     export interface Response {
+      /**
+       * The document this summary reads. A headless one (isHeadless) has no active view, selection, or visible categories, so those come back empty.
+       */
+      document: RevitDocumentSummary;
       documents: RevitDocumentSessionContextData;
       activeView?: null | RevitAgentActiveViewContext;
       selection: RevitAgentSelectionContext;
       browser: RevitAgentBrowserSummary;
       visibleCategories: RevitAgentVisibleCategorySummary[];
-    }
-    export interface RevitDocumentSessionContextData {
-      hasActiveDocument: boolean;
-      activeDocument?: null | RevitDocumentSummary;
-      openDocumentCount: number;
-      openDocuments: RevitDocumentSummary[];
     }
     export interface RevitDocumentSummary {
       documentKey: string;
@@ -2754,12 +2802,22 @@ export namespace RevitContextSummary {
       isFamilyDocument: boolean;
       isWorkshared: boolean;
       isActive: boolean;
+      /**
+       * Open with no window: no active view or selection, and Revit cannot activate it. Ops that read UI state refuse it; document-owned ops answer.
+       */
+      isHeadless: boolean;
       isModifiable: boolean;
       isReadOnly: boolean;
       isModelInCloud: boolean;
       cloudProjectGuid?: null | string;
       cloudModelGuid?: null | string;
       cloudModelUrn?: null | string;
+    }
+    export interface RevitDocumentSessionContextData {
+      hasActiveDocument: boolean;
+      activeDocument?: null | RevitDocumentSummary;
+      openDocumentCount: number;
+      openDocuments: RevitDocumentSummary[];
     }
     export interface RevitAgentActiveViewContext {
       handle: RevitAgentContextHandle;
@@ -4273,6 +4331,10 @@ export namespace RevitGlanceModel {
       isFamilyDocument: boolean;
       isWorkshared: boolean;
       isActive: boolean;
+      /**
+       * Open with no window: no active view or selection, and Revit cannot activate it. Ops that read UI state refuse it; document-owned ops answer.
+       */
+      isHeadless: boolean;
       isModifiable: boolean;
       isReadOnly: boolean;
       isModelInCloud: boolean;
@@ -5973,6 +6035,7 @@ export interface HostOps {
   "pod.import": { request: PodImport.Req.Request; response: PodImport.Res.Response };
   "pod.member.compose": { request: PodMemberCompose.Req.Request; response: PodMemberCompose.Res.Response };
   "revit.apply.command.execute": { request: RevitApplyCommandExecute.Req.Request; response: RevitApplyCommandExecute.Res.Response };
+  "revit.apply.elements.show": { request: RevitApplyElementsShow.Req.Request; response: RevitApplyElementsShow.Res.Response };
   "revit.apply.parameter-links": { request: RevitApplyParameterLinks.Req.Request; response: RevitApplyParameterLinks.Res.Response };
   "revit.apply.parameter-values": { request: RevitApplyParameterValues.Req.Request; response: RevitApplyParameterValues.Res.Response };
   "revit.apply.parameters-service-cache.refresh": { request: RevitApplyParametersServiceCacheRefresh.Req.Request; response: RevitApplyParametersServiceCacheRefresh.Res.Response };
@@ -6047,6 +6110,7 @@ export const hostOpKeys = [
   "pod.import",
   "pod.member.compose",
   "revit.apply.command.execute",
+  "revit.apply.elements.show",
   "revit.apply.parameter-links",
   "revit.apply.parameter-values",
   "revit.apply.parameters-service-cache.refresh",

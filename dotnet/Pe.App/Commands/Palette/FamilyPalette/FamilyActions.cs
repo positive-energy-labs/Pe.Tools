@@ -204,12 +204,8 @@ internal static class FamilyActions {
     /// </summary>
     internal static void HandleZoomToFamilyInstance(UnifiedFamilyItem item) {
         var uidoc = RevitUiSession.CurrentUIApplication.GetActiveUIDocument();
-        if (uidoc == null) return;
-        if (item.FamilyInstance == null) return;
-        var id = item.FamilyInstance.Id;
-        if (id == null) return;
-        uidoc.ShowElements(id);
-        uidoc.Selection.SetElementIds([id]);
+        if (uidoc == null || item.FamilyInstance == null) return;
+        _ = uidoc.SelectAndZoom([item.FamilyInstance.Id]);
     }
 
     /// <summary>

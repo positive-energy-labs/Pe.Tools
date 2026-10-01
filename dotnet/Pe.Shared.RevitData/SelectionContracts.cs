@@ -136,3 +136,25 @@ public record ElementContextQueryData(
     List<ElementContextEntry> Entries,
     List<RevitDataIssue> Issues
 );
+
+/// <summary>Request for revit.apply.elements.show: select elements and zoom a view to them, for the person at the window.</summary>
+/// <param name="ElementIds">Element ids to select and zoom to, from any handle-returning op.</param>
+/// <param name="ViewId">Graphical view to activate and zoom; omit for the active view.</param>
+public record RevitShowElementsRequest(
+    List<long> ElementIds,
+    long? ViewId = null
+);
+
+/// <summary>What revit.apply.elements.show selected, what it could not find, and the view it zoomed.</summary>
+/// <param name="Shown">Ids now selected.</param>
+/// <param name="Missing">Requested ids with no element in this document.</param>
+/// <param name="ViewId">The view that now shows them.</param>
+/// <param name="ViewName">That view's name.</param>
+/// <param name="Note">One line on what happened.</param>
+public record RevitShowElementsData(
+    List<long> Shown,
+    List<long> Missing,
+    long ViewId,
+    string ViewName,
+    string Note
+);
