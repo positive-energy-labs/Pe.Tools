@@ -162,6 +162,8 @@ function opRow(op: OpsCatalogEntry): Capability {
     kind: "op",
     title: op.displayName ?? op.key,
     description: [op.description ?? "", ...(op.callGuidance ?? [])].filter(Boolean).join(" "),
+    // [Op(Finds = ...)] is the op's search vocabulary; without it "point at" or "highlight" never reach the op.
+    ...(op.searchTerms?.length ? { finds: [...op.searchTerms] } : {}),
     needs: op.needs === "nothing" && !isTsOnlyOperationKey(op.key) ? "session" : op.needs,
     mutates: op.intent !== "Read",
     actor: (op as { actor?: "any" | "human" | "agent" }).actor ?? "any",

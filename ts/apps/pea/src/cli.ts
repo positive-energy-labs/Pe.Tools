@@ -27,6 +27,8 @@ export async function runPeaMain(args = process.argv.slice(2)): Promise<void> {
     description: "Pea product/operator CLI.",
     subCommands: createPeaCliSubCommands(),
     fallbackToEntry: true,
+    // The banner goes to stdout; a --json command's stdout is exactly one JSON object.
+    ...(args.includes("--json") ? { renderHeader: null } : {}),
   });
 }
 
