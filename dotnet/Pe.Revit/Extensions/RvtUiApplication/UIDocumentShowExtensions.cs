@@ -7,10 +7,11 @@ public static class UIDocumentShowExtensions {
     /// <summary>
     ///     A headless document has no window: <c>Application.OpenDocumentFile</c> opened it, it has no active
     ///     view or selection, and Revit cannot activate it (<c>RequestViewChange</c> throws). A link document
-    ///     also reads as headless.
+    ///     also reads as headless, and is answered without a <c>UIDocument</c>: Revit's open-document set includes
+    ///     every loaded link, and <c>new UIDocument(link)</c> throws "not a primary document" (2026-10-01).
     /// </summary>
     public static bool IsHeadless(this Document document) =>
-        new UIDocument(document).GetOpenUIViews().Count == 0;
+        document.IsLinked || new UIDocument(document).GetOpenUIViews().Count == 0;
 
     /// <summary>The active UI document when it holds <paramref name="document" />; null when the document is headless or not active.</summary>
     public static UIDocument? GetActiveUIDocumentFor(this UIApplication uiApp, Document document) =>
