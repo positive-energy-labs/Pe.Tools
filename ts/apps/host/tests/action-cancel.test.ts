@@ -3,6 +3,7 @@
  * request table, the per-session FIFO gate, the journal, `/actions` and `/actions/cancel` — is
  * production code. The op never answers until the test decides to answer it, so "the cancel
  * arrived while the op was still running" is the assertion, not an inference from timing.
+ * The same lane pins what a refusal and a lost reply leave behind on the document.
  */
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { partitionFixture } from "./partition-fixture.ts";
@@ -30,7 +31,7 @@ const metrics = {
 const lane = <A, E, R>(body: (harness: Harness) => Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
     const dir = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "pe-cancel-")));
-    const { bridge, incoming, outgoing, target } = yield* connectTestBridge();
+    const { bridge, incoming, outgoing, connection, target } = yield* connectTestBridge();
     const owner = new ActionJournal(join(dir, "attempts.json"));
     const fixture = yield* Effect.promise(() => partitionFixture(dir, target));
     const web = HttpRouter.toWebHandler(
@@ -61,7 +62,8 @@ const lane = <A, E, R>(body: (harness: Harness) => Effect.Effect<A, E, R>) =>
         JSON.stringify({ kind: "Response", response: { requestId, metrics, ...response } }),
       );
     try {
-      return yield* body({ owner, outgoing, post, get, answer, fixture });
+      const disconnect = Fiber.interrupt(connection);
+      return yield* body({ owner, outgoing, post, get, answer, disconnect, fixture });
     } finally {
       yield* Effect.promise(() => web.dispose());
       yield* Effect.promise(() => rm(dir, { recursive: true, force: true }));
@@ -79,6 +81,8 @@ type Harness = {
   post: (path: string, body: unknown) => Effect.Effect<Response>;
   get: (path: string) => Effect.Effect<unknown>;
   answer: (requestId: string, response: Record<string, unknown>) => Effect.Effect<boolean>;
+  /** The socket closes: every request Revit has not answered loses its reply. */
+  disconnect: Effect.Effect<unknown>;
   fixture: Awaited<ReturnType<typeof partitionFixture>>;
 };
 
@@ -331,5 +335,66 @@ test("Revit answering 'not in flight' is a refusal the stop control can print, n
 
       yield* answer(blocked, { ok: true, statusCode: 200, payloadJson: "{}" });
       yield* Effect.promise(() => owner.wait(intent.id));
+    }),
+  ));
+
+/** Revit's own answer to a request it refused, as BridgeAgent writes a BridgeOperationException. */
+const headlessRefusal = {
+  ok: false,
+  statusCode: 409,
+  errorMessage: "'Model' is headless (open with no window), so it has no active view.",
+  issues: [
+    {
+      instancePath: "$",
+      code: "DocumentHeadless",
+      message: "This request needs the active view.",
+      severity: "error",
+    },
+  ],
+};
+
+test("a refusal Revit answers settles failed, and the next mutation on the document is admitted", () =>
+  lane(({ owner, outgoing, post, answer, fixture }) =>
+    Effect.gen(function* () {
+      const refused = fixture.intent("refused-by-revit");
+      expect((yield* post("/actions", refused)).status).toBe(202);
+      const first = yield* Queue.take(outgoing);
+      yield* answer(first.request!.requestId, headlessRefusal);
+      const row = yield* Effect.promise(() => owner.wait(refused.id));
+      expect(row).toMatchObject({
+        state: "failed",
+        status: 409,
+        nativeOutcome: "DocumentHeadless",
+      });
+      expect(row.steps).toMatchObject([{ id: first.request!.requestId, state: "failed" }]);
+      // Revit received it, so the receipt never claims it was not dispatched.
+      expect("notDispatched" in row && row.notDispatched).toBeFalsy();
+
+      const next = fixture.intent("after-the-refusal");
+      expect((yield* post("/actions", next)).status).toBe(202);
+      const second = yield* Queue.take(outgoing);
+      yield* answer(second.request!.requestId, { ok: true, payloadJson: '{"remaining":[]}' });
+      const partition = yield* Queue.take(outgoing);
+      expect(partition.request?.operationKey).toBe("takeoffs.partition");
+      yield* answer(partition.request!.requestId, { ok: true, payloadJson: "{}" });
+      expect((yield* Effect.promise(() => owner.wait(next.id))).state).toBe("succeeded");
+    }),
+  ));
+
+test("a reply lost mid-write settles unknown and blocks the next mutation on the document", () =>
+  lane(({ owner, outgoing, post, disconnect, fixture }) =>
+    Effect.gen(function* () {
+      const lost = fixture.intent("lost-mid-write");
+      expect((yield* post("/actions", lost)).status).toBe(202);
+      yield* Queue.take(outgoing);
+      yield* disconnect;
+      const row = yield* Effect.promise(() => owner.wait(lost.id));
+      expect(row).toMatchObject({ state: "unknown", status: 503 });
+
+      const blocked = yield* post("/actions", fixture.intent("behind-the-unknown"));
+      expect(blocked.status).toBe(409);
+      expect(((yield* Effect.promise(() => blocked.json())) as { message: string }).message).toBe(
+        "action 'lost-mid-write' is unknown; recover that attempt before submitting another",
+      );
     }),
   ));
