@@ -1078,7 +1078,7 @@ internal sealed class RevitDataRequestService {
         }
     }
 
-    [Op("revit.apply.elements.show", Does = "Show elements to the person at the window: select them and zoom the active view, or the given view, to their extents. Answers which ids it showed, which were missing, and the view. Changes selection and zoom only, never the model. Needs the active windowed document; a headless document refuses.", Title = "Show Elements", Finds = ["show", "select", "selection", "zoom", "focus", "point-at", "highlight", "find", "navigate", "elements", "view"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Tier = OpTier.Default, Example = "{ \"elementIds\": [12345, 67890] }")]
+    [Op("revit.context.show-elements", Does = "Show elements to the person at the window: select them and zoom the active view, or the given view, to their extents. Answers which ids it showed, which were missing, and the view. Changes the selection and the zoom only, never the model. Needs the active windowed document; a headless document refuses.", Title = "Show Elements (Point At)", Finds = ["show", "select", "selection", "zoom", "focus", "point-at", "highlight", "find", "navigate", "elements", "view"], Tier = OpTier.Default, Example = "{ \"elementIds\": [12345, 67890] }")]
     private static RevitShowElementsData ShowElementsCore(RevitShowElementsRequest request, RevitDocument activeDocument) {
         var document = activeDocument.Value;
         var requested = (request.ElementIds ?? []).Distinct().ToList();
@@ -1292,25 +1292,25 @@ internal sealed class RevitDataRequestService {
         RevitUiSession.CurrentUIApplication.GetActiveUIDocumentFor(document);
 
     /// <summary>
-    ///     UI state (active view, selection, window) for a request branch that reads it. A headless document has
+    ///     UI state (active view, selection, window) for a request branch that needs it. A headless document has
     ///     none and can never be activated, so its refusal names the document-owned way instead.
     /// </summary>
-    private static UIDocument RequireUi(DbDocument document, string reads) =>
+    private static UIDocument RequireUi(DbDocument document, string needs) =>
         ActiveUi(document) ?? throw (document.IsHeadless()
             ? BridgeOperationExceptions.Conflict(
-                $"'{document.Title}' is headless (open with no window), so it has no {reads}.",
+                $"'{document.Title}' is headless (open with no window), so it has no {needs}.",
                 [BridgeOperationExceptions.Issue("$", "DocumentHeadless",
-                    $"This request reads the {reads}, which only the active windowed document has; a headless document cannot be activated.",
+                    $"This request needs the {needs}, which only the active windowed document has; a headless document cannot be activated.",
                     "Name explicit element, view, or sheet ids in the request, or run `pea script execute` against this document.")])
             : BridgeOperationExceptions.Conflict(
-                $"This request reads the {reads}, and '{document.Title}' is not the active document.",
+                $"This request needs the {needs}, and '{document.Title}' is not the active document.",
                 [BridgeOperationExceptions.Issue("$", "DocumentNotActive",
-                    $"Only the active document has a {reads}.",
+                    $"Only the active document has a {needs}.",
                     "Activate its window in Revit and retry, or name explicit element, view, or sheet ids in the request.")]));
 
-    /// <summary>UI for a request: required when the branch reads UI state, optional context otherwise.</summary>
-    private static UIDocument? UiFor(DbDocument document, bool readsUi, string reads) =>
-        readsUi ? RequireUi(document, reads) : ActiveUi(document);
+    /// <summary>UI for a request: required when the branch needs UI state, optional context otherwise.</summary>
+    private static UIDocument? UiFor(DbDocument document, bool needsUi, string needs) =>
+        needsUi ? RequireUi(document, needs) : ActiveUi(document);
 
     private static List<ElementId>? SelectionOf(UIDocument? ui) => ui?.Selection.GetElementIds().ToList();
 

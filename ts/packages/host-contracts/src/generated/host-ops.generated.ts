@@ -1005,52 +1005,6 @@ export namespace RevitApplyCommandExecute {
   }
 }
 
-/** Show elements to the person at the window: select them and zoom the active view, or the given view, to their extents. Answers which ids it showed, which were missing, and the view. Changes selection and zoom only, never the model. Needs the active windowed document; a headless document refuses. */
-export namespace RevitApplyElementsShow {
-  export namespace Req {
-    /**
-     * Request for revit.apply.elements.show: select elements and zoom a view to them, for the person at the window.
-     */
-    export interface Request {
-      /**
-       * Element ids to select and zoom to, from any handle-returning op.
-       */
-      elementIds: number[];
-      /**
-       * Graphical view to activate and zoom; omit for the active view.
-       */
-      viewId?: number | null;
-    }
-  }
-  export namespace Res {
-    /**
-     * What revit.apply.elements.show selected, what it could not find, and the view it zoomed.
-     */
-    export interface Response {
-      /**
-       * Ids now selected.
-       */
-      shown: number[];
-      /**
-       * Requested ids with no element in this document.
-       */
-      missing: number[];
-      /**
-       * The view that now shows them.
-       */
-      viewId: number;
-      /**
-       * That view's name.
-       */
-      viewName: string;
-      /**
-       * One line on what happened.
-       */
-      note: string;
-    }
-  }
-}
-
 /** Preview or atomically replace the model-owned parameter-link profile and reconcile its changed target values. */
 export namespace RevitApplyParameterLinks {
   export namespace Req {
@@ -2753,6 +2707,52 @@ export namespace RevitContextDocumentSession {
       cloudProjectGuid?: null | string;
       cloudModelGuid?: null | string;
       cloudModelUrn?: null | string;
+    }
+  }
+}
+
+/** Show elements to the person at the window: select them and zoom the active view, or the given view, to their extents. Answers which ids it showed, which were missing, and the view. Changes the selection and the zoom only, never the model. Needs the active windowed document; a headless document refuses. */
+export namespace RevitContextShowElements {
+  export namespace Req {
+    /**
+     * Request for revit.context.show-elements: select elements and zoom a view to them, for the person at the window.
+     */
+    export interface Request {
+      /**
+       * Element ids to select and zoom to, from any handle-returning op.
+       */
+      elementIds: number[];
+      /**
+       * Graphical view to activate and zoom; omit for the active view.
+       */
+      viewId?: number | null;
+    }
+  }
+  export namespace Res {
+    /**
+     * What revit.context.show-elements selected, what it could not find, and the view it zoomed.
+     */
+    export interface Response {
+      /**
+       * Ids now selected.
+       */
+      shown: number[];
+      /**
+       * Requested ids with no element in this document.
+       */
+      missing: number[];
+      /**
+       * The view that now shows them.
+       */
+      viewId: number;
+      /**
+       * That view's name.
+       */
+      viewName: string;
+      /**
+       * One line on what happened.
+       */
+      note: string;
     }
   }
 }
@@ -6035,7 +6035,6 @@ export interface HostOps {
   "pod.import": { request: PodImport.Req.Request; response: PodImport.Res.Response };
   "pod.member.compose": { request: PodMemberCompose.Req.Request; response: PodMemberCompose.Res.Response };
   "revit.apply.command.execute": { request: RevitApplyCommandExecute.Req.Request; response: RevitApplyCommandExecute.Res.Response };
-  "revit.apply.elements.show": { request: RevitApplyElementsShow.Req.Request; response: RevitApplyElementsShow.Res.Response };
   "revit.apply.parameter-links": { request: RevitApplyParameterLinks.Req.Request; response: RevitApplyParameterLinks.Res.Response };
   "revit.apply.parameter-values": { request: RevitApplyParameterValues.Req.Request; response: RevitApplyParameterValues.Res.Response };
   "revit.apply.parameters-service-cache.refresh": { request: RevitApplyParametersServiceCacheRefresh.Req.Request; response: RevitApplyParametersServiceCacheRefresh.Res.Response };
@@ -6051,6 +6050,7 @@ export interface HostOps {
   "revit.catalog.project-index": { request: RevitCatalogProjectIndex.Req.Request; response: RevitCatalogProjectIndex.Res.Response };
   "revit.catalog.schedules": { request: RevitCatalogSchedules.Req.Request; response: RevitCatalogSchedules.Res.Response };
   "revit.context.document-session": { request: RevitContextDocumentSession.Req.Request; response: RevitContextDocumentSession.Res.Response };
+  "revit.context.show-elements": { request: RevitContextShowElements.Req.Request; response: RevitContextShowElements.Res.Response };
   "revit.context.summary": { request: RevitContextSummary.Req.Request; response: RevitContextSummary.Res.Response };
   "revit.context.view-image": { request: RevitContextViewImage.Req.Request; response: RevitContextViewImage.Res.Response };
   "revit.context.view-rendering-state": { request: RevitContextViewRenderingState.Req.Request; response: RevitContextViewRenderingState.Res.Response };
@@ -6110,7 +6110,6 @@ export const hostOpKeys = [
   "pod.import",
   "pod.member.compose",
   "revit.apply.command.execute",
-  "revit.apply.elements.show",
   "revit.apply.parameter-links",
   "revit.apply.parameter-values",
   "revit.apply.parameters-service-cache.refresh",
@@ -6126,6 +6125,7 @@ export const hostOpKeys = [
   "revit.catalog.project-index",
   "revit.catalog.schedules",
   "revit.context.document-session",
+  "revit.context.show-elements",
   "revit.context.summary",
   "revit.context.view-image",
   "revit.context.view-rendering-state",
