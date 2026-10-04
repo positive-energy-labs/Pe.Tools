@@ -4,6 +4,7 @@ using Autodesk.Revit.DB.Mechanical;
 using Pe.Revit.Failures;
 using Pe.Revit.Tasks;
 using Pe.Shared.RevitData.Ducts;
+using Serilog;
 using System.Globalization;
 
 namespace Pe.Revit.Global.Lib.Mep;
@@ -167,7 +168,13 @@ public static class DuctApplier {
                 run();
                 sandbox.Complete();
             } catch (Exception ex) when (ex is InvalidOperationException or Autodesk.Revit.Exceptions.ApplicationException or ArgumentException) {
-                _ = group.RollBack();
+                Log.Error(ex, "ducts.apply stage {Stage} failed", name);
+                try {
+                    _ = group.RollBack();
+                } catch (Exception rollback) {
+                    // Dispose of an unassimilated group rolls back too; the stage failure is the answer.
+                    Log.Error(rollback, "ducts.apply group rollback after stage {Stage}", name);
+                }
                 foreach (var i in items.Where(i => i.Outcome == "written")) i.Outcome = "planned";
                 var detail = string.Join("; ", diagnostics.Where(d => d.IsError).Select(d => d.Message));
                 return detail.Length > 0 ? $"{name} ({ex.Message}: {detail})" : $"{name} ({ex.Message})";

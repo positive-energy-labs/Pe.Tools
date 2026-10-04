@@ -104,6 +104,7 @@ internal sealed class RevitDataRequestService {
         } catch (BridgeOperationException) {
             throw;
         } catch (Exception ex) {
+            Serilog.Log.Error(ex, "ducts.apply failed outside a stage");
             throw BridgeOperationExceptions.Unexpected("DuctsApplyException", ex, "Run ducts.apply with previewOnly=true and read each refusal, then retry.");
         }
     }
