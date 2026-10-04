@@ -1,5 +1,5 @@
 /**
- * Duct pressure-drop physics, pure. Same arithmetic as the SA 26 hand calc (`handcalc.py`), US units.
+ * Duct pressure-drop physics, pure. Same arithmetic as the campaign hand calc (`handcalc.py`), US units.
  * - Velocity V = Q / A (fpm; cfm, ft2).
  * - Velocity pressure Pv = RHO (V / 1097)^2 in-wg, RHO 0.075 lb/ft3.
  * - Straight run dp = f (L / D) Pv, with D the hydraulic diameter 4A/P (inches; L in ft, so 12 f L / D).

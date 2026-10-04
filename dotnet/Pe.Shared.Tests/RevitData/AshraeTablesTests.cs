@@ -62,7 +62,7 @@ public sealed class AshraeTablesTests {
 
     /// <summary>
     ///     Every table Revit ships parses into well-formed grids, says "No table", or is named Unsupported; never a
-    ///     ragged grid. The tables the SA 26 campaign looked up all parse.
+    ///     ragged grid. The tables the campaign looked up all parse.
     /// </summary>
     [Test]
     public void Every_installed_table_parses() {

@@ -11,7 +11,7 @@ namespace Pe.Revit.Global.Lib.Mep;
 
 /// <summary>
 ///     The Revit half of `ducts.apply`. Plans every write first (preview stops there, no transaction), then follows the
-///     SA 26 recipe (pressure-drop ledger): the engine switch, every targeted fitting and accessory to Not Defined and
+///     the campaign recipe (pressure-drop ledger): the engine switch, every targeted fitting and accessory to Not Defined and
 ///     committed, then each one's server entity (Revit's own, required by Revit) and its server, terminal connector
 ///     drops, fan static and Pe's store, committed. The two commits sit in one TransactionGroup: a failed stage rolls
 ///     the whole apply back and names itself, a clean apply is one undo step.
@@ -255,7 +255,7 @@ public static class DuctApplier {
     /// <summary>
     ///     Two routes, both proven on Project A (pressure-drop ledger, W3): the connector setter, which Revit refuses on
     ///     every family connector it does not own, and the instance parameter the family binds to its connector drop
-    ///     (the SA 26 recipe), named by the TerminalDrop slot. The slot route runs in a SubTransaction and keeps the
+    ///     (the campaign recipe), named by the TerminalDrop slot. The slot route runs in a SubTransaction and keeps the
     ///     write only when the connector reads the new drop after regeneration.
     /// </summary>
     private static Item Terminal(Document doc, DuctDropWrite w, DuctParameterSlots slots) {

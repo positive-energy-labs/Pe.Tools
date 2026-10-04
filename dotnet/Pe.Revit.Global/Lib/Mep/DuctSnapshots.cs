@@ -76,7 +76,7 @@ public static class DuctSnapshots {
         var critical = Try(() => m.GetCriticalPathSectionNumbers()?.ToList()) ?? [];
         var count = Try(() => (int?)m.SectionsCount) ?? 0;
         var sections = new List<DuctSection>();
-        // Section numbers are sparse: SA 26 had 16 sections and a critical path through 29 and 30.
+        // Section numbers are sparse: the campaign's system had 16 sections and a critical path through 29 and 30.
         var last = Math.Max(critical.DefaultIfEmpty(0).Max(), count * 4);
         for (var k = 1; k <= last && sections.Count < count; k++)
             if (Try(() => m.GetSectionByNumber(k)) is { } section)
