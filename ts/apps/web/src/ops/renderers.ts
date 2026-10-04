@@ -11,6 +11,7 @@ import { ProjectBrowserView } from "#/ops/views/catalog/project-browser";
 import { ProjectIndexView } from "#/ops/views/catalog/viz-cycle";
 import { ContextSummaryView } from "#/ops/views/context/kind-viz";
 import { ResolveReferencesView } from "#/ops/views/context/resolve-references";
+import { ViewImageView } from "#/ops/views/context/view-image";
 import { ParameterCoverageView, ScheduleCoverageView } from "#/ops/views/detail/parameter-coverage";
 import { LoadedFamiliesView, ParameterLinksView } from "#/ops/views/detail/parameter-links";
 import { SchedulesView } from "#/ops/views/detail/schedules";
@@ -21,6 +22,7 @@ export const outputRenderers: Record<string, ComponentType<OpViewProps>> = {
   "revit.catalog.project-browser": ProjectBrowserView,
   "revit.catalog.project-index": ProjectIndexView,
   "revit.context.summary": ContextSummaryView,
+  "revit.context.view-image": ViewImageView,
   "revit.resolve.references": ResolveReferencesView,
   "revit.detail.schedules": SchedulesView,
   "revit.detail.sheets": SheetsView,
@@ -81,7 +83,6 @@ export const rawByDesign = [
   "revit.catalog.schedules",
   "revit.context.document-session",
   "revit.context.show-elements",
-  "revit.context.view-image",
   "revit.context.view-rendering-state",
   "revit.context.visible-summary",
   "revit.detail.data-tables",

@@ -3,6 +3,7 @@ import {
   ArrowUpRight,
   FileScan,
   FlaskConical,
+  Image,
   Boxes,
   LayoutDashboard,
   LayoutGrid,
@@ -100,6 +101,14 @@ const TOOLS = [
     icon: FlaskConical,
     description:
       "Composed glances — many host calls gathered into one drawing, run against a session you pick.",
+  },
+  {
+    to: "/captures",
+    title: "Captures",
+    label: "Revit data",
+    icon: Image,
+    description:
+      "Every picture taken of a Revit view, newest first — who took it, which view, the receipt, and the URL a page or a chat links.",
   },
   {
     to: "/ops",

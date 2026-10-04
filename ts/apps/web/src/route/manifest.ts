@@ -117,7 +117,7 @@ export interface RouteManifest<W, R extends string, P, A extends string> {
   workKey?: WorkKey | null;
   /** The Work's trichotomy cell families; the Situation reads the first keyed, the head all. */
   cells?: readonly Cells<W>[];
-  /** What its verbs produce, by kind, and how each opens; `member` and `receipt` are built in (`inspect.tsx`). */
+  /** What its verbs produce, by kind, and how each opens; `member`, `receipt` and `capture` are built in (`inspect.tsx`). */
   inspectables?: Readonly<Record<string, Inspectable>>;
   readings?: Readonly<Record<R, ReadingSpec<P>>>;
   page?: z.ZodType<P>;
