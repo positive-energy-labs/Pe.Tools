@@ -167,7 +167,7 @@ public static class DuctApplier {
                 sandbox.Transaction.SetFailureHandlingOptions(options);
                 run();
                 sandbox.Complete();
-            } catch (Exception ex) when (ex is InvalidOperationException or Autodesk.Revit.Exceptions.ApplicationException or ArgumentException) {
+            } catch (Exception ex) when (DuctSnapshots.IsRevitFailure(ex) || ex is ArgumentException) {
                 Log.Error(ex, "ducts.apply stage {Stage} failed", name);
                 try {
                     _ = group.RollBack();
@@ -188,7 +188,7 @@ public static class DuctApplier {
         try {
             i.After = i.Write!();
             i.Outcome = "written";
-        } catch (Exception ex) when (ex is InvalidOperationException or Autodesk.Revit.Exceptions.ApplicationException or ArgumentException) {
+        } catch (Exception ex) when (DuctSnapshots.IsRevitFailure(ex) || ex is ArgumentException) {
             if (i.Kind == "store") throw;
             i.Refuse($"Revit refused: {ex.Message}");
         }
@@ -240,7 +240,10 @@ public static class DuctApplier {
         if (e is null) return new Item(w.Id, "terminal", null).Refuse($"element {w.Id} is not in the document");
         var c = DuctSnapshots.HvacConnectors(e).FirstOrDefault();
         var method = c is null ? null : Try(() => (DuctLossMethodType?)c.AssignedDuctLossMethod);
-        double? Read() => c is null ? null : Try(() => (double?)UnitUtils.ConvertFromInternalUnits(c.AssignedPressureDrop, InWg));
+        // Re-fetched on every read: a Regenerate invalidates the Connector wrapper (W3, InvalidObjectExceptionProxy).
+        double? Read() => Try(() => DuctSnapshots.HvacConnectors(e).FirstOrDefault() is { } live
+            ? (double?)UnitUtils.ConvertFromInternalUnits(live.AssignedPressureDrop, InWg)
+            : null);
         var had = Read();
         var item = new Item(w.Id, "terminal", c is null ? null : $"{method} {had:0.#####} in-wg") { Element = e };
         if (e.Category.ToBuiltInCategory() != BuiltInCategory.OST_DuctTerminal) return item.Refuse($"not an air terminal ({e.Category?.Name ?? "no category"})");
@@ -258,7 +261,7 @@ public static class DuctApplier {
                 if (bound is null) {
                     try {
                         c.AssignedPressureDrop = value;
-                    } catch (Autodesk.Revit.Exceptions.InvalidOperationException) {
+                    } catch (Exception ex) when (DuctSnapshots.IsRevitFailure(ex)) {
                         throw new InvalidOperationException(
                             "Revit refused the connector drop: the family binds it to a parameter; name that instance parameter as the TerminalDrop slot");
                     }
@@ -293,7 +296,9 @@ public static class DuctApplier {
         var after = $"{where} '{slots.FanStatic}' {w.ExternalStaticInWg:0.####} in-wg";
         if (p.HasValue && Math.Abs(Pressure(p) - w.ExternalStaticInWg) < 1e-6) return item.Unchanged(after);
         return item with {
-            Write = () => p.Set(UnitUtils.ConvertToInternalUnits(w.ExternalStaticInWg, InWg))
+            // Re-resolved: a Regenerate earlier in the stage can invalidate the planned Parameter wrapper.
+            Write = () => (where == "instance" ? e.LookupParameter(slots.FanStatic) : (e as FamilyInstance)?.Symbol?.LookupParameter(slots.FanStatic))
+                ?.Set(UnitUtils.ConvertToInternalUnits(w.ExternalStaticInWg, InWg)) == true
                 ? after
                 : throw new InvalidOperationException($"Revit rejected '{slots.FanStatic}' on the {where}")
         };
@@ -356,9 +361,7 @@ public static class DuctApplier {
     private static T? Try<T>(Func<T?> read) {
         try {
             return read();
-        } catch (Autodesk.Revit.Exceptions.ApplicationException) {
-            return default;
-        } catch (InvalidOperationException) {
+        } catch (Exception ex) when (DuctSnapshots.IsRevitFailure(ex)) {
             return default;
         }
     }

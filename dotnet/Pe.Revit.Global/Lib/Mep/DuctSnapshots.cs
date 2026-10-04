@@ -367,12 +367,18 @@ public static class DuctSnapshots {
     private static T? Try<T>(Func<T?> read) {
         try {
             return read();
-        } catch (Autodesk.Revit.Exceptions.ApplicationException) {
-            return default;
-        } catch (InvalidOperationException) {
+        } catch (Exception ex) when (IsRevitFailure(ex)) {
             return default;
         }
     }
+
+    /// <summary>
+    ///     A Revit API refusal. FOOTGUN (W3, R2025): an invalidated wrapper throws
+    ///     Autodesk.Revit.Proxy.Exceptions.InvalidObjectExceptionProxy, which is not an Autodesk.Revit.Exceptions type.
+    /// </summary>
+    internal static bool IsRevitFailure(Exception ex) =>
+        ex is Autodesk.Revit.Exceptions.ApplicationException or InvalidOperationException
+        || ex.GetType().Namespace?.StartsWith("Autodesk.Revit", StringComparison.Ordinal) == true;
 
     private static double[] P(XYZ p) => [R(p.X), R(p.Y), R(p.Z)];
     private static double R(double v, int digits = 3) => Math.Round(v, digits);
