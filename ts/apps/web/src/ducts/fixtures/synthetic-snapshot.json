@@ -15,15 +15,9 @@
   "groups": [
     {
       "id": "g10",
-      "rootIds": [
-        1
-      ],
-      "classifications": [
-        "Supply Air"
-      ],
-      "systemNames": [
-        "SA 1"
-      ],
+      "rootIds": [1],
+      "classifications": ["Supply Air"],
+      "systemNames": ["SA 1"],
       "terminalCount": 2,
       "elementCount": 7,
       "loops": 0,
@@ -38,22 +32,14 @@
       "family": "Air Handler",
       "type": "Standard",
       "levelId": 100,
-      "point": [
-        0.0,
-        0.0,
-        9.0
-      ],
+      "point": [0.0, 0.0, 9.0],
       "systemName": "SA 1",
       "classification": "Supply Air",
       "connectors": [
         {
           "index": 1,
           "kind": "end",
-          "point": [
-            0.0,
-            0.0,
-            9.0
-          ],
+          "point": [0.0, 0.0, 9.0],
           "shape": "round",
           "size": "12\"ø",
           "diameterIn": 12.0,
@@ -89,11 +75,7 @@
       "type": "Standard",
       "partType": "Elbow",
       "levelId": 100,
-      "point": [
-        20.0,
-        0.0,
-        9.0
-      ],
+      "point": [20.0, 0.0, 9.0],
       "groupId": "g10",
       "systemName": "SA 1",
       "classification": "Supply Air",
@@ -101,11 +83,7 @@
         {
           "index": 1,
           "kind": "end",
-          "point": [
-            20.0,
-            0.0,
-            9.0
-          ],
+          "point": [20.0, 0.0, 9.0],
           "shape": "round",
           "size": "12\"ø",
           "diameterIn": 12.0,
@@ -120,11 +98,7 @@
         {
           "index": 2,
           "kind": "end",
-          "point": [
-            20.0,
-            0.0,
-            9.0
-          ],
+          "point": [20.0, 0.0, 9.0],
           "shape": "round",
           "size": "12\"ø",
           "diameterIn": 12.0,
@@ -180,11 +154,7 @@
       "type": "Standard",
       "partType": "TapPerpendicular",
       "levelId": 100,
-      "point": [
-        10.0,
-        0.0,
-        9.0
-      ],
+      "point": [10.0, 0.0, 9.0],
       "groupId": "g10",
       "systemName": "SA 1",
       "classification": "Supply Air",
@@ -192,11 +162,7 @@
         {
           "index": 1,
           "kind": "end",
-          "point": [
-            10.0,
-            0.0,
-            9.0
-          ],
+          "point": [10.0, 0.0, 9.0],
           "shape": "round",
           "size": "6\"ø",
           "diameterIn": 6.0,
@@ -211,11 +177,7 @@
         {
           "index": 2,
           "kind": "end",
-          "point": [
-            10.0,
-            -0.5,
-            9.0
-          ],
+          "point": [10.0, -0.5, 9.0],
           "shape": "round",
           "size": "6\"ø",
           "diameterIn": 6.0,
@@ -279,11 +241,7 @@
       "family": "Supply Grille",
       "type": "Standard",
       "levelId": 100,
-      "point": [
-        20.0,
-        10.0,
-        9.0
-      ],
+      "point": [20.0, 10.0, 9.0],
       "groupId": "g10",
       "systemName": "SA 1",
       "classification": "Supply Air",
@@ -291,11 +249,7 @@
         {
           "index": 1,
           "kind": "end",
-          "point": [
-            20.0,
-            10.0,
-            9.0
-          ],
+          "point": [20.0, 10.0, 9.0],
           "shape": "round",
           "size": "12\"ø",
           "diameterIn": 12.0,
@@ -329,11 +283,7 @@
       "family": "Supply Grille",
       "type": "Standard",
       "levelId": 100,
-      "point": [
-        10.0,
-        -8.0,
-        9.0
-      ],
+      "point": [10.0, -8.0, 9.0],
       "groupId": "g10",
       "systemName": "SA 1",
       "classification": "Supply Air",
@@ -341,11 +291,7 @@
         {
           "index": 1,
           "kind": "end",
-          "point": [
-            10.0,
-            -8.0,
-            9.0
-          ],
+          "point": [10.0, -8.0, 9.0],
           "shape": "round",
           "size": "6\"ø",
           "diameterIn": 6.0,
@@ -383,16 +329,8 @@
       "diameterIn": 12.0,
       "lengthFt": 20.0,
       "polyline": [
-        [
-          0.0,
-          0.0,
-          9.0
-        ],
-        [
-          20.0,
-          0.0,
-          9.0
-        ]
+        [0.0, 0.0, 9.0],
+        [20.0, 0.0, 9.0]
       ],
       "levelId": 100,
       "groupId": "g10",
@@ -407,11 +345,7 @@
         {
           "index": 1,
           "kind": "end",
-          "point": [
-            0.0,
-            0.0,
-            9.0
-          ],
+          "point": [0.0, 0.0, 9.0],
           "shape": "round",
           "size": "12\"ø",
           "diameterIn": 12.0,
@@ -426,11 +360,7 @@
         {
           "index": 2,
           "kind": "end",
-          "point": [
-            20.0,
-            0.0,
-            9.0
-          ],
+          "point": [20.0, 0.0, 9.0],
           "shape": "round",
           "size": "12\"ø",
           "diameterIn": 12.0,
@@ -445,11 +375,7 @@
         {
           "index": 3,
           "kind": "curve",
-          "point": [
-            10.0,
-            0.0,
-            9.0
-          ],
+          "point": [10.0, 0.0, 9.0],
           "shape": "round",
           "size": "6\"ø",
           "diameterIn": 6.0,
@@ -472,16 +398,8 @@
       "diameterIn": 12.0,
       "lengthFt": 10.0,
       "polyline": [
-        [
-          20.0,
-          0.0,
-          9.0
-        ],
-        [
-          20.0,
-          10.0,
-          9.0
-        ]
+        [20.0, 0.0, 9.0],
+        [20.0, 10.0, 9.0]
       ],
       "levelId": 100,
       "groupId": "g10",
@@ -496,11 +414,7 @@
         {
           "index": 1,
           "kind": "end",
-          "point": [
-            20.0,
-            0.0,
-            9.0
-          ],
+          "point": [20.0, 0.0, 9.0],
           "shape": "round",
           "size": "12\"ø",
           "diameterIn": 12.0,
@@ -515,11 +429,7 @@
         {
           "index": 2,
           "kind": "end",
-          "point": [
-            20.0,
-            10.0,
-            9.0
-          ],
+          "point": [20.0, 10.0, 9.0],
           "shape": "round",
           "size": "12\"ø",
           "diameterIn": 12.0,
@@ -542,16 +452,8 @@
       "diameterIn": 6.0,
       "lengthFt": 7.5,
       "polyline": [
-        [
-          10.0,
-          -0.5,
-          9.0
-        ],
-        [
-          10.0,
-          -8.0,
-          9.0
-        ]
+        [10.0, -0.5, 9.0],
+        [10.0, -8.0, 9.0]
       ],
       "levelId": 100,
       "groupId": "g10",
@@ -566,11 +468,7 @@
         {
           "index": 1,
           "kind": "end",
-          "point": [
-            10.0,
-            -0.5,
-            9.0
-          ],
+          "point": [10.0, -0.5, 9.0],
           "shape": "round",
           "size": "6\"ø",
           "diameterIn": 6.0,
@@ -585,11 +483,7 @@
         {
           "index": 2,
           "kind": "end",
-          "point": [
-            10.0,
-            -8.0,
-            9.0
-          ],
+          "point": [10.0, -8.0, 9.0],
           "shape": "round",
           "size": "6\"ø",
           "diameterIn": 6.0,
@@ -632,38 +526,25 @@
       "baseEquipmentId": 1,
       "baseEquipmentConnector": 1,
       "criticalPathLossInWg": 0.1,
-      "criticalPath": [
-        1,
-        2
-      ],
+      "criticalPath": [1, 2],
       "sections": [
         {
           "number": 1,
           "flowCfm": 400.0,
           "totalPressureLossInWg": 0.04,
-          "elementIds": [
-            10,
-            21
-          ]
+          "elementIds": [10, 21]
         },
         {
           "number": 2,
           "flowCfm": 300.0,
           "totalPressureLossInWg": 0.06,
-          "elementIds": [
-            11,
-            30
-          ]
+          "elementIds": [11, 30]
         },
         {
           "number": 3,
           "flowCfm": 100.0,
           "totalPressureLossInWg": 0.05,
-          "elementIds": [
-            22,
-            12,
-            31
-          ]
+          "elementIds": [22, 12, 31]
         }
       ]
     }

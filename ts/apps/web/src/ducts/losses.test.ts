@@ -7,6 +7,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vite-plus/test";
+import { ductsRouteState, stagedDucts } from "@pe/agent-contracts";
 
 import { lookupGrid, toGrids, type Grid, type Grids } from "./loss-grid";
 import { friction, roundSection } from "./loss-physics";
@@ -108,7 +109,15 @@ const conn = (
     ...size,
   }) as Conn;
 const node = (id: number, kind: string, extra: object): DuctSnapshot["nodes"][number] =>
-  ({ id, kind, category: "", point: [0, 0, 0], groupId: "g1", facts: [], ...extra }) as never;
+  ({
+    id,
+    kind,
+    category: "",
+    point: [0, 0, 0],
+    groupId: "g1",
+    facts: [],
+    ...extra,
+  }) as unknown as DuctSnapshot["nodes"][number];
 const duct = (
   id: number,
   lengthFt: number,
@@ -126,7 +135,7 @@ const duct = (
     roughness: { valueFt: 0.0003, provenance: "revit-default" },
     revit: {},
     connectors,
-  }) as never as DuctSnapshot["segments"][number];
+  }) as unknown as DuctSnapshot["segments"][number];
 
 const snapshot = {
   document: { title: "t", readAt: "2026-10-04T00:00:00Z", elapsedMs: 1 },
@@ -333,4 +342,23 @@ it("narrows a ducts.tables response and reads a constant table", () => {
   expect(() =>
     toGrids({ tables: { A: { Co: { title: "t", x: [1], y: [1, 2], grid: [[1]] } } } }),
   ).toThrow();
+});
+
+it("prices under the table a person staged in the Work document", () => {
+  // The staged cell goes through the route contract, then becomes the solver's choices.
+  const doc = ductsRouteState.schema.parse({
+    rules: { "elbow-1d-gt10": { staged: { value: { table: "CD3-2" } } } },
+  });
+  const choices = Object.fromEntries(
+    Object.entries(stagedDucts(doc).rules).map(([key, v]) => [key, v.table]),
+  );
+  const r = computeLosses(synthetic as unknown as DuctSnapshot, grids, choices);
+  const elbow = r.paths[30]!.rows.find((x) => x.rule === "elbow-1d-gt10")!;
+  expect(elbow).toMatchObject({
+    table: "CD3-2",
+    c: 0.24,
+    inputs: { res: "Co", x: 12, xLabel: "D", notes: ["D clamped at 10"] },
+  });
+  const tap = r.paths[31]!.rows.find((x) => x.kind === "tap-branch")!;
+  expect(tap.inputs).toMatchObject({ res: "Cb", xLabel: "Qb/Qc", yLabel: "Ab/Ac", y: 0.25 });
 });

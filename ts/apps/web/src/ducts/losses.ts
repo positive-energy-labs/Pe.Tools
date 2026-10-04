@@ -31,6 +31,15 @@ type Connector = Node["connectors"][number];
 
 export type RowKind = "friction" | "fitting" | "tap-branch" | "tap-straight" | "terminal";
 
+export interface RowInputs {
+  res: "Co" | "Cb" | "Cs";
+  x: number;
+  y?: number;
+  xLabel: string;
+  yLabel?: string;
+  notes?: string[];
+}
+
 export interface Row {
   /** The element: the duct for friction (a tapped duct has several rows), else the fitting or terminal. */
   id: number;
@@ -42,6 +51,8 @@ export interface Row {
   pv?: number;
   fpm?: number;
   dp: number;
+  /** The table lookup behind a fitting or tap row, structured so callers never parse `desc`. */
+  inputs?: RowInputs;
   /** Revit's own reported drop for the fitting, shown beside dp; never an input. */
   revitDp?: number;
   desc: string;
@@ -336,6 +347,14 @@ function pathRows(
       pv: f.pv,
       fpm: f.fpm,
       dp: found.value * f.pv,
+      inputs: {
+        res: input.res as RowInputs["res"],
+        x: input.x,
+        ...(input.y == null ? {} : { y: input.y }),
+        xLabel: grid.xLabel,
+        ...(grid.yLabel ? { yLabel: grid.yLabel } : {}),
+        ...(found.notes.length ? { notes: found.notes } : {}),
+      },
       desc: `${rule.family} ${node.id}, ${table} ${input.res} ${round4(found.value)} x Pv ${Math.round(f.fpm)} fpm (${found.inputs})`,
       ...(found.notes.length ? { notes: found.notes } : {}),
     };
