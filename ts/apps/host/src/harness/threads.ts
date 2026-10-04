@@ -17,15 +17,20 @@ import {
   ClientSideConnection,
   ndJsonStream,
   PROTOCOL_VERSION,
+  type CreateElicitationRequest,
+  type CreateElicitationResponse,
+  type NewSessionResponse,
   type RequestPermissionRequest,
   type RequestPermissionResponse,
   type SessionConfigOption,
 } from "@agentclientprotocol/sdk";
 import {
   createThreadRequestSchema,
+  forkThreadRequestSchema,
   permissionResponseSchema,
   promptRequestSchema,
   putTargetSchema,
+  questionResponseSchema,
   threadHeadSchema,
   type HarnessEvent,
   type HarnessId,
@@ -94,24 +99,24 @@ type Meta = Omit<HarnessThreadSummary, "lastSeq"> & {
   head: ThreadHead;
   /** Prompts accepted while a turn ran; a restarted host runs them after resume. */
   queued: HarnessThreadBody["queued"];
+  /** The thread this one was forked from; `acpSessionId` is null when the fork crossed harnesses. */
+  forkOf: { threadId: string; acpSessionId: string | null } | null;
 };
 type Live = { conn: ClientSideConnection; sessionId: string; configOptions: SessionConfigOption[] };
-type Pending = {
-  turnId: string | null;
-  resolve: (response: RequestPermissionResponse) => void;
-};
+type Pending<R> = { turnId: string | null; resolve: (response: R) => void };
 type Thread = {
   meta: Meta;
   child: ChildProcess | null;
   events: HarnessEvent[];
   live: Promise<Live> | null;
-  /** Drops `update`s while `session/load` replays history the log already holds. */
-  loading: boolean;
+  /** The log as text, carried by the next prompt when the session is new over an existing log. */
+  refeed: string | null;
   session: HarnessThreadBody["session"];
   /** Set by delete or host shutdown: the turn in flight stops logging and nothing queued starts. */
   stopped: boolean;
   running: string | null;
-  pending: Map<string, Pending>;
+  pending: Map<string, Pending<RequestPermissionResponse>>;
+  questions: Map<string, Pending<CreateElicitationResponse>>;
   listeners: Set<(event: HarnessEvent) => void>;
 };
 type Append = HarnessEvent extends infer E
@@ -146,6 +151,43 @@ const NO_CHECKOUT = "Harness threads need a source checkout in this build";
 /** Thrown by `input` on a body route sent without a JSON content type; served as 415. */
 class NotJson extends Error {}
 const warn = (message: string) => Effect.runSync(Effect.logWarning(message));
+
+/** The log as the model saw it: the user's prompts and answers, Pea's words and questions, no tool
+ * traffic. Newest kept. */
+const REFEED_CHARS = 24_000;
+function transcript(events: HarnessEvent[]): string {
+  const lines: string[] = [];
+  let said = "";
+  const flush = () => {
+    if (said.trim()) lines.push(`Pea: ${said.trim()}`);
+    said = "";
+  };
+  const asked = new Map<string, string>();
+  for (const e of events) {
+    if (e.kind === "prompt") {
+      flush();
+      lines.push(`User: ${e.text}`);
+    } else if (e.kind === "update" && e.update.sessionUpdate === "agent_message_chunk") {
+      const content = (e.update as { content?: { type?: string; text?: string } }).content;
+      if (content?.type === "text" && content.text) said += content.text;
+    } else if (e.kind === "question_request") {
+      flush();
+      asked.set(e.requestId, e.message);
+      lines.push(`Pea asked: ${e.message}`);
+    } else if (e.kind === "question_resolved") {
+      flush();
+      lines.push(
+        e.by === "user" && e.action === "accept"
+          ? `User answered: ${JSON.stringify(e.content ?? {})}`
+          : `User did not answer (${e.by === "user" ? "skipped" : e.by}).`,
+      );
+    }
+  }
+  flush();
+  const body = lines.join("\n\n");
+  const kept = body.length > REFEED_CHARS ? `…${body.slice(-REFEED_CHARS)}` : body;
+  return `[Pea resumed this thread from its own record; the earlier harness session is gone. The transcript so far, oldest first. Continue from it; do not repeat it.]\n\n${kept}\n\n[End of transcript.]`;
+}
 
 /** tmp + rename, so a crash mid-write never leaves a torn file. */
 function writeJson(path: string, value: unknown) {
@@ -186,6 +228,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       const meta = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8")) as Meta;
       meta.head ??= emptyHead;
       meta.queued ??= [];
+      meta.forkOf ??= null;
       threads.set(id, fresh(meta, events));
     } catch (error) {
       warn(`harness thread ${dir} skipped: it does not parse (${String(error)})`);
@@ -198,13 +241,28 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       child: null,
       events,
       live: null,
-      loading: false,
+      refeed: null,
       session: "closed",
       stopped: false,
       running: null,
       pending: new Map(),
+      questions: new Map(),
       listeners: new Set(),
     };
+  }
+
+  /** A new thread on disk, spawned now so the model and mode pickers fill before the first prompt. */
+  function create(meta: Meta, events: HarnessEvent[] = []): Thread {
+    const t = fresh(meta, events);
+    mkdirSync(join(options.root, meta.id), { recursive: true });
+    writeMeta(t);
+    writeFileSync(
+      join(options.root, meta.id, "events.jsonl"),
+      events.map((e) => `${JSON.stringify(e)}\n`).join(""),
+    );
+    threads.set(meta.id, t);
+    ensure(t).catch(() => {}); // a failure to start is an `error` event
+    return t;
   }
 
   const writeMeta = (t: Thread) => writeJson(join(options.root, t.meta.id, "meta.json"), t.meta);
@@ -313,6 +371,36 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     return true;
   }
 
+  function resolveQuestion(
+    t: Thread,
+    requestId: string,
+    answer: { action: "accept" | "decline"; content?: Record<string, unknown> } | null,
+    by: "user" | "cancel" | "expired",
+  ) {
+    const pending = t.questions.get(requestId);
+    if (!pending) return false;
+    t.questions.delete(requestId);
+    const turnId = pending.turnId;
+    append(
+      t,
+      by === "user" && answer
+        ? { kind: "question_resolved", turnId, requestId, by, ...answer }
+        : { kind: "question_resolved", turnId, requestId, by: by === "user" ? "cancel" : by },
+    );
+    pending.resolve(
+      (answer?.action === "accept"
+        ? { action: "accept", content: answer.content ?? {} }
+        : { action: answer ? "decline" : "cancel" }) as CreateElicitationResponse,
+    );
+    return true;
+  }
+
+  /** Every ask the turn left open ends with the turn. */
+  function settleAsks(t: Thread, by: "cancel" | "expired") {
+    for (const requestId of t.pending.keys()) resolvePermission(t, requestId, null, by);
+    for (const requestId of t.questions.keys()) resolveQuestion(t, requestId, null, by);
+  }
+
   async function connect(t: Thread): Promise<Live> {
     const harness = t.meta.harness;
     if (!options.mcpServer) throw new Error(NO_SPAWN);
@@ -330,7 +418,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       if (t.session === "closed") return;
       t.session = "closed";
       t.live = null;
-      for (const requestId of t.pending.keys()) resolvePermission(t, requestId, null, "expired");
+      settleAsks(t, "expired");
       append(t, {
         kind: "error",
         turnId: t.running,
@@ -340,7 +428,6 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     const conn = new ClientSideConnection(
       () => ({
         sessionUpdate: ({ update }) => {
-          if (t.loading) return;
           append(t, { kind: "update", turnId: t.running, update });
           if (update.sessionUpdate === "current_mode_update") {
             t.meta.modeId = update.currentModeId;
@@ -370,6 +457,21 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
             });
             t.pending.set(requestId, { turnId, resolve });
           }),
+        // A form is the question card. A URL elicitation (MCP OAuth) has no place in Pea: declined.
+        createElicitation: (request: CreateElicitationRequest) =>
+          new Promise<CreateElicitationResponse>((resolve) => {
+            if (request.mode !== "form") return resolve({ action: "decline" });
+            const requestId = randomUUID();
+            const turnId = t.running;
+            append(t, {
+              kind: "question_request",
+              turnId,
+              requestId,
+              message: request.message,
+              requestedSchema: request.requestedSchema as Record<string, unknown>,
+            });
+            t.questions.set(requestId, { turnId, resolve });
+          }),
       }),
       ndJsonStream(
         Writable.toWeb(child.stdin!),
@@ -378,25 +480,52 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     );
     const init = await conn.initialize({
       protocolVersion: PROTOCOL_VERSION,
-      clientCapabilities: { fs: { readTextFile: false, writeTextFile: false } },
+      clientCapabilities: {
+        fs: { readTextFile: false, writeTextFile: false },
+        elicitation: { form: {} },
+      },
     });
     const request = { cwd: options.worldRoot, mcpServers: [options.mcpServer(t.meta.id)] };
-    // Neither `session/load` nor a fresh `session/new` restores the user's model and mode (drive
-    // 2026-10-01: a sonnet/default thread came back opus/auto), so both are re-applied below.
+    // No session verb restores the user's model and mode (drive 2026-10-01: a sonnet/default
+    // thread came back opus/auto), so both are re-applied below.
     const wantModel = t.meta.modelId;
     const wantMode = t.meta.modeId;
     const prior = t.meta.acpSessionId;
-    let state: "started" | "resumed" | "detached" = prior ? "detached" : "started";
-    let session: Awaited<ReturnType<typeof conn.newSession>> | null = null;
-    if (prior && init.agentCapabilities?.loadSession) {
-      t.loading = true;
-      session = await conn.loadSession({ ...request, sessionId: prior }).then(
-        (loaded) => ((state = "resumed"), { ...loaded, sessionId: prior }),
+    const caps = init.agentCapabilities?.sessionCapabilities;
+    let state: Exclude<HarnessThreadBody["session"], "closed"> = "started";
+    let session: NewSessionResponse | null = null;
+    // `session/resume` picks the stored session up with no replay; the log already holds it.
+    if (prior && caps?.resume)
+      session = await conn.resumeSession({ ...request, sessionId: prior }).then(
+        (resumed) => ((state = "resumed"), { ...resumed, sessionId: prior }),
         () => null,
       );
-      t.loading = false;
+    const source = t.meta.forkOf?.acpSessionId;
+    if (!session && !prior && source && caps?.fork)
+      session = await conn.unstable_forkSession({ ...request, sessionId: source }).then(
+        async (forked) => {
+          // claude-agent-acp writes the fork to disk and answers only its id; `session/resume`
+          // makes it live in this child. An adapter whose fork is already live refuses, harmlessly.
+          const live = caps.resume
+            ? await conn
+                .resumeSession({ ...request, sessionId: forked.sessionId })
+                .catch(() => null)
+            : null;
+          state = "forked";
+          return { ...forked, ...live, sessionId: forked.sessionId };
+        },
+        () => null,
+      );
+    if (!session) {
+      session = await conn.newSession(request);
+      // A new session over a log with earlier turns never saw them: the next prompt carries them.
+      // The turn being run now is not earlier; its prompt goes to the harness as itself.
+      const earlier = t.events.filter((e) => e.kind !== "prompt" || e.turnId !== t.running);
+      if (earlier.some((e) => e.kind === "prompt")) {
+        state = "detached";
+        t.refeed = transcript(earlier);
+      }
     }
-    session ??= await conn.newSession(request);
     const configOptions = session.configOptions ?? [];
     const modelOption = configOptions.find((o) => o.category === "model");
     // `models` is the unstable ACP model state (codex answers it); the SDK 1.5.1 type omits it.
@@ -421,9 +550,16 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     t.session = state;
     append(t, { kind: "session", state, acpSessionId: session.sessionId });
     const live = { conn, sessionId: session.sessionId, configOptions };
+    const notReapplied = (what: string) => (error: unknown) =>
+      void append(t, {
+        kind: "error",
+        turnId: t.running,
+        message: `${what} was not re-applied (${state}); the harness default runs: ${String((error as Error)?.message ?? error)}`,
+      });
     if (wantModel && wantModel !== t.meta.modelId)
-      await setModel(t, live, wantModel).catch(() => {});
-    if (wantMode && wantMode !== t.meta.modeId) await setMode(t, live, wantMode).catch(() => {});
+      await setModel(t, live, wantModel).catch(notReapplied(`model ${wantModel}`));
+    if (wantMode && wantMode !== t.meta.modeId)
+      await setMode(t, live, wantMode).catch(notReapplied(`mode ${wantMode}`));
     return live;
   }
 
@@ -475,9 +611,11 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     append(t, { kind: "prompt", turnId, text });
     try {
       const live = await ensure(t);
+      const refeed = t.refeed;
+      t.refeed = null;
       const result = await live.conn.prompt({
         sessionId: live.sessionId,
-        prompt: [{ type: "text", text }],
+        prompt: [{ type: "text", text: refeed ? `${refeed}\n\n${text}` : text }],
       });
       append(t, { kind: "turn_end", turnId, stopReason: result.stopReason });
     } catch (error) {
@@ -574,7 +712,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       if (!options.mcpServer) return json({ error: NO_SPAWN }, 503);
       const { harness, title } = await input(createThreadRequestSchema);
       const now = new Date().toISOString();
-      const meta: Meta = {
+      const t = create({
         id: randomUUID(),
         harness,
         title: title ?? "New thread",
@@ -587,14 +725,8 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         modes: [],
         head: emptyHead,
         queued: [],
-      };
-      const t = fresh(meta);
-      mkdirSync(join(options.root, meta.id), { recursive: true });
-      writeMeta(t);
-      writeFileSync(join(options.root, meta.id, "events.jsonl"), "");
-      threads.set(meta.id, t);
-      // Spawn now so the model and mode pickers fill before the first prompt; a failure is an `error` event.
-      ensure(t).catch(() => {});
+        forkOf: null,
+      });
       return json(summary(t));
     }
     const t = id ? threads.get(decodeURIComponent(id)) : undefined;
@@ -629,7 +761,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         return json({ turnId });
       }
       case "POST cancel": {
-        for (const requestId of t.pending.keys()) resolvePermission(t, requestId, null, "cancel");
+        settleAsks(t, "cancel");
         const live = t.running ? await t.live?.catch(() => null) : null;
         if (live) await live.conn.cancel({ sessionId: live.sessionId });
         return json({ cancelled: Boolean(live) });
@@ -639,6 +771,40 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         return resolvePermission(t, requestId, optionId, "user")
           ? json({ ok: true })
           : json({ error: `No pending permission ${requestId}` }, 409);
+      }
+      case "POST question": {
+        const { requestId, ...answer } = await input(questionResponseSchema);
+        return resolveQuestion(t, requestId, answer, "user")
+          ? json({ ok: true })
+          : json({ error: `No pending question ${requestId}` }, 409);
+      }
+      // The log is copied whole. Same harness: ACP `session/fork` carries the model context. Another
+      // harness: a new session, and the first prompt carries the transcript (`detached`).
+      case "POST fork": {
+        if (!options.mcpServer) return json({ error: NO_SPAWN }, 503);
+        if (t.running) return json({ error: "Fork after the running turn ends" }, 409);
+        const { harness = t.meta.harness, title } = await input(forkThreadRequestSchema);
+        const same = harness === t.meta.harness;
+        const now = new Date().toISOString();
+        const forked = create(
+          {
+            ...t.meta,
+            id: randomUUID(),
+            harness,
+            title: title ?? `${t.meta.title} (fork)`,
+            createdAt: now,
+            updatedAt: now,
+            acpSessionId: null,
+            modelId: same ? t.meta.modelId : null,
+            modeId: same ? t.meta.modeId : null,
+            models: [],
+            modes: [],
+            queued: [],
+            forkOf: { threadId: t.meta.id, acpSessionId: same ? t.meta.acpSessionId : null },
+          },
+          [...t.events],
+        );
+        return json(summary(forked));
       }
       case "POST model": {
         const { modelId } = await input(z.object({ modelId: z.string() }));
@@ -664,12 +830,17 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   // the turn ends in an error, and prompts queued behind it run once the harness resumes.
   for (const t of threads.values()) {
     const resolved = new Set(
-      t.events.flatMap((e) => (e.kind === "permission_resolved" ? [e.requestId] : [])),
+      t.events.flatMap((e) =>
+        e.kind === "permission_resolved" || e.kind === "question_resolved" ? [e.requestId] : [],
+      ),
     );
     for (const e of t.events)
-      if (e.kind === "permission_request" && !resolved.has(e.requestId))
+      if (
+        (e.kind === "permission_request" || e.kind === "question_request") &&
+        !resolved.has(e.requestId)
+      )
         append(t, {
-          kind: "permission_resolved",
+          kind: e.kind === "permission_request" ? "permission_resolved" : "question_resolved",
           turnId: e.turnId,
           requestId: e.requestId,
           by: "expired",

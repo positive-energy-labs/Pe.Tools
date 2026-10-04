@@ -28,6 +28,7 @@ import { useThreadScope } from "#/chat/scope";
 import type { ChatPage } from "#/chat/seeds";
 import {
   selectApprovals,
+  selectQuestions,
   selectPlan,
   selectRunStatus,
   selectTitle,
@@ -38,6 +39,7 @@ import { useWorkbench } from "#/workbench/provider";
 
 import { useHeadWorks } from "./head-works";
 import { ProposalHead } from "./proposal-head";
+import { QuestionForm } from "./question-form";
 import type { ChatDraft } from "#/workbench/prompt";
 
 export type ChatHandle = RouteHandle<ChatState, ChatReading, ChatPage, ChatActionKey>;
@@ -187,8 +189,16 @@ export function ComposerHead({
    * disappears over the chat shifted the whole lane every time it spoke. */
   status?: { text: string; caution: boolean; detail?: string };
 }) {
-  const { currentThreadId, threads, chat, missingThread, openThread, resolveApproval, store } =
-    useWorkbench();
+  const {
+    currentThreadId,
+    threads,
+    chat,
+    missingThread,
+    openThread,
+    resolveApproval,
+    answerQuestion,
+    store,
+  } = useWorkbench();
   const isRunning = selectRunStatus(chat) !== "idle";
   const { head, inventory, bound, ladder, health, threadLabel } = situation;
   const refusal =
@@ -235,6 +245,7 @@ export function ComposerHead({
   );
   // Live asks only: an expired ask is a transcript record, never a head row.
   const approvals = selectApprovals(chat);
+  const questions = selectQuestions(chat);
   const works = useHeadWorks(documentAddress(inventory, bound), ladder.docWord ?? "document", {
     open: store.actions.setPlugin,
     planIn: store.actions.planIn,
@@ -331,49 +342,60 @@ export function ComposerHead({
         </div>
       ) : null}
       <ProposalHead
-        asks={approvals.map((approval) => {
-          const call = callsById.get(approval.toolCallId);
-          return (
-            <div
-              key={approval.requestId}
-              className="flex flex-wrap items-baseline gap-3 py-0.5"
-              data-tool-id={approval.toolCallId}
-            >
-              <span className="face-mono text-ink">⌗ {toolTitle(approval.toolName)}</span>
-              {call?.target ? (
-                <code className="face-mono t-small text-ink" data-testid="approval-target">
-                  {call.target}
-                </code>
-              ) : null}
-              <div className="hairline-y hairline-rows flex w-full min-w-0 flex-col [&>button]:w-full">
-                {approval.options.map((option, index) => (
-                  <Press
-                    key={option.optionId}
-                    size="value"
-                    aria-label={option.name}
-                    data-kind={option.kind}
-                    onClick={() => void resolveApproval(approval.requestId, option.optionId)}
-                  >
-                    <span className="grid w-full grid-cols-[1.5rem_minmax(0,1fr)] items-start gap-2 px-2 py-1.5 text-left">
-                      <span aria-hidden="true" className="face-mono text-ink-2">
-                        {index + 1}.
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block">{option.name}</span>
-                        <span
-                          className="mt-0.5 block t-small text-ink-2"
-                          data-tone={option.kind === "allow_always" ? "caution" : undefined}
-                        >
-                          {VERDICT[option.kind]}
+        asks={[
+          ...questions.map((question) => (
+            <QuestionForm
+              key={question.requestId}
+              question={question}
+              onAnswer={(action, content) =>
+                void answerQuestion(question.requestId, action, content)
+              }
+            />
+          )),
+          ...approvals.map((approval) => {
+            const call = callsById.get(approval.toolCallId);
+            return (
+              <div
+                key={approval.requestId}
+                className="flex flex-wrap items-baseline gap-3 py-0.5"
+                data-tool-id={approval.toolCallId}
+              >
+                <span className="face-mono text-ink">⌗ {toolTitle(approval.toolName)}</span>
+                {call?.target ? (
+                  <code className="face-mono t-small text-ink" data-testid="approval-target">
+                    {call.target}
+                  </code>
+                ) : null}
+                <div className="hairline-y hairline-rows flex w-full min-w-0 flex-col [&>button]:w-full">
+                  {approval.options.map((option, index) => (
+                    <Press
+                      key={option.optionId}
+                      size="value"
+                      aria-label={option.name}
+                      data-kind={option.kind}
+                      onClick={() => void resolveApproval(approval.requestId, option.optionId)}
+                    >
+                      <span className="grid w-full grid-cols-[1.5rem_minmax(0,1fr)] items-start gap-2 px-2 py-1.5 text-left">
+                        <span aria-hidden="true" className="face-mono text-ink-2">
+                          {index + 1}.
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block">{option.name}</span>
+                          <span
+                            className="mt-0.5 block t-small text-ink-2"
+                            data-tone={option.kind === "allow_always" ? "caution" : undefined}
+                          >
+                            {VERDICT[option.kind]}
+                          </span>
                         </span>
                       </span>
-                    </span>
-                  </Press>
-                ))}
+                    </Press>
+                  ))}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          }),
+        ]}
         works={works}
       />
     </section>

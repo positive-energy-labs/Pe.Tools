@@ -294,6 +294,7 @@ function Composer({
               />
               {/* Thread verbs: the same route actions the shell lists, refusals shown the same way. */}
               <SituationAction handle={handle} name="new" action={handle.actions.new} />
+              <SituationAction handle={handle} name="fork" action={handle.actions.fork} />
               <ControlChips />
               <span className="ml-auto flex items-center gap-1.5">
                 {isRunning ? (

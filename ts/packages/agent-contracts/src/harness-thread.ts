@@ -21,6 +21,9 @@ import { z } from "zod";
  *   POST   /pe/threads/:id/prompt {text}       -> { turnId }   (202 queued when a turn is running)
  *   POST   /pe/threads/:id/cancel
  *   POST   /pe/threads/:id/permission {requestId, optionId}
+ *   POST   /pe/threads/:id/question {requestId, action, content?}   (answers an ACP elicitation form)
+ *   POST   /pe/threads/:id/fork {harness?, title?} -> HarnessThreadSummary
+ *            (copies the log; same harness forks the ACP session, another harness re-feeds the transcript)
  *   POST   /pe/threads/:id/model {modelId}
  *   POST   /pe/threads/:id/mode  {modeId}
  *   GET    /pe/threads/:id/stream  (SSE; each `data:` is one HarnessEvent, from `?after=<seq>`)
@@ -109,6 +112,38 @@ export const harnessEventSchema = z.discriminatedUnion("kind", [
       by: z.enum(["cancel", "expired"]),
     }),
   ]),
+  /** An ACP `elicitation/create` in `form` mode: the harness asks the user (Claude's AskUserQuestion,
+   * an MCP elicitation). `requestedSchema` is the ACP form schema verbatim; the web renders it. A
+   * non-form mode is declined by the host and never logged. */
+  z.object({
+    seq: z.number(),
+    at: z.string(),
+    kind: z.literal("question_request"),
+    turnId: z.string().nullable(),
+    requestId: z.string(),
+    message: z.string(),
+    requestedSchema: z.record(z.string(), z.unknown()),
+  }),
+  z.discriminatedUnion("by", [
+    z.object({
+      seq: z.number(),
+      at: z.string(),
+      kind: z.literal("question_resolved"),
+      turnId: z.string().nullable(),
+      requestId: z.string(),
+      by: z.literal("user"),
+      action: z.enum(["accept", "decline"]),
+      content: z.record(z.string(), z.unknown()).optional(),
+    }),
+    z.object({
+      seq: z.number(),
+      at: z.string(),
+      kind: z.literal("question_resolved"),
+      turnId: z.string().nullable(),
+      requestId: z.string(),
+      by: z.enum(["cancel", "expired"]),
+    }),
+  ]),
   z.object({
     seq: z.number(),
     at: z.string(),
@@ -142,12 +177,14 @@ export const harnessEventSchema = z.discriminatedUnion("kind", [
     kind: z.literal("title_changed"),
     title: z.string(),
   }),
-  /** The harness child died or was restarted; `resumed` says whether ACP `session/load` succeeded. */
+  /** The harness child was started: `started` a new session, `resumed` ACP `session/resume` of the
+   * stored one, `forked` ACP `session/fork` of the source thread's, `detached` a new session over an
+   * existing log (resume or fork failed, or the fork crossed harnesses), with the transcript re-fed. */
   z.object({
     seq: z.number(),
     at: z.string(),
     kind: z.literal("session"),
-    state: z.enum(["started", "resumed", "detached"]),
+    state: z.enum(["started", "resumed", "forked", "detached"]),
     acpSessionId: z.string().nullable(),
   }),
 ]);
@@ -174,13 +211,23 @@ export const harnessThreadBodySchema = harnessThreadSummarySchema.extend({
    * `permission_request` events. */
   running: z.boolean(),
   queued: z.array(z.object({ turnId: z.string(), text: z.string() })),
-  session: z.enum(["started", "resumed", "detached", "closed"]),
+  session: z.enum(["started", "resumed", "forked", "detached", "closed"]),
   events: z.array(harnessEventSchema),
 });
 export type HarnessThreadBody = z.infer<typeof harnessThreadBodySchema>;
 
 export const promptRequestSchema = z.object({ text: z.string().min(1) });
 export const permissionResponseSchema = z.object({ requestId: z.string(), optionId: z.string() });
+/** `accept` carries the form's answers keyed by property; `decline` is "skip", the harness goes on. */
+export const questionResponseSchema = z.object({
+  requestId: z.string(),
+  action: z.enum(["accept", "decline"]),
+  content: z.record(z.string(), z.unknown()).optional(),
+});
+export const forkThreadRequestSchema = z.object({
+  harness: harnessIdSchema.optional(),
+  title: z.string().optional(),
+});
 export const createThreadRequestSchema = z.object({
   harness: harnessIdSchema,
   title: z.string().optional(),

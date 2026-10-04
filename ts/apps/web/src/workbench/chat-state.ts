@@ -55,6 +55,14 @@ export interface Approval {
   options: Extract<HarnessEvent, { kind: "permission_request" }>["options"];
 }
 
+/** One open ACP form question (`question_request`): answered with content keyed by property, or
+ * declined. The schema is the ACP elicitation form verbatim; the question card renders it. */
+export interface Question {
+  requestId: string;
+  message: string;
+  requestedSchema: Record<string, unknown>;
+}
+
 export type ChatPart =
   | { type: "text"; text: string }
   | { type: "reasoning"; text: string }
@@ -144,6 +152,7 @@ function fold(state: ChatState): Fold {
   const rows: ChatMessage[] = [];
   const calls = new Map<string, ToolCall>();
   const approvals = new Map<string, Approval>();
+  const questions = new Map<string, Question>();
   const queued = new Map<string, string>();
   let open: ChatMessage | undefined;
   let turn = false;
@@ -170,6 +179,7 @@ function fold(state: ChatState): Fold {
     open = undefined;
     turn = false;
     approvals.clear();
+    questions.clear();
   };
   const line = (event: HarnessEvent, said: string) =>
     rows.push({
@@ -271,6 +281,22 @@ function fold(state: ChatState): Fold {
           Object.assign(call, { status: "denied" });
         break;
       }
+      case "question_request":
+        questions.set(event.requestId, {
+          requestId: event.requestId,
+          message: event.message,
+          requestedSchema: event.requestedSchema,
+        });
+        break;
+      case "question_resolved":
+        questions.delete(event.requestId);
+        if (event.by !== "user")
+          line(
+            event,
+            event.by === "expired" ? "question expired unanswered" : "question cancelled",
+          );
+        else if (event.action === "decline") line(event, "question skipped");
+        break;
       case "turn_end":
         close(event.stopReason === "cancelled");
         // The user row the cancel orphaned needs its reason in the transcript.
@@ -285,8 +311,11 @@ function fold(state: ChatState): Fold {
       // A session event never ends a turn: the host spawns or resumes the child on a turn's first
       // prompt, so `session` follows that `prompt`, and an interrupted turn gets its own `error`.
       case "session":
-        if (event.state === "detached") line(event, "history only; the harness session restarted");
+        if (event.state === "detached")
+          line(event, "new harness session; Pea re-fed the transcript from its record");
         if (event.state === "resumed") line(event, "session resumed");
+        if (event.state === "forked")
+          line(event, "forked; the harness session continues from here");
         break;
       case "title_changed":
         title = event.title;
@@ -303,6 +332,7 @@ function fold(state: ChatState): Fold {
     rows,
     calls: [...calls.values()],
     approvals: [...approvals.values()],
+    questions: [...questions.values()],
     turn,
     failure,
     queued: [...queued].map(([turnId, text]) => ({ turnId, text })),
@@ -316,6 +346,7 @@ interface Fold {
   rows: ChatMessage[];
   calls: ToolCall[];
   approvals: Approval[];
+  questions: Question[];
   /** A prompt's turn has not ended. */
   turn: boolean;
   failure?: string;
@@ -358,6 +389,11 @@ export function selectApprovals(state: ChatState): Approval[] {
   return fold(state).approvals;
 }
 
+/** Open form questions, same lifetime as approvals. */
+export function selectQuestions(state: ChatState): Question[] {
+  return fold(state).questions;
+}
+
 /** The last turn's error, until the next prompt. */
 export function selectTurnFailure(state: ChatState): string | undefined {
   return fold(state).failure;
@@ -366,8 +402,8 @@ export function selectTurnFailure(state: ChatState): string | undefined {
 export type RunStatus = "idle" | "running" | "waiting";
 
 export function selectRunStatus(state: ChatState): RunStatus {
-  const { approvals, turn } = fold(state);
-  if (approvals.length > 0) return "waiting";
+  const { approvals, questions, turn } = fold(state);
+  if (approvals.length > 0 || questions.length > 0) return "waiting";
   return turn ? "running" : "idle";
 }
 

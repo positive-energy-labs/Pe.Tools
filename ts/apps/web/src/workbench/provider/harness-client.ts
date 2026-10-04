@@ -44,6 +44,15 @@ export function harnessClient(origin: string) {
     cancel: (id: string) => call<void>(`${thread(id)}/cancel`, "POST"),
     permission: (id: string, requestId: string, optionId: string) =>
       call<void>(`${thread(id)}/permission`, "POST", { requestId, optionId }),
+    question: (
+      id: string,
+      requestId: string,
+      action: "accept" | "decline",
+      content?: Record<string, unknown>,
+    ) => call<void>(`${thread(id)}/question`, "POST", { requestId, action, content }),
+    /** Same harness forks the ACP session; another harness re-feeds the transcript. */
+    fork: (id: string, harness?: HarnessId) =>
+      call<HarnessThreadSummary>(`${thread(id)}/fork`, "POST", harness ? { harness } : {}),
     model: (id: string, modelId: string) => call<void>(`${thread(id)}/model`, "POST", { modelId }),
     mode: (id: string, modeId: string) => call<void>(`${thread(id)}/mode`, "POST", { modeId }),
   };

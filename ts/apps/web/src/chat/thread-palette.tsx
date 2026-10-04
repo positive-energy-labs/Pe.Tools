@@ -1,4 +1,4 @@
-import { Pencil, Plus, Search, X } from "lucide-react";
+import { GitFork, Pencil, Plus, Search, X } from "lucide-react";
 import type { HarnessId, HarnessInfo } from "@pe/agent-contracts";
 import { Dialog, DialogContent } from "#/components/lang/dialog";
 import { List } from "#/components/lang/list-popup";
@@ -7,17 +7,48 @@ import type { StoredThreadSummary } from "#/workbench/provider";
 import { Press } from "#/components/lang/press";
 import { Kbd } from "#/components/lang/kbd";
 
+/** Rename, one fork press per available harness (its own harness first), delete. */
 function ThreadActions({
   thread,
+  harnesses,
   onRename,
+  onFork,
   onDelete,
 }: {
   thread: StoredThreadSummary;
+  harnesses: HarnessInfo[];
   onRename: (id: string, title: string) => void;
+  onFork: (id: string, harness?: HarnessId) => void;
   onDelete: (id: string) => void;
 }) {
+  const forks = harnesses
+    .filter((harness) => harness.available)
+    .sort((a, b) => Number(b.id === thread.harness) - Number(a.id === thread.harness));
   return (
     <>
+      {forks.map((harness) => {
+        const own = harness.id === thread.harness;
+        const title = own
+          ? "Fork thread (same harness, context kept)"
+          : `Fork to ${harness.title} (transcript re-fed)`;
+        return (
+          <Press
+            key={harness.id}
+            type="button"
+            aria-label={title}
+            title={title}
+            tone="quiet"
+            state="rest"
+            onClick={(event) => {
+              event.stopPropagation();
+              onFork(thread.id, own ? undefined : harness.id);
+            }}
+          >
+            <GitFork />
+            {own ? null : <span className="t-small">{harness.title}</span>}
+          </Press>
+        );
+      })}
       <Press
         type="button"
         aria-label="Rename thread"
@@ -68,6 +99,7 @@ export function ThreadsSidebar({
   currentThreadId,
   onSelect,
   onNew,
+  onFork,
   onRename,
   onDelete,
   onSearch,
@@ -78,6 +110,7 @@ export function ThreadsSidebar({
   currentThreadId: string;
   onSelect: (id: string) => void;
   onNew: (harness: HarnessId) => void;
+  onFork: (id: string, harness?: HarnessId) => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
   onSearch: () => void;
@@ -105,7 +138,15 @@ export function ThreadsSidebar({
             lines: 2,
             // The open thread is the active item: the rail mark, never a hue or a frame.
             active: thread.id === currentThreadId,
-            actions: <ThreadActions thread={thread} onRename={onRename} onDelete={onDelete} />,
+            actions: (
+              <ThreadActions
+                thread={thread}
+                harnesses={harnesses}
+                onRename={onRename}
+                onFork={onFork}
+                onDelete={onDelete}
+              />
+            ),
           })}
         />
       </div>
@@ -168,6 +209,7 @@ export function ThreadDialog({
   onOpenChange,
   onSelect,
   onNew,
+  onFork,
   onRename,
   onDelete,
 }: {
@@ -178,6 +220,7 @@ export function ThreadDialog({
   onOpenChange: (open: boolean) => void;
   onSelect: (id: string) => void;
   onNew: (harness: HarnessId) => void;
+  onFork: (id: string, harness?: HarnessId) => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
 }) {
@@ -222,7 +265,13 @@ export function ThreadDialog({
                   lines: 2,
                   active: item.thread.id === currentThreadId,
                   actions: (
-                    <ThreadActions thread={item.thread} onRename={onRename} onDelete={onDelete} />
+                    <ThreadActions
+                      thread={item.thread}
+                      harnesses={harnesses}
+                      onRename={onRename}
+                      onFork={onFork}
+                      onDelete={onDelete}
+                    />
                   ),
                 }
           }

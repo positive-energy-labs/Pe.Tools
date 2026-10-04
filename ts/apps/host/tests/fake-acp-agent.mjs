@@ -1,8 +1,9 @@
 // A fake ACP agent for harness-threads.test.ts: echoes the prompt, emits one tool_call, asks one
-// permission when the prompt says "permission", hangs until cancel on "hang", lingers on "slow", and
-// names the session on "title", and switches its own mode on "mode". `FAKE_ACP_SHAPE=config` answers only `configOptions` for the model;
-// otherwise only the unstable `models` state, so `setModel` takes `session/set_model`.
-// `session/load` replays one old update, as a real adapter replays history.
+// permission when the prompt says "permission", asks one form question on "question", hangs until
+// cancel on "hang", lingers on "slow", names the session on "title", and switches its own mode on
+// "mode". `FAKE_ACP_SHAPE=config` answers only `configOptions` for the model; otherwise only the
+// unstable `models` state, so `setModel` takes `session/set_model`. `session/resume` picks a stored
+// session up with no replay and refuses the id "lost"; `session/fork` answers a new id.
 import { Readable, Writable } from "node:stream";
 import {
   AgentSideConnection,
@@ -52,21 +53,17 @@ new AgentSideConnection(
   (conn) => ({
     initialize: () => ({
       protocolVersion: PROTOCOL_VERSION,
-      agentCapabilities: { loadSession: true },
+      agentCapabilities: { loadSession: true, sessionCapabilities: { resume: {}, fork: {} } },
       authMethods: [],
     }),
     authenticate: () => {},
     newSession: () => session("fake-session"),
-    async loadSession({ sessionId }) {
-      await conn.sessionUpdate({
-        sessionId,
-        update: {
-          sessionUpdate: "agent_message_chunk",
-          content: { type: "text", text: "old replay" },
-        },
-      });
-      return session(sessionId);
+    resumeSession({ sessionId }) {
+      if (sessionId === "lost") throw RequestError.invalidParams({ sessionId });
+      const { sessionId: _, ...rest } = session(sessionId);
+      return rest;
     },
+    unstable_forkSession: ({ sessionId }) => session(`${sessionId}-fork`),
     setSessionConfigOption: ({ value }) => {
       if (shape !== "config") throw new Error("no config options");
       if (value !== "m1" && value !== "m2") throw RequestError.invalidParams({ value });
@@ -93,6 +90,33 @@ new AgentSideConnection(
           sessionId,
           update: { sessionUpdate: "current_mode_update", currentModeId: "plan" },
         });
+        return { stopReason: "end_turn" };
+      }
+      if (text === "question") {
+        const answer = await conn.createElicitation({
+          sessionId,
+          mode: "form",
+          message: "Which one?",
+          requestedSchema: {
+            type: "object",
+            properties: {
+              pick: {
+                type: "string",
+                title: "Pick",
+                oneOf: [
+                  { const: "a", title: "A" },
+                  { const: "b", title: "B" },
+                ],
+              },
+            },
+            required: ["pick"],
+          },
+        });
+        await say(
+          answer.action === "accept"
+            ? `answered ${answer.content?.pick}`
+            : `question ${answer.action}`,
+        );
         return { stopReason: "end_turn" };
       }
       if (text === "title") {

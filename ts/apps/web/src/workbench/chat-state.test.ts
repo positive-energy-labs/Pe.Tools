@@ -8,6 +8,7 @@ import {
   emptyChatState,
   selectApprovals,
   selectMessages,
+  selectQuestions,
   selectQueued,
   selectRunStatus,
   selectTitle,
@@ -135,7 +136,7 @@ describe("harness event projection", () => {
       {
         role: "system",
         running: false,
-        parts: [{ text: "history only; the harness session restarted" }],
+        parts: [{ text: "new harness session; Pea re-fed the transcript from its record" }],
       },
       { role: "user", running: false, parts: [{ text: "Now write it." }] },
       {
@@ -301,6 +302,42 @@ describe("harness event projection", () => {
       { seq: 15, at, kind: "error", turnId: "t2", message: "harness exited" },
     ] satisfies HarnessEvent[];
     expect(selectTurnFailure(state(failed))).toBe("harness exited");
+  });
+
+  it("parks a form question until answered; a skip or a cancel leaves a quiet line", () => {
+    const form = { properties: { pick: { type: "string" } }, required: ["pick"] };
+    const asked = [
+      ...LOG,
+      {
+        seq: 17,
+        at,
+        kind: "question_request",
+        turnId: "t2",
+        requestId: "q1",
+        message: "Which one?",
+        requestedSchema: form,
+      },
+    ] satisfies HarnessEvent[];
+    expect(selectQuestions(state(asked))).toEqual([
+      { requestId: "q1", message: "Which one?", requestedSchema: form },
+    ]);
+    expect(selectRunStatus(state(asked))).toBe("waiting");
+    const resolved = (tail: object) =>
+      state([
+        ...asked,
+        { seq: 18, at, kind: "question_resolved", turnId: "t2", requestId: "q1", ...tail },
+      ] as HarnessEvent[]);
+    const answered = resolved({ by: "user", action: "accept", content: { pick: "a" } });
+    expect(selectQuestions(answered)).toEqual([]);
+    expect(selectMessages(answered).some((row) => row.id === "question_resolved-18")).toBe(false);
+    const skipped = resolved({ by: "user", action: "decline" });
+    expect(selectMessages(skipped).find((row) => row.id === "question_resolved-18")?.parts).toEqual(
+      [{ type: "text", text: "question skipped" }],
+    );
+    const cancelled = resolved({ by: "cancel" });
+    expect(
+      selectMessages(cancelled).find((row) => row.id === "question_resolved-18")?.parts,
+    ).toEqual([{ type: "text", text: "question cancelled" }]);
   });
 
   it("titles the thread from the newest title_changed, else the body", () => {

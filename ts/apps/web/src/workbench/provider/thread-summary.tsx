@@ -46,6 +46,13 @@ export interface WorkbenchContextValue {
   deleteThread: (threadId: string) => Promise<boolean>;
   patchThreadView: (partial: { turn?: number }, replace?: boolean) => Promise<void>;
   resolveApproval: (requestId: string, optionId: string) => Promise<void>;
+  answerQuestion: (
+    requestId: string,
+    action: "accept" | "decline",
+    content?: Record<string, unknown>,
+  ) => Promise<void>;
+  /** Forks `threadId` (default: the current thread) onto `harness` (default: its own) and opens it. */
+  forkThread: (harness?: HarnessId, threadId?: string) => Promise<void>;
   setModel: (modelId: string) => Promise<void>;
   setMode: (modeId: string) => Promise<void>;
 }

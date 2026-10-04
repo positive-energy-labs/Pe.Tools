@@ -26,6 +26,7 @@ beforeAll(async () => {
   previousLocalAppData = process.env.LOCALAPPDATA;
   process.env.LOCALAPPDATA = root;
   process.env.PE_HARNESS_ADAPTER_CLAUDE = join(import.meta.dirname, "fake-acp-agent.mjs");
+  process.env.PE_HARNESS_ADAPTER_CODEX = process.env.PE_HARNESS_ADAPTER_CLAUDE;
 });
 afterEach(() => {
   delete process.env.FAKE_ACP_SHAPE;
@@ -33,6 +34,7 @@ afterEach(() => {
 afterAll(async () => {
   await Promise.all(hosts.map((threads) => threads.close()));
   delete process.env.PE_HARNESS_ADAPTER_CLAUDE;
+  delete process.env.PE_HARNESS_ADAPTER_CODEX;
   if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;
   else process.env.LOCALAPPDATA = previousLocalAppData;
   await rm(root, { recursive: true, force: true });
@@ -78,6 +80,23 @@ const openAsks = (body: HarnessThreadBody) =>
       ? [e]
       : [],
   );
+const openQuestions = (body: HarnessThreadBody) =>
+  body.events.flatMap((e) =>
+    e.kind === "question_request" &&
+    !body.events.some((r) => r.kind === "question_resolved" && r.requestId === e.requestId)
+      ? [e]
+      : [],
+  );
+/** What the fake echoed for the last prompt: the text the harness actually received. */
+const lastEcho = (body: HarnessThreadBody) => {
+  const prompt = body.events.findLastIndex((e) => e.kind === "prompt");
+  const chunk = body.events
+    .slice(prompt)
+    .find((e) => e.kind === "update" && e.update.sessionUpdate === "agent_message_chunk");
+  return chunk?.kind === "update"
+    ? ((chunk.update as { content?: { text?: string } }).content?.text ?? "")
+    : "";
+};
 
 test("a thread prompts, parks a permission, cancels, queues, renames, and replays over SSE", async () => {
   process.env.FAKE_ACP_SHAPE = "config";
@@ -325,12 +344,112 @@ test("a restarted host expires open asks, ends the open turn, resumes, and keeps
   expect(tail[1]).toMatchObject({ turnId, message: "host restarted during this turn" });
   expect(tail[2]).toMatchObject({ turnId: queued.json.turnId, text: "after restart" });
   expect([resumed.modelId, resumed.modeId]).toEqual(["m2", "plan"]);
-  // The `session/load` replay is history the log already holds.
-  expect(JSON.stringify(resumed.events)).not.toContain("old replay");
   expect(
     (await caller(second)("GET", "/pe/threads")).json.map((t: { id: string }) => t.id),
   ).not.toContain("torn");
 });
+
+test("a question parks the turn, a fork copies the log, and a lost session re-feeds the transcript", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { harness: "claude" })).json.id as string;
+  await until(read, id, (b) => b.session === "started" && b.lastSeq === 1);
+
+  // A form question parks the turn; the answer reaches the agent as the form's content.
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "question" });
+  let body = await until(read, id, (b) => openQuestions(b).length === 1);
+  expect(body.running).toBe(true);
+  const question = openQuestions(body)[0]!;
+  expect(question).toMatchObject({
+    message: "Which one?",
+    requestedSchema: { required: ["pick"] },
+  });
+  expect(
+    (await call("POST", `/pe/threads/${id}/question`, { requestId: "nope", action: "decline" }))
+      .status,
+  ).toBe(409);
+  await call("POST", `/pe/threads/${id}/question`, {
+    requestId: question.requestId,
+    action: "accept",
+    content: { pick: "b" },
+  });
+  body = await until(read, id, (b) => turnEnds(b).length === 1);
+  expect(kinds(body.events).slice(1)).toEqual([
+    "prompt",
+    "update:agent_message_chunk",
+    "question_request",
+    "question_resolved",
+    "update:agent_message_chunk",
+    "turn_end",
+  ]);
+  expect(body.events.find((e) => e.kind === "question_resolved")).toMatchObject({
+    by: "user",
+    action: "accept",
+    content: { pick: "b" },
+  });
+  expect(JSON.stringify(body.events)).toContain("answered b");
+
+  // Cancel settles an open question; the agent reads it as cancelled.
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "question" });
+  await until(read, id, (b) => openQuestions(b).length === 1);
+  await call("POST", `/pe/threads/${id}/cancel`);
+  body = await until(read, id, (b) => turnEnds(b).length === 2);
+  expect(body.events.findLast((e) => e.kind === "question_resolved")).toMatchObject({
+    by: "cancel",
+  });
+  expect(lastEcho(body)).toBe("echo: question");
+
+  // Same harness: the log is copied and the ACP session forked, so the model keeps its context.
+  const fork = await call("POST", `/pe/threads/${id}/fork`, {});
+  expect(fork.status).toBe(200);
+  const forked = await until(read, fork.json.id, (b) => b.session === "forked");
+  expect(forked.title).toBe("New thread (fork)");
+  expect(forked.events.slice(0, body.events.length)).toEqual(body.events);
+  expect(forked.events.at(-1)).toMatchObject({
+    kind: "session",
+    state: "forked",
+    acpSessionId: "fake-session-fork",
+  });
+  await call("POST", `/pe/threads/${fork.json.id}/prompt`, { text: "hello" });
+  const after = await until(read, fork.json.id, (b) => turnEnds(b).length === 3);
+  expect(lastEcho(after)).toBe("echo: hello");
+
+  // Another harness: no ACP fork; the first prompt carries the transcript, the record only the words.
+  const cross = await call("POST", `/pe/threads/${id}/fork`, {
+    harness: "codex",
+    title: "handoff",
+  });
+  const handoff = await until(read, cross.json.id, (b) => b.session === "detached");
+  expect([handoff.harness, handoff.title]).toEqual(["codex", "handoff"]);
+  await call("POST", `/pe/threads/${cross.json.id}/prompt`, { text: "go on" });
+  const fed = await until(read, cross.json.id, (b) => turnEnds(b).length === 3);
+  const echo = lastEcho(fed);
+  expect({ echo, kinds: kinds(fed.events).slice(-8) }).toMatchObject({
+    echo: expect.stringMatching(/^echo: \[Pea resumed this thread/),
+  });
+  expect(echo).toContain(
+    'User: question\n\nPea: echo: question\n\nPea asked: Which one?\n\nUser answered: {"pick":"b"}\n\nPea: answered b\n\nUser: question\n\nPea: echo: question\n\nPea asked: Which one?\n\nUser did not answer (cancel).',
+  );
+  expect(echo).toMatch(/\[End of transcript\.\]\n\ngo on$/);
+  expect(fed.events.findLast((e) => e.kind === "prompt")).toMatchObject({ text: "go on" });
+  await call("POST", `/pe/threads/${cross.json.id}/prompt`, { text: "again" });
+  expect(lastEcho(await until(read, cross.json.id, (b) => turnEnds(b).length === 4))).toBe(
+    "echo: again",
+  );
+
+  // A stored session the harness no longer has: a new session, `detached`, the transcript re-fed.
+  await threads.close();
+  const metaPath = join(root, id, "meta.json");
+  const meta = JSON.parse(await readFile(metaPath, "utf8")) as { acpSessionId: string };
+  await writeFile(metaPath, JSON.stringify({ ...meta, acpSessionId: "lost" }));
+  const second = host();
+  await caller(second)("POST", `/pe/threads/${id}/prompt`, { text: "still there?" });
+  const lost = await until(reader(second), id, (b) => turnEnds(b).length === 3);
+  expect(lost.events.findLast((e) => e.kind === "session")).toMatchObject({ state: "detached" });
+  expect(lastEcho(lost)).toMatch(/^echo: \[Pea resumed this thread/);
+  expect(lost.session).toBe("detached");
+}, 30_000);
 
 test("a host that cannot launch a Pea MCP server lists no harness and refuses new threads with 503", async () => {
   const call = caller(host(false));

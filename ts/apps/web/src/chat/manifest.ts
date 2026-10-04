@@ -26,6 +26,7 @@ export interface ChatRouteDeps {
   send?: (input: PromptInput) => Promise<void>;
   cancel?: () => Promise<void>;
   newThread?: () => Promise<void>;
+  forkThread?: () => Promise<void>;
   /** Why no thread can be created now (harnesses loading, none installed). */
   newRefusal?: string;
 }
@@ -35,7 +36,7 @@ const promptInput = z.object({
   attachments: z.array(z.unknown()).optional(),
 });
 
-export type ChatActionKey = "send" | "cancel" | "new";
+export type ChatActionKey = "send" | "cancel" | "new" | "fork";
 
 export const chatManifest = (
   deps: ChatRouteDeps,
@@ -89,6 +90,23 @@ export const chatManifest = (
         dirties: ["head"],
         ready: () => (deps.newThread ? (deps.newRefusal ?? null) : "Chat is not ready"),
         run: async () => deps.newThread?.(),
+      },
+      fork: {
+        label: "fork",
+        says: "copies this thread into a new one on the same harness, model context included, and opens it",
+        needs: "host",
+        actor: "human",
+        input: z.void() as unknown as z.ZodType<never>,
+        dirties: ["head"],
+        ready: () =>
+          !deps.forkThread
+            ? "Chat is not ready"
+            : !deps.thread
+              ? "No thread to fork yet"
+              : deps.running
+                ? "Fork after the running turn ends"
+                : null,
+        run: async () => deps.forkThread?.(),
       },
     },
     seeds: CHAT_SEEDS as never,

@@ -62,6 +62,7 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
     sendPrompt,
     cancel,
     newThread,
+    forkThread,
     newRefusal,
     missingThread,
     openThread,
@@ -79,9 +80,10 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
         send: (input) => sendPrompt(input.text, input.attachments),
         cancel,
         newThread: () => newThread(),
+        forkThread: () => forkThread(),
         newRefusal,
       }),
-    [currentThreadId, loading, isRunning, sendPrompt, cancel, newThread, newRefusal],
+    [currentThreadId, loading, isRunning, sendPrompt, cancel, newThread, forkThread, newRefusal],
   );
   // The handle is owned here, not inside the shell: Chat has no route head, and its composer
   // head is the Situation, which needs the same handle the shell's chords run through.
@@ -273,6 +275,7 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
                     currentThreadId={currentThreadId}
                     onSelect={openThread}
                     onNew={(harness) => void newThread(harness)}
+                    onFork={(id, harness) => void forkThread(harness, id)}
                     onRename={handleRenameThread}
                     onDelete={handleDeleteThread}
                     onSearch={() => store.actions.setPaletteOpen(true)}
@@ -347,6 +350,7 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
         onOpenChange={store.actions.setPaletteOpen}
         onSelect={openThread}
         onNew={(harness) => void newThread(harness)}
+        onFork={(id, harness) => void forkThread(harness, id)}
         onRename={handleRenameThread}
         onDelete={handleDeleteThread}
       />

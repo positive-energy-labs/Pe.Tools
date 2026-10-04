@@ -148,6 +148,16 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [attempt, client, currentThreadId, navigate],
   );
 
+  const forkThread = useCallback(
+    (threadId: string, harness?: HarnessId) =>
+      attempt(async () => {
+        const forked = await client.fork(threadId, harness);
+        await refreshThreads();
+        await gotoThread(forked.id);
+      }),
+    [attempt, client, gotoThread, refreshThreads],
+  );
+
   const patchThreadView = useCallback(
     (partial: { turn?: number }, replace = false) =>
       navigate({ search: (previous) => ({ ...previous, ...partial }), replace }),
@@ -196,6 +206,10 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       patchThreadView,
       resolveApproval: async (requestId, optionId) =>
         onThread((id) => client.permission(id, requestId, optionId))(),
+      answerQuestion: async (requestId, action, content) =>
+        onThread((id) => client.question(id, requestId, action, content))(),
+      forkThread: async (harness, threadId) =>
+        void (await forkThread(threadId || currentThreadId, harness)),
       setModel: async (modelId) => onThread((id) => client.model(id, modelId))(),
       setMode: async (modeId) => onThread((id) => client.mode(id, modeId))(),
     }),
@@ -209,6 +223,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       currentThreadId,
       deleteThread,
       error,
+      forkThread,
       gotoThread,
       harnesses,
       info,
