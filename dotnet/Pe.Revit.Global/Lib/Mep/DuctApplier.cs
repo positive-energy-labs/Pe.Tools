@@ -143,6 +143,9 @@ public static class DuctApplier {
                     _ = i.Element!.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM).Set(NotDefined.ToString());
             }));
         stages.Add(("losses", () => {
+            // Terminals, equipment and the store first: a terminal's SubTransaction rollback after the server change
+            // discards Revit's recalculation and the fittings commit with a 0 drop (W3, Project A).
+            foreach (var i in planned.Where(i => i.Loss is null && i.Kind != "engine")) Write(i);
             foreach (var i in lossy) {
                 var (server, schema, field, value) = i.Loss!.Value;
                 var entity = new Entity(schema);
@@ -151,7 +154,6 @@ public static class DuctApplier {
                 _ = i.Element.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM).Set(server.ToString());
                 i.Outcome = "written";
             }
-            foreach (var i in planned.Where(i => i.Loss is null && i.Kind != "engine")) Write(i);
         }));
 
         using var group = new TransactionGroup(doc, "Pe Apply Duct Losses");
