@@ -167,6 +167,155 @@ export namespace DocumentTemporaryStatus {
   }
 }
 
+/** Write duct losses into Revit so they travel with the model: Specific Coefficient on duct fittings, Specific Loss (in-wg) on duct accessories, terminal connector drops where the family connector is Specific Loss, fan external static on equipment through the FanStatic slot, the network-based calculation switch, and Pe's provenance store in the hidden _PE_DuctLosses Project Information parameter. previewOnly plans every write and refusal without a transaction. A real apply commits Not Defined, then the losses, in one undo step; a failed stage rolls everything back and is named. Returns per-target outcomes and the touched systems' critical path after. */
+export namespace DuctsApply {
+  export namespace Req {
+    /**
+     * Coefficient is Specific Coefficient (dimensionless); Table, Inputs and RuleKey are Pe's provenance for it and
+     * land only in the store. Terminals and Components carry a drop in in-wg; Equipment the fan external static.
+     *
+     */
+    export interface Request {
+      previewOnly: boolean;
+      slots?: null | DuctParameterSlots;
+      fittings: DuctFittingWrite[];
+      terminals: DuctDropWrite[];
+      components: DuctDropWrite[];
+      equipment: DuctEquipmentWrite[];
+      networkBasedCalculations?: boolean | null;
+      store: DuctLossStore;
+    }
+    /**
+     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) on terminals as a catalog drop.
+     *
+     */
+    export interface DuctParameterSlots {
+      fanStatic?: string;
+      fanFlow?: string;
+      componentDrop?: string;
+      terminalDrop?: null | string;
+    }
+    export interface DuctFittingWrite {
+      id: number;
+      coefficient: number;
+      table?: null | string;
+      inputs?: null | string;
+      ruleKey?: null | string;
+    }
+    export interface DuctDropWrite {
+      id: number;
+      inWg: number;
+      source?: null | string;
+    }
+    export interface DuctEquipmentWrite {
+      id: number;
+      externalStaticInWg: number;
+    }
+    /**
+     * Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter
+     * `_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request
+     * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
+     *
+     */
+    export interface DuctLossStore {
+      version?: number;
+      rules?: {
+        [k: string]: DuctRuleChoice;
+      };
+      instances?: {
+        [k: string]: DuctInstanceRecord;
+      };
+      terminals?: {
+        [k: string]: DuctDropRecord;
+      };
+      slots?: null | DuctParameterSlots;
+      workRevision?: number;
+      appliedAt?: null | string;
+      [k: string]: unknown;
+    }
+    /**
+     * A rule's chosen ASHRAE table (rule key is family:type plus a geometry condition, owned by the web).
+     */
+    export interface DuctRuleChoice {
+      table?: null | string;
+    }
+    /**
+     * What Pe wrote on one fitting: the table and lookup inputs behind the coefficient.
+     */
+    export interface DuctInstanceRecord {
+      table?: null | string;
+      inputs?: null | string;
+      coefficient: number;
+      appliedAt: string;
+    }
+    /**
+     * What Pe wrote on one terminal or component: the drop and where it came from (catalog, typed).
+     */
+    export interface DuctDropRecord {
+      inWg: number;
+      source?: null | string;
+      appliedAt: string;
+    }
+  }
+  export namespace Res {
+    /**
+     * StoreRevision is the store's WorkRevision after this call (unchanged on preview).
+     */
+    export interface Response {
+      previewOnly: boolean;
+      writes: DuctWrite[];
+      counts: DuctApplyCounts;
+      systemsAfter?: DuctSystem[] | null;
+      storeRevision: number;
+    }
+    /**
+     * One target's outcome. Kind: fitting, terminal, component, equipment, engine, store. Outcome: planned (preview),
+     * written, refused (Reason says why), unchanged (already holds the value). Before and After are display text.
+     *
+     */
+    export interface DuctWrite {
+      id?: number | null;
+      kind: string;
+      outcome: string;
+      reason?: null | string;
+      before?: null | string;
+      after?: null | string;
+    }
+    export interface DuctApplyCounts {
+      planned: number;
+      written: number;
+      refused: number;
+      unchanged: number;
+    }
+    /**
+     * One supply, return or exhaust MechanicalSystem as Revit reports it: the check beside Pe's own solve.
+     * CriticalPath is GetCriticalPathSectionNumbers(); empty when Revit found none.
+     *
+     */
+    export interface DuctSystem {
+      id: number;
+      name: string;
+      classification: string;
+      isWellConnected?: boolean | null;
+      baseEquipmentId?: number | null;
+      baseEquipmentConnector?: number | null;
+      criticalPathLossInWg?: null | number;
+      criticalPath: number[];
+      sections: DuctSection[];
+    }
+    /**
+     * One MEPSection: Revit's run of elements carrying one flow.
+     */
+    export interface DuctSection {
+      number: number;
+      flowCfm?: null | number;
+      totalPressureLossInWg?: null | number;
+      elementIds: number[];
+    }
+  }
+}
+
 /** Read every duct network in the project: ducts, flex, fittings, accessories, terminals and HVAC equipment with their connectors, grouped by topology with equipment cut out, plus pass-1 terminal flow, fitting geometry ratios, fitting and accessory loss methods, terminal drops, Revit's supply/return/exhaust systems with critical path and sections, issues and the query behind each layer. Slots name the fan static, fan flow, component drop and terminal catalog drop parameters. Read-only. */
 export namespace DuctsSnapshot {
   export namespace Req {
@@ -211,6 +360,11 @@ export namespace DuctsSnapshot {
       | "multi-root"
       | "high-velocity";
 
+    /**
+     * Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when
+     * the blob is unreadable or another version (fail-closed: ducts.apply refuses to overwrite it).
+     *
+     */
     export interface Response {
       document: DuctDocument;
       levels: DuctLevel[];
@@ -222,6 +376,8 @@ export namespace DuctsSnapshot {
       layers: DuctLayer[];
       systems: DuctSystem[];
       slots: DuctParameterSlots;
+      store?: null | DuctLossStore;
+      storeError?: null | string;
     }
     /**
      * The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:
@@ -440,6 +596,51 @@ export namespace DuctsSnapshot {
       fanFlow: string;
       componentDrop: string;
       terminalDrop?: null | string;
+    }
+    /**
+     * Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter
+     * `_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request
+     * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
+     *
+     */
+    export interface DuctLossStore {
+      version: number;
+      rules: {
+        [k: string]: DuctRuleChoice;
+      };
+      instances: {
+        [k: string]: DuctInstanceRecord;
+      };
+      terminals: {
+        [k: string]: DuctDropRecord;
+      };
+      slots?: null | DuctParameterSlots;
+      workRevision: number;
+      appliedAt?: null | string;
+      [k: string]: unknown;
+    }
+    /**
+     * A rule's chosen ASHRAE table (rule key is family:type plus a geometry condition, owned by the web).
+     */
+    export interface DuctRuleChoice {
+      table?: null | string;
+    }
+    /**
+     * What Pe wrote on one fitting: the table and lookup inputs behind the coefficient.
+     */
+    export interface DuctInstanceRecord {
+      table?: null | string;
+      inputs?: null | string;
+      coefficient: number;
+      appliedAt: string;
+    }
+    /**
+     * What Pe wrote on one terminal or component: the drop and where it came from (catalog, typed).
+     */
+    export interface DuctDropRecord {
+      inWg: number;
+      source?: null | string;
+      appliedAt: string;
     }
   }
 }
@@ -6344,6 +6545,7 @@ export interface HostOps {
   "data-table.apply": { request: DataTableApply.Req.Request; response: DataTableApply.Res.Response };
   "document.temporary.release": { request: DocumentTemporaryRelease.Req.Request; response: DocumentTemporaryRelease.Res.Response };
   "document.temporary.status": { request: DocumentTemporaryStatus.Req.Request; response: DocumentTemporaryStatus.Res.Response };
+  "ducts.apply": { request: DuctsApply.Req.Request; response: DuctsApply.Res.Response };
   "ducts.snapshot": { request: DuctsSnapshot.Req.Request; response: DuctsSnapshot.Res.Response };
   "ducts.tables": { request: DuctsTables.Req.Request; response: DuctsTables.Res.Response };
   "families.apply": { request: FamiliesApply.Req.Request; response: FamiliesApply.Res.Response };
@@ -6421,6 +6623,7 @@ export const hostOpKeys = [
   "data-table.apply",
   "document.temporary.release",
   "document.temporary.status",
+  "ducts.apply",
   "ducts.snapshot",
   "ducts.tables",
   "families.apply",
