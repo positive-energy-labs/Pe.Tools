@@ -33,7 +33,7 @@ const VIEWS = [
   {
     id: "losses",
     label: "losses",
-    sub: "per grille, what eats the pressure; stage fitting tables and drops, then apply to Revit",
+    sub: "per grille, what eats the pressure; stage fitting tables and drops, then write to Revit",
   },
 ] as const;
 
@@ -147,7 +147,7 @@ export function DuctsRoute({
           : group && group.rootIds.length === 0
             ? "no air mover; priced from the open end"
             : group
-              ? `Pe fan ${fmt(solved?.fan)} in-wg, Revit ${revitSays(snapshot, solved?.revitCritical)}`
+              ? `Pe fan ${fmt(solved?.fan)} in-wg (not in Revit until written), Revit ${revitSays(snapshot, solved?.revitCritical)}`
               : `largest Pe fan ${fmt(priced.now.fan)} in-wg over ${snapshot.groups.length} groups`;
   // Every written segment's cells count in the Work sentence; the losses body is the band.
   const counted = useMemo(

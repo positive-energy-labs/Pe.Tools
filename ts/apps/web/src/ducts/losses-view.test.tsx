@@ -22,7 +22,7 @@ import type { DuctsApply } from "@pe/host-contracts/generated";
 
 import type { Grid, Grids } from "./loss-grid";
 import { computeLosses } from "./losses";
-import { DuctsLosses, StagedLosses } from "./losses-view";
+import { DuctsLosses, foldRefusals, StagedLosses } from "./losses-view";
 import { manifest, type DuctsPage } from "./manifest";
 import { applyRequest, price } from "./pricing";
 import synthetic from "./fixtures/synthetic-snapshot.json";
@@ -366,8 +366,8 @@ it("apply is armed only by a preview of this Work revision and this snapshot", (
   expect(apply.ready(ctx({ evaluation, epoch: 1 }), nothing)).toMatch(/preview again/);
 });
 
-it("the band names a fan static that lands on the unit's type, and how many units it moves", () => {
-  const doc = land(
+it("the band names a staged fan static that lands on the unit's type, folds refusals, and names the engine minute", () => {
+  let doc = land(
     ductsRouteState.schema.parse({}),
     transitionPatches(
       ["rules"],
@@ -376,9 +376,20 @@ it("the band names a fan static that lands on the unit's type, and how many unit
       { kind: "stage", rung: { value: { table: "SD5-10" } } },
     ),
   );
+  doc = land(
+    doc,
+    transitionPatches(
+      ["unitStatics"],
+      "1",
+      {},
+      { kind: "stage", rung: { value: { inWg: 0.0761 } } },
+    ),
+  );
+  const shared = "the type is shared with 2 other units (6564593, 6078870)";
   const response: DuctsApply.Res.Response = {
     previewOnly: true,
     writes: [
+      { id: null, kind: "engine", outcome: "planned" },
       {
         id: 1,
         kind: "equipment",
@@ -386,15 +397,13 @@ it("the band names a fan static that lands on the unit's type, and how many unit
         before: null,
         after: "type 'PE_ESP' 0.0761 in-wg",
       },
-      {
-        id: 31,
-        kind: "terminal",
-        outcome: "refused",
-        reason:
-          "the instance has no writable number parameter 'Catalog Drop' (the TerminalDrop slot)",
-      },
+      { id: 1, kind: "equipment", outcome: "refused", reason: shared },
+      // A unit nobody staged never appears, even when Revit refused it.
+      { id: 77, kind: "equipment", outcome: "refused", reason: shared },
+      { id: 31, kind: "terminal", outcome: "refused", reason: "no writable parameter" },
+      { id: 30, kind: "terminal", outcome: "refused", reason: "no writable parameter" },
     ],
-    counts: { planned: 1, written: 0, refused: 1, unchanged: 0 },
+    counts: { planned: 2, written: 0, refused: 4, unchanged: 0 },
     storeRevision: 0,
   };
   const view = render(
@@ -408,10 +417,68 @@ it("the band names a fan static that lands on the unit's type, and how many unit
       group=""
     />,
   );
-  expect(view.container.querySelector('[data-type-fanout="1"]')?.textContent).toBe(
-    "unit 1: no instance fan static; writes type Air Handler : Standard (1 unit)",
+  const q = (selector: string) => view.container.querySelector(selector);
+  expect(q('[data-type-fanout="1"]')?.textContent).toBe(
+    "unit 1: no instance fan static; writes the type Air Handler : Standard: moves 1 unit",
   );
-  expect(view.container.textContent).toContain(
-    "terminal 31 refused: the instance has no writable number parameter",
+  expect(q("[data-scope]")?.textContent).toBe("every group: 1 fittings in 1 group");
+  expect(q("[data-engine]")?.textContent).toContain("about a minute, once per model");
+  expect(
+    [...view.container.querySelectorAll("[data-refused]")].map((el) => el.textContent),
+  ).toEqual([
+    `equipment 1 refused: ${shared}`,
+    "terminal refused: no writable parameter · ids 31, 30",
+  ]);
+});
+
+it("the band says how many instances this group writes of the whole document", () => {
+  const doc = land(
+    ductsRouteState.schema.parse({}),
+    transitionPatches(
+      ["rules"],
+      "tap-std",
+      {},
+      { kind: "stage", rung: { value: { table: "SD5-10" } } },
+    ),
   );
+  const view = render(
+    <StagedLosses
+      snapshot={twoGroups}
+      grids={grids}
+      priced={price(snapshot, grids, doc)}
+      evaluation={null}
+      fresh={false}
+      work={{ doc, revision: 0, write: async () => null }}
+      group="g20"
+    />,
+  );
+  expect(view.container.querySelector('[data-writes="tap-std"]')?.textContent).toBe(
+    "writes 0 of 1 instances (this group); choose every group to write all",
+  );
+  expect(view.container.querySelector("[data-scope]")).toBeNull();
+});
+
+it("the group head stages Pe's rounded fan static on its unit, and again takes it back", async () => {
+  const view = render(<Harness />);
+  const q = (selector: string) => view.container.querySelector(selector);
+  expect(q('[data-unit="1"]')?.textContent).toContain("Pe proposes0.0822");
+  expect(q("[data-staged-band]")).toBeNull();
+  fireEvent.click(within(q('[data-unit="1"]') as HTMLElement).getByText("stage"));
+  await view.findByText(/unit 1: fan static 0.0822 in-wg/);
+  fireEvent.click(within(q('[data-unit="1"]') as HTMLElement).getByText("staged"));
+  await waitFor(() => expect(q("[data-staged-band]")).toBeNull());
+});
+
+it("folds refusals with an identical reason into one line naming every id", () => {
+  expect(
+    foldRefusals([
+      { id: 1, kind: "equipment", outcome: "refused", reason: "shared" },
+      { id: 2, kind: "equipment", outcome: "refused", reason: "shared" },
+      { id: 3, kind: "terminal", outcome: "refused", reason: "other" },
+      { id: 4, kind: "terminal", outcome: "planned" },
+    ]),
+  ).toEqual([
+    { reason: "shared", kind: "equipment", ids: [1, 2] },
+    { reason: "other", kind: "terminal", ids: [3] },
+  ]);
 });

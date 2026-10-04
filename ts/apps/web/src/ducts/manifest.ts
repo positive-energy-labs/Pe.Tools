@@ -234,13 +234,13 @@ export const manifest = defineRoute<
       },
     },
     apply: {
-      label: "apply",
+      label: "write to Revit",
       labelNow: (ctx) => {
         // Planned writes only: a refused write is not one apply makes.
         const n = ctx.page.evaluation?.response.counts.planned ?? 0;
         return previewFresh(ctx.page, ctx.work.revision) && n
-          ? `apply ${n} write${n === 1 ? "" : "s"}`
-          : "apply";
+          ? `write ${n} to Revit`
+          : "write to Revit";
       },
       does: "ducts.apply-losses",
       input: none,

@@ -29,11 +29,14 @@ import { LOSS_RULES, ruleByKey } from "./loss-rules";
 import type { LossResult, Row } from "./losses";
 import { systemFor } from "./losses";
 import {
+  applyRequest,
   instancesOf,
   partOf,
   PARTS,
+  round4,
   stagedFanout,
   tableOf,
+  unitOf,
   unpriced,
   type Part,
   type Priced,
@@ -100,6 +103,37 @@ export const tablePatches = (
     ? transitionPatches(["rules"], key, cell, { kind: "unstage" })
     : transitionPatches(["rules"], key, cell, { kind: "stage", rung: { value: { table } } });
 };
+
+/** Stage Pe's fan static for a unit; staging the number already staged takes it back. */
+export const fanPatches = (
+  doc: DuctsRouteDocument | null,
+  unit: number,
+  inWg: number,
+): RouteStatePatch[] => {
+  const key = String(unit);
+  const cell = doc?.unitStatics[key] ?? {};
+  return cell.staged?.value.inWg === inWg
+    ? transitionPatches(["unitStatics"], key, cell, { kind: "unstage" })
+    : transitionPatches(["unitStatics"], key, cell, { kind: "stage", rung: { value: { inWg } } });
+};
+
+/** Refusals folded per reason: the shared-type refusal names the same peers for every unit of a type. */
+export function foldRefusals(writes: readonly DuctsApply.Res.DuctWrite[]) {
+  const by = new Map<string, { reason: string; kinds: Set<string>; ids: number[] }>();
+  for (const w of writes) {
+    if (w.outcome !== "refused") continue;
+    const reason = w.reason ?? "no reason";
+    const fold =
+      by.get(reason) ?? by.set(reason, { reason, kinds: new Set(), ids: [] }).get(reason)!;
+    fold.kinds.add(w.kind);
+    if (w.id != null) fold.ids.push(w.id);
+  }
+  return [...by.values()].map(({ reason, kinds, ids }) => ({
+    reason,
+    kind: [...kinds].join("/"),
+    ids,
+  }));
+}
 
 function DropCell({
   segment,
@@ -442,15 +476,21 @@ function GroupHead({
   snapshot,
   group,
   priced,
+  work,
 }: {
   snapshot: DuctSnapshot;
   group: Group;
   priced: Priced;
+  work: LossesWork;
 }) {
   const now = priced.now.byGroup[group.id];
   const next = priced.next.byGroup[group.id];
   const critical = now?.critical ?? null;
   const revit = critical == null ? null : systemFor(snapshot, critical);
+  // The air mover Pe's number would be written to; nothing reaches it until a person stages it.
+  const unit = unitOf(snapshot, priced.now, group);
+  const proposed = next && next.critical != null ? round4(next.fan) : null;
+  const stagedStatic = unit == null ? undefined : priced.staged.unitStatics[String(unit)]?.inWg;
   return (
     <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 py-1" data-group-head={group.id}>
       <span className="t-title">
@@ -479,7 +519,36 @@ function GroupHead({
         <span className="t-small" data-tone="caution">
           {NO_ROOT}
         </span>
-      ) : null}
+      ) : unit == null ? (
+        <span className="t-small text-ink-2">no air mover</span>
+      ) : (
+        <span className="inline-flex items-baseline gap-1 t-small" data-unit={unit}>
+          <span className="text-ink-2">unit</span>
+          <span className="face-mono">{unit}</span>
+          <span className="text-ink-2">Pe proposes</span>
+          <b className="face-mono">{proposed == null ? "—" : proposed}</b>
+          {stagedStatic !== undefined && stagedStatic !== proposed ? (
+            <span data-tone="caution" data-unit-staged={unit}>
+              staged {stagedStatic}
+            </span>
+          ) : null}
+          {proposed == null ? null : (
+            <Press
+              size="caption"
+              tone="quiet"
+              data-tone={stagedStatic === proposed ? "caution" : undefined}
+              onClick={() => void work.write(fanPatches(work.doc, unit, proposed))}
+              title={
+                stagedStatic === proposed
+                  ? "Take the staged fan static back"
+                  : `Stage ${proposed} in-wg as unit ${unit}'s external static; it is not in Revit until written`
+              }
+            >
+              {stagedStatic === proposed ? "staged" : "stage"}
+            </Press>
+          )}
+        </span>
+      )}
     </div>
   );
 }
@@ -597,7 +666,12 @@ function Bars({
 const GroupSection = memo(function GroupSection(props: ComponentProps<typeof Bars>) {
   return (
     <section>
-      <GroupHead snapshot={props.snapshot} group={props.group} priced={props.priced} />
+      <GroupHead
+        snapshot={props.snapshot}
+        group={props.group}
+        priced={props.priced}
+        work={props.work}
+      />
       <Bars {...props} />
     </section>
   );
@@ -768,22 +842,38 @@ export function StagedLosses({
   const keys = Object.keys(priced.staged.rules).sort();
   const terminals = Object.keys(priced.staged.terminalDrops).length;
   const components = Object.keys(priced.staged.componentDrops).length;
+  const units = Object.keys(priced.staged.unitStatics).sort();
   const slots = Object.entries(priced.staged.parameters);
-  if (!keys.length && !terminals && !components && !slots.length) return null;
+  if (!keys.length && !terminals && !components && !units.length && !slots.length) return null;
+  // What a write sends: the group in the sentence, or the whole document; the rules' tables are
+  // document-wide either way.
+  const all = applyRequest(snapshot, priced, "", "");
+  const sent = group ? applyRequest(snapshot, priced, "", group) : all;
+  const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
+  const groupsHit = new Set(all.fittings.map((f) => nodes.get(f.id)?.groupId)).size;
+  const count = (request: typeof all, key: string) =>
+    request.fittings.filter((f) => f.ruleKey === key).length;
   const fanOf = (result: LossResult) => (group ? result.byGroup[group]?.fan : result.fan);
   const discard = () => {
     const doc = work.doc;
     if (!doc) return;
     void work.write(
-      (["rules", "terminalDrops", "componentDrops", "parameters"] as const).flatMap((segment) =>
-        Object.entries(doc[segment] ?? {}).flatMap(([key, cell]) =>
-          cell?.staged ? transitionPatches([segment], key, cell, { kind: "unstage" }) : [],
-        ),
+      (["rules", "terminalDrops", "componentDrops", "unitStatics", "parameters"] as const).flatMap(
+        (segment) =>
+          Object.entries(doc[segment] ?? {}).flatMap(([key, cell]) =>
+            cell?.staged ? transitionPatches([segment], key, cell, { kind: "unstage" }) : [],
+          ),
       ),
     );
   };
   return (
     <div className="flex flex-col gap-0.5 t-small" data-staged-band="">
+      {!group && all.fittings.length ? (
+        <div className="text-ink-2" data-scope="every">
+          every group: {all.fittings.length} fittings in {groupsHit} group
+          {groupsHit === 1 ? "" : "s"}
+        </div>
+      ) : null}
       {keys.map((key) => {
         const rule = ruleByKey(key) ?? LOSS_RULES[0]!;
         const f = stagedFanout(snapshot, grids, priced, key);
@@ -806,6 +896,12 @@ export function StagedLosses({
             ) : (
               <span data-tone="caution">not a table this rule takes</span>
             )}
+            {group ? (
+              <span className="text-ink-2" data-writes={key}>
+                writes {count(sent, key)} of {count(all, key)} instances (this group); choose every
+                group to write all
+              </span>
+            ) : null}
             {missing ? <span data-tone="caution">{missing} unpriced, left out</span> : null}
           </div>
         );
@@ -818,43 +914,56 @@ export function StagedLosses({
           <ValueDiff from={fmt(fanOf(priced.now))} to={fmt(fanOf(priced.next))} /> in-wg
         </div>
       ) : null}
-      {(evaluation?.response.writes ?? [])
-        .filter(
+      {units.map((id) => {
+        const unit = snapshot.nodes.find((n) => n.id === Number(id));
+        const planned = (evaluation?.response.writes ?? []).find(
           (w) =>
             w.kind === "equipment" &&
             w.outcome === "planned" &&
-            w.id != null &&
+            w.id === Number(id) &&
             w.after?.startsWith("type "),
-        )
-        .map((w) => {
-          const unit = snapshot.nodes.find((n) => n.id === w.id);
-          const shared = snapshot.nodes.filter(
-            (n) => n.kind === "equipment" && n.family === unit?.family && n.type === unit?.type,
-          ).length;
-          return (
-            <div key={w.id} data-tone="caution" data-type-fanout={w.id}>
-              unit {w.id}: no instance fan static; writes type {unit?.family ?? "?"} :{" "}
-              {unit?.type ?? "?"} ({shared} unit{shared === 1 ? "" : "s"})
+        );
+        const shared = snapshot.nodes.filter(
+          (n) => n.kind === "equipment" && n.family === unit?.family && n.type === unit?.type,
+        ).length;
+        const inScope = !group || sent.equipment.some((e) => e.id === Number(id));
+        return (
+          <Fragment key={id}>
+            <div data-staged-unit={id}>
+              unit {id}: fan static {priced.staged.unitStatics[id]!.inWg} in-wg
+              {inScope ? "" : " · not this group's unit, left out"}
             </div>
-          );
-        })}
+            {planned && inScope ? (
+              <div data-tone="caution" data-type-fanout={id}>
+                unit {id}: no instance fan static; writes the type {unit?.family ?? "?"} :{" "}
+                {unit?.type ?? "?"}: moves {shared} unit{shared === 1 ? "" : "s"}
+              </div>
+            ) : null}
+          </Fragment>
+        );
+      })}
       {slots.length ? (
         <div className="face-mono">
           {slots.map(([slot, name]) => `${slot} = ${name}`).join(" · ")}
         </div>
       ) : null}
-      {/* Every refusal, each on its line: a count with a hidden tail is a refusal the page hides. */}
-      {(evaluation?.response.writes ?? [])
-        .filter((w) => w.outcome === "refused")
-        .map((w, n) => (
-          <div
-            key={`${w.kind}:${w.id ?? n}`}
-            data-tone="caution"
-            data-refused={`${w.kind}:${w.id ?? ""}`}
-          >
-            {w.kind} {w.id ?? ""} refused: {w.reason ?? "no reason"}
-          </div>
-        ))}
+      {/* One line per distinct reason, naming every id it covers; never a count with a hidden tail. */}
+      {foldRefusals(
+        (evaluation?.response.writes ?? []).filter(
+          (w) => w.kind !== "equipment" || String(w.id) in priced.staged.unitStatics,
+        ),
+      ).map(({ reason, kind, ids }) => (
+        <div key={`${kind}:${reason}`} data-tone="caution" data-refused={`${kind}:${ids[0] ?? ""}`}>
+          {ids.length === 1
+            ? `${kind} ${ids[0]} refused: ${reason}`
+            : `${kind} refused: ${reason}${ids.length ? ` · ids ${ids.join(", ")}` : ""}`}
+        </div>
+      ))}
+      {fresh && evaluation?.response.writes.some((w) => w.kind === "engine") ? (
+        <div data-tone="caution" data-engine="">
+          turns Revit's engine on first: about a minute, once per model
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-baseline gap-x-3">
         {evaluation ? (
           <span
@@ -875,7 +984,7 @@ export function StagedLosses({
           size="caption"
           tone="quiet"
           onClick={discard}
-          title="Unstage every staged rule, drop and slot"
+          title="Unstage every staged rule, drop, fan static and slot"
         >
           discard
         </Press>
