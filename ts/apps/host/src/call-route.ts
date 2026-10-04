@@ -45,6 +45,13 @@ import {
 } from "../../../packages/mcps/src/shared/takeoff-ops.ts";
 import type { OpResponseOf } from "@pe/host-contracts/operation-types";
 import { ActionJournal } from "./action-journal.ts";
+import { VIEW_IMAGE_KEY } from "@pe/agent-contracts";
+import {
+  captureOrigin,
+  hostCaptures,
+  registerViewImage,
+  type CaptureStore,
+} from "./captures-route.ts";
 import { boundedPayload, capture } from "@pe/runtime";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
 import {
@@ -119,7 +126,11 @@ const ACTOR_HEADER = "x-pe-action-actor";
 export function makeCallRoute(
   operations?: ActionJournal,
   captures?: TakeoffCaptures,
-  actionDeps: FamilyActionDependencies & { launchShell?: (path: string) => Promise<void> } = {},
+  actionDeps: FamilyActionDependencies & {
+    launchShell?: (path: string) => Promise<void>;
+    /** Where `revit.context.view-image` answers are kept; the product store by default. */
+    captureStore?: CaptureStore;
+  } = {},
   composition?: {
     readonly forwardBase: string | null;
     readonly dispatch: CallRouteDispatch;
@@ -359,12 +370,25 @@ export function makeCallRoute(
                 error instanceof BridgeError ? error : new BridgeError(String(error), 409),
             })
           : yield* bridge.invoke(key, request ?? {}, bridgeSessionId, openDocumentId);
+      const kept =
+        key === VIEW_IMAGE_KEY
+          ? yield* registerViewImage(
+              actionDeps.captureStore ?? hostCaptures(),
+              result.value,
+              request,
+              captureOrigin(origin, req.headers[ACTOR_HEADER]),
+              bridge,
+              { session: bridgeSessionId, openId: openDocumentId },
+            )
+          : null;
       captureOperation(op, { ok: true });
       // Every /call response names the target it actually ran against, so a tool card can show
       // what was touched rather than the selector that was typed. Headers, not a payload wrapper.
       // A TS-only op touched no Revit, so it stamps nothing rather than the latest session.
       const headers = result.target ? resolvedTargetHeaders(result.target) : {};
       if (captureId) headers["x-pe-takeoff-capture-id"] = captureId;
+      if (kept)
+        Object.assign(headers, { "x-pe-capture-id": kept.id, "x-pe-capture-url": kept.url });
       return Response.jsonUnsafe(result.value ?? null, { headers });
     }).pipe(
       Effect.catch((error) => {

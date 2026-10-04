@@ -24,9 +24,9 @@ import {
 } from "./host-lifecycle.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { staticSpaLayer } from "./static-spa.ts";
-import { viewImageRoute } from "./view-image-route.ts";
 import { peRoutesLayer } from "./pe-routes.ts";
 import { readInferenceEndpoint, saveInferenceEndpoint } from "./inference-endpoint.ts";
+import { capturesRoute } from "./captures-route.ts";
 
 export { resolveWebRoot } from "./static-spa.ts";
 
@@ -196,7 +196,6 @@ function makeRevitComposition(spa: SpaFallback = () => emptyNotFound) {
       sessionsRoute,
       docsRoute,
       callRoute,
-      viewImageRoute(),
       ServedSessionLive,
     ),
   };
@@ -258,6 +257,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
       ? () => Effect.sync(() => Response.html(readFileSync(join(webRoot, "index.html"), "utf8")))
       : () => emptyNotFound;
   const CommonAppLive = Layer.mergeAll(
+    capturesRoute(spa),
     adminShutdownRoute,
     inferenceEndpointRoutes,
     peRoutesLayer(options.routeRegistrations),

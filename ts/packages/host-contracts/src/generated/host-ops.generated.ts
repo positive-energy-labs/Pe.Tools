@@ -2964,7 +2964,7 @@ export namespace RevitContextViewImage {
       registration?: null | RevitViewImageRegistration;
       registrationRefusal?: null | RevitViewImageRegistrationRefusal;
       /**
-       * Host route for exactly the registered PNG, keyed by ImageSha256;
+       * Host captures route for exactly the registered PNG (the host keeps every taking), keyed by ImageSha256;
        * null exactly when Registration is. FilePath stays the host-side record.
        *
        */

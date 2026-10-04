@@ -3,17 +3,17 @@ import type { ProxyOptions } from "vite-plus";
 /** Product APIs only. TanStack owns documents and server-function routes. */
 export function devHostProxy(target: string): Record<string, ProxyOptions> {
   return {
-    "^/(?:call|events|ops|schemas|host|sessions|doctor|docs|pe|demo|view-image)(?:/|\\?|$)|^/api/bridge(?:/|\\?|$)|^/actions(?:/(?:recover|resume|cancel))?(?:\\?|$)|^/(?:family/readings|families/readings|schedules/readings)(?:\\?|$)":
+    "^/(?:call|events|ops|schemas|host|sessions|doctor|docs|pe|demo|captures)(?:/|\\?|$)|^/api/bridge(?:/|\\?|$)|^/actions(?:/(?:recover|resume|cancel))?(?:\\?|$)|^/(?:family/readings|families/readings|schedules/readings)(?:\\?|$)":
       {
         target,
         changeOrigin: true,
         ws: true,
-        // /ops is both a document and a JSON API. Sending document navigation to
-        // the backend would redirect back here forever.
+        // /ops and /captures are both a document and a JSON API. Sending document navigation
+        // to the backend would redirect back here forever.
         bypass(req) {
           if (
             req.method === "GET" &&
-            /^\/ops(?:\?|$)/.test(req.url ?? "") &&
+            /^\/(?:ops|captures)(?:\?|$)/.test(req.url ?? "") &&
             req.headers.accept?.includes("text/html")
           )
             return req.url;

@@ -371,10 +371,10 @@ public record RevitViewImageData(
     RevitViewImageRegistrationRefusal? RegistrationRefusal = null
 ) {
     /// <summary>
-    ///     Host route for exactly the registered PNG, keyed by <see cref="RevitViewImageRegistration.ImageSha256" />;
+    ///     Host captures route for exactly the registered PNG (the host keeps every taking), keyed by <see cref="RevitViewImageRegistration.ImageSha256" />;
     ///     null exactly when <see cref="Registration" /> is. <see cref="FilePath" /> stays the host-side record.
     /// </summary>
-    public string? ImageUrl => this.Registration is null ? null : $"/view-image/{this.Registration.ImageSha256}.png";
+    public string? ImageUrl => this.Registration is null ? null : $"/captures/{this.Registration.ImageSha256}.png";
 }
 
 /// <summary>Where a set of model points sits against a view's model crop. Outside means it can never draw under that view's image.</summary>
