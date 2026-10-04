@@ -1,19 +1,25 @@
 /**
  * /ducts — the Situation over one document's duct networks. The sentence names the document, the
  * subject group, the level and the layers; the body is the view `page.view` names (the tables by
- * default). The snapshot is one `ducts.snapshot` read keyed on the target and `page.epoch`;
- * targeting a document or choosing a group reads it again with no press.
+ * default). The snapshot is one `ducts.snapshot` read keyed on the target, the staged parameter
+ * slots and `page.epoch`; targeting a document or choosing a group reads it again with no press.
+ * The losses view is the `losses` stage: it also reads `ducts.tables`, and both reads are
+ * provided to the verbs so `preview` and `apply` build their request from what is drawn.
  */
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { stagedDucts, type TrichotomyCellLike } from "@pe/agent-contracts";
+import type { Reading } from "@pe/agent-contracts";
 
 import { Surface } from "#/components/lang/surface";
-import { SAVED, useDuctSnapshot } from "./host";
+import { SAVED, useDuctSnapshot, useDuctTables } from "./host";
 import { RouteShell, useRoute, useRouteThread } from "#/route";
 import { Ladder } from "#/route/ladder";
 import { useChooseTarget } from "#/route/shell";
 import { Situation } from "#/route/situation";
 import { useDocumentLadder } from "#/route/situation-ladder";
-import { manifest, type DuctsPage } from "./manifest";
+import { manifest, previewFresh, WRITTEN, type DuctsPage } from "./manifest";
+import { DuctsLosses, StagedLosses } from "./losses-view";
+import { price } from "./pricing";
 import { readiness, type DuctSnapshot } from "./readiness";
 import { DuctsLedger } from "./ledger";
 import { DuctsTables } from "./tables";
@@ -24,7 +30,14 @@ const VIEWS = [
   { id: "", label: "tables", sub: "groups, segments, issues and layers" },
   { id: "tree", label: "tree", sub: "one-line schematic from the root to each terminal" },
   { id: "ledger", label: "ledger", sub: "the Manual D worksheet: runs, issues and assumptions" },
+  {
+    id: "losses",
+    label: "losses",
+    sub: "per grille, what eats the pressure; stage fitting tables and drops, then apply to Revit",
+  },
 ] as const;
+
+const fmt = (n: number | null | undefined) => (n == null ? "—" : n.toFixed(4));
 
 /** The URL half of the page; the rest (epoch, stage) is ephemeral. */
 export type DuctsSearch = Pick<DuctsPage, "view" | "group" | "level" | "selected"> & {
@@ -47,10 +60,20 @@ export function DuctsRoute({
 }) {
   const [chosen] = useChooseTarget();
   const thread = useRouteThread();
+  // The snapshot and tables are read below, once the target resolves; the verbs see them here.
+  const [provided, setProvided] = useState<Record<"ducts" | "tables", Reading<unknown>>>({
+    ducts: { state: "absent" },
+    tables: { state: "absent" },
+  });
   const handle = useRoute(manifest, {
     target: chosen,
     thread,
-    page: { ...search, layers: search.layers ? search.layers.split(",") : [] },
+    provided,
+    page: {
+      ...search,
+      stage: search.view === "losses" ? "losses" : "survey",
+      layers: search.layers ? search.layers.split(",") : [],
+    },
   });
   const [page, setPage] = handle.page;
   const ladder = useDocumentLadder(handle);
@@ -58,7 +81,24 @@ export function DuctsRoute({
     handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
       ? handle.resolution.target.ref
       : null;
-  const { snapshot, error, pending } = useDuctSnapshot(doc, page.epoch, page.group);
+  const staged = useMemo(() => stagedDucts(handle.work.doc), [handle.work.doc]);
+  const { snapshot, error, pending } = useDuctSnapshot(
+    doc,
+    page.epoch,
+    page.group,
+    staged.parameters,
+  );
+  const tables = useDuctTables(page.view === "losses" ? (doc?.session ?? null) : null);
+  useEffect(() => {
+    setProvided({
+      ducts: snapshot ? { state: "ready", observation: snapshot } : { state: "absent" },
+      tables: tables.grids ? { state: "ready", observation: tables.grids } : { state: "absent" },
+    });
+  }, [snapshot, tables.grids]);
+  const priced = useMemo(
+    () => (snapshot && tables.grids ? price(snapshot, tables.grids, handle.work.doc) : null),
+    [snapshot, tables.grids, handle.work.doc],
+  );
 
   // The URL carries the view, subject, level, layers and selection, so a link lands on the same place.
   useEffect(() => {
@@ -96,6 +136,30 @@ export function DuctsRoute({
           ? "reading ducts…"
           : "this document has no duct networks";
   const busy = handle.busy !== null;
+  const solved = group ? priced?.now.byGroup[group.id] : null;
+  const lossesWord = !snapshot
+    ? "reading ducts"
+    : tables.error
+      ? `ducts.tables failed: ${tables.error}`
+      : !priced
+        ? "reading the ASHRAE tables"
+        : group && group.rootIds.length === 0
+          ? "no air mover; Pe computes from the open end; place one in Revit"
+          : group
+            ? `fan ${fmt(solved?.fan)} in-wg by Pe, ${solved?.revitCritical == null ? "no critical path from Revit" : `${fmt(solved.revitCritical)} by Revit`}`
+            : `largest fan ${fmt(priced.now.fan)} in-wg by Pe over ${snapshot.groups.length} groups`;
+  // Every written segment's cells count in the Work sentence; the losses body is the band.
+  const counted = useMemo(
+    () =>
+      Object.fromEntries(
+        WRITTEN.flatMap((segment) =>
+          Object.entries(handle.work.doc?.[segment] ?? {}).map(
+            ([key, cell]) => [`${segment}:${key}`, cell as TrichotomyCellLike] as const,
+          ),
+        ),
+      ),
+    [handle.work.doc],
+  );
 
   const sentence = (
     <>
@@ -153,16 +217,34 @@ export function DuctsRoute({
               sub: item.sub,
             })),
             picked: (id) => id === (page.view || "tables"),
-            pick: (id) => setPage({ view: id === "tables" ? "" : id }),
+            pick: (id) =>
+              setPage({
+                view: id === "tables" ? "" : id,
+                stage: id === "losses" ? "losses" : "survey",
+              }),
           },
         ]}
         disabled={busy}
       />
-      {", drawing "}
-      {layerWord(page.layers, snapshot) ?? "no layers"}.
+      {page.view === "losses" ? (
+        <>
+          {"; "}
+          {lossesWord}.
+        </>
+      ) : (
+        <>
+          {", drawing "}
+          {layerWord(page.layers, snapshot) ?? "no layers"}.
+        </>
+      )}
     </>
   );
 
+  const work = {
+    doc: handle.work.doc,
+    revision: handle.work.revision,
+    write: handle.work.write,
+  };
   const empty =
     !doc && !SAVED
       ? { says: "no document bound", exit: "choose a document in the sentence" }
@@ -181,6 +263,26 @@ export function DuctsRoute({
           situation={
             <Situation
               handle={handle}
+              commit={page.stage === "losses" ? "apply" : undefined}
+              work={{
+                counted,
+                draw: (_summary, line) => (
+                  <>
+                    {page.view === "losses" && snapshot && tables.grids && priced ? (
+                      <StagedLosses
+                        snapshot={snapshot}
+                        grids={tables.grids}
+                        priced={priced}
+                        evaluation={page.evaluation}
+                        fresh={previewFresh(page, handle.work.revision)}
+                        work={work}
+                        group={page.group}
+                      />
+                    ) : null}
+                    {line}
+                  </>
+                ),
+              }}
               target={{
                 session: ladder.sessionWord,
                 document: SAVED ? "saved snapshot" : ladder.docWord,
@@ -204,7 +306,18 @@ export function DuctsRoute({
         />
       }
     >
-      {page.view === "tree" ? (
+      {page.view === "losses" ? (
+        <DuctsLosses
+          snapshot={snapshot}
+          grids={tables.grids}
+          priced={priced}
+          ready={ready}
+          page={page}
+          setPage={setPage}
+          empty={empty}
+          work={work}
+        />
+      ) : page.view === "tree" ? (
         <DuctsTree snapshot={snapshot} page={page} setPage={setPage} empty={empty} />
       ) : page.view === "ledger" ? (
         <DuctsLedger

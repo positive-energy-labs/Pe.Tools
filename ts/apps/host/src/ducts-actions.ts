@@ -14,7 +14,11 @@ import {
 import { z } from "zod";
 import { BridgeError, type RevitBridge } from "./bridge.ts";
 import { type ActionJournal } from "./action-journal.ts";
-import { readNativeReceipt, readOriginalProcess, type SdkReceiptReader } from "./native-receipts.ts";
+import {
+  readNativeReceipt,
+  readOriginalProcess,
+  type SdkReceiptReader,
+} from "./native-receipts.ts";
 
 const preparedDuctsSchema = z.strictObject({ process: nativeProcessSchema });
 const refused = (message: string) => new BridgeError(message, 409, { notDispatched: true });

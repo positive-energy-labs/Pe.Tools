@@ -27,23 +27,34 @@ const metrics = {
 
 const input: DuctsApplyInput = {
   slots: { fanStatic: "PE_ESP" },
-  fittings: [{ id: 22, coefficient: 1.38, table: "SD5-10", inputs: "Qb/Qc=0.25", ruleKey: "tap-std" }],
+  fittings: [
+    { id: 22, coefficient: 1.38, table: "SD5-10", inputs: "Qb/Qc=0.25", ruleKey: "tap-std" },
+  ],
   terminals: [{ id: 31, inWg: 0.08, source: "catalog" }],
   components: [],
   equipment: [{ id: 1, externalStaticInWg: 0.1102 }],
   networkBasedCalculations: true,
   store: {
     version: 1,
-    rules: { "tap-std": "SD5-10" },
-    instances: { "22": { ruleKey: "tap-std", table: "SD5-10", coefficient: 1.38 } },
-    terminals: { "31": { inWg: 0.08, source: "catalog" } },
+    rules: { "tap-std": { table: "SD5-10" } },
+    instances: {
+      "22": {
+        table: "SD5-10",
+        inputs: "Qb/Qc=0.25",
+        coefficient: 1.38,
+        appliedAt: "2026-10-04T00:00:00.000Z",
+      },
+    },
+    terminals: {
+      "31": { inWg: 0.08, source: "catalog", appliedAt: "2026-10-04T00:00:00.000Z" },
+    },
     slots: { fanStatic: "PE_ESP" },
     workRevision: 4,
     appliedAt: "2026-10-04T00:00:00.000Z",
   },
 };
 
-const lane = <A,>(body: (h: Harness) => Effect.Effect<A, unknown, never>) =>
+const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>) =>
   Effect.gen(function* () {
     const dir = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "pe-ducts-")));
     const { bridge, incoming, outgoing, target } = yield* connectTestBridge();
@@ -70,7 +81,13 @@ const lane = <A,>(body: (h: Harness) => Effect.Effect<A, unknown, never>) =>
         incoming,
         JSON.stringify({
           kind: "Response",
-          response: { requestId, metrics, ok: true, statusCode: 200, payloadJson: JSON.stringify(value) },
+          response: {
+            requestId,
+            metrics,
+            ok: true,
+            statusCode: 200,
+            payloadJson: JSON.stringify(value),
+          },
         }),
       );
     const intent = (id: string, key: "ducts.preview" | "ducts.apply", openId = target.openId) => ({
@@ -106,10 +123,10 @@ type Harness = {
 
 const writes = (outcome: string) => ({
   previewOnly: outcome === "planned",
-  writes: [{ id: 22, kind: "fitting", outcome, reason: null, before: null, after: 1.38 }],
-  counts: { [outcome]: 1 },
+  writes: [{ id: 22, kind: "fitting", outcome, reason: null, before: null, after: "1.38" }],
+  counts: { planned: 0, written: 0, refused: 0, unchanged: 0, [outcome]: 1 },
   systemsAfter: [],
-  storeRevision: outcome === "planned" ? null : 1,
+  storeRevision: outcome === "planned" ? 0 : 4,
 });
 
 test("preview and apply send the web's request to ducts.apply, differing only in previewOnly", () =>

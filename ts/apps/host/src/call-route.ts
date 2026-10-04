@@ -148,14 +148,15 @@ export function makeCallRoute(
             : input.kind === "workflow" && Object.hasOwn(ductsActions, input.key)
               ? admitDuctsAction(input, owner(), bridge, actionDeps, resume)
               : admitGatewayAction(
-                input,
-                owner(),
-                bridge,
-                composition?.local ??
-                  ((key, input) => executeGatewayLocal(key, input, bridge, actionDeps.launchShell)),
-                actionDeps.sdk,
-                resume,
-              );
+                  input,
+                  owner(),
+                  bridge,
+                  composition?.local ??
+                    ((key, input) =>
+                      executeGatewayLocal(key, input, bridge, actionDeps.launchShell)),
+                  actionDeps.sdk,
+                  resume,
+                );
   };
   const post = HttpRouter.add("POST", "/call", (req) => {
     let captureId: string | undefined;

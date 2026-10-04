@@ -1,0 +1,783 @@
+/**
+ * The losses view (`page.view = "losses"`): the grille is the unit (pressure-drop ledger, F). Per
+ * group, one bar per terminal segmented by what eats the pressure; the longest is the fan. Pe's
+ * fan sits beside Revit's critical path in the group head. Opening a terminal draws its drawer:
+ * the rules on its path with their table chips, its terminal drop and the components on it.
+ * A chip or a number STAGES a Work cell; nothing reaches Revit until preview and apply. The bars
+ * show what Revit holds now and ghost to the staged state, as the staged band does (variant J).
+ */
+import { Fragment, useMemo, useState } from "react";
+import {
+  transitionPatches,
+  type DuctDrop,
+  type DuctsRouteDocument,
+  type RouteStatePatch,
+} from "@pe/agent-contracts";
+
+import { reviewTransitions, type CellWire } from "#/components/lang/band";
+import { cellFromTrichotomy, StateCell } from "#/components/lang/cell";
+import { EmptyState } from "#/components/lang/empty";
+import { Press } from "#/components/lang/press";
+import { Row as ListRow } from "#/components/lang/row";
+import { Switcher } from "#/components/lang/switcher";
+import type { Column } from "#/components/master-table/model";
+import { Table } from "#/components/master-table/table";
+import type { DuctsEvaluation, DuctsPage } from "./manifest";
+import { LOSS_RULES, ruleByKey } from "./loss-rules";
+import type { LossResult, Row } from "./losses";
+import { systemFor } from "./losses";
+import {
+  instancesOf,
+  partOf,
+  PARTS,
+  stagedFanout,
+  tableOf,
+  unpriced,
+  type Part,
+  type Priced,
+} from "./pricing";
+import type { Grids } from "./loss-grid";
+import type { DuctSnapshot, GroupReadiness } from "./readiness";
+
+type Node = DuctSnapshot["nodes"][number];
+type Group = DuctSnapshot["groups"][number];
+export interface LossesWork {
+  doc: DuctsRouteDocument | null;
+  revision: number | null;
+  write: CellWire["write"];
+}
+
+/** One viz hue per part, as a class: the bar and the chip wear the same one. */
+const PART_BG: Record<Part, string> = {
+  friction: "bg-(--viz-6)",
+  elbow: "bg-(--viz-1)",
+  tap: "bg-(--viz-2)",
+  transition: "bg-(--viz-3)",
+  damper: "bg-(--viz-4)",
+  terminal: "bg-(--viz-5)",
+};
+const fmt = (n: number | null | undefined) => (n == null ? "" : n.toFixed(4));
+const pct = (a: number, b: number) => (b > 0 ? `${Math.round((a / b) * 100)}%` : "");
+const NO_ROOT = "no air mover; Pe computes from the open end; place one in Revit";
+
+/** Why a terminal's number is not yet Revit's too. Glyph, word, and what it means. */
+const STATUS = {
+  "no-mover": ["⊘", "no mover", NO_ROOT],
+  "open-end": ["◌", "open end", "an open end on this network is not answered (capped or ignored)"],
+  "flag-off": [
+    "⚑",
+    "flag off",
+    "network-based calculations are off; Revit reports no critical path",
+  ],
+  refuses: [
+    "✕",
+    "family refuses",
+    "the terminal's connector is not Specific Loss; Revit refuses a drop",
+  ],
+  "no-drop": ["∅", "no drop", "no terminal drop is known; stage one from the catalog"],
+} as const;
+type Status = keyof typeof STATUS;
+
+export function terminalStatus(
+  snapshot: DuctSnapshot,
+  group: Group,
+  ready: GroupReadiness | undefined,
+  node: Node,
+  priced: Priced,
+): Status[] {
+  const issues = new Map(snapshot.issues.map((issue) => [issue.id, issue]));
+  const out: Status[] = [];
+  if (group.rootIds.length === 0) out.push("no-mover");
+  if (ready?.walk.some((id) => issues.get(id)?.kind === "open-end")) out.push("open-end");
+  if (!snapshot.document.networkBasedCalculations) out.push("flag-off");
+  if (node.terminalDrop && !node.terminalDrop.writable) out.push("refuses");
+  const terminal = priced.next.paths[node.id]?.rows.find((row) => row.kind === "terminal");
+  if (terminal?.error) out.push("no-drop");
+  return out;
+}
+
+/** Stage a rule's table; staging the table already staged takes it back. */
+export const tablePatches = (
+  doc: DuctsRouteDocument | null,
+  key: string,
+  table: string,
+): RouteStatePatch[] => {
+  const cell = doc?.rules[key] ?? {};
+  return cell.staged?.value.table === table
+    ? transitionPatches(["rules"], key, cell, { kind: "unstage" })
+    : transitionPatches(["rules"], key, cell, { kind: "stage", rung: { value: { table } } });
+};
+
+function DropCell({
+  segment,
+  id,
+  held,
+  work,
+  label,
+}: {
+  segment: "terminalDrops" | "componentDrops";
+  id: number;
+  held: number | null | undefined;
+  work: LossesWork;
+  label: string;
+}) {
+  const key = String(id);
+  const cell = work.doc?.[segment][key] ?? {};
+  const authored = (cell.staged ?? cell.proposal)?.value as DuctDrop | undefined;
+  const wire: CellWire = { segment, revision: work.revision, write: work.write };
+  return (
+    <span className="inline-flex items-baseline gap-1" aria-label={label}>
+      <StateCell
+        {...cellFromTrichotomy(cell, {
+          value: authored ? String(authored.inWg) : held == null ? "" : String(held),
+          cap: "editable",
+          note: authored && held != null ? `Revit holds ${held}` : undefined,
+        })}
+        scale="row"
+        numeric={{ min: 0, digits: 4 }}
+        placeholder="—"
+        onCommit={(text: string) =>
+          work
+            .write(
+              transitionPatches([segment], key, cell, {
+                kind: "stage",
+                rung: {
+                  value: {
+                    inWg: Number(text),
+                    ...(authored?.source ? { source: authored.source } : {}),
+                  },
+                },
+              }),
+            )
+            .then((refusal) => refusal?.message)
+        }
+        transitions={reviewTransitions(wire, key, cell)}
+      />
+      <span className="t-small text-ink-2">in-wg</span>
+    </span>
+  );
+}
+
+function Chips({ ruleKey, priced, work }: { ruleKey: string; priced: Priced; work: LossesWork }) {
+  const rule = ruleByKey(ruleKey)!;
+  const staged = priced.staged.rules[ruleKey]?.table.toUpperCase();
+  if (rule.options.length === 1) return <span className="face-mono">{rule.options[0]}</span>;
+  // The fill is the table every instance is looked up under now; a staged one also wears caution.
+  // Picking the staged table again takes it back (`tablePatches`).
+  return (
+    <Switcher
+      ariaLabel={`${rule.family} : ${rule.type} table`}
+      value={tableOf(priced, ruleKey)}
+      onChange={(table) => void work.write(tablePatches(work.doc, ruleKey, table))}
+      options={rule.options.map((table) => ({
+        value: table,
+        label:
+          staged === table ? (
+            <span data-tone="caution" data-staged-table={table}>
+              {table}
+            </span>
+          ) : (
+            table
+          ),
+        title:
+          staged === table
+            ? `${table} is staged for every ${rule.family} : ${rule.type}; pick it again to take it back`
+            : `Stage ${table} for every ${rule.family} : ${rule.type}${rule.cond ? ` (${rule.cond})` : ""}`,
+      }))}
+    />
+  );
+}
+
+/** One drawer row: a rule on this path, the path's straight duct, a component, the terminal, or a rule's instance list. */
+type DrawerRow =
+  | { kind: "rule"; key: string; rows: Row[] }
+  | { kind: "instances"; key: string }
+  | { kind: "friction"; rows: Row[] }
+  | { kind: "component"; row: Row }
+  | { kind: "terminal"; rows: Row[] };
+const rowId = (row: DrawerRow) =>
+  row.kind === "rule" || row.kind === "instances"
+    ? `${row.kind}:${row.key}`
+    : row.kind === "component"
+      ? `component:${row.row.id}`
+      : row.kind;
+
+function Drawer({
+  snapshot,
+  priced,
+  terminal,
+  work,
+}: {
+  snapshot: DuctSnapshot;
+  priced: Priced;
+  terminal: number;
+  work: LossesWork;
+}) {
+  const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
+  const nodes = useMemo(() => new Map(snapshot.nodes.map((n) => [n.id, n])), [snapshot]);
+  const segments = useMemo(() => new Map(snapshot.segments.map((s) => [s.id, s])), [snapshot]);
+  const path = priced.next.paths[terminal];
+  const node = nodes.get(terminal);
+  const columns = useMemo<Column<DrawerRow>[]>(() => {
+    const total = path?.total ?? 0;
+    const sum = (list: Row[]) => list.reduce((a, row) => a + row.dp, 0);
+    const own = (row: DrawerRow): Row[] =>
+      row.kind === "component" ? [row.row] : row.kind === "instances" ? [] : row.rows;
+    const revitOf = (ids: Iterable<number>) => {
+      let at: number | null = null;
+      for (const id of new Set(ids)) {
+        const v =
+          nodes.get(id)?.loss?.revitPressureDropInWg ?? segments.get(id)?.revit.pressureDropInWg;
+        if (v != null) at = (at ?? 0) + v;
+      }
+      return at;
+    };
+    const revit = (row: DrawerRow) =>
+      row.kind === "terminal"
+        ? node?.terminalDrop?.assignedPressureDropInWg
+        : revitOf(own(row).map((r) => r.id));
+    const mono = "block px-(--item-pad-x) text-right face-mono";
+    return [
+      {
+        key: "part",
+        label: "part",
+        width: "w-28",
+        cell: (row) => {
+          const first = own(row)[0];
+          return row.kind === "instances" || !first ? null : (
+            <PartChip part={partOf(first, nodes.get(first.id))} />
+          );
+        },
+      },
+      {
+        key: "rule",
+        label: "rule (family : type · condition)",
+        width: "min-w-56",
+        cell: (row) => {
+          if (row.kind === "rule") {
+            const rule = ruleByKey(row.key)!;
+            const missing = unpriced(priced, row.key);
+            return (
+              <span className="block truncate px-(--item-pad-x)" data-rule={row.key}>
+                {rule.family} : {rule.type}
+                {rule.cond ? <span className="text-ink-2"> · {rule.cond}</span> : null}
+                {missing ? (
+                  <span data-tone="caution">
+                    {" "}
+                    · {missing} with no value under {tableOf(priced, row.key)}
+                  </span>
+                ) : null}
+              </span>
+            );
+          }
+          if (row.kind === "instances")
+            return (
+              <span className="block truncate px-(--item-pad-x) face-mono" data-instances={row.key}>
+                {[...instancesOf(priced.next, row.key).values()]
+                  .map((r) => `${r.id} → ${r.c == null ? (r.error ?? "—") : fmt(r.c)}`)
+                  .join(" · ")}
+              </span>
+            );
+          if (row.kind === "friction")
+            return (
+              <span className="block px-(--item-pad-x)">
+                straight duct, {new Set(row.rows.map((r) => r.id)).size} runs
+              </span>
+            );
+          if (row.kind === "component")
+            return (
+              <span className="block truncate px-(--item-pad-x)" data-component={row.row.id}>
+                {nodes.get(row.row.id)?.family ?? row.row.desc}
+                {row.row.error ? <span data-tone="caution"> · {row.row.error}</span> : null}
+              </span>
+            );
+          return (
+            <span className="block truncate px-(--item-pad-x)" data-terminal-row={terminal}>
+              {node?.family ?? "terminal"} : {node?.type ?? ""}
+            </span>
+          );
+        },
+      },
+      {
+        key: "table",
+        label: "table or drop",
+        width: "min-w-48",
+        cell: (row) =>
+          row.kind === "rule" ? (
+            <Chips ruleKey={row.key} priced={priced} work={work} />
+          ) : row.kind === "component" ? (
+            <DropCell
+              segment="componentDrops"
+              id={row.row.id}
+              held={nodes.get(row.row.id)?.loss?.revitPressureDropInWg}
+              work={work}
+              label={`component ${row.row.id} drop`}
+            />
+          ) : row.kind === "terminal" ? (
+            <DropCell
+              segment="terminalDrops"
+              id={terminal}
+              held={
+                node?.terminalDrop?.catalogDropInWg ?? node?.terminalDrop?.assignedPressureDropInWg
+              }
+              work={work}
+              label={`terminal ${terminal} drop`}
+            />
+          ) : null,
+      },
+      {
+        key: "n",
+        label: "n",
+        width: "w-12",
+        title: "distinct fittings the rule prices; press to list them",
+        cell: (row) =>
+          row.kind !== "rule" ? null : (
+            <Press
+              size="caption"
+              tone="quiet"
+              title="show the instances under this rule"
+              onClick={() =>
+                setOpen((was) => {
+                  const next = new Set(was);
+                  if (!next.delete(row.key)) next.add(row.key);
+                  return next;
+                })
+              }
+            >
+              {instancesOf(priced.next, row.key).size}
+            </Press>
+          ),
+      },
+      {
+        key: "c",
+        label: "C",
+        width: "w-28",
+        cell: (row) => {
+          if (row.kind !== "rule") return null;
+          const cs = [...instancesOf(priced.next, row.key).values()].flatMap((r) =>
+            r.c == null ? [] : [r.c],
+          );
+          const lo = Math.min(...cs);
+          const hi = Math.max(...cs);
+          return (
+            <span className={mono}>
+              {cs.length ? (lo === hi ? fmt(lo) : `${fmt(lo)} – ${fmt(hi)}`) : "—"}
+            </span>
+          );
+        },
+      },
+      {
+        key: "dp",
+        label: "Δp here",
+        width: "w-20",
+        title: "in-wg on this grille's path",
+        cell: (row) => <span className={mono}>{fmt(sum(own(row))) || ""}</span>,
+      },
+      {
+        key: "share",
+        label: "share",
+        width: "w-14",
+        cell: (row) => <span className={mono}>{pct(sum(own(row)), total)}</span>,
+      },
+      {
+        key: "revit",
+        label: "Revit Σ",
+        width: "w-20",
+        title: "Revit's own reported drop on the same elements; a check, never an input",
+        cell: (row) => <span className={`${mono} text-ink-2`}>{fmt(revit(row))}</span>,
+      },
+    ];
+  }, [nodes, segments, node, path, priced, terminal, work]);
+  if (!path) return null;
+  const rows = path.rows;
+  const keys = [...new Set(rows.flatMap((row) => (row.rule ? [row.rule] : [])))];
+  const friction = rows.filter((row) => row.kind === "friction");
+  const drawer: DrawerRow[] = [
+    ...keys.flatMap((key): DrawerRow[] => [
+      { kind: "rule", key, rows: rows.filter((row) => row.rule === key) },
+      ...(open.has(key) ? [{ kind: "instances" as const, key }] : []),
+    ]),
+    ...(friction.length ? [{ kind: "friction" as const, rows: friction }] : []),
+    ...rows
+      .filter((row) => row.kind === "fitting" && !row.rule)
+      .map((row) => ({ kind: "component" as const, row })),
+    { kind: "terminal", rows: rows.filter((row) => row.kind === "terminal") },
+  ];
+  return (
+    <div className="ml-6 mb-2" data-drawer={terminal}>
+      <Table
+        label={`rules on grille ${terminal}'s path`}
+        rows={drawer}
+        columns={columns}
+        rowKey={rowId}
+        maxHeight="24rem"
+      />
+    </div>
+  );
+}
+
+const PartChip = ({ part }: { part: Part }) => (
+  <span className="inline-flex items-center gap-1 t-small face-mono">
+    <span className={`inline-block size-2 ${PART_BG[part]}`} />
+    {part}
+  </span>
+);
+
+/** Pe's fan beside Revit's critical path, with the staged fan when it differs. */
+function GroupHead({
+  snapshot,
+  group,
+  priced,
+}: {
+  snapshot: DuctSnapshot;
+  group: Group;
+  priced: Priced;
+}) {
+  const now = priced.now.byGroup[group.id];
+  const next = priced.next.byGroup[group.id];
+  const critical = now?.critical ?? null;
+  const revit = critical == null ? null : systemFor(snapshot, critical);
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 py-1" data-group-head={group.id}>
+      <span className="t-title">
+        {group.id} · {group.systemNames.slice(0, 3).join(", ") || "no system"}
+      </span>
+      <span>
+        <span className="t-small t-upper text-ink-2">fan static · Pe </span>
+        <b className="face-mono" data-fan={group.id}>
+          {fmt(now?.fan)}
+        </b>
+        {next && now && Math.abs(next.fan - now.fan) > 1e-9 ? (
+          <span className="face-mono" data-tone="caution" data-fan-next={group.id}>
+            {" "}
+            → {fmt(next.fan)}
+          </span>
+        ) : null}
+        <span className="t-small text-ink-2"> in-wg</span>
+      </span>
+      <span>
+        <span className="t-small t-upper text-ink-2">Revit says </span>
+        <span className="face-mono" data-revit={group.id}>
+          {!snapshot.document.networkBasedCalculations
+            ? "no critical path (engine flag off)"
+            : revit?.criticalPathLossInWg == null
+              ? "no critical path"
+              : fmt(revit.criticalPathLossInWg)}
+        </span>
+      </span>
+      <span className="t-small text-ink-2">critical grille {critical ?? "—"}</span>
+      {group.rootIds.length === 0 ? (
+        <span className="t-small" data-tone="caution">
+          {NO_ROOT}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function Bars({
+  snapshot,
+  group,
+  ready,
+  priced,
+  max,
+  page,
+  setPage,
+  work,
+}: {
+  snapshot: DuctSnapshot;
+  group: Group;
+  ready: GroupReadiness | undefined;
+  priced: Priced;
+  max: number;
+  page: DuctsPage;
+  setPage: (next: Partial<DuctsPage>) => void;
+  work: LossesWork;
+}) {
+  const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
+  const terminals = Object.entries(priced.now.paths)
+    .filter(([, path]) => path.groupId === group.id)
+    .map(([id, path]) => ({ id: Number(id), path }))
+    .sort((a, b) => b.path.total - a.path.total);
+  const critical = priced.now.byGroup[group.id]?.critical;
+  return (
+    <div>
+      {terminals.map(({ id, path }) => {
+        const node = nodes.get(id)!;
+        const by = new Map<Part, number>();
+        for (const row of path.rows) {
+          const part = partOf(row, nodes.get(row.id));
+          by.set(part, (by.get(part) ?? 0) + row.dp);
+        }
+        const next = priced.next.paths[id]?.total ?? path.total;
+        const moved = Math.abs(next - path.total) > 1e-9;
+        const statuses = terminalStatus(snapshot, group, ready, node, priced);
+        const opened = page.selected === String(id);
+        return (
+          <Fragment key={id}>
+            <ListRow
+              data-key={String(id)}
+              active={opened}
+              title={opened ? "close this grille's rules" : "open this grille's rules"}
+              onClick={() => setPage({ selected: opened ? "" : String(id) })}
+              lead={
+                <span className="inline-block w-12" aria-label="status" data-terminal={id}>
+                  {statuses.map((status) => (
+                    <span
+                      key={status}
+                      data-tone="caution"
+                      data-status={status}
+                      title={`${STATUS[status][1]}: ${STATUS[status][2]}`}
+                    >
+                      {STATUS[status][0]}
+                    </span>
+                  ))}
+                </span>
+              }
+              label={
+                <span className="flex items-center gap-2">
+                  <span className="w-56 shrink-0 truncate">
+                    <span className="face-mono">{id}</span> {node.family ?? ""} ·{" "}
+                    {Math.round(node.facts.find((f) => f.key === "flow")?.value ?? 0)} cfm
+                  </span>
+                  <span className="relative flex h-4 flex-1 bg-(--pe-recess)">
+                    {PARTS.filter((part) => by.get(part)).map((part) => (
+                      <span
+                        key={part}
+                        data-part={part}
+                        className={PART_BG[part]}
+                        style={{ width: `${(by.get(part)! / max) * 100}%` }}
+                        title={`${part}: ${fmt(by.get(part))} (${pct(by.get(part)!, path.total)})`}
+                      />
+                    ))}
+                    {moved ? (
+                      <span
+                        className="pointer-events-none absolute inset-y-0 left-0 dash-seam border"
+                        style={{ width: `${(next / max) * 100}%` }}
+                        data-ghost={id}
+                      />
+                    ) : null}
+                  </span>
+                </span>
+              }
+              meta={
+                <span className="flex gap-2">
+                  <span className="w-16 text-right face-mono" data-total={id}>
+                    {fmt(path.total)}
+                  </span>
+                  <span className="w-20 face-mono" data-tone="caution">
+                    {moved ? `→ ${fmt(next)}` : ""}
+                  </span>
+                  <span className="w-14 text-ink-2">{critical === id ? "critical" : ""}</span>
+                </span>
+              }
+            />
+            {opened ? (
+              <Drawer snapshot={snapshot} priced={priced} terminal={id} work={work} />
+            ) : null}
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+export function DuctsLosses({
+  snapshot,
+  grids,
+  priced,
+  ready,
+  page,
+  setPage,
+  empty,
+  work,
+}: {
+  snapshot: DuctSnapshot | null;
+  grids: Grids | null;
+  priced: Priced | null;
+  ready: Record<string, GroupReadiness>;
+  page: DuctsPage;
+  setPage: (next: Partial<DuctsPage>) => void;
+  empty: { says: string; exit: string } | null;
+  work: LossesWork;
+}) {
+  if (empty || !snapshot)
+    return (
+      <EmptyState story="scope" exit={empty?.exit ?? "wait for the snapshot"}>
+        {empty?.says ?? "reading ducts…"}
+      </EmptyState>
+    );
+  if (!grids || !priced)
+    return (
+      <EmptyState
+        story="scope"
+        exit="bind a Revit session; the tables are read from its ASHRAE folder"
+      >
+        reading the ASHRAE tables…
+      </EmptyState>
+    );
+  const groups = snapshot.groups.filter(
+    (group) =>
+      (!page.group || group.id === page.group) &&
+      Object.values(priced.now.paths).some((path) => path.groupId === group.id),
+  );
+  if (!groups.length)
+    return (
+      <EmptyState story="filter" exit="choose another group in the sentence">
+        no terminal path to price in {page.group || "this document"}
+      </EmptyState>
+    );
+  const max = Math.max(
+    1e-6,
+    ...groups.flatMap((g) => [
+      priced.now.byGroup[g.id]?.fan ?? 0,
+      priced.next.byGroup[g.id]?.fan ?? 0,
+    ]),
+  );
+  return (
+    <div className="flex flex-col gap-3 overflow-auto px-(--item-pad-x) py-2">
+      <div className="flex flex-wrap gap-3 t-small text-ink-2">
+        {PARTS.map((part) => (
+          <PartChip key={part} part={part} />
+        ))}
+        <span>open a grille; a table chip stages it for every fitting of that type</span>
+      </div>
+      {priced.next.errors.length ? (
+        <div className="t-small" data-tone="caution">
+          {priced.next.errors.length} lookups have no value (counted as 0); open a grille to see
+          which
+        </div>
+      ) : null}
+      {groups.map((group) => (
+        <section key={group.id}>
+          <GroupHead snapshot={snapshot} group={group} priced={priced} />
+          <Bars
+            snapshot={snapshot}
+            group={group}
+            ready={ready[group.id]}
+            priced={priced}
+            max={max}
+            page={page}
+            setPage={setPage}
+            work={work}
+          />
+        </section>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The staged band's body (variant J): each staged rule with what it moves before it lands, the
+ * staged drops and slots, the last preview's outcome, and discard.
+ */
+export function StagedLosses({
+  snapshot,
+  grids,
+  priced,
+  evaluation,
+  fresh,
+  work,
+  group,
+}: {
+  snapshot: DuctSnapshot;
+  grids: Grids;
+  priced: Priced;
+  evaluation: DuctsEvaluation | null;
+  fresh: boolean;
+  work: LossesWork;
+  group: string;
+}) {
+  const keys = Object.keys(priced.staged.rules).sort();
+  const terminals = Object.keys(priced.staged.terminalDrops).length;
+  const components = Object.keys(priced.staged.componentDrops).length;
+  const slots = Object.entries(priced.staged.parameters);
+  if (!keys.length && !terminals && !components && !slots.length) return null;
+  const fanOf = (result: LossResult) => (group ? result.byGroup[group]?.fan : result.fan);
+  const discard = () => {
+    const doc = work.doc;
+    if (!doc) return;
+    void work.write(
+      (["rules", "terminalDrops", "componentDrops", "parameters"] as const).flatMap((segment) =>
+        Object.entries(doc[segment] ?? {}).flatMap(([key, cell]) =>
+          cell?.staged ? transitionPatches([segment], key, cell, { kind: "unstage" }) : [],
+        ),
+      ),
+    );
+  };
+  return (
+    <div className="flex flex-col gap-0.5 t-small" data-staged-band="">
+      {keys.map((key) => {
+        const rule = ruleByKey(key) ?? LOSS_RULES[0]!;
+        const f = stagedFanout(snapshot, grids, priced, key);
+        const missing = unpriced(priced, key);
+        return (
+          <div key={key} className="flex flex-wrap items-baseline gap-x-3" data-staged-rule={key}>
+            <span>
+              {rule.family} : {rule.type}
+              {rule.cond ? <span className="text-ink-2"> · {rule.cond}</span> : null}
+            </span>
+            <span className="face-mono">
+              {(priced.applied[key] ?? rule.table).toUpperCase()} →{" "}
+              {priced.staged.rules[key]!.table.toUpperCase()}
+            </span>
+            {f ? (
+              <span className="face-mono" data-fanout={key}>
+                {f.instances} instances rewritten · {f.movedTerminals.length} grilles moved · fan{" "}
+                {fmt(fanOf(f.before))} → {fmt(fanOf(f.after))}
+              </span>
+            ) : (
+              <span data-tone="caution">not a table this rule takes</span>
+            )}
+            {missing ? (
+              <span data-tone="caution">{missing} instances have no value; left out</span>
+            ) : null}
+          </div>
+        );
+      })}
+      {terminals || components ? (
+        <div>
+          {terminals ? `${terminals} terminal drop${terminals === 1 ? "" : "s"}` : ""}
+          {terminals && components ? " · " : ""}
+          {components ? `${components} component drop${components === 1 ? "" : "s"}` : ""} staged ·
+          fan {fmt(fanOf(priced.now))} → {fmt(fanOf(priced.next))} in-wg
+        </div>
+      ) : null}
+      {slots.length ? (
+        <div className="face-mono">
+          {slots.map(([slot, name]) => `${slot} → ${name}`).join(" · ")}
+        </div>
+      ) : null}
+      <div className="flex flex-wrap items-baseline gap-x-3">
+        {evaluation ? (
+          <span
+            data-tone={fresh ? undefined : "caution"}
+            data-evaluation={fresh ? "fresh" : "stale"}
+          >
+            preview r{evaluation.revision}:{" "}
+            {Object.entries(evaluation.response.counts)
+              .filter(([, n]) => n)
+              .map(([outcome, n]) => `${n} ${outcome}`)
+              .join(" · ") || "nothing to write"}
+            {fresh ? "" : " · stale, preview again"}
+            {evaluation.response.writes
+              .filter((w) => w.outcome === "refused")
+              .slice(0, 3)
+              .map((w) => ` · ${w.kind} ${w.id ?? ""} refused: ${w.reason ?? "no reason"}`)
+              .join("")}
+          </span>
+        ) : (
+          <span className="text-ink-2">not previewed; preview asks Revit what it would accept</span>
+        )}
+        <Press
+          size="caption"
+          tone="quiet"
+          onClick={discard}
+          title="Unstage every staged rule, drop and slot"
+        >
+          discard
+        </Press>
+      </div>
+    </div>
+  );
+}

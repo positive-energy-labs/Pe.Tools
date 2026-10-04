@@ -36,8 +36,13 @@ const kindOfKey = (key: string): DuctAssumption["kind"] => {
 };
 
 /** The parameter slots `ducts.snapshot` reads and `ducts.apply` writes through. */
-export const DUCT_SLOTS = ["fanStatic", "fanFlow", "componentDrop", "terminalDrop"] as const;
-export type DuctSlot = (typeof DUCT_SLOTS)[number];
+export const DUCT_PARAMETER_KEYS = [
+  "fanStatic",
+  "fanFlow",
+  "componentDrop",
+  "terminalDrop",
+] as const;
+export type DuctParameterKey = (typeof DUCT_PARAMETER_KEYS)[number];
 
 const dropSchema = z.strictObject({
   inWg: z.number().nonnegative(),
@@ -56,7 +61,7 @@ export const ductsDocumentSchema = z
     terminalDrops: z.record(elementKey, trichotomyCellSchema(dropSchema)).default({}),
     componentDrops: z.record(elementKey, trichotomyCellSchema(dropSchema)).default({}),
     parameters: z
-      .partialRecord(z.enum(DUCT_SLOTS), trichotomyCellSchema(z.string().min(1)))
+      .partialRecord(z.enum(DUCT_PARAMETER_KEYS), trichotomyCellSchema(z.string().min(1)))
       .default({}),
   })
   .superRefine((doc, ctx) => {
@@ -86,7 +91,7 @@ export function stagedDucts(doc: DuctsRouteDocument | null) {
     rules: stagedOf(doc?.rules ?? {}),
     terminalDrops: stagedOf(doc?.terminalDrops ?? {}),
     componentDrops: stagedOf(doc?.componentDrops ?? {}),
-    parameters: stagedOf(doc?.parameters ?? {}) as Partial<Record<DuctSlot, string>>,
+    parameters: stagedOf(doc?.parameters ?? {}) as Partial<Record<DuctParameterKey, string>>,
   };
 }
 
@@ -96,13 +101,14 @@ export function stagedDucts(doc: DuctsRouteDocument | null) {
  * rule's chosen table; the equipment row is Pe's fan static for the group's air mover, through the
  * `fanStatic` slot. `store` is the provenance blob Revit keeps in Project Information.
  */
+const stamp = z.iso.datetime({ offset: true });
 const writeDrop = z.strictObject({
   id: z.number().int(),
   inWg: z.number().nonnegative(),
   source: z.string().nullable(),
 });
 export const ductsApplyInputSchema = z.strictObject({
-  slots: z.partialRecord(z.enum(DUCT_SLOTS), z.string().min(1)),
+  slots: z.partialRecord(z.enum(DUCT_PARAMETER_KEYS), z.string().min(1)),
   fittings: z.array(
     z.strictObject({
       id: z.number().int(),
@@ -118,17 +124,30 @@ export const ductsApplyInputSchema = z.strictObject({
     z.strictObject({ id: z.number().int(), externalStaticInWg: z.number().nonnegative() }),
   ),
   networkBasedCalculations: z.boolean(),
+  /** W3's `DuctLossStore` v1, merged by the native op into the Project Information blob. */
   store: z.strictObject({
     version: z.literal(1),
-    rules: z.record(z.string(), z.string()),
+    rules: z.record(z.string(), z.strictObject({ table: z.string() })),
     instances: z.record(
       z.string(),
-      z.strictObject({ ruleKey: z.string(), table: z.string(), coefficient: z.number() }),
+      z.strictObject({
+        table: z.string(),
+        inputs: z.string(),
+        coefficient: z.number(),
+        appliedAt: stamp,
+      }),
     ),
-    terminals: z.record(z.string(), dropSchema),
-    slots: z.partialRecord(z.enum(DUCT_SLOTS), z.string()),
+    terminals: z.record(
+      z.string(),
+      z.strictObject({
+        inWg: z.number().nonnegative(),
+        source: z.string().nullable(),
+        appliedAt: stamp,
+      }),
+    ),
+    slots: z.partialRecord(z.enum(DUCT_PARAMETER_KEYS), z.string()),
     workRevision: z.number().int().nonnegative(),
-    appliedAt: z.iso.datetime({ offset: true }),
+    appliedAt: stamp,
   }),
 });
 export type DuctsApplyInput = z.infer<typeof ductsApplyInputSchema>;

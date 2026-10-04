@@ -1,18 +1,46 @@
 /**
  * The static /ducts contract: read every duct network of one document, choose one as the subject,
- * and stage the assumptions that make it solvable. Read-only toward Revit: the one fetch verb is
- * `refresh`, the one Reading is `ducts` (`ducts.snapshot`), and Work holds assumptions only.
- * Readiness under those assumptions is derived (`readiness.ts`), never stored.
+ * stage the assumptions that make it solvable, then price its losses and write them to Revit.
+ * Readings: `ducts` (`ducts.snapshot`) and `tables` (`ducts.tables`), both read by the route
+ * (`host.ts`) and provided to the verbs. Readiness and losses are derived (`readiness.ts`,
+ * `pricing.ts`), never stored. `preview` asks Revit what the staged cells would write; `apply`
+ * sends the same request for real, armed only while the preview matches the Work revision and the
+ * snapshot it was built on.
  */
 import { z } from "zod";
-import { ductsRouteState, type DuctAssumption, type DuctsRouteDocument } from "@pe/agent-contracts";
+import {
+  ductsRouteState,
+  transitionPatches,
+  type DuctAssumption,
+  type DuctsRouteDocument,
+  type RouteStatePatch,
+} from "@pe/agent-contracts";
 
-import { defineRoute } from "#/route/manifest";
+import { defineRoute, semanticActionInput, type Ctx } from "#/route/manifest";
+import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
+import {
+  actionResult,
+  runSemanticAction,
+} from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import type { DuctsApplyResponse } from "./apply-contract";
+import type { Grids } from "./loss-grid";
+import { applyRequest, price } from "./pricing";
+import type { DuctSnapshot } from "./readiness";
 
-const DUCTS_STAGES = [{ key: "survey", word: "Surveying ducts" }] as const;
+const DUCTS_STAGES = [
+  { key: "survey", word: "Surveying ducts" },
+  { key: "losses", word: "Pricing losses" },
+] as const;
+
+/** What Revit said the staged cells would write, and the Work and snapshot it was asked over. */
+export interface DuctsEvaluation {
+  revision: number;
+  epoch: number;
+  response: DuctsApplyResponse;
+}
 
 const ductsPageSchema = z.object({
-  stage: z.enum(["survey"]).default("survey"),
+  stage: z.enum(["survey", "losses"]).default("survey"),
   /** The view the body draws; the default is the tables. Variants add keys. */
   view: z.string().default(""),
   /** The subject: one group id (`g<smallest element id>`); empty = the whole document. */
@@ -23,16 +51,84 @@ const ductsPageSchema = z.object({
   layers: z.array(z.string()).default([]),
   /** The selected element id as a string; empty = none. */
   selected: z.string().default(""),
-  /** Bumped by `refresh`; the snapshot read keys on it. */
+  /** Bumped by `refresh` and `apply`; the snapshot read keys on it. */
   epoch: z.number().default(0),
+  /** The last preview; `apply` is armed while it matches the Work revision and epoch. Page, never URL. */
+  evaluation: z.custom<DuctsEvaluation>().nullable().default(null),
 });
 export type DuctsPage = z.infer<typeof ductsPageSchema>;
-export type DuctsReading = "ducts";
+export type DuctsReading = "ducts" | "tables";
+type DuctsCtx = Ctx<DuctsRouteDocument, DuctsReading, DuctsPage>;
 
-export const manifest = defineRoute<DuctsRouteDocument, DuctsReading, DuctsPage, "refresh">({
+const observed = <T>(ctx: DuctsCtx, key: DuctsReading) => {
+  const reading = ctx.readings[key];
+  return reading?.state === "ready" ? (reading.observation as T) : null;
+};
+
+/** The segments `ducts.apply` writes; `assumptions` stay in Pe. */
+export const WRITTEN = ["rules", "terminalDrops", "componentDrops", "parameters"] as const;
+export const stagedCells = (doc: DuctsRouteDocument | null) =>
+  WRITTEN.flatMap((segment) =>
+    Object.entries(doc?.[segment] ?? {}).flatMap(([key, cell]) =>
+      cell?.staged ? [{ segment, key, cell }] : [],
+    ),
+  );
+
+/** The request from the staged cells, the snapshot and the grids the route read; throws why not. */
+const built = (ctx: DuctsCtx) => {
+  const snapshot = observed<DuctSnapshot>(ctx, "ducts");
+  const grids = observed<Grids>(ctx, "tables");
+  if (!snapshot) throw Error("The duct snapshot is not read yet");
+  if (!grids) throw Error("The ASHRAE tables are not read yet");
+  if (ctx.work.revision === null) throw Error("The Work is not read yet");
+  const priced = price(snapshot, grids, ctx.work.doc);
+  return applyRequest(snapshot, priced, ctx.work.revision, new Date().toISOString());
+};
+
+const dispatch = async (
+  ctx: DuctsCtx,
+  key: "ducts.preview" | "ducts.apply",
+  input: Record<string, unknown>,
+) => {
+  if (ctx.target.kind !== "document") throw Error("An open document is required");
+  // The host answers `{ value, target }` (ducts-actions.ts); the value is the native op's answer.
+  const answer = actionResult(
+    await runSemanticAction(key, semanticActionInput(key, input), ctx.target.ref),
+  ) as { value?: unknown };
+  return (answer.value ?? answer) as DuctsApplyResponse;
+};
+
+export const outcomeWords = (response: DuctsApplyResponse) =>
+  Object.entries(response.counts)
+    .filter(([, n]) => n)
+    .map(([outcome, n]) => `${n} ${outcome}`)
+    .join(" · ") || "nothing to write";
+
+/** The preview still describes this Work revision and this snapshot. */
+export const previewFresh = (page: DuctsPage, revision: number | null) =>
+  page.evaluation !== null &&
+  page.evaluation.revision === revision &&
+  page.evaluation.epoch === page.epoch;
+
+const why = (run: () => unknown) => {
+  try {
+    run();
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+};
+const none = z.void() as unknown as z.ZodType<never>;
+
+export const manifest = defineRoute<
+  DuctsRouteDocument,
+  DuctsReading,
+  DuctsPage,
+  "refresh" | "preview" | "apply"
+>({
   key: "ducts",
   name: "Ducts",
-  docs: "Read every duct network in the document by connector topology, choose one, and see what is known (sizes, flows, roughness, fan static, component drops) and what is missing before a pressure-loss solve. Assumptions you stage fill the gaps; nothing is written to Revit.",
+  docs: "Read every duct network in the document by connector topology, choose one, and see what is known and what is missing before a pressure-loss solve. Then price every grille's path (friction, fittings by type, the terminal's drop), stage the ASHRAE table each fitting type is looked up under and the drops you know, preview what Revit would accept, and apply: Pe writes the coefficients, drops and fan static into Revit, beside Revit's own critical path.",
   needs: "project",
   work: ductsRouteState,
   cells: [
@@ -50,9 +146,38 @@ export const manifest = defineRoute<DuctsRouteDocument, DuctsReading, DuctsPage,
             : `${a.inWg} in-wg`;
       },
     },
+    {
+      segment: "rules",
+      groupOf: (key) => [key],
+      nouns: ["rule"],
+      noun: "loss rules",
+      show: (value) => (value as { table: string }).table,
+    },
+    {
+      segment: "terminalDrops",
+      groupOf: (key) => [key],
+      nouns: ["terminal"],
+      noun: "terminal drops",
+      show: (value) => `${(value as { inWg: number }).inWg} in-wg`,
+    },
+    {
+      segment: "componentDrops",
+      groupOf: (key) => [key],
+      nouns: ["component"],
+      noun: "component drops",
+      show: (value) => `${(value as { inWg: number }).inWg} in-wg`,
+    },
+    {
+      segment: "parameters",
+      groupOf: (key) => [key],
+      nouns: ["slot"],
+      noun: "parameter slots",
+      show: (value) => String(value),
+    },
   ],
-  // The snapshot is one host read the route owns (`route.tsx`), keyed on target, subject and epoch.
-  readings: { ducts: () => null },
+  // Both are host reads the route owns (`host.ts`) and provides to the verbs: the snapshot keyed on
+  // target, subject, slots and epoch; the tables on the session.
+  readings: { ducts: () => null, tables: () => null },
   page: ductsPageSchema,
   stages: DUCTS_STAGES,
   actions: {
@@ -66,6 +191,60 @@ export const manifest = defineRoute<DuctsRouteDocument, DuctsReading, DuctsPage,
       rereads: "ducts",
       ready: () => null,
       run: async (ctx) => ctx.setPage({ epoch: ctx.page.epoch + 1 }),
+    },
+    preview: {
+      label: "preview",
+      does: "ducts.preview",
+      input: none,
+      dirties: [],
+      stage: "losses",
+      waitSeconds: NATIVE_APPLY_WAIT_S,
+      requires: { work: true },
+      count: (ctx) => stagedCells(ctx.work.doc).length || null,
+      ready: (ctx) => (stagedCells(ctx.work.doc).length ? why(() => built(ctx)) : "Nothing staged"),
+      run: async (ctx) => {
+        const request = built(ctx);
+        const response = await dispatch(ctx, "ducts.preview", request);
+        ctx.setPage({
+          evaluation: { revision: request.store.workRevision, epoch: ctx.page.epoch, response },
+        });
+        ctx.note("preview", `r${request.store.workRevision}: ${outcomeWords(response)}`);
+      },
+    },
+    apply: {
+      label: "apply",
+      labelNow: (ctx) => {
+        const n = ctx.page.evaluation?.response.writes.length ?? 0;
+        return previewFresh(ctx.page, ctx.work.revision) && n
+          ? `apply ${n} write${n === 1 ? "" : "s"}`
+          : "apply";
+      },
+      does: "ducts.apply",
+      input: none,
+      dirties: [],
+      stage: "losses",
+      waitSeconds: NATIVE_APPLY_WAIT_S,
+      requires: { work: true },
+      ready: (ctx) =>
+        !stagedCells(ctx.work.doc).length
+          ? "Nothing staged"
+          : ctx.page.evaluation === null
+            ? "Preview first"
+            : !previewFresh(ctx.page, ctx.work.revision)
+              ? "The staged Work or the snapshot changed since the preview; preview again"
+              : null,
+      run: async (ctx) => {
+        const applied = stagedCells(ctx.work.doc);
+        const response = await dispatch(ctx, "ducts.apply", built(ctx));
+        ctx.note("apply", outcomeWords(response), response.counts.refused > 0);
+        // The staged cells are in Revit now; the snapshot and its store are their home.
+        const patches: RouteStatePatch[] = applied.flatMap(({ segment, key, cell }) =>
+          transitionPatches([segment], key, cell, { kind: "unstage" }),
+        );
+        const refusal = await ctx.write(patches);
+        ctx.setPage({ epoch: ctx.page.epoch + 1, evaluation: null });
+        return refusal;
+      },
     },
   },
 });
