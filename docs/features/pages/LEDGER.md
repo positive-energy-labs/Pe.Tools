@@ -1,0 +1,35 @@
+# pages ledger
+
+An agent or a person drops a folder of HTML under the product home and the host serves it at an open URL with doors into Revit: typed ops, show, captures, the thread target, and shared state. Captures are the one picture currency that every surface links. Source: muse rounds 1 and 2 of 2026-10-04 over the pressure-drop walkthrough (`.artifacts/pdrop/walkthru/`, gitignored) and the synthesized-views session of 2026-09-28.
+
+## Decided
+- 2026-10-04, kaitpw: arbitrary HTML is non-negotiable. A page is a folder with `index.html`. There is no typed page document and no required template, because diagrams, todo lists, cheatsheets and issue trackers each want their own UI, shaped by the user.
+- 2026-10-04, kaitpw: a page is served at an open URL (`/pages/<slug>/`), never only inside an iframe. An agent can then drive it with chrome-agent, both parties can write the same fields, and the page is a control surface and a shared scratchpad.
+- 2026-10-04, the home is `Documents/Pe.Tools/Pages/<slug>/` beside Pods. One root holds product pages and repo throwaways. It is outside git, so a page over an NDA model is safe by location. No registration: a dropped folder appears.
+- 2026-10-04, kaitpw: agents use the raw host endpoints and the curated MCP tools alike, so a page's doors are the same vocabulary as `pe_find`, `pe_read` and `pe_do`, with the same capability keys, and a utility earns a place only when it is very common or hard to get right first try. `pe.js` is therefore `find`, `read`, `do`, the target headers (bridge session and document from the thread head), the read-versus-write door (`/call` versus `/actions`), and `state`. Show and capture are keys, not functions. `pe.css` serves the house tokens, opt-in. `pe.target()` and `pe.css` are the default head; a product route that wraps a page with the Situation head is deferred until a page asks for it.
+- 2026-10-04, shared state is the page kit kernel's event log (`.claude/skills/slot.page/kit`), persisted by the host per page. The page appends with `fire`, an agent appends over HTTP, the host fans out over SSE, and the page writes its own snapshot after each fire so an agent reads state without running the reducer.
+- 2026-10-04, kaitpw: no approval ceremony on page-originated mutations. "approvals are unnecessary and i think probably harmful at the end of the day, they'll be to hard to make a real feature that actually applies at all the edges it should, and at the end of the day its just ceremony." A page button that mutates Revit runs as a human act, and the receipt carries origin `page:<slug>`. For pages this defies the `AGENTS.md` posture line "Agents propose; users retain approval"; the wider reading is Owed.
+- 2026-10-04, captures are the one picture currency. `revit.context.view-image` is promoted: durable storage under the product state directory, one blob per sha, one receipt per taking (request, document, view, focus ids, registration, taken-at, origin `human`, `agent` or `page:<slug>`), a linear `/captures` route newest first, and `capture` as an inspectable kind. A chrome-agent screenshot registers the same way. A page shows a capture with `<img src="/captures/<sha>.png">`.
+- 2026-10-04, the ladder a page climbs: a folder; doors; a manifest (`page.json` gives a front-door tile, the `page` inspectable kind and a chat card); shared like a Pod; promoted to a route through `protoui` and `close`. A page shows its rung by what it contains, never by registration, and is never silently product. The page skill's stand-in law applies at every rung.
+- 2026-10-04, pictures are for people and tables are for Pea (spatial ledger: table before pixels; the synthesized-views session: images were Pea's weakest sense). The Space renderer stays that session's scope.
+- 2026-10-04, phasing (counsel, delegated by kaitpw): 1 captures; 2 pages served with doors, proven by rebuilding the pressure-drop walkthrough on them and deleting its server; 3 manifest, chat card and the two Pea skills.
+
+## Tried & rejected
+- 2026-10-04, a node server per page that compiles a C# script per click (`.artifacts/pdrop/walkthru/serve.mjs`): 15 s per click and no typed ops; obsolete once `revit.context.show-elements` and `pea script execute --json` shipped.
+- 2026-10-04, a typed walk document rendered on route primitives as the only page shape: kaitpw, too confining; it cannot hold lit diagrams, variant switchers or the grille bars.
+- 2026-10-04, a page that writes React into the product as a Pod: review burden, and Pods are C#.
+- 2026-10-04, the chat thread as the walk: no order, no revisit, cannot be handed to a supervisor. It survives only as how Pea shows one exhibit in chat.
+- 2026-10-04, a sandboxed iframe with a postMessage bridge as the only surface: kaitpw, too confining; chrome-agent and shared fields need the open URL. The iframe may return as the embedding for the Situation head.
+- 2026-10-04, route-state Work as the page's state: revisions and write masks would make every throwaway page declare a schema.
+
+## Owed
+- Phase 1, captures: storage move, receipt, `/captures`, the `capture` inspectable kind, and `capture_view` returning the receipt and URL. Prove first whether the `toModelOutput` media block in `ts/packages/mcps/src/shared/capture-view.ts` survives MCP into Claude and Codex; it decides whether Pea sees its own pictures.
+- Phase 2, pages: the host serves `Documents/Pe.Tools/Pages/<slug>/` and lists `/pages`; `pe.js` and `pe.css`; a per-page event log and snapshot with SSE; the kit kernel's hosted mode; the walkthrough rebuilt and `serve.mjs` deleted.
+- Phase 3: `page.json`, the front-door tile, the `page` inspectable kind, a chat card for a page tool result, and Pea skills `make-page` and `mep-pressure-drop` in `ts/packages/mcps/src/pea/skills.ts` (the second after `feat/pressure-drop` merges).
+- Ruling: does "no approval ceremony" retire the chat proposal path and the `AGENTS.md` posture line product-wide, or is it pages only? The agent ledger's Owed line on Codex gating nothing is the same question from the other side.
+- A lens op: make or reuse a named 3D view boxed around ids, clutter hidden, detail and style set, returning the view id (the walkthrough's `show.cs.tmpl`; a whole-house box at Fine, shaded, with links hung Revit for ten minutes). One op serves this ledger and the synthesized-views lens.
+- A selection checkpoint: a read that returns the person's selection and active view (`capture.cs.tmpl`); it may be a slice of `revit.context.summary`.
+- The `diagram` tool's nodes gain a status and an `InspectableRef` link (the agent ledger owns the tool).
+- A Revit UI-thread hang deadline and recovery belong to the SDK.
+- Sharing a page like a Pod, with its captures by hash. Deferred.
+- Capture storage growth: receipts stay, blobs go by age, when it matters.
