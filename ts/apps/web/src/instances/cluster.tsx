@@ -72,13 +72,21 @@ type DocFact = {
   readonly openIn: readonly string[];
 };
 
+type MissingLinks = "refuse" | "allow";
+
 type Staged =
-  | { readonly kind: "open"; readonly doc: DocFact; readonly world: Inventory }
+  | {
+      readonly kind: "open";
+      readonly doc: DocFact;
+      readonly world: Inventory;
+      readonly missingLinks: MissingLinks;
+    }
   | {
       readonly kind: "start";
       readonly doc?: DocFact;
       readonly year: string;
       readonly quarantine: boolean;
+      readonly missingLinks: MissingLinks;
     };
 
 /** Deliberately unexported: a `*Scope` export is a dead word (route-primitive guard row 6). */
@@ -248,9 +256,15 @@ export function InstancesCluster({
           doc: storedDoc ?? undefined,
           year: stored.year.slice(-2),
           quarantine: stored.quarantine,
+          missingLinks: stored.missingLinks ?? "refuse",
         }
       : storedWorld && storedDoc
-        ? { kind: "open", doc: storedDoc, world: storedWorld }
+        ? {
+            kind: "open",
+            doc: storedDoc,
+            world: storedWorld,
+            missingLinks: stored.missingLinks ?? "refuse",
+          }
         : null
     : null;
   const setStaged = (next: Staged | null) => {
@@ -270,6 +284,7 @@ export function InstancesCluster({
                         kind: "open",
                         session: sdkSessionSelectorOf(sessionTarget(next.world)),
                         document: next.doc.selector,
+                        missingLinks: next.missingLinks,
                       }
                     : {
                         kind: "start",
@@ -277,6 +292,7 @@ export function InstancesCluster({
                         name: sessionName,
                         document: next.doc?.selector,
                         quarantine: next.quarantine,
+                        missingLinks: next.missingLinks,
                       },
               },
             },
@@ -388,7 +404,7 @@ export function InstancesCluster({
       return;
     }
     if (pickedWorld) {
-      setStaged({ kind: "open", doc: document, world: pickedWorld });
+      setStaged({ kind: "open", doc: document, world: pickedWorld, missingLinks: "refuse" });
       return;
     }
     const year = document.year ?? yearPick;
@@ -396,7 +412,7 @@ export function InstancesCluster({
       refuse("stage refused", "Pick a session or Revit year before opening this document.");
       return;
     }
-    setStaged({ kind: "start", doc: document, year, quarantine: false });
+    setStaged({ kind: "start", doc: document, year, quarantine: false, missingLinks: "refuse" });
   };
 
   const openRefusal =
@@ -701,6 +717,28 @@ export function InstancesCluster({
                           ? `open ${staged.doc.title} in ${sessionLabel(staged.world)}`
                           : `start a new 20${staged.year} session ${staged.doc ? `opening ${staged.doc.title}` : ""}${staged.quarantine ? " with third-party add-ins disabled" : ""}`}
                       </span>
+                      {(staged.kind === "start" ? staged.doc != null : !stagedDocument) && (
+                        <div className="flex items-center gap-2 t-small text-ink-2">
+                          <span>missing linked files</span>
+                          <Switcher<MissingLinks>
+                            ariaLabel="missing linked files policy"
+                            value={staged.missingLinks}
+                            onChange={(missingLinks) => setStaged({ ...staged, missingLinks })}
+                            options={[
+                              {
+                                value: "refuse",
+                                label: "refuse",
+                                title: "Refuse to open if linked files are missing",
+                              },
+                              {
+                                value: "allow",
+                                label: "allow",
+                                title: "Open with missing links; omissions appear in the result",
+                              },
+                            ]}
+                          />
+                        </div>
+                      )}
                       {staged.kind === "start" ? (
                         <>
                           <Input

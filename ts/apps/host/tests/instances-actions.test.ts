@@ -144,12 +144,16 @@ test("a Pea-proposed open never dispatches; the person stages it", async () => {
   expect(JSON.stringify(refused)).toContain("Pea proposed this open; a person stages it first");
   expect(f.calls.some((argv) => argv[0] === "doc")).toBe(false);
 
-  const revision = await f.stage({ ...proposed, document: "C:/Tower.rvt" });
+  const revision = await f.stage({ ...proposed, document: "C:/Tower.rvt", missingLinks: "allow" });
   expect((await f.admit("instances.open", { session }, revision)).state).toBe("succeeded");
   const open = f.calls.at(-1)!;
   expect(open.slice(0, 2)).toEqual(["doc", "open"]);
   expect(open).toContain("C:/Tower.rvt");
   expect(open).not.toContain("C:/Pea.rvt");
+  expect(open.slice(open.indexOf("--missing-links"), open.indexOf("--missing-links") + 2)).toEqual([
+    "--missing-links",
+    "allow",
+  ]);
 });
 
 test("start dispatches the staged session under the step id with an absent expectation", async () => {
@@ -160,7 +164,10 @@ test("start dispatches the staged session under the step id with an absent expec
     name: "dev",
     document: "C:/Tower.rvt",
   });
-  expect((await f.launch()).staged?.value).toMatchObject({ quarantine: false });
+  expect((await f.launch()).staged?.value).toMatchObject({
+    quarantine: false,
+    missingLinks: "refuse",
+  });
   const receipt = await f.admit("instances.start", {}, revision);
   expect(receipt.state).toBe("succeeded");
   const step = receipt.steps[0]!;
@@ -172,6 +179,10 @@ test("start dispatches the staged session under the step id with an absent expec
   });
   const argv = f.calls.at(-1)!;
   expect(argv.slice(0, 2)).toEqual(["session", "start"]);
+  expect(argv.slice(argv.indexOf("--missing-links"), argv.indexOf("--missing-links") + 2)).toEqual([
+    "--missing-links",
+    "refuse",
+  ]);
   expect(argv).toContain("--request-file");
   expect(argv[argv.indexOf("--conflict-policy") + 1]).toBe("keep");
   const file = argv[argv.indexOf("--request-file") + 1]!;
@@ -194,6 +205,70 @@ test("only the person's staged quarantine choice reaches session start", async (
   expect((await f.launch()).staged?.value).toMatchObject({ quarantine: true });
   expect((await f.admit("instances.start", {}, revision)).state).toBe("succeeded");
   expect(f.calls.at(-1)).toContain("--quarantine");
+});
+
+test("allowing missing links is staged explicitly for open and its omission result stays in the receipt", async () => {
+  const nativeResult = {
+    state: "opened",
+    openId: "a".repeat(32),
+    missingLinkPolicy: "allow",
+    missingLinkCount: 1,
+    missingLinks: [
+      {
+        elementId: "1234",
+        name: "Site",
+        type: "RevitLinkType",
+        status: "NotFound",
+        path: "C:/Links/site.rvt",
+      },
+    ],
+  };
+  const f = await setup(() => ({ result: nativeResult }));
+  const revision = await f.stage({
+    kind: "open",
+    session: sdkSessionSelectorOf("dev"),
+    document: "C:/Tower.rvt",
+    missingLinks: "allow",
+  });
+  expect((await f.launch()).staged?.value).toMatchObject({ missingLinks: "allow" });
+  const receipt = await f.admit("instances.open", { session }, revision);
+  expect(receipt.state).toBe("succeeded");
+  expect(receipt.steps[0]).toMatchObject({ state: "succeeded", result: nativeResult });
+  const argv = f.calls.at(-1)!;
+  expect(argv.slice(argv.indexOf("--missing-links"), argv.indexOf("--missing-links") + 2)).toEqual([
+    "--missing-links",
+    "allow",
+  ]);
+});
+
+test("the default missing-links refusal keeps its SDK explanation and staged Work", async () => {
+  const f = await setup(() => ({
+    result: { state: "rejected" },
+    diagnostics: [
+      {
+        code: "doc.missing-links",
+        detail: "C:/Links/site.rvt was not found",
+        fix: null,
+      },
+    ],
+  }));
+  const revision = await f.stage({
+    kind: "open",
+    session: sdkSessionSelectorOf("dev"),
+    document: "C:/Tower.rvt",
+  });
+  const receipt = await f.admit("instances.open", { session }, revision);
+  expect(receipt.state).toBe("failed");
+  expect(receipt.steps[0]).toMatchObject({
+    state: "failed",
+    status: 409,
+    evidence: {
+      result: {
+        diagnostics: [{ code: "doc.missing-links", detail: "C:/Links/site.rvt was not found" }],
+      },
+    },
+  });
+  expect((await f.launch()).staged?.value).toMatchObject({ missingLinks: "refuse" });
 });
 
 test("start captures a gone session receipt so the SDK can retire that exact row", async () => {
@@ -384,7 +459,13 @@ test("a failed start keeps the staged launch for the person to retry", async () 
   const revision = await f.stage({ kind: "start", year: "2025", name: "dev" });
   expect((await f.admit("instances.start", {}, revision)).state).toBe("failed");
   expect((await f.launch()).staged).toEqual({
-    value: { kind: "start", year: "2025", name: "dev", quarantine: false },
+    value: {
+      kind: "start",
+      year: "2025",
+      name: "dev",
+      quarantine: false,
+      missingLinks: "refuse",
+    },
   });
 });
 

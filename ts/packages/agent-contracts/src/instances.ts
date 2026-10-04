@@ -21,6 +21,7 @@ export const instancesLaunchSchema = z.discriminatedUnion("kind", [
     kind: z.literal("open"),
     session: sdkSessionSelectorSchema,
     document: documentSelector,
+    missingLinks: z.enum(["allow", "refuse"]).default("refuse"),
   }),
   z.object({
     kind: z.literal("start"),
@@ -28,6 +29,7 @@ export const instancesLaunchSchema = z.discriminatedUnion("kind", [
     name: z.string().max(64),
     document: documentSelector.optional(),
     quarantine: z.boolean().default(false),
+    missingLinks: z.enum(["allow", "refuse"]).default("refuse"),
   }),
 ]);
 export type InstancesLaunch = z.infer<typeof instancesLaunchSchema>;

@@ -234,6 +234,7 @@ export async function admitInstancesAction(
               year: staged.year,
               id: staged.name || undefined,
               doc: staged.document,
+              missingLinks: staged.missingLinks,
               quarantine: staged.quarantine,
               conflictPolicy: "keep",
               requestFile: REQUEST_FILE,
@@ -243,6 +244,7 @@ export async function admitInstancesAction(
             return docOpenArgv({
               path: staged.document,
               id,
+              missingLinks: staged.missingLinks,
               conflictPolicy: "keep",
               requestFile: REQUEST_FILE,
             });
@@ -283,6 +285,14 @@ export async function admitInstancesAction(
         const envelope = parsePeRevitEnvelope(await read(args), args, peRevitLauncher());
         const blocking = envelope.diagnostics.find((d: Diagnostic) => NOT_DISPATCHED.has(d.code));
         if (blocking) throw refuse(`${blocking.code}: ${blocking.detail}`, envelope.result);
+        const missingLinksRefusal = envelope.diagnostics.find(
+          (d: Diagnostic) => d.code === "doc.missing-links",
+        );
+        if (missingLinksRefusal)
+          throw new BridgeError(`${missingLinksRefusal.code}: ${missingLinksRefusal.detail}`, 409, {
+            dispatched: true,
+            result: envelope,
+          });
         const failures = envelope.diagnostics.filter((d: Diagnostic) => !ADVISORY.has(d.code));
         if (failures.length)
           throw new BridgeError(
