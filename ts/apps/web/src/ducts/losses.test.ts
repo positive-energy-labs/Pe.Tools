@@ -12,6 +12,8 @@ import { ductsRouteState, stagedDucts } from "@pe/agent-contracts";
 import { lookupGrid, toGrids, type Grid, type Grids } from "./loss-grid";
 import { friction, roundSection } from "./loss-physics";
 import { computeLosses, fanout, systemFor } from "./losses";
+import { price, stagedFanout } from "./pricing";
+import { groupTree } from "./topology";
 import synthetic from "./fixtures/synthetic-snapshot.json";
 import type { DuctSnapshot } from "./readiness";
 
@@ -361,4 +363,25 @@ it("prices under the table a person staged in the Work document", () => {
   });
   const tap = r.paths[31]!.rows.find((x) => x.kind === "tap-branch")!;
   expect(tap.inputs).toMatchObject({ res: "Cb", xLabel: "Qb/Qc", yLabel: "Ab/Ac", y: 0.25 });
+});
+
+it("prices once per snapshot: a Work change reuses the applied solve and answers as a fresh solve would", () => {
+  const snap = structuredClone(synthetic) as unknown as DuctSnapshot;
+  const key = "elbow-1d-gt10";
+  const doc = ductsRouteState.schema.parse({
+    rules: { [key]: { staged: { value: { table: "CD3-2" } } } },
+  });
+  const unstaged = price(snap, grids, null);
+  const staged = price(snap, grids, doc);
+  expect(staged.now).toBe(unstaged.now);
+  expect(price(snap, grids, doc)).toBe(staged);
+  expect(staged.next).toEqual(computeLosses(snap, grids, staged.choices, staged.overrides));
+  // A different snapshot object is a different solve.
+  expect(price(structuredClone(snap), grids, doc).now).not.toBe(staged.now);
+
+  const f = stagedFanout(snap, grids, staged, key)!;
+  expect(stagedFanout(snap, grids, unstaged, key)).toBeNull();
+  expect(stagedFanout(snap, grids, staged, key)).toBe(f);
+  expect(f).toEqual(fanout(snap, grids, staged.applied, key, "CD3-2"));
+  expect(groupTree(snap, "g10")).toBe(groupTree(snap, "g10"));
 });
