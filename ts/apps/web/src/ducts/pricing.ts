@@ -122,8 +122,13 @@ export function instancesOf(result: LossResult, key: string): Map<number, Row> {
   return out;
 }
 
-/** The table inputs W2 prints in a row's description. SHIM: W2 owes `Row.inputs`. */
-const inputsOf = (row: Row) => /\(([^()]*)\)$/.exec(row.desc)?.[1] ?? "";
+/** A row's table lookup as the store keeps it: "xLabel=x, yLabel=y". */
+const inputsOf = ({ inputs }: Row) => {
+  if (!inputs) return "";
+  const at = (n: number) => +n.toPrecision(4);
+  const x = `${inputs.xLabel}=${at(inputs.x)}`;
+  return inputs.y == null ? x : `${x}, ${inputs.yLabel ?? "y"}=${at(inputs.y)}`;
+};
 
 const round4 = (n: number) => Math.round(n * 1e4) / 1e4;
 
