@@ -39,7 +39,15 @@
     } catch {}
     throw new Error(`${r.status} ${r.statusText}${m ? `: ${m}` : ""}`);
   };
-  const json = async (r) => (r.ok ? r.json() : fail(r));
+  // A capture's URL rides a response header (`x-pe-capture-url`); it is copied onto the answer so a page can `<img src>` it.
+  const json = async (r) => {
+    if (!r.ok) return fail(r);
+    const body = await r.json();
+    const capture = r.headers.get("x-pe-capture-url");
+    if (capture && body && typeof body === "object")
+      Object.assign(body, { captureUrl: capture, captureId: r.headers.get("x-pe-capture-id") });
+    return body;
+  };
   const post = (path, body) =>
     fetch(path, { method: "POST", headers: headers(), body: JSON.stringify(body) });
 
@@ -108,7 +116,7 @@
   pe.do = async (key, input = {}) => {
     if (!pe.doc) await pe.target();
     const r = await post("/call", { key, request: input });
-    if (r.ok) return r.json();
+    if (r.ok) return json(r);
     const refusal = await r.json().catch(() => null);
     if (!(r.status === 409 && refusal && refusal.notDispatched)) return fail(r, refusal ?? "");
     const id = crypto.randomUUID();
@@ -136,9 +144,11 @@
   /**
    * Share a kit kernel's event log through the host. Replays the saved log into `k`, sends every later `k.fire`
    * to `/pages/<slug>/events`, follows other copies and agents live, and keeps `/pages/<slug>/state`'s snapshot
-   * current. Hash navigation (`nav`) stays local. Resolves to `k` once the replay is in.
+   * current. Event types in `local` stay in this copy; hash navigation (`nav`) always does. Resolves to `k` once
+   * the replay is in.
    */
-  pe.state = async (k) => {
+  pe.state = async (k, { local = [] } = {}) => {
+    const isLocal = (ev) => ev.type === "nav" || local.includes(ev.type);
     const base = `/pages/${pe.slug}`;
     const mine = new Set();
     let seq = 0;
@@ -157,13 +167,16 @@
     };
     const saved = await json(await fetch(`${base}/state`));
     seq = saved.seq;
-    k.replay(saved.events.map((row) => row.event));
+    k.replay(
+      saved.events.map((row) => row.event),
+      k.base,
+    ); // from the kernel's base, so the URL's view state survives the replay
     const fire = k.fire;
     k.fire = (ev) => {
-      if (ev.type === "nav") return fire(ev);
-      ev.id ||= crypto.randomUUID();
+      if (isLocal(ev)) return fire(ev);
+      ev.eventId ||= crypto.randomUUID(); // ours, so the echo over SSE is skipped; `id` stays the page's own
       if (!fire(ev)) return false;
-      mine.add(ev.id);
+      mine.add(ev.eventId);
       snapshot();
       post(`${base}/events`, ev)
         .then(json)
@@ -171,15 +184,27 @@
         .catch((e) => console.error("pe.state: the host did not keep an event", e));
       return true;
     };
-    const es = new EventSource(`${base}/events?after=${seq}`);
-    es.onmessage = (m) => {
-      const row = JSON.parse(m.data);
-      seq = Math.max(seq, row.seq);
-      if (mine.delete(row.event.id)) return; // our own fire, already applied
-      if (fire(row.event)) snapshot();
+    // The browser's own EventSource retry wedges in "connecting" after a dev host restart (seen 2026-10-04),
+    // so the stream is replaced on every error, from the last seq seen; nothing is lost, the host replays.
+    let retryMs = 1000;
+    const follow = () => {
+      const es = new EventSource(`${base}/events?after=${seq}`);
+      es.onopen = () => (retryMs = 1000);
+      es.onmessage = (m) => {
+        const row = JSON.parse(m.data);
+        seq = Math.max(seq, row.seq);
+        if (mine.delete(row.event.eventId)) return; // our own fire, already applied
+        if (fire(row.event)) snapshot();
+      };
+      es.onerror = () => {
+        es.close();
+        setTimeout(follow, retryMs);
+        retryMs = Math.min(retryMs * 2, 10000);
+      };
+      pe.events = es;
     };
+    follow();
     // ponytail: undo stays local to one copy; a shared undo is an event of its own when a page needs it.
-    pe.events = es;
     return k;
   };
 

@@ -190,7 +190,12 @@ export function createPagesHandler(root: string) {
       });
     } catch (error) {
       if (isMissing(error) || (error as { code?: string }).code === "EISDIR")
-        return problem(404, `no ${segments.join("/")} in page ${slug}`);
+        return problem(
+          404,
+          segments.length === 1 && segments[0] === "index.html"
+            ? `no page ${slug}: a page is a folder ${join(root, slug)} holding an index.html`
+            : `no ${segments.join("/")} in page ${slug}`,
+        );
       throw error;
     }
   }
@@ -240,7 +245,7 @@ export function createPagesHandler(root: string) {
     const parts = url.pathname.split("/").filter(Boolean); // ["pages", slug?, ...rest]
     const wantsHtml = (request.headers.get("accept") ?? "").includes("text/html");
     if (parts.length === 1)
-      return wantsHtml ? listPage(await list()) : json({ pages: await list() });
+      return wantsHtml ? listPage(await list()) : json({ root, pages: await list() });
     const [, slug = "", ...rest] = parts;
     if (slug === "pe.js")
       return new Response(asset("pe.js"), {
