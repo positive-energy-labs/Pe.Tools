@@ -86,6 +86,28 @@ internal sealed class RevitDataRequestService {
     private static DuctSnapshotData GetDuctSnapshotCore(DuctSnapshotRequest request, ProjectDocument activeDocument) =>
         Lib.Mep.DuctSnapshots.Snapshot(activeDocument.Value, request.Slots);
 
+    [Op("ducts.apply", Does = "Write duct losses into Revit so they travel with the model: Specific Coefficient on duct fittings, Specific Loss (in-wg) on duct accessories, terminal connector drops where the family connector is Specific Loss, fan external static on equipment through the FanStatic slot, the network-based calculation switch, and Pe's provenance store in the hidden _PE_DuctLosses Project Information parameter. previewOnly plans every write and refusal without a transaction. A real apply commits Not Defined, then the losses, in one undo step; a failed stage rolls everything back and is named. Returns per-target outcomes and the touched systems' critical path after.", Title = "Apply Duct Losses", Finds = ["ducts", "apply", "pressure", "loss", "coefficient", "terminal", "fan-static", "critical-path", "mutation"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"previewOnly\": true, \"fittings\": [{ \"id\": 12345, \"coefficient\": 0.25, \"table\": \"CD3-1\", \"ruleKey\": \"Round Elbow:Standard|r/D 1.0\" }], \"terminals\": [], \"components\": [], \"equipment\": [], \"store\": { \"version\": 1 } }")]
+    private static DuctApplyResult ApplyDuctsCore(DuctApplyRequest request, ProjectDocument activeDocument) {
+        var document = activeDocument.Value;
+        if (!request.PreviewOnly && document.IsReadOnly)
+            throw BridgeOperationExceptions.Conflict(
+                "The active project document is read-only.",
+                [BridgeOperationExceptions.Issue("$", "DuctsDocumentReadOnly", "The active project document is read-only.",
+                    "Open a writable project document and retry, or use previewOnly=true.")]);
+        if (request.Store is null)
+            throw BridgeOperationExceptions.Conflict(
+                "ducts.apply needs the store read from ducts.snapshot.",
+                [BridgeOperationExceptions.Issue("$.store", "DuctsStoreMissing", "The request carries no store.",
+                    "Send ducts.snapshot's store (or { \"version\": 1 } when it has none) with the changes merged in.")]);
+        try {
+            return Lib.Mep.DuctApplier.Apply(document, request);
+        } catch (BridgeOperationException) {
+            throw;
+        } catch (Exception ex) {
+            throw BridgeOperationExceptions.Unexpected("DuctsApplyException", ex, "Run ducts.apply with previewOnly=true and read each refusal, then retry.");
+        }
+    }
+
     [Op("ducts.tables", Does = "Read ASHRAE duct fitting coefficient grids (Co, Cb, Cs) by table id from the .tbl files Revit installs, verbatim: axes, labels and values for a web lookup. Read-only; needs no document.", Title = "Get ASHRAE Duct Tables", Finds = ["ducts", "ashrae", "tables", "coefficient", "fittings", "pressure"], Actor = OpActor.Any, Cost = OpCost.Cheap, Example = "{ \"ids\": [\"CD3-2\", \"SD5-9\"] }")]
     private static DuctTablesData GetDuctTablesCore(DuctTablesRequest request) {
         try {

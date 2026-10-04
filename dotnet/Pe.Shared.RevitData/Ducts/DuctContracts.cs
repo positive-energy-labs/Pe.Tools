@@ -87,6 +87,10 @@ public sealed record DuctParameterSlots(
     string ComponentDrop = "Pressure Drop",
     string? TerminalDrop = null);
 
+/// <summary>
+///     Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when
+///     the blob is unreadable or another version (fail-closed: ducts.apply refuses to overwrite it).
+/// </summary>
 public sealed record DuctSnapshotData(
     DuctDocument Document,
     IReadOnlyList<DuctLevel> Levels,
@@ -97,7 +101,9 @@ public sealed record DuctSnapshotData(
     IReadOnlyList<DuctIssue> Issues,
     IReadOnlyList<DuctLayer> Layers,
     IReadOnlyList<DuctSystem> Systems,
-    DuctParameterSlots Slots);
+    DuctParameterSlots Slots,
+    DuctLossStore? Store = null,
+    string? StoreError = null);
 
 /// <summary>
 ///     The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:

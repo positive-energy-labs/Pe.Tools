@@ -44,7 +44,7 @@ public static class DuctSnapshots {
         nodes.AddRange(Of(BuiltInCategory.OST_DuctAccessory).Select(e => Node(e, DuctNodeKind.Accessory, slots, schemas)));
         nodes.AddRange(Of(BuiltInCategory.OST_DuctTerminal).Select(e => Node(e, DuctNodeKind.Terminal, slots, schemas)));
         nodes.AddRange(Of(BuiltInCategory.OST_MechanicalEquipment)
-            .Where(e => Hvac(e).Any()).Select(e => Node(e, DuctNodeKind.Equipment, slots, schemas)));
+            .Where(e => HvacConnectors(e).Any()).Select(e => Node(e, DuctNodeKind.Equipment, slots, schemas)));
         var systems = new FilteredElementCollector(doc).OfClass(typeof(MechanicalSystem)).Cast<MechanicalSystem>()
             .Where(m => m.SystemType is DuctSystemType.SupplyAir or DuctSystemType.ReturnAir or DuctSystemType.ExhaustAir)
             .OrderBy(m => m.Name, StringComparer.Ordinal)
@@ -52,6 +52,7 @@ public static class DuctSnapshots {
             .ToList();
 
         var analysis = DuctNetwork.Analyze(nodes, segments);
+        var (store, storeError) = DuctApplier.ReadStore(doc);
         return new DuctSnapshotData(
             new DuctDocument(doc.Title, readAt, clock.ElapsedMilliseconds, DuctSettings.GetDuctSettings(doc).NetworkBasedCalculations),
             levels,
@@ -62,10 +63,12 @@ public static class DuctSnapshots {
             analysis.Issues,
             Layers(analysis, systems, slots),
             systems,
-            slots);
+            slots,
+            store,
+            storeError);
     }
 
-    private static DuctSystem RevitSystem(MechanicalSystem m) {
+    internal static DuctSystem RevitSystem(MechanicalSystem m) {
         var critical = Try(() => m.GetCriticalPathSectionNumbers()?.ToList()) ?? [];
         var count = Try(() => (int?)m.SectionsCount) ?? 0;
         var sections = new List<DuctSection>();
@@ -123,7 +126,7 @@ public static class DuctSnapshots {
     }
 
     private static DuctTerminalDrop Terminal(Element e, DuctParameterSlots slots) {
-        var c = Hvac(e).FirstOrDefault();
+        var c = HvacConnectors(e).FirstOrDefault();
         var method = c is null ? null : Try(() => c.AssignedDuctLossMethod.ToString());
         return new DuctTerminalDrop(
             c is null ? null : Try(() => (double?)R(UnitUtils.ConvertFromInternalUnits(c.AssignedPressureDrop, UnitTypeId.InchesOfWater60DegreesFahrenheit), 5)),
@@ -136,7 +139,7 @@ public static class DuctSnapshots {
         var flex = curve is FlexDuct;
         var type = doc.GetElement(curve.GetTypeId()) as MEPCurveType;
         var roughness = type?.Roughness ?? 0;
-        var connectors = Hvac(curve).Select(Connector).ToList();
+        var connectors = HvacConnectors(curve).Select(Connector).ToList();
         var polyline = curve is FlexDuct fd
             ? fd.Points.Select(P).ToList()
             : curve.Location is LocationCurve { Curve: var line }
@@ -208,7 +211,7 @@ public static class DuctSnapshots {
             null,
             Text(e, BuiltInParameter.RBS_SYSTEM_NAME_PARAM),
             Text(e, BuiltInParameter.RBS_SYSTEM_CLASSIFICATION_PARAM),
-            Hvac(e).Select(Connector).ToList(),
+            HvacConnectors(e).Select(Connector).ToList(),
             facts.Where(f => f.Value is not null || f.Text is not null).ToList(),
             kind is DuctNodeKind.Fitting or DuctNodeKind.Accessory ? Loss(e, schemas) : null,
             kind == DuctNodeKind.Terminal ? Terminal(e, slots) : null);
@@ -278,7 +281,7 @@ public static class DuctSnapshots {
         ];
     }
 
-    private static IEnumerable<Connector> Hvac(Element e) {
+    internal static IEnumerable<Connector> HvacConnectors(Element e) {
         var manager = e switch {
             MEPCurve c => c.ConnectorManager,
             FamilyInstance fi => fi.MEPModel?.ConnectorManager,
