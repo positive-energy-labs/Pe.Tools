@@ -8,7 +8,8 @@ import { cleanup, render } from "@testing-library/react";
 import { afterEach, expect, it } from "vite-plus/test";
 import { applyPatches, ductsRouteState, type DuctsRouteDocument } from "@pe/agent-contracts";
 
-import { DuctsLedger, verdictPatches } from "./ledger";
+import { DuctsLedger } from "./ledger";
+import { verdictPatches } from "./assumptions";
 import type { DuctsPage } from "./manifest";
 import { readiness, type DuctSnapshot } from "./readiness";
 import { chainsOf, groupTree, runsOf } from "./topology";
@@ -167,6 +168,8 @@ const page = (patch: Partial<DuctsPage> = {}): DuctsPage => ({
   level: "",
   layers: [],
   selected: "",
+  issue: "",
+  encoding: "health",
   epoch: 0,
   evaluation: null,
   ...patch,

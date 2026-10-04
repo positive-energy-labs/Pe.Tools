@@ -5,50 +5,27 @@
  * drawn dark. Assumptions stage into the `assumptions` Work only (Pea may propose the same
  * keys); nothing is written to Revit, and readiness re-derives from what is staged.
  */
-import { useMemo } from "react";
-import {
-  transitionPatches,
-  type DuctAssumption,
-  type DuctsRouteDocument,
-  type RouteStatePatch,
-} from "@pe/agent-contracts";
+import { useContext, useMemo } from "react";
+import { type DuctsRouteDocument, type RouteStatePatch } from "@pe/agent-contracts";
 
+import { AssumptionCell } from "./assumptions";
 import { EmptyState } from "#/components/lang/empty";
 import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
-import { Switcher } from "#/components/lang/switcher";
 import type { Column } from "#/components/master-table/model";
 import { Table } from "#/components/master-table/table";
 import { tokenRef } from "#/lib/token";
+import { ChatHosted } from "#/route/situation-ladder";
 import { ISSUE_KINDS, IssueLegend, issueVerdict, type Blocks, type IssueKind } from "./issues";
 import type { DuctsPage } from "./manifest";
 import type { DuctSnapshot, GroupReadiness } from "./readiness";
+import { READY } from "./tables";
 import { groupTree, runsOf, terminalCfm, type GroupTree, type Run } from "./topology";
 
 type Issue = DuctSnapshot["issues"][number];
-type Verdict = Extract<DuctAssumption, { kind: "verdict" }>["verdict"];
-type Choice = Verdict | "unset";
 
 const num = (value: number | null | undefined, digits = 0) =>
   value == null ? "" : value.toFixed(digits);
-
-const READY = {
-  blocked: {
-    word: "blocked",
-    tone: "alarm",
-    note: "a walk from the root cannot reach every terminal",
-  },
-  walkable: {
-    word: "walkable",
-    tone: "caution",
-    note: "walkable; fan static or component drops unknown",
-  },
-  budgetable: {
-    word: "budgetable",
-    tone: "done",
-    note: "walkable, and every static and drop is known",
-  },
-} as const;
 
 const CLASS_ORDER: readonly Blocks[] = ["walkable", "budgetable", "none"];
 /** Kinds in class-then-shade order, so counts read the same everywhere. */
@@ -76,37 +53,6 @@ function KindCounts({ issues }: { issues: readonly Issue[] }) {
   );
 }
 
-/** The verdicts an issue kind can take: open ends all three; the rest that `ignore` resolves. */
-const CHOICES: Partial<Record<IssueKind, readonly Verdict[]>> = {
-  "open-end": ["capped", "connect", "ignore"],
-  "no-terminal-flow": ["ignore"],
-  "default-flex-roughness": ["ignore"],
-};
-const CHOICE_TITLE: Record<Choice, string> = {
-  capped: "Capped: this end carries no flow. Resolves the open end.",
-  connect: "Connect: the model must be fixed in Revit. Does not resolve the open end.",
-  ignore: "Ignore: leave this out of the walk. Resolves it.",
-  unset: "No staged answer.",
-};
-
-/** The patches one verdict choice makes on an issue's cell: stage it, or unstage for `unset`. */
-export const verdictPatches = (
-  doc: DuctsRouteDocument | null,
-  issueId: string,
-  choice: Choice,
-): RouteStatePatch[] =>
-  transitionPatches(
-    ["assumptions"],
-    issueId,
-    doc?.assumptions[issueId] ?? {},
-    choice === "unset"
-      ? { kind: "unstage" }
-      : { kind: "stage", rung: { value: { kind: "verdict", verdict: choice } } },
-  );
-
-const verdictAt = (value: DuctAssumption | undefined) =>
-  value?.kind === "verdict" ? value.verdict : null;
-
 type GroupRow = DuctSnapshot["groups"][number] & {
   readiness: GroupReadiness;
   cfm: number;
@@ -129,6 +75,7 @@ export function DuctsLedger({
   empty: { says: string; exit: string } | null;
   work: { doc: DuctsRouteDocument | null; write: (patch: RouteStatePatch[]) => Promise<unknown> };
 }) {
+  const hosted = useContext(ChatHosted);
   const issuesByGroup = useMemo(() => {
     const map = new Map<string, Issue[]>();
     for (const issue of snapshot?.issues ?? [])
@@ -354,13 +301,14 @@ export function DuctsLedger({
       }}
       start={
         <PaneSplit
-          axis="horizontal"
+          axis={hosted ? "vertical" : "horizontal"}
           grow
           resize={{
             target: "end",
-            defaultSize: 760,
-            minSize: 360,
-            persist: "pe.ducts.ledgerRunsWidth",
+            defaultSize: hosted ? 240 : 760,
+            minSize: hosted ? 120 : 360,
+            minOtherSize: 120,
+            persist: hosted ? undefined : "pe.ducts.ledgerRunsWidth",
           }}
           start={
             <Pane
@@ -377,7 +325,7 @@ export function DuctsLedger({
                 rowKey={(g) => g.id}
                 activeKey={page.group || null}
                 onRowClick={(g) =>
-                  setPage({ group: page.group === g.id ? "" : g.id, selected: "" })
+                  setPage({ group: page.group === g.id ? "" : g.id, selected: "", issue: "" })
                 }
                 empty={none}
               />
@@ -408,7 +356,7 @@ export function DuctsLedger({
                 columns={runColumns}
                 rowKey={(r) => String(r.terminal)}
                 activeKey={active ? String(active.terminal) : null}
-                onRowClick={(r) => setPage({ selected: String(r.terminal) })}
+                onRowClick={(r) => setPage({ selected: String(r.terminal), issue: "" })}
                 empty={pick}
               />
             </Pane>
@@ -417,13 +365,14 @@ export function DuctsLedger({
       }
       end={
         <PaneSplit
-          axis="horizontal"
+          axis={hosted ? "vertical" : "horizontal"}
           grow
           resize={{
             target: "end",
-            defaultSize: 360,
-            minSize: 200,
-            persist: "pe.ducts.ledgerMapWidth",
+            defaultSize: hosted ? 120 : 360,
+            minSize: hosted ? 80 : 200,
+            minOtherSize: 160,
+            persist: hosted ? undefined : "pe.ducts.ledgerMapWidth",
           }}
           start={
             <Pane
@@ -439,9 +388,9 @@ export function DuctsLedger({
                 rows={issues}
                 columns={issueColumns}
                 rowKey={(i) => i.id}
-                activeKey={page.selected || null}
+                activeKey={page.issue || null}
                 onRowClick={(i) =>
-                  setPage({ selected: i.elementId == null ? "" : String(i.elementId) })
+                  setPage({ selected: i.elementId == null ? "" : String(i.elementId), issue: i.id })
                 }
                 empty={pick}
               />
@@ -459,52 +408,6 @@ export function DuctsLedger({
         />
       }
     />
-  );
-}
-
-/** The staged verdict of one issue, and its editor where a verdict can answer it. */
-function AssumptionCell({
-  issue,
-  work,
-}: {
-  issue: Issue;
-  work: { doc: DuctsRouteDocument | null; write: (patch: RouteStatePatch[]) => Promise<unknown> };
-}) {
-  const cell = work.doc?.assumptions[issue.id];
-  const staged = verdictAt(cell?.staged?.value);
-  const proposed = verdictAt(cell?.proposal?.value);
-  const choices = CHOICES[issue.kind];
-  if (!choices) {
-    const info = ISSUE_KINDS[issue.kind];
-    return (
-      <span className="text-ink-mute">
-        {info.blocks === "budgetable"
-          ? "needs an override value"
-          : info.blocks === "walkable"
-            ? "needs a structural answer"
-            : ""}
-      </span>
-    );
-  }
-  const options = [...choices, "unset" as const].map((value) => ({
-    value,
-    label: value,
-    title: CHOICE_TITLE[value],
-  }));
-  return (
-    <span className="flex items-center gap-1">
-      <Switcher<Choice>
-        ariaLabel={`assumption for ${issue.id}`}
-        options={options}
-        value={staged ?? "unset"}
-        onChange={(choice) => void work.write(verdictPatches(work.doc, issue.id, choice))}
-      />
-      {proposed && proposed !== staged ? (
-        <span data-tone="pea" title="Pea proposed this; choose it to stage it">
-          Pea: {proposed}
-        </span>
-      ) : null}
-    </span>
   );
 }
 

@@ -42,7 +42,7 @@ export interface DuctsEvaluation {
 
 const ductsPageSchema = z.object({
   stage: z.enum(["survey", "losses"]).default("survey"),
-  /** The view the body draws; the default is the tables. Variants add keys. */
+  /** The view the body draws: "" the tables, `tree`, `ledger`, `losses`, `plan` one level, `iso` every level. */
   view: z.string().default(""),
   /** The subject: one group id (`g<smallest element id>`); empty = the whole document. */
   group: z.string().default(""),
@@ -52,6 +52,10 @@ const ductsPageSchema = z.object({
   layers: z.array(z.string()).default([]),
   /** The selected element id as a string; empty = none. */
   selected: z.string().default(""),
+  /** The selected issue id (it may name no element: no-root, multi-root); empty = none. */
+  issue: z.string().default(""),
+  /** The spatial views' encoding, a key of `ENCODINGS` (`encoding.tsx`). */
+  encoding: z.string().default("health"),
   /** Bumped by `refresh` and `apply`; the snapshot read keys on it. */
   epoch: z.number().default(0),
   /** The last preview; `apply` is armed while it matches the Work revision and epoch. Page, never URL. */

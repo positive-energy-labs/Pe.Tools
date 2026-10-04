@@ -68,6 +68,8 @@ const PAGE: DuctsPage = {
   level: "",
   layers: [],
   selected: "",
+  issue: "",
+  encoding: "health",
   epoch: 0,
   evaluation: null,
 };

@@ -113,9 +113,8 @@ const targetQuery = (target: Target): string => {
 };
 
 /**
- * The route Work a Target keys: its document's Address, as the browser resolves it. Work keys by
- * Address, so an exact `open` Target is resolved through the live inventory; dropping it read the
- * Target-less Work instead of the Chat's (E2E-J1). A closed document refuses rather than fall back.
+ * Resolve route Work like the browser: Address when saved, exact open lifetime when unsaved.
+ * Carry the lifetime beside an Address for Save As migration; a closed lifetime refuses (E2E-J1).
  */
 async function routeWorkScope(target: Target): Promise<{ query: string; target: ResolvedTarget }> {
   if (target?.kind !== "open") return { query: targetQuery(target), target: namedTarget(target) };
@@ -125,13 +124,15 @@ async function routeWorkScope(target: Target): Promise<{ query: string; target: 
   const document = sessions
     .find((session) => session.sessionId === target.ref.session)
     ?.openDocuments?.find((doc) => doc.openId === target.ref.openId);
-  const address = addressSchema.safeParse(document?.address).data;
-  if (!address)
+  if (!document)
     throw Error(
-      "The Chat's document is no longer open, so its route Work has no Address to read; ask the person to pick the document again.",
+      "The Chat's document is no longer open in its session; ask the person to pick an open document again.",
     );
+  const address = addressSchema.safeParse(document.address).data ?? null;
+  const query = new URLSearchParams({ open: `${target.ref.session}/${target.ref.openId}` });
+  if (address) query.set("target", address);
   return {
-    query: new URLSearchParams({ target: address }).toString(),
+    query: query.toString(),
     target: { session: target.ref.session, document: address },
   };
 }
@@ -143,7 +144,11 @@ export const peFind = createTool({
   inputSchema: z.object({
     query: z.string().optional().describe("Keywords describing what you need."),
     kind: capabilityKindSchema.optional(),
-    needs: capabilityNeedsSchema.optional(),
+    needs: capabilityNeedsSchema
+      .optional()
+      .describe(
+        "document includes project-document and family-document capabilities. Other needs match exactly. This filters requirements, not current availability.",
+      ),
     mutates: z.boolean().optional(),
     limit: z.number().int().min(1).max(50).default(8),
   }),

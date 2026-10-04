@@ -16,12 +16,13 @@ import { RouteShell, useRoute, useRouteThread } from "#/route";
 import { Ladder } from "#/route/ladder";
 import { useChooseTarget } from "#/route/shell";
 import { Situation } from "#/route/situation";
-import { useDocumentLadder } from "#/route/situation-ladder";
+import { LadderPicker, useDocumentLadder } from "#/route/situation-ladder";
 import { manifest, previewFresh, WRITTEN, type DuctsPage } from "./manifest";
 import { DuctsLosses, revitSays, StagedLosses } from "./losses-view";
 import { price } from "./pricing";
 import { readiness, type DuctSnapshot } from "./readiness";
 import { DuctsLedger } from "./ledger";
+import { DuctsSpatial } from "./spatial";
 import { DuctsTables } from "./tables";
 import { DuctsTree } from "./tree";
 
@@ -35,12 +36,17 @@ const VIEWS = [
     label: "losses",
     sub: "per grille, what eats the pressure; stage fitting tables and drops, then write to Revit",
   },
+  { id: "plan", label: "a plan", sub: "the network on one level" },
+  { id: "iso", label: "an isometric", sub: "the network across every level" },
 ] as const;
 
 const fmt = (n: number | null | undefined) => (n == null ? "—" : n.toFixed(4));
 
 /** The URL half of the page; the rest (epoch, stage) is ephemeral. */
-export type DuctsSearch = Pick<DuctsPage, "view" | "group" | "level" | "selected"> & {
+export type DuctsSearch = Pick<
+  DuctsPage,
+  "view" | "group" | "level" | "selected" | "issue" | "encoding"
+> & {
   layers: string;
 };
 
@@ -83,7 +89,9 @@ export function DuctsRoute({
       : null;
   const staged = useMemo(() => stagedDucts(handle.work.doc), [handle.work.doc]);
   const { snapshot, error, pending } = useDuctSnapshot(doc, page.epoch, staged.parameters);
-  const tables = useDuctTables(page.view === "losses" ? (doc?.session ?? null) : null);
+  // The spatial views ink Pe's losses, so they read the tables too; the other views do not.
+  const priceable = page.view === "losses" || page.view === "plan" || page.view === "iso";
+  const tables = useDuctTables(priceable ? (doc?.session ?? null) : null);
   useEffect(() => {
     setProvided({
       ducts: snapshot ? { state: "ready", observation: snapshot } : { state: "absent" },
@@ -103,6 +111,8 @@ export function DuctsRoute({
       page.group !== search.group ||
       page.level !== search.level ||
       page.selected !== search.selected ||
+      page.issue !== search.issue ||
+      page.encoding !== search.encoding ||
       layers !== search.layers
     )
       setSearch({
@@ -110,9 +120,11 @@ export function DuctsRoute({
         group: page.group,
         level: page.level,
         selected: page.selected,
+        issue: page.issue,
+        encoding: page.encoding,
         layers,
       });
-  }, [page.view, page.group, page.level, page.selected, page.layers]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page.view, page.group, page.level, page.selected, page.issue, page.encoding, page.layers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ready = useMemo(
     () => (snapshot ? readiness(snapshot, handle.work.doc) : {}),
@@ -164,7 +176,7 @@ export function DuctsRoute({
 
   const sentence = (
     <>
-      on <Ladder levels={ladder.levels} disabled={busy} caution={ladder.lost} />
+      on {SAVED ? "saved snapshot" : <LadderPicker ladder={ladder} disabled={busy} />}
       {", "}
       <Ladder
         levels={[
@@ -183,7 +195,7 @@ export function DuctsRoute({
               : null,
             note: read,
             picked: (id) => id === page.group,
-            pick: (id) => setPage({ group: id === page.group ? "" : id, selected: "" }),
+            pick: (id) => setPage({ group: id === page.group ? "" : id, selected: "", issue: "" }),
           },
         ]}
         disabled={busy}
@@ -333,7 +345,16 @@ export function DuctsRoute({
           page={page}
           setPage={setPage}
           empty={empty}
-          work={{ doc: handle.work.doc, write: handle.work.write }}
+          work={{ doc: work.doc, write: work.write }}
+        />
+      ) : page.view === "plan" || page.view === "iso" ? (
+        <DuctsSpatial
+          snapshot={snapshot}
+          ready={ready}
+          priced={priced}
+          page={page}
+          setPage={setPage}
+          empty={empty}
         />
       ) : (
         <DuctsTables

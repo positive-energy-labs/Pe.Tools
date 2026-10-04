@@ -132,7 +132,7 @@ export function DuctsTree({
   const longestFt = tree.longest.length ? tree.dist.get(tree.longest.at(-1)!)! : null;
   const flowed = chains.some((c) => c.cfm != null);
   const equipment = snapshot.nodes.find((n) => n.id === tree.root?.equipment);
-  const pick = (id: number) => setPage({ selected: selected === id ? "" : String(id) });
+  const pick = (id: number) => setPage({ selected: selected === id ? "" : String(id), issue: "" });
   const rootY = layout.placed.find((p) => p.chain.from === null)?.y1 ?? PAD;
 
   return (
