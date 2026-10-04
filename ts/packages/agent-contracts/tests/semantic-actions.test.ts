@@ -26,15 +26,18 @@ test("host actions are one key space of records with one prose field and declare
 });
 
 test("ducts preview and apply share one input, admitted on a project document by any actor", () => {
-  expect(semanticActions["ducts.preview"]).toBe(ductsActions["ducts.preview"]);
-  expect(ductsActions["ducts.preview"].input).toBe(ductsActions["ducts.apply"].input);
+  expect(semanticActions["ducts.preview-losses"]).toBe(ductsActions["ducts.preview-losses"]);
+  expect(ductsActions["ducts.preview-losses"].input).toBe(ductsActions["ducts.apply-losses"].input);
   for (const row of Object.values(ductsActions)) {
     expect(row.needs).toBe("project-document");
     expect(row.actor).toBe("any");
   }
   // Only the real write changes the model; the preview leaves the snapshot fresh.
-  expect(ductsActions["ducts.apply"].dirties).toEqual(["snapshot"]);
-  expect(ductsActions["ducts.preview"].dirties).toEqual([]);
-  // previewOnly is the verb's, never the caller's.
-  expect(() => ductsActions["ducts.apply"].input.parse({ previewOnly: false } as never)).toThrow();
+  expect(ductsActions["ducts.apply-losses"].dirties).toEqual(["snapshot"]);
+  expect(ductsActions["ducts.preview-losses"].dirties).toEqual([]);
+  // The native op keeps its own key; previewOnly is the verb's, never the caller's.
+  expect(Object.keys(hostActions)).not.toContain("ducts.apply");
+  expect(() =>
+    ductsActions["ducts.apply-losses"].input.parse({ previewOnly: false } as never),
+  ).toThrow();
 });

@@ -158,7 +158,7 @@ export function fanWrites(
 }
 
 /**
- * The `ducts.apply` request from the staged cells only: every instance of a staged rule under
+ * The native `ducts.apply` request (less `previewOnly`) from the staged cells only: every instance of a staged rule under
  * its chosen table (instances the table cannot price are left out, and the band says so), every
  * staged drop, the staged parameter slots, and the fan static of each group a write touches.
  */
@@ -201,23 +201,16 @@ export function applyRequest(
     equipment: fanWrites(snapshot, priced.next, touched),
     // Revit's own critical path (the check beside Pe's) needs the network-based engine.
     networkBasedCalculations: true,
+    // The native op writes the store as sent: the model's store (unknown keys included) with
+    // this apply over it, at the revision read, so a store that moved since refuses as stale.
     store: {
+      ...stored,
       version: 1,
       rules: Object.fromEntries(
         Object.entries(priced.choices).map(([key, table]) => [key, { table: table.toUpperCase() }]),
       ),
       instances: {
-        ...Object.fromEntries(
-          Object.entries(stored?.instances ?? {}).map(([id, record]) => [
-            id,
-            {
-              table: record.table ?? null,
-              inputs: record.inputs ?? null,
-              coefficient: record.coefficient,
-              appliedAt: record.appliedAt,
-            },
-          ]),
-        ),
+        ...stored?.instances,
         ...Object.fromEntries(
           fittings.map(({ id, table, inputs, coefficient }) => [
             String(id),
@@ -226,20 +219,14 @@ export function applyRequest(
         ),
       },
       terminals: {
-        ...Object.fromEntries(
-          Object.entries(stored?.terminals ?? {}).map(([id, drop]) => [
-            id,
-            { inWg: drop.inWg, source: drop.source ?? null, appliedAt: drop.appliedAt },
-          ]),
-        ),
+        ...stored?.terminals,
         ...Object.fromEntries(
           terminals.map(({ id, inWg, source }) => [String(id), { inWg, source, appliedAt }]),
         ),
       },
       slots: Object.fromEntries(
         Object.entries({ ...snapshot.slots, ...slots }).filter(([, name]) => !!name),
-      ) as DuctsApplyInput["store"]["slots"],
-      // The model store's revision as read: an apply over a store that moved since refuses.
+      ),
       workRevision: stored?.workRevision ?? 0,
       appliedAt,
     },

@@ -137,17 +137,23 @@ export function DuctsRoute({
           : "this document has no duct networks";
   const busy = handle.busy !== null;
   const solved = group ? priced?.now.byGroup[group.id] : null;
+  // With the network engine on, ducts.snapshot takes about 30 s on a large model: say so.
+  const reading = snapshot?.document.networkBasedCalculations
+    ? "reading ducts.snapshot (about 30 s with network-based calculations on)"
+    : "reading ducts.snapshot";
   const lossesWord = !snapshot
-    ? "reading ducts"
-    : tables.error
-      ? `ducts.tables failed: ${tables.error}`
-      : !priced
-        ? "reading the ASHRAE tables"
-        : group && group.rootIds.length === 0
-          ? "no air mover; Pe computes from the open end; place one in Revit"
-          : group
-            ? `fan ${fmt(solved?.fan)} in-wg by Pe, ${solved?.revitCritical == null ? "no critical path from Revit" : `${fmt(solved.revitCritical)} by Revit`}`
-            : `largest fan ${fmt(priced.now.fan)} in-wg by Pe over ${snapshot.groups.length} groups`;
+    ? reading
+    : pending
+      ? `${reading}; the bars show the last read`
+      : tables.error
+        ? `ducts.tables failed: ${tables.error}`
+        : !priced
+          ? "reading the ASHRAE tables"
+          : group && group.rootIds.length === 0
+            ? "no air mover; Pe computes from the open end; place one in Revit"
+            : group
+              ? `fan ${fmt(solved?.fan)} in-wg by Pe, ${solved?.revitCritical == null ? "no critical path from Revit" : `${fmt(solved.revitCritical)} by Revit`}`
+              : `largest fan ${fmt(priced.now.fan)} in-wg by Pe over ${snapshot.groups.length} groups`;
   // Every written segment's cells count in the Work sentence; the losses body is the band.
   const counted = useMemo(
     () =>
@@ -244,6 +250,7 @@ export function DuctsRoute({
     doc: handle.work.doc,
     revision: handle.work.revision,
     write: handle.work.write,
+    preview: page.evaluation?.response ?? null,
   };
   const empty =
     !doc && !SAVED

@@ -130,16 +130,19 @@ const definitions = {
 } as const;
 export const takeoffActions = definitions;
 
-/** /ducts verbs: one native op, `ducts.apply`, once with `previewOnly` and once for real. */
+/**
+ * /ducts verbs: one native op, `ducts.apply`, once with `previewOnly` and once for real. Their own
+ * keys, so `operations call ducts.apply` still names the native op.
+ */
 export const ductsActions = {
-  "ducts.preview": {
+  "ducts.preview-losses": {
     says: "Plan the staged duct loss writes (fitting coefficients, terminal and component drops, fan static) and report each write's outcome without changing Revit.",
     needs: "project-document",
     actor: "any",
     input: ductsApplyInputSchema,
     dirties: [],
   },
-  "ducts.apply": {
+  "ducts.apply-losses": {
     says: "Write the staged duct loss values to Revit (fitting coefficients, terminal and component drops, fan static) and record their provenance in Project Information.",
     needs: "project-document",
     actor: "any",

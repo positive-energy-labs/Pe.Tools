@@ -7,6 +7,7 @@
  * show what Revit holds now and ghost to the staged state, as the staged band does (variant J).
  */
 import { Fragment, useMemo, useState } from "react";
+import type { DuctsApply } from "@pe/host-contracts/generated";
 import {
   transitionPatches,
   type DuctDrop,
@@ -44,6 +45,8 @@ type Group = DuctSnapshot["groups"][number];
 export interface LossesWork {
   doc: DuctsRouteDocument | null;
   revision: number | null;
+  /** The last preview's answer: a write it refused says why at its cell. */
+  preview?: DuctsApply.Res.Response | null;
   write: CellWire["write"];
 }
 
@@ -123,6 +126,10 @@ function DropCell({
 }) {
   const key = String(id);
   const cell = work.doc?.[segment][key] ?? {};
+  const kind = segment === "terminalDrops" ? "terminal" : "component";
+  const refusal = work.preview?.writes.find(
+    (w) => w.kind === kind && w.id === id && w.outcome === "refused",
+  );
   const authored = (cell.staged ?? cell.proposal)?.value as DuctDrop | undefined;
   const wire: CellWire = { segment, revision: work.revision, write: work.write };
   return (
@@ -152,6 +159,9 @@ function DropCell({
             .then((refusal) => refusal?.message)
         }
         transitions={reviewTransitions(wire, key, cell)}
+        refused={
+          refusal ? `preview: Revit refuses this drop: ${refusal.reason ?? "no reason"}` : undefined
+        }
       />
       <span className="t-small text-ink-2">in-wg</span>
     </span>
@@ -582,6 +592,59 @@ function Bars({
   );
 }
 
+const SLOT_WORDS = {
+  fanStatic: "fan static (on the unit, in-wg)",
+  fanFlow: "fan flow (on the unit, CFM)",
+  componentDrop: "component drop (on accessories, in-wg)",
+  terminalDrop:
+    "terminal drop (on grilles, in-wg; Revit refuses the connector, so a family parameter carries it)",
+} as const;
+
+/** The Revit parameter each value travels in; staged names ride the next snapshot read and apply. */
+function Slots({ snapshot, work }: { snapshot: DuctSnapshot; work: LossesWork }) {
+  const wire: CellWire = { segment: "parameters", revision: work.revision, write: work.write };
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 t-small" data-slots="">
+      <span className="t-upper text-ink-2">parameters</span>
+      {(Object.keys(SLOT_WORDS) as (keyof typeof SLOT_WORDS)[]).map((slot) => {
+        const cell = work.doc?.parameters[slot] ?? {};
+        const held = snapshot.slots[slot] ?? "";
+        const authored = (cell.staged ?? cell.proposal)?.value;
+        return (
+          <span
+            key={slot}
+            className="inline-flex items-baseline gap-1"
+            data-slot={slot}
+            title={SLOT_WORDS[slot]}
+          >
+            <span className="text-ink-2">{slot}</span>
+            <StateCell
+              {...cellFromTrichotomy(cell, {
+                value: authored ?? held,
+                cap: "editable",
+                note: authored && held ? `the snapshot read ${held}` : undefined,
+              })}
+              scale="row"
+              placeholder={slot === "terminalDrop" ? "none; name the family parameter" : "—"}
+              onCommit={(text: string) =>
+                work
+                  .write(
+                    transitionPatches(["parameters"], slot, cell, {
+                      kind: "stage",
+                      rung: { value: text.trim() },
+                    }),
+                  )
+                  .then((refused) => refused?.message)
+              }
+              transitions={reviewTransitions(wire, slot, cell)}
+            />
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 export function DuctsLosses({
   snapshot,
   grids,
@@ -636,6 +699,7 @@ export function DuctsLosses({
   );
   return (
     <div className="flex flex-col gap-3 overflow-auto px-(--item-pad-x) py-2">
+      <Slots snapshot={snapshot} work={work} />
       <div className="flex flex-wrap gap-3 t-small text-ink-2">
         {PARTS.map((part) => (
           <PartChip key={part} part={part} />
@@ -743,6 +807,21 @@ export function StagedLosses({
           fan {fmt(fanOf(priced.now))} → {fmt(fanOf(priced.next))} in-wg
         </div>
       ) : null}
+      {(evaluation?.response.writes ?? [])
+        .filter((w) => w.kind === "equipment" && w.id != null && w.after?.startsWith("type "))
+        .map((w) => {
+          const unit = snapshot.nodes.find((n) => n.id === w.id);
+          const shared = snapshot.nodes.filter(
+            (n) => n.kind === "equipment" && n.family === unit?.family && n.type === unit?.type,
+          ).length;
+          return (
+            <div key={w.id} data-tone="caution" data-type-fanout={w.id}>
+              unit {w.id}: the instance has no fan static parameter, so apply writes type{" "}
+              {unit?.family ?? "?"} : {unit?.type ?? "?"} · moves {shared} unit
+              {shared === 1 ? "" : "s"}
+            </div>
+          );
+        })}
       {slots.length ? (
         <div className="face-mono">
           {slots.map(([slot, name]) => `${slot} → ${name}`).join(" · ")}

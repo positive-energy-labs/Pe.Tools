@@ -50,6 +50,8 @@ const input: DuctsApplyInput = {
     },
     slots: { fanStatic: "PE_ESP" },
     workRevision: 4,
+    // A key a later store version adds passes through untouched ([JsonExtensionData]).
+    pressureClass: "low",
     appliedAt: "2026-10-04T00:00:00.000Z",
   },
 };
@@ -90,7 +92,11 @@ const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>) =>
           },
         }),
       );
-    const intent = (id: string, key: "ducts.preview" | "ducts.apply", openId = target.openId) => ({
+    const intent = (
+      id: string,
+      key: "ducts.preview-losses" | "ducts.apply-losses",
+      openId = target.openId,
+    ) => ({
       id,
       key,
       kind: "workflow" as const,
@@ -116,7 +122,7 @@ type Harness = {
   answer: (requestId: string, value: unknown) => Effect.Effect<boolean>;
   intent: (
     id: string,
-    key: "ducts.preview" | "ducts.apply",
+    key: "ducts.preview-losses" | "ducts.apply-losses",
     openId?: string,
   ) => Record<string, unknown> & { id: string };
 };
@@ -133,15 +139,15 @@ test("preview and apply send the web's request to ducts.apply, differing only in
   lane(({ owner, outgoing, post, answer, intent }) =>
     Effect.gen(function* () {
       for (const [id, key, outcome] of [
-        ["preview-1", "ducts.preview", "planned"],
-        ["apply-1", "ducts.apply", "written"],
+        ["preview-1", "ducts.preview-losses", "planned"],
+        ["apply-1", "ducts.apply-losses", "written"],
       ] as const) {
         expect((yield* post(intent(id, key))).status).toBe(202);
         const frame = yield* Queue.take(outgoing);
         expect(frame.request?.operationKey).toBe("ducts.apply");
         expect(JSON.parse(frame.request!.payloadJson)).toEqual({
           ...input,
-          previewOnly: key === "ducts.preview",
+          previewOnly: key === "ducts.preview-losses",
         });
         yield* answer(frame.request!.requestId, writes(outcome));
         const row = (yield* Effect.promise(() => owner.wait(id))) as {
@@ -158,14 +164,14 @@ test("a request for another document lifetime, or with a caller's previewOnly, n
   lane(({ owner, outgoing, post, intent }) =>
     Effect.gen(function* () {
       // Admission answers first; the lifetime check runs before any native step and refuses it.
-      yield* post(intent("gone", "ducts.apply", "closed-open"));
+      yield* post(intent("gone", "ducts.apply-losses", "closed-open"));
       const gone = (yield* Effect.promise(() => owner.wait("gone"))) as {
         state: string;
         steps: unknown[];
       };
       expect(gone.state).not.toBe("succeeded");
       expect(gone.steps).toEqual([]);
-      const smuggled = intent("smuggled", "ducts.apply");
+      const smuggled = intent("smuggled", "ducts.apply-losses");
       const bad = yield* post({ ...smuggled, input: { ...input, previewOnly: false } });
       expect(bad.status).toBeGreaterThanOrEqual(400);
       expect(yield* Queue.size(outgoing)).toBe(0);

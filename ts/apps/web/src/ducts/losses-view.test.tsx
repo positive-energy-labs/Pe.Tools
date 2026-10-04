@@ -14,6 +14,7 @@ import {
   transitionPatches,
   type DuctsRouteDocument,
   semanticActions,
+  type DuctsApplyInput,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
 
@@ -139,6 +140,8 @@ it("draws one bar per grille, opens a grille's rules, and a table chip stages th
   );
   expect(status30).toEqual(["refuses"]);
   expect(q("[data-staged-band]")).toBeNull();
+  // The slot a terminal drop travels in is a cell a person can name.
+  expect(q('[data-slot="terminalDrop"]')).not.toBeNull();
 
   fireEvent.click(q('[data-terminal="31"]')!);
   const drawer = q('[data-drawer="31"]') as HTMLElement;
@@ -231,8 +234,11 @@ it("builds the ducts.apply request from the staged cells only, exactly", () => {
   // generated native request.
   const wire: DuctsApply.Req.Request = { ...applyRequest(snapshot, priced, at), previewOnly: true };
   expect(wire.previewOnly).toBe(true);
+  // Both directions: the semantic action's input is the generated request less previewOnly.
+  const fromWire = ({ previewOnly: _, ...rest }: DuctsApply.Req.Request): DuctsApplyInput => rest;
+  expect(fromWire(wire)).toEqual(applyRequest(snapshot, priced, at));
   expect(() =>
-    semanticActions["ducts.apply"].input.parse(applyRequest(snapshot, priced, at)),
+    semanticActions["ducts.apply-losses"].input.parse(applyRequest(snapshot, priced, at)),
   ).not.toThrow();
 });
 
@@ -269,4 +275,54 @@ it("apply is armed only by a preview of this Work revision and this snapshot", (
   expect(apply.ready(ctx({ evaluation }), nothing)).toBeNull();
   expect(apply.ready(ctx({ evaluation }, 4), nothing)).toMatch(/preview again/);
   expect(apply.ready(ctx({ evaluation, epoch: 1 }), nothing)).toMatch(/preview again/);
+});
+
+it("the band names a fan static that lands on the unit's type, and how many units it moves", () => {
+  const doc = land(
+    ductsRouteState.schema.parse({}),
+    transitionPatches(
+      ["rules"],
+      "tap-std",
+      {},
+      { kind: "stage", rung: { value: { table: "SD5-10" } } },
+    ),
+  );
+  const response: DuctsApply.Res.Response = {
+    previewOnly: true,
+    writes: [
+      {
+        id: 1,
+        kind: "equipment",
+        outcome: "planned",
+        before: null,
+        after: "type 'PE_ESP' 0.0761 in-wg",
+      },
+      {
+        id: 31,
+        kind: "terminal",
+        outcome: "refused",
+        reason:
+          "the instance has no writable number parameter 'Catalog Drop' (the TerminalDrop slot)",
+      },
+    ],
+    counts: { planned: 1, written: 0, refused: 1, unchanged: 0 },
+    storeRevision: 0,
+  };
+  const view = render(
+    <StagedLosses
+      snapshot={snapshot}
+      grids={grids}
+      priced={price(snapshot, grids, doc)}
+      evaluation={{ revision: 0, epoch: 0, response }}
+      fresh
+      work={{ doc, revision: 0, write: async () => null, preview: response }}
+      group=""
+    />,
+  );
+  expect(view.container.querySelector('[data-type-fanout="1"]')?.textContent).toBe(
+    "unit 1: the instance has no fan static parameter, so apply writes type Air Handler : Standard · moves 1 unit",
+  );
+  expect(view.container.textContent).toContain(
+    "terminal 31 refused: the instance has no writable number parameter",
+  );
 });

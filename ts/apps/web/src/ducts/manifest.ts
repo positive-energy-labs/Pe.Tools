@@ -20,6 +20,7 @@ import { defineRoute, semanticActionInput, type Ctx } from "#/route/manifest";
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 import {
   actionResult,
+  readAction,
   runSemanticAction,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type { DuctsApply } from "@pe/host-contracts/generated";
@@ -88,14 +89,20 @@ const built = (ctx: DuctsCtx) => {
 
 const dispatch = async (
   ctx: DuctsCtx,
-  key: "ducts.preview" | "ducts.apply",
+  key: "ducts.preview-losses" | "ducts.apply-losses",
   input: Record<string, unknown>,
 ) => {
   if (ctx.target.kind !== "document") throw Error("An open document is required");
+  // An apply on a large model runs about 45 s (the engine switch and commits recalculate it). A
+  // receipt that comes back detached or running is read again until it settles; the verb's
+  // `waitSeconds` is the one bound, and past it the route ends the verb honestly.
+  let row = await runSemanticAction(key, semanticActionInput(key, input), ctx.target.ref);
+  while (row.state === "detached" || row.state === "running") {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    row = (await readAction(row.id)) ?? row;
+  }
   // The host answers `{ value, target }` (ducts-actions.ts); the value is the native op's answer.
-  const answer = actionResult(
-    await runSemanticAction(key, semanticActionInput(key, input), ctx.target.ref),
-  ) as { value?: unknown };
+  const answer = actionResult(row) as { value?: unknown };
   return (answer.value ?? answer) as DuctsApply.Res.Response;
 };
 
@@ -195,7 +202,7 @@ export const manifest = defineRoute<
     },
     preview: {
       label: "preview",
-      does: "ducts.preview",
+      does: "ducts.preview-losses",
       input: none,
       dirties: [],
       stage: "losses",
@@ -205,7 +212,7 @@ export const manifest = defineRoute<
       ready: (ctx) => (stagedCells(ctx.work.doc).length ? why(() => built(ctx)) : "Nothing staged"),
       run: async (ctx) => {
         const request = built(ctx);
-        const response = await dispatch(ctx, "ducts.preview", request);
+        const response = await dispatch(ctx, "ducts.preview-losses", request);
         ctx.setPage({
           evaluation: { revision: ctx.work.revision!, epoch: ctx.page.epoch, response },
         });
@@ -220,7 +227,7 @@ export const manifest = defineRoute<
           ? `apply ${n} write${n === 1 ? "" : "s"}`
           : "apply";
       },
-      does: "ducts.apply",
+      does: "ducts.apply-losses",
       input: none,
       dirties: [],
       stage: "losses",
@@ -236,7 +243,7 @@ export const manifest = defineRoute<
               : null,
       run: async (ctx) => {
         const applied = stagedCells(ctx.work.doc);
-        const response = await dispatch(ctx, "ducts.apply", built(ctx));
+        const response = await dispatch(ctx, "ducts.apply-losses", built(ctx));
         ctx.note("apply", outcomeWords(response), response.counts.refused > 0);
         // The staged cells are in Revit now; the snapshot and its store are their home.
         const patches: RouteStatePatch[] = applied.flatMap(({ segment, key, cell }) =>

@@ -1,5 +1,5 @@
 /**
- * /ducts verbs on the host: `ducts.preview` and `ducts.apply` are one native op, `ducts.apply`,
+ * /ducts verbs on the host: `ducts.preview-losses` and `ducts.apply-losses` are one native op, `ducts.apply`,
  * sent with `previewOnly` true or false. The web builds the whole write list from the person's
  * staged cells and Pe's own lookup; the host admits it against the exact document lifetime and
  * process incarnation, journals the native step, and never reads or rewrites the Work.
@@ -70,7 +70,7 @@ export async function admitDuctsAction(
     },
     async (execution) => {
       const { process } = preparedDuctsSchema.parse(execution.prepared);
-      const input = { ...admission.input, previewOnly: key === "ducts.preview" };
+      const input = { ...admission.input, previewOnly: key === "ducts.preview-losses" };
       const value = await execution.step("native", "ducts.apply", input, async (requestId) => {
         await current(process);
         const outcome = await Effect.runPromise(

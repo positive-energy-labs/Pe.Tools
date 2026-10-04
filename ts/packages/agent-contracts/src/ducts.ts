@@ -96,26 +96,33 @@ export function stagedDucts(doc: DuctsRouteDocument | null) {
 }
 
 /**
- * What `ducts.preview` and `ducts.apply` send (`previewOnly` is the verb's). Built by the web from
- * the staged cells and Pe's own lookup: one fitting row per instance of a staged rule, under the
- * rule's chosen table; the equipment row is Pe's fan static for the group's air mover, through the
- * `fanStatic` slot. `store` is the provenance blob Revit keeps in Project Information.
+ * What `ducts.preview-losses` and `ducts.apply-losses` send; the host adds `previewOnly` and calls
+ * the native `ducts.apply`. Mirrors the generated `DuctsApply.Req.Request` field for field (the web
+ * test pins the two types to each other). Built by the web from the staged cells and Pe's own
+ * lookup: one fitting row per instance of a staged rule under the rule's chosen table; the
+ * equipment row is Pe's fan static for the group's air mover, through the `fanStatic` slot.
  */
-const stamp = z.iso.datetime({ offset: true });
+const optionalText = z.string().nullable().optional();
 const writeDrop = z.strictObject({
   id: z.number().int(),
   inWg: z.number().nonnegative(),
-  source: z.string().nullable(),
+  source: optionalText,
+});
+const slotsSchema = z.strictObject({
+  fanStatic: z.string().min(1).optional(),
+  fanFlow: z.string().min(1).optional(),
+  componentDrop: z.string().min(1).optional(),
+  terminalDrop: optionalText,
 });
 export const ductsApplyInputSchema = z.strictObject({
-  slots: z.partialRecord(z.enum(DUCT_PARAMETER_KEYS), z.string().min(1)),
+  slots: slotsSchema.nullable().optional(),
   fittings: z.array(
     z.strictObject({
       id: z.number().int(),
       coefficient: z.number(),
-      table: z.string().min(1),
-      inputs: z.string(),
-      ruleKey: z.string().min(1),
+      table: optionalText,
+      inputs: optionalText,
+      ruleKey: optionalText,
     }),
   ),
   terminals: z.array(writeDrop),
@@ -123,35 +130,41 @@ export const ductsApplyInputSchema = z.strictObject({
   equipment: z.array(
     z.strictObject({ id: z.number().int(), externalStaticInWg: z.number().nonnegative() }),
   ),
-  networkBasedCalculations: z.boolean(),
+  networkBasedCalculations: z.boolean().nullable().optional(),
   /**
-   * The whole provenance store after this apply (`DuctLossStore` v1): the model's store with this
-   * apply's rules, instances and drops over it, since the native op writes it as sent. `workRevision`
-   * is the model store's revision as read; an older one refuses as stale.
+   * The whole provenance store after this apply (`DuctLossStore` v1): the model's store, its
+   * unknown keys passed through, with this apply's rules, instances and drops over it, since the
+   * native op writes it as sent. `workRevision` is the model store's revision as read; an older
+   * one refuses as stale.
    */
-  store: z.strictObject({
-    version: z.literal(1),
-    rules: z.record(z.string(), z.strictObject({ table: z.string().nullable() })),
-    instances: z.record(
-      z.string(),
-      z.strictObject({
-        table: z.string().nullable(),
-        inputs: z.string().nullable(),
-        coefficient: z.number(),
-        appliedAt: stamp,
-      }),
-    ),
-    terminals: z.record(
-      z.string(),
-      z.strictObject({
-        inWg: z.number().nonnegative(),
-        source: z.string().nullable(),
-        appliedAt: stamp,
-      }),
-    ),
-    slots: z.partialRecord(z.enum(DUCT_PARAMETER_KEYS), z.string()),
-    workRevision: z.number().int().nonnegative(),
-    appliedAt: stamp,
+  store: z.looseObject({
+    /** 1; the native op refuses any other store version. */
+    version: z.number().int().optional(),
+    rules: z.record(z.string(), z.strictObject({ table: optionalText })).optional(),
+    instances: z
+      .record(
+        z.string(),
+        z.strictObject({
+          table: optionalText,
+          inputs: optionalText,
+          coefficient: z.number(),
+          appliedAt: z.string(),
+        }),
+      )
+      .optional(),
+    terminals: z
+      .record(
+        z.string(),
+        z.strictObject({
+          inWg: z.number().nonnegative(),
+          source: optionalText,
+          appliedAt: z.string(),
+        }),
+      )
+      .optional(),
+    slots: slotsSchema.nullable().optional(),
+    workRevision: z.number().int().nonnegative().optional(),
+    appliedAt: optionalText,
   }),
 });
 export type DuctsApplyInput = z.infer<typeof ductsApplyInputSchema>;
@@ -160,7 +173,7 @@ export const ductsRouteState = {
   route: "ducts",
   title: "Ducts",
   description:
-    "Duct pressure-drop Work, one trichotomy cell per key. assumptions: an issue id from ducts.snapshot holds a verdict (capped, connect, ignore); flex-roughness:<flex type> (ft), fan-static:<equipment id> (in-wg) and component-drop:<family> (in-wg) hold overrides, never written to Revit. rules: a loss-rule key holds { table }, the ASHRAE table every instance of that fitting type is looked up under. terminalDrops and componentDrops: an element id holds { inWg, source }. parameters: fanStatic, fanFlow, componentDrop, terminalDrop name the Revit parameter of each slot (person only). Pea may propose rules and drops; a person stages; ducts.apply writes the staged cells to Revit after a preview.",
+    "Duct pressure-drop Work, one trichotomy cell per key. assumptions: an issue id from ducts.snapshot holds a verdict (capped, connect, ignore); flex-roughness:<flex type> (ft), fan-static:<equipment id> (in-wg) and component-drop:<family> (in-wg) hold overrides, never written to Revit. rules: a loss-rule key holds { table }, the ASHRAE table every instance of that fitting type is looked up under. terminalDrops and componentDrops: an element id holds { inWg, source }. parameters: fanStatic, fanFlow, componentDrop, terminalDrop name the Revit parameter of each slot (person only). Pea may propose rules and drops; a person stages; ducts.apply-losses writes the staged cells to Revit after ducts.preview-losses.",
   schema: ductsDocumentSchema,
   agentWriteMask: [
     ["assumptions", "*", "proposal"],
