@@ -91,6 +91,7 @@ public static class DuctApplier {
                 Finite(w.InWg) ? UnitUtils.ConvertToInternalUnits(w.InWg, InWg).ToString("R", CultureInfo.InvariantCulture) : null, w.InWg, $"specific-loss {w.InWg:0.####} in-wg")));
         foreach (var w in request.Terminals ?? []) items.Add(Duplicate("terminal", w.Id) ?? Plan("terminal", w.Id, () => Terminal(doc, w, slots)));
         foreach (var w in request.Equipment ?? []) items.Add(Duplicate("equipment", w.Id) ?? Plan("equipment", w.Id, () => Equipment(doc, w, slots)));
+        SharedTypes(items, request.Equipment ?? []);
 
         var (stored, storeError) = ReadStore(doc);
         var storeRevision = stored?.WorkRevision ?? 0;
@@ -302,6 +303,23 @@ public static class DuctApplier {
         };
     }
 
+    /// <summary>
+    ///     Units of one type that each fall back to the type's fan static but ask for different values would race: the
+    ///     last write wins and the rest are silently overwritten. Every write in such a set is refused, naming its peers.
+    /// </summary>
+    private static void SharedTypes(List<Item> items, IReadOnlyList<DuctEquipmentWrite> asked) {
+        var value = asked.GroupBy(w => w.Id).ToDictionary(g => g.Key, g => g.First().ExternalStaticInWg);
+        var conflicts = items
+            .Where(i => i is { Kind: "equipment", Outcome: not "refused", Id: { } } && i.After?.StartsWith("type ") == true)
+            .GroupBy(i => ((FamilyInstance)i.Element!).Symbol.Id.Value())
+            .Where(g => g.Select(i => value[i.Id!.Value]).Distinct().Count() > 1);
+        foreach (var set in conflicts) {
+            var peers = string.Join(", ", set.Select(i => $"{i.Id} asks {value[i.Id!.Value]:0.####}"));
+            foreach (var i in set)
+                i.Refuse($"units of one type ({((FamilyInstance)i.Element!).Symbol.Name}) ask for different fan statics ({peers}); a type holds one value, so give the family an instance parameter or stage one value");
+        }
+    }
+
     private static Item Equipment(Document doc, DuctEquipmentWrite w, DuctParameterSlots slots) {
         var e = doc.GetElement(w.Id.ToElementId());
         if (e is null) return new Item(w.Id, "equipment", null).Refuse($"element {w.Id} is not in the document");
@@ -316,7 +334,9 @@ public static class DuctApplier {
         if (!Finite(w.ExternalStaticInWg) || w.ExternalStaticInWg < 0) return item.Refuse("the static must be a finite number of 0 or more");
         var after = $"{where} '{slots.FanStatic}' {w.ExternalStaticInWg:0.####} in-wg";
         if (p.HasValue && Math.Abs(Pressure(p) - w.ExternalStaticInWg) < 1e-6) return item.Unchanged(after);
+        // A preview names the instance-or-type target too: a type write moves every unit of that type.
         return item with {
+            After = after,
             // Re-resolved: a Regenerate earlier in the stage can invalidate the planned Parameter wrapper.
             Write = () => (where == "instance" ? e.LookupParameter(slots.FanStatic) : (e as FamilyInstance)?.Symbol?.LookupParameter(slots.FanStatic))
                 ?.Set(UnitUtils.ConvertToInternalUnits(w.ExternalStaticInWg, InWg)) == true

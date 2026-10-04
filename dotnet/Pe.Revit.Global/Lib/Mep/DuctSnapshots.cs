@@ -25,7 +25,9 @@ public static class DuctSnapshots {
     };
 
     public static DuctSnapshotData Snapshot(Document doc, DuctParameterSlots? slots = null) {
-        slots = (slots ?? new DuctParameterSlots()).WithDefaults();
+        // The names the person staged win, then the names the last apply recorded in the store, then the defaults.
+        var (store, storeError) = DuctApplier.ReadStore(doc);
+        slots = (slots?.Over(store?.Slots) ?? store?.Slots ?? new DuctParameterSlots()).WithDefaults();
         var clock = Stopwatch.StartNew();
         var readAt = DateTimeOffset.UtcNow;
         List<Element> Of(BuiltInCategory category) => new FilteredElementCollector(doc)
@@ -55,7 +57,6 @@ public static class DuctSnapshots {
             .ToList();
 
         var analysis = DuctNetwork.Analyze(nodes, segments);
-        var (store, storeError) = DuctApplier.ReadStore(doc);
         return new DuctSnapshotData(
             new DuctDocument(doc.Title, readAt, clock.ElapsedMilliseconds, network),
             levels,

@@ -88,6 +88,15 @@ public sealed record DuctParameterSlots(
     string? TerminalDrop = null) {
     private static readonly DuctParameterSlots Defaults = new();
 
+    /// <summary>Each name this leaves blank (a partial wire object) comes from <paramref name="under" />.</summary>
+    public DuctParameterSlots Over(DuctParameterSlots? under) => under is null
+        ? this
+        : new DuctParameterSlots(
+            string.IsNullOrWhiteSpace(this.FanStatic) ? under.FanStatic : this.FanStatic,
+            string.IsNullOrWhiteSpace(this.FanFlow) ? under.FanFlow : this.FanFlow,
+            string.IsNullOrWhiteSpace(this.ComponentDrop) ? under.ComponentDrop : this.ComponentDrop,
+            string.IsNullOrWhiteSpace(this.TerminalDrop) ? under.TerminalDrop : this.TerminalDrop);
+
     /// <summary>A partial slots object from the wire deserializes missing names as null, not the defaults; this restores them.</summary>
     public DuctParameterSlots WithDefaults() => new(
         string.IsNullOrWhiteSpace(this.FanStatic) ? Defaults.FanStatic : this.FanStatic,
