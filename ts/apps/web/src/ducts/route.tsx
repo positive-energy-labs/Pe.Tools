@@ -2,7 +2,7 @@
  * /ducts — the Situation over one document's duct networks. The sentence names the document, the
  * subject group, the level and the layers; the body is the view `page.view` names (the tables by
  * default). The snapshot is one `ducts.snapshot` read keyed on the target, the staged parameter
- * slots and `page.epoch`; targeting a document or choosing a group reads it again with no press.
+ * slots and `page.epoch`; targeting a document reads it again with no press, choosing a group does not.
  * The losses view is the `losses` stage: it also reads `ducts.tables`, and both reads are
  * provided to the verbs so `preview` and `apply` build their request from what is drawn.
  */
@@ -82,12 +82,7 @@ export function DuctsRoute({
       ? handle.resolution.target.ref
       : null;
   const staged = useMemo(() => stagedDucts(handle.work.doc), [handle.work.doc]);
-  const { snapshot, error, pending } = useDuctSnapshot(
-    doc,
-    page.epoch,
-    page.group,
-    staged.parameters,
-  );
+  const { snapshot, error, pending } = useDuctSnapshot(doc, page.epoch, staged.parameters);
   const tables = useDuctTables(page.view === "losses" ? (doc?.session ?? null) : null);
   useEffect(() => {
     setProvided({

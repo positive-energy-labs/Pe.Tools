@@ -42,13 +42,13 @@ function useSaved(epoch: number) {
 }
 
 /**
- * `ducts.snapshot` of the one document the sentence names, read again when the subject changes.
+ * `ducts.snapshot` of the one document the sentence names; the request carries no group, so a new
+ * subject group does not read it again. A refresh (`epoch`) does.
  * `slots` are the person's staged parameter names; an absent slot reads the op's default.
  */
 export function useDuctSnapshot(
   doc: { session: string; openId: string } | null,
   epoch: number,
-  group: string,
   slots: Partial<Record<DuctParameterKey, string>> = {},
 ) {
   const call = useHostOp("ducts.snapshot", Object.keys(slots).length ? { slots } : {}, {
@@ -57,11 +57,11 @@ export function useDuctSnapshot(
     enabled: doc !== null && !SAVED,
     waitSeconds: NATIVE_READ_WAIT_S,
   });
-  // A new target is a new request (its deps change); a new subject or a refresh reads again.
+  // A new target is a new request (its deps change); a refresh reads again.
   const { refresh } = call;
   useEffect(() => {
-    if (epoch > 0 || group) refresh();
-  }, [epoch, group, refresh]);
+    if (epoch > 0) refresh();
+  }, [epoch, refresh]);
   const saved = useSaved(epoch);
   if (SAVED) return saved;
   return { snapshot: call.data ?? null, error: call.error?.message ?? null, pending: call.pending };
