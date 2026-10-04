@@ -36,7 +36,5 @@ test("ducts preview and apply share one input, admitted on a project document by
   expect(ductsActions["ducts.apply"].dirties).toEqual(["snapshot"]);
   expect(ductsActions["ducts.preview"].dirties).toEqual([]);
   // previewOnly is the verb's, never the caller's.
-  expect(() =>
-    ductsActions["ducts.apply"].input.parse({ previewOnly: false } as never),
-  ).toThrow();
+  expect(() => ductsActions["ducts.apply"].input.parse({ previewOnly: false } as never)).toThrow();
 });
