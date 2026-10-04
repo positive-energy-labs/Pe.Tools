@@ -433,6 +433,8 @@ export namespace DuctsSnapshot {
     /**
      * One physical HVAC connector. Kind is "end" or "curve" (a tap on a duct's side). Direction is Revit's
      * (in, out, bidirectional); flow direction for the solver comes from the root, never from this.
+     * FlowCfm is Revit's connector flow, read only on the legacy engine: under network-based calculations the getter can
+     * crash Revit 2025 (pressure-drop ledger, W3).
      *
      */
     export interface DuctConnector {
@@ -486,8 +488,10 @@ export namespace DuctsSnapshot {
     }
     /**
      * A terminal's drop. AssignedPressureDropInWg is the first HVAC connector's AssignedPressureDrop; ConnectorLossMethod
-     * its AssignedDuctLossMethod (NotDefined, Coefficient, SpecificLoss). Writable is true only for SpecificLoss: under
-     * NotDefined Revit refuses the setter (SA 26 campaign). CatalogDropInWg is the TerminalDrop slot, if one is named.
+     * its AssignedDuctLossMethod (NotDefined, Coefficient, SpecificLoss). Writable is true only for SpecificLoss, and
+     * is necessary, not sufficient: Revit refuses the connector setter on a family's Specific Loss connector too (W3), so
+     * ducts.apply writes the instance parameter the family binds to it, named by the TerminalDrop slot.
+     * CatalogDropInWg is the TerminalDrop slot, if one is named.
      *
      */
     export interface DuctTerminalDrop {

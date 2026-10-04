@@ -113,7 +113,7 @@ public static class DuctSnapshots {
             fields.FirstOrDefault(kv => name(kv.Key)).Value is { } text
             && double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : null;
         var method = known ? LossServers[id] : DuctLossMethod.Other;
-        // ASSUMPTION (units unproven): the Specific Loss entity stores pressure in Revit internal units.
+        // The Specific Loss entity's one field is PressureLoss, a string in Revit internal pressure units (pressure-drop ledger, W3).
         var specificLoss = method == DuctLossMethod.SpecificLoss
             && Number(k => k != "Coefficient" && (k.Contains("Loss") || k.Contains("Pressure"))) is { } raw
                 ? R(UnitUtils.ConvertFromInternalUnits(raw, UnitTypeId.InchesOfWater60DegreesFahrenheit), 5)

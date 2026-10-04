@@ -94,6 +94,9 @@ public sealed class DuctSyntheticFixtureTests {
             File.WriteAllText(path, json);
         }
         Assert.That(File.Exists(path), $"missing {path}; run with PE_WRITE_FIXTURES=1");
-        Assert.That(File.ReadAllText(path).Replace("\r\n", "\n"), Is.EqualTo(json));
+        // Parsed, not byte, equality: the web formats the file (W2's parsed-JSON drift guard, c5e55424).
+        var onDisk = Newtonsoft.Json.Linq.JToken.Parse(File.ReadAllText(path));
+        Assert.That(Newtonsoft.Json.Linq.JToken.DeepEquals(onDisk, Newtonsoft.Json.Linq.JToken.Parse(json)), Is.True,
+            $"{path} drifted from DuctNetwork; run with PE_WRITE_FIXTURES=1 and format it");
     }
 }
