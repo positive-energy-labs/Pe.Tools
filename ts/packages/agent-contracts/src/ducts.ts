@@ -7,8 +7,9 @@
  *   is re-looked-up under. A person edits a type's table, never a raw coefficient.
  * - `terminalDrops` (terminal id) and `componentDrops` (fitting or accessory id): a stated drop in
  *   in-wg and where it came from.
+ * - `unitStatics` (air mover id): the external static Pe writes to a unit, in in-wg.
  * - `parameters`: which Revit parameter carries each slot; person-only, Pea cannot propose.
- * `ducts.apply` writes the staged rules, drops and slots (and Pe's fan static) to Revit.
+ * `ducts.apply` writes the staged rules, drops, unit statics and slots to Revit.
  */
 import { z } from "zod";
 
@@ -50,6 +51,8 @@ const dropSchema = z.strictObject({
   source: z.string().optional(),
 });
 export type DuctDrop = z.infer<typeof dropSchema>;
+/** The external static Pe writes to an air mover (a unit id key); staged only, never a side effect. */
+const unitStaticSchema = z.strictObject({ inWg: z.number().nonnegative() });
 const elementKey = z.string().regex(/^\d+$/, { error: "a drop cell key is an element id" });
 
 export const ductsDocumentSchema = z
@@ -60,6 +63,7 @@ export const ductsDocumentSchema = z
       .default({}),
     terminalDrops: z.record(elementKey, trichotomyCellSchema(dropSchema)).default({}),
     componentDrops: z.record(elementKey, trichotomyCellSchema(dropSchema)).default({}),
+    unitStatics: z.record(elementKey, trichotomyCellSchema(unitStaticSchema)).default({}),
     parameters: z
       .partialRecord(z.enum(DUCT_PARAMETER_KEYS), trichotomyCellSchema(z.string().min(1)))
       .default({}),
@@ -91,6 +95,7 @@ export function stagedDucts(doc: DuctsRouteDocument | null) {
     rules: stagedOf(doc?.rules ?? {}),
     terminalDrops: stagedOf(doc?.terminalDrops ?? {}),
     componentDrops: stagedOf(doc?.componentDrops ?? {}),
+    unitStatics: stagedOf(doc?.unitStatics ?? {}),
     parameters: stagedOf(doc?.parameters ?? {}) as Partial<Record<DuctParameterKey, string>>,
   };
 }
@@ -100,7 +105,7 @@ export function stagedDucts(doc: DuctsRouteDocument | null) {
  * the native `ducts.apply`. Mirrors the generated `DuctsApply.Req.Request` field for field (the web
  * test pins the two types to each other). Built by the web from the staged cells and Pe's own
  * lookup: one fitting row per instance of a staged rule under the rule's chosen table; the
- * equipment row is Pe's fan static for the group's air mover, through the `fanStatic` slot.
+ * equipment rows are the staged `unitStatics`, through the `fanStatic` slot.
  */
 const optionalText = z.string().nullable().optional();
 const writeDrop = z.strictObject({
@@ -173,13 +178,14 @@ export const ductsRouteState = {
   route: "ducts",
   title: "Ducts",
   description:
-    "Duct pressure-drop Work, one trichotomy cell per key. assumptions: an issue id from ducts.snapshot holds a verdict (capped, connect, ignore); flex-roughness:<flex type> (ft), fan-static:<equipment id> (in-wg) and component-drop:<family> (in-wg) hold overrides, never written to Revit. rules: a loss-rule key holds { table }, the ASHRAE table every instance of that fitting type is looked up under. terminalDrops and componentDrops: an element id holds { inWg, source }. parameters: fanStatic, fanFlow, componentDrop, terminalDrop name the Revit parameter of each slot (person only). Pea may propose rules and drops; a person stages; ducts.apply-losses writes the staged cells to Revit after ducts.preview-losses.",
+    "Duct pressure-drop Work, one trichotomy cell per key. assumptions: an issue id from ducts.snapshot holds a verdict (capped, connect, ignore); flex-roughness:<flex type> (ft), fan-static:<equipment id> (in-wg) and component-drop:<family> (in-wg) hold overrides, never written to Revit. rules: a loss-rule key holds { table }, the ASHRAE table every instance of that fitting type is looked up under. terminalDrops and componentDrops: an element id holds { inWg, source }. unitStatics: an air mover's element id holds { inWg }, the external static written to it. parameters: fanStatic, fanFlow, componentDrop, terminalDrop name the Revit parameter of each slot (person only). Pea may propose rules and drops; a person stages; ducts.apply-losses writes the staged cells to Revit after ducts.preview-losses.",
   schema: ductsDocumentSchema,
   agentWriteMask: [
     ["assumptions", "*", "proposal"],
     ["rules", "*", "proposal"],
     ["terminalDrops", "*", "proposal"],
     ["componentDrops", "*", "proposal"],
+    ["unitStatics", "*", "proposal"],
   ],
   commands: {},
 } satisfies RouteStateSpec<typeof ductsDocumentSchema>;

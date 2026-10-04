@@ -55,6 +55,7 @@ it("ducts: Pea proposes rules and drops but never stages them, and never touches
     ["rules", "tap-std", { table: "SD5-10" }],
     ["terminalDrops", "31", { inWg: 0.08, source: "catalog p. 12" }],
     ["componentDrops", "22", { inWg: 0.05 }],
+    ["unitStatics", "40", { inWg: 1.25 }],
   ] as const;
   for (const [segment, key, value] of cases) {
     const propose = transitionPatches([segment], key, {}, { kind: "propose", rung: { value } });
@@ -82,6 +83,16 @@ it("ducts: Pea proposes rules and drops but never stages them, and never touches
     { kind: "stage", rung: { value: "X" } },
   );
   expect(applyPatches(spec, envelope, "human", badSlot, 0)).toMatchObject({ ok: false });
+});
+
+it("ducts: a unit static is keyed by element id and holds a non-negative in-wg", () => {
+  const spec = ductsRouteState as unknown as RouteStateSpec<z.ZodType>;
+  const envelope: RouteEnvelope<unknown> = { version: 1, revision: 0, doc: spec.schema.parse({}) };
+  const stage = (key: string, inWg: number) =>
+    transitionPatches(["unitStatics"], key, {}, { kind: "stage", rung: { value: { inWg } } });
+  expect(applyPatches(spec, envelope, "human", stage("40", 1.25), 0)).toMatchObject({ ok: true });
+  expect(applyPatches(spec, envelope, "human", stage("rtu", 1.25), 0)).toMatchObject({ ok: false });
+  expect(applyPatches(spec, envelope, "human", stage("40", -1), 0)).toMatchObject({ ok: false });
 });
 
 it("schedules: Pea proposes a grid cell through the shared contract and cannot stage it", () => {

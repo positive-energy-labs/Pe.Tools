@@ -67,7 +67,13 @@ const observed = <T>(ctx: DuctsCtx, key: DuctsReading) => {
 };
 
 /** The segments `ducts.apply` writes; `assumptions` stay in Pe. */
-export const WRITTEN = ["rules", "terminalDrops", "componentDrops", "parameters"] as const;
+export const WRITTEN = [
+  "rules",
+  "terminalDrops",
+  "componentDrops",
+  "unitStatics",
+  "parameters",
+] as const;
 export const stagedCells = (doc: DuctsRouteDocument | null) =>
   WRITTEN.flatMap((segment) =>
     Object.entries(doc?.[segment] ?? {}).flatMap(([key, cell]) =>
@@ -173,6 +179,13 @@ export const manifest = defineRoute<
       groupOf: (key) => [key],
       nouns: ["component"],
       noun: "component drops",
+      show: (value) => `${(value as { inWg: number }).inWg} in-wg`,
+    },
+    {
+      segment: "unitStatics",
+      groupOf: (key) => [key],
+      nouns: ["fan static"],
+      noun: "fan statics",
       show: (value) => `${(value as { inWg: number }).inWg} in-wg`,
     },
     {
