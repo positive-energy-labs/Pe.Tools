@@ -246,12 +246,17 @@ export function DuctsRoute({
     </>
   );
 
-  const work = {
-    doc: handle.work.doc,
-    revision: handle.work.revision,
-    write: handle.work.write,
-    preview: page.evaluation?.response ?? null,
-  };
+  // Stable between renders so the memoized losses blocks hold.
+  const preview = page.evaluation?.response ?? null;
+  const work = useMemo(
+    () => ({
+      doc: handle.work.doc,
+      revision: handle.work.revision,
+      write: handle.work.write,
+      preview,
+    }),
+    [handle.work.doc, handle.work.revision, handle.work.write, preview],
+  );
   const empty =
     !doc && !SAVED
       ? { says: "no document bound", exit: "choose a document in the sentence" }

@@ -6,7 +6,7 @@
  * A chip or a number STAGES a Work cell; nothing reaches Revit until preview and apply. The bars
  * show what Revit holds now and ghost to the staged state, as the staged band does (variant J).
  */
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, memo, useMemo, useState, type ComponentProps } from "react";
 import type { DuctsApply } from "@pe/host-contracts/generated";
 import {
   transitionPatches,
@@ -39,7 +39,7 @@ import {
   type Priced,
 } from "./pricing";
 import type { Grids } from "./loss-grid";
-import type { DuctSnapshot, GroupReadiness } from "./readiness";
+import { snapshotById, type DuctSnapshot, type GroupReadiness } from "./readiness";
 
 type Node = DuctSnapshot["nodes"][number];
 type Group = DuctSnapshot["groups"][number];
@@ -80,7 +80,7 @@ export function terminalStatus(
   node: Node,
   priced: Priced,
 ): Status[] {
-  const issues = new Map(snapshot.issues.map((issue) => [issue.id, issue]));
+  const { issues } = snapshotById(snapshot);
   const out: Status[] = [];
   if (ready?.walk.some((id) => issues.get(id)?.kind === "open-end")) out.push("open-end");
   if (node.terminalDrop && !node.terminalDrop.writable) out.push("refuses");
@@ -201,7 +201,7 @@ const rowId = (row: DrawerRow) =>
       ? `component:${row.row.id}`
       : row.kind;
 
-function Drawer({
+const Drawer = memo(function Drawer({
   snapshot,
   priced,
   terminal,
@@ -213,8 +213,7 @@ function Drawer({
   work: LossesWork;
 }) {
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
-  const nodes = useMemo(() => new Map(snapshot.nodes.map((n) => [n.id, n])), [snapshot]);
-  const segments = useMemo(() => new Map(snapshot.segments.map((s) => [s.id, s])), [snapshot]);
+  const { nodes, segments } = snapshotById(snapshot);
   const path = priced.next.paths[terminal];
   const node = nodes.get(terminal);
   const columns = useMemo<Column<DrawerRow>[]>(() => {
@@ -422,7 +421,7 @@ function Drawer({
       />
     </div>
   );
-}
+});
 
 const PartChip = ({ part }: { part: Part }) => (
   <span className="inline-flex items-center gap-1 t-small face-mono">
@@ -491,7 +490,7 @@ function Bars({
   ready,
   priced,
   max,
-  page,
+  selected,
   setPage,
   work,
 }: {
@@ -500,11 +499,11 @@ function Bars({
   ready: GroupReadiness | undefined;
   priced: Priced;
   max: number;
-  page: DuctsPage;
+  selected: string;
   setPage: (next: Partial<DuctsPage>) => void;
   work: LossesWork;
 }) {
-  const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
+  const { nodes } = snapshotById(snapshot);
   const terminals = Object.entries(priced.now.paths)
     .filter(([, path]) => path.groupId === group.id)
     .map(([id, path]) => ({ id: Number(id), path }))
@@ -522,7 +521,7 @@ function Bars({
         const next = priced.next.paths[id]?.total ?? path.total;
         const moved = Math.abs(next - path.total) > 1e-9;
         const statuses = terminalStatus(snapshot, ready, node, priced);
-        const opened = page.selected === String(id);
+        const opened = selected === String(id);
         return (
           <Fragment key={id}>
             <ListRow
@@ -593,6 +592,16 @@ function Bars({
     </div>
   );
 }
+
+/** One group's head and bars; memoized so only a group whose own inputs moved re-renders. */
+const GroupSection = memo(function GroupSection(props: ComponentProps<typeof Bars>) {
+  return (
+    <section>
+      <GroupHead snapshot={props.snapshot} group={props.group} priced={props.priced} />
+      <Bars {...props} />
+    </section>
+  );
+});
 
 const SLOT_WORDS = {
   fanStatic: "fan static (on the unit, in-wg)",
@@ -716,19 +725,20 @@ export function DuctsLosses({
         ) : null}
       </div>
       {groups.map((group) => (
-        <section key={group.id}>
-          <GroupHead snapshot={snapshot} group={group} priced={priced} />
-          <Bars
-            snapshot={snapshot}
-            group={group}
-            ready={ready[group.id]}
-            priced={priced}
-            max={max}
-            page={page}
-            setPage={setPage}
-            work={work}
-          />
-        </section>
+        <GroupSection
+          key={group.id}
+          snapshot={snapshot}
+          group={group}
+          ready={ready[group.id]}
+          priced={priced}
+          max={max}
+          // Only the group holding the open grille sees `selected`, so a pick re-renders one group.
+          selected={
+            priced.now.paths[Number(page.selected)]?.groupId === group.id ? page.selected : ""
+          }
+          setPage={setPage}
+          work={work}
+        />
       ))}
     </div>
   );

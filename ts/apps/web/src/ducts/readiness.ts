@@ -28,13 +28,33 @@ export interface GroupReadiness {
 const staged = (doc: DuctsRouteDocument | null, key: string): DuctAssumption | undefined =>
   doc?.assumptions[key]?.staged?.value;
 
+interface ById {
+  issues: Map<string, DuctIssue>;
+  nodes: Map<number, DuctSnapshot["nodes"][number]>;
+  segments: Map<number, DuctSnapshot["segments"][number]>;
+}
+
+const byIds = new WeakMap<DuctSnapshot, ById>();
+
+/** The snapshot's issues, nodes and segments by id; built once per snapshot, shared by every view. */
+export function snapshotById(snapshot: DuctSnapshot): ById {
+  let index = byIds.get(snapshot);
+  if (!index) {
+    index = {
+      issues: new Map(snapshot.issues.map((issue) => [issue.id, issue])),
+      nodes: new Map(snapshot.nodes.map((node) => [node.id, node])),
+      segments: new Map(snapshot.segments.map((segment) => [segment.id, segment])),
+    };
+    byIds.set(snapshot, index);
+  }
+  return index;
+}
+
 export function readiness(
   snapshot: DuctSnapshot,
   doc: DuctsRouteDocument | null,
 ): Record<string, GroupReadiness> {
-  const issues = new Map(snapshot.issues.map((issue) => [issue.id, issue]));
-  const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
-  const segments = new Map(snapshot.segments.map((segment) => [segment.id, segment]));
+  const { issues, nodes, segments } = snapshotById(snapshot);
   const verdict = (issue: DuctIssue) => {
     const value = staged(doc, issue.id);
     return value?.kind === "verdict" ? value.verdict : null;
