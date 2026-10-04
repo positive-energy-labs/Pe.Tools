@@ -142,6 +142,57 @@
   };
 
   /**
+   * Run C# in Revit (`scripting.execute`): Execute-body statements with `doc`, `uidoc`, `app`, `selection` in scope
+   * and `Result(value)` as the answer. `mode` is ReadOnly (default; every change rolls back), WriteTransaction (one
+   * host-owned transaction) or NoTransaction (the script owns its transactions). Throws with the compiler's or the
+   * runtime's own message when the script did not succeed; otherwise answers what `Result(...)` was given.
+   */
+  pe.script = async (scriptContent, { mode = "ReadOnly", timeoutSeconds = 120 } = {}) => {
+    const run = await pe.do("scripting.execute", {
+      scriptContent,
+      permissionMode: mode,
+      timeoutSeconds,
+    });
+    if (run.status !== "Succeeded") {
+      const why = (run.diagnostics || [])
+        .filter((d) => d.severity === "Error")
+        .map((d) => d.message.split("\n")[0])
+        .join("; ");
+      throw new Error(
+        `script ${run.status}${why ? `: ${why}` : ""}${run.output ? `\n${run.output}` : ""}`,
+      );
+    }
+    return run.data ?? run.result ?? null;
+  };
+
+  /**
+   * The smallest kernel: `reduce(state, event)` over a log. `fire` applies one event and renders (false when nothing
+   * changed), `replay` rebuilds from a base. Hand the result to `pe.state` to share it.
+   */
+  pe.kernel = (reduce, base, render = () => {}) => {
+    const k = { state: base, base, log: [] };
+    k.fire = (ev) => {
+      const next = reduce(k.state, ev);
+      if (next === k.state) return false;
+      k.log.push(ev);
+      k.state = next;
+      render(next);
+      return true;
+    };
+    k.replay = (events, from = base) => {
+      k.state = from;
+      k.log = [];
+      for (const ev of events) {
+        const next = reduce(k.state, ev);
+        if (next !== k.state) (k.log.push(ev), (k.state = next));
+      }
+      render(k.state);
+      return k;
+    };
+    return k;
+  };
+
+  /**
    * Share a kit kernel's event log through the host. Replays the saved log into `k`, sends every later `k.fire`
    * to `/pages/<slug>/events`, follows other copies and agents live, and keeps `/pages/<slug>/state`'s snapshot
    * current. Event types in `local` stay in this copy; hash navigation (`nav`) always does. Resolves to `k` once

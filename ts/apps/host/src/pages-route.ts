@@ -172,7 +172,18 @@ export function createPagesHandler(root: string) {
       `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Pages</title><link rel="stylesheet" href="/pages/pe.css"></head>
 <body style="padding:24px;max-width:720px"><h1>Pages</h1>
 <p>Every folder under <code>${escapeHtml(root)}</code> with an <code>index.html</code>, newest first. Doors: <a href="/pages/pe.js">pe.js</a> · <a href="/pages/pe.css">pe.css</a>.</p>
-<ul>${rows}</ul></body></html>`,
+<ul>${rows}</ul>
+<h2>Make one</h2>
+<p>A page is a folder with an <code>index.html</code>. Three lines give it Revit and a shared log:</p>
+<pre>&lt;link rel="stylesheet" href="/pages/pe.css"&gt;
+&lt;script src="/pages/pe.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  const k = pe.kernel((state, event) =&gt; state, {}, render);   // reduce(state, event), base, render
+  pe.state(k);                                                 // every copy and every agent share k's log
+  await pe.do("revit.context.show-elements", { elementIds: [1234] });   // pe.find, pe.read, pe.do: Pea's doors
+&lt;/script&gt;</pre>
+<p>Agents reach the same log at <code>GET /pages/&lt;slug&gt;/state</code> and <code>POST /pages/&lt;slug&gt;/events</code>. The header of <a href="/pages/pe.js">pe.js</a> is the whole reference.</p>
+</body></html>`,
       { headers: { "content-type": "text/html; charset=utf-8" } },
     );
   }

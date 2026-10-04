@@ -1120,6 +1120,66 @@ internal sealed class RevitDataRequestService {
         return new RevitShowElementsData(shown, missing, target.Id.Value(), target.Name, note);
     }
 
+    // The clutter a lens hides: everything that is not the model. A whole-house 3D view at Fine with the architect's
+    // links visible hung Revit's UI thread for 10+ minutes (2026-10-01); the lens stays at Medium, hidden lines, boxed.
+    private static readonly BuiltInCategory[] LensClutter = [
+        BuiltInCategory.OST_RvtLinks, BuiltInCategory.OST_VolumeOfInterest, BuiltInCategory.OST_Levels, BuiltInCategory.OST_Grids,
+        BuiltInCategory.OST_CLines, BuiltInCategory.OST_MEPSpaces, BuiltInCategory.OST_HVAC_Zones, BuiltInCategory.OST_Rooms, BuiltInCategory.OST_Areas,
+    ];
+
+    [Op("revit.context.lens", Does = "Make or refresh this document's lens: a 3D view (default name 'Pe lens') with its section box around the elements, medium detail, hidden lines, and links, levels, grids, rooms, spaces and zones hidden. Answers the view id to pass to revit.context.show-elements. Adds or updates that one view and changes nothing else; the document may be headless.", Title = "Lens (Box a 3D View Around Elements)", Finds = ["lens", "3d", "view", "section-box", "box", "isolate", "zoom", "show", "focus", "look"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Tier = OpTier.Default, Example = "{ \"elementIds\": [12345, 67890] }")]
+    private static RevitLensData LensCore(RevitLensRequest request, RevitDocument activeDocument) {
+        var document = activeDocument.Value;
+        var requested = (request.ElementIds ?? []).Distinct().ToList();
+        if (requested.Count == 0)
+            throw BridgeOperationExceptions.BadRequest("Name at least one element.",
+                [BridgeOperationExceptions.Issue("$.elementIds", "ElementIdsEmpty", "elementIds is empty.",
+                    "Pass element ids from a handle-returning op such as revit.context.visible-summary.")]);
+        var boxes = requested.Select(id => document.GetElement(id.ToElementId()))
+            .Where(e => e is not null and not ElementType)
+            .Select(e => e.get_BoundingBox(null))
+            .Where(b => b is not null)
+            .ToList();
+        if (boxes.Count == 0)
+            throw BridgeOperationExceptions.Conflict("None of the elements has a bounding box to look at.",
+                [BridgeOperationExceptions.Issue("$.elementIds", "ElementsUnboxed",
+                    $"No element in '{document.Title}' with the ids {string.Join(", ", requested)} has model geometry.",
+                    "Pass model elements (not types, views, or systems); for a system pass its members.")]);
+
+        var name = string.IsNullOrWhiteSpace(request.Name) ? "Pe lens" : request.Name.Trim();
+        var pad = request.PaddingFeet ?? 4.0;
+        var view = new FilteredElementCollector(document).OfClass(typeof(View3D)).Cast<View3D>()
+            .FirstOrDefault(v => !v.IsTemplate && v.Name == name);
+        var created = view is null;
+        using var transaction = new Transaction(document, $"Lens: {name}");
+        transaction.Start();
+        if (view is null) {
+            var family = new FilteredElementCollector(document).OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>()
+                .First(x => x.ViewFamily == ViewFamily.ThreeDimensional);
+            view = View3D.CreateIsometric(document, family.Id);
+            view.Name = name;
+            view.ViewTemplateId = ElementId.InvalidElementId;
+        }
+        view.DetailLevel = ViewDetailLevel.Medium;
+        view.DisplayStyle = DisplayStyle.HLR;
+        foreach (var category in LensClutter) {
+            var id = new ElementId(category);
+            try { if (view.CanCategoryBeHidden(id)) view.SetCategoryHidden(id, true); } catch (Autodesk.Revit.Exceptions.ApplicationException) { }
+        }
+        var margin = new XYZ(pad, pad, pad);
+        view.SetSectionBox(new BoundingBoxXYZ {
+            Min = new XYZ(boxes.Min(b => b.Min.X), boxes.Min(b => b.Min.Y), boxes.Min(b => b.Min.Z)) - margin,
+            Max = new XYZ(boxes.Max(b => b.Max.X), boxes.Max(b => b.Max.Y), boxes.Max(b => b.Max.Z)) + margin,
+        });
+        view.IsSectionBoxActive = true;
+        if (transaction.Commit() != TransactionStatus.Committed)
+            throw BridgeOperationExceptions.Conflict("Revit did not keep the lens.",
+                [BridgeOperationExceptions.Issue("$", "LensRefused", $"The transaction for '{name}' was not committed.",
+                    "Close any modal dialog or edit mode in Revit and retry.")]);
+        return new RevitLensData(view.Id.Value(), name, created, boxes.Count,
+            $"{(created ? "Made" : "Refreshed")} '{name}' boxed around {boxes.Count} element(s); pass viewId {view.Id.Value()} to revit.context.show-elements.");
+    }
+
     private static BridgeOperationException CaptureTargetError() => BridgeOperationExceptions.Conflict(
         "No exportable view.",
         [

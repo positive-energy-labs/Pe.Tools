@@ -2711,6 +2711,56 @@ export namespace RevitContextDocumentSession {
   }
 }
 
+/** Make or refresh this document's lens: a 3D view (default name 'Pe lens') with its section box around the elements, medium detail, hidden lines, and links, levels, grids, rooms, spaces and zones hidden. Answers the view id to pass to revit.context.show-elements. Adds or updates that one view and changes nothing else; the document may be headless. */
+export namespace RevitContextLens {
+  export namespace Req {
+    /**
+     * Request for revit.context.lens: box a 3D view around elements so a window or a capture can look at them.
+     */
+    export interface Request {
+      /**
+       * Model element ids to box, from any handle-returning op.
+       */
+      elementIds: number[];
+      /**
+       * The 3D view's name; made when missing, refreshed when present. Default "Pe lens".
+       */
+      name?: null | string;
+      /**
+       * Room around the elements' union box, in feet. Default 4.
+       */
+      paddingFeet?: null | number;
+    }
+  }
+  export namespace Res {
+    /**
+     * What revit.context.lens made or refreshed.
+     */
+    export interface Response {
+      /**
+       * The lens view's id, for revit.context.show-elements or revit.context.view-image.
+       */
+      viewId: number;
+      /**
+       * That view's name.
+       */
+      viewName: string;
+      /**
+       * True when the view was made by this call; false when an existing one was refreshed.
+       */
+      created: boolean;
+      /**
+       * How many of the elements had geometry and sit inside the box.
+       */
+      boxed: number;
+      /**
+       * One line on what happened.
+       */
+      note: string;
+    }
+  }
+}
+
 /** Show elements to the person at the window: select them and zoom the active view, or the given view, to their extents. Answers which ids it showed, which were missing, and the view. Changes the selection and the zoom only, never the model. Needs the active windowed document; a headless document refuses. */
 export namespace RevitContextShowElements {
   export namespace Req {
@@ -6050,6 +6100,7 @@ export interface HostOps {
   "revit.catalog.project-index": { request: RevitCatalogProjectIndex.Req.Request; response: RevitCatalogProjectIndex.Res.Response };
   "revit.catalog.schedules": { request: RevitCatalogSchedules.Req.Request; response: RevitCatalogSchedules.Res.Response };
   "revit.context.document-session": { request: RevitContextDocumentSession.Req.Request; response: RevitContextDocumentSession.Res.Response };
+  "revit.context.lens": { request: RevitContextLens.Req.Request; response: RevitContextLens.Res.Response };
   "revit.context.show-elements": { request: RevitContextShowElements.Req.Request; response: RevitContextShowElements.Res.Response };
   "revit.context.summary": { request: RevitContextSummary.Req.Request; response: RevitContextSummary.Res.Response };
   "revit.context.view-image": { request: RevitContextViewImage.Req.Request; response: RevitContextViewImage.Res.Response };
@@ -6125,6 +6176,7 @@ export const hostOpKeys = [
   "revit.catalog.project-index",
   "revit.catalog.schedules",
   "revit.context.document-session",
+  "revit.context.lens",
   "revit.context.show-elements",
   "revit.context.summary",
   "revit.context.view-image",
