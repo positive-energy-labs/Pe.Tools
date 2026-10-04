@@ -3,6 +3,7 @@ import { instancesActions, instancesReading } from "./instances.ts";
 import { scheduleActions, scheduleReads } from "./schedule-actions.ts";
 import { familyActions, familyReads } from "./family-actions.ts";
 import { stagedRoomEditSchema } from "./takeoffs.ts";
+import { ductsApplyInputSchema } from "./ducts.ts";
 import { nativeProcessSchema } from "./action-receipts.ts";
 import { z } from "zod";
 import { executionTargetSchema } from "./target.ts";
@@ -128,8 +129,29 @@ const definitions = {
   },
 } as const;
 export const takeoffActions = definitions;
+
+/** /ducts verbs: one native op, `ducts.apply`, once with `previewOnly` and once for real. */
+export const ductsActions = {
+  "ducts.preview": {
+    says: "Plan the staged duct loss writes (fitting coefficients, terminal and component drops, fan static) and report each write's outcome without changing Revit.",
+    needs: "project-document",
+    actor: "any",
+    input: ductsApplyInputSchema,
+    dirties: [],
+  },
+  "ducts.apply": {
+    says: "Write the staged duct loss values to Revit (fitting coefficients, terminal and component drops, fan static) and record their provenance in Project Information.",
+    needs: "project-document",
+    actor: "any",
+    input: ductsApplyInputSchema,
+    dirties: ["snapshot"],
+  },
+} as const satisfies Record<string, ActionDefinition>;
+export type DuctsActionKey = keyof typeof ductsActions;
+
 export const semanticActions = {
   ...definitions,
+  ...ductsActions,
   ...familyActions,
   ...instancesActions,
   ...scheduleActions,

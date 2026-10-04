@@ -1,6 +1,7 @@
 import { expect, expectTypeOf, test } from "vite-plus/test";
 import {
   actionControls,
+  ductsActions,
   familyReads,
   hostActions,
   instancesReading,
@@ -22,4 +23,20 @@ test("host actions are one key space of records with one prose field and declare
     expect(row).not.toHaveProperty("description");
     expect(row.says).not.toBe("");
   }
+});
+
+test("ducts preview and apply share one input, admitted on a project document by any actor", () => {
+  expect(semanticActions["ducts.preview"]).toBe(ductsActions["ducts.preview"]);
+  expect(ductsActions["ducts.preview"].input).toBe(ductsActions["ducts.apply"].input);
+  for (const row of Object.values(ductsActions)) {
+    expect(row.needs).toBe("project-document");
+    expect(row.actor).toBe("any");
+  }
+  // Only the real write changes the model; the preview leaves the snapshot fresh.
+  expect(ductsActions["ducts.apply"].dirties).toEqual(["snapshot"]);
+  expect(ductsActions["ducts.preview"].dirties).toEqual([]);
+  // previewOnly is the verb's, never the caller's.
+  expect(() =>
+    ductsActions["ducts.apply"].input.parse({ previewOnly: false } as never),
+  ).toThrow();
 });

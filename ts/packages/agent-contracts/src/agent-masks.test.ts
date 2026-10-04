@@ -48,6 +48,42 @@ it("ducts: Pea proposes an assumption, cannot stage it, and a key holding the wr
   expect(applyPatches(spec, envelope, "human", wrong, 0)).toMatchObject({ ok: false });
 });
 
+it("ducts: Pea proposes rules and drops but never stages them, and never touches parameter slots", () => {
+  const spec = ductsRouteState as unknown as RouteStateSpec<z.ZodType>;
+  const envelope: RouteEnvelope<unknown> = { version: 1, revision: 0, doc: spec.schema.parse({}) };
+  const cases = [
+    ["rules", "tap-std", { table: "SD5-10" }],
+    ["terminalDrops", "31", { inWg: 0.08, source: "catalog p. 12" }],
+    ["componentDrops", "22", { inWg: 0.05 }],
+  ] as const;
+  for (const [segment, key, value] of cases) {
+    const propose = transitionPatches([segment], key, {}, { kind: "propose", rung: { value } });
+    expect(applyPatches(spec, envelope, "agent", propose, 0), segment).toMatchObject({ ok: true });
+    const stage = transitionPatches([segment], key, {}, { kind: "stage", rung: { value } });
+    expect(applyPatches(spec, envelope, "agent", stage, 0), segment).toMatchObject({ ok: false });
+    expect(applyPatches(spec, envelope, "human", stage, 0), segment).toMatchObject({ ok: true });
+  }
+  const slot = (kind: "propose" | "stage") =>
+    transitionPatches(["parameters"], "fanStatic", {}, { kind, rung: { value: "PE_ESP" } });
+  expect(applyPatches(spec, envelope, "agent", slot("propose"), 0)).toMatchObject({ ok: false });
+  expect(applyPatches(spec, envelope, "human", slot("stage"), 0)).toMatchObject({ ok: true });
+  // A drop is keyed by element id and a slot by its name; anything else refuses.
+  const badDrop = transitionPatches(
+    ["terminalDrops"],
+    "grille",
+    {},
+    { kind: "stage", rung: { value: { inWg: 0.1 } } },
+  );
+  expect(applyPatches(spec, envelope, "human", badDrop, 0)).toMatchObject({ ok: false });
+  const badSlot = transitionPatches(
+    ["parameters"],
+    "fanSpeed",
+    {},
+    { kind: "stage", rung: { value: "X" } },
+  );
+  expect(applyPatches(spec, envelope, "human", badSlot, 0)).toMatchObject({ ok: false });
+});
+
 it("schedules: Pea proposes a grid cell through the shared contract and cannot stage it", () => {
   const envelope: RouteEnvelope<unknown> = {
     version: 1,
