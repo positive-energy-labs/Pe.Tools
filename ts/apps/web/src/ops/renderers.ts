@@ -44,6 +44,7 @@ export const rawByDesign = [
   "document.temporary.release",
   "document.temporary.status",
   "ducts.snapshot",
+  "ducts.tables",
   "families.apply",
   "families.capture",
   "families.plan",

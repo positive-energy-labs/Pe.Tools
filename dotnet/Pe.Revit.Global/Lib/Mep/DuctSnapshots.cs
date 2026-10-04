@@ -1,5 +1,8 @@
+using Autodesk.Revit.DB.ExtensibleStorage;
+using Autodesk.Revit.DB.ExternalService;
 using Autodesk.Revit.DB.Mechanical;
 using Pe.Shared.RevitData.Ducts;
+using System.Globalization;
 using DuctShape = Pe.Shared.RevitData.Ducts.DuctShape;
 
 namespace Pe.Revit.Global.Lib.Mep;
@@ -13,7 +16,16 @@ public static class DuctSnapshots {
     // Revit's shipped DuctType/FlexDuctType roughness (galvanized steel). On flex it is wrong by ~10x.
     private const double RevitDefaultRoughnessFt = 0.0003;
 
-    public static DuctSnapshotData Snapshot(Document doc) {
+    // Duct fitting and accessory loss servers (RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM values).
+    private static readonly IReadOnlyDictionary<Guid, DuctLossMethod> LossServers = new Dictionary<Guid, DuctLossMethod> {
+        [new Guid("76eff5da-2e71-45f7-b940-cc5716328ba0")] = DuctLossMethod.NotDefined,
+        [new Guid("8baf7d75-8b9b-46d0-b8ce-3ad1c19e6b19")] = DuctLossMethod.AshraeTable,
+        [new Guid("5a598293-1504-46cc-a9c0-de55c82848b9")] = DuctLossMethod.SpecificCoefficient,
+        [new Guid("46245996-eebb-4536-ac17-9c1cd917d8cf")] = DuctLossMethod.SpecificLoss
+    };
+
+    public static DuctSnapshotData Snapshot(Document doc, DuctParameterSlots? slots = null) {
+        slots ??= new DuctParameterSlots();
         var clock = Stopwatch.StartNew();
         var readAt = DateTimeOffset.UtcNow;
         List<Element> Of(BuiltInCategory category) => new FilteredElementCollector(doc)
@@ -26,23 +38,98 @@ public static class DuctSnapshots {
 
         var segments = Of(BuiltInCategory.OST_DuctCurves).Concat(Of(BuiltInCategory.OST_FlexDuctCurves))
             .OfType<MEPCurve>().Select(c => Segment(doc, c)).ToList();
+        var schemas = LossSchemas();
         var nodes = new List<DuctNode>();
-        nodes.AddRange(Of(BuiltInCategory.OST_DuctFitting).Select(e => Node(doc, e, Fitting(e))));
-        nodes.AddRange(Of(BuiltInCategory.OST_DuctAccessory).Select(e => Node(doc, e, DuctNodeKind.Accessory)));
-        nodes.AddRange(Of(BuiltInCategory.OST_DuctTerminal).Select(e => Node(doc, e, DuctNodeKind.Terminal)));
+        nodes.AddRange(Of(BuiltInCategory.OST_DuctFitting).Select(e => Node(e, Fitting(e), slots, schemas)));
+        nodes.AddRange(Of(BuiltInCategory.OST_DuctAccessory).Select(e => Node(e, DuctNodeKind.Accessory, slots, schemas)));
+        nodes.AddRange(Of(BuiltInCategory.OST_DuctTerminal).Select(e => Node(e, DuctNodeKind.Terminal, slots, schemas)));
         nodes.AddRange(Of(BuiltInCategory.OST_MechanicalEquipment)
-            .Where(e => Hvac(e).Any()).Select(e => Node(doc, e, DuctNodeKind.Equipment)));
+            .Where(e => Hvac(e).Any()).Select(e => Node(e, DuctNodeKind.Equipment, slots, schemas)));
+        var systems = new FilteredElementCollector(doc).OfClass(typeof(MechanicalSystem)).Cast<MechanicalSystem>()
+            .Where(m => m.SystemType is DuctSystemType.SupplyAir or DuctSystemType.ReturnAir or DuctSystemType.ExhaustAir)
+            .OrderBy(m => m.Name, StringComparer.Ordinal)
+            .Select(RevitSystem)
+            .ToList();
 
         var analysis = DuctNetwork.Analyze(nodes, segments);
         return new DuctSnapshotData(
-            new DuctDocument(doc.Title, readAt, clock.ElapsedMilliseconds),
+            new DuctDocument(doc.Title, readAt, clock.ElapsedMilliseconds, DuctSettings.GetDuctSettings(doc).NetworkBasedCalculations),
             levels,
             analysis.Groups,
             analysis.Nodes,
             analysis.Segments,
             analysis.Flows,
             analysis.Issues,
-            Layers(analysis));
+            Layers(analysis, systems, slots),
+            systems,
+            slots);
+    }
+
+    private static DuctSystem RevitSystem(MechanicalSystem m) {
+        var critical = Try(() => m.GetCriticalPathSectionNumbers()?.ToList()) ?? [];
+        var count = Try(() => (int?)m.SectionsCount) ?? 0;
+        var sections = new List<DuctSection>();
+        // Section numbers are sparse: SA 26 had 16 sections and a critical path through 29 and 30.
+        var last = Math.Max(critical.DefaultIfEmpty(0).Max(), count * 4);
+        for (var k = 1; k <= last && sections.Count < count; k++)
+            if (Try(() => m.GetSectionByNumber(k)) is { } section)
+                sections.Add(new DuctSection(
+                    k,
+                    Try(() => (double?)R(UnitUtils.ConvertFromInternalUnits(section.Flow, UnitTypeId.CubicFeetPerMinute), 1)),
+                    Try(() => (double?)R(UnitUtils.ConvertFromInternalUnits(section.TotalPressureLoss, UnitTypeId.InchesOfWater60DegreesFahrenheit), 5)),
+                    section.GetElementIds().Select(id => id.Value).ToList()));
+        return new DuctSystem(
+            m.Id.Value,
+            m.Name,
+            m.SystemType.ToString(),
+            Try(() => (bool?)m.IsWellConnected),
+            Try(() => m.BaseEquipment?.Id.Value),
+            Try(() => m.BaseEquipmentConnector?.Id),
+            Try(() => (double?)R(UnitUtils.ConvertFromInternalUnits(m.PressureLossOfCriticalPath, UnitTypeId.InchesOfWater60DegreesFahrenheit), 5)),
+            critical,
+            sections);
+    }
+
+    private static Dictionary<Guid, Schema?> LossSchemas() {
+        var service = ExternalServiceRegistry.GetService(ExternalServices.BuiltInExternalServices.DuctFittingAndAccessoryPressureDropService);
+        return LossServers.Keys.ToDictionary(id => id,
+            id => Try(() => (service?.GetServer(id) as IDuctFittingAndAccessoryPressureDropServer)?.GetDataSchema()));
+    }
+
+    private static DuctLoss Loss(Element e, Dictionary<Guid, Schema?> schemas) {
+        var server = e.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM)?.AsString();
+        var known = Guid.TryParse(server, out var id) && LossServers.ContainsKey(id);
+        var fields = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        if (known && schemas[id] is { } schema && schema.ReadAccessGranted() && e.GetEntity(schema) is { } entity && entity.IsValid())
+            foreach (var field in schema.ListFields().Where(f => f.ValueType == typeof(string)))
+                if (entity.Get<string>(field) is { Length: > 0 } value) fields[field.FieldName] = value;
+        double? Number(Func<string, bool> name) =>
+            fields.FirstOrDefault(kv => name(kv.Key)).Value is { } text
+            && double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : null;
+        var method = known ? LossServers[id] : DuctLossMethod.Other;
+        // ASSUMPTION (units unproven): the Specific Loss entity stores pressure in Revit internal units.
+        var specificLoss = method == DuctLossMethod.SpecificLoss
+            && Number(k => k != "Coefficient" && (k.Contains("Loss") || k.Contains("Pressure"))) is { } raw
+                ? R(UnitUtils.ConvertFromInternalUnits(raw, UnitTypeId.InchesOfWater60DegreesFahrenheit), 5)
+                : (double?)null;
+        return new DuctLoss(
+            method,
+            server is { Length: > 0 } ? server : null,
+            fields.TryGetValue("ASHRAETableName", out var table) && table.Length > 0 ? table : null,
+            method == DuctLossMethod.SpecificCoefficient ? Number(k => k == "Coefficient") : null,
+            specificLoss,
+            Converted(e, BuiltInParameter.RBS_PRESSURE_DROP, UnitTypeId.InchesOfWater60DegreesFahrenheit),
+            fields);
+    }
+
+    private static DuctTerminalDrop Terminal(Element e, DuctParameterSlots slots) {
+        var c = Hvac(e).FirstOrDefault();
+        var method = c is null ? null : Try(() => c.AssignedDuctLossMethod.ToString());
+        return new DuctTerminalDrop(
+            c is null ? null : Try(() => (double?)R(UnitUtils.ConvertFromInternalUnits(c.AssignedPressureDrop, UnitTypeId.InchesOfWater60DegreesFahrenheit), 5)),
+            method,
+            method == nameof(DuctLossMethodType.SpecificLoss),
+            slots.TerminalDrop is { } name ? Converted(Named(e, name), UnitTypeId.InchesOfWater60DegreesFahrenheit) : null);
     }
 
     private static DuctSegment Segment(Document doc, MEPCurve curve) {
@@ -83,7 +170,7 @@ public static class DuctSnapshots {
     private static DuctNodeKind Fitting(Element e) =>
         (e as FamilyInstance)?.MEPModel is MechanicalFitting { PartType: PartType.Cap } ? DuctNodeKind.Cap : DuctNodeKind.Fitting;
 
-    private static DuctNode Node(Document doc, Element e, DuctNodeKind kind) {
+    private static DuctNode Node(Element e, DuctNodeKind kind, DuctParameterSlots slots, Dictionary<Guid, Schema?> schemas) {
         var fi = e as FamilyInstance;
         var facts = new List<DuctFact>();
         switch (kind) {
@@ -92,14 +179,18 @@ public static class DuctSnapshots {
                 if (Space(fi) is { } space) facts.Add(new DuctFact("space", null, space, "", DuctProvenance.Geometry));
                 break;
             case DuctNodeKind.Accessory:
-                facts.Add(Fact(DuctNetwork.PressureDrop, Converted(Named(e, "Pressure Drop"), UnitTypeId.InchesOfWater60DegreesFahrenheit), "in-wg", DuctProvenance.DesignerStated));
+                facts.Add(Fact(DuctNetwork.PressureDrop, Converted(Named(e, slots.ComponentDrop), UnitTypeId.InchesOfWater60DegreesFahrenheit), "in-wg", DuctProvenance.DesignerStated));
                 break;
             case DuctNodeKind.Equipment:
-                facts.Add(Fact(DuctNetwork.ExternalStatic, Converted(Named(e, "PE_M_Fan_ExternalStaticPressure"), UnitTypeId.InchesOfWater60DegreesFahrenheit), "in-wg", DuctProvenance.DesignerStated));
-                facts.Add(Fact("fanFlow", Converted(Named(e, "PE_M_Fan_AirFlow"), UnitTypeId.CubicFeetPerMinute), "cfm", DuctProvenance.DesignerStated));
+                facts.Add(Fact(DuctNetwork.ExternalStatic, Converted(Named(e, slots.FanStatic), UnitTypeId.InchesOfWater60DegreesFahrenheit), "in-wg", DuctProvenance.DesignerStated));
+                facts.Add(Fact("fanFlow", Converted(Named(e, slots.FanFlow), UnitTypeId.CubicFeetPerMinute), "cfm", DuctProvenance.DesignerStated));
                 break;
-            case DuctNodeKind.Fitting when e.LookupParameter("Angle") is { HasValue: true, StorageType: StorageType.Double } angle:
-                facts.Add(new DuctFact("angle", R(angle.AsDouble() * 180 / Math.PI), null, "deg", DuctProvenance.Geometry));
+            case DuctNodeKind.Fitting:
+                if (e.LookupParameter("Angle") is { HasValue: true, StorageType: StorageType.Double } angle)
+                    facts.Add(new DuctFact("angle", R(angle.AsDouble() * 180 / Math.PI), null, "deg", DuctProvenance.Geometry));
+                // Revit's elbow families carry "Center Radius" as an instance length; r/D is derived in DuctNetwork.
+                if (e.LookupParameter("Center Radius") is { HasValue: true, StorageType: StorageType.Double } radius && radius.AsDouble() > 0)
+                    facts.Add(new DuctFact(DuctNetwork.CenterRadius, R(radius.AsDouble() * 12), null, "in", DuctProvenance.Geometry));
                 break;
         }
         var levelId = e.LevelId != ElementId.InvalidElementId
@@ -118,10 +209,12 @@ public static class DuctSnapshots {
             Text(e, BuiltInParameter.RBS_SYSTEM_NAME_PARAM),
             Text(e, BuiltInParameter.RBS_SYSTEM_CLASSIFICATION_PARAM),
             Hvac(e).Select(Connector).ToList(),
-            facts.Where(f => f.Value is not null || f.Text is not null).ToList());
+            facts.Where(f => f.Value is not null || f.Text is not null).ToList(),
+            kind is DuctNodeKind.Fitting or DuctNodeKind.Accessory ? Loss(e, schemas) : null,
+            kind == DuctNodeKind.Terminal ? Terminal(e, slots) : null);
     }
 
-    private static IReadOnlyList<DuctLayer> Layers(DuctNetwork.Analysis a) {
+    private static IReadOnlyList<DuctLayer> Layers(DuctNetwork.Analysis a, IReadOnlyList<DuctSystem> systems, DuctParameterSlots slots) {
         var segs = a.Segments;
         var terminals = a.Nodes.Where(n => n.Kind == DuctNodeKind.Terminal).ToList();
         var equipment = a.Nodes.Where(n => n.Kind == DuctNodeKind.Equipment).ToList();
@@ -130,6 +223,8 @@ public static class DuctSnapshots {
             .Concat(segs.SelectMany(s => s.Connectors)).ToList();
         var elements = a.Nodes.Count + segs.Count;
         var issueGroups = a.Issues.Select(i => i.GroupId).ToHashSet();
+        var fittings = a.Nodes.Where(n => n.Kind == DuctNodeKind.Fitting).ToList();
+        var lossy = a.Nodes.Where(n => n.Loss is not null).ToList();
         return [
             new("topology", "Topology from connector walks",
                 "FilteredElementCollector(doc).OfCategory(OST_DuctCurves | OST_FlexDuctCurves | OST_DuctFitting | OST_DuctAccessory | OST_DuctTerminal | OST_MechanicalEquipment).WhereElementIsNotElementType(); each ConnectorManager.Connectors where Domain == DomainHvac and ConnectorType is End or Curve; Connector.AllRefs names the connected owner. Equipment is cut out: its ports become group roots.",
@@ -153,10 +248,10 @@ public static class DuctSnapshots {
                 "DuctNetwork.PassOne: terminal design flow summed up the tree from the one equipment port of each loop-free group",
                 new(a.Flows.Count, segs.Count), DuctProvenance.Derived),
             new("fan-static", "Fan external static",
-                "OST_MechanicalEquipment with HVAC connectors: LookupParameter(\"PE_M_Fan_ExternalStaticPressure\") (InchesOfWater60DegreesFahrenheit) and LookupParameter(\"PE_M_Fan_AirFlow\") on the instance, else on its FamilySymbol",
+                $"OST_MechanicalEquipment with HVAC connectors: LookupParameter(\"{slots.FanStatic}\") (InchesOfWater60DegreesFahrenheit) and LookupParameter(\"{slots.FanFlow}\") on the instance, else on its FamilySymbol",
                 new(equipment.Count(e => DuctNetwork.Fact(e, DuctNetwork.ExternalStatic) > 0), equipment.Count), DuctProvenance.DesignerStated),
             new("component-drop", "Component pressure drop",
-                "OST_DuctAccessory instances: LookupParameter(\"Pressure Drop\") (InchesOfWater60DegreesFahrenheit) on the instance, else on its FamilySymbol",
+                $"OST_DuctAccessory instances: LookupParameter(\"{slots.ComponentDrop}\") (InchesOfWater60DegreesFahrenheit) on the instance, else on its FamilySymbol",
                 new(accessories.Count(e => DuctNetwork.Fact(e, DuctNetwork.PressureDrop) > 0), accessories.Count), DuctProvenance.DesignerStated),
             new("systems", "Systems and labels",
                 "every element: RBS_SYSTEM_NAME_PARAM, RBS_SYSTEM_CLASSIFICATION_PARAM",
@@ -164,6 +259,19 @@ public static class DuctSnapshots {
             new("spaces", "Terminal spaces",
                 "OST_DuctTerminal instances: FamilyInstance.Space (Number Name)",
                 new(terminals.Count(t => t.Facts.Any(f => f.Key == "space")), terminals.Count), DuctProvenance.Geometry),
+            new("fitting-geometry", "Fitting geometry",
+                "OST_DuctFitting: LookupParameter(\"Angle\"), LookupParameter(\"Center Radius\"); connector sizes; DuctNetwork derives rOverD (round elbows), inlet and aoOverA1 (rooted transitions), takeoff, mainDiameter, mainArea and abOverAc (fittings on a duct's curve connector)",
+                new(fittings.Count(n => n.Facts.Any(f => f.Key is DuctNetwork.ROverD or DuctNetwork.AoOverA1 or DuctNetwork.AbOverAc)), fittings.Count), DuctProvenance.Geometry),
+            new("loss-method", "Fitting and accessory loss method",
+                "RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM; ExternalServiceRegistry DuctFittingAndAccessoryPressureDropService GetServer(id).GetDataSchema(), Element.GetEntity(schema) string fields (ASHRAETableName, Coefficient); RBS_PRESSURE_DROP",
+                new(lossy.Count(n => n.Loss!.Method is DuctLossMethod.SpecificCoefficient or DuctLossMethod.SpecificLoss), lossy.Count), DuctProvenance.RevitReported),
+            new("terminal-drop", "Terminal pressure drop",
+                "OST_DuctTerminal first HVAC connector: AssignedPressureDrop (InchesOfWater60DegreesFahrenheit), AssignedDuctLossMethod (writable only under SpecificLoss); "
+                + (slots.TerminalDrop is { } td ? $"catalog LookupParameter(\"{td}\") on the instance, else on its FamilySymbol" : "no catalog drop slot named"),
+                new(terminals.Count(t => t.TerminalDrop?.AssignedPressureDropInWg > 0 || t.TerminalDrop?.CatalogDropInWg > 0), terminals.Count), DuctProvenance.DesignerStated),
+            new("revit-systems", "Revit systems and critical path",
+                "FilteredElementCollector(doc).OfClass(MechanicalSystem) where SystemType is SupplyAir, ReturnAir or ExhaustAir: IsWellConnected, BaseEquipment, BaseEquipmentConnector, PressureLossOfCriticalPath, GetCriticalPathSectionNumbers(), GetSectionByNumber(k) Flow, TotalPressureLoss, GetElementIds(); DuctSettings.NetworkBasedCalculations",
+                new(systems.Count(s => s.CriticalPath.Count > 0), systems.Count), DuctProvenance.RevitReported),
             new("issues", "Issues",
                 "DuctNetwork.Analyze over the topology layer: open ends (caps excluded), loops, stubs under 3 in, implausible sizes, default flex roughness, roots, missing terminal flow, fan static and component drops, and Revit velocity of 2000 fpm or more",
                 new(a.Groups.Count(g => !issueGroups.Contains(g.Id)), a.Groups.Count), DuctProvenance.Derived)
@@ -208,7 +316,8 @@ public static class DuctSnapshots {
                 _ => "bidirectional"
             }) ?? "n/a",
             Try(() => c.DuctSystemType.ToString()),
-            ConnectedTo(c));
+            ConnectedTo(c),
+            DuctNetwork.Area(shape, diameter, width, height) is { } area ? R(area, 5) : null);
     }
 
     private static DuctRef? ConnectedTo(Connector c) {

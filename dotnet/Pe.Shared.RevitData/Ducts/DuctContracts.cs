@@ -74,6 +74,19 @@ public enum DuctIssueKind {
     [EnumMember(Value = "high-velocity")] HighVelocity
 }
 
+/// <summary>Optional: which parameters carry the designer-stated values. Absent reads the defaults.</summary>
+public sealed record DuctSnapshotRequest(DuctParameterSlots? Slots = null);
+
+/// <summary>
+///     Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+///     equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) on terminals as a catalog drop.
+/// </summary>
+public sealed record DuctParameterSlots(
+    string FanStatic = "PE_M_Fan_ExternalStaticPressure",
+    string FanFlow = "PE_M_Fan_AirFlow",
+    string ComponentDrop = "Pressure Drop",
+    string? TerminalDrop = null);
+
 public sealed record DuctSnapshotData(
     DuctDocument Document,
     IReadOnlyList<DuctLevel> Levels,
@@ -82,10 +95,69 @@ public sealed record DuctSnapshotData(
     IReadOnlyList<DuctSegment> Segments,
     IReadOnlyList<DuctFlow> Flows,
     IReadOnlyList<DuctIssue> Issues,
-    IReadOnlyList<DuctLayer> Layers);
+    IReadOnlyList<DuctLayer> Layers,
+    IReadOnlyList<DuctSystem> Systems,
+    DuctParameterSlots Slots);
 
-/// <summary>The document read, when, and how long the read took.</summary>
-public sealed record DuctDocument(string Title, DateTimeOffset ReadAt, long ElapsedMs);
+/// <summary>
+///     The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:
+///     the legacy engine never reports a critical path (pressure-drop ledger).
+/// </summary>
+public sealed record DuctDocument(string Title, DateTimeOffset ReadAt, long ElapsedMs, bool NetworkBasedCalculations);
+
+/// <summary>
+///     One supply, return or exhaust MechanicalSystem as Revit reports it: the check beside Pe's own solve.
+///     CriticalPath is GetCriticalPathSectionNumbers(); empty when Revit found none.
+/// </summary>
+public sealed record DuctSystem(
+    long Id,
+    string Name,
+    string Classification,
+    bool? IsWellConnected,
+    long? BaseEquipmentId,
+    int? BaseEquipmentConnector,
+    double? CriticalPathLossInWg,
+    IReadOnlyList<int> CriticalPath,
+    IReadOnlyList<DuctSection> Sections);
+
+/// <summary>One MEPSection: Revit's run of elements carrying one flow.</summary>
+public sealed record DuctSection(int Number, double? FlowCfm, double? TotalPressureLossInWg, IReadOnlyList<long> ElementIds);
+
+[JsonConverter(typeof(StringEnumConverter))]
+public enum DuctLossMethod {
+    [EnumMember(Value = "not-defined")] NotDefined,
+    /// <summary>"Coefficient from ASHRAE Table": computes zero on every fitting in R2025 and R2026 (pressure-drop ledger).</summary>
+    [EnumMember(Value = "ashrae-table")] AshraeTable,
+    [EnumMember(Value = "specific-coefficient")] SpecificCoefficient,
+    [EnumMember(Value = "specific-loss")] SpecificLoss,
+    /// <summary>A server this census does not know, or no server parameter.</summary>
+    [EnumMember(Value = "other")] Other
+}
+
+/// <summary>
+///     A fitting's or accessory's loss state: the server in RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM and the string
+///     fields of that server's entity on the instance, verbatim in Fields. Table, Coefficient and SpecificLossInWg are
+///     read from them. RevitPressureDropInWg is the element's own RBS_PRESSURE_DROP.
+/// </summary>
+public sealed record DuctLoss(
+    DuctLossMethod Method,
+    string? ServerId,
+    string? Table,
+    double? Coefficient,
+    double? SpecificLossInWg,
+    double? RevitPressureDropInWg,
+    IReadOnlyDictionary<string, string> Fields);
+
+/// <summary>
+///     A terminal's drop. AssignedPressureDropInWg is the first HVAC connector's AssignedPressureDrop; ConnectorLossMethod
+///     its AssignedDuctLossMethod (NotDefined, Coefficient, SpecificLoss). Writable is true only for SpecificLoss: under
+///     NotDefined Revit refuses the setter (SA 26 campaign). CatalogDropInWg is the TerminalDrop slot, if one is named.
+/// </summary>
+public sealed record DuctTerminalDrop(
+    double? AssignedPressureDropInWg,
+    string? ConnectorLossMethod,
+    bool Writable,
+    double? CatalogDropInWg);
 
 /// <summary>A level; ElevationFt is Level.ProjectElevation (geometry frame), never Level.Elevation.</summary>
 public sealed record DuctLevel(long Id, string Name, double ElevationFt);
@@ -123,7 +195,8 @@ public sealed record DuctConnector(
     double? FlowCfm,
     string Direction,
     string? Classification,
-    DuctRef? ConnectedTo);
+    DuctRef? ConnectedTo,
+    double? AreaFt2 = null);
 
 /// <summary>One stated or reported value with its unit and provenance.</summary>
 public sealed record DuctFact(string Key, double? Value, string? Text, string Unit, DuctProvenance Provenance);
@@ -141,7 +214,9 @@ public sealed record DuctNode(
     string? SystemName,
     string? Classification,
     IReadOnlyList<DuctConnector> Connectors,
-    IReadOnlyList<DuctFact> Facts);
+    IReadOnlyList<DuctFact> Facts,
+    DuctLoss? Loss = null,
+    DuctTerminalDrop? TerminalDrop = null);
 
 public sealed record DuctRoughness(double ValueFt, DuctProvenance Provenance);
 

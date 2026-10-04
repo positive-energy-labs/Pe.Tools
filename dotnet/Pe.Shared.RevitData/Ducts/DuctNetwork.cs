@@ -15,6 +15,26 @@ public static class DuctNetwork {
     /// <summary>The advisory line for Revit-reported velocity, fpm.</summary>
     public const double HighVelocityFpm = 2000;
 
+    // Fitting geometry. The collector writes CenterRadius; Analyze derives the rest (provenance geometry, Inlet derived).
+    /// <summary>Elbow centerline radius, in: the instance parameter "Center Radius" of Revit's elbow families.</summary>
+    public const string CenterRadius = "centerRadius";
+    /// <summary>Round elbow: CenterRadius over the connector diameter (ASHRAE CD3-x).</summary>
+    public const string ROverD = "rOverD";
+    /// <summary>The connector index that faces the root in a single-root tree: the flow's way in.</summary>
+    public const string Inlet = "inlet";
+    /// <summary>Transition: outlet area over inlet area in the flow direction (ASHRAE SD4/SR4 Ao/A1).</summary>
+    public const string AoOverA1 = "aoOverA1";
+    /// <summary>1 when the fitting sits on a duct's curve connector: a takeoff (tap) on the side of a main.</summary>
+    public const string Takeoff = "takeoff";
+    /// <summary>Takeoff: the main duct's element id.</summary>
+    public const string MainSegment = "mainSegment";
+    /// <summary>Takeoff: the main's diameter, in (round mains only).</summary>
+    public const string MainDiameter = "mainDiameter";
+    /// <summary>Takeoff: the main's cross-section area, ft2.</summary>
+    public const string MainArea = "mainArea";
+    /// <summary>Takeoff: branch area over main area (ASHRAE SD5-x Ab/Ac).</summary>
+    public const string AbOverAc = "abOverAc";
+
     public sealed record Analysis(
         IReadOnlyList<DuctNode> Nodes,
         IReadOnlyList<DuctSegment> Segments,
@@ -78,6 +98,7 @@ public static class DuctNetwork {
         }
 
         var groups = new List<DuctGroup>();
+        var parentOf = new Dictionary<long, long>();
         var flows = new List<DuctFlow>();
         var issues = new List<DuctIssue>();
         for (var i = 0; i < members.Count; i++) {
@@ -132,14 +153,23 @@ public static class DuctNetwork {
                 if (!(Fact(nodeById[r], ExternalStatic) > 0))
                     Add(DuctIssueKind.NoFanStatic, r, nodeById[r].Point, $"{nodeById[r].Family} states no external static");
 
-            if (ports.Count == 1 && loops == 0) flows.AddRange(PassOne(ports[0].element, adj, nodeById, segById));
+            if (ports.Count == 1 && loops == 0) {
+                var (groupFlows, parent) = PassOne(ports[0].element, adj, nodeById, segById);
+                flows.AddRange(groupFlows);
+                foreach (var kv in parent) parentOf[kv.Key] = kv.Value == kv.Key ? ports[0].equipment : kv.Value;
+            }
             issues.AddRange(groupIssues);
             groups.Add(new DuctGroup(gid, roots, classes.ToList(), systems.ToList(), terminals, ids.Count, loops,
                 groupIssues.Select(x => x.Id).ToList()));
         }
 
         return new Analysis(
-            nodes.Select(n => n with { GroupId = groupOf.TryGetValue(n.Id, out var g) ? g : null }).ToList(),
+            nodes.Select(n => n with {
+                GroupId = groupOf.TryGetValue(n.Id, out var g) ? g : null,
+                Facts = n.Kind is DuctNodeKind.Fitting or DuctNodeKind.Accessory
+                    ? n.Facts.Concat(Geometry(n, parentOf.TryGetValue(n.Id, out var up) ? up : null, segById)).ToList()
+                    : n.Facts
+            }).ToList(),
             segments.Select(s => s with { GroupId = groupOf.TryGetValue(s.Id, out var g) ? g : null }).ToList(),
             groups.OrderByDescending(g => g.ElementCount).ThenBy(g => g.Id, StringComparer.Ordinal).ToList(),
             flows,
@@ -148,8 +178,47 @@ public static class DuctNetwork {
         double[]? Point(long id) => nodeById.TryGetValue(id, out var n) ? n.Point : segById.TryGetValue(id, out var s) ? Mid(s) : null;
     }
 
+    /// <summary>Ratios a coefficient table is looked up by, from connector sizes and, when rooted, flow direction.</summary>
+    private static IEnumerable<DuctFact> Geometry(DuctNode n, long? parent, Dictionary<long, DuctSegment> segments) {
+        DuctFact F(string key, double value, string unit, DuctProvenance p = DuctProvenance.Geometry) =>
+            new(key, Math.Round(value, 4), null, unit, p);
+        var ports = n.Connectors;
+        if (Fact(n, CenterRadius) is { } r && ports.FirstOrDefault()?.DiameterIn is { } d && d > 0)
+            yield return F(ROverD, r / d, "");
+        var inlet = parent is { } up ? ports.FirstOrDefault(c => c.ConnectedTo?.ElementId == up) : null;
+        if (inlet is not null) {
+            yield return F(Inlet, inlet.Index, "", DuctProvenance.Derived);
+            if (n.PartType == "Transition" && ports.Count == 2 && Area(inlet) is { } a1 && a1 > 0
+                && Area(ports.First(c => c != inlet)) is { } ao)
+                yield return F(AoOverA1, ao / a1, "");
+        }
+        foreach (var c in ports) {
+            if (c.ConnectedTo is not { } to || !segments.TryGetValue(to.ElementId, out var main)) continue;
+            if (main.Connectors.FirstOrDefault(m => m.Index == to.Connector)?.Kind != "curve") continue;
+            yield return F(Takeoff, 1, "");
+            yield return F(MainSegment, main.Id, "");
+            if (main.Shape == DuctShape.Round && main.DiameterIn is { } md) yield return F(MainDiameter, md, "in");
+            var ac = Area(main.Shape, main.DiameterIn, main.WidthIn, main.HeightIn);
+            if (ac is not { } mainArea || mainArea <= 0) yield break;
+            yield return F(MainArea, mainArea, "ft2");
+            if (Area(ports.FirstOrDefault(o => o != c) ?? c) is { } ab) yield return F(AbOverAc, ab / mainArea, "");
+            yield break;
+        }
+    }
+
+    /// <summary>Cross-section area, ft2; flat oval is a rectangle with two half-round ends (W major, H minor).</summary>
+    public static double? Area(DuctShape shape, double? diameterIn, double? widthIn, double? heightIn) => shape switch {
+        DuctShape.Round when diameterIn is { } d => Math.PI / 4 * d * d / 144,
+        DuctShape.Rectangular when widthIn is { } w && heightIn is { } h => w * h / 144,
+        DuctShape.Oval when widthIn is { } w && heightIn is { } h =>
+            (Math.PI / 4 * Math.Min(w, h) * Math.Min(w, h) + Math.Min(w, h) * Math.Abs(w - h)) / 144,
+        _ => null
+    };
+
+    private static double? Area(DuctConnector c) => c.AreaFt2 ?? Area(c.Shape, c.DiameterIn, c.WidthIn, c.HeightIn);
+
     /// <summary>Sum terminal design flow up a tree rooted at the element attached to the one equipment port.</summary>
-    private static IEnumerable<DuctFlow> PassOne(
+    private static (IEnumerable<DuctFlow> Flows, Dictionary<long, long> Parent) PassOne(
         long root,
         Dictionary<long, HashSet<long>> adj,
         Dictionary<long, DuctNode> nodes,
@@ -169,7 +238,7 @@ public static class DuctNetwork {
         }
         var sum = order.ToDictionary(x => x, x => nodes.TryGetValue(x, out var n) && n.Kind == DuctNodeKind.Terminal ? Fact(n, TerminalFlow) ?? 0 : 0);
         for (var i = order.Count - 1; i > 0; i--) sum[parent[order[i]]] += sum[order[i]];
-        return order.Where(segments.ContainsKey).Select(x => new DuctFlow(x, Math.Round(sum[x], 1), DuctProvenance.Derived));
+        return (order.Where(segments.ContainsKey).Select(x => new DuctFlow(x, Math.Round(sum[x], 1), DuctProvenance.Derived)).ToList(), parent);
     }
 
     public static double? Fact(DuctNode node, string key) => node.Facts.FirstOrDefault(f => f.Key == key)?.Value;
