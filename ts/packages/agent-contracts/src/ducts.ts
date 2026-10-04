@@ -124,15 +124,19 @@ export const ductsApplyInputSchema = z.strictObject({
     z.strictObject({ id: z.number().int(), externalStaticInWg: z.number().nonnegative() }),
   ),
   networkBasedCalculations: z.boolean(),
-  /** W3's `DuctLossStore` v1, merged by the native op into the Project Information blob. */
+  /**
+   * The whole provenance store after this apply (`DuctLossStore` v1): the model's store with this
+   * apply's rules, instances and drops over it, since the native op writes it as sent. `workRevision`
+   * is the model store's revision as read; an older one refuses as stale.
+   */
   store: z.strictObject({
     version: z.literal(1),
-    rules: z.record(z.string(), z.strictObject({ table: z.string() })),
+    rules: z.record(z.string(), z.strictObject({ table: z.string().nullable() })),
     instances: z.record(
       z.string(),
       z.strictObject({
-        table: z.string(),
-        inputs: z.string(),
+        table: z.string().nullable(),
+        inputs: z.string().nullable(),
         coefficient: z.number(),
         appliedAt: stamp,
       }),

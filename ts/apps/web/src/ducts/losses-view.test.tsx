@@ -17,6 +17,8 @@ import {
   type RouteStatePatch,
 } from "@pe/agent-contracts";
 
+import type { DuctsApply } from "@pe/host-contracts/generated";
+
 import type { Grid, Grids } from "./loss-grid";
 import { computeLosses } from "./losses";
 import { DuctsLosses, StagedLosses } from "./losses-view";
@@ -194,7 +196,7 @@ it("builds the ducts.apply request from the staged cells only, exactly", () => {
   expect(
     computeLosses(snapshot, grids, priced.choices, priced.overrides).byGroup.g10?.fan,
   ).toBeCloseTo(0.1060651, 6);
-  expect(applyRequest(snapshot, priced, 7, at)).toEqual({
+  expect(applyRequest(snapshot, priced, at)).toEqual({
     slots: {},
     fittings: [
       {
@@ -221,13 +223,16 @@ it("builds the ducts.apply request from the staged cells only, exactly", () => {
         fanFlow: "PE_M_Fan_AirFlow",
         componentDrop: "Pressure Drop",
       },
-      workRevision: 7,
+      workRevision: 0,
       appliedAt: at,
     },
   });
-  // The request is what the semantic action admits.
+  // The request is what the semantic action admits, and with the verb's previewOnly it is the
+  // generated native request.
+  const wire: DuctsApply.Req.Request = { ...applyRequest(snapshot, priced, at), previewOnly: true };
+  expect(wire.previewOnly).toBe(true);
   expect(() =>
-    semanticActions["ducts.apply"].input.parse(applyRequest(snapshot, priced, 7, at)),
+    semanticActions["ducts.apply"].input.parse(applyRequest(snapshot, priced, at)),
   ).not.toThrow();
 });
 
@@ -255,7 +260,7 @@ it("apply is armed only by a preview of this Work revision and this snapshot", (
         ducts: { state: "ready", observation: snapshot },
         tables: { state: "ready", observation: grids },
       },
-    }) as unknown as Parameters<typeof manifest.actions.apply.ready>[0];
+    }) as unknown as Parameters<NonNullable<typeof manifest.actions>["apply"]["ready"]>[0];
   const { apply, preview } = manifest.actions!;
   const nothing = undefined as unknown as Parameters<typeof apply.ready>[1];
   expect(preview.ready(ctx({}), nothing)).toBeNull();

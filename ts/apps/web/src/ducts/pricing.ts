@@ -26,19 +26,13 @@ export const TABLE_IDS: readonly string[] = [
   ...new Set(LOSS_RULES.flatMap((rule) => rule.options)),
 ].sort();
 
-/**
- * The tables Revit's provenance store says were last applied, per rule key.
- * SHIM: W3 is adding `store` to `ducts.snapshot` (the Project Information blob `ducts.apply`
- * writes); read it off the generated type once codegen lands. Absent, every rule is its default.
- */
-export const appliedChoices = (snapshot: DuctSnapshot): Choices => {
-  const rules =
-    (snapshot as { store?: { rules?: Record<string, { table?: string | null }> } | null }).store
-      ?.rules ?? {};
-  return Object.fromEntries(
-    Object.entries(rules).flatMap(([key, rule]) => (rule.table ? [[key, rule.table]] : [])),
+/** The tables Pe's provenance store says were last applied, per rule key; absent = the default. */
+export const appliedChoices = (snapshot: DuctSnapshot): Choices =>
+  Object.fromEntries(
+    Object.entries(snapshot.store?.rules ?? {}).flatMap(([key, rule]) =>
+      rule.table ? [[key, rule.table.toUpperCase()]] : [],
+    ),
   );
-};
 
 const byId = <V>(cells: Record<string, V>, pick: (value: V) => number) =>
   Object.fromEntries(Object.entries(cells).map(([id, value]) => [Number(id), pick(value)]));
@@ -171,7 +165,6 @@ export function fanWrites(
 export function applyRequest(
   snapshot: DuctSnapshot,
   priced: Priced,
-  revision: number,
   appliedAt: string,
 ): DuctsApplyInput {
   const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
@@ -199,6 +192,7 @@ export function applyRequest(
     [...fittings, ...terminals, ...components].flatMap(({ id }) => nodes.get(id)?.groupId ?? []),
   );
   const slots = priced.staged.parameters;
+  const stored = snapshot.store;
   return {
     slots,
     fittings,
@@ -212,19 +206,41 @@ export function applyRequest(
       rules: Object.fromEntries(
         Object.entries(priced.choices).map(([key, table]) => [key, { table: table.toUpperCase() }]),
       ),
-      instances: Object.fromEntries(
-        fittings.map(({ id, table, inputs, coefficient }) => [
-          String(id),
-          { table, inputs, coefficient, appliedAt },
-        ]),
-      ),
-      terminals: Object.fromEntries(
-        terminals.map(({ id, inWg, source }) => [String(id), { inWg, source, appliedAt }]),
-      ),
+      instances: {
+        ...Object.fromEntries(
+          Object.entries(stored?.instances ?? {}).map(([id, record]) => [
+            id,
+            {
+              table: record.table ?? null,
+              inputs: record.inputs ?? null,
+              coefficient: record.coefficient,
+              appliedAt: record.appliedAt,
+            },
+          ]),
+        ),
+        ...Object.fromEntries(
+          fittings.map(({ id, table, inputs, coefficient }) => [
+            String(id),
+            { table, inputs, coefficient, appliedAt },
+          ]),
+        ),
+      },
+      terminals: {
+        ...Object.fromEntries(
+          Object.entries(stored?.terminals ?? {}).map(([id, drop]) => [
+            id,
+            { inWg: drop.inWg, source: drop.source ?? null, appliedAt: drop.appliedAt },
+          ]),
+        ),
+        ...Object.fromEntries(
+          terminals.map(({ id, inWg, source }) => [String(id), { inWg, source, appliedAt }]),
+        ),
+      },
       slots: Object.fromEntries(
         Object.entries({ ...snapshot.slots, ...slots }).filter(([, name]) => !!name),
       ) as DuctsApplyInput["store"]["slots"],
-      workRevision: revision,
+      // The model store's revision as read: an apply over a store that moved since refuses.
+      workRevision: stored?.workRevision ?? 0,
       appliedAt,
     },
   };

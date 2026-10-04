@@ -22,7 +22,7 @@ import {
   actionResult,
   runSemanticAction,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
-import type { DuctsApplyResponse } from "./apply-contract";
+import type { DuctsApply } from "@pe/host-contracts/generated";
 import type { Grids } from "./loss-grid";
 import { applyRequest, price } from "./pricing";
 import type { DuctSnapshot } from "./readiness";
@@ -36,7 +36,7 @@ const DUCTS_STAGES = [
 export interface DuctsEvaluation {
   revision: number;
   epoch: number;
-  response: DuctsApplyResponse;
+  response: DuctsApply.Res.Response;
 }
 
 const ductsPageSchema = z.object({
@@ -81,8 +81,9 @@ const built = (ctx: DuctsCtx) => {
   if (!snapshot) throw Error("The duct snapshot is not read yet");
   if (!grids) throw Error("The ASHRAE tables are not read yet");
   if (ctx.work.revision === null) throw Error("The Work is not read yet");
-  const priced = price(snapshot, grids, ctx.work.doc);
-  return applyRequest(snapshot, priced, ctx.work.revision, new Date().toISOString());
+  if (snapshot.storeError)
+    throw Error(`Pe's provenance store in this model is unreadable: ${snapshot.storeError}`);
+  return applyRequest(snapshot, price(snapshot, grids, ctx.work.doc), new Date().toISOString());
 };
 
 const dispatch = async (
@@ -95,10 +96,10 @@ const dispatch = async (
   const answer = actionResult(
     await runSemanticAction(key, semanticActionInput(key, input), ctx.target.ref),
   ) as { value?: unknown };
-  return (answer.value ?? answer) as DuctsApplyResponse;
+  return (answer.value ?? answer) as DuctsApply.Res.Response;
 };
 
-export const outcomeWords = (response: DuctsApplyResponse) =>
+export const outcomeWords = (response: DuctsApply.Res.Response) =>
   Object.entries(response.counts)
     .filter(([, n]) => n)
     .map(([outcome, n]) => `${n} ${outcome}`)
@@ -206,9 +207,9 @@ export const manifest = defineRoute<
         const request = built(ctx);
         const response = await dispatch(ctx, "ducts.preview", request);
         ctx.setPage({
-          evaluation: { revision: request.store.workRevision, epoch: ctx.page.epoch, response },
+          evaluation: { revision: ctx.work.revision!, epoch: ctx.page.epoch, response },
         });
-        ctx.note("preview", `r${request.store.workRevision}: ${outcomeWords(response)}`);
+        ctx.note("preview", `Work r${ctx.work.revision}: ${outcomeWords(response)}`);
       },
     },
     apply: {
