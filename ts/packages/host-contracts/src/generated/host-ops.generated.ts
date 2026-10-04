@@ -167,10 +167,26 @@ export namespace DocumentTemporaryStatus {
   }
 }
 
-/** Read every duct network in the project: ducts, flex, fittings, accessories, terminals and HVAC equipment with their connectors, grouped by topology with equipment cut out, plus pass-1 terminal flow, issues (open ends, loops, stubs, roots, missing flow, fan static and component drops) and the query behind each layer. Read-only. */
+/** Read every duct network in the project: ducts, flex, fittings, accessories, terminals and HVAC equipment with their connectors, grouped by topology with equipment cut out, plus pass-1 terminal flow, fitting geometry ratios, fitting and accessory loss methods, terminal drops, Revit's supply/return/exhaust systems with critical path and sections, issues and the query behind each layer. Slots name the fan static, fan flow, component drop and terminal catalog drop parameters. Read-only. */
 export namespace DuctsSnapshot {
   export namespace Req {
-    export interface Request {}
+    /**
+     * Optional: which parameters carry the designer-stated values. Absent reads the defaults.
+     */
+    export interface Request {
+      slots?: null | DuctParameterSlots;
+    }
+    /**
+     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) on terminals as a catalog drop.
+     *
+     */
+    export interface DuctParameterSlots {
+      fanStatic?: string;
+      fanFlow?: string;
+      componentDrop?: string;
+      terminalDrop?: null | string;
+    }
   }
   export namespace Res {
     export type DuctNodeKind = "equipment" | "terminal" | "fitting" | "accessory" | "cap";
@@ -179,6 +195,7 @@ export namespace DuctsSnapshot {
      * Where a value came from. The route prints it beside the value.
      */
     export type DuctProvenance = "geometry" | "revit-reported" | "revit-default" | "designer-stated" | "derived";
+    export type DuctLossMethod = "not-defined" | "ashrae-table" | "specific-coefficient" | "specific-loss" | "other";
     export type DuctSegmentKind = "duct" | "flex";
     export type DuctIssueKind =
       | "open-end"
@@ -203,14 +220,19 @@ export namespace DuctsSnapshot {
       flows: DuctFlow[];
       issues: DuctIssue[];
       layers: DuctLayer[];
+      systems: DuctSystem[];
+      slots: DuctParameterSlots;
     }
     /**
-     * The document read, when, and how long the read took.
+     * The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:
+     * the legacy engine never reports a critical path (pressure-drop ledger).
+     *
      */
     export interface DuctDocument {
       title: string;
       readAt: string;
       elapsedMs: number;
+      networkBasedCalculations: boolean;
     }
     /**
      * A level; ElevationFt is Level.ProjectElevation (geometry frame), never Level.Elevation.
@@ -249,6 +271,8 @@ export namespace DuctsSnapshot {
       classification?: null | string;
       connectors: DuctConnector[];
       facts: DuctFact[];
+      loss?: null | DuctLoss;
+      terminalDrop?: null | DuctTerminalDrop;
     }
     /**
      * One physical HVAC connector. Kind is "end" or "curve" (a tap on a duct's side). Direction is Revit's
@@ -268,6 +292,7 @@ export namespace DuctsSnapshot {
       direction: string;
       classification?: null | string;
       connectedTo?: null | DuctRef;
+      areaFt2?: null | number;
     }
     /**
      * What a connector touches: an element id and that element's connector index.
@@ -285,6 +310,35 @@ export namespace DuctsSnapshot {
       text?: null | string;
       unit: string;
       provenance: DuctProvenance;
+    }
+    /**
+     * A fitting's or accessory's loss state: the server in RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM and the string
+     * fields of that server's entity on the instance, verbatim in Fields. Table, Coefficient and SpecificLossInWg are
+     * read from them. RevitPressureDropInWg is the element's own RBS_PRESSURE_DROP.
+     *
+     */
+    export interface DuctLoss {
+      method: DuctLossMethod;
+      serverId?: null | string;
+      table?: null | string;
+      coefficient?: null | number;
+      specificLossInWg?: null | number;
+      revitPressureDropInWg?: null | number;
+      fields: {
+        [k: string]: string;
+      };
+    }
+    /**
+     * A terminal's drop. AssignedPressureDropInWg is the first HVAC connector's AssignedPressureDrop; ConnectorLossMethod
+     * its AssignedDuctLossMethod (NotDefined, Coefficient, SpecificLoss). Writable is true only for SpecificLoss: under
+     * NotDefined Revit refuses the setter (SA 26 campaign). CatalogDropInWg is the TerminalDrop slot, if one is named.
+     *
+     */
+    export interface DuctTerminalDrop {
+      assignedPressureDropInWg?: null | number;
+      connectorLossMethod?: null | string;
+      writable: boolean;
+      catalogDropInWg?: null | number;
     }
     export interface DuctSegment {
       id: number;
@@ -350,6 +404,89 @@ export namespace DuctsSnapshot {
     export interface DuctCoverage {
       have: number;
       of: number;
+    }
+    /**
+     * One supply, return or exhaust MechanicalSystem as Revit reports it: the check beside Pe's own solve.
+     * CriticalPath is GetCriticalPathSectionNumbers(); empty when Revit found none.
+     *
+     */
+    export interface DuctSystem {
+      id: number;
+      name: string;
+      classification: string;
+      isWellConnected?: boolean | null;
+      baseEquipmentId?: number | null;
+      baseEquipmentConnector?: number | null;
+      criticalPathLossInWg?: null | number;
+      criticalPath: number[];
+      sections: DuctSection[];
+    }
+    /**
+     * One MEPSection: Revit's run of elements carrying one flow.
+     */
+    export interface DuctSection {
+      number: number;
+      flowCfm?: null | number;
+      totalPressureLossInWg?: null | number;
+      elementIds: number[];
+    }
+    /**
+     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) on terminals as a catalog drop.
+     *
+     */
+    export interface DuctParameterSlots {
+      fanStatic: string;
+      fanFlow: string;
+      componentDrop: string;
+      terminalDrop?: null | string;
+    }
+  }
+}
+
+/** Read ASHRAE duct fitting coefficient grids (Co, Cb, Cs) by table id from the .tbl files Revit installs, verbatim: axes, labels and values for a web lookup. Read-only; needs no document. */
+export namespace DuctsTables {
+  export namespace Req {
+    /**
+     * The table ids to read, as ASHRAE names them ("CD3-2", "SD5-9"); case does not matter.
+     */
+    export interface Request {
+      ids: string[];
+    }
+  }
+  export namespace Res {
+    /**
+     * Tables keyed by upper-case id, then by result key (Co, Cb, Cs; a block printed twice gets "#2").
+     * A table Revit ships as "No table" has no results. Missing names ids with no file in Folder. Unsupported maps
+     * an id to why it was not parsed: three-axis tables (a second Y such as Re or As/Ac) and fixed-width rows whose
+     * numbers run together; a wrong grid is worse than none.
+     *
+     */
+    export interface Response {
+      folder: string;
+      tables: {
+        [k: string]: {
+          [k: string]: AshraeGrid;
+        };
+      };
+      missing: string[];
+      unsupported: {
+        [k: string]: string;
+      };
+    }
+    /**
+     * One coefficient grid; the wire shape the web's loss-grid.ts reads. With Y present, Grid is number[][]: one row
+     * per Y, one column per X. With Y absent, Grid is number[] over X; a constant ("Co= 0.12") is one value with X
+     * empty. Grid is typed object because the wire is a union; Rows and Values build it.
+     *
+     */
+    export interface AshraeGrid {
+      title: string;
+      xLabel: string;
+      x: number[];
+      yLabel?: null | string;
+      y?: number[] | null;
+      grid: unknown;
     }
   }
 }
@@ -6208,6 +6345,7 @@ export interface HostOps {
   "document.temporary.release": { request: DocumentTemporaryRelease.Req.Request; response: DocumentTemporaryRelease.Res.Response };
   "document.temporary.status": { request: DocumentTemporaryStatus.Req.Request; response: DocumentTemporaryStatus.Res.Response };
   "ducts.snapshot": { request: DuctsSnapshot.Req.Request; response: DuctsSnapshot.Res.Response };
+  "ducts.tables": { request: DuctsTables.Req.Request; response: DuctsTables.Res.Response };
   "families.apply": { request: FamiliesApply.Req.Request; response: FamiliesApply.Res.Response };
   "families.capture": { request: FamiliesCapture.Req.Request; response: FamiliesCapture.Res.Response };
   "families.plan": { request: FamiliesPlan.Req.Request; response: FamiliesPlan.Res.Response };
@@ -6284,6 +6422,7 @@ export const hostOpKeys = [
   "document.temporary.release",
   "document.temporary.status",
   "ducts.snapshot",
+  "ducts.tables",
   "families.apply",
   "families.capture",
   "families.plan",
