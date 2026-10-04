@@ -485,7 +485,7 @@ export interface Fanout {
   instances: number;
 }
 
-/** What staging `newTable` under `ruleKey` would move, before it lands. */
+/** What staging `newTable` under `ruleKey` would move, before it lands; `before` is the solve at `choices`/`overrides` when the caller holds it. */
 export function fanout(
   snapshot: DuctSnapshot,
   grids: Grids,
@@ -493,12 +493,12 @@ export function fanout(
   ruleKey: string,
   newTable: string,
   overrides: Overrides = {},
+  before: LossResult = computeLosses(snapshot, grids, choices, overrides),
 ): Fanout {
   const rule = ruleByKey(ruleKey);
   if (!rule) throw new Error(`no loss rule ${ruleKey}`);
   const table = newTable.toUpperCase();
   if (!rule.options.includes(table)) throw new Error(`${table} is not a candidate for ${ruleKey}`);
-  const before = computeLosses(snapshot, grids, choices, overrides);
   const after = computeLosses(snapshot, grids, { ...choices, [ruleKey]: table }, overrides);
   const movedTerminals = Object.keys(after.paths)
     .map(Number)

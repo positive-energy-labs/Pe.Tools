@@ -49,13 +49,45 @@ export interface Priced {
   staged: ReturnType<typeof stagedDucts>;
 }
 
+/**
+ * What depends on (snapshot, grids) alone, kept so a Work change re-solves only `next`: the
+ * applied solve, the last priced Work, and each staged rule's fanout.
+ */
+interface Solved {
+  applied: Choices;
+  now: LossResult;
+  last: { doc: DuctsRouteDocument | null; priced: Priced } | null;
+  fanouts: Map<string, Fanout>;
+}
+
+const solved = new WeakMap<DuctSnapshot, WeakMap<Grids, Solved>>();
+
+function solvedFor(snapshot: DuctSnapshot, grids: Grids): Solved {
+  const byGrids = solved.get(snapshot) ?? solved.set(snapshot, new WeakMap()).get(snapshot)!;
+  let entry = byGrids.get(grids);
+  if (!entry) {
+    const applied = appliedChoices(snapshot);
+    entry = {
+      applied,
+      now: computeLosses(snapshot, grids, applied),
+      last: null,
+      fanouts: new Map(),
+    };
+    byGrids.set(grids, entry);
+  }
+  return entry;
+}
+
+/** Cached per (snapshot, grids) and, for the last one, per `doc`: callers may price freely. */
 export function price(
   snapshot: DuctSnapshot,
   grids: Grids,
   doc: DuctsRouteDocument | null,
 ): Priced {
+  const entry = solvedFor(snapshot, grids);
+  if (entry.last?.doc === doc) return entry.last.priced;
   const staged = stagedDucts(doc);
-  const applied = appliedChoices(snapshot);
+  const { applied, now } = entry;
   const choices = {
     ...applied,
     ...Object.fromEntries(Object.entries(staged.rules).map(([key, { table }]) => [key, table])),
@@ -65,8 +97,7 @@ export function price(
     componentDrop: byId(staged.componentDrops, (drop) => drop.inWg),
   };
   const same = Object.keys(staged.rules).length === 0 && !hasDrops(staged);
-  const now = computeLosses(snapshot, grids, applied);
-  return {
+  const priced: Priced = {
     applied,
     choices,
     overrides,
@@ -74,6 +105,8 @@ export function price(
     next: same ? now : computeLosses(snapshot, grids, choices, overrides),
     staged,
   };
+  entry.last = { doc, priced };
+  return priced;
 }
 const hasDrops = (staged: Priced["staged"]) =>
   Object.keys(staged.terminalDrops).length + Object.keys(staged.componentDrops).length > 0;
@@ -92,7 +125,13 @@ export function stagedFanout(
   const table = priced.staged.rules[key]?.table;
   const rule = ruleByKey(key);
   if (!table || !rule?.options.includes(table.toUpperCase())) return null;
-  return fanout(snapshot, grids, priced.applied, key, table);
+  // Depends on the applied state and the one rule, never on the rest of the Work.
+  const { fanouts } = solvedFor(snapshot, grids);
+  const at = `${key}|${table.toUpperCase()}`;
+  let f = fanouts.get(at);
+  if (!f)
+    fanouts.set(at, (f = fanout(snapshot, grids, priced.applied, key, table, {}, priced.now)));
+  return f;
 }
 
 /** The part a row charges in a terminal's bar. */
