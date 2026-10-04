@@ -21,7 +21,12 @@ const issue = (id: string, kind: DuctSnapshot["issues"][number]["kind"], element
 
 /** One supply group off AHU 9: an open end, an accessory with no drop, an AHU with no fan static. */
 const snapshot = {
-  document: { title: "t", readAt: "2026-09-26T00:00:00Z", elapsedMs: 1 },
+  document: {
+    title: "t",
+    readAt: "2026-09-26T00:00:00Z",
+    elapsedMs: 1,
+    networkBasedCalculations: false,
+  },
   levels: [],
   groups: [
     {
@@ -63,6 +68,12 @@ const snapshot = {
     issue("no-fan-static:g1:9", "no-fan-static", 9),
   ],
   layers: [],
+  systems: [],
+  slots: {
+    fanStatic: "PE_M_Fan_ExternalStaticPressure",
+    fanFlow: "PE_M_Fan_AirFlow",
+    componentDrop: "Pressure Drop",
+  },
 } as DuctSnapshot;
 
 it("a group climbs from blocked to walkable to budgetable as a person stages assumptions", () => {

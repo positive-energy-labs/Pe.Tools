@@ -101,7 +101,12 @@ const flow = (cfm: number) =>
 
 const OPEN = "open-end:g1:9:1";
 const snapshot = {
-  document: { title: "t", readAt: "2026-09-26T00:00:00Z", elapsedMs: 1 },
+  document: {
+    title: "t",
+    readAt: "2026-09-26T00:00:00Z",
+    elapsedMs: 1,
+    networkBasedCalculations: false,
+  },
   levels: [],
   groups: [
     {
@@ -147,6 +152,12 @@ const snapshot = {
     },
   ],
   layers: [],
+  systems: [],
+  slots: {
+    fanStatic: "PE_M_Fan_ExternalStaticPressure",
+    fanFlow: "PE_M_Fan_AirFlow",
+    componentDrop: "Pressure Drop",
+  },
 } as DuctSnapshot;
 
 const page = (patch: Partial<DuctsPage> = {}): DuctsPage => ({
