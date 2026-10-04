@@ -222,7 +222,8 @@ export const manifest = defineRoute<
     apply: {
       label: "apply",
       labelNow: (ctx) => {
-        const n = ctx.page.evaluation?.response.writes.length ?? 0;
+        // Planned writes only: a refused write is not one apply makes.
+        const n = ctx.page.evaluation?.response.counts.planned ?? 0;
         return previewFresh(ctx.page, ctx.work.revision) && n
           ? `apply ${n} write${n === 1 ? "" : "s"}`
           : "apply";

@@ -433,6 +433,17 @@ const PartChip = ({ part }: { part: Part }) => (
   </span>
 );
 
+/**
+ * Revit's critical path as a word. With the engine flag off Revit reports 0 for every system,
+ * which is not an answer, so the flag is named instead of the zero.
+ */
+export const revitSays = (snapshot: DuctSnapshot, inWg: number | null | undefined) =>
+  !snapshot.document.networkBasedCalculations
+    ? "no critical path (engine flag off)"
+    : inWg == null
+      ? "no critical path"
+      : fmt(inWg);
+
 /** Pe's fan beside Revit's critical path, with the staged fan when it differs. */
 function GroupHead({
   snapshot,
@@ -468,11 +479,7 @@ function GroupHead({
       <span>
         <span className="t-small t-upper text-ink-2">Revit says </span>
         <span className="face-mono" data-revit={group.id}>
-          {!snapshot.document.networkBasedCalculations
-            ? "no critical path (engine flag off)"
-            : revit?.criticalPathLossInWg == null
-              ? "no critical path"
-              : fmt(revit.criticalPathLossInWg)}
+          {revitSays(snapshot, revit?.criticalPathLossInWg)}
         </span>
       </span>
       <span className="t-small text-ink-2">critical grille {critical ?? "—"}</span>
@@ -827,6 +834,18 @@ export function StagedLosses({
           {slots.map(([slot, name]) => `${slot} → ${name}`).join(" · ")}
         </div>
       ) : null}
+      {/* Every refusal, each on its line: a count with a hidden tail is a refusal the page hides. */}
+      {(evaluation?.response.writes ?? [])
+        .filter((w) => w.outcome === "refused")
+        .map((w, n) => (
+          <div
+            key={`${w.kind}:${w.id ?? n}`}
+            data-tone="caution"
+            data-refused={`${w.kind}:${w.id ?? ""}`}
+          >
+            {w.kind} {w.id ?? ""} refused: {w.reason ?? "no reason"}
+          </div>
+        ))}
       <div className="flex flex-wrap items-baseline gap-x-3">
         {evaluation ? (
           <span
@@ -839,11 +858,6 @@ export function StagedLosses({
               .map(([outcome, n]) => `${n} ${outcome}`)
               .join(" · ") || "nothing to write"}
             {fresh ? "" : " · stale, preview again"}
-            {evaluation.response.writes
-              .filter((w) => w.outcome === "refused")
-              .slice(0, 3)
-              .map((w) => ` · ${w.kind} ${w.id ?? ""} refused: ${w.reason ?? "no reason"}`)
-              .join("")}
           </span>
         ) : (
           <span className="text-ink-2">not previewed; preview asks Revit what it would accept</span>

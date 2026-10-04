@@ -18,7 +18,7 @@ import { useChooseTarget } from "#/route/shell";
 import { Situation } from "#/route/situation";
 import { useDocumentLadder } from "#/route/situation-ladder";
 import { manifest, previewFresh, WRITTEN, type DuctsPage } from "./manifest";
-import { DuctsLosses, StagedLosses } from "./losses-view";
+import { DuctsLosses, revitSays, StagedLosses } from "./losses-view";
 import { price } from "./pricing";
 import { readiness, type DuctSnapshot } from "./readiness";
 import { DuctsLedger } from "./ledger";
@@ -152,7 +152,7 @@ export function DuctsRoute({
           : group && group.rootIds.length === 0
             ? "no air mover; Pe computes from the open end; place one in Revit"
             : group
-              ? `fan ${fmt(solved?.fan)} in-wg by Pe, ${solved?.revitCritical == null ? "no critical path from Revit" : `${fmt(solved.revitCritical)} by Revit`}`
+              ? `fan ${fmt(solved?.fan)} in-wg by Pe; Revit says ${revitSays(snapshot, solved?.revitCritical)}`
               : `largest fan ${fmt(priced.now.fan)} in-wg by Pe over ${snapshot.groups.length} groups`;
   // Every written segment's cells count in the Work sentence; the losses body is the band.
   const counted = useMemo(
