@@ -24,6 +24,7 @@ import { OutcomeLine } from "#/components/lang/outcome";
 import { Press } from "#/components/lang/press";
 import { Switcher } from "#/components/lang/switcher";
 import { Input } from "#/components/lang/input";
+import { Switch } from "#/components/lang/switch";
 import { ActionButton as VerbButton } from "#/components/lang/action-button";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { Table } from "#/components/master-table/table";
@@ -73,7 +74,12 @@ type DocFact = {
 
 type Staged =
   | { readonly kind: "open"; readonly doc: DocFact; readonly world: Inventory }
-  | { readonly kind: "start"; readonly doc?: DocFact; readonly year: string };
+  | {
+      readonly kind: "start";
+      readonly doc?: DocFact;
+      readonly year: string;
+      readonly quarantine: boolean;
+    };
 
 /** Deliberately unexported: a `*Scope` export is a dead word (route-primitive guard row 6). */
 type DocumentScope = { readonly kind: "document"; readonly document: string; readonly pin: string };
@@ -150,7 +156,7 @@ const describeLaunch = (value: unknown) => {
   const launch = value as InstancesLaunch;
   return launch.kind === "open"
     ? `open ${launch.document} in ${launch.session}`
-    : `start a new ${launch.year} session${launch.document ? ` opening ${launch.document}` : ""}`;
+    : `start a new ${launch.year} session${launch.document ? ` opening ${launch.document}` : ""}${launch.quarantine ? " with third-party add-ins disabled" : ""}`;
 };
 
 export function InstancesCluster({
@@ -237,7 +243,12 @@ export function InstancesCluster({
       : undefined;
   const staged: Staged | null = stored
     ? stored.kind === "start"
-      ? { kind: "start", doc: storedDoc ?? undefined, year: stored.year.slice(-2) }
+      ? {
+          kind: "start",
+          doc: storedDoc ?? undefined,
+          year: stored.year.slice(-2),
+          quarantine: stored.quarantine,
+        }
       : storedWorld && storedDoc
         ? { kind: "open", doc: storedDoc, world: storedWorld }
         : null
@@ -265,6 +276,7 @@ export function InstancesCluster({
                         year: `20${next.year}`,
                         name: sessionName,
                         document: next.doc?.selector,
+                        quarantine: next.quarantine,
                       },
               },
             },
@@ -384,7 +396,7 @@ export function InstancesCluster({
       refuse("stage refused", "Pick a session or Revit year before opening this document.");
       return;
     }
-    setStaged({ kind: "start", doc: document, year });
+    setStaged({ kind: "start", doc: document, year, quarantine: false });
   };
 
   const openRefusal =
@@ -687,16 +699,27 @@ export function InstancesCluster({
                       <span className="t-prose text-ink">
                         {staged.kind === "open"
                           ? `open ${staged.doc.title} in ${sessionLabel(staged.world)}`
-                          : `start a new 20${staged.year} session ${staged.doc ? `opening ${staged.doc.title}` : ""}`}
+                          : `start a new 20${staged.year} session ${staged.doc ? `opening ${staged.doc.title}` : ""}${staged.quarantine ? " with third-party add-ins disabled" : ""}`}
                       </span>
                       {staged.kind === "start" ? (
-                        <Input
-                          face="mono"
-                          aria-label="session name"
-                          placeholder="name this session"
-                          value={sessionName}
-                          onChange={(event) => setSessionName(event.target.value)}
-                        />
+                        <>
+                          <Input
+                            face="mono"
+                            aria-label="session name"
+                            placeholder="name this session"
+                            value={sessionName}
+                            onChange={(event) => setSessionName(event.target.value)}
+                          />
+                          <div className="flex items-center gap-2 t-small text-ink-2">
+                            <Switch
+                              aria-label="Disable third-party add-ins for new launches this Revit year until this session stops"
+                              checked={staged.quarantine}
+                              onCheckedChange={(quarantine) => setStaged({ ...staged, quarantine })}
+                            />
+                            Disable third-party add-ins for new launches this Revit year until this
+                            session stops
+                          </div>
+                        </>
                       ) : null}
                       {staged.kind === "open" ? (
                         <VerbButton

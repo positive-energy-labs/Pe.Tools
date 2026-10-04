@@ -160,6 +160,7 @@ test("start dispatches the staged session under the step id with an absent expec
     name: "dev",
     document: "C:/Tower.rvt",
   });
+  expect((await f.launch()).staged?.value).toMatchObject({ quarantine: false });
   const receipt = await f.admit("instances.start", {}, revision);
   expect(receipt.state).toBe("succeeded");
   const step = receipt.steps[0]!;
@@ -183,6 +184,16 @@ test("start dispatches the staged session under the step id with an absent expec
   });
   expect(argv).toContain("2025");
   expect(argv).toContain("C:/Tower.rvt");
+  expect(argv).not.toContain("--quarantine");
+});
+
+test("only the person's staged quarantine choice reaches session start", async () => {
+  const f = await setup(() => ({ result: { state: "started", id: "dev" } }), []);
+  await f.propose({ kind: "start", year: "2025", name: "dev", quarantine: false });
+  const revision = await f.stage({ kind: "start", year: "2025", name: "dev", quarantine: true });
+  expect((await f.launch()).staged?.value).toMatchObject({ quarantine: true });
+  expect((await f.admit("instances.start", {}, revision)).state).toBe("succeeded");
+  expect(f.calls.at(-1)).toContain("--quarantine");
 });
 
 test("start captures a gone session receipt so the SDK can retire that exact row", async () => {
@@ -373,7 +384,7 @@ test("a failed start keeps the staged launch for the person to retry", async () 
   const revision = await f.stage({ kind: "start", year: "2025", name: "dev" });
   expect((await f.admit("instances.start", {}, revision)).state).toBe("failed");
   expect((await f.launch()).staged).toEqual({
-    value: { kind: "start", year: "2025", name: "dev" },
+    value: { kind: "start", year: "2025", name: "dev", quarantine: false },
   });
 });
 

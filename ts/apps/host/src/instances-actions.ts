@@ -234,6 +234,7 @@ export async function admitInstancesAction(
               year: staged.year,
               id: staged.name || undefined,
               doc: staged.document,
+              quarantine: staged.quarantine,
               conflictPolicy: "keep",
               requestFile: REQUEST_FILE,
             });

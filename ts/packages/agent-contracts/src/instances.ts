@@ -27,6 +27,7 @@ export const instancesLaunchSchema = z.discriminatedUnion("kind", [
     year: z.string().regex(/^20\d{2}$/),
     name: z.string().max(64),
     document: documentSelector.optional(),
+    quarantine: z.boolean().default(false),
   }),
 ]);
 export type InstancesLaunch = z.infer<typeof instancesLaunchSchema>;
