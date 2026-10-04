@@ -1,0 +1,676 @@
+{
+  "document": {
+    "title": "Synthetic",
+    "readAt": "2026-10-04T00:00:00+00:00",
+    "elapsedMs": 1,
+    "networkBasedCalculations": true
+  },
+  "levels": [
+    {
+      "id": 100,
+      "name": "Level 1",
+      "elevationFt": 0.0
+    }
+  ],
+  "groups": [
+    {
+      "id": "g10",
+      "rootIds": [
+        1
+      ],
+      "classifications": [
+        "Supply Air"
+      ],
+      "systemNames": [
+        "SA 1"
+      ],
+      "terminalCount": 2,
+      "elementCount": 7,
+      "loops": 0,
+      "issueIds": []
+    }
+  ],
+  "nodes": [
+    {
+      "id": 1,
+      "kind": "equipment",
+      "category": "Equipment",
+      "family": "Air Handler",
+      "type": "Standard",
+      "levelId": 100,
+      "point": [
+        0.0,
+        0.0,
+        9.0
+      ],
+      "systemName": "SA 1",
+      "classification": "Supply Air",
+      "connectors": [
+        {
+          "index": 1,
+          "kind": "end",
+          "point": [
+            0.0,
+            0.0,
+            9.0
+          ],
+          "shape": "round",
+          "size": "12\"ø",
+          "diameterIn": 12.0,
+          "direction": "bidirectional",
+          "classification": "SupplyAir",
+          "connectedTo": {
+            "elementId": 10,
+            "connector": 1
+          },
+          "areaFt2": 0.7854
+        }
+      ],
+      "facts": [
+        {
+          "key": "externalStatic",
+          "value": 0.5,
+          "unit": "in-wg",
+          "provenance": "designer-stated"
+        },
+        {
+          "key": "fanFlow",
+          "value": 400.0,
+          "unit": "cfm",
+          "provenance": "designer-stated"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "kind": "fitting",
+      "category": "Fitting",
+      "family": "Round Elbow",
+      "type": "Standard",
+      "partType": "Elbow",
+      "levelId": 100,
+      "point": [
+        20.0,
+        0.0,
+        9.0
+      ],
+      "groupId": "g10",
+      "systemName": "SA 1",
+      "classification": "Supply Air",
+      "connectors": [
+        {
+          "index": 1,
+          "kind": "end",
+          "point": [
+            20.0,
+            0.0,
+            9.0
+          ],
+          "shape": "round",
+          "size": "12\"ø",
+          "diameterIn": 12.0,
+          "direction": "bidirectional",
+          "classification": "SupplyAir",
+          "connectedTo": {
+            "elementId": 10,
+            "connector": 2
+          },
+          "areaFt2": 0.7854
+        },
+        {
+          "index": 2,
+          "kind": "end",
+          "point": [
+            20.0,
+            0.0,
+            9.0
+          ],
+          "shape": "round",
+          "size": "12\"ø",
+          "diameterIn": 12.0,
+          "direction": "bidirectional",
+          "classification": "SupplyAir",
+          "connectedTo": {
+            "elementId": 11,
+            "connector": 1
+          },
+          "areaFt2": 0.7854
+        }
+      ],
+      "facts": [
+        {
+          "key": "angle",
+          "value": 90.0,
+          "unit": "deg",
+          "provenance": "geometry"
+        },
+        {
+          "key": "centerRadius",
+          "value": 12.0,
+          "unit": "in",
+          "provenance": "geometry"
+        },
+        {
+          "key": "rOverD",
+          "value": 1.0,
+          "unit": "",
+          "provenance": "geometry"
+        },
+        {
+          "key": "inlet",
+          "value": 1.0,
+          "unit": "",
+          "provenance": "derived"
+        }
+      ],
+      "loss": {
+        "method": "ashrae-table",
+        "serverId": "8baf7d75-8b9b-46d0-b8ce-3ad1c19e6b19",
+        "table": "CD3-21",
+        "fields": {
+          "ASHRAETableName": "CD3-21"
+        }
+      }
+    },
+    {
+      "id": 22,
+      "kind": "fitting",
+      "category": "Fitting",
+      "family": "Round Takeoff",
+      "type": "Standard",
+      "partType": "TapPerpendicular",
+      "levelId": 100,
+      "point": [
+        10.0,
+        0.0,
+        9.0
+      ],
+      "groupId": "g10",
+      "systemName": "SA 1",
+      "classification": "Supply Air",
+      "connectors": [
+        {
+          "index": 1,
+          "kind": "end",
+          "point": [
+            10.0,
+            0.0,
+            9.0
+          ],
+          "shape": "round",
+          "size": "6\"ø",
+          "diameterIn": 6.0,
+          "direction": "bidirectional",
+          "classification": "SupplyAir",
+          "connectedTo": {
+            "elementId": 10,
+            "connector": 3
+          },
+          "areaFt2": 0.19635
+        },
+        {
+          "index": 2,
+          "kind": "end",
+          "point": [
+            10.0,
+            -0.5,
+            9.0
+          ],
+          "shape": "round",
+          "size": "6\"ø",
+          "diameterIn": 6.0,
+          "direction": "bidirectional",
+          "classification": "SupplyAir",
+          "connectedTo": {
+            "elementId": 12,
+            "connector": 1
+          },
+          "areaFt2": 0.19635
+        }
+      ],
+      "facts": [
+        {
+          "key": "inlet",
+          "value": 1.0,
+          "unit": "",
+          "provenance": "derived"
+        },
+        {
+          "key": "takeoff",
+          "value": 1.0,
+          "unit": "",
+          "provenance": "geometry"
+        },
+        {
+          "key": "mainSegment",
+          "value": 10.0,
+          "unit": "",
+          "provenance": "geometry"
+        },
+        {
+          "key": "mainDiameter",
+          "value": 12.0,
+          "unit": "in",
+          "provenance": "geometry"
+        },
+        {
+          "key": "mainArea",
+          "value": 0.7854,
+          "unit": "ft2",
+          "provenance": "geometry"
+        },
+        {
+          "key": "abOverAc",
+          "value": 0.25,
+          "unit": "",
+          "provenance": "geometry"
+        }
+      ],
+      "loss": {
+        "method": "not-defined",
+        "serverId": "76eff5da-2e71-45f7-b940-cc5716328ba0",
+        "fields": {}
+      }
+    },
+    {
+      "id": 30,
+      "kind": "terminal",
+      "category": "Terminal",
+      "family": "Supply Grille",
+      "type": "Standard",
+      "levelId": 100,
+      "point": [
+        20.0,
+        10.0,
+        9.0
+      ],
+      "groupId": "g10",
+      "systemName": "SA 1",
+      "classification": "Supply Air",
+      "connectors": [
+        {
+          "index": 1,
+          "kind": "end",
+          "point": [
+            20.0,
+            10.0,
+            9.0
+          ],
+          "shape": "round",
+          "size": "12\"ø",
+          "diameterIn": 12.0,
+          "direction": "bidirectional",
+          "classification": "SupplyAir",
+          "connectedTo": {
+            "elementId": 11,
+            "connector": 2
+          },
+          "areaFt2": 0.7854
+        }
+      ],
+      "facts": [
+        {
+          "key": "flow",
+          "value": 300.0,
+          "unit": "cfm",
+          "provenance": "designer-stated"
+        }
+      ],
+      "terminalDrop": {
+        "assignedPressureDropInWg": 0.0,
+        "connectorLossMethod": "NotDefined",
+        "writable": false
+      }
+    },
+    {
+      "id": 31,
+      "kind": "terminal",
+      "category": "Terminal",
+      "family": "Supply Grille",
+      "type": "Standard",
+      "levelId": 100,
+      "point": [
+        10.0,
+        -8.0,
+        9.0
+      ],
+      "groupId": "g10",
+      "systemName": "SA 1",
+      "classification": "Supply Air",
+      "connectors": [
+        {
+          "index": 1,
+          "kind": "end",
+          "point": [
+            10.0,
+            -8.0,
+            9.0
+          ],
+          "shape": "round",
+          "size": "6\"ø",
+          "diameterIn": 6.0,
+          "direction": "bidirectional",
+          "classification": "SupplyAir",
+          "connectedTo": {
+            "elementId": 12,
+            "connector": 2
+          },
+          "areaFt2": 0.19635
+        }
+      ],
+      "facts": [
+        {
+          "key": "flow",
+          "value": 100.0,
+          "unit": "cfm",
+          "provenance": "designer-stated"
+        }
+      ],
+      "terminalDrop": {
+        "assignedPressureDropInWg": 0.05,
+        "connectorLossMethod": "SpecificLoss",
+        "writable": true
+      }
+    }
+  ],
+  "segments": [
+    {
+      "id": 10,
+      "kind": "duct",
+      "type": "Round Duct",
+      "shape": "round",
+      "size": "12\"ø",
+      "diameterIn": 12.0,
+      "lengthFt": 20.0,
+      "polyline": [
+        [
+          0.0,
+          0.0,
+          9.0
+        ],
+        [
+          20.0,
+          0.0,
+          9.0
+        ]
+      ],
+      "levelId": 100,
+      "groupId": "g10",
+      "systemName": "SA 1",
+      "classification": "Supply Air",
+      "roughness": {
+        "valueFt": 0.0003,
+        "provenance": "revit-default"
+      },
+      "revit": {},
+      "connectors": [
+        {
+          "index": 1,
+          "kind": "end",
+          "point": [
+            0.0,
+            0.0,
+            9.0
+          ],
+          "shape": "round",
+          "size": "12\"ø",
+          "diameterIn": 12.0,
+          "direction": "bidirectional",
+          "classification": "SupplyAir",
+          "connectedTo": {
+            "elementId": 1,
+            "connector": 1
+          },
+          "areaFt2": 0.7854
+        },
+        {
+          "index": 2,
+          "kind": "end",
+          "point": [
+            20.0,
+            0.0,
+            9.0
+          ],
+          "shape": "round",
+          "size": "12\"ø",
+          "diameterIn": 12.0,
+          "direction": "bidirectional",
+          "classification": "SupplyAir",
+          "connectedTo": {
+            "elementId": 21,
+            "connector": 1
+          },
+          "areaFt2": 0.7854
+        },
+        {
+          "index": 3,
+          "kind": "curve",
+          "point": [
+            10.0,
+            0.0,
+            9.0
+          ],
+          "shape": "round",
+          "size": "6\"ø",
+          "diameterIn": 6.0,
+          "direction": "bidirectional",
+          "classification": "SupplyAir",
+          "connectedTo": {
+            "elementId": 22,
+            "connector": 1
+          },
+          "areaFt2": 0.19635
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "kind": "duct",
+      "type": "Round Duct",
+      "shape": "round",
+      "size": "12\"ø",
+      "diameterIn": 12.0,
+      "lengthFt": 10.0,
+      "polyline": [
+        [
+          20.0,
+          0.0,
+          9.0
+        ],
+        [
+          20.0,
+          10.0,
+          9.0
+        ]
+      ],
+      "levelId": 100,
+      "groupId": "g10",
+      "systemName": "SA 1",
+      "classification": "Supply Air",
+      "roughness": {
+        "valueFt": 0.0003,
+        "provenance": "revit-default"
+      },
+      "revit": {},
+      "connectors": [
+        {
+          "index": 1,
+          "kind": "end",
+          "point": [
+            20.0,
+            0.0,
+            9.0
+          ],
+          "shape": "round",
+          "size": "12\"ø",
+          "diameterIn": 12.0,
+          "direction": "bidirectional",
+          "classification": "SupplyAir",
+          "connectedTo": {
+            "elementId": 21,
+            "connector": 2
+          },
+          "areaFt2": 0.7854
+        },
+        {
+          "index": 2,
+          "kind": "end",
+          "point": [
+            20.0,
+            10.0,
+            9.0
+          ],
+          "shape": "round",
+          "size": "12\"ø",
+          "diameterIn": 12.0,
+          "direction": "bidirectional",
+          "classification": "SupplyAir",
+          "connectedTo": {
+            "elementId": 30,
+            "connector": 1
+          },
+          "areaFt2": 0.7854
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "kind": "duct",
+      "type": "Round Duct",
+      "shape": "round",
+      "size": "6\"ø",
+      "diameterIn": 6.0,
+      "lengthFt": 7.5,
+      "polyline": [
+        [
+          10.0,
+          -0.5,
+          9.0
+        ],
+        [
+          10.0,
+          -8.0,
+          9.0
+        ]
+      ],
+      "levelId": 100,
+      "groupId": "g10",
+      "systemName": "SA 1",
+      "classification": "Supply Air",
+      "roughness": {
+        "valueFt": 0.0003,
+        "provenance": "revit-default"
+      },
+      "revit": {},
+      "connectors": [
+        {
+          "index": 1,
+          "kind": "end",
+          "point": [
+            10.0,
+            -0.5,
+            9.0
+          ],
+          "shape": "round",
+          "size": "6\"ø",
+          "diameterIn": 6.0,
+          "direction": "bidirectional",
+          "classification": "SupplyAir",
+          "connectedTo": {
+            "elementId": 22,
+            "connector": 2
+          },
+          "areaFt2": 0.19635
+        },
+        {
+          "index": 2,
+          "kind": "end",
+          "point": [
+            10.0,
+            -8.0,
+            9.0
+          ],
+          "shape": "round",
+          "size": "6\"ø",
+          "diameterIn": 6.0,
+          "direction": "bidirectional",
+          "classification": "SupplyAir",
+          "connectedTo": {
+            "elementId": 31,
+            "connector": 1
+          },
+          "areaFt2": 0.19635
+        }
+      ]
+    }
+  ],
+  "flows": [
+    {
+      "segmentId": 10,
+      "cfm": 400.0,
+      "provenance": "derived"
+    },
+    {
+      "segmentId": 12,
+      "cfm": 100.0,
+      "provenance": "derived"
+    },
+    {
+      "segmentId": 11,
+      "cfm": 300.0,
+      "provenance": "derived"
+    }
+  ],
+  "issues": [],
+  "layers": [],
+  "systems": [
+    {
+      "id": 500,
+      "name": "SA 1",
+      "classification": "SupplyAir",
+      "isWellConnected": true,
+      "baseEquipmentId": 1,
+      "baseEquipmentConnector": 1,
+      "criticalPathLossInWg": 0.1,
+      "criticalPath": [
+        1,
+        2
+      ],
+      "sections": [
+        {
+          "number": 1,
+          "flowCfm": 400.0,
+          "totalPressureLossInWg": 0.04,
+          "elementIds": [
+            10,
+            21
+          ]
+        },
+        {
+          "number": 2,
+          "flowCfm": 300.0,
+          "totalPressureLossInWg": 0.06,
+          "elementIds": [
+            11,
+            30
+          ]
+        },
+        {
+          "number": 3,
+          "flowCfm": 100.0,
+          "totalPressureLossInWg": 0.05,
+          "elementIds": [
+            22,
+            12,
+            31
+          ]
+        }
+      ]
+    }
+  ],
+  "slots": {
+    "fanStatic": "PE_M_Fan_ExternalStaticPressure",
+    "fanFlow": "PE_M_Fan_AirFlow",
+    "componentDrop": "Pressure Drop"
+  }
+}
