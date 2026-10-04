@@ -815,7 +815,13 @@ export function StagedLosses({
         </div>
       ) : null}
       {(evaluation?.response.writes ?? [])
-        .filter((w) => w.kind === "equipment" && w.id != null && w.after?.startsWith("type "))
+        .filter(
+          (w) =>
+            w.kind === "equipment" &&
+            w.outcome === "planned" &&
+            w.id != null &&
+            w.after?.startsWith("type "),
+        )
         .map((w) => {
           const unit = snapshot.nodes.find((n) => n.id === w.id);
           const shared = snapshot.nodes.filter(

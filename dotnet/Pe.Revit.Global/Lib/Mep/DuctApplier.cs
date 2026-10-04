@@ -65,7 +65,8 @@ public static class DuctApplier {
     }
 
     public static DuctApplyResult Apply(Document doc, DuctApplyRequest request) {
-        var slots = (request.Slots ?? request.Store.Slots ?? new DuctParameterSlots()).WithDefaults();
+        // Name by name: a staged slot wins over the stored one, so a partial request never drops a stored name.
+        var slots = (request.Slots?.Over(request.Store.Slots) ?? request.Store.Slots ?? new DuctParameterSlots()).WithDefaults();
         var schemas = new Dictionary<Guid, Schema?> {
             [SpecificCoefficient] = Schema(SpecificCoefficient),
             [SpecificLoss] = Schema(SpecificLoss)
