@@ -22,6 +22,7 @@ import {
   createCapabilityCatalogSource,
   createRouteRegistrations,
   resolvePeaProductHomePath,
+  peaAgentInstructionsFor,
 } from "@pe/mcps";
 import {
   observeResources,
@@ -304,6 +305,13 @@ export function makeHostPeRoutes(
   const threads = createHarnessThreads({
     root: productHarnessThreadsPath(),
     worldRoot: resolvePeaProductHomePath(),
+    // The same kernel the Pea MCP server declares, for the harness that cannot read it from there.
+    developerInstructions: async () => {
+      const sessions = bridge ? await Effect.runPromise(bridge.list).catch(() => []) : [];
+      return peaAgentInstructionsFor({
+        revit: sessions.some((session) => session.connected && Boolean(session.sessionId)),
+      });
+    },
     // Dev lane: jiti runs the Pea MCP server from source.
     // TODO: installed lane needs a packaged Pea MCP server entry spawned beside Pe.Host.exe.
     mcpServer: sourceRoot

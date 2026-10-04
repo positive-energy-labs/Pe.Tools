@@ -142,6 +142,8 @@ export type HarnessThreadsOptions = {
         env: { name: string; value: string }[];
       })
     | null;
+  /** The Pea kernel for a harness that does not read MCP instructions (Codex); read per spawn. */
+  developerInstructions?: () => Promise<string>;
 };
 
 const emptyHead: ThreadHead = { defaultTarget: null, revision: 0 };
@@ -153,26 +155,29 @@ class NotJson extends Error {}
 const warn = (message: string) => Effect.runSync(Effect.logWarning(message));
 
 /**
- * Codex reads `developer_instructions` from its config. Without this, a Codex child asked for an
- * answer in `agent` mode delivers the question as an async message and sleeps 60 s in a loop until
- * cancelled, and codex-acp forwards none of it (repro 2026-10-04, `.artifacts/tmp/codex-ask-repro*`).
+ * Codex reads `developer_instructions` from its config, and that is the only instruction door this
+ * wire reaches: Codex ignores an MCP server's `instructions` (canary 2026-10-04: a child called the
+ * canary's tool and still did not know its secret word), so the Pea kernel rides here for Codex and
+ * in the MCP instructions for Claude, which does read them. The question rule is Codex-only: asked
+ * for an answer in `agent` mode, Codex otherwise delivers the question as an async message and sleeps
+ * 60 s in a loop until cancelled, and codex-acp forwards none of it (repro `.artifacts/tmp/codex-ask-repro*`).
  * In plan mode Codex has `request_user_input`, which codex-acp turns into the question card.
  */
-const CODEX_DEVELOPER_INSTRUCTIONS =
+const CODEX_QUESTION_RULE =
   "You are running inside Pea, a chat surface. When you need an answer from the user: if the request_user_input tool is available, call it and wait for its result; otherwise write the question as your final message and end your turn, and the answer arrives as the next user message. Never use async message delivery, never call the sleep tool, and never wait inside a turn.";
 
 /** The child's env on top of the host's: the saved endpoint, and for Codex its developer instructions. */
-function childEnv(harness: HarnessId): Record<string, string> {
+async function childEnv(
+  harness: HarnessId,
+  kernel: HarnessThreadsOptions["developerInstructions"],
+): Promise<Record<string, string>> {
   const endpoint = harnessEndpointEnv(harness);
   if (harness !== "codex") return endpoint;
   const config = endpoint.CODEX_CONFIG ? (JSON.parse(endpoint.CODEX_CONFIG) as object) : {};
-  return {
-    ...endpoint,
-    CODEX_CONFIG: JSON.stringify({
-      ...config,
-      developer_instructions: CODEX_DEVELOPER_INSTRUCTIONS,
-    }),
-  };
+  const developer_instructions = [await kernel?.(), CODEX_QUESTION_RULE]
+    .filter(Boolean)
+    .join("\n\n");
+  return { ...endpoint, CODEX_CONFIG: JSON.stringify({ ...config, developer_instructions }) };
 }
 
 /** The log as the model saw it: the user's prompts and answers, Pea's words and questions, no tool
@@ -431,7 +436,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       cwd: options.worldRoot,
       stdio: ["pipe", "pipe", "pipe"],
       // The host env unchanged (a user's own ANTHROPIC_API_KEY stays), plus the child's own.
-      env: { ...process.env, ...childEnv(harness) },
+      env: { ...process.env, ...(await childEnv(harness, options.developerInstructions)) },
       windowsHide: true,
     });
     t.child = child;

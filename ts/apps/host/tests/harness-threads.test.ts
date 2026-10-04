@@ -15,6 +15,7 @@ const host = (spawn = true) => {
     root,
     worldRoot: tmpdir(),
     mcpServer: spawn ? mcpServer : null,
+    developerInstructions: async () => "KERNEL: You are Pea.",
   });
   hosts.push(threads);
   return threads;
@@ -469,6 +470,7 @@ test("a codex child gets Pea's developer instructions in CODEX_CONFIG; a claude 
   const config = JSON.parse(envLine(await until(read, codex, (b) => turnEnds(b).length === 1))) as {
     developer_instructions: string;
   };
+  expect(config.developer_instructions.startsWith("KERNEL: You are Pea.\n\n")).toBe(true);
   expect(config.developer_instructions).toContain("request_user_input");
   expect(config.developer_instructions).toContain("never call the sleep tool");
   const claude = (await call("POST", "/pe/threads", { harness: "claude" })).json.id as string;
