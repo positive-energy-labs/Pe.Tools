@@ -80,7 +80,7 @@ public static class DuctApplier {
         foreach (var w in request.Components ?? [])
             items.Add(Duplicate("component", w.Id) ?? Lossy(doc, w.Id, "component", BuiltInCategory.OST_DuctAccessory, SpecificLoss, schemas, PressureLossField,
                 Finite(w.InWg) ? UnitUtils.ConvertToInternalUnits(w.InWg, InWg).ToString("R", CultureInfo.InvariantCulture) : null, w.InWg, $"specific-loss {w.InWg:0.####} in-wg"));
-        foreach (var w in request.Terminals ?? []) items.Add(Duplicate("terminal", w.Id) ?? Terminal(doc, w));
+        foreach (var w in request.Terminals ?? []) items.Add(Duplicate("terminal", w.Id) ?? Terminal(doc, w, slots));
         foreach (var w in request.Equipment ?? []) items.Add(Duplicate("equipment", w.Id) ?? Equipment(doc, w, slots));
 
         var (stored, storeError) = ReadStore(doc);
@@ -222,26 +222,51 @@ public static class DuctApplier {
         return item with { Loss = (server, schema, field, value), After = after };
     }
 
-    private static Item Terminal(Document doc, DuctDropWrite w) {
+    /// <summary>
+    ///     Two routes, both proven on Project A (pressure-drop ledger, W3): the connector setter, which Revit refuses on
+    ///     every family connector it does not own, and the instance parameter the family binds to its connector drop
+    ///     (the SA 26 recipe), named by the TerminalDrop slot. The slot route runs in a SubTransaction and keeps the
+    ///     write only when the connector reads the new drop after regeneration.
+    /// </summary>
+    private static Item Terminal(Document doc, DuctDropWrite w, DuctParameterSlots slots) {
         var e = doc.GetElement(w.Id.ToElementId());
         if (e is null) return new Item(w.Id, "terminal", null).Refuse($"element {w.Id} is not in the document");
         var c = DuctSnapshots.HvacConnectors(e).FirstOrDefault();
         var method = c is null ? null : Try(() => (DuctLossMethodType?)c.AssignedDuctLossMethod);
-        double? had = c is null ? null : Try(() => (double?)UnitUtils.ConvertFromInternalUnits(c.AssignedPressureDrop, InWg));
+        double? Read() => c is null ? null : Try(() => (double?)UnitUtils.ConvertFromInternalUnits(c.AssignedPressureDrop, InWg));
+        var had = Read();
         var item = new Item(w.Id, "terminal", c is null ? null : $"{method} {had:0.#####} in-wg") { Element = e };
         if (e.Category.ToBuiltInCategory() != BuiltInCategory.OST_DuctTerminal) return item.Refuse($"not an air terminal ({e.Category?.Name ?? "no category"})");
         if (c is null) return item.Refuse("the terminal has no HVAC connector");
         if (method != DuctLossMethodType.SpecificLoss)
-            return item.Refuse($"the connector's loss method is {method}; Revit refuses the drop unless the family connector is Specific Loss");
+            return item.Refuse($"the connector's loss method is {method}; Revit takes a drop only when the family connector is Specific Loss");
         if (!Finite(w.InWg) || w.InWg < 0) return item.Refuse("the drop must be a finite number of 0 or more");
         if (had is { } h && Math.Abs(h - w.InWg) < 1e-6) return item.Unchanged($"{w.InWg:0.#####} in-wg");
+        var bound = slots.TerminalDrop is { } name ? e.LookupParameter(name) : null;
+        if (slots.TerminalDrop is { } named && (bound is null || bound.IsReadOnly || bound.StorageType != StorageType.Double))
+            return item.Refuse($"the instance has no writable number parameter '{named}' (the TerminalDrop slot)");
+        var value = UnitUtils.ConvertToInternalUnits(w.InWg, InWg);
         return item with {
             Write = () => {
-                c.AssignedPressureDrop = UnitUtils.ConvertToInternalUnits(w.InWg, InWg);
-                var read = UnitUtils.ConvertFromInternalUnits(c.AssignedPressureDrop, InWg);
-                return Math.Abs(read - w.InWg) < 1e-6
-                    ? $"{read:0.#####} in-wg"
-                    : throw new InvalidOperationException($"the connector reads {read:0.#####} in-wg after the write; the family binds its drop to a parameter");
+                if (bound is null) {
+                    try {
+                        c.AssignedPressureDrop = value;
+                    } catch (Autodesk.Revit.Exceptions.InvalidOperationException) {
+                        throw new InvalidOperationException(
+                            "Revit refused the connector drop: the family binds it to a parameter; name that instance parameter as the TerminalDrop slot");
+                    }
+                    return $"connector {Read():0.#####} in-wg";
+                }
+                using var sub = new SubTransaction(doc);
+                _ = sub.Start();
+                _ = bound.Set(value);
+                doc.Regenerate();
+                if (Read() is { } read && Math.Abs(read - w.InWg) < 1e-6) {
+                    _ = sub.Commit();
+                    return $"'{bound.Definition.Name}' {read:0.#####} in-wg; connector reads it";
+                }
+                _ = sub.RollBack();
+                throw new InvalidOperationException($"'{bound.Definition.Name}' is not bound to the connector drop (the connector still reads {Read():0.#####} in-wg); nothing kept");
             }
         };
     }
@@ -317,7 +342,8 @@ public static class DuctApplier {
         : server!
         : "no server";
 
-    private static double Pressure(Parameter? p) => p is { StorageType: StorageType.Double } ? UnitUtils.ConvertFromInternalUnits(p.AsDouble(), InWg) : 0;
+    // + 0.0 turns -0 into 0 for display.
+    private static double Pressure(Parameter? p) => p is { StorageType: StorageType.Double } ? Math.Round(UnitUtils.ConvertFromInternalUnits(p.AsDouble(), InWg), 6) + 0.0 : 0;
     private static bool Finite(double v) => !double.IsNaN(v) && !double.IsInfinity(v);
 
     private static T? Try<T>(Func<T?> read) {
