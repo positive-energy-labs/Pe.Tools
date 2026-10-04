@@ -16,6 +16,7 @@ An agent or a person drops a folder of HTML under the product home and the host 
 - 2026-10-04, phasing (counsel, delegated by kaitpw): 1 captures; 2 pages served with doors, proven by rebuilding the pressure-drop walkthrough on them and deleting its server; 3 manifest, chat card and the two Pea skills.
 
 ## Tried & rejected
+- 2026-10-04, a base64 media block from `capture_view` as the way a model sees a picture: FALSIFIED[session, `pages-pre`, 592a785a plus the dirty main tree, 2026-10-04T17:17Z]. The Pea MCP server stringifies every tool result, so the `toModelOutput` block never reached Claude or Codex (a 763,161-character text block; "I never saw it"), and the tool refused anyway because `ts/packages/mcps/src/pea/index.ts` passed no `openDocumentId`. Evidence: the main checkout's `.artifacts/runs/session-20261004-pages-pre/REPORT.md`.
 - 2026-10-04, a node server per page that compiles a C# script per click (`.artifacts/pdrop/walkthru/serve.mjs`): 15 s per click and no typed ops; obsolete once `revit.context.show-elements` and `pea script execute --json` shipped.
 - 2026-10-04, a typed walk document rendered on route primitives as the only page shape: kaitpw, too confining; it cannot hold lit diagrams, variant switchers or the grille bars.
 - 2026-10-04, a page that writes React into the product as a Pod: review burden, and Pods are C#.
