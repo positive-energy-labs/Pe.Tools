@@ -358,7 +358,9 @@ export const retiredPeaSkillNames: readonly string[] = [
   "author-pe-settings",
 ];
 
+/** Codex reads repo skills from `.agents/skills` under its cwd; Claude Code from `.claude/skills`. */
 export const peaStandardSkillsRoot = path.join(".agents", "skills");
+export const peaClaudeSkillsRoot = path.join(".claude", "skills");
 export const peaProductHomeEnvVar = "PE_TOOLS_PRODUCT_HOME";
 
 export interface PeaProductHomeOptions {
@@ -378,7 +380,8 @@ export function resolvePeaStandardSkillsRoot(options: PeaProductHomeOptions = {}
 }
 
 export function resolvePeaSkillPaths(options: PeaProductHomeOptions = {}): string[] {
-  return [resolvePeaStandardSkillsRoot(options)];
+  const home = resolvePeaProductHomePath(options);
+  return [path.join(home, peaStandardSkillsRoot), path.join(home, peaClaudeSkillsRoot)];
 }
 
 export interface MaterializedPeaSkill {
@@ -387,31 +390,28 @@ export interface MaterializedPeaSkill {
   status: "created" | "updated" | "unchanged";
 }
 
+/** Writes every bundled skill under each harness root; retires the product's former names there. */
 export async function materializeBundledPeaSkills(
   options: PeaProductHomeOptions = {},
 ): Promise<MaterializedPeaSkill[]> {
-  const skillsRoot = resolvePeaStandardSkillsRoot(options);
-  await mkdir(skillsRoot, { recursive: true });
-
-  for (const name of retiredPeaSkillNames) {
-    if (bundledPeaSkills.some((skill) => skill.name === name))
-      throw new Error(`Pea skill '${name}' is both bundled and retired.`);
-    await rm(path.join(skillsRoot, name), { recursive: true, force: true });
-  }
-
   const materialized: MaterializedPeaSkill[] = [];
-  for (const skill of bundledPeaSkills) {
-    const skillPath = path.join(skillsRoot, skill.name, "SKILL.md");
-    await mkdir(path.dirname(skillPath), { recursive: true });
-    const content = `${skill.content.trimEnd()}\n`;
-    const existing = await readExisting(skillPath);
-    const status = existing == null ? "created" : existing === content ? "unchanged" : "updated";
-    if (status !== "unchanged") {
-      await writeFile(skillPath, content, "utf-8");
+  for (const skillsRoot of resolvePeaSkillPaths(options)) {
+    await mkdir(skillsRoot, { recursive: true });
+    for (const name of retiredPeaSkillNames) {
+      if (bundledPeaSkills.some((skill) => skill.name === name))
+        throw new Error(`Pea skill '${name}' is both bundled and retired.`);
+      await rm(path.join(skillsRoot, name), { recursive: true, force: true });
     }
-    materialized.push({ name: skill.name, path: skillPath, status });
+    for (const skill of bundledPeaSkills) {
+      const skillPath = path.join(skillsRoot, skill.name, "SKILL.md");
+      await mkdir(path.dirname(skillPath), { recursive: true });
+      const content = `${skill.content.trimEnd()}\n`;
+      const existing = await readExisting(skillPath);
+      const status = existing == null ? "created" : existing === content ? "unchanged" : "updated";
+      if (status !== "unchanged") await writeFile(skillPath, content, "utf-8");
+      materialized.push({ name: skill.name, path: skillPath, status });
+    }
   }
-
   return materialized;
 }
 

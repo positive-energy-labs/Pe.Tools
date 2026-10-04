@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { HarnessEvent, HarnessThreadBody, ThreadHead } from "@pe/agent-contracts";
 import { createHarnessThreads } from "../src/harness/threads.ts";
+import { peaCodexProjectConfig, userCodexMcpServers } from "../src/harness/user-shell.ts";
 import { productInferenceEndpointPath } from "../src/product-paths.ts";
 
 let root = "";
@@ -16,6 +17,7 @@ const host = (spawn = true) => {
     worldRoot: tmpdir(),
     mcpServer: spawn ? mcpServer : null,
     developerInstructions: async () => "KERNEL: You are Pea.",
+    shellPath: async () => "C:\\canary-bin;C:\\also",
   });
   hosts.push(threads);
   return threads;
@@ -456,26 +458,52 @@ test("a codex child gets Pea's developer instructions in CODEX_CONFIG; a claude 
   const threads = host();
   const call = caller(threads);
   const read = reader(threads);
-  const envLine = (body: HarnessThreadBody) =>
+  const envLine = (body: HarnessThreadBody, name = "CODEX_CONFIG") =>
     body.events
       .flatMap((e) =>
         e.kind === "update" && e.update.sessionUpdate === "agent_message_chunk"
           ? [(e.update as { content?: { text?: string } }).content?.text ?? ""]
           : [],
       )
-      .find((text) => text.startsWith("CODEX_CONFIG="))!
-      .slice("CODEX_CONFIG=".length);
+      .find((text) => text.startsWith(`${name}=`))!
+      .slice(name.length + 1);
   const codex = (await call("POST", "/pe/threads", { harness: "codex" })).json.id as string;
   await call("POST", `/pe/threads/${codex}/prompt`, { text: "env" });
-  const config = JSON.parse(envLine(await until(read, codex, (b) => turnEnds(b).length === 1))) as {
-    developer_instructions: string;
-  };
+  const codexBody = await until(read, codex, (b) => turnEnds(b).length === 1);
+  const config = JSON.parse(envLine(codexBody)) as { developer_instructions: string };
+  // The user's PATH leads, the host's entries follow.
+  expect(envLine(codexBody, "PATH").startsWith("C:\\canary-bin;C:\\also;")).toBe(true);
   expect(config.developer_instructions.startsWith("KERNEL: You are Pea.\n\n")).toBe(true);
   expect(config.developer_instructions).toContain("request_user_input");
   expect(config.developer_instructions).toContain("never call the sleep tool");
   const claude = (await call("POST", "/pe/threads", { harness: "claude" })).json.id as string;
   await call("POST", `/pe/threads/${claude}/prompt`, { text: "env" });
-  expect(envLine(await until(read, claude, (b) => turnEnds(b).length === 1))).toBe("");
+  const claudeBody = await until(read, claude, (b) => turnEnds(b).length === 1);
+  expect(envLine(claudeBody)).toBe("");
+  expect(envLine(claudeBody, "PATH").startsWith("C:\\canary-bin;")).toBe(true);
+});
+
+test("the user's own Codex MCP servers are read by header and written off by name", async () => {
+  const config = join(root, "codex-config.toml");
+  await writeFile(
+    config,
+    '[mcp_servers.foo]\ncommand = "x"\n[mcp_servers.foo.env]\nA = "1"\n[mcp_servers.bar]\n[other]\n',
+  );
+  expect(await userCodexMcpServers(config)).toEqual(["foo", "bar"]);
+  expect(await userCodexMcpServers(join(root, "missing.toml"))).toEqual([]);
+  expect(peaCodexProjectConfig(["foo", "bar"])).toBe(
+    [
+      "# Written by Pea at every host start. Your own Codex MCP servers (~/.codex/config.toml) stay",
+      "# out of Pea threads; Pea attaches its own. Edits here are overwritten.",
+      "",
+      '[mcp_servers."foo"]',
+      "enabled = false",
+      "",
+      '[mcp_servers."bar"]',
+      "enabled = false",
+      "",
+    ].join("\n"),
+  );
 });
 
 test("a host that cannot launch a Pea MCP server lists no harness and refuses new threads with 503", async () => {

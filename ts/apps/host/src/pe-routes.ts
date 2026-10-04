@@ -22,8 +22,15 @@ import {
   createCapabilityCatalogSource,
   createRouteRegistrations,
   resolvePeaProductHomePath,
+  materializeBundledPeaSkills,
   peaAgentInstructionsFor,
 } from "@pe/mcps";
+import {
+  captureUserShellPath,
+  userCodexConfigPath,
+  userCodexMcpServers,
+  writePeaCodexProjectConfig,
+} from "./harness/user-shell.ts";
 import {
   observeResources,
   resourceResponse,
@@ -302,9 +309,32 @@ export function makeHostPeRoutes(
   registrationsFactory: typeof createRouteRegistrations = createRouteRegistrations,
 ) {
   const sourceRoot = hostOwnership.sourceRoot;
+  const worldRoot = resolvePeaProductHomePath();
+  // Pea's bundled skills under the world root, where both harnesses read cwd skills from.
+  void materializeBundledPeaSkills().catch((error) =>
+    Effect.runSync(Effect.logWarning(`Pea skills were not materialized: ${String(error)}`)),
+  );
+  // The user's own Codex MCP servers stay out of Pea threads: a project-level config in the world root.
+  void userCodexMcpServers(userCodexConfigPath())
+    .then((names) => writePeaCodexProjectConfig(worldRoot, names))
+    .catch((error) =>
+      Effect.runSync(
+        Effect.logWarning(`Pea's Codex project config was not written: ${String(error)}`),
+      ),
+    );
+  // Once per host start: the profile-loaded PATH every child gets.
+  const shellPath = captureUserShellPath().then((captured) => {
+    Effect.runSync(
+      captured
+        ? Effect.logInfo(`user shell PATH captured (${captured.split(";").length} entries)`)
+        : Effect.logWarning("user shell PATH not captured: harness children keep the host's PATH"),
+    );
+    return captured;
+  });
   const threads = createHarnessThreads({
+    shellPath: () => shellPath,
     root: productHarnessThreadsPath(),
-    worldRoot: resolvePeaProductHomePath(),
+    worldRoot,
     // The same kernel the Pea MCP server declares, for the harness that cannot read it from there.
     developerInstructions: async () => {
       const sessions = bridge ? await Effect.runPromise(bridge.list).catch(() => []) : [];

@@ -43,6 +43,7 @@ import {
 import { Effect } from "effect";
 import { z } from "zod";
 import { harnessEndpointEnv, readSaved } from "../inference-endpoint.ts";
+import { mergePath } from "./user-shell.ts";
 
 /** The thread wire of ADR 0015; contract and route list in `@pe/agent-contracts` `harness-thread.ts`. */
 
@@ -144,6 +145,8 @@ export type HarnessThreadsOptions = {
     | null;
   /** The Pea kernel for a harness that does not read MCP instructions (Codex); read per spawn. */
   developerInstructions?: () => Promise<string>;
+  /** The user's shell PATH for the child, read per spawn; null keeps the host's. */
+  shellPath?: () => Promise<string | null>;
 };
 
 const emptyHead: ThreadHead = { defaultTarget: null, revision: 0 };
@@ -166,18 +169,28 @@ const warn = (message: string) => Effect.runSync(Effect.logWarning(message));
 const CODEX_QUESTION_RULE =
   "You are running inside Pea, a chat surface. When you need an answer from the user: if the request_user_input tool is available, call it and wait for its result; otherwise write the question as your final message and end your turn, and the answer arrives as the next user message. Never use async message delivery, never call the sleep tool, and never wait inside a turn.";
 
-/** The child's env on top of the host's: the saved endpoint, and for Codex its developer instructions. */
+/**
+ * The child's env on top of the host's: the user's shell PATH, the saved endpoint, and for Codex its
+ * developer instructions. The user's own Codex MCP servers are kept out by the project-level config
+ * the routes write in the world root, never here: codex-acp replaces a CODEX_CONFIG `mcp_servers`.
+ */
 async function childEnv(
   harness: HarnessId,
-  kernel: HarnessThreadsOptions["developerInstructions"],
+  options: HarnessThreadsOptions,
 ): Promise<Record<string, string>> {
-  const endpoint = harnessEndpointEnv(harness);
-  if (harness !== "codex") return endpoint;
-  const config = endpoint.CODEX_CONFIG ? (JSON.parse(endpoint.CODEX_CONFIG) as object) : {};
-  const developer_instructions = [await kernel?.(), CODEX_QUESTION_RULE]
+  const env: Record<string, string> = { ...harnessEndpointEnv(harness) };
+  const userPath = await options.shellPath?.();
+  if (userPath) {
+    const key = Object.keys(process.env).find((k) => k.toUpperCase() === "PATH") ?? "Path";
+    env[key] = mergePath(userPath, process.env[key]);
+  }
+  if (harness !== "codex") return env;
+  const config = env.CODEX_CONFIG ? (JSON.parse(env.CODEX_CONFIG) as object) : {};
+  const developer_instructions = [await options.developerInstructions?.(), CODEX_QUESTION_RULE]
     .filter(Boolean)
     .join("\n\n");
-  return { ...endpoint, CODEX_CONFIG: JSON.stringify({ ...config, developer_instructions }) };
+  env.CODEX_CONFIG = JSON.stringify({ ...config, developer_instructions });
+  return env;
 }
 
 /** The log as the model saw it: the user's prompts and answers, Pea's words and questions, no tool
@@ -436,7 +449,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       cwd: options.worldRoot,
       stdio: ["pipe", "pipe", "pipe"],
       // The host env unchanged (a user's own ANTHROPIC_API_KEY stays), plus the child's own.
-      env: { ...process.env, ...(await childEnv(harness, options.developerInstructions)) },
+      env: { ...process.env, ...(await childEnv(harness, options)) },
       windowsHide: true,
     });
     t.child = child;

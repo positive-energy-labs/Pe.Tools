@@ -121,6 +121,7 @@ new AgentSideConnection(
       }
       if (text === "env") {
         await say(`CODEX_CONFIG=${process.env.CODEX_CONFIG ?? ""}`);
+        await say(`PATH=${process.env.PATH ?? process.env.Path ?? ""}`);
         return { stopReason: "end_turn" };
       }
       if (text === "title") {
