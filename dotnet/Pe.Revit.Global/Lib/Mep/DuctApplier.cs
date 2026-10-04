@@ -106,6 +106,8 @@ public static class DuctApplier {
             return Result(false, items, null, storeRevision);
         }
         store.Write = () => {
+            // Composed at write time: terminals and equipment ran first in this stage, so a refused write is not recorded.
+            next = Compose(request, stored, items, now, slots, storeRevision + 1);
             StoreText.Write(doc, next.ToJson());
             return $"revision {next.WorkRevision}";
         };
@@ -312,7 +314,7 @@ public static class DuctApplier {
         var rules = new Dictionary<string, DuctRuleChoice>(asked.Rules ?? new(), StringComparer.Ordinal);
         var instances = new Dictionary<long, DuctInstanceRecord>(asked.Instances ?? new());
         var drops = new Dictionary<long, DuctDropRecord>(asked.Terminals ?? new());
-        bool Lands(string kind, long id) => items.Any(i => i.Kind == kind && i.Id == id && i.Outcome is "planned" or "unchanged");
+        bool Lands(string kind, long id) => items.Any(i => i.Kind == kind && i.Id == id && i.Outcome is "planned" or "unchanged" or "written");
         foreach (var w in (request.Fittings ?? []).Where(w => Lands("fitting", w.Id))) {
             instances[w.Id] = new DuctInstanceRecord(w.Table, w.Inputs, w.Coefficient, now);
             if (w.RuleKey is { Length: > 0 } key && !rules.ContainsKey(key)) rules[key] = new DuctRuleChoice(w.Table);
