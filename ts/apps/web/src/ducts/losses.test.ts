@@ -13,6 +13,7 @@ import { lookupGrid, toGrids, type Grid, type Grids } from "./loss-grid";
 import { friction, roundSection } from "./loss-physics";
 import { computeLosses, fanout, systemFor } from "./losses";
 import { price, stagedFanout } from "./pricing";
+import { indexOf, lossesOf, sceneOf } from "./scene";
 import { groupTree } from "./topology";
 import synthetic from "./fixtures/synthetic-snapshot.json";
 import type { DuctSnapshot } from "./readiness";
@@ -384,4 +385,36 @@ it("prices once per snapshot: a Work change reuses the applied solve and answers
   expect(stagedFanout(snap, grids, staged, key)).toBe(f);
   expect(f).toEqual(fanout(snap, grids, staged.applied, key, "CD3-2"));
   expect(groupTree(snap, "g10")).toBe(groupTree(snap, "g10"));
+});
+
+it("the scene carries Pe's loss per element, counting the rows paths share once", () => {
+  const snap = synthetic as unknown as DuctSnapshot;
+  const priced = price(snap, grids, null);
+  const rows = (terminal: number, id: number) =>
+    priced.now.paths[terminal]!.rows.filter((row) => row.id === id);
+  const sum = (list: { dp: number }[]) => list.reduce((a, row) => a + row.dp, 0);
+  const losses = lossesOf(priced.now);
+  // Duct 10 is walked by both paths and tapped once: its first interval is the same row on each
+  // path, its second belongs to the path that carries on. Summing every path would count the
+  // first interval twice.
+  expect(rows(30, 10)).toHaveLength(2);
+  expect(rows(31, 10)).toHaveLength(1);
+  expect(losses.get(10)).toBeCloseTo(sum(rows(30, 10)), 9);
+  expect(losses.get(10)).toBeLessThan(sum(rows(30, 10)) + sum(rows(31, 10)) - 1e-6);
+  // A tap's straight and branch legs are alternatives: the larger one shows.
+  expect(losses.get(22)).toBeCloseTo(0.0223083, 6);
+  expect(losses.get(31)).toBeCloseTo(0.05, 9);
+  // An element no priced path crosses has no loss, not zero.
+  expect(losses.has(1)).toBe(false);
+
+  const scene = sceneOf(indexOf(snap, priced), "g10", () => true);
+  const duct = scene.segments.find((facts) => facts.segment.id === 10)!;
+  expect(duct.pressure?.drop).toBeCloseTo(losses.get(10)!, 9);
+  expect(scene.nodes.find((facts) => facts.node.id === 22)?.pressure?.drop).toBeCloseTo(
+    0.0223083,
+    6,
+  );
+  // Unpriced (no tables read yet) the scene draws without loss, and the other groups stay context.
+  expect(sceneOf(indexOf(snap), "g10", () => true).segments.every((f) => !f.pressure)).toBe(true);
+  expect(sceneOf(indexOf(snap, priced), "", () => true).context.flat()).toHaveLength(3);
 });
