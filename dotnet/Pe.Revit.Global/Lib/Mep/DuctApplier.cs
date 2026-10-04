@@ -122,7 +122,7 @@ public static class DuctApplier {
             .SelectMany(i => DuctSnapshots.HvacConnectors(i.Element!))
             .Select(c => Try(() => c.MEPSystem as MechanicalSystem))
             .OfType<MechanicalSystem>()
-            .GroupBy(m => m.Id.Value).Select(g => g.First())
+            .GroupBy(m => m.Id.Value()).Select(g => g.First())
             .OrderBy(m => m.Name, StringComparer.Ordinal)
             .Select(DuctSnapshots.RevitSystem)
             .ToList();
@@ -189,7 +189,7 @@ public static class DuctApplier {
 
     private static Item Engine(Document doc, bool want) {
         var settings = DuctSettings.GetDuctSettings(doc);
-        var item = new Item(settings.Id.Value, "engine", Engine(settings.NetworkBasedCalculations)) {
+        var item = new Item(settings.Id.Value(), "engine", Engine(settings.NetworkBasedCalculations)) {
             Write = () => {
                 settings.NetworkBasedCalculations = want;
                 return Engine(want);
@@ -202,14 +202,14 @@ public static class DuctApplier {
 
     private static Item Lossy(Document doc, long id, string kind, BuiltInCategory category, Guid server,
         Dictionary<Guid, Schema?> schemas, string field, string? value, double number, string after) {
-        var e = doc.GetElement(new ElementId(id));
+        var e = doc.GetElement(id.ToElementId());
         if (e is null) return new Item(id, kind, null).Refuse($"element {id} is not in the document");
         var method = e.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM);
         var current = method?.AsString();
         var existing = Guid.TryParse(current, out var g) && schemas.TryGetValue(g, out var s) && s is not null
                        && e.GetEntity(s) is { } en && en.IsValid() ? en.Get<string>(field) : null;
         var item = new Item(id, kind, $"{Name(current)}{(existing is { Length: > 0 } ? " " + existing : "")}") { Element = e };
-        if (e.Category?.BuiltInCategory != category)
+        if (e.Category.ToBuiltInCategory() != category)
             return item.Refuse($"not a {(category == BuiltInCategory.OST_DuctFitting ? "duct fitting" : "duct accessory")} ({e.Category?.Name ?? "no category"})");
         if (method is null || method.IsReadOnly) return item.Refuse("the element has no writable loss method server parameter");
         if (value is null || number < 0) return item.Refuse("the value must be a finite number of 0 or more");
@@ -223,13 +223,13 @@ public static class DuctApplier {
     }
 
     private static Item Terminal(Document doc, DuctDropWrite w) {
-        var e = doc.GetElement(new ElementId(w.Id));
+        var e = doc.GetElement(w.Id.ToElementId());
         if (e is null) return new Item(w.Id, "terminal", null).Refuse($"element {w.Id} is not in the document");
         var c = DuctSnapshots.HvacConnectors(e).FirstOrDefault();
         var method = c is null ? null : Try(() => (DuctLossMethodType?)c.AssignedDuctLossMethod);
         double? had = c is null ? null : Try(() => (double?)UnitUtils.ConvertFromInternalUnits(c.AssignedPressureDrop, InWg));
         var item = new Item(w.Id, "terminal", c is null ? null : $"{method} {had:0.#####} in-wg") { Element = e };
-        if (e.Category?.BuiltInCategory != BuiltInCategory.OST_DuctTerminal) return item.Refuse($"not an air terminal ({e.Category?.Name ?? "no category"})");
+        if (e.Category.ToBuiltInCategory() != BuiltInCategory.OST_DuctTerminal) return item.Refuse($"not an air terminal ({e.Category?.Name ?? "no category"})");
         if (c is null) return item.Refuse("the terminal has no HVAC connector");
         if (method != DuctLossMethodType.SpecificLoss)
             return item.Refuse($"the connector's loss method is {method}; Revit refuses the drop unless the family connector is Specific Loss");
@@ -247,12 +247,12 @@ public static class DuctApplier {
     }
 
     private static Item Equipment(Document doc, DuctEquipmentWrite w, DuctParameterSlots slots) {
-        var e = doc.GetElement(new ElementId(w.Id));
+        var e = doc.GetElement(w.Id.ToElementId());
         if (e is null) return new Item(w.Id, "equipment", null).Refuse($"element {w.Id} is not in the document");
         var own = e.LookupParameter(slots.FanStatic);
         var (p, where) = own is not null ? (own, "instance") : ((e as FamilyInstance)?.Symbol?.LookupParameter(slots.FanStatic), "type");
         var item = new Item(w.Id, "equipment", p is { HasValue: true, StorageType: StorageType.Double } ? $"{where} {Pressure(p):0.####} in-wg" : null) { Element = e };
-        if (e.Category?.BuiltInCategory != BuiltInCategory.OST_MechanicalEquipment) return item.Refuse($"not mechanical equipment ({e.Category?.Name ?? "no category"})");
+        if (e.Category.ToBuiltInCategory() != BuiltInCategory.OST_MechanicalEquipment) return item.Refuse($"not mechanical equipment ({e.Category?.Name ?? "no category"})");
         if (p is null) return item.Refuse($"neither the instance nor its type has '{slots.FanStatic}'");
         if (p.StorageType != StorageType.Double || p.Definition.GetDataType() != SpecTypeId.HvacPressure)
             return item.Refuse($"'{slots.FanStatic}' on the {where} is not an HVAC pressure parameter");
