@@ -9,6 +9,7 @@ const canonicalFixtures: Record<
   { canonicalReviewUrl: string; fixtureKind: FixtureKind } | undefined
 > = {
   "/": { canonicalReviewUrl: "/", fixtureKind: "inherent-static" },
+  "/captures": { canonicalReviewUrl: "/captures", fixtureKind: "live-route" },
   "/chat": { canonicalReviewUrl: "/chat?demo=diagram", fixtureKind: "demo-fixture" },
   "/data-tables": { canonicalReviewUrl: "/data-tables", fixtureKind: "live-route" },
   "/doc-lab": { canonicalReviewUrl: "/doc-lab", fixtureKind: "inherent-static" },

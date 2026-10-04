@@ -29,6 +29,7 @@ describe("fixture census", () => {
       fixtureKind: "live-route",
     });
     expect(census.nonFixtureLiveRoutes.map(({ route }) => route)).toEqual([
+      "/captures",
       "/data-tables",
       "/ops",
       "/parameter-links",
