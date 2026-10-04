@@ -627,6 +627,27 @@ public sealed class RevitAutomationContractsTests {
     }
 
     [Test]
+    public void Downloaded_version_never_overwrites_an_existing_backup() {
+        var root = Path.Combine(Path.GetTempPath(), "pe-version-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try {
+            var partial = Path.Combine(root, "download.partial");
+            var output = Path.Combine(root, "backup.rvt");
+            File.WriteAllText(partial, "new source");
+            File.WriteAllText(output, "kept backup");
+
+            Assert.Throws<IOException>(() => DataManagementApiClient.PublishDownloadedVersion(partial, output));
+            Assert.That(File.ReadAllText(output), Is.EqualTo("kept backup"));
+            File.Delete(output);
+
+            DataManagementApiClient.PublishDownloadedVersion(partial, output);
+            Assert.That(File.ReadAllText(output), Is.EqualTo("new source"));
+        } finally {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Test]
     public void Automation_receipt_round_trips_new_route_fields() {
         var receiptPath = Path.Combine(Path.GetTempPath(), $"pe-da-receipt-{Guid.NewGuid():N}.json");
 

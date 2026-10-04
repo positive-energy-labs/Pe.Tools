@@ -92,14 +92,26 @@ public sealed class DataManagementApiClient(
         string destinationPath,
         CancellationToken cancellationToken
     ) {
+        if (File.Exists(destinationPath) || Directory.Exists(destinationPath))
+            throw new IOException($"Destination '{destinationPath}' already exists.");
+
         var version = await this.GetVersionAsync(projectId, versionId, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(version.StorageId))
             throw new InvalidDataException($"Version '{versionId}' did not include a storage id.");
 
         var (bucketKey, objectKey) = ObjectStorageApiClient.ParseObjectUrn(version.StorageId);
-        await objectStorageClient.DownloadObjectAsync(bucketKey, objectKey, destinationPath, cancellationToken)
-            .ConfigureAwait(false);
+        var partialPath = destinationPath + ".partial-" + Guid.NewGuid().ToString("N");
+        try {
+            await objectStorageClient.DownloadObjectAsync(bucketKey, objectKey, partialPath, cancellationToken)
+                .ConfigureAwait(false);
+            PublishDownloadedVersion(partialPath, destinationPath);
+        } finally {
+            if (File.Exists(partialPath)) File.Delete(partialPath);
+        }
     }
+
+    internal static void PublishDownloadedVersion(string partialPath, string destinationPath) =>
+        File.Move(partialPath, destinationPath); // no overwrite, including a destination created during download
 
     private static DataManagementHubEntry ReadHubEntry(HubData hub) =>
         new(

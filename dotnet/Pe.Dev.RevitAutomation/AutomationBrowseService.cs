@@ -1,4 +1,6 @@
 using Newtonsoft.Json;
+using Pe.Aps.DataManagement;
+using System.Security.Cryptography;
 using System.IO;
 
 namespace Pe.Dev.RevitAutomation;
@@ -266,6 +268,55 @@ public sealed class AutomationBrowseService {
         };
     }
 
+    public async Task<AutomationApsItemVersionsResult> BrowseVersionsAsync(
+        string repoRoot,
+        string modelPath,
+        string? versionId,
+        string? outPath,
+        bool refresh,
+        Action<string>? log,
+        CancellationToken cancellationToken
+    ) {
+        if (outPath is not null && string.IsNullOrWhiteSpace(versionId))
+            throw new ArgumentException("--out requires --version-id from this model's APS item versions.");
+
+        var context = this.RequireProjectContext(repoRoot);
+        var model = await this.ResolveModelAsync(repoRoot, context.HubId!, context.ProjectId!, modelPath,
+                refresh, log, cancellationToken).ConfigureAwait(false);
+        var client = RevitAutomationApsCredentials.CreateAps().DataManagement();
+        var versions = await client.GetItemVersionsAsync(model.ProjectId, model.ItemId, cancellationToken)
+            .ConfigureAwait(false);
+        var selected = versionId is null ? null : versions.SingleOrDefault(version => version.Id == versionId);
+        if (versionId is not null && selected is null)
+            throw new InvalidOperationException($"APS version '{versionId}' does not belong to item '{model.ItemId}'.");
+
+        string? downloadedPath = null, sha256 = null, format = null;
+        if (outPath is not null) {
+            if (string.IsNullOrWhiteSpace(selected!.StorageId))
+                throw new InvalidOperationException($"APS version '{selected.Id}' has no downloadable source storage id.");
+            downloadedPath = Path.GetFullPath(Path.IsPathRooted(outPath) ? outPath : Path.Combine(repoRoot, outPath));
+            if (File.Exists(downloadedPath) || Directory.Exists(downloadedPath))
+                throw new IOException($"Destination '{downloadedPath}' already exists.");
+            await client.DownloadVersionSourceAsync(model.ProjectId, selected.Id, downloadedPath, cancellationToken)
+                .ConfigureAwait(false);
+            await using var stream = File.OpenRead(downloadedPath);
+            var header = new byte[4];
+            var headerLength = await stream.ReadAtLeastAsync(header, header.Length, false, cancellationToken)
+                .ConfigureAwait(false);
+            format = headerLength == header.Length && header.SequenceEqual(new byte[] { 0x50, 0x4B, 0x03, 0x04 }) ? "zip" :
+                string.Equals(selected.FileType, "rvt", StringComparison.OrdinalIgnoreCase) ? "rvt-candidate" : "unknown";
+            stream.Position = 0;
+            sha256 = Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false));
+        }
+
+        return new AutomationApsItemVersionsResult(
+            "aps-item-version", model.ProjectId, model.ItemId, model.ModelPath,
+            versions.Select(version => new AutomationApsItemVersion(version.Id, version.DisplayName,
+                version.CreatedAt, version.RevitProjectVersion, version.IsCompositeDesign,
+                !string.IsNullOrWhiteSpace(version.StorageId))).ToArray(),
+            selected?.Id, downloadedPath, format, sha256);
+    }
+
     public AutomationCacheStatus GetCacheStatus(string repoRoot) =>
         this._cacheStore.GetStatus(repoRoot);
 
@@ -450,3 +501,10 @@ public sealed class AutomationBrowseService {
             : canonical[..lastSlash];
     }
 }
+
+public sealed record AutomationApsItemVersion(string Id, string DisplayName, DateTimeOffset? CreatedAt,
+    int? RevitYear, bool? IsCompositeDesign, bool HasDownload);
+
+public sealed record AutomationApsItemVersionsResult(string SourceKind, string ProjectId, string ItemId,
+    string ModelPath, IReadOnlyList<AutomationApsItemVersion> Versions, string? SelectedVersionId,
+    string? DownloadedPath, string? DownloadFormat, string? Sha256);
