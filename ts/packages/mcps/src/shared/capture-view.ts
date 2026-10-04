@@ -1,8 +1,6 @@
-import * as fs from "node:fs/promises";
 import { createTool } from "@mastra/core/tools";
 import z from "zod";
 import type { HostRpcCaller } from "./host-rpc-caller.ts";
-import { isReadImageSuccess, type ReadImageResult } from "./read-image.ts";
 
 const captureViewInputSchema = z.object({
   target: z
@@ -62,7 +60,6 @@ const captureViewInputSchema = z.object({
 
 type RevitViewImageData = {
   view: { label?: string; elementId?: number };
-  filePath: string;
   byteSize: number;
   pixelSize: number;
   viewScale?: number | null;
@@ -70,14 +67,18 @@ type RevitViewImageData = {
   sheetNumber?: string | null;
 };
 
-/** One-hop "let me see Revit": export a view to PNG via the bridge, read the file, return it as an image part. */
+/**
+ * One-hop "let me see Revit": export a view through the host, which keeps it as a capture. The
+ * tool answers small text naming the capture's URL and receipt id; pictures are for people
+ * (pages ledger, 2026-10-04), and every surface links the same `/captures/<sha>.png`.
+ */
 export function createCaptureViewTool(createHostRpcCaller: () => Promise<HostRpcCaller>) {
   return createTool({
     id: "capture_view",
     description:
-      "SEE a Revit view exactly as the user sees it — templates, VG overrides, and temporary hide/isolate all apply. Captures the active view (default), a view/sheet/viewport by id or name, or a schedule placed on a sheet, optionally cropped to elements / the selection / a scope box. Never creates or restyles views to take a picture. Use after placements/mutations to visually verify results, or whenever you need to look at what the user is looking at.",
+      "SEE a Revit view exactly as the user sees it — templates, VG overrides, and temporary hide/isolate all apply. Captures the active view (default), a view/sheet/viewport by id or name, or a schedule placed on a sheet, optionally cropped to elements / the selection / a scope box. Never creates or restyles views to take a picture. The host keeps the PNG as a capture; the answer names its URL (open it, or put it in a page as <img src>) and its receipt id. Use after placements/mutations so the user can check the result, or to show the user what you are looking at.",
     inputSchema: captureViewInputSchema,
-    execute: async (input): Promise<ReadImageResult> => {
+    execute: async (input): Promise<{ text: string; isError?: boolean }> => {
       const caller = await createHostRpcCaller();
       const result = await caller.callOperation("revit.context.view-image", {
         target: input.target,
@@ -86,38 +87,20 @@ export function createCaptureViewTool(createHostRpcCaller: () => Promise<HostRpc
         pixelSize: input.pixelSize,
       });
       if (!result.ok) return { text: `capture_view failed: ${result.message}`, isError: true };
-
+      if (!result.capture)
+        return { text: "capture_view: the host answered without keeping a capture", isError: true };
+      // TODO: a model that needs the pixels gets a server-side MCP image content block; the Pea MCP
+      // server stringifies tool results today, so base64 here reached Claude as 763k chars of text.
       const data = result.response as RevitViewImageData;
-      try {
-        const bytes = await fs.readFile(data.filePath);
-        const extras = [
-          data.sheetNumber ? `on sheet ${data.sheetNumber}` : null,
-          data.viewScale ? `1:${data.viewScale}` : null,
-          data.modelRect
-            ? `model rect (${data.modelRect.minX.toFixed(1)},${data.modelRect.minY.toFixed(1)})→(${data.modelRect.maxX.toFixed(1)},${data.modelRect.maxY.toFixed(1)}) ft`
-            : null,
-        ].filter(Boolean);
-        return {
-          text: `${data.view?.label ?? "view"} (${data.filePath}, ${bytes.length} bytes, ${data.pixelSize}px${extras.length ? `; ${extras.join("; ")}` : ""})`,
-          mediaType: "image/png",
-          byteSize: bytes.length,
-          data: bytes.toString("base64"),
-        };
-      } catch (error) {
-        return {
-          text: `capture_view exported to ${data.filePath} but reading it failed: ${error instanceof Error ? error.message : String(error)}`,
-          isError: true,
-        };
-      }
-    },
-    toModelOutput: (output) => {
-      if (!isReadImageSuccess(output)) return undefined;
+      const extras = [
+        data.sheetNumber ? `on sheet ${data.sheetNumber}` : null,
+        data.viewScale ? `1:${data.viewScale}` : null,
+        data.modelRect
+          ? `model rect (${data.modelRect.minX.toFixed(1)},${data.modelRect.minY.toFixed(1)})→(${data.modelRect.maxX.toFixed(1)},${data.modelRect.maxY.toFixed(1)}) ft`
+          : null,
+      ].filter(Boolean);
       return {
-        type: "content",
-        value: [
-          { type: "text", text: output.text },
-          { type: "media", data: output.data, mediaType: output.mediaType },
-        ],
+        text: `${data.view?.label ?? "view"}: ${caller.hostBaseUrl.replace(/\/$/, "")}${result.capture.url} (capture ${result.capture.id}, ${data.byteSize} bytes, ${data.pixelSize}px${extras.length ? `; ${extras.join("; ")}` : ""})`,
       };
     },
   });

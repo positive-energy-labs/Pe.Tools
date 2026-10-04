@@ -27,13 +27,15 @@ export {
 const sessionOf = (target: DocumentRequest | null | undefined): string | undefined =>
   target ? (target.kind === "open" ? target.ref.session : target.session) : undefined;
 
-const captureView = createCaptureViewTool(
-  async () =>
-    new HostRpcCaller({
-      hostBaseUrl: peaHostBaseUrl(),
-      bridgeSessionId: sessionOf((await scopeOf())?.defaultTarget),
-    }),
-);
+const captureView = createCaptureViewTool(async () => {
+  const target = (await scopeOf())?.defaultTarget;
+  // view-image needs an exact open document; a session alone is refused by the host.
+  return new HostRpcCaller({
+    hostBaseUrl: peaHostBaseUrl(),
+    bridgeSessionId: sessionOf(target),
+    openDocumentId: target?.kind === "open" ? target.ref.openId : undefined,
+  });
+});
 
 /**
  * Pea's product surface: three capability doors over ONE catalog (`pe_find` ranks it, `pe_read`

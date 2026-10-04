@@ -130,6 +130,8 @@ export type HostOperationCallResult =
       operation?: HostOperationSearchResult;
       /** The session and document the host actually resolved to (x-pe-resolved-* headers). */
       resolvedTarget?: ResolvedTarget;
+      /** The capture the host kept for a `revit.context.view-image` answer (x-pe-capture-* headers). */
+      capture?: { id: string; url: string };
       response: unknown;
       action?: ActionReceipt | DetachedAction;
     }
@@ -250,6 +252,7 @@ const callHostRpcOperationEffect = Effect.fnUntraced(function* (
         operation && verbosity !== "compact" ? toSearchResult(operation, verbosity) : undefined,
       response: result.success.rawBody,
       resolvedTarget: result.success.resolvedTarget,
+      capture: result.success.capture,
     } satisfies HostOperationCallResult;
   }
 
@@ -284,6 +287,7 @@ const callHostRpcEffect = Effect.fnUntraced(function* (
     elapsedMs: Math.round(performance.now() - started),
     rawBody: call.body,
     resolvedTarget: call.resolvedTarget,
+    capture: call.capture,
   };
 });
 
@@ -294,6 +298,12 @@ function readResolvedTarget(response: Response): ResolvedTarget | undefined {
   return session || document
     ? { session, document: document ? decodeURIComponent(document) : null }
     : undefined;
+}
+
+function readCapture(response: Response): { id: string; url: string } | undefined {
+  const id = response.headers.get("x-pe-capture-id");
+  const url = response.headers.get("x-pe-capture-url");
+  return id && url ? { id, url } : undefined;
 }
 
 // Plain POST /call — unknown keys pass through so runtime-registered Revit ops
@@ -340,6 +350,7 @@ const runHostRpcEffect = Effect.fnUntraced(function* (
       return {
         body: (await response.json()) as unknown,
         resolvedTarget: readResolvedTarget(response),
+        capture: readCapture(response),
       };
     },
     catch: (error) =>
