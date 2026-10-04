@@ -15,3 +15,10 @@ if (!existsSync(src)) {
 rmSync(dest, { recursive: true, force: true });
 cpSync(src, dest, { recursive: true });
 console.log(`staged web SPA -> ${dest}`);
+
+// Page assets (pages-route.ts reads them from <dir of Pe.Host.exe>/pages when installed).
+const pages = join(here, "..", "dist-installed", "pages");
+rmSync(pages, { recursive: true, force: true });
+cpSync(join(here, "..", "src", "pages"), pages, { recursive: true });
+cpSync(join(here, "..", "..", "web", "src", "base.css"), join(pages, "base.css"));
+console.log(`staged page assets -> ${pages}`);

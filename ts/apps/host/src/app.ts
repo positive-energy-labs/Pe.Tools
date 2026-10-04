@@ -27,6 +27,7 @@ import { staticSpaLayer } from "./static-spa.ts";
 import { peRoutesLayer } from "./pe-routes.ts";
 import { readInferenceEndpoint, saveInferenceEndpoint } from "./inference-endpoint.ts";
 import { capturesRoute } from "./captures-route.ts";
+import { pagesRoute } from "./pages-route.ts";
 
 export { resolveWebRoot } from "./static-spa.ts";
 
@@ -258,6 +259,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
       : () => emptyNotFound;
   const CommonAppLive = Layer.mergeAll(
     capturesRoute(spa),
+    pagesRoute(),
     adminShutdownRoute,
     inferenceEndpointRoutes,
     peRoutesLayer(options.routeRegistrations),

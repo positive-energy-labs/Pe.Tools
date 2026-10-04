@@ -1,0 +1,113 @@
+/* pe.css — the house look for a page, opt-in: <link rel="stylesheet" href="/pages/pe.css">.
+ * Above this line the host prepends the product's base.css (the --pe-* tokens, light and dark).
+ * Below, plain elements take the house defaults, so a page with no stylesheet of its own still looks like ours. */
+html {
+  color-scheme: light dark;
+}
+body {
+  margin: 0;
+  background: var(--pe-page);
+  color: var(--pe-ink);
+  font:
+    14px/1.5 var(--font-body, system-ui),
+    system-ui,
+    sans-serif;
+}
+h1,
+h2,
+h3 {
+  font-family: var(--font-display, inherit);
+  font-weight: 600;
+  margin: 0.6em 0 0.3em;
+}
+h1 {
+  font-size: 22px;
+}
+h2 {
+  font-size: 18px;
+}
+h3 {
+  font-size: 15px;
+}
+a {
+  color: var(--pe-nav);
+}
+code,
+pre,
+kbd,
+.mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.93em;
+}
+pre {
+  background: var(--pe-artifact);
+  border: 1px solid var(--pe-line);
+  border-radius: var(--radius, 4px);
+  padding: 8px 10px;
+  overflow: auto;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--pe-artifact);
+  border: 1px solid var(--pe-line);
+  border-radius: var(--radius, 4px);
+  padding: 3px 10px;
+}
+button {
+  cursor: pointer;
+}
+button:hover {
+  background: var(--pe-recess);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+button.commit {
+  background: var(--pe-commit);
+  color: var(--pe-on-commit);
+  border-color: var(--pe-commit);
+}
+input,
+textarea {
+  padding: 3px 6px;
+}
+table {
+  border-collapse: collapse;
+  background: var(--pe-artifact);
+}
+td,
+th {
+  border: 1px solid var(--pe-line);
+  padding: 3px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+th {
+  color: var(--pe-ink-mute);
+  font-weight: 600;
+  font-size: 12px;
+}
+hr {
+  border: 0;
+  border-top: 1px solid var(--pe-line);
+}
+.muted {
+  color: var(--pe-ink-mute);
+}
+.alarm {
+  color: var(--pe-alarm);
+}
+.caution {
+  color: var(--pe-caution);
+}
+.done {
+  color: var(--pe-done);
+}
+[hidden] {
+  display: none !important;
+}

@@ -12,6 +12,11 @@ export function productPodsRootPath(): string {
   return join(productUserContentRootPath(), productPathNames.podsDirectoryName);
 }
 
+/** Pages (`pages-route.ts`): one folder per page beside Pods, outside git, no registration. */
+export function productPagesRootPath(): string {
+  return join(productUserContentRootPath(), productPathNames.pagesDirectoryName);
+}
+
 export function productApsCredentialsPath(): string {
   return join(
     process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"),

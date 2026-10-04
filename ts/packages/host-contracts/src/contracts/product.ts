@@ -15,6 +15,7 @@ export const productPathNames = {
   cacheDirectoryName: "cache",
   preferencesFileName: "preferences.json",
   podsDirectoryName: "Pods",
+  pagesDirectoryName: "Pages",
   settingsDirectoryName: "settings",
   assetsDirectoryName: "assets",
   outputDirectoryName: "output",
