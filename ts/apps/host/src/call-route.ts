@@ -28,7 +28,8 @@ import {
 } from "@pe/agent-contracts";
 import { z } from "zod";
 import { admitTakeoffAction, recoverTakeoffAction, fileVersion } from "./takeoff-actions.ts";
-import { takeoffActions } from "@pe/agent-contracts";
+import { admitDuctsAction, recoverDuctsAction } from "./ducts-actions.ts";
+import { ductsActions, takeoffActions } from "@pe/agent-contracts";
 import { Effect, Layer, Schema } from "effect";
 import {
   addressSchema,
@@ -144,7 +145,9 @@ export function makeCallRoute(
           ? admitFamilyAction(input, owner(), observations(), bridge, actionDeps, resume)
           : input.kind === "workflow" && Object.hasOwn(takeoffActions, input.key)
             ? admitTakeoffAction(input, owner(), observations(), bridge, actionDeps, resume)
-            : admitGatewayAction(
+            : input.kind === "workflow" && Object.hasOwn(ductsActions, input.key)
+              ? admitDuctsAction(input, owner(), bridge, actionDeps, resume)
+              : admitGatewayAction(
                 input,
                 owner(),
                 bridge,
@@ -740,7 +743,9 @@ export function makeCallRoute(
                       ? recoverFamilyAction(body.id, owner(), actionDeps)
                       : original?.kind === "workflow" && Object.hasOwn(takeoffActions, original.key)
                         ? recoverTakeoffAction(body.id, owner(), actionDeps)
-                        : recoverGatewayAction(body.id, owner(), actionDeps.sdk, bridge)),
+                        : original?.kind === "workflow" && Object.hasOwn(ductsActions, original.key)
+                          ? recoverDuctsAction(body.id, owner(), actionDeps)
+                          : recoverGatewayAction(body.id, owner(), actionDeps.sdk, bridge)),
               );
             }
             // A control added to actionControls gets a route before it gets a handler.
