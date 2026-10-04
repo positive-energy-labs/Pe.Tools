@@ -6,7 +6,8 @@
     "**/dist-installed/**",
     "**/vendor/**",
     "**/*.generated.ts",
-    "**/routeTree.gen.ts"
+    "**/routeTree.gen.ts",
+    "apps/host/src/pages/**"
   ],
   "ignoreBinaries": ["vp", "vpx", "reg.exe", "tailscale"],
   "ignoreDependencies": [

@@ -66,6 +66,7 @@ const MIME: Record<string, string> = {
   ".webp": "image/webp",
   ".woff2": "font/woff2",
 };
+const HEARTBEAT_MS = 15_000;
 const isMissing = (error: unknown) => (error as { code?: string } | null)?.code === "ENOENT";
 
 export type PageEventRow = { seq: number; at: string; origin: string; event: unknown };
@@ -217,7 +218,14 @@ export function createPagesHandler(root: string) {
         // Follow first, then replay: a row appended between the two is sent once, by seq.
         const unfollow = state.follow(send);
         for (const row of await state.rows()) send(row);
+        // A named heartbeat, so pe.js can tell a quiet stream from a dead one (a browser's own
+        // EventSource retry was seen to never fire after a dev host restart, 2026-10-04).
+        const beat = setInterval(
+          () => controller.enqueue(encoder.encode("event: ping\ndata: {}\n\n")),
+          HEARTBEAT_MS,
+        );
         stop = () => {
+          clearInterval(beat);
           unfollow();
           try {
             controller.close();

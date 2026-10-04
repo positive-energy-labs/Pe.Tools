@@ -184,23 +184,33 @@
         .catch((e) => console.error("pe.state: the host did not keep an event", e));
       return true;
     };
-    // The browser's own EventSource retry wedges in "connecting" after a dev host restart (seen 2026-10-04),
-    // so the stream is replaced on every error, from the last seq seen; nothing is lost, the host replays.
+    // A browser's own EventSource retry was seen to never fire after a dev host restart (2026-10-04), so the
+    // stream is replaced by a watchdog: on error, when it never opens, or when the host's heartbeat (every 15 s)
+    // stops. It resumes from the last seq seen; nothing is lost, the host replays.
     let retryMs = 1000;
+    let heard = Date.now();
     const follow = () => {
       const es = new EventSource(`${base}/events?after=${seq}`);
-      es.onopen = () => (retryMs = 1000);
+      heard = Date.now();
+      es.onopen = () => ((retryMs = 1000), (heard = Date.now()));
+      es.addEventListener("ping", () => (heard = Date.now()));
       es.onmessage = (m) => {
+        heard = Date.now();
         const row = JSON.parse(m.data);
         seq = Math.max(seq, row.seq);
         if (mine.delete(row.event.eventId)) return; // our own fire, already applied
         if (fire(row.event)) snapshot();
       };
-      es.onerror = () => {
+      const replace = () => {
         es.close();
+        clearInterval(watch);
         setTimeout(follow, retryMs);
         retryMs = Math.min(retryMs * 2, 10000);
       };
+      es.onerror = replace;
+      const watch = setInterval(() => {
+        if (Date.now() - heard > (es.readyState === 1 ? 45000 : 10000)) replace();
+      }, 2000);
       pe.events = es;
     };
     follow();
