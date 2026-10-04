@@ -64,7 +64,7 @@ public static class DuctApplier {
     }
 
     public static DuctApplyResult Apply(Document doc, DuctApplyRequest request) {
-        var slots = request.Slots ?? request.Store.Slots ?? new DuctParameterSlots();
+        var slots = (request.Slots ?? request.Store.Slots ?? new DuctParameterSlots()).WithDefaults();
         var schemas = new Dictionary<Guid, Schema?> {
             [SpecificCoefficient] = Schema(SpecificCoefficient),
             [SpecificLoss] = Schema(SpecificLoss)

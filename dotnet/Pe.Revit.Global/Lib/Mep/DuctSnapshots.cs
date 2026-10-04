@@ -25,7 +25,7 @@ public static class DuctSnapshots {
     };
 
     public static DuctSnapshotData Snapshot(Document doc, DuctParameterSlots? slots = null) {
-        slots ??= new DuctParameterSlots();
+        slots = (slots ?? new DuctParameterSlots()).WithDefaults();
         var clock = Stopwatch.StartNew();
         var readAt = DateTimeOffset.UtcNow;
         List<Element> Of(BuiltInCategory category) => new FilteredElementCollector(doc)

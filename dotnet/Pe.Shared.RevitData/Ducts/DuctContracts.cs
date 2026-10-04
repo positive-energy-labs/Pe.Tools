@@ -85,7 +85,16 @@ public sealed record DuctParameterSlots(
     string FanStatic = "PE_M_Fan_ExternalStaticPressure",
     string FanFlow = "PE_M_Fan_AirFlow",
     string ComponentDrop = "Pressure Drop",
-    string? TerminalDrop = null);
+    string? TerminalDrop = null) {
+    private static readonly DuctParameterSlots Defaults = new();
+
+    /// <summary>A partial slots object from the wire deserializes missing names as null, not the defaults; this restores them.</summary>
+    public DuctParameterSlots WithDefaults() => new(
+        string.IsNullOrWhiteSpace(this.FanStatic) ? Defaults.FanStatic : this.FanStatic,
+        string.IsNullOrWhiteSpace(this.FanFlow) ? Defaults.FanFlow : this.FanFlow,
+        string.IsNullOrWhiteSpace(this.ComponentDrop) ? Defaults.ComponentDrop : this.ComponentDrop,
+        string.IsNullOrWhiteSpace(this.TerminalDrop) ? null : this.TerminalDrop);
+}
 
 /// <summary>
 ///     Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when

@@ -47,4 +47,12 @@ public sealed class DuctLossStoreTests {
     [TestCase("null", "empty")]
     public void Fails_closed(string json, string message) =>
         Assert.That(() => DuctLossStore.FromJson(json), Throws.InvalidOperationException.With.Message.Contains(message));
+
+    [Test]
+    public void Partial_slots_from_the_wire_fall_back_to_the_defaults() {
+        var slots = Newtonsoft.Json.JsonConvert.DeserializeObject<DuctParameterSlots>("""{"componentDrop":"Damper Drop"}""")!;
+
+        Assert.That(slots.FanStatic, Is.Null, "Newtonsoft passes null for a missing ctor argument");
+        Assert.That(slots.WithDefaults(), Is.EqualTo(new DuctParameterSlots(ComponentDrop: "Damper Drop")));
+    }
 }
