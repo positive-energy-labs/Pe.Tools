@@ -42,7 +42,7 @@ describe("fixture census", () => {
       fixtureKind: "prototype-fixture",
     });
     expect(census.missingReviewUrls).toEqual([]);
-    expect(census.missingCanonicalFixtures).toBe(5);
+    expect(census.missingCanonicalFixtures).toBe(6);
   });
 
   it("uses real manifest seed names for every demo review URL", () => {
