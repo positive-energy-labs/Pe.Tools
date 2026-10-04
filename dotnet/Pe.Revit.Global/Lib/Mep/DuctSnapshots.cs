@@ -36,15 +36,18 @@ public static class DuctSnapshots {
             .Select(l => new DuctLevel(l.Id.Value, l.Name, R(l.ProjectElevation)))
             .ToList();
 
+        // FOOTGUN (pdrop-w3, 2026-10-04): under network-based calculations Revit 2025's Connector.Flow getter can raise an
+        // AccessViolationException on Project A (uncatchable in .NET 8; it killed Revit mid-snapshot). Read it only on the legacy engine.
+        var network = DuctSettings.GetDuctSettings(doc).NetworkBasedCalculations;
         var segments = Of(BuiltInCategory.OST_DuctCurves).Concat(Of(BuiltInCategory.OST_FlexDuctCurves))
-            .OfType<MEPCurve>().Select(c => Segment(doc, c)).ToList();
+            .OfType<MEPCurve>().Select(c => Segment(doc, c, network)).ToList();
         var schemas = LossSchemas();
         var nodes = new List<DuctNode>();
-        nodes.AddRange(Of(BuiltInCategory.OST_DuctFitting).Select(e => Node(e, Fitting(e), slots, schemas)));
-        nodes.AddRange(Of(BuiltInCategory.OST_DuctAccessory).Select(e => Node(e, DuctNodeKind.Accessory, slots, schemas)));
-        nodes.AddRange(Of(BuiltInCategory.OST_DuctTerminal).Select(e => Node(e, DuctNodeKind.Terminal, slots, schemas)));
+        nodes.AddRange(Of(BuiltInCategory.OST_DuctFitting).Select(e => Node(e, Fitting(e), slots, schemas, network)));
+        nodes.AddRange(Of(BuiltInCategory.OST_DuctAccessory).Select(e => Node(e, DuctNodeKind.Accessory, slots, schemas, network)));
+        nodes.AddRange(Of(BuiltInCategory.OST_DuctTerminal).Select(e => Node(e, DuctNodeKind.Terminal, slots, schemas, network)));
         nodes.AddRange(Of(BuiltInCategory.OST_MechanicalEquipment)
-            .Where(e => HvacConnectors(e).Any()).Select(e => Node(e, DuctNodeKind.Equipment, slots, schemas)));
+            .Where(e => HvacConnectors(e).Any()).Select(e => Node(e, DuctNodeKind.Equipment, slots, schemas, network)));
         var systems = new FilteredElementCollector(doc).OfClass(typeof(MechanicalSystem)).Cast<MechanicalSystem>()
             .Where(m => m.SystemType is DuctSystemType.SupplyAir or DuctSystemType.ReturnAir or DuctSystemType.ExhaustAir)
             .OrderBy(m => m.Name, StringComparer.Ordinal)
@@ -54,7 +57,7 @@ public static class DuctSnapshots {
         var analysis = DuctNetwork.Analyze(nodes, segments);
         var (store, storeError) = DuctApplier.ReadStore(doc);
         return new DuctSnapshotData(
-            new DuctDocument(doc.Title, readAt, clock.ElapsedMilliseconds, DuctSettings.GetDuctSettings(doc).NetworkBasedCalculations),
+            new DuctDocument(doc.Title, readAt, clock.ElapsedMilliseconds, network),
             levels,
             analysis.Groups,
             analysis.Nodes,
@@ -135,11 +138,11 @@ public static class DuctSnapshots {
             slots.TerminalDrop is { } name ? Converted(Named(e, name), UnitTypeId.InchesOfWater60DegreesFahrenheit) : null);
     }
 
-    private static DuctSegment Segment(Document doc, MEPCurve curve) {
+    private static DuctSegment Segment(Document doc, MEPCurve curve, bool network) {
         var flex = curve is FlexDuct;
         var type = doc.GetElement(curve.GetTypeId()) as MEPCurveType;
         var roughness = type?.Roughness ?? 0;
-        var connectors = HvacConnectors(curve).Select(Connector).ToList();
+        var connectors = HvacConnectors(curve).Select(c => Connector(c, network)).ToList();
         var polyline = curve is FlexDuct fd
             ? fd.Points.Select(P).ToList()
             : curve.Location is LocationCurve { Curve: var line }
@@ -173,7 +176,7 @@ public static class DuctSnapshots {
     private static DuctNodeKind Fitting(Element e) =>
         (e as FamilyInstance)?.MEPModel is MechanicalFitting { PartType: PartType.Cap } ? DuctNodeKind.Cap : DuctNodeKind.Fitting;
 
-    private static DuctNode Node(Element e, DuctNodeKind kind, DuctParameterSlots slots, Dictionary<Guid, Schema?> schemas) {
+    private static DuctNode Node(Element e, DuctNodeKind kind, DuctParameterSlots slots, Dictionary<Guid, Schema?> schemas, bool network) {
         var fi = e as FamilyInstance;
         var facts = new List<DuctFact>();
         switch (kind) {
@@ -211,7 +214,7 @@ public static class DuctSnapshots {
             null,
             Text(e, BuiltInParameter.RBS_SYSTEM_NAME_PARAM),
             Text(e, BuiltInParameter.RBS_SYSTEM_CLASSIFICATION_PARAM),
-            HvacConnectors(e).Select(Connector).ToList(),
+            HvacConnectors(e).Select(c => Connector(c, network)).ToList(),
             facts.Where(f => f.Value is not null || f.Text is not null).ToList(),
             kind is DuctNodeKind.Fitting or DuctNodeKind.Accessory ? Loss(e, schemas) : null,
             kind == DuctNodeKind.Terminal ? Terminal(e, slots) : null);
@@ -293,7 +296,7 @@ public static class DuctSnapshots {
                 yield return c;
     }
 
-    private static DuctConnector Connector(Connector c) {
+    private static DuctConnector Connector(Connector c, bool network) {
         var shape = c.Shape switch {
             ConnectorProfileType.Round => DuctShape.Round,
             ConnectorProfileType.Rectangular => DuctShape.Rectangular,
@@ -312,7 +315,7 @@ public static class DuctSnapshots {
             diameter,
             width,
             height,
-            Try(() => Math.Abs(c.Flow) > 1e-9 ? R(UnitUtils.ConvertFromInternalUnits(c.Flow, UnitTypeId.CubicFeetPerMinute)) : (double?)null),
+            network ? null : Try(() => Math.Abs(c.Flow) > 1e-9 ? R(UnitUtils.ConvertFromInternalUnits(c.Flow, UnitTypeId.CubicFeetPerMinute)) : (double?)null),
             Try(() => c.Direction switch {
                 FlowDirectionType.In => "in",
                 FlowDirectionType.Out => "out",

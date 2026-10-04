@@ -197,6 +197,8 @@ public sealed record DuctRef(long ElementId, int Connector);
 /// <summary>
 ///     One physical HVAC connector. Kind is "end" or "curve" (a tap on a duct's side). Direction is Revit's
 ///     (in, out, bidirectional); flow direction for the solver comes from the root, never from this.
+///     FlowCfm is Revit's connector flow, read only on the legacy engine: under network-based calculations the getter can
+///     crash Revit 2025 (pressure-drop ledger, W3).
 /// </summary>
 public sealed record DuctConnector(
     int Index,
