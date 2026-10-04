@@ -183,6 +183,22 @@ export function unitOf(snapshot: DuctSnapshot, result: LossResult, group: Group)
 }
 
 /**
+ * Pe's fan static for a unit: parallel groups of one classification share the largest, and the
+ * classifications a unit serves add (supply and return are in series). `parts` names each.
+ */
+export function proposedStatic(snapshot: DuctSnapshot, result: LossResult, unit: number) {
+  const byKind = new Map<string, number>();
+  for (const group of snapshot.groups) {
+    const solved = result.byGroup[group.id];
+    if (!solved || solved.critical == null || unitOf(snapshot, result, group) !== unit) continue;
+    const kind = group.classifications.join(",");
+    byKind.set(kind, Math.max(byKind.get(kind) ?? 0, solved.fan));
+  }
+  const parts = [...byKind].map(([kind, fan]) => ({ kind, fan }));
+  return parts.length ? { total: round4(parts.reduce((a, b) => a + b.fan, 0)), parts } : null;
+}
+
+/**
  * The native `ducts.apply` request (less `previewOnly`) from the staged cells only: every instance of a staged rule under
  * its chosen table (instances the table cannot price are left out, and the band says so), every
  * staged drop, the staged parameter slots, and the staged unit statics. `group` scopes the instances, drops

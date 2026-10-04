@@ -33,7 +33,7 @@ import {
   instancesOf,
   partOf,
   PARTS,
-  round4,
+  proposedStatic,
   stagedFanout,
   tableOf,
   unitOf,
@@ -103,6 +103,8 @@ export const tablePatches = (
     ? transitionPatches(["rules"], key, cell, { kind: "unstage" })
     : transitionPatches(["rules"], key, cell, { kind: "stage", rung: { value: { table } } });
 };
+
+const kindWord = (kind: string) => kind.replace(/ air$/i, "").toLowerCase();
 
 /** Stage Pe's fan static for a unit; staging the number already staged takes it back. */
 export const fanPatches = (
@@ -489,7 +491,8 @@ function GroupHead({
   const revit = critical == null ? null : systemFor(snapshot, critical);
   // The air mover Pe's number would be written to; nothing reaches it until a person stages it.
   const unit = unitOf(snapshot, priced.now, group);
-  const proposed = next && next.critical != null ? round4(next.fan) : null;
+  const sum = unit == null ? null : proposedStatic(snapshot, priced.next, unit);
+  const proposed = sum?.total ?? null;
   const stagedStatic = unit == null ? undefined : priced.staged.unitStatics[String(unit)]?.inWg;
   return (
     <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 py-1" data-group-head={group.id}>
@@ -526,7 +529,12 @@ function GroupHead({
           <span className="text-ink-2">unit</span>
           <span className="face-mono">{unit}</span>
           <span className="text-ink-2">Pe proposes</span>
-          <b className="face-mono">{proposed == null ? "—" : proposed}</b>
+          <b className="face-mono">{proposed == null ? "—" : proposed.toFixed(4)}</b>
+          {sum && sum.parts.length > 1 ? (
+            <span className="face-mono text-ink-2" data-unit-parts={unit}>
+              ({sum.parts.map(({ kind, fan }) => `${kindWord(kind)} ${fmt(fan)}`).join(" + ")})
+            </span>
+          ) : null}
           {stagedStatic !== undefined && stagedStatic !== proposed ? (
             <span data-tone="caution" data-unit-staged={unit}>
               staged {stagedStatic}

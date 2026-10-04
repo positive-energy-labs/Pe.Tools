@@ -24,7 +24,7 @@ import type { Grid, Grids } from "./loss-grid";
 import { computeLosses } from "./losses";
 import { DuctsLosses, foldRefusals, StagedLosses } from "./losses-view";
 import { manifest, type DuctsPage } from "./manifest";
-import { applyRequest, price } from "./pricing";
+import { applyRequest, price, proposedStatic } from "./pricing";
 import synthetic from "./fixtures/synthetic-snapshot.json";
 import type { DuctSnapshot } from "./readiness";
 
@@ -297,6 +297,44 @@ it("scopes the request to the group in the sentence, and to every group when non
   expect(ids("")).toEqual({ fittings: [21, 22], terminals: [30, 31], equipment: [1, 100], rules });
   expect(ids("g10")).toEqual({ fittings: [22], terminals: [31], equipment: [1], rules });
   expect(ids("g20")).toEqual({ fittings: [21], terminals: [30], equipment: [100], rules });
+});
+
+it("proposes a unit's static as the largest fan per classification, summed over the kinds it serves", () => {
+  const shared: DuctSnapshot = {
+    ...snapshot,
+    groups: [
+      ...snapshot.groups,
+      { ...snapshot.groups[0]!, id: "g20", rootIds: [1], classifications: ["Return Air"] },
+      { ...snapshot.groups[0]!, id: "g30", rootIds: [1], classifications: ["Supply Air"] },
+      { ...snapshot.groups[0]!, id: "g40", rootIds: [2], classifications: ["Supply Air"] },
+    ],
+  };
+  const solved = (fan: number, critical: number | null = 31) => ({
+    fan,
+    critical,
+    revitCritical: null,
+  });
+  const result = {
+    byGroup: {
+      g10: solved(0.15),
+      g20: solved(0.0516),
+      g30: solved(0.1), // parallel supply: the largest wins, not the sum
+      g40: solved(9), // another unit
+    },
+  } as unknown as Parameters<typeof proposedStatic>[1];
+  expect(proposedStatic(shared, result, 1)).toEqual({
+    total: 0.2016,
+    parts: [
+      { kind: "Supply Air", fan: 0.15 },
+      { kind: "Return Air", fan: 0.0516 },
+    ],
+  });
+  expect(proposedStatic(shared, result, 3)).toBeNull();
+  // A group with no critical path contributes nothing.
+  const dead = {
+    byGroup: { ...result.byGroup, g20: solved(0.0516, null) },
+  } as unknown as typeof result;
+  expect(proposedStatic(shared, dead, 1)?.total).toBe(0.15);
 });
 
 it("writes a unit only from a staged fan static, never a proposal or a side effect", () => {
