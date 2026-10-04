@@ -648,6 +648,23 @@ public sealed class RevitAutomationContractsTests {
     }
 
     [Test]
+    public async Task Item_version_history_reads_all_pages_before_selecting_an_older_version() {
+        static DataManagementVersionEntry Entry(string id) =>
+            new(id, id, null, null, null, null, null, null, null, null, null, null, null);
+
+        var requestedPages = new List<int>();
+        var versions = await DataManagementApiClient.CollectVersionPagesAsync(page => {
+            requestedPages.Add(page);
+            return Task.FromResult(page == 0
+                ? (new[] { Entry("recent") }, true)
+                : (new[] { Entry("older") }, false));
+        }, CancellationToken.None);
+
+        Assert.That(requestedPages, Is.EqualTo(new[] { 0, 1 }));
+        Assert.That(versions.Select(version => version.Id), Is.EqualTo(new[] { "recent", "older" }));
+    }
+
+    [Test]
     public void Automation_receipt_round_trips_new_route_fields() {
         var receiptPath = Path.Combine(Path.GetTempPath(), $"pe-da-receipt-{Guid.NewGuid():N}.json");
 

@@ -67,10 +67,27 @@ public sealed class DataManagementApiClient(
         string itemId,
         CancellationToken cancellationToken
     ) {
-        var response = await this._itemsApi.GetItemVersionsAsync(projectId, itemId, accessToken: getAccessToken())
-            .WaitAsync(cancellationToken)
-            .ConfigureAwait(false);
-        return response.Content?.Data?.Select(ReadVersionEntry).ToArray() ?? [];
+        return await CollectVersionPagesAsync(async page => {
+            var response = await this._itemsApi.GetItemVersionsAsync(
+                    projectId, itemId, pageNumber: page, pageLimit: 200, accessToken: getAccessToken())
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return (response.Content?.Data?.Select(ReadVersionEntry).ToArray() ?? [],
+                !string.IsNullOrWhiteSpace(response.Content?.Links?.Next?.Href));
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
+    internal static async Task<IReadOnlyList<DataManagementVersionEntry>> CollectVersionPagesAsync(
+        Func<int, Task<(DataManagementVersionEntry[] Entries, bool HasNext)>> readPage,
+        CancellationToken cancellationToken
+    ) {
+        var versions = new List<DataManagementVersionEntry>();
+        for (var page = 0; ; page++) {
+            cancellationToken.ThrowIfCancellationRequested();
+            var (entries, hasNext) = await readPage(page).ConfigureAwait(false);
+            versions.AddRange(entries);
+            if (!hasNext) return versions;
+        }
     }
 
     public async Task<DataManagementVersionEntry> GetVersionAsync(

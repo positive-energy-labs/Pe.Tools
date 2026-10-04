@@ -6,7 +6,8 @@ namespace Pe.Dev.RevitAutomation;
 internal static class RevitAutomationApsCredentials {
     public static ApsClient CreateAps() {
         var credentials = new ApsCredentialSource().ReadCredentials();
-        return new ApsClient(new ApsClient.StaticAuthTokenProvider(credentials.WebClientId, credentials.WebClientSecret));
+        return new ApsClient(new ApsClient.StaticAuthTokenProvider(credentials.WebClientId, credentials.WebClientSecret),
+            allowInteractiveAuthorization: false);
     }
 
     public static string GetConfiguredWebClientId() =>

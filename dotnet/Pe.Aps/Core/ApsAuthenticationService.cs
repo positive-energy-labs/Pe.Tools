@@ -11,7 +11,7 @@ using System.Text;
 
 namespace Pe.Aps.Core;
 
-internal sealed class ApsAuthenticationService(IApsCredentialProvider credentialProvider) {
+internal sealed class ApsAuthenticationService(IApsCredentialProvider credentialProvider, bool allowInteractiveAuthorization = true) {
     private static readonly PersistedApsTokenStore PersistedTokenStore = new();
     private static readonly AuthenticationClient AuthenticationClient = new(SdkManagerBuilder.Create().Build());
     private static readonly object TokenMutationLock = new();
@@ -37,6 +37,7 @@ internal sealed class ApsAuthenticationService(IApsCredentialProvider credential
         };
 
     private readonly IApsCredentialProvider _credentialProvider = credentialProvider;
+    private readonly bool _allowInteractiveAuthorization = allowInteractiveAuthorization;
 
     private const int CallbackPort = 8080;
     private const int DefaultExpirationSeconds = 3600;
@@ -71,12 +72,18 @@ internal sealed class ApsAuthenticationService(IApsCredentialProvider credential
                 tokenKey,
                 clientSecret,
                 persistedToken.RefreshToken,
-                scopes
+                scopes,
+                !this._allowInteractiveAuthorization
             );
 
             if (refreshedToken != null)
                 return CreateTokenResult(refreshedToken, request);
         }
+
+        if (request.FlowKind == ApsAuthFlowKind.ThreeLeggedConfidential && !this._allowInteractiveAuthorization)
+            throw new InvalidOperationException(
+                "APS delegated token is unavailable after refresh. Run 'pe-dev automation auth login' interactively, then retry."
+            );
 
         return request.FlowKind switch {
             ApsAuthFlowKind.TwoLegged => PerformClientCredentialsFlow(clientId, clientSecret, tokenKey, request, scopes),
@@ -204,7 +211,8 @@ internal sealed class ApsAuthenticationService(IApsCredentialProvider credential
         TokenStoreKey tokenKey,
         string clientSecret,
         string refreshToken,
-        IReadOnlyList<string> scopes
+        IReadOnlyList<string> scopes,
+        bool failOnRefreshError
     ) {
         lock (TokenMutationLock) {
             var currentToken = TryLoadPersistedToken(tokenKey);
@@ -214,7 +222,8 @@ internal sealed class ApsAuthenticationService(IApsCredentialProvider credential
             var refreshTokenToUse = string.IsNullOrWhiteSpace(currentToken?.RefreshToken)
                 ? refreshToken
                 : currentToken.RefreshToken;
-            var refreshedToken = ExecuteTokenRefresh(tokenKey.ClientId, clientSecret, refreshTokenToUse, scopes);
+            var refreshedToken = ExecuteTokenRefresh(tokenKey.ClientId, clientSecret, refreshTokenToUse, scopes,
+                failOnRefreshError);
             if (refreshedToken == null)
                 return null;
 
@@ -228,7 +237,8 @@ internal sealed class ApsAuthenticationService(IApsCredentialProvider credential
         string clientId,
         string clientSecret,
         string refreshToken,
-        IReadOnlyList<string> scopes
+        IReadOnlyList<string> scopes,
+        bool failOnRefreshError
     ) {
         try {
             using var cts = new CancellationTokenSource(RefreshTimeout);
@@ -239,6 +249,14 @@ internal sealed class ApsAuthenticationService(IApsCredentialProvider credential
                 .GetAwaiter()
                 .GetResult();
         } catch (Exception ex) {
+            if (failOnRefreshError) {
+                var reason = ex is OperationCanceledException ? "timeout" :
+                    ex is HttpRequestException httpException && httpException.StatusCode is { } status
+                        ? $"HTTP {(int)status}" : ex.GetType().Name;
+                throw new InvalidOperationException(
+                    $"APS delegated token refresh failed ({reason}). Run 'pe-dev automation auth login' interactively, then retry.",
+                    ex);
+            }
             Log.Warning(ex, "APS refresh token flow failed for client {ClientId}.", clientId);
             return null;
         }

@@ -8,12 +8,12 @@ using System.Net.Http.Headers;
 
 namespace Pe.Aps;
 
-public sealed class Aps(IApsCredentialProvider authTokenProvider) {
+public sealed class Aps(IApsCredentialProvider authTokenProvider, bool allowInteractiveAuthorization = true) {
     private const string DeveloperApiBaseUrl = "https://developer.api.autodesk.com/";
     private const string AutomationApiBaseUrl = "https://developer.api.autodesk.com/da/us-east/v3/";
 
     private static readonly SDKManager SdkManager = SdkManagerBuilder.Create().Build();
-    private readonly ApsAuthenticationService _auth = new(authTokenProvider);
+    private readonly ApsAuthenticationService _auth = new(authTokenProvider, allowInteractiveAuthorization);
 
     private HttpClient CreateHttpClient(ApsTokenRequest request, string baseUrl = DeveloperApiBaseUrl) => new() {
         BaseAddress = new Uri(baseUrl),
