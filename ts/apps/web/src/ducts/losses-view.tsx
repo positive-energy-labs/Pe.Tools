@@ -21,6 +21,7 @@ import { EmptyState } from "#/components/lang/empty";
 import { Press } from "#/components/lang/press";
 import { Row as ListRow } from "#/components/lang/row";
 import { Switcher } from "#/components/lang/switcher";
+import { ValueDiff } from "#/components/lang/value-diff";
 import type { Column } from "#/components/master-table/model";
 import { Table } from "#/components/master-table/table";
 import type { DuctsEvaluation, DuctsPage } from "./manifest";
@@ -60,39 +61,28 @@ const PART_BG: Record<Part, string> = {
   terminal: "bg-(--viz-5)",
 };
 const fmt = (n: number | null | undefined) => (n == null ? "" : n.toFixed(4));
+const fmtC = (n: number) => n.toFixed(2);
 const pct = (a: number, b: number) => (b > 0 ? `${Math.round((a / b) * 100)}%` : "");
-const NO_ROOT = "no air mover; Pe computes from the open end; place one in Revit";
+const NO_ROOT = "no air mover; priced from the open end";
 
-/** Why a terminal's number is not yet Revit's too. Glyph, word, and what it means. */
+/** Why this grille's number is not yet Revit's too: the word, and what it means. The group-wide
+ * reasons (no mover, engine flag off) are said once in the group head, never per row. */
 const STATUS = {
-  "no-mover": ["⊘", "no mover", NO_ROOT],
-  "open-end": ["◌", "open end", "an open end on this network is not answered (capped or ignored)"],
-  "flag-off": [
-    "⚑",
-    "flag off",
-    "network-based calculations are off; Revit reports no critical path",
-  ],
-  refuses: [
-    "✕",
-    "family refuses",
-    "the terminal's connector is not Specific Loss; Revit refuses a drop",
-  ],
-  "no-drop": ["∅", "no drop", "no terminal drop is known; stage one from the catalog"],
+  "open-end": ["open end", "an open end on this path is not answered (capped or ignored)"],
+  refuses: ["drop refused", "the connector is not Specific Loss; Revit refuses a terminal drop"],
+  "no-drop": ["no drop", "no terminal drop is known; stage one from the catalog"],
 } as const;
 type Status = keyof typeof STATUS;
 
 export function terminalStatus(
   snapshot: DuctSnapshot,
-  group: Group,
   ready: GroupReadiness | undefined,
   node: Node,
   priced: Priced,
 ): Status[] {
   const issues = new Map(snapshot.issues.map((issue) => [issue.id, issue]));
   const out: Status[] = [];
-  if (group.rootIds.length === 0) out.push("no-mover");
   if (ready?.walk.some((id) => issues.get(id)?.kind === "open-end")) out.push("open-end");
-  if (!snapshot.document.networkBasedCalculations) out.push("flag-off");
   if (node.terminalDrop && !node.terminalDrop.writable) out.push("refuses");
   const terminal = priced.next.paths[node.id]?.rows.find((row) => row.kind === "terminal");
   if (terminal?.error) out.push("no-drop");
@@ -133,7 +123,7 @@ function DropCell({
   const authored = (cell.staged ?? cell.proposal)?.value as DuctDrop | undefined;
   const wire: CellWire = { segment, revision: work.revision, write: work.write };
   return (
-    <span className="inline-flex items-baseline gap-1" aria-label={label}>
+    <span className="inline-flex items-baseline gap-1 whitespace-nowrap" aria-label={label}>
       <StateCell
         {...cellFromTrichotomy(cell, {
           value: authored ? String(authored.inWg) : held == null ? "" : String(held),
@@ -163,7 +153,6 @@ function DropCell({
           refusal ? `preview: Revit refuses this drop: ${refusal.reason ?? "no reason"}` : undefined
         }
       />
-      <span className="t-small text-ink-2">in-wg</span>
     </span>
   );
 }
@@ -246,12 +235,12 @@ function Drawer({
       row.kind === "terminal"
         ? node?.terminalDrop?.assignedPressureDropInWg
         : revitOf(own(row).map((r) => r.id));
-    const mono = "block px-(--item-pad-x) text-right face-mono";
+    const mono = "block px-(--item-pad-x) text-right face-mono whitespace-nowrap";
     return [
       {
         key: "part",
         label: "part",
-        width: "w-28",
+        width: "w-24",
         cell: (row) => {
           const first = own(row)[0];
           return row.kind === "instances" || !first ? null : (
@@ -261,14 +250,19 @@ function Drawer({
       },
       {
         key: "rule",
-        label: "rule (family : type · condition)",
-        width: "min-w-56",
+        label: "rule",
+        title: "family : type · condition; every instance matching it shares one table",
+        width: "w-[26rem] max-w-[26rem]",
         cell: (row) => {
           if (row.kind === "rule") {
             const rule = ruleByKey(row.key)!;
             const missing = unpriced(priced, row.key);
             return (
-              <span className="block truncate px-(--item-pad-x)" data-rule={row.key}>
+              <span
+                className="block truncate px-(--item-pad-x)"
+                data-rule={row.key}
+                title={`${rule.family} : ${rule.type}${rule.cond ? ` · ${rule.cond}` : ""}`}
+              >
                 {rule.family} : {rule.type}
                 {rule.cond ? <span className="text-ink-2"> · {rule.cond}</span> : null}
                 {missing ? (
@@ -284,7 +278,7 @@ function Drawer({
             return (
               <span className="block truncate px-(--item-pad-x) face-mono" data-instances={row.key}>
                 {[...instancesOf(priced.next, row.key).values()]
-                  .map((r) => `${r.id} → ${r.c == null ? (r.error ?? "—") : fmt(r.c)}`)
+                  .map((r) => `${r.id} ${r.c == null ? (r.error ?? "—") : fmt(r.c)}`)
                   .join(" · ")}
               </span>
             );
@@ -310,8 +304,10 @@ function Drawer({
       },
       {
         key: "table",
-        label: "table or drop",
-        width: "min-w-48",
+        label: "table / drop (in-wg)",
+        title:
+          "the ASHRAE table a rule is looked up under, or the drop a terminal or component holds",
+        width: "whitespace-nowrap",
         cell: (row) =>
           row.kind === "rule" ? (
             <Chips ruleKey={row.key} priced={priced} work={work} />
@@ -338,7 +334,7 @@ function Drawer({
       {
         key: "n",
         label: "n",
-        width: "w-12",
+        width: "w-10",
         title: "distinct fittings the rule prices; press to list them",
         cell: (row) =>
           row.kind !== "rule" ? null : (
@@ -361,6 +357,7 @@ function Drawer({
       {
         key: "c",
         label: "C",
+        title: "loss coefficient across the rule's instances on this path (lowest – highest)",
         width: "w-28",
         cell: (row) => {
           if (row.kind !== "rule") return null;
@@ -371,14 +368,14 @@ function Drawer({
           const hi = Math.max(...cs);
           return (
             <span className={mono}>
-              {cs.length ? (lo === hi ? fmt(lo) : `${fmt(lo)} – ${fmt(hi)}`) : "—"}
+              {cs.length ? (lo === hi ? fmtC(lo) : `${fmtC(lo)} – ${fmtC(hi)}`) : "—"}
             </span>
           );
         },
       },
       {
         key: "dp",
-        label: "Δp here",
+        label: "Δp",
         width: "w-20",
         title: "in-wg on this grille's path",
         cell: (row) => <span className={mono}>{fmt(sum(own(row))) || ""}</span>,
@@ -386,12 +383,13 @@ function Drawer({
       {
         key: "share",
         label: "share",
-        width: "w-14",
+        title: "of this grille's total",
+        width: "w-12",
         cell: (row) => <span className={mono}>{pct(sum(own(row)), total)}</span>,
       },
       {
         key: "revit",
-        label: "Revit Σ",
+        label: "Revit",
         width: "w-20",
         title: "Revit's own reported drop on the same elements; a check, never an input",
         cell: (row) => <span className={`${mono} text-ink-2`}>{fmt(revit(row))}</span>,
@@ -438,11 +436,7 @@ const PartChip = ({ part }: { part: Part }) => (
  * which is not an answer, so the flag is named instead of the zero.
  */
 export const revitSays = (snapshot: DuctSnapshot, inWg: number | null | undefined) =>
-  !snapshot.document.networkBasedCalculations
-    ? "no critical path (engine flag off)"
-    : inWg == null
-      ? "no critical path"
-      : fmt(inWg);
+  !snapshot.document.networkBasedCalculations ? "engine off" : inWg == null ? "no path" : fmt(inWg);
 
 /** Pe's fan beside Revit's critical path, with the staged fan when it differs. */
 function GroupHead({
@@ -463,26 +457,25 @@ function GroupHead({
       <span className="t-title">
         {group.id} · {group.systemNames.slice(0, 3).join(", ") || "no system"}
       </span>
-      <span>
-        <span className="t-small t-upper text-ink-2">fan static · Pe </span>
+      <span className="inline-flex items-baseline gap-1">
+        <span className="t-small t-upper text-ink-2">fan static</span>
+        <span className="t-small text-ink-2">Pe</span>
         <b className="face-mono" data-fan={group.id}>
           {fmt(now?.fan)}
         </b>
         {next && now && Math.abs(next.fan - now.fan) > 1e-9 ? (
-          <span className="face-mono" data-tone="caution" data-fan-next={group.id}>
-            {" "}
-            → {fmt(next.fan)}
+          <span data-tone="caution" data-fan-next={group.id}>
+            <ValueDiff from="" to={fmt(next.fan)} />
           </span>
         ) : null}
-        <span className="t-small text-ink-2"> in-wg</span>
-      </span>
-      <span>
-        <span className="t-small t-upper text-ink-2">Revit says </span>
+        <span className="t-small text-ink-2">in-wg · Revit</span>
         <span className="face-mono" data-revit={group.id}>
           {revitSays(snapshot, revit?.criticalPathLossInWg)}
         </span>
       </span>
-      <span className="t-small text-ink-2">critical grille {critical ?? "—"}</span>
+      <span className="t-small text-ink-2">
+        critical <span className="face-mono">{critical ?? "—"}</span>
+      </span>
       {group.rootIds.length === 0 ? (
         <span className="t-small" data-tone="caution">
           {NO_ROOT}
@@ -528,7 +521,7 @@ function Bars({
         }
         const next = priced.next.paths[id]?.total ?? path.total;
         const moved = Math.abs(next - path.total) > 1e-9;
-        const statuses = terminalStatus(snapshot, group, ready, node, priced);
+        const statuses = terminalStatus(snapshot, ready, node, priced);
         const opened = page.selected === String(id);
         return (
           <Fragment key={id}>
@@ -537,22 +530,8 @@ function Bars({
               active={opened}
               title={opened ? "close this grille's rules" : "open this grille's rules"}
               onClick={() => setPage({ selected: opened ? "" : String(id) })}
-              lead={
-                <span className="inline-block w-12" aria-label="status" data-terminal={id}>
-                  {statuses.map((status) => (
-                    <span
-                      key={status}
-                      data-tone="caution"
-                      data-status={status}
-                      title={`${STATUS[status][1]}: ${STATUS[status][2]}`}
-                    >
-                      {STATUS[status][0]}
-                    </span>
-                  ))}
-                </span>
-              }
               label={
-                <span className="flex items-center gap-2">
+                <span className="flex items-center gap-2" data-terminal={id}>
                   <span className="w-56 shrink-0 truncate">
                     <span className="face-mono">{id}</span> {node.family ?? ""} ·{" "}
                     {Math.round(node.facts.find((f) => f.key === "flow")?.value ?? 0)} cfm
@@ -575,17 +554,33 @@ function Bars({
                       />
                     ) : null}
                   </span>
+                  <span
+                    className="flex w-40 shrink-0 gap-2 t-small whitespace-nowrap"
+                    aria-label="status"
+                  >
+                    {statuses.map((status) => (
+                      <span
+                        key={status}
+                        data-tone="caution"
+                        data-status={status}
+                        title={STATUS[status][1]}
+                      >
+                        {STATUS[status][0]}
+                      </span>
+                    ))}
+                  </span>
                 </span>
               }
               meta={
                 <span className="flex gap-2">
-                  <span className="w-16 text-right face-mono" data-total={id}>
-                    {fmt(path.total)}
+                  <span
+                    className="w-36 text-right"
+                    data-total={id}
+                    data-tone={moved ? "caution" : undefined}
+                  >
+                    {moved ? <ValueDiff from={fmt(path.total)} to={fmt(next)} /> : fmt(path.total)}
                   </span>
-                  <span className="w-20 face-mono" data-tone="caution">
-                    {moved ? `→ ${fmt(next)}` : ""}
-                  </span>
-                  <span className="w-14 text-ink-2">{critical === id ? "critical" : ""}</span>
+                  <span className="w-14">{critical === id ? "critical" : ""}</span>
                 </span>
               }
             />
@@ -632,7 +627,7 @@ function Slots({ snapshot, work }: { snapshot: DuctSnapshot; work: LossesWork })
                 note: authored && held ? `the snapshot read ${held}` : undefined,
               })}
               scale="row"
-              placeholder={slot === "terminalDrop" ? "none; name the family parameter" : "—"}
+              placeholder={slot === "terminalDrop" ? "name a parameter" : "—"}
               onCommit={(text: string) =>
                 work
                   .write(
@@ -707,18 +702,19 @@ export function DuctsLosses({
   return (
     <div className="flex flex-col gap-3 overflow-auto px-(--item-pad-x) py-2">
       <Slots snapshot={snapshot} work={work} />
-      <div className="flex flex-wrap gap-3 t-small text-ink-2">
+      <div className="flex flex-wrap items-baseline gap-3 t-small text-ink-2">
         {PARTS.map((part) => (
           <PartChip key={part} part={part} />
         ))}
-        <span>open a grille; a table chip stages it for every fitting of that type</span>
+        {priced.next.errors.length ? (
+          <span
+            data-tone="caution"
+            title="a rule matched but its table gave no coefficient; the bars count it as 0"
+          >
+            {priced.next.errors.length} unpriced, counted 0
+          </span>
+        ) : null}
       </div>
-      {priced.next.errors.length ? (
-        <div className="t-small" data-tone="caution">
-          {priced.next.errors.length} lookups have no value (counted as 0); open a grille to see
-          which
-        </div>
-      ) : null}
       {groups.map((group) => (
         <section key={group.id}>
           <GroupHead snapshot={snapshot} group={group} priced={priced} />
@@ -788,21 +784,19 @@ export function StagedLosses({
               {rule.family} : {rule.type}
               {rule.cond ? <span className="text-ink-2"> · {rule.cond}</span> : null}
             </span>
-            <span className="face-mono">
-              {(priced.applied[key] ?? rule.table).toUpperCase()} →{" "}
-              {priced.staged.rules[key]!.table.toUpperCase()}
-            </span>
+            <ValueDiff
+              from={(priced.applied[key] ?? rule.table).toUpperCase()}
+              to={priced.staged.rules[key]!.table.toUpperCase()}
+            />
             {f ? (
               <span className="face-mono" data-fanout={key}>
-                {f.instances} instances rewritten · {f.movedTerminals.length} grilles moved · fan{" "}
-                {fmt(fanOf(f.before))} → {fmt(fanOf(f.after))}
+                {f.instances} fittings · {f.movedTerminals.length} grilles · fan{" "}
+                <ValueDiff from={fmt(fanOf(f.before))} to={fmt(fanOf(f.after))} />
               </span>
             ) : (
               <span data-tone="caution">not a table this rule takes</span>
             )}
-            {missing ? (
-              <span data-tone="caution">{missing} instances have no value; left out</span>
-            ) : null}
+            {missing ? <span data-tone="caution">{missing} unpriced, left out</span> : null}
           </div>
         );
       })}
@@ -810,8 +804,8 @@ export function StagedLosses({
         <div>
           {terminals ? `${terminals} terminal drop${terminals === 1 ? "" : "s"}` : ""}
           {terminals && components ? " · " : ""}
-          {components ? `${components} component drop${components === 1 ? "" : "s"}` : ""} staged ·
-          fan {fmt(fanOf(priced.now))} → {fmt(fanOf(priced.next))} in-wg
+          {components ? `${components} component drop${components === 1 ? "" : "s"}` : ""} · fan{" "}
+          <ValueDiff from={fmt(fanOf(priced.now))} to={fmt(fanOf(priced.next))} /> in-wg
         </div>
       ) : null}
       {(evaluation?.response.writes ?? [])
@@ -829,15 +823,14 @@ export function StagedLosses({
           ).length;
           return (
             <div key={w.id} data-tone="caution" data-type-fanout={w.id}>
-              unit {w.id}: the instance has no fan static parameter, so apply writes type{" "}
-              {unit?.family ?? "?"} : {unit?.type ?? "?"} · moves {shared} unit
-              {shared === 1 ? "" : "s"}
+              unit {w.id}: no instance fan static; writes type {unit?.family ?? "?"} :{" "}
+              {unit?.type ?? "?"} ({shared} unit{shared === 1 ? "" : "s"})
             </div>
           );
         })}
       {slots.length ? (
         <div className="face-mono">
-          {slots.map(([slot, name]) => `${slot} → ${name}`).join(" · ")}
+          {slots.map(([slot, name]) => `${slot} = ${name}`).join(" · ")}
         </div>
       ) : null}
       {/* Every refusal, each on its line: a count with a hidden tail is a refusal the page hides. */}
@@ -866,7 +859,7 @@ export function StagedLosses({
             {fresh ? "" : " · stale, preview again"}
           </span>
         ) : (
-          <span className="text-ink-2">not previewed; preview asks Revit what it would accept</span>
+          <span className="text-ink-2">not previewed</span>
         )}
         <Press
           size="caption"

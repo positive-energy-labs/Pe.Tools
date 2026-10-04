@@ -5,7 +5,7 @@
  * on its path, a table chip stages a Work cell that moves the band and the fan, and the
  * `ducts.apply` request built from the staged cells is exact. Grids are inline test data.
  */
-import { cleanup, fireEvent, render, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, expect, it } from "vite-plus/test";
 import {
@@ -150,17 +150,16 @@ it("draws one bar per grille, opens a grille's rules, and a table chip stages th
   expect(q('[data-rule="elbow-1d-gt10"]')).toBeNull(); // the elbow is on grille 30's path only
 
   fireEvent.click(within(rowOf('[data-rule="tap-std"]')).getByText("SD5-10"));
-  await view.findByText(/instances rewritten/);
-  expect(q('[data-staged-rule="tap-std"]')?.textContent).toContain("SD5-9 → SD5-10");
+  await view.findByText(/grilles · fan/);
+  expect(q('[data-staged-rule="tap-std"]')?.textContent).toContain("SD5-9→SD5-10");
   expect(q('[data-fanout="tap-std"]')?.textContent).toBe(
-    "1 instances rewritten · 2 grilles moved · fan 0.0822 → 0.0761",
+    "1 fittings · 2 grilles · fan 0.0822→0.0761",
   );
   expect(q('[data-fan-next="g10"]')?.textContent).toContain("0.0761");
   expect(q('[data-ghost="31"]')).not.toBeNull();
   // Pressing the staged chip again takes it back.
   fireEvent.click(within(rowOf('[data-rule="tap-std"]')).getByText("SD5-10"));
-  await view.findByText(/open a grille/);
-  expect(q("[data-staged-band]")).toBeNull();
+  await waitFor(() => expect(q("[data-staged-band]")).toBeNull());
 });
 
 it("builds the ducts.apply request from the staged cells only, exactly", () => {
@@ -320,7 +319,7 @@ it("the band names a fan static that lands on the unit's type, and how many unit
     />,
   );
   expect(view.container.querySelector('[data-type-fanout="1"]')?.textContent).toBe(
-    "unit 1: the instance has no fan static parameter, so apply writes type Air Handler : Standard · moves 1 unit",
+    "unit 1: no instance fan static; writes type Air Handler : Standard (1 unit)",
   );
   expect(view.container.textContent).toContain(
     "terminal 31 refused: the instance has no writable number parameter",

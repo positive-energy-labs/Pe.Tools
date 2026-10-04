@@ -67,6 +67,23 @@ export function useDuctSnapshot(
   return { snapshot: call.data ?? null, error: call.error?.message ?? null, pending: call.pending };
 }
 
+/** In dev with a saved snapshot, the grids come from its sibling `tables.json` (a saved `ducts.tables`). */
+const SAVED_TABLES = SAVED?.replace(/[^/]*$/, "tables.json");
+
+function useSavedTables() {
+  const [data, setData] = useState<{ data?: unknown; error?: string }>({});
+  useEffect(() => {
+    if (!SAVED_TABLES) return;
+    fetch(SAVED_TABLES)
+      .then((response) => (response.ok ? response.json() : Promise.reject(`${response.status}`)))
+      .then(
+        (data: unknown) => setData({ data }),
+        (error: unknown) => setData({ error: `saved tables ${SAVED_TABLES}: ${String(error)}` }),
+      );
+  }, []);
+  return data;
+}
+
 /** Revit's shipped ASHRAE grids for every table a loss rule may name; needs a session, no document. */
 export function useDuctTables(session: string | null) {
   const call = useHostOp(
@@ -74,23 +91,25 @@ export function useDuctTables(session: string | null) {
     { ids: [...TABLE_IDS] },
     {
       bridgeSessionId: session ?? undefined,
-      enabled: session !== null,
+      enabled: session !== null && !SAVED,
       waitSeconds: NATIVE_READ_WAIT_S,
     },
   );
+  const saved = useSavedTables();
+  const data = SAVED ? saved.data : call.data;
   const grids = useMemo(() => {
-    if (!call.data) return { grids: null, error: null };
+    if (!data) return { grids: null, error: null };
     try {
-      return { grids: toGrids(call.data), error: null };
+      return { grids: toGrids(data), error: null };
     } catch (error) {
       return { grids: null, error: String(error) };
     }
-  }, [call.data]);
+  }, [data]);
   return {
     grids: grids.grids as Grids | null,
     missing: call.data?.missing ?? [],
     unsupported: call.data?.unsupported ?? {},
-    error: grids.error ?? call.error?.message ?? null,
-    pending: call.pending,
+    error: grids.error ?? saved.error ?? call.error?.message ?? null,
+    pending: SAVED ? !saved.data && !saved.error : call.pending,
   };
 }

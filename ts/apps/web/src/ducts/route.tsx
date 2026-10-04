@@ -150,10 +150,10 @@ export function DuctsRoute({
         : !priced
           ? "reading the ASHRAE tables"
           : group && group.rootIds.length === 0
-            ? "no air mover; Pe computes from the open end; place one in Revit"
+            ? "no air mover; priced from the open end"
             : group
-              ? `fan ${fmt(solved?.fan)} in-wg by Pe; Revit says ${revitSays(snapshot, solved?.revitCritical)}`
-              : `largest fan ${fmt(priced.now.fan)} in-wg by Pe over ${snapshot.groups.length} groups`;
+              ? `Pe fan ${fmt(solved?.fan)} in-wg, Revit ${revitSays(snapshot, solved?.revitCritical)}`
+              : `largest Pe fan ${fmt(priced.now.fan)} in-wg over ${snapshot.groups.length} groups`;
   // Every written segment's cells count in the Work sentence; the losses body is the band.
   const counted = useMemo(
     () =>
