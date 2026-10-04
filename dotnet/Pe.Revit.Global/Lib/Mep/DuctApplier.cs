@@ -217,8 +217,10 @@ public static class DuctApplier {
         if (e is null) return new Item(id, kind, null).Refuse($"element {id} is not in the document");
         var method = e.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM);
         var current = method?.AsString();
+        // The element's own server's entity, read through that schema's own field (it may differ from the target's).
         var existing = Guid.TryParse(current, out var g) && schemas.TryGetValue(g, out var s) && s is not null
-                       && e.GetEntity(s) is { } en && en.IsValid() ? en.Get<string>(field) : null;
+                       && s.ListFields().FirstOrDefault(f => f.ValueType == typeof(string)) is { } own
+                       && e.GetEntity(s) is { } en && en.IsValid() ? en.Get<string>(own) : null;
         var item = new Item(id, kind, $"{Name(current)}{(existing is { Length: > 0 } ? " " + existing : "")}") { Element = e };
         if (e.Category.ToBuiltInCategory() != category)
             return item.Refuse($"not a {(category == BuiltInCategory.OST_DuctFitting ? "duct fitting" : "duct accessory")} ({e.Category?.Name ?? "no category"})");
