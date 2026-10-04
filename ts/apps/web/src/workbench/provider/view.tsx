@@ -1,47 +1,26 @@
-import { cancelAndRefresh, CHAT_ACTIONS } from "../actions";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { MastraClient, type PermissionPolicy, type ToolCategory } from "@mastra/client-js";
-import type { ToolResume } from "./thread-summary";
+import type { HarnessId, HarnessInfo } from "@pe/agent-contracts";
 import { resolveWorkbenchConfig } from "../config";
-import {
-  selectApprovals,
-  selectRunStatus,
-  PERMISSION_LEVELS,
-  type AccessLevel,
-} from "../chat-state";
+import { selectRunStatus, selectTurnFailure } from "../chat-state";
 import { previousOf, useHostStatus } from "#/readings";
-import { appAtomRegistry } from "#/route/route-owner";
-import { useRouteOwner } from "#/route/route-owner";
+import { appAtomRegistry, useRouteOwner } from "#/route/route-owner";
 import { createChatPageStore } from "../store";
 import type { WorkbenchAttachment } from "../prompt";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";
 import { WorkbenchContext } from "./thread-summary";
 import { chatLoading, useThreadStream } from "./thread-stream";
-import { saveApiKey } from "./host";
+import { harnessClient, notFound } from "./harness-client";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { CHAT_SEEDS } from "#/chat/seeds";
-import {
-  errorMessage,
-  forkSessionThread,
-  resumeDataForSuspension,
-  toSummaries,
-} from "./use-workbench";
+import { errorMessage } from "./use-workbench";
 
 export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const config = useMemo(() => resolveWorkbenchConfig(), []);
   const navigate = useNavigate({ from: "/chat" });
   const search = useSearch({ from: "/chat" });
-  const [initialThreadId] = useState(() => search.thread ?? crypto.randomUUID());
-  const currentThreadId = search.thread ?? initialThreadId;
-  useEffect(() => {
-    if (!search.thread)
-      void navigate({
-        search: (previous) => ({ ...previous, thread: currentThreadId }),
-        replace: true,
-      });
-  }, [currentThreadId, navigate, search.thread]);
+  const currentThreadId = search.thread ?? "";
   const store = useRouteOwner(() =>
     createChatPageStore({
       registry: appAtomRegistry,
@@ -53,219 +32,120 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     }),
   );
 
-  // The one `host-status` Reading. Its own lifecycle is the freshness claim; `previousOf` keeps
-  // the last good answer through loading and failure so the surface never invents one.
+  // The one `host-status` Reading; `previousOf` keeps the last good answer through a refetch.
   const hostStatus = useHostStatus();
   const info = previousOf(hostStatus);
+  const client = useMemo(() => harnessClient(config.origin), [config.origin]);
   const [threads, setThreads] = useState<StoredThreadSummary[]>([]);
+  // Undefined until the host answered: "new" refuses with a reason rather than throwing.
+  const [harnesses, setHarnesses] = useState<HarnessInfo[]>();
   const [error, setError] = useState<string>();
-  const settlingApprovalsRef = useRef(new Set<string>());
 
-  // `?demo=<seed>`: the transcript shows that seed's thread and nothing is fetched (the route's
-  // `useRoute` mounts the same seed for its readings). No session, so every action refuses.
+  // `?demo=<seed>`: the transcript shows that seed's thread and nothing is fetched.
   const [demo] = useState(() =>
     typeof location === "undefined"
       ? undefined
       : CHAT_SEEDS[new URLSearchParams(location.search).get("demo") as keyof typeof CHAT_SEEDS]
           ?.work,
   );
-  const controllerId = info?.controllerId;
-  const resourceId = info?.resourceId;
-  const session = useMemo(() => {
-    if (demo || !controllerId || !resourceId) return undefined;
-    const controller = new MastraClient({ baseUrl: config.origin }).getAgentController(
-      controllerId,
-    );
-    return controller.session(resourceId, currentThreadId);
-  }, [config.origin, currentThreadId, controllerId, resourceId, demo]);
-
   const refreshThreads = useCallback(async () => {
-    if (!session) return;
-    try {
-      setThreads(toSummaries(await session.listThreads()));
-    } catch (caught) {
-      setError(errorMessage(caught));
-    }
-  }, [session]);
+    if (demo) return;
+    const listed = await client.threads();
+    setThreads([...listed].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)));
+  }, [client, demo]);
 
   const stream = useThreadStream({
     origin: config.origin,
-    thread: session ? { id: currentThreadId, session } : null,
+    threadId: demo || !currentThreadId ? null : currentThreadId,
+    onListChange: () => void refreshThreads().catch((caught) => setError(errorMessage(caught))),
   });
-  const {
-    pending: threadPending,
-    error: streamFault,
-    invalidate,
-    displayKnown,
-    turnFailure,
-    turnFailed,
-  } = stream;
+  const missingThread = notFound(stream.error);
   const chat = demo ?? stream.chat;
-  const bodyAtom = useMemo(() => {
-    if (!demo) return stream.bodyAtom;
-    const { display: _display, ...body } = demo;
-    return Atom.make(AsyncResult.success(body));
-  }, [demo, stream.bodyAtom]);
-  const loading = demo ? false : chatLoading(hostStatus, threadPending);
+  const bodyAtom = useMemo(
+    () => (demo ? Atom.make(AsyncResult.success(demo)) : stream.bodyAtom),
+    [demo, stream.bodyAtom],
+  );
+  const loading = demo ? false : chatLoading(hostStatus, stream.pending);
+  const isRunning = selectRunStatus(chat) !== "idle";
+  const turnFailure = selectTurnFailure(chat);
 
-  const status = selectRunStatus(chat);
-  const isRunning = status !== "idle";
+  /** Every verb: clear the last complaint, run, and say what failed. */
+  const attempt = useCallback(async (run: () => Promise<unknown>) => {
+    try {
+      setError(undefined);
+      await run();
+      return true;
+    } catch (caught) {
+      setError(errorMessage(caught));
+      return false;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (demo || loading) return;
+    void attempt(async () => {
+      setHarnesses(await client.harnesses());
+      await refreshThreads();
+    });
+  }, [attempt, client, demo, loading, refreshThreads]);
 
   const gotoThread = useCallback(
     (threadId: string, replace = false) => store.actions.openThread(threadId, replace),
     [store],
   );
 
-  useEffect(() => {
-    if (loading || streamFault) return;
-    const timer = setTimeout(() => void refreshThreads(), 1_000);
-    return () => clearTimeout(timer);
-  }, [loading, refreshThreads, streamFault]);
+  /** Why no thread can be created now, or undefined when one can. */
+  const newRefusal = demo
+    ? undefined
+    : !harnesses
+      ? "Harnesses are loading"
+      : harnesses.some((item) => item.available)
+        ? undefined
+        : (harnesses[0]?.reason ?? "No harness is available");
+
+  /** A thread on `harness`, or the first one that can spawn. */
+  const createThread = useCallback(
+    async (harness?: HarnessId) => {
+      const chosen = harness ?? harnesses?.find((item) => item.available)?.id;
+      if (!chosen) throw Error(newRefusal ?? "No harness is available");
+      const created = await client.create(chosen);
+      await refreshThreads();
+      await gotoThread(created.id);
+      return created.id;
+    },
+    [client, gotoThread, harnesses, newRefusal, refreshThreads],
+  );
 
   const sendPrompt = useCallback(
     async (text: string, attachments?: WorkbenchAttachment[]) => {
       const prompt = text.trim();
-      if (!prompt && !attachments?.length) throw Error("Enter a prompt or attachment");
-      if (!session) throw Error("Session is not ready");
-      if (!displayKnown) throw Error("Thread state is loading");
-      try {
-        setError(undefined);
-        // The host admits the turn under the thread's Scope; the browser names no target.
-        const context = { session, display: chat.display };
-        const refusal = CHAT_ACTIONS.send.ready(context, { text, attachments });
-        if (refusal) throw Error(refusal);
-        await CHAT_ACTIONS.send.run(context, { text, attachments });
-        if (threadPending) invalidate();
-      } catch (caught) {
-        setError(errorMessage(caught));
-        throw caught;
-      }
+      if (!prompt) throw Error("Enter a prompt");
+      if (attachments?.length) throw Error("Attachments do not cross the harness wire yet");
+      // The host queues a send behind a running turn; the browser never gates on it.
+      const ok = await attempt(async () =>
+        client.prompt(currentThreadId || (await createThread()), prompt),
+      );
+      if (!ok) throw Error("Send failed");
     },
-    [displayKnown, invalidate, session, store, threadPending, chat.display],
+    [attempt, client, createThread, currentThreadId],
   );
 
-  const cancel = useCallback(async () => {
-    if (!session) return;
-    try {
-      await cancelAndRefresh({ session, display: chat.display }, invalidate);
-    } catch (caught) {
-      setError(errorMessage(caught));
-    }
-  }, [chat.display, invalidate, session]);
-
-  const newThread = useCallback(() => {
-    void gotoThread(crypto.randomUUID());
-  }, [gotoThread]);
-
-  const forkThread = useCallback(async () => {
-    if (!session) return;
-    try {
-      await forkSessionThread(session, currentThreadId, gotoThread);
-    } catch (caught) {
-      setError(errorMessage(caught));
-    }
-  }, [currentThreadId, gotoThread, session]);
-
-  const openThread = useCallback(
-    (threadId: string) => {
-      void gotoThread(threadId);
+  const onThread = useCallback(
+    (run: (threadId: string) => Promise<unknown>) => async () => {
+      if (currentThreadId) await attempt(() => run(currentThreadId));
     },
-    [gotoThread],
-  );
-
-  const renameThread = useCallback(
-    async (threadId: string, title: string) => {
-      const next = title.trim();
-      if (!session || !next) return;
-      try {
-        await session.renameThread(threadId, next);
-        await refreshThreads();
-      } catch (caught) {
-        setError(errorMessage(caught));
-      }
-    },
-    [refreshThreads, session],
+    [attempt, currentThreadId],
   );
 
   const deleteThread = useCallback(
-    async (threadId: string) => {
-      if (!session) return false;
-      try {
-        await session.deleteThread(threadId);
+    (threadId: string) =>
+      attempt(async () => {
+        await client.remove(threadId);
         setThreads((previous) => previous.filter((item) => item.id !== threadId));
-        if (threadId === currentThreadId) await gotoThread(crypto.randomUUID());
-        else await refreshThreads();
-        return true;
-      } catch (caught) {
-        setError(errorMessage(caught));
-        return false;
-      }
-    },
-    [currentThreadId, gotoThread, refreshThreads, session],
-  );
-
-  const resolveApproval = useCallback(
-    async (toolCallId: string, response?: ToolResume) => {
-      if (!session) return;
-      // Settlement is server-only: the patched Mastra core clears the gate
-      // and re-emits display state when the approval actually disarms. The client never removes
-      // the gate itself; it only refuses a second send while one is in flight.
-      if (settlingApprovalsRef.current.has(toolCallId)) return;
-      settlingApprovalsRef.current.add(toolCallId);
-      const approval = selectApprovals(chat.display).find((item) => item.toolCallId === toolCallId);
-      try {
-        if (approval?.kind === "suspension") {
-          await session.respondToToolSuspension(
-            toolCallId,
-            resumeDataForSuspension(approval.toolName, approval.payload, response),
-          );
-        } else {
-          await session.approveTool(toolCallId, response !== "reject_once");
-        }
-      } catch (caught) {
-        setError(errorMessage(caught));
-      } finally {
-        settlingApprovalsRef.current.delete(toolCallId);
-      }
-    },
-    [chat.display, session],
-  );
-
-  const addApiKey = useCallback(
-    async (provider: string, apiKey: string) => {
-      await saveApiKey(config.origin, provider, apiKey);
-      invalidate();
-    },
-    [config.origin, invalidate],
-  );
-
-  const setModel = useCallback(
-    async (modelId: string) => {
-      if (!session) return;
-      try {
-        await session.switchModel(modelId);
-      } catch (caught) {
-        setError(errorMessage(caught));
-      }
-    },
-    [session],
-  );
-
-  const setAccessLevel = useCallback(
-    async (accessLevel: AccessLevel) => {
-      if (!session) return;
-      try {
-        for (const [category, policy] of Object.entries(PERMISSION_LEVELS[accessLevel]))
-          await session.setPermissionForCategory(
-            category as ToolCategory,
-            policy as PermissionPolicy,
-          );
-        invalidate();
-      } catch (caught) {
-        setError(errorMessage(caught));
-      }
-    },
-    [invalidate, session],
+        if (threadId === currentThreadId)
+          await navigate({ search: (previous) => ({ ...previous, thread: undefined }) });
+      }),
+    [attempt, client, currentThreadId, navigate],
   );
 
   const patchThreadView = useCallback(
@@ -274,61 +154,78 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [navigate],
   );
 
+  // A thread the host does not know is the transcript's empty state, not a fault.
   const operationError =
-    error ?? (hostStatus.state === "failed" ? hostStatus.message : streamFault?.message);
+    error ??
+    (hostStatus.state === "failed"
+      ? hostStatus.message
+      : missingThread
+        ? undefined
+        : stream.error?.message);
   const context = useMemo<WorkbenchContextValue>(
     () => ({
       store,
       config,
-      session,
       chat,
       bodyAtom,
       loading,
       error,
       threads,
+      harnesses: harnesses ?? [],
+      newRefusal,
+      missingThread,
       currentThreadId,
       turn: search.turn,
       prompt: search.prompt,
-      displayKnown,
       turnFailure,
-      turnFailed,
       revit: info?.capabilities.revit,
       world: info?.world as WorkbenchContextValue["world"],
       isRunning,
       operationError,
       sendPrompt,
-      cancel,
-      newThread,
-      forkThread,
-      openThread,
-      renameThread,
+      cancel: onThread((id) => client.cancel(id)),
+      newThread: async (harness) => void (await attempt(() => createThread(harness))),
+      openThread: (threadId) => void gotoThread(threadId),
+      renameThread: async (threadId, title) =>
+        void (await attempt(async () => {
+          if (!title.trim()) return;
+          await client.rename(threadId, title.trim());
+          await refreshThreads();
+        })),
       deleteThread,
       patchThreadView,
-      resolveApproval,
-      setModel,
-      addApiKey,
-      setAccessLevel,
+      resolveApproval: async (requestId, optionId) =>
+        onThread((id) => client.permission(id, requestId, optionId))(),
+      setModel: async (modelId) => onThread((id) => client.model(id, modelId))(),
+      setMode: async (modeId) => onThread((id) => client.mode(id, modeId))(),
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
-      chat,
+      attempt,
       bodyAtom,
-      loading,
-      error,
-      threads,
+      chat,
+      client,
+      config,
+      createThread,
       currentThreadId,
-      search.turn,
-      search.prompt,
-      displayKnown,
-      turnFailure,
-      turnFailed,
+      deleteThread,
+      error,
+      gotoThread,
+      harnesses,
       info,
       isRunning,
+      loading,
+      missingThread,
+      newRefusal,
+      onThread,
       operationError,
-      store,
-      config,
-      session,
       patchThreadView,
+      refreshThreads,
+      search.prompt,
+      search.turn,
+      sendPrompt,
+      store,
+      threads,
+      turnFailure,
     ],
   );
 

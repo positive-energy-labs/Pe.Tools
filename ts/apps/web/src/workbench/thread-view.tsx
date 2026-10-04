@@ -34,7 +34,7 @@ function createCurrentThreadView(deps: {
     Atom.make<WorldState>({
       density: "inspect",
       diff: false,
-      open: new Set(["system-prompt"]),
+      open: new Set<string>(),
       openItems: new Set<string>(),
     }),
   );

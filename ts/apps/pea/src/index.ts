@@ -6,4 +6,3 @@ export {
 } from "./cli.ts";
 export { runPeaPrompt, runPeaPromptTurn } from "./prompt.ts";
 export type { PeaPromptRequest, PeaPromptResult } from "./prompt.ts";
-export { runPeaAcp, runPeaTui } from "./runtime.ts";

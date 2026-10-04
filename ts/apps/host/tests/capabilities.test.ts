@@ -7,19 +7,16 @@ import { expect, test, vi } from "vite-plus/test";
 import { documentsRootEnvVar } from "@pe/host-contracts/product-paths";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
-import { resolvePeaWorld } from "@pe/runtime/pea";
-import { createDeterministicRuntime } from "@pe/runtime/testing";
 import { makeHttpLive } from "../src/app.ts";
 import { hostOwnership, productRoot } from "../src/host-ownership.ts";
-import { makeMastraRuntimeLive } from "../src/mastra-runtime.ts";
 
 /**
- * Host boundary: on a no-Revit host the one capability catalog answers in under 3 s, names the
- * sources that did not answer, and still lists every route row and skill row.
+ * Host boundary: on a no-Revit host, the one capability catalog answers
+ * in under 3 s, names the sources that did not answer, and still lists every route row and skill
+ * row; route Work, Readings and the thread head answer from the host itself.
  */
-test("GET /pe/capabilities answers fast without Revit and names the silent sources", async () => {
+test("the host-owned /pe surface answers without Revit", async () => {
   const localAppData = mkdtempSync(join(tmpdir(), "pe-caps-"));
-  const databaseRoot = mkdtempSync(join(tmpdir(), "pe-caps-db-"));
   const previousLocalAppData = process.env.LOCALAPPDATA;
   process.env.LOCALAPPDATA = localAppData;
   vi.stubEnv(documentsRootEnvVar, join(localAppData, "Documents"));
@@ -34,13 +31,6 @@ test("GET /pe/capabilities answers fast without Revit and names the silent sourc
           makeHttpLive({
             capabilities: { revit: false },
             lifecycle: { handle, latch },
-            mastraLayer: makeMastraRuntimeLive({ revit: false }, undefined, async () =>
-              createDeterministicRuntime({
-                databasePath: join(databaseRoot, "caps.db"),
-                resourceId: resolvePeaWorld().id,
-                responses: [{ text: "unused" }],
-              }),
-            ),
             nodeServer,
             port: 0,
             webRoot: null,
@@ -60,11 +50,6 @@ test("GET /pe/capabilities answers fast without Revit and names the silent sourc
     }
     if (!service) throw new Error("service file did not appear");
     const base = `http://127.0.0.1:${service.port}`;
-    // The agent app mounts after bind; wait for it rather than for a fixed delay.
-    await expect
-      .poll(async () => (await fetch(`${base}/pe/inspect`)).status, { timeout: 15_000 })
-      .toBe(200);
-
     const started = Date.now();
     const response = await fetch(
       `${base}/pe/capabilities?doc=${encodeURIComponent("C:\\Models\\A.rvt")}&pin=pe.app-25`,
@@ -94,6 +79,28 @@ test("GET /pe/capabilities answers fast without Revit and names the silent sourc
     expect(keys).toContain("skill:build-pod");
     expect(keys.some((key) => key.startsWith("op:revit."))).toBe(false);
 
+    // The thread head, its Reading, and route Work, with no tenant behind them.
+    const put = await fetch(`${base}/pe/scope/t1`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ defaultTarget: null, expectedRevision: 0 }),
+    });
+    expect(await put.json()).toMatchObject({ ok: true, head: { revision: 1 } });
+    const resources = await fetch(
+      `${base}/pe/resources?keys=${encodeURIComponent(JSON.stringify([{ kind: "thread-head", thread: "t1" }]))}`,
+    );
+    const reader = resources.body!.getReader();
+    const frame = new TextDecoder().decode((await reader.read()).value);
+    await reader.cancel();
+    expect(JSON.parse(frame.slice(frame.indexOf("data: ") + 6))).toMatchObject({
+      kind: "snapshot",
+      value: { defaultTarget: null, revision: 1 },
+    });
+    const routeList = await fetch(`${base}/pe/route-state`);
+    expect(routeList.status).toBe(200);
+    expect(((await routeList.json()) as unknown[]).length).toBeGreaterThan(0);
+    expect((await fetch(`${base}/pe/harnesses`)).status).toBe(200);
+
     await fetch(`${base}/admin/shutdown`, {
       method: "POST",
       headers: { "x-pe-service-token": service.token },
@@ -103,7 +110,7 @@ test("GET /pe/capabilities answers fast without Revit and names the silent sourc
     vi.unstubAllEnvs();
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;
     else process.env.LOCALAPPDATA = previousLocalAppData;
-    for (const directory of [databaseRoot, localAppData])
+    for (const directory of [localAppData])
       try {
         rmSync(directory, { force: true, recursive: true, maxRetries: 50, retryDelay: 100 });
       } catch {

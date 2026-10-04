@@ -2,7 +2,21 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { createTool } from "@mastra/core/tools";
 import z from "zod";
-import { resolveWorkspacePathAccess } from "./request-access.ts";
+import * as os from "node:os";
+
+/** The path resolved from `~` and the server's cwd, and whether it lies under that cwd. */
+function workspacePathAccess(requested: string) {
+  const expanded =
+    requested === "~" || /^~[\\/]/.test(requested)
+      ? path.join(os.homedir(), requested.slice(2))
+      : requested;
+  const absolutePath = path.resolve(expanded);
+  const root = process.cwd();
+  return {
+    absolutePath,
+    allowed: absolutePath === root || absolutePath.startsWith(root + path.sep),
+  };
+}
 
 const imageMediaTypesByExtension: Record<string, string> = {
   ".png": "image/png",
@@ -61,8 +75,8 @@ export const readImage = createTool({
   description:
     "View an image file from disk (png/jpeg/webp/gif) so you can actually SEE it. Use when you need to look at exported Revit view images, plan/sheet PNGs, or other visual artifacts referenced by path.",
   inputSchema: readImageInputSchema,
-  execute: async (input, context): Promise<ReadImageResult> => {
-    const access = resolveWorkspacePathAccess(input.filePath, context);
+  execute: async (input): Promise<ReadImageResult> => {
+    const access = workspacePathAccess(input.filePath);
     const mediaType = imageMediaTypesByExtension[path.extname(access.absolutePath).toLowerCase()];
     if (!mediaType) {
       return readImageFailure(
@@ -71,7 +85,7 @@ export const readImage = createTool({
     }
     if (!access.allowed) {
       return readImageFailure(
-        `Access denied: "${access.absolutePath}" is outside the Pea workspace and allowed paths. Use request_access to gain access first.`,
+        `Access denied: "${access.absolutePath}" is outside the Pea workspace.`,
       );
     }
 

@@ -1,212 +1,121 @@
 import { previousOf } from "#/readings";
-import type { Reading } from "@pe/agent-contracts";
-import type { AgentControllerEvent, MastraClient, MastraDBMessage } from "@mastra/client-js";
+import type { HarnessEvent, Reading } from "@pe/agent-contracts";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import { Cause, Effect } from "effect";
-import { useEffect, useMemo, useState } from "react";
-import {
-  emptyChatState,
-  isUserTurn,
-  type ChatDisplay,
-  type ChatState,
-  type ThreadBody,
-} from "../chat-state";
-
-type ControllerClient = ReturnType<MastraClient["getAgentController"]>;
-type SessionClient = ReturnType<ControllerClient["session"]>;
+import { useEffect, useMemo, useRef, useState } from "react";
+import { emptyChatState, type ChatState, type ThreadBody } from "../chat-state";
+import { harnessClient, streamThread } from "./harness-client";
 
 const EMPTY = emptyChatState();
-const EMPTY_BODY: ThreadBody = (() => {
-  const { display: _display, ...body } = EMPTY;
-  return body;
-})();
-const emptyBodyAtom = Atom.make(AsyncResult.success(EMPTY_BODY));
-type LiveThread = {
-  key: string | null;
-  frame: ChatDisplay | null;
-  sent: MastraDBMessage[];
-  fault: Error | null;
-  turnFailure: Error | null;
-  turnFailed: boolean;
-};
-
-const emptyLive = () => ({
-  frame: null,
-  sent: [] as MastraDBMessage[],
-  fault: null,
-  turnFailure: null,
-  turnFailed: false,
-});
+const emptyBodyAtom = Atom.make(AsyncResult.success(EMPTY));
 
 const bodyAtoms = Atom.family((key: string) => {
   const [origin, threadId] = JSON.parse(key) as [string, string];
   return Atom.make(
     Effect.tryPromise({
-      try: async (signal) => {
-        const response = await fetch(`${origin}/pe/thread/${encodeURIComponent(threadId)}`, {
-          signal,
-        });
-        if (!response.ok) throw new Error(`Thread sync failed (${response.status}).`);
-        return response.json() as Promise<ThreadBody>;
-      },
+      try: (signal) => harnessClient(origin).body(threadId, signal),
       catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
     }),
   ).pipe(Atom.autoDispose);
 });
 
-const threadBodyAtom = (origin: string, threadId: string) =>
-  bodyAtoms(JSON.stringify([origin, threadId]));
-
-const invalidatingEvents = new Set<AgentControllerEvent["type"]>([
-  "message_end",
-  "agent_end",
-  "thread_deleted",
+/** Events that change the body's own fields (model, mode, session): re-read it. The queue and the
+ * title fold from the log (`selectQueued`, `selectTitle`). */
+const bodyEvents = new Set<HarnessEvent["kind"]>([
+  "turn_end",
+  "error",
   "model_changed",
   "mode_changed",
+  "session",
 ]);
 
+/** Events that change what the thread list says (title, `harness · model` line). */
+const listEvents = new Set<HarnessEvent["kind"]>([
+  "model_changed",
+  "mode_changed",
+  "title_changed",
+  "session",
+]);
+
+const lastSeq = (events: readonly HarnessEvent[]) => events.at(-1)?.seq ?? 0;
+
 /**
- * Whether the chat is still waiting for its thread body. Decided by what has arrived, not by
- * request states: the host status Reading starts `absent` (never `loading`) until its first frame,
- * and until it lands there is no session, so no thread fetch either. A failed host status ends the
- * wait. Read as "loaded and empty" too early, the lens dropped a `?turn` it could not yet find.
+ * Whether the chat is still waiting for its thread body. A failed host status ends the wait; until
+ * the host status Reading lands there is no thread fetch either.
  */
 export function chatLoading(hostStatus: Reading<unknown>, threadPending: boolean): boolean {
   const hostKnown = previousOf(hostStatus) !== undefined || hostStatus.state === "failed";
   return !hostKnown || threadPending;
 }
 
+/**
+ * One thread: its body on mount, then the SSE tail from the body's last seq. Live events append
+ * to one current-thread slot; the body re-reads on events that change its own fields, and the
+ * two merge by seq so neither replays the other.
+ */
 export function useThreadStream(options: {
   origin: string;
-  thread: { id: string; session: SessionClient } | null;
+  threadId: string | null;
+  /** The thread list is stale: an event changed what a summary says. */
+  onListChange?: () => void;
 }) {
-  const { origin, thread } = options;
-  const threadId = thread?.id ?? null;
-  const session = thread?.session;
+  const { origin, threadId } = options;
+  const onListChange = useRef(options.onListChange);
+  onListChange.current = options.onListChange;
   const key = threadId === null ? null : JSON.stringify([origin, threadId]);
-  const bodyAtom = useMemo(
-    () => (threadId === null ? emptyBodyAtom : threadBodyAtom(origin, threadId)),
-    [origin, threadId],
-  );
+  const bodyAtom = useMemo(() => (key === null ? emptyBodyAtom : bodyAtoms(key)), [key]);
   const body = useAtomValue(bodyAtom);
-  // Live state is one current-thread slot, never a retained thread map. Reset during the
-  // selection render so B cannot briefly project A while React waits to run an effect.
-  const [live, setLive] = useState<LiveThread>(() => ({ key, ...emptyLive() }));
-  if (live.key !== key) setLive({ key, ...emptyLive() });
-  const current = live.key === key ? live : emptyLive();
-
-  // The one refetch path: cancel kills a fetch that left before the change, so an older body
-  // can never land after a newer one. It closes over `refresh` ALONE — `query` is a fresh object
-  // every render, and an `invalidate` that changed identity per render tore the SSE subscription
-  // down and reopened it on every render, dropping whatever `message_end` fired in the gap.
   const invalidate = useAtomRefresh(bodyAtom);
+  // Reset during the selection render so B never briefly projects A.
+  const [live, setLive] = useState<{
+    key: string | null;
+    events: HarnessEvent[];
+    fault: Error | null;
+  }>(() => ({ key, events: [], fault: null }));
+  if (live.key !== key) setLive({ key, events: [], fault: null });
+
+  const stored: ThreadBody | undefined = body._tag === "Success" ? body.value : undefined;
+  const storedRef = useRef(stored);
+  storedRef.current = stored;
+  const loaded = stored !== undefined;
   useEffect(() => {
-    if (!session) return;
-    let stopped = false;
-    const accept = (event: AgentControllerEvent) => {
-      if (stopped) return;
-      const started = event.type === "message_start" ? (event.message as MastraDBMessage) : null;
-      if (started && isUserTurn(started)) {
+    if (threadId === null || !loaded) return;
+    return streamThread({
+      origin,
+      threadId,
+      after: lastSeq(storedRef.current?.events ?? []),
+      onEvent: (event) => {
         setLive((previous) =>
-          previous.key !== key || previous.sent.some((item) => item.id === started.id)
-            ? previous
-            : { ...previous, sent: [...previous.sent, started] },
+          previous.key === key
+            ? { ...previous, events: [...previous.events, event], fault: null }
+            : previous,
         );
-      }
-      if (event.type === "display_state_changed") {
-        const frame = event.displayState as ChatDisplay;
-        setLive((previous) =>
-          previous.key !== key
-            ? previous
-            : {
-                ...previous,
-                frame,
-                fault: frame.isRunning ? null : previous.fault,
-                turnFailure: frame.isRunning ? null : previous.turnFailure,
-                turnFailed: frame.isRunning ? false : previous.turnFailed,
-              },
-        );
-      }
-      if (event.type === "error" || (event.type === "agent_end" && event.reason === "error")) {
-        setLive((previous) =>
-          previous.key !== key
-            ? previous
-            : {
-                ...previous,
-                turnFailure:
-                  event.type === "error"
-                    ? event.error instanceof Error
-                      ? event.error
-                      : new Error(String(event.error))
-                    : previous.turnFailure,
-                turnFailed: true,
-              },
-        );
-      }
-      if (invalidatingEvents.has(event.type)) invalidate();
-    };
-
-    let unsubscribe: (() => void) | undefined;
-    void session
-      .subscribe({
-        onEvent: accept,
-        reconnect: true,
-        onReconnect: () => invalidate(),
-        onError: (error) => {
-          if (!stopped)
-            setLive((previous) =>
-              previous.key === key
-                ? { ...previous, fault: error instanceof Error ? error : new Error(String(error)) }
-                : previous,
-            );
-        },
-      })
-      .then((subscription) => {
-        if (stopped) subscription.unsubscribe();
-        else unsubscribe = subscription.unsubscribe;
-      })
-      .catch((error) => {
-        if (!stopped)
-          setLive((previous) =>
-            previous.key === key
-              ? { ...previous, fault: error instanceof Error ? error : new Error(String(error)) }
-              : previous,
-          );
-      });
-
-    return () => {
-      stopped = true;
-      unsubscribe?.();
-    };
-  }, [invalidate, key, session]);
+        if (bodyEvents.has(event.kind)) invalidate();
+        if (listEvents.has(event.kind)) onListChange.current?.();
+      },
+      onFault: (fault) =>
+        setLive((previous) => (previous.key === key ? { ...previous, fault } : previous)),
+    });
+  }, [invalidate, key, loaded, origin, threadId]);
 
   const chat = useMemo<ChatState>(() => {
-    if (body._tag !== "Success" && current.sent.length === 0 && current.frame === null)
-      return EMPTY;
-    const stored = body._tag === "Success" ? body.value : EMPTY_BODY;
-    const known = new Set(stored.messages.map((message) => message.id));
-    const unstored = current.sent.filter((message) => !known.has(message.id));
-    const messages = unstored.length ? [...stored.messages, ...unstored] : stored.messages;
-    return { ...stored, messages, display: current.frame ?? EMPTY.display };
-  }, [body, current]);
+    if (!stored) return EMPTY;
+    const after = lastSeq(stored.events);
+    const tail = live.key === key ? live.events.filter((event) => event.seq > after) : [];
+    return tail.length ? { ...stored, events: [...stored.events, ...tail] } : stored;
+  }, [key, live, stored]);
   const error = useMemo(() => {
-    if (body._tag !== "Failure") return current.fault;
+    if (body._tag !== "Failure") return live.key === key ? live.fault : null;
     const fault = Cause.squash(body.cause);
     return fault instanceof Error ? fault : new Error(Cause.pretty(body.cause));
-  }, [body, current.fault]);
+  }, [body, key, live]);
 
   return {
     chat,
-    // Pending exactly while a named thread has no body and no failure. Not `query.isPending`:
-    // that is false on the first render after the thread appears (the fetch starts in an
-    // effect), and true again on every refetch over a thread already on screen.
     pending: threadId !== null && body._tag === "Initial" && body.waiting,
     error,
-    displayKnown: current.frame !== null,
-    turnFailure: current.turnFailure,
-    turnFailed: current.turnFailed,
     invalidate,
     bodyAtom,
   };

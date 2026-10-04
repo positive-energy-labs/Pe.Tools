@@ -7,7 +7,6 @@
  */
 import { useMemo, useState, type ReactNode } from "react";
 import { fanOut, type CellGroup, type TrichotomyCellLike } from "@pe/agent-contracts";
-
 import { ActionButton } from "#/components/lang/action-button";
 import {
   fanOutWord,
@@ -20,7 +19,6 @@ import {
 } from "#/components/lang/band";
 import { Press } from "#/components/lang/press";
 import { Verdict } from "#/components/lang/verdict";
-
 export interface HeadWork {
   id: string;
   /** The route title, e.g. "Families". */
@@ -47,16 +45,13 @@ export interface HeadWork {
   /** The head's plan, refused where it ran; said here, where it was pressed (F-B-5). */
   refusal?: string;
 }
-
 const REST_WORKS = 3;
 const GROUP_ROWS = 5;
 const EXAMPLES = 2;
 const COMMIT_REASON =
   "Open the plan in the pane — staging is not applying; the confirmation lists every change before Revit changes";
-
 const pending = (cell: TrichotomyCellLike) => cell.proposal != null || cell.staged != null;
 const showDefault = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
-
 /** Depth-1 groups, contested first, then by pending size, then label. */
 function headGroups(work: Pick<HeadWork, "cells" | "groupOf" | "wire">): CellGroup[] {
   const { groups } = workSummary(work.cells, {
@@ -70,7 +65,6 @@ function headGroups(work: Pick<HeadWork, "cells" | "groupOf" | "wire">): CellGro
       String(a.path[0]).localeCompare(String(b.path[0])),
   );
 }
-
 /** `{P} proposed · {S} staged · {C} contested`, zeros omitted. */
 function Counts({ proposed, staged, contested }: ReturnType<typeof tally>) {
   const parts: ReactNode[] = [];
@@ -98,7 +92,6 @@ function Counts({ proposed, staged, contested }: ReturnType<typeof tally>) {
     </span>
   );
 }
-
 export function ProposalHead({ asks, works }: { asks: readonly ReactNode[]; works: HeadWork[] }) {
   const [all, setAll] = useState(false);
   const lines = new Map<string, HeadWork[]>();
@@ -113,7 +106,7 @@ export function ProposalHead({ asks, works }: { asks: readonly ReactNode[]; work
       aria-label="Pea proposals"
       className="hairline-t hairline-b flex flex-col px-2 py-1 t-prose"
     >
-      {asks}
+      {asks.length > 0 && <div className="hairline-b mb-1">{asks}</div>}
       {shown.map((parts) => (
         <WorkLine key={parts[0]!.id} parts={parts} />
       ))}
@@ -131,7 +124,6 @@ export function ProposalHead({ asks, works }: { asks: readonly ReactNode[]; work
     </div>
   );
 }
-
 /** One line per Work: what · the counts (the review toggle) · revision · a refusal · the commit. */
 function WorkLine({ parts }: { parts: HeadWork[] }) {
   const [open, setOpen] = useState(false);
@@ -190,7 +182,6 @@ function WorkLine({ parts }: { parts: HeadWork[] }) {
     </div>
   );
 }
-
 function Groups({ work, groups }: { work: HeadWork; groups: CellGroup[] }) {
   const [outcomes, setOutcomes] = useState<ReadonlyMap<string, FanOutOutcome>>(new Map());
   const more = groups.length - GROUP_ROWS;
@@ -227,9 +218,7 @@ function Groups({ work, groups }: { work: HeadWork; groups: CellGroup[] }) {
     </div>
   );
 }
-
 const NO_KEYS: string[] = [];
-
 function GroupRow({
   work,
   group,
@@ -286,7 +275,16 @@ function GroupRow({
             ? null
             : group.contested
               ? `${group.contested} contested — resolve in ${work.route}`
-              : `${group.staged} staged`;
+              : [
+                  ...new Set(
+                    keys.flatMap((key) => {
+                      const staged = work.cells[key]?.staged;
+                      return staged ? [to(staged.delete === true ? null : staged.value)] : [];
+                    }),
+                  ),
+                ]
+                  .slice(0, EXAMPLES)
+                  .join(" · ");
   const facts = [
     group.proposed ? `${group.span} cells` : null,
     group.proposed && group.contested ? `${group.contested} contested` : null,
@@ -337,7 +335,7 @@ function GroupRow({
             title={`Open ${label} in ${work.route}`}
             onClick={() => work.open(group.path)}
           >
-            ›
+            review ›
           </Press>
         </span>
       </div>

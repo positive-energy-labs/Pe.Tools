@@ -159,11 +159,10 @@ export const threadHeadSchema = z.object({
 });
 export type ThreadHead = z.infer<typeof threadHeadSchema>;
 
-/** `PUT /pe/scope/:thread`. `turn` is set only by pea's approved default-target proposal. */
+/** `PUT /pe/scope/:thread`. */
 export const putTargetSchema = z.object({
   defaultTarget: documentRequestSchema.nullable(),
   expectedRevision: z.number().int().nonnegative(),
-  turn: z.uuid().optional(),
 });
 export type PutTarget = z.infer<typeof putTargetSchema>;
 
@@ -171,25 +170,5 @@ export const putTargetResultSchema = z.discriminatedUnion("why", [
   z.object({ ok: z.literal(true), why: z.literal("set"), head: threadHeadSchema }),
   /** Someone wrote first; `head` is current, re-read and decide again. */
   z.object({ ok: z.literal(false), why: z.literal("stale"), head: threadHeadSchema }),
-  /** Pea is mid-turn and the write did not come from that turn; wait or stop it. */
-  z.object({ ok: z.literal(false), why: z.literal("in-turn") }),
 ]);
 export type PutTargetResult = z.infer<typeof putTargetResultSchema>;
-
-/* ── Turn: the thread head frozen at admission ───────────────────────────────────── */
-
-/** The turn context frozen at admission and read by every tool through requestContext. */
-export const turnContextKey = "pea.turn";
-export const turnSchema = threadHeadSchema.extend({
-  id: z.uuid(),
-  thread: z.string().min(1),
-});
-export type Turn = z.infer<typeof turnSchema>;
-export function turnOf(context: unknown): Turn | null {
-  const requestContext = (context as { requestContext?: unknown } | undefined)?.requestContext;
-  const raw =
-    requestContext && typeof requestContext === "object" && "get" in requestContext
-      ? (requestContext as { get(key: string): unknown }).get(turnContextKey)
-      : (requestContext as Record<string, unknown> | undefined)?.[turnContextKey];
-  return turnSchema.safeParse(raw).data ?? null;
-}

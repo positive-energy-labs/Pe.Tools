@@ -29,7 +29,7 @@ import {
   fmtTok,
   tone,
 } from "./cap";
-import { ContextBudgetBar, whySentence } from "./bar";
+import { whySentence } from "./bar";
 import { PressContent } from "#/components/anatomy/press-content";
 import { Code } from "#/components/lang/code";
 
@@ -165,8 +165,6 @@ export function SessionStrip({
           ) : null}
         </div>
       ) : null}
-
-      {inspect && breakdown ? <ContextBudgetBar breakdown={breakdown} cache={cache} /> : null}
 
       <div className="hairline-t-faint mt-2.5">
         {layers.map((layer) => {

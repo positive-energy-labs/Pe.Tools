@@ -57,6 +57,9 @@ export type { Lane };
 type Frame = (ReadingFrame & { stale?: boolean }) | { kind: "stale"; key: string };
 type Source = Pick<EventSource, "onopen" | "onmessage" | "onerror" | "close">;
 
+/** The one place the web opens an SSE stream: Readings, and a harness thread's tail. */
+export const openEventSource = (url: string) => new EventSource(url);
+
 /** One browser connection. This map owns subscriptions and retained evidence, never owner truth. */
 class PeReadings {
   private readonly entries = new Map<
@@ -79,7 +82,7 @@ class PeReadings {
 
   constructor(
     private readonly url: () => string,
-    private readonly connect: (url: string) => Source = (url) => new EventSource(url),
+    private readonly connect: (url: string) => Source = openEventSource,
   ) {}
 
   /** Retire this owner's transport. Idempotent, and one-way: no further request is ever issued. */
@@ -387,7 +390,6 @@ export function useHostEvents<T>(enabled: boolean, onEvent: (event: T) => void) 
 
 export interface PeInfo {
   controllerId?: string;
-  resourceId?: string;
   capabilities: { revit?: boolean } & Record<string, unknown>;
   world?: unknown;
   bridgeIsConnected: boolean;

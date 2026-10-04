@@ -6,19 +6,9 @@ import { createServer as createViteServer } from "vite-plus";
 import { expect, test } from "vite-plus/test";
 import { makeHttpLive } from "../src/app.ts";
 import { hostOwnership, productRoot } from "../src/host-ownership.ts";
-import { MastraRuntime } from "../src/mastra-runtime.ts";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 import { devHostProxy } from "../../web/dev-proxy.ts";
-
-const StubMastraLive = Layer.succeed(MastraRuntime, {
-  fetch: async (req) =>
-    Response.json({
-      url: req.url,
-      body: await req.text(),
-      selector: req.headers.get("x-pe-bridge-session-id"),
-    }),
-});
 
 function socketMessage(socket: WebSocket, predicate: (data: string) => boolean) {
   return new Promise<string>((resolve, reject) => {
@@ -62,7 +52,6 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
           makeHttpLive({
             capabilities: { revit: true },
             lifecycle: { handle, latch },
-            mastraLayer: StubMastraLive,
             port: 0,
             webRoot: null,
             webUrl,
@@ -103,15 +92,9 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
     expect(await fetch(`${browser}/host/status`).then((r) => r.json())).toEqual(
       await fetch(`${backend}/host/status`).then((r) => r.json()),
     );
-    for (const path of ["/pe/thread/one?x=1", "/api/agent-controller/threads"]) {
-      expect(
-        await fetch(browser + path, {
-          method: "POST",
-          body: "body",
-          headers: { "x-pe-bridge-session-id": "selected-session" },
-        }).then((r) => r.json()),
-      ).toEqual({ url: backend + path, body: "body", selector: "selected-session" });
-    }
+    expect(await fetch(`${browser}/pe/harnesses`).then((r) => r.json())).toEqual(
+      await fetch(`${backend}/pe/harnesses`).then((r) => r.json()),
+    );
     const events = await fetch(`${browser}/events`);
     const reader = events.body!.getReader();
     expect(new TextDecoder().decode((await reader.read()).value)).toContain(": open");

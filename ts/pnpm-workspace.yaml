@@ -17,18 +17,13 @@ catalog:
   vite-plus: 0.2.1
   knip: ^6.37.0
   zod: 4.3.6
+  "@agentclientprotocol/sdk": 1.5.1
+  "@agentclientprotocol/claude-agent-acp": 0.84.0
+  "@agentclientprotocol/codex-acp": 2.1.0
 overrides:
   vite: "catalog:"
   "@smithy/core": 3.33.3
-  "@mastra/code-sdk@1.4.0>zod": 4.3.6
-  "mastracode@0.35.0>zod": 4.3.6
 patchedDependencies:
-  # SHIM: Remove when upstream core supports owned target-thread renames, detached clones, settled approval cleanup,
-  # and releasing a detached suspended thread run on abort (E2E-J5; pinned by runtime ask-new-turn-web.test.ts).
-  # Also: ask_user reads a selectionMode with no options as a free-text ask, not a refusal (F-H6-1; runtime ask-lifetime.test.ts).
-  "@mastra/core@1.61.0": patches/@mastra__core@1.61.0.patch
-  # SHIM: Remove when upstream server treats explicit rename/delete/clone routes as target-thread operations.
-  "@mastra/server@1.61.0": patches/@mastra__server@1.61.0.patch
   vite-plus@0.2.1: patches/vite-plus@0.2.1.patch
 peerDependencyRules:
   allowAny:
@@ -38,33 +33,14 @@ peerDependencyRules:
     vite: "*"
     vitest: "*"
 allowBuilds:
-  "@google/genai": false
   "@makeomatic/ffi-napi": true
   "@makeomatic/ref-napi": true
-  agent-browser: false
   bufferutil: false
-  edgedriver: false
   esbuild: true
-  geckodriver: false
   koffi: false
   msgpackr-extract: false
-  onnxruntime-node: false
-  protobufjs: false
 minimumReleaseAgeExclude:
   - lucide-react@1.21.0
-  - "@mastra/client-js@1.42.0"
-  - "@mastra/code-sdk@1.4.0"
   - "@mastra/core@1.61.0"
-  - "@mastra/github-signals@0.2.2"
-  - "@mastra/hono@1.7.1"
-  - "@mastra/libsql@1.21.1"
   - "@mastra/mcp@1.13.1"
-  - "@mastra/memory@1.27.0"
-  - "@mastra/observability@1.15.2"
-  - "@mastra/pg@1.14.2"
-  - "@mastra/server@1.61.0"
-  - mastracode@0.35.0
-  - "@mastra/schema-compat@1.3.2-alpha.0"
-  - "@mastra/duckdb@1.5.1"
-  - "@mastra/playground-ui@40.0.1"
-  - "@mastra/react@1.2.4"
+  - "@agentclientprotocol/codex-acp@2.1.0"

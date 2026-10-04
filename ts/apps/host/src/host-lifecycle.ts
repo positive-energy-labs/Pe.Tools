@@ -25,7 +25,7 @@ const DEV_TAKEOVER_ARGUMENT = "--take-over-host";
 /**
  * Lifecycle handles shared between the launch root and the request handlers (Pillar 3):
  * - `latch`: raced against `Layer.launch`; tripping it closes the launch scope so every finalizer
- *   runs (graceful server close -> Mastra release -> service-file release), replacing the old
+ *   runs (graceful server close, harness children, service-file release), replacing the old
  *   `process.exit(0)` that skipped them.
  * - `handle`: resolved once the SDK claim (`claimServiceHost`) installs this host's identity on bind.
  *   The shutdown route awaits it to authorize with the claim's per-launch token; the claim owns the

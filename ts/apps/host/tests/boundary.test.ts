@@ -6,33 +6,14 @@ import { expect, test } from "vite-plus/test";
 import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-types";
 import { makeHttpLive } from "../src/app.ts";
 import { hostOwnership, productRoot } from "../src/host-ownership.ts";
-import { MastraRuntime } from "../src/mastra-runtime.ts";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 
 /**
  * The one vertical boundary test (owner's philosophy: one seam test, no unit sprawl). It boots the
- * real `makeHttpLive` composition on an ephemeral port with a STUB Mastra tenant (a trivial Hono-
- * shaped fetch), then asserts the whole seam: service file, status, static SPA fallback, the Mastra
- * mount at its absolute path, and graceful token-authorized shutdown. The real pea runtime is
- * proven offline by `@pe/runtime`'s own `buildAgentControllerApp` test; here we only exercise the
- * host's mount/lifecycle plumbing, so the tenant is stubbed (keeps this hermetic â€” no product-home
- * writes, no model/auth). InstallGc is disabled so the test never spawns the install kernel.
+ * real `makeHttpLive` composition on an ephemeral port, then asserts the whole seam: service file,
+ * status, static SPA fallback, the host-owned `/pe` routes, and graceful token-authorized shutdown.
  */
-const StubMastraLive = Layer.succeed(MastraRuntime, {
-  fetch: (request: Request) => {
-    const url = new URL(request.url);
-    if (url.pathname === "/pe/inspect") {
-      return Promise.resolve(
-        new Response(JSON.stringify({ controllerId: "pea", resourceId: "test-resource" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      );
-    }
-    return Promise.resolve(new Response("not found", { status: 404 }));
-  },
-});
 
 async function waitFor<T>(fn: () => Promise<T | null>, timeoutMs = 10_000): Promise<T> {
   const deadline = Date.now() + timeoutMs;
@@ -44,7 +25,7 @@ async function waitFor<T>(fn: () => Promise<T | null>, timeoutMs = 10_000): Prom
   }
 }
 
-test("host boundary: service file, status, static SPA, mastra mount, graceful shutdown", async () => {
+test("host boundary: service file, status, static SPA, /pe routes, graceful shutdown", async () => {
   const localAppData = mkdtempSync(join(tmpdir(), "pe-host-boundary-"));
   const webDir = mkdtempSync(join(tmpdir(), "pe-host-web-"));
   writeFileSync(join(webDir, "index.html"), "<!doctype html><title>pe-spa</title>");
@@ -66,7 +47,6 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
       const HttpLive = makeHttpLive({
         capabilities: { revit: true },
         port: 0,
-        mastraLayer: StubMastraLive,
         lifecycle: { latch, handle },
         webRoot: webDir,
       });
@@ -135,10 +115,9 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
     expect(spa.status).toBe(200);
     expect(await spa.text()).toContain("pe-spa");
 
-    // (4) the Mastra mount answers /pe/inspect at its absolute path.
-    const inspect = await fetch(`${base}/pe/inspect`);
-    expect(inspect.status).toBe(200);
-    expect(await inspect.json()).toMatchObject({ controllerId: "pea" });
+    // (4) the host-owned harness surface answers at its absolute path.
+    const harnesses = await fetch(`${base}/pe/harnesses`);
+    expect(harnesses.status).toBe(200);
 
     // (5) the release readout is lane-truthful: a source-lane host reports no installed release.
     const installStatus = await fetch(`${base}/host/install`);

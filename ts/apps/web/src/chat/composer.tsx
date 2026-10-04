@@ -26,8 +26,8 @@ import { Thumbnail } from "#/workbench/thumbnail";
 import { useSend, type ChatHandle } from "#/chat/composer-head";
 import { SituationAction } from "#/route/situation-verbs";
 
-/** A skill the thread's inspect lists: the one thing the slash menu offers. `new` and `fork` are
- * route verbs (`chat/manifest.ts`); mode switches are the mode dial. */
+/** A slash command the harness advertises (`available_commands_update`). `new` is a route verb
+ * (`chat/manifest.ts`); mode switches are the mode dial. */
 interface SlashCommand {
   name: string;
   description: string;
@@ -99,7 +99,7 @@ function Composer({
   // The slash menu's keys are the list's (R14); Tab also picks, so the composer reads its cursor.
   const menu = useRef<Collection<SlashCommand> | null>(null);
 
-  const commands = useMemo<SlashCommand[]>(() => selectSkillCommands(chat.inspect), [chat.inspect]);
+  const commands = useMemo<SlashCommand[]>(() => selectSkillCommands(chat), [chat]);
   const slash = text.startsWith("/") ? text.slice(1).split(/\s+/)[0]!.toLowerCase() : undefined;
   const showMenu =
     !menuDismissed &&
@@ -107,7 +107,7 @@ function Composer({
     !text.includes(" ") &&
     filterItems(commands, (command) => command.name, "substring", slash).length > 0;
 
-  const pick = (command: SlashCommand) => setText(`Use the ${command.name} skill: `);
+  const pick = (command: SlashCommand) => setText(`/${command.name} `);
 
   const sendCurrent = () => {
     void send.run();
@@ -273,7 +273,7 @@ function Composer({
                 void addFiles(files);
               }}
             />
-            {/* Control row: attachments + session controls (model/access), then Send — the same
+            {/* Control row: attachments + harness controls (model/mode), then Send — the same
               manifest verb Enter runs, with the Situation's flag (moved here from the head,
               2026-09-14: a composer's send belongs beside its text). */}
             <div className="flex items-center gap-1.5 pt-1">
@@ -294,7 +294,6 @@ function Composer({
               />
               {/* Thread verbs: the same route actions the shell lists, refusals shown the same way. */}
               <SituationAction handle={handle} name="new" action={handle.actions.new} />
-              <SituationAction handle={handle} name="fork" action={handle.actions.fork} />
               <ControlChips />
               <span className="ml-auto flex items-center gap-1.5">
                 {isRunning ? (

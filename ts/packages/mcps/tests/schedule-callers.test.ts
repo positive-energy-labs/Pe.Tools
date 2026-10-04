@@ -2,7 +2,6 @@ import { expect, test, vi } from "vite-plus/test";
 import { cli } from "gunshi";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { turnContextKey } from "@pe/agent-contracts";
 import { setup } from "../../../apps/host/tests/schedule-test-fixture.ts";
 import { PeaCliCommands } from "../src/pea/PeaCliCommands.ts";
 import { peRead, peDo } from "../src/pea/capability-tools.ts";
@@ -63,21 +62,20 @@ test("Gunshi Schedule read and human apply use exact HTTP action and frozen Work
   }
 });
 
-test("Pea Schedule A/B/A reads honor frozen turn and cannot perform human-only apply", async () => {
+test("Pea Schedule A/B/A reads honor the thread head and cannot perform human-only apply", async () => {
   const f = await setup();
   vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://host");
-  const turn = {
-    id: "11111111-1111-4111-8111-111111111111",
-    thread: "t",
-    defaultTarget: { kind: "open", ref: f.a },
-    revision: 1,
-  };
-  const context = {
-    agent: { toolCallId: "schedule-call" },
-    requestContext: { [turnContextKey]: turn },
-  };
+  // A harness child's call: `PE_THREAD` names the thread and the host answers its live head.
+  vi.stubEnv("PE_THREAD", "t");
+  const inner = globalThis.fetch;
+  vi.stubGlobal("fetch", (input: string | URL | Request, init?: RequestInit) =>
+    new URL(input instanceof Request ? input.url : String(input), "http://host").pathname ===
+    "/pe/scope/t"
+      ? Promise.resolve(Response.json({ defaultTarget: { kind: "open", ref: f.a }, revision: 1 }))
+      : inner(input as string, init),
+  );
   const run = (tool: typeof peRead | typeof peDo, input: unknown) =>
-    tool.execute!(input as never, context as never);
+    tool.execute!(input as never, { agent: { toolCallId: "schedule-call" } } as never);
   const start = f.sent.length;
   for (const target of [undefined, { kind: "open", ref: f.b }, undefined]) {
     const result = await run(peRead, {

@@ -172,6 +172,7 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
 | **document-owned**    | Behavior that can be derived from a specific `Document` without needing UI session state | Prefer `Document` extensions for this                                                        |
 | **document session**  | Open/active/UI-tab state for documents in the current Revit process                      | Keep this in `UIApplication` or session-aware helpers                                        |
 | **artifact**          | A durable machine-readable output produced by a command or DA workitem                   | Prefer this over vague `report` when the file is the actual output contract                  |
+| **inference endpoint** | The one OpenAI-compatible base URL plus key Pea sends model calls to (ADR 0014). A subscription proxy, a VPS, Ollama, or a future PE gateway are all just an endpoint | Prefer "Pea talks to any OpenAI-compatible endpoint"; avoid naming Tailscale, Codex, or a cloud as a Pea feature |
 
 ## Proof Lanes
 

@@ -131,7 +131,7 @@ const bounds = (loops: [number, number][][]) => {
   };
 };
 
-const COMMANDS = selectSkillCommands(CHAT_SEED_STATE.inspect).map((c) => ({
+const COMMANDS = selectSkillCommands(CHAT_SEED_STATE).map((c) => ({
   key: c.name,
   label: `/${c.name}`,
   sub: c.description,

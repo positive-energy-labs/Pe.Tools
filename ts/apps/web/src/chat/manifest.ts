@@ -1,44 +1,33 @@
-import { askLifetime } from "@pe/agent-contracts";
 /**
  * The chat route, declared once. The thread head is a Reading, so the route's default Target is
  * whatever the head says — `useRoute` reads it back out of `readings` and no component keeps a
- * second copy. `send` and `cancel` run `workbench/actions.ts` over the session the provider holds,
- * because that session IS chat's host caller; `new` and `fork` run the provider's thread verbs.
+ * second copy. Every action runs the provider's verb over the harness-thread wire.
  */
 import { z } from "zod";
 
 import { defineRoute, type RouteManifest } from "#/route";
-import { CHAT_ACTIONS, type ChatActionService, type PromptInput } from "#/workbench/actions";
-import {
-  emptyChatState,
-  isParkedAsk,
-  selectApprovals,
-  type ChatState,
-} from "#/workbench/chat-state";
+import type { WorkbenchAttachment } from "#/workbench/prompt";
+import type { ChatState } from "#/workbench/chat-state";
 import { CHAT_SEEDS, type ChatPage } from "#/chat/seeds";
 
 export type ChatReading = "head" | "inventory" | "receipts";
 
-/** What the route needs from the live surface to run its actions. */
+export interface PromptInput {
+  text: string;
+  attachments?: WorkbenchAttachment[];
+}
+
+/** What the route needs from the live surface to run its actions; absent on seeds. */
 export interface ChatRouteDeps {
   thread: string;
-  session?: ChatActionService;
-  display?: ChatState["display"];
-  /** A body or stream frame must establish the gate before an empty display can mean idle. */
-  displayKnown?: boolean;
-  /**
-   * The provider's send, when the surface has one: it runs the same `CHAT_ACTIONS.send` and then
-   * re-reads a thread whose stream was still pending. Absent (static registration, seeds), the
-   * action runs the session directly.
-   */
+  /** The thread body has loaded (or there is no thread yet). */
+  ready?: boolean;
+  running?: boolean;
   send?: (input: PromptInput) => Promise<void>;
-  /** The provider's cancel, which re-reads the thread after runtime abort settles. */
-  cancel?: () => void | Promise<void>;
-  /** Whether the thread holds any message; an empty thread has nothing to fork. */
-  hasMessages?: boolean;
-  /** The provider's thread verbs; absent on the static registration. */
-  newThread?: () => void;
-  forkThread?: () => Promise<void>;
+  cancel?: () => Promise<void>;
+  newThread?: () => Promise<void>;
+  /** Why no thread can be created now (harnesses loading, none installed). */
+  newRefusal?: string;
 }
 
 const promptInput = z.object({
@@ -46,13 +35,12 @@ const promptInput = z.object({
   attachments: z.array(z.unknown()).optional(),
 });
 
-export type ChatActionKey = "send" | "cancel" | "new" | "fork";
+export type ChatActionKey = "send" | "cancel" | "new";
 
 export const chatManifest = (
   deps: ChatRouteDeps,
-): RouteManifest<ChatState, ChatReading, ChatPage, ChatActionKey> => {
-  const context = { session: deps.session, display: deps.display ?? emptyChatState().display };
-  return defineRoute<ChatState, ChatReading, ChatPage, ChatActionKey>({
+): RouteManifest<ChatState, ChatReading, ChatPage, ChatActionKey> =>
+  defineRoute<ChatState, ChatReading, ChatPage, ChatActionKey>({
     key: "chat",
     name: "Chat",
     docs: "Choose a thread in the left pane; the transcript reads only that thread while its composer keeps each visited draft. The Situation names the bound target and turn state. Enter sends from the focused composer; Shift+Enter adds a line. The optional workspace stays beside the same conversation.",
@@ -64,73 +52,44 @@ export const chatManifest = (
     },
     actions: {
       send: {
-        label: context.display.isRunning || context.display.queuedFollowUps ? "queue" : "send",
+        label: deps.running ? "queue" : "send",
         says: "sends this prompt, or queues it after the active turn, under the thread target",
         needs: "host",
         actor: "human",
         input: promptInput as unknown as z.ZodType<never>,
         dirties: ["head", "receipts"],
-        // The runtime queues active-turn sends. The store-owned composer draft is
-        // parsed on the press, so the route holds no second draft.
         ready: (_ctx, input) => {
-          if (!context.session) return "Session is not ready";
-          if (!deps.displayKnown) return "Thread state is loading";
-          const approvals = selectApprovals(context.display);
-          // A parked ask does not hold the composer: the new turn is how the runtime expires it.
-          if (approvals.some((approval) => !isParkedAsk(approval)))
-            return "A tool approval is waiting";
-          return input ? CHAT_ACTIONS.send.ready(context, input as PromptInput) : null;
+          if (!deps.send) return "Chat is not ready";
+          if (!deps.ready) return "Thread state is loading";
+          // The first send creates the thread.
+          if (!deps.thread && deps.newRefusal) return deps.newRefusal;
+          const prompt = input as PromptInput | undefined;
+          if (prompt?.attachments?.length) return "Attachments do not cross the harness wire yet";
+          return prompt && !prompt.text.trim() ? "Enter a prompt" : null;
         },
-        run: async (_ctx, input) => {
-          const prompt = input as PromptInput;
-          if (deps.send) await deps.send(prompt);
-          else await CHAT_ACTIONS.send.run(context, prompt);
-        },
+        run: async (_ctx, input) => deps.send?.(input as PromptInput),
       },
       cancel: {
         label: "cancel",
-        says: `stops the running turn; its open asks expire, unanswered (an ask ${askLifetime})`,
+        says: "stops the running turn; its open permission asks expire, unanswered",
         needs: "host",
         actor: "human",
         input: z.void() as unknown as z.ZodType<never>,
         dirties: ["receipts"],
-        ready: () => CHAT_ACTIONS.cancel.ready(context),
-        run: async () => {
-          if (deps.cancel) await deps.cancel();
-          else await CHAT_ACTIONS.cancel.run(context);
-        },
+        ready: () =>
+          !deps.cancel ? "Chat is not ready" : deps.running ? null : "Nothing is running",
+        run: async () => deps.cancel?.(),
       },
       new: {
         label: "new",
-        says: "starts a new, empty thread and opens it",
+        says: "starts a new, empty thread on the first available harness and opens it",
         needs: "host",
         actor: "human",
         input: z.void() as unknown as z.ZodType<never>,
         dirties: ["head"],
-        ready: () => (deps.newThread ? null : "Chat is not ready"),
-        run: async () => {
-          deps.newThread?.();
-        },
-      },
-      fork: {
-        label: "fork",
-        says: "clones this thread, messages and all, and opens the clone",
-        needs: "host",
-        actor: "human",
-        input: z.void() as unknown as z.ZodType<never>,
-        dirties: ["head"],
-        ready: () => {
-          if (!deps.thread) return "No thread to fork";
-          if (!context.session) return "Session is not ready";
-          if (!deps.hasMessages) return "This thread has no messages to fork";
-          if (context.display.isRunning) return "Pea is working";
-          return deps.forkThread ? null : "Chat is not ready";
-        },
-        run: async () => {
-          await deps.forkThread?.();
-        },
+        ready: () => (deps.newThread ? (deps.newRefusal ?? null) : "Chat is not ready"),
+        run: async () => deps.newThread?.(),
       },
     },
     seeds: CHAT_SEEDS as never,
   });
-};

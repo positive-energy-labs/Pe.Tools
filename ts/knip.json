@@ -8,20 +8,22 @@
     "**/*.generated.ts",
     "**/routeTree.gen.ts"
   ],
-  "ignoreBinaries": ["vp", "vpx", "reg.exe"],
+  "ignoreBinaries": ["vp", "vpx", "reg.exe", "tailscale"],
   "ignoreDependencies": [
     "@typescript/native-preview",
     "bumpp",
     "jiti",
     "@opentui/solid",
-    "@family-fixtures/.*"
+    "@family-fixtures/.*",
+    "@agentclientprotocol/claude-agent-acp",
+    "@agentclientprotocol/codex-acp"
   ],
   "workspaces": {
     ".": {
       "entry": ["scripts/*.ts", "tests/e2e/*.ts"]
     },
     "apps/host": {
-      "entry": ["src/index.ts", "src/dev.ts", "scripts/*.{ts,mjs}"]
+      "entry": ["src/index.ts", "src/dev.ts", "scripts/*.{ts,mjs}", "tests/fake-acp-agent.mjs"]
     },
     "apps/web": {
       "entry": ["src/routes/**/*.{ts,tsx}!", "scripts/*"]

@@ -15,9 +15,6 @@ import {
   type ActionAdmission,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
-import { createPeaRuntime } from "../../../packages/runtime/src/pea-runtime.ts";
-import { buildAgentControllerApp } from "../../../packages/runtime/src/agent-controller-web.ts";
-import type { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
 import { buildCapabilities } from "../../../packages/mcps/src/pea/capabilities.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
@@ -25,6 +22,7 @@ import { RevitBridge, BridgeError, type HostBridgeEvent } from "../src/bridge.ts
 import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts";
 import { documentMarks } from "../src/document-marks.ts";
 import { makeCallRoute } from "../src/call-route.ts";
+import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
 import { sdkSessions, sdkEnvelope, originalProcess } from "./native-receipt-fixture.ts";
 import { detailResponse } from "./schedule-fixture.ts";
 
@@ -75,15 +73,10 @@ export async function setup() {
   vi.stubEnv("PE_LANE", "dev");
   const dir = await mkdtemp(join(tmpdir(), "pe-schedule-chain-"));
   cleanup.push(() => rm(dir, { recursive: true, force: true, maxRetries: 5 }));
-  const runtime = await createPeaRuntime({ workspaceRoot: dir });
-  cleanup.push(async () => {
-    await runtime.close?.();
-  });
   const captures = new TakeoffCaptures(join(dir, "captures"));
-  let work!: RouteWorkspace;
-  const app = await buildAgentControllerApp({
-    runtime,
-    label: "pea",
+  const app = createPeRoutes({
+    store: fileRouteDocumentStore(join(dir, "work")),
+    heads: { observe: () => () => {} },
     capabilityCatalog: {
       read: async () => ({
         at: new Date().toISOString(),
@@ -100,16 +93,14 @@ export async function setup() {
     observeHostResource: (request, publish) => observeHost(request, publish),
     // As the host boots: one mark holder per bridge, shared by every Reading and every push.
     markReadings: (observe) => (request, publish) => markReadings(marks)(observe)(request, publish),
-    routeRegistrations: [
+    registrations: [
       {
         spec: scheduleGridRouteState,
         handlers: {},
       },
     ],
-    onRouteWorkspace: (value) => {
-      work = value;
-    },
   });
+  const work = app.workspace;
   let owner = new ActionJournal(join(dir, "actions.json"));
   const a = { session: "A", openId: "open-A" },
     b = { session: "B", openId: "open-B" };

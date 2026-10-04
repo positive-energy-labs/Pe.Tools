@@ -20,7 +20,6 @@
     "@base-ui/react": "catalog:",
     "@effect/atom-react": "4.0.0-beta.92",
     "@llamaindex/llama-cloud": "^2.10.0",
-    "@mastra/client-js": "1.42.0",
     "@pe/agent-contracts": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@pe/schema-core": "workspace:*",

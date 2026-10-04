@@ -19,7 +19,6 @@ import {
 } from "@pe/agent-contracts";
 import type { z } from "zod";
 import { observeResources, resourceResponse } from "../src/resource-stream.ts";
-import { ScopeStore } from "../src/scope-store.ts";
 import { RouteWorkspace } from "../src/route-workspace.ts";
 
 const target = address("C:\\Models\\Old.rvt");
@@ -118,10 +117,7 @@ for (const [spec, saved] of [
         await module.apply(scope, spec.route, actor, [{ path: ["excludedIds"], value: [] }], 0),
       ).toMatchObject({ ok: false, error: UNREADABLE_WORK });
     // The Work Reading stream says the same sentence.
-    const scopes = new ScopeStore(
-      async () => ({ getState: async () => null, setState: async () => {} }),
-      "test",
-    );
+    const scopes = { observe: () => () => {} };
     const abort = new AbortController();
     const response = resourceResponse(
       new Request(

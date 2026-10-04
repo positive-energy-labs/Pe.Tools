@@ -11,8 +11,6 @@ import { ChevronRight } from "lucide-react";
 import { useCurrentThreadView } from "./thread-view";
 import {
   readRecord,
-  formatBytes,
-  toolImages,
   toolOutputForDisplay,
   type Approval,
   type ChatMessage,
@@ -29,7 +27,6 @@ import { PressContent } from "#/components/anatomy/press-content";
 import { FactChip } from "#/components/lang/chip";
 import { Thumbnail } from "./thumbnail";
 import { useCopy } from "#/lib/use-copy";
-import { deferredResultSummary, useDeferredToolResult } from "./deferred-result";
 
 type RegisterMoment = (id: string, el: HTMLElement | null) => void;
 
@@ -85,6 +82,15 @@ export function Moments({
   let turn = 0;
   return messages.flatMap((message, index) => {
     if (message.role === "user") turn += 1;
+    // A host line (the harness session restarted): one quiet sentence, no head, no copy.
+    if (message.role === "system")
+      return [
+        <MomentSection key={message.id} message={message} register={register}>
+          <p className="t-small text-ink-2">
+            {message.parts.map((part) => (part.type === "text" ? part.text : "")).join(" ")}
+          </p>
+        </MomentSection>,
+      ];
     const run = runs.get(message.id);
     const open = run ? opened.has(run.id) : false;
     // A closed run is ONE row: its non-lead members leave the DOM entirely, so the lens measures
@@ -140,7 +146,7 @@ function MomentSection({
     .join("\n\n");
   return (
     <section
-      aria-label={`${role === "user" ? "User" : "Assistant"} message`}
+      aria-label={`${role === "user" ? "User" : role === "system" ? "Host" : "Assistant"} message`}
       data-key={id}
       data-role={role}
       {...annotation("moment")}
@@ -360,18 +366,23 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
   // inspect window, so the inspection survives the pointer leaving and the transcript scrolling.
   const key = `tool:${call.id}`;
   const open = pinKey === key;
-  const deferred = useDeferredToolResult(call, open);
   const running = call.status === "in_progress";
   const diagram = succeededDiagram(call);
   const failed = call.status === "failed";
-  // ponytail: no cause word; `ExpiredAsk` does not carry one and the ruling forbids inventing it.
+  // Only a host restart expires an ask (`permission_resolved by:"expired"`).
   const expired = call.status === "expired";
   // The runtime's cancel record rides the same record path: a word, no tag, nothing to press.
   const cancelled = call.status === "cancelled";
-  const record = expired ? " — expired, unanswered" : cancelled ? " — cancelled" : null;
+  const record = expired
+    ? " — expired, unanswered; the host restarted"
+    : cancelled
+      ? " — cancelled"
+      : null;
+  const denied = call.status === "denied";
+  const title = toolTitle(call.title);
   const tone = failed ? "failed" : running ? "active" : "";
-  const result = failed ? (call.result ?? call.error) : deferred.result;
-  const images = deferred.ref ? toolImages(result) : call.images;
+  const result = failed ? (call.result ?? call.error) : call.result;
+  const images = call.images;
   // What the run actually touched: the Scope revision it was admitted under and the session and
   // document the host resolved to. Read from the result, so it is evidence, not intent.
   const ran = readRecord(result);
@@ -401,7 +412,7 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
         }}
         className={tone}
       >
-        <span>⌗ {toolTitle(call.title)}</span>
+        <span>⌗ {title}</span>
         {record ? <span className="t-small text-ink-2">{record}</span> : null}
         {call.target ? <code>{call.target}</code> : null}
         {revision !== undefined ? (
@@ -418,16 +429,15 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
         {record ? null : (
           <span
             className={`ml-auto t-small face-mono tracking-[0.02em] ${running ? "text-ink-2" : ""}`}
-            data-tone={failed ? "caution" : running ? undefined : "done"}
+            data-tone={failed ? "caution" : running || denied ? undefined : "done"}
           >
-            {failed ? "err" : approval ? "wait" : running ? "run" : "ok"}
+            {failed ? "err" : denied ? "denied" : approval ? "wait" : running ? "run" : "ok"}
           </span>
         )}
       </div>
-      {deferred.ref ? (
-        <span className="t-small text-ink-2" data-testid="deferred-result-summary">
-          {deferredResultSummary(deferred.ref.summary)} · {formatBytes(deferred.ref.byteSize)}
-        </span>
+      {/* The friendly title names the act; the tool id under it is what a log or a skill says. */}
+      {title !== call.title ? (
+        <span className="t-small face-mono text-ink-2">{call.title}</span>
       ) : null}
       {/* A diagram call draws its own args once the host accepted them (agent ledger). */}
       {diagram ? (
@@ -444,16 +454,7 @@ function ToolCallPart({ call, approval }: { call: ToolCall; approval?: Approval 
       {open ? (
         <div {...annotation("tool-body")}>
           <Code code={stringify(call.args)} lang="json" title="in" />
-          {deferred.pending ? (
-            <div className="t-prose text-ink-2">Loading full result…</div>
-          ) : deferred.error ? (
-            <div className="flex items-baseline gap-2 t-prose" data-tone="caution">
-              <span>{deferred.error.message}</span>
-              <Press type="button" tone="quiet" size="caption" onClick={deferred.retry}>
-                retry
-              </Press>
-            </div>
-          ) : result === undefined ? null : failed ? (
+          {result === undefined ? null : failed ? (
             <Code
               code={stringify(toolOutputForDisplay(result))}
               lang="json"

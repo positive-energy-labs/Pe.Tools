@@ -32,7 +32,7 @@ export function UiSurfaceSpecimens() {
         render={() => (
           <div className="w-80">
             <Card>
-              <span className="t-title p-5">Overhead Coiling Door 421</span>
+              <span className="t-title">Overhead Coiling Door 421</span>
             </Card>
           </div>
         )}

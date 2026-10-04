@@ -23,11 +23,3 @@ const mesaWorldSchema = z.strictObject({
 
 export const peaSessionDescriptorSchema = z.union([localWorldSchema, mesaWorldSchema]);
 export type PeaSessionDescriptor = z.infer<typeof peaSessionDescriptorSchema>;
-
-export const peInfoSchema = z.strictObject({
-  controllerId: z.string().min(1),
-  resourceId: z.string().min(1),
-  capabilities: z.strictObject({ revit: z.boolean() }),
-  world: peaSessionDescriptorSchema,
-});
-export type PeInfo = z.infer<typeof peInfoSchema>;

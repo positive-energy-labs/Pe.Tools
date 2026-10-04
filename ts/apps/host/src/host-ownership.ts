@@ -5,7 +5,7 @@ import {
   sourceRootVariable,
   type HostLane,
 } from "@pe/host-contracts/service-identity";
-import type { PeaRuntimeCapabilities } from "@pe/runtime/pea";
+import type { PeaRuntimeCapabilities } from "@pe/mcps";
 
 export { productRoot } from "@pe/host-contracts/service-identity";
 

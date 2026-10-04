@@ -4,7 +4,7 @@ import { useRender } from "@base-ui/react/use-render";
 import { tv } from "#/lib/tv";
 
 export const cardRecipe = tv({
-  slots: { root: "flex flex-col gap-3 rounded-lg border border-line text-ink" },
+  slots: { root: "flex flex-col gap-3 rounded-lg border border-line p-5 text-ink" },
 });
 
 // One bordered surface. Replaces the rounded-{lg,xl,2xl} panel markup re-derived per page.

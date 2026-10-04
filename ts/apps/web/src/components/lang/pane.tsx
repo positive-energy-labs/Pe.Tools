@@ -343,10 +343,12 @@ export function Pane({
                     data-surface="artifact"
                     aria-label={`${id ?? kind} keyboard shortcuts`}
                     style={{ top: cardPosition.top, left: cardPosition.left }}
-                    className={`fixed z-popup w-56 border border-line-2 text-ink shadow-float transition-[opacity,transform] duration-control motion-reduce:transition-none ${
-                      cardVisible
-                        ? "translate-y-0 opacity-100"
-                        : "pointer-events-none -translate-y-1 opacity-0"
+                    // Read-only hints that may float over another pane's controls (bottom-left over
+                    // the chat sidebar's new-thread buttons when the window has no room on the
+                    // right), so a click always passes through. Diagnosed 2026-10-01:
+                    // .artifacts/runs/first-click-diagnose-20261001/.
+                    className={`pointer-events-none fixed z-popup w-56 border border-line-2 text-ink shadow-float transition-[opacity,transform] duration-control motion-reduce:transition-none ${
+                      cardVisible ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0"
                     }`}
                   >
                     <div className="t-small t-upper flex items-center justify-between border-b border-line px-2.5 py-2 text-ink-2">

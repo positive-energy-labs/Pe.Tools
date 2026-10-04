@@ -13,7 +13,6 @@ export * from "./settings.ts";
 export * from "./schedule-actions.ts";
 export * from "./schedule-grid-data.ts";
 export * from "./world.ts";
-export * from "./thread.ts";
 export * from "./target.ts";
 export * from "./instances.ts";
 export * from "./capability.ts";
@@ -27,3 +26,5 @@ export * from "./family-actions.ts";
 export * from "./seed.ts";
 
 export * from "./diagram.ts";
+
+export * from "./harness-thread.ts";

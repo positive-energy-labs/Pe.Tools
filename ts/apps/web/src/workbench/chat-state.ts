@@ -1,62 +1,26 @@
-import type {
-  AgentControllerAvailableModel,
-  KnownAgentControllerEvent,
-  MastraDBMessage,
-  MastraMessagePart,
-  PermissionRules,
-} from "@mastra/client-js";
-import { threadAccessPolicies, type ExpiredAsk, type ThreadViewState } from "@pe/agent-contracts";
+import type { HarnessEvent, HarnessThreadBody } from "@pe/agent-contracts";
 import { stringify } from "../components/lang/code-format.ts";
-import type { PeInspect } from "../host/inspect.ts";
 
-export type ChatDisplay = Omit<
-  Partial<Extract<KnownAgentControllerEvent, { type: "display_state_changed" }>["displayState"]>,
-  "omProgress"
-> & { omProgress?: OmProgress };
-
-interface OmProgress {
-  status?: string;
-  pendingTokens?: number;
-  threshold?: number;
-  observationTokens?: number;
-  reflectionThreshold?: number;
-  buffered?: {
-    observations?: { status?: string };
-    reflection?: { status?: string; observationTokens?: number };
-  };
-}
-
-/** The fetched thread body plus the live display frame from the stream. */
-export type ChatState = ThreadViewState<
-  MastraDBMessage,
-  AgentControllerAvailableModel,
-  PermissionRules | undefined,
-  PeInspect
-> & { display: ChatDisplay };
-/** `/pe/thread` is the durable body only; display state arrives solely over the stream. */
-export type ThreadBody = Omit<ChatState, "display">;
-export type AccessLevel = ChatState["access"];
-
-/**
- * A user turn is a persisted user row or a live user signal. The persisted row says `type: "user"`
- * with text parts; the live `message_start` carries a `data-user-message` signal part.
- */
-export function isUserTurn(message: MastraDBMessage): boolean {
-  if (message.role === "user") return true;
-  if (message.role !== "signal") return false;
-  const signal = readRecord(readRecord(message.content.metadata)?.signal);
-  return message.type === "user" || signal?.type === "user";
-}
+/** The thread body with every event the stream has appended since it was fetched. */
+export type ChatState = HarnessThreadBody;
+export type ThreadBody = HarnessThreadBody;
 
 export function emptyChatState(): ChatState {
   return {
-    display: {},
-    messages: [],
-    inspect: {},
-    models: { available: [] },
-    permissions: undefined,
-    access: "ask",
-    modeId: "",
+    id: "",
+    harness: "claude",
+    title: "",
+    createdAt: "",
+    updatedAt: "",
+    modelId: null,
+    models: [],
+    modes: [],
+    modeId: null,
+    running: false,
+    queued: [],
+    lastSeq: 0,
+    session: "closed",
+    events: [],
   };
 }
 
@@ -65,10 +29,12 @@ type ToolOutcome = { result?: unknown } & (
   | { status: "in_progress" }
   | { status: "completed" }
   | { status: "failed"; error: string }
-  /** An ask whose turn is gone (turn end, cancel, host restart): a record, never answerable. */
+  /** Its permission ask expired unanswered: a record, never answerable. */
   | { status: "expired" }
-  /** A non-ask call a person's cancel stopped mid-run (the runtime's record): not a failure. */
+  /** A cancel stopped it mid-run: not a failure. */
   | { status: "cancelled" }
+  /** The user answered its permission ask with a reject option. */
+  | { status: "denied" }
 );
 
 export type ToolCall = {
@@ -77,123 +43,377 @@ export type ToolCall = {
   args: unknown;
   target?: string;
   parentMessageId?: string;
-  /** Images the call produced so far, from its result or, while it runs, its progress. */
+  /** Images the call produced so far. */
   images: string[];
 } & ToolOutcome;
 
-/**
- * The thread's user turns and assistant rows, with the message the run is streaming merged in by
- * id. Every chat projection reads this list, so the transcript and the trace lane agree.
- */
-function threadRows(state: ChatState): MastraDBMessage[] {
-  const stored = state.messages.filter(
-    (message) => isUserTurn(message) || message.role === "assistant",
-  );
-  const wire = state.display.isRunning ? state.display.currentMessage : undefined;
-  if (!wire) return stored;
-  const current: MastraDBMessage = { ...wire, createdAt: new Date(wire.createdAt) };
-  return stored.some((message) => message.id === current.id)
-    ? stored.map((message) => (message.id === current.id ? current : message))
-    : [...stored, current];
+/** One open ACP permission request, answered by `optionId`. */
+export interface Approval {
+  requestId: string;
+  toolCallId: string;
+  toolName: string;
+  options: Extract<HarnessEvent, { kind: "permission_request" }>["options"];
 }
 
-/** The one tool-call merge: stored invocations first (first sighting wins), then live-only tools,
- * which belong to the last assistant row. */
-export function selectToolCalls(state: ChatState): ToolCall[] {
-  const rows = threadRows(state);
-  const calls: ToolCall[] = [];
-  const seen = new Set<string>();
-  const expired = new Set(selectExpiredAsks(state).map((ask) => ask.toolCallId));
-  const cancelled = new Set((state.cancelledCalls ?? []).map((call) => call.toolCallId));
-  // A call the live frame holds an approval for is waiting on a person, not interrupted.
-  const waiting = new Set(selectApprovals(state.display).map((approval) => approval.toolCallId));
-  for (const [messageAt, message] of rows.entries()) {
-    for (const part of message.content.parts) {
-      if (part.type !== "tool-invocation") continue;
-      const call = part.toolInvocation;
-      if (seen.has(call.toolCallId)) continue;
-      seen.add(call.toolCallId);
-      const active = state.display.activeTools?.[call.toolCallId];
-      const terminal =
-        call.state === "result" || call.state === "output-error" || call.state === "output-denied";
-      const interrupted =
-        !terminal &&
-        !active &&
-        !waiting.has(call.toolCallId) &&
-        (messageAt < rows.length - 1 || state.display.isRunning !== true);
-      const args = call.rawInput ?? call.args;
-      const result = call.result ?? active?.result;
-      // Mastra keeps a call its input validation refused as a `result` holding the error; a tool
-      // that threw is a `result` of `{ isError: true, content }`.
-      const rejected = readRecord(result)?.error === true || readRecord(result)?.isError === true;
-      // A live approval wins: Mastra's `agent_end` (reason "suspended") marks every still-running
-      // active tool `status: "error"`, the suspended ask among them (F-J1-9). It is waiting.
-      const failed =
-        !waiting.has(call.toolCallId) &&
-        (call.isError === true ||
-          (terminal && call.state !== "result") ||
-          // A stored terminal state wins: a turn that ended in error marks its live calls `error`,
-          // and the run can still store their results afterwards (F-H6-8).
-          (!terminal && active?.status === "error") ||
-          rejected ||
-          interrupted);
-      const completed = terminal || active?.status === "completed";
-      const images = toolImages(result ?? progressOutput(active?.partialResult));
-      const outcome: ToolOutcome = expired.has(call.toolCallId)
-        ? { status: "expired", result }
-        : cancelled.has(call.toolCallId)
-          ? { status: "cancelled", result }
-          : failed
-            ? {
-                status: "failed",
-                error:
-                  call.errorText ||
-                  readString(readRecord(result)?.message) ||
-                  readString(readRecord(result)?.content) ||
-                  text(result) ||
-                  "Tool call ended without a terminal result.",
-                result,
-              }
-            : { status: completed ? "completed" : "in_progress", result };
-      calls.push({
-        id: call.toolCallId,
-        title: call.toolName,
-        args,
-        target: toolTarget(args),
-        parentMessageId: message.id,
-        images,
-        ...outcome,
-      });
+export type ChatPart =
+  | { type: "text"; text: string }
+  | { type: "reasoning"; text: string }
+  | { type: "image"; image: string; name?: string }
+  | { type: "file"; name: string; mimeType: string }
+  | { type: "tool-call"; call: ToolCall; approval?: Approval };
+
+/** One row of the chat transcript. `system` is a quiet line the host wrote, never a speaker. */
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant" | "system";
+  parts: ChatPart[];
+  createdAt?: Date;
+  /** The assistant row the run is producing now; its last part is the one still moving. */
+  running: boolean;
+}
+
+/** An ACP `ToolCall` / `ToolCallUpdate` body, as the host kept it verbatim. */
+interface AcpToolCall {
+  toolCallId: string;
+  title?: string | null;
+  name?: string | null;
+  status?: string | null;
+  rawInput?: unknown;
+  rawOutput?: unknown;
+  content?: unknown[] | null;
+}
+
+/** `mcp__pea__pe_do` (claude) or `mcp.pea.pe_do` (codex) → `pe_do`: records key on the Pea tool id. */
+const toolId = (name: string) => name.replace(/^mcp__.+?__/, "").replace(/^mcp\.[^.]+\./, "");
+
+/** Codex wraps an MCP call's input as `{server, tool, arguments}`; the call is `tool(arguments)`. */
+function mcpInput(raw: unknown): { tool?: string; args: unknown } {
+  const record = readRecord(raw);
+  return record && typeof record.server === "string" && typeof record.tool === "string"
+    ? { tool: record.tool, args: record.arguments }
+    : { args: raw };
+}
+
+/**
+ * A tool result as its value: an MCP `CallToolResult` (`{content: [...]}`, or codex's
+ * `{result: {content: [...]}}`) or a list of text blocks becomes the text, and text that is JSON
+ * becomes the JSON. Anything with an image stays as it is.
+ */
+function toolValue(result: unknown): unknown {
+  const record = readRecord(result);
+  const content = record?.content ?? readRecord(record?.result)?.content;
+  const blocks = Array.isArray(content) ? content : result;
+  if (Array.isArray(blocks) && blocks.length > 0) {
+    const texts = blocks.map((block) => {
+      const record = readRecord(block);
+      return record?.type === "text" ? readString(record.text) : undefined;
+    });
+    if (texts.every((item) => item !== undefined)) result = texts.join("\n");
+  }
+  if (typeof result !== "string" || !/^\s*[[{]/.test(result)) return result;
+  try {
+    return JSON.parse(result) as unknown;
+  } catch {
+    return result;
+  }
+}
+
+/** ACP tool content: text blocks become strings, image blocks stay records `toolImage` reads. */
+function contentValue(content: unknown[] | null | undefined): unknown {
+  if (!content?.length) return undefined;
+  const values = content.map((item) => {
+    const block = readRecord(readRecord(item)?.content);
+    return block?.type === "text" ? block.text : (block ?? item);
+  });
+  return values.length === 1 ? values[0] : values;
+}
+
+function chunkText(update: Record<string, unknown>): string {
+  const content = readRecord(update.content);
+  return content?.type === "text" ? (readString(content.text) ?? "") : "";
+}
+
+/**
+ * The one fold of the event log into transcript rows. `prompt` opens a user row; chunks, tool
+ * calls and their updates land on the turn's assistant row; `turn_end`, `error` and `session`
+ * close it; a `permission_request` with no later `permission_resolved` is that call's approval.
+ */
+function fold(state: ChatState): Fold {
+  const cached = folds.get(state);
+  if (cached) return cached;
+  const rows: ChatMessage[] = [];
+  const calls = new Map<string, ToolCall>();
+  const approvals = new Map<string, Approval>();
+  const queued = new Map<string, string>();
+  let open: ChatMessage | undefined;
+  let turn = false;
+  let failure: string | undefined;
+  let title = state.title;
+
+  const assistant = (event: HarnessEvent) => {
+    if (open) return open;
+    open = { id: `pea-${event.seq}`, role: "assistant", parts: [], running: true, ...at(event) };
+    rows.push(open);
+    return open;
+  };
+  /** A call the turn left unsettled ended with it: cancelled by a cancel, failed otherwise. */
+  const close = (cancelled: boolean) => {
+    for (const call of calls.values())
+      if (call.status === "in_progress")
+        Object.assign(
+          call,
+          cancelled
+            ? { status: "cancelled" }
+            : { status: "failed", error: "Tool call ended without a terminal result." },
+        );
+    if (open) open.running = false;
+    open = undefined;
+    turn = false;
+    approvals.clear();
+  };
+  const line = (event: HarnessEvent, said: string) =>
+    rows.push({
+      id: `${event.kind}-${event.seq}`,
+      role: "system",
+      parts: [{ type: "text", text: said }],
+      running: false,
+      ...at(event),
+    });
+  const applyCall = (event: HarnessEvent, body: AcpToolCall) => {
+    let call = calls.get(body.toolCallId);
+    if (!call) {
+      const row = assistant(event);
+      call = {
+        id: body.toolCallId,
+        title: "tool",
+        args: undefined,
+        images: [],
+        status: "in_progress",
+        parentMessageId: row.id,
+      };
+      calls.set(call.id, call);
+      row.parts.push({ type: "tool-call", call });
+    }
+    const name = body.name ?? body.title;
+    if (name) call.title = toolId(name);
+    if (body.rawInput !== undefined) {
+      const input = mcpInput(body.rawInput);
+      if (input.tool) call.title = input.tool;
+      call.args = input.args;
+      call.target = toolTarget(input.args);
+    }
+    const raw = body.rawOutput ?? contentValue(body.content);
+    const result = raw === undefined ? undefined : toolValue(raw);
+    if (result !== undefined) {
+      call.result = result;
+      call.images = toolImages(result);
+    }
+    // A denied call stays denied: the harness reports the refusal as a failed call.
+    if (call.status === "denied") return;
+    if (body.status === "completed") call.status = "completed";
+    if (body.status === "failed")
+      Object.assign(call, { status: "failed", error: text(result) || "Tool call failed." });
+  };
+
+  for (const event of state.events) {
+    switch (event.kind) {
+      case "queued":
+        queued.set(event.turnId, event.text);
+        break;
+      case "prompt":
+        queued.delete(event.turnId);
+        close(false);
+        failure = undefined;
+        turn = true;
+        rows.push({
+          id: `you-${event.seq}`,
+          role: "user",
+          parts: [{ type: "text", text: event.text }],
+          running: false,
+          ...at(event),
+        });
+        break;
+      case "update": {
+        const update = event.update as Record<string, unknown>;
+        const kind = update.sessionUpdate;
+        if (kind === "agent_message_chunk" || kind === "agent_thought_chunk") {
+          const said = chunkText(update);
+          if (!said) break;
+          const type = kind === "agent_message_chunk" ? "text" : "reasoning";
+          const row = assistant(event);
+          const tail = row.parts.at(-1);
+          if (tail?.type === type) tail.text += said;
+          else row.parts.push({ type, text: said });
+        } else if (kind === "tool_call" || kind === "tool_call_update") {
+          applyCall(event, update as unknown as AcpToolCall);
+        }
+        break;
+      }
+      case "permission_request": {
+        const toolCallId = event.toolCall.toolCallId;
+        applyCall(event, event.toolCall as AcpToolCall);
+        approvals.set(event.requestId, {
+          requestId: event.requestId,
+          toolCallId,
+          toolName: calls.get(toolCallId)?.title ?? "tool",
+          options: event.options,
+        });
+        break;
+      }
+      case "permission_resolved": {
+        const ask = approvals.get(event.requestId);
+        approvals.delete(event.requestId);
+        const call = ask && calls.get(ask.toolCallId);
+        if (call?.status !== "in_progress") break;
+        if (event.by !== "user")
+          Object.assign(call, { status: event.by === "expired" ? "expired" : "cancelled" });
+        else if (ask!.options.find((o) => o.optionId === event.optionId)?.kind.startsWith("reject"))
+          Object.assign(call, { status: "denied" });
+        break;
+      }
+      case "turn_end":
+        close(event.stopReason === "cancelled");
+        // The user row the cancel orphaned needs its reason in the transcript.
+        if (event.stopReason === "cancelled") line(event, "cancelled");
+        break;
+      case "error":
+        // A host restart already wrote its record under the turn; it is not a failure to banner.
+        if (event.message !== HOST_RESTARTED) failure = event.message;
+        close(false);
+        line(event, event.message);
+        break;
+      // A session event never ends a turn: the host spawns or resumes the child on a turn's first
+      // prompt, so `session` follows that `prompt`, and an interrupted turn gets its own `error`.
+      case "session":
+        if (event.state === "detached") line(event, "history only; the harness session restarted");
+        if (event.state === "resumed") line(event, "session resumed");
+        break;
+      case "title_changed":
+        title = event.title;
+        break;
     }
   }
-  const lastAssistantId = rows.filter((m) => m.role === "assistant").at(-1)?.id;
-  for (const [id, tool] of Object.entries(state.display.activeTools ?? {})) {
-    if (seen.has(id)) continue;
-    const result = tool.result ?? tool.shellOutput ?? tool.partialResult;
-    const outcome: ToolOutcome =
-      (tool.status === "error" || tool.isError) && !waiting.has(id)
-        ? { status: "failed", error: text(tool.result) || "Tool call failed.", result }
-        : { status: tool.status === "completed" ? "completed" : "in_progress", result };
-    calls.push({
-      id,
-      title: tool.name,
-      args: tool.args,
-      target: toolTarget(tool.args),
-      parentMessageId: lastAssistantId,
-      images: toolImages(tool.result ?? progressOutput(tool.partialResult)),
-      ...outcome,
-    });
+  for (const approval of approvals.values()) {
+    const part = rows
+      .flatMap((row) => row.parts)
+      .find((item) => item.type === "tool-call" && item.call.id === approval.toolCallId);
+    if (part?.type === "tool-call") part.approval = approval;
   }
-  return calls;
+  const result = {
+    rows,
+    calls: [...calls.values()],
+    approvals: [...approvals.values()],
+    turn,
+    failure,
+    queued: [...queued].map(([turnId, text]) => ({ turnId, text })),
+    title,
+  };
+  folds.set(state, result);
+  return result;
+}
+
+interface Fold {
+  rows: ChatMessage[];
+  calls: ToolCall[];
+  approvals: Approval[];
+  /** A prompt's turn has not ended. */
+  turn: boolean;
+  failure?: string;
+  /** Prompts accepted behind a running turn that have not started (`queued` with no `prompt`). */
+  queued: { turnId: string; text: string }[];
+  /** The newest `title_changed`, else the body's title. */
+  title: string;
+}
+
+/** The host's error for a turn its own restart cut off (apps/host src/harness/threads.ts). */
+const HOST_RESTARTED = "host restarted during this turn";
+
+/** Every selector reads one fold per state object. */
+const folds = new WeakMap<ChatState, Fold>();
+
+/** The list the chat draws. While a turn has no assistant row yet, a running placeholder stands in. */
+export function selectMessages(state: ChatState): ChatMessage[] {
+  const rows = [...fold(state).rows];
+  if (selectRunStatus(state) !== "idle" && rows.at(-1)?.role !== "assistant")
+    rows.push({ id: "pea-pending", role: "assistant", parts: [], running: true });
+  return rows.filter(
+    (message) => message.running || message.parts.some((part) => part.type !== "reasoning"),
+  );
+}
+
+export function selectQueued(state: ChatState): Fold["queued"] {
+  return fold(state).queued;
+}
+
+export function selectTitle(state: ChatState): string {
+  return fold(state).title;
+}
+
+export function selectToolCalls(state: ChatState): ToolCall[] {
+  return fold(state).calls;
+}
+
+/** Live asks only: a resolved or expired request is a transcript record, never a head row. */
+export function selectApprovals(state: ChatState): Approval[] {
+  return fold(state).approvals;
+}
+
+/** The last turn's error, until the next prompt. */
+export function selectTurnFailure(state: ChatState): string | undefined {
+  return fold(state).failure;
+}
+
+export type RunStatus = "idle" | "running" | "waiting";
+
+export function selectRunStatus(state: ChatState): RunStatus {
+  const { approvals, turn } = fold(state);
+  if (approvals.length > 0) return "waiting";
+  return turn ? "running" : "idle";
+}
+
+/** The newest `session/update` of one kind, or undefined. */
+function latest(state: ChatState, kind: string): Record<string, unknown> | undefined {
+  for (let i = state.events.length - 1; i >= 0; i -= 1) {
+    const event = state.events[i]!;
+    if (event.kind === "update" && event.update.sessionUpdate === kind)
+      return event.update as Record<string, unknown>;
+  }
+  return undefined;
+}
+
+/** The harness's plan (`plan` update): the whole list each time, newest wins. */
+export function selectPlan(
+  state: ChatState,
+): { id: string; content: string; status: "pending" | "in_progress" | "completed" }[] {
+  const entries = latest(state, "plan")?.entries;
+  return (Array.isArray(entries) ? entries : []).map((entry, index) => {
+    const record = readRecord(entry);
+    const status = record?.status;
+    return {
+      id: String(index),
+      content: readString(record?.content) ?? "",
+      status: status === "completed" || status === "in_progress" ? status : "pending",
+    };
+  });
+}
+
+/** The harness's slash commands (`available_commands_update`). */
+export function selectSkillCommands(state: ChatState): { name: string; description: string }[] {
+  const commands = latest(state, "available_commands_update")?.availableCommands;
+  return (Array.isArray(commands) ? commands : []).flatMap((command) => {
+    const record = readRecord(command);
+    const name = readString(record?.name);
+    return name ? [{ name, description: readString(record?.description) ?? "command" }] : [];
+  });
 }
 
 /**
  * The one rule for "is this tool output entry an image", fitted to what the image tools really
- * return (`capture_view`, `read_image` in packages/mcps: `{ text, mediaType, byteSize, data }`):
+ * return (`capture_view`, `read_image` in packages/mcps: `{ text, mediaType, byteSize, data }`,
+ * and ACP image blocks `{ type: "image", mimeType, data }`):
  * - a record needs an `image/*` media type AND either base64 `data` (or a `data:image/` URL in it)
  *   or an `image`/`url` field holding a `data:image/` or http(s) URL;
  * - a bare string must be a `data:image/…;base64,` URL.
- * Anything else is not an image: a docs search row's `url: "local:P:…"` was wrapped as base64.
  * `field` names where the bytes sit, for the display projection below.
  */
 function toolImage(part: unknown): { url: string; mime: string; field?: string } | undefined {
@@ -220,29 +440,15 @@ function toolImage(part: unknown): { url: string; mime: string; field?: string }
 
 const DATA_IMAGE = /^data:(image\/[\w.+-]+);base64,/;
 
-// ponytail: checks the first 64 chars and the length, not every byte; a multi-MB capture is
-// re-read on every streamed frame. Tighten only if a non-image base64 look-alike shows up.
+// ponytail: checks the first 64 chars and the length, not every byte.
 const looksBase64 = (value: string) =>
   value.length > 0 && value.length % 4 === 0 && /^[A-Za-z0-9+/]+={0,2}$/.test(value.slice(0, 64));
 
 const outputEntries = (output: unknown): unknown[] => (Array.isArray(output) ? output : [output]);
 
 /** Which images a tool call produced. The transcript strip and the trace lane both read this. */
-export function toolImages(output: unknown): string[] {
+function toolImages(output: unknown): string[] {
   return outputEntries(output).flatMap((part) => toolImage(part)?.url ?? []);
-}
-
-/**
- * A running call's progress, as Mastra stores it: `tool_update` stringifies a non-string
- * payload onto `activeTools[id].partialResult`. Parse it back so its images count.
- */
-function progressOutput(partial: unknown): unknown {
-  if (typeof partial !== "string") return partial;
-  try {
-    return JSON.parse(partial) as unknown;
-  } catch {
-    return partial;
-  }
 }
 
 /**
@@ -269,217 +475,6 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export type ChatPart =
-  | { type: "text"; text: string }
-  | { type: "reasoning"; text: string }
-  | { type: "image"; image: string; name?: string }
-  | { type: "file"; name: string; mimeType: string }
-  | { type: "tool-call"; call: ToolCall; approval?: Approval };
-
-/** One row of the chat transcript. */
-export interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  parts: ChatPart[];
-  createdAt?: Date;
-  /** The assistant row the run is producing now; its last part is the one still moving. */
-  running: boolean;
-}
-
-/**
- * The list the chat draws, in the same render as the lens. While the run has not started an
- * assistant row yet, a running placeholder stands in so the caret shows at once.
- */
-export function selectMessages(state: ChatState): ChatMessage[] {
-  const rows = threadRows(state);
-  const calls = selectToolCalls(state);
-  const callsById = new Map(calls.map((call) => [call.id, call]));
-  const approvals = selectApprovals(state.display);
-  const streamingId = state.display.isRunning ? state.display.currentMessage?.id : undefined;
-  const toolPart = (call: ToolCall): ChatPart => ({
-    type: "tool-call",
-    call,
-    approval: approvals.find((approval) => approval.toolCallId === call.id),
-  });
-  const emitted = new Set<string>();
-  const messages = rows.map((message): ChatMessage => {
-    const user = isUserTurn(message);
-    const parts: ChatPart[] = [];
-    for (const part of message.content.parts) {
-      if (part.type === "text") {
-        const text = textPart(part.text, user);
-        if (text) parts.push(text);
-      } else if (part.type === "reasoning") {
-        if (part.reasoning.trim()) parts.push({ type: "reasoning", text: part.reasoning });
-      } else if (part.type === "file") {
-        const file = filePart(part.data, part.mimeType, readString(readRecord(part)?.filename));
-        if (file) parts.push(file);
-      } else if (part.type === "tool-invocation") {
-        const call = callsById.get(part.toolInvocation.toolCallId);
-        if (!call || emitted.has(call.id)) continue;
-        emitted.add(call.id);
-        parts.push(toolPart(call));
-      } else if (part.type === "data-signal" || part.type === "data-user-message") {
-        const data = readRecord(part.data);
-        if (user) parts.push(...signalParts(data?.contents));
-        else if (data?.tagName === "route-workspace") {
-          const said = signalText(data.contents);
-          if (said.trim()) parts.push({ type: "text", text: said });
-        }
-      }
-    }
-    if (!user)
-      for (const call of calls)
-        if (call.parentMessageId === message.id && !emitted.has(call.id)) {
-          emitted.add(call.id);
-          parts.push(toolPart(call));
-        }
-    return {
-      id: message.id,
-      role: user ? "user" : "assistant",
-      parts,
-      ...createdAt(message),
-      running: !user && message.id === streamingId,
-    };
-  });
-  if (selectRunStatus(state) !== "idle" && messages.at(-1)?.role !== "assistant")
-    messages.push({ id: "pea-pending", role: "assistant", parts: [], running: true });
-  // The one renderable rule: speech, an image, a call, or the row still being produced.
-  return messages.filter(
-    (message) => message.running || message.parts.some((part) => part.type !== "reasoning"),
-  );
-}
-
-/** Mastra inlines a text attachment into the user turn as `[File: name]` and a fence. */
-const INLINED_FILE = /^\[File: (.+)\]\n(`{3,})\n[\s\S]*\n\2$/;
-
-function textPart(text: string, user: boolean): ChatPart | undefined {
-  if (!text.trim()) return undefined;
-  const inlined = user ? INLINED_FILE.exec(text) : null;
-  return inlined
-    ? { type: "file", name: inlined[1]!, mimeType: "text/plain" }
-    : { type: "text", text };
-}
-
-function filePart(
-  data: string | undefined,
-  mimeType: string | undefined,
-  name: string | undefined,
-): ChatPart | undefined {
-  if (mimeType && !mimeType.startsWith("image/"))
-    return { type: "file", name: name ?? "file", mimeType };
-  const image = imageSource(data, data, mimeType);
-  return image ? { type: "image", image, ...(name ? { name } : {}) } : undefined;
-}
-
-/** A live user signal's `contents`: its text, then the files Mastra attached to the turn. */
-function signalParts(contents: unknown): ChatPart[] {
-  if (!Array.isArray(contents)) {
-    const text = typeof contents === "string" ? textPart(contents, true) : undefined;
-    return text ? [text] : [];
-  }
-  return contents.flatMap((entry) => {
-    const record = readRecord(entry);
-    const part =
-      record?.type === "file"
-        ? filePart(
-            readString(record.data),
-            readString(record.mediaType),
-            readString(record.filename),
-          )
-        : textPart(readString(record?.text) ?? "", true);
-    return part ? [part] : [];
-  });
-}
-
-function signalText(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (!Array.isArray(value)) return "";
-  return value
-    .map((part) => readString(readRecord(part)?.text) ?? "")
-    .filter(Boolean)
-    .join("\n");
-}
-
-function createdAt(message: MastraDBMessage): { createdAt?: Date } {
-  const at = message.createdAt;
-  if (!at) return {};
-  const date = at instanceof Date ? at : new Date(at);
-  return Number.isNaN(date.getTime()) ? {} : { createdAt: date };
-}
-
-/** A permission gate answers yes/no; a suspension answers with a resume payload. */
-export type Approval = { toolCallId: string; toolName: string } & (
-  | { kind: "permission" }
-  | { kind: "suspension"; payload: unknown }
-);
-
-/** A parked `ask_user`: Pea is waiting on the person, not working. A new turn expires it. */
-export const isParkedAsk = (
-  approval: Approval,
-): approval is Extract<Approval, { kind: "suspension" }> =>
-  approval.kind === "suspension" && approval.toolName === "ask_user";
-
-export function selectApprovals(display: ChatDisplay): Approval[] {
-  const approvals: Approval[] = [];
-  const pending = display.pendingApproval;
-  if (pending)
-    approvals.push({
-      kind: "permission",
-      toolCallId: pending.toolCallId,
-      toolName: pending.toolName,
-    });
-  for (const suspension of Object.values(display.pendingSuspensions ?? {})) {
-    approvals.push({
-      kind: "suspension",
-      toolCallId: suspension.toolCallId,
-      toolName: suspension.toolName,
-      payload: suspension.suspendPayload,
-    });
-  }
-  return approvals;
-}
-
-/** The runtime derives expiry; an ask the live frame still holds wins over a stale body. */
-function selectExpiredAsks(state: ChatState): ExpiredAsk[] {
-  const live = new Set(selectApprovals(state.display).map((approval) => approval.toolCallId));
-  return (state.expiredAsks ?? []).filter((ask) => !live.has(ask.toolCallId));
-}
-
-export type RunStatus = "idle" | "running" | "waiting";
-
-export function selectRunStatus(state: ChatState): RunStatus {
-  if (selectApprovals(state.display).length > 0) return "waiting";
-  return state.display.isRunning ? "running" : "idle";
-}
-
-export function selectSkillCommands(inspect: PeInspect): { name: string; description: string }[] {
-  return (inspect.skills ?? []).flatMap((skill) => {
-    const record = readRecord(skill);
-    const name = readString(record?.name);
-    return name ? [{ name, description: readString(record?.description) ?? "skill" }] : [];
-  });
-}
-
-export interface AccessLevelInfo {
-  id: AccessLevel;
-  name: string;
-  description: string;
-}
-
-export const ACCESS_LEVELS: AccessLevelInfo[] = [
-  { id: "read-only", name: "Read-only", description: "Block workspace changes." },
-  { id: "ask", name: "Ask", description: "Ask before tools that change state." },
-  { id: "trusted", name: "Trusted", description: "Run trusted workspace tools directly." },
-];
-
-export const PERMISSION_LEVELS = threadAccessPolicies;
-
-export const APPROVAL_OPTIONS = [
-  { id: "allow_once", kind: "allow-once", label: "Approve" },
-  { id: "reject_once", kind: "reject-once", label: "Deny" },
-];
-
 export interface ContextItem {
   name: string;
   src?: string;
@@ -495,184 +490,29 @@ export interface ContextSegment {
   items?: ContextItem[];
 }
 
-interface MemoryWindows {
-  messageTokens: number;
-  observationThreshold: number;
-  observationTokens: number;
-  reflectionThreshold: number;
-  reflectionFloor?: number;
-  observing?: boolean;
-  reflecting?: boolean;
-}
-
 export interface ContextBreakdown {
   contextWindow?: number;
   totalTokens: number;
   segments: ContextSegment[];
-  memoryWindows?: MemoryWindows;
 }
 
+/** The harness's own context count (`usage_update {used, size}`); nothing before the first one. */
 export function selectBreakdown(state: ChatState): ContextBreakdown | undefined {
-  const inspect = state.inspect;
-  const systemPromptText = inspect.systemPrompt?.content;
-  const tools = breakdownTools(inspect.toolList);
-  const skills = breakdownSkills(inspect.skills);
-  if (
-    systemPromptText === undefined &&
-    tools.length === 0 &&
-    skills.length === 0 &&
-    inspect.contextWindow === undefined
-  )
-    return undefined;
-
-  const segments: ContextSegment[] = [];
-  const chat = state.messages.filter((m) => isUserTurn(m) || m.role === "assistant");
-  const messageTokens = chat.reduce((sum, m) => sum + estimateTokens(messageText(m)), 0);
-  if (messageTokens > 0)
-    segments.push({
-      id: "messages",
-      label: "Messages",
-      tokens: messageTokens,
-      items: [
-        {
-          name: `Conversation tail · ${chat.length} msgs`,
-          src: "transcript",
-          tokens: messageTokens,
-          state: "in",
-          body: "The newest turn is always uncached — this tail is reprocessed every send.",
-        },
-      ],
-    });
-  if (systemPromptText !== undefined)
-    segments.push({
-      id: "system-prompt",
-      label: "System prompt",
-      tokens: estimateTokens(systemPromptText),
-      items: systemPromptItems(systemPromptText, inspect.agents),
-    });
-  if (tools.length > 0)
-    segments.push({
-      id: "tools",
-      label: "Tools & MCP",
-      tokens: tools.reduce((sum, tool) => sum + (tool.tokens ?? 0), 0),
-      items: tools.map((tool) => ({ ...tool, state: "in" as const })),
-    });
-  if (skills.length > 0) segments.push({ id: "skills", label: "Skills", tokens: 0, items: skills });
-
-  const totalTokens = segments.reduce((sum, segment) => sum + segment.tokens, 0);
-  if (inspect.contextWindow && inspect.contextWindow > totalTokens)
-    segments.push({ id: "free", label: "Free space", tokens: inspect.contextWindow - totalTokens });
-
-  return {
-    contextWindow: inspect.contextWindow,
-    totalTokens,
-    segments,
-    memoryWindows: memoryWindows(state.display.omProgress),
-  };
+  const usage = latest(state, "usage_update");
+  const used = usage?.used;
+  const size = usage?.size;
+  if (typeof used !== "number" || typeof size !== "number") return undefined;
+  const segments: ContextSegment[] = [{ id: "messages", label: "Used", tokens: used }];
+  if (size > used) segments.push({ id: "free", label: "Free space", tokens: size - used });
+  return { contextWindow: size, totalTokens: used, segments };
 }
 
-function memoryWindows(om: OmProgress | undefined): MemoryWindows | undefined {
-  if (!om) return undefined;
-  const floor = om.buffered?.reflection?.observationTokens ?? 0;
-  return {
-    messageTokens: om.pendingTokens ?? 0,
-    observationThreshold: om.threshold ?? 0,
-    observationTokens: om.observationTokens ?? 0,
-    reflectionThreshold: om.reflectionThreshold ?? 0,
-    ...(floor > 0 ? { reflectionFloor: floor } : {}),
-    observing: om.buffered?.observations?.status === "running" || om.status === "observing",
-    reflecting: om.buffered?.reflection?.status === "running" || om.status === "reflecting",
-  };
-}
-
-function systemPromptItems(text: string, agents: unknown[] | undefined): ContextItem[] {
-  const trimmed = text.trim();
-  const items: ContextItem[] = trimmed
-    ? [
-        {
-          name: "Base identity",
-          src: "resolved prompt",
-          tokens: estimateTokens(trimmed),
-          body: trimmed,
-          state: "in",
-        },
-      ]
-    : [];
-  for (const agent of agents ?? []) {
-    const record = readRecord(agent);
-    const name = typeof agent === "string" ? agent : readString(record?.name);
-    if (!name) continue;
-    items.push({
-      name: `agent · ${name}`,
-      src: "agent instructions",
-      body: readString(record?.description),
-      state: "in",
-    });
-  }
-  return items;
-}
-
-function breakdownTools(toolList: PeInspect["toolList"]): ContextItem[] {
-  return (toolList?.tools ?? []).flatMap((tool): ContextItem[] => {
-    const record = readRecord(tool);
-    const name = readString(record?.name);
-    if (!name) return [];
-    const approx = record?.approxTokens;
-    return [
-      {
-        name,
-        src: "runtime/tools",
-        tokens: typeof approx === "number" ? approx : estimateTokens(name),
-        body: readString(record?.description),
-      },
-    ];
-  });
-}
-
-function breakdownSkills(skills: unknown[] | undefined): ContextItem[] {
-  return (skills ?? []).flatMap((skill): ContextItem[] => {
-    const record = readRecord(skill);
-    const name = readString(record?.name);
-    if (!name) return [];
-    const approx = record?.approxTokens;
-    return [
-      {
-        name,
-        src: ".claude/skills",
-        tokens: typeof approx === "number" ? approx : undefined,
-        body:
-          readString(record?.body) ??
-          readString(record?.content) ??
-          readString(record?.description),
-        state: "on-demand",
-      },
-    ];
-  });
-}
-
-function estimateTokens(text: string | undefined): number {
-  return text ? Math.ceil(text.length / 4) : 0;
-}
-
-function messageText(message: MastraDBMessage): string {
-  return message.content.parts
-    .map((part) => partText(part))
-    .filter(Boolean)
-    .join("\n")
-    .trim();
-}
-
-function partText(part: MastraMessagePart): string {
-  if (part.type === "text") return part.text;
-  if (part.type === "reasoning") return part.reasoning;
-  return "";
-}
-
-export function toolTarget(args: unknown): string | undefined {
+function toolTarget(args: unknown): string | undefined {
   const record = readRecord(args);
   // pe_read / pe_do: the capability key is what the user reads on the card.
   if (typeof record?.key === "string") return record.key;
-  const candidate = record?.path ?? record?.file ?? record?.query ?? record?.command;
+  const candidate =
+    record?.path ?? record?.file_path ?? record?.file ?? record?.query ?? record?.command;
   if (typeof candidate === "string") return candidate;
   if (typeof args === "string" && args.length <= 64) return args;
   return undefined;
@@ -685,8 +525,9 @@ function text(value: unknown): string {
   return typeof value === "string" ? value : stringify(value);
 }
 
-export function shortId(value: string): string {
-  return value.length <= 12 ? value : `${value.slice(0, 8)}...`;
+function at(event: HarnessEvent): { createdAt?: Date } {
+  const date = new Date(event.at);
+  return Number.isNaN(date.getTime()) ? {} : { createdAt: date };
 }
 
 export function readRecord(value: unknown): Record<string, unknown> | undefined {
@@ -695,17 +536,6 @@ export function readRecord(value: unknown): Record<string, unknown> | undefined 
     : undefined;
 }
 
-export function readString(value: unknown): string | undefined {
+function readString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
-}
-
-function imageSource(
-  direct: string | undefined,
-  data: string | undefined,
-  mime: string | undefined,
-): string | undefined {
-  if (direct && /^(data:|https?:|blob:)/.test(direct)) return direct;
-  const raw = data ?? (direct && !direct.includes("/") ? direct : undefined);
-  if (raw) return `data:${mime ?? "image/png"};base64,${raw}`;
-  return direct;
 }

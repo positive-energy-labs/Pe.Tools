@@ -1,11 +1,12 @@
-import { Deferred, Effect, Layer, Stream } from "effect";
-import { HttpRouter, HttpServer, HttpServerResponse as Response } from "effect/unstable/http";
+import { Deferred, Effect, Layer, Schema, Stream } from "effect";
+import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
 import { NodeHttpClient, NodeHttpServer, NodeServices } from "@effect/platform-node";
 import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { BRIDGE_PATH, hostProcessIdentity } from "@pe/host-contracts/contracts";
-import type { PeaRuntimeCapabilities } from "@pe/runtime/pea";
+import type { PeaRuntimeCapabilities } from "@pe/mcps";
+import { inferenceEndpointSaveRequestSchema } from "@pe/host-contracts/operation-types";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
 import { getHostStatus } from "./local-ops.ts";
 import { isSettingsSchemaUrl } from "./settings.ts";
@@ -22,9 +23,10 @@ import {
   ServiceFileLive,
 } from "./host-lifecycle.ts";
 import { hostOwnership } from "./host-ownership.ts";
-import { MastraMountLive, MastraRuntime, withMastraDegrade } from "./mastra-runtime.ts";
 import { staticSpaLayer } from "./static-spa.ts";
 import { viewImageRoute } from "./view-image-route.ts";
+import { peRoutesLayer } from "./pe-routes.ts";
+import { readInferenceEndpoint, saveInferenceEndpoint } from "./inference-endpoint.ts";
 
 export { resolveWebRoot } from "./static-spa.ts";
 
@@ -118,6 +120,34 @@ const hostInstallRoute = HttpRouter.add("GET", "/host/install", () =>
   }),
 );
 
+// The OpenAI-compatible endpoint Pea uses. Plain routes, not ops: the save carries a key, and ops
+// reach the action journal, the ops catalog and Pea. A refused save answers `{ step, message }`.
+const inferenceEndpointRoutes = Layer.mergeAll(
+  HttpRouter.add("GET", "/host/inference-endpoint", () =>
+    Effect.flatMap(readInferenceEndpoint(), Response.json),
+  ),
+  HttpRouter.add("POST", "/host/inference-endpoint", (req) =>
+    req.json.pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(inferenceEndpointSaveRequestSchema)),
+      Effect.flatMap(saveInferenceEndpoint),
+      Effect.map((saved) => Response.jsonUnsafe(saved)),
+      Effect.catch((error) =>
+        Effect.succeed(
+          "step" in error
+            ? Response.jsonUnsafe(
+                { step: error.step, message: error.message },
+                { status: error.status },
+              )
+            : Response.jsonUnsafe(
+                { step: "request", message: `request: ${error.message}` },
+                { status: 400 },
+              ),
+        ),
+      ),
+    ),
+  ),
+);
+
 /**
  * Service-file schema 3, second half: once a Revit payload registers on the bridge and reports the
  * pe-revit session it belongs to, amend this host's service file to name that session. That is what
@@ -180,24 +210,20 @@ export interface HttpLiveOptions {
   readonly nodeServer?: Server;
   /** Browser origin of the separately owned dev frontend. API requests stay here. */
   readonly webUrl?: Deferred.Deferred<string>;
-  /**
-   * The Mastra tenant layer; the boundary test swaps a trivial stub (RIn = never) for the real
-   * runtime (RIn = HttpServer). `HttpServer` is satisfied by the shared `NodeHttpServer.layer`.
-   */
-  readonly mastraLayer: Layer.Layer<MastraRuntime, unknown, HttpServer.HttpServer>;
   /** Boot-scoped shutdown latch + service token, injected by the launch root. */
   readonly lifecycle: HostLifecycle["Service"];
   /** Built SPA directory, or null to skip static serving (dev/vite). */
   readonly webRoot: string | null;
+  /** Route registrations for the host-owned route surface; tests inject their own. */
+  readonly routeRegistrations?: Parameters<typeof peRoutesLayer>[0];
   /** Test sentinel for the complete Revit/SDK/proxy composition. */
   readonly revitCompositionFactory?: typeof makeRevitComposition;
 }
 
 /**
- * Assemble the full host app + server as one launchable Layer. `mastraLayer` and `port` are
- * parameters so the boundary test can boot the real composition on an ephemeral port with a stub
- * tenant. HttpServer is provided once (via `NodeHttpServer.layer`) and shared by the router, the
- * Mastra tenant (bound loopback -> hostBaseUrl), and the service-file writer.
+ * Assemble the full host app + server as one launchable Layer. `port` is a parameter so the
+ * boundary test can boot the real composition on an ephemeral port. HttpServer is provided once
+ * (via `NodeHttpServer.layer`) and shared by the router and the service-file writer.
  */
 export function makeHttpLive(options: HttpLiveOptions) {
   const nodeServer = options.nodeServer ?? createServer();
@@ -233,8 +259,9 @@ export function makeHttpLive(options: HttpLiveOptions) {
       : () => emptyNotFound;
   const CommonAppLive = Layer.mergeAll(
     adminShutdownRoute,
+    inferenceEndpointRoutes,
+    peRoutesLayer(options.routeRegistrations),
     demoRoutes(),
-    MastraMountLive,
     webUrl
       ? HttpRouter.add("GET", "/*", (req) => (isNavigation(req) ? spa(req) : emptyNotFound))
       : staticSpaLayer(options.webRoot),
@@ -243,7 +270,6 @@ export function makeHttpLive(options: HttpLiveOptions) {
   if (options.capabilities.revit) {
     const revitComposition = (options.revitCompositionFactory ?? makeRevitComposition)(spa);
     return HttpRouter.serve(Layer.mergeAll(revitComposition.routes, CommonAppLive)).pipe(
-      Layer.provide(withMastraDegrade(options.mastraLayer)),
       Layer.provide(ClaimedServerLive),
       Layer.provide(NodeHttpClient.layerUndici),
       Layer.provide(revitComposition.provider),
@@ -263,9 +289,6 @@ export function makeHttpLive(options: HttpLiveOptions) {
   ).pipe(
     // The empty in-memory bridge registry admits no native connection on this composition.
     Layer.provide(RevitBridgeLive),
-    // ClaimedServerLive binds and completes takeover before the tenant opens shared product state.
-    // The tenant still receives that same HttpServer, and any runtime failure degrades only /pe/*.
-    Layer.provide(withMastraDegrade(options.mastraLayer)),
     Layer.provide(ClaimedServerLive),
     Layer.provide(NodeHttpClient.layerUndici),
     Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),

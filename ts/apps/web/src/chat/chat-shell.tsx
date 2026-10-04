@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { ModeDial } from "#/chat/mode-dial";
-import { ThreadDialog, ThreadsSidebar } from "#/chat/thread-palette";
+import { NewThreadButtons, ThreadDialog, ThreadsSidebar } from "#/chat/thread-palette";
 import { useWorkbench } from "#/workbench/provider";
 import { useMode } from "#/workbench/use-mode";
 import { MODES } from "#/workbench/depth";
-import { ContextRibbon, useCacheView } from "#/workbench/world";
+import { useCacheView } from "#/workbench/world";
 import { SessionStrip } from "#/workbench/world";
-import { selectBreakdown, selectRunStatus } from "#/workbench/chat-state";
+import { selectBreakdown, selectRunStatus, selectTitle } from "#/workbench/chat-state";
+import { EmptyState } from "#/components/lang/empty";
 import { buildTraceCells, ToolCellBody, TraceCellView } from "#/workbench/lens/context-strip";
 import { Press } from "#/components/lang/press";
 import { X } from "lucide-react";
@@ -52,48 +53,35 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
     bodyAtom,
     loading,
     threads,
+    harnesses,
     currentThreadId,
     prompt,
-    displayKnown,
     turnFailure,
-    turnFailed,
-    session,
+    isRunning,
     operationError,
     sendPrompt,
     cancel,
     newThread,
-    forkThread,
+    newRefusal,
+    missingThread,
     openThread,
     renameThread,
     deleteThread,
   } = useWorkbench();
   const [mode, setMode] = useMode();
-  // The route, re-declared with this thread and this session bound. `routes/chat.tsx` exports the
-  // static one; the actions only become runnable once the provider has a session.
+  // The route, re-declared with this thread and the provider's verbs bound.
   const manifest = useMemo(
     () =>
       chatManifest({
-        thread: currentThreadId ?? "",
-        display: chat.display,
-        displayKnown,
-        session,
+        thread: currentThreadId,
+        ready: !loading,
+        running: isRunning,
         send: (input) => sendPrompt(input.text, input.attachments),
         cancel,
-        hasMessages: chat.messages.length > 0,
-        newThread,
-        forkThread,
+        newThread: () => newThread(),
+        newRefusal,
       }),
-    [
-      currentThreadId,
-      chat.display,
-      displayKnown,
-      chat.messages.length,
-      session,
-      sendPrompt,
-      cancel,
-      newThread,
-      forkThread,
-    ],
+    [currentThreadId, loading, isRunning, sendPrompt, cancel, newThread, newRefusal],
   );
   // The handle is owned here, not inside the shell: Chat has no route head, and its composer
   // head is the Situation, which needs the same handle the shell's chords run through.
@@ -154,8 +142,8 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
   // here instead of inside the Lens. userTurns gates the diff baseline (advances on each send).
   const breakdown = useMemo(() => selectBreakdown(chat), [chat]);
   const userTurns = useMemo(
-    () => chat.messages.reduce((count, m) => (m.role === "user" ? count + 1 : count), 0),
-    [chat.messages],
+    () => chat.events.filter((event) => event.kind === "prompt").length,
+    [chat.events],
   );
   const cache = useCacheView(breakdown, userTurns);
   const traceCells = useMemo(() => buildTraceCells(chat), [chat]);
@@ -181,20 +169,17 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
 
   const runStatus = selectRunStatus(chat);
   const status = {
-    text:
-      turnFailed || turnFailure
-        ? "failed"
-        : !displayKnown
-          ? loading
-            ? "loading thread state"
-            : "connecting"
-          : runStatus === "waiting"
-            ? "waiting for you"
-            : runStatus === "running"
-              ? "running"
-              : "ready",
-    caution: turnFailed || turnFailure !== null,
-    detail: operationError ?? turnFailure?.message,
+    text: turnFailure
+      ? "failed"
+      : loading
+        ? "loading thread state"
+        : runStatus === "waiting"
+          ? "waiting for you"
+          : runStatus === "running"
+            ? "running"
+            : "ready",
+    caution: turnFailure !== undefined,
+    detail: operationError ?? turnFailure,
   };
   const chatColumn = (
     <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] gap-y-[var(--gutter)]">
@@ -204,12 +189,29 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
           scroll="clip"
           flush
           id="transcript"
-          title={threads.find((thread) => thread.id === currentThreadId)?.title ?? "thread"}
+          title={
+            selectTitle(chat) ||
+            threads.find((thread) => thread.id === currentThreadId)?.title ||
+            "thread"
+          }
           actions={<ChatCluster handle={handle} situation={situation} />}
           boundaryKey={currentThreadId}
           onRetry={retryBody}
         >
-          <ThreadBody bodyAtom={bodyAtom} state={chat} mode={mode} sideOpen={sideOpen} />
+          {missingThread ? (
+            <div className="grid min-h-[60vh] place-content-center justify-items-center gap-3 px-6 text-center">
+              <EmptyState story="scope" exit="start a new thread, or pick one on the left">
+                no such thread on this host
+              </EmptyState>
+              <span className="face-mono t-small text-ink-2">{currentThreadId}</span>
+              <NewThreadButtons
+                harnesses={harnesses}
+                onNew={(harness) => void newThread(harness)}
+              />
+            </div>
+          ) : (
+            <ThreadBody bodyAtom={bodyAtom} state={chat} mode={mode} sideOpen={sideOpen} />
+          )}
         </Pane>
       </div>
       <ComposerBank
@@ -224,11 +226,6 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
               situation={situation}
               status={status}
               urlTarget={target}
-            />
-            <ContextRibbon
-              breakdown={breakdown}
-              cache={cache}
-              onOpenWorld={() => setMode("world")}
             />
           </>
         }
@@ -272,9 +269,10 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
                 {mode === "threads" ? (
                   <ThreadsSidebar
                     threads={threads}
+                    harnesses={harnesses}
                     currentThreadId={currentThreadId}
                     onSelect={openThread}
-                    onNew={newThread}
+                    onNew={(harness) => void newThread(harness)}
                     onRename={handleRenameThread}
                     onDelete={handleDeleteThread}
                     onSearch={() => store.actions.setPaletteOpen(true)}
@@ -343,11 +341,12 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
       {host.kept}
       <ThreadDialog
         threads={threads}
+        harnesses={harnesses}
         currentThreadId={currentThreadId}
         open={paletteOpen}
         onOpenChange={store.actions.setPaletteOpen}
         onSelect={openThread}
-        onNew={newThread}
+        onNew={(harness) => void newThread(harness)}
         onRename={handleRenameThread}
         onDelete={handleDeleteThread}
       />

@@ -2,17 +2,17 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
-import { takeoffsRouteState, threadHeadSchema } from "@pe/agent-contracts";
-import { buildAgentControllerApp } from "../../../packages/runtime/src/agent-controller-web.ts";
-import { createDeterministicRuntime } from "@pe/runtime/testing";
+import { z } from "zod";
 import {
-  RouteWorkspace,
-  type RouteDocumentStore,
-} from "../../../packages/runtime/src/route-workspace.ts";
-import { Effect, Layer, PubSub } from "effect";
-import { HttpServer } from "effect/unstable/http";
-import { RevitBridge, type HostBridgeEvent, type BridgeSessionView } from "../src/bridge.ts";
-import { makeMastraRuntimeLive, MastraRuntime } from "../src/mastra-runtime.ts";
+  address,
+  routeBindingsSchema,
+  takeoffsRouteState,
+  threadHeadSchema,
+} from "@pe/agent-contracts";
+import { RouteWorkspace, type RouteWorkspaceRegistration } from "@pe/runtime";
+import { Effect, PubSub } from "effect";
+import type { RevitBridge, HostBridgeEvent, BridgeSessionView } from "../src/bridge.ts";
+import { createPeRoutes, fileRouteDocumentStore, makeHostPeRoutes } from "../src/pe-routes.ts";
 
 const registrations = [
   {
@@ -39,23 +39,12 @@ const path = "http://host/pe/route-state/test?open=session/closed";
 
 test("HTTP Work written before workspace recreation is swept by the next workspace", async () => {
   const directory = await mkdtemp(join(tmpdir(), "pe-work-"));
-  const runtime = await createDeterministicRuntime({
-    databasePath: join(directory, "work.db"),
-    resourceId: "work-proof",
-    responses: [],
-  });
   try {
-    const threadState = (await runtime.mastra!.getStorage()!.getStore("threadState"))!;
-    const store: RouteDocumentStore = {
-      getState: ({ targetKey, route }) =>
-        threadState.getState({ threadId: "work-proof", type: `${route}:${targetKey}` }),
-      setState: ({ targetKey, route, value }) =>
-        threadState.setState({ threadId: "work-proof", type: `${route}:${targetKey}`, value }),
-    };
-    const app = await buildAgentControllerApp({
-      runtime,
-      label: "pea",
-      routeRegistrations: registrations,
+    const store = fileRouteDocumentStore(join(directory, "work"));
+    const app = createPeRoutes({
+      registrations,
+      store,
+      heads: { observe: () => () => {} },
     });
     const written = await app.fetch(
       new Request(`${path.replace("?", "/apply?")}`, {
@@ -93,7 +82,6 @@ test("HTTP Work written before workspace recreation is swept by the next workspa
       doc: { count: 9 },
     });
   } finally {
-    await runtime.close?.();
     await rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }).catch(
       () => {},
     );
@@ -123,28 +111,13 @@ test("host HTTP publishes one discard when a bridge frame closes the last docume
               return () => listeners.delete(listener);
             },
           } as unknown as RevitBridge["Service"];
-          const tenant = makeMastraRuntimeLive(
-            { revit: true },
+          const { routes: host, threads } = makeHostPeRoutes(
+            "http://127.0.0.1:0",
+            bridge,
             () => registrations,
-            async () =>
-              createDeterministicRuntime({
-                databasePath: join(directory, "work.db"),
-                resourceId: "sweep-proof",
-                responses: [],
-              }),
-          ).pipe(
-            Layer.provide(
-              Layer.mergeAll(
-                Layer.succeed(RevitBridge, bridge),
-                Layer.succeed(HttpServer.HttpServer, {
-                  address: { _tag: "TcpAddress", port: 0, hostname: "127.0.0.1" },
-                  serve: () => Effect.void,
-                }),
-              ),
-            ),
           );
+          yield* Effect.addFinalizer(() => Effect.sync(() => threads.close()));
           yield* Effect.gen(function* () {
-            const host = yield* MastraRuntime;
             yield* Effect.promise(async () => {
               const response = await host.fetch(
                 new Request(
@@ -196,7 +169,7 @@ test("host HTTP publishes one discard when a bridge frame closes the last docume
                 await collecting;
               }
             });
-          }).pipe(Effect.provide(tenant));
+          });
         }),
       ),
     );
@@ -208,3 +181,146 @@ test("host HTTP publishes one discard when a bridge frame closes the last docume
     );
   }
 }, 20_000);
+
+/** The host's route-state surface checks every write's revision, body and actor. */
+test("HTTP authored writes enforce short local revision checks", async () => {
+  const schema = z
+    .object({
+      bindings: routeBindingsSchema,
+      values: z.record(z.string(), z.string()).default({}),
+      count: z.number().int().default(0),
+    })
+    .prefault({});
+  let externalCalls = 0;
+  const external = async () => (externalCalls++, { mutated: true });
+  const catalogReads: unknown[] = [];
+  const catalogRead = async (session?: unknown) => (
+    catalogReads.push(session),
+    {
+      at: "2026-09-14T22:54:30.125Z",
+      sessions: [],
+      sources: {},
+      capabilities: [],
+    }
+  );
+  const app = createPeRoutes({
+    registrations: [
+      {
+        spec: {
+          route: "test-route",
+          title: "Test Route",
+          description: "A test collaborative route.",
+          schema,
+          agentWriteMask: [["values"]],
+          commands: {
+            increment: { description: "Increment.", actor: "any", input: z.object({}) },
+            external: { description: "External.", actor: "human", input: z.object({}) },
+          },
+        },
+        handlers: {
+          increment: async (_input: unknown, context: any) => {
+            const doc = context.getDoc();
+            doc.count++;
+            await context.setDoc(doc);
+            return { count: doc.count };
+          },
+          external,
+        },
+      },
+    ] as unknown as RouteWorkspaceRegistration[],
+    store: (() => {
+      const state = new Map<string, unknown>();
+      return {
+        getState: async ({ targetKey, route }: { targetKey: string; route: string }) =>
+          structuredClone(state.get(`${targetKey}:${route}`)),
+        setState: async ({
+          targetKey,
+          route,
+          value,
+        }: {
+          targetKey: string;
+          route: string;
+          value: unknown;
+        }) => {
+          state.set(`${targetKey}:${route}`, structuredClone(value));
+        },
+      };
+    })(),
+    heads: { observe: () => () => {} },
+    capabilityCatalog: { read: catalogRead },
+  });
+  const queryA = `target=${encodeURIComponent(address(String.raw`C:\Models\A.rvt`))}`;
+  expect(
+    await app.fetch(new Request("http://local/pe/capabilities?session=session-exact")),
+  ).toMatchObject({ status: 200 });
+  expect(catalogReads).toContain("session-exact");
+  const response = await app.fetch(
+    new Request("http://local/pe/route-state/test-route?target=not-an-address"),
+  );
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ error: /invalid Target/ });
+  // E2E-J1: a registered route with no Work reads the empty document at r0.
+  const absent = await app.fetch(new Request(`http://local/pe/route-state/test-route?${queryA}`));
+  expect(absent.status).toBe(200);
+  expect(await absent.json()).toMatchObject({ route: "test-route", revision: 0, doc: {} });
+  const unknown = await app.fetch(new Request(`http://local/pe/route-state/nope?${queryA}`));
+  expect(unknown.status).toBe(404);
+  expect(await unknown.json()).toEqual({ error: "unknown route 'nope'" });
+
+  const post = (path: string, body: unknown) =>
+    app.fetch(
+      new Request(`http://local${path}?${queryA}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    );
+  expect(
+    await (
+      await post("/pe/agent/route-state/test-route/apply", {
+        patches: [{ path: ["values", "http"], value: "landed" }],
+        expectedRevision: 0,
+      })
+    ).json(),
+  ).toMatchObject({ ok: true, revision: 1 });
+  // F-H6-4: a malformed body names the failing field and its shape.
+  const stringPath = await post("/pe/agent/route-state/test-route/apply", {
+    patches: [{ path: "scope.proposal", value: 1 }],
+    expectedRevision: 1,
+  });
+  expect(stringPath.status).toBe(400);
+  expect(await stringPath.json()).toMatchObject({
+    ok: false,
+    kind: "error",
+    error: 'invalid body at patches[0].path: must be a segment array, e.g. ["scope","proposal"]',
+  });
+  expect(
+    await (await post("/pe/agent/route-state/test-route/apply", { patches: [] })).json(),
+  ).toMatchObject({ error: expect.stringMatching(/^invalid body at expectedRevision: /) });
+  const command = { command: "increment", input: {}, expectedRevision: 1 };
+  expect(await (await post("/pe/route-state/test-route/command", command)).json()).toMatchObject({
+    ok: true,
+    revision: 2,
+  });
+  expect(
+    await (
+      await post("/pe/route-state/test-route/command", { ...command, expectedRevision: 99 })
+    ).json(),
+  ).toMatchObject({ ok: false, code: "stale_revision" });
+  // Start fresh is a human verb: Pea's door refuses it, and readable Work has nothing to set aside.
+  expect(
+    await (await post("/pe/agent/route-state/test-route/start-fresh", {})).json(),
+  ).toMatchObject({ ok: false, error: "start fresh is human-only" });
+  expect(await (await post("/pe/route-state/test-route/start-fresh", {})).json()).toMatchObject({
+    ok: false,
+    error: "this route's Work is readable",
+  });
+  // Salvage is a human read: a route that declares none has nothing (404); Pea is refused by name.
+  const salvage = (prefix: string) =>
+    app.fetch(new Request(`http://local${prefix}/test-route/salvage?${queryA}`));
+  expect((await salvage("/pe/route-state")).status).toBe(404);
+  const pea = await salvage("/pe/agent/route-state");
+  expect(pea.status).toBe(403);
+  expect(await pea.json()).toMatchObject({ ok: false, error: "salvage is human-only" });
+  expect(externalCalls).toBe(0);
+});

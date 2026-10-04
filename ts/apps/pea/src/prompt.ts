@@ -1,18 +1,19 @@
 /**
- * `pea --prompt` — one headless Pea turn per invocation.
+ * `pea --prompt` - one headless turn on a harness thread (ADR 0015: the harness drives).
  *
- * Builds a fresh headless Pea runtime (the same product tools, skills, storage, and memory
- * profile as the interactive TUI), sends a single prompt, prints `{ threadId, response }`,
- * and exits. `--thread <id>` continues an existing Pea thread; `--json` prints the result as
- * JSON on stdout. Relocated from the old peco `talk_to_pea` worker; the MCP toolset stays
- * agent-free and harnesses talk to Pea through this CLI mode instead.
+ * Creates (or, with `--thread`, continues) a host harness thread, posts the prompt, and follows
+ * the thread's SSE event log until that turn ends. Permission requests are answered with
+ * `reject_once` unless `--allow`. Prints `{ ok, host, threadId, harness, model, stopReason, response }`.
  */
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { MastraDBMessage } from "@mastra/core/agent-controller";
-import { resolvePeaProductHomePath } from "@pe/mcps";
-import { createPeaRuntime, type PeaRuntimeHandle } from "@pe/runtime/pea";
+import type {
+  HarnessEvent,
+  HarnessId,
+  HarnessThreadBody,
+  HarnessThreadSummary,
+} from "@pe/agent-contracts";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { productRoot } from "@pe/host-contracts/service-identity";
 import {
@@ -23,69 +24,38 @@ import {
 } from "@pe/host-contracts/service-identity";
 import { ensureRunning } from "@pe/host-contracts/pe-service";
 
-const runtimeCloseTimeoutMs = 5000;
 const sourceHostStartupTimeoutMs = 45_000;
-const defaultPeaPromptTimeoutSeconds = 900;
 
 // Progress breadcrumbs on stderr: off by default so `pea --prompt --json` stays pipe-clean.
 // Set PEA_PROMPT_TRACE=1 to locate a stuck await on timeout.
-const traceEnabled = process.env.PEA_PROMPT_TRACE === "1";
-
 function trace(message: string): void {
-  if (!traceEnabled) return;
+  if (process.env.PEA_PROMPT_TRACE !== "1") return;
   process.stderr.write(`[pea-prompt ${new Date().toISOString()}] ${message}\n`);
 }
 
-const tracedEventTypes = new Set([
-  "agent_start",
-  "agent_end",
-  "tool_start",
-  "tool_end",
-  "tool_approval_required",
-  "tool_suspended",
-  "error",
-  "info",
-]);
-
-function traceSessionEvents(session: PeaPromptSession): void {
-  session.subscribe?.((event) => {
-    const record = readRecord(event);
-    const type = typeof record?.type === "string" ? record.type : "";
-    if (!tracedEventTypes.has(type)) return;
-    const toolName = typeof record?.toolName === "string" ? ` tool=${record.toolName}` : "";
-    trace(`event ${type}${toolName}`);
-  });
-}
-
-type PeaPromptRuntime = PeaRuntimeHandle & {
-  session: PeaPromptSession;
-};
-
-type PeaPromptMessage = Pick<MastraDBMessage, "id" | "role" | "content">;
-
-type PeaPromptSession = {
-  thread: {
-    switch(request: { threadId: string }): Promise<void>;
-    create(request: { title: string }): Promise<{ id: string }>;
-    listActiveMessages(request?: { limit?: number }): Promise<PeaPromptMessage[]>;
-  };
-  sendMessage(request: { content: string }): Promise<void>;
-  abort(): void;
-  subscribe?(listener: (event: unknown) => void): () => void;
-};
-
 export interface PeaPromptRequest {
   prompt: string;
+  harness?: HarnessId;
   threadId?: string;
+  /** Posted to the thread's `/model` before the prompt. */
+  modelId?: string;
   json?: boolean;
   timeoutSeconds?: number;
-  workspaceRoot?: string;
+  /** Answer permission requests with `allow_once`; otherwise `reject_once`. */
+  allow?: boolean;
 }
 
 export interface PeaPromptResult {
   ok: boolean;
+  /** Host base URL the run talked to. */
+  host: string;
   threadId: string;
+  harness: HarnessId | "";
+  model: string | null;
+  stopReason: string;
   response: string;
+  /** Tool calls whose permission request this run rejected (pass --allow to approve them). */
+  rejected: string[];
 }
 
 /** Run one headless prompt, print the result, and return the process exit code. */
@@ -96,8 +66,13 @@ export async function runPeaPrompt(request: PeaPromptRequest): Promise<number> {
   } catch (error) {
     result = {
       ok: false,
+      host: "",
       threadId: request.threadId ?? "",
+      harness: "",
+      model: request.modelId ?? null,
+      stopReason: "error",
       response: error instanceof Error ? error.message : String(error),
+      rejected: [],
     };
   }
 
@@ -105,69 +80,150 @@ export async function runPeaPrompt(request: PeaPromptRequest): Promise<number> {
     process.stdout.write(`${JSON.stringify(result)}\n`);
   } else {
     process.stdout.write(`${result.response}\n`);
+    if (result.rejected.length > 0)
+      process.stdout.write(`rejected: ${result.rejected.join(", ")} (pass --allow)\n`);
     process.stdout.write(`threadId: ${result.threadId || "(none)"}\n`);
   }
-
   return result.ok ? 0 : 1;
 }
 
 export async function runPeaPromptTurn(request: PeaPromptRequest): Promise<PeaPromptResult> {
-  const timeoutSeconds = request.timeoutSeconds ?? defaultPeaPromptTimeoutSeconds;
-  trace("creating runtime");
-  const runtime = await createPeaPromptRuntime(request);
-  trace("runtime ready");
-  traceSessionEvents(runtime.session);
-  try {
-    const thread = request.threadId
-      ? (await runtime.session.thread.switch({ threadId: request.threadId }),
-        { id: request.threadId })
-      : await runtime.session.thread.create({ title: "Pea prompt" });
-    trace(`thread ready id=${thread.id}`);
+  const host = await ensureTsHostRunning();
+  const base = `${host}/pe/threads`;
+  // An older host without the harness wire answers 404 on thread routes; name it up front.
+  const harnesses = await fetch(`${host}/pe/harnesses`);
+  if (!harnesses.ok)
+    throw new Error(
+      `Host ${host} predates the harness wire (GET /pe/harnesses -> ${harnesses.status}); restart it.`,
+    );
+  await harnesses.arrayBuffer();
+  const call = async <T>(method: string, route: string, body?: unknown): Promise<T> => {
+    const response = await fetch(`${base}${route}`, {
+      method,
+      headers: method === "GET" ? undefined : { "content-type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const text = await response.text();
+    if (!response.ok)
+      throw new Error(`${method} /pe/threads${route} -> ${response.status} ${text}`);
+    return (text ? JSON.parse(text) : undefined) as T;
+  };
 
-    const turn = await sendPeaMessageWithTimeout(runtime.session, request.prompt, timeoutSeconds);
-    return {
-      ok: turn.ok,
-      threadId: thread.id,
-      response: turn.latestAssistantText,
-    };
+  const thread: HarnessThreadSummary & Partial<Pick<HarnessThreadBody, "events">> = request.threadId
+    ? await call<HarnessThreadBody>("GET", `/${request.threadId}`)
+    : await call<HarnessThreadSummary>("POST", "", {
+        harness: request.harness ?? "claude",
+        title: "Pea prompt",
+      });
+  const after = thread.lastSeq;
+  trace(`thread ${thread.id} harness=${thread.harness} after=${after}`);
+
+  const result: PeaPromptResult = {
+    ok: false,
+    host,
+    threadId: thread.id,
+    harness: thread.harness,
+    model: request.modelId ?? thread.modelId,
+    stopReason: "",
+    response: "",
+    rejected: [],
+  };
+  const timeoutSeconds = request.timeoutSeconds ?? 900;
+  const signal = AbortSignal.timeout(timeoutSeconds * 1000);
+  // Closing the SSE body on exit is what lets the process end without a libuv teardown assertion.
+  const streamAbort = new AbortController();
+  const chunks: string[] = [];
+  let breakBeforeNextChunk = false;
+  let modelSeen = false;
+  try {
+    if (request.modelId) await call("POST", `/${thread.id}/model`, { modelId: request.modelId });
+    const { turnId } = await call<{ turnId: string }>("POST", `/${thread.id}/prompt`, {
+      text: request.prompt,
+    });
+    trace(`turn ${turnId}`);
+    // The log is durable and replayable from `after`, so following it after the POST misses nothing.
+    for await (const event of streamEvents(
+      `${base}/${thread.id}/stream?after=${after}`,
+      AbortSignal.any([signal, streamAbort.signal]),
+    )) {
+      trace(`event ${event.kind}`);
+      if (event.kind === "model_changed") {
+        result.model = event.modelId;
+        modelSeen = true;
+      }
+      if (event.kind === "error" && event.turnId === null)
+        return { ...result, stopReason: "error", response: event.message };
+      if (!("turnId" in event) || event.turnId === null) {
+        if (event.kind !== "permission_request") continue;
+      } else if (event.turnId !== turnId) continue;
+      if (event.kind === "update") {
+        if (event.turnId === null) continue;
+        if (event.update.sessionUpdate !== "agent_message_chunk") breakBeforeNextChunk = true;
+        else {
+          const content = event.update.content as { type?: string; text?: string } | undefined;
+          if (content?.type === "text" && content.text) {
+            if (breakBeforeNextChunk && chunks.length > 0) chunks.push("\n");
+            breakBeforeNextChunk = false;
+            chunks.push(content.text);
+          }
+        }
+      } else if (event.kind === "permission_request") {
+        const want = request.allow ? "allow" : "reject";
+        // `allow_always` would outlive this one headless turn; take it only when nothing else allows.
+        const option =
+          event.options.find((candidate) => candidate.kind === `${want}_once`) ??
+          event.options.find((candidate) => candidate.kind.startsWith(want));
+        if (!option) throw new Error(`Permission ${event.requestId} offers no ${want} option.`);
+        if (!request.allow) result.rejected.push(event.toolCall?.title ?? event.requestId);
+        await call("POST", `/${thread.id}/permission`, {
+          requestId: event.requestId,
+          optionId: option.optionId,
+        });
+      } else if (event.kind === "turn_end") {
+        // The thread body's modelId is the settled model unless a model_changed already said so.
+        const settled = await call<HarnessThreadBody>("GET", `/${thread.id}`).catch(() => null);
+        return {
+          ...result,
+          model: modelSeen ? result.model : (settled?.modelId ?? result.model),
+          ok: event.stopReason === "end_turn",
+          stopReason: event.stopReason,
+          response: chunks.join("").trim(),
+        };
+      } else if (event.kind === "error") {
+        return { ...result, stopReason: "error", response: event.message };
+      }
+    }
+    throw new Error("The thread stream closed before the turn ended.");
+  } catch (error) {
+    if (!signal.aborted) {
+      const response = error instanceof Error ? error.message : String(error);
+      return { ...result, stopReason: "error", response };
+    }
+    await call("POST", `/${thread.id}/cancel`).catch(() => undefined);
+    const response = `Pea did not finish within ${timeoutSeconds} seconds.`;
+    return { ...result, stopReason: "timeout", response };
   } finally {
-    await closeRuntimeBestEffort(runtime);
+    streamAbort.abort();
   }
 }
 
-async function closeRuntimeBestEffort(runtime: PeaPromptRuntime): Promise<void> {
-  if (!runtime.close) return;
-
-  try {
-    await withTimeout(runtime.close(), runtimeCloseTimeoutMs);
-  } catch {
-    runtime.session.abort();
+async function* streamEvents(url: string, signal: AbortSignal): AsyncGenerator<HarnessEvent> {
+  const response = await fetch(url, { signal, headers: { accept: "text/event-stream" } });
+  if (!response.ok || !response.body) throw new Error(`GET ${url} -> ${response.status}`);
+  let buffer = "";
+  for await (const text of response.body.pipeThrough(new TextDecoderStream())) {
+    buffer += text;
+    for (let end = buffer.indexOf("\n\n"); end >= 0; end = buffer.indexOf("\n\n")) {
+      const data = buffer
+        .slice(0, end)
+        .split("\n")
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trimStart())
+        .join("\n");
+      buffer = buffer.slice(end + 2);
+      if (data) yield JSON.parse(data) as HarnessEvent;
+    }
   }
-}
-
-function withTimeout<T>(task: Promise<T> | T, timeoutMs: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`Timed out after ${timeoutMs}ms.`)), timeoutMs);
-  });
-
-  return Promise.race([Promise.resolve(task), timeout]).finally(() => {
-    if (timer) clearTimeout(timer);
-  });
-}
-
-async function createPeaPromptRuntime(request: PeaPromptRequest): Promise<PeaPromptRuntime> {
-  const workspaceRoot = path.resolve(request.workspaceRoot ?? resolvePeaProductHomePath());
-  const hostBaseUrl = await ensureTsHostRunning();
-  const handle = await createPeaRuntime({
-    workspaceRoot,
-    hostBaseUrl,
-    protocol: "test",
-    accessLevel: "trusted",
-    capabilities: { revit: true },
-  });
-  if (!handle.session) throw new Error("Expected Pea prompt runtime session.");
-  return handle as PeaPromptRuntime;
 }
 
 async function ensureTsHostRunning(): Promise<string> {
@@ -239,100 +295,4 @@ async function resolveInstalledHostLaunch(): Promise<{
   const entryPath = path.join(appBase, "bin", "host", "Pe.Host.exe");
   if (!existsSync(entryPath)) throw new Error(`installed host entry is missing: ${entryPath}`);
   return { appBase, entryPath };
-}
-
-async function sendPeaMessageWithTimeout(
-  session: PeaPromptSession,
-  content: string,
-  timeoutSeconds: number,
-) {
-  const beforeMessages = await session.thread.listActiveMessages({ limit: 80 });
-  const beforeIds = new Set(beforeMessages.flatMap((message) => (message.id ? [message.id] : [])));
-  const deadline = Date.now() + timeoutSeconds * 1000;
-  let timedOut = false;
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      timedOut = true;
-      session.abort();
-      reject(new Error(`Pea did not finish within ${timeoutSeconds} seconds.`));
-    }, timeoutSeconds * 1000);
-  });
-
-  try {
-    trace("sendMessage start");
-    await Promise.race([session.sendMessage({ content }), timeout]);
-    trace("sendMessage resolved; polling for new assistant text");
-    const latestText = await waitForNewAssistantText(session, beforeIds, deadline);
-    trace(`poll finished hasText=${Boolean(latestText)}`);
-    if (!latestText) {
-      return {
-        ok: false,
-        timedOut: Date.now() >= deadline,
-        latestAssistantText: "Pea did not produce an assistant response for this turn.",
-      };
-    }
-
-    return { ok: true, timedOut: false, latestAssistantText: latestText };
-  } catch (error) {
-    return {
-      ok: false,
-      timedOut,
-      latestAssistantText: error instanceof Error ? error.message : String(error),
-    };
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
-async function waitForNewAssistantText(
-  session: PeaPromptSession,
-  beforeIds: Set<string>,
-  deadline: number,
-): Promise<string> {
-  while (Date.now() < deadline) {
-    const messages = await session.thread.listActiveMessages({ limit: 80 });
-    const newAssistantText = latestAssistantText(
-      messages.filter((message) => !message.id || !beforeIds.has(message.id)),
-    );
-    if (newAssistantText) return newAssistantText;
-
-    await delay(500);
-  }
-
-  return "";
-}
-
-function latestAssistantText(messages: readonly PeaPromptMessage[]): string {
-  for (const message of [...messages].reverse()) {
-    if (message.role !== "assistant") continue;
-
-    const text = textFromMessage(message);
-    if (text) return text;
-  }
-
-  return "";
-}
-
-function textFromMessage(message: { content: MastraDBMessage["content"] }): string {
-  return message.content.parts
-    .map((part) => {
-      const typedPart = readRecord(part);
-      return typedPart?.type === "text" && typeof typedPart.text === "string" ? typedPart.text : "";
-    })
-    .filter(Boolean)
-    .join("\n")
-    .trim();
-}
-
-function readRecord(value: unknown): Record<string, unknown> | undefined {
-  return isRecord(value) ? value : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
 }

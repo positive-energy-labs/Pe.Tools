@@ -3,7 +3,6 @@ export {
   buildCapabilities,
   bundledPeaSkills,
   configurePeaProductToolContext,
-  ownedTurnDocuments,
   createCapabilityCatalogSource,
   createRouteRegistrations,
   peDo,
@@ -11,7 +10,6 @@ export {
   peRead,
   materializeBundledPeaSkills,
   peaProductHomeEnvVar,
-  peaProductToolMetadata,
   peaProductTools,
   peaStandardSkillsRoot,
   resolvePeaProductHomePath,
@@ -37,3 +35,9 @@ export {
   scriptPodExportInputSchema,
   scriptPodImportInputSchema,
 } from "./shared/scripting.ts";
+export {
+  peaAgentInstructions,
+  peaAgentInstructionsFor,
+  peaRevitOrientation,
+  type PeaRuntimeCapabilities,
+} from "./pea/instructions.ts";

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { isAbsolute, join, normalize } from "node:path";
+import { isAbsolute, join, normalize, resolve } from "node:path";
 import { Effect, FileSystem } from "effect";
 import {
   BRIDGE_CONTRACT_VERSION,
@@ -20,29 +20,27 @@ import {
 } from "@pe/host-contracts/operation-types";
 import type { BridgeSessionView } from "./bridge.ts";
 import { readFileStringOrEmpty, statOrNull } from "./files/index.ts";
-import { resolvePeaWorld, type PeaRuntimeCapabilities } from "@pe/runtime/pea";
+import { resolvePeaProductHomePath, type PeaRuntimeCapabilities } from "@pe/mcps";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
 import { LocalOpError } from "./local-error.ts";
 
 const RUNTIME_IDENTITY = `pe-host-ts/${process.version}`;
 
-export type AgentRuntimeStatus = { readonly available: boolean; readonly error: string | null };
-
-// Mastra tenant health (D4). Starts unavailable/no-error ("not yet settled"); the tenant layer
-// reports in once its init succeeds or degrades to 503 (mastra-runtime.ts catch).
-let agentRuntimeStatus: AgentRuntimeStatus = { available: false, error: null };
-
-export function setAgentRuntimeStatus(status: AgentRuntimeStatus): void {
-  agentRuntimeStatus = status;
+function resolvePeaWorld() {
+  const root = resolve(resolvePeaProductHomePath());
+  return {
+    id: `pea:${Buffer.from(root).toString("base64url")}`,
+    root,
+    storage: { kind: "local-unversioned" },
+    isolation: "none",
+  } as const;
 }
 
 export function getHostStatus(
   bridge: BridgeSessionView,
   capabilities: PeaRuntimeCapabilities = hostCapabilities,
 ) {
-  const world = resolvePeaWorld();
   return Effect.succeed({
-    agentRuntime: agentRuntimeStatus,
     bridgeContractVersion: BRIDGE_CONTRACT_VERSION,
     bridgeIsConnected: bridge.connected,
     bridgePath: BRIDGE_PATH,
@@ -53,11 +51,10 @@ export function getHostStatus(
     executablePath: hostOwnership.executablePath,
     lane: hostOwnership.lane,
     processId: hostOwnership.processId,
-    resourceId: world.id,
     runtimeIdentity: RUNTIME_IDENTITY,
     serviceName: hostOwnership.serviceName,
     sourceRoot: hostOwnership.sourceRoot,
-    world,
+    world: resolvePeaWorld(),
   } satisfies HostProbeData);
 }
 

@@ -1,0 +1,10 @@
+{
+  "context_servers": {
+    "executor": {
+      "source": "custom",
+      "type": "http",
+      "url": "https://executor.sh/positive-energy/mcp",
+      "headers": {}
+    }
+  }
+}

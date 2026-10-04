@@ -29,7 +29,10 @@ const program = hostProgram(
         Effect.sync(() =>
           spawn(
             process.execPath,
-            [fileURLToPath(new URL("../scripts/dev-web.ts", import.meta.url))],
+            [
+              fileURLToPath(new URL("../scripts/dev-web.ts", import.meta.url)),
+              ...process.argv.filter((a) => a === "--share"),
+            ],
             {
               cwd: new URL("../", import.meta.url),
               stdio: ["ignore", "inherit", "inherit", "ipc"],

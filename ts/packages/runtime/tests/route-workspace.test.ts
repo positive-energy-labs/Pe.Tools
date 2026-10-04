@@ -1,8 +1,4 @@
 import { observeResources, resourceResponse } from "../src/resource-stream.ts";
-import { ScopeStore } from "../src/scope-store.ts";
-import { mkdtemp, rm } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { address, routeBindingsSchema } from "@pe/agent-contracts";
@@ -14,8 +10,6 @@ import type {
   WorkKey,
 } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../src/route-workspace.ts";
-import { buildAgentControllerApp } from "../src/agent-controller-web.ts";
-import { createPeaRuntime } from "../src/pea-runtime.ts";
 import type {
   RouteDocumentStore,
   RouteWorkspaceEvent,
@@ -102,7 +96,6 @@ const documentB: WorkKey = {
   route: "test-route",
   target: address("C:\\Models\\B.rvt"),
 };
-const queryA = `target=${encodeURIComponent(documentA.target!)}`;
 
 function bind(module: RouteWorkspace, scope: WorkKey = documentA) {
   return {
@@ -301,112 +294,9 @@ test("stale commands never invoke and successful writes return landed revisions"
 
 // Durable large-result / serialization-loss proof lives in host gateway.test.ts on ActionJournal.
 
-test("HTTP authored writes enforce short local revision checks", async () => {
-  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-route-state-"));
-  const runtime = await createPeaRuntime({ workspaceRoot });
-  const external = vi.fn(async () => ({ mutated: true }));
-  const catalogRead = vi.fn(async () => ({
-    at: "2026-09-14T22:54:30.125Z",
-    sessions: [],
-    sources: {},
-    capabilities: [],
-  }));
-  try {
-    const app = await buildAgentControllerApp({
-      runtime,
-      label: "pea",
-      capabilityCatalog: { read: catalogRead },
-      routeRegistrations: [registration({ external })],
-    });
-    expect(
-      await app.fetch(new Request("http://local/pe/capabilities?session=session-exact")),
-    ).toMatchObject({ status: 200 });
-    expect(catalogRead).toHaveBeenCalledWith("session-exact");
-    const response = await app.fetch(
-      new Request("http://local/pe/route-state/test-route?target=not-an-address"),
-    );
-    expect(response.status).toBe(400);
-    // E2E-J1: a registered route with no Work at the scope reads the empty document at r0, the
-    // one apply starts from; "unknown route" names only an unregistered route.
-    const absent = await app.fetch(new Request(`http://local/pe/route-state/test-route?${queryA}`));
-    expect(absent.status).toBe(200);
-    expect(await absent.json()).toMatchObject({ route: "test-route", revision: 0, doc: {} });
-    const unknown = await app.fetch(new Request(`http://local/pe/route-state/nope?${queryA}`));
-    expect(unknown.status).toBe(404);
-    expect(await unknown.json()).toEqual({ error: "unknown route 'nope'" });
-    expect(await response.json()).toMatchObject({ error: /invalid Target/ });
-
-    const post = (path: string, body: unknown) =>
-      app.fetch(
-        new Request(`http://local${path}?${queryA}`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-      );
-    expect(
-      await (
-        await post("/pe/agent/route-state/test-route/apply", {
-          patches: [{ path: ["values", "http"], value: "landed" }],
-          expectedRevision: 0,
-        })
-      ).json(),
-    ).toMatchObject({ ok: true, revision: 1 });
-    // F-H6-4: a malformed body names the failing field and its shape, read off the schema's issue.
-    const stringPath = await post("/pe/agent/route-state/test-route/apply", {
-      patches: [{ path: "scope.proposal", value: 1 }],
-      expectedRevision: 1,
-    });
-    expect(stringPath.status).toBe(400);
-    expect(await stringPath.json()).toMatchObject({
-      ok: false,
-      kind: "error",
-      error: 'invalid body at patches[0].path: must be a segment array, e.g. ["scope","proposal"]',
-    });
-    expect(
-      await (await post("/pe/agent/route-state/test-route/apply", { patches: [] })).json(),
-    ).toMatchObject({ error: expect.stringMatching(/^invalid body at expectedRevision: /) });
-    const command = {
-      command: "increment",
-      input: {},
-      expectedRevision: 1,
-    };
-    expect(await (await post("/pe/route-state/test-route/command", command)).json()).toMatchObject({
-      ok: true,
-      revision: 2,
-    });
-    expect(
-      await (
-        await post("/pe/route-state/test-route/command", { ...command, expectedRevision: 99 })
-      ).json(),
-    ).toMatchObject({ ok: false, code: "stale_revision" });
-    // Start fresh is a human verb: Pea's door refuses it, and readable Work has nothing to set aside.
-    expect(
-      await (await post("/pe/agent/route-state/test-route/start-fresh", {})).json(),
-    ).toMatchObject({ ok: false, error: "start fresh is human-only" });
-    expect(await (await post("/pe/route-state/test-route/start-fresh", {})).json()).toMatchObject({
-      ok: false,
-      error: "this route's Work is readable",
-    });
-    // Salvage is a human read: a route that declares none has nothing (404); Pea is refused by name.
-    const salvage = (prefix: string) =>
-      app.fetch(new Request(`http://local${prefix}/test-route/salvage?${queryA}`));
-    expect((await salvage("/pe/route-state")).status).toBe(404);
-    const pea = await salvage("/pe/agent/route-state");
-    expect(pea.status).toBe(403);
-    expect(await pea.json()).toMatchObject({ ok: false, error: "salvage is human-only" });
-  } finally {
-    await runtime.close?.();
-    await rm(workspaceRoot, { recursive: true, force: true });
-  }
-}, 30_000);
-
 test("resource stream publishes absent Work, an applied revision, and ends on abort", async () => {
   const module = workspace(memoryStore().store);
-  const scopes = new ScopeStore(
-    async () => ({ getState: async () => null, setState: async () => {} }),
-    "test",
-  );
+  const scopes = { observe: () => () => {} };
   const abort = new AbortController();
   const response = resourceResponse(
     new Request(

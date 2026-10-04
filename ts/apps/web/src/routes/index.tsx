@@ -149,6 +149,14 @@ const TOOLS = [
       "Every Revit world pe-revit and the bridge know about — the sessions pea controls and starts and stops, the one it only observes (your own Revit), each session's companion legs, and the ledger of what happened.",
   },
   {
+    to: "/settings",
+    title: "Settings",
+    label: "Pea",
+    icon: Settings2,
+    description:
+      "The OpenAI-compatible endpoint Pea talks to — proved with a model list and one chat before it is saved.",
+  },
+  {
     to: "/design-system",
     title: "Design System",
     label: "Design language",

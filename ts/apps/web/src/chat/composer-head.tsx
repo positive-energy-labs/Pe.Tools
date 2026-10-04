@@ -6,7 +6,6 @@
  * reject have one location and the stream stays a record.
  */
 import { useEffect, useRef } from "react";
-import { AskUserPrompt, readQuestion } from "#/chat/ask-prompt";
 import { resolveCallTarget, toolTitle, type TargetResolution } from "@pe/agent-contracts";
 import { ArrowDown, X } from "lucide-react";
 import { Popover } from "@base-ui/react/popover";
@@ -15,7 +14,6 @@ import { useAtomValue } from "@effect/atom-react";
 
 import { ActionButton } from "#/components/lang/action-button";
 import { Press } from "#/components/lang/press";
-import { Verdict } from "#/components/lang/verdict";
 import { Rail } from "#/components/lang/rail";
 import { targetInventory } from "#/readings";
 import { Ladder } from "#/route/ladder";
@@ -29,12 +27,11 @@ import type { ChatReading, ChatActionKey } from "#/chat/manifest";
 import { useThreadScope } from "#/chat/scope";
 import type { ChatPage } from "#/chat/seeds";
 import {
-  APPROVAL_OPTIONS,
-  isParkedAsk,
   selectApprovals,
+  selectPlan,
   selectRunStatus,
+  selectTitle,
   selectToolCalls,
-  toolTarget,
   type ChatState,
 } from "#/workbench/chat-state";
 import { useWorkbench } from "#/workbench/provider";
@@ -114,7 +111,7 @@ const documentAddress = (
 /** What both the composer head and the thread head's cluster read: the thread's target and its
  *  health. Called ONCE per surface (ChatSurface) and handed to both. */
 export function useChatSituation(handle: ChatHandle) {
-  const { currentThreadId, threads } = useWorkbench();
+  const { currentThreadId, threads, chat, missingThread } = useWorkbench();
   const head = useThreadScope(currentThreadId, !handle.demo, handle.readings.head);
   const inventory = targetInventory(
     handle.readings.inventory as Parameters<typeof targetInventory>[0],
@@ -131,7 +128,12 @@ export function useChatSituation(handle: ChatHandle) {
     },
   });
   const health = head.defaultTarget ? complaint(resolution) : null;
-  const threadLabel = threads.find((item) => item.id === currentThreadId)?.title ?? currentThreadId;
+  // A thread the host does not know names nothing: the transcript says "no such thread".
+  const threadLabel = missingThread
+    ? ""
+    : selectTitle(chat) ||
+      threads.find((item) => item.id === currentThreadId)?.title ||
+      currentThreadId;
   return { head, inventory, bound, ladder, health, threadLabel };
 }
 
@@ -185,7 +187,8 @@ export function ComposerHead({
    * disappears over the chat shifted the whole lane every time it spoke. */
   status?: { text: string; caution: boolean; detail?: string };
 }) {
-  const { currentThreadId, threads, chat, openThread, resolveApproval, store } = useWorkbench();
+  const { currentThreadId, threads, chat, missingThread, openThread, resolveApproval, store } =
+    useWorkbench();
   const isRunning = selectRunStatus(chat) !== "idle";
   const { head, inventory, bound, ladder, health, threadLabel } = situation;
   const refusal =
@@ -231,19 +234,21 @@ export function ComposerHead({
       : level,
   );
   // Live asks only: an expired ask is a transcript record, never a head row.
-  const approvals = selectApprovals(chat.display);
+  const approvals = selectApprovals(chat);
   const works = useHeadWorks(documentAddress(inventory, bound), ladder.docWord ?? "document", {
     open: store.actions.setPlugin,
     planIn: store.actions.planIn,
     planRefusal: useAtomValue(store.atoms.planRefusal),
   });
-  // "Do" alone says nothing about what is being asked for. The proposal row names the capability
-  // key and the target the call would run against, read off the call itself in the stream.
+  // "Do" alone says nothing about what is being asked for: the ask row names the call's target.
   const callsById = new Map(selectToolCalls(chat).map((call) => [call.id, call]));
   const selectedThread = threads.find((item) => item.id === currentThreadId);
-  const threadOptions = selectedThread
-    ? threads
-    : [{ id: currentThreadId, title: currentThreadId, updatedAt: "" }, ...threads];
+  const threadOptions =
+    selectedThread || missingThread
+      ? threads
+      : [{ id: currentThreadId, title: currentThreadId, updatedAt: "" }, ...threads].filter(
+          (thread) => thread.id,
+        );
   return (
     <section aria-label="Situation" className="flex min-w-0 flex-col" data-testid="composer-head">
       <Rail
@@ -302,7 +307,7 @@ export function ComposerHead({
         }
         trail={
           <span className="flex shrink-0 items-center gap-3">
-            <PlanChip tasks={chat.display.tasks ?? []} />
+            <PlanChip tasks={selectPlan(chat)} />
             <Press
               tone="quiet"
               size="icon"
@@ -326,71 +331,65 @@ export function ComposerHead({
         </div>
       ) : null}
       <ProposalHead
-        asks={approvals.map((approval) => (
-          <div
-            key={approval.toolCallId}
-            className="flex flex-wrap items-baseline gap-3 py-0.5"
-            data-tool-id={approval.toolCallId}
-          >
-            <span className="face-mono text-ink">⌗ {toolTitle(approval.toolName)}</span>
-            {(() => {
-              const call = callsById.get(approval.toolCallId);
-              const target = call ? toolTarget(call.args) : undefined;
-              return target ? (
+        asks={approvals.map((approval) => {
+          const call = callsById.get(approval.toolCallId);
+          return (
+            <div
+              key={approval.requestId}
+              className="flex flex-wrap items-baseline gap-3 py-0.5"
+              data-tool-id={approval.toolCallId}
+            >
+              <span className="face-mono text-ink">⌗ {toolTitle(approval.toolName)}</span>
+              {call?.target ? (
                 <code className="face-mono t-small text-ink" data-testid="approval-target">
-                  {target}
+                  {call.target}
                 </code>
-              ) : null;
-            })()}
-            {(() => {
-              const call = callsById.get(approval.toolCallId);
-              return call?.target && call.target !== toolTarget(call.args) ? (
-                <span className="t-small truncate text-ink-2">{call.target}</span>
-              ) : null;
-            })()}
-            <span className="t-small text-ink-2">{approval.kind}</span>
-            {isParkedAsk(approval)
-              ? // A live ask answers HERE: asks live in the head, the transcript holds records.
-                (() => {
-                  const question = readQuestion(approval.payload);
-                  return question ? (
-                    <AskUserPrompt
-                      toolCallId={approval.toolCallId}
-                      question={question}
-                      resolve={resolveApproval}
-                    />
-                  ) : (
-                    <span className="text-ink-2">the ask carries no question to answer</span>
-                  );
-                })()
-              : APPROVAL_OPTIONS.map((option) => {
-                  const allow = option.kind.startsWith("allow");
-                  return (
-                    <Verdict
-                      key={option.id}
-                      kind={allow ? "accept" : "deny"}
-                      title={
-                        allow
-                          ? `Let pea run ${toolTitle(approval.toolName)} — the call executes against the live target`
-                          : `Refuse this ${toolTitle(approval.toolName)} call — pea continues without it`
-                      }
-                      onClick={() => {
-                        void resolveApproval(approval.toolCallId, option.id);
-                      }}
-                    >
-                      {option.label}
-                    </Verdict>
-                  );
-                })}
-          </div>
-        ))}
+              ) : null}
+              <div className="hairline-y hairline-rows flex w-full min-w-0 flex-col [&>button]:w-full">
+                {approval.options.map((option, index) => (
+                  <Press
+                    key={option.optionId}
+                    size="value"
+                    aria-label={option.name}
+                    data-kind={option.kind}
+                    onClick={() => void resolveApproval(approval.requestId, option.optionId)}
+                  >
+                    <span className="grid w-full grid-cols-[1.5rem_minmax(0,1fr)] items-start gap-2 px-2 py-1.5 text-left">
+                      <span aria-hidden="true" className="face-mono text-ink-2">
+                        {index + 1}.
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block">{option.name}</span>
+                        <span
+                          className="mt-0.5 block t-small text-ink-2"
+                          data-tone={option.kind === "allow_always" ? "caution" : undefined}
+                        >
+                          {VERDICT[option.kind]}
+                        </span>
+                      </span>
+                    </span>
+                  </Press>
+                ))}
+              </div>
+            </div>
+          );
+        })}
         works={works}
       />
     </section>
   );
 }
 
-type PlanTask = NonNullable<ChatState["display"]["tasks"]>[number];
+/** What each ACP permission option kind covers, said under the harness's own option name. From
+ *  the kind only, in neutral words: the call may be a file write, a command, or a Pea door. */
+const VERDICT = {
+  allow_once: "this call only",
+  allow_always: "every call of this kind in this session, beyond this thread",
+  reject_once: "refuse",
+  reject_always: "refuse every call of this kind in this session, beyond this thread",
+} as const;
+
+type PlanTask = ReturnType<typeof selectPlan>[number];
 
 /** Pea's plan as one `plan x/y` press in the cluster; the list opens over the lane, never adding
  *  height to the head. Nothing when pea has no plan. */

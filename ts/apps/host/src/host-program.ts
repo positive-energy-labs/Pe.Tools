@@ -7,7 +7,6 @@ import { productRoot } from "@pe/host-contracts/service-identity";
 import { resolveHostVersion } from "./host-lifecycle.ts";
 import { makeHttpLive, resolveWebRoot } from "./app.ts";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
-import { makeMastraRuntimeLive } from "./mastra-runtime.ts";
 
 const preferredPort = Number(new URL(hostProcessIdentity.defaultHostBaseUrl).port);
 
@@ -35,7 +34,6 @@ export const hostProgram = (
         port,
         webUrl,
         capabilities: hostCapabilities,
-        mastraLayer: makeMastraRuntimeLive(hostCapabilities),
         lifecycle: { latch, handle },
         webRoot: resolveWebRoot(),
       });

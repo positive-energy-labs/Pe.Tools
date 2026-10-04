@@ -18,6 +18,9 @@
     "check": "vp check"
   },
   "dependencies": {
+    "@agentclientprotocol/claude-agent-acp": "catalog:",
+    "@agentclientprotocol/codex-acp": "catalog:",
+    "@agentclientprotocol/sdk": "catalog:",
     "@effect/platform-node": "4.0.0-beta.92",
     "@pe/agent-contracts": "workspace:*",
     "@pe/host-contracts": "workspace:*",
@@ -29,6 +32,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.6.2",
+    "playwright-core": "1.60.0",
     "typescript": "^6.0.3",
     "vite-plus": "catalog:"
   }

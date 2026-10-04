@@ -20,7 +20,8 @@ import { defineConfig } from "vite-plus";
  * Shimmed packages (store prefixes are version-pinned when the store holds several versions):
  * - get-stream (v9, ESM-only — Node 25 require(esm) handles it): rolldown duplicates the module
  *   and mis-renames its export-then-mutate `nodeImports` binding (declared `nodeImports$1`,
- *   mutated as undeclared `nodeImports`) — same inlining bug class, surfaced at Mastra init.
+ *   mutated as undeclared `nodeImports`). It arrives through @mastra/core (execa), which the
+ *   Pea MCP tools still import.
  */
 const seaRequireSpecifiers = /^get-stream$/;
 const seaRequirePackages: Record<string, string> = {
@@ -67,63 +68,15 @@ function seaRequireShimSource(spec: string): string {
   ].join("\n");
 }
 
-/**
- * Throwing stub for onnxruntime-node (decision record: docs/features/host/LEDGER.md).
- *
- * mastracode eagerly imports @mastra/fastembed (chunk-YADYGJS7.js:32) whose
- * `import * as ort from "onnxruntime-node"` drags a 255MB native package into every init — but
- * NO embedding-dependent memory feature is exercised by this host (no embedder configured,
- * semanticRecall off, OM is LLM-based). All `ort.*` usage sits inside async embed methods, never
- * at module eval, so a stub that loads cleanly and throws only on USE is init-safe. Export names
- * are enumerated at build time from onnxruntime-common (pure JS; onnxruntime-node's index
- * re-exports it) so namespace consumers bind normally.
- */
-const seaStubSpecifiers = /^onnxruntime-node$/;
-const seaStubVirtualPrefix = "\0pe-sea-stub:";
-const seaStubMessage =
-  "onnxruntime-node is stubbed in the installed host (no embedder configured); " +
-  "if embeddings are enabled, un-stub it — see docs/features/host/LEDGER.md";
-
-function seaStubShimSource(): string {
-  const storeEntry = readdirSync(pnpmStore).find((entry) =>
-    entry.startsWith("onnxruntime-common@"),
-  );
-  if (!storeEntry) throw new Error(`onnxruntime-common not found in ${pnpmStore}`);
-  const commonRequire = createRequire(
-    join(pnpmStore, storeEntry, "node_modules", "onnxruntime-common", "package.json"),
-  );
-  const names = new Set(Object.keys(commonRequire("onnxruntime-common") as object));
-  for (const extra of ["listSupportedBackends", "binding", "initOrt"]) names.add(extra);
-  const exportNames = [...names].filter(
-    (name) => name !== "default" && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name),
-  );
-  return [
-    `const message = ${JSON.stringify(seaStubMessage)};`,
-    `const stub = new Proxy(function () {}, {`,
-    `  get(_target, prop) {`,
-    `    if (typeof prop !== "string" || prop === "__esModule" || prop === "then") return undefined;`,
-    `    throw new Error(message);`,
-    `  },`,
-    `  apply() { throw new Error(message); },`,
-    `  construct() { throw new Error(message); },`,
-    `});`,
-    `export default stub;`,
-    ...exportNames.map((name) => `export const ${name} = stub;`),
-    "",
-  ].join("\n");
-}
-
 const seaRequireShim = {
   name: "pe:sea-require-shim",
   resolveId: {
     order: "pre" as const,
     handler(source: string) {
-      if (seaStubSpecifiers.test(source)) return seaStubVirtualPrefix + source;
       return seaRequireSpecifiers.test(source) ? seaRequireVirtualPrefix + source : null;
     },
   },
   load(id: string) {
-    if (id.startsWith(seaStubVirtualPrefix)) return seaStubShimSource();
     return id.startsWith(seaRequireVirtualPrefix)
       ? seaRequireShimSource(id.slice(seaRequireVirtualPrefix.length))
       : null;
@@ -139,11 +92,6 @@ export default defineConfig({
     plugins: [seaRequireShim],
     deps: {
       alwaysBundle: [/./],
-      neverBundle: [
-        /^@duckdb\/node-bindings-win32-x64/,
-        /^@anush008\/tokenizers-win32-x64-msvc/,
-        /^@libsql\/win32-x64-msvc/,
-      ],
       onlyBundle: false,
     },
     loader: {

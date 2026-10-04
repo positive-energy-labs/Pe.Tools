@@ -9,15 +9,13 @@ import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-typ
 import {
   address,
   findCapabilities,
-  turnContextKey,
   type CapabilityCatalog,
-  type Turn,
+  type ThreadHead,
 } from "@pe/agent-contracts";
 import { buildCapabilities } from "../src/pea/capabilities.ts";
 import { createRouteRegistrations } from "../src/pea/routes.ts";
 import { bundledPeaSkills } from "../src/pea/skills.ts";
 import { peDo, peFind, peRead } from "../src/pea/capability-tools.ts";
-import { ScopeStore, admitTurn } from "../../runtime/src/scope-store.ts";
 
 import { bodyText } from "./body-text.ts";
 
@@ -344,20 +342,33 @@ test("F-B-2: a Families route read names a missing scope and preserves a catalog
 });
 
 type ExecutableTool = { execute?: (input: never, context: never) => Promise<unknown> };
-const turn: Turn = {
-  id: "11111111-1111-4111-8111-111111111111",
+type Head = ThreadHead & { thread: string };
+const turn: Head = {
   thread: "t1",
   defaultTarget: { kind: "named", session: "b1", address: address("C:\\Models\\A.rvt") },
   revision: 4,
 };
-const run = (tool: ExecutableTool, input: unknown, admitted = turn) =>
-  tool.execute!(
-    input as never,
-    {
-      agent: { toolCallId: "call-1" },
-      requestContext: { [turnContextKey]: admitted },
-    } as never,
-  );
+/** A harness child's call: `PE_THREAD` names the thread, and the host answers its live head. */
+async function withHead<T>(head: Head, body: () => Promise<T>): Promise<T> {
+  const inner = globalThis.fetch;
+  const prior = process.env.PE_THREAD;
+  process.env.PE_THREAD = head.thread;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    return url.pathname === `/pe/scope/${encodeURIComponent(head.thread)}`
+      ? Response.json({ defaultTarget: head.defaultTarget, revision: head.revision })
+      : inner(input as string, init);
+  }) as typeof fetch;
+  try {
+    return await body();
+  } finally {
+    globalThis.fetch = inner;
+    if (prior === undefined) delete process.env.PE_THREAD;
+    else process.env.PE_THREAD = prior;
+  }
+}
+const run = (tool: ExecutableTool, input: unknown, head = turn) =>
+  withHead(head, () => tool.execute!(input as never, { agent: { toolCallId: "call-1" } } as never));
 
 test("Families view Pea doors require a mounted pane and return an exact retained reference", async () => {
   vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
@@ -490,7 +501,7 @@ test("an exact-open turn Target reads and writes route Work under its document's
       ? Response.json({ route: "families", revision: 2, doc: {}, ok: true })
       : Response.json({ error: "unknown route 'families'" }, { status: 404 });
   });
-  const open: Turn = {
+  const open: Head = {
     ...turn,
     defaultTarget: { kind: "open", ref: { session: "b1", openId: "project-a" } },
   };
@@ -533,7 +544,7 @@ test("an exact-open turn Target reads and writes route Work under its document's
   }
 });
 
-test("an explicit document detour leaves the next call on the frozen turn default", async () => {
+test("an explicit document detour leaves the next call on the thread head default", async () => {
   vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
   const targets: string[][] = [];
   vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
@@ -582,7 +593,7 @@ test("an explicit document detour leaves the next call on the frozen turn defaul
   }
 });
 
-test("real turn admission freezes an open lifetime; reopen needs an explicit override and host/session work needs no Work", async () => {
+test("the live head names an open lifetime; reopen needs an explicit override and host/session work needs no Work", async () => {
   vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
   let openId = "a";
   const dispatches: Array<{ key: string; session: string | null; document: string | null }> = [];
@@ -629,32 +640,12 @@ test("real turn admission freezes an open lifetime; reopen needs an explicit ove
     return Response.json({ done: true });
   });
   try {
-    const head = {
+    const head: Head = {
+      thread: "t1",
       defaultTarget: { kind: "open", ref: { session: "b1", openId: "a" } },
       revision: 4,
     };
-    const scopes = new ScopeStore(
-      async () => ({
-        getState: async () => head,
-        setState: async () => {
-          throw Error("unexpected Work/head write");
-        },
-      }),
-      "resource",
-    );
-    let context: unknown;
-    await admitTurn(
-      scopes,
-      {
-        thread: { requireId: () => "t1" },
-        sendSignal: (_signal: unknown, options: unknown) => {
-          context = options;
-          return { accepted: Promise.resolve() };
-        },
-      } as never,
-      { content: "inspect" },
-    );
-    const call = (input: unknown) => peRead.execute!(input as never, context as never);
+    const call = (input: unknown) => run(peRead, input, head);
     expect(
       await call({ key: "op:revit.catalog.loaded-families", timeoutSeconds: 30 }),
     ).toMatchObject({ ok: true, revision: 4 });
@@ -703,7 +694,6 @@ test("real turn admission freezes an open lifetime; reopen needs an explicit ove
       [null, null],
       ["idle", null],
     ]);
-    expect(await scopes.read("t1")).toEqual(head);
   } finally {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
@@ -880,18 +870,10 @@ test("Pea doors author native JSON and plan both family routes under the turn Ta
     for (const route of ["family", "families"] as const) {
       const document = `C:\\Models\\FFRouteProof.${route === "family" ? "rfa" : "rvt"}`;
       const scoped = (input: unknown) =>
-        peDo.execute!(
-          input as never,
-          {
-            agent: { toolCallId: `ff-${route}` },
-            requestContext: {
-              [turnContextKey]: {
-                ...turn,
-                defaultTarget: { kind: "named", session: "ff-proof", address: document },
-              },
-            },
-          } as never,
-        );
+        run(peDo, input, {
+          ...turn,
+          defaultTarget: { kind: "named", session: "ff-proof", address: address(document) },
+        });
       const member = { pod: "pe-standards", path: "settings/ff-route-proof.json" };
       expect(
         await scoped({ key: "route:pods", workspaceId: "settings:resolved-file", input: {} }),

@@ -21,6 +21,7 @@ const canonicalFixtures: Record<
   "/rooms": { canonicalReviewUrl: "/rooms", fixtureKind: "live-route" },
   "/pods": { canonicalReviewUrl: "/pods?demo=browse", fixtureKind: "demo-fixture" },
   "/schedules": { canonicalReviewUrl: "/schedules?demo=apply", fixtureKind: "demo-fixture" },
+  "/settings": { canonicalReviewUrl: "/settings", fixtureKind: "live-route" },
   "/takeoffs": { canonicalReviewUrl: "/takeoffs?demo=sync", fixtureKind: "demo-fixture" },
 } as const;
 

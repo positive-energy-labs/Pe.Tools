@@ -6,13 +6,13 @@
     }
   },
   "hostBelowRoute": {
-    "total": 7,
+    "total": 6,
     "byArea": {
       "chat": 1,
       "grounded-doc": 1,
       "lab": 2,
       "(root)": 1,
-      "workbench": 2
+      "workbench": 1
     }
   },
   "escHandler": {
@@ -47,7 +47,7 @@
     }
   },
   "inlineColor": {
-    "total": 52,
+    "total": 47,
     "byArea": {
       "components": 6,
       "design-system": 1,
@@ -59,7 +59,7 @@
       "param-tables": 3,
       "routes": 1,
       "takeoff": 3,
-      "workbench": 7
+      "workbench": 2
     }
   },
   "rawMeaningColor": {
