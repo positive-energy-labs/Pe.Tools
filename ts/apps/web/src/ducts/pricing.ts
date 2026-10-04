@@ -20,6 +20,7 @@ import {
 import type { DuctSnapshot } from "./readiness";
 
 type Node = DuctSnapshot["nodes"][number];
+type Group = DuctSnapshot["groups"][number];
 
 /** Every table a rule may be looked up under: the one `ducts.tables` read. */
 export const TABLE_IDS: readonly string[] = [
@@ -169,54 +170,41 @@ const inputsOf = ({ inputs }: Row) => {
   return inputs.y == null ? x : `${x}, ${inputs.yLabel ?? "y"}=${at(inputs.y)}`;
 };
 
-const round4 = (n: number) => Math.round(n * 1e4) / 1e4;
+export const round4 = (n: number) => Math.round(n * 1e4) / 1e4;
 
-/**
- * Each group's fan static by its air mover, from Pe's solve: parallel groups of one
- * classification share the largest, and a unit's supply and return add (they are in series).
- */
-export function fanWrites(
-  snapshot: DuctSnapshot,
-  result: LossResult,
-  groups: ReadonlySet<string>,
-): DuctsApplyInput["equipment"] {
-  const byUnit = new Map<number, Map<string, number>>();
-  for (const group of snapshot.groups) {
-    const solved = result.byGroup[group.id];
-    if (!groups.has(group.id) || !solved || solved.critical == null) continue;
-    const unit =
-      group.rootIds.length === 1
-        ? group.rootIds[0]!
-        : systemFor(snapshot, solved.critical)?.baseEquipmentId;
-    if (unit == null) continue;
-    const kind = group.classifications.join(",");
-    const fans = byUnit.get(unit) ?? byUnit.set(unit, new Map()).get(unit)!;
-    fans.set(kind, Math.max(fans.get(kind) ?? 0, solved.fan));
-  }
-  return [...byUnit]
-    .map(([id, fans]) => ({
-      id,
-      externalStaticInWg: round4([...fans.values()].reduce((a, b) => a + b, 0)),
-    }))
-    .sort((a, b) => a.id - b.id);
+/** The air mover a group's fan static is written to: its one root, else its critical system's base. */
+export function unitOf(snapshot: DuctSnapshot, result: LossResult, group: Group): number | null {
+  const critical = result.byGroup[group.id]?.critical;
+  return group.rootIds.length === 1
+    ? group.rootIds[0]!
+    : critical == null
+      ? null
+      : (systemFor(snapshot, critical)?.baseEquipmentId ?? null);
 }
 
 /**
  * The native `ducts.apply` request (less `previewOnly`) from the staged cells only: every instance of a staged rule under
  * its chosen table (instances the table cannot price are left out, and the band says so), every
- * staged drop, the staged parameter slots, and the fan static of each group a write touches.
+ * staged drop, the staged parameter slots, and the staged unit statics. `group` scopes the instances, drops
+ * and unit to that group's nodes; empty is every group. The rules' chosen tables stay
+ * document-wide.
  */
 export function applyRequest(
   snapshot: DuctSnapshot,
   priced: Priced,
   appliedAt: string,
+  group: string,
 ): DuctsApplyInput {
   const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
+  const inScope = (id: number) => !group || nodes.get(id)?.groupId === group;
+  const unit = group
+    ? snapshot.groups.filter((g) => g.id === group).map((g) => unitOf(snapshot, priced.now, g))[0]
+    : undefined;
   const fittings = Object.keys(priced.staged.rules)
     .sort()
     .flatMap((ruleKey) =>
       [...instancesOf(priced.next, ruleKey).values()]
-        .filter((row) => row.c != null && !row.error)
+        .filter((row) => row.c != null && !row.error && inScope(row.id))
         .map((row) => ({
           id: row.id,
           coefficient: row.c!,
@@ -228,13 +216,15 @@ export function applyRequest(
     .sort((a, b) => a.id - b.id);
   const drops = (cells: Priced["staged"]["terminalDrops"]) =>
     Object.entries(cells)
+      .filter(([id]) => inScope(Number(id)))
       .map(([id, drop]) => ({ id: Number(id), inWg: drop.inWg, source: drop.source ?? null }))
       .sort((a, b) => a.id - b.id);
   const terminals = drops(priced.staged.terminalDrops);
   const components = drops(priced.staged.componentDrops);
-  const touched = new Set(
-    [...fittings, ...terminals, ...components].flatMap(({ id }) => nodes.get(id)?.groupId ?? []),
-  );
+  const equipment = Object.entries(priced.staged.unitStatics)
+    .map(([id, { inWg }]) => ({ id: Number(id), externalStaticInWg: inWg }))
+    .filter(({ id }) => !group || id === unit)
+    .sort((a, b) => a.id - b.id);
   const slots = priced.staged.parameters;
   const stored = snapshot.store;
   return {
@@ -242,7 +232,7 @@ export function applyRequest(
     fittings,
     terminals,
     components,
-    equipment: fanWrites(snapshot, priced.next, touched),
+    equipment,
     // Revit's own critical path (the check beside Pe's) needs the network-based engine.
     networkBasedCalculations: true,
     // The native op writes the store as sent: the model's store (unknown keys included) with

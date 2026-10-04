@@ -90,7 +90,8 @@ const built = (ctx: DuctsCtx) => {
   if (ctx.work.revision === null) throw Error("The Work is not read yet");
   if (snapshot.storeError)
     throw Error(`Pe's provenance store in this model is unreadable: ${snapshot.storeError}`);
-  return applyRequest(snapshot, price(snapshot, grids, ctx.work.doc), new Date().toISOString());
+  const priced = price(snapshot, grids, ctx.work.doc);
+  return applyRequest(snapshot, priced, new Date().toISOString(), ctx.page.group);
 };
 
 const dispatch = async (

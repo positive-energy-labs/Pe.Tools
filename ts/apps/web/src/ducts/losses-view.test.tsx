@@ -182,6 +182,17 @@ it("builds the ducts.apply request from the staged cells only, exactly", () => {
       { kind: "stage", rung: { value: { inWg: 0.08, source: "catalog" } } },
     ),
   );
+  // The fan static is a staged cell too; without one nothing is written to the unit.
+  expect(applyRequest(snapshot, price(snapshot, grids, doc), "", "").equipment).toEqual([]);
+  doc = land(
+    doc,
+    transitionPatches(
+      ["unitStatics"],
+      "1",
+      {},
+      { kind: "stage", rung: { value: { inWg: 0.1061 } } },
+    ),
+  );
   // A proposal never reaches Revit.
   doc = land(
     doc,
@@ -198,7 +209,7 @@ it("builds the ducts.apply request from the staged cells only, exactly", () => {
   expect(
     computeLosses(snapshot, grids, priced.choices, priced.overrides).byGroup.g10?.fan,
   ).toBeCloseTo(0.1060651, 6);
-  expect(applyRequest(snapshot, priced, at)).toEqual({
+  expect(applyRequest(snapshot, priced, at, "")).toEqual({
     slots: {},
     fittings: [
       {
@@ -231,14 +242,93 @@ it("builds the ducts.apply request from the staged cells only, exactly", () => {
   });
   // The request is what the semantic action admits, and with the verb's previewOnly it is the
   // generated native request.
-  const wire: DuctsApply.Req.Request = { ...applyRequest(snapshot, priced, at), previewOnly: true };
+  const wire: DuctsApply.Req.Request = {
+    ...applyRequest(snapshot, priced, at, ""),
+    previewOnly: true,
+  };
   expect(wire.previewOnly).toBe(true);
   // Both directions: the semantic action's input is the generated request less previewOnly.
   const fromWire = ({ previewOnly: _, ...rest }: DuctsApply.Req.Request): DuctsApplyInput => rest;
-  expect(fromWire(wire)).toEqual(applyRequest(snapshot, priced, at));
+  expect(fromWire(wire)).toEqual(applyRequest(snapshot, priced, at, ""));
   expect(() =>
-    semanticActions["ducts.apply-losses"].input.parse(applyRequest(snapshot, priced, at)),
+    semanticActions["ducts.apply-losses"].input.parse(applyRequest(snapshot, priced, at, "")),
   ).not.toThrow();
+});
+
+/** Two groups: grille 30 and elbow 21 move to g20 (its own unit 100); the solve is the original's. */
+const twoGroups: DuctSnapshot = {
+  ...snapshot,
+  nodes: snapshot.nodes.map((node) =>
+    node.id === 21 || node.id === 30 ? { ...node, groupId: "g20" } : node,
+  ),
+  groups: [
+    ...snapshot.groups,
+    { ...snapshot.groups[0]!, id: "g20", rootIds: [100], terminalCount: 1, elementCount: 2 },
+  ],
+};
+
+it("scopes the request to the group in the sentence, and to every group when none is named", () => {
+  let doc = ductsRouteState.schema.parse({});
+  const stage = <S extends "rules" | "terminalDrops" | "unitStatics">(
+    segment: S,
+    key: string,
+    value: unknown,
+  ) => {
+    doc = land(doc, transitionPatches([segment], key, {}, { kind: "stage", rung: { value } }));
+  };
+  stage("rules", "tap-std", { table: "SD5-10" }); // fitting 22, g10
+  stage("rules", "elbow-1d-gt10", { table: "CD3-2" }); // fitting 21, g20
+  stage("terminalDrops", "31", { inWg: 0.08 }); // g10
+  stage("terminalDrops", "30", { inWg: 0.05 }); // g20
+  stage("unitStatics", "1", { inWg: 0.1 });
+  stage("unitStatics", "100", { inWg: 0.2 });
+  const priced = price(snapshot, grids, doc);
+  const ids = (group: string) => {
+    const request = applyRequest(twoGroups, priced, "", group);
+    return {
+      fittings: request.fittings.map((f) => f.id),
+      terminals: request.terminals.map((t) => t.id),
+      equipment: request.equipment.map((e) => e.id),
+      // The rules' tables stay document-wide.
+      rules: Object.keys(request.store.rules ?? {}).sort(),
+    };
+  };
+  const rules = ["elbow-1d-gt10", "tap-std"];
+  expect(ids("")).toEqual({ fittings: [21, 22], terminals: [30, 31], equipment: [1, 100], rules });
+  expect(ids("g10")).toEqual({ fittings: [22], terminals: [31], equipment: [1], rules });
+  expect(ids("g20")).toEqual({ fittings: [21], terminals: [30], equipment: [100], rules });
+});
+
+it("writes a unit only from a staged fan static, never a proposal or a side effect", () => {
+  let doc = land(
+    ductsRouteState.schema.parse({}),
+    transitionPatches(
+      ["rules"],
+      "tap-std",
+      {},
+      { kind: "stage", rung: { value: { table: "SD5-10" } } },
+    ),
+  );
+  doc = land(
+    doc,
+    transitionPatches(
+      ["unitStatics"],
+      "1",
+      {},
+      { kind: "propose", rung: { value: { inWg: 0.3 } } },
+    ),
+  );
+  expect(applyRequest(snapshot, price(snapshot, grids, doc), "", "g10").equipment).toEqual([]);
+  doc = land(
+    doc,
+    transitionPatches(["unitStatics"], "1", doc.unitStatics["1"] ?? {}, {
+      kind: "stage",
+      rung: { value: { inWg: 0.3 } },
+    }),
+  );
+  expect(applyRequest(snapshot, price(snapshot, grids, doc), "", "g10").equipment).toEqual([
+    { id: 1, externalStaticInWg: 0.3 },
+  ]);
 });
 
 it("apply is armed only by a preview of this Work revision and this snapshot", () => {
