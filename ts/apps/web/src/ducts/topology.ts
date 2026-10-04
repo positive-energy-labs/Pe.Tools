@@ -64,28 +64,73 @@ export const terminalCfm = (node: Node | null | undefined) => {
   return fact?.value ?? null;
 };
 
+/** The snapshot bucketed by group in one pass; `groupTree` runs once per group, not once per scan. */
+interface GroupIndex {
+  groups: Map<string, DuctSnapshot["groups"][number]>;
+  nodeById: Map<number, Node>;
+  flows: Map<number, number | null>;
+  nodes: Map<string, Node[]>;
+  segments: Map<string, Segment[]>;
+  issues: Map<string, Issue[]>;
+  trees: Map<string, GroupTree>;
+}
+
+const indexes = new WeakMap<DuctSnapshot, GroupIndex>();
+
+const bucket = <V>(into: Map<string, V[]>, key: string | null | undefined, value: V) => {
+  if (key == null) return;
+  const list = into.get(key);
+  if (list) list.push(value);
+  else into.set(key, [value]);
+};
+
+function groupIndex(snapshot: DuctSnapshot): GroupIndex {
+  const cached = indexes.get(snapshot);
+  if (cached) return cached;
+  const index: GroupIndex = {
+    groups: new Map(snapshot.groups.map((g) => [g.id, g])),
+    nodeById: new Map(snapshot.nodes.map((n) => [n.id, n])),
+    flows: new Map(snapshot.flows.map((f) => [f.segmentId, f.cfm])),
+    nodes: new Map(),
+    segments: new Map(),
+    issues: new Map(),
+    trees: new Map(),
+  };
+  for (const node of snapshot.nodes) bucket(index.nodes, node.groupId, node);
+  for (const segment of snapshot.segments) bucket(index.segments, segment.groupId, segment);
+  for (const issue of snapshot.issues)
+    if (issue.elementId != null) bucket(index.issues, issue.groupId, issue);
+  indexes.set(snapshot, index);
+  return index;
+}
+
+/** Pure on the snapshot, so built once per (snapshot, group) and shared: callers read, never write. */
 export function groupTree(snapshot: DuctSnapshot, groupId: string): GroupTree {
-  const group = snapshot.groups.find((g) => g.id === groupId);
-  const flows = new Map(snapshot.flows.map((f) => [f.segmentId, f.cfm]));
+  const by = groupIndex(snapshot);
+  let tree = by.trees.get(groupId);
+  if (!tree) by.trees.set(groupId, (tree = buildTree(by, groupId)));
+  return tree;
+}
+
+function buildTree(by: GroupIndex, groupId: string): GroupTree {
+  const group = by.groups.get(groupId);
   const parts = new Map<number, Part>();
-  for (const node of snapshot.nodes)
-    if (node.groupId === groupId)
-      parts.set(node.id, { id: node.id, node, segment: null, lengthFt: 0, cfm: null });
-  for (const segment of snapshot.segments)
-    if (segment.groupId === groupId)
-      parts.set(segment.id, {
-        id: segment.id,
-        node: null,
-        segment,
-        lengthFt: segment.lengthFt,
-        cfm: flows.get(segment.id) ?? null,
-      });
+  for (const node of by.nodes.get(groupId) ?? [])
+    parts.set(node.id, { id: node.id, node, segment: null, lengthFt: 0, cfm: null });
+  for (const segment of by.segments.get(groupId) ?? [])
+    parts.set(segment.id, {
+      id: segment.id,
+      node: null,
+      segment,
+      lengthFt: segment.lengthFt,
+      cfm: by.flows.get(segment.id) ?? null,
+    });
   const connectors = (part: Part): Connector[] =>
     part.node?.connectors ?? part.segment?.connectors ?? [];
 
   // Undirected adjacency inside the group; equipment ports are attachments, as in C#.
   const rootIds = new Set(group?.rootIds ?? []);
-  const equipment = snapshot.nodes.filter((n) => rootIds.has(n.id));
+  const equipment = [...rootIds].flatMap((id) => by.nodeById.get(id) ?? []);
   const adjacent = new Map<number, number[]>([...parts.keys()].map((id) => [id, []]));
   const ports = new Map<string, RootPort>();
   const attach = (port: RootPort) => ports.set(`${port.equipment}:${port.port}`, port);
@@ -123,8 +168,9 @@ export function groupTree(snapshot: DuctSnapshot, groupId: string): GroupTree {
   const walk = (start: number) => {
     parent.set(start, null);
     const queue = [start];
-    while (queue.length) {
-      const x = queue.shift()!;
+    let head = 0;
+    while (head < queue.length) {
+      const x = queue[head++]!;
       order.push(x);
       for (const y of adjacent.get(x)!) {
         if (y === parent.get(x)) continue;
@@ -163,12 +209,11 @@ export function groupTree(snapshot: DuctSnapshot, groupId: string): GroupTree {
   const longest = far == null ? [] : pathTo(parent, far);
 
   const issuesByElement = new Map<number, Issue[]>();
-  for (const issue of snapshot.issues)
-    if (issue.groupId === groupId && issue.elementId != null)
-      issuesByElement.set(issue.elementId, [
-        ...(issuesByElement.get(issue.elementId) ?? []),
-        issue,
-      ]);
+  for (const issue of by.issues.get(groupId) ?? []) {
+    const list = issuesByElement.get(issue.elementId!);
+    if (list) list.push(issue);
+    else issuesByElement.set(issue.elementId!, [issue]);
+  }
 
   return {
     groupId,
@@ -216,8 +261,8 @@ function chooseRoot(
     const queue = ports.map((port, index) => ({ id: port.element, index }));
     const owner = new Map<number, number>();
     for (const { id, index } of queue) if (!owner.has(id)) owner.set(id, index);
-    while (queue.length) {
-      const { id, index } = queue.shift()!;
+    for (let head = 0; head < queue.length; ) {
+      const { id, index } = queue[head++]!;
       if (owner.get(id) !== index) continue;
       for (const y of adjacent.get(id)!)
         if (!owner.has(y)) {
