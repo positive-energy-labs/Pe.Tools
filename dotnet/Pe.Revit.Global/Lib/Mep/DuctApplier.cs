@@ -116,6 +116,10 @@ public static class DuctApplier {
         store.Write = () => {
             // Composed at write time: terminals and equipment ran first in this stage, so a refused write is not recorded.
             next = Compose(request, stored, items, now, slots, storeRevision + 1);
+            if (stored is not null && Content(stored) == Content(next)) {
+                store.Outcome = "unchanged";
+                return $"revision {storeRevision}";
+            }
             StoreText.Write(doc, next.ToJson());
             return $"revision {next.WorkRevision}";
         };
@@ -199,7 +203,7 @@ public static class DuctApplier {
     private static void Write(Item i) {
         try {
             i.After = i.Write!();
-            i.Outcome = "written";
+            if (i.Outcome == "planned") i.Outcome = "written";
         } catch (Exception ex) when (DuctSnapshots.IsRevitFailure(ex) || ex is ArgumentException) {
             if (i.Kind == "store") throw;
             i.Refuse($"Revit refused: {ex.Message}");
@@ -229,7 +233,10 @@ public static class DuctApplier {
         var existing = Guid.TryParse(current, out var g) && schemas.TryGetValue(g, out var s) && s is not null
                        && s.ListFields().FirstOrDefault(f => f.ValueType == typeof(string)) is { } own
                        && e.GetEntity(s) is { } en && en.IsValid() ? en.Get<string>(own) : null;
-        var item = new Item(id, kind, $"{Name(current)}{(existing is { Length: > 0 } ? " " + existing : "")}") { Element = e };
+        var shown = g == SpecificLoss && double.TryParse(existing, NumberStyles.Float, CultureInfo.InvariantCulture, out var raw)
+            ? $"{UnitUtils.ConvertFromInternalUnits(raw, InWg):0.####} in-wg"
+            : existing;
+        var item = new Item(id, kind, $"{Name(current)}{(shown is { Length: > 0 } ? " " + shown : "")}") { Element = e };
         if (e.Category.ToBuiltInCategory() != category)
             return item.Refuse($"not a {(category == BuiltInCategory.OST_DuctFitting ? "duct fitting" : "duct accessory")} ({e.Category?.Name ?? "no category"})");
         if (method is null || method.IsReadOnly) return item.Refuse("the element has no writable loss method server parameter");
