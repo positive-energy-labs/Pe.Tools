@@ -451,6 +451,31 @@ test("a question parks the turn, a fork copies the log, and a lost session re-fe
   expect(lost.session).toBe("detached");
 }, 30_000);
 
+test("a codex child gets Pea's developer instructions in CODEX_CONFIG; a claude child gets none", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const envLine = (body: HarnessThreadBody) =>
+    body.events
+      .flatMap((e) =>
+        e.kind === "update" && e.update.sessionUpdate === "agent_message_chunk"
+          ? [(e.update as { content?: { text?: string } }).content?.text ?? ""]
+          : [],
+      )
+      .find((text) => text.startsWith("CODEX_CONFIG="))!
+      .slice("CODEX_CONFIG=".length);
+  const codex = (await call("POST", "/pe/threads", { harness: "codex" })).json.id as string;
+  await call("POST", `/pe/threads/${codex}/prompt`, { text: "env" });
+  const config = JSON.parse(envLine(await until(read, codex, (b) => turnEnds(b).length === 1))) as {
+    developer_instructions: string;
+  };
+  expect(config.developer_instructions).toContain("request_user_input");
+  expect(config.developer_instructions).toContain("never call the sleep tool");
+  const claude = (await call("POST", "/pe/threads", { harness: "claude" })).json.id as string;
+  await call("POST", `/pe/threads/${claude}/prompt`, { text: "env" });
+  expect(envLine(await until(read, claude, (b) => turnEnds(b).length === 1))).toBe("");
+});
+
 test("a host that cannot launch a Pea MCP server lists no harness and refuses new threads with 503", async () => {
   const call = caller(host(false));
   expect((await call("GET", "/pe/harnesses")).json).toEqual(

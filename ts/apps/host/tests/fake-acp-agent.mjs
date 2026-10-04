@@ -119,6 +119,10 @@ new AgentSideConnection(
         );
         return { stopReason: "end_turn" };
       }
+      if (text === "env") {
+        await say(`CODEX_CONFIG=${process.env.CODEX_CONFIG ?? ""}`);
+        return { stopReason: "end_turn" };
+      }
       if (text === "title") {
         await conn.sessionUpdate({
           sessionId,
