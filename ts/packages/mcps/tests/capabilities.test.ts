@@ -6,7 +6,13 @@ import { familiesRouteState, hostActions } from "@pe/agent-contracts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-types";
-import { address, turnContextKey, type CapabilityCatalog, type Turn } from "@pe/agent-contracts";
+import {
+  address,
+  findCapabilities,
+  turnContextKey,
+  type CapabilityCatalog,
+  type Turn,
+} from "@pe/agent-contracts";
 import { buildCapabilities } from "../src/pea/capabilities.ts";
 import { createRouteRegistrations } from "../src/pea/routes.ts";
 import { bundledPeaSkills } from "../src/pea/skills.ts";
@@ -84,6 +90,31 @@ function catalog(): CapabilityCatalog {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+});
+
+test("an op's [Op(Finds)] search terms find it when its key, title, and description do not", () => {
+  const rows = buildCapabilities({
+    ops: [
+      {
+        key: "revit.context.show-elements",
+        displayName: "Show Elements",
+        description: "Select elements and zoom the view to them.",
+        searchTerms: ["point-at", "highlight"],
+        needs: "document",
+        intent: "Read",
+      },
+      { key: "revit.context.view-image", description: "Export a view.", needs: "document" },
+    ],
+    routes: [],
+    pods: null,
+    skills: [],
+  });
+  expect(findCapabilities(rows, { query: "highlight" }).map((row) => row.key)).toEqual([
+    "op:revit.context.show-elements",
+  ]);
+  expect(findCapabilities(rows, { query: "point at" })[0]?.key).toBe(
+    "op:revit.context.show-elements",
+  );
 });
 
 async function find(input: Record<string, unknown>) {

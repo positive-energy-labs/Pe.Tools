@@ -81,6 +81,7 @@ export const rawByDesign = [
   "revit.catalog.parameter-evidence",
   "revit.catalog.schedules",
   "revit.context.document-session",
+  "revit.context.show-elements",
   "revit.context.view-image",
   "revit.context.view-rendering-state",
   "revit.context.visible-summary",

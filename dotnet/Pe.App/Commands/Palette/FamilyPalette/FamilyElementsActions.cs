@@ -89,10 +89,8 @@ internal static class FamilyElementsActions {
     /// </summary>
     internal static void HandleZoomToElement(FamilyElementItem? item) {
         var uidoc = RevitUiSession.CurrentUIApplication.GetActiveUIDocument();
-        if (uidoc == null) return;
-        if (item?.ElementId == null) return;
-        uidoc.ShowElements(item.ElementId);
-        uidoc.Selection.SetElementIds([item.ElementId]);
+        if (uidoc == null || item?.ElementId == null) return;
+        _ = uidoc.SelectAndZoom([item.ElementId]);
     }
 
     /// <summary>

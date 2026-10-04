@@ -143,7 +143,9 @@ public record RevitAgentBrowserSummary(
     int FamilyCount
 );
 
+/// <param name="Document">The document this summary reads. A headless one (isHeadless) has no active view, selection, or visible categories, so those come back empty.</param>
 public record RevitAgentContextSummaryData(
+    RevitDocumentSummary Document,
     RevitDocumentSessionContextData Documents,
     RevitAgentActiveViewContext? ActiveView,
     RevitAgentSelectionContext Selection,

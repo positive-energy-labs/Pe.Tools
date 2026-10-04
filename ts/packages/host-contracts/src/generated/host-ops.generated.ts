@@ -2884,12 +2884,62 @@ export namespace RevitContextDocumentSession {
       isFamilyDocument: boolean;
       isWorkshared: boolean;
       isActive: boolean;
+      /**
+       * Open with no window: no active view or selection, and Revit cannot activate it. Ops that read UI state refuse it; document-owned ops answer.
+       */
+      isHeadless: boolean;
       isModifiable: boolean;
       isReadOnly: boolean;
       isModelInCloud: boolean;
       cloudProjectGuid?: null | string;
       cloudModelGuid?: null | string;
       cloudModelUrn?: null | string;
+    }
+  }
+}
+
+/** Show elements to the person at the window: select them and zoom the active view, or the given view, to their extents. Answers which ids it showed, which were missing, and the view. Changes the selection and the zoom only, never the model. Needs the active windowed document; a headless document refuses. */
+export namespace RevitContextShowElements {
+  export namespace Req {
+    /**
+     * Request for revit.context.show-elements: select elements and zoom a view to them, for the person at the window.
+     */
+    export interface Request {
+      /**
+       * Element ids to select and zoom to, from any handle-returning op.
+       */
+      elementIds: number[];
+      /**
+       * Graphical view to activate and zoom; omit for the active view.
+       */
+      viewId?: number | null;
+    }
+  }
+  export namespace Res {
+    /**
+     * What revit.context.show-elements selected, what it could not find, and the view it zoomed.
+     */
+    export interface Response {
+      /**
+       * Ids now selected.
+       */
+      shown: number[];
+      /**
+       * Requested ids with no element in this document.
+       */
+      missing: number[];
+      /**
+       * The view that now shows them.
+       */
+      viewId: number;
+      /**
+       * That view's name.
+       */
+      viewName: string;
+      /**
+       * One line on what happened.
+       */
+      note: string;
     }
   }
 }
@@ -2922,17 +2972,15 @@ export namespace RevitContextSummary {
       | "SearchMatch";
 
     export interface Response {
+      /**
+       * The document this summary reads. A headless one (isHeadless) has no active view, selection, or visible categories, so those come back empty.
+       */
+      document: RevitDocumentSummary;
       documents: RevitDocumentSessionContextData;
       activeView?: null | RevitAgentActiveViewContext;
       selection: RevitAgentSelectionContext;
       browser: RevitAgentBrowserSummary;
       visibleCategories: RevitAgentVisibleCategorySummary[];
-    }
-    export interface RevitDocumentSessionContextData {
-      hasActiveDocument: boolean;
-      activeDocument?: null | RevitDocumentSummary;
-      openDocumentCount: number;
-      openDocuments: RevitDocumentSummary[];
     }
     export interface RevitDocumentSummary {
       documentKey: string;
@@ -2941,12 +2989,22 @@ export namespace RevitContextSummary {
       isFamilyDocument: boolean;
       isWorkshared: boolean;
       isActive: boolean;
+      /**
+       * Open with no window: no active view or selection, and Revit cannot activate it. Ops that read UI state refuse it; document-owned ops answer.
+       */
+      isHeadless: boolean;
       isModifiable: boolean;
       isReadOnly: boolean;
       isModelInCloud: boolean;
       cloudProjectGuid?: null | string;
       cloudModelGuid?: null | string;
       cloudModelUrn?: null | string;
+    }
+    export interface RevitDocumentSessionContextData {
+      hasActiveDocument: boolean;
+      activeDocument?: null | RevitDocumentSummary;
+      openDocumentCount: number;
+      openDocuments: RevitDocumentSummary[];
     }
     export interface RevitAgentActiveViewContext {
       handle: RevitAgentContextHandle;
@@ -4460,6 +4518,10 @@ export namespace RevitGlanceModel {
       isFamilyDocument: boolean;
       isWorkshared: boolean;
       isActive: boolean;
+      /**
+       * Open with no window: no active view or selection, and Revit cannot activate it. Ops that read UI state refuse it; document-owned ops answer.
+       */
+      isHeadless: boolean;
       isModifiable: boolean;
       isReadOnly: boolean;
       isModelInCloud: boolean;
@@ -6176,6 +6238,7 @@ export interface HostOps {
   "revit.catalog.project-index": { request: RevitCatalogProjectIndex.Req.Request; response: RevitCatalogProjectIndex.Res.Response };
   "revit.catalog.schedules": { request: RevitCatalogSchedules.Req.Request; response: RevitCatalogSchedules.Res.Response };
   "revit.context.document-session": { request: RevitContextDocumentSession.Req.Request; response: RevitContextDocumentSession.Res.Response };
+  "revit.context.show-elements": { request: RevitContextShowElements.Req.Request; response: RevitContextShowElements.Res.Response };
   "revit.context.summary": { request: RevitContextSummary.Req.Request; response: RevitContextSummary.Res.Response };
   "revit.context.view-image": { request: RevitContextViewImage.Req.Request; response: RevitContextViewImage.Res.Response };
   "revit.context.view-rendering-state": { request: RevitContextViewRenderingState.Req.Request; response: RevitContextViewRenderingState.Res.Response };
@@ -6251,6 +6314,7 @@ export const hostOpKeys = [
   "revit.catalog.project-index",
   "revit.catalog.schedules",
   "revit.context.document-session",
+  "revit.context.show-elements",
   "revit.context.summary",
   "revit.context.view-image",
   "revit.context.view-rendering-state",

@@ -66,7 +66,7 @@ public static class Kernel
             face = face.Difference(new GeometrySnapper(f.CreatePolygon(Ring(h))).SnapTo(face, WeldFt));
         return Enumerable.Range(0, face.NumGeometries).Select(i => (Polygon)face.GetGeometryN(i))
             .SelectMany(p => p.InteriorRings.Prepend(p.Shell))
-            .Select(r => CleanRing([.. r.Coordinates.SkipLast(1).Select(c => new[] { c.X, c.Y })]))
+            .Select(r => CleanRing([.. r.Coordinates.Take(r.Coordinates.Length - 1).Select(c => new[] { c.X, c.Y })]))
             .Where(r => Math.Abs(Shoelace(r)) >= MinRingSqft).ToList();
     }
 

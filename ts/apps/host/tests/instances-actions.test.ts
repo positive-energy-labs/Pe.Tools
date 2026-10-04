@@ -384,3 +384,29 @@ test("a Pea-admitted start of the person's staged launch retires it too", async 
   expect(row.state).toBe("succeeded");
   expect((await f.launch()).staged).toBeNull();
 });
+
+test("an SDK refusal that ran nothing settles failed (hr would-drop); an advisory diagnostic keeps success", async () => {
+  const f = await setup((args) =>
+    args[0] === "session"
+      ? {
+          result: { id: "dev", state: "would-drop", documents: [] },
+          diagnostics: [
+            { code: "session.hr-would-drop", detail: "2 open document(s) are headless", fix: null },
+          ],
+        }
+      : {
+          result: { state: "ok", openId: "a".repeat(32) },
+          diagnostics: [{ code: "doc.file-year-unread", detail: "cloud: not-local", fix: null }],
+        },
+  );
+  const revision = await f.stage({
+    kind: "open",
+    session: sdkSessionSelectorOf("dev"),
+    document: "C:/Tower.rvt",
+  });
+  const restart = await f.admit("instances.restart", { session }, revision);
+  expect(restart).toMatchObject({ state: "failed", notDispatched: true });
+  expect(JSON.stringify(restart)).toContain("session.hr-would-drop");
+
+  expect((await f.admit("instances.open", { session }, revision)).state).toBe("succeeded");
+});

@@ -150,6 +150,11 @@ export class PeaCliCommands {
         "Search the one capability catalog (ops, route documents, pods, skills) — the same rows and ranking pe_find gives the agent.",
       args: {
         host: commonArgs.host,
+        bridgeSessionId: {
+          type: "string",
+          description:
+            "Revit session whose operations to include; without it only host operations, pods, and skills are searched.",
+        },
         query: { type: "string", description: "Optional search query." },
         kind: {
           type: "string",
@@ -162,13 +167,18 @@ export class PeaCliCommands {
         },
         limit: { type: "number", description: "Maximum rows to print.", default: 8 },
       },
+      toKebab: true,
       run: async (ctx) => {
         // The URL is disclosed BEFORE the fetch: a bare `fetch failed` with no URL was the
         // 2026-08-19/20 dead end — an empty catalog and a wrong-lane resolution are told apart
         // by reading the output rather than by guessing.
         const hostBaseUrl = this.resolveHostBaseUrl(ctx.values.host);
         console.log(`host ${hostBaseUrl}`);
-        const catalog = await readCatalog(undefined, hostBaseUrl);
+        const catalog = await readCatalog(
+          undefined,
+          hostBaseUrl,
+          asOptionalString(ctx.values.bridgeSessionId),
+        );
         if ("isError" in catalog) throw new Error(catalog.content);
         const rows = findCapabilities(catalog.capabilities, {
           query: firstNonBlank(ctx.values.query),
@@ -284,10 +294,17 @@ export class PeaCliCommands {
           type: "number",
           description: "Cooperative execution timeout in seconds (host default 600).",
         },
+        json: {
+          type: "boolean",
+          description:
+            "Print the whole result (status, executionId, output, data, diagnostics) as one JSON object on stdout.",
+          default: false,
+        },
       },
       toKebab: true,
       examples: [
         "pea script execute --file scratch\\Probe.cs",
+        "pea script execute --file scratch\\Probe.cs --json",
         "pea script execute --source-path src\\SampleScript.cs",
         "pea script execute --source-path src\\Fix.cs --permission-mode WriteTransaction",
         "Get-Content .\\Probe.cs | pea script execute --stdin --source-name Probe.cs",
@@ -311,7 +328,9 @@ export class PeaCliCommands {
           permissionMode: parseCliPermissionMode(ctx.values.permissionMode),
           timeoutSeconds,
         } satisfies ScriptExecuteInput);
-        writeScriptExecution(result);
+        if (result.status !== "Succeeded") process.exitCode = 1;
+        if (ctx.values.json) process.stdout.write(`${JSON.stringify(result)}\n`);
+        else writeScriptExecution(result);
       },
     });
   }
@@ -538,7 +557,6 @@ function writeLogs(logs: HostOpResponse<"logs.tail">) {
 }
 
 function writeScriptExecution(result: HostOpResponse<"scripting.execute">) {
-  if (result.status !== "Succeeded") process.exitCode = 1;
   console.log(`status    ${result.status}`);
   console.log(`execution ${result.executionId}`);
   console.log(`revit     ${result.revitVersion}`);

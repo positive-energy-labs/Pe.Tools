@@ -65,21 +65,29 @@ export class BridgeError {
     readonly evidence: {
       readonly issues?: BridgeResponse["issues"];
       readonly nativeOutcome?: string;
+      /** Revit never saw the request. */
       readonly notDispatched?: true;
+      /** Revit answered the request with a settled verdict, so its outcome is known. */
       readonly dispatched?: true;
       readonly result?: unknown;
       readonly resolvedTarget?: { readonly session: string; readonly document: string | null };
     } = {},
   ) {}
   get nativeOutcome(): string | undefined {
-    // BridgeAgent emits one root issue for a RevitTaskOutcome; preserve unknown future codes.
-    const issues = this.evidence.issues;
-    return (
-      this.evidence.nativeOutcome ??
-      (issues?.length === 1 && issues[0]?.instancePath === "$" ? issues[0].code : undefined)
-    );
+    return this.evidence.nativeOutcome ?? rootOutcome(this.evidence.issues);
   }
 }
+
+/** BridgeAgent emits one root issue for a RevitTaskOutcome or a typed refusal; preserve unknown future codes. */
+const rootOutcome = (issues: BridgeResponse["issues"]) =>
+  issues?.length === 1 && issues[0]?.instancePath === "$" ? issues[0].code : undefined;
+
+/**
+ * Answers in which Revit has no outcome yet for the request: the delegate is still on the API
+ * thread, or it timed out, which `pe-revit op result` also leaves unsettled. Every other answer is
+ * settled.
+ */
+const UNSETTLED_OUTCOMES = new Set(["AbandonedStillRunning", "TimedOut"]);
 
 /** No Revit process is currently connected to the bridge. */
 export class NoRevitSession {
@@ -681,6 +689,10 @@ export const RevitBridgeLive = Layer.effect(
           return yield* Effect.fail(
             new BridgeError(res.errorMessage ?? `${operationKey} failed`, res.statusCode ?? 500, {
               issues: res.issues,
+              // A refusal is an answer, not a lost reply: it must never leave the action unknown.
+              ...(UNSETTLED_OUTCOMES.has(rootOutcome(res.issues) ?? "")
+                ? {}
+                : { dispatched: true as const }),
               resolvedTarget: {
                 session: session.sdkSessionId ?? session.sessionId,
                 document: targetOpenId

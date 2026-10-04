@@ -26,10 +26,12 @@ public static class RevitAgentContextCollector {
 
     public static RevitAgentContextSummaryData CollectSummary(
         Document document,
+        RevitDocumentSummary summary,
         RevitDocumentSessionContextData documents,
         View? activeView,
         IReadOnlyCollection<ElementId>? currentSelection
     ) => new(
+        summary,
         documents,
         activeView == null ? null : CreateActiveViewContext(document, activeView),
         CreateSelectionContext(document, currentSelection, 12),

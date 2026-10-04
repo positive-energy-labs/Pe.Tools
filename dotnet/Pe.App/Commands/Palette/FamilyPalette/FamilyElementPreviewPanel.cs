@@ -1,6 +1,7 @@
 using Autodesk.Revit.UI;
 using Pe.App.Commands.Palette.CommandPalette;
 using Pe.Revit.Extensions.FamParameter;
+using Pe.Revit.Extensions.ProjDocument;
 using Pe.Revit.Ui.Core;
 using System.Windows;
 using System.Windows.Controls;
@@ -236,8 +237,7 @@ public class FamilyElementPreviewPanel : PaletteSidebarPanel<FamilyElementItem, 
         case AssociatedElementType.Array:
         case AssociatedElementType.Connector:
             if (element.ElementId == null) return;
-            this._uidoc.ShowElements(element.ElementId);
-            this._uidoc.Selection.SetElementIds([element.ElementId]);
+            _ = this._uidoc.SelectAndZoom([element.ElementId]);
             break;
 
         case AssociatedElementType.Parameter:

@@ -740,7 +740,7 @@ export function makeCallRoute(
                       ? recoverFamilyAction(body.id, owner(), actionDeps)
                       : original?.kind === "workflow" && Object.hasOwn(takeoffActions, original.key)
                         ? recoverTakeoffAction(body.id, owner(), actionDeps)
-                        : recoverGatewayAction(body.id, owner(), actionDeps.sdk)),
+                        : recoverGatewayAction(body.id, owner(), actionDeps.sdk, bridge)),
               );
             }
             // A control added to actionControls gets a route before it gets a handler.

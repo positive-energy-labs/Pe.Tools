@@ -11,6 +11,7 @@ import {
   type ActionAdmission,
   type ActionStep,
   type DocumentRef,
+  type ExecutionTarget,
   type ActionReceipt,
 } from "@pe/agent-contracts";
 
@@ -177,6 +178,23 @@ function settle(
   };
 }
 
+const sessionOf = (target: ExecutionTarget) =>
+  target.kind === "session"
+    ? target.session
+    : target.kind === "document"
+      ? target.ref.session
+      : null;
+/**
+ * An uncertain attempt blocks only what it could have touched: the same document lifetime, or a
+ * session and anything on it. Never the whole host: one crashed script must not refuse every
+ * action on every session (headless research, Hazard 3).
+ */
+const overlaps = (a: ExecutionTarget, b: ExecutionTarget) =>
+  a.kind !== "host" &&
+  b.kind !== "host" &&
+  sessionOf(a) === sessionOf(b) &&
+  (a.kind === "session" || b.kind === "session" || a.ref.openId === b.ref.openId);
+
 /** The attempt without its terminal fields, so a new settlement never inherits a stale one. */
 const unsettled = (row: ActionReceipt) => {
   const {
@@ -322,14 +340,7 @@ export class ActionJournal {
             (row.state === "running" ||
               row.state === "unknown" ||
               (row.key === "schedule.grid.push" && row.state === "incomplete")) &&
-            ((row.state === "unknown" &&
-              row.preparation.state === "ready" &&
-              ["native-leaf", "host-leaf"].includes(
-                String((row.preparation.value as { kind?: string })?.kind),
-              )) ||
-              (canonicalRouteInput(admission.destination) ===
-                canonicalRouteInput(row.destination) &&
-                admission.destination.kind !== "host") ||
+            (overlaps(admission.destination, row.destination) ||
               (row.key === "schedule.grid.push" &&
                 admission.key === row.key &&
                 admission.bases.work &&
