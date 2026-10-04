@@ -73,16 +73,24 @@ public static class DuctApplier {
         var items = new List<Item>();
         var seen = new HashSet<(string, long)>();
         Item? Duplicate(string kind, long id) => seen.Add((kind, id)) ? null : new Item(id, kind, null).Refuse("the request names this id twice");
+        // A Revit refusal while reading one target is that target's refusal, never the whole call's.
+        Item Plan(string kind, long id, Func<Item> plan) {
+            try {
+                return plan();
+            } catch (Exception ex) when (DuctSnapshots.IsRevitFailure(ex) || ex is ArgumentException) {
+                return new Item(id, kind, null).Refuse($"Revit refused the read: {ex.Message}");
+            }
+        }
 
         if (request.NetworkBasedCalculations is { } engine) items.Add(Engine(doc, engine));
         foreach (var w in request.Fittings ?? [])
-            items.Add(Duplicate("fitting", w.Id) ?? Lossy(doc, w.Id, "fitting", BuiltInCategory.OST_DuctFitting, SpecificCoefficient, schemas, CoefficientField,
-                Finite(w.Coefficient) ? w.Coefficient.ToString("R", CultureInfo.InvariantCulture) : null, w.Coefficient, $"specific-coefficient {w.Coefficient:0.####}"));
+            items.Add(Duplicate("fitting", w.Id) ?? Plan("fitting", w.Id, () => Lossy(doc, w.Id, "fitting", BuiltInCategory.OST_DuctFitting, SpecificCoefficient, schemas, CoefficientField,
+                Finite(w.Coefficient) ? w.Coefficient.ToString("R", CultureInfo.InvariantCulture) : null, w.Coefficient, $"specific-coefficient {w.Coefficient:0.####}")));
         foreach (var w in request.Components ?? [])
-            items.Add(Duplicate("component", w.Id) ?? Lossy(doc, w.Id, "component", BuiltInCategory.OST_DuctAccessory, SpecificLoss, schemas, PressureLossField,
-                Finite(w.InWg) ? UnitUtils.ConvertToInternalUnits(w.InWg, InWg).ToString("R", CultureInfo.InvariantCulture) : null, w.InWg, $"specific-loss {w.InWg:0.####} in-wg"));
-        foreach (var w in request.Terminals ?? []) items.Add(Duplicate("terminal", w.Id) ?? Terminal(doc, w, slots));
-        foreach (var w in request.Equipment ?? []) items.Add(Duplicate("equipment", w.Id) ?? Equipment(doc, w, slots));
+            items.Add(Duplicate("component", w.Id) ?? Plan("component", w.Id, () => Lossy(doc, w.Id, "component", BuiltInCategory.OST_DuctAccessory, SpecificLoss, schemas, PressureLossField,
+                Finite(w.InWg) ? UnitUtils.ConvertToInternalUnits(w.InWg, InWg).ToString("R", CultureInfo.InvariantCulture) : null, w.InWg, $"specific-loss {w.InWg:0.####} in-wg")));
+        foreach (var w in request.Terminals ?? []) items.Add(Duplicate("terminal", w.Id) ?? Plan("terminal", w.Id, () => Terminal(doc, w, slots)));
+        foreach (var w in request.Equipment ?? []) items.Add(Duplicate("equipment", w.Id) ?? Plan("equipment", w.Id, () => Equipment(doc, w, slots)));
 
         var (stored, storeError) = ReadStore(doc);
         var storeRevision = stored?.WorkRevision ?? 0;
