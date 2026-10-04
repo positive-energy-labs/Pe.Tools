@@ -42,6 +42,8 @@ export interface Row {
   pv?: number;
   fpm?: number;
   dp: number;
+  /** Revit's own reported drop for the fitting, shown beside dp; never an input. */
+  revitDp?: number;
   desc: string;
   notes?: string[];
   error?: string;
@@ -58,7 +60,7 @@ export interface LossError {
 export type Choices = Readonly<Record<string, string>>;
 
 export interface Overrides {
-  /** Catalog static pressure per terminal id, in-wg; beats the node `staticPressure` fact. */
+  /** Catalog static pressure per terminal id, in-wg; beats `terminalDrop.catalogDropInWg`, then `assignedPressureDropInWg`. */
   terminalPs?: Readonly<Record<number, number>>;
   /** A stated drop per fitting or accessory id, in-wg; replaces the rule lookup (not for taps). */
   componentDrop?: Readonly<Record<number, number>>;
@@ -84,7 +86,7 @@ export interface LossResult {
   /** Largest path total over every group, in-wg; 0 with no path. See `byGroup` for per-system fans. */
   fan: number;
   critical: number | null;
-  byGroup: Record<string, { fan: number; critical: number | null }>;
+  byGroup: Record<string, { fan: number; critical: number | null; revitCritical: number | null }>;
   byRule: Record<string, RuleLoss>;
   errors: LossError[];
 }
@@ -99,7 +101,7 @@ const portOf = (c: Connector | undefined): Port | null =>
 const segmentSection = (s: Segment) => sectionOf(s.shape, s.diameterIn, s.widthIn, s.heightIn);
 
 const isTap = (node: Node | null | undefined) =>
-  !!node && (node.partType?.startsWith("Tap") === true || factOf(node, "isTakeoff") === 1);
+  !!node && (node.partType?.startsWith("Tap") === true || factOf(node, "takeoff") === 1);
 
 /**
  * Facts the rules read, from a node connectors and W1 facts. `prev` is the element toward the
@@ -116,7 +118,11 @@ export function fittingFacts(
     node.connectors.find((c) => id != null && c.connectedTo?.elementId === id);
   const tap = isTap(node);
   const main = toward(prev);
-  const inlet = tap ? node.connectors.find((c) => c !== main) : (main ?? node.connectors[0]);
+  // W1 `inlet` is the connector index facing the root; derive from the path only when absent.
+  const stated = factOf(node, "inlet");
+  const facing = stated == null ? undefined : node.connectors.find((c) => c.index === stated);
+  const inlet =
+    facing ?? (tap ? node.connectors.find((c) => c !== main) : (main ?? node.connectors[0]));
   const outlet = tap
     ? undefined
     : (toward(next) ??
@@ -127,6 +133,18 @@ export function fittingFacts(
     inletPort.section && outletPort?.section
       ? outletPort.section.areaFt2 / inletPort.section.areaFt2
       : null;
+  // A tap collar connector is the branch size; the main is the duct it hangs off.
+  const mainArea = factOf(node, "mainArea");
+  const mainPort: Port | null = !tap
+    ? null
+    : mainArea != null
+      ? {
+          shape: "round",
+          section: { areaFt2: mainArea, dhIn: 12 * Math.sqrt((4 * mainArea) / Math.PI) },
+        }
+      : parent
+        ? { shape: parent.shape, section: segmentSection(parent) }
+        : null;
   return {
     kind: node.kind === "accessory" ? "accessory" : "fitting",
     partType: node.partType ?? null,
@@ -134,9 +152,9 @@ export function fittingFacts(
     aoOverA1: factOf(node, "aoOverA1") ?? ratio,
     inlet: inletPort,
     outlet: outletPort,
-    // A tap collar connector is the branch size; the main is the duct it hangs off.
-    main: tap && parent ? { shape: parent.shape, section: segmentSection(parent) } : null,
-    isTakeoff: tap,
+    main: mainPort,
+    abOverAc: factOf(node, "abOverAc"),
+    takeoff: tap,
   };
 }
 
@@ -173,6 +191,14 @@ function tapDistance(duct: Segment, tap: Node, parentId: number | null): number 
   const s = fromEnd ? total - best.s : best.s;
   return Math.max(0, Math.min(duct.lengthFt, (s / total) * duct.lengthFt));
 }
+
+type System = NonNullable<DuctSnapshot["systems"]>[number];
+
+/** Revit's system that carries a terminal: the one whose sections list it. */
+export const systemFor = (snapshot: DuctSnapshot, terminalId: number): System | undefined =>
+  snapshot.systems?.find((sys) =>
+    sys.sections.some((section) => section.elementIds.includes(terminalId)),
+  );
 
 const round4 = (n: number) => +n.toFixed(4);
 
@@ -221,7 +247,12 @@ export function computeLosses(
           priced.get(r.rule)!.add(r.id);
         }
     }
-    result.byGroup[group.id] = { fan, critical };
+    result.byGroup[group.id] = {
+      fan,
+      critical,
+      revitCritical:
+        (critical == null ? null : systemFor(snapshot, critical)?.criticalPathLossInWg) ?? null,
+    };
     if (critical != null && (result.critical == null || fan > result.fan)) {
       result.fan = fan;
       result.critical = critical;
@@ -320,7 +351,7 @@ function pathRows(
     const parentPart = prev == null ? null : tree.parts.get(prev);
     const facts = fittingFacts(node, prev, next, parentPart?.segment ?? null);
     const stated = overrides.componentDrop?.[node.id];
-    if (stated != null && !facts.isTakeoff) {
+    if (stated != null && !facts.takeoff) {
       rows.push({
         id: node.id,
         kind: "fitting",
@@ -331,7 +362,7 @@ function pathRows(
     }
     const rule = LOSS_RULES.find((r) => r.when(facts, flows));
     if (!rule) {
-      if (facts.isTakeoff) return; // a tap with no branch flow loses nothing here
+      if (facts.takeoff) return; // a tap with no branch flow loses nothing here
       const message = fail({
         id: node.id,
         message: `no rule matches ${node.partType ?? node.kind} ${node.id}`,
@@ -343,11 +374,13 @@ function pathRows(
   };
 
   const terminalRow = (node: Node) => {
-    const ps = overrides.terminalPs?.[node.id] ?? factOf(node, "staticPressure");
+    const drop = node.terminalDrop;
+    const ps =
+      overrides.terminalPs?.[node.id] ?? drop?.catalogDropInWg ?? drop?.assignedPressureDropInWg;
     const cfm = terminalCfm(node);
     let error: string | undefined;
     if (ps == null)
-      error = fail({ id: node.id, message: `terminal ${node.id} has no static pressure` });
+      error = fail({ id: node.id, message: `terminal ${node.id} has no terminal drop` });
     else if (cfm == null)
       error = fail({ id: node.id, message: `terminal ${node.id} has no design flow` });
     rows.push({
@@ -355,7 +388,7 @@ function pathRows(
       kind: "terminal",
       leg: "ps",
       dp: ps ?? 0,
-      desc: `terminal ${node.id} at ${cfm ?? "?"} cfm, catalog Ps`,
+      desc: `terminal ${node.id} at ${cfm ?? "?"} cfm, terminal drop`,
       ...(error ? { error } : {}),
     });
   };

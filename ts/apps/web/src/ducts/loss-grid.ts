@@ -43,9 +43,55 @@ function interp1(x: number, xs: number[], ys: number[], label: string): [number,
 
 const flat = (grid: Grid): grid is Grid & { grid: number[] } => !grid.y;
 
+const isNumbers = (v: unknown): v is number[] =>
+  Array.isArray(v) && v.every((n) => typeof n === "number");
+
+function toGrid(raw: unknown, where: string): Grid {
+  const g = raw as Partial<Grid> | null;
+  if (!g || typeof g !== "object" || typeof g.title !== "string" || !isNumbers(g.x))
+    throw new GridError(`${where}: not a grid`);
+  const y = g.y ?? undefined;
+  const ok =
+    y == null
+      ? isNumbers(g.grid)
+      : isNumbers(y) &&
+        Array.isArray(g.grid) &&
+        g.grid.length === y.length &&
+        g.grid.every((row) => isNumbers(row) && row.length === g.x!.length);
+  if (!ok) throw new GridError(`${where}: grid does not match its axes`);
+  return {
+    title: g.title,
+    xLabel: g.xLabel ?? "x",
+    x: g.x,
+    ...(y == null ? {} : { y, yLabel: g.yLabel ?? "y" }),
+    grid: g.grid as Grid["grid"],
+  };
+}
+
+/** Narrow a `ducts.tables` response (typed `unknown` on the wire) to `Grids`; throws on a malformed grid. */
+export function toGrids(response: unknown): Grids {
+  const tables = (response as { tables?: Record<string, Record<string, unknown>> } | null)?.tables;
+  if (!tables || typeof tables !== "object")
+    throw new GridError("ducts.tables response has no tables");
+  const out: Grids = {};
+  for (const [id, results] of Object.entries(tables)) {
+    out[id.toUpperCase()] = {};
+    for (const [res, raw] of Object.entries(results))
+      out[id.toUpperCase()]![res] = toGrid(raw, `${id} ${res}`);
+  }
+  return out;
+}
+
 /** Look `x` (and `y` for a 2-D grid) up; throws `GridError` when the inputs do not fit the grid. */
 export function lookupGrid(grid: Grid, x: number, y?: number | null): Lookup {
-  if (!Number.isFinite(x)) throw new GridError(`${grid.xLabel} is not a number`);
+  if (grid.x.length > 0 && !Number.isFinite(x))
+    throw new GridError(`${grid.xLabel} is not a number`);
+  if (grid.x.length === 0) {
+    // A constant table ("Co = 0.12"): one value, no axes.
+    const v = (grid.grid as number[])[0];
+    if (v == null) throw new GridError(`${grid.title} has no value`);
+    return { value: v, notes: [], inputs: "constant" };
+  }
   const notes: string[] = [];
   const note = (n?: string) => n && notes.push(n);
   if (flat(grid)) {

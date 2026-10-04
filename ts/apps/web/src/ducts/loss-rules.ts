@@ -16,8 +16,8 @@ export interface Port {
 }
 
 /**
- * What a rule may know of a fitting. W1's `DuctNode` facts (`rOverD`, `aoOverA1`, `isTakeoff`) feed
- * `rOverD`/`aoOverA1`/`isTakeoff` through `fittingFacts` in losses.ts; sizes come from connectors.
+ * What a rule may know of a fitting. W1's `DuctNode` facts (`rOverD`, `aoOverA1`, `takeoff`) feed
+ * `rOverD`/`aoOverA1`/`takeoff` through `fittingFacts` in losses.ts; sizes come from connectors.
  */
 export interface FittingFacts {
   kind: "fitting" | "accessory";
@@ -30,7 +30,9 @@ export interface FittingFacts {
   outlet: Port | null;
   /** The main duct a tap hangs off. */
   main: Port | null;
-  isTakeoff: boolean;
+  /** Branch area over main area at a tap. */
+  abOverAc: number | null;
+  takeoff: boolean;
 }
 
 /** Flow through the fitting, cfm. A tap also carries branch, main-upstream and main-downstream. */
@@ -131,14 +133,14 @@ export const LOSS_RULES: readonly LossRule[] = [
     table: "SD5-9",
     options: TAPS,
     basis: "branch leg: Pv of the branch; straight leg: Pv of the main downstream",
-    when: (f, flows) => f.isTakeoff && (flows.qb ?? 0) > 0 && flows.qc! > 0,
+    when: (f, flows) => f.takeoff && (flows.qb ?? 0) > 0 && flows.qc! > 0,
     input: (f, flows, _t, leg) => {
       const qc = flows.qc!;
       if (leg === "Cs") return { res: "Cs", x: flows.qs! / qc, y: 1 };
       return {
         res: "Cb",
         x: flows.qb! / qc,
-        y: (f.inlet.section?.areaFt2 ?? NaN) / (f.main?.section?.areaFt2 ?? NaN),
+        y: f.abOverAc ?? (f.inlet.section?.areaFt2 ?? NaN) / (f.main?.section?.areaFt2 ?? NaN),
       };
     },
     basisOf: (f, flows, leg) =>

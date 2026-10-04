@@ -8,9 +8,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vite-plus/test";
 
-import { lookupGrid, type Grid, type Grids } from "./loss-grid";
+import { lookupGrid, toGrids, type Grid, type Grids } from "./loss-grid";
 import { friction, roundSection } from "./loss-physics";
-import { computeLosses, fanout } from "./losses";
+import { computeLosses, fanout, systemFor } from "./losses";
+import synthetic from "./fixtures/synthetic-snapshot.json";
 import type { DuctSnapshot } from "./readiness";
 
 // ---- test-only .tbl reader (ctable.py parse) ------------------------------------------------
@@ -52,6 +53,7 @@ function parseTbl(name: string): Record<string, Grid> {
 }
 const grids: Grids = {
   "CD3-2": parseTbl("Cd3-2"),
+  "CD3-21": parseTbl("Cd3-21"),
   "SD5-9": parseTbl("Sd5-9"),
   "SR4-3": parseTbl("Sr4-3"),
 };
@@ -157,18 +159,18 @@ const snapshot = {
       connectors: [conn(0, [3, 1], round(8)), conn(1, [6, 0], rect(12, 4))],
     }),
     node(6, "terminal", {
+      terminalDrop: { catalogDropInWg: 0.05, writable: false },
       connectors: [conn(0, [5, 1], rect(12, 4))],
-      facts: [
-        { key: "flow", value: 200, unit: "cfm", provenance: "designer-stated" },
-        { key: "staticPressure", value: 0.05, unit: "in-wg", provenance: "designer-stated" },
-      ],
+      facts: [{ key: "flow", value: 200, unit: "cfm", provenance: "designer-stated" }],
     }),
     node(8, "terminal", {
+      terminalDrop: {
+        assignedPressureDropInWg: 0.08,
+        connectorLossMethod: "SpecificLoss",
+        writable: true,
+      },
       connectors: [conn(0, [7, 1], round(6))],
-      facts: [
-        { key: "flow", value: 100, unit: "cfm", provenance: "designer-stated" },
-        { key: "staticPressure", value: 0.08, unit: "in-wg", provenance: "designer-stated" },
-      ],
+      facts: [{ key: "flow", value: 100, unit: "cfm", provenance: "designer-stated" }],
     }),
   ],
   segments: [
@@ -260,9 +262,9 @@ it("honours overrides and reports a missing table", () => {
     { terminalPs: { 8: 0.1 }, componentDrop: { 2: 0.5 } },
   );
   expect(r.paths[8]!.total).toBeCloseTo(T8 - 0.08 + 0.1 - 0.0110481 + 0.5, 6);
-  const missing = computeLosses(snapshot, grids, { "elbow-1d-le10": "CD3-21" });
+  const missing = computeLosses(snapshot, grids, { "elbow-1d-le10": "CD3-9" });
   expect(missing.errors).toEqual([
-    expect.objectContaining({ id: 2, rule: "elbow-1d-le10", table: "CD3-21" }),
+    expect.objectContaining({ id: 2, rule: "elbow-1d-le10", table: "CD3-9" }),
   ]);
 });
 
@@ -295,4 +297,40 @@ it("fanout moves only the terminals whose path crosses the rule", () => {
   const tapped = fanout(snapshot, { ...grids, "SD5-10": sd10 }, {}, "tap-std", "SD5-10");
   expect([...tapped.movedTerminals].sort((a, b) => a - b)).toEqual([6, 8]);
   expect(tapped.instances).toBe(1);
+});
+
+it("runs the whole pipeline over W1's synthetic snapshot", () => {
+  // Expected from the same grids and handcalc.py arithmetic, computed independently:
+  //  T30  duct 10 (12 in, 10 ft, 400 cfm) 0.0035563 + tap straight SD5-9 Cs(.75, 1) .125 x Pv(300 cfm)
+  //       0.0011366 + duct 10 (10 ft, 300 cfm) 0.0021239 + elbow CD3-21 D=12 .29 x Pv 0.0026370
+  //       + duct 11 (10 ft, 300 cfm) 0.0021239 + terminal assigned 0                  = 0.0115778
+  //  T31  duct 10 0.0035563 + tap branch SD5-9 Cb(.25, abOverAc .25) 1.38 x Pv(100 cfm in 6 in)
+  //       0.0223083 + duct 12 (6 in, 7.5 ft, 100 cfm) 0.0063438 + terminal 0.05       = 0.0822084
+  const snap = synthetic as unknown as DuctSnapshot;
+  const r = computeLosses(snap, grids);
+  expect(r.errors).toEqual([]);
+  expect(r.paths[30]!.total).toBeCloseTo(0.01157782, 7);
+  expect(r.paths[31]!.total).toBeCloseTo(0.08220842, 7);
+  expect(r.critical).toBe(31);
+  expect(r.paths[30]!.rows.find((x) => x.rule === "elbow-1d-gt10")).toMatchObject({
+    table: "CD3-21",
+  });
+  expect(systemFor(snap, 31)?.id).toBe(500);
+  expect(r.byGroup.g10).toMatchObject({ critical: 31, revitCritical: 0.1 });
+  // No grids loaded: every priced fitting reports it, nothing throws.
+  expect(computeLosses(snap, {}).errors.length).toBeGreaterThan(0);
+});
+
+it("narrows a ducts.tables response and reads a constant table", () => {
+  const g = toGrids({
+    tables: {
+      "cd9-1": { Co: { title: "const", xLabel: "x", x: [], grid: [0.12] } },
+      "cd3-2": { Co: { title: "t", xLabel: "D", x: [3, 4], grid: [0.44, 0.37] } },
+    },
+  });
+  expect(lookupGrid(g["CD9-1"]!.Co!, 99).value).toBe(0.12);
+  expect(lookupGrid(g["CD3-2"]!.Co!, 3.5).value).toBeCloseTo(0.405, 6);
+  expect(() =>
+    toGrids({ tables: { A: { Co: { title: "t", x: [1], y: [1, 2], grid: [[1]] } } } }),
+  ).toThrow();
 });
