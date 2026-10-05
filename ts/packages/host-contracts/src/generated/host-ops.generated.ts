@@ -182,7 +182,6 @@ export namespace DuctsApply {
       terminals: DuctDropWrite[];
       components: DuctDropWrite[];
       equipment: DuctEquipmentWrite[];
-      networkBasedCalculations?: boolean | null;
       store: DuctLossStore;
     }
     /**
@@ -270,7 +269,7 @@ export namespace DuctsApply {
       storeRevision: number;
     }
     /**
-     * One target's outcome. Kind: fitting, terminal, component, equipment, engine, store. Outcome: planned (preview),
+     * One target's outcome. Kind: fitting, terminal, component, equipment, store. Outcome: planned (preview),
      * written, refused (Reason says why), unchanged (already holds the value). Before and After are display text.
      *
      */
@@ -381,7 +380,7 @@ export namespace DuctsSnapshot {
     }
     /**
      * The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:
-     * the legacy engine never reports a critical path (pressure-drop ledger).
+     * read only: the snapshot guards an access violation on it, and apply never sets it (pressure-drop ledger).
      *
      */
     export interface DuctDocument {
@@ -472,7 +471,7 @@ export namespace DuctsSnapshot {
     /**
      * A fitting's or accessory's loss state: the server in RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM and the string
      * fields of that server's entity on the instance, verbatim in Fields. Table, Coefficient and SpecificLossInWg are
-     * read from them. RevitPressureDropInWg is the element's own RBS_PRESSURE_DROP.
+     * read from them. RevitPressureDropInWg is the element's own RBS_DUCT_PRESSURE_DROP (RBS_PRESSURE_DROP is empty under a stored ASHRAE table).
      *
      */
     export interface DuctLoss {

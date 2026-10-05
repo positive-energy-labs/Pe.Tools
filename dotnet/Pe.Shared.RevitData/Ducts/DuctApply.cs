@@ -4,8 +4,8 @@ using Pe.Shared.RevitData.Serialization;
 
 namespace Pe.Shared.RevitData.Ducts;
 
-// The `ducts.apply` contract: write fitting coefficients, terminal and component drops, fan static and the engine
-// switch into Revit, plus Pe's provenance store. PreviewOnly plans every write and opens no transaction.
+// The `ducts.apply` contract: write fitting coefficients, terminal and component drops, fan static
+// into Revit, plus Pe's provenance store. PreviewOnly plans every write and opens no transaction.
 
 /// <summary>
 ///     Coefficient is Specific Coefficient (dimensionless); Table, Inputs and RuleKey are Pe's provenance for it and
@@ -18,7 +18,6 @@ public sealed record DuctApplyRequest(
     IReadOnlyList<DuctDropWrite> Terminals,
     IReadOnlyList<DuctDropWrite> Components,
     IReadOnlyList<DuctEquipmentWrite> Equipment,
-    bool? NetworkBasedCalculations,
     DuctLossStore Store);
 
 public sealed record DuctFittingWrite(long Id, double Coefficient, string? Table, string? Inputs, string? RuleKey);
@@ -36,7 +35,7 @@ public sealed record DuctApplyResult(
     int StoreRevision);
 
 /// <summary>
-///     One target's outcome. Kind: fitting, terminal, component, equipment, engine, store. Outcome: planned (preview),
+///     One target's outcome. Kind: fitting, terminal, component, equipment, store. Outcome: planned (preview),
 ///     written, refused (Reason says why), unchanged (already holds the value). Before and After are display text.
 /// </summary>
 public sealed record DuctWrite(long? Id, string Kind, string Outcome, string? Reason, string? Before, string? After);

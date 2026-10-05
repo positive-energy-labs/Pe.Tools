@@ -11,7 +11,7 @@ namespace Pe.Revit.Global.Lib.Mep;
 
 /// <summary>
 ///     The Revit half of `ducts.apply`. Plans every write first (preview stops there, no transaction), then follows the
-///     the campaign recipe (pressure-drop ledger): the engine switch, every targeted fitting and accessory to Not Defined and
+///     the campaign recipe (pressure-drop ledger): every targeted fitting and accessory to Not Defined and
 ///     committed, then each one's server entity (Revit's own, required by Revit) and its server, terminal connector
 ///     drops, fan static and Pe's store, committed. The two commits sit in one TransactionGroup: a failed stage rolls
 ///     the whole apply back and names itself, a clean apply is one undo step.
@@ -83,7 +83,6 @@ public static class DuctApplier {
             }
         }
 
-        if (request.NetworkBasedCalculations is { } engine) items.Add(Engine(doc, engine));
         foreach (var w in request.Fittings ?? [])
             items.Add(Duplicate("fitting", w.Id) ?? Plan("fitting", w.Id, () => Lossy(doc, w.Id, "fitting", BuiltInCategory.OST_DuctFitting, SpecificCoefficient, schemas, CoefficientField,
                 Finite(w.Coefficient) ? w.Coefficient.ToString("R", CultureInfo.InvariantCulture) : null, w.Coefficient, $"specific-coefficient {w.Coefficient:0.####}")));
@@ -134,7 +133,7 @@ public static class DuctApplier {
         }
 
         foreach (var i in items.Where(i => i.Outcome == "written" && i.Element is { IsValidObject: true } && i.Loss is not null))
-            i.After += $"; Revit drop {Pressure(i.Element!.get_Parameter(BuiltInParameter.RBS_PRESSURE_DROP)):0.#####} in-wg";
+            i.After += $"; Revit drop {Pressure(i.Element!.get_Parameter(BuiltInParameter.RBS_DUCT_PRESSURE_DROP)):0.#####} in-wg";
         var systems = items.Where(i => i.Outcome == "written" && i.Element is { IsValidObject: true })
             .SelectMany(i => DuctSnapshots.HvacConnectors(i.Element!))
             .Select(c => Try(() => c.MEPSystem as MechanicalSystem))
@@ -151,8 +150,6 @@ public static class DuctApplier {
         var planned = items.Where(i => i.Outcome == "planned").ToList();
         var lossy = planned.Where(i => i.Loss is not null).ToList();
         var stages = new List<(string Name, Action Run)>();
-        if (planned.FirstOrDefault(i => i.Kind == "engine") is { } engine)
-            stages.Add(("engine", () => Write(engine)));
         if (lossy.Count > 0)
             stages.Add(("not-defined", () => {
                 foreach (var i in lossy)
@@ -161,7 +158,7 @@ public static class DuctApplier {
         stages.Add(("losses", () => {
             // Terminals, equipment and the store first: a terminal's SubTransaction rollback after the server change
             // discards Revit's recalculation and the fittings commit with a 0 drop (W3, Project A).
-            foreach (var i in planned.Where(i => i.Loss is null && i.Kind != "engine")) Write(i);
+            foreach (var i in planned.Where(i => i.Loss is null)) Write(i);
             foreach (var i in lossy) {
                 var (server, schema, field, value) = i.Loss!.Value;
                 var entity = new Entity(schema);
@@ -211,19 +208,6 @@ public static class DuctApplier {
             i.Refuse($"Revit refused: {ex.Message}");
         }
     }
-
-    private static Item Engine(Document doc, bool want) {
-        var settings = DuctSettings.GetDuctSettings(doc);
-        var item = new Item(settings.Id.Value(), "engine", Engine(settings.NetworkBasedCalculations)) {
-            Write = () => {
-                settings.NetworkBasedCalculations = want;
-                return Engine(want);
-            }
-        };
-        return settings.NetworkBasedCalculations == want ? item.Unchanged(Engine(want)) : item;
-    }
-
-    private static string Engine(bool network) => network ? "network-based calculations" : "legacy calculations";
 
     private static Item Lossy(Document doc, long id, string kind, BuiltInCategory category, Guid server,
         Dictionary<Guid, Schema?> schemas, string field, string? value, double number, string after) {

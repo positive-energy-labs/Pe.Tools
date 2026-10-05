@@ -104,7 +104,7 @@ const dispatch = async (
   input: Record<string, unknown>,
 ) => {
   if (ctx.target.kind !== "document") throw Error("An open document is required");
-  // An apply on a large model runs about 45 s (the engine switch and commits recalculate it). A
+  // An apply on a large model runs about 45 s (the commits recalculate it). A
   // receipt that comes back detached or running is read again until it settles; the verb's
   // `waitSeconds` is the one bound, and past it the route ends the verb honestly.
   let row = await runSemanticAction(key, semanticActionInput(key, input), ctx.target.ref);

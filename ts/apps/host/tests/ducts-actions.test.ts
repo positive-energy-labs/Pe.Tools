@@ -33,7 +33,6 @@ const input: DuctsApplyInput = {
   terminals: [{ id: 31, inWg: 0.08, source: "catalog" }],
   components: [],
   equipment: [{ id: 1, externalStaticInWg: 0.1102 }],
-  networkBasedCalculations: true,
   store: {
     version: 1,
     rules: { "tap-std": { table: "SD5-10" } },

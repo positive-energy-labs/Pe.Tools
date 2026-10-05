@@ -69,7 +69,7 @@ const pct = (a: number, b: number) => (b > 0 ? `${Math.round((a / b) * 100)}%` :
 const NO_ROOT = "no air mover; priced from the open end";
 
 /** Why this grille's number is not yet Revit's too: the word, and what it means. The group-wide
- * reasons (no mover, engine flag off) are said once in the group head, never per row. */
+ * reasons (no mover) are said once in the group head, never per row. */
 const STATUS = {
   "open-end": ["open end", "an open end on this path is not answered (capped or ignored)"],
   refuses: ["drop refused", "the connector is not Specific Loss; Revit refuses a terminal drop"],
@@ -466,12 +466,9 @@ const PartChip = ({ part }: { part: Part }) => (
   </span>
 );
 
-/**
- * Revit's critical path as a word. With the engine flag off Revit reports 0 for every system,
- * which is not an answer, so the flag is named instead of the zero.
- */
-export const revitSays = (snapshot: DuctSnapshot, inWg: number | null | undefined) =>
-  !snapshot.document.networkBasedCalculations ? "engine off" : inWg == null ? "no path" : fmt(inWg);
+/** Revit's critical path as a word, whatever the engine flag: a system with no path reads "no path". */
+export const revitSays = (inWg: number | null | undefined) =>
+  inWg == null ? "no path" : fmt(inWg);
 
 /** Pe's fan beside Revit's critical path, with the staged fan when it differs. */
 function GroupHead({
@@ -512,7 +509,7 @@ function GroupHead({
         ) : null}
         <span className="t-small text-ink-2">in-wg · Revit</span>
         <span className="face-mono" data-revit={group.id}>
-          {revitSays(snapshot, revit?.criticalPathLossInWg)}
+          {revitSays(revit?.criticalPathLossInWg)}
         </span>
       </span>
       <span className="t-small text-ink-2">
@@ -967,11 +964,6 @@ export function StagedLosses({
             : `${kind} refused: ${reason}${ids.length ? ` · ids ${ids.join(", ")}` : ""}`}
         </div>
       ))}
-      {fresh && evaluation?.response.writes.some((w) => w.kind === "engine") ? (
-        <div data-tone="caution" data-engine="">
-          turns Revit's engine on first: about a minute, once per model
-        </div>
-      ) : null}
       <div className="flex flex-wrap items-baseline gap-x-3">
         {evaluation ? (
           <span

@@ -125,7 +125,8 @@ public static class DuctSnapshots {
             fields.TryGetValue("ASHRAETableName", out var table) && table.Length > 0 ? table : null,
             method == DuctLossMethod.SpecificCoefficient ? Number(k => k == "Coefficient") : null,
             specificLoss,
-            Converted(e, BuiltInParameter.RBS_PRESSURE_DROP, UnitTypeId.InchesOfWater60DegreesFahrenheit),
+            // RBS_PRESSURE_DROP is empty on a fitting charged through a stored ASHRAE table; RBS_DUCT_PRESSURE_DROP is the Properties palette value (pressure-drop ledger, 2026-10-05).
+            Converted(e, BuiltInParameter.RBS_DUCT_PRESSURE_DROP, UnitTypeId.InchesOfWater60DegreesFahrenheit),
             fields);
     }
 
@@ -270,7 +271,7 @@ public static class DuctSnapshots {
                 "OST_DuctFitting: LookupParameter(\"Angle\"), LookupParameter(\"Center Radius\"); connector sizes; DuctNetwork derives rOverD (round elbows), inlet and aoOverA1 (rooted transitions), takeoff, mainDiameter, mainArea and abOverAc (fittings on a duct's curve connector)",
                 new(fittings.Count(n => n.Facts.Any(f => f.Key is DuctNetwork.ROverD or DuctNetwork.AoOverA1 or DuctNetwork.AbOverAc)), fittings.Count), DuctProvenance.Geometry),
             new("loss-method", "Fitting and accessory loss method",
-                "RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM; ExternalServiceRegistry DuctFittingAndAccessoryPressureDropService GetServer(id).GetDataSchema(), Element.GetEntity(schema) string fields (ASHRAETableName, Coefficient); RBS_PRESSURE_DROP",
+                "RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM; ExternalServiceRegistry DuctFittingAndAccessoryPressureDropService GetServer(id).GetDataSchema(), Element.GetEntity(schema) string fields (ASHRAETableName, Coefficient); RBS_DUCT_PRESSURE_DROP",
                 new(lossy.Count(n => n.Loss!.Method is DuctLossMethod.SpecificCoefficient or DuctLossMethod.SpecificLoss), lossy.Count), DuctProvenance.RevitReported),
             new("terminal-drop", "Terminal pressure drop",
                 "OST_DuctTerminal first HVAC connector: AssignedPressureDrop (InchesOfWater60DegreesFahrenheit), AssignedDuctLossMethod (writable only under SpecificLoss); "

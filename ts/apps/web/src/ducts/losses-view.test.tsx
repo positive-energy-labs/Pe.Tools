@@ -225,7 +225,6 @@ it("builds the ducts.apply request from the staged cells only, exactly", () => {
     terminals: [{ id: 31, inWg: 0.08, source: "catalog" }],
     components: [],
     equipment: [{ id: 1, externalStaticInWg: 0.1061 }],
-    networkBasedCalculations: true,
     store: {
       version: 1,
       rules: { "tap-std": { table: "SD5-10" } },
@@ -406,7 +405,7 @@ it("apply is armed only by a preview of this Work revision and this snapshot", (
   expect(apply.ready(ctx({ evaluation, epoch: 1 }), nothing)).toMatch(/preview again/);
 });
 
-it("the band names a staged fan static that lands on the unit's type, folds refusals, and names the engine minute", () => {
+it("the band names a staged fan static that lands on the unit's type, and folds refusals", () => {
   let doc = land(
     ductsRouteState.schema.parse({}),
     transitionPatches(
@@ -429,7 +428,6 @@ it("the band names a staged fan static that lands on the unit's type, folds refu
   const response: DuctsApply.Res.Response = {
     previewOnly: true,
     writes: [
-      { id: null, kind: "engine", outcome: "planned" },
       {
         id: 1,
         kind: "equipment",
@@ -462,7 +460,6 @@ it("the band names a staged fan static that lands on the unit's type, folds refu
     "unit 1: no instance fan static; writes the type Air Handler : Standard: moves 1 unit",
   );
   expect(q("[data-scope]")?.textContent).toBe("every group: 1 fittings in 1 group");
-  expect(q("[data-engine]")?.textContent).toContain("about a minute, once per model");
   expect(
     [...view.container.querySelectorAll("[data-refused]")].map((el) => el.textContent),
   ).toEqual([

@@ -125,7 +125,7 @@ public sealed record DuctSnapshotData(
 
 /// <summary>
 ///     The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:
-///     the legacy engine never reports a critical path (pressure-drop ledger).
+///     read only: the snapshot guards an access violation on it, and apply never sets it (pressure-drop ledger).
 /// </summary>
 public sealed record DuctDocument(string Title, DateTimeOffset ReadAt, long ElapsedMs, bool NetworkBasedCalculations);
 
@@ -161,7 +161,7 @@ public enum DuctLossMethod {
 /// <summary>
 ///     A fitting's or accessory's loss state: the server in RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM and the string
 ///     fields of that server's entity on the instance, verbatim in Fields. Table, Coefficient and SpecificLossInWg are
-///     read from them. RevitPressureDropInWg is the element's own RBS_PRESSURE_DROP.
+///     read from them. RevitPressureDropInWg is the element's own RBS_DUCT_PRESSURE_DROP (RBS_PRESSURE_DROP is empty under a stored ASHRAE table).
 /// </summary>
 public sealed record DuctLoss(
     DuctLossMethod Method,

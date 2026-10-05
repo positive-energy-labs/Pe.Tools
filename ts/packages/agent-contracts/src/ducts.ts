@@ -135,7 +135,6 @@ export const ductsApplyInputSchema = z.strictObject({
   equipment: z.array(
     z.strictObject({ id: z.number().int(), externalStaticInWg: z.number().nonnegative() }),
   ),
-  networkBasedCalculations: z.boolean().nullable().optional(),
   /**
    * The whole provenance store after this apply (`DuctLossStore` v1): the model's store, its
    * unknown keys passed through, with this apply's rules, instances and drops over it, since the

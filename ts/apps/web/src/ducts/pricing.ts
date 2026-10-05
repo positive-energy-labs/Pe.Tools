@@ -249,8 +249,6 @@ export function applyRequest(
     terminals,
     components,
     equipment,
-    // Revit's own critical path (the check beside Pe's) needs the network-based engine.
-    networkBasedCalculations: true,
     // The native op writes the store as sent: the model's store (unknown keys included) with
     // this apply over it, at the revision read, so a store that moved since refuses as stale.
     store: {
