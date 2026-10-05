@@ -34,6 +34,7 @@ namespace Pe.App;
 public sealed class AppCore : IPePayload {
     private RevitTaskQueue? _revitTaskQueue;
     private BridgeConnectionSupervisor? _bridgeConnectionSupervisor;
+    private IDisposable? _sdkOperations;
 
     public void Startup(PePayloadContext context) {
         // The SDK decided the lane and roots at load time; the launcher only reads them.
@@ -82,6 +83,8 @@ public sealed class AppCore : IPePayload {
             },
             reason => this._bridgeConnectionSupervisor?.RequestReconnect(reason)
         );
+        // Before the host connects, and independent of it: `pe-revit op run` reaches these with Pe.Host down.
+        this._sdkOperations = SdkOperations.Bind(context.Operations);
         this._bridgeConnectionSupervisor = new BridgeConnectionSupervisor(revitTaskQueue);
         this._bridgeConnectionSupervisor.Start();
 
@@ -116,6 +119,8 @@ public sealed class AppCore : IPePayload {
         AutoTagService.Instance.Shutdown();
         ParameterLinksService.Instance.Shutdown();
         HostRuntime.Shutdown();
+        this._sdkOperations?.Dispose();
+        this._sdkOperations = null;
         RevitTaskAccessor.RunAsync = null;
         this._revitTaskQueue?.Dispose();
         this._revitTaskQueue = null;

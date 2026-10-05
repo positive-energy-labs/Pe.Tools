@@ -439,11 +439,12 @@ export interface SessionDialogInfo {
 export interface SessionDialogsResult {
   readonly detail: string | null;
   readonly id: string;
+  readonly phase: string;
   readonly pid: number;
   readonly processStartUtc: string;
   readonly recentSessionEvent: string | null;
   readonly sessionJournal: string;
-  readonly state: string;
+  readonly state: SessionVerbState;
   readonly windows: readonly SessionDialogInfo[];
 }
 
@@ -468,25 +469,28 @@ export interface SessionHrColdResult {
   readonly dropped: readonly DroppedDocument[];
   readonly id: string;
   readonly legs: readonly SessionOperationLeg[];
+  readonly phase: SessionHrPhase;
   readonly reopened: string | null;
   readonly session: ControlledObservation;
-  readonly state: SessionHrResultState;
+  readonly state: SessionVerbState;
 }
 
 export interface SessionHrFailureResult {
   readonly dropped: readonly DroppedDocument[];
   readonly id: string;
   readonly legs: readonly SessionOperationLeg[];
+  readonly phase: SessionHrPhase;
   readonly reopened: string | null;
-  readonly state: SessionHrResultState;
+  readonly state: SessionVerbState;
 }
 
 export interface SessionHrHotResult {
   readonly detail: string;
   readonly how: string;
   readonly id: string;
+  readonly phase: SessionHrPhase;
   readonly session: ControlledObservation;
-  readonly state: SessionHrResultState;
+  readonly state: SessionVerbState;
 }
 
 export interface SessionKey {
@@ -496,12 +500,22 @@ export interface SessionKey {
 }
 
 export interface SessionListResult {
+  readonly phase: SessionListPhase;
   readonly processReadErrors: readonly ProcessReadError[];
   readonly quarantines: readonly QuarantineObservation[];
   readonly registryRoot: string;
   readonly sessions: readonly SessionObservation[];
-  readonly state: SessionListResultState;
+  readonly state: SessionVerbState;
   readonly unreadableReceipts: readonly UnreadableSessionReceipt[];
+}
+
+export interface SessionLogsResult {
+  readonly events: readonly string[];
+  readonly id: string;
+  readonly journal: string | null;
+  readonly phase: string;
+  readonly state: SessionVerbState;
+  readonly tail: number;
 }
 
 export interface SessionOperationLeg {
@@ -514,7 +528,8 @@ export interface SessionOperationLeg {
 export interface SessionStartFailureResult {
   readonly id: string;
   readonly legs: readonly SessionOperationLeg[];
-  readonly state: SessionStartResultState;
+  readonly phase: SessionStartPhase;
+  readonly state: SessionVerbState;
 }
 
 export interface SessionStartPlanResult {
@@ -523,33 +538,38 @@ export interface SessionStartPlanResult {
   readonly key: SessionKey;
   readonly mutations: readonly string[];
   readonly payload: string;
-  readonly state: SessionStartResultState;
+  readonly phase: SessionStartPhase;
+  readonly state: SessionVerbState;
 }
 
 export interface SessionStartResult {
   readonly id: string;
   readonly legs: readonly SessionOperationLeg[];
+  readonly phase: SessionStartPhase;
   readonly session: ControlledObservation;
-  readonly state: SessionStartResultState;
+  readonly state: SessionVerbState;
 }
 
 export interface SessionStopDetailResult {
   readonly detail: string | null;
   readonly id: string;
-  readonly state: SessionStopResultState;
+  readonly phase: SessionStopPhase;
+  readonly state: SessionVerbState;
 }
 
 export interface SessionStopFailureResult {
   readonly id: string;
   readonly legs: readonly SessionOperationLeg[];
-  readonly state: SessionStopResultState;
+  readonly phase: SessionStopPhase;
+  readonly state: SessionVerbState;
 }
 
 export interface SessionStopResult {
   readonly borrows: readonly BorrowCustodyInfo[] | null;
   readonly borrowsRequestId: string | null;
   readonly id: string;
-  readonly state: SessionStopResultState;
+  readonly phase: SessionStopPhase;
+  readonly state: SessionVerbState;
 }
 
 export interface StateResult {
@@ -628,17 +648,19 @@ export type MutationKey = "session.hr" | "session.reset" | "session.start" | "se
 
 export type RestartMode = "cold-swap" | "hot-apply";
 
-export type SessionHrResultState = "applied" | "blocked" | "booting" | "doc-failed" | "existing" | "failed" | "gone" | "no-change" | "ready" | "restart-required" | "stop-blocked" | "unresponsive" | "wait-timeout";
+export type SessionHrPhase = "applied" | "blocked" | "booting" | "doc-failed" | "existing" | "failed" | "gone" | "no-change" | "ready" | "restart-required" | "stop-blocked" | "unresponsive" | "wait-timeout";
 
 export type SessionKindValue = "hr" | "installed" | "snapshot" | "test";
 
-export type SessionListResultState = "no-sessions" | "ok";
+export type SessionListPhase = "no-sessions" | "ok";
 
 export type SessionSelectorState = "ambiguous" | "no-match" | "no-sessions" | "resolved-implicit" | "resolved-pinned";
 
-export type SessionStartResultState = "booting" | "doc-failed" | "existing" | "failed" | "gone" | "planned" | "ready" | "unresponsive";
+export type SessionStartPhase = "booting" | "doc-failed" | "existing" | "failed" | "gone" | "planned" | "ready" | "unresponsive";
 
-export type SessionStopResultState = "blocked" | "failed" | "stopped";
+export type SessionStopPhase = "blocked" | "failed" | "stopped";
+
+export type SessionVerbState = "bad-invocation" | "failed" | "ok" | "refused";
 
 export const BridgeWireCodes = {
   BackgroundNoWindow: "doc.background-no-window",
@@ -694,6 +716,7 @@ export const BridgeWireDoc = {
   IsActive: "isActive",
   IsFamily: "isFamily",
   IsModified: "isModified",
+  ModelGuid: "modelGuid",
   OpenId: "openId",
   Path: "path",
   Persistence: "persistence",
@@ -701,6 +724,8 @@ export const BridgeWireDoc = {
   PersistenceLocal: "local",
   PersistenceLocalWorkshared: "local-workshared",
   PersistenceUnsaved: "unsaved",
+  ProjectGuid: "projectGuid",
+  Region: "region",
   Title: "title",
   Window: "window",
 } as const;
@@ -791,6 +816,13 @@ export const BridgeWirePolicy = {
 } as const;
 export type BridgeWirePolicy = (typeof BridgeWirePolicy)[keyof typeof BridgeWirePolicy];
 
+export const BridgeWireResult = {
+  AtOpen: "atOpen",
+  Borrows: "borrows",
+  Documents: "documents",
+} as const;
+export type BridgeWireResult = (typeof BridgeWireResult)[keyof typeof BridgeWireResult];
+
 export const BridgeWireRoutes = {
   ArmNoSave: "/arm-nosave",
   DocClose: "/doc/close",
@@ -808,6 +840,20 @@ export const BridgeWireRoutes = {
   WaitQuery: "timeoutMs",
 } as const;
 export type BridgeWireRoutes = (typeof BridgeWireRoutes)[keyof typeof BridgeWireRoutes];
+
+export const BridgeWireStatus = {
+  AddinAssembly: "assembly",
+  AddinPath: "path",
+  Addins: "addins",
+  EventsFile: "eventsFile",
+  InstanceId: "instanceId",
+  Ok: "ok",
+  Pid: "pid",
+  ProcessStartUtc: "processStartUtc",
+  RevitVersion: "revitVersion",
+  SessionDescriptor: "sessionDescriptor",
+} as const;
+export type BridgeWireStatus = (typeof BridgeWireStatus)[keyof typeof BridgeWireStatus];
 
 export const BridgeWireVerdicts = {
   Abandoned: "abandoned",
@@ -888,7 +934,7 @@ export type TestState = typeof TEST_STATES[number];
 export const VERSION_STATES = [] as const;
 export type VersionState = typeof VERSION_STATES[number];
 
-export type CoreDiagnosticCode = "bridge.body-read-failed" | "bridge.method-not-allowed" | "bridge.non-loopback" | "bridge.origin-rejected" | "bridge.request-too-large" | "bridge.unauthorized" | "bridge.unknown-route" | "doc.background-no-window" | "doc.bad-body" | "doc.bad-invocation" | "doc.bridge-unreachable" | "doc.central-is-not-local" | "doc.close-needs-save-destination" | "doc.conflict-required" | "doc.detached-window-needs-link-policy" | "doc.dialog-cancelled" | "doc.file-year-unread" | "doc.lifetime-ended" | "doc.manifest-unrecorded" | "doc.missing-links" | "doc.no-active-replacement" | "doc.no-match" | "doc.no-recents" | "doc.not-connected-workshared" | "doc.not-workshared" | "doc.output-exists" | "doc.preserve-needs-detached" | "doc.reference-census-incomplete" | "doc.refused" | "doc.revit-version-unreadable" | "doc.revit-year-mismatch" | "doc.save-needs-local-file" | "doc.show-detached-needs-save" | "doc.show-needs-path" | "doc.show-needs-window" | "doc.source-open" | "doc.template-missing" | "doc.unexpected-dialog" | "doc.unsaved-required" | "doc.worksets-required" | "doctor.bad-invocation" | "doctor.partial" | "guide.bad-invocation" | "guide.unknown-topic" | "op.admission-pending" | "op.admission-unavailable" | "op.bad-invocation" | "op.body-unreadable" | "op.duplicate-request" | "op.intent-conflict" | "op.liveness-unknown" | "op.outcome-unknown" | "op.outcome-unrecorded" | "op.process-dead" | "op.queue-disposed" | "op.queue-unresponsive" | "op.read-failed" | "op.receipt-divergence" | "op.receipt-read-retried" | "op.request-id-unusable" | "op.reserved-key" | "op.response-missing" | "op.stale-expectation" | "op.still-running" | "op.superseded-terminal" | "op.transport-lost" | "op.uncoded" | "op.unknown-key" | "op.unknown-request" | "session.ambiguous" | "session.bad-invocation" | "session.bootstrap-mismatch" | "session.bootstrap-missing" | "session.borrows-unrecorded" | "session.build-failed" | "session.descriptor-invalid" | "session.descriptor-missing" | "session.emit-failed" | "session.id-in-use" | "session.kill-unconfirmed" | "session.launch-failed" | "session.launch-skipped" | "session.mutation-busy" | "session.no-match" | "session.no-revit" | "session.no-sessions" | "session.no-sessions-for-year" | "session.project-missing" | "session.quarantine-unavailable" | "session.quarantined" | "session.reopen-failed" | "session.restart-required" | "session.stop-blocked" | "session.unsaved-unsaveable" | "session.wait-timeout" | "session.year-mismatch" | "session.year-required" | "test.attach-preflight" | "test.bad-invocation" | "test.failed" | "version.bad-invocation" | "version.missing";
+export type CoreDiagnosticCode = "bridge.body-read-failed" | "bridge.method-not-allowed" | "bridge.non-loopback" | "bridge.origin-rejected" | "bridge.request-too-large" | "bridge.unauthorized" | "bridge.unknown-route" | "doc.background-no-window" | "doc.bad-body" | "doc.bad-invocation" | "doc.bridge-unreachable" | "doc.central-is-not-local" | "doc.close-needs-save-destination" | "doc.conflict-required" | "doc.detached-window-needs-link-policy" | "doc.dialog-cancelled" | "doc.file-year-unread" | "doc.lifetime-ended" | "doc.manifest-unrecorded" | "doc.missing-links" | "doc.no-active-replacement" | "doc.no-match" | "doc.no-recents" | "doc.not-connected-workshared" | "doc.not-workshared" | "doc.output-exists" | "doc.preserve-needs-detached" | "doc.reference-census-incomplete" | "doc.refused" | "doc.revit-version-unreadable" | "doc.revit-year-mismatch" | "doc.save-needs-local-file" | "doc.show-detached-needs-save" | "doc.show-needs-path" | "doc.show-needs-window" | "doc.source-open" | "doc.template-missing" | "doc.unexpected-dialog" | "doc.unsaved-required" | "doc.worksets-required" | "doctor.bad-invocation" | "doctor.partial" | "guide.bad-invocation" | "guide.unknown-topic" | "op.admission-pending" | "op.admission-unavailable" | "op.bad-invocation" | "op.body-unreadable" | "op.duplicate-request" | "op.intent-conflict" | "op.liveness-unknown" | "op.outcome-unknown" | "op.outcome-unrecorded" | "op.process-dead" | "op.queue-disposed" | "op.queue-unresponsive" | "op.read-failed" | "op.receipt-divergence" | "op.receipt-read-retried" | "op.request-id-unusable" | "op.reserved-key" | "op.response-missing" | "op.stale-expectation" | "op.still-running" | "op.superseded-terminal" | "op.transport-lost" | "op.uncoded" | "op.unknown-key" | "op.unknown-request" | "session.ambiguous" | "session.bad-invocation" | "session.bootstrap-mismatch" | "session.bootstrap-missing" | "session.borrows-unrecorded" | "session.build-failed" | "session.descriptor-invalid" | "session.descriptor-missing" | "session.emit-failed" | "session.force-skips-save" | "session.id-in-use" | "session.kill-unconfirmed" | "session.launch-failed" | "session.launch-skipped" | "session.mutation-busy" | "session.no-match" | "session.no-revit" | "session.no-sessions" | "session.no-sessions-for-year" | "session.project-missing" | "session.quarantine-unavailable" | "session.quarantined" | "session.reopen-failed" | "session.restart-required" | "session.stop-blocked" | "session.unsaved-unsaveable" | "session.wait-timeout" | "session.year-mismatch" | "session.year-required" | "test.attach-preflight" | "test.bad-invocation" | "test.failed" | "version.bad-invocation" | "version.missing";
 
 export function docCloseArgv(opts: { doc: string; id?: string; unsaved: string; out?: string; release?: string; requestId?: string; expectSession?: string; expectDoc?: string; wait?: boolean; noWait?: boolean; timeoutSeconds?: number; }): string[] {
   const argv = ["doc", "close"];

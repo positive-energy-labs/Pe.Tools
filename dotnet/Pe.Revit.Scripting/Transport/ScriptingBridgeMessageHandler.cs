@@ -94,7 +94,22 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
     );
 
     [Op("scripting.execute", Does = "Execute trusted in-process C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a captured src file in a valid pod workspace — exactly one of the two. sourceBundle may supply captured Pod manifest, project presence and source bytes with sourcePath; references resolve from the original workspace key. The supplied document is the script target; UI document and selection are available only when it is active. permissionMode defaults to ReadOnly, which discards supplied-document changes via a rollback guard; pass WriteTransaction for one host-owned transaction, or NoTransaction when the script or called library must own transaction boundaries (including APIs such as Document.SaveAs that reject an open transaction).", Title = "Execute Revit Script", Finds = ["script", "execute", "csharp", "revit", "pod"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
-    public async Task<ExecuteRevitScriptData> ExecuteAsync(
+    public Task<ExecuteRevitScriptData> ExecuteAsync(
+        ExecuteRevitScriptRequest request,
+        RevitDocument target,
+        CancellationToken cancellationToken
+    ) => this.EnqueueAsync(
+        "execute script",
+        () => this.ExecuteOnApiThread(request, target, cancellationToken),
+        cancellationToken
+    );
+
+    /// <summary>
+    ///     Runs one script now on the calling Revit API thread, for a caller that already holds it
+    ///     (the SDK op queue). <paramref name="cancellationToken" /> is the cancel path: it links into
+    ///     the script's <c>ct</c>, so a script that checks it yields.
+    /// </summary>
+    public ExecuteRevitScriptData ExecuteOnApiThread(
         ExecuteRevitScriptRequest request,
         RevitDocument target,
         CancellationToken cancellationToken
@@ -102,7 +117,6 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
         var executionId = Guid.NewGuid().ToString("N");
         var timeoutSeconds = NormalizeTimeoutSeconds(request.TimeoutSeconds);
         using var timeoutSource = new CancellationTokenSource();
-        // The request's own token is the cancel path: op.cancel <requestId> fires it.
         using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(
             timeoutSource.Token,
             cancellationToken
@@ -112,35 +126,28 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
             () => timeoutSource.IsCancellationRequested,
             timeoutSeconds
         );
-
-        return await this.EnqueueAsync(
-            "execute script",
-            () => {
-                lock (this._sync)
-                    this._runningExecution = new RunningExecution(executionId, DateTimeOffset.UtcNow);
-                // The timeout clock starts when the script actually starts, not while it waits in line.
-                timeoutSource.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
-                var stopwatch = Stopwatch.StartNew();
-                try {
-                    var result = this._executionService.Execute(
-                        target.Value,
-                        request with { WorkspaceKey = NormalizeWorkspaceKey(request.WorkspaceKey) },
-                        executionId,
-                        cancellation
-                    );
-                    if (result.Status == ScriptExecutionStatus.Succeeded && stopwatch.Elapsed.TotalSeconds > timeoutSeconds)
-                        result.Diagnostics.Add(ScriptDiagnosticFactory.Warning(
-                            "cancel",
-                            $"Execution ran {(int)stopwatch.Elapsed.TotalSeconds}s, past the {timeoutSeconds}s timeout, but the script never reached a cooperative checkpoint. Check ct or call ThrowIfCancelled() inside loops so it can be interrupted."
-                        ));
-                    return result;
-                } finally {
-                    lock (this._sync)
-                        this._runningExecution = null;
-                }
-            },
-            cancellationToken
-        ).ConfigureAwait(false);
+        lock (this._sync)
+            this._runningExecution = new RunningExecution(executionId, DateTimeOffset.UtcNow);
+        // The timeout clock starts when the script actually starts, not while it waits in line.
+        timeoutSource.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+        var stopwatch = Stopwatch.StartNew();
+        try {
+            var result = this._executionService.Execute(
+                target.Value,
+                request with { WorkspaceKey = NormalizeWorkspaceKey(request.WorkspaceKey) },
+                executionId,
+                cancellation
+            );
+            if (result.Status == ScriptExecutionStatus.Succeeded && stopwatch.Elapsed.TotalSeconds > timeoutSeconds)
+                result.Diagnostics.Add(ScriptDiagnosticFactory.Warning(
+                    "cancel",
+                    $"Execution ran {(int)stopwatch.Elapsed.TotalSeconds}s, past the {timeoutSeconds}s timeout, but the script never reached a cooperative checkpoint. Check ct or call ThrowIfCancelled() inside loops so it can be interrupted."
+                ));
+            return result;
+        } finally {
+            lock (this._sync)
+                this._runningExecution = null;
+        }
     }
 
     [Op("pod.member.compose", Does = "Compose one JSON member ($include, $preset) from the saved file or the supplied draft content. @local/ resolves inside the pod; @<id>/ resolves to the installed pod with that manifest id. Returns composed JSON, this member's diagnostics only, and consumed fragments with SHA-256.", Title = "Compose Pod Member", Finds = ["pod", "member", "compose", "include", "preset", "settings"])]

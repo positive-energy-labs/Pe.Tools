@@ -119,7 +119,7 @@ async function setup(
 }
 
 test("a Pea proposal never launches; the launch reads exactly what the person staged", async () => {
-  const f = await setup(() => ({ result: { state: "started", id: "dev" } }), []);
+  const f = await setup(() => ({ result: { state: "ok", phase: "ready", id: "dev" } }), []);
   let revision = await f.propose({ kind: "start", year: "2026", name: "pea-pick" });
   const refused = await f.admit("instances.start", {}, revision);
   expect(refused.state).toBe("failed");
@@ -158,7 +158,14 @@ test("start launches the staged session under its step id, then opens the staged
   const f = await setup(
     (args) =>
       args[0] === "session"
-        ? { result: { state: "ready", id: "dev", session: { receipt: { receiptPath } } } }
+        ? {
+            result: {
+              state: "ok",
+              phase: "ready",
+              id: "dev",
+              session: { receipt: { receiptPath } },
+            },
+          }
         : { result: { state: "ok", openId } },
     [],
   );
@@ -199,7 +206,7 @@ test("start launches the staged session under its step id, then opens the staged
 });
 
 test("only the person's staged quarantine choice reaches session start", async () => {
-  const f = await setup(() => ({ result: { state: "started", id: "dev" } }), []);
+  const f = await setup(() => ({ result: { state: "ok", phase: "ready", id: "dev" } }), []);
   await f.propose({ kind: "start", year: "2025", name: "dev", quarantine: false });
   const revision = await f.stage({ kind: "start", year: "2025", name: "dev", quarantine: true });
   expect((await f.launch()).staged?.value).toMatchObject({ quarantine: true });
@@ -269,7 +276,7 @@ test("the default missing-links refusal keeps its SDK explanation and staged Wor
 
 test("start captures a gone session receipt so the SDK can retire that exact row", async () => {
   const f = await setup(
-    () => ({ result: { state: "started", id: "dev" } }),
+    () => ({ result: { state: "ok", phase: "ready", id: "dev" } }),
     [
       {
         case: "gone-receipt",
@@ -431,7 +438,7 @@ test("a lost session verb stays unknown: recovery never re-issues its request id
 });
 
 test("a proven start retires the consumed staged launch; a second press does not start again", async () => {
-  const f = await setup(() => ({ result: { state: "started", id: "dev" } }), []);
+  const f = await setup(() => ({ result: { state: "ok", phase: "ready", id: "dev" } }), []);
   const spec = { kind: "start", year: "2025", name: "dev" };
   const revision = await f.stage(spec);
   expect((await f.admit("instances.start", {}, revision)).state).toBe("succeeded");
@@ -464,7 +471,7 @@ test("a failed start keeps the staged launch for the person to retry", async () 
 });
 
 test("a Pea-admitted start of the person's staged launch retires it too", async () => {
-  const f = await setup(() => ({ result: { state: "started", id: "dev" } }), []);
+  const f = await setup(() => ({ result: { state: "ok", phase: "ready", id: "dev" } }), []);
   const revision = await f.stage({ kind: "start", year: "2025", name: "dev" });
   const row = await f.admit("instances.start", {}, revision, undefined, "agent");
   expect(row.state).toBe("succeeded");
@@ -474,7 +481,7 @@ test("a Pea-admitted start of the person's staged launch retires it too", async 
 test("restart, stop and close carry the person's unsaved choice; none has a default", async () => {
   const f = await setup((args) =>
     args[0] === "session"
-      ? { result: { id: "dev", state: "ready" } }
+      ? { result: { id: "dev", state: "ok", phase: "ready" } }
       : {
           result: { state: "ok", openId },
           diagnostics: [{ code: "doc.file-year-unread", detail: "cloud: not-local", fix: null }],

@@ -1,6 +1,4 @@
 ﻿using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
-using Newtonsoft.Json.Serialization;
 using Pe.Shared.HostContracts.Bridge;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Protocol;
@@ -37,16 +35,7 @@ internal sealed class BridgeAgent : IDisposable {
     private readonly BridgeRequestPump _pump;
     private readonly Task _readLoop;
 
-    private readonly JsonSerializerSettings _serializerSettings = new() {
-        NullValueHandling = NullValueHandling.Ignore,
-        ContractResolver = new DefaultContractResolver {
-            NamingStrategy = new CamelCaseNamingStrategy {
-                ProcessDictionaryKeys = false,
-                OverrideSpecifiedNames = false
-            }
-        },
-        Converters = [new StringEnumConverter()]
-    };
+    private readonly JsonSerializerSettings _serializerSettings = SdkOperations.Json;
 
     private readonly CancellationTokenSource _shutdown = new();
     private readonly ThrottleGate _throttleGate = new();
@@ -327,7 +316,7 @@ internal sealed class BridgeAgent : IDisposable {
                 request.RequestId,
                 responseBytes
             );
-            CompleteOpReceipt(receipt, "ok", payloadJson);
+            CompleteOpReceipt(receipt, BridgeWire.Verdicts.Ok, payloadJson);
             await this.WriteFrameAsync(frame, cancellationToken).ConfigureAwait(false);
             Log.Information(
                 "Host bridge wrote response frame: OperationKey={OperationKey}, RequestId={RequestId}",
@@ -343,7 +332,7 @@ internal sealed class BridgeAgent : IDisposable {
                 request.OperationKey,
                 request.RequestId
             );
-            CompleteOpReceipt(receipt, "cancelled", JsonConvert.SerializeObject(
+            CompleteOpReceipt(receipt, BridgeWire.Verdicts.Cancelled, JsonConvert.SerializeObject(
                 new { error = message, statusCode = BridgeOperationExceptions.CancelledStatusCode },
                 this._serializerSettings));
             throw;
@@ -373,10 +362,10 @@ internal sealed class BridgeAgent : IDisposable {
                 request.OperationKey,
                 request.RequestId
             );
-            // 423 is Revit already executing something else — the op never ran, so it is `rejected`,
+            // 423 is Revit already executing something else — the op never ran, so it is `refused`,
             // not `failed`. `op result` reads the verdict; conflating them would tell an agent its
             // op broke when it was simply refused.
-            CompleteOpReceipt(receipt, ex.StatusCode == 423 ? "rejected" : "failed",
+            CompleteOpReceipt(receipt, ex.StatusCode == 423 ? BridgeWire.Verdicts.Refused : BridgeWire.Verdicts.Failed,
                 JsonConvert.SerializeObject(new { error = ex.Message, statusCode = ex.StatusCode }, this._serializerSettings));
             await this.WriteFrameAsync(errorFrame, cancellationToken).ConfigureAwait(false);
         } catch (Exception ex) {
@@ -405,7 +394,7 @@ internal sealed class BridgeAgent : IDisposable {
                 request.OperationKey,
                 request.RequestId
             );
-            CompleteOpReceipt(receipt, "failed",
+            CompleteOpReceipt(receipt, BridgeWire.Verdicts.Failed,
                 JsonConvert.SerializeObject(new { error = ex.Message }, this._serializerSettings));
             await this.WriteFrameAsync(errorFrame, cancellationToken).ConfigureAwait(false);
         }
@@ -455,11 +444,11 @@ internal sealed class BridgeAgent : IDisposable {
 
     private static (string Verdict, int StatusCode) RevitTaskOutcomeResponse(RevitTaskOutcome outcome) => outcome switch {
         RevitTaskOutcome.CancelledBeforeDispatch or RevitTaskOutcome.CancelledCooperatively
-            => ("cancelled", BridgeOperationExceptions.CancelledStatusCode),
-        RevitTaskOutcome.TimedOut => ("timed-out", 504),
-        RevitTaskOutcome.AbandonedStillRunning => ("abandoned-still-running", 423),
-        RevitTaskOutcome.RefusedQueueUnresponsive => ("rejected", 423),
-        RevitTaskOutcome.RefusedQueueDisposed => ("rejected", 503),
+            => (BridgeWire.Verdicts.Cancelled, BridgeOperationExceptions.CancelledStatusCode),
+        RevitTaskOutcome.TimedOut => (BridgeWire.Verdicts.TimedOut, 504),
+        RevitTaskOutcome.AbandonedStillRunning => (BridgeWire.Verdicts.Abandoned, 423),
+        RevitTaskOutcome.RefusedQueueUnresponsive => (BridgeWire.Verdicts.Refused, 423),
+        RevitTaskOutcome.RefusedQueueDisposed => (BridgeWire.Verdicts.Refused, 503),
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "Expected a non-value Revit task outcome.")
     };
 
@@ -471,13 +460,7 @@ internal sealed class BridgeAgent : IDisposable {
         var tracked = openDocumentId == null ? null : DocumentTrackerAccessor.Current?.FindOpenId(openDocumentId);
         var document = tracked?.Resolve()
             ?? throw BridgeOperationExceptions.Conflict("The selected document is no longer open. Select a document and retry.");
-        OpDocumentGate.Require(op.Definition.Needs, document != null, document?.IsFamilyDocument == true);
-        return op.Definition.Needs switch {
-            OpNeeds.Document => new RevitDocument(document!),
-            OpNeeds.ProjectDocument => new ProjectDocument(document!),
-            OpNeeds.FamilyDocument => new FamilyDocument(document!),
-            _ => null
-        };
+        return SdkOperations.Wrap(op.Definition.Needs, document);
     }
 
     /// <summary>

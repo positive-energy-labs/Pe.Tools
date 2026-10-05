@@ -54,8 +54,9 @@ const mutate: SdkReceiptReader = (args) =>
   );
 
 /**
- * Session-verb refusals the CLI raises before it admits or dispatches anything. Doc verbs need no
- * list: their envelope `state` is drawn from the op verdicts, and `refused` never ran (ADR 0009 law 3).
+ * Session-verb refusals the CLI raises before it admits or dispatches anything. A session `refused`
+ * without one of these may follow an effect (an unconfirmed kill, a blocked stop), so it stays
+ * unknown. A doc verb's `refused` never ran (ADR 0009 law 3).
  */
 const NOT_DISPATCHED = new Set([
   "op.stale-expectation",
@@ -63,14 +64,9 @@ const NOT_DISPATCHED = new Set([
   "op.admission-unavailable",
   "op.request-id-unusable",
   "session.bad-invocation",
-  "doc.bad-invocation",
   "session.year-mismatch",
   "session.no-sessions-for-year",
-  "doc.revit-year-mismatch",
-  "doc.background-no-window",
 ]);
-/** Said beside a success, never instead of one: the verb ran and its result stands. */
-const ADVISORY = new Set(["doc.file-year-unread"]);
 
 /**
  * Recorded per step: the session expectation and the verb argv, with the request id named
@@ -135,40 +131,29 @@ async function readStartExpectation(id: string, read: SdkReceiptReader): Promise
   return row.receipt.receiptPath;
 }
 
-/** Run one recorded verb under its step id and settle it from the envelope the SDK printed. */
+/** Run one recorded verb under its step id and settle it from the state the SDK derived (law 10). */
 async function dispatch(input: StepInput, requestId: string, read: SdkReceiptReader) {
   const args = input.argv.map((arg) => (arg === REQUEST_ID ? requestId : arg));
   const envelope = parsePeRevitEnvelope(await read(args), args, peRevitLauncher());
-  const said = (diagnostics: readonly Diagnostic[]) =>
-    diagnostics.map((d) => `${d.code}: ${d.detail}`).join("; ");
-  const missingLinks = envelope.diagnostics.find((d: Diagnostic) => d.code === "doc.missing-links");
-  if (missingLinks)
-    throw new BridgeError(said([missingLinks]), 409, { dispatched: true, result: envelope });
-  if (args[0] === "doc") {
-    // Doc verbs carry the op verdict as their state (ADR 0009 law 10).
-    const state = (envelope.result as { state?: string } | null)?.state;
-    if (state === "ok") return envelope.result;
-    if (state === "refused" || state === "bad-invocation")
-      throw refuse(said(envelope.diagnostics) || `pe-revit ${state}`, envelope.result);
-    if (state === "failed")
-      throw new BridgeError(said(envelope.diagnostics) || "pe-revit failed", 502, {
-        dispatched: true,
-        result: envelope.result,
-      });
-    if (state === "cancelled")
-      throw new BridgeError(said(envelope.diagnostics) || "pe-revit cancelled", 499, {
-        result: envelope.result,
-      });
-    // timed-out, abandoned, running, transport-lost: the work may still land. Unknown; recover by op result.
-    throw new BridgeError(`pe-revit ${state ?? "answered no state"}; the outcome is unknown`, 504, {
-      result: envelope.result,
-    });
-  }
-  const blocking = envelope.diagnostics.find((d: Diagnostic) => NOT_DISPATCHED.has(d.code));
-  if (blocking) throw refuse(said([blocking]), envelope.result);
-  const failures = envelope.diagnostics.filter((d: Diagnostic) => !ADVISORY.has(d.code));
-  if (failures.length) throw new BridgeError(said(failures), 502, { result: envelope.result });
-  return envelope.result;
+  const state = (envelope.result as { state?: string } | null)?.state;
+  const said =
+    envelope.diagnostics.map((d: Diagnostic) => `${d.code}: ${d.detail}`).join("; ") ||
+    `pe-revit ${state ?? "answered no state"}`;
+  if (envelope.diagnostics.some((d: Diagnostic) => d.code === "doc.missing-links"))
+    throw new BridgeError(said, 409, { dispatched: true, result: envelope });
+  if (state === "ok") return envelope.result;
+  const doc = args[0] === "doc";
+  if (
+    (state === "refused" || state === "bad-invocation") &&
+    (doc || envelope.diagnostics.some((d: Diagnostic) => NOT_DISPATCHED.has(d.code)))
+  )
+    throw refuse(said, envelope.result);
+  if (doc && state === "failed")
+    throw new BridgeError(said, 502, { dispatched: true, result: envelope.result });
+  if (doc && state === "cancelled") throw new BridgeError(said, 499, { result: envelope.result });
+  // timed-out, abandoned, running, transport-lost, or a session verb that did not finish: the
+  // outcome is unknown; a doc verb recovers from its op receipt.
+  throw new BridgeError(said, 504, { result: envelope.result });
 }
 
 export async function admitInstancesAction(
