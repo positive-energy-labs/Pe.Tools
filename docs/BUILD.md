@@ -142,12 +142,13 @@ Do not document or depend on removed public `pe-dev` command groups (`doctor`, `
 
 ```powershell
 dotnet tool run pe-revit -- session start --year 25 --id pe.app-25-probe --json          # installed payload
-dotnet tool run pe-revit -- session start --project .\dotnet\Pe.App\Pe.App.csproj --year 25 --json   # this checkout's bytes
+dotnet tool run pe-revit -- session start --project .\dotnet\Pe.App\Pe.App.csproj --year 25 --background --json   # this checkout's bytes, an agent's Revit
+dotnet tool run pe-revit -- session stop --id pe.app-25-probe --unsaved discard --json   # stop only the session you started
 ```
 
 Bare `start` (no `--project`) is the **installed** lane — every product on its fixed installed path, no checkout, no build, no copy. That is what an end user runs, and it is the only lane that proves installed behavior. Adding `--project` makes it the **dev** lane. Name which one any claim used; they run different bytes and prove different things.
 
-Every session pe-revit starts is `controlled`, so `session list`, `doc *`, `op list`, and stop/hr all work against it. A Revit the user launched is `observed`: readable, never mutable. Do not add a Pe.Tools-side guard for that — the SDK resolver refuses it before the verb runs.
+Every session pe-revit starts is `controlled`, so `session list`, `doc open|save|close|list`, `op run|wait|cancel|result|list`, and stop/reset/hr all work against it. `--unsaved keep|discard` is required on stop, reset, a cold `hr` and `doc close`: no verb discards work by default. A Revit the user launched is `observed`: readable, never mutable. Do not add a Pe.Tools-side guard for that — the SDK resolver refuses it before the verb runs.
 
 ## Packaging and release decisions
 
