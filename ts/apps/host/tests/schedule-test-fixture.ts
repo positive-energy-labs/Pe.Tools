@@ -199,7 +199,7 @@ export async function setup() {
     if (args[0] === "session") return sdkSessions();
     const id = args[2];
     return sdkEnvelope({
-      state: "completed",
+      state: "ok",
       requestId: id,
       receipt: {
         requestId: id,

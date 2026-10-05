@@ -1685,7 +1685,7 @@ test("an interrupted Families apply resumes from its exact durable FF run withou
     interrupted.preparation as { value: { process: { pid: number; processStartUtc: string } } }
   ).value;
   nativeResult = {
-    state: "completed",
+    state: "ok",
     requestId: step.id,
     receipt: {
       requestId: step.id,

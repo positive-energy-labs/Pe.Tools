@@ -58,6 +58,10 @@ export const instancesSessionSchema = z.strictObject({
 });
 const workInput = z.object({ workspaceId: z.string().min(1) });
 const sessionInput = workInput.extend({ session: instancesSessionSchema });
+/** What happens to unsaved changes when a lifecycle verb ends a document or session. A person
+ * chooses it every time: there is no default, because no verb discards work by default. */
+export const instancesUnsavedSchema = z.enum(["keep", "discard"]);
+const unsaved = instancesUnsavedSchema;
 export const instancesActions = {
   "instances.start": {
     says: "Start the authored staged session through the SDK under this action id; the receipt is the SDK envelope.",
@@ -74,37 +78,37 @@ export const instancesActions = {
     input: sessionInput,
   },
   "instances.restart": {
-    says: "Restart the explicitly supplied session incarnation. Human-only.",
+    says: "Restart the explicitly supplied session incarnation, keeping or discarding unsaved changes as the person chose. Human-only.",
     dirties: ["sdk"],
     needs: "nothing",
     actor: "human",
-    input: sessionInput,
+    input: sessionInput.extend({ unsaved }),
   },
   "instances.stop": {
-    says: "Stop the explicitly supplied session incarnation. Human-only.",
+    says: "Stop the explicitly supplied session incarnation, keeping or discarding unsaved changes as the person chose. Human-only.",
     dirties: ["sdk"],
     needs: "nothing",
     actor: "human",
-    input: sessionInput.extend({ force: z.boolean().default(false) }),
+    input: sessionInput.extend({ force: z.boolean().default(false), unsaved }),
   },
   "instances.close": {
-    says: "Close the explicitly supplied document lifetime by its published openId. Human-only.",
+    says: "Close the explicitly supplied document lifetime by its published openId, keeping or discarding unsaved changes as the person chose. Human-only.",
     dirties: ["sdk"],
     needs: "nothing",
     actor: "human",
-    input: sessionInput.extend({ document: documentRefSchema, intent: z.string().min(1) }),
+    input: sessionInput.extend({ document: documentRefSchema, unsaved }),
   },
 } as const;
 export type InstancesActionKey = keyof typeof instancesActions;
 
 export const instancesReading = {
-  says: "Read SDK sessions, installed years, recents or current documents without changing authored Instances Work.",
+  says: "Read SDK sessions, installed years, recents or open documents without changing authored Instances Work.",
   dirties: [],
   needs: "nothing",
   actor: "any",
   mutates: false,
   input: z.object({
-    read: z.enum(["sessions", "doctor", "recents", "current"]),
+    read: z.enum(["sessions", "doctor", "recents", "documents"]),
     id: z.string().optional(),
     year: z.string().optional(),
     all: z.boolean().optional(),

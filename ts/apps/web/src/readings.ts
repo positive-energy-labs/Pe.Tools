@@ -503,7 +503,14 @@ const RECEIPT_LANE = {
 function projectObservation(row: SessionObservation): ObservationView {
   switch (row.case) {
     case "controlled-active":
-      return [ACTIVE_PHASE[row.bridge.bridge], row.detail, row.process];
+      // Law 4 (ADR 0009): a listener that answers while the API thread does not is unresponsive.
+      return [
+        row.bridge.bridge === "ready" && row.bridge.unresponsive
+          ? "unresponsive"
+          : ACTIVE_PHASE[row.bridge.bridge],
+        row.detail,
+        row.process,
+      ];
     case "controlled-pending":
       switch (row.attempt.attempt) {
         case "awaiting-launch":

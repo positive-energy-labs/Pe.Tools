@@ -226,7 +226,7 @@ test("an exact cancelled SDK receipt settles a lost reply once without replaying
     const read = (_args: readonly string[]) => {
       return Promise.resolve(
         sdkEnvelope({
-          state: "completed",
+          state: "cancelled",
           requestId: nativeId,
           receipt: {
             requestId: nativeId,

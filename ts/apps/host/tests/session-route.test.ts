@@ -6,92 +6,27 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
 import { expect, test } from "vite-plus/test";
+import { sessionStartArgv } from "@pe/host-contracts/pe-revit-contract";
 import {
-  docCloneArgs,
-  docOpenArgs,
+  docListArgs,
   docRecentsArgs,
   executeSessionCli,
-  parseDocCloneRequest,
-  parseDocOpenRequest,
-  parseSessionActionRequest,
   resolveStartProject,
-  sessionActionTimeoutMs,
-  sessionCliArgs,
   sessionStatusArgs,
-  type SessionActionRequest,
 } from "../src/session-route.ts";
 import { peRevitLauncher, validatePeRevitEnvelope } from "../src/pe-revit-launch.ts";
 
 const execFileAsync = promisify(execFile);
 
-function parsed(body: unknown): SessionActionRequest {
-  const result = parseSessionActionRequest(body);
-  if (!result.ok) throw new Error(result.error);
-  return result.request;
-}
+// --- payload routing and reads → CLI args -----------------------------------------------------
 
-// --- action → CLI args mapping ----------------------------------------------------------------
-
-test("start on a source-linked (dev) host uses the checkout's Pe.App project", () => {
-  const project = resolveStartProject("dev", "C:\\repo\\Pe.Tools");
-  expect(project).toBe(join("C:\\repo\\Pe.Tools", "dotnet", "Pe.App", "Pe.App.csproj"));
-
-  const request = parsed({ action: "start", year: 25, id: "scratch", lane: "dev" });
-  expect(request.lane).toBe("dev");
-  const args = sessionCliArgs(request, project);
-  expect(args).toEqual([
-    "session",
-    "start",
-    "--project",
+test("a source-linked (dev) host starts from its checkout's Pe.App; an installed host passes no --project", () => {
+  expect(resolveStartProject("dev", "C:\\repo\\Pe.Tools")).toBe(
     join("C:\\repo\\Pe.Tools", "dotnet", "Pe.App", "Pe.App.csproj"),
-    "--year",
-    "25",
-    "--id",
-    "scratch",
-    "--json",
-  ]);
-});
-
-test("start on an installed-lane host passes NO --project: project-less start IS installed", () => {
+  );
   expect(resolveStartProject("installed", null)).toBeUndefined();
   // A dev host with no resolvable source root also falls back to the installed payload.
   expect(resolveStartProject("dev", null)).toBeUndefined();
-
-  // lane defaults to installed — the same bare `{year}` the CLI reads as installed (BB-1 F-14).
-  const request = parsed({ action: "start", year: "25" });
-  expect(request.lane).toBe("installed");
-  const args = sessionCliArgs(request, undefined);
-  expect(args).toEqual(["session", "start", "--year", "25", "--json"]);
-  expect(parseSessionActionRequest({ action: "start", year: "25", lane: "sandbox" })).toMatchObject(
-    {
-      ok: false,
-    },
-  );
-  // The retired flags must never reappear: lane is derived from the payload source, and start
-  // blocks to ready by default.
-  expect(args).not.toContain("--installed");
-  expect(args).not.toContain("--wait");
-});
-
-test("start carries an optional --doc for the end-user case", () => {
-  expect(
-    sessionCliArgs(parsed({ action: "start", year: "26", doc: "Tower.rvt" }), undefined),
-  ).toEqual(["session", "start", "--year", "26", "--doc", "Tower.rvt", "--json"]);
-});
-
-test("stop/restart map to --id verbs; stop honors force", () => {
-  // restart shells `session hr --restart` — beta.131 deleted `session restart`.
-  expect(sessionCliArgs(parsed({ action: "restart", id: "scratch" }), undefined)).toEqual([
-    "session",
-    "hr",
-    "--id",
-    "scratch",
-    "--restart",
-    "--json",
-  ]);
-  expect(sessionCliArgs(parsed({ action: "stop", id: "scratch", force: true }), undefined)).toEqual(
-    ["session", "stop", "--id", "scratch", "--force", "--json"],
-  );
 });
 
 test("fleet and exact reads both use list; an id narrows it", () => {
@@ -100,71 +35,19 @@ test("fleet and exact reads both use list; an id narrows it", () => {
   expect(sessionStatusArgs("scratch")).toEqual(["session", "list", "--id", "scratch", "--json"]);
 });
 
-test("document recents args carry an optional year", () => {
-  expect(docRecentsArgs()).toEqual(["doc", "recents", "--json"]);
-  expect(docRecentsArgs("2026")).toEqual(["doc", "recents", "--year", "2026", "--json"]);
-});
-
-test("document open requires path and id and maps optional arguments", () => {
-  expect(parseDocOpenRequest({ path: "recent:Cloud.rvt" })).toMatchObject({ ok: false });
-  expect(parseDocOpenRequest({ id: "dev-26" })).toMatchObject({ ok: false });
-  const parsed = parseDocOpenRequest({
-    path: "recent:Cloud.rvt",
-    id: "dev-26",
-    conflictPolicy: "keep",
-    detach: true,
-  });
-  if (!parsed.ok) throw Error(parsed.error);
-  expect(docOpenArgs(parsed.request)).toEqual([
+test("recents and open documents are both doc list reads", () => {
+  expect(docRecentsArgs()).toEqual(["doc", "list", "--recent", "--json"]);
+  expect(docRecentsArgs("2026")).toEqual(["doc", "list", "--recent", "--year", "2026", "--json"]);
+  expect(docListArgs()).toEqual(["doc", "list", "--json"]);
+  expect(docListArgs("dev-26", "a".repeat(32))).toEqual([
     "doc",
-    "open",
-    "recent:Cloud.rvt",
+    "list",
     "--id",
     "dev-26",
-    "--detach",
-    "--conflict-policy",
-    "keep",
+    "--doc",
+    "a".repeat(32),
     "--json",
   ]);
-});
-
-test("document clone requires source, output, and id", () => {
-  expect(parseDocCloneRequest({ source: "C:\\Models\\Central.rvt", id: "dev-25" })).toMatchObject({
-    ok: false,
-  });
-  const parsed = parseDocCloneRequest({
-    source: "C:\\Models\\Central.rvt",
-    out: "C:\\Models\\Central.PeTakeoffs.rvt",
-    id: "dev-25",
-  });
-  if (!parsed.ok) throw Error(parsed.error);
-  expect(docCloneArgs(parsed.request)).toEqual([
-    "doc",
-    "clone",
-    "C:\\Models\\Central.rvt",
-    "--id",
-    "dev-25",
-    "--out",
-    "C:\\Models\\Central.PeTakeoffs.rvt",
-    "--json",
-  ]);
-});
-
-test("action body validation mirrors the CLI invocation contract", () => {
-  expect(parseSessionActionRequest(null)).toMatchObject({ ok: false });
-  expect(parseSessionActionRequest({ action: "destroy" })).toMatchObject({ ok: false });
-  expect(parseSessionActionRequest({ action: "wait", id: "s" })).toMatchObject({ ok: false });
-  expect(parseSessionActionRequest({ action: "start" })).toMatchObject({ ok: false }); // no year
-  expect(parseSessionActionRequest({ action: "stop" })).toMatchObject({ ok: false }); // no id
-  expect(parseSessionActionRequest({ action: "start", year: 25 })).toMatchObject({ ok: true });
-  expect(parseSessionActionRequest({ action: "converge" })).toMatchObject({ ok: false });
-});
-
-test("caller-provided timeouts get a margin over the CLI's own budget", () => {
-  expect(sessionActionTimeoutMs(parsed({ action: "restart", id: "s", timeoutSeconds: 300 }))).toBe(
-    360_000,
-  );
-  expect(sessionActionTimeoutMs(parsed({ action: "restart", id: "s" }))).toBe(600_000);
 });
 
 // --- launcher / envelope validation ------------------------------------------------------------
@@ -263,19 +146,19 @@ const existingIdVerdicts = [
     code: "session.generation-displaced",
     detail:
       "id 'installed-25' is already registered: generation 20260821010410920 [stopped] stopped at 2026-08-21T01:05:12.4896453Z (installed payload); this start mints a NEW generation and moves the current pointer off it",
-    fix: "`pe-revit session restart --id installed-25` refreshes that session in place; pass a different --id to keep both",
+    fix: "`pe-revit session hr --id installed-25 --restart` refreshes that session in place; pass a different --id to keep both",
     nextSteps: [
-      "pe-revit doc current --id installed-25",
-      "pe-revit session stop --id installed-25  (when done)",
+      "pe-revit doc list --id installed-25",
+      "pe-revit session stop --id installed-25 --unsaved keep  (when done)",
     ],
   },
   {
     code: "session.id-collision",
     detail: "Session id 'installed-25' is already registered (state stopped).",
-    fix: "pe-revit session restart --id installed-25",
+    fix: "pe-revit session hr --id installed-25 --restart",
     nextSteps: [
-      "pe-revit session restart --id installed-25 — boot a fresh process under the same id",
-      "pe-revit session gc --id installed-25 --forget — retire the row and free the id",
+      "pe-revit session hr --id installed-25 --restart — boot a fresh process under the same id",
+      "pe-revit session reset --id installed-25 --unsaved discard --restart — recover a wedged row",
     ],
   },
 ];
@@ -292,12 +175,9 @@ for (const verdict of existingIdVerdicts) {
       binary: null,
     });
     const outcome = await Effect.runPromise(
-      executeSessionCli(
-        sessionCliArgs(parsed({ action: "start", year: "25" }), undefined),
-        () => Effect.succeed(envelope),
-        1_000,
-        { action: "start" },
-      ),
+      executeSessionCli(sessionStartArgv({ year: "25" }), () => Effect.succeed(envelope), 1_000, {
+        action: "start",
+      }),
     );
 
     expect(outcome.status).toBe(200);
@@ -330,10 +210,12 @@ test("a spawn failure is a plain 500", async () => {
 
 test("a hung CLI is a 504 that forges no envelope", async () => {
   const outcome = await Effect.runPromise(
-    executeSessionCli(["session", "restart", "--id", "scratch", "--json"], () => Effect.never, 50, {
-      action: "restart",
-      id: "scratch",
-    }),
+    executeSessionCli(
+      ["session", "hr", "--id", "scratch", "--restart", "--json"],
+      () => Effect.never,
+      50,
+      { action: "hr", id: "scratch" },
+    ),
   );
 
   expect(outcome.status).toBe(504);
@@ -342,5 +224,7 @@ test("a hung CLI is a 504 that forges no envelope", async () => {
   // one, so a caller can never mistake a route-local timeout for an SDK verdict.
   expect(Object.keys(body).sort()).toEqual(["error", "nextSteps", "ok"]);
   expect(body.ok).toBe(false);
-  expect((body.nextSteps as string[])[1]).toContain("pe-revit session stop --id scratch --force");
+  expect((body.nextSteps as string[])[1]).toContain(
+    "pe-revit session reset --id scratch --unsaved keep|discard",
+  );
 });

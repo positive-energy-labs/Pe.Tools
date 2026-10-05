@@ -6,17 +6,11 @@ import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { join } from "node:path";
 import {
-  docCloneArgv,
-  docCurrentArgv,
-  docOpenArgv,
-  docRecentsArgv,
+  docListArgv,
   doctorArgv,
-  sessionHrArgv,
   sessionListArgv,
   sessionStartArgv,
-  sessionStopArgv,
 } from "@pe/host-contracts/pe-revit-contract";
-import type { SessionAction, SessionActionRequest } from "@pe/host-contracts/contracts";
 import { checkoutLayout } from "@pe/host-contracts/service-identity";
 import { hostOwnership, type HostLane } from "./host-ownership.ts";
 import { peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-launch.ts";
@@ -35,66 +29,9 @@ import { peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-launch.ts";
  * envelope was ever produced) and is reported as a plain 504, not as a hand-made `unresponsive`
  * result that would look like an SDK verdict without being one.
  *
- * GET /sessions → `session list --json`, narrowed with `--id` when an id is supplied.
- * POST /sessions {action: start|stop|restart, …} → the matching verb (restart shells
- * `session hr --restart`, the SDK's cold-swap since beta.131 deleted `session restart`).
+ * GET /sessions → `session list --json`, narrowed with `--id` when an id is supplied. Lifecycle
+ * mutations are not relayed here: they are host-admitted Instances actions (instances-actions.ts).
  */
-
-// Request shape is the shared hand-authored contract (@pe/host-contracts/contracts) so the web
-// client builds the exact type this route parses.
-export type { SessionActionRequest } from "@pe/host-contracts/contracts";
-
-const SESSION_ACTIONS: readonly SessionAction[] = ["start", "stop", "restart"];
-
-/**
- * Parse and validate a POST body. Field requirements mirror the CLI's own invocation contract
- * (start needs a year; stop/restart need an id) so bad requests fail here with a clear message
- * instead of a shelled bad-invocation.
- */
-export function parseSessionActionRequest(
-  body: unknown,
-):
-  | { readonly ok: true; readonly request: SessionActionRequest }
-  | { readonly ok: false; readonly error: string } {
-  if (typeof body !== "object" || body === null || Array.isArray(body))
-    return { ok: false, error: `body must be { action: ${SESSION_ACTIONS.join("|")}, ...args }` };
-  const record = body as Record<string, unknown>;
-  const action = record.action;
-  if (typeof action !== "string" || !SESSION_ACTIONS.includes(action as SessionAction))
-    return { ok: false, error: `action must be one of ${SESSION_ACTIONS.join("|")}` };
-  const id = readOptionalString(record.id);
-  const year =
-    typeof record.year === "number" ? String(record.year) : readOptionalString(record.year);
-  if (action === "start" && !year) return { ok: false, error: 'start requires year (e.g. "25")' };
-  const lane = record.lane === undefined ? "installed" : record.lane;
-  if (action === "start" && lane !== "installed" && lane !== "dev")
-    return { ok: false, error: 'lane must be "installed" (default) or "dev"' };
-  if ((action === "stop" || action === "restart") && !id)
-    return { ok: false, error: `${action} requires id` };
-  const conflictPolicy = readOptionalString(record.conflictPolicy);
-  if (
-    conflictPolicy !== undefined &&
-    conflictPolicy !== "keep" &&
-    conflictPolicy !== "discard-latest"
-  )
-    return { ok: false, error: 'conflictPolicy must be "keep" or "discard-latest"' };
-  return {
-    ok: true,
-    request: {
-      action: action as SessionAction,
-      id,
-      year,
-      lane: action === "start" ? (lane as HostLane) : undefined,
-      doc: readOptionalString(record.doc),
-      conflictPolicy,
-      force: record.force === true,
-      timeoutSeconds:
-        typeof record.timeoutSeconds === "number" && Number.isFinite(record.timeoutSeconds)
-          ? record.timeoutSeconds
-          : undefined,
-    },
-  };
-}
 
 function readOptionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
@@ -113,35 +50,6 @@ export function resolveStartProject(lane: HostLane, sourceRoot: string | null): 
     : undefined;
 }
 
-/**
- * Map a validated action request onto pe-revit argv through the GENERATED builders. Every builder
- * appends `--json` itself. Start and restart return their own terminal observation.
- */
-export function sessionCliArgs(
-  request: SessionActionRequest,
-  project: string | undefined,
-): string[] {
-  switch (request.action) {
-    case "start":
-      return sessionStartArgv({
-        project,
-        year: request.year!,
-        id: request.id,
-        doc: request.doc,
-        conflictPolicy: request.conflictPolicy,
-        timeoutSeconds: request.timeoutSeconds,
-      });
-    case "restart":
-      return sessionHrArgv({
-        id: request.id,
-        restart: true,
-        timeoutSeconds: request.timeoutSeconds,
-      });
-    case "stop":
-      return sessionStopArgv({ id: request.id, force: request.force });
-  }
-}
-
 /** GET (list) CLI args; `id` narrows to one session, `all` includes the graveyard. */
 export function sessionStatusArgs(id?: string | null, all = false): string[] {
   const pinned = id?.trim();
@@ -152,85 +60,17 @@ type SessionCliRunner<R = never> = (args: readonly string[]) => Effect.Effect<st
 
 type SessionCliOutcome = { readonly status: number; readonly bodyJson: string };
 
-type DocOpenRequest = {
-  readonly path: string;
-  readonly id: string;
-  readonly conflictPolicy?: string;
-  readonly detach?: boolean;
-};
-
-type DocCloneRequest = {
-  readonly source: string;
-  readonly out: string;
-  readonly id: string;
-};
-
+/** `doc list --recent [--year]`: the per-year recents; needs no Revit. */
 export function docRecentsArgs(year?: string | null): string[] {
-  return docRecentsArgv({ year: readOptionalString(year) });
+  return docListArgv({ recent: true, year: readOptionalString(year) });
 }
 
-export function parseDocOpenRequest(
-  body: unknown,
-):
-  | { readonly ok: true; readonly request: DocOpenRequest }
-  | { readonly ok: false; readonly error: string } {
-  const record =
-    typeof body === "object" && body !== null && !Array.isArray(body)
-      ? (body as Record<string, unknown>)
-      : {};
-  const path = readOptionalString(record.path);
-  const id = readOptionalString(record.id);
-  if (!path || !id) return { ok: false, error: "document open requires path and id" };
-  return {
-    ok: true,
-    request: {
-      path,
-      id,
-      conflictPolicy: readOptionalString(record.conflictPolicy),
-      detach: record.detach === true,
-    },
-  };
+/** `doc list [--id] [--doc]`: open documents; no `--id` reads every live session. */
+export function docListArgs(id?: string | null, doc?: string | null): string[] {
+  return docListArgv({ id: readOptionalString(id), doc: readOptionalString(doc) });
 }
 
-export function docOpenArgs(request: DocOpenRequest): string[] {
-  return docOpenArgv(request);
-}
-
-export function parseDocCloneRequest(
-  body: unknown,
-):
-  | { readonly ok: true; readonly request: DocCloneRequest }
-  | { readonly ok: false; readonly error: string } {
-  const record =
-    typeof body === "object" && body !== null && !Array.isArray(body)
-      ? (body as Record<string, unknown>)
-      : {};
-  const source = readOptionalString(record.source);
-  const out = readOptionalString(record.out);
-  const id = readOptionalString(record.id);
-  if (!source || !out || !id)
-    return { ok: false, error: "document clone requires source, out, and id" };
-  return { ok: true, request: { source, out, id } };
-}
-
-export function docCloneArgs(request: DocCloneRequest): string[] {
-  return docCloneArgv(request);
-}
-
-function docCurrentArgs(id?: string | null, doc?: string | null): string[] {
-  return docCurrentArgv({ id: readOptionalString(id), doc: readOptionalString(doc) });
-}
-
-// Start and restart block on Revit readiness (cold boot is 180-300s; the CLI's own wait
-// default is 420s; a dev-lane start also builds first) — the route budget must outlast the CLI's.
-const DEFAULT_ACTION_TIMEOUT_MS = 600_000;
 const STATUS_TIMEOUT_MS = 60_000;
-
-export function sessionActionTimeoutMs(request: SessionActionRequest): number {
-  return request.timeoutSeconds != null
-    ? Math.round(request.timeoutSeconds * 1000) + 60_000
-    : DEFAULT_ACTION_TIMEOUT_MS;
-}
 
 /**
  * Run one shelled session CLI invocation and shape the HTTP outcome: stdout (the CLI's JSON
@@ -258,12 +98,12 @@ export function executeSessionCli<R>(
         status: 504,
         bodyJson: JSON.stringify({
           ok: false,
-          error: `pe-revit session ${timeoutContext.action}${target} did not answer within ${Math.round(timeoutMs / 1000)}s. The process may still be alive but blocked inside a Revit API call, which no timeout can cancel.`,
+          error: `pe-revit session ${timeoutContext.action}${target} did not answer within ${Math.round(timeoutMs / 1000)}s. The process may still be alive but blocked inside a Revit API call, which only session reset ends.`,
           nextSteps: [
             timeoutContext.id
               ? `pe-revit session list --id ${timeoutContext.id} --json — read what the SDK actually observes`
               : `pe-revit session list --all --json — read what the SDK actually observes`,
-            `pe-revit session stop${target} --force — force-stop that exact incarnation`,
+            `pe-revit session reset --id ${timeoutContext.id ?? "<id>"} --unsaved keep|discard — recover a wedged session; choose what happens to unsaved work`,
           ],
         }),
       } satisfies SessionCliOutcome;
@@ -305,7 +145,7 @@ export function observeSdkReading(
             ? doctorArgv({ timeoutSeconds: 20 })
             : request.read === "recents"
               ? docRecentsArgs(request.year)
-              : docCurrentArgs(request.id);
+              : docListArgs(request.id);
       const result = await Effect.runPromise(
         executeSessionCli(args, runPeRevitCli, STATUS_TIMEOUT_MS, {
           action: request.read,
@@ -380,19 +220,6 @@ const sessionsMintRoute = HttpRouter.add("GET", "/sessions/mint", (req) =>
   }),
 );
 
-const sessionsActionRoute = HttpRouter.add("POST", "/sessions", () =>
-  Effect.succeed(
-    Response.jsonUnsafe(
-      {
-        ok: false,
-        error: "This SDK mutation relay is not ported to host admission; no effect dispatched",
-        notDispatched: true,
-      },
-      { status: 409 },
-    ),
-  ),
-);
-
 const doctorRoute = HttpRouter.add("GET", "/doctor", () =>
   Effect.gen(function* () {
     const outcome = yield* executeSessionCli(
@@ -440,7 +267,6 @@ export const sessionsRoute = Layer.mergeAll(
   instancesReadingsRoute,
   sessionsStatusRoute,
   sessionsMintRoute,
-  sessionsActionRoute,
   doctorRoute,
 );
 
@@ -451,69 +277,24 @@ const docsRecentsRoute = HttpRouter.add("GET", "/docs/recents", (req) =>
       docRecentsArgs(year),
       runPeRevitCli,
       STATUS_TIMEOUT_MS,
-      { action: "doc recents" },
+      { action: "doc list --recent" },
     );
     return jsonResponse(outcome);
   }),
 );
 
-const docsOpenRoute = HttpRouter.add("POST", "/docs/open", () =>
-  Effect.succeed(
-    Response.jsonUnsafe(
-      {
-        ok: false,
-        error: "This SDK mutation relay is not ported to host admission; no effect dispatched",
-        notDispatched: true,
-      },
-      { status: 409 },
-    ),
-  ),
-);
-
-const docsCloneRoute = HttpRouter.add("POST", "/docs/clone", () =>
-  Effect.succeed(
-    Response.jsonUnsafe(
-      {
-        ok: false,
-        error: "This SDK mutation relay is not ported to host admission; no effect dispatched",
-        notDispatched: true,
-      },
-      { status: 409 },
-    ),
-  ),
-);
-
-const docsCurrentRoute = HttpRouter.add("GET", "/docs/current", (req) =>
+const docsListRoute = HttpRouter.add("GET", "/docs", (req) =>
   Effect.gen(function* () {
     const search = new URL(req.url, "http://localhost").searchParams;
     const id = search.get("id");
     const outcome = yield* executeSessionCli(
-      docCurrentArgs(id, search.get("doc")),
+      docListArgs(id, search.get("doc")),
       runPeRevitCli,
       STATUS_TIMEOUT_MS,
-      { action: "doc current", id: id ?? undefined },
+      { action: "doc list", id: id ?? undefined },
     );
     return jsonResponse(outcome);
   }),
 );
 
-const docsCloseRoute = HttpRouter.add("POST", "/docs/close", () =>
-  Effect.succeed(
-    Response.jsonUnsafe(
-      {
-        ok: false,
-        error: "This SDK mutation relay is not ported to host admission; no effect dispatched",
-        notDispatched: true,
-      },
-      { status: 409 },
-    ),
-  ),
-);
-
-export const docsRoute = Layer.mergeAll(
-  docsRecentsRoute,
-  docsOpenRoute,
-  docsCloneRoute,
-  docsCurrentRoute,
-  docsCloseRoute,
-);
+export const docsRoute = Layer.mergeAll(docsRecentsRoute, docsListRoute);

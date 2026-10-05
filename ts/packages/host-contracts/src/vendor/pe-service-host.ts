@@ -142,7 +142,7 @@ export async function claimServiceHost(
   if (result.outcome === "owner-stopped-and-claimed" && existing) {
     try {
       descriptor.onEvict?.(existing);
-    } catch { }
+    } catch {}
   }
   if (result.outcome === "no-current-owner" || result.outcome === "owner-stopped-and-claimed")
     return { claimed: true, handle: makeHandle(appBase, descriptor.name, result.file) };
@@ -156,7 +156,7 @@ function mayEvict(policy: ReplacementPolicy, incumbentLane: string): boolean {
 function makeHandle(appBase: string, name: string, serviceFile: ServiceFile): ServiceHostHandle {
   return {
     serviceFile,
-    release: () => deleteServiceFile(appBase, name, serviceFile.instanceId).then(() => { }),
+    release: () => deleteServiceFile(appBase, name, serviceFile.instanceId).then(() => {}),
   };
 }
 
@@ -193,7 +193,7 @@ export async function chooseServicePort(
     );
     if (Number.isInteger(remembered) && remembered > 0 && remembered <= 65_535)
       preferred = remembered;
-  } catch { }
+  } catch {}
   if (!Number.isInteger(preferred) || preferred <= 0 || preferred > 65_535) return 0;
   return (await portIsFree(preferred)) ? preferred : 0;
 }

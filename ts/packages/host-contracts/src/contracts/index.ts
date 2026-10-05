@@ -5,4 +5,3 @@
 export * from "./product.js";
 export * from "./bridge-protocol.js";
 export * from "./operation-vocabulary.js";
-export * from "./session-lifecycle.js";

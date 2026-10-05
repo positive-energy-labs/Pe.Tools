@@ -73,6 +73,7 @@ type DocFact = {
 };
 
 type MissingLinks = "refuse" | "allow";
+type Unsaved = "keep" | "discard";
 
 type Staged =
   | {
@@ -303,6 +304,10 @@ export function InstancesCluster({
   const sessionName = localSessionName ?? (stored?.kind === "start" ? stored.name : "");
   const setSessionName = (name: string) => setLocalSessionName(sessionIdOf(name));
   const [busy, setBusy] = useState<string | null>(null);
+  // What restart/stop do with unsaved changes: the person picks it each time; there is no default.
+  const [unsaved, setUnsaved] = useState<Unsaved | null>(null);
+  // A choice made for one session never carries to the next one picked.
+  useEffect(() => setUnsaved(null), [target]);
   // A refusal or a settled launch is a log row; a receipt row opens where recovery lives (N3).
   const refuse = (label: string, says: string) => route.note(label, says, true);
   const unresolved = useHostCall(
@@ -374,6 +379,7 @@ export function InstancesCluster({
         workspaceId,
         ...(command !== "start" ? { session: { id: world?.id, process } } : {}),
         ...(command === "stop" ? { force: world?.phase === "unresponsive" } : {}),
+        ...(command === "restart" || command === "stop" ? { unsaved } : {}),
       });
       const row = await runSemanticAction(
         key,
@@ -393,6 +399,7 @@ export function InstancesCluster({
       refuse(`${command} refused`, String(caught));
     } finally {
       setBusy(null);
+      setUnsaved(null);
     }
   };
   // Staging: with a picked world the open targets THAT world; without one the document brings its
@@ -799,19 +806,47 @@ export function InstancesCluster({
                     <div className="flex flex-wrap items-center gap-3">
                       <span className="t-small face-mono text-ink-2">session</span>
                       <span className="t-prose text-ink">{sessionLabel(pickedWorld)}</span>
+                      <div className="flex items-center gap-2 t-small text-ink-2">
+                        <span>unsaved changes</span>
+                        <Switcher<Unsaved | "">
+                          ariaLabel="unsaved changes policy"
+                          value={unsaved ?? ""}
+                          onChange={(next) => setUnsaved(next || null)}
+                          options={[
+                            {
+                              value: "keep",
+                              label: "keep",
+                              title: "Save open documents first; refuse if one cannot be saved",
+                            },
+                            {
+                              value: "discard",
+                              label: "discard",
+                              title: "Close open documents without saving",
+                            },
+                          ]}
+                        />
+                      </div>
                       <VerbButton
                         tone="act"
                         label="restart"
-                        reason="cold-swap this session (session hr --restart)"
-                        disabled={busy !== null}
+                        reason={
+                          unsaved
+                            ? `cold-swap this session (session hr --restart --unsaved ${unsaved})`
+                            : "choose what happens to unsaved changes first"
+                        }
+                        disabled={busy !== null || unsaved === null}
                         busy={busy === "restart"}
                         onClick={() => void runCommand("restart")}
                       />
                       <VerbButton
                         tone="act"
                         label={pickedWorld.phase === "unresponsive" ? "force stop" : "stop"}
-                        reason="stop this session"
-                        disabled={busy !== null}
+                        reason={
+                          unsaved
+                            ? `stop this session (--unsaved ${unsaved})`
+                            : "choose what happens to unsaved changes first"
+                        }
+                        disabled={busy !== null || unsaved === null}
                         busy={busy === "stop"}
                         onClick={() => void runCommand("stop")}
                       />

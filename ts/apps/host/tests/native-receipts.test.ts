@@ -47,7 +47,7 @@ test("production SDK reader uses exact generated selector; mismatched or unresol
     startedUtc: originalProcess.processStartUtc,
     completedUtc: "1970-01-01T00:00:02.0000000Z",
   };
-  const result = { state: "completed", requestId: step.id, receipt, response: { written: true } };
+  const result = { state: "ok", requestId: step.id, receipt, response: { written: true } };
   const read = async (args: readonly string[]) => {
     const selector = {
       requestId: step.id,
@@ -77,7 +77,8 @@ test("production SDK reader uses exact generated selector; mismatched or unresol
         { pid: 43 },
         { processStartUtc: "1970-01-01T00:00:01.0000001Z" },
       ].map((patch) => ({ ...result, receipt: { ...receipt, ...patch } })),
-      ...["pending", "unknown-request", "response-missing", "abandoned"].map((state) => ({
+      // `running`, a refusal, a failed read and a dead or superseded incarnation never settle.
+      ...["running", "refused", "failed", "abandoned"].map((state) => ({
         ...result,
         state,
       })),
@@ -89,6 +90,7 @@ test("production SDK reader uses exact generated selector; mismatched or unresol
       file,
       sdkEnvelope({
         ...result,
+        state: "failed",
         receipt: { ...receipt, verdict: "failed" },
         response: { error: "central unreachable", statusCode: 409 },
       }),
@@ -106,7 +108,8 @@ test("production SDK reader uses exact generated selector; mismatched or unresol
       file,
       sdkEnvelope({
         ...result,
-        receipt: { ...receipt, verdict: "rejected" },
+        state: "refused",
+        receipt: { ...receipt, verdict: "refused" },
         response: { error: "queue refusal", statusCode: 423, outcome: "RefusedQueueUnresponsive" },
       }),
     );
@@ -119,6 +122,7 @@ test("production SDK reader uses exact generated selector; mismatched or unresol
       file,
       sdkEnvelope({
         ...result,
+        state: "cancelled",
         receipt: { ...receipt, verdict: "cancelled" },
         response: { error: "stopped at checkpoint", statusCode: 499 },
       }),
@@ -130,14 +134,21 @@ test("production SDK reader uses exact generated selector; mismatched or unresol
       status: 499,
     });
     for (const altered of [
-      { ...result, receipt: { ...receipt, verdict: "cancelled" }, response: undefined },
       {
         ...result,
+        state: "cancelled",
+        receipt: { ...receipt, verdict: "cancelled" },
+        response: undefined,
+      },
+      {
+        ...result,
+        state: "cancelled",
         receipt: { ...receipt, verdict: "cancelled" },
         response: { error: "not cancellation", statusCode: 500 },
       },
       {
         ...result,
+        state: "cancelled",
         receipt: { ...receipt, verdict: "cancelled", key: "takeoffs.adopt" },
         response: { error: "stopped", statusCode: 499 },
       },
@@ -151,6 +162,7 @@ test("production SDK reader uses exact generated selector; mismatched or unresol
         ...JSON.parse(sdkEnvelope(result)),
         result: {
           ...result,
+          state: "cancelled",
           receipt: { ...receipt, verdict: "cancelled" },
           response: { error: "stopped", statusCode: 499 },
         },
