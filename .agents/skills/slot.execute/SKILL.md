@@ -86,6 +86,8 @@ dotnet tool run pe-revit -- <command> --json
 - Discover host operations before calling them. Put structured requests in a file; do not pass JSON through PowerShell quoting. A mutation script ends with an independent read-back.
 - Show a picture to the person with a markdown image whose absolute path uses forward slashes: `![x](C:/Users/.../out.png)`. A backslash path does not render in the T3 chat (2026-09-26). Put the backslash path in a code block beside it for copying.
 - Use the in-app browser preview for route proof. Inspect console, network, visible state, and the route's receipts. If browser automation is unavailable or broken, report the browser claim as unproven and prove only the lower lane.
+- A measured browser claim (hover timing, layout shift, long tasks) needs a visible, un-throttled tab: a background tab pauses animation frames and throttles timers, so popovers never open under synthetic input and no shift or long-task entry is recorded. Launch the measuring Chrome with `chrome-agent launch --port <p> -- --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows`. `chrome-agent stop` deletes that instance's session profile and its sign-in; the person signs in again, never you.
+- More than a handful of CDP calls wants one persistent websocket to the target (chrome-agent's Python client, or `websockets` to `/json`'s debugger URL), not a CLI spawn per call: a spawn costs seconds, a call on an open session costs a millisecond. Hover everything before clicking anything, dwell past the popover delay, and abort a route when the page reloads or shows its crash screen. Any edit to the tree reloads the dev server and voids a run in progress.
 
 ## Worktrees and Herdr
 

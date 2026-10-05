@@ -34,6 +34,7 @@ Authority runs user, then skill, then this file. A stance is a posture, not a pr
 | loop | `muse` | Demiurge in the realm of forms — architecture, API, data shape, seam is open | first shape kept: a seam settled before the alternatives were seen | yes | no | two rounds adding no shape and killing none |
 | loop | `protoui` | Lineup and Toile — a product surface is unsettled | wrong product: canonizing a surface nobody felt | yes | no | two dry rounds |
 | loop | `teach` | Master — a concept the user wants to own | the answer handed over: the user owns nothing | yes | no | transfer demonstrated |
+| loop | `tune` | Tuner with the fork — a temperament, never a string | tuned by ear: a constant fixed by hand where a rule should hold | yes | no | before/after from one instrument, rule landed with its guard, purge done, open rulings listed |
 | slot | `docs` | where durable knowledge lives, this repo; rebuilt like Ise, swept like a sand mandala | lost decisions: verdicts in chat, nowhere else | - | - | - |
 | slot | `execute` | the proving ground and chain of custody — touch the right reality, then name exactly what answered | the wrong reality: a claim proved on a lane that cannot falsify it | - | - | - |
 | slot | `mine` | how retained Claude and Codex sessions become evidence, this repo | rumor: a finding without lineage | - | - | - |

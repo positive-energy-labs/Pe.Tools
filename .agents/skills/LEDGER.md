@@ -12,6 +12,10 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 - 2026-08-25, usage as observed by the user: `triangulate`, `demiurge`, `close` open most sessions; `delegate` and `purge` are stacked near-always; `prove` fires by trigger; the rest fire from `index`, rarely typed. Self-routed descriptions must stay verbatim-tight; index-routed ones may loosen.
 - 2026-08-25, a number that fires a law is a gate; a number that sizes the work is a param and lives in the prompt or a `write` register. Where the failure is internal and uncountable, the disposition is the gate; do not dress it as a number. Gate pass source: `.artifacts/runs/skills-crusade-20260825/GATES-*.md`.
 
+### Additions
+
+- 2026-10-04, `loop.tune` added after the TC perf round (Tuner with the fork; prevents "tuned by ear"). It owns the measure, census, rule, purge, re-measure loop; the browser-measurement mechanics went to `execute` and the sequence-by-collision law to `delegate`. The round's evidence: three measurement passes lost to throttling, reloads and CLI-per-call before one counted; every guessed constant was wrong within the hour and every rule held.
+
 ### The unit: a stance
 
 - 2026-08-24, the unit is a stance: invocations above the fold, laws below, portable; `write` owns the form. Runbooks (`execute`, `docs`, `write`) are slots, not stances.

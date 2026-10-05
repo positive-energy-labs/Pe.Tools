@@ -31,6 +31,7 @@ Mode: no fan-out without a posture table first. Task, who (model and thinking), 
 - Cross lines only after the clean readings exist. Handing one agent two unrelated bodies is where the new idea comes from; cross before the clean readings and you cannot say what produced it.
 - Convergence means the panel was too wide. When independent readings agree, the agreement is the finding and the extra agents were paid for nothing; widen only where the first readings disagreed.
 - One writing line, one tree. Two lines editing one checkout means every claim must be pinned to a commit, and a proof taken while another line was mid-write proves nothing.
+- Sequence by collision, not by topic. Give each line a disjoint file set and name it in the brief; a line that measures a running surface flies alone, because any line that saves reloads the server under it and voids the reading (two full passes lost this way, 2026-10-04). A shared contract two lines code against is written in both briefs, verbatim.
 - Leave it better than you found it. Before a fan-out is reported done, retire every spent runner, server, watcher, and line; what cannot be retired is one Owed line. Let go of any resource no foreseeable future needs. An anti-pattern seen on the way is one Owed line, not a fix.
 
 ## Models [scope: repo]
