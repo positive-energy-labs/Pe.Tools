@@ -468,7 +468,22 @@ function pathRows(
     if (node.kind !== "fitting" && node.kind !== "accessory") return;
     if (isTap(node)) {
       const qb = below.get(node.id) ?? 0;
-      const qc = mainFlowAt.get(node.id) ?? qb;
+      // A takeoff is priced only when the path enters it from its main duct.
+      const qc =
+        prev != null && prev === factOf(node, "mainSegment") ? mainFlowAt.get(node.id) : null;
+      if (qc == null) {
+        const message = fail({
+          id: node.id,
+          message: `tap ${node.id} is entered from the collar or has no main segment, no takeoff rule applies`,
+        });
+        return void rows.push({
+          id: node.id,
+          kind: LEG_KIND.Cb,
+          dp: 0,
+          desc: message,
+          error: message,
+        });
+      }
       return fitting(node, prev, next, { q: qb, qb, qc, qs: qc - qb }, "Cb");
     }
     fitting(node, prev, next, { q: below.get(node.id) ?? 0 }, "C");

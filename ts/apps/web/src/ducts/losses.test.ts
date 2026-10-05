@@ -165,6 +165,7 @@ const snapshot = {
     node(4, "fitting", {
       partType: "TapAdjustable",
       connectors: [conn(0, [3, 2], round(6), "curve"), conn(1, [7, 0], round(6))],
+      facts: [{ key: "mainSegment", value: 3, unit: "", provenance: "geometry" }],
     }),
     node(5, "fitting", {
       partType: "Transition",
@@ -278,6 +279,26 @@ it("honours overrides and reports a missing table", () => {
   expect(missing.errors).toEqual([
     expect.objectContaining({ id: 2, rule: "elbow-1d-le10", table: "CD3-9" }),
   ]);
+});
+
+it("prices a tap as a takeoff only when entered from its main, never from the collar", () => {
+  const main = computeLosses(snapshot, grids).paths[8]!.rows.find((x) => x.id === 4)!;
+  expect(main.error).toBeUndefined();
+  expect(main.c).toBeGreaterThan(0);
+
+  // Same parts, fed through the collar: unit 100 -> duct 7 (6 in) -> tap 4 -> duct 3 -> 5 -> grille 6.
+  const flipped = structuredClone(snapshot);
+  flipped.nodes = flipped.nodes.filter((n) => [100, 4, 5, 6].includes(n.id));
+  flipped.segments = flipped.segments.filter((x) => x.id === 3 || x.id === 7);
+  flipped.nodes[0]!.connectors = [conn(0, [7, 1], round(6))];
+  flipped.segments.find((x) => x.id === 3)!.connectors[0]!.connectedTo = null;
+  flipped.segments.find((x) => x.id === 7)!.connectors[1] = conn(1, [100, 0], round(6));
+  const r = computeLosses(flipped, grids);
+  const row = r.paths[6]!.rows.find((x) => x.id === 4)!;
+  expect(row).toMatchObject({ kind: "tap-branch", dp: 0 });
+  expect(row.error).toMatch(/entered from the collar/);
+  expect(row.c).toBeUndefined();
+  expect(r.errors).toEqual([expect.objectContaining({ id: 4 })]);
 });
 
 it("fanout moves only the terminals whose path crosses the rule", () => {
