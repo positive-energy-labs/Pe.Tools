@@ -55,19 +55,22 @@ public sealed class FamilyModelRoundtripTests {
 
     /// <summary>
     ///     RULING kaitpw 2026-10-06 (option A): a connector centred between planes is `at` `midway:A|B`. MakeConnectors places
-    ///     it halfway between A and B, capture reads the same entries back, and reapply converges with no outcome.
+    ///     it halfway between A and B on a solid face (a duct connector needs one), capture reads the same entries back, and reapply converges with no outcome.
     /// </summary>
     [Test]
     public void Midway_connector_roundtrips_through_make_connectors_and_capture() {
         var parsed = FamilyModelJson.Parse("""
             { "family": { "name": "Midway connector", "category": "GenericModels", "template": "Generic Model", "placement": "OneLevelBased" },
               "types": { "Standard": {} },
+              "datums": { "Ref. Level": { "normal": "Z", "isLevel": true }, "Center (Left/Right)": { "normal": "X" }, "Center (Front/Back)": { "normal": "Y" } },
               "refPlanes": {
                 "duct left": { "normal": "PlusX", "at": "-1ft" }, "duct right": { "normal": "PlusX", "at": "1.5ft" },
-                "duct bottom": { "normal": "PlusZ", "at": "0.25ft" }, "duct top": { "normal": "PlusZ", "at": "1.25ft" },
-                "duct face": { "normal": "PlusY", "at": "2ft" } },
+                "duct bottom": { "normal": "PlusZ", "at": "0.25ft" }, "duct top": { "normal": "PlusZ", "at": "1.25ft" } },
+              "forms": { "box": { "kind": "Prism", "center": ["Center (Left/Right)", "Center (Front/Back)"], "bottom": "Ref. Level",
+                "width": "4ft", "depth": "4ft", "height": "2ft" } },
               "connectors": { "supply": { "domain": "Duct", "systemType": "SupplyAir", "shape": "Rectangular",
-                "on": "duct face", "at": ["midway:duct left|duct right", "midway:duct bottom|duct top"], "width": "1ft", "height": "0.5ft" } } }
+                "on": "box.back", "at": ["midway:duct left|duct right", "midway:duct bottom|duct top"], "width": "1ft", "height": "0.5ft",
+                "flowDirection": "Bidirectional", "flowConfiguration": "Calculated", "lossMethod": "NotDefined" } } }
             """);
         Assert.That(parsed.Diagnostics, Is.Empty);
         var desired = parsed.Value!;
@@ -84,7 +87,7 @@ public sealed class FamilyModelRoundtripTests {
             var captured = document.CaptureFamilyModel();
             var connector = captured.Connectors.Values.Single();
             Assert.Multiple(() => {
-                Assert.That(connector.On, Is.EqualTo("duct face"));
+                Assert.That(connector.On, Is.EqualTo("box.back"));
                 Assert.That(connector.At, Is.EquivalentTo(new[] { "midway:duct left|duct right", "midway:duct bottom|duct top" }));
                 Assert.That(connector.Width?.Feet, Is.EqualTo(1).Within(1e-9));
                 Assert.That(connector.Height?.Feet, Is.EqualTo(0.5).Within(1e-9));
