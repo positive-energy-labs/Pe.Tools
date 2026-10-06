@@ -38,6 +38,8 @@ interface ProseConstituent {
   kind: "solid" | "connector" | "nested";
   /** The Work pointer of Pea's proposal when the reading has no such constituent yet. */
   proposed?: string;
+  /** Pea's proposals about one property of a constituent the reading does hold (`/connectors/c1/on`). */
+  proposedProps?: { id: string; property: string; text: string }[];
   text: string;
   params: string[];
 }

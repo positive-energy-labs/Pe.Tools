@@ -17,8 +17,17 @@ import {
 import type { FamilyWorkspaceCore } from "#/family/workspace-core";
 
 export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
-  const { world, draft, setInspect, proposalsAt, proposalsOn, locate, consumers, transitionsAt } =
-    core;
+  const {
+    world,
+    draft,
+    setInspect,
+    proposalsAt,
+    propertyProposalsAt,
+    proposalsOn,
+    locate,
+    consumers,
+    transitionsAt,
+  } = core;
   /**
    * THE VERDICT RAIL — a COUNT, not a control (ruled 2026-08-31, per-cell grounding). It used to
    * carry a 24px pea icon-press inside a 20px row, which was the locate affordance improvised
@@ -114,6 +123,26 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
       const authored = authoredText(draft.authored[row.name]) ?? "";
       const blocks = world.grounding[row.name] ?? [];
       const family = proposalsAt(row.name, null);
+      const properties = propertyProposalsAt(row.name);
+      /** One proposed property (isInstance, formula, propertiesGroup...) as its own cell, with the
+       * cell's own accept and deny, drawn where the property already shows on the row. */
+      const propertyCell = (entry: (typeof properties)[number]) => (
+        <span key={entry.id} className="ml-1 inline-block w-44 align-middle">
+          <NavStateCell
+            {...cellFromTrichotomy(
+              proposalCell([entry], null),
+              {
+                value: `${entry.property} ${entry.proposed}`,
+                currentValue: entry.current ?? "(not set)",
+              },
+              () => `${entry.property} ${entry.proposed}`,
+            )}
+            onLocate={() => locate(entry)}
+            transitions={transitionsAt(entry.id)}
+          />
+        </span>
+      );
+      const formulaProposals = properties.filter((entry) => entry.property === "formula");
       const drives = consumers.get(row.name) ?? [];
       const reason = `${row.name} — ${row.dataType}, bound per ${
         row.isInstance
@@ -167,6 +196,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
                 </Press>
               )}
               {row.isInstance && <span className="ml-1">inst</span>}
+              {properties.filter((entry) => entry.property !== "formula").map(propertyCell)}
               {world.missingInRevit.has(row.name) && <span className="ml-1">⊘</span>}
               {blocks.length > 0 && <span className="ml-1">{blocks.join(" ")}</span>}
             </span>
@@ -177,9 +207,10 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
 
                 DERIVED SPENDS NO COLOUR: the language has no role for "a formula
                 computed this", and the leading `=` already says it. Italic carries the rest. */}
-            {(isFormula(authored) || drives.length > 0) && (
+            {(isFormula(authored) || drives.length > 0 || formulaProposals.length > 0) && (
               <span>
                 {isFormula(authored) && <span>{authored}</span>}
+                {formulaProposals.map(propertyCell)}
                 {isFormula(authored) && drives.length > 0 && <span> · </span>}
                 {drives.length > 0 && <span>→ </span>}
                 {drives.map((entry, index) => (

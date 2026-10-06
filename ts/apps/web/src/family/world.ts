@@ -148,7 +148,10 @@ export interface ProtoProposal {
   typeName?: string;
   /** A proposal for a constituent (`/nested|connectors|forms/<slug>`): `param` is empty, and the
    * constituents list, not the parameters grid, draws it. */
-  constituent?: { section: "nested" | "connectors" | "forms"; slug: string };
+  constituent?: { section: "nested" | "connectors" | "forms"; slug: string; property?: string };
+  /** `/parameters/<name>/<property>` (isInstance, formula, propertiesGroup...): a proposal about
+   * that property of the parameter, never about its family-level value. */
+  property?: string;
   /** What the reading holds at the pointer, when it holds anything: the cell's tooltip says it. */
   current: string | null;
   proposed: string;

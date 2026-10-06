@@ -167,6 +167,21 @@ export function AnatomyDrawing({
                   scale="row"
                   transitions={transitionsAt(part.proposed)}
                 />
+              ) : (part.proposedProps?.length ?? 0) > 0 ? (
+                <>
+                  {part.proposedProps!.map((entry) => (
+                    <StateCell
+                      key={entry.id}
+                      {...cellFromTrichotomy(
+                        fields[entry.id] ?? {},
+                        { value: `${entry.property} ${entry.text}` },
+                        () => `${entry.property} ${entry.text}`,
+                      )}
+                      scale="row"
+                      transitions={transitionsAt(entry.id)}
+                    />
+                  ))}
+                </>
               ) : unbound > 0 ? (
                 <span
                   data-tone="caution"

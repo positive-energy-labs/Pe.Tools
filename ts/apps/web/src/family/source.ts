@@ -79,6 +79,16 @@ function addProposedStructure(
     ...world.liveOnlyRows.map((row) => row.name),
   ]);
   for (const proposal of world.proposals) {
+    if (proposal.constituent?.property) {
+      const { slug, property } = proposal.constituent;
+      const part = world.constituents.find((entry) => entry.slug === slug);
+      if (part)
+        part.proposedProps = [
+          ...(part.proposedProps ?? []),
+          { id: proposal.id, property, text: proposal.proposed },
+        ];
+      continue;
+    }
     if (proposal.constituent) {
       const { section, slug } = proposal.constituent;
       if (reading?.[section]?.[slug] !== undefined) continue;
@@ -93,6 +103,7 @@ function addProposedStructure(
       continue;
     }
     const root = settingsFieldSegments(proposal.id)[0];
+    // A property of a parameter the reading lacks rides the row its spec proposal creates.
     if ((root !== "parameters" && root !== "types") || known.has(proposal.param)) continue;
     known.add(proposal.param);
     const named = fields[settingsFieldPointer(["parameters", proposal.param])]?.proposal?.value;
@@ -193,16 +204,31 @@ export function familySource(
       proposed:
         typeof proposal.value === "string"
           ? proposal.value
-          : parts.length === 2 && parts[0] === "parameters"
-            ? specText(proposal.value)
-            : parameterText(proposal.value),
+          : typeof proposal.value === "boolean"
+            ? String(proposal.value)
+            : parts.length === 2 && parts[0] === "parameters"
+              ? specText(proposal.value)
+              : parameterText(proposal.value),
       sourceBlockId: proposal.sources?.[0]?.blockId ?? "",
       note: proposal.note ?? "",
       confidence: proposal.confidence ?? "high",
     };
     // A constituent is the whole object at `/<section>/<slug>`: no parameter row owns it.
-    if (parts.length === 2 && isConstituentSection(parts[0]))
-      return [{ ...shared, param: "", constituent: { section: parts[0], slug: parts[1]! } }];
+    if (parts.length >= 2 && parts.length <= 3 && isConstituentSection(parts[0]))
+      return [
+        {
+          ...shared,
+          param: "",
+          constituent: {
+            section: parts[0],
+            slug: parts[1]!,
+            ...(parts[2] ? { property: parts[2] } : {}),
+          },
+        },
+      ];
+    // `/parameters/<name>/<property>` is about the property; `value` IS the family-level value.
+    if (parts[0] === "parameters" && parts.length === 3 && parts[2] !== "value")
+      return [{ ...shared, param: parts[1]!, property: parts[2]! }];
     const typeName = parts[0] === "types" ? parts[1] : undefined;
     const param = typeName ? parts[2] : parts[1];
     if (!param) return [];

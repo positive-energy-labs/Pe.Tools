@@ -221,10 +221,14 @@ export function ProposalCard({
   register: (node: HTMLDivElement | null) => void;
 }) {
   const target = proposal.constituent
-    ? `${proposal.constituent.section} · ${proposal.constituent.slug}`
-    : proposal.typeName
-      ? `${proposal.param} · ${proposal.typeName}`
-      : `${proposal.param} · family value`;
+    ? `${proposal.constituent.section} · ${proposal.constituent.slug}${
+        proposal.constituent.property ? ` · ${proposal.constituent.property}` : ""
+      }`
+    : proposal.property
+      ? `${proposal.param} · ${proposal.property}`
+      : proposal.typeName
+        ? `${proposal.param} · ${proposal.typeName}`
+        : `${proposal.param} · family value`;
   return (
     <div
       ref={register}

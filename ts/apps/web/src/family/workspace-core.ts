@@ -114,7 +114,17 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
    * would be the surface lying about how much is outstanding. */
   const proposalsAt = (param: string, typeName: string | null): ProtoProposal[] =>
     world.proposals.filter(
-      (entry) => entry.param === param && (entry.typeName ?? null) === typeName && stands(entry),
+      (entry) =>
+        entry.param === param &&
+        entry.property === undefined &&
+        (entry.typeName ?? null) === typeName &&
+        stands(entry),
+    );
+
+  /** Every standing proposal about one PROPERTY of a parameter (isInstance, formula, group). */
+  const propertyProposalsAt = (param: string): ProtoProposal[] =>
+    world.proposals.filter(
+      (entry) => entry.param === param && entry.property !== undefined && stands(entry),
     );
 
   /** Every standing proposal anywhere on a parameter's row — what the RAIL counts. */
@@ -200,7 +210,7 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
    */
   const sever = (next: Draft, param: string, typeName: string | null) => {
     for (const entry of world.proposals) {
-      if (entry.param !== param) continue;
+      if (entry.param !== param || entry.property !== undefined) continue;
       if ((entry.typeName ?? null) !== typeName) continue;
       if (next.cleared.includes(entry.id)) continue;
       next.cleared.push(entry.id);
@@ -494,6 +504,7 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
     cardRefs,
     say,
     proposalsAt,
+    propertyProposalsAt,
     proposalsOn,
     openProposals,
     locate,
