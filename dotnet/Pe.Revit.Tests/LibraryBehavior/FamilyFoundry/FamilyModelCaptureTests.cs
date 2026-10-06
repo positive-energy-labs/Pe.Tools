@@ -239,15 +239,14 @@ public sealed class FamilyModelCaptureTests {
     ///     A private mechanical-equipment family (2026-10-06 field capture): three extrusions on unnamed planes, two
     ///     rectangular duct connectors centred on extrusion faces, one electrical connector. The field run dropped the
     ///     extrusion whose start cap sits on both `Ref. Level` and the origin datum `Reference Plane`, slugged the other two
-    ///     from placeholder plane names (`plane`, `plane-1`), and reported both centred duct connectors under
-    ///     ConnectorFaceNotOnPlane although each face lies on a named plane.
+    ///     from placeholder plane names (`plane`, `plane-1`), and reported both centred duct connectors as unmodeled.
+    ///     RULING kaitpw 2026-10-06 (option A): a face-centred connector captures with `midway:A|B` entries in `at`.
     /// </summary>
     [Test]
-    public void Hcb_three_extrusions_keep_own_slugs_and_centred_duct_connectors_report_their_planes() {
+    public void Hcb_three_extrusions_keep_own_slugs_and_face_centred_duct_connectors_capture_midway() {
         var model = this.CaptureAt(Path.Combine(PrivateFixtures.Dir("families/hcb"), "HCB.rfa"));
         var planeNames = model.Datums.Keys.Concat(model.RefPlanes.Keys).Concat(model.RefLines.Keys).ToHashSet();
-        var centred = model.Unmodeled.Where(u => u.Reason == UnmodeledReason.ConnectorCenterNotOnPlanes)
-            .ToDictionary(u => u.Facts.GetValueOrDefault("systemType") ?? "", u => u.Facts);
+        var bySystem = model.Connectors.Values.ToDictionary(c => c.SystemType);
 
         Assert.Multiple(() => {
             Assert.That(model.Forms.Keys, Is.EquivalentTo(new[] { "extrusion-1", "extrusion-2", "extrusion-3" }));
@@ -257,22 +256,26 @@ public sealed class FamilyModelCaptureTests {
             Assert.That(model.Forms["extrusion-1"].End, Is.EqualTo("plane-5"));
             Assert.That(model.Coverage["forms"], Is.EqualTo(CoverageState.Read));
 
-            Assert.That(model.Connectors.Values.Select(c => c.SystemType), Is.EquivalentTo(new[] { ConnectorSystemType.PowerBalanced }));
-            Assert.That(model.Unmodeled.Count(u => u.Reason == UnmodeledReason.ConnectorFaceNotOnPlane), Is.Zero,
-                "both duct connector faces lie on named planes");
-            Assert.That(centred.Keys, Is.EquivalentTo(new[] { "ReturnAir", "SupplyAir" }));
-            Assert.That(centred.GetValueOrDefault("ReturnAir"), Does.ContainKey("on").WithValue("plane-6"));
-            Assert.That(centred.GetValueOrDefault("ReturnAir"), Does.ContainKey("shape").WithValue("Rectangular"));
-            Assert.That(centred.GetValueOrDefault("ReturnAir"), Does.ContainKey("width").WithValue("param:E"));
-            Assert.That(centred.GetValueOrDefault("ReturnAir"), Does.ContainKey("height").WithValue("param:F"));
-            Assert.That(centred.GetValueOrDefault("ReturnAir"), Does.ContainKey("at").WithValue("Center (Left/Right)"));
+            Assert.That(bySystem.Keys, Is.EquivalentTo(new[] { ConnectorSystemType.PowerBalanced, ConnectorSystemType.ReturnAir, ConnectorSystemType.SupplyAir }));
+            Assert.That(model.Unmodeled.Where(u => u.Path.StartsWith("$.connectors", StringComparison.Ordinal)), Is.Empty);
+            Assert.That(model.Coverage["connectors"], Is.EqualTo(CoverageState.Read));
+
+            var ret = bySystem.GetValueOrDefault(ConnectorSystemType.ReturnAir);
+            Assert.That(ret?.Domain, Is.EqualTo(ConnectorDomain.Duct));
+            Assert.That(ret?.Shape, Is.EqualTo(ConnectorShape.Rectangular));
+            Assert.That(ret?.On, Is.EqualTo("plane-6"));
             // plane-9 and plane-13 coincide at z = 1.0833; a coincident tie resolves to the ordinal-first name.
-            Assert.That(centred.GetValueOrDefault("ReturnAir"), Does.ContainKey("midway").WithValue("plane-10|plane-13"));
-            Assert.That(centred.GetValueOrDefault("SupplyAir"), Does.ContainKey("on").WithValue("plane-15"));
-            Assert.That(centred.GetValueOrDefault("SupplyAir"), Does.ContainKey("width").WithValue("param:M"));
-            Assert.That(centred.GetValueOrDefault("SupplyAir"), Does.ContainKey("height").WithValue("param:L"));
-            Assert.That(centred.GetValueOrDefault("SupplyAir"), Does.ContainKey("midway").WithValue("plane-11|plane-12, plane-13|plane-14"));
-            Assert.That(model.Coverage["connectors"], Is.EqualTo(CoverageState.Partial));
+            Assert.That(ret?.At, Is.EquivalentTo(new[] { "Center (Left/Right)", "midway:plane-10|plane-13" }));
+            Assert.That(ret?.Width?.Text, Is.EqualTo("param:E"));
+            Assert.That(ret?.Height?.Text, Is.EqualTo("param:F"));
+
+            var sup = bySystem.GetValueOrDefault(ConnectorSystemType.SupplyAir);
+            Assert.That(sup?.Domain, Is.EqualTo(ConnectorDomain.Duct));
+            Assert.That(sup?.Shape, Is.EqualTo(ConnectorShape.Rectangular));
+            Assert.That(sup?.On, Is.EqualTo("plane-15"));
+            Assert.That(sup?.At, Is.EquivalentTo(new[] { "midway:plane-11|plane-12", "midway:plane-13|plane-14" }));
+            Assert.That(sup?.Width?.Text, Is.EqualTo("param:M"));
+            Assert.That(sup?.Height?.Text, Is.EqualTo("param:L"));
         });
     }
 }

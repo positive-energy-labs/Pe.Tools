@@ -763,7 +763,7 @@ internal sealed class FamilyModelCapturer {
                 continue;
             }
 
-            var at = this.CrossingPlanesThrough(c.Origin, normal);
+            var at = this.CrossingPlanesThrough(c.Origin, normal) ?? this.MidwayAt(c.Origin, normal);
             if (at == null) {
                 this.Add(UnmodeledReason.ConnectorCenterNotOnPlanes, "$.connectors", this.CenterFacts(c, domain.Value, system.Value, on, normal));
                 continue;
@@ -826,7 +826,7 @@ internal sealed class FamilyModelCapturer {
         if (domain != ConnectorDomain.Electrical) facts.Add(("shape", c.Shape.ToString()));
         var at = this.NamedPlanesThrough(c.Origin, p => Math.Abs(p.Normal.DotProduct(normal)) < Tol);
         if (at.Count > 0) facts.Add(("at", string.Join("|", at)));
-        var midway = this.MidwayPairs(c.Origin, normal);
+        var midway = this.InFaceDirections(c.Origin, normal).Select(direction => direction.Midway).OfType<string>().ToList();
         if (midway.Count > 0) facts.Add(("midway", string.Join(", ", midway)));
         if (domain is ConnectorDomain.Duct or ConnectorDomain.Pipe) {
             var sizes = c.Shape == ConnectorProfileType.Round
@@ -838,23 +838,34 @@ internal sealed class FamilyModelCapturer {
         return facts.ToArray();
     }
 
-    /// <summary>Per in-face direction no named plane crosses at <paramref name="point" />, the nearest pair of parallel named planes it lies midway between.</summary>
-    private List<string> MidwayPairs(XYZ point, XYZ axis) {
+    /// <summary>
+    ///     `at` for a face-centred connector: per in-face direction, the named plane through the centre (datums first, then
+    ///     by name), else the nearest midway pair (<see cref="ConnectorAt" />). Null when a direction has neither.
+    /// </summary>
+    private List<string>? MidwayAt(XYZ point, XYZ axis) {
+        var entries = this.InFaceDirections(point, axis).Select(direction => direction.Through ?? direction.Midway).ToList();
+        return entries.Count == 2 && entries.All(entry => entry != null) ? entries.Select(entry => entry!).ToList() : null;
+    }
+
+    /// <summary>Per in-face axis direction: the named plane through <paramref name="point" />, else the nearest pair of parallel named planes it lies midway between.</summary>
+    private List<(string? Through, string? Midway)> InFaceDirections(XYZ point, XYZ axis) {
         var planes = this.NamedPlanes().Where(p => Math.Abs(p.Normal.DotProduct(axis)) < Tol && ToAxis(p.Normal) != null).ToList();
         double Along(NamedPlane p, XYZ n) => (p.Origin - point).DotProduct(n);
-        return planes.GroupBy(p => ToAxis(p.Normal)!.Value.Unsigned())
-            .Where(direction => direction.All(p => Math.Abs(Along(p, p.Normal)) >= FaceTol))
+        return planes.GroupBy(p => ToAxis(p.Normal)!.Value.Unsigned()).OrderBy(direction => direction.Key)
             .Select(direction => {
+                var through = direction.Where(p => Math.Abs(Along(p, p.Normal)) < FaceTol)
+                    .OrderByDescending(p => p.IsDatum).ThenBy(p => p.Name, StringComparer.Ordinal).Select(p => p.Name).FirstOrDefault();
+                if (through != null) return (through, (string?)null);
                 var n = direction.First().Normal;
-                return (from a in direction
-                        from b in direction
-                        let da = Along(a, n)
-                        let db = Along(b, n)
-                        where da < -FaceTol && db > FaceTol && Math.Abs(da + db) < FaceTol
-                        orderby Math.Round(db, 6), a.Name, b.Name // coincident planes tie; the ordinal name breaks it
-                        select string.Join("|", new[] { a.Name, b.Name }.OrderBy(x => x, StringComparer.Ordinal))).FirstOrDefault();
-            })
-            .OfType<string>().OrderBy(x => x, StringComparer.Ordinal).ToList();
+                var midway = (from a in direction
+                              from b in direction
+                              let da = Along(a, n)
+                              let db = Along(b, n)
+                              where da < -FaceTol && db > FaceTol && Math.Abs(da + db) < FaceTol
+                              orderby Math.Round(db, 6), a.Name, b.Name // coincident planes tie; the ordinal name breaks it
+                              select ConnectorAt.Midway(a.Name, b.Name)).FirstOrDefault();
+                return ((string?)null, midway);
+            }).ToList();
     }
 
     private static ConnectorSystemType? SystemTypeOf(MEPSystemClassification classification) =>

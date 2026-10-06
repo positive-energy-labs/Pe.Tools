@@ -694,11 +694,15 @@ public sealed class FamilyModelConnector {
     public string On { get; init; } = string.Empty;
 
     /// <summary>
-    ///     Two named planes crossing at the connector centre, both containing the normal. A connector whose face lies on
-    ///     <see cref="On" /> but whose centre fewer than two named planes cross (Revit centres a face-hosted connector on
-    ///     the face, midway between its bounding planes) is `unmodeled` with reason
-    ///     <see cref="UnmodeledReason.ConnectorCenterNotOnPlanes" />; its facts name `on`, the crossing planes found, the
-    ///     `midway` plane pairs and the sizes with their associations, so the author can declare the centre planes.
+    ///     Two entries that cross on <see cref="On" /> at the connector centre, each containing the normal. An entry is a
+    ///     named plane, or `midway:A|B` (<see cref="ConnectorAt" />): the plane parallel to the named planes A and B and
+    ///     equidistant from them, for a connector centred between two planes that no named plane crosses
+    ///     (RULING kaitpw 2026-10-06, option A). Revit centres a face-hosted connector on its face, midway between the
+    ///     face's bounding planes. Capture writes the named plane through the centre when one exists, else the nearest
+    ///     midway pair, A and B in ordinal order; coincident candidate planes tie to the ordinal-first name. Apply moves
+    ///     the connector to the point; like a plain plane name, a midway entry seeds the position and adds no constraint.
+    ///     A connector with neither a crossing plane nor a midway pair in one in-face direction is `unmodeled` with
+    ///     reason <see cref="UnmodeledReason.ConnectorCenterNotOnPlanes" />.
     /// </summary>
     [JsonProperty("at", Required = Required.Always)]
     public List<string> At { get; init; } = [];
@@ -764,6 +768,32 @@ public enum LossMethod { NotDefined, Coefficient, SpecificLoss, Table }
 ///     `ElectricalSystemType`, `FlowDirectionType`, `*FlowConfigurationType` and `*LossMethodType` spell it.
 ///     `MEPSystemClassification` agrees with the domain enums except `DataCircuit`, which is <see cref="ConnectorSystemType.Data" />.
 /// </summary>
+/// <summary>
+///     The grammar of one <see cref="FamilyModelConnector.At" /> entry: a plane name, or `midway:A|B`, the plane parallel
+///     to and equidistant from the named planes A and B.
+/// </summary>
+public static class ConnectorAt {
+    public const string MidwayPrefix = "midway:";
+
+    /// <summary>The canonical midway entry, its two planes in ordinal order.</summary>
+    public static string Midway(string a, string b) =>
+        string.CompareOrdinal(a, b) <= 0 ? $"{MidwayPrefix}{a}|{b}" : $"{MidwayPrefix}{b}|{a}";
+
+    public static bool IsMidway(string entry) => entry.StartsWith(MidwayPrefix, StringComparison.Ordinal);
+
+    public static bool TryMidway(string entry, out string a, out string b) {
+        (a, b) = (string.Empty, string.Empty);
+        if (!IsMidway(entry)) return false;
+        var parts = entry[MidwayPrefix.Length..].Split('|');
+        if (parts.Length != 2 || parts.Any(string.IsNullOrWhiteSpace)) return false;
+        (a, b) = (parts[0], parts[1]);
+        return true;
+    }
+
+    /// <summary>The named planes an entry refers to: itself, or the midway pair.</summary>
+    public static IReadOnlyList<string> Planes(string entry) => TryMidway(entry, out var a, out var b) ? [a, b] : [entry];
+}
+
 public static class ConnectorRevitNames {
     private static readonly Dictionary<ConnectorSystemType, string> Renamed = new() {
         [ConnectorSystemType.HydronicSupply] = "SupplyHydronic",
@@ -929,7 +959,7 @@ public enum UnmodeledReason {
     ArrayAnchorNotObservable,
     ConnectorOnCurvedFace,
     ConnectorFaceNotOnPlane,
-    ConnectorCenterNotOnPlanes,      // the face lies on a named plane but no two named planes cross at its centre (a face-centred connector); facts carry on, at, midway and sizes
+    ConnectorCenterNotOnPlanes,      // the face lies on a named plane, but in one in-face direction no named plane crosses the centre and no plane pair has it midway; facts carry on, at, midway and sizes
     ConnectorOnNestedFace,           // kaitpw 2026-09-06: the connector rides a nested instance's face; the host names no plane for it
     ConnectorSizeByRadius,           // a round connector sized through its Radius slot; the vocabulary names diameter only
     FormulaNameNotDeclared,
