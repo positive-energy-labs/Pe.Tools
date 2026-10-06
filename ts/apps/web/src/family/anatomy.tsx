@@ -36,6 +36,8 @@
  * ruling. FOCUS is page vocabulary, not drawing vocabulary: a `--pe-select` fill and
  * an ink stroke, exactly as the table's focused row does.
  */
+import type { TrichotomyCellLike } from "@pe/agent-contracts";
+import { cellFromTrichotomy, StateCell, type CellTransition } from "#/components/lang/cell";
 import { HelpTip } from "#/components/lang/help";
 import type { FamilyModel } from "#/family/family-model";
 import { bindingOf, type Draft, type Focus, type FamilyPageModel } from "#/family/model";
@@ -55,6 +57,8 @@ export function AnatomyDrawing({
   onFocus,
   onInspect,
   inspecting,
+  fields,
+  transitionsAt,
 }: {
   world: FamilyPageModel;
   draft: Draft;
@@ -70,6 +74,9 @@ export function AnatomyDrawing({
   /** A constituent is something you can OPEN, not just light. */
   onInspect: (slug: string) => void;
   inspecting: string | null;
+  /** The Work's cells: a constituent only Pea proposes draws its own proposed cell from these. */
+  fields: Record<string, TrichotomyCellLike>;
+  transitionsAt: (key: string) => readonly CellTransition[];
 }) {
   const views =
     model == null ? (
@@ -138,7 +145,8 @@ export function AnatomyDrawing({
           keyOf={(part) => part.slug}
           labelOf={(part) => part.slug}
           empty="the profile names no constituents"
-          onPick={(part) => onInspect(part.slug)}
+          // A proposed constituent is not in the document yet: there is nothing to open.
+          onPick={(part) => (part.proposed ? undefined : onInspect(part.slug))}
           row={(part) => {
             const geom = world.geomBySlug.get(part.slug);
             const unbound =
@@ -148,15 +156,25 @@ export function AnatomyDrawing({
             return {
               lead: <span className="face-mono text-ink-2">{part.kind}</span>,
               label: <span className="face-mono">{part.slug}</span>,
-              meta:
-                unbound > 0 ? (
-                  <span
-                    data-tone="caution"
-                    title={`${unbound} of this constituent's dimensions are frozen literals no parameter drives. They are the ghost rows at the bottom of the table.`}
-                  >
-                    {unbound}⚠
-                  </span>
-                ) : undefined,
+              meta: part.proposed ? (
+                // The reading has none: Pea's object is a cell of its own, accept and deny on it.
+                <StateCell
+                  {...cellFromTrichotomy(
+                    fields[part.proposed] ?? {},
+                    { value: part.text },
+                    () => part.text,
+                  )}
+                  scale="row"
+                  transitions={transitionsAt(part.proposed)}
+                />
+              ) : unbound > 0 ? (
+                <span
+                  data-tone="caution"
+                  title={`${unbound} of this constituent's dimensions are frozen literals no parameter drives. They are the ghost rows at the bottom of the table.`}
+                >
+                  {unbound}⚠
+                </span>
+              ) : undefined,
               active: inspecting === part.slug,
               onMouseEnter: () => onFocus({ kind: "part", id: part.slug }),
               onMouseLeave: () => onFocus(null),

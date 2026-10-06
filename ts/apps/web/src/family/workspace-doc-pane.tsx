@@ -394,7 +394,13 @@ export function FamilyWorkspaceDocPane() {
                 }
                 specFileName={world.spec?.fileName ?? null}
                 onHover={(on) => {
-                  setFocus(on ? { kind: "param", id: proposal.param } : null);
+                  setFocus(
+                    on
+                      ? proposal.constituent
+                        ? { kind: "part", id: proposal.constituent.slug }
+                        : { kind: "param", id: proposal.param }
+                      : null,
+                  );
                   setFocusedProposal(on ? proposal.id : null);
                 }}
                 register={(node) => {

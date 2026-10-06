@@ -2,18 +2,23 @@ import type { Column, TableState } from "#/components/master-table/model";
 import { token } from "#/lib/token";
 import { PressContent } from "#/components/anatomy/press-content";
 import { Press } from "#/components/lang/press";
+import { cellFromTrichotomy } from "#/components/lang/cell";
+import { parameterText } from "#/family/family-model";
+import { NavStateCell } from "#/family/marks";
 import {
   authoredText,
   bindingOf,
   isFormula,
   pinnedSort,
+  proposalCell,
   sortDirOf,
   type PRow,
 } from "#/family/model";
 import type { FamilyWorkspaceCore } from "#/family/workspace-core";
 
 export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
-  const { world, draft, setInspect, proposalsAt, proposalsOn, locate, consumers } = core;
+  const { world, draft, setInspect, proposalsAt, proposalsOn, locate, consumers, transitionsAt } =
+    core;
   /**
    * THE VERDICT RAIL — a COUNT, not a control (ruled 2026-08-31, per-cell grounding). It used to
    * carry a 24px pea icon-press inside a 20px row, which was the locate affordance improvised
@@ -193,6 +198,21 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
               </span>
             )}
           </span>
+          {row.proposed && family[0] ? (
+            // The reading has no such parameter: Pea's declaration of it is a cell of its own,
+            // with the same accept and deny every other proposal has.
+            <span className="w-44 shrink-0">
+              <NavStateCell
+                {...cellFromTrichotomy(
+                  proposalCell(family, null),
+                  { value: "", currentValue: "(not in the reading)" },
+                  parameterText,
+                )}
+                onLocate={() => locate(family[0]!)}
+                transitions={transitionsAt(family[0].id)}
+              />
+            </span>
+          ) : null}
         </span>
       );
     },

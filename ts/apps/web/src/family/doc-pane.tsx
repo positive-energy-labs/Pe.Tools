@@ -220,9 +220,11 @@ export function ProposalCard({
   onHover: (on: boolean) => void;
   register: (node: HTMLDivElement | null) => void;
 }) {
-  const target = proposal.typeName
-    ? `${proposal.param} · ${proposal.typeName}`
-    : `${proposal.param} · family value`;
+  const target = proposal.constituent
+    ? `${proposal.constituent.section} · ${proposal.constituent.slug}`
+    : proposal.typeName
+      ? `${proposal.param} · ${proposal.typeName}`
+      : `${proposal.param} · family value`;
   return (
     <div
       ref={register}
@@ -245,7 +247,12 @@ export function ProposalCard({
         label={<span className="t-small face-mono text-ink-2">{target}</span>}
         cell={cell}
         // The note is the card's paragraph below; the cell keeps its facts on hover.
-        facts={{ value: proposal.proposed, foot: "hover" }}
+        facts={{
+          value: proposal.proposed,
+          ...(proposal.current != null ? { currentValue: proposal.current } : {}),
+          foot: "hover",
+        }}
+        mark={false}
       />
       <p className="mt-0.5 text-ink">{proposal.note}</p>
       {blockMd && (
