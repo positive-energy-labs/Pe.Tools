@@ -266,7 +266,8 @@ public sealed class FamilyModelCaptureTests {
             Assert.That(centred.GetValueOrDefault("ReturnAir"), Does.ContainKey("width").WithValue("param:E"));
             Assert.That(centred.GetValueOrDefault("ReturnAir"), Does.ContainKey("height").WithValue("param:F"));
             Assert.That(centred.GetValueOrDefault("ReturnAir"), Does.ContainKey("at").WithValue("Center (Left/Right)"));
-            Assert.That(centred.GetValueOrDefault("ReturnAir"), Does.ContainKey("midway").WithValue("plane-10|plane-9"));
+            // plane-9 and plane-13 coincide at z = 1.0833; a coincident tie resolves to the ordinal-first name.
+            Assert.That(centred.GetValueOrDefault("ReturnAir"), Does.ContainKey("midway").WithValue("plane-10|plane-13"));
             Assert.That(centred.GetValueOrDefault("SupplyAir"), Does.ContainKey("on").WithValue("plane-15"));
             Assert.That(centred.GetValueOrDefault("SupplyAir"), Does.ContainKey("width").WithValue("param:M"));
             Assert.That(centred.GetValueOrDefault("SupplyAir"), Does.ContainKey("height").WithValue("param:L"));
