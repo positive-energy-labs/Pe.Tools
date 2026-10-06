@@ -693,6 +693,13 @@ public sealed class FamilyModelConnector {
     [JsonProperty("on", Required = Required.Always)]
     public string On { get; init; } = string.Empty;
 
+    /// <summary>
+    ///     Two named planes crossing at the connector centre, both containing the normal. A connector whose face lies on
+    ///     <see cref="On" /> but whose centre fewer than two named planes cross (Revit centres a face-hosted connector on
+    ///     the face, midway between its bounding planes) is `unmodeled` with reason
+    ///     <see cref="UnmodeledReason.ConnectorCenterNotOnPlanes" />; its facts name `on`, the crossing planes found, the
+    ///     `midway` plane pairs and the sizes with their associations, so the author can declare the centre planes.
+    /// </summary>
     [JsonProperty("at", Required = Required.Always)]
     public List<string> At { get; init; } = [];
 
@@ -922,6 +929,7 @@ public enum UnmodeledReason {
     ArrayAnchorNotObservable,
     ConnectorOnCurvedFace,
     ConnectorFaceNotOnPlane,
+    ConnectorCenterNotOnPlanes,      // the face lies on a named plane but no two named planes cross at its centre (a face-centred connector); facts carry on, at, midway and sizes
     ConnectorOnNestedFace,           // kaitpw 2026-09-06: the connector rides a nested instance's face; the host names no plane for it
     ConnectorSizeByRadius,           // a round connector sized through its Radius slot; the vocabulary names diameter only
     FormulaNameNotDeclared,

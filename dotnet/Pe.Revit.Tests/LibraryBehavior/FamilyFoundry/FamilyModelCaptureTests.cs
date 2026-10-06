@@ -23,13 +23,17 @@ public sealed class FamilyModelCaptureTests {
         this._application = uiApplication?.Application
                             ?? throw new InvalidOperationException("ricaun.RevitTest did not provide a UIApplication.");
 
-    private FamilyModel Capture(string fixture) {
-        var document = RevitFamilyFixtureHarness.OpenFamilyFixture(this._application, fixture);
+    private FamilyModel Capture(string fixture) =>
+        this.CaptureAt(RevitFamilyFixtureHarness.GetFamilyFixturePath(fixture));
+
+    private FamilyModel CaptureAt(string path) {
+        var document = RevitFamilyFixtureHarness.OpenFamilyDocument(this._application, path);
         try {
             var model = document.CaptureFamilyModel();
-            var captured = Path.Combine(TestContext.CurrentContext.WorkDirectory, "captured");
+            // ricaun.NUnit throws on TestContext.WorkDirectory inside Revit; the assembly directory is where ricaun runs from.
+            var captured = Path.Combine(Path.GetDirectoryName(typeof(FamilyModelCaptureTests).Assembly.Location)!, "captured");
             Directory.CreateDirectory(captured);
-            File.WriteAllText(Path.Combine(captured, Path.GetFileNameWithoutExtension(fixture) + ".json"), FamilyModelJson.Serialize(model));
+            File.WriteAllText(Path.Combine(captured, Path.GetFileNameWithoutExtension(path) + ".json"), FamilyModelJson.Serialize(model));
             return model;
         } finally {
             document.Close(false);
@@ -228,6 +232,46 @@ public sealed class FamilyModelCaptureTests {
             // The exhaust connector sits on the device's top face at z = _flange thickness; no named plane is coplanar.
             Assert.That(model.Connectors, Is.Empty);
             Assert.That(model.Unmodeled.Count(u => u.Reason == UnmodeledReason.ConnectorFaceNotOnPlane), Is.EqualTo(1));
+        });
+    }
+
+    /// <summary>
+    ///     A private mechanical-equipment family (2026-10-06 field capture): three extrusions on unnamed planes, two
+    ///     rectangular duct connectors centred on extrusion faces, one electrical connector. The field run dropped the
+    ///     extrusion whose start cap sits on both `Ref. Level` and the origin datum `Reference Plane`, slugged the other two
+    ///     from placeholder plane names (`plane`, `plane-1`), and reported both centred duct connectors under
+    ///     ConnectorFaceNotOnPlane although each face lies on a named plane.
+    /// </summary>
+    [Test]
+    public void Hcb_three_extrusions_keep_own_slugs_and_centred_duct_connectors_report_their_planes() {
+        var model = this.CaptureAt(Path.Combine(PrivateFixtures.Dir("families/hcb"), "HCB.rfa"));
+        var planeNames = model.Datums.Keys.Concat(model.RefPlanes.Keys).Concat(model.RefLines.Keys).ToHashSet();
+        var centred = model.Unmodeled.Where(u => u.Reason == UnmodeledReason.ConnectorCenterNotOnPlanes)
+            .ToDictionary(u => u.Facts.GetValueOrDefault("systemType") ?? "", u => u.Facts);
+
+        Assert.Multiple(() => {
+            Assert.That(model.Forms.Keys, Is.EquivalentTo(new[] { "extrusion-1", "extrusion-2", "extrusion-3" }));
+            Assert.That(model.Forms.Keys.Where(planeNames.Contains), Is.Empty, "a form slug never reuses a plane name");
+            Assert.That(model.Forms["extrusion-1"].SketchPlane, Is.EqualTo("Ref. Level"));
+            Assert.That(model.Forms["extrusion-1"].Start, Is.EqualTo("Ref. Level"), "a cap on its own sketch plane names that plane");
+            Assert.That(model.Forms["extrusion-1"].End, Is.EqualTo("plane-5"));
+            Assert.That(model.Coverage["forms"], Is.EqualTo(CoverageState.Read));
+
+            Assert.That(model.Connectors.Values.Select(c => c.SystemType), Is.EquivalentTo(new[] { ConnectorSystemType.PowerBalanced }));
+            Assert.That(model.Unmodeled.Count(u => u.Reason == UnmodeledReason.ConnectorFaceNotOnPlane), Is.Zero,
+                "both duct connector faces lie on named planes");
+            Assert.That(centred.Keys, Is.EquivalentTo(new[] { "ReturnAir", "SupplyAir" }));
+            Assert.That(centred.GetValueOrDefault("ReturnAir"), Does.ContainKey("on").WithValue("plane-6"));
+            Assert.That(centred.GetValueOrDefault("ReturnAir"), Does.ContainKey("shape").WithValue("Rectangular"));
+            Assert.That(centred.GetValueOrDefault("ReturnAir"), Does.ContainKey("width").WithValue("param:E"));
+            Assert.That(centred.GetValueOrDefault("ReturnAir"), Does.ContainKey("height").WithValue("param:F"));
+            Assert.That(centred.GetValueOrDefault("ReturnAir"), Does.ContainKey("at").WithValue("Center (Left/Right)"));
+            Assert.That(centred.GetValueOrDefault("ReturnAir"), Does.ContainKey("midway").WithValue("plane-10|plane-9"));
+            Assert.That(centred.GetValueOrDefault("SupplyAir"), Does.ContainKey("on").WithValue("plane-15"));
+            Assert.That(centred.GetValueOrDefault("SupplyAir"), Does.ContainKey("width").WithValue("param:M"));
+            Assert.That(centred.GetValueOrDefault("SupplyAir"), Does.ContainKey("height").WithValue("param:L"));
+            Assert.That(centred.GetValueOrDefault("SupplyAir"), Does.ContainKey("midway").WithValue("plane-11|plane-12, plane-13|plane-14"));
+            Assert.That(model.Coverage["connectors"], Is.EqualTo(CoverageState.Partial));
         });
     }
 }
