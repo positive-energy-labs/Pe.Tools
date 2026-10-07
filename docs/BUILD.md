@@ -185,7 +185,10 @@ Package outputs:
 
 `CreateBundleModule` owns the Pe.App year staging used by both transports.
 `CreateInstallerModule` owns the host/Pea SEA payload builds plus the product release-signing
-boundary. SDK `pe-revit install package`
+boundary. The MSI also lays Desktop and Start Menu shortcuts to `Pe.Host.exe --open` from the host
+payload's `shortcut` block in `product.payloads.json` (SDK beta.178 `pe-revit msi`); a bare launch of
+the SEA with no `PE_LANE` is the installed lane and claims the ordinary `host` service, so a Revit
+started afterwards joins it. SDK `pe-revit install package`
 copies the manifest-declared sources into the portable zip and writes its release receipt;
 `pe-revit msi` consumes the same checked manifest and emits the MSI. Pe.Tools then signs that final
 MSI and refreshes only the receipt's MSI SHA-256 so the receipt describes the bytes that will be
