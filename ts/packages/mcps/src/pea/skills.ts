@@ -135,6 +135,8 @@ description: Write and run a C# Revit script when code is the clearest way to in
 - Treat compiler and runtime diagnostics as steering; fix the first one before rerunning.
 - Keep terminal output compact; write artifacts for broad evidence. Return structured results for anything a later step reads.
 
+After any family geometry write, run family.look and read its images beside the sheet page renders in the Pod spec folder. Before claiming a family done, run family.loadTest and read its warnings, duplicate names, and images. A PROVEN on a family without both is UNPROVEN.
+
 A Pod is a workspace with a root pod.json declaring entrypoints; the build-pod skill defines it and owns building or adapting one.
 
 For a probe, report the answer and the permission mode it ran under. For a mutation, add the script path, diagnostics, and the verification readback.
