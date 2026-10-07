@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import { settingsFieldPointer, type MeasuredValue } from "@pe/agent-contracts";
 import { parameterText, paramSpec } from "#/family/family-model";
 import { EmptyState } from "#/components/lang/empty";
@@ -55,7 +56,10 @@ export function FamilyWorkspaceDocPane() {
     editLiteral,
     litBlocks,
     bindPicker,
+    attachSpec,
   } = useFamilyWorkspace();
+  const upload = useRef<HTMLInputElement>(null);
+  const [attaching, setAttaching] = useState(false);
   const partInspector = (part: GeomConstituent): React.ReactNode => (
     <>
       <p
@@ -311,8 +315,7 @@ export function FamilyWorkspaceDocPane() {
       kind="inspector"
       flush
       headerSurface="recess"
-      // The spec region below is the pane's ONE scroller; the pane body only clips. Two scrollers
-      // in one sidebar stack two bars (scrollbar law, 2026-08-31).
+      // The proposal stack and camera scroll independently: locating a citation keeps its card visible.
       scroll="clip"
       // The pane is a COLUMN: the spec and its proposals scroll in the upper half, the inspector
       // docks under them. Neither displaces the other — an inspector that replaced the spec would
@@ -343,27 +346,45 @@ export function FamilyWorkspaceDocPane() {
                 value: "sheet",
                 label: "sheet",
                 title:
-                  "Show the spec as a page: the block boxes where they sit on the sheet, so a citation can be located by eye. STAND-IN — the real surface renders the PDF here through the grounded-doc camera.",
+                  "Show the rendered pages with measured block boxes. Focusing a proposal locates its citation on the sheet.",
               },
             ]}
           />
+          <input
+            ref={upload}
+            type="file"
+            accept="application/pdf"
+            className="hidden"
+            onChange={async (event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (!file) return;
+              setAttaching(true);
+              try {
+                await attachSpec(file);
+                say(`attached ${file.name}`);
+              } catch (error) {
+                say(String(error));
+              } finally {
+                setAttaching(false);
+              }
+            }}
+          />
           <ActionButton
-            label="parse"
-            onClick={() =>
-              say(
-                world.spec
-                  ? `re-parsed ${world.spec.fileName} — ${world.spec.blocks.length} blocks`
-                  : "No spec is attached to this profile, so there is nothing to re-read. Parsing one is route:family's parse_spec command, which this page does not yet run.",
-              )
-            }
-            reason="Read the source document again and rebuild its blocks. Parsing is the doc pane's own verb — it changes what can be cited, and nothing about the profile."
+            label={attaching ? "attaching" : "attach PDF"}
+            disabled={attaching}
+            onClick={() => upload.current?.click()}
+            reason="Parse a cut sheet and save its pages and blocks beside the captured family"
           />
         </>
       }
     >
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 flex flex-col">
         {/* proposals — margin annotations, docked as a stack above the spec */}
-        <div className="hairline-b px-2 py-1.5" data-surface="artifact">
+        <div
+          className="hairline-b shrink-0 max-h-1/3 overflow-y-auto px-2 py-1.5"
+          data-surface="artifact"
+        >
           <div
             className="mb-1 flex items-baseline gap-2"
             title="Pea's reading of the spec, aimed at named cells. Accepting moves the value into the table where you can see it land; the citation stays lit either way, because the grounding is a separate fact from the proposal."
@@ -411,11 +432,13 @@ export function FamilyWorkspaceDocPane() {
           )}
         </div>
 
-        {docMode === "text" ? (
-          <SpecText spec={world.spec} litBlocks={litBlocks} />
-        ) : (
-          <SpecSheet spec={world.spec} litBlocks={litBlocks} zoom={docZoom} onZoom={setDocZoom} />
-        )}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {docMode === "text" ? (
+            <SpecText spec={world.spec} litBlocks={litBlocks} />
+          ) : (
+            <SpecSheet spec={world.spec} litBlocks={litBlocks} zoom={docZoom} onZoom={setDocZoom} />
+          )}
+        </div>
       </div>
 
       {inspectorPanel}

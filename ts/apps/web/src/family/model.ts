@@ -600,13 +600,3 @@ export function partsInFocus(
   if (focus.kind === "part") return new Set([focus.id]);
   return new Set((consumers.get(focus.id) ?? []).map((entry) => entry.slug));
 }
-
-/** Deterministic jitter for the stand-in page camera — it must put a block in the SAME place every
- * render, or it stops standing in for a document and starts being noise. */
-export function hashOf(text: string): number {
-  let hash = 2166136261;
-  for (let index = 0; index < text.length; index += 1) {
-    hash = Math.imul(hash ^ text.charCodeAt(index), 16777619) >>> 0;
-  }
-  return hash;
-}

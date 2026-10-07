@@ -128,17 +128,7 @@ export interface ProtoLive {
   >;
 }
 
-interface SpecBlock {
-  id: string;
-  page: number;
-  kind: "heading" | "table" | "text";
-  md: string;
-}
-
-export interface ProtoSpec {
-  fileName: string;
-  blocks: SpecBlock[];
-}
+export type ProtoSpec = import("@pe/agent-contracts").ParsedDocView;
 
 /** Pea's proposal — EPHEMERAL, page-scoped. Links a profile cell to the spec text it came from. */
 export interface ProtoProposal {

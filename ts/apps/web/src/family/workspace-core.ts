@@ -101,9 +101,9 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   // Locating scrolls the card into the sidebar. That is the whole payoff of the rail and the
   // corner folds: the table points, the sidebar decides, and nothing covers the table.
   useEffect(() => {
-    if (!focusedProposal) return;
+    if (!focusedProposal || docMode === "sheet") return;
     cardRefs.current[focusedProposal]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [focusedProposal]);
+  }, [focusedProposal, docMode]);
 
   /** A proposal STANDS until it is cleared. Accepting does not clear it: the reader wants it
    * behind the staged value, because that is the only evidence that the square is pea's ink. */
@@ -535,6 +535,7 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
     focusedParams,
     focusedParts,
     litBlocks,
+    attachSpec: store.actions.attachSpec,
   };
 }
 

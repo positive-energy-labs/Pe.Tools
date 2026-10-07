@@ -1,23 +1,14 @@
 import type { TrichotomyCellLike } from "@pe/agent-contracts";
 import { token } from "#/lib/token";
-/**
- * /family — the doc sidebar's contents: the spec in two modes, and pea's proposal cards.
- *
- * ONE PANE, TWO MODES. `text` is the spec as OCR read it — markdown blocks, checkable word for
- * word, which is what a citation actually resolves to. `sheet` is a STAND-IN for the grounded-doc
- * camera: it draws where the blocks sit on the page, not what they say, which is the one question
- * the text mode cannot answer. It announces itself as a stand-in rather than pretending.
- *
- * PROPOSALS DOCK ON TOP OF IT, so a proposal's cell and its verbs sit beside the spec text that
- * justifies it.
- */
 import { EmptyState } from "#/components/lang/empty";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { FactChip, Tag } from "#/components/lang/chip";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { useEffect, useRef } from "react";
+import { useGroundedDoc } from "#/grounded-doc/engine";
+import { PagePane } from "#/grounded-doc/view/page-pane";
 import { ReviewRow, type CellWire } from "#/components/lang/band";
 import { Switcher } from "#/components/lang/switcher";
-import { hashOf } from "#/family/model";
+
 import type { ProtoProposal, ProtoSpec } from "#/family/world";
 import { Code } from "#/components/lang/code";
 
@@ -82,10 +73,7 @@ export function SpecText({
   );
 }
 
-/**
- * The sheet mode. Positions are hashed from the block id, so they are arbitrary but STABLE; a
- * stand-in that moved between renders would be worse than nothing.
- */
+/** The same measured page canvas as /doc-lab, driven by the family's citation focus. */
 export function SpecSheet({
   spec,
   litBlocks,
@@ -97,99 +85,40 @@ export function SpecSheet({
   zoom: number;
   onZoom: (zoom: number) => void;
 }) {
+  const engine = useGroundedDoc();
+  const refs = useRef(new Map<string, HTMLElement>());
+  const viewport = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (spec) engine.setDoc(spec);
+    else engine.clear();
+  }, [spec, engine.setDoc, engine.clear]);
+  const blockId = [...litBlocks][0] ?? null;
+  useEffect(() => {
+    engine.hoverBlock(blockId, "external");
+    const node = blockId ? refs.current.get(blockId) : null;
+    const pane = viewport.current;
+    if (node && pane)
+      pane.scrollTop += node.getBoundingClientRect().top - pane.getBoundingClientRect().top;
+  }, [blockId, litBlocks, engine.doc, engine.hoverBlock]);
   if (!spec)
     return (
-      <EmptyState story="scope" exit="parse a cut sheet to attach one">
-        no spec attached to render — there are no block placements to draw
+      <EmptyState story="scope" exit="attach a cut sheet">
+        no spec attached
       </EmptyState>
     );
-
-  const pages = [...new Set(spec.blocks.map((block) => block.page))].sort((a, b) => a - b);
-
   return (
-    <div className="p-1.5">
-      <div className="mb-1.5 flex items-center gap-1">
-        {/* A stand-in announces itself AND says what would replace it (SURFACE-PHILOSOPHY §3).
-            An advisory, not a warning: it blocks nothing and claims nothing about the model. */}
-        <OutcomeLine
-          kind="advisory"
-          label="stand-in for the page camera"
-          says="block placement only — the real surface renders the PDF here through the grounded-doc camera, at which point these outlines become the real text"
-        />
-        {/* An exclusive choice among a fixed set is a MODE, so it wears the mode treatment (a
-            neutral fill) rather than becoming two verbs that both look pressable. */}
-        <Switcher
-          ariaLabel="page zoom"
-          value={zoom === 1 ? "fit" : "in"}
-          onChange={(next) => onZoom(next === "fit" ? 1 : 1.6)}
-          options={[
-            {
-              value: "fit",
-              label: "fit",
-              title: "Fit the whole page in the sidebar — the view for locating a citation.",
-            },
-            {
-              value: "in",
-              label: "1.6×",
-              title:
-                "Zoom in. The sidebar scrolls; the highlighted block stays highlighted, so zooming never loses the thing you were looking at.",
-            },
-          ]}
-        />
-      </div>
-
-      <div className="space-y-2.5 overflow-x-auto">
-        {pages.map((page) => {
-          const blocks = spec.blocks.filter((block) => block.page === page);
-          return (
-            <div key={page} style={{ width: `${100 * zoom}%`, minWidth: 180 }}>
-              <div className="t-small face-mono mb-0.5 text-ink-2">page {page}</div>
-              <svg
-                viewBox="0 0 100 130"
-                className="hairline-x-2 hairline-y-2 block w-full"
-                data-surface="document"
-                role="img"
-                aria-label={`stand-in page ${page}`}
-              >
-                {blocks.map((block, index) => {
-                  const hash = hashOf(block.id);
-                  const x = 8 + (hash % 18);
-                  const y = 12 + index * 34;
-                  const width = Math.min(84 - (x - 8), 42 + ((hash >>> 7) % 40));
-                  const height = block.kind === "table" ? 24 : block.kind === "heading" ? 7 : 14;
-                  const lit = litBlocks.has(block.id);
-                  return (
-                    <g key={block.id}>
-                      <rect
-                        x={x}
-                        y={y}
-                        width={width}
-                        height={height}
-                        fill="transparent"
-                        data-selected={lit ? "" : undefined}
-                        /* A neutral mark, not a hue: a fill cannot separate at this size, so
-                           the highest-contrast neutral is what lights it (takeoffs #8). */
-                        stroke={lit ? token("ink") : token("line-2")}
-                        strokeWidth={lit ? 1 : 0.4}
-                      >
-                        <title>
-                          {lit
-                            ? `${block.id} — cited by the parameter in focus. This is roughly where it sits on page ${page}.`
-                            : `${block.id} · ${block.kind} on page ${page}. Hover a grounded row in the table to light it.`}
-                        </title>
-                      </rect>
-                      {lit && (
-                        <text x={x} y={y - 1.5} fontSize={4} fill={token("ink-2")}>
-                          {block.id}
-                        </text>
-                      )}
-                    </g>
-                  );
-                })}
-              </svg>
-            </div>
-          );
-        })}
+    <div ref={viewport} className="h-full p-1.5 overflow-auto">
+      <Switcher
+        ariaLabel="page zoom"
+        value={zoom === 1 ? "fit" : "in"}
+        onChange={(next) => onZoom(next === "fit" ? 1 : 1.6)}
+        options={[
+          { value: "fit", label: "fit", title: "Fit the page" },
+          { value: "in", label: "1.6x", title: "Zoom into the page" },
+        ]}
+      />
+      <div style={{ width: `${100 * zoom}%` }}>
+        <PagePane engine={engine} refs={refs} litBlockIds={litBlocks} />
       </div>
     </div>
   );
@@ -233,7 +162,16 @@ export function ProposalCard({
     <div
       ref={register}
       onMouseEnter={() => onHover(true)}
-      onMouseLeave={() => onHover(false)}
+      onMouseLeave={(event) => {
+        if (!event.currentTarget.contains(document.activeElement)) onHover(false);
+      }}
+      onFocus={() => onHover(true)}
+      onBlur={(event) => {
+        if (!event.relatedTarget && event.currentTarget.contains(document.activeElement)) return;
+        if (!event.currentTarget.contains(event.relatedTarget)) onHover(false);
+      }}
+      tabIndex={0}
+      data-proposal-id={proposal.id}
       className="hairline-b mb-1 py-1 pl-2 last:mb-0 last:border-b-0"
       /* Pea's identity, never the commit colour: the card edge is a MARK (`--pe-pea`, the display
          rung) and the focus wash is mixed from pea's ink. */

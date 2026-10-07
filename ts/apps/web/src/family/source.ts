@@ -184,15 +184,7 @@ export function familySource(
         spec: null,
         proposals: [],
       });
-  world.spec = spec
-    ? {
-        ...spec,
-        blocks: spec.blocks.map((block) => ({
-          ...block,
-          kind: block.kind === "heading" || block.kind === "table" ? block.kind : "text",
-        })),
-      }
-    : null;
+  world.spec = spec ?? null;
   const reading = model ?? capturedModel;
   world.proposals = Object.entries(fields).flatMap(([pointer, field]): ProtoProposal[] => {
     if (!field.proposal) return [];
