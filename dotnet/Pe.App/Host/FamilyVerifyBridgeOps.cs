@@ -24,7 +24,8 @@ internal static class FamilyVerifyBridgeOps {
                     dialogs.Select(d => BridgeOperationExceptions.Issue("$", "DialogRefused", d.Message, null)).ToList());
             return result;
         } catch (Exception exception) when (dialogs.Count != 0) {
-            throw BridgeOperationExceptions.Conflict(exception.Message,
+            // The SDK receipt carries Exception.Message, while the host also carries structured issues.
+            throw BridgeOperationExceptions.Conflict(exception.Message + Environment.NewLine + string.Join(Environment.NewLine, dialogs.Select(d => d.Message)),
                 dialogs.Select(d => BridgeOperationExceptions.Issue("$", "DialogRefused", d.Message, null)).ToList());
         }
     }
