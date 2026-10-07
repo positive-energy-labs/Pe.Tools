@@ -20,6 +20,7 @@ catalog:
   "@agentclientprotocol/sdk": 1.5.1
   "@agentclientprotocol/claude-agent-acp": 0.84.0
   "@agentclientprotocol/codex-acp": 2.1.0
+  '@modelcontextprotocol/sdk': 1.29.0
 overrides:
   vite: "catalog:"
   "@smithy/core": 3.33.3
@@ -41,6 +42,4 @@ allowBuilds:
   msgpackr-extract: false
 minimumReleaseAgeExclude:
   - lucide-react@1.21.0
-  - "@mastra/core@1.61.0"
-  - "@mastra/mcp@1.13.1"
   - "@agentclientprotocol/codex-acp@2.1.0"

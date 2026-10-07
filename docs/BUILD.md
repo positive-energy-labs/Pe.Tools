@@ -300,11 +300,9 @@ Installed Pea ships at a fixed path; the installer lays it and MSI replaces it i
   bin\pea\
     pea.exe                           # the Node SEA (entry)
     bundle\                           # the SEA bundle sources
-    node_modules\                     # sidecars staged beside the exe (see apps/pea/scripts/stage-native-sidecars.mjs)
-    package.json                      # mastracode package-root decoy
 ```
 
-The payload is a Node SEA executable produced by Vite+/tsdown from `ts/apps/pea/src/main.ts`. Because a SEA cannot static-ESM-import external bare specifiers, `apps/pea/vite.config.ts` carries the `pe:sea-require-shim` plugin (identical to the host's): the win32 natives (duckdb/tokenizers/libsql) plus the JS sidecars that break when inlined (`drizzle-orm`, `get-stream`) are rewritten to runtime `createRequire` and staged into `node_modules\` beside the exe; `onnxruntime-node` is a throwing stub (no embedding feature runs — see SDK-LEDGER T9). `stage-native-sidecars.mjs` is the authority for the exact staged set. Build machines need Vite+ with Node 25.7.0+ and the `ts` dependency store; end-user machines run no `pnpm install`/`deploy`/resolution. The shim resolves the installed target by fixed path; `pea --installed` forces it; a `pea.dev.txt` (written by `pe-revit dev link`) routes to the checkout instead.
+The payload is a Node SEA executable produced by Vite+/tsdown from `ts/apps/pea/src/main.ts`. The bundle is self-contained: nothing is staged beside the exe but the bundle sources (and, for the host, `web\client` and `pages`). The 2026-10-07 Mastra removal retired the last `createRequire` sidecar (`get-stream`, via Mastra's execa) together with the `pe:sea-require-shim` plugin and `stage-native-sidecars.mjs`; a new runtime dependency that a SEA cannot inline is a build error to fix at the dependency, not a reason to bring the shim back. Build machines need Vite+ with Node 25.7.0+ and the `ts` dependency store; end-user machines run no `pnpm install`/`deploy`/resolution. The shim resolves the installed target by fixed path; `pea --installed` forces it; a `pea.dev.txt` (written by `pe-revit dev link`) routes to the checkout instead.
 
 Private `ts` packages are source-exported for development. Their Vite+ package configs use explicit `pack.entry` values so `vp pack` can still produce artifacts without mutating package exports back to `dist`; keep installed payload bundling as the artifact boundary instead of adding parallel `main` / `main-installed` source entrypoints.
 

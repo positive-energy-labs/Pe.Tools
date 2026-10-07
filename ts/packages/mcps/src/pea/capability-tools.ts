@@ -29,7 +29,7 @@ import { readScheduleCapture } from "../shared/schedule-client.ts";
  * the thread head's default Target, and every result carries `revision` (the Scope revision it ran under) and `target` (what the host actually
  * resolved to), so the transcript card shows what was touched, not what was typed.
  */
-import { createTool } from "@mastra/core/tools";
+import { createTool } from "../shared/tool.ts";
 import z from "zod";
 import {
   capabilityCatalogSchema,

@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { Deferred, Effect, Layer, type Scope } from "effect";
 import { capture } from "@pe/runtime";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
@@ -45,6 +46,17 @@ export const hostProgram = (
       );
 
       console.log(`pe-host binding http://127.0.0.1:${port || "dynamic"}`);
+      if (port && process.argv.includes("--open")) {
+        // Standalone desktop entry: open the default browser once the listener has had a moment to bind.
+        const url = `http://127.0.0.1:${port}/`;
+        setTimeout(() => {
+          console.log(`pe-host opening ${url}`);
+          spawn("cmd.exe", ["/c", "start", "", url], {
+            windowsHide: true,
+            stdio: "ignore",
+          }).unref();
+        }, 500);
+      }
       const frontend =
         web && webUrl
           ? Effect.flatMap(Deferred.await(handle), (claimed) => web(claimed, webUrl))

@@ -1,6 +1,6 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { createTool } from "@mastra/core/tools";
+import { createTool } from "./tool.ts";
 import z from "zod";
 import * as os from "node:os";
 

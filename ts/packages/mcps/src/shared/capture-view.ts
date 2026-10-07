@@ -1,4 +1,4 @@
-import { createTool } from "@mastra/core/tools";
+import { createTool } from "./tool.ts";
 import z from "zod";
 import type { HostRpcCaller } from "./host-rpc-caller.ts";
 
