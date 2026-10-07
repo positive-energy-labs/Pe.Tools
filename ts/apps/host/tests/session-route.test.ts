@@ -65,6 +65,15 @@ test("dev host selects its checkout CLI even when an installed shim exists", () 
   );
 });
 
+test("installed host runs the MSI-laid pe-revit.exe shim directly", () => {
+  // Only the native shim exists; a retired pe-revit.cmd is never looked for.
+  const launch = peRevitLauncher({ lane: "installed", sourceRoot: null }, undefined, (path) =>
+    path.toLowerCase().endsWith("pe-revit.exe"),
+  );
+  expect(launch.args).toEqual([]);
+  expect(launch.cmd.toLowerCase().endsWith(join("shims", "pe-revit.exe").toLowerCase())).toBe(true);
+});
+
 test("session CLI rejects empty, invalid, and non-envelope output", () => {
   const launch = { cmd: "dotnet", args: ["pe-revit"] } as const;
   const args = ["session", "list", "--json"];

@@ -55,13 +55,16 @@ export function peRevitLaunch(
       cwd: inputs.devWorkingDirectory,
     };
   }
+  // The installed CLI is the shim apphost the MSI lays (and `dev link` deploys): run it directly.
+  // There is no `.cmd` shim since the native MSI; looking for one fell through to `dotnet pe-revit`,
+  // which no product machine has, so every installed-host SDK reading failed.
   const installedShim = join(
     installRoot(inputs.vendorName, inputs.productName, localAppData),
     "shims",
-    "pe-revit.cmd",
+    "pe-revit.exe",
   );
   return fileExists(installedShim)
-    ? { cmd: "cmd", args: ["/c", installedShim] }
+    ? { cmd: installedShim, args: [] }
     : { cmd: "dotnet", args: ["pe-revit"] };
 }
 
