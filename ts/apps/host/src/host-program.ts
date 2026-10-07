@@ -82,5 +82,10 @@ export const hostProgram = (
 function openBrowser(port: number): void {
   const url = `http://127.0.0.1:${port}/`;
   console.log(`pe-host opening ${url}`);
-  spawn("cmd.exe", ["/c", "start", "", url], { windowsHide: true, stdio: "ignore" }).unref();
+  // detached: on Windows a non-detached child dies with this process, and the reuse path exits at once.
+  spawn("cmd.exe", ["/c", "start", "", url], {
+    detached: true,
+    windowsHide: true,
+    stdio: "ignore",
+  }).unref();
 }
