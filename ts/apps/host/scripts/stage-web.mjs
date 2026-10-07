@@ -21,4 +21,6 @@ const pages = join(here, "..", "dist-installed", "pages");
 rmSync(pages, { recursive: true, force: true });
 cpSync(join(here, "..", "src", "pages"), pages, { recursive: true });
 cpSync(join(here, "..", "..", "web", "src", "base.css"), join(pages, "base.css"));
+for (const name of ["revit.js", "revit.css"])
+  cpSync(join(here, "..", "..", "web", "src", "revit", name), join(pages, name));
 console.log(`staged page assets -> ${pages}`);

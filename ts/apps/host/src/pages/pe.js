@@ -5,7 +5,12 @@
  *   await pe.find("show elements");                      // rank the catalog by words → [{ key, intent, description }]
  *   await pe.read("revit.context.summary");              // run a read; the answer is the op's response
  *   await pe.do("revit.context.show-elements", { elementIds: [1234] });   // run a mutation; waits until it settles
+ *   await pe.script("checks/census.csx");                // run C# in Revit: a source string, or a .cs/.csx path beside the page
  *   await pe.state(kernel);                              // share a kit kernel's event log with every copy and every agent
+ *   pe.describe(() => `# ${kernel.state.title}`);        // what the page says, as markdown, kept beside the snapshot for agents
+ *   await pe.picture([1234]);                            // lens then view-image: { url, sha, at, viewId, viewName, registration }
+ *   await pe.reading("checks/census.csx", run);          // one reading: { source, at, rows } with rows = what `run()` answered
+ *   await pe.diff([1234], ["Mark"], run);                // read the parameters, run, read again: the rows that changed
  *
  * `find`, `read` and `do` are the same words and keys as Pea's `pe_find`, `pe_read` and `pe_do`, over the same
  * endpoints an agent uses by hand (`/ops`, `/call`, `/actions`). The script only adds what every page gets wrong
@@ -143,11 +148,19 @@
 
   /**
    * Run C# in Revit (`scripting.execute`): Execute-body statements with `doc`, `uidoc`, `app`, `selection` in scope
-   * and `Result(value)` as the answer. `mode` is ReadOnly (default; every change rolls back), WriteTransaction (one
-   * host-owned transaction) or NoTransaction (the script owns its transactions). Throws with the compiler's or the
-   * runtime's own message when the script did not succeed; otherwise answers what `Result(...)` was given.
+   * and `Result(value)` as the answer. `source` is the C#, or a one-line `.cs`/`.csx` path fetched relative to the
+   * page (`checks/census.csx` is the file beside index.html). `mode` is ReadOnly (default; every change rolls back),
+   * WriteTransaction (one host-owned transaction) or NoTransaction (the script owns its transactions). Throws with
+   * the compiler's or the runtime's own message when the script did not succeed; otherwise answers what
+   * `Result(...)` was given.
    */
-  pe.script = async (scriptContent, { mode = "ReadOnly", timeoutSeconds = 120 } = {}) => {
+  pe.script = async (source, { mode = "ReadOnly", timeoutSeconds = 120 } = {}) => {
+    let scriptContent = source;
+    if (!source.includes("\n") && /\.csx?$/i.test(source)) {
+      const r = await fetch(new URL(source, location.href), { cache: "no-store" });
+      if (!r.ok) return fail(r);
+      scriptContent = await r.text();
+    }
     const run = await pe.do("scripting.execute", {
       scriptContent,
       permissionMode: mode,
@@ -163,6 +176,86 @@
       );
     }
     return run.data ?? run.result ?? null;
+  };
+
+  /**
+   * A picture of elements the agent can cite: `revit.context.lens` boxes a 3D view around them (a mutation, through
+   * `pe.do`), then `revit.context.view-image` exports that view cropped to them (a read). The host keeps the PNG once
+   * per sha at `url`; `registration` places its pixels in model XY (null when the host refused to register it).
+   */
+  // TODO: with `focus` set, view-image crops to the elements alone; one 7 in elbow came back as two unreadable arcs (pdrop-tour walk, 2026-10-05). Widen the crop (margin, or focus off and the lens box only) so a person can tell what they are looking at.
+  pe.picture = async (elementIds, { name, paddingFeet, pixelSize, marginPercent } = {}) => {
+    const lens = await pe.do("revit.context.lens", { elementIds, name, paddingFeet });
+    const image = await pe.read("revit.context.view-image", {
+      target: { id: lens.viewId },
+      focus: { elementIds },
+      pixelSize,
+      marginPercent,
+    });
+    const url = image.captureUrl || image.imageUrl;
+    if (!url) throw new Error(`view-image of ${lens.viewName} was not kept by the host`);
+    return {
+      url,
+      sha: (url.match(/([a-f0-9]{64})/i) || [])[1] || null,
+      at: Date.now(),
+      viewId: lens.viewId,
+      viewName: lens.viewName,
+      registration: image.registration || null,
+    };
+  };
+
+  /** One reading: `rows` is whatever `run()` answers, `source` is the page's name for where it came from (an op key, a script path). */
+  pe.reading = async (source, run) => {
+    const rows = await run();
+    return { source, at: Date.now(), rows };
+  };
+
+  /**
+   * What a write changed: the named parameters of the elements are read (`revit.detail.elements`), `run()` runs, and
+   * they are read again. Values compare on Revit's raw value and show as Revit displays them, so a change hidden by
+   * the document's units precision still counts. Answers `{ rows: [{ id, parameter, before, after }], unchanged }`.
+   */
+  pe.diff = async (elementIds, parameterNames, run) => {
+    const read = async () => {
+      const { entries } = await pe.read("revit.detail.elements", {
+        query: {
+          kind: "ElementReferences",
+          elementIds,
+          parameterQuery: { parameters: parameterNames.map((name) => ({ name })) },
+        },
+      });
+      const values = new Map();
+      for (const e of entries)
+        for (const p of e.requestedParameters || [])
+          values.set(`${e.elementId}\n${p.name}`, {
+            raw: p.rawValue ?? p.value ?? null,
+            shown: p.displayValue ?? p.value ?? null,
+          });
+      return values;
+    };
+    const before = await read();
+    await run();
+    const after = await read();
+    const rows = [];
+    let unchanged = 0;
+    for (const [key, a] of after) {
+      const b = before.get(key);
+      if (b && b.raw === a.raw) unchanged++;
+      else {
+        const [id, parameter] = key.split("\n");
+        rows.push({ id: Number(id), parameter, before: b ? b.shown : null, after: a.shown });
+      }
+    }
+    return { rows, unchanged };
+  };
+
+  /**
+   * The page's text projection: `fn()` answers markdown describing what the page shows now. `pe.state` writes it
+   * beside the snapshot after every change, so `GET /pages/<slug>/state` tells an agent what the page says.
+   */
+  let describe = null;
+  pe.describe = (fn) => {
+    describe = fn;
   };
 
   /**
@@ -206,15 +299,19 @@
     let timer;
     const snapshot = () => {
       clearTimeout(timer);
-      timer = setTimeout(
-        () =>
-          fetch(`${base}/snapshot`, {
+      timer = setTimeout(() => {
+        fetch(`${base}/snapshot`, {
+          method: "PUT",
+          headers: headers(),
+          body: JSON.stringify(k.state),
+        }).catch(() => {});
+        if (describe)
+          fetch(`${base}/text`, {
             method: "PUT",
-            headers: headers(),
-            body: JSON.stringify(k.state),
-          }).catch(() => {}),
-        150,
-      );
+            headers: { ...headers(), "content-type": "text/markdown" },
+            body: String(describe(k.state)),
+          }).catch(() => {});
+      }, 150);
     };
     const saved = await json(await fetch(`${base}/state`));
     seq = saved.seq;
@@ -268,6 +365,19 @@
     // ponytail: undo stays local to one copy; a shared undo is an event of its own when a page needs it.
     return k;
   };
+
+  // A tab never learns its page file changed, so a stale copy keeps running old code: kaitpw pressed pre-fix
+  // buttons for two hours while the fix was on disk (2026-10-05). Re-read the page's own file and reload on change.
+  // ponytail: polls the whole file every 15 s; a host-sent mtime on the events heartbeat replaces it if pages get big.
+  if (pe.slug) {
+    const own = () => fetch(location.pathname, { cache: "no-store" }).then((r) => (r.ok ? r.text() : null));
+    own().then((first) =>
+      setInterval(
+        () => own().then((now) => now != null && first != null && now !== first && location.reload(), () => {}),
+        15000,
+      ),
+    );
+  }
 
   window.pe = pe;
 })();

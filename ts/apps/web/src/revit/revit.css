@@ -1,0 +1,1193 @@
+/* Revit facsimile chrome. Every value is a --rv-* token from base.css; nothing here is house
+   style on purpose: it must look like Revit, not like us. Everything hangs off `.rv`.
+   Ground truth: Revit 2025 on Windows 11 (.artifacts/revit-mock/ref/user-*.png, 200%). */
+.rv {
+  color-scheme: light;
+  font-family: var(--rv-font);
+  font-size: var(--rv-type);
+  line-height: 1.25;
+  color: var(--rv-ink);
+  background: var(--rv-chrome);
+  -webkit-font-smoothing: auto;
+  /* The app body sets font-size-adjust, which would scale Segoe UI up ~8%. */
+  font-size-adjust: none;
+  display: inline-flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  border: 1px solid var(--rv-frame);
+  border-radius: var(--rv-window-radius);
+  overflow: hidden;
+  box-shadow: 0 8px 24px var(--rv-shadow);
+  user-select: none;
+  text-align: left;
+  vertical-align: top;
+  position: relative;
+}
+.rv *,
+.rv *::before,
+.rv *::after {
+  box-sizing: border-box;
+}
+
+/* ── window chrome ─────────────────────────────────────────────────────────── */
+.rv-titlebar {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  flex: none;
+  padding: 0 0 0 8px;
+  background: var(--rv-caption);
+  font-size: var(--rv-type);
+  gap: 8px;
+}
+.rv-titlebar[data-dock] {
+  height: 22px;
+  background: var(--rv-chrome);
+  padding-left: 6px;
+}
+.rv-titlebar[data-dock] > .rv-caption > span {
+  width: 24px;
+  height: 22px;
+}
+.rv-titlebar-text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rv-caption {
+  display: flex;
+}
+.rv-caption > span {
+  width: 46px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  font-size: var(--rv-type-caption);
+  color: var(--rv-ink);
+}
+.rv-caption svg {
+  width: 10px;
+  height: 10px;
+  stroke: var(--rv-ink);
+  stroke-width: 1;
+}
+.rv-titlebar[data-dock] .rv-caption svg {
+  width: 8px;
+  height: 8px;
+}
+.rv-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+.rv-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 41px;
+  padding: 0 11px;
+  background: var(--rv-chrome);
+  border-top: var(--rv-hair) solid var(--rv-line-soft);
+}
+.rv-footer-spacer {
+  flex: 1;
+}
+.rv-buttonbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex: 1;
+}
+.rv-buttonbar > .rv-footer-spacer {
+  margin-right: auto;
+}
+/* ── flow layout (the spec's row/col) ── */
+.rv-body {
+  font-size: var(--rv-type-small);
+}
+.rv-hbox,
+.rv-vbox {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  gap: 8px;
+}
+.rv-vbox {
+  flex-direction: column;
+}
+.rv-hbox > .rv-label,
+.rv-hbox > .rv-button,
+.rv-hbox > .rv-check,
+.rv-hbox > .rv-radio,
+.rv-hbox > .rv-field-row,
+.rv-hbox > .rv-anchor {
+  align-self: center;
+}
+.rv-spacer {
+  flex: 1;
+}
+.rv-rule {
+  border-top: var(--rv-hair) solid var(--rv-well-outer);
+  border-bottom: var(--rv-hair) solid var(--rv-paper);
+}
+.rv-label {
+  white-space: nowrap;
+}
+.rv-label[data-disabled] {
+  color: var(--rv-ink-off);
+}
+.rv-body > .rv-buttonbar {
+  flex: none;
+}
+/* Wrapping prose inside a dialog: an error's message, an explanation under a diagram. */
+.rv-text {
+  white-space: pre-line;
+  line-height: 1.3;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.rv-text[data-well] {
+  background: var(--rv-paper);
+  border: var(--rv-hair) solid var(--rv-list-line);
+  padding: 4px 6px;
+}
+.rv-text[data-strong] {
+  font-weight: var(--weight-bold);
+}
+.rv-text[data-disabled] {
+  color: var(--rv-ink-off);
+}
+.rv-image {
+  display: grid;
+  place-items: center;
+  background: var(--rv-paper);
+  border: var(--rv-hair) solid var(--rv-list-line);
+  color: var(--rv-ink-mute);
+  overflow: hidden;
+  min-height: 0;
+}
+.rv-image > img {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* ── explainer marks: change rings and note badges (not Revit; the page's ink) ── */
+.rv [data-changed],
+.rv-figure [data-changed] {
+  outline: 2px solid var(--rv-mark);
+  outline-offset: 1px;
+  z-index: 3;
+}
+.rv [data-rv]:has(> .rv-badge) {
+  position: relative;
+}
+.rv-badge {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  z-index: 4;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: var(--rv-mark);
+  color: var(--rv-paper);
+  font-size: var(--rv-type-tiny);
+  font-weight: var(--weight-bold);
+  font-family: var(--rv-font);
+  line-height: 1;
+}
+/* Inside clipped rows (trees, grids, lists, palette names) a badge sits inline after the text. */
+.rv-tree-item > .rv-badge,
+.rv-grid-cell > .rv-badge,
+.rv-list-item > .rv-badge,
+.rv-props-name > .rv-badge {
+  position: static;
+  margin-left: 4px;
+  flex: none;
+}
+.rv-props-name:has(> .rv-badge) {
+  display: flex;
+  align-items: center;
+}
+.rv-figure {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  vertical-align: top;
+}
+.rv-notes {
+  margin: 0;
+  padding-left: 20px;
+  max-width: 60ch;
+}
+.rv-notes > li::marker {
+  color: var(--rv-mark);
+  font-weight: var(--weight-bold);
+}
+.rv-compare {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rv-sides {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
+}
+.rv-side-label {
+  font-weight: var(--weight-strong);
+  margin-bottom: 4px;
+}
+.rv-changes {
+  margin: 0;
+  padding-left: 18px;
+}
+
+/* The dotted resize grip in a sizable dialog's bottom-right corner. */
+.rv-grip {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 6px;
+  height: 6px;
+  /* six 1px squares on a 2px pitch, in a 3-2-1 triangle */
+  background-image: conic-gradient(from 90deg, var(--rv-grip) 25%, transparent 0);
+  background-size: 2px 2px;
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+}
+
+/* ── controls ──────────────────────────────────────────────────────────────── */
+.rv-button {
+  display: inline-grid;
+  place-items: center;
+  min-width: 74px;
+  height: 22px;
+  padding: 0 10px;
+  background: var(--rv-button);
+  border: var(--rv-hair) solid var(--rv-button-line);
+  border-bottom-color: var(--rv-button-base);
+  border-radius: var(--rv-radius);
+  color: var(--rv-ink);
+  font-size: var(--rv-type-small);
+  white-space: nowrap;
+}
+.rv-button[data-default] {
+  border-color: var(--rv-focus);
+  border-bottom-color: var(--rv-focus-deep);
+}
+.rv-button[data-disabled] {
+  color: var(--rv-ink-off);
+  background: var(--rv-button-off);
+  border-color: var(--rv-button-off-line);
+}
+.rv-field {
+  display: flex;
+  align-items: center;
+  height: 19px;
+  padding: 0 5px;
+  background: var(--rv-paper);
+  border: var(--rv-hair) solid var(--rv-field-line);
+  border-bottom-color: var(--rv-field-base);
+  border-radius: var(--rv-radius);
+  color: var(--rv-ink);
+  /* Win11 edit text sits high in its box, not centred. */
+  padding-bottom: 3px;
+  gap: 4px;
+  min-width: 0;
+}
+.rv-field > span:first-child {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: clip;
+}
+.rv-field[data-readonly] {
+  background: transparent;
+}
+.rv-field[data-placeholder] {
+  color: var(--rv-ink-mute);
+}
+.rv-field > .rv-tool {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+.rv-field[data-disabled] {
+  background: var(--rv-combo-off);
+  border-color: var(--rv-combo-off-line);
+  color: var(--rv-ink-off);
+  --rv-chevron: var(--rv-chevron-off);
+}
+/* Win11 combo chevron: a thin V. */
+.rv-chevron {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+.rv-chevron::before {
+  content: "";
+  width: 3.5px;
+  height: 3.5px;
+  margin-top: -1.5px;
+  border-right: var(--rv-hair) solid var(--rv-chevron, var(--rv-ink-2));
+  border-bottom: var(--rv-hair) solid var(--rv-chevron, var(--rv-ink-2));
+  transform: rotate(45deg);
+}
+/* Revit palette and options-bar drop arrow: a small filled triangle. */
+.rv-drop {
+  width: 14px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.rv-drop::before {
+  content: "";
+  border: 4px solid transparent;
+  border-top: 5px solid var(--rv-ink-2);
+  margin-top: 5px;
+}
+.rv-ellipsis {
+  min-width: 22px;
+  width: 22px;
+  height: 19px;
+  display: grid;
+  place-items: center;
+  border: var(--rv-hair) solid var(--rv-button-line);
+  border-bottom-color: var(--rv-button-base);
+  border-radius: var(--rv-radius);
+  background: var(--rv-button);
+  flex: none;
+  letter-spacing: 1px;
+}
+.rv-check,
+.rv-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 18px;
+  position: relative;
+}
+.rv-check::before,
+.rv-radio::before {
+  content: "";
+  width: 13px;
+  height: 13px;
+  border: var(--rv-hair) solid var(--rv-ink-off);
+  border-radius: var(--rv-radius);
+  background: var(--rv-paper);
+  flex: none;
+}
+.rv-radio::before {
+  border-radius: 50%;
+}
+.rv-check[data-checked]::before {
+  background: var(--rv-check);
+  border-color: var(--rv-check);
+}
+.rv-check[data-checked]::after {
+  content: "";
+  position: absolute;
+  left: 4.5px;
+  top: 50%;
+  width: 4px;
+  height: 7px;
+  margin-top: -5px;
+  border-right: 1.2px solid var(--rv-paper);
+  border-bottom: 1.2px solid var(--rv-paper);
+  transform: rotate(45deg);
+}
+.rv-radio[data-checked]::before {
+  border-color: var(--rv-check);
+  box-shadow: inset 0 0 0 3.5px var(--rv-check);
+}
+.rv-group {
+  --rv-bg: var(--rv-chrome);
+  border: var(--rv-hair) solid var(--rv-line-soft);
+  border-radius: var(--rv-radius);
+  padding: 12px 8px 8px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rv-group-title {
+  position: absolute;
+  top: -8px;
+  left: 4px;
+  padding: 0 1px;
+  line-height: 16px;
+  font-size: var(--rv-type-small);
+  background: var(--rv-bg);
+}
+.rv-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rv-row > .rv-field,
+.rv-row > .rv-row {
+  flex: 1;
+  min-width: 0;
+}
+.rv-anchor {
+  color: var(--rv-blue);
+  text-decoration: underline;
+}
+/* A classic sunken frame (Fixed3D): dark on the top and left, light on the bottom and right. */
+.rv-well {
+  position: relative;
+  background: var(--rv-paper);
+  border: var(--rv-hair) solid;
+  border-color: var(--rv-well-outer) var(--rv-paper) var(--rv-paper) var(--rv-well-outer);
+  overflow: hidden;
+  min-width: 0;
+}
+/* The inner line of the sunken frame, painted over the content so a white grid cannot hide it. */
+.rv-well::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  border: var(--rv-hair) solid;
+  border-color: var(--rv-well-inner) var(--rv-well-light) var(--rv-well-light) var(--rv-well-inner);
+}
+/* A Win11 list box: flat, one grey-blue hairline. */
+.rv-list {
+  font-size: var(--rv-type-small);
+  background: var(--rv-paper);
+  border: var(--rv-hair) solid var(--rv-list-line);
+  overflow: hidden;
+  padding: 1px 0;
+}
+.rv-list-item {
+  height: 17px;
+  padding: 0 3px;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.rv-list-item[data-selected] {
+  background: var(--rv-tree-select);
+  color: var(--rv-paper);
+}
+/* A column of icon tools beside a grid (Routing Preferences, Duct Sizes). */
+.rv-tools[data-dir="row"] {
+  flex-direction: row;
+}
+.rv-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  align-items: center;
+}
+.rv-tool {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--rv-ink-2);
+  stroke-width: 1.2;
+}
+.rv-tool[data-disabled] {
+  stroke: var(--rv-tool-off);
+}
+.rv-tool {
+  filter: drop-shadow(var(--rv-hair) var(--rv-hair) 0 var(--rv-paper));
+}
+.rv-tool > [data-solid] {
+  fill: var(--rv-ink-2);
+}
+.rv-tool[data-disabled] > [data-solid] {
+  fill: var(--rv-tool-off);
+}
+
+/* ── tabs (dialog tab control) ─────────────────────────────────────────────── */
+.rv-tabs {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.rv-tabstrip {
+  display: flex;
+  padding-left: 2px;
+}
+.rv-tab {
+  padding: 3px 8px;
+  border: 1px solid var(--rv-line-soft);
+  border-bottom: none;
+  background: var(--rv-chrome);
+  margin-bottom: -1px;
+}
+.rv-tab[data-selected] {
+  background: var(--rv-paper);
+  position: relative;
+  padding-top: 5px;
+  margin-top: -2px;
+}
+.rv-tabpage {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--rv-line-soft);
+  background: var(--rv-paper);
+  padding: 10px;
+  overflow: hidden;
+}
+.rv-tabpage .rv-group {
+  --rv-bg: var(--rv-paper);
+}
+
+/* ── task dialog ───────────────────────────────────────────────────────────── */
+.rv-task {
+  background: var(--rv-paper);
+  padding: 14px 18px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 380px;
+  max-width: 520px;
+}
+.rv-task-head {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.rv-task-instruction {
+  font-size: var(--rv-type-instruction);
+  color: var(--rv-instruction);
+  line-height: 1.3;
+}
+.rv-task-content {
+  color: var(--rv-ink);
+  white-space: pre-line;
+}
+.rv-task[data-icon] > .rv-task-content,
+.rv-task[data-icon] > .rv-cmdlink {
+  margin-left: 42px;
+}
+.rv-cmdlink {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  column-gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--rv-radius);
+}
+.rv-cmdlink:hover {
+  border-color: var(--rv-line-soft);
+  background: var(--rv-hover);
+}
+.rv-cmdlink-arrow {
+  width: 16px;
+  height: 16px;
+  fill: var(--rv-cmd-arrow);
+  grid-row: span 2;
+  margin-top: 2px;
+}
+.rv-task-footnote {
+  padding: 8px 18px 10px;
+  background: var(--rv-chrome);
+}
+.rv-cmdlink-title {
+  color: var(--rv-instruction);
+  font-size: var(--rv-type-cmd);
+  line-height: 1.2;
+}
+.rv-cmdlink-note {
+  color: var(--rv-ink-2);
+}
+.rv-expander {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--rv-ink);
+}
+.rv-expander > svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: var(--rv-ink-faint);
+  stroke-width: 1.2;
+}
+.rv-expander[data-open] > svg {
+  transform: rotate(180deg);
+}
+.rv-icon {
+  width: 32px;
+  height: 32px;
+  flex: none;
+}
+.rv-icon-warning {
+  fill: var(--rv-warning);
+}
+.rv-icon-error {
+  fill: var(--rv-error);
+}
+.rv-icon-info,
+.rv-icon-shield {
+  fill: var(--rv-focus);
+}
+.rv-icon-mark {
+  fill: var(--rv-ink);
+}
+.rv-icon-text {
+  fill: var(--rv-paper);
+  font-weight: var(--weight-bold);
+  font-size: var(--rv-type-instruction);
+  font-family: var(--rv-font);
+}
+
+/* ── properties palette ────────────────────────────────────────────────────── */
+.rv-props {
+  width: 300px;
+  background: var(--rv-chrome);
+}
+.rv-props-type {
+  display: grid;
+  grid-template-columns: 72px 1fr 16px;
+  gap: 6px;
+  padding: 6px 2px 2px 6px;
+  background: var(--rv-paper);
+  align-items: center;
+}
+.rv-props-thumb {
+  width: 70px;
+  height: 56px;
+  background: var(--rv-paper);
+  border: 1px solid var(--rv-line-soft);
+  display: grid;
+  place-items: center;
+  color: var(--rv-glyph);
+}
+.rv-props-selector {
+  display: block;
+  min-width: 0;
+  line-height: 1.2;
+}
+.rv-props-type > .rv-drop {
+  align-self: end;
+  margin-bottom: 4px;
+}
+.rv-props-instance {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+  background: var(--rv-paper);
+}
+.rv-props-instance > .rv-field {
+  flex: 1;
+  border: none;
+  border-bottom: 1px solid var(--rv-line-soft);
+  height: 20px;
+  padding: 0 2px;
+}
+.rv-props-edit-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.rv-props-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  background: var(--rv-paper);
+}
+.rv-props-body > .rv-props-grid {
+  flex: 1;
+  align-content: start;
+  overflow: hidden;
+}
+.rv-props-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rv-props-button {
+  flex: 1;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  background: var(--rv-button);
+  border: var(--rv-hair) solid var(--rv-button-line);
+  border-bottom-color: var(--rv-button-base);
+}
+.rv-props-link {
+  width: 9px;
+  height: 14px;
+  flex: none;
+  margin-left: auto;
+  border: var(--rv-hair) solid var(--rv-line-soft);
+  background: var(--rv-chrome);
+}
+.rv-props-grid {
+  background: var(--rv-paper);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-top: 1px solid var(--rv-line-soft);
+}
+.rv-props-group {
+  grid-column: span 2;
+  display: flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px 0 4px;
+  background: var(--rv-chrome);
+  font-weight: var(--weight-bold);
+}
+.rv-props-group > span:last-child {
+  margin-left: auto;
+  color: var(--rv-ink);
+  font-size: var(--rv-type-tiny);
+  line-height: 0.7;
+}
+.rv-props-name,
+.rv-props-value {
+  height: 18px;
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  gap: 2px;
+}
+.rv-props-name {
+  padding-left: 12px;
+}
+.rv-props-name[data-disabled],
+.rv-props-value[data-disabled] {
+  color: var(--rv-ink-faint);
+}
+.rv-props-value[data-disabled] .rv-check::before {
+  border-color: var(--rv-ink-faint);
+}
+.rv-props-value[data-number] {
+  color: var(--rv-number);
+}
+.rv-props-value[data-edit] {
+  background: var(--rv-paper);
+  box-shadow: inset 0 0 0 1px var(--rv-ink);
+  color: var(--rv-ink);
+}
+.rv-props-value .rv-check {
+  min-height: 0;
+}
+.rv-props-foot {
+  display: flex;
+  align-items: center;
+  padding: 6px;
+  gap: 8px;
+  background: var(--rv-chrome);
+}
+.rv-props-foot .rv-anchor {
+  flex: 1;
+}
+.rv-props-foot .rv-button {
+  min-width: 68px;
+  height: 20px;
+}
+
+/* ── ribbon ────────────────────────────────────────────────────────────────── */
+.rv-ribbon {
+  background: var(--rv-chrome);
+  border: none;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+.rv-ribbon-tabs {
+  display: flex;
+  align-items: flex-end;
+  height: 24px;
+  padding: 0 4px;
+  background: var(--rv-chrome);
+}
+.rv-ribbon-tab {
+  padding: 3px 9px 4px;
+  color: var(--rv-ink);
+  white-space: nowrap;
+}
+.rv-ribbon-tab[data-file] {
+  background: var(--rv-file);
+  color: var(--rv-paper);
+  padding: 3px 12px 4px;
+  margin-right: 2px;
+}
+.rv-ribbon-tab[data-selected] {
+  background: var(--rv-chrome);
+  border: 1px solid var(--rv-line-soft);
+  border-bottom-color: var(--rv-chrome);
+  margin-bottom: -1px;
+}
+.rv-ribbon-tab[data-modify] {
+  background: var(--rv-ribbon-modify);
+  color: var(--rv-ink);
+  margin-left: 2px;
+}
+.rv-ribbon-state {
+  margin-left: 6px;
+  padding: 3px 6px 4px;
+  color: var(--rv-ink-2);
+  font-size: var(--rv-type-tiny);
+}
+.rv-ribbon-panels {
+  display: flex;
+  align-items: stretch;
+  background: var(--rv-chrome);
+  border-bottom: 1px solid var(--rv-line-soft);
+  padding: 2px 0 0;
+  overflow: hidden;
+}
+.rv-panel {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--rv-line-soft);
+}
+.rv-panel-items {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 3px 6px;
+  flex: 1;
+}
+.rv-panel-title {
+  text-align: center;
+  padding: 3px 8px;
+  color: var(--rv-ink-2);
+  white-space: nowrap;
+}
+.rv-rbtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 3px;
+  min-width: 42px;
+  border: 1px solid transparent;
+  border-radius: var(--rv-radius);
+  text-align: center;
+  line-height: 1.1;
+}
+.rv-rbtn:hover {
+  background: var(--rv-hover);
+  border-color: var(--rv-select-line);
+}
+.rv-rbtn[data-selected] {
+  background: var(--rv-select);
+  border-color: var(--rv-select-line);
+}
+.rv-rbtn-label {
+  white-space: pre-line;
+}
+.rv-rbtn[data-split]::after {
+  content: "\25BE";
+  font-size: var(--rv-type-tiny);
+  line-height: 0.8;
+  color: var(--rv-ink-2);
+}
+.rv-rbtn-stack {
+  display: flex;
+  flex-direction: column;
+}
+.rv-rbtn-stack > .rv-rbtn {
+  flex-direction: row;
+  min-width: 0;
+  height: 24px;
+  padding: 1px 4px 1px 2px;
+  gap: 4px;
+  white-space: nowrap;
+}
+.rv-rbtn-stack > .rv-rbtn[data-split]::after {
+  margin-left: 2px;
+}
+.rv-glyph {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--rv-radius);
+  background: linear-gradient(135deg, var(--rv-glyph-2), var(--rv-glyph));
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--rv-paper);
+  font-weight: var(--weight-strong);
+}
+.rv-glyph[data-size="small"] {
+  width: 16px;
+  height: 16px;
+  font-size: var(--rv-type-tiny);
+}
+
+/* ── options bar ───────────────────────────────────────────────────────────── */
+.rv-options {
+  display: flex;
+  flex-direction: row;
+  border: none;
+  box-shadow: none;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  height: 26px;
+  padding: 0 8px;
+  background: var(--rv-chrome);
+  border-bottom: 1px solid var(--rv-line);
+  white-space: nowrap;
+}
+.rv-options[data-modify] {
+  background: var(--rv-ribbon-modify);
+  border-bottom-color: var(--rv-ribbon-modify-line);
+}
+.rv-options > .rv-field {
+  width: 150px;
+}
+.rv-options-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--rv-line-soft);
+}
+
+/* ── tree (classic WinForms TreeView with lines) ───────────────────────────── */
+.rv-tree {
+  font-size: var(--rv-type-small);
+  display: flex;
+}
+.rv-tree-rows {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.rv-tree-label[data-disabled] {
+  color: var(--rv-ink-off);
+}
+.rv-tree-item {
+  display: flex;
+  align-items: stretch;
+  height: 14px;
+  white-space: nowrap;
+}
+.rv-tree-col {
+  width: 19px;
+  flex: none;
+  position: relative;
+}
+/* Vertical dotted connector; `data-up`/`data-down` pick which half of the row it spans. */
+.rv-tree-col[data-line]::before,
+.rv-tree-col[data-up]::before,
+.rv-tree-col[data-down]::before {
+  content: "";
+  position: absolute;
+  left: 9px;
+  width: 1px;
+  top: 0;
+  bottom: 0;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--rv-tree-dot) 0 var(--rv-hair),
+    transparent var(--rv-hair) calc(var(--rv-hair) * 2)
+  );
+  background-size: var(--rv-hair) 100%;
+  background-repeat: no-repeat;
+}
+.rv-tree-col[data-up]:not([data-down])::before {
+  bottom: 50%;
+}
+.rv-tree-col[data-down]:not([data-up])::before {
+  top: 50%;
+}
+/* Horizontal stub from the connector to the label. */
+.rv-tree-col[data-joint]::after {
+  content: "";
+  position: absolute;
+  left: 9px;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--rv-tree-dot) 0 var(--rv-hair),
+    transparent var(--rv-hair) calc(var(--rv-hair) * 2)
+  );
+  background-size: 100% var(--rv-hair);
+  background-repeat: no-repeat;
+}
+/* The plus/minus box over the joint. */
+.rv-tree-box {
+  position: absolute;
+  z-index: 1;
+  left: 5px;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin-top: -4.5px;
+  border: var(--rv-hair) solid var(--rv-tree-box);
+  background: linear-gradient(var(--rv-paper), var(--rv-tree-box-fill));
+}
+.rv-tree-box::before,
+.rv-tree-box::after {
+  content: "";
+  position: absolute;
+  background: var(--rv-tree-minus);
+}
+.rv-tree-box::before {
+  left: 1.5px;
+  right: 1.5px;
+  top: 50%;
+  height: 1.5px;
+  margin-top: -0.75px;
+}
+.rv-tree-box[data-closed]::after {
+  top: 1.5px;
+  bottom: 1.5px;
+  left: 50%;
+  width: 1.5px;
+  margin-left: -0.75px;
+}
+.rv-tree-label {
+  padding: 0 2px;
+  margin-left: 3.5px;
+  line-height: 14px;
+}
+.rv-tree-label[data-selected] {
+  background: var(--rv-tree-select);
+  color: var(--rv-paper);
+}
+
+/* ── grid (DataGridView: settings tables, routing lists) ───────────────────── */
+.rv-grid {
+  display: flex;
+  min-height: 0;
+}
+.rv-grid-table {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-auto-rows: var(--rv-row, 21px);
+  font-size: var(--rv-type);
+  align-content: start;
+  background: var(--rv-paper);
+  overflow: hidden;
+}
+.rv-grid-table[data-small] {
+  font-size: var(--rv-type-small);
+}
+.rv-grid-head {
+  display: grid;
+  place-items: center;
+  background: var(--rv-chrome);
+  border-right: var(--rv-hair) solid var(--rv-ink);
+  border-bottom: var(--rv-hair) solid var(--rv-ink);
+  /* raised header: a white highlight along the top */
+  box-shadow: inset 0 var(--rv-hair) 0 var(--rv-paper);
+}
+.rv-grid-cell {
+  display: flex;
+  align-items: center;
+  padding: 0 2px var(--rv-lift, 0);
+  white-space: nowrap;
+  overflow: hidden;
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--rv-grid-line) 0 var(--rv-hair),
+    transparent var(--rv-hair) calc(var(--rv-hair) * 2)
+  );
+  background-size: 100% var(--rv-hair);
+  background-position: bottom;
+  background-repeat: no-repeat;
+}
+.rv-grid-cell[data-split],
+.rv-grid-fill[data-split] {
+  border-right: var(--rv-hair) solid var(--rv-grid-line);
+}
+/* The last column closes with a dotted rule, through the rows and the blank area below. */
+.rv-grid-cell[data-last],
+.rv-grid-fill[data-last] {
+  box-shadow: inset calc(var(--rv-hair) * -1) 0 0 transparent;
+  background-image:
+    repeating-linear-gradient(
+      to right,
+      var(--rv-grid-line) 0 var(--rv-hair),
+      transparent var(--rv-hair) calc(var(--rv-hair) * 2)
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      var(--rv-grid-line) 0 var(--rv-hair),
+      transparent var(--rv-hair) calc(var(--rv-hair) * 2)
+    );
+  background-size:
+    100% var(--rv-hair),
+    var(--rv-hair) 100%;
+  background-position:
+    bottom,
+    right;
+  background-repeat: no-repeat;
+}
+.rv-grid-fill[data-last] {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--rv-grid-line) 0 var(--rv-hair),
+    transparent var(--rv-hair) calc(var(--rv-hair) * 2)
+  );
+  background-size: var(--rv-hair) 100%;
+  background-position: right;
+}
+.rv-grid-cell[data-disabled] {
+  color: var(--rv-ink-mute);
+}
+.rv-grid-cell[data-current] {
+  box-shadow: inset 0 0 0 var(--rv-hair) var(--rv-ink);
+}
+.rv-grid-cell .rv-check {
+  min-height: 0;
+  /* the box stays centred; only text rides the lift */
+  position: relative;
+  top: calc(var(--rv-lift, 0px) / 2);
+}
+.rv-grid-fold {
+  margin-left: auto;
+  padding-right: 4px;
+  font-size: var(--rv-type-tiny);
+  font-weight: var(--weight-regular);
+  line-height: 0.7;
+}
+.rv-grid-band {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  padding: 0 2px;
+  margin-top: 1.5px;
+  padding-top: 3px;
+  background: var(--rv-band);
+  font-weight: var(--weight-bold);
+}
+/* Win11 overlay scrollbar: a pale column with a thin grey thumb. */
+.rv-grid-scroll {
+  width: 17px;
+  flex: none;
+  position: relative;
+  background: var(--rv-chrome);
+  border-left: var(--rv-hair) solid var(--rv-paper);
+}
+.rv-grid-scroll > span {
+  position: absolute;
+  left: 7px;
+  width: 2.5px;
+  border-radius: 2px;
+  background: var(--rv-scroll-thumb);
+}
