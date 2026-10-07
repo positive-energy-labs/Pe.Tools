@@ -61,6 +61,30 @@ const server = createServer(async (request, response) => {
       append({ kind: "prompt", turnId, text: "hang" });
       return json({ turnId });
     }
+    if (JSON.parse(body).text === "ask") {
+      append(
+        { kind: "prompt", turnId, text: "ask" },
+        chunk(turnId, "Two decisions:"),
+        {
+          kind: "question_request",
+          turnId,
+          requestId: "q1",
+          message: "Please answer the following questions.",
+          requestedSchema: {
+            type: "object",
+            properties: {
+              question_0: {
+                title: "Mixing box",
+                description: "How should it be modeled?",
+                oneOf: [{ const: "Nested", title: "Nested family", description: "schedulable" }, { const: "Host" }],
+              },
+              question_1: { description: "Which hand?" },
+            },
+          },
+        },
+      );
+      return json({ turnId });
+    }
     append(
       { kind: "prompt", turnId, text: JSON.parse(body).text },
       { kind: "queued", turnId: "turn-q", text: "later" },
@@ -153,4 +177,21 @@ test("pea --prompt creates a thread, rejects permissions by default, and continu
   expect(hung.stopReason).toBe("timeout");
   expect(calls).toContain("POST /pe/threads/t1/cancel");
   expect(contentTypes.every((type) => type === "application/json")).toBe(true);
+
+  // A question card ends the headless turn with the questions as text; the next prompt answers.
+  calls.length = 0;
+  const asked = await runPeaPromptTurn({ prompt: "ask", threadId: "t1" });
+  expect(asked.stopReason).toBe("question");
+  expect(asked.response).toBe(
+    [
+      "Two decisions:",
+      "",
+      "Please answer the following questions.",
+      "1. Mixing box: How should it be modeled?",
+      "   - Nested family: schedulable",
+      "   - Host",
+      "2. Which hand?",
+    ].join("\n"),
+  );
+  expect(calls).toContain("POST /pe/threads/t1/cancel");
 });

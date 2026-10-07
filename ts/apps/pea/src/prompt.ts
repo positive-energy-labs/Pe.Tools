@@ -3,7 +3,9 @@
  *
  * Creates (or, with `--thread`, continues) a host harness thread, posts the prompt, and follows
  * the thread's SSE event log until that turn ends. Permission requests are answered with
- * `reject_once` unless `--allow`. Prints `{ ok, host, threadId, harness, model, stopReason, response }`.
+ * `reject_once` unless `--allow`. A question card ends the turn with `stopReason: "question"` and the
+ * questions as the response; the next `--thread` prompt carries the answers. Prints `{ ok, host,
+ * threadId, harness, model, stopReason, response }`.
  */
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -179,6 +181,13 @@ export async function runPeaPromptTurn(request: PeaPromptRequest): Promise<PeaPr
           requestId: event.requestId,
           optionId: option.optionId,
         });
+      } else if (event.kind === "question_request") {
+        // Headless has no one to fill the question card: the turn ends here with the questions as
+        // the response, and the caller's next `--prompt --thread` carries the answers.
+        if (chunks.length > 0) chunks.push("\n\n");
+        chunks.push(renderQuestions(event.message, event.requestedSchema));
+        await call("POST", `/${thread.id}/cancel`).catch(() => undefined);
+        return { ...result, stopReason: "question", response: chunks.join("").trim() };
       } else if (event.kind === "turn_end") {
         // The thread body's modelId is the settled model unless a model_changed already said so.
         const settled = await call<HarnessThreadBody>("GET", `/${thread.id}`).catch(() => null);
@@ -205,6 +214,21 @@ export async function runPeaPromptTurn(request: PeaPromptRequest): Promise<PeaPr
   } finally {
     streamAbort.abort();
   }
+}
+
+/** The ACP form schema as text: one numbered question per property, its options after it. */
+function renderQuestions(message: string, schema: Record<string, unknown>): string {
+  const properties = (schema.properties ?? {}) as Record<string, Record<string, unknown>>;
+  const lines = [message];
+  Object.values(properties).forEach((property, index) => {
+    const title = typeof property.title === "string" ? `${property.title}: ` : "";
+    lines.push(`${index + 1}. ${title}${String(property.description ?? "")}`.trim());
+    for (const option of (property.oneOf ?? []) as Record<string, unknown>[]) {
+      const label = String(option.title ?? option.const ?? "");
+      lines.push(`   - ${label}${option.description ? `: ${String(option.description)}` : ""}`);
+    }
+  });
+  return lines.join("\n");
 }
 
 async function* streamEvents(url: string, signal: AbortSignal): AsyncGenerator<HarnessEvent> {
