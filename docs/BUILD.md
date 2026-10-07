@@ -46,7 +46,7 @@ That does not make `BUILD.md` a tool manual. The durable decision is: **when the
 
 - **Windows dotnet state can be poisoned.** Missing core Windows environment variables can break NuGet/MSBuild restore with errors such as `Value cannot be null. (Parameter 'path1')`. The build tool detects this and points to `tools/dotnet-sandbox-safe.ps1`; recovery notes live in that script's comment header.
 - **Revit process startup is expensive.** A cold start is 90-300s. Avoid touching a session unless its UI/document state is the subject of proof.
-- **The dev session is user-owned state.** A restart can cost minutes and reopens only the active document. Attached proof should be deliberate and evidence-based.
+- **HR sessions are disposable development state.** A cold HR restart discards unsaved edits and reopens all recoverable open documents, including documents opened outside the CLI. Use a plain or installed session for work that must survive. A restart can cost minutes; attached proof should be deliberate and evidence-based.
 - **Hot reload is useful but not proof by itself.** Treat an applied delta as a step toward a behavior/log/script/test proof, not as the final freshness claim. `buildStamp` is provenance only; loaded-path identity and a restart are the freshness facts.
 - **Terminal isolated outputs do not feed a session's loaded assemblies.** The safe compile lane writes `.artifacts/...`; a dev-lane session runs a byte copy of the package-local interactive build, and the installed lane runs neither.
 - **Installed and dev roots are separate.** Do not validate installed behavior against dev host/runtime roots.
@@ -148,7 +148,7 @@ dotnet tool run pe-revit -- session stop --id pe.app-25-probe --unsaved discard 
 
 Bare `start` (no `--project`) is the **installed** lane — every product on its fixed installed path, no checkout, no build, no copy. That is what an end user runs, and it is the only lane that proves installed behavior. Adding `--project` makes it the **dev** lane. Name which one any claim used; they run different bytes and prove different things.
 
-Every session pe-revit starts is `controlled`, so `session list`, `doc open|save|close|list`, `op run|wait|cancel|result|list`, and stop/reset/hr all work against it. `--unsaved keep|discard` is required on stop, reset, a cold `hr` and `doc close`: no verb discards work by default. A Revit the user launched is `observed`: readable, never mutable. Do not add a Pe.Tools-side guard for that — the SDK resolver refuses it before the verb runs.
+Every session pe-revit starts is `controlled`, so `session list`, `doc open|save|close|list`, `op run|wait|cancel|result|list`, and stop/reset work against it. `--unsaved keep|discard` is required on stop, reset and `doc close`. HR applies only to checkout HR sessions: a cold restart discards unsaved edits by default, takes a fresh document checkpoint, and reopens recoverable documents without restoring views. Never-saved documents are dropped. Plain/snapshot and installed sessions refuse HR. A Revit the user launched is `observed`: readable, never mutable. Do not add a Pe.Tools-side guard for that — the SDK resolver refuses it before the verb runs.
 
 ## Packaging and release decisions
 

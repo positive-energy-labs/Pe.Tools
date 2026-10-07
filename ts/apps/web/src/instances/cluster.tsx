@@ -304,7 +304,7 @@ export function InstancesCluster({
   const sessionName = localSessionName ?? (stored?.kind === "start" ? stored.name : "");
   const setSessionName = (name: string) => setLocalSessionName(sessionIdOf(name));
   const [busy, setBusy] = useState<string | null>(null);
-  // What restart/stop do with unsaved changes: the person picks it each time; there is no default.
+  // Stop requires an unsaved-work choice. Development HR restart always discards.
   const [unsaved, setUnsaved] = useState<Unsaved | null>(null);
   // A choice made for one session never carries to the next one picked.
   useEffect(() => setUnsaved(null), [target]);
@@ -379,7 +379,7 @@ export function InstancesCluster({
         workspaceId,
         ...(command !== "start" ? { session: { id: world?.id, process } } : {}),
         ...(command === "stop" ? { force: world?.phase === "unresponsive" } : {}),
-        ...(command === "restart" || command === "stop" ? { unsaved } : {}),
+        ...(command === "stop" ? { unsaved } : {}),
       });
       const row = await runSemanticAction(
         key,
@@ -807,7 +807,7 @@ export function InstancesCluster({
                       <span className="t-small face-mono text-ink-2">session</span>
                       <span className="t-prose text-ink">{sessionLabel(pickedWorld)}</span>
                       <div className="flex items-center gap-2 t-small text-ink-2">
-                        <span>unsaved changes</span>
+                        <span>on stop</span>
                         <Switcher<Unsaved | "">
                           ariaLabel="unsaved changes policy"
                           value={unsaved ?? ""}
@@ -828,13 +828,20 @@ export function InstancesCluster({
                       </div>
                       <VerbButton
                         tone="act"
-                        label="restart"
+                        label="restart · discard edits"
                         reason={
-                          unsaved
-                            ? `cold-swap this session (session hr --restart --unsaved ${unsaved})`
-                            : "choose what happens to unsaved changes first"
+                          pickedWorld.row &&
+                          "kind" in pickedWorld.row &&
+                          pickedWorld.row.kind === "hr"
+                            ? "Restart this development session and reopen its documents; unsaved changes are discarded"
+                            : "HR restart is only available for development HR sessions"
                         }
-                        disabled={busy !== null || unsaved === null}
+                        disabled={
+                          busy !== null ||
+                          !pickedWorld.row ||
+                          !("kind" in pickedWorld.row) ||
+                          pickedWorld.row.kind !== "hr"
+                        }
                         busy={busy === "restart"}
                         onClick={() => void runCommand("restart")}
                       />

@@ -244,7 +244,6 @@ export async function admitInstancesAction(
             return sessionHrArgv({
               id,
               restart: true,
-              unsaved: input.unsaved!,
               requestId,
               expectSession,
             });

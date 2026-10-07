@@ -478,7 +478,7 @@ test("a Pea-admitted start of the person's staged launch retires it too", async 
   expect((await f.launch()).staged).toBeNull();
 });
 
-test("restart, stop and close carry the person's unsaved choice; none has a default", async () => {
+test("development restart discards implicitly; stop and close require an unsaved choice", async () => {
   const f = await setup((args) =>
     args[0] === "session"
       ? { result: { id: "dev", state: "ok", phase: "ready" } }
@@ -492,19 +492,22 @@ test("restart, stop and close carry the person's unsaved choice; none has a defa
     session: sdkSessionSelectorOf("dev"),
     document: "C:/Tower.rvt",
   });
-  for (const key of ["instances.restart", "instances.stop", "instances.close"])
+  for (const key of ["instances.stop", "instances.close"])
     await expect(
       f.admit(key, { session, document: { session: "dev", openId } }, revision),
     ).rejects.toThrow();
   expect(f.calls).toEqual([]);
 
-  expect(
-    (await f.admit("instances.restart", { session, unsaved: "discard" }, revision)).state,
-  ).toBe("succeeded");
+  await expect(
+    f.admit("instances.restart", { session, unsaved: "keep" }, revision),
+  ).rejects.toThrow();
+  expect(f.calls).toEqual([]);
+
+  expect((await f.admit("instances.restart", { session }, revision)).state).toBe("succeeded");
   const restart = f.calls.at(-1)!;
   expect(restart.slice(0, 2)).toEqual(["session", "hr"]);
   expect(restart).toContain("--restart");
-  expect(flag(restart, "--unsaved")).toBe("discard");
+  expect(restart).not.toContain("--unsaved");
   expect(flag(restart, "--expect-session")).toBe(receiptPath);
 
   expect((await f.admit("instances.stop", { session, unsaved: "keep" }, revision)).state).toBe(

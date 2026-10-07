@@ -58,8 +58,7 @@ export const instancesSessionSchema = z.strictObject({
 });
 const workInput = z.object({ workspaceId: z.string().min(1) });
 const sessionInput = workInput.extend({ session: instancesSessionSchema });
-/** What happens to unsaved changes when a lifecycle verb ends a document or session. A person
- * chooses it every time: there is no default, because no verb discards work by default. */
+/** Explicit unsaved-work policy for stop and close. Development HR restart always discards. */
 export const instancesUnsavedSchema = z.enum(["keep", "discard"]);
 const unsaved = instancesUnsavedSchema;
 export const instancesActions = {
@@ -78,11 +77,11 @@ export const instancesActions = {
     input: sessionInput,
   },
   "instances.restart": {
-    says: "Restart the explicitly supplied session incarnation, keeping or discarding unsaved changes as the person chose. Human-only.",
+    says: "Restart the explicitly supplied development session, discarding unsaved changes and reopening its documents. Human-only.",
     dirties: ["sdk"],
     needs: "nothing",
     actor: "human",
-    input: sessionInput.extend({ unsaved }),
+    input: sessionInput.strict(),
   },
   "instances.stop": {
     says: "Stop the explicitly supplied session incarnation, keeping or discarding unsaved changes as the person chose. Human-only.",
