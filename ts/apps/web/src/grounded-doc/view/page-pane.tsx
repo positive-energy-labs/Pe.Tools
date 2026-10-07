@@ -10,9 +10,11 @@ import { anchorRef, pageKey } from "./block-markdown";
 export function PagePane({
   engine,
   refs,
+  litBlockIds,
 }: {
   engine: GroundedDocEngine;
   refs: React.RefObject<Map<string, HTMLElement>>;
+  litBlockIds?: ReadonlySet<string>;
 }) {
   const doc = engine.doc;
   if (!doc) return null;
@@ -24,7 +26,13 @@ export function PagePane({
     >
       <div className="flex flex-col gap-4 p-3">
         {doc.pages.map((page) => (
-          <PageCanvas key={page.page} page={page} engine={engine} refs={refs} />
+          <PageCanvas
+            key={page.page}
+            page={page}
+            engine={engine}
+            refs={refs}
+            litBlockIds={litBlockIds}
+          />
         ))}
       </div>
     </div>
@@ -35,10 +43,12 @@ function PageCanvas({
   page,
   engine,
   refs,
+  litBlockIds,
 }: {
   page: ParsedPage;
   engine: GroundedDocEngine;
   refs: React.RefObject<Map<string, HTMLElement>>;
+  litBlockIds?: ReadonlySet<string>;
 }) {
   const blocks = engine.blocksForPage(page.page);
   const images = engine.imagesForPage(page.page);
@@ -65,7 +75,8 @@ function PageCanvas({
           />
         )}
         {blocks.map((block) => {
-          const isFocused = engine.focus?.blockId === block.id;
+          const isFocused =
+            engine.focus?.blockId === block.id || litBlockIds?.has(block.id) === true;
           const isPinned = engine.pinned?.blockId === block.id;
           const isApprox = engine.ambiguousBlockIds.has(block.id);
           return block.bboxes.map((bbox, index) => (
@@ -74,6 +85,8 @@ function PageCanvas({
               tone={isApprox ? "quiet" : page.screenshotUrl ? "neutral" : "neutral"}
               state={isFocused ? (isApprox ? "focused" : "focused") : "rest"}
               key={`${block.id}-${index}`}
+              data-block-id={block.id}
+              data-citation-lit={isFocused ? "true" : undefined}
               ref={
                 index === 0
                   ? (el) => {

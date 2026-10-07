@@ -5,6 +5,7 @@ export * from "./route-doc.ts";
 export * from "./reading.ts";
 export * from "./trichotomy.ts";
 export * from "./family.ts";
+export * from "./grounded-doc.ts";
 export * from "./families.ts";
 export * from "./takeoffs.ts";
 export * from "./rooms.ts";

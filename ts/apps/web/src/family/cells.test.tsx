@@ -89,7 +89,7 @@ test("a Family table cell and a doc-pane field draw exactly the contract's trans
   const table = screen.getByRole("region", { name: "table" });
   expect(verbs(table)).toEqual(drawn(TYPE));
   // The inspector's family value is the same kind of cell on its own field.
-  const inspector = screen.getByDisplayValue("12in").closest<HTMLElement>(".dl-cell")!;
+  const inspector = screen.getByDisplayValue("10in").closest<HTMLElement>(".dl-cell")!;
   expect(verbs(inspector.parentElement!)).toEqual(drawn(FAMILY));
   // The sidebar card is the same field as a ReviewRow: the cell's verbs, not the card's.
   const card = screen.getByText("Width · Wide").closest<HTMLElement>(".grid")!;

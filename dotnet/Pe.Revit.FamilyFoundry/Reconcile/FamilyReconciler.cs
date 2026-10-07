@@ -387,7 +387,7 @@ public static class FamilyReconciler {
                 .Concat(f.Profile?.SelectMany(l => l.Curves).SelectMany(c => new[] { c.On }.Concat(c.Center ?? [])) ?? [])))
             .Concat(Of("nested", d.Nested, n => new[] { n.Host }.Concat(n.Align?.Select(a => a.To) ?? [])))
             .Concat(Of("arrays", d.Arrays, a => new[] { a.SpacingPlane, "nested:" + a.Member }))
-            .Concat(Of("connectors", d.Connectors, c => new[] { c.On }.Concat(c.At)))
+            .Concat(Of("connectors", d.Connectors, c => new[] { c.On }.Concat(c.At.SelectMany(ConnectorAt.Planes))))
             .Concat(Of("details", d.Details, x => (x.Align?.Select(a => a.To) ?? []).Concat(x.Curves?.SelectMany(l => l.Curves).Select(c => c.On) ?? [])));
     }
 

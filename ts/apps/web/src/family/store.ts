@@ -46,6 +46,9 @@ import {
 import { previousOf, useReading } from "#/readings";
 import { useRoute, type EntityPage } from "#/route";
 import { openMember } from "#/route/spec-editor";
+import { displaySpec } from "#/family/spec";
+import { openSpec } from "#/family/host";
+import type { ParsedDocView } from "@pe/agent-contracts";
 
 type Setter<A> = A | ((previous: A) => A);
 const next = <A>(value: Setter<A>, previous: A): A =>
@@ -373,9 +376,35 @@ export function useFamilyStore(options: {
     // captureStatus is already this exact document lifetime; a family may have no path.
     return captured.evidence;
   }, [captured, member]);
+  const [fileSpec, setFileSpec] = useState<ParsedDocView | null>(null);
+  useEffect(() => {
+    let current = true;
+    setFileSpec(null);
+    if (member)
+      openSpec(member).then(
+        (doc) => {
+          if (current) setFileSpec(doc);
+        },
+        (error: unknown) => {
+          if (current) patch({ receipt: { verb: "spec", text: String(error), at: Date.now() } });
+        },
+      );
+    return () => {
+      current = false;
+    };
+  }, [member, patch]);
+  const attached = draftDoc?.spec;
+  const spec = useMemo(() => {
+    if (!member) return null;
+    const doc =
+      attached?.member.pod === member.pod && attached.member.path === member.path
+        ? attached.doc
+        : fileSpec;
+    return doc ? displaySpec(doc, member) : null;
+  }, [member, attached, fileSpec]);
   const lane = useMemo(
-    () => familySource(snapshot, evidence, fields, familyDoc.doc),
-    [snapshot, evidence, fields, familyDoc.doc],
+    () => familySource(snapshot, evidence, fields, spec ?? familyDoc.doc),
+    [snapshot, evidence, fields, spec, familyDoc.doc],
   );
   const saved = useMemo(() => savedFrom(initialDraft(lane.world)), [lane]);
   const draft = useMemo(
@@ -476,6 +505,21 @@ export function useFamilyStore(options: {
       flush,
       /** Re-read the open family into the draft; the proposals stay on it. */
       read: () => handle.actions.read.run(),
+      async attachSpec(this: void, file: File) {
+        if (!member) throw Error("Capture the family into a pod before attaching its cut sheet");
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () =>
+            resolve((typeof reader.result === "string" ? reader.result : "").split(",")[1]!);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(file);
+        });
+        const refusal = await handle.actions.attach_spec.run({
+          member,
+          source: { fileName: file.name, base64 },
+        });
+        if (refusal) throw Error(refusal.message);
+      },
       /** Opening a saved member puts its bytes in the draft as the reading; the page names it. */
       async open(next: PodMember) {
         await flush();
@@ -493,6 +537,7 @@ export function useFamilyStore(options: {
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
+      member,
       handle.actions,
       handle.work,
       draft,

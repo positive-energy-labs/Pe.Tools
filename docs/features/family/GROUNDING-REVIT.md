@@ -100,6 +100,13 @@ Two orthogonal relationship types (both belong in the snapshot):
     `CreateDuctConnector(..., face, edge)` gave width along -Y on a horizontal face with an X edge and with a Y edge.
     `ElementTransformUtils.RotateElement` about the connector normal turns it, and the turn holds across all 8 HCB types.
 36. **A value set before a dimension is labeled does not drive it**: set the parameter again after `FamilyLabel`.
+37. **Same-name nested families merge on project load** (2026-10-06, HCB build, user-observed): two nested
+    families with one name become one loaded family in the project, and Revit asks overwrite-or-keep on a pure
+    name match. Give every nested family a unique name before nesting it twice with different content.
+38. **Mechanical connectors cannot nest and cannot be hidden by a toggle** (2026-10-06, HCB build, user-observed):
+    a connector inside a nested family is not a connector of the host, and a connector has no visibility
+    parameter. A toggled accessory (the OA mixing box) needs the host to own the connector on its own stub,
+    and the stub follows the toggle.
 
 ## Authored-parameter scoping (derived from documentation — NOT live-proven)
 

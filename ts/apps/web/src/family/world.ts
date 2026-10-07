@@ -128,17 +128,7 @@ export interface ProtoLive {
   >;
 }
 
-interface SpecBlock {
-  id: string;
-  page: number;
-  kind: "heading" | "table" | "text";
-  md: string;
-}
-
-export interface ProtoSpec {
-  fileName: string;
-  blocks: SpecBlock[];
-}
+export type ProtoSpec = import("@pe/agent-contracts").ParsedDocView;
 
 /** Pea's proposal — EPHEMERAL, page-scoped. Links a profile cell to the spec text it came from. */
 export interface ProtoProposal {
@@ -146,6 +136,13 @@ export interface ProtoProposal {
   /** paramName, plus typeName when it targets a type override */
   param: string;
   typeName?: string;
+  /** A proposal for a constituent (`/nested|connectors|forms/<slug>`): `param` is empty, and the
+   * constituents list, not the parameters grid, draws it. */
+  constituent?: { section: "nested" | "connectors" | "forms"; slug: string; property?: string };
+  /** `/parameters/<name>/<property>` (isInstance, formula, propertiesGroup...): a proposal about
+   * that property of the parameter, never about its family-level value. */
+  property?: string;
+  /** What the reading holds at the pointer, when it holds anything: the cell's tooltip says it. */
   current: string | null;
   proposed: string;
   sourceBlockId: string;

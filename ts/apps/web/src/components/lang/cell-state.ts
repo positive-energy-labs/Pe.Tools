@@ -66,6 +66,12 @@ interface StateCellBase {
    */
   counterValue?: string;
   /**
+   * THE ORIGINAL (ruled 2026-10-06, kaitpw): a proposed cell DRAWS Pea's value, so what the model
+   * holds under it rides here — the row-scale title and the card footline say "currently X".
+   * `cellFromTrichotomy` fills it from the value the caller passed, which is the current one.
+   */
+  currentValue?: string;
+  /**
    * Whether the cell can be written at all. Anything but `editable` owns the body.
    * RULED 2026-08-31 (proposal-state demiurge): `readonly` and `excluded` were one rendering
    * under two names — they collapse into `locked` and the distinction rides `capReason`, which
@@ -261,8 +267,21 @@ export function cellFromTrichotomy(
         ? "delete"
         : show(proposal.value)
       : undefined;
+  // A standing proposal is what the cell DRAWS (ruled 2026-10-06); the caller's value, which is
+  // the current one, moves to `currentValue` and the tooltip. A deletion draws the empty mark.
+  const proposedText =
+    stage === "proposed" ? (proposal?.delete === true ? "" : show(proposal?.value)) : undefined;
+  const callerText =
+    typeof facts.value === "string" || typeof facts.value === "number"
+      ? String(facts.value)
+      : undefined;
+  const flipped = proposedText !== undefined && callerText !== proposedText;
   return {
     ...facts,
+    ...(flipped ? { value: proposedText } : {}),
+    ...(flipped && facts.currentValue === undefined && callerText !== undefined
+      ? { currentValue: callerText === "" ? "(blank)" : callerText }
+      : {}),
     stage,
     ...(stage === "staged" ? { stagedBy } : {}),
     ...(contested != null ? { counterValue: contested } : {}),
@@ -376,6 +395,9 @@ export function cellFactsText(p: StateCellProps): string | null {
         : `model holds ${p.modelValue}`,
     );
   if (p.counterValue != null) parts.push(`pea proposes ${p.counterValue}`);
+  // The proposal is what the cell draws; the original and the author ride the tooltip.
+  if (p.stage === "proposed") parts.push("proposed by pea");
+  if (p.currentValue != null && p.stage === "proposed") parts.push(`currently ${p.currentValue}`);
   if (p.capReason != null) parts.push(p.capReason);
   if (p.note != null)
     parts.push(p.confidence != null ? `${p.confidence} confidence — ${p.note}` : p.note);

@@ -5,7 +5,6 @@ import { NodeServices } from "@effect/platform-node";
 import {
   actionAdmissionSchema,
   familyActions,
-  familyCaptureSchema,
   familyReads,
   familiesCaptureEvidenceSchema,
   familiesRouteState,
@@ -1189,96 +1188,65 @@ export async function readFamily(
   const input = familyReads[key].input.parse(raw.input ?? {});
   if (key === "family.saved") return captures.family(familyReads[key].input.parse(input).id);
   const scope = workKeySchema.parse(raw.scope);
-  let reading: FamilyCapture["reading"];
-  let liveFence: (() => Promise<void>) | undefined;
-  let provenance: FamilyCapture["provenance"] = { kind: "file" };
-  if (key === "family.parse-spec") {
-    const { url } = familyReads[key].input.parse(input);
-    const form = new FormData();
-    form.append("url", url);
-    const response = await fetch(
-      `${process.env.PE_WEB_URL ?? "http://localhost:3000"}/api/pdf-audit/parse`,
-      { method: "POST", body: form },
-    );
-    const parsed = (await response.json()) as {
-      error?: string;
-      jobId?: string;
-      fileName?: string;
-      blocks?: unknown[];
-      images?: unknown[];
-    };
-    if (!response.ok || parsed.error) throw Error(parsed.error ?? "Spec parsing failed");
-    reading = familyCaptureSchema.shape.reading.parse({
-      kind: "spec",
-      value: {
-        parseId: parsed.jobId ?? null,
-        fileName: parsed.fileName ?? "document.pdf",
-        blocks: parsed.blocks ?? [],
-        images: parsed.images ?? [],
-      },
-    });
-  } else {
-    const target = documentRefSchema.parse(raw.target);
-    // Parameter Links reads a project document, not a family document.
-    const original = await current(bridge, target, "project");
-    const fence = async () => {
-      const next = await current(bridge, target, "project");
-      if (
-        next.processId !== original.processId ||
-        next.processStartUtcUnixMs !== original.processStartUtcUnixMs
-      )
-        throw refused("Reading process changed");
-    };
-    liveFence = fence;
-    const native = async (key: string, input: unknown) => {
-      await fence();
-      const result = await invoke(bridge, target, key, input);
-      await fence();
-      return result;
-    };
-    if (!deps.workspace) throw refused("Route Work is unavailable");
-    const view = await deps.workspace.read(scope, "parameter-links");
-    if (!view) throw refused("Author this route's Work before reading it");
-    const document = parameterLinksRouteState.schema.parse(view.doc);
-    const { evaluate, subject } = familyReads["parameter-links.read"].input.parse(input);
-    // The staged profile, or a labelled preview of Pea's proposal; nothing else is evaluated.
-    const profile =
-      subject === "proposal"
-        ? (document.profile.proposal?.value ?? null)
-        : stagedParameterProfile(document);
-    if (evaluate && !profile)
-      throw refused(
-        subject === "proposal"
-          ? "Pea has proposed no profile"
-          : "Stage a profile before evaluating it",
-      );
-    const data = evaluate
-      ? await native("revit.apply.parameter-links", {
-          profile,
-          previewOnly: true,
-          reconcile: false,
-        })
-      : await native("revit.detail.parameter-links", { includeEvaluation: false });
-    reading = {
-      kind: "parameter-links",
-      value: parameterLinksReadingSchema.parse({
-        ...(data as object),
-        basis: parameterLinksBasis(document, subject),
-        workRevision: view.revision,
-        evaluated: evaluate,
-        subject,
-        // What Revit holds arrives as `profile`; `stored` names it for what it is.
-        stored: (data as { profile?: unknown }).profile ?? null,
-        // A stored-profile read observes Revit, never the staged profile: it carries no
-        // evaluation, so it can never arm an apply of a profile it did not evaluate.
-        evaluation: evaluate ? (data as { evaluation?: unknown }).evaluation : null,
-      }),
-    };
+  const target = documentRefSchema.parse(raw.target);
+  // Parameter Links reads a project document, not a family document.
+  const original = await current(bridge, target, "project");
+  const fence = async () => {
+    const next = await current(bridge, target, "project");
+    if (
+      next.processId !== original.processId ||
+      next.processStartUtcUnixMs !== original.processStartUtcUnixMs
+    )
+      throw refused("Reading process changed");
+  };
+  const native = async (key: string, input: unknown) => {
     await fence();
-    provenance = { kind: "live", target };
-  }
+    const result = await invoke(bridge, target, key, input);
+    await fence();
+    return result;
+  };
+  if (!deps.workspace) throw refused("Route Work is unavailable");
+  const view = await deps.workspace.read(scope, "parameter-links");
+  if (!view) throw refused("Author this route's Work before reading it");
+  const document = parameterLinksRouteState.schema.parse(view.doc);
+  const { evaluate, subject } = familyReads["parameter-links.read"].input.parse(input);
+  // The staged profile, or a labelled preview of Pea's proposal; nothing else is evaluated.
+  const profile =
+    subject === "proposal"
+      ? (document.profile.proposal?.value ?? null)
+      : stagedParameterProfile(document);
+  if (evaluate && !profile)
+    throw refused(
+      subject === "proposal"
+        ? "Pea has proposed no profile"
+        : "Stage a profile before evaluating it",
+    );
+  const data = evaluate
+    ? await native("revit.apply.parameter-links", {
+        profile,
+        previewOnly: true,
+        reconcile: false,
+      })
+    : await native("revit.detail.parameter-links", { includeEvaluation: false });
+  const reading: FamilyCapture["reading"] = {
+    kind: "parameter-links",
+    value: parameterLinksReadingSchema.parse({
+      ...(data as object),
+      basis: parameterLinksBasis(document, subject),
+      workRevision: view.revision,
+      evaluated: evaluate,
+      subject,
+      // What Revit holds arrives as `profile`; `stored` names it for what it is.
+      stored: (data as { profile?: unknown }).profile ?? null,
+      // A stored-profile read observes Revit, never the staged profile: it carries no
+      // evaluation, so it can never arm an apply of a profile it did not evaluate.
+      evaluation: evaluate ? (data as { evaluation?: unknown }).evaluation : null,
+    }),
+  };
+  await fence();
+  const provenance: FamilyCapture["provenance"] = { kind: "live", target };
   return captures.saveFamily(
     { key: scope, capturedAt: new Date().toISOString(), provenance, reading },
-    liveFence,
+    fence,
   );
 }

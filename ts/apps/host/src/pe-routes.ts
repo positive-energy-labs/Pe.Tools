@@ -49,6 +49,7 @@ import { hostOwnership } from "./host-ownership.ts";
 import { productHarnessThreadsPath, productRouteWorkPath } from "./product-paths.ts";
 import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
 import { bindActionWorkspace } from "./takeoff-actions.ts";
+import { familySpecAsset, familySpecHandlers } from "./family-spec.ts";
 
 /**
  * Route Work as one JSON file per (route, Work key), named by hash: Addresses are Windows paths. The
@@ -149,6 +150,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
   async function handle(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const method = request.method;
+    if (method === "GET" && url.pathname === "/pe/family-spec") return familySpecAsset(url);
     const parts = url.pathname.split("/").slice(2).map(decodeURIComponent); // drop "", "pe"
     const body = () => request.json().catch(() => null);
 
@@ -364,6 +366,10 @@ export function makeHostPeRoutes(
       : null,
   });
   const registrations = registrationsFactory({ hostBaseUrl });
+  for (const registration of registrations) {
+    if (registration.spec.route === "family")
+      Object.assign(registration.handlers, familySpecHandlers());
+  }
   const catalog = createCapabilityCatalogSource({ hostBaseUrl, registrations });
   const routes = createPeRoutes({
     registrations,
@@ -412,6 +418,7 @@ export const peRoutesLayer = (registrationsFactory?: typeof createRouteRegistrat
         yield* router.add("*", path, harness);
       for (const path of [
         "/pe/capabilities",
+        "/pe/family-spec",
         "/pe/resources",
         "/pe/route-state",
         "/pe/route-state/:route",
