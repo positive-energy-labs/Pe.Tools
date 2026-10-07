@@ -135,11 +135,42 @@ description: Write and run a C# Revit script when code is the clearest way to in
 - Treat compiler and runtime diagnostics as steering; fix the first one before rerunning.
 - Keep terminal output compact; write artifacts for broad evidence. Return structured results for anything a later step reads.
 
-After any family geometry write, run family.look and read its images beside the sheet page renders in the Pod spec folder. Before claiming a family done, run family.loadTest and read its warnings, duplicate names, and images. A PROVEN on a family without both is UNPROVEN.
+Building or fixing a family from a cut sheet follows build-revit-family.
 
 A Pod is a workspace with a root pod.json declaring entrypoints; the build-pod skill defines it and owns building or adapting one.
 
 For a probe, report the answer and the permission mode it ran under. For a mutation, add the script path, diagnostics, and the verification readback.
+`,
+  },
+  {
+    name: "build-revit-family",
+    content: String.raw`---
+name: build-revit-family
+description: Build, extend, or fix a Revit family from a manufacturer cut sheet or submittal. Use when the user asks to build out, rebuild, add types, sizes, connectors, clearances, or accessories to a family, or to make a family match a spec sheet.
+---
+
+# Build Revit Family
+
+A family is a spatial claim. Counts and flexed formulas prove that numbers hold, never that a solid sits on the side the drawing shows. The user should never have to be your eyes.
+
+## Method
+
+1. Attach the sheet: pe_do key=route:family.attach_spec with the PDF. Tables give sizes; drawings give sides, offsets, and which openings exist. Read the page renders in the Pod spec folder as images, not only the text.
+2. Inventory before building, then align on it: every size column is a type; every opening drawn is a connector (supply, return, outside air, each pipe, drain, power); every option is a Yes/No toggle; every clearance zone is a block. A ruling about one axis never removes items on another: "no three-phase" removes electrical variants, not cabinet sizes. Ask.
+3. Parameters: search the parameters service cache for PE_ shared parameters first (PE_G_Dim_*, PE_M_Fan_AirFlow, PE_M_PerfCool_CapacityRated, PE_M_Fan_Filter, PE_E_*). Create a family parameter only when no PE parameter fits, and name it in your report. Sheet dimensions are type parameters.
+4. Clearances: nest the company clearance family (!Mechanical Equipment_Clearance_Rectangular_UH in the PE library, or the one the user names) once per zone, always on. Ask before modeling clearance as plain solids.
+5. Verify after every geometry write: family.look with the family's Yes/No toggles, then read the plan and the connection-side elevation beside the matching page. Check in its census that every inventory connector exists in every type and toggle state. Before calling it done, run family.loadTest and read its warnings, duplicate names, and images. A PROVEN without both is UNPROVEN.
+
+## Revit laws
+
+- A connector inside a nested family is not the host's connector, and no connector can be hidden. An accessory opening (a mixing box outside-air collar) needs a host-owned stub extrusion that copies the collar footprint, with the connector on the stub's face; the stub follows the toggle, the connector stays.
+- A connector hosted on a nested instance face does not follow the instance. Host it on a host extrusion locked to formula-driven planes.
+- Nested families with one name merge into one loaded family in a project. Give every nested family a unique name.
+- A rectangular connector's width axis comes from the host face, not the edge argument. Rotate it about its normal, then census the width direction.
+- A nested family's type slot cannot be associated. Make its size parameters instance and associate those.
+- A value set before a dimension is labeled does not drive it. Set it again after labeling.
+
+Report the inventory with each item built or not, the PE and family parameters used, and the look and loadTest verdicts with the image paths you read.
 `,
   },
   {
