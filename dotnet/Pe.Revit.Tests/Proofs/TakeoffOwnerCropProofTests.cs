@@ -28,8 +28,8 @@ public sealed class TakeoffOwnerCropProofTests {
                 while (TakeoffCarriers.Preflight(doc, TakeoffCarrierStage.Materialization).MissingCarrierGuids.Count > 0)
                     TakeoffCarriers.InitializeNext(doc, TakeoffCarrierStage.Materialization);
                 var type = new FilteredElementCollector(doc).OfClass(typeof(FilledRegionType)).FirstElementId();
-                _ = FilledRegion.Create(doc, type, source.Id, [Kernel.ToLoop(Square(40, 0, 20), 0)]);
-                _ = FilledRegion.Create(doc, type, source.Id, [Kernel.ToLoop(Square(-80, 0, 20), 0)]);
+                _ = FilledRegion.Create(doc, type, source.Id, Kernel.ToLoops(Square(40, 0, 20), [], 0));
+                _ = FilledRegion.Create(doc, type, source.Id, Kernel.ToLoops(Square(-80, 0, 20), [], 0));
                 duplicate = (ViewPlan)doc.GetElement(source.Duplicate(ViewDuplicateOption.WithDetailing));
                 duplicate.Name = "Owner crop duplicate";
                 var crop = duplicate.CropBox;

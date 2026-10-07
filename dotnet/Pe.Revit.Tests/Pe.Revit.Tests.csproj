@@ -33,6 +33,7 @@
               Link="Fixtures\FamilyModel\puck.rfa" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="..\..\eng\PrivateFixtures.cs" Link="PrivateFixtures.cs" />
         <None Include="Fixtures\Families\**\*.rfa" CopyToOutputDirectory="PreserveNewest" />
         <None Include="Fixtures\Projects\**\*.rvt" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>

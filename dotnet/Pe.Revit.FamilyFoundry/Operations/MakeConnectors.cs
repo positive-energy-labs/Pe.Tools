@@ -17,7 +17,7 @@ public sealed class MakeConnectors((string Slug, FamilyModelConnector Spec)[] co
             try {
                 var (reference, plane) = FamilyRefs.Resolve(doc, spec.On);
                 var normal = plane.Normal.Normalize();
-                var center = FamilyRefs.Intersect(plane, FamilyRefs.Resolve(doc, spec.At[0]).Plane, FamilyRefs.Resolve(doc, spec.At[1]).Plane);
+                var center = FamilyRefs.Intersect(plane, AtPlane(doc, spec.At[0]), AtPlane(doc, spec.At[1]));
                 var connector = spec.Domain switch {
                     ConnectorDomain.Duct => ConnectorElement.CreateDuctConnector(doc, Revit<ConnectorSystemType, DuctSystemType>(spec.SystemType),
                         spec.Shape == ConnectorShape.Rectangular ? ConnectorProfileType.Rectangular : spec.Shape == ConnectorShape.Oval ? ConnectorProfileType.Oval : ConnectorProfileType.Round, reference),
@@ -63,6 +63,16 @@ public sealed class MakeConnectors((string Slug, FamilyModelConnector Spec)[] co
             } catch (Exception ex) { logs.Add(new LogEntry(slug).Error(ex)); }
         }
         return new OperationLog(this.Name, logs);
+    }
+
+    /// <summary>An `at` entry's plane: the named plane, or for `midway:A|B` the plane parallel to A and B halfway between them.</summary>
+    private static Plane AtPlane(FamilyDocument doc, string entry) {
+        if (!ConnectorAt.TryMidway(entry, out var a, out var b)) return FamilyRefs.Resolve(doc, entry).Plane;
+        var (pa, pb) = (FamilyRefs.Resolve(doc, a).Plane, FamilyRefs.Resolve(doc, b).Plane);
+        var n = pa.Normal.Normalize();
+        if (Math.Abs(Math.Abs(n.DotProduct(pb.Normal.Normalize())) - 1) > 1e-9)
+            throw new InvalidOperationException($"'{entry}': planes '{a}' and '{b}' are not parallel.");
+        return Plane.CreateByNormalAndOrigin(n, pa.Origin + n * ((pb.Origin - pa.Origin).DotProduct(n) / 2));
     }
 
     private static TRevit Revit<TContract, TRevit>(TContract value) where TContract : struct, Enum where TRevit : struct, Enum =>
