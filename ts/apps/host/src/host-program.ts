@@ -3,6 +3,7 @@ import { Deferred, Effect, Layer, type Scope } from "effect";
 import { capture } from "@pe/runtime";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { chooseServicePort } from "@pe/host-contracts/pe-service-host";
+import { discoverService } from "@pe/host-contracts/pe-service";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { productRoot } from "@pe/host-contracts/service-identity";
 import { resolveHostVersion } from "./host-lifecycle.ts";
@@ -24,6 +25,19 @@ export const hostProgram = (
       yield* Effect.sync(() =>
         capture("app_boot", { component: "host", version: resolveHostVersion() }),
       );
+      // Desktop entry: a host that already serves (started by Revit or an earlier click) is the
+      // answer. Open it and exit; a second launch would otherwise evict it and drop Revit's bridge.
+      const open = process.argv.includes("--open");
+      if (open) {
+        const live = yield* Effect.promise(() =>
+          discoverService(productRoot(), hostOwnership.serviceName, { verifyOwner: true }),
+        );
+        if (live) {
+          console.log(`pe-host already serving on ${live.port} (pid ${live.pid}); opening it`);
+          openBrowser(live.port);
+          return;
+        }
+      }
       const port = yield* Effect.promise(() =>
         chooseServicePort(productRoot(), hostOwnership.serviceName, preferredPort),
       );
@@ -46,17 +60,13 @@ export const hostProgram = (
       );
 
       console.log(`pe-host binding http://127.0.0.1:${port || "dynamic"}`);
-      if (port && process.argv.includes("--open")) {
-        // Standalone desktop entry: open the default browser once the listener has had a moment to bind.
-        const url = `http://127.0.0.1:${port}/`;
-        setTimeout(() => {
-          console.log(`pe-host opening ${url}`);
-          spawn("cmd.exe", ["/c", "start", "", url], {
-            windowsHide: true,
-            stdio: "ignore",
-          }).unref();
-        }, 500);
-      }
+      if (open)
+        // Open only once the claim holds, on the port the service file names.
+        yield* Effect.forkDetach(
+          Deferred.await(handle).pipe(
+            Effect.tap((claimed) => Effect.sync(() => openBrowser(claimed.serviceFile.port))),
+          ),
+        );
       const frontend =
         web && webUrl
           ? Effect.flatMap(Deferred.await(handle), (claimed) => web(claimed, webUrl))
@@ -67,3 +77,9 @@ export const hostProgram = (
       );
     }),
   );
+
+function openBrowser(port: number): void {
+  const url = `http://127.0.0.1:${port}/`;
+  console.log(`pe-host opening ${url}`);
+  spawn("cmd.exe", ["/c", "start", "", url], { windowsHide: true, stdio: "ignore" }).unref();
+}
