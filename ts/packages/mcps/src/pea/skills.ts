@@ -161,6 +161,17 @@ A family is a spatial claim. Counts and flexed formulas prove that numbers hold,
 4. Clearances: nest the company clearance family (!Mechanical Equipment_Clearance_Rectangular_UH in the PE library, or the one the user names) once per zone, always on. Ask before modeling clearance as plain solids.
 5. Verify after every geometry write: family.look with the family's Yes/No toggles, then read the plan and the connection-side elevation beside the matching page. Check in its census that every inventory connector exists in every type and toggle state. Before calling it done, run family.loadTest and read its warnings, duplicate names, and images. A PROVEN without both is UNPROVEN.
 
+## Gut check first
+
+Parameters are the obvious review. What a project feels when the family loads is the connectors, the toggles, the orientation and the nested families, and that view decides what the parameters beneath must be. Write it before you align and again before you report done, per type and per toggle state:
+
+- Every connector: domain, system classification, flow direction, shape and size, and the family parameter that drives each of its size, flow, pressure drop, voltage and load. A connector whose size or flow nothing drives is a finding, not a detail.
+- Every toggle and variant: which solids and connectors each state shows, and which connectors stay in the project unconnected while the option is off.
+- Orientation: the hand, which side the connections and the control box sit on, where the origin is, and what the flip controls do.
+- Nested families by name, shared or not, and what each one schedules as.
+
+Census this with a script when the look census does not carry it; never report it from memory.
+
 ## Sheet letters
 
 - A cut sheet's lettered dimensions are labels local to one drawing and its table, never identities. The same letter often means different things on different pages: on the Magic Aire HCB submittal, L is the supply opening height for sizes 04 to 20 and an offset for 30/40, where J is the height.
