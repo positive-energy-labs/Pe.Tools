@@ -35,7 +35,11 @@ import {
  * a constituent that a geometry-less profile can offer. */
 interface ProseConstituent {
   slug: string;
-  kind: "solid" | "connector";
+  kind: "solid" | "connector" | "nested";
+  /** The Work pointer of Pea's proposal when the reading has no such constituent yet. */
+  proposed?: string;
+  /** Pea's proposals about one property of a constituent the reading does hold (`/connectors/c1/on`). */
+  proposedProps?: { id: string; property: string; text: string }[];
   text: string;
   params: string[];
 }
@@ -71,6 +75,14 @@ export interface FamilyPageModel {
   profileDirty: boolean;
 }
 
+/**
+ * THE ONE TYPE ORDER (ruled 2026-10-06, kaitpw): a family-agnostic natural collation, so
+ * `HCB 04 < HCB 06 < HCB 12 < HCB 30`. Capture order is Revit's and means nothing to a reader;
+ * every list of types on this route sorts through this comparator.
+ */
+const typeCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+export const byTypeName = (a: string, b: string): number => typeCollator.compare(a, b);
+
 export function buildFamilyPageModel(source: FamilySpecModel): FamilyPageModel {
   const params = source.profile.params;
   const geom = source.profile.geometry ?? [];
@@ -84,7 +96,7 @@ export function buildFamilyPageModel(source: FamilySpecModel): FamilyPageModel {
       ...Object.keys(source.profile.types),
       ...(live?.typeNames ?? Object.values(live?.values ?? {}).flatMap(Object.keys)),
     ]),
-  ];
+  ].sort(byTypeName);
   return {
     source,
     path: source.profile.path,
@@ -416,6 +428,8 @@ export interface PRow {
    * of thing from a parameter and a surface that hid that difference would be the lie.
    */
   kind: "profile" | "live-only" | "ghost";
+  /** A parameter only Pea's proposals name: the reading lacks it, so the row is drawn proposed. */
+  proposed?: boolean;
   /** ghost only — which constituent.property the row IS. */
   slug?: string;
   property?: string;
@@ -510,6 +524,13 @@ export function isUnsavedAt(
   typeName: string,
 ): boolean {
   if (row.kind === "live-only") return false;
+  // A row only Pea's proposals draw has nothing of the draft's in it until something is staged.
+  if (
+    row.proposed &&
+    !(row.name in draft.authored) &&
+    draft.types[typeName]?.[row.name] === undefined
+  )
+    return false;
   const disk = savedValueAt(saved, row, typeName);
   return disk === null || disk !== draftValueAt(world, draft, row, typeName);
 }
