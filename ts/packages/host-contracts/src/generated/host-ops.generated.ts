@@ -2678,6 +2678,49 @@ export namespace RevitCatalogSchedules {
   }
 }
 
+/** List the document's review warnings as Revit's Review Warnings dialog shows them: severity, text, the elements each is about, and the elements listed alongside. Read-only. */
+export namespace RevitCatalogWarnings {
+  export namespace Req {
+    export interface Request {}
+  }
+  export namespace Res {
+    /**
+     * What revit.catalog.warnings read.
+     */
+    export interface Response {
+      /**
+       * How many warnings the document holds.
+       */
+      count: number;
+      /**
+       * Every warning, in the order Revit reports them.
+       */
+      rows: RevitWarningRow[];
+    }
+    /**
+     * One warning the document holds, as Revit's Review Warnings dialog lists it.
+     */
+    export interface RevitWarningRow {
+      /**
+       * Revit's severity name: Warning, Error, or DocumentCorruption.
+       */
+      severity: string;
+      /**
+       * The warning text.
+       */
+      description: string;
+      /**
+       * Ids of the elements the warning is about.
+       */
+      elementIds: number[];
+      /**
+       * Ids of elements Revit lists alongside, such as the other side of a join or overlap.
+       */
+      additionalElementIds: number[];
+    }
+  }
+}
+
 /** Read open, active, and selected document session context from connected Revit. Use only when the question spans multiple open documents or there is no active document; revit.context.summary covers single-document orientation. */
 export namespace RevitContextDocumentSession {
   export namespace Req {
@@ -2707,6 +2750,69 @@ export namespace RevitContextDocumentSession {
       cloudProjectGuid?: null | string;
       cloudModelGuid?: null | string;
       cloudModelUrn?: null | string;
+    }
+  }
+}
+
+/** Read the tail of the journal Revit is recording for this session: the only record of what the person did in the UI (ribbon commands, dialog answers, error dialogs, transactions). Each row carries its line index, timestamp when present, and kind. Pass afterLine to poll for lines past the last one seen; pass kinds to keep only commands, dialogs, errors or transactions. */
+export namespace RevitContextJournal {
+  export namespace Req {
+    /**
+     * Request for revit.context.journal: read the tail of the journal Revit is recording for this session.
+     */
+    export interface Request {
+      /**
+       * Most rows to answer. Default 200, capped at 2000.
+       */
+      maxLines?: number | null;
+      /**
+       * 0-based index of the last line already seen; answers the rows after it, oldest first, so a page can poll. Omit for the newest rows.
+       */
+      afterLine?: number | null;
+      /**
+       * Keep only these kinds: command, dialog, error, transaction, other. Omit for every kind.
+       */
+      kinds?: string[] | null;
+    }
+  }
+  export namespace Res {
+    /**
+     * What revit.context.journal read.
+     */
+    export interface Response {
+      /**
+       * The journal file Revit is recording to.
+       */
+      path: string;
+      /**
+       * Lines in the file at read time; the newest index is TotalLines - 1.
+       */
+      totalLines: number;
+      /**
+       * The matching lines, oldest first, blank lines dropped.
+       */
+      rows: RevitJournalRow[];
+    }
+    /**
+     * One journal line Revit wrote.
+     */
+    export interface RevitJournalRow {
+      /**
+       * 0-based index of the line in the journal file; pass as afterLine to read past it.
+       */
+      line: number;
+      /**
+       * The journal timestamp on this line (its `dd-MMM-yyyy HH:mm:ss.fff` text) when it has one, else null.
+       */
+      at?: null | string;
+      /**
+       * command, dialog, error, transaction, or other, by the line's prefix.
+       */
+      kind: string;
+      /**
+       * The line, trimmed.
+       */
+      text: string;
     }
   }
 }
@@ -6099,7 +6205,9 @@ export interface HostOps {
   "revit.catalog.project-browser": { request: RevitCatalogProjectBrowser.Req.Request; response: RevitCatalogProjectBrowser.Res.Response };
   "revit.catalog.project-index": { request: RevitCatalogProjectIndex.Req.Request; response: RevitCatalogProjectIndex.Res.Response };
   "revit.catalog.schedules": { request: RevitCatalogSchedules.Req.Request; response: RevitCatalogSchedules.Res.Response };
+  "revit.catalog.warnings": { request: RevitCatalogWarnings.Req.Request; response: RevitCatalogWarnings.Res.Response };
   "revit.context.document-session": { request: RevitContextDocumentSession.Req.Request; response: RevitContextDocumentSession.Res.Response };
+  "revit.context.journal": { request: RevitContextJournal.Req.Request; response: RevitContextJournal.Res.Response };
   "revit.context.lens": { request: RevitContextLens.Req.Request; response: RevitContextLens.Res.Response };
   "revit.context.show-elements": { request: RevitContextShowElements.Req.Request; response: RevitContextShowElements.Res.Response };
   "revit.context.summary": { request: RevitContextSummary.Req.Request; response: RevitContextSummary.Res.Response };
@@ -6175,7 +6283,9 @@ export const hostOpKeys = [
   "revit.catalog.project-browser",
   "revit.catalog.project-index",
   "revit.catalog.schedules",
+  "revit.catalog.warnings",
   "revit.context.document-session",
+  "revit.context.journal",
   "revit.context.lens",
   "revit.context.show-elements",
   "revit.context.summary",

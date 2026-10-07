@@ -151,11 +151,11 @@ public sealed class ButtonRegistry {
             Container = new ButtonContainer.Panel("Tools")
         }),
         Register(new ButtonRegistration<CmdApsAuth> {
-            Text = "APS Auth",
+            Text = "Autodesk Sign-in",
             SmallImage = "id-card16.png",
             LargeImage = "id-card32.png",
             ToolTip =
-                "Authenticate to Autodesk Platform Services through the legacy persisted token flow.",
+                "Check the Autodesk sign-in already active in Revit.",
             Container = new ButtonContainer.PullDown("General", "Manage")
         }),
         Register(new ButtonRegistration<CmdCacheParametersService> {

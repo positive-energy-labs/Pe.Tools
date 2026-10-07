@@ -7,7 +7,7 @@ public class Parameters(HttpClient httpClient, IParametersTokenProvider tokenPro
     private const string Suffix = "parameters/v1/accounts/";
 
     private static async Task<T?> DeserializeToType<T>(HttpResponseMessage res) {
-        var asString = await res.Content.ReadAsStringAsync();
+        var asString = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
         return JsonConvert.DeserializeObject<T>(asString);
     }
 
@@ -23,20 +23,14 @@ public class Parameters(HttpClient httpClient, IParametersTokenProvider tokenPro
         while (true) {
             var response = await httpClient.GetAsync(
                 Suffix + Clean(hubId) + $"/groups?offset={offset}&limit={limit}"
-            );
+            ).ConfigureAwait(false);
 
             if (!response.IsSuccessStatusCode) {
-                // On first page failure, throw to avoid caching empty results
-                if (offset == 0) {
-                    var errorContent = await response.Content.ReadAsStringAsync();
-                    throw new HttpRequestException(
-                        $"Failed to fetch groups. Status: {response.StatusCode}. Response: {errorContent}");
-                }
-
-                break;
+                throw new HttpRequestException(
+                    $"Failed to fetch groups at offset {offset}. Status: {response.StatusCode}.");
             }
 
-            var page = await DeserializeToType<ParametersApi.Groups>(response);
+            var page = await DeserializeToType<ParametersApi.Groups>(response).ConfigureAwait(false);
             if (page?.Results == null || page.Results.Count == 0) break;
 
             allResults.AddRange(page.Results);
@@ -65,20 +59,14 @@ public class Parameters(HttpClient httpClient, IParametersTokenProvider tokenPro
             var response = await httpClient.GetAsync(
                 Suffix + Clean(hubId) + "/groups/" + Clean(grpId)
                 + $"/collections?offset={offset}&limit={limit}"
-            );
+            ).ConfigureAwait(false);
 
             if (!response.IsSuccessStatusCode) {
-                // On first page failure, throw to avoid caching empty results
-                if (offset == 0) {
-                    var errorContent = await response.Content.ReadAsStringAsync();
-                    throw new HttpRequestException(
-                        $"Failed to fetch collections. Status: {response.StatusCode}. Response: {errorContent}");
-                }
-
-                break;
+                throw new HttpRequestException(
+                    $"Failed to fetch collections at offset {offset}. Status: {response.StatusCode}.");
             }
 
-            var page = await DeserializeToType<ParametersApi.Collections>(response);
+            var page = await DeserializeToType<ParametersApi.Collections>(response).ConfigureAwait(false);
             if (page?.Results == null || page.Results.Count == 0) break;
 
             allResults.AddRange(page.Results);
@@ -120,15 +108,14 @@ public class Parameters(HttpClient httpClient, IParametersTokenProvider tokenPro
             var response = await httpClient.GetAsync(
                 Suffix + Clean(hubId) + "/groups/" + Clean(grpId) + "/collections/" + Clean(colId)
                 + $"/parameters?offset={offset}&limit={limit}"
-            );
+            ).ConfigureAwait(false);
 
             if (!response.IsSuccessStatusCode) {
-                var errorContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                 throw new HttpRequestException(
-                    $"Failed to fetch parameters at offset {offset}. Status: {response.StatusCode}. Response: {errorContent}");
+                    $"Failed to fetch parameters at offset {offset}. Status: {response.StatusCode}.");
             }
 
-            var page = await DeserializeToType<ParametersApi.Parameters>(response);
+            var page = await DeserializeToType<ParametersApi.Parameters>(response).ConfigureAwait(false);
             if (page?.Results == null || page.Results.Count == 0) break;
 
             allResults.AddRange(page.Results);
