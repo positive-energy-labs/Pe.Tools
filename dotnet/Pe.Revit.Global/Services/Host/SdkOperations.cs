@@ -34,7 +34,9 @@ public static class SdkOperations {
     private static readonly string[] ReadOnlyKeys = [
         "host.ops.catalog",
         "revit.context.document-session",
-        "revit.context.summary"
+        "revit.context.summary",
+        "family.look",
+        "family.loadTest"
     ];
 
     /// <summary>

@@ -671,6 +671,157 @@ export namespace FamilyCapture {
   }
 }
 
+/** Load the open family into a disposable project, place each selected type, export plan/elevation/3D PNGs and inspect project warnings, resolved failures, nested name duplicates and exposed instance connectors. Closes the scratch project without saving and never saves the family. */
+export namespace FamilyLoadTest {
+  export namespace Req {
+    export interface Request {
+      outDir: string;
+      types?: string[] | null;
+      template?: null | string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      familyName: string;
+      sameNameAlreadyExisted: boolean;
+      loadDecisions: FamilyLoadDecision[];
+      nestedFamilies: FamilyLoadNested[];
+      duplicateNames: string[];
+      rows: FamilyLoadInstance[];
+      warnings: RevitWarningRow[];
+      failures: FamilyLoadFailure[];
+      images: FamilyVerifyImage[];
+    }
+    export interface FamilyLoadDecision {
+      family: string;
+      shared: boolean;
+      inUse: boolean;
+      overwrite: boolean;
+    }
+    /**
+     * LoadedIds belong to the scratch project; EmbeddedCount includes non-shared definitions inside the loaded family.
+     */
+    export interface FamilyLoadNested {
+      name: string;
+      sourceCount: number;
+      loadedIds: number[];
+      embeddedCount: number;
+    }
+    export interface FamilyLoadInstance {
+      type: string;
+      id?: number | null;
+      connectors: FamilyVerifyConnector[];
+      error?: null | string;
+    }
+    /**
+     * Positions and sizes are inches; normals are unit vectors.
+     */
+    export interface FamilyVerifyConnector {
+      domain: string;
+      system: string;
+      origin: FamilyVerifyPoint;
+      normal: FamilyVerifyPoint;
+      shape: string;
+      diameter?: null | number;
+      width?: null | number;
+      height?: null | number;
+    }
+    export interface FamilyVerifyPoint {
+      x: number;
+      y: number;
+      z: number;
+    }
+    /**
+     * One warning the document holds, as Revit's Review Warnings dialog lists it.
+     */
+    export interface RevitWarningRow {
+      /**
+       * Revit's severity name: Warning, Error, or DocumentCorruption.
+       */
+      severity: string;
+      /**
+       * The warning text.
+       */
+      description: string;
+      /**
+       * Ids of the elements the warning is about.
+       */
+      elementIds: number[];
+      /**
+       * Ids of elements Revit lists alongside, such as the other side of a join or overlap.
+       */
+      additionalElementIds: number[];
+    }
+    export interface FamilyLoadFailure {
+      severity: string;
+      description: string;
+      failingElementIds: number[];
+      additionalElementIds: number[];
+      resolution: string;
+    }
+    export interface FamilyVerifyImage {
+      view: string;
+      path: string;
+    }
+  }
+}
+
+/** Inspect every selected family type and Yes/No toggle off/on: geometry census in inches and geometry-only plan, X/Y elevations and isometric PNGs. Rolls back all family changes. Family editor images can draw invisible geometry; read the visibility census too. */
+export namespace FamilyLook {
+  export namespace Req {
+    export interface Request {
+      outDir: string;
+      types?: string[] | null;
+      toggles?: string[] | null;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      rows: FamilyLookRow[];
+    }
+    export interface FamilyLookRow {
+      type: string;
+      state: string;
+      elements: FamilyLookElement[];
+      images: FamilyVerifyImage[];
+    }
+    export interface FamilyLookElement {
+      id: number;
+      kind: string;
+      name: string;
+      visible: boolean;
+      bounds?: null | FamilyVerifyBounds;
+      connector?: null | FamilyVerifyConnector;
+    }
+    export interface FamilyVerifyBounds {
+      min: FamilyVerifyPoint;
+      max: FamilyVerifyPoint;
+    }
+    export interface FamilyVerifyPoint {
+      x: number;
+      y: number;
+      z: number;
+    }
+    /**
+     * Positions and sizes are inches; normals are unit vectors.
+     */
+    export interface FamilyVerifyConnector {
+      domain: string;
+      system: string;
+      origin: FamilyVerifyPoint;
+      normal: FamilyVerifyPoint;
+      shape: string;
+      diameter?: null | number;
+      width?: null | number;
+      height?: null | number;
+    }
+    export interface FamilyVerifyImage {
+      view: string;
+      path: string;
+    }
+  }
+}
+
 /** Open a loaded family from the active project in the Revit family editor and activate it (saves to a scratch .rfa to make activation possible). */
 export namespace FamilyOpen {
   export namespace Req {
@@ -6182,6 +6333,8 @@ export interface HostOps {
   "family.apply": { request: FamilyApply.Req.Request; response: FamilyApply.Res.Response };
   "family.build": { request: FamilyBuild.Req.Request; response: FamilyBuild.Res.Response };
   "family.capture": { request: FamilyCapture.Req.Request; response: FamilyCapture.Res.Response };
+  "family.loadTest": { request: FamilyLoadTest.Req.Request; response: FamilyLoadTest.Res.Response };
+  "family.look": { request: FamilyLook.Req.Request; response: FamilyLook.Res.Response };
   "family.open": { request: FamilyOpen.Req.Request; response: FamilyOpen.Res.Response };
   "family.plan": { request: FamilyPlan.Req.Request; response: FamilyPlan.Res.Response };
   "family.temporary.acquire": { request: FamilyTemporaryAcquire.Req.Request; response: FamilyTemporaryAcquire.Res.Response };
@@ -6260,6 +6413,8 @@ export const hostOpKeys = [
   "family.apply",
   "family.build",
   "family.capture",
+  "family.loadTest",
+  "family.look",
   "family.open",
   "family.plan",
   "family.temporary.acquire",
