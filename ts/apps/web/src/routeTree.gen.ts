@@ -15,6 +15,7 @@ import { Route as ChatRouteImport } from "./routes/chat";
 import { Route as DataTablesRouteImport } from "./routes/data-tables";
 import { Route as DesignSystemRouteImport } from "./routes/design-system";
 import { Route as DocLabRouteImport } from "./routes/doc-lab";
+import { Route as DuctLossRouteImport } from "./routes/duct-loss";
 import { Route as FamiliesRouteImport } from "./routes/families";
 import { Route as FamilyRouteImport } from "./routes/family";
 import { Route as GrillesRouteImport } from "./routes/grilles";
@@ -32,6 +33,7 @@ import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.
 import { Route as DesignSystemBandRouteImport } from "./routes/design-system_.band";
 import { Route as DesignSystemListRouteImport } from "./routes/design-system_.list";
 import { Route as DesignSystemPopoversRouteImport } from "./routes/design-system_.popovers";
+import { Route as DesignSystemRevitRouteImport } from "./routes/design-system_.revit";
 import { Route as DesignSystemSwatchRouteImport } from "./routes/design-system_.swatch";
 import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
 import { Route as ApiPdfAuditParseParseIdRouteImport } from "./routes/api/pdf-audit/parse.$parseId";
@@ -64,6 +66,11 @@ const DesignSystemRoute = DesignSystemRouteImport.update({
 const DocLabRoute = DocLabRouteImport.update({
   id: "/doc-lab",
   path: "/doc-lab",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const DuctLossRoute = DuctLossRouteImport.update({
+  id: "/duct-loss",
+  path: "/duct-loss",
   getParentRoute: () => rootRouteImport,
 } as any);
 const FamiliesRoute = FamiliesRouteImport.update({
@@ -151,6 +158,11 @@ const DesignSystemPopoversRoute = DesignSystemPopoversRouteImport.update({
   path: "/design-system/popovers",
   getParentRoute: () => rootRouteImport,
 } as any);
+const DesignSystemRevitRoute = DesignSystemRevitRouteImport.update({
+  id: "/design-system_/revit",
+  path: "/design-system/revit",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const DesignSystemSwatchRoute = DesignSystemSwatchRouteImport.update({
   id: "/design-system_/swatch",
   path: "/design-system/swatch",
@@ -174,6 +186,7 @@ export interface FileRoutesByFullPath {
   "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
+  "/duct-loss": typeof DuctLossRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/grilles": typeof GrillesRoute;
@@ -191,6 +204,7 @@ export interface FileRoutesByFullPath {
   "/design-system/band": typeof DesignSystemBandRoute;
   "/design-system/list": typeof DesignSystemListRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
+  "/design-system/revit": typeof DesignSystemRevitRoute;
   "/design-system/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
@@ -202,6 +216,7 @@ export interface FileRoutesByTo {
   "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
+  "/duct-loss": typeof DuctLossRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/grilles": typeof GrillesRoute;
@@ -219,6 +234,7 @@ export interface FileRoutesByTo {
   "/design-system/band": typeof DesignSystemBandRoute;
   "/design-system/list": typeof DesignSystemListRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
+  "/design-system/revit": typeof DesignSystemRevitRoute;
   "/design-system/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
@@ -231,6 +247,7 @@ export interface FileRoutesById {
   "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
+  "/duct-loss": typeof DuctLossRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/grilles": typeof GrillesRoute;
@@ -248,6 +265,7 @@ export interface FileRoutesById {
   "/design-system_/band": typeof DesignSystemBandRoute;
   "/design-system_/list": typeof DesignSystemListRoute;
   "/design-system_/popovers": typeof DesignSystemPopoversRoute;
+  "/design-system_/revit": typeof DesignSystemRevitRoute;
   "/design-system_/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
@@ -261,6 +279,7 @@ export interface FileRouteTypes {
     | "/data-tables"
     | "/design-system"
     | "/doc-lab"
+    | "/duct-loss"
     | "/families"
     | "/family"
     | "/grilles"
@@ -278,6 +297,7 @@ export interface FileRouteTypes {
     | "/design-system/band"
     | "/design-system/list"
     | "/design-system/popovers"
+    | "/design-system/revit"
     | "/design-system/swatch"
     | "/api/pdf-audit/parse"
     | "/api/pdf-audit/parse/$parseId";
@@ -289,6 +309,7 @@ export interface FileRouteTypes {
     | "/data-tables"
     | "/design-system"
     | "/doc-lab"
+    | "/duct-loss"
     | "/families"
     | "/family"
     | "/grilles"
@@ -306,6 +327,7 @@ export interface FileRouteTypes {
     | "/design-system/band"
     | "/design-system/list"
     | "/design-system/popovers"
+    | "/design-system/revit"
     | "/design-system/swatch"
     | "/api/pdf-audit/parse"
     | "/api/pdf-audit/parse/$parseId";
@@ -317,6 +339,7 @@ export interface FileRouteTypes {
     | "/data-tables"
     | "/design-system"
     | "/doc-lab"
+    | "/duct-loss"
     | "/families"
     | "/family"
     | "/grilles"
@@ -334,6 +357,7 @@ export interface FileRouteTypes {
     | "/design-system_/band"
     | "/design-system_/list"
     | "/design-system_/popovers"
+    | "/design-system_/revit"
     | "/design-system_/swatch"
     | "/api/pdf-audit/parse"
     | "/api/pdf-audit/parse/$parseId";
@@ -346,6 +370,7 @@ export interface RootRouteChildren {
   DataTablesRoute: typeof DataTablesRoute;
   DesignSystemRoute: typeof DesignSystemRoute;
   DocLabRoute: typeof DocLabRoute;
+  DuctLossRoute: typeof DuctLossRoute;
   FamiliesRoute: typeof FamiliesRoute;
   FamilyRoute: typeof FamilyRoute;
   GrillesRoute: typeof GrillesRoute;
@@ -363,6 +388,7 @@ export interface RootRouteChildren {
   DesignSystemBandRoute: typeof DesignSystemBandRoute;
   DesignSystemListRoute: typeof DesignSystemListRoute;
   DesignSystemPopoversRoute: typeof DesignSystemPopoversRoute;
+  DesignSystemRevitRoute: typeof DesignSystemRevitRoute;
   DesignSystemSwatchRoute: typeof DesignSystemSwatchRoute;
   ApiPdfAuditParseRoute: typeof ApiPdfAuditParseRouteWithChildren;
 }
@@ -409,6 +435,13 @@ declare module "@tanstack/react-router" {
       path: "/doc-lab";
       fullPath: "/doc-lab";
       preLoaderRoute: typeof DocLabRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/duct-loss": {
+      id: "/duct-loss";
+      path: "/duct-loss";
+      fullPath: "/duct-loss";
+      preLoaderRoute: typeof DuctLossRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/families": {
@@ -530,6 +563,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DesignSystemPopoversRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/design-system_/revit": {
+      id: "/design-system_/revit";
+      path: "/design-system/revit";
+      fullPath: "/design-system/revit";
+      preLoaderRoute: typeof DesignSystemRevitRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/design-system_/swatch": {
       id: "/design-system_/swatch";
       path: "/design-system/swatch";
@@ -572,6 +612,7 @@ const rootRouteChildren: RootRouteChildren = {
   DataTablesRoute: DataTablesRoute,
   DesignSystemRoute: DesignSystemRoute,
   DocLabRoute: DocLabRoute,
+  DuctLossRoute: DuctLossRoute,
   FamiliesRoute: FamiliesRoute,
   FamilyRoute: FamilyRoute,
   GrillesRoute: GrillesRoute,
@@ -589,6 +630,7 @@ const rootRouteChildren: RootRouteChildren = {
   DesignSystemBandRoute: DesignSystemBandRoute,
   DesignSystemListRoute: DesignSystemListRoute,
   DesignSystemPopoversRoute: DesignSystemPopoversRoute,
+  DesignSystemRevitRoute: DesignSystemRevitRoute,
   DesignSystemSwatchRoute: DesignSystemSwatchRoute,
   ApiPdfAuditParseRoute: ApiPdfAuditParseRouteWithChildren,
 };

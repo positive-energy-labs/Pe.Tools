@@ -27,6 +27,7 @@ import {
 } from "#/readings";
 import { situationCells } from "./cells";
 import { DEFAULT_WAIT_S, type RouteManifest } from "./manifest";
+import { urlPage, useInitialUrlPage, useUrlPage } from "./url";
 import { actionFacts, staticNeed, type ActionFacts } from "./facts";
 import { callHostDynamic } from "#/host/client";
 import { causeRefusal, refuse, type Refusal } from "./refusal";
@@ -143,10 +144,17 @@ export function useRoute<W, R extends string, P, A extends string>(
     provided?: Partial<Record<R, Reading<unknown>>>;
     /** The thread whose head is this route's default target. */
     thread?: string;
+    /** False where the route does not own the address (a chat pane); a seed never does. */
+    url?: boolean;
   } = {},
 ): RouteHandle<W, R, P, A> {
   const demo = useMemo(frozenDemo, []);
   const seed = demo ? manifest.seeds?.[demo as A] : undefined;
+  const url = useMemo(
+    () => (options.url === false || seed ? null : urlPage(manifest)),
+    [manifest, options.url, seed],
+  );
+  const urlInitial = useInitialUrlPage(url);
   const owner = useRouteOwner(() =>
     createRouteOwner(
       manifest.key,
@@ -154,9 +162,10 @@ export function useRoute<W, R extends string, P, A extends string>(
     ),
   );
   const [page, setPageState] = useState<P>(() => {
-    const initial = { ...seed?.page, ...options.page };
+    const initial = { ...seed?.page, ...options.page, ...urlInitial };
     return manifest.page ? manifest.page.parse(initial) : (initial as P);
   });
+  useUrlPage(url, page, setPageState);
   const [outcome, setOutcome] = useState<RouteOutcome<A> | null>(null);
   // Busy and failure live in the OWNER, which is what `runAction` writes and what refuses a second
   // action. Holding a second copy in render state is how the button and the chord drifted apart:

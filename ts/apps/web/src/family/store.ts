@@ -167,8 +167,8 @@ export function useFamilyStore(options: {
   thread?: string;
   /** The owner's live `pod.list`; the demo lane seeds its own. */
   pods: Reading<unknown>;
-  /** Where the route arrived pointing (a deep link from `/pods` or a chat pane). */
-  initial?: Partial<EntityPage>;
+  /** False in a chat pane, which does not own the URL. */
+  url: boolean;
 }) {
   const demo = useMemo(
     () => new URLSearchParams(globalThis.location?.search ?? "").has("demo"),
@@ -189,7 +189,7 @@ export function useFamilyStore(options: {
   const handle = useRoute(routeManifest, {
     target: options.target ?? null,
     thread: options.thread,
-    page: options.initial as Partial<FamilyPage & EntityPage> | undefined,
+    url: options.url,
     provided,
   });
   const [page, setPage] = handle.page as unknown as readonly [

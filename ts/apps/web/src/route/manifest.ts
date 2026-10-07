@@ -121,6 +121,8 @@ export interface RouteManifest<W, R extends string, P, A extends string> {
   inspectables?: Readonly<Record<string, Inspectable>>;
   readings?: Readonly<Record<R, ReadingSpec<P>>>;
   page?: z.ZodType<P>;
+  /** The Page keys the address carries (`route/url.ts`): what the Situation targets, so Back steps through places. Each needs a default. */
+  url?: readonly (keyof P & string)[];
   /** The stages a route works in; `word` is the first word of the Situation ("Auditing rooms"). */
   stages?: readonly { key: string; word: string }[];
   actions?: {
@@ -236,17 +238,6 @@ const entityPage = z.object({
   selection: z.array(z.string()).default([]),
   confirming: z.boolean().default(false),
   sheet: z.custom<PlanSheet>().nullable().default(null),
-});
-
-/** The URL half of the entity page: every entity route's search carries stage, pod and path. */
-export type EntitySearch = Partial<Pick<EntityPage, "stage" | "pod" | "path">>;
-
-export const entitySearch = (search: Record<string, unknown>): EntitySearch => ({
-  ...(ENTITY_STAGES.some((stage) => stage.key === search.stage)
-    ? { stage: search.stage as EntityStage }
-    : {}),
-  ...(typeof search.pod === "string" && search.pod ? { pod: search.pod } : {}),
-  ...(typeof search.path === "string" && search.path ? { path: search.path } : {}),
 });
 
 /** What a plan lane reads to draw its sheet: the handle's view, with no host reach. */
@@ -443,7 +434,15 @@ export function entityRoute<W, const R extends string, P extends object, const A
   def: EntityRouteDef<W, R, P>,
   audit: Pick<
     RouteManifest<W, R, P, A>,
-    "work" | "workKey" | "cells" | "inspectables" | "readings" | "page" | "actions" | "seeds"
+    | "work"
+    | "workKey"
+    | "cells"
+    | "inspectables"
+    | "readings"
+    | "page"
+    | "url"
+    | "actions"
+    | "seeds"
   > = {},
 ): RouteManifest<W, R | EntityReading, P & EntityPage, A | EntityAction> {
   const plan = def.plan as ApplyPlan<unknown, string, object> | undefined;
@@ -589,6 +588,8 @@ export function entityRoute<W, const R extends string, P extends object, const A
     page: (audit.page ? z.intersection(audit.page, entityPage) : entityPage) as z.ZodType<
       P & EntityPage
     >,
+    // Stage, pod and path live in the URL so `/pods` can deep-link a spec and Back steps through them.
+    url: [...(audit.url ?? []), "stage", "pod", "path"] as never,
     actions: {
       ...audit.actions,
       ...(read && def.read !== "explicit" ? { read: { ...read, visible: false } } : {}),

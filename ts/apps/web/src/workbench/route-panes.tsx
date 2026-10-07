@@ -89,11 +89,8 @@ function HostedInstances() {
 }
 
 function HostedRooms() {
-  const [view, setView] = useState("");
   const [layers, setLayers] = useState("");
-  return (
-    <RoomsRoute view={view} focus="" layers={layers} setLayers={setLayers} setView={setView} />
-  );
+  return <RoomsRoute focus="" layers={layers} setLayers={setLayers} url={false} />;
 }
 
 function HostedPods({ thread }: { thread: string }) {

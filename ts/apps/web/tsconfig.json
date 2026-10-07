@@ -16,6 +16,8 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "noEmit": true,
+    /* src/revit/revit.js is plain JS with JSDoc types so pages can load it unbuilt */
+    "allowJs": true,
 
     /* Linting */
     "skipLibCheck": true,

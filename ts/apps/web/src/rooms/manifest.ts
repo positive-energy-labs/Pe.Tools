@@ -80,6 +80,8 @@ export const manifest = defineRoute<
   ],
   readings: { receipts: { kind: "receipts", target: { session: "", openId: "" } } } as never,
   page: roomsPageSchema,
+  // The stage and the plan view are the address, so a link lands on the same plan.
+  url: ["stage", "view"],
   stages: ROOMS_STAGES,
   actions: {
     partition: {

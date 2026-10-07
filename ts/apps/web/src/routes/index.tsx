@@ -16,6 +16,7 @@ import {
   Table,
   Table2,
   Terminal,
+  Wind,
 } from "lucide-react";
 
 import { RouteShell, emptyManifest } from "#/route";
@@ -77,6 +78,14 @@ const TOOLS = [
     icon: LayoutGrid,
     description:
       "The custom wood floor grille calculator — profiles in a sheet, the active one drawn to submittal scale, the buildable field charted; export a sheet to PDF or .svg.",
+  },
+  {
+    to: "/duct-loss",
+    title: "Duct Loss",
+    label: "Duct friction",
+    icon: Wind,
+    description:
+      "The imperial duct friction loss formula, live — type a duct and airflow, read Δp with every intermediate term beside the equation.",
   },
   {
     to: "/pods",

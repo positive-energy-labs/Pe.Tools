@@ -2,10 +2,10 @@
  * The entity route body: the Situation selects the target and the pod, the audit is the page,
  * and capture/apply open the spec editor beside it; a planned apply opens the confirmation sheet
  * above the editor. `/family`, `/families` and `/schedules` are definitions (`entityRoute`), not
- * implementations. Stage, pod and path live in the URL so `/pods` can deep-link a spec.
+ * implementations. Stage, pod and path are the kernel's `url` keys (`route/url.ts`).
  */
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { Switcher } from "#/components/lang/switcher";
@@ -31,25 +31,6 @@ import type { RouteHandle } from "./use-route";
 import type { StageDecl } from "./stage";
 
 type Handle = RouteHandle<any, any, EntityPage, any>;
-
-/** Page → URL. Defaults stay out of the address so a bare route URL stays bare. */
-function useEntityUrl(page: EntityPage, enabled: boolean) {
-  const navigate = useNavigate();
-  const { stage, pod, path } = page;
-  useEffect(() => {
-    if (!enabled) return;
-    void navigate({
-      to: ".",
-      search: (previous: Record<string, unknown>) => ({
-        ...previous,
-        stage: stage === "audit" ? undefined : stage,
-        pod: pod || undefined,
-        path: path || undefined,
-      }),
-      replace: true,
-    } as never);
-  }, [enabled, navigate, stage, pod, path]);
-}
 
 const NOTHING_HELD: ReadonlySet<string> = new Set();
 
@@ -119,7 +100,6 @@ export function EntityRouteView({
   children: ReactNode;
 }) {
   const [page, setPage] = handle.page;
-  useEntityUrl(page, url);
   const ladder = useDocumentLadder(handle);
   // The Situation palette is the sentence's ladder, opened by Ctrl K or its own trigger.
   const [palette, setPalette] = useState(false);

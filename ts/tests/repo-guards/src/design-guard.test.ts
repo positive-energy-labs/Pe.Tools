@@ -65,7 +65,11 @@ import { describe, expect, it } from "vite-plus/test";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../../../apps/web/src");
 const SKIP_DIRS = new Set(["node_modules", "src"]); // src/src is a stray vite artifact
-const SKIP_FILES = new Set(["routeTree.gen.ts"]);
+/* revit/revit.css is the Revit facsimile (explainers compose fake Revit UI without images). It is
+   off-system on purpose and draws every value from the --rv-* block in base.css, so the house value
+   rules do not apply to it; its classes still register through styles.css, and its TSX is scanned.
+   Ruling: docs/features/design-system/LEDGER.md, "Revit facsimile" (2026-10-05). */
+const SKIP_FILES = new Set(["routeTree.gen.ts", "revit.css"]);
 
 type Entry = { rel: string; text: string };
 
