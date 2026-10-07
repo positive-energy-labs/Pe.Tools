@@ -13,10 +13,10 @@ px = im.load()
 w, h = im.size
 for y in range(h):
     for x in range(w):
-        r, g, b, _ = px[x, y]
+        r, g, b, a0 = px[x, y]
         d = 255 - min(r, g, b)  # 0 on white, ~90 on the green
         a = 0 if d < 8 else 255 if d > 40 else int((d - 8) * 255 / 32)
-        px[x, y] = (r, g, b, a)
+        px[x, y] = (r, g, b, min(a0, a))  # keep existing transparency (rerun on brand/pea.png)
 
 # Crop to the mark, then pad to a square with a small margin so it fills the icon.
 box = im.getbbox()
