@@ -4,6 +4,8 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 
 ## Decided
 
+- 2026-10-05, delegated implementation defaults to Sol 6.1 (`gpt-6.1-sol`) at the user's request; this replaces the Sol 6 model guidance that caused an outdated selection. Model IDs come from the live catalog, and an explicit user choice wins.
+
 ### Drivers
 
 - 2026-08-25, three drivers, named once: **purity** (a stance is portable; anything repo-shaped lives in a slot), **single source of truth** (one file owns each fact; mirrors are junctions, tables are projections, the check asserts the projection), **modularity** (one capability, one skill; merge on overlap, split on two stops). A fourth, softly: **gate over disposition** below the fold. Every line here derives from one of them.

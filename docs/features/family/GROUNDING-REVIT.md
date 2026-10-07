@@ -71,6 +71,36 @@ Two orthogonal relationship types (both belong in the snapshot):
     Revit's public API cannot recreate that relationship. `Resources/Native/2025/puck.rfa` is
     therefore an intentional native compiler resource, not a temporary workaround.
 
+28. **A connector hosted on a nested instance face does not follow the instance** (2026-10-06, HCB build):
+    `ConnectorElement.CreateDuctConnector` accepts the face reference from `GetInstanceGeometry`, but the
+    connector stays at the point of creation when the nested type or its associated size parameters change.
+    Give the host family its own stub extrusion locked to formula-driven planes and host the connector there.
+29. **`NewAlignment` and `NewLinearDimension` refuse references from nested instance geometry faces**
+    ("not geometrically aligned" even when coplanar). Lock a nested instance only through its named
+    references: `FamilyInstance.GetReferences(FamilyInstanceReferenceType)` or `GetReferenceByName`.
+30. **A nested family exposes a named reference only when the plane's Is Reference matches its orientation**:
+    X-normal planes may be Left/Right/Center (Left/Right), Y-normal Front/Back/Center (Front/Back), Z-normal
+    Top/Bottom/Center (Elevation). A mismatched tag is accepted by the API and silently ignored at the host.
+31. **`ELEM_REFERENCE_NAME` integers have gaps** (2026-10-06, Revit 2025): 0 Left, 1 Center (Left/Right), 2 Right,
+    3 Front, 4 Center (Front/Back), 5 Back, 6 Bottom, 7 Center (Elevation), 8 Top, 12 Not a Reference,
+    13 Strong Reference; 9 to 11 read back empty. Read back `AsValueString()` after `Regenerate()`, not before.
+32. **The nested type slot cannot be associated**: `ELEM_TYPE_PARAM`, `ELEM_FAMILY_AND_TYPE_PARAM`,
+    `ELEM_TYPE_LABEL` and `SYMBOL_ID_PARAM` all refuse `AssociateElementParameterToFamilyParameter`, and a
+    Family Type host parameter cannot drive a nested instance's type by API. Make the nested family's size
+    parameters instance (`FamilyManager.MakeInstance`, after clearing type formulas that reference them) and
+    associate those instead.
+33. **A nested instance aligned by one face and sized by a plain value stretches instead of moving** when the
+    host plane moves; a size owned by an associated host parameter makes the alignment move the instance.
+34. **`Document.ExportImage` works on a headless family document inside a rolled-back script** (2026-10-06,
+    Revit 2025): switch `FamilyManager.CurrentType`, hide Dimensions/CLines/Levels, export plan, elevations and
+    a 3D view to PNG. Annotations left visible hid geometry in the first export. A per-type census of every
+    `GenericForm`, nested instance and connector bbox plus these images caught a stray form a log line called deleted.
+    Family editor views draw `Visible = No` elements anyway, so images cannot prove a visibility toggle; the census can.
+35. **A rectangular connector's width axis comes from the host face, not the `edge` argument** (2026-10-06, Revit 2025):
+    `CreateDuctConnector(..., face, edge)` gave width along -Y on a horizontal face with an X edge and with a Y edge.
+    `ElementTransformUtils.RotateElement` about the connector normal turns it, and the turn holds across all 8 HCB types.
+36. **A value set before a dimension is labeled does not drive it**: set the parameter again after `FamilyLabel`.
+
 ## Authored-parameter scoping (derived from documentation — NOT live-proven)
 
 2026-08-17, folded from `docs/context/rvt-api/REVIT_PARAMETER_METADATA_RESOLUTION.md` (deleted — git

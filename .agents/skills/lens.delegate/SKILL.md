@@ -36,6 +36,6 @@ Mode: no fan-out without a posture table first. Task, who (model and thinking), 
 
 ## Models [scope: repo]
 
-Astra 6, Opus 5.5 and Sol 6 are close in capability, so the choice matters less than it did. Default to the cheapest model that can do the task. Fable 5.1 is for taste: design, UX and architecture opinion, never an implementation line. A second provider on a panel buys a different reading, not a better one.
+Use Sol 6.1 (`gpt-6.1-sol`) for delegated implementation work unless the user explicitly chooses another model. Resolve provider/model IDs from the live tool catalog; do not substitute Sol 6 or older Codex defaults. Choose thinking effort for the task. Fable 5.1 is for taste: design, UX and architecture opinion, never an implementation line. A second provider on a panel buys a different reading, not a better one.
 
 Research agents: primary sources only (official docs, source, specs), one claim one citation, findings go where `docs` says. Clone third-party source locally and sync before reading; grep beats the web.

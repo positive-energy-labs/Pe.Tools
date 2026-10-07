@@ -19,6 +19,7 @@ The surface that makes a firm model compute duct and pipe pressure drop: a grill
 - 2026-10-04, a shadow store where Pe never writes to Revit: nothing travels with the model and native sizing stays dead.
 
 ## Owed
+- Port `/ducts` to `manifest.url` (`view`, `group`, `level`, `layers`, `selected`) when the branch merges: main's `route/url.ts` (2026-10-04) replaces the hand-written search mirror in `routes/ducts.tsx` and `ducts/route.tsx`; drop the `text()` numeric shim and the `replace: true` effect.
 - F's own con: a table changed under one grille silently moves every other grille that shares the rule. Round 3 must show the fan-out before the change lands (cite the design-system fan-out primitive gap).
 - Rulings still open from round 2: rule grain (type, type plus condition, part type); instances hidden, count-expands, or exceptions only; the grille as a rule row or its own table; what Pe writes for a tap, which Revit holds one coefficient for.
 - Where fan static pressure lands. Counsel: on the unit in Revit so it travels, and as a typed column on the Units card wall until the workbook can read it from Revit. kaitpw has not ruled.

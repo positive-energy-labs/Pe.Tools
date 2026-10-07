@@ -135,6 +135,39 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 - 2026-08-29 — `components/ui/` is folded into `components/lang/`: one grammar, no second tier.
   Chat views are product, and live in `chat/`.
 - 2026-08-29 — A losing prototype variant is deleted on verdict; only the winner's rewrite lives.
+- 2026-10-05 — The Revit facsimile (`apps/web/src/revit/`, specimens at `/design-system/revit`) is
+  a deliberate foreign body: stateless components that compose fake Revit chrome (ribbon, options
+  bar, Properties palette, TaskDialog, classic modal) for explainers, with no images. It is not
+  house style. Its literals live in the `--rv-*` block of `base.css` (the one file that may name a
+  colour); `revit.css` consumes only those tokens and is exempt from the house value rules by name
+  in `design-guard.test.ts` (`SKIP_FILES`); its classes still register through `styles.css` and
+  its TSX is scanned. Nothing outside `revit/` may consume `--rv-*` or `.rv-*`. Re-openable:
+  decided in an autonomous session against three critic rounds on Autodesk Help screenshots
+  (`.artifacts/revit-mock/critic-*.md`), not by kaitpw.
+- 2026-10-05 — Revit facsimile ground truth is kaitpw's own Revit 2025 on Windows 11 at 200%
+  (`.artifacts/revit-mock/ref/user-*.png`), not Autodesk Help images. Colours are sampled from
+  those captures. Control lines are one device pixel (`--rv-hair: 0.5px`). Text is Segoe UI at
+  9pt (12px: titles, grids) or 8pt (10.5px: buttons, labels, trees, group titles), and the app's
+  `font-size-adjust` is reset inside `.rv`. A dialog is mocked by pinning pieces with `RvAt` at
+  coordinates read off a 200% capture: subtract the window frame origin, then halve.
+  `.artifacts/revit-mock/compare.py` and `align.py` render the specimens at device scale 2 and
+  report per-line offsets. Mechanical Settings, Edit Shared Parameters and Routing Preferences
+  sit within 1px per text line. Re-openable, as above.
+- 2026-10-05 (supersedes the two entries above where they differ) — The Revit facsimile is one
+  declarative spec and one renderer: `apps/web/src/revit/revit.js`, plain JavaScript with JSDoc
+  types, so pages load it unbuilt. A window is a JSON value (`dialog`, `palette`, `task`, `ribbon`)
+  holding every piece and its state. The state words are `disabled`, `selected`, `checked`, `open`
+  and `default`, the same on every piece. Ids derive from text (`button:OK`, `tables/CD3-11`; a tree
+  row repeated under two parents takes its path). `set` derives a second state from a first, `diff`
+  lists what changed, `compare` draws two states with the changes ringed and listed, and notes pin
+  numbered badges on ids. Layout is flow (`row`/`col`) by default; an optional `at` box pins a piece
+  to a capture, which keeps Mechanical Settings, Edit Shared Parameters and Routing Preferences at
+  1px. The React pieces and `RvAt` are deleted; `apps/web/src/revit/index.tsx` only wraps the
+  renderer. Pages may consume `.rv-*` through `/pages/revit.css` (pages ledger, same date). Task
+  dialog fields are the journal's own (instruction, command links, common buttons, default), from
+  the dialog census in `.artifacts/revit-mock/journal-census.md`. Shape from a Fable critic round
+  (`.artifacts/revit-mock/reshape-fable.md`); the separate package and the `h`-parameterised
+  renderer it proposed were rejected for one file beside `base.css` and an HTML string. Re-openable.
 
 ### The language
 
@@ -356,6 +389,8 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
   at the new count. Refines the 2026-08-29 "not a de-emphasis mechanism" line, does not replace it.
 
 ### Route and state architecture (cross-route, owned here)
+
+- 2026-10-04, kaitpw: THE ADDRESS IS GENERATED FROM THE MANIFEST. A route names the Page keys the URL carries in `manifest.url`; `route/url.ts` derives the TanStack `validateSearch` reader and `stripSearchParams(defaults)` middleware from the page schema (Standard Schema, so zod is the one source), and `useRoute` syncs both ways: a Page move pushes one history entry per place, an address move (Back, Forward, a link) moves the Page. Every url key needs a default so a bare route URL stays bare. Replaces the hand-written `useEntityUrl`, `entitySearch` and per-route search shims; `url: false` on `useRoute` is for chat panes and seeds, which own no address. `view` is the declared home for UI variants. Proven on `/rooms` stage in a browser (push, strip, Back, Forward). Owed: port `/ducts` on `feat/pressure-drop` to `url` keys when it merges.
 
 - 2026-09-09 — Confirmed finish scope after the pause: fully cut over every retained route to the shared targeting, authored Work, readings, per-view state and operation contracts now. Concentrate complete product-workflow acceptance on Chat and Takeoffs; do not redesign every product.
 - 2026-09-09 — Chat acceptance must demonstrate a real turn using default document A, explicit per-call document B, then default A again without changing the default; retain the agreed temporary-document ownership, route-pane and navigation/recovery requirements.
