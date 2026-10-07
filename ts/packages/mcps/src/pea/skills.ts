@@ -161,6 +161,20 @@ A family is a spatial claim. Counts and flexed formulas prove that numbers hold,
 4. Clearances: nest the company clearance family (!Mechanical Equipment_Clearance_Rectangular_UH in the PE library, or the one the user names) once per zone, always on. Ask before modeling clearance as plain solids.
 5. Verify after every geometry write: family.look with the family's Yes/No toggles, then read the plan and the connection-side elevation beside the matching page. Check in its census that every inventory connector exists in every type and toggle state. Before calling it done, run family.loadTest and read its warnings, duplicate names, and images. A PROVEN without both is UNPROVEN.
 
+## Sheet letters
+
+- A cut sheet's lettered dimensions are labels local to one drawing and its table, never identities. The same letter often means different things on different pages: on the Magic Aire HCB submittal, L is the supply opening height for sizes 04 to 20 and an offset for 30/40, where J is the height.
+- For each table, map every letter to its meaning by finding where its drawing dimensions it. Name parameters by meaning (Supply Opening Height), never by letter. Show the per-table map when you align; a letter whose meaning changes between tables is a finding.
+- Check each mapping against the cabinet: an opening must fit inside its face, and its offsets plus its size must not exceed the face.
+
+## Accessories
+
+Mixing boxes, filter racks, curbs and their top, back and bottom variants have no free shape. Present the three shapes with their costs and let the user choose, per family or as a company standard:
+
+- Nested family behind a Yes/No toggle keeps the accessory schedulable with its model-number types. Its connectors are not the host's, so each needs a host stub and a host connector. No connector can hide, so every variant's connectors stay in the project unconnected while that option is off; three outside-air variants mean three dangling connectors. Users must remember the toggles.
+- Host geometry is the simplest and carries fully through family capture. The accessory is no longer a schedulable element of its own, and its connectors still dangle when the option is off.
+- A model group of separate families, placed together and ungrouped after placement, keeps each part's own connectors and schedule rows, and nothing dangles. The parts are not driven by the host's size parameters, and edits happen after placement.
+
 ## Revit laws
 
 - A connector inside a nested family is not the host's connector, and no connector can be hidden. An accessory opening (a mixing box outside-air collar) needs a host-owned stub extrusion that copies the collar footprint, with the connector on the stub's face; the stub follows the toggle, the connector stays.
