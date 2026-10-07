@@ -86,6 +86,12 @@
       "name": "host",
       "source": "ts/apps/host/dist-installed",
       "entry": "Pe.Host.exe",
+      "shortcut": {
+        "name": "Pe.Tools",
+        "arguments": "--open",
+        "icon": "web/client/favicon.ico",
+        "description": "Open Pe.Tools in your browser; Revit joins this host when it starts"
+      },
       "dev": "vp run @pe/host#attach",
       "build": "pnpm --dir ts --filter @pe/host build:payload",
       "service": {
