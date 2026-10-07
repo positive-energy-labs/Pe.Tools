@@ -25,14 +25,15 @@ export const hostProgram = (
       yield* Effect.sync(() =>
         capture("app_boot", { component: "host", version: resolveHostVersion() }),
       );
-      // Desktop entry: a host that already serves (started by Revit or an earlier click) is the
-      // answer. Open it and exit; a second launch would otherwise evict it and drop Revit's bridge.
+      // Desktop entry: a same-version host that already serves (started by Revit or an earlier
+      // click) is the answer. Open it and exit; a second launch would otherwise evict it and drop
+      // Revit's bridge. An older host (left running across an upgrade) is replaced as usual.
       const open = process.argv.includes("--open");
       if (open) {
         const live = yield* Effect.promise(() =>
           discoverService(productRoot(), hostOwnership.serviceName, { verifyOwner: true }),
         );
-        if (live) {
+        if (live?.version === resolveHostVersion()) {
           console.log(`pe-host already serving on ${live.port} (pid ${live.pid}); opening it`);
           openBrowser(live.port);
           return;
