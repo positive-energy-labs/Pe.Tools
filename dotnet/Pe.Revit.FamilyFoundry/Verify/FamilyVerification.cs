@@ -69,7 +69,7 @@ public static class FamilyVerification {
         var typeNames = Types(familyDocument, request.Types).Select(t => t.Name).ToList();
         var app = familyDocument.Application;
         var template = request.Template ?? app.DefaultProjectTemplate;
-        if (!string.IsNullOrWhiteSpace(template) && (!Path.IsPathFullyQualified(template) || !File.Exists(template) || !string.Equals(Path.GetExtension(template), ".rte", StringComparison.OrdinalIgnoreCase)))
+        if (!string.IsNullOrWhiteSpace(template) && (!IsFullyQualified(template) || !File.Exists(template) || !string.Equals(Path.GetExtension(template), ".rte", StringComparison.OrdinalIgnoreCase)))
             throw Bad("$.template", "InvalidTemplate", "The project template must be an existing absolute .rte path.");
         var sourceNested = NestedDefinitions(familyDocument);
         var failures = new FailureRecorder();
@@ -157,7 +157,7 @@ public static class FamilyVerification {
     }
 
     private static string OutputDirectory(string path) {
-        if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path)) throw Bad("$.outDir", "AbsolutePathRequired", "outDir must be an absolute directory.");
+        if (string.IsNullOrWhiteSpace(path) || !IsFullyQualified(path)) throw Bad("$.outDir", "AbsolutePathRequired", "outDir must be an absolute directory.");
         Directory.CreateDirectory(path);
         return path;
     }
@@ -220,7 +220,8 @@ public static class FamilyVerification {
             document.ExportImage(options);
             var exported = Directory.GetFiles(directory, Path.GetFileName(temporary) + "*.png").Single();
             var path = Path.Combine(directory, prefix + "__" + key + ".png");
-            File.Move(exported, path, true);
+            if (File.Exists(path)) File.Delete(path);
+            File.Move(exported, path);
             images.Add(new FamilyVerifyImage(key, path.Replace('\\', '/')));
         }
         return images;
@@ -229,7 +230,7 @@ public static class FamilyVerification {
     // Escape instead of dropping characters so different authored names cannot overwrite one another.
     private static string Safe(string name) => string.Concat(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) || c == '~' || c == '.' ? "~" + ((int)c).ToString("X4") : c.ToString()));
     private static Dictionary<string, int> NestedDefinitions(Document document) => new FilteredElementCollector(document).OfClass(typeof(FamilyInstance)).Cast<FamilyInstance>()
-        .Select(i => i.Symbol.Family).DistinctBy(f => f.Id.Value()).GroupBy(f => f.Name, StringComparer.Ordinal)
+        .Select(i => i.Symbol.Family).GroupBy(f => f.Id.Value()).Select(g => g.First()).GroupBy(f => f.Name, StringComparer.Ordinal)
         .ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
     private static Dictionary<string, int> LoadedNestedDefinitions(Document project, Family loaded, FailureRecorder failures) {
         using var group = new TransactionGroup(project, "Inspect loaded nested definitions (rollback)");
@@ -268,6 +269,11 @@ public static class FamilyVerification {
     }, Point(c.Origin), Point(c.CoordinateSystem.BasisZ, 1), c.Shape.ToString(), c.Shape == ConnectorProfileType.Round ? c.Radius * 24 : null,
         c.Shape is ConnectorProfileType.Rectangular or ConnectorProfileType.Oval ? c.Width * 12 : null,
         c.Shape is ConnectorProfileType.Rectangular or ConnectorProfileType.Oval ? c.Height * 12 : null);
+    // Path.IsPathFullyQualified is absent on net48 (Revit 2023/2024): drive-rooted or UNC only, never `C:foo` or `\foo`.
+    private static bool IsFullyQualified(string path) =>
+        path.StartsWith(@"\\", StringComparison.Ordinal)
+        || (path.Length >= 3 && char.IsLetter(path[0]) && path[1] == ':' && (path[2] == '\\' || path[2] == '/'));
+
     private static Exception Bad(string path, string code, string message) => BridgeOperationExceptions.BadRequest(message, [BridgeOperationExceptions.Issue(path, code, message, null)]);
 
     private sealed class LoadOptions(string name) : IFamilyLoadOptions {
@@ -294,7 +300,7 @@ public static class FamilyVerification {
                 var severity = failure.GetSeverity();
                 var resolution = "Warning retained";
                 if (severity != FailureSeverity.Warning) {
-                    var current = Enum.GetValues<FailureResolutionType>().FirstOrDefault(type => type != FailureResolutionType.Invalid
+                    var current = Enum.GetValues(typeof(FailureResolutionType)).Cast<FailureResolutionType>().FirstOrDefault(type => type != FailureResolutionType.Invalid
                         && failure.HasResolutionOfType(type) && accessor.IsFailureResolutionPermitted(failure, type)
                         && !accessor.GetAttemptedResolutionTypes(failure).Contains(type));
                     if (current != FailureResolutionType.Invalid) {
