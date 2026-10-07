@@ -4,9 +4,10 @@ public sealed record FamilyLookRequest(string OutDir, IReadOnlyList<string>? Typ
 public sealed record FamilyLoadTestRequest(string OutDir, IReadOnlyList<string>? Types = null, string? Template = null);
 public sealed record FamilyVerifyPoint(double X, double Y, double Z);
 public sealed record FamilyVerifyBounds(FamilyVerifyPoint Min, FamilyVerifyPoint Max);
-/// <summary>Positions and sizes are inches; normals are unit vectors.</summary>
+/// <summary>Positions and sizes are inches; normals are unit vectors. Direction is In, Out, Bidirectional, or null when the domain has none.
+/// Drives maps a connector parameter (Flow, Width, Voltage...) to the family parameter associated with it; family documents only.</summary>
 public sealed record FamilyVerifyConnector(string Domain, string System, FamilyVerifyPoint Origin, FamilyVerifyPoint Normal,
-    string Shape, double? Diameter, double? Width, double? Height);
+    string Shape, double? Diameter, double? Width, double? Height, string? Direction, IReadOnlyDictionary<string, string>? Drives);
 public sealed record FamilyLookElement(long Id, string Kind, string Name, bool Visible, FamilyVerifyBounds? Bounds, FamilyVerifyConnector? Connector);
 public sealed record FamilyVerifyImage(string View, string Path);
 public sealed record FamilyLookRow(string Type, string State, IReadOnlyList<FamilyLookElement> Elements, IReadOnlyList<FamilyVerifyImage> Images);

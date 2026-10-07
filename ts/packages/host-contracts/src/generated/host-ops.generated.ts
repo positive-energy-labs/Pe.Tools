@@ -714,7 +714,8 @@ export namespace FamilyLoadTest {
       error?: null | string;
     }
     /**
-     * Positions and sizes are inches; normals are unit vectors.
+     * Positions and sizes are inches; normals are unit vectors. Direction is In, Out, Bidirectional, or null when the domain has none.
+     *             Drives maps a connector parameter (Flow, Width, Voltage...) to the family parameter associated with it; family documents only.
      */
     export interface FamilyVerifyConnector {
       domain: string;
@@ -725,6 +726,10 @@ export namespace FamilyLoadTest {
       diameter?: null | number;
       width?: null | number;
       height?: null | number;
+      direction?: null | string;
+      drives?: null | {
+        [k: string]: string;
+      };
     }
     export interface FamilyVerifyPoint {
       x: number;
@@ -803,7 +808,8 @@ export namespace FamilyLook {
       z: number;
     }
     /**
-     * Positions and sizes are inches; normals are unit vectors.
+     * Positions and sizes are inches; normals are unit vectors. Direction is In, Out, Bidirectional, or null when the domain has none.
+     *             Drives maps a connector parameter (Flow, Width, Voltage...) to the family parameter associated with it; family documents only.
      */
     export interface FamilyVerifyConnector {
       domain: string;
@@ -814,6 +820,10 @@ export namespace FamilyLook {
       diameter?: null | number;
       width?: null | number;
       height?: null | number;
+      direction?: null | string;
+      drives?: null | {
+        [k: string]: string;
+      };
     }
     export interface FamilyVerifyImage {
       view: string;

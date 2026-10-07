@@ -260,15 +260,29 @@ public static class FamilyVerification {
         return new FamilyVerifyBounds(Point(new XYZ(corners.Min(p => p.X), corners.Min(p => p.Y), corners.Min(p => p.Z))),
             Point(new XYZ(corners.Max(p => p.X), corners.Max(p => p.Y), corners.Max(p => p.Z))));
     }
-    private static FamilyVerifyConnector Describe(ConnectorElement c) => new(c.Domain.ToString(), c.SystemClassification.ToString(), Point(c.Origin), Point(c.CoordinateSystem.BasisZ, 1),
-        c.Shape.ToString(), c.Shape == ConnectorProfileType.Round ? c.Radius * 24 : null,
-        c.Shape is ConnectorProfileType.Rectangular or ConnectorProfileType.Oval ? c.Width * 12 : null,
-        c.Shape is ConnectorProfileType.Rectangular or ConnectorProfileType.Oval ? c.Height * 12 : null);
+    private static FamilyVerifyConnector Describe(ConnectorElement c) {
+        var manager = c.Document.FamilyManager;
+        var drives = c.Parameters.Cast<Parameter>()
+            .Select(p => (Name: p.Definition.Name, Family: manager.GetAssociatedFamilyParameter(p)))
+            .Where(x => x.Family is not null)
+            .ToDictionary(x => x.Name, x => x.Family!.Definition.Name);
+        var direction = c.Domain switch {
+            Domain.DomainHvac => c.get_Parameter(BuiltInParameter.RBS_DUCT_FLOW_DIRECTION_PARAM),
+            Domain.DomainPiping => c.get_Parameter(BuiltInParameter.RBS_PIPE_FLOW_DIRECTION_PARAM),
+            _ => null
+        };
+        return new(c.Domain.ToString(), c.SystemClassification.ToString(), Point(c.Origin), Point(c.CoordinateSystem.BasisZ, 1),
+            c.Shape.ToString(), c.Shape == ConnectorProfileType.Round ? c.Radius * 24 : null,
+            c.Shape is ConnectorProfileType.Rectangular or ConnectorProfileType.Oval ? c.Width * 12 : null,
+            c.Shape is ConnectorProfileType.Rectangular or ConnectorProfileType.Oval ? c.Height * 12 : null,
+            direction is null ? null : ((FlowDirectionType)direction.AsInteger()).ToString(), drives);
+    }
     private static FamilyVerifyConnector Describe(Connector c) => new(c.Domain.ToString(), c.Domain switch {
         Domain.DomainHvac => c.DuctSystemType.ToString(), Domain.DomainPiping => c.PipeSystemType.ToString(), Domain.DomainElectrical => c.ElectricalSystemType.ToString(), _ => "Undefined"
     }, Point(c.Origin), Point(c.CoordinateSystem.BasisZ, 1), c.Shape.ToString(), c.Shape == ConnectorProfileType.Round ? c.Radius * 24 : null,
         c.Shape is ConnectorProfileType.Rectangular or ConnectorProfileType.Oval ? c.Width * 12 : null,
-        c.Shape is ConnectorProfileType.Rectangular or ConnectorProfileType.Oval ? c.Height * 12 : null);
+        c.Shape is ConnectorProfileType.Rectangular or ConnectorProfileType.Oval ? c.Height * 12 : null,
+        c.Domain is Domain.DomainHvac or Domain.DomainPiping ? c.Direction.ToString() : null, null);
     // Path.IsPathFullyQualified is absent on net48 (Revit 2023/2024): drive-rooted or UNC only, never `C:foo` or `\foo`.
     private static bool IsFullyQualified(string path) =>
         path.StartsWith(@"\\", StringComparison.Ordinal)
