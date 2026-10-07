@@ -104,7 +104,7 @@
       "name": "pea",
       "source": "ts/apps/pea/dist-installed",
       "entry": "pea.exe",
-      "build": "pnpm --dir ts --filter @pe/pea build:installed"
+      "build": "pnpm --dir ts --filter @pe/pea build"
     },
     {
       "type": "PathShim",

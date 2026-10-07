@@ -11,9 +11,8 @@ import { hostOwnership } from "./host-ownership.ts";
  *   unset and static serving is skipped).
  */
 export function resolveWebRoot(): string | null {
-  if (hostOwnership.lane === "installed") {
-    return join(dirname(process.execPath), "web", "client");
-  }
+  const bundled = join(dirname(process.execPath), "web", "client");
+  if (hostOwnership.lane === "installed" || existsSync(bundled)) return bundled;
   return process.env.PE_TOOLS_WEB_DIST?.trim() || null;
 }
 
