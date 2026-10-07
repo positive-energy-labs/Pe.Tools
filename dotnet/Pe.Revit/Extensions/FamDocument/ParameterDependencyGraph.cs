@@ -117,7 +117,7 @@ public sealed record ParameterDependencyGraph(IReadOnlyList<ParameterGraphNode> 
         string.Join("; ", ids.Select(id => Describe(document, id)));
 
     private static string Describe(FamilyDocument document, long id) {
-        var element = document.Document.GetElement(new ElementId(id));
+        var element = document.Document.GetElement(id.ToElementId());
         if (element is null) return $"{id}=<missing>";
         var category = element.Category?.Name;
         var style = (element as CurveElement)?.LineStyle?.Name;

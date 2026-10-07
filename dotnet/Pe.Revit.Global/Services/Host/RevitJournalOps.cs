@@ -55,8 +55,10 @@ internal static class RevitJournalOps {
             .Where(line => line.Text.Length != 0)
             .Where(line => request.AfterLine is not { } after || line.Index > after)
             .Select(line => new RevitJournalRow(line.Index, JournalStamp.Match(line.Text) is { Success: true } m ? m.Value : null, Classify(line.Text), line.Text))
-            .Where(row => kinds.Count == 0 || kinds.Contains(row.Kind));
-        var page = request.AfterLine is null ? rows.TakeLast(maxLines) : rows.Take(maxLines);
+            .Where(row => kinds.Count == 0 || kinds.Contains(row.Kind))
+            .ToList();
+        // Skip, not TakeLast: net48 (Revit 2023/2024) has no TakeLast.
+        var page = request.AfterLine is null ? rows.Skip(Math.Max(0, rows.Count - maxLines)) : rows.Take(maxLines);
         return new RevitJournalTailData(path, lines.Count, page.ToList());
     }
 
