@@ -63,6 +63,8 @@ const config = defineConfig(({ mode }) => {
       dedupe: ["react", "react-dom"],
       alias: { "@family-fixtures": familyFixturesDir },
     },
+    // Feedback notes name the picked component; minified names would read `p`.
+    build: { rolldownOptions: { output: { keepNames: true } } },
     optimizeDeps: {
       // ponytail: the dev host's optimizer held its bundle until static-import crawl end and the
       // crawl never ended on 2026-09-11 (504 Outdated Optimize Dep forever, `deps_temp_*` never

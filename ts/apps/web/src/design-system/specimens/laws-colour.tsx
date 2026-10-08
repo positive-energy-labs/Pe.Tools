@@ -76,6 +76,11 @@ export function ColourLaws({ owner }: { owner: (name: string) => string }) {
         <Press state="selected" aria-pressed>
           selected row
         </Press>
+        {/* The pick mark: the feedback picker's target, veil plus ink outline over any content. */}
+        <span className="relative w-fit">
+          <ActionButton label="picked for a note" onClick={noop} reason="Pick mark specimen" />
+          <span className="pick-mark absolute inset-0" />
+        </span>
         <CounterExample why="Pea green would claim authorship, not selection">
           <FactChip tone="pea" title="Selected row">
             selected row

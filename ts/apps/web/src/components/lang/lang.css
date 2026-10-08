@@ -47,6 +47,16 @@
   --pe-on: var(--pe-select);
 }
 
+/* The pick mark: the element a feedback note is about. It floats over arbitrary page content, so it
+   wears the hover veil (never the opaque select fill, which would hide the target) plus a full-ink
+   outline: line-2 is 22% ink and vanished over real content and in the note's picture. */
+.pick-mark {
+  background-image: var(--fill-veil);
+  outline: 2px solid var(--pe-ink);
+  outline-offset: 2px;
+  pointer-events: none;
+}
+
 :where(svg [aria-selected="true"], svg [data-selected]) {
   fill: var(--pe-select);
 }

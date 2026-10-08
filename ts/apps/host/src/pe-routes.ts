@@ -32,6 +32,8 @@ import {
   writePeaCodexProjectConfig,
 } from "./harness/user-shell.ts";
 import {
+  ANALYTICS_PAYLOAD_BUDGET,
+  captureNow,
   observeResources,
   resourceResponse,
   RouteViewStore,
@@ -50,6 +52,20 @@ import { productHarnessThreadsPath, productRouteWorkPath } from "./product-paths
 import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
 import { bindActionWorkspace } from "./takeoff-actions.ts";
 import { familySpecAsset, familySpecHandlers } from "./family-spec.ts";
+
+// One user note on one picked element, bound for PostHog; the picture rides inline as a data URL.
+const feedbackSchema = z.object({
+  comment: z.string().trim().min(1).max(8000),
+  url: z.string().max(2048),
+  selector: z.string().max(2048).nullable(),
+  component: z.string().max(200).nullable(),
+  components: z.array(z.string().max(200)).max(64),
+  html: z.string().max(4000),
+  rect: z.object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() }),
+  viewport: z.object({ width: z.number(), height: z.number(), dpr: z.number() }),
+  picture: z.string().startsWith("data:image/").max(ANALYTICS_PAYLOAD_BUDGET).nullable(),
+  picture_error: z.string().max(500).nullable(),
+});
 
 /**
  * Route Work as one JSON file per (route, Work key), named by hash: Addresses are Windows paths. The
@@ -169,6 +185,16 @@ export function createPeRoutes(options: PeRoutesOptions) {
     }
     if (method === "GET" && url.pathname === "/pe/resources")
       return resourceResponse(request, observe);
+    if (method === "POST" && url.pathname === "/pe/feedback") {
+      const parsed = feedbackSchema.safeParse(await body());
+      if (!parsed.success) return json({ error: "invalid feedback" }, 400);
+      try {
+        await captureNow("ui_feedback", parsed.data);
+        return json({ ok: true });
+      } catch (error) {
+        return json({ error: message(error) }, 502);
+      }
+    }
 
     if (parts[0] === "route-view" && parts[1] === "families") {
       const [, , instance] = parts;
@@ -419,6 +445,7 @@ export const peRoutesLayer = (registrationsFactory?: typeof createRouteRegistrat
       for (const path of [
         "/pe/capabilities",
         "/pe/family-spec",
+        "/pe/feedback",
         "/pe/resources",
         "/pe/route-state",
         "/pe/route-state/:route",

@@ -24,6 +24,7 @@ import {
 } from "../host/install";
 import { FactChip } from "../components/lang/chip";
 import { OutcomeLine } from "../components/lang/outcome";
+import { FeedbackPicker } from "../components/feedback-picker";
 
 import appCss from "../styles.css?url";
 
@@ -81,6 +82,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <RegistryContext.Provider value={appAtomRegistry}>
           {children}
           <UpdateButton />
+          <FeedbackPicker />
           <TanStackDevtools
             config={{
               position: "middle-left",
