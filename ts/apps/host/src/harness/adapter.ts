@@ -1,7 +1,8 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { createRequire } from "node:module";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { isSea } from "node:sea";
 import { Readable, Writable } from "node:stream";
 import { ClientSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
@@ -33,28 +34,34 @@ export const adapters: Record<
   },
 };
 
-/** A SEA cannot execute another Node script; its adapters run in the shipped child runtime. */
-export function adapterLaunch(
-  harness: HarnessId,
-  runtimeRoot: string | null = isSea() ? join(dirname(process.execPath), "harness") : null,
-): { command: string; args: string[]; env: Record<string, string> } {
+/**
+ * The installed host runs each adapter inside its own executable (`Pe.Host.exe --adapter <id>`,
+ * dispatched in index.ts), so no second Node ships; a source host runs the adapter's bin under its
+ * own Node. The adapter drives the user's own CLI (`adapterCli`), never a shipped one.
+ */
+export function adapterLaunch(harness: HarnessId): {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+} {
+  const cli = adapterCli(harness);
+  // A SEA has no fallback CLI: without this path the codex adapter would re-run Pe.Host.exe itself.
+  if (isSea() && !isAbsolute(cli))
+    throw new Error(`${adapters[harness].title} is not installed (no ${cli}.exe found).`);
+  const env: Record<string, string> = isAbsolute(cli)
+    ? { [harness === "claude" ? "CLAUDE_CODE_EXECUTABLE" : "CODEX_PATH"]: cli }
+    : {};
+  if (isSea()) return { command: process.execPath, args: ["--adapter", harness], env };
   const override = process.env[`PE_HARNESS_ADAPTER_${harness.toUpperCase()}`];
-  const command = runtimeRoot ? join(runtimeRoot, "node.exe") : process.execPath;
-  const manifest = runtimeRoot
-    ? join(runtimeRoot, "package.json")
-    : createRequire(import.meta.url).resolve("@pe/harness-runtime/package.json");
-  const require = createRequire(manifest);
-  const pkgJson = require.resolve(`${adapters[harness].pkg}/package.json`);
+  const pkgJson = createRequire(import.meta.url).resolve(`${adapters[harness].pkg}/package.json`);
   const bin = JSON.parse(readFileSync(pkgJson, "utf8")).bin as Record<string, string>;
-  const entry = override ?? join(dirname(pkgJson), Object.values(bin)[0]!);
-  const env: Record<string, string> = {};
-  if (runtimeRoot && harness === "codex") env.CODEX_PATH = adapterCli(harness, runtimeRoot);
-  for (const path of [command, entry, ...Object.values(env)])
-    if (!existsSync(path)) throw new Error(`Harness runtime file is missing: ${path}`);
-  return { command, args: [entry], env };
+  return {
+    command: process.execPath,
+    args: [override ?? join(dirname(pkgJson), Object.values(bin)[0]!)],
+    env,
+  };
 }
 
-/** Installed login uses the same native CLI as inference, without a global CLI installation. */
 /** Spawns the harness's adapter over `env` and connects `client` to it; `stderr()` is the tail. */
 export function openAdapter(
   harness: HarnessId,
@@ -81,21 +88,24 @@ export function openAdapter(
   return { child, conn, stderr: () => stderr };
 }
 
-export function adapterCli(
-  harness: HarnessId,
-  runtimeRoot: string | null = isSea() ? join(dirname(process.execPath), "harness") : null,
-): string {
-  if (!runtimeRoot) return adapters[harness].cli;
-  const require = createRequire(join(runtimeRoot, "package.json"));
-  const adapter = createRequire(require.resolve(`${adapters[harness].pkg}/package.json`));
-  if (harness === "claude") {
-    const sdk = createRequire(adapter.resolve("@anthropic-ai/claude-agent-sdk"));
-    return sdk.resolve(`@anthropic-ai/claude-agent-sdk-win32-${process.arch}/claude.exe`);
-  }
-  const codex = createRequire(adapter.resolve("@openai/codex/package.json"));
-  const native = codex.resolve(`@openai/codex-win32-${process.arch}/package.json`);
-  const triple = process.arch === "arm64" ? "aarch64" : "x86_64";
-  return join(dirname(native), "vendor", `${triple}-pc-windows-msvc`, "bin", "codex.exe");
+/**
+ * The user's own CLI (host ledger 2026-10-08, H1): where the official installer puts it, else the
+ * first `<cli>.exe` on PATH, else the bare name (not installed). Only native exes count, because
+ * the Claude SDK spawns its executable without a shell.
+ */
+export function adapterCli(harness: HarnessId): string {
+  const local = process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local");
+  const official =
+    harness === "claude"
+      ? join(homedir(), ".local", "bin", "claude.exe")
+      : join(local, "Programs", "OpenAI", "Codex", "bin", "codex.exe");
+  if (existsSync(official)) return official;
+  const found = spawnSync("where.exe", [`${adapters[harness].cli}.exe`], {
+    encoding: "utf8",
+    windowsHide: true,
+    timeout: 5000,
+  });
+  return found.status === 0 ? found.stdout.split(/\r?\n/)[0]!.trim() : adapters[harness].cli;
 }
 
 export function adapterLogin(harness: HarnessId, cli = adapterCli(harness)): string {

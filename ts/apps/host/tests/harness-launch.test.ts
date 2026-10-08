@@ -1,45 +1,19 @@
 import { afterEach, expect, test } from "vite-plus/test";
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { adapterCli, adapterLaunch, adapterLogin, peaMcpServer } from "../src/harness/adapter.ts";
 
 const roots: string[] = [];
 afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })));
 
-test("a relocated installed host launches shipped Node and Codex without PATH lookup", () => {
-  const root = mkdtempSync(join(tmpdir(), "pe-launch-"));
-  roots.push(root);
-  const runtime = join(root, "bin", "host", "harness");
-  mkdirSync(runtime, { recursive: true });
-  writeFileSync(join(runtime, "package.json"), "{}");
-  cpSync(process.execPath, join(runtime, "node.exe"));
-  const pkg = (name: string, manifest: object, files: string[] = []) => {
-    const directory = join(runtime, "node_modules", name);
-    mkdirSync(directory, { recursive: true });
-    writeFileSync(join(directory, "package.json"), JSON.stringify(manifest));
-    for (const file of files) {
-      mkdirSync(dirname(join(directory, file)), { recursive: true });
-      writeFileSync(join(directory, file), "");
-    }
-    return directory;
-  };
-  const adapter = pkg("@agentclientprotocol/codex-acp", { bin: { "codex-acp": "dist/index.js" } }, [
-    "dist/index.js",
-  ]);
-  pkg("@openai/codex", {});
-  const native = `vendor/${process.arch === "arm64" ? "aarch64" : "x86_64"}-pc-windows-msvc/bin/codex.exe`;
-  const codex = pkg(`@openai/codex-win32-${process.arch}`, {}, [native]);
-  const launch = adapterLaunch("codex", runtime);
-  expect(launch).toEqual({
-    command: join(runtime, "node.exe"),
-    args: [join(adapter, "dist/index.js")],
-    env: { CODEX_PATH: join(codex, native) },
-  });
-  expect(adapterCli("codex", runtime)).toBe(join(codex, native));
-  expect(adapterLogin("codex", join(codex, native))).toBe(`& '${join(codex, native)}' login`);
-  rmSync(join(codex, native));
-  expect(() => adapterLaunch("codex", runtime)).toThrow("Harness runtime file is missing");
+test("a source host runs the adapter bin under its own Node and hands it the user's CLI", () => {
+  const launch = adapterLaunch("codex");
+  expect(launch.command).toBe(process.execPath);
+  expect(launch.args[0]).toMatch(/codex-acp[\\/]dist[\\/]index\.js$/);
+  const cli = adapterCli("codex");
+  expect(launch.env).toEqual(isAbsolute(cli) ? { CODEX_PATH: cli } : {});
+  if (isAbsolute(cli)) expect(cli).toMatch(/codex\.exe$/i);
 });
 
 test("installed subscription login quotes a native path for PowerShell", () => {

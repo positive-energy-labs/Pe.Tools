@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute } from "node:path";
@@ -297,17 +297,6 @@ async function checkEndpoint(
 
 type AuthStatus = { kind?: string; label?: string };
 
-/** Installed login uses the shipped CLI; source login uses the user's PATH. */
-function cliOnPath(harness: HarnessId, env: Record<string, string | undefined>): boolean {
-  const cli = adapterCli(harness);
-  if (isAbsolute(cli)) return existsSync(cli);
-  const finder = process.platform === "win32" ? "where.exe" : "which";
-  return (
-    spawnSync(finder, [adapters[harness].cli], { env, windowsHide: true, timeout: 5000 }).status ===
-    0
-  );
-}
-
 async function acpProbe(
   record: ProviderRecord,
   env: Record<string, string | undefined>,
@@ -343,7 +332,7 @@ async function acpProbe(
           step: "endpoint",
           message: `The harness refused the endpoint: ${detail}`,
         }
-      : cliOnPath(record.harness, env)
+      : isAbsolute(adapterCli(record.harness))
         ? {
             state: "refused",
             step: "signed-in",
@@ -352,7 +341,7 @@ async function acpProbe(
         : {
             state: "refused",
             step: "installed",
-            message: `${adapters[record.harness].title} is not signed in and \`${adapters[record.harness].cli}\` is not on your PATH.`,
+            message: `${adapters[record.harness].title} is not installed: no ${adapters[record.harness].cli}.exe in its installer's folder or on your PATH.`,
           };
   const work = (async (): Promise<Omit<Probed, "probedAt">> => {
     await conn.initialize({

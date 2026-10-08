@@ -15,8 +15,6 @@
     "smokeService": "host",
     "smokePaths": [
       "app/bin/host/Pe.Host.exe",
-      "app/bin/host/harness/node.exe",
-      "app/bin/host/harness/package.json",
       "app/bin/host/web/client/index.html",
       "app/bin/pea/pea.exe"
     ]
@@ -92,7 +90,7 @@
         "name": "Pe.Tools",
         "arguments": "--open",
         "icon": "web/client/favicon.ico",
-        "description": "Open Pe.Tools in your browser; Revit joins this host when it starts"
+        "description": "Open Pe.Tools in its own window; Revit joins this host when it starts"
       },
       "dev": "vp run @pe/host#attach",
       "build": "pnpm --dir ts --filter @pe/host build:payload",
@@ -100,7 +98,8 @@
         "preferredPort": 5180,
         "health": "/host/status",
         "shutdown": "/admin/shutdown",
-        "tier": "managed"
+        "tier": "managed",
+        "autostart": true
       }
     },
     {

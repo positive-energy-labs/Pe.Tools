@@ -201,8 +201,7 @@ function App() {
       <main className="py-16">
         <section className="max-w-2xl">
           <p className="t-small t-upper mb-3 text-ink-2">
-            <span className="t-upper">Internal tools</span> ·{" "}
-            <span className="t-small face-mono">update proof 0.6.22</span>
+            <span className="t-upper">Internal tools</span>
           </p>
           <p className="t-display face-display text-ink">Healthy people, healthy planet.</p>
           <p className="t-prose mt-4 text-ink-2">

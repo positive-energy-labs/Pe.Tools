@@ -26,6 +26,7 @@ import { staticSpaLayer } from "./static-spa.ts";
 import { peRoutesLayer } from "./pe-routes.ts";
 import { capturesRoute } from "./captures-route.ts";
 import { pagesRoute } from "./pages-route.ts";
+import { updateRoutes } from "./update-route.ts";
 
 export { resolveWebRoot } from "./static-spa.ts";
 
@@ -231,6 +232,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
     capturesRoute(spa),
     pagesRoute(),
     adminShutdownRoute,
+    updateRoutes,
     peRoutesLayer(options.routeRegistrations),
     demoRoutes(),
     webUrl

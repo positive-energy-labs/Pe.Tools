@@ -77,6 +77,12 @@ importers:
 
   apps/host:
     dependencies:
+      '@agentclientprotocol/claude-agent-acp':
+        specifier: 'catalog:'
+        version: 0.84.0(@anthropic-ai/sdk@0.128.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))
+      '@agentclientprotocol/codex-acp':
+        specifier: 'catalog:'
+        version: 2.1.0
       '@agentclientprotocol/sdk':
         specifier: 'catalog:'
         version: 1.5.1(zod@4.3.6)
@@ -86,9 +92,6 @@ importers:
       '@pe/agent-contracts':
         specifier: workspace:*
         version: link:../../packages/agent-contracts
-      '@pe/harness-runtime':
-        specifier: workspace:*
-        version: link:../../tools/harness-runtime
       '@pe/host-contracts':
         specifier: workspace:*
         version: link:../../packages/host-contracts
@@ -439,15 +442,6 @@ importers:
       vite-plus:
         specifier: 'catalog:'
         version: 0.2.1(patch_hash=ec4550f35894920e3b7936089232d1d01a00fdf491b57911927884cde8bc5a09)(@opentelemetry/api@1.9.1)(@types/node@25.9.2)(bufferutil@4.1.0)(esbuild@0.28.1)(jiti@2.7.0)(jsdom@28.1.0)(tsx@4.23.0)(typescript@6.0.3)(vite@8.0.16(@types/node@25.9.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.1))(yaml@2.9.1)
-
-  tools/harness-runtime:
-    dependencies:
-      '@agentclientprotocol/claude-agent-acp':
-        specifier: 'catalog:'
-        version: 0.84.0(@anthropic-ai/sdk@0.128.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))
-      '@agentclientprotocol/codex-acp':
-        specifier: 'catalog:'
-        version: 2.1.0
 
 packages:
 

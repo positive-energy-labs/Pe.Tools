@@ -13,6 +13,9 @@ type UpdateAvailability = {
   installedVersion: string | null;
   latestVersion: string | null;
   updateAvailable: boolean;
+  /** No Revit, or every one idle with nothing unsaved: the update applies without asking. */
+  quiet: boolean;
+  revits?: { pid: number; year: number; idle: boolean; unsaved: string[] }[];
   error?: string;
 };
 
@@ -20,6 +23,7 @@ type UpdateAcknowledgement = {
   accepted?: boolean;
   reason?: string;
   installedVersion?: string | null;
+  latestVersion?: string | null;
   error?: string;
   status: number;
 };
@@ -42,7 +46,7 @@ export async function acknowledgeUpdate(): Promise<UpdateAcknowledgement> {
   return { ...body, status: response.status };
 }
 
-/** The old host exits after commit; poll the receipt until its replacement proves a new release. */
+/** The host exits after handing off; poll until its successor proves a new release. */
 export async function waitForVersionChange(previousVersion: string | null): Promise<string> {
   const deadline = Date.now() + 180_000;
   while (Date.now() < deadline) {
@@ -55,5 +59,7 @@ export async function waitForVersionChange(previousVersion: string | null): Prom
       // The replacement host is not serving yet; keep asking until the deadline.
     }
   }
-  throw new Error("Update started, but the new host did not come back within 3 minutes.");
+  throw new Error(
+    "Update started, but the app did not come back within 3 minutes; it reopens by itself when the install finishes.",
+  );
 }

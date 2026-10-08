@@ -758,7 +758,7 @@ test("providers list from the probe: readiness follows the adapter's own auth re
     process.env.FAKE_ACP_AUTH = auth;
     const refused = (await call("POST", "/pe/providers/codex/probe")).json as Provider;
     expect(refused.readiness).toMatchObject({ state: "refused" });
-    // `signed-in` when `codex` is on the PATH, else `installed`: the login needs the CLI.
+    // `signed-in` when the user's codex.exe is found, else `installed`: the login needs the CLI.
     expect(["signed-in", "installed"]).toContain(
       refused.readiness.state === "refused" && refused.readiness.step,
     );
@@ -771,7 +771,7 @@ test("providers list from the probe: readiness follows the adapter's own auth re
   expect(threads.consoles).toEqual([
     step.state === "refused" && step.step === "installed"
       ? "irm https://chatgpt.com/codex/install.ps1 | iex"
-      : "codex login",
+      : adapter.adapterLogin("codex"),
   ]);
   await expect
     .poll(async () => ((await call("GET", "/pe/providers/codex")).json as Provider).readiness)
