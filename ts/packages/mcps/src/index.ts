@@ -24,6 +24,7 @@ export {
   resolveWorkspaceKey,
 } from "./shared/host-config.ts";
 export { HostRpcCaller } from "./shared/host-rpc-caller.ts";
+export { startPeaMcp } from "./stdio.ts";
 export {
   ScriptingTools,
   bootstrapScriptWorkspace,

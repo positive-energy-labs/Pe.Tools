@@ -66,26 +66,6 @@ export const apsLogoutResultSchema = Schema.Struct({
 });
 export type ApsLogoutResult = Schema.Schema.Type<typeof apsLogoutResultSchema>;
 
-// --- Inference endpoint (GET/POST /host/inference-endpoint; deliberately not an op: the save
-// carries a key, and ops reach the action journal and Pea) ----------------------------------
-
-/** The one OpenAI-compatible endpoint Pea talks to. The key never leaves the host unredacted. */
-export const inferenceEndpointSchema = Schema.Struct({
-  baseUrl: Schema.NullOr(Schema.String),
-  /** Last 4 characters only, e.g. `…a1b2`. */
-  apiKeyRedacted: Schema.NullOr(Schema.String),
-  /** The probe that admitted the saved endpoint; a failed probe never saves. */
-  probe: Schema.NullOr(Schema.Struct({ model: Schema.String, atUtc: Schema.String })),
-});
-export type InferenceEndpoint = Schema.Schema.Type<typeof inferenceEndpointSchema>;
-export const inferenceEndpointSaveRequestSchema = Schema.Struct({
-  baseUrl: Schema.String,
-  apiKey: Schema.String,
-});
-export type InferenceEndpointSaveRequest = Schema.Schema.Type<
-  typeof inferenceEndpointSaveRequestSchema
->;
-
 // Preserve the long-standing operation-types import surface while the transport constant itself
 // lives below the generated-contract boundary (host-typegen must not import its own output).
 export {

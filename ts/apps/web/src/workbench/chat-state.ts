@@ -9,13 +9,14 @@ export function emptyChatState(): ChatState {
   return {
     id: "",
     harness: "claude",
+    providerId: "",
+    providerName: "",
     title: "",
     createdAt: "",
     updatedAt: "",
     modelId: null,
     models: [],
-    modes: [],
-    modeId: null,
+    traits: [],
     running: false,
     queued: [],
     lastSeq: 0,
@@ -405,6 +406,12 @@ export function selectRunStatus(state: ChatState): RunStatus {
   const { approvals, questions, turn } = fold(state);
   if (approvals.length > 0 || questions.length > 0) return "waiting";
   return turn ? "running" : "idle";
+}
+
+/** The host's turn marker: seconds the running turn has heard nothing, until the next event. */
+export function selectWaitingSeconds(state: ChatState): number | undefined {
+  const last = state.events.at(-1);
+  return last?.kind === "waiting" && fold(state).turn ? Math.round(last.sinceMs / 1000) : undefined;
 }
 
 /** The newest `session/update` of one kind, or undefined. */

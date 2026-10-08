@@ -50,13 +50,19 @@ export function productRouteWorkPath(): string {
   );
 }
 
-/** The one OpenAI-compatible endpoint Pea uses (`inference-endpoint.ts`). Holds a key: state, not Documents. */
-export function productInferenceEndpointPath(): string {
+/** A file under product state (LOCALAPPDATA): settings that hold a key or belong to this machine. */
+function productStateFile(name: string): string {
   return join(
     process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"),
     productIdentity.vendorName,
     productIdentity.productName,
     productPathNames.stateDirectoryName,
-    "inference-endpoint.json",
+    name,
   );
 }
+
+/** User-added endpoint providers (`harness/providers.ts`). Holds keys: state, not Documents. */
+export const productProvidersPath = () => productStateFile("providers.json");
+
+/** The access setting, `{ guarded }` (`harness/providers.ts`). */
+export const productAccessPath = () => productStateFile("access.json");

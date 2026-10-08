@@ -50,6 +50,7 @@ A skill changes method, never authorization. Capture, instrumentation, and gloss
 2. **Quantify every change**. Restate the plan in your words before starting; misalignment is cheapest here. Gauge expected delta to data models, LOC, file topology, dependency tree, surface shape, modularity, performance, and testability. 
 3. **Chart the journey as it passes**. Handles are the substrate: consumed terminal commands, dependency changes, resource names, wave/round/agent/mux/worktree names label what is actually happening. Landmarks chart the way: a user-story fulfilled, a stance change, a realignment, a lesson. Waypoints are targets that unblock the queue. 
 4. **Stop only after proven**. A stop is reported with a stamp on the claim inside it. This is the wall every loop exits through.
+5. **End the turn on the whole account**. Before you end a turn, do every part of the ask that needs no verdict. The client shows the user only your last message, so that message stands alone: what changed, with its stamp; what you did not do, and why; then the next command or the numbered decision you need. Never end a turn on a status line, a promise ("I'll check X"), or a bare acknowledgement.
 
 Fix unexpected systemic signals, scope growth avoidance is an old maxim to forget. Eg. a user steer, time-box spent, excessive LOC, a repeated helper script, a misunderstanding. They are only noise if you choose to work around them. Fix the root cause by default and at the highest rung that fits. Fix above your layer? File it Owed and name the interim. Rungs:
 

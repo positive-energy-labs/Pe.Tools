@@ -11,10 +11,22 @@ import { z } from "zod";
  * Trust: the host binds loopback and these routes carry no token. Every mutating route requires
  * `content-type: application/json`, so a cross-origin simple request cannot reach it.
  *
+ * A provider is one harness with one auth source: the harness's own login (`subscription`, one per
+ * harness, id = harness id) or a user-added `endpoint` (URL plus key, id `<harness>-<slug>`). The key
+ * stays in the host's providers file; the wire carries its last four characters.
+ *
  * Routes (host, same origin as `/pe/*`):
- *   GET    /pe/harnesses                       -> HarnessInfo[]
+ *   GET    /pe/providers                       -> Provider[]   (last probe; `unknown` until the first)
+ *   POST   /pe/providers      {harness, name, auth:{kind:"endpoint", baseUrl, apiKey}} -> Provider
+ *            (probed before save; a refusal is 400 `{step, message}`)
+ *   DELETE /pe/providers/:id                   (a subscription provider refuses, 409)
+ *   POST   /pe/providers/:id/probe             -> Provider
+ *   POST   /pe/providers/:id/open-login        -> {opened: true}   (a console on this machine runs the
+ *            harness's login, or its installer when the step is `installed`; re-probes when it closes)
+ *   GET    /pe/access                          -> Access
+ *   PUT    /pe/access         {guarded}        -> Access   (the ACP mode a new session starts in)
  *   GET    /pe/threads                         -> HarnessThreadSummary[]
- *   POST   /pe/threads        {harness, title?} -> HarnessThreadSummary
+ *   POST   /pe/threads        {providerId, title?} -> HarnessThreadSummary
  *   GET    /pe/threads/:id                     -> HarnessThreadBody
  *   PUT    /pe/threads/:id    {title}          -> HarnessThreadSummary
  *   DELETE /pe/threads/:id
@@ -22,10 +34,10 @@ import { z } from "zod";
  *   POST   /pe/threads/:id/cancel
  *   POST   /pe/threads/:id/permission {requestId, optionId}
  *   POST   /pe/threads/:id/question {requestId, action, content?}   (answers an ACP elicitation form)
- *   POST   /pe/threads/:id/fork {harness?, title?} -> HarnessThreadSummary
- *            (copies the log; same harness forks the ACP session, another harness re-feeds the transcript)
+ *   POST   /pe/threads/:id/fork {providerId?, title?} -> HarnessThreadSummary
+ *            (copies the log; same provider forks the ACP session, another re-feeds the transcript)
  *   POST   /pe/threads/:id/model {modelId}
- *   POST   /pe/threads/:id/mode  {modeId}
+ *   POST   /pe/threads/:id/trait {id, value}    (ACP `session/set_config_option`)
  *   GET    /pe/threads/:id/stream  (SSE; each `data:` is one HarnessEvent, from `?after=<seq>`)
  */
 
@@ -33,19 +45,70 @@ export const harnessIds = ["claude", "codex"] as const;
 export const harnessIdSchema = z.enum(harnessIds);
 export type HarnessId = z.infer<typeof harnessIdSchema>;
 
-export const harnessInfoSchema = z.object({
-  id: harnessIdSchema,
-  title: z.string(),
-  /** The adapter binary resolved and spawnable. False carries `reason`. */
-  available: z.boolean(),
-  reason: z.string().optional(),
-  /** From ACP `initialize`: `authMethods[].id`; empty when the harness carries its own login. */
-  authMethods: z.array(z.string()),
-});
-export type HarnessInfo = z.infer<typeof harnessInfoSchema>;
-
 export const harnessModelSchema = z.object({ modelId: z.string(), name: z.string() });
-export const harnessModeSchema = z.object({ id: z.string(), name: z.string() });
+export type HarnessModel = z.infer<typeof harnessModelSchema>;
+
+/** A provider's auth source as the wire sees it: never the key itself. */
+export const authSourceViewSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("subscription") }),
+  z.object({ kind: z.literal("endpoint"), baseUrl: z.string(), keyLast4: z.string() }),
+]);
+export type AuthSourceView = z.infer<typeof authSourceViewSchema>;
+
+/** The first step that stands between the provider and a turn; `unknown` when the probe could not tell. */
+export const readinessSchema = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("ready") }),
+  z.object({
+    state: z.literal("refused"),
+    step: z.enum(["installed", "signed-in", "endpoint"]),
+    message: z.string(),
+  }),
+  z.object({ state: z.literal("unknown"), message: z.string() }),
+]);
+export type Readiness = z.infer<typeof readinessSchema>;
+
+/** An ACP session config option beyond model, mode and collaboration mode (effort, fast mode). */
+export const traitOptionSchema = z.discriminatedUnion("kind", [
+  z.object({
+    id: z.string(),
+    name: z.string(),
+    kind: z.literal("select"),
+    options: z.array(z.object({ id: z.string(), name: z.string() })),
+    current: z.string().nullable(),
+  }),
+  z.object({ id: z.string(), name: z.string(), kind: z.literal("boolean"), current: z.boolean() }),
+]);
+export type TraitOption = z.infer<typeof traitOptionSchema>;
+
+export const providerSchema = z.object({
+  id: z.string(),
+  harness: harnessIdSchema,
+  name: z.string(),
+  auth: authSourceViewSchema,
+  readiness: readinessSchema,
+  /** Subscription choices come from ACP; endpoint choices are advertised text models, with a tested default first. Other listed models are validated when selected. */
+  models: z.array(harnessModelSchema),
+  traits: z.array(traitOptionSchema),
+  /** When the cached readiness, models and traits were read; null before the first probe. */
+  probedAt: z.string().nullable(),
+});
+export type Provider = z.infer<typeof providerSchema>;
+
+export const addProviderRequestSchema = z.object({
+  harness: harnessIdSchema,
+  name: z.string().trim().min(1),
+  auth: z.object({
+    kind: z.literal("endpoint"),
+    baseUrl: z.string(),
+    apiKey: z.string(),
+    modelId: z.string().trim().min(1).optional(),
+  }),
+});
+export type AddProviderRequest = z.infer<typeof addProviderRequestSchema>;
+
+/** Guarded starts a session in the harness's own auto mode; unguarded in its full-access mode. */
+export const accessSchema = z.object({ guarded: z.boolean() });
+export type Access = z.infer<typeof accessSchema>;
 
 /** One ACP `session/update` notification body, kept verbatim. The web switches on `sessionUpdate`. */
 export const acpSessionUpdateSchema = z.object({ sessionUpdate: z.string() }).passthrough();
@@ -167,8 +230,17 @@ export const harnessEventSchema = z.discriminatedUnion("kind", [
   z.object({
     seq: z.number(),
     at: z.string(),
-    kind: z.literal("mode_changed"),
-    modeId: z.string(),
+    kind: z.literal("trait_changed"),
+    traitId: z.string(),
+    value: z.union([z.string(), z.boolean()]),
+  }),
+  /** The host's own clock: a turn running with no session update for `sinceMs`, once per 60 s. */
+  z.object({
+    seq: z.number(),
+    at: z.string(),
+    kind: z.literal("waiting"),
+    turnId: z.string(),
+    sinceMs: z.number(),
   }),
   /** From ACP `session_info_update.title`, or a user rename. */
   z.object({
@@ -193,6 +265,8 @@ export type HarnessEvent = z.infer<typeof harnessEventSchema>;
 export const harnessThreadSummarySchema = z.object({
   id: z.string(),
   harness: harnessIdSchema,
+  providerId: z.string(),
+  providerName: z.string(),
   title: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -204,8 +278,7 @@ export type HarnessThreadSummary = z.infer<typeof harnessThreadSummarySchema>;
 
 export const harnessThreadBodySchema = harnessThreadSummarySchema.extend({
   models: z.array(harnessModelSchema),
-  modes: z.array(harnessModeSchema),
-  modeId: z.string().nullable(),
+  traits: z.array(traitOptionSchema),
   /** Derivable from `events` (a `prompt` with no `turn_end`/`error`; a `queued` with no `prompt`);
    * carried so a one-shot reader need not fold the log. Open asks are the unresolved
    * `permission_request` events. */
@@ -225,10 +298,14 @@ export const questionResponseSchema = z.object({
   content: z.record(z.string(), z.unknown()).optional(),
 });
 export const forkThreadRequestSchema = z.object({
-  harness: harnessIdSchema.optional(),
+  providerId: z.string().optional(),
   title: z.string().optional(),
 });
 export const createThreadRequestSchema = z.object({
-  harness: harnessIdSchema,
+  providerId: z.string(),
   title: z.string().optional(),
+});
+export const traitRequestSchema = z.object({
+  id: z.string(),
+  value: z.union([z.string(), z.boolean()]),
 });

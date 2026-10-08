@@ -22,7 +22,7 @@ test("pea exposes three capability doors, one Scope door, and the media and docs
 });
 
 test("pea composes product commands without dev", () => {
-  expect(getPeaCliCommandNames()).toEqual(expect.arrayContaining(["host", "script"]));
+  expect(getPeaCliCommandNames()).toEqual(expect.arrayContaining(["host", "script", "mcp"]));
   expect(getPeaCliCommandNames()).not.toContain("dev");
   // The standalone `web` subcommand was removed when the host absorbed the web-server path.
   expect(getPeaCliCommandNames()).not.toContain("web");

@@ -116,8 +116,8 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     expect(await spa.text()).toContain("pe-spa");
 
     // (4) the host-owned harness surface answers at its absolute path.
-    const harnesses = await fetch(`${base}/pe/harnesses`);
-    expect(harnesses.status).toBe(200);
+    const access = await fetch(`${base}/pe/access`);
+    expect(access.status).toBe(200);
 
     // (5) the release readout is lane-truthful: a source-lane host reports no installed release.
     const installStatus = await fetch(`${base}/host/install`);

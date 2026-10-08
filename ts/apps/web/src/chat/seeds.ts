@@ -50,12 +50,6 @@ const THREAD = {
     { modelId: "claude-sonnet", name: "Claude Sonnet" },
     { modelId: "claude-opus", name: "Claude Opus" },
   ],
-  modes: [
-    { id: "default", name: "Default" },
-    { id: "acceptEdits", name: "Accept edits" },
-    { id: "plan", name: "Plan" },
-  ],
-  modeId: "default",
   session: "started",
 } satisfies ChatState;
 

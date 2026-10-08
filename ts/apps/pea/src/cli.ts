@@ -1,7 +1,7 @@
 import { cli, define } from "gunshi";
 import { renderUsage } from "gunshi/renderer";
 import { harnessIds, type HarnessId } from "@pe/agent-contracts";
-import { PeaCliCommands, discoverHostBaseUrl, resolveWorkspaceKey } from "@pe/mcps";
+import { PeaCliCommands, discoverHostBaseUrl, resolveWorkspaceKey, startPeaMcp } from "@pe/mcps";
 import type { PeaPromptRequest } from "./prompt.ts";
 
 export async function runPeaMain(args = process.argv.slice(2)): Promise<void> {
@@ -19,8 +19,8 @@ export async function runPeaMain(args = process.argv.slice(2)): Promise<void> {
     description: "Pea product/operator CLI.",
     subCommands: createPeaCliSubCommands(),
     fallbackToEntry: true,
-    // The banner goes to stdout; a --json command's stdout is exactly one JSON object.
-    ...(args.includes("--json") ? { renderHeader: null } : {}),
+    // JSON and MCP stdout are protocol streams.
+    ...(args.includes("--json") || args[0] === "mcp" ? { renderHeader: null } : {}),
   });
 }
 
@@ -33,6 +33,7 @@ export function createPeaCliCommand() {
       "pea",
       'pea --prompt "Summarize the open Revit documents." --json',
       "pea host status",
+      "pea mcp --host dev",
       "pea script bootstrap",
       "pea script execute --source-path src\\SampleScript.cs",
     ].join("\n"),
@@ -48,6 +49,16 @@ export function createPeaCliCommand() {
 export function createPeaCliSubCommands() {
   return {
     ...new PeaCliCommands().commands(),
+    mcp: define({
+      name: "mcp",
+      description: "Serve Pea's tools over local stdio for an MCP client on this machine.",
+      args: {
+        host: { type: "string", description: "Host URL, installed, dev, or a worktree path." },
+      },
+      run: async (ctx) => {
+        await startPeaMcp(ctx.values.host);
+      },
+    }),
   };
 }
 

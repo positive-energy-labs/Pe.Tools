@@ -5,7 +5,8 @@
  * pick binds its rung and advances. A route hands it rungs as plain data; the list draws them.
  *
  * Marks: dotted underline = operable and held; dashed = empty or reported by the world, not chosen;
- * the caution tone = the ladder is incomplete or its feed disagrees.
+ * the caution tone = the ladder is incomplete or its feed disagrees. `face="inline"` is the same
+ * ladder as a chip in running chrome (the composer's head): the trigger says the whole path.
  */
 import { useRef, type ReactNode } from "react";
 
@@ -20,6 +21,10 @@ interface RungOption {
   sub?: string;
   /** The head it lists under (a schedule's category). */
   group?: string;
+  /** Present, the row refuses picks and says why. */
+  refusal?: string;
+  /** The `sub` fact is the world disagreeing (a provider not ready): the caution tone. */
+  caution?: boolean;
 }
 
 export interface Rung {
@@ -50,8 +55,10 @@ export function Ladder({
   title,
   open,
   onOpenChange,
+  face = "word",
 }: {
   levels: readonly Rung[];
+  face?: "word" | "inline";
   /** The bound value was reported by the world, not chosen (house law 8): dashed. */
   derived?: boolean;
   /** The world disagrees with the binding ("needs initialization"): caution tone. */
@@ -65,7 +72,11 @@ export function Ladder({
   const collection = useRef<Collection<Hit> | null>(null);
   const unbound = levels.findIndex((rung) => rung.label === null);
   const complete = unbound < 0;
-  const word = complete ? (levels.at(-1)?.label ?? "") : levels[unbound]!.placeholder;
+  const word = !complete
+    ? levels[unbound]!.placeholder
+    : face === "inline"
+      ? levels.map((rung) => rung.label).join(" › ")
+      : (levels.at(-1)?.label ?? "");
   const rungOf = (hit: Hit) => levels.find((rung) => rung.key === hit.rung)!;
   const rungs: Level<Hit>[] = levels.map((rung) => ({
     label: rung.key,
@@ -87,7 +98,7 @@ export function Ladder({
   return (
     <ListPopup<Hit>
       anchor="trigger"
-      face="word"
+      face={face}
       trigger={word}
       title={title}
       disabled={disabled}
@@ -139,7 +150,8 @@ export function Ladder({
           </span>
         ) : undefined,
         label: hit.label,
-        meta: hit.sub,
+        meta: hit.caution ? <span data-tone="caution">{hit.sub}</span> : hit.sub,
+        refusal: hit.refusal,
       })}
     />
   );

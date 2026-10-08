@@ -3,6 +3,7 @@
 // product-owned path names, transport env vars, and scripting identity.
 
 import { payload, productIdentity as generatedIdentity } from "../vendor/generated/product.g.ts";
+export { productInstallLayout } from "../vendor/generated/product.g.ts";
 
 export const productIdentity = {
   ...generatedIdentity,

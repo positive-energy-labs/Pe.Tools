@@ -21,23 +21,18 @@ const bodyAtoms = Atom.family((key: string) => {
   ).pipe(Atom.autoDispose);
 });
 
-/** Events that change the body's own fields (model, mode, session): re-read it. The queue and the
- * title fold from the log (`selectQueued`, `selectTitle`). */
+/** Events that change the body's own fields (model, traits, session): re-read it. The queue and
+ * the title fold from the log (`selectQueued`, `selectTitle`). */
 const bodyEvents = new Set<HarnessEvent["kind"]>([
   "turn_end",
   "error",
   "model_changed",
-  "mode_changed",
+  "trait_changed",
   "session",
 ]);
 
-/** Events that change what the thread list says (title, `harness · model` line). */
-const listEvents = new Set<HarnessEvent["kind"]>([
-  "model_changed",
-  "mode_changed",
-  "title_changed",
-  "session",
-]);
+/** Events that change what the thread list says (title, `provider · model` line). */
+const listEvents = new Set<HarnessEvent["kind"]>(["model_changed", "title_changed", "session"]);
 
 const lastSeq = (events: readonly HarnessEvent[]) => events.at(-1)?.seq ?? 0;
 

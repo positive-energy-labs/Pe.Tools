@@ -15,6 +15,8 @@
     "smokeService": "host",
     "smokePaths": [
       "app/bin/host/Pe.Host.exe",
+      "app/bin/host/harness/node.exe",
+      "app/bin/host/harness/package.json",
       "app/bin/host/web/client/index.html",
       "app/bin/pea/pea.exe"
     ]

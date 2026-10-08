@@ -14,6 +14,7 @@ import {
   selectTitle,
   selectToolCalls,
   selectTurnFailure,
+  selectWaitingSeconds,
   type ChatState,
 } from "./chat-state";
 
@@ -302,6 +303,14 @@ describe("harness event projection", () => {
       { seq: 15, at, kind: "error", turnId: "t2", message: "harness exited" },
     ] satisfies HarnessEvent[];
     expect(selectTurnFailure(state(failed))).toBe("harness exited");
+  });
+
+  it("says how long the running turn has heard nothing, until the next event", () => {
+    const open: HarnessEvent[] = [{ seq: 1, at, kind: "prompt", turnId: "t1", text: "hi" }];
+    const waiting = [...open, { seq: 2, at, kind: "waiting", turnId: "t1", sinceMs: 61_400 }];
+    expect(selectWaitingSeconds(state(waiting as HarnessEvent[]))).toBe(61);
+    const moved = [...waiting, chunk(3, "agent_message_chunk", "ok")];
+    expect(selectWaitingSeconds(state(moved as HarnessEvent[]))).toBeUndefined();
   });
 
   it("parks a form question until answered; a skip or a cancel leaves a quiet line", () => {

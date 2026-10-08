@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { ModeDial } from "#/chat/mode-dial";
-import { NewThreadButtons, ThreadDialog, ThreadsSidebar } from "#/chat/thread-palette";
+import { NewThreadButton, ThreadDialog, ThreadsSidebar } from "#/chat/thread-palette";
 import { useWorkbench } from "#/workbench/provider";
 import { useMode } from "#/workbench/use-mode";
 import { MODES } from "#/workbench/depth";
 import { useCacheView } from "#/workbench/world";
 import { SessionStrip } from "#/workbench/world";
-import { selectBreakdown, selectRunStatus, selectTitle } from "#/workbench/chat-state";
+import {
+  selectBreakdown,
+  selectRunStatus,
+  selectTitle,
+  selectWaitingSeconds,
+} from "#/workbench/chat-state";
 import { EmptyState } from "#/components/lang/empty";
 import { buildTraceCells, ToolCellBody, TraceCellView } from "#/workbench/lens/context-strip";
 import { Press } from "#/components/lang/press";
@@ -53,7 +58,7 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
     bodyAtom,
     loading,
     threads,
-    harnesses,
+    providers,
     currentThreadId,
     prompt,
     turnFailure,
@@ -170,6 +175,7 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
   ]);
 
   const runStatus = selectRunStatus(chat);
+  const silentFor = selectWaitingSeconds(chat);
   const status = {
     text: turnFailure
       ? "failed"
@@ -177,9 +183,11 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
         ? "loading thread state"
         : runStatus === "waiting"
           ? "waiting for you"
-          : runStatus === "running"
-            ? "running"
-            : "ready",
+          : silentFor !== undefined
+            ? `waiting on the model for ${silentFor} s`
+            : runStatus === "running"
+              ? "running"
+              : "ready",
     caution: turnFailure !== undefined,
     detail: operationError ?? turnFailure,
   };
@@ -206,10 +214,7 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
                 no such thread on this host
               </EmptyState>
               <span className="face-mono t-small text-ink-2">{currentThreadId}</span>
-              <NewThreadButtons
-                harnesses={harnesses}
-                onNew={(harness) => void newThread(harness)}
-              />
+              <NewThreadButton onNew={() => void newThread()} />
             </div>
           ) : (
             <ThreadBody bodyAtom={bodyAtom} state={chat} mode={mode} sideOpen={sideOpen} />
@@ -271,11 +276,11 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
                 {mode === "threads" ? (
                   <ThreadsSidebar
                     threads={threads}
-                    harnesses={harnesses}
+                    providers={providers.list ?? []}
                     currentThreadId={currentThreadId}
                     onSelect={openThread}
-                    onNew={(harness) => void newThread(harness)}
-                    onFork={(id, harness) => void forkThread(harness, id)}
+                    onNew={() => void newThread()}
+                    onFork={(id, providerId) => void forkThread(providerId, id)}
                     onRename={handleRenameThread}
                     onDelete={handleDeleteThread}
                     onSearch={() => store.actions.setPaletteOpen(true)}
@@ -344,13 +349,13 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
       {host.kept}
       <ThreadDialog
         threads={threads}
-        harnesses={harnesses}
+        providers={providers.list ?? []}
         currentThreadId={currentThreadId}
         open={paletteOpen}
         onOpenChange={store.actions.setPaletteOpen}
         onSelect={openThread}
-        onNew={(harness) => void newThread(harness)}
-        onFork={(id, harness) => void forkThread(harness, id)}
+        onNew={() => void newThread()}
+        onFork={(id, providerId) => void forkThread(providerId, id)}
         onRename={handleRenameThread}
         onDelete={handleDeleteThread}
       />

@@ -99,7 +99,7 @@ test("the host-owned /pe surface answers without Revit", async () => {
     const routeList = await fetch(`${base}/pe/route-state`);
     expect(routeList.status).toBe(200);
     expect(((await routeList.json()) as unknown[]).length).toBeGreaterThan(0);
-    expect((await fetch(`${base}/pe/harnesses`)).status).toBe(200);
+    expect((await fetch(`${base}/pe/access`)).status).toBe(200);
 
     await fetch(`${base}/admin/shutdown`, {
       method: "POST",

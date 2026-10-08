@@ -92,13 +92,13 @@ export async function runPeaPrompt(request: PeaPromptRequest): Promise<number> {
 export async function runPeaPromptTurn(request: PeaPromptRequest): Promise<PeaPromptResult> {
   const host = await ensureTsHostRunning();
   const base = `${host}/pe/threads`;
-  // An older host without the harness wire answers 404 on thread routes; name it up front.
-  const harnesses = await fetch(`${host}/pe/harnesses`);
-  if (!harnesses.ok)
+  // An older host without providers answers 404 on this route; name it up front.
+  const providers = await fetch(`${host}/pe/providers`);
+  if (!providers.ok)
     throw new Error(
-      `Host ${host} predates the harness wire (GET /pe/harnesses -> ${harnesses.status}); restart it.`,
+      `Host ${host} predates providers (GET /pe/providers -> ${providers.status}); restart it.`,
     );
-  await harnesses.arrayBuffer();
+  await providers.arrayBuffer();
   const call = async <T>(method: string, route: string, body?: unknown): Promise<T> => {
     const response = await fetch(`${base}${route}`, {
       method,
@@ -114,7 +114,8 @@ export async function runPeaPromptTurn(request: PeaPromptRequest): Promise<PeaPr
   const thread: HarnessThreadSummary & Partial<Pick<HarnessThreadBody, "events">> = request.threadId
     ? await call<HarnessThreadBody>("GET", `/${request.threadId}`)
     : await call<HarnessThreadSummary>("POST", "", {
-        harness: request.harness ?? "claude",
+        // The harness's own login: a subscription provider's id is its harness id.
+        providerId: request.harness ?? "claude",
         title: "Pea prompt",
       });
   const after = thread.lastSeq;

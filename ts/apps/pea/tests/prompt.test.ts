@@ -47,7 +47,7 @@ const server = createServer(async (request, response) => {
   if (request.method !== "GET") contentTypes.push(request.headers["content-type"]);
   const json = (value: unknown) => response.end(JSON.stringify(value));
   const route = `${request.method} ${url.pathname}`;
-  if (route === "GET /pe/harnesses") return json([]);
+  if (route === "GET /pe/providers") return json([]);
   if (route === "POST /pe/threads") return json(summary());
   if (route === "GET /pe/threads/t1") return json({ ...summary(), events: log });
   if (route === "POST /pe/threads/t1/model") {
@@ -62,27 +62,26 @@ const server = createServer(async (request, response) => {
       return json({ turnId });
     }
     if (JSON.parse(body).text === "ask") {
-      append(
-        { kind: "prompt", turnId, text: "ask" },
-        chunk(turnId, "Two decisions:"),
-        {
-          kind: "question_request",
-          turnId,
-          requestId: "q1",
-          message: "Please answer the following questions.",
-          requestedSchema: {
-            type: "object",
-            properties: {
-              question_0: {
-                title: "Mixing box",
-                description: "How should it be modeled?",
-                oneOf: [{ const: "Nested", title: "Nested family", description: "schedulable" }, { const: "Host" }],
-              },
-              question_1: { description: "Which hand?" },
+      append({ kind: "prompt", turnId, text: "ask" }, chunk(turnId, "Two decisions:"), {
+        kind: "question_request",
+        turnId,
+        requestId: "q1",
+        message: "Please answer the following questions.",
+        requestedSchema: {
+          type: "object",
+          properties: {
+            question_0: {
+              title: "Mixing box",
+              description: "How should it be modeled?",
+              oneOf: [
+                { const: "Nested", title: "Nested family", description: "schedulable" },
+                { const: "Host" },
+              ],
             },
+            question_1: { description: "Which hand?" },
           },
         },
-      );
+      });
       return json({ turnId });
     }
     append(

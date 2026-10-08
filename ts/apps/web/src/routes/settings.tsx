@@ -1,129 +1,198 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import type { HarnessId } from "@pe/agent-contracts";
 
 import { RouteShell, emptyManifest } from "#/route";
-import { ActionButton } from "#/components/lang/action-button";
-import { FactChip } from "#/components/lang/chip";
 import { Input } from "#/components/lang/input";
-import { Label } from "#/components/lang/label";
-import type { InferenceEndpoint } from "@pe/host-contracts/operation-types";
-import { hostUrl } from "#/host/client";
-import { useAction, useHostCall } from "#/readings";
+import { Press } from "#/components/lang/press";
+import { Switcher } from "#/components/lang/switcher";
+import { AccessSwitch } from "#/chat/first-open";
+import { errorMessage } from "#/workbench/provider/use-workbench";
+import { readinessSub, useProviders, type ProvidersState } from "#/workbench/provider/providers";
 
 const manifest = {
   ...emptyManifest("settings", "Settings"),
-  docs: "Advanced. Routes Codex threads through this endpoint; Claude threads ignore it.",
+  docs: "Providers: each harness with its own login, plus any endpoint (URL and key) you add. A thread binds one at its first send.",
 };
 
 export const Route = createFileRoute("/settings")({ component: SettingsRoute });
 
-/** Plain host routes, not ops: the save carries a key, which must not reach the action journal. */
-async function endpointCall(init?: RequestInit): Promise<InferenceEndpoint> {
-  const response = await fetch(hostUrl("/host/inference-endpoint"), init);
-  const body = (await response.json()) as InferenceEndpoint & { message?: string };
-  if (!response.ok) throw new Error(body.message ?? response.statusText);
-  return body;
-}
-
-/** Client-side refusals before any request; the host repeats the URL rules and owns the probe. */
-export function endpointFormIssues(baseUrl: string, apiKey: string) {
-  const issues: { baseUrl?: string; apiKey?: string } = {};
-  try {
-    const { protocol } = new URL(baseUrl.trim());
-    if (protocol !== "http:" && protocol !== "https:")
-      issues.baseUrl = `scheme must be http or https, got ${protocol}`;
-  } catch {
-    issues.baseUrl = "not a URL";
-  }
-  if (!apiKey) issues.apiKey = "required";
-  else if (/\s/.test(apiKey)) issues.apiKey = "must not contain whitespace";
-  return issues;
-}
+const cell = "px-2 py-1 text-left";
 
 function SettingsRoute() {
-  const saved = useHostCall((signal) => endpointCall({ signal }), ["inference-endpoint"]);
-  const [baseUrl, setBaseUrl] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [touched, setTouched] = useState(false);
-  const save = useAction(
-    (request: { baseUrl: string; apiKey: string }) =>
-      endpointCall({
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(request),
-      }),
-    () => saved.refresh(),
-  );
-  const issues = endpointFormIssues(baseUrl, apiKey);
-  const invalid = issues.baseUrl !== undefined || issues.apiKey !== undefined;
-  const shown = touched ? issues : {};
-
+  const providers = useProviders("");
   return (
     <RouteShell manifest={manifest}>
-      <div className="flex max-w-xl flex-col gap-4 p-6">
-        <section className="flex flex-wrap items-center gap-2">
-          <FactChip title="the saved base URL">
-            {saved.data?.baseUrl ?? "no endpoint saved"}
-          </FactChip>
-          {saved.data?.apiKeyRedacted ? (
-            <FactChip title="the saved key, last 4 characters">
-              {saved.data.apiKeyRedacted}
-            </FactChip>
-          ) : null}
-          {saved.data?.probe ? (
-            <FactChip title="the probe that admitted this endpoint">
-              {saved.data.probe.model} · {saved.data.probe.atUtc}
-            </FactChip>
-          ) : null}
-          {saved.error ? <p data-tone="alarm">{saved.error.message}</p> : null}
-        </section>
-        <form
-          className="flex flex-col gap-3"
-          onSubmit={(event) => event.preventDefault()}
-          noValidate
-        >
-          <Label>
-            Base URL
+      <div className="flex flex-col gap-4 p-6">
+        <table className="t-small" aria-label="providers">
+          <thead className="text-ink-2">
+            <tr className="hairline-b">
+              {["name", "harness", "auth", "readiness", "last probe", ""].map((head) => (
+                <th key={head} className={cell}>
+                  {head}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {(providers.list ?? []).map((provider) => (
+              <tr key={provider.id} className="hairline-b">
+                <td className={cell}>{provider.name}</td>
+                <td className={`${cell} face-mono`}>{provider.harness}</td>
+                <td className={`${cell} face-mono`}>
+                  {provider.auth.kind === "subscription"
+                    ? "subscription"
+                    : `${new URL(provider.auth.baseUrl).host} · …${provider.auth.keyLast4}`}
+                </td>
+                <td
+                  className={`${cell} face-mono`}
+                  data-tone={provider.readiness.state === "ready" ? undefined : "caution"}
+                >
+                  {readinessSub(provider)}
+                </td>
+                <td className={`${cell} face-mono`}>{provider.probedAt ?? "never"}</td>
+                <td className={cell}>
+                  <span className="flex gap-1">
+                    <Press
+                      tone="quiet"
+                      size="caption"
+                      onClick={() => void providers.probe(provider.id)}
+                    >
+                      Probe
+                    </Press>
+                    {provider.auth.kind === "subscription" ? (
+                      <Press
+                        tone="quiet"
+                        size="caption"
+                        title="open the harness's own login in a console on this machine"
+                        onClick={() => void providers.openLogin(provider.id)}
+                      >
+                        Sign in
+                      </Press>
+                    ) : (
+                      <Press
+                        tone="quiet"
+                        size="caption"
+                        onClick={() => void providers.remove(provider.id)}
+                      >
+                        Remove
+                      </Press>
+                    )}
+                  </span>
+                </td>
+              </tr>
+            ))}
+            <AddRow providers={providers} />
+          </tbody>
+        </table>
+        {providers.error ? (
+          <p className="t-small" data-tone="caution">
+            {providers.error}
+          </p>
+        ) : null}
+        <AccessSwitch providers={providers} />
+      </div>
+    </RouteShell>
+  );
+}
+
+/** An endpoint provider: the host probes it before it saves, and a refusal says its step here. */
+function AddRow({ providers }: { providers: ProvidersState }) {
+  const [harness, setHarness] = useState<HarnessId>("codex");
+  const [name, setName] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [modelId, setModelId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string>();
+  const save = async () => {
+    setBusy(true);
+    setRefusal(undefined);
+    try {
+      await providers.add({
+        harness,
+        name,
+        auth: {
+          kind: "endpoint",
+          baseUrl,
+          apiKey,
+          ...(modelId.trim() ? { modelId: modelId.trim() } : {}),
+        },
+      });
+      setName("");
+      setBaseUrl("");
+      setApiKey("");
+      setModelId("");
+    } catch (caught) {
+      setRefusal(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <tr>
+      <td className={cell} colSpan={6}>
+        <span className="flex flex-wrap items-center gap-2">
+          <span>Add endpoint</span>
+          <Switcher
+            ariaLabel="harness"
+            value={harness}
+            onChange={setHarness}
+            options={[
+              { value: "claude", label: "claude", title: "Claude Code over the Messages API" },
+              { value: "codex", label: "codex", title: "Codex over the Responses API" },
+            ]}
+          />
+          <span className="w-40">
+            <Input
+              placeholder="name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </span>
+          <span className="w-72">
             <Input
               face="mono"
+              placeholder="https://host/v1"
               value={baseUrl}
-              placeholder="http://127.0.0.1:8317/v1"
-              aria-invalid={shown.baseUrl !== undefined || undefined}
               onChange={(event) => setBaseUrl(event.target.value)}
             />
-          </Label>
-          {shown.baseUrl ? <p data-tone="alarm">Base URL: {shown.baseUrl}</p> : null}
-          <Label>
-            API key
+          </span>
+          <span className="w-56">
             <Input
               type="password"
               face="mono"
-              value={apiKey}
+              placeholder="API key"
               autoComplete="off"
-              aria-invalid={shown.apiKey !== undefined || undefined}
+              value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
             />
-          </Label>
-          {shown.apiKey ? <p data-tone="alarm">API key: {shown.apiKey}</p> : null}
-          <div>
-            <ActionButton
-              tone="commit"
-              label="Prove and save"
-              busy={save.isPending}
-              reason="Advanced. Routes Codex threads through this endpoint; Claude threads ignore it."
-              onClick={() => {
-                setTouched(true);
-                if (!invalid) save.mutate({ baseUrl, apiKey });
-              }}
+          </span>
+          <span className="w-56">
+            <Input
+              face="mono"
+              aria-label="Model to validate"
+              placeholder="Model (automatic if empty)"
+              value={modelId}
+              onChange={(event) => setModelId(event.target.value)}
             />
-          </div>
-          {save.error ? (
-            <p data-tone="alarm" className="face-mono whitespace-pre-wrap">
-              {save.error.message.replace(/^Error: /, "")}
-            </p>
-          ) : null}
-        </form>
-      </div>
-    </RouteShell>
+          </span>
+          <Press
+            tone="quiet"
+            size="caption"
+            frame="line"
+            disabled={busy}
+            onClick={() => void save()}
+          >
+            {busy ? "probing…" : "Save"}
+          </Press>
+        </span>
+        {refusal ? (
+          <p className="face-mono whitespace-pre-wrap pt-1" data-tone="caution">
+            {refusal}
+          </p>
+        ) : null}
+      </td>
+    </tr>
   );
 }

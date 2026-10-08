@@ -1,16 +1,12 @@
 import { createContext } from "react";
-import type {
-  HarnessId,
-  HarnessInfo,
-  HarnessThreadSummary,
-  PeaSessionDescriptor,
-} from "@pe/agent-contracts";
+import type { HarnessThreadSummary, PeaSessionDescriptor } from "@pe/agent-contracts";
 import { type WorkbenchEndpointConfig } from "../config";
 import { type ChatState, type ThreadBody } from "../chat-state";
 import { type ChatPageStore } from "../store";
 import { type WorkbenchAttachment } from "../prompt";
 import type * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import type { HeadDraft, ProvidersState } from "./providers";
 
 export type StoredThreadSummary = HarnessThreadSummary;
 
@@ -23,8 +19,11 @@ export interface WorkbenchContextValue {
   loading: boolean;
   error?: string;
   threads: StoredThreadSummary[];
-  harnesses: HarnessInfo[];
-  /** Why "new" cannot run now (harnesses loading, none installed); undefined when it can. */
+  providers: ProvidersState;
+  /** The head a thread binds at first send; read only while no thread is open. */
+  draft: HeadDraft;
+  setDraft: (draft: HeadDraft) => void;
+  /** Why the first send cannot create a thread now (none ready, the pick refused); else undefined. */
   newRefusal?: string;
   /** The URL's thread is one the host does not know (404). */
   missingThread: boolean;
@@ -40,7 +39,8 @@ export interface WorkbenchContextValue {
   operationError?: string;
   sendPrompt: (text: string, attachments?: WorkbenchAttachment[]) => Promise<void>;
   cancel: () => Promise<void>;
-  newThread: (harness?: HarnessId) => Promise<void>;
+  /** Opens an empty draft; the thread is created at its first send. */
+  newThread: () => Promise<void>;
   openThread: (threadId: string) => void;
   renameThread: (threadId: string, title: string) => Promise<void>;
   deleteThread: (threadId: string) => Promise<boolean>;
@@ -51,10 +51,10 @@ export interface WorkbenchContextValue {
     action: "accept" | "decline",
     content?: Record<string, unknown>,
   ) => Promise<void>;
-  /** Forks `threadId` (default: the current thread) onto `harness` (default: its own) and opens it. */
-  forkThread: (harness?: HarnessId, threadId?: string) => Promise<void>;
+  /** Forks `threadId` (default: the current thread) onto `providerId` (default: its own), opens it. */
+  forkThread: (providerId?: string, threadId?: string) => Promise<void>;
   setModel: (modelId: string) => Promise<void>;
-  setMode: (modeId: string) => Promise<void>;
+  setTrait: (id: string, value: string | boolean) => Promise<void>;
 }
 
 export const WorkbenchContext = createContext<WorkbenchContextValue | undefined>(undefined);

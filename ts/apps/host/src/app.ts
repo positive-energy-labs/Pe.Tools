@@ -1,4 +1,4 @@
-import { Deferred, Effect, Layer, Schema, Stream } from "effect";
+import { Deferred, Effect, Layer, Stream } from "effect";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
 import { NodeHttpClient, NodeHttpServer, NodeServices } from "@effect/platform-node";
 import { readFileSync } from "node:fs";
@@ -6,7 +6,6 @@ import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { BRIDGE_PATH, hostProcessIdentity } from "@pe/host-contracts/contracts";
 import type { PeaRuntimeCapabilities } from "@pe/mcps";
-import { inferenceEndpointSaveRequestSchema } from "@pe/host-contracts/operation-types";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
 import { getHostStatus } from "./local-ops.ts";
 import { isSettingsSchemaUrl } from "./settings.ts";
@@ -25,7 +24,6 @@ import {
 import { hostOwnership } from "./host-ownership.ts";
 import { staticSpaLayer } from "./static-spa.ts";
 import { peRoutesLayer } from "./pe-routes.ts";
-import { readInferenceEndpoint, saveInferenceEndpoint } from "./inference-endpoint.ts";
 import { capturesRoute } from "./captures-route.ts";
 import { pagesRoute } from "./pages-route.ts";
 
@@ -119,34 +117,6 @@ const hostInstallRoute = HttpRouter.add("GET", "/host/install", () =>
       releaseVersion: installed ? resolveHostVersion() : null,
     });
   }),
-);
-
-// The OpenAI-compatible endpoint Pea uses. Plain routes, not ops: the save carries a key, and ops
-// reach the action journal, the ops catalog and Pea. A refused save answers `{ step, message }`.
-const inferenceEndpointRoutes = Layer.mergeAll(
-  HttpRouter.add("GET", "/host/inference-endpoint", () =>
-    Effect.flatMap(readInferenceEndpoint(), Response.json),
-  ),
-  HttpRouter.add("POST", "/host/inference-endpoint", (req) =>
-    req.json.pipe(
-      Effect.flatMap(Schema.decodeUnknownEffect(inferenceEndpointSaveRequestSchema)),
-      Effect.flatMap(saveInferenceEndpoint),
-      Effect.map((saved) => Response.jsonUnsafe(saved)),
-      Effect.catch((error) =>
-        Effect.succeed(
-          "step" in error
-            ? Response.jsonUnsafe(
-                { step: error.step, message: error.message },
-                { status: error.status },
-              )
-            : Response.jsonUnsafe(
-                { step: "request", message: `request: ${error.message}` },
-                { status: 400 },
-              ),
-        ),
-      ),
-    ),
-  ),
 );
 
 /**
@@ -261,7 +231,6 @@ export function makeHttpLive(options: HttpLiveOptions) {
     capturesRoute(spa),
     pagesRoute(),
     adminShutdownRoute,
-    inferenceEndpointRoutes,
     peRoutesLayer(options.routeRegistrations),
     demoRoutes(),
     webUrl

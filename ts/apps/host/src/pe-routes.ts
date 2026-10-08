@@ -16,8 +16,6 @@ import {
   type CapabilityCatalog,
   type WorkKey,
 } from "@pe/agent-contracts";
-import { hostProcessIdentity } from "@pe/host-contracts/contracts";
-import { checkoutLayout } from "@pe/host-contracts/service-identity";
 import {
   createCapabilityCatalogSource,
   createRouteRegistrations,
@@ -46,6 +44,8 @@ import {
 import { z } from "zod";
 import { RevitBridge } from "./bridge.ts";
 import { documentMarks } from "./document-marks.ts";
+import { createProviders } from "./harness/providers.ts";
+import { peaMcpServer } from "./harness/adapter.ts";
 import { createHarnessThreads } from "./harness/threads.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { productHarnessThreadsPath, productRouteWorkPath } from "./product-paths.ts";
@@ -359,8 +359,10 @@ export function makeHostPeRoutes(
     );
     return captured;
   });
+  // Every provider is probed once in the background; the list says `unknown` until then.
+  const providers = createProviders({ shellPath: () => shellPath });
   const threads = createHarnessThreads({
-    shellPath: () => shellPath,
+    providers,
     root: productHarnessThreadsPath(),
     worldRoot,
     // The same kernel the Pea MCP server declares, for the harness that cannot read it from there.
@@ -370,26 +372,7 @@ export function makeHostPeRoutes(
         revit: sessions.some((session) => session.connected && Boolean(session.sessionId)),
       });
     },
-    // Dev lane: jiti runs the Pea MCP server from source.
-    // TODO: installed lane needs a packaged Pea MCP server entry spawned beside Pe.Host.exe.
-    mcpServer: sourceRoot
-      ? (threadId) => {
-          const ts = join(sourceRoot, checkoutLayout.ts);
-          return {
-            name: "pea",
-            command: process.execPath,
-            args: [
-              join(ts, "node_modules", "jiti", "lib", "jiti-cli.mjs"),
-              join(ts, "packages", "mcps", "src", "server.ts"),
-              "pea",
-            ],
-            env: [
-              { name: hostProcessIdentity.hostBaseUrlVariable, value: hostBaseUrl },
-              { name: "PE_THREAD", value: threadId },
-            ],
-          };
-        }
-      : null,
+    mcpServer: (threadId) => peaMcpServer(sourceRoot, hostBaseUrl, threadId),
   });
   const registrations = registrationsFactory({ hostBaseUrl });
   for (const registration of registrations) {
@@ -407,7 +390,7 @@ export function makeHostPeRoutes(
   });
   bindActionWorkspace(routes.workspace);
   sweepClosedDocuments(bridge, routes.workspace);
-  return { threads, routes, catalog };
+  return { providers, threads, routes, catalog };
 }
 
 /** {@link makeHostPeRoutes} on the host's router. Harness children die when the launch scope closes. */
@@ -417,7 +400,7 @@ export const peRoutesLayer = (registrationsFactory?: typeof createRouteRegistrat
       const { address } = yield* HttpServer.HttpServer;
       const hostBaseUrl = `http://127.0.0.1:${address._tag === "TcpAddress" ? address.port : 0}`;
       const bridge = Option.getOrUndefined(yield* Effect.serviceOption(RevitBridge));
-      const { threads, routes, catalog } = makeHostPeRoutes(
+      const { providers, threads, routes, catalog } = makeHostPeRoutes(
         hostBaseUrl,
         bridge,
         registrationsFactory,
@@ -434,8 +417,15 @@ export const peRoutesLayer = (registrationsFactory?: typeof createRouteRegistrat
         );
       const harness = HttpEffect.fromWebHandler((request) => threads.fetch(request));
       const pe = HttpEffect.fromWebHandler((request) => routes.fetch(request));
+      const provider = HttpEffect.fromWebHandler((request) => providers.fetch(request));
       for (const path of [
-        "/pe/harnesses",
+        "/pe/providers",
+        "/pe/providers/:id",
+        "/pe/providers/:id/:verb",
+        "/pe/access",
+      ] as const)
+        yield* router.add("*", path, provider);
+      for (const path of [
         "/pe/threads",
         "/pe/threads/:id",
         "/pe/threads/:id/:verb",

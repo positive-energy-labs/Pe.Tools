@@ -3,11 +3,12 @@
  * web never talks to a harness: it reads the host's event log and posts the user's verbs.
  */
 import type {
+  Access,
+  AddProviderRequest,
   HarnessEvent,
-  HarnessId,
-  HarnessInfo,
   HarnessThreadBody,
   HarnessThreadSummary,
+  Provider,
 } from "@pe/agent-contracts";
 import { openEventSource } from "#/readings";
 
@@ -21,20 +22,32 @@ export function harnessClient(origin: string) {
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
     if (!response.ok) {
-      const said = await response.text().catch(() => "");
-      throw Object.assign(new Error(said || `${method} /pe${path} failed (${response.status}).`), {
-        status: response.status,
-      });
+      throw Object.assign(
+        new Error(
+          said(await response.text().catch(() => "")) ||
+            `${method} /pe${path} failed (${response.status}).`,
+        ),
+        {
+          status: response.status,
+        },
+      );
     }
     return (
       response.status === 204 ? undefined : await response.json().catch(() => undefined)
     ) as T;
   };
   const thread = (id: string) => `/threads/${encodeURIComponent(id)}`;
+  const provider = (id: string) => `/providers/${encodeURIComponent(id)}`;
   return {
-    harnesses: () => call<HarnessInfo[]>("/harnesses"),
+    providers: () => call<Provider[]>("/providers"),
+    addProvider: (input: AddProviderRequest) => call<Provider>("/providers", "POST", input),
+    removeProvider: (id: string) => call<void>(provider(id), "DELETE"),
+    probe: (id: string) => call<Provider>(`${provider(id)}/probe`, "POST"),
+    openLogin: (id: string) => call<{ opened: true }>(`${provider(id)}/open-login`, "POST"),
+    access: () => call<Access>("/access"),
+    setAccess: (access: Access) => call<Access>("/access", "PUT", access),
     threads: () => call<HarnessThreadSummary[]>("/threads"),
-    create: (harness: HarnessId) => call<HarnessThreadSummary>("/threads", "POST", { harness }),
+    create: (providerId: string) => call<HarnessThreadSummary>("/threads", "POST", { providerId }),
     body: (id: string, signal?: AbortSignal) =>
       call<HarnessThreadBody>(thread(id), "GET", undefined, signal),
     rename: (id: string, title: string) => call<HarnessThreadSummary>(thread(id), "PUT", { title }),
@@ -50,12 +63,23 @@ export function harnessClient(origin: string) {
       action: "accept" | "decline",
       content?: Record<string, unknown>,
     ) => call<void>(`${thread(id)}/question`, "POST", { requestId, action, content }),
-    /** Same harness forks the ACP session; another harness re-feeds the transcript. */
-    fork: (id: string, harness?: HarnessId) =>
-      call<HarnessThreadSummary>(`${thread(id)}/fork`, "POST", harness ? { harness } : {}),
+    /** Same provider forks the ACP session; another provider re-feeds the transcript. */
+    fork: (id: string, providerId?: string) =>
+      call<HarnessThreadSummary>(`${thread(id)}/fork`, "POST", providerId ? { providerId } : {}),
     model: (id: string, modelId: string) => call<void>(`${thread(id)}/model`, "POST", { modelId }),
-    mode: (id: string, modeId: string) => call<void>(`${thread(id)}/mode`, "POST", { modeId }),
+    trait: (id: string, traitId: string, value: string | boolean) =>
+      call<void>(`${thread(id)}/trait`, "POST", { id: traitId, value }),
   };
+}
+
+/** A refusal body as words: `{step, message}` (a provider add) or `{error}`; otherwise the text. */
+function said(text: string): string {
+  try {
+    const body = JSON.parse(text) as { step?: string; message?: string; error?: string };
+    return body.step ? `${body.step}: ${body.message}` : (body.message ?? body.error ?? text);
+  } catch {
+    return text;
+  }
 }
 
 /** The host answered 404: the thread (or route) does not exist there. */

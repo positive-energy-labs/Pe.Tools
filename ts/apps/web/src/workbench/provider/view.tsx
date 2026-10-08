@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import type { HarnessId, HarnessInfo } from "@pe/agent-contracts";
 import { resolveWorkbenchConfig } from "../config";
 import { selectRunStatus, selectTurnFailure } from "../chat-state";
 import { previousOf, useHostStatus } from "#/readings";
@@ -15,6 +14,7 @@ import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { CHAT_SEEDS } from "#/chat/seeds";
 import { errorMessage } from "./use-workbench";
+import { EMPTY_HEAD, isReady, useProviders, type HeadDraft } from "./providers";
 
 export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const config = useMemo(() => resolveWorkbenchConfig(), []);
@@ -37,8 +37,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const info = previousOf(hostStatus);
   const client = useMemo(() => harnessClient(config.origin), [config.origin]);
   const [threads, setThreads] = useState<StoredThreadSummary[]>([]);
-  // Undefined until the host answered: "new" refuses with a reason rather than throwing.
-  const [harnesses, setHarnesses] = useState<HarnessInfo[]>();
+  const [draft, setDraft] = useState<HeadDraft>(EMPTY_HEAD);
   const [error, setError] = useState<string>();
 
   // `?demo=<seed>`: the transcript shows that seed's thread and nothing is fetched.
@@ -83,38 +82,42 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (demo || loading) return;
-    void attempt(async () => {
-      setHarnesses(await client.harnesses());
-      await refreshThreads();
-    });
-  }, [attempt, client, demo, loading, refreshThreads]);
+    void attempt(refreshThreads);
+  }, [attempt, demo, loading, refreshThreads]);
+  const providers = useProviders(config.origin, !demo);
 
   const gotoThread = useCallback(
     (threadId: string, replace = false) => store.actions.openThread(threadId, replace),
     [store],
   );
 
-  /** Why no thread can be created now, or undefined when one can. */
+  /** The draft's provider: the pick, or Pea default = the first ready one. */
+  const drafted = draft.providerId
+    ? providers.list?.find((item) => item.id === draft.providerId)
+    : providers.list?.find(isReady);
+  /** Why the first send cannot create a thread now, or undefined when it can. */
   const newRefusal = demo
     ? undefined
-    : !harnesses
-      ? "Harnesses are loading"
-      : harnesses.some((item) => item.available)
-        ? undefined
-        : (harnesses[0]?.reason ?? "No harness is available");
+    : !providers.list
+      ? "Providers are loading"
+      : !providers.list.some(isReady)
+        ? "no provider is ready"
+        : drafted && !isReady(drafted)
+          ? `${drafted.name} is not ready`
+          : undefined;
 
-  /** A thread on `harness`, or the first one that can spawn. */
-  const createThread = useCallback(
-    async (harness?: HarnessId) => {
-      const chosen = harness ?? harnesses?.find((item) => item.available)?.id;
-      if (!chosen) throw Error(newRefusal ?? "No harness is available");
-      const created = await client.create(chosen);
-      await refreshThreads();
-      await gotoThread(created.id);
-      return created.id;
-    },
-    [client, gotoThread, harnesses, newRefusal, refreshThreads],
-  );
+  /** Binds the draft: the thread is created on its provider, then takes the draft's model and traits. */
+  const createThread = useCallback(async () => {
+    if (newRefusal || !drafted) throw Error(newRefusal ?? "no provider is ready");
+    const created = await client.create(drafted.id);
+    if (draft.modelId && draft.modelId !== created.modelId)
+      await client.model(created.id, draft.modelId);
+    for (const [id, value] of Object.entries(draft.traits))
+      await client.trait(created.id, id, value);
+    await refreshThreads();
+    await gotoThread(created.id);
+    return created.id;
+  }, [client, draft, drafted, gotoThread, newRefusal, refreshThreads]);
 
   const sendPrompt = useCallback(
     async (text: string, attachments?: WorkbenchAttachment[]) => {
@@ -149,9 +152,9 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   );
 
   const forkThread = useCallback(
-    (threadId: string, harness?: HarnessId) =>
+    (threadId: string, providerId?: string) =>
       attempt(async () => {
-        const forked = await client.fork(threadId, harness);
+        const forked = await client.fork(threadId, providerId);
         await refreshThreads();
         await gotoThread(forked.id);
       }),
@@ -181,7 +184,9 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       loading,
       error,
       threads,
-      harnesses: harnesses ?? [],
+      providers,
+      draft,
+      setDraft,
       newRefusal,
       missingThread,
       currentThreadId,
@@ -194,7 +199,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       operationError,
       sendPrompt,
       cancel: onThread((id) => client.cancel(id)),
-      newThread: async (harness) => void (await attempt(() => createThread(harness))),
+      newThread: async () =>
+        void (await navigate({ search: (previous) => ({ ...previous, thread: undefined }) })),
       openThread: (threadId) => void gotoThread(threadId),
       renameThread: async (threadId, title) =>
         void (await attempt(async () => {
@@ -208,10 +214,10 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         onThread((id) => client.permission(id, requestId, optionId))(),
       answerQuestion: async (requestId, action, content) =>
         onThread((id) => client.question(id, requestId, action, content))(),
-      forkThread: async (harness, threadId) =>
-        void (await forkThread(threadId || currentThreadId, harness)),
+      forkThread: async (providerId, threadId) =>
+        void (await forkThread(threadId || currentThreadId, providerId)),
       setModel: async (modelId) => onThread((id) => client.model(id, modelId))(),
-      setMode: async (modeId) => onThread((id) => client.mode(id, modeId))(),
+      setTrait: async (traitId, value) => onThread((id) => client.trait(id, traitId, value))(),
     }),
     [
       attempt,
@@ -224,8 +230,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       deleteThread,
       error,
       forkThread,
-      gotoThread,
-      harnesses,
+      draft,
       info,
       isRunning,
       loading,
@@ -234,7 +239,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       onThread,
       operationError,
       patchThreadView,
-      refreshThreads,
+      providers,
       search.prompt,
       search.turn,
       sendPrompt,

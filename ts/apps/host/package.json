@@ -13,16 +13,15 @@
     "dev:no-revit": "vp exec node scripts/dev-watch.ts --take-over-host --no-revit",
     "attach": "vp exec node --import jiti/register src/dev.ts",
     "build": "vp pack",
-    "build:payload": "vp pack && pnpm --filter @pe/web build && node scripts/stage-web.mjs",
+    "build:payload": "vp pack && pnpm --filter @pe/web build && node scripts/stage-web.mjs && node scripts/stage-harness.mjs",
     "test": "vp test",
     "check": "vp check"
   },
   "dependencies": {
-    "@agentclientprotocol/claude-agent-acp": "catalog:",
-    "@agentclientprotocol/codex-acp": "catalog:",
     "@agentclientprotocol/sdk": "catalog:",
     "@effect/platform-node": "4.0.0-beta.92",
     "@pe/agent-contracts": "workspace:*",
+    "@pe/harness-runtime": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@pe/mcps": "workspace:*",
     "@pe/runtime": "workspace:*",

@@ -27,7 +27,7 @@ export interface ChatRouteDeps {
   cancel?: () => Promise<void>;
   newThread?: () => Promise<void>;
   forkThread?: () => Promise<void>;
-  /** Why no thread can be created now (harnesses loading, none installed). */
+  /** Why the first send cannot create a thread now (providers loading, none ready). */
   newRefusal?: string;
 }
 
@@ -83,17 +83,17 @@ export const chatManifest = (
       },
       new: {
         label: "new",
-        says: "starts a new, empty thread on the first available harness and opens it",
+        says: "opens an empty draft; the first send creates its thread on the head's provider",
         needs: "host",
         actor: "human",
         input: z.void() as unknown as z.ZodType<never>,
         dirties: ["head"],
-        ready: () => (deps.newThread ? (deps.newRefusal ?? null) : "Chat is not ready"),
+        ready: () => (deps.newThread ? null : "Chat is not ready"),
         run: async () => deps.newThread?.(),
       },
       fork: {
         label: "fork",
-        says: "copies this thread into a new one on the same harness, model context included, and opens it",
+        says: "copies this thread into a new one on the same provider, model context included, and opens it",
         needs: "host",
         actor: "human",
         input: z.void() as unknown as z.ZodType<never>,
