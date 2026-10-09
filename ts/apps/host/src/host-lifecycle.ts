@@ -3,11 +3,7 @@ import { join } from "node:path";
 import { Context, Deferred, Effect, Layer } from "effect";
 import { HttpRouter, HttpServer, HttpServerResponse as Response } from "effect/unstable/http";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
-import {
-  readServiceFile,
-  sweepDeadServiceFiles,
-  writeServiceFile,
-} from "@pe/host-contracts/pe-service";
+import { sweepDeadServiceFiles } from "@pe/host-contracts/pe-service";
 import {
   authorizeShutdownFor,
   claimServiceHost,
@@ -87,35 +83,6 @@ function buildHostDescriptor(port: number): ServiceHostDescriptor {
     health: hostProcessIdentity.healthPath,
     policy: hostReplacementPolicy(hostOwnership.lane, process.argv.includes(DEV_TAKEOVER_ARGUMENT)),
   };
-}
-
-/**
- * Schema-3 `sessionId`: record WHICH pe-revit session this host serves, once a Revit payload
- * registers on the bridge and tells us. It cannot be written at claim time — the claim happens on
- * bind, long before any Revit process connects — so this is an in-place amendment of our OWN file.
- *
- * Why it matters: without it, `session list` can only match this host to a session by LANE, and
- * it says so in as many words (`legBecause: "lane match and NOT proof that this host serves this
- * session"`). With it, the leg is an association the SDK can actually stand behind.
- *
- * Compare-and-swap on `instanceId`: if the file no longer names this launch, a successor claimed
- * it and writing would clobber a live identity. Best-effort throughout — a leg is narration, and
- * failing to improve it must never take the host down.
- */
-export async function announceServedSession(
-  appBase: string,
-  handle: ServiceHostHandle,
-  sessionId: string,
-): Promise<void> {
-  try {
-    const current = await readServiceFile(appBase, hostOwnership.serviceName);
-    if (!current || current.instanceId !== handle.serviceFile.instanceId) return;
-    if (current.sessionId === sessionId) return;
-    await writeServiceFile(appBase, hostOwnership.serviceName, { ...current, sessionId });
-    console.log(`pe-host service file now names pe-revit session ${sessionId}`);
-  } catch (error) {
-    console.warn(`pe-host could not record the served session id: ${String(error)}`);
-  }
 }
 
 /**

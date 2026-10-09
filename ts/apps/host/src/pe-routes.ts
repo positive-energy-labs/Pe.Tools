@@ -50,6 +50,9 @@ import { createHarnessThreads } from "./harness/threads.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { productHarnessThreadsPath, productRouteWorkPath } from "./product-paths.ts";
 import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
+import { createMachine, machineSources } from "./machine.ts";
+import { UpdateReader } from "./update-reader.ts";
+import { makeInstalledUpdateReader } from "./update-route.ts";
 import { bindActionWorkspace } from "./takeoff-actions.ts";
 import { familySpecAsset, familySpecHandlers } from "./family-spec.ts";
 
@@ -335,6 +338,7 @@ export function makeHostPeRoutes(
   hostBaseUrl: string,
   bridge: RevitBridge["Service"] | undefined,
   registrationsFactory: typeof createRouteRegistrations = createRouteRegistrations,
+  update: UpdateReader["Service"] = makeInstalledUpdateReader(),
 ) {
   const sourceRoot = hostOwnership.sourceRoot;
   const worldRoot = resolvePeaProductHomePath();
@@ -361,6 +365,7 @@ export function makeHostPeRoutes(
   });
   // Every provider is probed once in the background; the list says `unknown` until then.
   const providers = createProviders({ shellPath: () => shellPath });
+  const machine = createMachine(machineSources(bridge, providers, update));
   const threads = createHarnessThreads({
     providers,
     root: productHarnessThreadsPath(),
@@ -385,12 +390,19 @@ export function makeHostPeRoutes(
     store: fileRouteDocumentStore(productRouteWorkPath()),
     heads: threads.heads,
     capabilityCatalog: catalog,
-    observeHostResource: hostResourceObserver(bridge, undefined, undefined, hostBaseUrl),
+    observeHostResource: hostResourceObserver(
+      bridge,
+      undefined,
+      undefined,
+      hostBaseUrl,
+      undefined,
+      machine,
+    ),
     markReadings: markReadings(documentMarks(bridge)),
   });
   bindActionWorkspace(routes.workspace);
   sweepClosedDocuments(bridge, routes.workspace);
-  return { providers, threads, routes, catalog };
+  return { providers, threads, routes, catalog, machine };
 }
 
 /** {@link makeHostPeRoutes} on the host's router. Harness children die when the launch scope closes. */
@@ -400,11 +412,14 @@ export const peRoutesLayer = (registrationsFactory?: typeof createRouteRegistrat
       const { address } = yield* HttpServer.HttpServer;
       const hostBaseUrl = `http://127.0.0.1:${address._tag === "TcpAddress" ? address.port : 0}`;
       const bridge = Option.getOrUndefined(yield* Effect.serviceOption(RevitBridge));
-      const { providers, threads, routes, catalog } = makeHostPeRoutes(
+      const update = yield* UpdateReader;
+      const { providers, threads, routes, catalog, machine } = makeHostPeRoutes(
         hostBaseUrl,
         bridge,
         registrationsFactory,
+        update,
       );
+      yield* Effect.addFinalizer(() => Effect.sync(() => machine.close()));
       yield* Effect.addFinalizer(() => Effect.promise(() => threads.close()));
       // With Revit present the op and pod rows describe the connected session, so a session
       // arriving or leaving drops the 30 s cache; without Revit there is no bridge to watch.

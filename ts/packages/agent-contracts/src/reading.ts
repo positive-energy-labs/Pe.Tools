@@ -70,6 +70,7 @@ export const sdkReadingSchema = z.strictObject({
 export type SdkReading = z.infer<typeof sdkReadingSchema>;
 
 export const readingRequestSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("machine") }),
   sdkReadingSchema,
   z.discriminatedUnion("binding", [
     workKeySchema.options[0].extend({ kind: z.literal("work") }),
@@ -135,8 +136,6 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
     document: z.string().min(1).optional(),
     text: z.boolean().optional(),
   }),
-  /** Installed product version and the update the installer offers. */
-  z.strictObject({ kind: z.literal("install-status") }),
 ]);
 export type ReadingRequest = z.infer<typeof readingRequestSchema>;
 
@@ -186,4 +185,5 @@ export type ActionReadingKey =
   | "families"
   | "parameter-links"
   | "schedules"
-  | "sdk";
+  | "sdk"
+  | "machine";

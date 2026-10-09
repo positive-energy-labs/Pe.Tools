@@ -703,6 +703,9 @@ export function createProviders(options: ProvidersOptions) {
 
   return {
     get,
+    /** Machine projects the existing probe cache; it never starts a second provider probe. */
+    readiness: () =>
+      records().map((record) => ({ id: record.id, readiness: view(record).readiness })),
     env,
     models: (id: string) => cache.get(id)?.models ?? [],
     validateModel: async (record: ProviderRecord, modelId: string) => {

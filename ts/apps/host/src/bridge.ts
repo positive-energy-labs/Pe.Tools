@@ -340,7 +340,7 @@ export function resolveSessionTarget<S extends SessionTargetCandidate>(
   };
 }
 
-// Multi-session registry with a current-session fallback for old callers.
+// Multi-session registry. A caller pins its target; attachment order never selects one.
 export class RevitBridge extends Context.Service<
   RevitBridge,
   {
@@ -431,7 +431,6 @@ export const RevitBridgeLive = Layer.effect(
   RevitBridge,
   Effect.gen(function* () {
     const sessions = yield* Ref.make(new Map<string, Session>());
-    const currentSessionId = yield* Ref.make<string | null>(null);
     const events = yield* Effect.acquireRelease(
       PubSub.sliding<HostBridgeEvent>(EVENT_STREAM_CAPACITY),
       PubSub.shutdown,
@@ -494,11 +493,6 @@ export const RevitBridgeLive = Layer.effect(
         next.delete(closedSession.sessionId);
         return next;
       });
-      const current = yield* Ref.get(currentSessionId);
-      if (current === closedSession.sessionId) {
-        const remaining = yield* Ref.get(sessions);
-        yield* Ref.set(currentSessionId, remaining.keys().next().value ?? null);
-      }
       yield* emit({
         sessionId: closedSession.sessionId,
         kind: "disconnected",
@@ -577,7 +571,6 @@ export const RevitBridgeLive = Layer.effect(
             yield* Ref.update(sessions, (map) =>
               new Map(map).set(registeredSession.sessionId, registeredSession),
             );
-            yield* Ref.set(currentSessionId, registeredSession.sessionId);
             yield* send({
               kind: "RegistrationAck",
               registrationAck: { accepted: true, sessionId: registeredSession.sessionId },
@@ -887,17 +880,10 @@ export const RevitBridgeLive = Layer.effect(
       );
     });
 
-    // Read-only view: never hard-fails. An untargeted snapshot with several sessions falls back
-    // to the most recently registered one (status displays); targeted misses read as disconnected.
+    // Read-only view: an ambiguous or missing target has no selected session fallback.
     const snapshot = Effect.fnUntraced(function* (bridgeSessionId?: string) {
       const resolution = yield* resolveTarget(bridgeSessionId);
       if (resolution._tag === "found") return yield* viewSession(resolution.session);
-      if (!bridgeSessionId) {
-        const map = yield* Ref.get(sessions);
-        const currentId = yield* Ref.get(currentSessionId);
-        const current = currentId ? map.get(currentId) : undefined;
-        if (current) return yield* viewSession(current);
-      }
       return { connected: false } satisfies BridgeSessionView;
     });
 

@@ -281,6 +281,9 @@ importers:
 
   packages/agent-contracts:
     dependencies:
+      '@pe/host-contracts':
+        specifier: workspace:*
+        version: link:../host-contracts
       zod:
         specifier: 4.3.6
         version: 4.3.6
