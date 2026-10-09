@@ -254,8 +254,8 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
     private static void MakeGuiSubsystem(string executable) {
         using var stream = new FileStream(executable, FileMode.Open, FileAccess.ReadWrite);
         var headers = new PEHeaders(stream);
-        // Subsystem sits at offset 68 of the optional header for PE32 and PE32+ alike.
-        var subsystemOffset = headers.PEHeaderStartOffset + 4 + 20 + 68;
+        // PEHeaderStartOffset is the optional header; Subsystem sits at its offset 68 for PE32 and PE32+.
+        var subsystemOffset = headers.PEHeaderStartOffset + 68;
         stream.Seek(subsystemOffset, SeekOrigin.Begin);
         var current = (ushort)(stream.ReadByte() | stream.ReadByte() << 8);
         if (current != 3 && current != 2)
