@@ -1,3 +1,4 @@
+import { sdkSessionSelectionSchema } from "./sdk-session.ts";
 import { z } from "zod";
 import { capabilityNeedsSchema } from "./capability.ts";
 
@@ -42,7 +43,7 @@ export type DocumentRequest = z.infer<typeof documentRequestSchema>;
  * A call override never rewrites thread scope or authored work. */
 export const callTargetSchema = z.discriminatedUnion("needs", [
   z.strictObject({ needs: z.literal("nothing") }),
-  z.strictObject({ needs: z.literal("session"), target: z.string().min(1) }),
+  z.strictObject({ needs: z.literal("session"), target: sdkSessionSelectionSchema.optional() }),
   z.strictObject({
     needs: capabilityNeedsSchema.exclude(["nothing", "session"]),
     target: documentRequestSchema.optional(),
@@ -81,6 +82,7 @@ export type TargetInventory = z.infer<typeof targetInventorySchema>;
 
 export const executionTargetSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("host") }),
+  z.strictObject({ kind: z.literal("sdk-session"), selection: sdkSessionSelectionSchema }),
   z.strictObject({ kind: z.literal("session"), session: z.string().min(1) }),
   z.strictObject({ kind: z.literal("document"), ref: documentRefSchema }),
 ]);
@@ -100,15 +102,12 @@ export type TargetResolution =
 
 /** Callers retain the request for recovery; this function never chooses another session. */
 export function resolveCallTarget(
-  call: CallTarget,
+  call: Exclude<CallTarget, { needs: "session" }>,
   defaultDocument: DocumentRequest | null,
   inventory: TargetInventory,
 ): TargetResolution {
   if (call.needs === "nothing") return { kind: "resolved", target: { kind: "host" } };
-  const request =
-    call.needs === "session"
-      ? { kind: "session" as const, session: call.target }
-      : (call.target ?? defaultDocument);
+  const request = call.target ?? defaultDocument;
   if (!request) return { kind: "choose", reason: "missing" };
   if (inventory.kind !== "ready") return inventory;
   const session = request.kind === "open" ? request.ref.session : request.session;
@@ -116,7 +115,6 @@ export function resolveCallTarget(
     ? inventory.sessions[session]
     : undefined;
   if (!found) return { kind: "choose", reason: "session-gone" };
-  if (request.kind === "session") return { kind: "resolved", target: { kind: "session", session } };
   if (found.kind !== "ready") return found;
   const documents = found.values.filter((doc) =>
     request.kind === "open"

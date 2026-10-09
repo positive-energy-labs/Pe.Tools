@@ -1,3 +1,4 @@
+import { sdkSession, readSessionScope } from "./sdk-session.ts";
 import { admitScheduleAction, recoverScheduleAction, readSchedule } from "./schedule-actions.ts";
 import { admitInstancesAction, recoverInstancesAction } from "./instances-actions.ts";
 import { instancesActions } from "@pe/agent-contracts";
@@ -54,13 +55,7 @@ import {
 } from "./captures-route.ts";
 import { boundedPayload, capture } from "@pe/runtime";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
-import {
-  RevitBridge,
-  BridgeError,
-  CANCEL_OPERATION_KEY,
-  NoRevitSession,
-  type BridgeSessionView,
-} from "./bridge.ts";
+import { RevitBridge, BridgeError, CANCEL_OPERATION_KEY, NoRevitSession } from "./bridge.ts";
 import { apsAuthLogin, apsAuthLogout, apsAuthStatus, apsAuthToken } from "./aps-auth.ts";
 import {
   getBridgeSessionSummary,
@@ -95,6 +90,7 @@ import {
   tsOnlyOperationCatalog,
   tsOnlyOperationSchemas,
   type TsOnlyOperationKey,
+  type HostSessionScope,
 } from "@pe/host-contracts/operation-types";
 import type { HostErrorKind } from "@pe/host-contracts/contracts";
 
@@ -246,9 +242,12 @@ export function makeCallRoute(
       if (unknownKey) return yield* Effect.fail(invalidBody(unknownBodyKeyMessage(unknownKey)));
       const key = body.key;
       const request = "request" in body ? body.request : undefined;
-      let bridgeSessionId = req.headers[HOST_RPC_BRIDGE_SESSION_HEADER]?.trim() || undefined;
-      let openDocumentId: string | null | undefined =
-        req.headers[HOST_RPC_DOCUMENT_HEADER]?.trim() || undefined;
+      const scope = yield* Effect.try({
+        try: () => readSessionScope(req.headers),
+        catch: (error) => invalidBody(String(error)),
+      });
+      let bridgeSessionId = scope.bridgeSessionId;
+      let openDocumentId: string | null | undefined = scope.openDocumentId;
 
       if (key === "takeoffs.saved") {
         op = { key, request, tsOnly: true, startedAt: Date.now(), origin };
@@ -259,17 +258,19 @@ export function makeCallRoute(
 
       if (key === "host.ops.catalog") openDocumentId = null;
       const bridge = yield* RevitBridge;
-      // Endpoint-level backstop for the data-loss path: an untargeted Revit op with several sessions
-      // connected must never fall through to one of them. bridge.invoke also hard-fails here, but its
-      // hint speaks the MCP `target=` selector; at the raw wire the fix is the header, so name it.
-      if (!isTsOnlyOperationKey(key) && !bridgeSessionId) {
-        const sessions = yield* bridge.list;
-        if (sessions.length > 1) return yield* Effect.fail(ambiguousBridgeTarget(sessions));
-      }
+      const resolvedSession =
+        !isTsOnlyOperationKey(key) && key !== CANCEL_OPERATION_KEY
+          ? yield* sdkSession(bridge, scope, actionDeps.sdk)
+          : undefined;
+      bridgeSessionId = resolvedSession?.sessionId ?? bridgeSessionId;
       op = { key, request, tsOnly: isTsOnlyOperationKey(key), startedAt: Date.now(), origin };
-      if (key !== "takeoffs.snapshot" && key !== "host.ops.catalog") {
+      if (
+        key !== "takeoffs.snapshot" &&
+        key !== "host.ops.catalog" &&
+        key !== CANCEL_OPERATION_KEY
+      ) {
         const definition = yield* Effect.tryPromise({
-          try: () => operationDefinition(key, bridge, bridgeSessionId),
+          try: () => operationDefinition(key, bridge, resolvedSession),
           catch: (error) => error,
         });
         if (definition.intent === "Mutate") {
@@ -292,14 +293,8 @@ export function makeCallRoute(
         });
         if (!isTsOnlyOperationKey(key)) {
           const target = yield* Effect.tryPromise({
-            try: () =>
-              gatewayTarget(
-                key,
-                definition.needs,
-                bridge,
-                bridgeSessionId,
-                openDocumentId ?? undefined,
-              ),
+            try: async () =>
+              gatewayTarget(key, definition.needs, resolvedSession, openDocumentId ?? undefined),
             catch: (error) => error,
           });
           if (target.kind !== "host")
@@ -309,7 +304,7 @@ export function makeCallRoute(
       }
       const result = isTsOnlyOperationKey(key)
         ? {
-            value: yield* dispatch(key, request, bridgeSessionId, bridge),
+            value: yield* dispatch(key, request, scope, bridge),
             target: null,
           }
         : key === "takeoffs.snapshot"
@@ -473,18 +468,27 @@ export function makeCallRoute(
             session: req.headers[HOST_RPC_BRIDGE_SESSION_HEADER],
             openId: req.headers[HOST_RPC_DOCUMENT_HEADER],
           });
+          const resolvedSession = await Effect.runPromise(
+            sdkSession(
+              bridge,
+              {
+                bridgeSessionId: target.session,
+                openDocumentId: target.openId,
+              },
+              actionDeps.sdk,
+            ),
+          );
           const definition = await operationDefinition(
             "revit.matrix.loaded-families",
             bridge,
-            target.session,
+            resolvedSession,
           );
           requireEligibleActor(definition, req.headers[ACTOR_HEADER] ?? "human");
           if (definition.intent !== "Read") throw Error("Matrix operation must be a read");
-          const resolved = await gatewayTarget(
+          const resolved = gatewayTarget(
             "revit.matrix.loaded-families",
             definition.needs,
-            bridge,
-            target.session,
+            resolvedSession,
             target.openId,
           );
           if (
@@ -953,32 +957,25 @@ function unknownBodyKeyMessage(key: string): string {
     : `${base}.`;
 }
 
-/** Untargeted Revit op with multiple sessions connected — refuse rather than route to one. */
-function ambiguousBridgeTarget(sessions: readonly BridgeSessionView[]): BridgeError {
-  const ids = sessions.map((s) => s.sessionId ?? "(unknown)").join(", ");
-  return new BridgeError(
-    `Multiple Revit sessions are connected (${ids}); untargeted Revit operations are ambiguous and refused. Set the '${HOST_RPC_BRIDGE_SESSION_HEADER}' header to target one.`,
-    409,
-  );
-}
-
 const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
   key: TsOnlyOperationKey,
   request: unknown,
-  bridgeSessionId: string | undefined,
+  scope: HostSessionScope | undefined,
   bridge: RevitBridge["Service"],
 ) {
   switch (key) {
     case "takeoffs.saved":
       return yield* savedTakeoffs(request, hostTakeoffCaptures());
     case "host.status":
-      return yield* Effect.flatMap(bridge.snapshot(bridgeSessionId), (snapshot) =>
-        getHostStatus(snapshot),
+      return yield* Effect.flatMap(
+        Effect.map(bridge.list, (sessions) => ({ connected: sessions.some((s) => s.connected) })),
+        (snapshot) => getHostStatus(snapshot),
       );
     case "host.topology": {
       // The operator's map: host identity + all sessions in one snapshot (ADR 0003).
-      const host = yield* Effect.flatMap(bridge.snapshot(bridgeSessionId), (snapshot) =>
-        getHostStatus(snapshot),
+      const host = yield* Effect.flatMap(
+        Effect.map(bridge.list, (sessions) => ({ connected: sessions.some((s) => s.connected) })),
+        (snapshot) => getHostStatus(snapshot),
       );
       const sessions = yield* listBridgeSessions(bridge.list);
       return {
@@ -988,7 +985,7 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
       };
     }
     case "bridge.sessions.summary":
-      return yield* Effect.flatMap(bridge.snapshot(bridgeSessionId), getBridgeSessionSummary);
+      return yield* Effect.flatMap(sdkSession(bridge, scope), getBridgeSessionSummary);
     case "bridge.sessions.list":
       return yield* listBridgeSessions(bridge.list);
     case "logs.tail":
@@ -1008,7 +1005,7 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
     case "pod.member.compose":
       return yield* composeMember(
         yield* decodeRequest(key, request),
-        yield* podContext(bridge, bridgeSessionId),
+        yield* podContext(bridge, scope),
       );
     case "rhvac.open":
       return yield* rhvacOpen(yield* decodeRequest(key, request));
@@ -1036,9 +1033,10 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
 /** A session-less host composes schema-only; it never pretends a bridge is there. */
 const podContext = Effect.fnUntraced(function* (
   bridge: RevitBridge["Service"],
-  bridgeSessionId: string | undefined,
+  scope: HostSessionScope | undefined,
 ) {
-  const session = yield* bridge.snapshot(bridgeSessionId);
+  if (!scope?.session && !scope?.bridgeSessionId) return {} satisfies PodContext;
+  const session = yield* sdkSession(bridge, scope);
   if (!session.connected || !session.sessionId) return {} satisfies PodContext;
   return {
     invokeBridge: (key, payload) =>
@@ -1072,6 +1070,7 @@ function toProblem(error: unknown): {
   nativeOutcome?: string;
   issues?: BridgeError["evidence"]["issues"];
   notDispatched?: true;
+  result?: unknown;
   resolvedTarget?: BridgeError["evidence"]["resolvedTarget"];
 } {
   if (error instanceof Error) return { kind: "HostFailure", message: error.message, status: 500 };
@@ -1114,6 +1113,7 @@ function toProblem(error: unknown): {
         nativeOutcome: error.nativeOutcome,
         issues: error.evidence.issues,
         notDispatched: error.evidence.notDispatched,
+        result: error.evidence.result,
         resolvedTarget: error.evidence.resolvedTarget,
       };
     case "LocalOpError":

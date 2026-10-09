@@ -93,7 +93,15 @@ export function familySpecHandlers(): RouteStateCommandHandlers<FamilyDraft> {
         body: form,
       });
       const payload = await parsed.json();
-      if (!parsed.ok) throw Error(payload.error ?? `Parse failed (${parsed.status})`);
+      if (!parsed.ok)
+        throw Error(
+          typeof payload === "object" &&
+            payload !== null &&
+            "error" in payload &&
+            typeof payload.error === "string"
+            ? payload.error
+            : `Parse failed (${parsed.status})`,
+        );
       const doc = parsedDocViewSchema.parse(payload);
       const dir = dirname(member.path).replaceAll("\\", "/");
       const name = basename(file.name, extname(file.name)).replace(/[^a-zA-Z0-9_-]/g, "-");

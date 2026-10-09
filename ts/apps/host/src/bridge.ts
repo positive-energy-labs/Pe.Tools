@@ -11,7 +11,6 @@ import {
   type BridgeRegistrationRequest,
   type BridgeResponse,
   type BridgeStateSnapshot,
-  type Custody,
   type Lane,
 } from "@pe/host-contracts/contracts";
 
@@ -104,8 +103,6 @@ export type BridgeSessionView = {
   readonly lane?: Lane | null;
   /** The id `pe-revit session list` prints for this session, when the payload reported one. */
   readonly sdkSessionId?: string | null;
-  /** Disclosed, never enforced — the SDK resolver is what actually refuses mutation on observed. */
-  readonly custody?: Custody;
   readonly buildStamp?: string | null;
   readonly state?: BridgeStateSnapshot;
 };
@@ -145,202 +142,7 @@ function normalizeSessionLane(lane: string | null | undefined): Lane | null {
   return LANES.find((known) => known === normalized) ?? null;
 }
 
-// Bridge-only connections have no SDK census row; sdkSessionId is an inference until that row is joined.
-function inferCustody(session: Pick<SessionTargetCandidate, "sdkSessionId">): Custody {
-  return session.sdkSessionId ? "controlled" : "observed";
-}
-
-export type SessionTargetCandidate = {
-  readonly sessionId: string;
-  readonly processId: number;
-  readonly lane: Lane | null;
-  readonly sdkSessionId: string | null;
-  /** Document Addresses this session holds, as the bridge last reported them. */
-  readonly documents: readonly string[];
-};
-
-/** The document Addresses a bridge snapshot discloses. */
-// ponytail: the wire reports only the ACTIVE document per session (openDocumentCount is a bare
-// number), so "holds" means "is active in". Widen the state-sync payload with the open-document
-// list when a background document must be addressable.
-function heldDocuments(
-  state: Pick<BridgeStateSnapshot, "activeDocumentCloudModelGuid" | "activeDocumentPath">,
-): string[] {
-  const id = state.activeDocumentCloudModelGuid ?? state.activeDocumentPath;
-  return id ? [id] : [];
-}
-
-export type SessionTargetResolution<S extends SessionTargetCandidate> =
-  | { readonly _tag: "found"; readonly session: S }
-  | { readonly _tag: "none" }
-  | { readonly _tag: "error"; readonly message: string; readonly statusCode: number };
-
-function describeSessions(sessions: readonly SessionTargetCandidate[]): string {
-  if (sessions.length === 0) return "(no sessions connected)";
-  return sessions
-    .map(
-      (s) =>
-        `${s.sessionId} (pid ${s.processId}, lane ${s.lane ?? "unreported"}, ${inferCustody(s)}${
-          s.sdkSessionId ? `, session ${s.sdkSessionId}` : ""
-        }, holds ${s.documents.length ? s.documents.join(" + ") : "no document"})`,
-    )
-    .join("; ");
-}
-
-// The selector words ARE the SDK's custody and lane values, not a parallel product grammar:
-// `controlled`/`observed` come from `Custody`, `dev`/`installed` from `Lane`. `session:<id>`
-// addresses a pe-revit session by the id `session list` prints. Pid and bridge session id stay
-// broker-local addressing, for a connection the SDK's registry may not know about at all.
-const CUSTODIES: readonly Custody[] = ["controlled", "observed"];
-
-const TARGET_SYNTAX = `Target one with target=<selector>: ${[...CUSTODIES, ...LANES]
-  .map((word) => `'${word}'`)
-  .join(", ")}, 'session:<id>', 'doc:<Address>', a pid, or a bridge session id.`;
-
-/**
- * The sole target-resolution choke point, over BRIDGE-CONNECTED sessions — the broker's own
- * concern (DECISIONS Bridge row). It speaks the SDK's words but resolves over a different set than
- * pe-revit's resolver does: pe-revit resolves over the session registry, this resolves over live
- * WebSocket attachments, and a session can be in either without being in the other.
- *
- * Selector grammar: `session:<id>` → the connection reporting that pe-revit session id;
- * `doc:<Address>` → the one connection holding that document (zero or several holders refuse,
- * naming every session and what it holds); `pin:<id>|doc:<Address>` → the pinned pe-revit session
- * only while it holds the document; a pin miss refuses; `controlled`/`observed` â†’ custody; `dev`/`installed` â†’ lane; all digits â†’ pid; anything else
- * → bridge session id (one process incarnation). Untargeted with one session is implicit
- * (ergonomic and safe); untargeted with several HARD-FAILS immediately with the listing —
- * read-only status/list surfaces aggregate via `list` instead, never through here.
- */
-export function resolveSessionTarget<S extends SessionTargetCandidate>(
-  sessions: readonly S[],
-  target: string | undefined,
-): SessionTargetResolution<S> {
-  const selector = target?.trim();
-  const listing = describeSessions(sessions);
-
-  if (!selector) {
-    if (sessions.length === 0) return { _tag: "none" };
-    if (sessions.length === 1) return { _tag: "found", session: sessions[0] };
-    return {
-      _tag: "error",
-      statusCode: 409,
-      message: `Multiple Revit sessions are connected; untargeted Revit operations are ambiguous and refused. ${TARGET_SYNTAX} Connected sessions: ${listing}`,
-    };
-  }
-
-  if (selector.toLowerCase().startsWith("session:")) {
-    const sdkSessionId = selector.slice("session:".length).trim();
-    const matches = sessions.filter((s) => s.sdkSessionId === sdkSessionId);
-    if (matches.length === 1) return { _tag: "found", session: matches[0] };
-    if (matches.length === 0)
-      return {
-        _tag: "error",
-        statusCode: 404,
-        message: `No connected session reports pe-revit session '${sdkSessionId}'. Connected sessions: ${listing}`,
-      };
-    return {
-      _tag: "error",
-      statusCode: 409,
-      message: `pe-revit session '${sdkSessionId}' has ${matches.length} connected sessions — this should not happen (takeover keeps one per process incarnation). Target a pid or bridge session id instead. Connected sessions: ${listing}`,
-    };
-  }
-
-  // A Scope that names a document and no session resolves here: the document is the primary key
-  // and the session is derived from its one holder. Two holders is the one case the user must
-  // name a session, and the refusal lists them so the head can offer exactly those.
-  // A pin is a required selected session, never a fallback preference.
-  const pinned = /^pin:([^|]+)\|doc:(.*)$/is.exec(selector);
-  if (pinned || selector.toLowerCase().startsWith("doc:")) {
-    const address = (pinned ? pinned[2]! : selector.slice("doc:".length)).trim();
-    const pin = pinned?.[1]!.trim();
-    const holders = sessions.filter((s) => s.documents.includes(address));
-    // An observed Revit (no pe-revit receipt) has no SDK id; its bridge id is its name on the head.
-    const held = pin ? holders.find((s) => (s.sdkSessionId ?? s.sessionId) === pin) : undefined;
-    if (held) return { _tag: "found", session: held };
-    if (pin)
-      return {
-        _tag: "error",
-        statusCode: 409,
-        message: `Pinned session '${pin}' does not hold document '${address}'. Connected sessions: ${listing}`,
-      };
-    if (holders.length === 1) return { _tag: "found", session: holders[0] };
-    if (holders.length === 0)
-      return {
-        _tag: "error",
-        statusCode: 404,
-        message: `No connected session holds document '${address}'. Open it in Revit, or from /instances. Connected sessions: ${listing}`,
-      };
-    return {
-      _tag: "error",
-      statusCode: 409,
-      message: `Document '${address}' is open in ${holders.length} sessions: ${describeSessions(holders)}. Name one with 'session:<id>'.`,
-    };
-  }
-
-  // Custody, the SDK's word: `observed` is a session pe-revit holds no receipt for — the one the
-  // retired grammar called `user`, and the one the SDK resolver refuses every mutation on.
-  // `controlled` is a session pe-revit launched. The broker discloses which; it never enforces.
-  const custody = CUSTODIES.find((word) => word === selector.toLowerCase());
-  if (custody) {
-    const matches = sessions.filter((s) => inferCustody(s) === custody);
-    if (matches.length === 1) return { _tag: "found", session: matches[0] };
-    if (matches.length === 0)
-      return {
-        _tag: "error",
-        statusCode: 404,
-        message: `No ${custody} session is connected. Connected sessions: ${listing}`,
-      };
-    return {
-      _tag: "error",
-      statusCode: 409,
-      message: `'${custody}' is ambiguous: ${matches.length} ${custody} sessions are connected. Target a pid or bridge session id. Connected sessions: ${listing}`,
-    };
-  }
-
-  const lane = LANES.find((known) => known === selector.toLowerCase());
-  if (lane) {
-    const matches = sessions.filter((s) => s.lane === lane);
-    if (matches.length === 1) return { _tag: "found", session: matches[0] };
-    if (matches.length === 0)
-      return {
-        _tag: "error",
-        statusCode: 404,
-        message: `No ${lane}-lane session is connected. Connected sessions: ${listing}`,
-      };
-    return {
-      _tag: "error",
-      statusCode: 409,
-      message: `'${lane}' is ambiguous: ${matches.length} ${lane}-lane sessions are connected. Target a pid or bridge session id. Connected sessions: ${listing}`,
-    };
-  }
-
-  if (/^\d+$/.test(selector)) {
-    const pid = Number.parseInt(selector, 10);
-    const matches = sessions.filter((s) => s.processId === pid);
-    if (matches.length === 1) return { _tag: "found", session: matches[0] };
-    if (matches.length === 0)
-      return {
-        _tag: "error",
-        statusCode: 404,
-        message: `No connected session has pid ${pid}. Connected sessions: ${listing}`,
-      };
-    return {
-      _tag: "error",
-      statusCode: 409,
-      message: `Pid ${pid} matches ${matches.length} sessions. Target a bridge session id. Connected sessions: ${listing}`,
-    };
-  }
-
-  const byId = sessions.find((s) => s.sessionId === selector);
-  if (byId) return { _tag: "found", session: byId };
-  return {
-    _tag: "error",
-    statusCode: 404,
-    message: `No connected session matches target '${selector}'. ${TARGET_SYNTAX} Connected sessions: ${listing}`,
-  };
-}
-
-// Multi-session registry. A caller pins its target; attachment order never selects one.
+// Exact attachment registry. Session selection belongs to the SDK.
 export class RevitBridge extends Context.Service<
   RevitBridge,
   {
@@ -455,24 +257,9 @@ export const RevitBridgeLive = Layer.effect(
         processStartUtcUnixMs: session.processStartUtcUnixMs,
         lane: session.lane,
         sdkSessionId: session.sdkSessionId,
-        custody: inferCustody(session),
         buildStamp: session.buildStamp,
         state: yield* Ref.get(session.state),
       } satisfies BridgeSessionView;
-    });
-
-    // The sole target-resolution choke point for operations that reach into one Revit process.
-    const resolveTarget = Effect.fnUntraced(function* (target?: string) {
-      const map = yield* Ref.get(sessions);
-      const candidates = yield* Effect.all(
-        [...map.values()].map((session) =>
-          Effect.map(Ref.get(session.state), (state) => ({
-            ...session,
-            documents: heldDocuments(state),
-          })),
-        ),
-      );
-      return resolveSessionTarget(candidates, target);
     });
 
     const failPendingRequest = Effect.fnUntraced(function* (session: Session, reason: string) {
@@ -681,7 +468,7 @@ export const RevitBridgeLive = Layer.effect(
                 ? {}
                 : { dispatched: true as const }),
               resolvedTarget: {
-                session: session.sdkSessionId ?? session.sessionId,
+                session: session.sessionId,
                 document: targetOpenId
                   ? (state.openDocuments.find((document) => document.openId === targetOpenId)
                       ?.address ?? null)
@@ -707,7 +494,7 @@ export const RevitBridgeLive = Layer.effect(
         const request = (yield* Ref.get(session.requests)).get(requestId);
         if (!request) continue;
         const target = {
-          session: session.sdkSessionId ?? session.sessionId,
+          session: session.sessionId,
           document: null,
         };
         if (request.phase === "dispatched") {
@@ -740,8 +527,7 @@ export const RevitBridgeLive = Layer.effect(
       openDocumentId?: string | null,
       requestId?: string,
     ) {
-      // Every bridge invoke reaches into exactly one Revit process, so ambiguity hard-fails here
-      // (no warning-only release). Read-only aggregation across sessions goes through `list`.
+      // The SDK adapter supplies one exact attachment. Census goes through `list`.
       // `op.cancel` is the exception in two ways: the request it names picks the session (an
       // untargeted cancel must work while several sessions are connected), and it NEVER queues —
       // waiting behind the op it is meant to stop is the whole bug it exists to fix.
@@ -750,16 +536,7 @@ export const RevitBridgeLive = Layer.effect(
         const known = typeof named === "string" ? yield* cancelRequest(named) : null;
         if (known) return known;
       }
-      const resolution = yield* resolveTarget(bridgeSessionId);
-      if (resolution._tag === "none") return yield* Effect.fail(new NoRevitSession());
-      if (resolution._tag === "error")
-        return yield* Effect.fail(
-          new BridgeError(resolution.message, resolution.statusCode, { notDispatched: true }),
-        );
-      // The candidate is a spread copy carrying `documents`; the liveness check below compares by
-      // identity, so take the map's own Session object. FOOTGUN: every invoke failed NoRevitSession
-      // on a live Revit (2026-09-06) while `list` showed the session, because of this copy.
-      const session = (yield* Ref.get(sessions)).get(resolution.session.sessionId);
+      const session = bridgeSessionId ? (yield* Ref.get(sessions)).get(bridgeSessionId) : undefined;
       if (!session) return yield* Effect.fail(new NoRevitSession());
 
       // An id this host never queued: let Revit answer for it, but still outside the gate.
@@ -767,7 +544,7 @@ export const RevitBridgeLive = Layer.effect(
         const result = yield* invokeSession(session, operationKey, payload, undefined);
         return {
           value: result.value,
-          target: { session: session.sdkSessionId ?? session.sessionId, document: null },
+          target: { session: session.sessionId, document: null },
         };
       }
 
@@ -861,7 +638,7 @@ export const RevitBridgeLive = Layer.effect(
         return {
           value: result.value,
           target: {
-            session: session.sdkSessionId ?? session.sessionId,
+            session: session.sessionId,
             document:
               state.openDocuments.find((document) => document.openId === result.openDocumentId)
                 ?.address ?? null,
@@ -880,11 +657,12 @@ export const RevitBridgeLive = Layer.effect(
       );
     });
 
-    // Read-only view: an ambiguous or missing target has no selected session fallback.
+    // Exact attachment lookup only; absence never selects a socket.
     const snapshot = Effect.fnUntraced(function* (bridgeSessionId?: string) {
-      const resolution = yield* resolveTarget(bridgeSessionId);
-      if (resolution._tag === "found") return yield* viewSession(resolution.session);
-      return { connected: false } satisfies BridgeSessionView;
+      const session = bridgeSessionId ? (yield* Ref.get(sessions)).get(bridgeSessionId) : undefined;
+      return session
+        ? yield* viewSession(session)
+        : ({ connected: false } satisfies BridgeSessionView);
     });
 
     const list = Effect.gen(function* () {

@@ -49,7 +49,7 @@ function host(prior?: Record<string, unknown>) {
         sessions: [],
         capabilities: buildCapabilities({ ops: operations, routes: [], pods: null, skills: [] }),
       });
-    if (url.pathname === "/ops") return Response.json({ operations });
+    if (url.pathname === "/ops") return Response.json({ operations, bridgeSessionId: "A" });
     if (url.pathname === "/call") {
       const body = JSON.parse(await bodyText(init));
       if (body.key === "bridge.sessions.list")
@@ -87,7 +87,9 @@ test("pe_do admits native operations and workflows with exact identity, actor, t
     await call(peDo, { key: "op:scripting.execute", target, input: { scriptContent: "x" } }),
   ).toMatchObject({ ok: true });
   for (const key of ["scripting.workspace.bootstrap", "pod.import", "pod.export"])
-    expect(await call(peDo, { key: `op:${key}`, target: "A" }, key)).toMatchObject({ ok: true });
+    expect(await call(peDo, { key: `op:${key}`, target: { id: "A" } }, key)).toMatchObject({
+      ok: true,
+    });
   const bases = { captureId: "c".repeat(64) };
   expect(
     await call(peDo, {

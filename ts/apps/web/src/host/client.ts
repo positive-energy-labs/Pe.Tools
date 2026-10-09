@@ -1,4 +1,5 @@
 import {
+  HOST_RPC_SDK_SESSION_HEADER,
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
   HOST_RPC_ORIGIN_HEADER,
@@ -45,6 +46,7 @@ async function postCall(
   options?: HostCallOptions,
 ): Promise<unknown> {
   const headers: Record<string, string> = { "content-type": "application/json" };
+  if (options?.session) headers[HOST_RPC_SDK_SESSION_HEADER] = JSON.stringify(options.session);
   if (options?.bridgeSessionId) headers[HOST_RPC_BRIDGE_SESSION_HEADER] = options.bridgeSessionId;
   if (options?.openDocumentId) headers[HOST_RPC_DOCUMENT_HEADER] = options.openDocumentId;
   // queue-provenance §1: `web:<route>` — the current path is the route id at call time.

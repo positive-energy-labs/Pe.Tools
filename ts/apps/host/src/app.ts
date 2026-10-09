@@ -1,3 +1,4 @@
+import { sdkSession } from "./sdk-session.ts";
 import { Deferred, Effect, Layer, Stream } from "effect";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
 import { NodeHttpClient, NodeHttpServer, NodeServices } from "@effect/platform-node";
@@ -12,7 +13,8 @@ import { isSettingsSchemaUrl } from "./settings.ts";
 import { isNavigation, opsCatalogRoute, type SpaFallback } from "./ops-catalog.ts";
 import { demoRoutes } from "./demo-owner.ts";
 import { callRoute } from "./call-route.ts";
-import { docsRoute, sessionsRoute } from "./session-route.ts";
+import { productRoot } from "./host-ownership.ts";
+import { instancesReadingsRoute } from "./session-route.ts";
 import {
   adminShutdownRoute,
   HostLifecycle,
@@ -43,11 +45,7 @@ const settingsSchemaRoute = HttpRouter.add("GET", "/schemas/settings/*", (req) =
     if (!isSettingsSchemaUrl(schemaUrl))
       return Response.jsonUnsafe({ error: `No schema at ${schemaUrl}` }, { status: 404 });
     const result = yield* Effect.result(
-      bridge.invoke(
-        "settings.schema",
-        { schemaUrl },
-        (yield* bridge.snapshot(undefined)).sessionId,
-      ),
+      bridge.invoke("settings.schema", { schemaUrl }, (yield* sdkSession(bridge)).sessionId),
     );
     if (result._tag === "Failure")
       return Response.jsonUnsafe(
@@ -102,7 +100,6 @@ const bridgeEventsRoute = HttpRouter.add("GET", "/events", () =>
 const noRevitBoundary = () =>
   Layer.mergeAll(
     HttpRouter.add("*", BRIDGE_PATH, emptyNotFound),
-    HttpRouter.add("*", "/sessions", emptyNotFound),
     HttpRouter.add("*", "/events", emptyNotFound),
     HttpRouter.add("*", "/schemas/settings/*", emptyNotFound),
     HttpRouter.add("*", "/host/install", emptyNotFound),
@@ -131,8 +128,7 @@ function makeRevitComposition(spa: SpaFallback = () => emptyNotFound) {
       settingsSchemaRoute,
       hostStatusRoute,
       hostInstallRoute,
-      sessionsRoute,
-      docsRoute,
+      instancesReadingsRoute,
       callRoute,
     ),
   };

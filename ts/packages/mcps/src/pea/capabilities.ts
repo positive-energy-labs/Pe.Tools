@@ -1,3 +1,4 @@
+import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import {
   instancesReading,
   scheduleReads,
@@ -20,6 +21,7 @@ import {
 import { z } from "zod";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 import {
+  HOST_RPC_SDK_SESSION_HEADER,
   HOST_RPC_BRIDGE_SESSION_HEADER,
   isTsOnlyOperationKey,
   type HostOpResponse,
@@ -284,8 +286,8 @@ const CATALOG_TTL_MS = 30_000;
 const SOURCE_BUDGET_MS = 2_000;
 
 export interface CapabilityCatalogSource {
-  /** The catalog for one bridge selector (`session:<id>`, `doc:<Address>`, or none). */
-  read(bridgeSelector?: string): Promise<CapabilityCatalog>;
+  /** The catalog for an SDK selection or an exact private attachment. */
+  read(scope?: HostSessionScope): Promise<CapabilityCatalog>;
   /** Drop every cached catalog; the host calls this when a Revit session connects or leaves. */
   invalidate(): void;
 }
@@ -303,19 +305,19 @@ export function createCapabilityCatalogSource(options: {
   const cache = new Map<string, { at: number; catalog: CapabilityCatalog }>();
   return {
     invalidate: () => cache.clear(),
-    read: async (bridgeSelector) => {
-      const cacheKey = bridgeSelector ?? "";
+    read: async (scope = {}) => {
+      const cacheKey = JSON.stringify(scope);
       const hit = cache.get(cacheKey);
       if (hit && Date.now() - hit.at < CATALOG_TTL_MS) return hit.catalog;
 
       const sources: Record<string, string> = { "route registry": "ok", skills: "ok" };
       const caller = new HostRpcCaller({
         hostBaseUrl: base,
-        bridgeSessionId: bridgeSelector,
+        ...scope,
         timeoutMs: SOURCE_BUDGET_MS,
       });
       const [ops, pods, sessions] = await Promise.allSettled([
-        fetchOps(base, bridgeSelector),
+        fetchOps(base, scope),
         caller.call("pod.list"),
         caller.call("bridge.sessions.list"),
       ]);
@@ -359,9 +361,10 @@ export function createCapabilityCatalogSource(options: {
   };
 }
 
-async function fetchOps(base: string, bridgeSelector?: string) {
+async function fetchOps(base: string, scope: HostSessionScope) {
   const headers: Record<string, string> = {};
-  if (bridgeSelector) headers[HOST_RPC_BRIDGE_SESSION_HEADER] = bridgeSelector;
+  if (scope.bridgeSessionId) headers[HOST_RPC_BRIDGE_SESSION_HEADER] = scope.bridgeSessionId;
+  if (scope.session) headers[HOST_RPC_SDK_SESSION_HEADER] = JSON.stringify(scope.session);
   const response = await fetch(`${base}/ops`, {
     headers,
     signal: AbortSignal.timeout(SOURCE_BUDGET_MS),

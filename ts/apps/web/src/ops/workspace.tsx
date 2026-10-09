@@ -12,7 +12,7 @@ import { Pane } from "#/components/lang/pane";
 import { Press } from "#/components/lang/press";
 import { Provenance } from "#/components/lang/section";
 import { Surface } from "#/components/lang/surface";
-import { previousOf, useFleet, useReading } from "#/readings";
+import { previousOf, useReading } from "#/readings";
 import { RouteShell, useRoute } from "#/route";
 import { Ladder } from "#/route/ladder";
 import { useChooseTarget } from "#/route/shell";
@@ -43,7 +43,6 @@ export function OpsRoute({
 
   // The catalogue is session-scoped: bridge ops list only once the sentence names a session.
   // First resolve a plain session-needing manifest for the ladder, then narrow by what it found.
-  const fleet = useFleet();
   const ladderHandle = useRoute(
     useMemo(() => opsManifest(), []),
     { target: chosen },
@@ -63,7 +62,6 @@ export function OpsRoute({
   const observed = previousOf(catalog);
   const operations = useMemo(() => observed?.operations ?? [], [observed]);
   const selected = operations.find((entry) => entry.key === op);
-  const custody = fleet.sessions.find((row) => row.sessionId === sessionId)?.custody;
 
   useEffect(() => {
     setValues(
@@ -79,7 +77,6 @@ export function OpsRoute({
     () =>
       opsManifest({
         ...(selected ? { selected } : {}),
-        ...(custody ? { custody } : {}),
         run: async (ctx) => {
           if (!selected) return;
           const request = requestOf(values);
@@ -97,7 +94,7 @@ export function OpsRoute({
           }
         },
       }),
-    [selected, custody, values, actionId, set],
+    [selected, values, actionId, set],
   );
   const handle = useRoute(manifest, { target: chosen });
   const ladder = useDocumentLadder(handle);

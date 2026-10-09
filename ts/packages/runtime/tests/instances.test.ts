@@ -35,7 +35,7 @@ test("Instances isolates Work by key; Pea proposes a launch and only a person st
   expect(
     await workspace.apply(a, "instances", "agent", [{ path: ["observation"], value: {} }], 0),
   ).toMatchObject({ ok: false, hint: expect.stringContaining("human-only") });
-  const launch = { kind: "open", session: "session:exact", document: "C:\\Models\\A.rvt" };
+  const launch = { kind: "open", session: { id: "exact" }, document: "C:\\Models\\A.rvt" };
   // Pea proposes a launch; the staged value is what open/start consume, so Pea may not stage it.
   const propose = transitionPatches([], "launch", {}, { kind: "propose", rung: { value: launch } });
   const stage = transitionPatches([], "launch", {}, { kind: "stage", rung: { value: launch } });

@@ -276,19 +276,31 @@ test("an exact cancelled SDK receipt settles a lost reply once without replaying
 });
 
 test("a cancel for a request still behind the host gate never reaches Revit", () =>
-  lane(({ outgoing, answer }) =>
+  lane(({ outgoing, answer, fixture }) =>
     Effect.gen(function* () {
       const bridge = yield* RevitBridge;
       // A long read holds the gate — the `/families` matrix read is the real one (w4-revit
       // defect 8); everything a route dispatches after it waits behind it.
       const holding = yield* Effect.forkScoped(
-        bridge.invoke("revit.catalog.loaded-families", {}, undefined, null, "holds-the-gate"),
+        bridge.invoke(
+          "revit.catalog.loaded-families",
+          {},
+          fixture.intent("probe").destination.ref.session,
+          null,
+          "holds-the-gate",
+        ),
       );
       const held = yield* Queue.take(outgoing);
       expect(held.request?.requestId).toBe("holds-the-gate");
 
       const queued = yield* Effect.forkScoped(
-        bridge.invoke("takeoffs.partition", {}, undefined, null, "waits-behind"),
+        bridge.invoke(
+          "takeoffs.partition",
+          {},
+          fixture.intent("probe").destination.ref.session,
+          null,
+          "waits-behind",
+        ),
       );
       yield* Effect.sleep("50 millis"); // let the fork reach the gate; queueing is all in-memory
       const stopped = yield* bridge.invoke("op.cancel", { requestId: "waits-behind" });

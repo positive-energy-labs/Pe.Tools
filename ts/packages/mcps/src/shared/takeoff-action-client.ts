@@ -1,3 +1,4 @@
+import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
 import { actionListFilterSchema, type ActionListFilter } from "@pe/agent-contracts";
 import {
   canonicalRouteInput,
@@ -132,8 +133,11 @@ export async function runSemanticAction(
         key.startsWith("instances.") &&
         input.session &&
         typeof input.session === "object" &&
-        "id" in input.session
-          ? { kind: "session", session: String(input.session.id) }
+        "selection" in input.session
+          ? {
+              kind: "sdk-session",
+              selection: sdkSessionSelectionSchema.parse(input.session.selection),
+            }
           : target
             ? { kind: "document", ref: target }
             : { kind: "host" },

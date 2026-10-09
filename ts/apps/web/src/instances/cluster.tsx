@@ -2,8 +2,6 @@ import {
   instancesActions,
   type InstancesActionKey,
   nativeProcessSchema,
-  sdkSessionSelectorOf,
-  sdkSessionTargetOf,
   sameValue,
   transitionPatches,
   type InstancesLaunch,
@@ -164,7 +162,7 @@ const NOT_STAGED = "Pea's proposal is not staged; accept it first";
 const describeLaunch = (value: unknown) => {
   const launch = value as InstancesLaunch;
   return launch.kind === "open"
-    ? `open ${launch.document} in ${launch.session}`
+    ? `open ${launch.document} in ${"id" in launch.session ? launch.session.id : `pid ${launch.session.pid}`}`
     : `start a new ${launch.year} session${launch.document ? ` opening ${launch.document}` : ""}${launch.quarantine ? " with third-party add-ins disabled" : ""}`;
 };
 
@@ -248,7 +246,11 @@ export function InstancesCluster({
     : null;
   const storedWorld =
     stored?.kind === "open"
-      ? findSession(liveWorlds, sdkSessionTargetOf(stored.session))
+      ? liveWorlds.find((world) =>
+          "id" in stored.session
+            ? world.id === stored.session.id
+            : world.row && "process" in world.row && world.row.process.pid === stored.session.pid,
+        )
       : undefined;
   const staged: Staged | null = stored
     ? stored.kind === "start"
@@ -283,7 +285,10 @@ export function InstancesCluster({
                   next.kind === "open"
                     ? {
                         kind: "open",
-                        session: sdkSessionSelectorOf(sessionTarget(next.world)),
+                        session:
+                          next.world.row?.case === "observed-active"
+                            ? { pid: next.world.row.process.pid }
+                            : { id: next.world.id },
                         document: next.doc.selector,
                         missingLinks: next.missingLinks,
                       }
@@ -377,7 +382,17 @@ export function InstancesCluster({
           : undefined;
       const input = instancesActions[key].input.parse({
         workspaceId,
-        ...(command !== "start" ? { session: { id: world?.id, process } } : {}),
+        ...(command !== "start"
+          ? {
+              session: {
+                selection:
+                  world?.row?.case === "observed-active"
+                    ? { pid: world.row.process.pid }
+                    : { id: world?.id },
+                process,
+              },
+            }
+          : {}),
         ...(command === "stop" ? { force: world?.phase === "unresponsive" } : {}),
         ...(command === "stop" ? { unsaved } : {}),
       });
@@ -866,7 +881,7 @@ export function InstancesCluster({
                     <div>
                       <OutcomeLine
                         kind="error"
-                        label={`staged session unavailable: ${stored.session}`}
+                        label={`staged session unavailable: ${"id" in stored.session ? stored.session.id : `pid ${stored.session.pid}`}`}
                       />
                       <VerbButton
                         tone="act"

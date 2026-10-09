@@ -682,7 +682,11 @@ test("the live head names an open lifetime; reopen needs an explicit override an
     ).toMatchObject({ ok: true });
     expect(
       await peRead.execute!(
-        { key: "op:revit.context.document-session", target: "idle", timeoutSeconds: 30 } as never,
+        {
+          key: "op:revit.context.document-session",
+          target: { id: "idle" },
+          timeoutSeconds: 30,
+        } as never,
         {} as never,
       ),
     ).toMatchObject({ ok: true });
@@ -692,7 +696,7 @@ test("the live head names an open lifetime; reopen needs an explicit override an
       ["b1", "a"],
       ["b1", "a2"],
       [null, null],
-      ["idle", null],
+      [null, null],
     ]);
   } finally {
     vi.unstubAllGlobals();
@@ -777,7 +781,7 @@ test("the doors ride the host under the turn Target and name the revision and re
     expect(map.sessions).toHaveLength(1);
     expect(map.revision).toBe(4);
     // The catalog is read for the turn's Target Address, never for a model-typed selector.
-    expect(calls[0]?.url.search).toBe("?target=C%3A%5CModels%5CA.rvt");
+    expect(calls[0]?.url.search).toBe("?target=C%3A%5CModels%5CA.rvt&session=b1");
 
     const op = (await run(peRead, {
       key: "op:revit.catalog.loaded-families",
