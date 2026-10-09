@@ -1,3 +1,5 @@
+import type { HostSessionScope } from "@pe/host-contracts/operation-types";
+import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -93,7 +95,7 @@ export interface PeRoutesOptions {
   registrations: readonly RouteWorkspaceRegistration[];
   store: RouteDocumentStore;
   heads: ThreadHeadSource;
-  capabilityCatalog?: { read(bridgeSelector?: string): Promise<CapabilityCatalog> };
+  capabilityCatalog?: { read(scope?: HostSessionScope): Promise<CapabilityCatalog> };
   observeHostResource?: ResourceObserver;
   /** Wraps every served Reading, Work included, e.g. with the host's document change mark. */
   markReadings?: (observe: ResourceObserver) => ResourceObserver;
@@ -175,10 +177,15 @@ export function createPeRoutes(options: PeRoutesOptions) {
       const scope = workKey(url, "", "read");
       if (scope instanceof Response) return scope;
       try {
-        const selector =
-          url.searchParams.get("session") ??
-          (scope.target !== null ? `doc:${scope.target}` : undefined);
-        return json(await options.capabilityCatalog.read(selector));
+        const query = url.searchParams;
+        return json(
+          await options.capabilityCatalog.read({
+            bridgeSessionId: query.get("session") ?? undefined,
+            session: query.has("sdk")
+              ? sdkSessionSelectionSchema.parse(JSON.parse(query.get("sdk")!))
+              : undefined,
+          }),
+        );
       } catch (error) {
         return json({ error: message(error) }, 502);
       }

@@ -1,3 +1,4 @@
+import { sdkSessionSelectionSchema } from "./sdk-session.ts";
 /**
  * Reading — anything observed from Revit, the host, or disk. One subject, one observation time,
  * one lifecycle. Readings arrive on one stream with gap frames. Receipts, inventory, files and
@@ -63,7 +64,7 @@ export type Reading<T> =
 export const sdkReadingSchema = z.strictObject({
   kind: z.literal("sdk"),
   read: z.enum(["sessions", "doctor", "recents", "documents"]),
-  id: z.string().min(1).optional(),
+  session: sdkSessionSelectionSchema.optional(),
   year: z.string().min(1).optional(),
   all: z.boolean().optional(),
 });

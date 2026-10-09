@@ -7,6 +7,7 @@ import { hostActionJournal } from "./gateway-owner.ts";
 import { hostTakeoffCaptures, type TakeoffCaptures } from "./takeoff-captures.ts";
 import { listBridgeSessions } from "./local-ops.ts";
 import { observeSdkReading } from "./session-route.ts";
+import { sdkSession } from "./sdk-session.ts";
 import type { DocumentMarks, DocumentRef } from "./document-marks.ts";
 
 /**
@@ -232,11 +233,18 @@ export function hostResourceObserver(
           let live = true;
           const { target, key: domain, context } = request;
           void Effect.runPromise(
-            bridge.invoke(
-              "revit.catalog.field-options",
-              { key: domain, context },
-              target.session,
-              target.openId,
+            sdkSession(bridge, {
+              bridgeSessionId: target.session,
+              openDocumentId: target.openId,
+            }).pipe(
+              Effect.flatMap((resolved) =>
+                bridge.invoke(
+                  "revit.catalog.field-options",
+                  { key: domain, context },
+                  resolved.sessionId,
+                  target.openId,
+                ),
+              ),
             ),
           ).then(
             ({ value }) => {

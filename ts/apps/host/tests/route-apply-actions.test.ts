@@ -1673,7 +1673,7 @@ test("a plan whose apply outcome is unknown refuses another apply until it is re
 test("an interrupted Families apply resumes from its exact durable FF run without native redispatch", async () => {
   let nativeResult: unknown;
   const env = await setup(async (args) =>
-    args.includes("result") ? sdkEnvelope(nativeResult) : sdkSessions(),
+    args.includes("result") ? sdkEnvelope(nativeResult) : sdkSessions(args),
   );
   const { apply, revision } = await stagedPlan(env, { [W]: staged("10") });
   env.unknown(true);

@@ -1,4 +1,6 @@
+import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import {
+  sdkSessionSelectionSchema,
   instancesReading,
   scheduleReads,
   type ScheduleReadKey,
@@ -158,11 +160,9 @@ export const peFind = createTool({
   }),
   execute: async (input) => {
     const { target, revision } = await targetOf();
-    const catalog = await readCatalog(
-      target,
-      undefined,
-      target?.kind === "open" ? target.ref.session : undefined,
-    );
+    const catalog = await readCatalog(target, undefined, {
+      bridgeSessionId: targetSession(target),
+    });
     if ("isError" in catalog) return catalog;
     // A human-only row is the person's press, never Pea's move: it is not offered at all.
     const offered = catalog.capabilities.filter((row) => row.actor !== "human");
@@ -177,7 +177,7 @@ export const peFind = createTool({
         defaultDocument: targetDocument(target),
         sources: catalog.sources,
         map: capabilityMap(offered),
-        hint: "Query pe_find for rows. pe_read runs a row that does not mutate; pe_do runs any row and is approval-gated. A session's custody says what the SDK will allow (observed = reads only). defaultDocument is the thread's default document, read live per call. Op target overrides affect one call only. Session work requires an exact session ID; host work needs no document. target_set changes later turns.",
+        hint: "Query pe_find for rows. pe_read runs a row that does not mutate; pe_do runs any row and is approval-gated. The SDK decides session resolution, adoption and refusal. defaultDocument is the thread's default document, read live per call. Op target overrides affect one call only. Session work accepts SDK id-or-pid selection; host work needs no document. target_set changes later turns.",
       };
     const rows = findCapabilities(offered, input);
     return {
@@ -209,10 +209,10 @@ const runInputSchema = z.object({
   key: z.string().min(1).describe("A capability key from pe_find."),
   input: z.unknown().optional().describe("Matches the row's input schema."),
   target: z
-    .union([z.string().min(1), documentRequestSchema])
+    .union([sdkSessionSelectionSchema, documentRequestSchema.options[0]])
     .optional()
     .describe(
-      "Op calls only: exact session ID for session work, or an exact open/named document request. Overrides only this call; omission keeps the frozen turn default.",
+      "Op calls only: SDK selection {id: name} or {pid: number} for session work, or {kind: open, ref: {session, openId}} for an exact product document. Overrides only this call; omission keeps the frozen turn default.",
     ),
   expectedRevision: z
     .number()
@@ -304,30 +304,21 @@ async function executeTool(
         };
       }
       const requested = input.target;
-      const target =
-        typeof requested === "object" && requested?.kind === "open" ? requested.ref : undefined;
       const caller = new HostRpcCaller({
         hostBaseUrl: base(),
         actor: "agent",
         requestId: id,
-        bridgeSessionId: target?.session ?? (typeof requested === "string" ? requested : undefined),
-        openDocumentId: target?.openId,
+        ...transportScope(requested),
         timeoutMs: input.timeoutSeconds * 1000,
       });
       const result = await caller.callOperation(key, payload);
       return { ok: result.ok, key: input.key, target: defaultTarget, revision, result };
     }
   }
-  const overrideSession =
-    typeof input.target === "string"
-      ? input.target
-      : input.target?.kind === "open"
-        ? input.target.ref.session
-        : input.target?.session;
   const catalog = await readCatalog(
     defaultTarget,
     undefined,
-    overrideSession ?? targetSession(defaultTarget),
+    transportScope(input.target, defaultTarget),
   );
   if ("isError" in catalog) return catalog;
   const row = catalog.capabilities.find((candidate) => candidate.key === input.key);
@@ -409,7 +400,10 @@ async function dispatch(
         const query = new URLSearchParams(
           Object.entries(reading)
             .filter(([, value]) => value !== undefined)
-            .map(([key, value]) => [key, String(value)]),
+            .map(([key, value]) => [
+              key,
+              typeof value === "object" ? JSON.stringify(value) : String(value),
+            ]),
         );
         const response = await fetch(`${base()}/instances/readings?${query.toString()}`, {
           signal: AbortSignal.timeout(input.timeoutSeconds * 1000),
@@ -512,15 +506,9 @@ async function dispatch(
     case "pod": {
       const pod = parsePodKey(row.key);
       if (!pod) throw new Error(`Malformed pod key '${row.key}'.`);
-      const selector =
-        typeof input.target === "string"
-          ? input.target
-          : input.target?.kind === "open"
-            ? input.target.ref.session
-            : (input.target?.session ?? targetSession(defaultTarget));
       const definition = await new HostRpcCaller({
         hostBaseUrl: base(),
-        bridgeSessionId: selector,
+        ...transportScope(input.target, defaultTarget),
       }).getOperation("scripting.execute");
       if (!definition) throw Error("Public scripting operation metadata unavailable");
       const target = await operationTarget(
@@ -712,15 +700,32 @@ async function dispatch(
   }
 }
 
+/** SDK selection and product document references travel on different fields. */
+function transportScope(target: RunInput["target"], fallback: Target = null): HostSessionScope {
+  if (target && !("kind" in target)) return { session: target };
+  const document = target ?? fallback;
+  return document?.kind === "open"
+    ? { bridgeSessionId: document.ref.session, openDocumentId: document.ref.openId }
+    : document
+      ? { bridgeSessionId: document.session }
+      : {};
+}
+
 async function operationTarget(
   row: Capability,
   override: RunInput["target"],
   defaultTarget: Target,
-) {
+): Promise<HostSessionScope> {
   if (row.needs === "nothing") {
     if (override !== undefined) throw Error("This capability needs no Revit target.");
     return {};
   }
+  if (row.needs === "session") {
+    if (override && "kind" in override) throw Error("A session capability takes SDK id or pid");
+    return { session: override };
+  }
+  if (override && !("kind" in override))
+    throw Error("A document capability requires an exact open document reference");
   const { sessions } = await new HostRpcCaller({ hostBaseUrl: base(), timeoutMs: 30_000 }).call(
     "bridge.sessions.list",
   );
@@ -742,14 +747,8 @@ async function operationTarget(
       ]),
     ),
   };
-  if (row.needs === "session" && typeof override !== "string")
-    throw Error("A session capability requires an explicit exact session ID.");
-  if (row.needs !== "session" && typeof override === "string")
-    throw Error("A document capability requires an open or named document request.");
   const resolution = resolveCallTarget(
-    row.needs === "session"
-      ? { needs: "session", target: override as string }
-      : { needs: row.needs, target: typeof override === "object" ? override : undefined },
+    { needs: row.needs, target: override },
     defaultTarget,
     inventory,
   );
@@ -805,7 +804,7 @@ function parseTarget(value: unknown): ResolvedTarget | null {
   if (!value || typeof value !== "object") return null;
   const record = value as { session?: unknown; document?: unknown };
   return {
-    session: typeof record.session === "string" ? record.session.replace(/^session:/, "") : null,
+    session: typeof record.session === "string" ? record.session : null,
     document: typeof record.document === "string" ? record.document : null,
   };
 }
@@ -837,13 +836,15 @@ async function routeFetch(path: string, body?: unknown): Promise<Record<string, 
 export async function readCatalog(
   target: Target = null,
   hostBaseUrl?: string,
-  session?: string,
+  scope: HostSessionScope = {},
 ): Promise<CapabilityCatalog | { isError: true; content: string }> {
   let url = hostBaseUrl;
   try {
     url ??= base();
-    const query = session ? new URLSearchParams({ session }).toString() : targetQuery(target);
-    const response = await fetch(`${url}/pe/capabilities?${query}`);
+    const query = new URLSearchParams(targetQuery(target));
+    if (scope.bridgeSessionId) query.set("session", scope.bridgeSessionId);
+    if (scope.session) query.set("sdk", JSON.stringify(scope.session));
+    const response = await fetch(`${url}/pe/capabilities?${query.toString()}`);
     const parsed = capabilityCatalogSchema.safeParse(await response.json());
     if (!response.ok || !parsed.success)
       return { isError: true, content: `GET ${url}/pe/capabilities failed (${response.status}).` };

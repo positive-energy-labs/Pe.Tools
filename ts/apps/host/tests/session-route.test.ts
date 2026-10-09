@@ -32,14 +32,20 @@ test("a source-linked (dev) host starts from its checkout's Pe.App; an installed
 test("fleet and exact reads both use list; an id narrows it", () => {
   expect(sessionStatusArgs()).toEqual(["session", "list", "--json"]);
   expect(sessionStatusArgs(undefined, true)).toEqual(["session", "list", "--all", "--json"]);
-  expect(sessionStatusArgs("scratch")).toEqual(["session", "list", "--id", "scratch", "--json"]);
+  expect(sessionStatusArgs({ id: "scratch" })).toEqual([
+    "session",
+    "list",
+    "--id",
+    "scratch",
+    "--json",
+  ]);
 });
 
 test("recents and open documents are both doc list reads", () => {
   expect(docRecentsArgs()).toEqual(["doc", "list", "--recent", "--json"]);
   expect(docRecentsArgs("2026")).toEqual(["doc", "list", "--recent", "--year", "2026", "--json"]);
   expect(docListArgs()).toEqual(["doc", "list", "--json"]);
-  expect(docListArgs("dev-26", "a".repeat(32))).toEqual([
+  expect(docListArgs({ id: "dev-26" }, "a".repeat(32))).toEqual([
     "doc",
     "list",
     "--id",

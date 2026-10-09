@@ -13,6 +13,7 @@ import {
   type HostOperationVisibility,
 } from "@pe/host-contracts/contracts";
 import {
+  HOST_RPC_SDK_SESSION_HEADER,
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
   HostCallError,
@@ -56,18 +57,23 @@ function schemaTitle(schemaJson: string | undefined): string | undefined {
 }
 
 /** `bridgeCatalogError` set means the session's native half did not answer; never cached. */
-export type OpsCatalog = { ops: HostOperationDefinition[]; bridgeCatalogError?: string };
+export type OpsCatalog = {
+  ops: HostOperationDefinition[];
+  bridgeSessionId?: string;
+  bridgeCatalogError?: string;
+};
 
-async function loadCatalog(hostBaseUrl: string, bridgeSessionId?: string): Promise<OpsCatalog> {
+async function loadCatalog(hostBaseUrl: string, scope: HostSessionScope): Promise<OpsCatalog> {
   const base = trimTrailingSlash(hostBaseUrl);
   // A catalog describes one Revit process. Sharing it across selectors can make Pea discover an
   // operation in the dev session and then invoke it in another session where that contract does not exist.
-  const cacheKey = `${base}\0${bridgeSessionId ?? ""}`;
+  const cacheKey = `${base}\0${JSON.stringify(scope)}`;
   const cached = catalogCache.get(cacheKey);
   if (cached && Date.now() - cached.at < CATALOG_TTL_MS) return cached.catalog;
 
   const headers: Record<string, string> = {};
-  if (bridgeSessionId) headers[HOST_RPC_BRIDGE_SESSION_HEADER] = bridgeSessionId;
+  if (scope.bridgeSessionId) headers[HOST_RPC_BRIDGE_SESSION_HEADER] = scope.bridgeSessionId;
+  if (scope.session) headers[HOST_RPC_SDK_SESSION_HEADER] = JSON.stringify(scope.session);
   // A transport failure must NAME THE URL: a bare `fetch failed` with the host up was the
   // 2026-08-19/20 dead end — no port, no hint, indistinguishable from a wrong-lane resolution.
   const response = await fetch(`${base}/ops`, {
@@ -90,13 +96,18 @@ async function loadCatalog(hostBaseUrl: string, bridgeSessionId?: string): Promi
   const payload = (await response.json()) as {
     operations?: OpsCatalogEntry[];
     bridgeCatalogError?: string;
+    bridgeSessionId?: string;
   };
   const ops = (payload.operations ?? []).map((entry) => ({
     ...entry,
     requestTypeName: entry.requestTypeName ?? schemaTitle(entry.requestSchemaJson),
     responseTypeName: entry.responseTypeName ?? schemaTitle(entry.responseSchemaJson),
   }));
-  const catalog = { ops, bridgeCatalogError: payload.bridgeCatalogError };
+  const catalog = {
+    ops,
+    bridgeSessionId: payload.bridgeSessionId,
+    bridgeCatalogError: payload.bridgeCatalogError,
+  };
   // A host-local-only answer under load is not the session's catalog; the next read asks again.
   if (!catalog.bridgeCatalogError) catalogCache.set(cacheKey, { at: Date.now(), catalog });
   return catalog;
@@ -230,7 +241,7 @@ export class HostRpcCaller {
   catalog(): Promise<OpsCatalog> {
     if (this.options.catalogOverride)
       return Promise.resolve({ ops: [...this.options.catalogOverride] });
-    return loadCatalog(this.options.hostBaseUrl, this.options.bridgeSessionId);
+    return loadCatalog(this.options.hostBaseUrl, this.options);
   }
 }
 
@@ -319,6 +330,7 @@ const runHostRpcEffect = Effect.fnUntraced(function* (
       const headers: Record<string, string> = { "content-type": "application/json" };
       if (options.requestId) headers["x-pe-action-id"] = options.requestId;
       if (options.actor) headers["x-pe-action-actor"] = options.actor;
+      if (options.session) headers[HOST_RPC_SDK_SESSION_HEADER] = JSON.stringify(options.session);
       if (options.bridgeSessionId)
         headers[HOST_RPC_BRIDGE_SESSION_HEADER] = options.bridgeSessionId;
       if (options.openDocumentId) headers[HOST_RPC_DOCUMENT_HEADER] = options.openDocumentId;

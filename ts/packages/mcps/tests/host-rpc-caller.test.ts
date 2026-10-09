@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
-import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-types";
+import { HOST_RPC_SDK_SESSION_HEADER } from "@pe/host-contracts/operation-types";
 import { HostRpcCaller } from "../src/shared/host-rpc-caller.ts";
 
 // Fixture standing in for a live /ops catalog (the caller's only real source).
@@ -68,15 +68,15 @@ test("catalog enrichment preserves the explicit session selector", async () => {
   try {
     const client = new HostRpcCaller({
       hostBaseUrl: "http://127.0.0.1:5181",
-      bridgeSessionId: "session:catalog-e2e",
+      session: { id: "catalog-e2e" },
     });
     // Every catalog op stays resolvable at transport level, scripting.* included.
     expect((await client.getOperation("scripting.execute"))?.key).toBe("scripting.execute");
 
     expect(calls).toHaveLength(1);
     expect(new URL(calls[0].url).pathname).toBe("/ops");
-    expect(new Headers(calls[0].init?.headers).get(HOST_RPC_BRIDGE_SESSION_HEADER)).toBe(
-      "session:catalog-e2e",
+    expect(new Headers(calls[0].init?.headers).get(HOST_RPC_SDK_SESSION_HEADER)).toBe(
+      JSON.stringify({ id: "catalog-e2e" }),
     );
   } finally {
     globalThis.fetch = originalFetch;

@@ -14,7 +14,6 @@ export type HostOperationCatalogEntry = HostOperationDefinition & {
   responseSchemaJson?: string;
 };
 
-type Custody = "controlled" | "observed";
 export type OpsReading = "inventory";
 type OpsCtx = Ctx<never, OpsReading, Record<string, never>>;
 
@@ -33,23 +32,11 @@ const opNeeds = (op?: HostOperationCatalogEntry) => targetNeed(opRecord(op).need
 export const isMutation = (op?: HostOperationCatalogEntry) =>
   op?.intent?.toLowerCase() === "mutate";
 
-/**
- * Why the selected op cannot run, beyond the target the harness resolves. Intent is judged
- * before origin: a mutation on a Revit session runs only under controlled custody. A host-local
- * mutation has no custody to judge and is audited by the action journal instead (`run.ts`).
- */
-const opsRefusal = (op: HostOperationCatalogEntry | undefined, custody?: Custody) =>
-  !op
-    ? "pick an operation"
-    : !op.intent
-      ? "Operation readiness metadata is unavailable"
-      : isMutation(op) && opNeeds(op) !== "host" && custody !== "controlled"
-        ? "mutating operations require a controlled world"
-        : null;
+const opsRefusal = (op: HostOperationCatalogEntry | undefined) =>
+  !op ? "pick an operation" : !op.intent ? "Operation readiness metadata is unavailable" : null;
 
 export interface OpsRouteDeps {
   selected?: HostOperationCatalogEntry;
-  custody?: Custody;
   run?: (ctx: OpsCtx) => Promise<void>;
 }
 
@@ -60,7 +47,7 @@ export const opsManifest = (
   return defineRoute<never, OpsReading, Record<string, never>, "run">({
     key: "ops",
     name: "Ops",
-    docs: "Select an operation, inspect its required target and custody, then run it only after the route can resolve those requirements.",
+    docs: "Select an operation and its required target. The SDK resolves the session and decides adoption or refusal.",
     // A session is always asked for so the catalogue can list that session's ops; a host-local
     // op still runs without one because its verb needs only the host.
     needs: needs === "host" ? "session" : needs,
@@ -72,7 +59,7 @@ export const opsManifest = (
         input: z.void() as unknown as z.ZodType<never>,
         dirties: [],
         chord: "Mod+Enter",
-        ready: () => opsRefusal(deps.selected, deps.custody),
+        ready: () => opsRefusal(deps.selected),
         run: async (ctx) => {
           if (!deps.run) throw Error("pick an operation first");
           await deps.run(ctx);

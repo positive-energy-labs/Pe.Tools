@@ -129,7 +129,7 @@ export async function setup() {
   const sessions = () =>
     [a, b].map((target) => ({
       sessionId: target.session,
-      processId: 42,
+      processId: target === a ? 42 : 43,
       processStartUtcUnixMs: 1000,
       connected: true,
       state: {
@@ -196,7 +196,7 @@ export async function setup() {
     () => captures,
   );
   const sdk = async (args: readonly string[]) => {
-    if (args[0] === "session") return sdkSessions();
+    if (args[0] === "session" || args[0] === "doc") return sdkSessions(args);
     const id = args[2];
     return sdkEnvelope({
       state: "ok",
@@ -205,6 +205,7 @@ export async function setup() {
         requestId: id,
         key: "schedule.cells.apply",
         ...originalProcess,
+        pid: Number(args[args.indexOf("--pid") + 1]),
         verdict: "ok",
       },
       response,

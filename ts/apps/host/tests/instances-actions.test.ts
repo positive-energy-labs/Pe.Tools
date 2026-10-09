@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "vite-plus/test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { instancesRouteState, sdkSessionSelectorOf, transitionPatches } from "@pe/agent-contracts";
+import { instancesRouteState, transitionPatches } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { admitInstancesAction, recoverInstancesAction } from "../src/instances-actions.ts";
@@ -14,12 +14,12 @@ afterEach(async () => {
 });
 
 const scope = { binding: "workspace" as const, route: "instances", target: null, work: "ws-1" };
-const session = { id: "dev", process: originalProcess };
+const session = { selection: { id: "dev" }, process: originalProcess };
 const receiptPath = "C:/receipts/dev.json";
 const openId = "a".repeat(32);
 /** The value after `flag` in one recorded argv. */
 const flag = (argv: readonly string[], name: string) => argv[argv.indexOf(name) + 1];
-const observed = { id: "4242", process: { ...originalProcess, pid: 4242 } };
+const observed = { selection: { pid: 4242 }, process: { ...originalProcess, pid: 4242 } };
 const observedRow = { case: "observed-active", process: observed.process };
 const adopted = {
   state: "ok",
@@ -75,6 +75,13 @@ async function setup(
       return sdkEnvelope({
         sessions: sessionRows,
       });
+    if (args[0] === "doc" && args[1] === "list") {
+      const process = args.includes("--pid") ? observed.process : originalProcess;
+      return JSON.stringify({
+        ...JSON.parse(sdkEnvelope({ state: "ok", documents: [{ openId }] })),
+        resolved: { ...process, id: "dev" },
+      });
+    }
     const reply = await answer(args);
     if (reply instanceof Error) throw reply;
     return JSON.stringify({
@@ -116,7 +123,7 @@ async function setup(
         actor,
         destination:
           "session" in input
-            ? { kind: "session", session: (input.session as typeof session).id }
+            ? { kind: "sdk-session", selection: (input.session as typeof session).selection }
             : { kind: "host" },
         input: { workspaceId: scope.work, ...input },
         bases: { work: { key: scope, revision } },
@@ -166,7 +173,7 @@ test("a Pea proposal never launches; the launch reads exactly what the person st
 
 test("a Pea-proposed open never dispatches; the person stages it", async () => {
   const f = await setup(() => ({ result: { state: "ok", openId } }));
-  const proposed = { kind: "open", session: sdkSessionSelectorOf("dev"), document: "C:/Pea.rvt" };
+  const proposed = { kind: "open", session: { id: "dev" }, document: "C:/Pea.rvt" };
   const refused = await f.admit("instances.open", { session }, await f.propose(proposed));
   expect(refused.state).toBe("failed");
   expect(JSON.stringify(refused)).toContain("Pea proposed this open; a person stages it first");
@@ -260,7 +267,7 @@ test("allowing missing links is staged explicitly for open and its omission resu
   const f = await setup(() => ({ result: nativeResult }));
   const revision = await f.stage({
     kind: "open",
-    session: sdkSessionSelectorOf("dev"),
+    session: { id: "dev" },
     document: "C:/Tower.rvt",
     missingLinks: "allow",
   });
@@ -284,7 +291,7 @@ test("the default missing-links refusal keeps its SDK explanation and staged Wor
   }));
   const revision = await f.stage({
     kind: "open",
-    session: sdkSessionSelectorOf("dev"),
+    session: { id: "dev" },
     document: "C:/Tower.rvt",
   });
   const receipt = await f.admit("instances.open", { session }, revision);
@@ -345,7 +352,7 @@ test("only a matching running open blocks a new intent; unknown remains recovera
   const stage = (document: string) =>
     f.stage({
       kind: "open",
-      session: sdkSessionSelectorOf("dev"),
+      session: { id: "dev" },
       document,
     });
   let revision = await stage("C:/Tower.rvt");
@@ -374,7 +381,7 @@ test("open binds the exact recorded incarnation and its receipt path; a foreign 
   const f = await setup(() => ({ result: { state: "ok", openId } }));
   const revision = await f.stage({
     kind: "open",
-    session: sdkSessionSelectorOf("dev"),
+    session: { id: "dev" },
     document: "C:/Tower.rvt",
   });
   const receipt = await f.admit("instances.open", { session }, revision);
@@ -391,12 +398,12 @@ test("open binds the exact recorded incarnation and its receipt path; a foreign 
   // The proven open retired its staged launch; the person stages it again for the foreign attempt.
   const restaged = await f.stage({
     kind: "open",
-    session: sdkSessionSelectorOf("dev"),
+    session: { id: "dev" },
     document: "C:/Tower.rvt",
   });
   const foreign = await f.admit(
     "instances.open",
-    { session: { id: "dev", process: { ...originalProcess, pid: 43 } } },
+    { session: { selection: { id: "dev" }, process: { ...originalProcess, pid: 43 } } },
     restaged,
   );
   expect(foreign).toMatchObject({ state: "failed", notDispatched: true });
@@ -429,23 +436,24 @@ test.each(["open", "stop", "restart", "close"])(
     );
     const revision = await f.stage({
       kind: "open",
-      session: sdkSessionSelectorOf("4242"),
+      session: { pid: 4242 },
       document: "C:/Tower.rvt",
     });
     const input = {
       session: observed,
       ...(verb === "stop" || verb === "close" ? { unsaved: "keep" } : {}),
-      ...(verb === "close" ? { document: { session: "4242", openId } } : {}),
+      ...(verb === "close" ? { document: { source: "sdk", session: { pid: 4242 }, openId } } : {}),
     };
     const receipt = await f.admit(`instances.${verb}`, input, revision);
     expect(receipt.state).toBe("succeeded");
     expect(receipt.steps[0]).toMatchObject({ key: `instances.${verb}.adopt`, state: "succeeded" });
     expect(f.calls.map((args) => args.slice(0, 2).join(" "))).toEqual([
+      ...(verb === "close" ? ["doc list"] : []),
       "session list",
       "session start",
       `${verb === "open" || verb === "close" ? "doc" : "session"} ${verb === "restart" ? "hr" : verb}`,
     ]);
-    const adoption = f.calls[1]!;
+    const adoption = f.calls.find((args) => args[0] === "session" && args[1] === "start")!;
     expect(flag(adoption, "--pid")).toBe("4242");
     expect(flag(adoption, "--request-id")).toBe(receipt.steps[0]!.id);
     expect(adoption).not.toContain("--project");
@@ -462,10 +470,10 @@ test("a numeric controlled session name stays an id", async () => {
     () => ({ result: { state: "ok" } }),
     [{ case: "controlled-active", id: "4242", process: originalProcess, receipt: { receiptPath } }],
   );
-  const named = { id: "4242", process: originalProcess };
+  const named = { selection: { id: "4242" }, process: originalProcess };
   const revision = await f.stage({
     kind: "open",
-    session: sdkSessionSelectorOf(named.id),
+    session: { id: named.selection.id },
     document: "C:/Tower.rvt",
   });
   expect((await f.admit("instances.open", { session: named }, revision)).state).toBe("succeeded");
@@ -480,7 +488,7 @@ test.each(["pid", "processStartUtc"] as const)(
     const f = await setup(() => adoptionAnswer, [observedRow]);
     const revision = await f.stage({
       kind: "open",
-      session: sdkSessionSelectorOf("4242"),
+      session: { pid: 4242 },
       document: "C:/Tower.rvt",
     });
     const foreign = {
@@ -509,7 +517,7 @@ test.each(["resolved-pid", "resolved-start", "session-start", "receipt"])(
     const f = await setup(() => answer, [observedRow]);
     const revision = await f.stage({
       kind: "open",
-      session: sdkSessionSelectorOf("4242"),
+      session: { pid: 4242 },
       document: "C:/Tower.rvt",
     });
     const receipt = await f.admit("instances.open", { session: observed }, revision);
@@ -580,7 +588,7 @@ test.each(["adoption", "mutation"])(
     );
     const revision = await f.stage({
       kind: "open",
-      session: sdkSessionSelectorOf("4242"),
+      session: { pid: 4242 },
       document: "C:/Tower.rvt",
     });
     const lost = await f.admit("instances.open", { session: observed }, revision);
@@ -681,8 +689,7 @@ test("a pre-admission SDK refusal is failed and undispatched; recovery settles a
     if (mode === "hang") return Error("pe-revit produced no output");
     return { result: { state: "ok", openId } };
   });
-  const stage = () =>
-    f.stage({ kind: "open", session: sdkSessionSelectorOf("dev"), document: "C:/Tower.rvt" });
+  const stage = () => f.stage({ kind: "open", session: { id: "dev" }, document: "C:/Tower.rvt" });
   const refused = await f.admit("instances.open", { session }, await stage());
   expect(refused).toMatchObject({
     state: "failed",
@@ -780,6 +787,41 @@ test("a Pea-admitted start of the person's staged launch retires it too", async 
   expect((await f.launch()).staged).toBeNull();
 });
 
+test("SDK close refuses product references and wrong-source ids before mutation", async () => {
+  const f = await setup(() => {
+    throw Error("must not mutate");
+  });
+  const revision = await f.stage({
+    kind: "open",
+    session: { id: "dev" },
+    document: "C:/Tower.rvt",
+  });
+  await expect(
+    f.admit(
+      "instances.close",
+      {
+        session,
+        document: { session: "attachment", openId },
+        unsaved: "keep",
+      },
+      revision,
+    ),
+  ).rejects.toThrow();
+  expect(f.calls).toEqual([]);
+  const refused = await f.admit(
+    "instances.close",
+    {
+      session,
+      document: { source: "sdk", session: session.selection, openId: "product-open-id" },
+      unsaved: "keep",
+    },
+    revision,
+  );
+  expect(refused.state).toBe("failed");
+  expect(JSON.stringify(refused)).toContain("SDK document lifetime");
+  expect(f.calls.map((args) => args.slice(0, 2))).toEqual([["doc", "list"]]);
+});
+
 test("development restart discards implicitly; stop and close require an unsaved choice", async () => {
   const f = await setup((args) =>
     args[0] === "session"
@@ -791,12 +833,16 @@ test("development restart discards implicitly; stop and close require an unsaved
   );
   const revision = await f.stage({
     kind: "open",
-    session: sdkSessionSelectorOf("dev"),
+    session: { id: "dev" },
     document: "C:/Tower.rvt",
   });
   for (const key of ["instances.stop", "instances.close"])
     await expect(
-      f.admit(key, { session, document: { session: "dev", openId } }, revision),
+      f.admit(
+        key,
+        { session, document: { source: "sdk", session: { id: "dev" }, openId } },
+        revision,
+      ),
     ).rejects.toThrow();
   expect(f.calls).toEqual([]);
 
@@ -821,7 +867,7 @@ test("development restart discards implicitly; stop and close require an unsaved
 
   const close = await f.admit(
     "instances.close",
-    { session, document: { session: "dev", openId }, unsaved: "keep" },
+    { session, document: { source: "sdk", session: { id: "dev" }, openId }, unsaved: "keep" },
     revision,
   );
   expect(close.state).toBe("succeeded");

@@ -143,13 +143,7 @@ function SessionNode({
         <span className="min-w-0 truncate">{text(session.sessionId)}</span>
         {lane ? <DeployBadge lane={lane} /> : null}
         {custody && (
-          <FactChip
-            title={
-              custody === "controlled"
-                ? "pe-revit holds this session's registry receipt and owns its lifecycle"
-                : "pe-revit holds no receipt for this session; it can read status and documents only"
-            }
-          >
+          <FactChip title={"SDK custody disclosure; the SDK decides adoption and refusal"}>
             {custody}
           </FactChip>
         )}

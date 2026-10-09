@@ -2,7 +2,9 @@ import {
   actionAdmissionSchema,
   instancesActions,
   instancesRouteState,
-  sdkSessionTargetOf,
+  type SdkSessionSelection,
+  type SdkDocumentRef,
+  canonicalRouteInput,
   transitionPatches,
   type InstancesActionKey,
   type InstancesLaunch,
@@ -15,6 +17,8 @@ import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import {
   docCloseArgv,
+  docListArgv,
+  type DocListResult,
   docOpenArgv,
   opResultArgv,
   sessionHrArgv,
@@ -74,9 +78,7 @@ const NOT_DISPATCHED = new Set([
  * symbolically. The step id IS the SDK request id, minted only when the step is recorded, so a
  * replay compares the same bytes.
  */
-type SessionSelection =
-  | { readonly id?: string; readonly pid?: never }
-  | { readonly pid: number; readonly id?: never };
+type SessionSelection = SdkSessionSelection | { id?: undefined };
 type StepInput = {
   readonly expectSession?: string;
   readonly argv: readonly string[];
@@ -85,19 +87,25 @@ const REQUEST_ID = "<request-id>";
 /** The union of every Instances action input; each verb reads only the fields its schema admitted. */
 type InstancesInput = {
   workspaceId: string;
-  session?: { id: string; process: { pid: number; processStartUtc: string; executable: string } };
+  session?: {
+    selection: SdkSessionSelection;
+    process: { pid: number; processStartUtc: string; executable: string };
+  };
   force?: boolean;
   unsaved?: "keep" | "discard";
-  document?: { session: string; openId: string };
+  document?: SdkDocumentRef;
 };
 type Prepared = {
   staged: import("@pe/agent-contracts").InstancesLaunch | null;
-  session?: { id: string; process: { pid: number; processStartUtc: string; executable: string } };
+  session?: {
+    selection: SdkSessionSelection;
+    process: { pid: number; processStartUtc: string; executable: string };
+  };
 };
 
 /** The exact recorded session row for this pid/start pair; a mutable session name never selects. */
 async function readRecordedSession(
-  session: { id: string; process: { pid: number; processStartUtc: string } },
+  session: { selection: SdkSessionSelection; process: { pid: number; processStartUtc: string } },
   read: SdkReceiptReader,
 ): Promise<{ selection: SessionSelection; expectSession: string | null }> {
   const args = sessionListArgv({ pid: session.process.pid });
@@ -120,12 +128,12 @@ async function readRecordedSession(
   const row = rows[0]!;
   if (row.case === "observed-active")
     return { selection: { pid: row.process.pid }, expectSession: null };
-  if (!("receipt" in row) || row.id !== session.id)
+  if (!("receipt" in row) || ("id" in session.selection && row.id !== session.selection.id))
     throw refuse(
       "The supplied session name does not match the SDK process receipt",
       envelope.result,
     );
-  return { selection: { id: row.id }, expectSession: row.receipt.receiptPath };
+  return { selection: session.selection, expectSession: row.receipt.receiptPath };
 }
 
 /** The `--expect-session` a named start passes: `absent`, or the exact row it may retire. */
@@ -198,7 +206,9 @@ export async function admitInstancesAction(
   const session = input.session;
   if (
     session
-      ? admission.destination.kind !== "session" || admission.destination.session !== session.id
+      ? admission.destination.kind !== "sdk-session" ||
+        canonicalRouteInput(admission.destination.selection) !==
+          canonicalRouteInput(session.selection)
       : admission.destination.kind !== "host"
   )
     throw refuse("Instances destination must match the explicitly supplied session");
@@ -220,11 +230,34 @@ export async function admitInstancesAction(
         throw refuse("Stage a start first");
       if (
         key === "instances.open" &&
-        (staged?.kind !== "open" || sdkSessionTargetOf(staged.session) !== session?.id)
+        (staged?.kind !== "open" ||
+          canonicalRouteInput(staged.session) !== canonicalRouteInput(session?.selection))
       )
         throw refuse(
           "The staged open belongs to another session; explicitly stage the requested session",
         );
+      if (key === "instances.close") {
+        const document = input.document!;
+        if (
+          !session ||
+          canonicalRouteInput(document.session) !== canonicalRouteInput(session.selection)
+        )
+          throw refuse("SDK document belongs to another session");
+        const argv = docListArgv(document.session);
+        const envelope = parsePeRevitEnvelope<DocListResult, Resolved | null>(
+          await read(argv),
+          argv,
+          peRevitLauncher(),
+        );
+        if (
+          envelope.exitCode !== 0 ||
+          envelope.result.state !== "ok" ||
+          envelope.resolved?.pid !== session.process.pid ||
+          envelope.resolved.processStartUtc !== session.process.processStartUtc ||
+          !envelope.result.documents.some((doc) => doc.openId === document.openId)
+        )
+          throw refuse("The SDK document lifetime is not open in the original process", envelope);
+      }
       return { kind: "instances", staged, session, input: admission.input };
     },
     async (execution) => {
@@ -236,10 +269,8 @@ export async function admitInstancesAction(
         ? { selection: { pid: incarnation!.process.pid }, expectSession: null }
         : prior
           ? {
-              selection: {
-                id:
-                  incarnation?.id ??
-                  (staged?.kind === "start" ? staged.name || undefined : undefined),
+              selection: incarnation?.selection ?? {
+                id: staged?.kind === "start" ? staged.name || undefined : undefined,
               },
               expectSession: (prior.input as StepInput).expectSession,
             }

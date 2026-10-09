@@ -1,18 +1,17 @@
-import { Effect, Layer, Option } from "effect";
+import { Effect, Option } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
-import { canonicalRouteInput, type SdkReading } from "@pe/agent-contracts";
+import {
+  canonicalRouteInput,
+  type SdkSessionSelection,
+  type SdkReading,
+} from "@pe/agent-contracts";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { join } from "node:path";
-import {
-  docListArgv,
-  doctorArgv,
-  sessionListArgv,
-  sessionStartArgv,
-} from "@pe/host-contracts/pe-revit-contract";
+import { docListArgv, doctorArgv, sessionListArgv } from "@pe/host-contracts/pe-revit-contract";
 import { checkoutLayout } from "@pe/host-contracts/service-identity";
-import { hostOwnership, type HostLane } from "./host-ownership.ts";
+import { type HostLane } from "./host-ownership.ts";
 import { peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-launch.ts";
 
 /**
@@ -29,8 +28,8 @@ import { peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-launch.ts";
  * envelope was ever produced) and is reported as a plain 504, not as a hand-made `unresponsive`
  * result that would look like an SDK verdict without being one.
  *
- * GET /sessions → `session list --json`, narrowed with `--id` when an id is supplied. Lifecycle
- * mutations are not relayed here: they are host-admitted Instances actions (instances-actions.ts).
+ * /instances/readings and the shared Reading owner relay SDK reads. Lifecycle mutations are
+ * host-admitted Instances actions (instances-actions.ts).
  */
 
 function readOptionalString(value: unknown): string | undefined {
@@ -51,9 +50,8 @@ export function resolveStartProject(lane: HostLane, sourceRoot: string | null): 
 }
 
 /** GET (list) CLI args; `id` narrows to one session, `all` includes the graveyard. */
-export function sessionStatusArgs(id?: string | null, all = false): string[] {
-  const pinned = id?.trim();
-  return pinned ? sessionListArgv({ id: pinned }) : sessionListArgv({ all });
+export function sessionStatusArgs(session?: SdkSessionSelection, all = false): string[] {
+  return sessionListArgv({ ...session, all });
 }
 
 type SessionCliRunner<R = never> = (args: readonly string[]) => Effect.Effect<string, unknown, R>;
@@ -65,9 +63,9 @@ export function docRecentsArgs(year?: string | null): string[] {
   return docListArgv({ recent: true, year: readOptionalString(year) });
 }
 
-/** `doc list [--id] [--doc]`: open documents; no `--id` reads every live session. */
-export function docListArgs(id?: string | null, doc?: string | null): string[] {
-  return docListArgv({ id: readOptionalString(id), doc: readOptionalString(doc) });
+/** Open documents in the SDK-resolved session; omission runs its default ladder. */
+export function docListArgs(session?: SdkSessionSelection, doc?: string | null): string[] {
+  return docListArgv({ ...session, doc: readOptionalString(doc) });
 }
 
 const STATUS_TIMEOUT_MS = 60_000;
@@ -140,16 +138,16 @@ export function observeSdkReading(
     async () => {
       const args =
         request.read === "sessions"
-          ? sessionStatusArgs(request.id, request.all)
+          ? sessionStatusArgs(request.session, request.all)
           : request.read === "doctor"
             ? doctorArgv({ timeoutSeconds: 20 })
             : request.read === "recents"
               ? docRecentsArgs(request.year)
-              : docListArgs(request.id);
+              : docListArgs(request.session);
       const result = await Effect.runPromise(
         executeSessionCli(args, runPeRevitCli, STATUS_TIMEOUT_MS, {
           action: request.read,
-          id: request.id,
+          id: request.session && "id" in request.session ? request.session.id : undefined,
         }).pipe(Effect.provide(NodeServices.layer)),
       );
       if (result.status !== 200) throw Error(result.bodyJson);
@@ -167,79 +165,16 @@ export function observeSdkReading(
   );
 }
 
-function jsonResponse(outcome: SessionCliOutcome) {
-  return Response.text(outcome.bodyJson, {
-    status: outcome.status,
-    headers: { "content-type": "application/json" },
-  });
-}
-
-const sessionsStatusRoute = HttpRouter.add("GET", "/sessions", (req) =>
-  Effect.gen(function* () {
-    const search = new URL(req.url, "http://localhost").searchParams;
-    const id = search.get("id");
-    const outcome = yield* executeSessionCli(
-      sessionStatusArgs(id, search.get("all") === "true"),
-      runPeRevitCli,
-      STATUS_TIMEOUT_MS,
-      { action: "status", id: id ?? undefined },
-    );
-    return jsonResponse(outcome);
-  }),
-);
-
-// LEDGER (docs/features/host/LEDGER.md): the browser never mints session ids — this route
-// discloses the id the SDK WOULD mint, via `session start --plan` (no mutation). A
-// `session.bootstrap-missing` refusal for a never-converged year relays verbatim, like any envelope.
-const sessionsMintRoute = HttpRouter.add("GET", "/sessions/mint", (req) =>
-  Effect.gen(function* () {
-    const search = new URL(req.url, "http://localhost").searchParams;
-    const lane = search.get("lane");
-    const year = search.get("year")?.trim();
-    if ((lane !== "installed" && lane !== "dev") || !year)
-      return Response.jsonUnsafe(
-        { ok: false, error: 'mint requires lane ("installed" or "dev") and year (e.g. "25")' },
-        { status: 400 },
-      );
-    const project = resolveStartProject(hostOwnership.lane, hostOwnership.sourceRoot);
-    if (lane === "dev" && project === undefined)
-      return Response.jsonUnsafe(
-        {
-          ok: false,
-          error: `lane "dev" needs a source-linked host; this host (lane ${hostOwnership.lane}) has no checkout to build Pe.App from — mint with lane "installed" or run the host from a checkout`,
-        },
-        { status: 400 },
-      );
-    const outcome = yield* executeSessionCli(
-      sessionStartArgv({ project: lane === "dev" ? project : undefined, year, plan: true }),
-      runPeRevitCli,
-      STATUS_TIMEOUT_MS,
-      { action: "start --plan" },
-    );
-    return jsonResponse(outcome);
-  }),
-);
-
-const doctorRoute = HttpRouter.add("GET", "/doctor", () =>
-  Effect.gen(function* () {
-    const outcome = yield* executeSessionCli(
-      doctorArgv({ timeoutSeconds: 20 }),
-      runPeRevitCli,
-      STATUS_TIMEOUT_MS,
-      { action: "doctor" },
-    );
-    return jsonResponse(outcome);
-  }),
-);
-
-const instancesReadingsRoute = HttpRouter.add("GET", "/instances/readings", (req) =>
+export const instancesReadingsRoute = HttpRouter.add("GET", "/instances/readings", (req) =>
   Effect.tryPromise(async () => {
     const { sdkReadingSchema } = await import("@pe/agent-contracts");
     const query = new URL(req.url, "http://host").searchParams;
+    if ([...query.keys()].some((key) => !["read", "session", "year", "all"].includes(key)))
+      throw Error("Unknown SDK reading field; session accepts an id-or-pid object");
     const request = sdkReadingSchema.parse({
       kind: "sdk",
       read: query.get("read"),
-      ...(query.has("id") ? { id: query.get("id") } : {}),
+      ...(query.has("session") ? { session: JSON.parse(query.get("session")!) } : {}),
       ...(query.has("year") ? { year: query.get("year") } : {}),
       ...(query.has("all") ? { all: query.get("all") === "true" } : {}),
     });
@@ -262,39 +197,3 @@ const instancesReadingsRoute = HttpRouter.add("GET", "/instances/readings", (req
     ),
   ),
 );
-
-export const sessionsRoute = Layer.mergeAll(
-  instancesReadingsRoute,
-  sessionsStatusRoute,
-  sessionsMintRoute,
-  doctorRoute,
-);
-
-const docsRecentsRoute = HttpRouter.add("GET", "/docs/recents", (req) =>
-  Effect.gen(function* () {
-    const year = new URL(req.url, "http://localhost").searchParams.get("year");
-    const outcome = yield* executeSessionCli(
-      docRecentsArgs(year),
-      runPeRevitCli,
-      STATUS_TIMEOUT_MS,
-      { action: "doc list --recent" },
-    );
-    return jsonResponse(outcome);
-  }),
-);
-
-const docsListRoute = HttpRouter.add("GET", "/docs", (req) =>
-  Effect.gen(function* () {
-    const search = new URL(req.url, "http://localhost").searchParams;
-    const id = search.get("id");
-    const outcome = yield* executeSessionCli(
-      docListArgs(id, search.get("doc")),
-      runPeRevitCli,
-      STATUS_TIMEOUT_MS,
-      { action: "doc list", id: id ?? undefined },
-    );
-    return jsonResponse(outcome);
-  }),
-);
-
-export const docsRoute = Layer.mergeAll(docsRecentsRoute, docsListRoute);

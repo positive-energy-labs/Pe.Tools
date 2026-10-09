@@ -1,25 +1,14 @@
 import { z } from "zod";
 import { nativeProcessSchema } from "./action-receipts.ts";
-import { documentRefSchema } from "./target.ts";
+import { sdkSessionSelectionSchema, sdkDocumentRefSchema } from "./sdk-session.ts";
 import type { RouteStateSpec } from "./route-state.ts";
 import { trichotomyCellSchema } from "./trichotomy.ts";
-const SDK_SESSION_SELECTOR_PREFIX = "session:";
-export const sdkSessionSelectorSchema = z.templateLiteral([
-  SDK_SESSION_SELECTOR_PREFIX,
-  z.string().min(1),
-]);
-export type SdkSessionSelector = z.infer<typeof sdkSessionSelectorSchema>;
-export const sdkSessionSelectorOf = (target: string): SdkSessionSelector =>
-  sdkSessionSelectorSchema.parse(`${SDK_SESSION_SELECTOR_PREFIX}${target}`);
-export const sdkSessionTargetOf = (selector: SdkSessionSelector): string =>
-  selector.slice(SDK_SESSION_SELECTOR_PREFIX.length);
-
 const documentSelector = z.string().trim().min(1);
 /** What open/start launches: a document into a session, or a new session. */
 export const instancesLaunchSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("open"),
-    session: sdkSessionSelectorSchema,
+    session: sdkSessionSelectionSchema,
     document: documentSelector,
     missingLinks: z.enum(["allow", "refuse"]).default("refuse"),
   }),
@@ -53,7 +42,7 @@ export const instancesRouteState = {
 } satisfies RouteStateSpec<typeof instancesDocumentSchema>;
 
 export const instancesSessionSchema = z.strictObject({
-  id: z.string().min(1),
+  selection: sdkSessionSelectionSchema,
   process: nativeProcessSchema,
 });
 const workInput = z.object({ workspaceId: z.string().min(1) });
@@ -95,7 +84,7 @@ export const instancesActions = {
     dirties: ["sdk"],
     needs: "nothing",
     actor: "human",
-    input: sessionInput.extend({ document: documentRefSchema, unsaved }),
+    input: sessionInput.extend({ document: sdkDocumentRefSchema, unsaved }),
   },
 } as const;
 export type InstancesActionKey = keyof typeof instancesActions;
@@ -108,7 +97,7 @@ export const instancesReading = {
   mutates: false,
   input: z.object({
     read: z.enum(["sessions", "doctor", "recents", "documents"]),
-    id: z.string().optional(),
+    session: sdkSessionSelectionSchema.optional(),
     year: z.string().optional(),
     all: z.boolean().optional(),
   }),

@@ -54,7 +54,8 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
         ? []
         : ["A", "B"].map((sessionId) => ({
             sessionId,
-            processId: 42,
+            connected: true,
+            processId: sessionId === "A" ? 42 : 43,
             processStartUtcUnixMs: 1000,
             state: {
               openDocuments: [
@@ -82,7 +83,7 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
     HttpRouter.toWebHandler(
       Layer.mergeAll(
         makeCallRoute(owner, undefined, { sdk: sdkSessions }),
-        opsCatalogRoute(() => Effect.die("not navigation")),
+        opsCatalogRoute(() => Effect.die("not navigation"), sdkSessions),
       ).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
       { disableLogger: true },
     );

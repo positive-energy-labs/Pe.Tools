@@ -862,23 +862,26 @@ export async function createDemoOwner(parent: string, raw: unknown) {
           ...settings,
           workspace: work,
           sdk: async (args) => {
-            if (!args.includes("session"))
+            if (args[0] !== "session" && args[0] !== "doc")
               throw Error("Unsupported simulated SDK receipt recovery");
             return JSON.stringify({
-              result: {
-                sessions: [
-                  {
-                    case: "controlled-active",
-                    process: {
-                      pid: 42,
-                      processStartUtc: "1970-01-01T00:00:01.0000000Z",
-                      executable: join(root, "SIMULATED.exe"),
+              result:
+                args[0] === "doc"
+                  ? { state: "ok", documents: [] }
+                  : {
+                      sessions: [
+                        {
+                          case: "controlled-active",
+                          process: {
+                            pid: 42,
+                            processStartUtc: "1970-01-01T00:00:01.0000000Z",
+                            executable: join(root, "SIMULATED.exe"),
+                          },
+                        },
+                      ],
                     },
-                  },
-                ],
-              },
               diagnostics: [],
-              resolved: null,
+              resolved: { pid: 42, processStartUtc: "1970-01-01T00:00:01.0000000Z" },
               binary: {},
               command: {},
               nextSteps: [],

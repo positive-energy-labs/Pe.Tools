@@ -1,3 +1,4 @@
+import { resolveSdkSession } from "./sdk-session.ts";
 import { createHash } from "node:crypto";
 import { join, resolve, win32 } from "node:path";
 import { Effect, FileSystem } from "effect";
@@ -281,7 +282,12 @@ export async function lifetime(
   family: boolean | "project",
   deps: TakeoffActionDependencies,
 ) {
-  const session = await current(bridge, target, family);
+  const session = await resolveSdkSession(
+    bridge,
+    { bridgeSessionId: target.session, openDocumentId: target.openId },
+    deps.sdk,
+  );
+  await current(bridge, target, family);
   if (!session.processId || session.processStartUtcUnixMs == null)
     throw refused("Original process identity unavailable");
   const process = await readOriginalProcess(

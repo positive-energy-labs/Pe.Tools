@@ -26,6 +26,7 @@ export const connectTestBridge = () =>
         registration: {
           processId: 42,
           processStartUtcUnixMs: 1000,
+          sdkSessionId: "4242",
           contractVersion: BRIDGE_CONTRACT_VERSION,
           state: {
             activeDocumentIsFamilyDocument: false,

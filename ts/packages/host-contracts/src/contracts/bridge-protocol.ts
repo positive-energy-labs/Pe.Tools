@@ -8,6 +8,8 @@ import type { HostLane } from "../service-identity.ts";
 export const HOST_CONTRACT_VERSION = 55 as const;
 export const BRIDGE_CONTRACT_VERSION = 23 as const;
 export const BRIDGE_PATH = "/api/bridge" as const;
+export const HOST_RPC_SDK_SESSION_HEADER = "x-pe-sdk-session" as const;
+/** Private exact attachment identity; never an SDK name or selector language. */
 export const HOST_RPC_BRIDGE_SESSION_HEADER = "x-pe-bridge-session-id" as const;
 export const HOST_RPC_DOCUMENT_HEADER = "x-pe-open-document-id" as const;
 
@@ -30,7 +32,7 @@ export const HOST_RPC_ORIGIN_HEADER = "x-pe-origin" as const;
 
 const nullableString = Schema.optional(Schema.NullOr(Schema.String));
 
-// `controlled` = pe-revit holds a receipt (full lifecycle); `observed` = reads only.
+// SDK census disclosure only. An observed process can be adopted by an SDK mutation.
 export type Custody = SessionObservation extends infer Observation
   ? Observation extends { readonly case: "observed-active" }
     ? "observed"
@@ -82,7 +84,7 @@ export const bridgeRegistrationAckSchema = Schema.Struct({
 });
 export type BridgeRegistrationAck = Schema.Schema.Type<typeof bridgeRegistrationAckSchema>;
 
-/** `openId` is the bridge's id, the one `?target=` accepts (not `pe-revit doc open`'s).
+/** `openId` is the bridge's id, carried with an exact attachment (not `pe-revit doc open`'s).
  * `address` is null until the document is saved (detached, new, or an EditFamily family). */
 export const bridgeDocumentSnapshotSchema = Schema.Struct({
   openId: Schema.String,

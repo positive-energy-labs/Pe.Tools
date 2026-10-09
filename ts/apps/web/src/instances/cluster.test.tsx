@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { instancesRouteState, sdkSessionSelectorOf } from "@pe/agent-contracts";
+import { instancesRouteState } from "@pe/agent-contracts";
 import type { Inventory } from "#/readings";
 import type { InstancesHandle } from "./manifest";
 import type { InstancesFleet } from "./route";
@@ -19,6 +19,8 @@ vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
   readScopedActionStatuses: vi.fn(),
   runSemanticAction: vi.fn(async () => ({ id: "open-action", state: "succeeded" })),
 }));
+// jsdom has no scrolling implementation.
+HTMLElement.prototype.scrollIntoView = vi.fn();
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -75,7 +77,7 @@ function draw(staged = true, connected = true) {
                 staged: {
                   value: {
                     kind: "open",
-                    session: sdkSessionSelectorOf("4242"),
+                    session: { pid: 4242 },
                     document: "C:/Tower.rvt",
                   },
                 },
@@ -111,7 +113,7 @@ test("a staged open in an observed process reaches the semantic action with the 
   await waitFor(() => expect(runSemanticAction).toHaveBeenCalled());
   expect(vi.mocked(runSemanticAction).mock.calls[0]!.slice(0, 4)).toEqual([
     "instances.open",
-    { workspaceId: "instances", session: { id: "4242", process } },
+    { workspaceId: "instances", session: { selection: { pid: 4242 }, process } },
     undefined,
     { work: { key, revision: 7 } },
   ]);
