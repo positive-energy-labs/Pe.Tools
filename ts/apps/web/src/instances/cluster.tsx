@@ -423,11 +423,7 @@ export function InstancesCluster({
   };
 
   const openRefusal =
-    staged?.kind === "open" && staged.world.custody !== "controlled"
-      ? "observed world — open the document in Revit yourself"
-      : staged?.kind === "open" && !staged.world.session
-        ? "this world has no connected session"
-        : null;
+    staged?.kind === "open" && !staged.world.session ? "this world has no connected session" : null;
 
   const fleetColumns = useMemo<Column<Inventory>[]>(
     () => [

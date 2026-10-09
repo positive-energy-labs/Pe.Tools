@@ -19,12 +19,30 @@ const receiptPath = "C:/receipts/dev.json";
 const openId = "a".repeat(32);
 /** The value after `flag` in one recorded argv. */
 const flag = (argv: readonly string[], name: string) => argv[argv.indexOf(name) + 1];
+const observed = { id: "4242", process: { ...originalProcess, pid: 4242 } };
+const observedRow = { case: "observed-active", process: observed.process };
+const adopted = {
+  state: "ok",
+  id: "adopted-4242",
+  legs: [],
+  session: {
+    case: "controlled-active",
+    id: "adopted-4242",
+    process: observed.process,
+    receipt: { receiptPath: "C:/receipts/adopted-4242.json" },
+  },
+};
+const adoptionAnswer = {
+  result: adopted,
+  resolved: { id: adopted.id, pid: 4242, processStartUtc: observed.process.processStartUtc },
+};
 
 type Answer =
   | {
       result: unknown;
       exitCode?: number;
       diagnostics?: { code: string; detail: string; fix: null }[];
+      resolved?: unknown;
     }
   | Error;
 async function setup(
@@ -63,6 +81,7 @@ async function setup(
       ...JSON.parse(sdkEnvelope(reply.result)),
       diagnostics: reply.diagnostics ?? [],
       exitCode: reply.exitCode ?? 0,
+      resolved: reply.resolved ?? null,
     });
   };
   const owner = new ActionJournal(join(dir, "actions.json"));
@@ -95,7 +114,10 @@ async function setup(
         kind: "workflow",
         key,
         actor,
-        destination: "session" in input ? { kind: "session", session: "dev" } : { kind: "host" },
+        destination:
+          "session" in input
+            ? { kind: "session", session: (input.session as typeof session).id }
+            : { kind: "host" },
         input: { workspaceId: scope.work, ...input },
         bases: { work: { key: scope, revision } },
       },
@@ -398,6 +420,245 @@ test.each([2, 3])(
   },
 );
 
+test.each(["open", "stop", "restart", "close"])(
+  "observed 4242 is adopted by the SDK before %s dispatches by pid with its receipt",
+  async (verb) => {
+    const f = await setup(
+      (args) => (args[1] === "start" ? adoptionAnswer : { result: { state: "ok", openId } }),
+      [observedRow],
+    );
+    const revision = await f.stage({
+      kind: "open",
+      session: sdkSessionSelectorOf("4242"),
+      document: "C:/Tower.rvt",
+    });
+    const input = {
+      session: observed,
+      ...(verb === "stop" || verb === "close" ? { unsaved: "keep" } : {}),
+      ...(verb === "close" ? { document: { session: "4242", openId } } : {}),
+    };
+    const receipt = await f.admit(`instances.${verb}`, input, revision);
+    expect(receipt.state).toBe("succeeded");
+    expect(receipt.steps[0]).toMatchObject({ key: `instances.${verb}.adopt`, state: "succeeded" });
+    expect(f.calls.map((args) => args.slice(0, 2).join(" "))).toEqual([
+      "session list",
+      "session start",
+      `${verb === "open" || verb === "close" ? "doc" : "session"} ${verb === "restart" ? "hr" : verb}`,
+    ]);
+    const adoption = f.calls[1]!;
+    expect(flag(adoption, "--pid")).toBe("4242");
+    expect(flag(adoption, "--request-id")).toBe(receipt.steps[0]!.id);
+    expect(adoption).not.toContain("--project");
+    expect(adoption).not.toContain("--id");
+    const mutation = f.calls.at(-1)!;
+    expect(flag(mutation, "--pid")).toBe("4242");
+    expect(mutation).not.toContain("--id");
+    expect(flag(mutation, "--expect-session")).toBe(adopted.session.receipt.receiptPath);
+  },
+);
+
+test("a numeric controlled session name stays an id", async () => {
+  const f = await setup(
+    () => ({ result: { state: "ok" } }),
+    [{ case: "controlled-active", id: "4242", process: originalProcess, receipt: { receiptPath } }],
+  );
+  const named = { id: "4242", process: originalProcess };
+  const revision = await f.stage({
+    kind: "open",
+    session: sdkSessionSelectorOf(named.id),
+    document: "C:/Tower.rvt",
+  });
+  expect((await f.admit("instances.open", { session: named }, revision)).state).toBe("succeeded");
+  expect(flag(f.calls.at(-1)!, "--id")).toBe("4242");
+  expect(f.calls.at(-1)).not.toContain("--pid");
+  expect(f.calls.some((args) => args[1] === "start")).toBe(false);
+});
+
+test.each(["pid", "processStartUtc"] as const)(
+  "an observed original %s mismatch refuses before adoption",
+  async (field) => {
+    const f = await setup(() => adoptionAnswer, [observedRow]);
+    const revision = await f.stage({
+      kind: "open",
+      session: sdkSessionSelectorOf("4242"),
+      document: "C:/Tower.rvt",
+    });
+    const foreign = {
+      ...observed,
+      process: {
+        ...observed.process,
+        [field]: field === "pid" ? 4243 : "1970-01-01T00:00:02.0000000Z",
+      },
+    };
+    expect(await f.admit("instances.open", { session: foreign }, revision)).toMatchObject({
+      state: "failed",
+      notDispatched: true,
+    });
+    expect(f.calls).toHaveLength(1);
+  },
+);
+
+test.each(["resolved-pid", "resolved-start", "session-start", "receipt"])(
+  "adoption refuses an invalid %s before the requested mutation",
+  async (bad) => {
+    const answer = structuredClone(adoptionAnswer);
+    if (bad === "resolved-pid") answer.resolved.pid++;
+    if (bad === "resolved-start") answer.resolved.processStartUtc = "replacement";
+    if (bad === "session-start") answer.result.session.process.processStartUtc = "replacement";
+    if (bad === "receipt") answer.result.session.receipt.receiptPath = "absent";
+    const f = await setup(() => answer, [observedRow]);
+    const revision = await f.stage({
+      kind: "open",
+      session: sdkSessionSelectorOf("4242"),
+      document: "C:/Tower.rvt",
+    });
+    const receipt = await f.admit("instances.open", { session: observed }, revision);
+    expect(receipt.state).not.toBe("succeeded");
+    expect(f.calls.some((args) => args[0] === "doc")).toBe(false);
+    expect((await f.launch()).staged).not.toBeNull();
+  },
+);
+
+test("a supervisor refusal after an effect leg never claims nothing was dispatched", async () => {
+  const response = JSON.parse(
+    sdkEnvelope({ state: "refused", legs: [{ name: "stop", status: "ok" }] }),
+  );
+  response.diagnostics = [
+    { code: "op.stale-expectation", detail: "replacement refused after stop", fix: null },
+  ];
+  const f = await setup((args) =>
+    args[0] === "op"
+      ? {
+          result: {
+            state: "refused",
+            requestId: args[2],
+            receipt: { requestId: args[2], key: "session.hr", verdict: "refused" },
+            response,
+          },
+        }
+      : Error("lost"),
+  );
+  const revision = await f.stage({ kind: "start", year: "2025", name: "dev" });
+  const lost = await f.admit("instances.restart", { session }, revision);
+  const settled = await recoverInstancesAction(lost.id, f.owner, f.deps);
+  expect(settled.steps[0]).toMatchObject({ state: "failed" });
+  expect(settled.steps[0]).not.toHaveProperty("notDispatched", true);
+  expect(settled).not.toHaveProperty("notDispatched", true);
+  expect(f.calls.filter((args) => args[1] === "hr")).toHaveLength(1);
+});
+
+test.each(["adoption", "mutation"])(
+  "a lost observed %s recovers and resumes without repeating SDK adoption",
+  async (lostLeg) => {
+    let lostOnce = false;
+    const f = await setup(
+      (args) => {
+        if (args[0] === "op") {
+          const adoption = lostLeg === "adoption";
+          return {
+            result: {
+              state: "ok",
+              requestId: args[2],
+              receipt: {
+                requestId: args[2],
+                key: adoption ? "session.start" : "doc.open",
+                verdict: "ok",
+              },
+              response: adoption
+                ? { ...JSON.parse(sdkEnvelope(adopted)), resolved: adoptionAnswer.resolved }
+                : { state: "ok", openId },
+            },
+          };
+        }
+        if (!lostOnce && (lostLeg === "adoption" ? args[1] === "start" : args[0] === "doc")) {
+          lostOnce = true;
+          return Error("lost original response");
+        }
+        return args[1] === "start" ? adoptionAnswer : { result: { state: "ok", openId } };
+      },
+      [observedRow],
+    );
+    const revision = await f.stage({
+      kind: "open",
+      session: sdkSessionSelectorOf("4242"),
+      document: "C:/Tower.rvt",
+    });
+    const lost = await f.admit("instances.open", { session: observed }, revision);
+    expect(lost.state).toBe("unknown");
+    await recoverInstancesAction(lost.id, f.owner, f.deps);
+    const resumed = await f.admit("instances.open", { session: observed }, revision, lost.id);
+    expect(resumed.state).toBe("succeeded");
+    expect(f.calls.filter((args) => args[1] === "start")).toHaveLength(1);
+    expect(f.calls.filter((args) => args[0] === "doc")).toHaveLength(1);
+    expect((await f.launch()).staged).toBeNull();
+  },
+);
+
+test("a numeric staged start name stays an id", async () => {
+  const f = await setup(() => ({ result: { state: "ok", id: "4242" } }), []);
+  const revision = await f.stage({ kind: "start", year: "2025", name: "4242" });
+  expect((await f.admit("instances.start", {}, revision)).state).toBe("succeeded");
+  for (const argv of f.calls) {
+    expect(flag(argv, "--id")).toBe("4242");
+    expect(argv).not.toContain("--pid");
+  }
+});
+
+test.each(["running", "missing-response", "wrong-request", "wrong-key", "conflicting-state"])(
+  "a lost supervisor with %s evidence stays unknown and never re-dispatches",
+  async (mode) => {
+    const f = await setup((args) => {
+      if (args[0] !== "op") return Error("lost response");
+      const result = {
+        state: mode === "running" ? "running" : "ok",
+        requestId: mode === "wrong-request" ? "foreign" : args[2],
+        receipt: {
+          requestId: args[2],
+          key: mode === "wrong-key" ? "session.stop" : "session.start",
+          verdict: "ok",
+        },
+        response:
+          mode === "missing-response"
+            ? null
+            : JSON.parse(
+                sdkEnvelope({ state: mode === "conflicting-state" ? "failed" : "ok", legs: [] }),
+              ),
+      };
+      return { result };
+    }, []);
+    const lost = await f.admit(
+      "instances.start",
+      {},
+      await f.stage({ kind: "start", year: "2025", name: "dev" }),
+    );
+    const settled = await recoverInstancesAction(lost.id, f.owner, f.deps);
+    expect(settled.steps[0]!.state).toBe("unknown");
+    expect(f.calls.at(-1)).toEqual(["op", "result", lost.steps[0]!.id, "--json"]);
+    expect(f.calls.filter((args) => args[1] === "start")).toHaveLength(1);
+  },
+);
+
+test("an unknown supervisor request is refused undispatched from the read-only receipt lookup", async () => {
+  const f = await setup(
+    (args) =>
+      args[0] === "op"
+        ? {
+            result: { requestId: args[2], state: "refused" },
+            diagnostics: [{ code: "op.unknown-request", detail: "never admitted", fix: null }],
+          }
+        : Error("lost"),
+    [],
+  );
+  const lost = await f.admit(
+    "instances.start",
+    {},
+    await f.stage({ kind: "start", year: "2025", name: "dev" }),
+  );
+  const settled = await recoverInstancesAction(lost.id, f.owner, f.deps);
+  expect(settled.steps[0]).toMatchObject({ state: "failed", notDispatched: true });
+  expect(f.calls.filter((args) => args[1] === "start")).toHaveLength(1);
+});
+
 test("a pre-admission SDK refusal is failed and undispatched; recovery settles a lost open from its op receipt", async () => {
   let mode: "refuse" | "hang" | "answer" = "refuse";
   const f = await setup((args) => {
@@ -446,19 +707,37 @@ test("a pre-admission SDK refusal is failed and undispatched; recovery settles a
   expect(f.calls.length).toBe(dispatched); // the recovered step replays; nothing is re-dispatched
 });
 
-test("a lost session verb stays unknown: recovery never re-issues its request id", async () => {
-  const f = await setup(() => Error("pe-revit produced no output"), []);
-  const lost = await f.admit(
-    "instances.start",
-    {},
-    await f.stage({ kind: "start", year: "2025", name: "dev" }),
-  );
-  expect(lost.state).toBe("unknown");
-  const calls = f.calls.length;
-  const settled = await recoverInstancesAction(lost.id, f.owner, f.deps);
-  expect(settled.steps[0]?.state).toBe("unknown");
-  expect(f.calls.length).toBe(calls);
-});
+test.each(["start", "stop", "hr"])(
+  "a lost session %s reads its durable supervisor receipt and never re-dispatches",
+  async (verb) => {
+    const response = { state: "ok", id: "dev", legs: [] };
+    const f = await setup((args) =>
+      args[0] === "op"
+        ? {
+            result: {
+              state: "ok",
+              requestId: args[2],
+              receipt: { requestId: args[2], key: `session.${verb}`, verdict: "ok" },
+              response: JSON.parse(sdkEnvelope(response)),
+            },
+          }
+        : Error("pe-revit produced no output"),
+    );
+    const revision = await f.stage({ kind: "start", year: "2025", name: "dev" });
+    const key = `instances.${verb === "hr" ? "restart" : verb}`;
+    const input =
+      verb === "start" ? {} : { session, ...(verb === "stop" ? { unsaved: "keep" } : {}) };
+    const lost = await f.admit(key, input, revision);
+    expect(lost.state).toBe("unknown");
+    const settled = await recoverInstancesAction(lost.id, f.owner, f.deps);
+    expect(settled.steps[0]).toMatchObject({ state: "succeeded", result: response });
+    expect(f.calls.at(-1)).toEqual(["op", "result", lost.steps[0]!.id, "--json"]);
+    const count = f.calls.length;
+    expect((await f.admit(key, input, revision, lost.id)).state).toBe("succeeded");
+    expect(f.calls).toHaveLength(count);
+    expect(f.calls.filter((args) => args[1] === verb)).toHaveLength(1);
+  },
+);
 
 test("a proven start retires the consumed staged launch; a second press does not start again", async () => {
   const f = await setup(() => ({ result: { state: "ok", phase: "ready", id: "dev" } }), []);
