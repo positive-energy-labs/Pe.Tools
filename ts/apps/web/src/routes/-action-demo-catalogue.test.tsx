@@ -10,7 +10,7 @@ import { afterEach, expect, test } from "vite-plus/test";
 import { CHAT_SEEDS } from "#/chat/seeds";
 import { PODS_SEEDS } from "#/route/seeds";
 import { SCHEDULE_SEEDS } from "#/route/schedules/manifest";
-import { INSTANCES_SEEDS } from "#/instances/seeds";
+import { OPEN_SEEDS } from "#/open/seeds";
 import { manifest as takeoffManifest } from "#/takeoff/manifest";
 import { manifest as familyManifest } from "#/routes/family";
 import { manifest as familiesManifest } from "#/families/manifest";
@@ -21,7 +21,7 @@ const declared = [
   ["chat", CHAT_SEEDS],
   ["pods", PODS_SEEDS],
   ["schedules", SCHEDULE_SEEDS],
-  ["instances", INSTANCES_SEEDS],
+  ["instances", OPEN_SEEDS],
   ["takeoffs", takeoffManifest.seeds],
   ["family", familyManifest.seeds],
   ["families", familiesManifest.seeds],

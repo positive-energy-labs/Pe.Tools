@@ -6,7 +6,7 @@ import { actionControls, routeCallOf, semanticActions } from "@pe/agent-contract
 
 import { manifest as families } from "#/families/manifest";
 import { familyManifest } from "#/family/manifest";
-import { instancesManifest } from "#/instances/manifest";
+import { openManifest } from "#/open/manifest";
 import { manifest as parameterLinks } from "#/parameter-links/manifest";
 import { manifest as rooms } from "#/rooms/manifest";
 import { schedulesManifest } from "#/route/schedules/manifest";
@@ -15,7 +15,7 @@ import { manifest as takeoffs } from "#/takeoff/manifest";
 
 /** Every plugin route's manifest, by its key; the order is the pane's. */
 export const CHAT_PLUGINS = {
-  instances: instancesManifest,
+  instances: openManifest,
   takeoffs,
   family: familyManifest(),
   families,

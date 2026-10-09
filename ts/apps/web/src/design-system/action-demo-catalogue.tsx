@@ -9,7 +9,7 @@ import type { Seed } from "@pe/agent-contracts";
 import { CHAT_SEEDS } from "#/chat/seeds";
 import { PODS_SEEDS } from "#/route/seeds";
 import { SCHEDULE_SEEDS } from "#/route/schedules/manifest";
-import { INSTANCES_SEEDS } from "#/instances/seeds";
+import { OPEN_SEEDS } from "#/open/seeds";
 import { manifest as takeoffManifest } from "#/takeoff/manifest";
 import { manifest as familyManifest } from "#/routes/family";
 import { manifest as familiesManifest } from "#/families/manifest";
@@ -49,7 +49,7 @@ export const SEED_CATALOGUE: SeedRow[] = [
   ...rows("chat", "/chat", CHAT_SEEDS as AnySeeds),
   ...rows("pods", "/pods", PODS_SEEDS as AnySeeds),
   ...rows("schedules", "/schedules", SCHEDULE_SEEDS as AnySeeds),
-  ...rows("instances", "/instances", INSTANCES_SEEDS as AnySeeds),
+  ...rows("instances", "/open", OPEN_SEEDS as AnySeeds),
   ...rows("takeoffs", "/takeoffs", takeoffManifest.seeds as AnySeeds),
   ...rows("family", "/family", familyManifest.seeds as AnySeeds),
   ...rows("families", "/families", familiesManifest.seeds as AnySeeds),

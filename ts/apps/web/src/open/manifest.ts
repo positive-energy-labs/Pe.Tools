@@ -1,10 +1,11 @@
 /**
- * The instances route, declared once. Instances is where sessions come FROM, so it declares no
- * `needs`: it must render with nothing attached. Its Readings are the four SDK/broker subjects the
- * surface already subscribes (`useFleet()` = sessions + inventory, plus the doctor's
- * installed years and the per-year recents), and its one route-level action is the refresh that
- * reacquires them without touching Work — the lifecycle commands (start/open/restart/stop) are
- * staged-document verbs and stay in the cluster's sticky card.
+ * The Open route, declared once (machine control plane, host ledger 2026-10-09 ruling 3). Open is
+ * where Revits come FROM, so it declares no `needs`: it renders with nothing attached. Its
+ * Readings are the host's one `Machine` (years, sessions, documents) and the SDK recents across
+ * every installed year; its one route-level action is the refresh that reacquires both without
+ * touching Work. The lifecycle verbs (start, open, hr, stop) stay with the launcher and the
+ * Running list. The internal `instances` key, Work and capability ids identify authored work and
+ * outlive the retired URL.
  */
 import { z } from "zod";
 import {
@@ -17,22 +18,20 @@ import {
 import { defineRoute } from "#/route/manifest";
 import type { RouteHandle } from "#/route/use-route";
 import { dirty } from "#/readings";
-import { INSTANCES_SEEDS } from "#/instances/seeds";
+import { OPEN_SEEDS } from "#/open/seeds";
 
-export type InstancesReading = "sessions" | "inventory" | "doctor" | "recents";
-export type InstancesHandle = RouteHandle<InstancesDocument, InstancesReading, object, "refresh">;
+export type OpenReading = "machine" | "recents";
+export type OpenHandle = RouteHandle<InstancesDocument, OpenReading, object, "refresh">;
 
 const READINGS = {
-  sessions: { kind: "sdk", read: "sessions" },
-  inventory: { kind: "inventory" },
-  doctor: { kind: "sdk", read: "doctor" },
+  machine: { kind: "machine" },
   recents: { kind: "sdk", read: "recents" },
-} as const satisfies Record<InstancesReading, ReadingRequest>;
+} as const satisfies Record<OpenReading, ReadingRequest>;
 
-export const instancesManifest = defineRoute({
+export const openManifest = defineRoute({
   key: "instances",
-  name: "Instances",
-  docs: "Refresh the SDK census to inspect available sessions, installed years, diagnostics and recent documents before starting or recovering a session.",
+  name: "Open",
+  docs: "Start a Revit, open a model, and see which Revit holds it. Refresh reacquires the machine reading and the recent documents of every installed year.",
   work: instancesRouteState,
   // ONE shared workspace, not a document (spec §7): the cluster, the chat plugin and
   // `pe_do route:instances.*` must all name this key; a Target-keyed one reads an empty document.
@@ -54,17 +53,17 @@ export const instancesManifest = defineRoute({
   actions: {
     refresh: {
       label: "refresh",
-      says: "reacquire the SDK census, installed years and recents without changing Work",
+      says: "reacquire the machine reading and the recents without changing Work",
       needs: "host",
       actor: "any",
       input: z.void() as unknown as z.ZodType<never>,
-      dirties: ["sessions", "inventory", "doctor", "recents"],
-      rereads: "sessions",
+      dirties: ["machine", "recents"],
+      rereads: "machine",
       ready: () => null,
       run: async () => {
         for (const request of Object.values(READINGS)) dirty(request);
       },
     },
   },
-  seeds: INSTANCES_SEEDS,
+  seeds: OPEN_SEEDS,
 });

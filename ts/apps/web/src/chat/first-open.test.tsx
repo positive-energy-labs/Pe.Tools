@@ -4,9 +4,6 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { Provider } from "@pe/agent-contracts";
 
-vi.mock("@tanstack/react-router", () => ({
-  Link: ({ children }: { children: unknown }) => <a href="/settings">{children as never}</a>,
-}));
 const { FirstOpenCard } = await import("./first-open");
 
 afterEach(cleanup);
@@ -54,7 +51,7 @@ test("every provider refused: one row each, its own verb, the access switch, and
   expect(providers.openLogin).toHaveBeenCalledWith("claude");
   fireEvent.click(screen.getByText("Sign in"));
   expect(providers.openLogin).toHaveBeenCalledWith("codex");
-  expect(screen.getByText("Open settings")).toBeTruthy();
+  expect(screen.getByText("Open providers")).toBeTruthy();
   fireEvent.click(screen.getByText("Probe"));
   expect(providers.probe).toHaveBeenCalledWith("claude-probe");
   expect(screen.getByText("Pea asks before each change")).toBeTruthy();

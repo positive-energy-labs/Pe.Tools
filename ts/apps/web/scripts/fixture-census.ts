@@ -16,7 +16,11 @@ const canonicalFixtures: Record<
   "/families": { canonicalReviewUrl: "/families?demo=apply", fixtureKind: "demo-fixture" },
   "/family": { canonicalReviewUrl: "/family?demo=apply", fixtureKind: "demo-fixture" },
   "/grilles": { canonicalReviewUrl: "/grilles", fixtureKind: "inherent-static" },
-  "/instances": { canonicalReviewUrl: "/instances?demo=refresh", fixtureKind: "demo-fixture" },
+  "/machine": {
+    canonicalReviewUrl: "/machine?shell=tray&demo=blocked-plan",
+    fixtureKind: "demo-fixture",
+  },
+  "/open": { canonicalReviewUrl: "/open?demo=refresh", fixtureKind: "demo-fixture" },
   "/ops": { canonicalReviewUrl: "/ops", fixtureKind: "live-route" },
   "/parameter-links": { canonicalReviewUrl: "/parameter-links", fixtureKind: "live-route" },
   "/rooms": { canonicalReviewUrl: "/rooms", fixtureKind: "live-route" },

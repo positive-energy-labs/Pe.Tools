@@ -4,6 +4,7 @@ import {
   Scripts,
   createRootRouteWithContext,
   retainSearchParams,
+  useRouterState,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { TanStackDevtools } from "@tanstack/react-devtools";
@@ -12,8 +13,7 @@ import { RegistryContext } from "@effect/atom-react";
 import { OwnerInspector } from "../state/owner-inspector";
 import { inspectAtomRegistry } from "../state/atom-inspect";
 import { appAtomRegistry, routeSearch } from "../route/route-owner";
-import { FeedbackPicker } from "../components/feedback-picker";
-import { UpdateButton } from "../components/update-button";
+import { AppChrome } from "../route/app-chrome";
 
 import appCss from "../styles.css?url";
 
@@ -60,6 +60,10 @@ export function RootComponent() {
   );
 }
 
+function Chrome() {
+  return <AppChrome pathname={useRouterState({ select: (state) => state.location.pathname })} />;
+}
+
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" data-pe suppressHydrationWarning>
@@ -70,8 +74,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <body>
         <RegistryContext.Provider value={appAtomRegistry}>
           {children}
-          <UpdateButton />
-          <FeedbackPicker />
+          <Chrome />
           <TanStackDevtools
             config={{
               position: "middle-left",

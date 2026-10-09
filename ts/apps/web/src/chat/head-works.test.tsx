@@ -32,7 +32,7 @@ test("the instances Work's launch proposal is a head Work, counted and opened li
         },
       } as never);
   });
-  const instances = result.current.find((work) => work.route === "Instances");
+  const instances = result.current.find((work) => work.route === "Open");
   expect(instances).toBeDefined();
   expect(Object.keys(instances!.cells)).toEqual(["launch"]);
   expect(instances!.cells.launch!.proposal).toBeTruthy();
