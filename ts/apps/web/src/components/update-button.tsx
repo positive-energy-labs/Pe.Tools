@@ -1,12 +1,8 @@
 import { DownloadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useAction, useHostCall } from "#/readings";
-import {
-  acknowledgeUpdate,
-  readInstallStatus,
-  readUpdateAvailability,
-  waitForVersionChange,
-} from "../host/install";
+import type { Machine } from "@pe/agent-contracts";
+import { dirty, useAction, useReading } from "#/readings";
+import { acknowledgeUpdate } from "../host/install";
 import { ActionButton } from "./lang/action-button";
 import { FactChip } from "./lang/chip";
 import { OutcomeLine } from "./lang/outcome";
@@ -21,52 +17,69 @@ import { OutcomeLine } from "./lang/outcome";
  * so it lives at the document root and the route shell keeps only the lamp.
  */
 export function UpdateButton() {
-  const installed = useHostCall(readInstallStatus, ["host-install"]);
-  const available = useHostCall(readUpdateAvailability, ["host-update"]);
-  const [current, setCurrent] = useState<string | null>(null);
+  const reading = useReading<Machine>({ kind: "machine" });
+  const machine =
+    reading.state === "ready"
+      ? reading.observation
+      : "previous" in reading
+        ? reading.previous
+        : undefined;
+  const plan = machine?.update.plan;
+  const receipt = machine?.update.receipt;
+  const [requestId, setRequestId] = useState<string | null>(null);
   const update = useAction(async () => {
-    const planId = available.data?.planId;
-    if (!planId) throw new Error("Read an update plan before applying it.");
-    const body = await acknowledgeUpdate(planId);
-    if (body.status === 409 && body.reason === "already-current" && body.installedVersion)
-      return body.installedVersion;
-    if (body.status >= 400 || body.accepted !== true)
-      throw new Error(body.error ?? `update failed (${body.status})`);
-    // The host exits; its successor (or the reopened app window) proves the new release.
-    await waitForVersionChange(available.data?.installedVersion ?? null);
-    window.location.reload();
-    return null;
-  }, setCurrent);
-  const offered = available.data?.updateAvailable === true && current === null;
-  const quiet = offered && available.data?.quiet === true;
+    if (!plan?.planId) throw new Error("Read an update plan before applying it.");
+    const admitted = await acknowledgeUpdate(plan.planId);
+    dirty({ kind: "machine" });
+    return admitted;
+  }, setRequestId);
+  const previousSettled = receipt && ["ok", "failed", "refused"].includes(receipt.state);
+  const offered =
+    machine?.host?.payload === "installed" &&
+    plan?.available === true &&
+    requestId === null &&
+    machine.update.admittedPlanId !== plan.planId &&
+    (!machine.update.requestId || previousSettled);
+  const quiet =
+    offered && plan?.quiet === true && reading.state === "ready" && !machine?.update.planLeg.error;
   const started = useRef(false);
   useEffect(() => {
     if (!quiet || started.current) return;
     started.current = true;
     update.mutate(undefined);
   }, [quiet, update]);
-  const busy = (available.data?.revits ?? []).filter(
+  const busy = (plan?.revits ?? []).filter(
     (revit) => !revit.idle || revit.unknown || revit.documents.some((doc) => doc.isModified),
   );
   return (
     <div className="flex items-center gap-2">
-      {installed.data?.releaseVersion && (
-        <FactChip title="the release installed on this machine">
-          v{installed.data.releaseVersion}
-        </FactChip>
+      {machine?.host?.version && (
+        <FactChip title="the release installed on this machine">v{machine.host.version}</FactChip>
       )}
-      {available.data?.error && <OutcomeLine kind="advisory" label="update check unavailable" />}
-      {current && (
+      {machine?.update.planLeg.error && (
+        <OutcomeLine kind="advisory" label="update check unavailable" />
+      )}
+      {(requestId || machine?.update.requestId) && (
         <OutcomeLine
-          kind="advisory"
-          label={`already on ${current}`}
-          says="the latest release is installed"
+          kind={
+            receipt?.state === "ok"
+              ? "receipt"
+              : receipt?.state === "failed" || receipt?.state === "refused"
+                ? "error"
+                : "advisory"
+          }
+          label={receipt ? `update ${receipt.state}` : "update admitted; receipt pending"}
+          says={
+            reading.state === "stale"
+              ? "Host disconnected; progress is not observed"
+              : (receipt?.legs.at(-1)?.detail ?? undefined)
+          }
         />
       )}
       {update.isPending && (
         <OutcomeLine
           kind="busy"
-          label={`updating to ${available.data?.latestVersion}`}
+          label={`updating to ${plan?.latest}`}
           says="Revit closes with its work saved, then the app and your documents reopen"
         />
       )}
@@ -75,7 +88,7 @@ export function UpdateButton() {
         <>
           <OutcomeLine
             kind="advisory"
-            label={`${available.data?.latestVersion} is ready`}
+            label={`${plan?.latest} is ready`}
             says={busy
               .map((revit) => {
                 const modified = revit.documents.filter((doc) => doc.isModified);
@@ -85,7 +98,7 @@ export function UpdateButton() {
                     ? `Revit ${revit.year} saves ${modified.map((doc) => doc.title ?? doc.path ?? "untitled").join(", ")} first`
                     : `Revit ${revit.year} is busy`;
               })
-              .concat((available.data?.blockers ?? []).map((blocker) => blocker.detail))
+              .concat((plan?.blockers ?? []).map((blocker) => blocker.detail))
               .join("; ")}
           />
           <ActionButton

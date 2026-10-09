@@ -8,6 +8,7 @@ import { hostTakeoffCaptures, type TakeoffCaptures } from "./takeoff-captures.ts
 import { listBridgeSessions } from "./local-ops.ts";
 import { observeSdkReading } from "./session-route.ts";
 import type { DocumentMarks, DocumentRef } from "./document-marks.ts";
+import type { MachineOwner } from "./machine.ts";
 
 /**
  * The host's own HTTP surface, read by the host on the host's clock. A one-shot Reading gets one
@@ -139,17 +140,14 @@ export function hostResourceObserver(
   origin = "http://127.0.0.1",
   // Resolved at the call, not at the build: one observer outlives any one `fetch` binding.
   read: (url: URL, init?: RequestInit) => Promise<Response> = (url, init) => fetch(url, init),
+  machine?: MachineOwner,
 ): ResourceObserver {
   const inventoryReads = new OwnerReads();
   return (request, publish) => {
     const key = readingKey(request);
     const accept = (result: OwnerValue<unknown>) => publish(resourceSnapshot(key, result));
     /** Read the host's own HTTP surface once, or on the host's own timer. Never the client's. */
-    const oneShot = (
-      paths: ReadonlyArray<readonly [string, RequestInit?]>,
-      periodMs?: number,
-      pair = false,
-    ) => {
+    const oneShot = (paths: ReadonlyArray<readonly [string, RequestInit?]>, periodMs?: number) => {
       const controller = new AbortController();
       const pump = () =>
         Promise.all(
@@ -167,8 +165,7 @@ export function hostResourceObserver(
             return value;
           }),
         ).then(
-          (bodies) =>
-            accept({ value: pair ? { installed: bodies[0], update: bodies[1] } : bodies[0] }),
+          (bodies) => accept({ value: bodies[0] }),
           (error: unknown) => {
             if (!controller.signal.aborted) accept({ error: String(error) });
           },
@@ -184,24 +181,23 @@ export function hostResourceObserver(
 
     function observe(): () => void {
       switch (request.kind) {
+        case "machine":
+          if (!machine) {
+            accept({ error: "Machine owner is unavailable" });
+            return () => {};
+          }
+          return machine.observe((value) => accept({ value }));
         case "sdk":
           return observeSdkReading(request, accept, (notify) =>
             bridge ? bridge.subscribe(() => notify()) : () => {},
           );
-        case "install-status":
         case "host-status":
         case "capabilities":
         case "ops-catalog":
         case "schedule-reading":
         case "takeoff-saved":
         case "rhvac-file-version":
-          return oneShot(
-            request.kind === "install-status"
-              ? [["/host/install"], ["/host/update"]]
-              : [ONE_SHOT[request.kind]!(request as never)],
-            POLL_MS[request.kind],
-            request.kind === "install-status",
-          );
+          return oneShot([ONE_SHOT[request.kind]!(request as never)], POLL_MS[request.kind]);
         case "receipts":
           if (request.scope)
             return oneShot(

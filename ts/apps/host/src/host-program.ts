@@ -11,7 +11,7 @@ import { productRoot } from "@pe/host-contracts/service-identity";
 import { resolveHostVersion } from "./host-lifecycle.ts";
 import { makeHttpLive, resolveWebRoot } from "./app.ts";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
-import { updateWhenNoRevit } from "./update-route.ts";
+import { makeInstalledUpdateReader, updateWhenNoRevit } from "./update-route.ts";
 
 const preferredPort = Number(new URL(hostProcessIdentity.defaultHostBaseUrl).port);
 
@@ -49,11 +49,13 @@ export const hostProgram = (
       const latch = yield* Deferred.make<void>();
       const handle = yield* Deferred.make<ServiceHostHandle>();
       const webUrl = web ? yield* Deferred.make<string>() : undefined;
+      const updateReader = makeInstalledUpdateReader();
       const HttpLive = makeHttpLive({
         port,
         webUrl,
         capabilities: hostCapabilities,
         lifecycle: { latch, handle },
+        updateReader,
         webRoot: resolveWebRoot(),
       });
 
@@ -75,7 +77,7 @@ export const hostProgram = (
       else
         yield* Effect.forkDetach(
           Deferred.await(handle).pipe(
-            Effect.andThen(Effect.promise(updateWhenNoRevit)),
+            Effect.andThen(Effect.promise(() => updateWhenNoRevit(updateReader))),
             Effect.andThen((handedOff) =>
               handedOff ? Deferred.succeed(latch, undefined) : Effect.void,
             ),

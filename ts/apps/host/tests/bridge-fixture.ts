@@ -2,7 +2,7 @@ import { Effect, Queue } from "effect";
 import { type HttpServerRequest } from "effect/unstable/http";
 import { BRIDGE_CONTRACT_VERSION, type BridgeFrame } from "@pe/host-contracts/contracts";
 import { RevitBridge } from "../src/bridge.ts";
-export const connectTestBridge = () =>
+export const connectTestBridge = (processId = 42) =>
   Effect.gen(function* () {
     const bridge = yield* RevitBridge;
     const incoming = yield* Queue.make<string>();
@@ -24,7 +24,7 @@ export const connectTestBridge = () =>
       JSON.stringify({
         kind: "Registration",
         registration: {
-          processId: 42,
+          processId,
           processStartUtcUnixMs: 1000,
           contractVersion: BRIDGE_CONTRACT_VERSION,
           state: {

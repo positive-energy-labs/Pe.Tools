@@ -12,11 +12,9 @@ import { isSettingsSchemaUrl } from "./settings.ts";
 import { isNavigation, opsCatalogRoute, type SpaFallback } from "./ops-catalog.ts";
 import { demoRoutes } from "./demo-owner.ts";
 import { callRoute } from "./call-route.ts";
-import { productRoot } from "./host-ownership.ts";
 import { docsRoute, sessionsRoute } from "./session-route.ts";
 import {
   adminShutdownRoute,
-  announceServedSession,
   HostLifecycle,
   resolveHostVersion,
   ServiceFileLive,
@@ -26,7 +24,8 @@ import { staticSpaLayer } from "./static-spa.ts";
 import { peRoutesLayer } from "./pe-routes.ts";
 import { capturesRoute } from "./captures-route.ts";
 import { pagesRoute } from "./pages-route.ts";
-import { updateRoutes } from "./update-route.ts";
+import { makeInstalledUpdateReader, updateRoutes } from "./update-route.ts";
+import { UpdateReader } from "./update-reader.ts";
 
 export { resolveWebRoot } from "./static-spa.ts";
 
@@ -64,11 +63,13 @@ const settingsSchemaRoute = HttpRouter.add("GET", "/schemas/settings/*", (req) =
   }),
 );
 
-const hostStatusRoute = HttpRouter.add("GET", hostProcessIdentity.healthPath, () =>
+export const hostStatusRoute = HttpRouter.add("GET", hostProcessIdentity.healthPath, () =>
   Effect.gen(function* () {
     const bridge = yield* RevitBridge;
-    const snapshot = yield* bridge.snapshot(undefined);
-    return yield* Response.json(yield* getHostStatus(snapshot));
+    const sessions = yield* bridge.list;
+    return yield* Response.json(
+      yield* getHostStatus({ connected: sessions.some((session) => session.connected) }),
+    );
   }),
 );
 
@@ -120,41 +121,6 @@ const hostInstallRoute = HttpRouter.add("GET", "/host/install", () =>
   }),
 );
 
-/**
- * Service-file schema 3, second half: once a Revit payload registers on the bridge and reports the
- * pe-revit session it belongs to, amend this host's service file to name that session. That is what
- * turns `session list`'s companion observation from a lane guess into a real association — the SDK reads
- * the file, and the file now says which session this host serves.
- *
- * A host serves at most one Revit session in practice, but nothing enforces it; the LAST session to
- * connect wins, which is the same "current session" rule the rest of this broker already uses.
- * Best-effort by construction: the announcement never gates registration.
- */
-const ServedSessionLive = Layer.effectDiscard(
-  Effect.gen(function* () {
-    const bridge = yield* RevitBridge;
-    const { handle: handleDeferred } = yield* HostLifecycle;
-    yield* Effect.forkScoped(
-      Stream.fromPubSub(bridge.events).pipe(
-        Stream.filter((event) => event.kind === "connected"),
-        Stream.runForEach((event) =>
-          Effect.gen(function* () {
-            const views = yield* bridge.list;
-            const sdkSessionId = views.find(
-              (view) => view.sessionId === event.sessionId,
-            )?.sdkSessionId;
-            // No sdkSessionId means this Revit was not launched by pe-revit (custody `observed`);
-            // there is no session to name, and claiming one would be an invention.
-            if (!sdkSessionId) return;
-            const handle = yield* Deferred.await(handleDeferred);
-            yield* Effect.promise(() => announceServedSession(productRoot(), handle, sdkSessionId));
-          }),
-        ),
-      ),
-    );
-  }),
-);
-
 function makeRevitComposition(spa: SpaFallback = () => emptyNotFound) {
   return {
     provider: RevitBridgeLive,
@@ -168,7 +134,6 @@ function makeRevitComposition(spa: SpaFallback = () => emptyNotFound) {
       sessionsRoute,
       docsRoute,
       callRoute,
-      ServedSessionLive,
     ),
   };
 }
@@ -183,6 +148,7 @@ export interface HttpLiveOptions {
   readonly webUrl?: Deferred.Deferred<string>;
   /** Boot-scoped shutdown latch + service token, injected by the launch root. */
   readonly lifecycle: HostLifecycle["Service"];
+  readonly updateReader?: UpdateReader["Service"];
   /** Built SPA directory, or null to skip static serving (dev/vite). */
   readonly webRoot: string | null;
   /** Route registrations for the host-owned route surface; tests inject their own. */
@@ -197,6 +163,10 @@ export interface HttpLiveOptions {
  * (via `NodeHttpServer.layer`) and shared by the router and the service-file writer.
  */
 export function makeHttpLive(options: HttpLiveOptions) {
+  const UpdateLive = Layer.succeed(
+    UpdateReader,
+    options.updateReader ?? makeInstalledUpdateReader(),
+  );
   const nodeServer = options.nodeServer ?? createServer();
   // Socket retirement. The platform layer detaches its request handler and calls `server.close`
   // on release, but a keep-alive socket a browser still holds survives that close with nothing
@@ -247,6 +217,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
       Layer.provide(NodeHttpClient.layerUndici),
       Layer.provide(revitComposition.provider),
       Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),
+      Layer.provide(UpdateLive),
       Layer.provide(NodeServices.layer),
     );
   }
@@ -265,6 +236,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
     Layer.provide(ClaimedServerLive),
     Layer.provide(NodeHttpClient.layerUndici),
     Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),
+    Layer.provide(UpdateLive),
     Layer.provide(NodeServices.layer),
   );
 }
