@@ -14,15 +14,20 @@ Live-effort map for the 2026-10-09 host ledger Decided line "MACHINE CONTROL PLA
 | 5 | `/open` replaces `/instances`; machine drawer from the version chip; providers rendered in the drawer; tray route `/machine?shell=tray`; route tree regenerated | deterministic, controlled dev session, installed | merged 324a6d1f 2026-10-09; PROVEN[deterministic open 7, machine 9; seed screenshots]; controlled dev session and installed owed to wave 6 |
 | 6 | Real old-to-new upgrade on an isolated installed machine with a saved and a modified document; ledgers; ADR 0014 narrow supersession; delete this map | installed | last |
 
-## Owed from the build (deterministic lane complete 2026-10-09)
+## Stabilized after the lane (2026-10-09)
 
-- Wave 6: real old-to-new upgrade on an isolated installed machine with a saved and a modified document; login icon and one incumbent; the WebView2 tray against a live host; a second tailnet device through `/mcp` and the web; then ledgers, ADR 0014 narrow supersession, delete this map.
-- `sdk-session.ts` resolves through the CLI at about 278 ms per call; memoize per process incarnation (pid + processStartUtc) before a user's every native op pays it.
-- `Pe.Host.Tray.exe` is 163 MB self-contained WinForms; framework-dependent would need the desktop runtime on every machine. Accept or trim later.
-- The Pea palm launcher floats over `/machine?shell=tray` and the Open documents table; hide it in the tray shell and keep it clear of tables.
+- `sdk-session.ts` memoizes the SDK resolution per live process incarnation (pid + processStartUtc); re-resolves when the incarnation changes or the process exits. f6eba964.
+- The floater over the tray shell and the Open table was TanStack Devtools (dev-only), not a Pea launcher; it is off in `shell=tray` and on `/open`. f6eba964.
+- PWA floor (ruled yes by kaitpw): manifest on the pinned origin with `id: "/"`, `start_url` `/open`, standalone, `launch_handler` focus-existing, one Open shortcut; App Badging from the version chip; "Install as app" in the drawer host group when Edge offers a prompt. No service worker; `--open` keeps `--app=url`; Window Controls Overlay is later protoui. The `id` is what keeps a later WCO or start_url change from orphaning installs. af4180c5. Installing from the product profile `<productRoot>/edge-app` is owed to wave 6a.
+- `Pe.Host.Tray.exe` 163 MB -> 72 MB with `EnableCompressionInSingleFile` only (Astra, publish-measured). Framework-dependent (1.3 MB) ruled out: supported years are 2023-2026, 2023/2024 are .NET Framework, Revit 2025.5/2026.5 move to .NET 10, and the SDK product manifest has no prerequisite slot. Trimming WinForms+WebView2 is unsupported. 10c2121e.
+
+## Owed
+
+- Wave 6a on desktop-p9vi8iv (tailnet, no Revit; needs sshd enabled by kaitpw): MSI install, login icon, one incumbent on 5180, WebView2 tray against the live host, Explorer restart, old-to-new upgrade with no documents, PWA install from the product profile, kp-pc as the second tailnet device through the web and `/mcp` once p9iv shares. Windows Sandbox is the fallback.
+- Wave 6b on kp-pc, kaitpw driving: the upgrade with a saved and a modified document through the product's own consent flow; the felt tray. Then ledgers, ADR 0014 narrow supersession, delete this map.
 - `/machine?shell=tray` Open window and Quit host need the service token only the tray holds (`POST /admin/window`); the drawer draws them refused with that reason.
-- PWA floor (kaitpw leaning yes, not ruled): manifest on the pinned origin (`start_url` `/open`, standalone, `launch_handler` focus-existing, one Open shortcut), App Badging from the version chip state; `--open` keeps `--app=url`; no service worker. Window Controls Overlay is later protoui work.
 - Web test-bar guard counts the new Open and machine tests as scaffold (28 against a ceiling of 16, same count as before); main's dev server on Node 25 needs `NODE_OPTIONS=--experimental-eventsource`.
+- Tray startup cost with compression is unmeasured (81 ms more on a warm refusal exit); measure in 6a.
 
 ## Found by the toiles
 
