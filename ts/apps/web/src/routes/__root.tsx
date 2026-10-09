@@ -6,14 +6,11 @@ import {
   retainSearchParams,
   useRouterState,
 } from "@tanstack/react-router";
-import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
-import { TanStackDevtools } from "@tanstack/react-devtools";
 import { RegistryContext } from "@effect/atom-react";
 
-import { OwnerInspector } from "../state/owner-inspector";
 import { inspectAtomRegistry } from "../state/atom-inspect";
 import { appAtomRegistry, routeSearch } from "../route/route-owner";
-import { AppChrome } from "../route/app-chrome";
+import { AppChrome, AppDevtools } from "../route/app-chrome";
 
 import appCss from "../styles.css?url";
 
@@ -61,7 +58,13 @@ export function RootComponent() {
 }
 
 function Chrome() {
-  return <AppChrome pathname={useRouterState({ select: (state) => state.location.pathname })} />;
+  const location = useRouterState({ select: (state) => state.location });
+  return (
+    <>
+      <AppChrome pathname={location.pathname} />
+      <AppDevtools pathname={location.pathname} shell={String(location.search.shell ?? "")} />
+    </>
+  );
 }
 
 function RootDocument({ children }: { children: React.ReactNode }) {
@@ -75,18 +78,6 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <RegistryContext.Provider value={appAtomRegistry}>
           {children}
           <Chrome />
-          <TanStackDevtools
-            config={{
-              position: "middle-left",
-            }}
-            plugins={[
-              {
-                name: "Tanstack Router",
-                render: <TanStackRouterDevtoolsPanel />,
-              },
-              { name: "Route owners", render: <OwnerInspector /> },
-            ]}
-          />
         </RegistryContext.Provider>
         <Scripts />
       </body>

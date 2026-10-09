@@ -23,6 +23,7 @@ const readSdk: SdkReceiptReader = (args) =>
   );
 const refuse = (message: string, result?: unknown) =>
   new BridgeError(message, 409, { notDispatched: true, result });
+const resolutions = new WeakMap<object, Map<string, { resolved: Resolved; sessionId: string }>>();
 
 export function readSessionScope(headers: Record<string, string | undefined>): HostSessionScope {
   const raw = headers[HOST_RPC_SDK_SESSION_HEADER];
@@ -52,18 +53,43 @@ export async function resolveSdkSession(
   if (held && (!held.connected || !held.processId || !held.processStartUtcUnixMs))
     throw refuse("The exact bridge attachment is no longer available");
   const argv = docListArgv(selection ?? (held ? { pid: held.processId } : {}));
-  const envelope = parsePeRevitEnvelope<DocListResult, Resolved | null>(
-    await read(argv),
-    argv,
-    peRevitLauncher(),
-  );
-  if (envelope.exitCode !== 0 || envelope.result?.state !== "ok")
+  const key = JSON.stringify(argv);
+  let cache = resolutions.get(bridge);
+  if (!cache) resolutions.set(bridge, (cache = new Map()));
+  const cached = cache.get(key);
+  const sockets = await Effect.runPromise(bridge.list);
+  let resolved = cached?.resolved;
+  if (cached) {
+    const start = Date.parse(cached.resolved.processStartUtc!);
+    const matches = sockets.filter(
+      (socket) =>
+        socket.connected &&
+        socket.sessionId === cached.sessionId &&
+        socket.processId === cached.resolved.pid &&
+        socket.processStartUtcUnixMs === start,
+    );
+    try {
+      if (matches.length !== 1) throw new Error("bridge disconnected");
+      process.kill(cached.resolved.pid!, 0);
+    } catch {
+      cache.delete(key);
+      resolved = undefined;
+    }
+  }
+  const envelope = resolved
+    ? undefined
+    : parsePeRevitEnvelope<DocListResult, Resolved | null>(
+        await read(argv),
+        argv,
+        peRevitLauncher(),
+      );
+  if (envelope && (envelope.exitCode !== 0 || envelope.result?.state !== "ok"))
     throw refuse(
       envelope.diagnostics.map((d) => `${d.code}: ${d.detail}`).join("; ") ||
         `pe-revit ${envelope.result?.state}`,
       envelope,
     );
-  const resolved = envelope.resolved;
+  resolved ??= envelope?.resolved ?? undefined;
   const start = resolved?.processStartUtc ? Date.parse(resolved.processStartUtc) : NaN;
   if (
     !resolved ||
@@ -80,8 +106,10 @@ export async function resolveSdkSession(
       socket.processId === resolved.pid &&
       socket.processStartUtcUnixMs === start,
   );
-  if (matches.length !== 1)
+  if (matches.length !== 1) {
+    cache.delete(key);
     throw refuse("The SDK resolved process has no unique bridge attachment", envelope);
+  }
   const socket = matches[0]!;
   if (
     held &&
@@ -95,6 +123,7 @@ export async function resolveSdkSession(
     !socket.state?.openDocuments.some((doc) => doc.openId === scope.openDocumentId)
   )
     throw refuse("The exact product document lifetime is no longer open", envelope);
+  cache.set(key, { resolved, sessionId: socket.sessionId! });
   return {
     ...socket,
     sessionId: socket.sessionId!,

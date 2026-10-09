@@ -116,6 +116,44 @@ test("the held attachment is checked again after the SDK answers", async () => {
   ).rejects.toMatchObject({ evidence: { notDispatched: true } });
 });
 
+test("one live incarnation skips the SDK; a replacement resolves again", async () => {
+  const current = { ...socket, processId: process.pid };
+  const sockets = [current];
+  let calls = 0;
+  const read = async () => {
+    calls++;
+    return sdkEnvelope(
+      { state: "ok", documents: [] },
+      {
+        ...sdkResolved,
+        pid: process.pid,
+        processStartUtc: new Date(current.processStartUtcUnixMs!).toISOString(),
+      },
+    );
+  };
+  const target = bridge(sockets);
+  const scope = { session: { pid: process.pid } };
+  await resolveSdkSession(target, scope, read);
+  await resolveSdkSession(target, scope, read);
+  expect(calls).toBe(1);
+  current.processStartUtcUnixMs = 2000;
+  await resolveSdkSession(target, scope, read);
+  expect(calls).toBe(2);
+});
+
+test("a cached socket cannot outlive its process", async () => {
+  const sockets = [{ ...socket, processId: 2147483647 }];
+  const target = bridge(sockets);
+  let calls = 0;
+  const read = async () => {
+    calls++;
+    return sdkEnvelope({ state: "ok", documents: [] }, { ...sdkResolved, pid: 2147483647 });
+  };
+  await resolveSdkSession(target, { session: { pid: 2147483647 } }, read);
+  await resolveSdkSession(target, { session: { pid: 2147483647 } }, read);
+  expect(calls).toBe(2);
+});
+
 test("an exact product document uses its held pid and refuses a closed lifetime or SDK document id", () =>
   Effect.runPromise(
     Effect.scoped(

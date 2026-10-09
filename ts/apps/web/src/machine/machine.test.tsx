@@ -10,7 +10,7 @@ import type { Machine, Reading } from "@pe/agent-contracts";
 
 import { acknowledgeUpdate } from "#/host/install";
 import { MACHINE_SEEDS } from "#/open/seeds";
-import { AppChrome } from "#/route/app-chrome";
+import { AppChrome, AppDevtools } from "#/route/app-chrome";
 
 import { MachineBody } from "./body";
 import { chipText, machineOf } from "./model";
@@ -21,6 +21,9 @@ vi.mock("#/open/lifecycle", async (original) => ({
   useInstancesBasis: () => null,
 }));
 vi.mock("#/components/feedback-picker", () => ({ FeedbackPicker: () => null }));
+vi.mock("@tanstack/react-devtools", () => ({
+  TanStackDevtools: () => <div data-testid="devtools-launcher" />,
+}));
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -118,6 +121,15 @@ describe("shells", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("complementary", { name: "this machine" })).toBeNull();
     expect(document.activeElement).toBe(chip);
+  });
+
+  test("the floating launcher is absent in the tray and clear of Open", () => {
+    const { rerender } = render(<AppDevtools pathname="/machine" shell="tray" />);
+    expect(screen.queryByTestId("devtools-launcher")).toBeNull();
+    rerender(<AppDevtools pathname="/open" />);
+    expect(screen.queryByTestId("devtools-launcher")).toBeNull();
+    rerender(<AppDevtools pathname="/family" />);
+    expect(screen.getByTestId("devtools-launcher")).toBeTruthy();
   });
 
   test("only the tray shell can quit the host and open a window", () => {
