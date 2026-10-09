@@ -29,11 +29,12 @@
     }
   },
   "longTitle": {
-    "total": 26,
+    "total": 27,
     "byArea": {
       "components": 3,
       "family": 16,
       "grounded-doc": 1,
+      "rooms": 1,
       "route": 1,
       "routes": 2,
       "takeoff": 3
@@ -47,7 +48,7 @@
     }
   },
   "inlineColor": {
-    "total": 47,
+    "total": 51,
     "byArea": {
       "components": 6,
       "design-system": 1,
@@ -57,6 +58,7 @@
       "lab": 8,
       "ops": 14,
       "param-tables": 3,
+      "rooms": 4,
       "routes": 1,
       "takeoff": 3,
       "workbench": 2
@@ -71,9 +73,9 @@
     "byArea": {}
   },
   "fatRoute": {
-    "total": 9,
+    "total": 11,
     "byArea": {
-      "routes": 9
+      "routes": 11
     }
   }
 }
