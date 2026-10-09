@@ -16,7 +16,8 @@ if (hostOwnership.lane === "installed") {
     const write = stream.write.bind(stream);
     stream.write = ((chunk: string | Uint8Array, ...rest: never[]) => {
       try {
-        appendFileSync(file, `${new Date().toISOString()} ${chunk}`);
+        // eslint-disable-next-line no-control-regex -- the logger colors its console lines
+        appendFileSync(file, `${new Date().toISOString()} ${String(chunk).replace(/\x1b\[[0-9;]*m/g, "")}`);
       } catch {
         // The log is a courtesy; never let it take the host down.
       }

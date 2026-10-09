@@ -139,6 +139,13 @@ export async function startInstalledTray(handle: ServiceHostHandle): Promise<() 
   });
   return async () => {
     child.stdin?.end();
-    await exited;
+    // A shim that does not dispose on EOF must not hold the host: the installer stub gives a
+    // handed-off host 120 s to exit, and a successor's claim waits on this pid. Bounded, then killed.
+    const timer = new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 5_000));
+    if ((await Promise.race([exited, timer])) === "timeout") {
+      console.warn("pe-host tray did not exit on EOF within 5 s; killing it");
+      child.kill();
+      await exited;
+    }
   };
 }

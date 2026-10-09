@@ -18,10 +18,30 @@ export const updateVerb: UpdateRunner = (verbArgs, detached = false) => {
       stdio: ["ignore", "pipe", "ignore"],
     });
     let stdout = "";
-    child.stdout.on("data", (chunk) => (stdout += chunk));
+    let settled = false;
+    const settle = (envelope: () => Parameters<typeof resolve>[0]) => {
+      if (settled) return;
+      try {
+        const value = envelope();
+        settled = true;
+        resolve(value);
+      } catch (error) {
+        if (!detached) reject(error);
+      }
+    };
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+      // A detached apply hands off to the installer stub, which inherits this pipe and then waits for
+      // THIS host to exit (`--wait-pid`). Waiting for the pipe to close here deadlocks both until the
+      // stub gives up (install refused: "Processes still running after 120 seconds"). Resolve on the
+      // envelope the CLI prints at handoff; the pipe closes whenever the stub finishes.
+      if (detached) settle(() => parsePeRevitEnvelope(stdout, verbArgs, launch));
+    });
     child.on("error", reject);
     child.on("close", () => {
+      if (settled) return;
       try {
+        settled = true;
         resolve(parsePeRevitEnvelope(stdout, verbArgs, launch));
       } catch (error) {
         reject(error);
