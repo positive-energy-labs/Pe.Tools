@@ -174,6 +174,10 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         System.IO.File.Exists(builtHostExecutable)
             .ShouldBeTrue($"TS host executable build did not create {builtHostExecutable}");
         signing.SignAndVerifyFile(builtHostExecutable);
+        var builtTrayExecutable = Path.Combine(builtHostDirectory, "tray", "Pe.Host.Tray.exe");
+        System.IO.File.Exists(builtTrayExecutable)
+            .ShouldBeTrue($"Host payload build did not create {builtTrayExecutable}");
+        signing.SignAndVerifyFile(builtTrayExecutable);
         Directory.Delete(Path.Combine(builtHostDirectory, "bundle"), recursive: true);
 
         runtimePublishDirectory.GetFiles(file => file.Exists)

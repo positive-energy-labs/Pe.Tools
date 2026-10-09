@@ -1,0 +1,20 @@
+<Project Sdk="Pe.Revit.Sdk">
+  <PropertyGroup>
+    <PeProjectKind>Tool</PeProjectKind>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" PrivateAssets="build;buildTransitive" />
+    <InternalsVisibleTo Include="Pe.Host.Tray.Tests" />
+  </ItemGroup>
+  <!-- WebView2 adds both UI frameworks; this shim uses only WinForms. -->
+  <Target Name="RemoveUnusedWebView2Wpf" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Reference.Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
+</Project>

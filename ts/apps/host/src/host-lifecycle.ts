@@ -36,6 +36,7 @@ export class HostLifecycle extends Context.Service<
   {
     readonly latch: Deferred.Deferred<void>;
     readonly handle: Deferred.Deferred<ServiceHostHandle>;
+    readonly startTray?: (handle: ServiceHostHandle) => Promise<() => Promise<void>>;
   }
 >()("pe/HostLifecycle") {}
 
@@ -128,7 +129,7 @@ export async function announceServedSession(
 export const ServiceFileLive = Layer.effectDiscard(
   Effect.gen(function* () {
     const server = yield* HttpServer.HttpServer;
-    const { handle: handleDeferred } = yield* HostLifecycle;
+    const { handle: handleDeferred, startTray } = yield* HostLifecycle;
     const address = server.address;
     const port = address._tag === "TcpAddress" ? address.port : 0;
     const appBase = productRoot();
@@ -182,6 +183,11 @@ export const ServiceFileLive = Layer.effectDiscard(
       ),
     );
     console.log(`pe-host service claim acquired pid=${handle.serviceFile.pid} port=${port}`);
+    if (hostOwnership.lane === "installed" && startTray)
+      yield* Effect.acquireRelease(
+        Effect.promise(() => startTray(handle)),
+        (dispose) => Effect.promise(dispose),
+      );
     yield* Deferred.succeed(handleDeferred, handle);
   }),
 );

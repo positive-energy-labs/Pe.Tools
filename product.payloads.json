@@ -19,6 +19,7 @@
     "smokeService": "host",
     "smokePaths": [
       "app/bin/host/Pe.Host.exe",
+      "app/bin/host/tray/Pe.Host.Tray.exe",
       "app/bin/host/web/client/index.html",
       "app/bin/pea/pea.exe"
     ]
