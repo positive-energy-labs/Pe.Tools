@@ -6,6 +6,16 @@ export default defineConfig({
     outDir: "dist-installed/bundle",
     clean: ["dist-installed"],
     shims: true,
+    plugins: [
+      {
+        name: "preserve-node-socket-context",
+        transform: {
+          filter: { id: /@effect\/platform-node-shared\/dist\/NodeSocket\.js$/ },
+          // Rolldown drops Context while retaining the unused NetSocket superclass call.
+          handler: () => ({ moduleSideEffects: "no-treeshake" }),
+        },
+      },
+    ],
     deps: {
       alwaysBundle: [/./],
       onlyBundle: false,
