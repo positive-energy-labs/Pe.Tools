@@ -73,6 +73,8 @@ const recovered = (value: UpdateReceipt) =>
     value.state === "running" ? 4 : 0,
   );
 
+const MANIFEST = "C:/Users/x/AppData/Local/Positive Energy/Pe.Tools/product.payloads.json";
+
 async function fixture() {
   const dir = await mkdtemp(join(tmpdir(), "pe-update-reader-"));
   const path = join(dir, "host-update.json");
@@ -80,7 +82,11 @@ async function fixture() {
   let confirmed: UpdateReceipt | null = null;
   const run: UpdateRunner = vi.fn(async (args, detached = false) => {
     calls.push({ args, detached });
-    if (args[0] === "update" && args[1] === "check") return envelope(plan);
+    if (args[0] === "update" && args[1] === "check") {
+      // The installed root resolves from the manifest; without it the SDK says update.not-installed.
+      expect(args).toEqual(["update", "check", "--manifest", MANIFEST, "--json"]);
+      return envelope(plan);
+    }
     if (args[0] === "op") {
       if (!confirmed) throw Error("successor not answering");
       expect(args).toEqual(["op", "result", confirmed.requestId, "--json"]);
@@ -93,7 +99,7 @@ async function fixture() {
     return envelope(confirmed, 4);
   });
   const make = (runner = run) =>
-    createUpdateReader({ path, run: runner, installed: true, pid: 123 });
+    createUpdateReader({ path, run: runner, installed: true, pid: 123, manifest: MANIFEST });
   return {
     dir,
     path,
@@ -166,6 +172,8 @@ test("GET carries the full validated plan, POST returns persisted request and re
         "update",
         "apply",
         plan.planId,
+        "--manifest",
+        MANIFEST,
         "--request-id",
         saved.requestId,
         "--wait-pid",

@@ -110,6 +110,8 @@ export function createUpdateReader(options: {
   readonly run: UpdateRunner;
   readonly installed: boolean;
   readonly pid: number;
+  /** The installed product manifest; the SDK resolves the install root from it (`update.not-installed` otherwise). */
+  readonly manifest?: string;
   readonly now?: () => string;
 }) {
   const now = options.now ?? (() => new Date().toISOString());
@@ -231,7 +233,7 @@ export function createUpdateReader(options: {
       await Promise.all([
         (async () => {
           try {
-            const envelope = await options.run(updateCheckArgv());
+            const envelope = await options.run(updateCheckArgv({ manifest: options.manifest }));
             if (envelope.exitCode !== 0) throw Error(said(envelope));
             const plan = validateUpdatePlan(envelope.result);
             value = {
@@ -288,6 +290,7 @@ export function createUpdateReader(options: {
         const envelope = await options.run(
           updateApplyArgv({
             planId,
+            manifest: options.manifest,
             requestId: record.requestId,
             waitPid: options.pid,
             noShortcutArgs,

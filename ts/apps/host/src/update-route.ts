@@ -36,6 +36,7 @@ export const makeInstalledUpdateReader = () =>
     run: updateVerb,
     installed: hostOwnership.lane === "installed",
     pid: process.pid,
+    manifest: join(productRoot(), "product.payloads.json"),
   });
 
 /** Login applies only with no Revit, through the same durable admission as the HTTP action. */
