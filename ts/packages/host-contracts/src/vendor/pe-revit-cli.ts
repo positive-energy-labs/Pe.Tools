@@ -1,4 +1,4 @@
-// SDK-owned copy-in client. The generated contract defines the eight-field envelope.
+// SDK-owned copy-in client. The generated contract defines the nine-field envelope.
 // Process success is not a verdict; validation rejects empty, non-JSON, and non-envelope output.
 
 import { existsSync } from "node:fs";
@@ -44,7 +44,7 @@ export function peRevitLaunch(
   if (inputs.lane === "dev") {
     if (!inputs.devWorkingDirectory)
       throw new Error(
-        "Dev-lane pe-revit launch requires devWorkingDirectory (the dotnet tool-manifest root).",
+        "Checkout pe-revit launch requires devWorkingDirectory (the dotnet tool-manifest root).",
       );
     return {
       cmd: "dotnet",
@@ -113,7 +113,7 @@ export function validatePeRevitEnvelope(
   return stdout;
 }
 
-/** Structural type guard for the envelope's eight required top-level fields. */
+/** Structural type guard for the envelope's nine required top-level fields. */
 export function isPeRevitEnvelope(value: unknown): value is PeRevitEnvelope {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
@@ -125,7 +125,8 @@ export function isPeRevitEnvelope(value: unknown): value is PeRevitEnvelope {
     typeof v.command === "object" && v.command !== null &&
     Array.isArray(v.nextSteps) &&
     typeof v.guide === "string" &&
-    Array.isArray(v.related)
+    Array.isArray(v.related) &&
+    typeof v.exitCode === "number" && Number.isInteger(v.exitCode) && v.exitCode >= 0 && v.exitCode <= 4
   );
 }
 
