@@ -66,9 +66,14 @@ export interface MachineSources {
 /** One clock, one in-flight refresh, full confirmed data retained independently of every leg. */
 export function createMachine(
   sources: MachineSources,
-  options: { now?: () => string; periodMs?: number } = {},
+  options: { now?: () => string; periodMs?: number; updatePeriodMs?: number } = {},
 ) {
   const now = options.now ?? (() => new Date().toISOString());
+  // The update feed is GitHub's API at 60 unauthenticated calls an hour: it has its own clock, read
+  // at boot, when a new observer arrives (the drawer's recheck reopens the stream), and every
+  // updatePeriodMs. The 5 s machine tick never touches it (it did, and emptied the quota in minutes).
+  const updatePeriodMs = options.updatePeriodMs ?? 30 * 60_000;
+  let updateDueAt = 0;
   const listeners = new Set<(value: Machine) => void>();
   let inFlight: Promise<Machine> | undefined;
   let timer: ReturnType<typeof setInterval> | undefined;
@@ -138,11 +143,16 @@ export function createMachine(
             share = value;
           },
         ),
-        read(
-          "update",
-          () => sources.update.refresh(),
-          () => {},
-        ),
+        Date.now() >= updateDueAt
+          ? read(
+              "update",
+              () => {
+                updateDueAt = Date.now() + updatePeriodMs;
+                return sources.update.refresh();
+              },
+              () => {},
+            )
+          : Promise.resolve(true),
       ]);
       if (censusRead)
         await Promise.all(
@@ -236,6 +246,7 @@ export function createMachine(
   function observe(accept: (value: Machine) => void) {
     if (closed) throw Error("Machine owner is retired.");
     listeners.add(accept);
+    updateDueAt = 0;
     if (latest.legs.sessions) accept(latest);
     if (listeners.size === 1) {
       const notify = () => {

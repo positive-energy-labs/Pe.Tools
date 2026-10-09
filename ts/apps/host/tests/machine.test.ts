@@ -337,3 +337,18 @@ test("health aggregates every attachment while an ambiguous snapshot has no atta
     ),
   );
 });
+
+test("the update feed is read at boot, on a new observer, and on its own clock, never on the tick", async () => {
+  const { sources, machine } = fixture();
+  const stop = machine.observe(() => {});
+  await machine.refresh();
+  await machine.refresh();
+  await machine.refresh();
+  expect(sources.update.refresh).toHaveBeenCalledTimes(1);
+  const again = machine.observe(() => {});
+  await machine.refresh();
+  expect(sources.update.refresh).toHaveBeenCalledTimes(2);
+  again();
+  stop();
+  machine.close();
+});

@@ -173,6 +173,7 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         );
         System.IO.File.Exists(builtHostExecutable)
             .ShouldBeTrue($"TS host executable build did not create {builtHostExecutable}");
+        MakeGuiSubsystem(builtHostExecutable);
         signing.SignAndVerifyFile(builtHostExecutable);
         var builtTrayExecutable = Path.Combine(builtHostDirectory, "tray", "Pe.Host.Tray.exe");
         System.IO.File.Exists(builtTrayExecutable)
@@ -241,6 +242,26 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             .ShouldBeTrue("Failed to publish TS pea for installer packaging.");
 
         context.Logger.LogInformation("Finished publishing TS pea runtime for installer packaging.");
+    }
+
+    /// <summary>
+    ///     Node's apphost is a console-subsystem image: started from the login Run value, the Start Menu
+    ///     shortcut or the installer stub, the host would own a console window, and closing it kills the
+    ///     host and its tray. Flip the PE optional-header Subsystem to GUI after the SEA is built and
+    ///     before signing. Node black-holes stdout without a console; the installed lane tees to
+    ///     logs/host.log. Redirected pipes (the --adapter child, the SDK launcher's log) are unaffected.
+    /// </summary>
+    private static void MakeGuiSubsystem(string executable) {
+        using var stream = new FileStream(executable, FileMode.Open, FileAccess.ReadWrite);
+        var headers = new PEHeaders(stream);
+        // Subsystem sits at offset 68 of the optional header for PE32 and PE32+ alike.
+        var subsystemOffset = headers.PEHeaderStartOffset + 4 + 20 + 68;
+        stream.Seek(subsystemOffset, SeekOrigin.Begin);
+        var current = (ushort)(stream.ReadByte() | stream.ReadByte() << 8);
+        if (current != 3 && current != 2)
+            throw new InvalidOperationException($"{executable} has an unexpected PE subsystem {current}.");
+        stream.Seek(subsystemOffset, SeekOrigin.Begin);
+        stream.Write([(byte)2, (byte)0]);
     }
 
     private static string PrepareUnsignedNode(PackageSigningResult signing) {
