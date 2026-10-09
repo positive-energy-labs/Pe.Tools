@@ -11,10 +11,12 @@ Live-effort map for the 2026-10-09 host ledger Decided line "MACHINE CONTROL PLA
 | 2 | `Machine` owner `ts/apps/host/src/machine.ts` over the existing SSE readings; typed update reader with request-id persisted before apply and successor recovery through `op result`; `waitForVersionChange` deleted | deterministic, compile | started 2026-10-09 |
 | 3 | Installed host pins 5180 and refuses with the occupant named; `dotnet/Pe.Host.Tray` (NotifyIcon plus WebView2 window on `/machine?shell=tray`, native menu fallback) staged into the host payload; spawn after claim, dispose on exit | compile, artifact, then installed | tray source started 2026-10-09; host integration after 2 |
 | 4 | `request-identity.ts` before every handler and the WS upgrade; `share.ts` owning one Serve mapping; `/mcp` Streamable HTTP behind it; invocation-local tool context; `dev.ts --share` deleted | deterministic ingress matrix, then installed tailnet from a second device | after 2 |
-| 5 | `/open` replaces `/instances`; machine drawer from the version chip; providers rendered in the drawer; tray route `/machine?shell=tray`; route tree regenerated | deterministic, controlled dev session, installed | after 1, 2 |
+| 5 | `/open` replaces `/instances`; machine drawer from the version chip; providers rendered in the drawer; tray route `/machine?shell=tray`; route tree regenerated | deterministic, controlled dev session, installed | deterministic and seed screenshots on `mcp/w5-web` 2026-10-09, unmerged; controlled dev session and installed owed |
 | 6 | Real old-to-new upgrade on an isolated installed machine with a saved and a modified document; ledgers; ADR 0014 narrow supersession; delete this map | installed | last |
 
 ## Owed to the build, found by the toiles
+
+- Wave 5 added a token-gated `POST /admin/window` (the tray footer's Open window had no route); only the tray carries the token, so the web drawer draws Open window and Quit host refused with that reason.
 
 - `ObservedActive` has no documents: the Machine owner joins `doc list --pid` for observed rows and declares persistence unknown.
 - `UpdateBlocker` has no pid: the pid chip is the `UpdatePlan.revits[]` row holding the same blocker.

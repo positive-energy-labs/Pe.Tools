@@ -33,6 +33,14 @@ export const Route = createFileRoute("/")({ component: App });
  * exhibits are reachable through the satellite links on its card. */
 const TOOLS = [
   {
+    to: "/open",
+    title: "Open",
+    label: "Revit",
+    icon: Server,
+    description:
+      "Start a Revit, open a model, and see which Revit holds it: the launcher, every recent document across installed years, and each running Revit with its shape, documents and verbs.",
+  },
+  {
     to: "/family",
     title: "Family",
     label: "Family Foundry",
@@ -159,20 +167,12 @@ const TOOLS = [
       "Cross-element parameter links — co-edit the link profile with pea, preview the projected target writes, then apply to reconcile them.",
   },
   {
-    to: "/instances",
-    title: "Instances",
-    label: "Fleet",
-    icon: Server,
-    description:
-      "Every Revit world pe-revit and the bridge know about — the sessions pea controls and starts and stops, the one it only observes (your own Revit), each session's companion legs, and the ledger of what happened.",
-  },
-  {
     to: "/settings",
     title: "Settings",
     label: "Pea",
     icon: Settings2,
     description:
-      "The OpenAI-compatible endpoint Pea talks to — proved with a model list and one chat before it is saved.",
+      "Whether Pea asks before each change. Providers and sign-in live in the machine drawer, behind the version chip.",
   },
   {
     to: "/design-system",

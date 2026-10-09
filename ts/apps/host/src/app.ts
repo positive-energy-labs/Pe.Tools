@@ -1,6 +1,12 @@
 import { sdkSession } from "./sdk-session.ts";
 import { requestIdentityLayer } from "./request-identity.ts";
-import { createShare, shareIntentFile, shareRoute, tailscaleCommand, type ShareOwner } from "./share.ts";
+import {
+  createShare,
+  shareIntentFile,
+  shareRoute,
+  tailscaleCommand,
+  type ShareOwner,
+} from "./share.ts";
 import { mcpRoute } from "./mcp-route.ts";
 import { Deferred, Effect, Layer, Stream, Option } from "effect";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
@@ -19,6 +25,7 @@ import { callRoute } from "./call-route.ts";
 import { instancesReadingsRoute } from "./session-route.ts";
 import {
   adminShutdownRoute,
+  adminWindowRoute,
   HostLifecycle,
   resolveHostVersion,
   ServiceFileLive,
@@ -194,17 +201,22 @@ export function makeHttpLive(options: HttpLiveOptions) {
     const address = nodeServer.address();
     return address && typeof address !== "string" ? address.port : options.port;
   };
-  const share = options.share ?? createShare({
-    installed: hostOwnership.lane === "installed",
-    port,
-    run: tailscaleCommand(),
-    ...shareIntentFile(join(productRoot(), "state", "share.json")),
-  });
+  const share =
+    options.share ??
+    createShare({
+      installed: hostOwnership.lane === "installed",
+      port,
+      run: tailscaleCommand(),
+      ...shareIntentFile(join(productRoot(), "state", "share.json")),
+    });
   const identity = requestIdentityLayer({
     port,
-    frontendOrigin: () => options.webUrl
-      ? Option.getOrUndefined(Effect.runSync(Deferred.poll(options.webUrl)).pipe(Option.map(Effect.runSync)))
-      : undefined,
+    frontendOrigin: () =>
+      options.webUrl
+        ? Option.getOrUndefined(
+            Effect.runSync(Deferred.poll(options.webUrl)).pipe(Option.map(Effect.runSync)),
+          )
+        : undefined,
     share,
   });
   const webUrl = options.webUrl;
@@ -221,6 +233,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
     capturesRoute(spa),
     pagesRoute(),
     adminShutdownRoute,
+    adminWindowRoute,
     updateRoutes,
     peRoutesLayer(options.routeRegistrations, share),
     demoRoutes(),

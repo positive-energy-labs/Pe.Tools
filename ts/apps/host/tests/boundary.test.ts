@@ -124,7 +124,11 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     expect(installStatus.status).toBe(200);
     expect(await installStatus.json()).toMatchObject({ installed: false, releaseVersion: null });
 
-    // (6) graceful shutdown: the SDK claim token authorizes, then the server stops + file deleted.
+    // (6) the tray's Open window needs the claim token too; without it nothing is spawned.
+    const window = await fetch(`${base}/admin/window`, { method: "POST" });
+    expect(window.status).toBe(403);
+
+    // (7) graceful shutdown: the SDK claim token authorizes, then the server stops + file deleted.
     const shutdown = await fetch(`${base}/admin/shutdown`, {
       method: "POST",
       headers: {

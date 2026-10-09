@@ -19,8 +19,9 @@ import { Route as DuctLossRouteImport } from "./routes/duct-loss";
 import { Route as FamiliesRouteImport } from "./routes/families";
 import { Route as FamilyRouteImport } from "./routes/family";
 import { Route as GrillesRouteImport } from "./routes/grilles";
-import { Route as InstancesRouteImport } from "./routes/instances";
 import { Route as LabRouteImport } from "./routes/lab";
+import { Route as MachineRouteImport } from "./routes/machine";
+import { Route as OpenRouteImport } from "./routes/open";
 import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as ParamTablesRouteImport } from "./routes/param-tables";
 import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
@@ -88,14 +89,19 @@ const GrillesRoute = GrillesRouteImport.update({
   path: "/grilles",
   getParentRoute: () => rootRouteImport,
 } as any);
-const InstancesRoute = InstancesRouteImport.update({
-  id: "/instances",
-  path: "/instances",
-  getParentRoute: () => rootRouteImport,
-} as any);
 const LabRoute = LabRouteImport.update({
   id: "/lab",
   path: "/lab",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const MachineRoute = MachineRouteImport.update({
+  id: "/machine",
+  path: "/machine",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const OpenRoute = OpenRouteImport.update({
+  id: "/open",
+  path: "/open",
   getParentRoute: () => rootRouteImport,
 } as any);
 const OpsRoute = OpsRouteImport.update({
@@ -190,8 +196,9 @@ export interface FileRoutesByFullPath {
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/grilles": typeof GrillesRoute;
-  "/instances": typeof InstancesRoute;
   "/lab": typeof LabRoute;
+  "/machine": typeof MachineRoute;
+  "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
@@ -220,8 +227,9 @@ export interface FileRoutesByTo {
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/grilles": typeof GrillesRoute;
-  "/instances": typeof InstancesRoute;
   "/lab": typeof LabRoute;
+  "/machine": typeof MachineRoute;
+  "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
@@ -251,8 +259,9 @@ export interface FileRoutesById {
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/grilles": typeof GrillesRoute;
-  "/instances": typeof InstancesRoute;
   "/lab": typeof LabRoute;
+  "/machine": typeof MachineRoute;
+  "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
@@ -283,8 +292,9 @@ export interface FileRouteTypes {
     | "/families"
     | "/family"
     | "/grilles"
-    | "/instances"
     | "/lab"
+    | "/machine"
+    | "/open"
     | "/ops"
     | "/param-tables"
     | "/parameter-links"
@@ -313,8 +323,9 @@ export interface FileRouteTypes {
     | "/families"
     | "/family"
     | "/grilles"
-    | "/instances"
     | "/lab"
+    | "/machine"
+    | "/open"
     | "/ops"
     | "/param-tables"
     | "/parameter-links"
@@ -343,8 +354,9 @@ export interface FileRouteTypes {
     | "/families"
     | "/family"
     | "/grilles"
-    | "/instances"
     | "/lab"
+    | "/machine"
+    | "/open"
     | "/ops"
     | "/param-tables"
     | "/parameter-links"
@@ -374,8 +386,9 @@ export interface RootRouteChildren {
   FamiliesRoute: typeof FamiliesRoute;
   FamilyRoute: typeof FamilyRoute;
   GrillesRoute: typeof GrillesRoute;
-  InstancesRoute: typeof InstancesRoute;
   LabRoute: typeof LabRoute;
+  MachineRoute: typeof MachineRoute;
+  OpenRoute: typeof OpenRoute;
   OpsRoute: typeof OpsRoute;
   ParamTablesRoute: typeof ParamTablesRoute;
   ParameterLinksRoute: typeof ParameterLinksRoute;
@@ -465,18 +478,25 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof GrillesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/instances": {
-      id: "/instances";
-      path: "/instances";
-      fullPath: "/instances";
-      preLoaderRoute: typeof InstancesRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
     "/lab": {
       id: "/lab";
       path: "/lab";
       fullPath: "/lab";
       preLoaderRoute: typeof LabRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/machine": {
+      id: "/machine";
+      path: "/machine";
+      fullPath: "/machine";
+      preLoaderRoute: typeof MachineRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/open": {
+      id: "/open";
+      path: "/open";
+      fullPath: "/open";
+      preLoaderRoute: typeof OpenRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/ops": {
@@ -616,8 +636,9 @@ const rootRouteChildren: RootRouteChildren = {
   FamiliesRoute: FamiliesRoute,
   FamilyRoute: FamilyRoute,
   GrillesRoute: GrillesRoute,
-  InstancesRoute: InstancesRoute,
   LabRoute: LabRoute,
+  MachineRoute: MachineRoute,
+  OpenRoute: OpenRoute,
   OpsRoute: OpsRoute,
   ParamTablesRoute: ParamTablesRoute,
   ParameterLinksRoute: ParameterLinksRoute,

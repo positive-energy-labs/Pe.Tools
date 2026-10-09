@@ -4,9 +4,9 @@
  * Claude desktop, Claude Code or Codex to Pea's tools over MCP.
  */
 import { useState } from "react";
-import { Link } from "@tanstack/react-router";
 import type { Provider } from "@pe/agent-contracts";
 import { Press } from "#/components/lang/press";
+import { openMachine } from "#/machine/door";
 import { Switch } from "#/components/lang/switch";
 import { Switcher } from "#/components/lang/switcher";
 import { readinessSub, type ProvidersState } from "#/workbench/provider/providers";
@@ -35,9 +35,9 @@ function ReadyVerb({ provider, providers }: { provider: Provider; providers: Pro
   if (readiness.state === "ready") return null;
   if (provider.auth.kind === "endpoint")
     return (
-      <Link to="/settings" className="t-small underline">
-        Open settings
-      </Link>
+      <Press tone="quiet" size="caption" frame="line" onClick={() => openMachine("pea")}>
+        Open providers
+      </Press>
     );
   if (readiness.state === "unknown")
     return (

@@ -9,14 +9,12 @@ import { RouteHelpButton } from "./help";
 import { FlowMatrix } from "./flow";
 import { HostedChrome } from "./hosted-chrome";
 import { RouteInspector } from "./inspector";
-import { useHostLamp } from "./shell";
 import type { RouteHandle } from "./use-route";
 
 /**
- * host › session › document, one instrument that says ONE thing at rest: the deepest link that
- * answers (the document, which is the picker), or the first link that does not. The host is named
- * only when it is the broken link — a connected host with no session is "choose a session", not
- * "host · connected › no session". The whole chain rides the title.
+ * session › document, one instrument that says ONE thing at rest: the document (which is the
+ * picker) and its complaint. Whether the host answers is not drawn here: connected-or-not states
+ * left product chrome (host ledger 2026-10-09). The whole chain rides the title.
  */
 export function ChainLamp({
   handle,
@@ -32,17 +30,11 @@ export function ChainLamp({
   /** Diagnostic label only; the sentence owns target selection. */
   document: string | null;
 }) {
-  const host = useHostLamp();
   const resolution = handle.resolution;
-  const hostOk = host.tone === "done";
   const sessionWord =
     session ??
     (resolution.kind === "choose" ? resolution.reason.replaceAll("-", " ") : "no session");
-  const title = [
-    `host · ${host.word} — ${host.says}`,
-    `session · ${sessionWord}`,
-    health ? `document · ${health}` : null,
-  ]
+  const title = [`session · ${sessionWord}`, health ? `document · ${health}` : null]
     .filter(Boolean)
     .join("\n");
   const dot = (on: boolean, tone: "done" | "alarm" | "caution" | "mute" = "done") =>
@@ -50,13 +42,6 @@ export function ChainLamp({
       <StateDot tone={tone} />
     ) : (
       <span className="inline-block size-2 shrink-0 rounded-[1px] border border-ink-mute align-middle" />
-    );
-  if (!hostOk)
-    return (
-      <span className="flex items-center gap-1.5 t-small face-mono text-ink-mute" title={title}>
-        {dot(host.tone === "ink", host.tone === "alarm" ? "alarm" : "mute")}
-        <span data-tone={host.tone === "alarm" ? "alarm" : undefined}>host · {host.word}</span>
-      </span>
     );
   return (
     <span className="flex items-center gap-1.5 t-small face-mono text-ink-mute" title={title}>
