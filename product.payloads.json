@@ -2,7 +2,7 @@
   "product": "Pe.Tools",
   "vendor": "Positive Energy",
   "releases": "positive-energy-labs/Pe.Tools",
-  "version": "0.7.6",
+  "version": "0.7.7",
   "sdk": {
     "feed": null,
     "clientDir": "ts/packages/host-contracts/src/vendor/generated"
