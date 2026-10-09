@@ -138,26 +138,40 @@ function HostFooter({
     );
   return (
     <div className="hairline-t flex flex-col gap-1 pt-1.5" aria-label="host">
-      <span className="flex flex-wrap items-center gap-2">
-        <span className="font-semibold">Pe.Tools</span>
-        <span className="face-mono">{host.version}</span>
-        <span className="face-mono text-ink-2">{host.payload}</span>
-        <span className="text-ink-2">
-          {host.startedBy ? `since ${host.startedBy} · ` : ""}up {uptimeWords(host.uptimeSeconds)}
-        </span>
-        <span className="ml-auto flex items-center gap-1">
-          <PidChip
-            pid={host.process.pid}
-            title={`host process, started ${host.process.processStartUtc}`}
-          />
+      {shell === "tray" ? (
+        <span className="flex min-w-0 items-center gap-1 whitespace-nowrap">
           <span
-            className="face-mono text-ink-2"
-            title="the pinned origin the window and the tailnet URL use"
+            className="min-w-0 flex-1 truncate"
+            title={`since ${host.startedBy ?? "unknown"} · up ${uptimeWords(host.uptimeSeconds)}`}
           >
-            :{host.port}
+            Pe.Tools {host.version} · {host.payload} · up {uptimeWords(host.uptimeSeconds)}
+          </span>
+          <span className="shrink-0 face-mono text-ink-2">
+            pid {host.process.pid} · :{host.port}
           </span>
         </span>
-      </span>
+      ) : (
+        <span className="flex flex-wrap items-center gap-2">
+          <span className="font-semibold">Pe.Tools</span>
+          <span className="face-mono">{host.version}</span>
+          <span className="face-mono text-ink-2">{host.payload}</span>
+          <span className="text-ink-2">
+            {host.startedBy ? `since ${host.startedBy} · ` : ""}up {uptimeWords(host.uptimeSeconds)}
+          </span>
+          <span className="ml-auto flex items-center gap-1">
+            <PidChip
+              pid={host.process.pid}
+              title={`host process, started ${host.process.processStartUtc}`}
+            />
+            <span
+              className="face-mono text-ink-2"
+              title="the pinned origin the window and the tailnet URL use"
+            >
+              :{host.port}
+            </span>
+          </span>
+        </span>
+      )}
       <span className="flex flex-wrap items-center gap-1">
         <span
           className="text-ink-2"
