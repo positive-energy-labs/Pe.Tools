@@ -2,6 +2,7 @@ import { execFile, spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
 import { Context, Deferred, Effect, Layer } from "effect";
 import { HttpRouter, HttpServer, HttpServerResponse as Response } from "effect/unstable/http";
@@ -83,6 +84,16 @@ const bindingDependencies = {
       return false;
     }
   },
+  retire: async (file: ServiceFile) => {
+    const response = await fetch(`http://127.0.0.1:${file.port}${hostProcessIdentity.shutdownPath}`, {
+      method: "POST",
+      headers: { "x-pe-service-token": file.token },
+      signal: AbortSignal.timeout(5_000),
+    });
+    await response.body?.cancel();
+    if (!response.ok) throw new Error(`shutdown returned HTTP ${response.status}`);
+  },
+  sleep,
 };
 
 function describeOccupant(occupant: PortOccupant): string {
@@ -113,19 +124,37 @@ export async function prepareHostBinding(
     const owners = await dependencies.occupants(appBase, live.port);
     const samePath = (a: string, b: string) =>
       a.replaceAll("\\", "/").toLowerCase() === b.replaceAll("\\", "/").toLowerCase();
-    if (
+    const verified =
       live.lane === "installed" &&
       live.executablePath &&
       samePath(live.executablePath, ownership.executablePath) &&
       owners.some(
         (owner) => owner.pid === live.pid && samePath(owner.executable, live.executablePath!),
       ) &&
-      (await dependencies.healthy(live))
-    )
-      return live;
-    throw new Error(
-      `Installed host refused: service '${ownership.serviceName}' has a live ${live.lane} record (${describeOccupant({ pid: live.pid, executable: live.executablePath ?? "unknown", serviceName: ownership.serviceName })}); not a verified serving installed incumbent. ${owners.map(describeOccupant).join("; ")}`,
-    );
+      (await dependencies.healthy(live));
+    if (!verified)
+      throw new Error(
+        `Installed host refused: service '${ownership.serviceName}' has a live ${live.lane} record (${describeOccupant({ pid: live.pid, executable: live.executablePath ?? "unknown", serviceName: ownership.serviceName })}); not a verified serving installed incumbent. ${owners.map(describeOccupant).join("; ")}`,
+      );
+    if (live.version === version) return live;
+    console.log(`pe-host retiring ${live.version} incumbent pid ${live.pid} on port ${live.port}`);
+    try {
+      await dependencies.retire(live);
+    } catch (cause) {
+      throw new Error(
+        `Installed host refused: stale incumbent pid ${live.pid}, version ${live.version} failed to retire.`,
+        { cause },
+      );
+    }
+    for (let attempt = 0; attempt <= 15; attempt++) {
+      if (!(await dependencies.occupants(appBase, live.port)).some((owner) => owner.pid === live.pid))
+        break;
+      if (attempt === 15)
+        throw new Error(
+          `Installed host refused: stale incumbent pid ${live.pid}, version ${live.version} still owns port ${live.port} after shutdown.`,
+        );
+      await dependencies.sleep(1_000);
+    }
   }
   const owners = await dependencies.occupants(appBase, installedPort);
   if (owners.length)

@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   choosePort: vi.fn(),
   occupants: vi.fn(),
   healthy: vi.fn(),
+  retire: vi.fn(),
+  sleep: vi.fn(),
   claim: vi.fn(),
   release: vi.fn(),
   dispose: vi.fn(),
@@ -106,6 +108,8 @@ beforeEach(() => {
   mocks.choosePort.mockResolvedValue(0);
   mocks.occupants.mockResolvedValue([]);
   mocks.healthy.mockResolvedValue(true);
+  mocks.retire.mockResolvedValue(undefined);
+  mocks.sleep.mockResolvedValue(undefined);
   mocks.update.mockResolvedValue(false);
   mocks.bind.mockReturnValue(undefined);
   mocks.claim.mockImplementation(async (_root: string, descriptor: ServiceHostDescriptor) => ({
@@ -130,6 +134,8 @@ beforeEach(() => {
       choosePort: mocks.choosePort,
       occupants: mocks.occupants,
       healthy: mocks.healthy,
+      retire: mocks.retire,
+      sleep: mocks.sleep,
     }),
   );
   vi.spyOn(console, "log").mockImplementation(() => {});
@@ -180,9 +186,9 @@ test("installed start binds only 5180; tray belongs to the winning claim and dis
 });
 
 test.each([false, true])(
-  "ordinary installed start reuses even an older incumbent; open=%s",
+  "ordinary installed start reuses a same-version incumbent; open=%s",
   async (open) => {
-    mocks.discover.mockResolvedValue(incumbent);
+    mocks.discover.mockResolvedValue({ ...incumbent, version: "new" });
     mocks.occupants.mockResolvedValue([
       { pid: incumbent.pid, executable: incumbent.executablePath },
     ]);
@@ -190,6 +196,7 @@ test.each([false, true])(
     await launch();
     expect(mocks.bind).not.toHaveBeenCalled();
     expect(mocks.claim).not.toHaveBeenCalled();
+    expect(mocks.retire).not.toHaveBeenCalled();
     expect(mocks.update).not.toHaveBeenCalled();
     expect(trays()).toHaveLength(0);
     expect(windows()).toHaveLength(open ? 1 : 0);
@@ -199,6 +206,41 @@ test.each([false, true])(
     );
   },
 );
+
+test.each([false, true])(
+  "ordinary installed start retires an older incumbent before binding; open=%s",
+  async (open) => {
+    mocks.discover.mockResolvedValue(incumbent);
+    mocks.occupants
+      .mockResolvedValueOnce([{ pid: 42, executable: incumbent.executablePath }])
+      .mockResolvedValue([]);
+    if (open) process.argv.push("--open");
+    await launch();
+    expect(mocks.retire).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ port: 5180, token: "private" }),
+    );
+    expect(console.log).toHaveBeenCalledWith("pe-host retiring old incumbent pid 42 on port 5180");
+    expect(mocks.bind).toHaveBeenCalledExactlyOnceWith(5180);
+    expect(mocks.claim).toHaveBeenCalledOnce();
+  },
+);
+
+test("installed start refuses an older incumbent that still owns the port", async () => {
+  mocks.discover.mockResolvedValue(incumbent);
+  mocks.occupants.mockResolvedValue([{ pid: 42, executable: incumbent.executablePath }]);
+  await expect(launch()).rejects.toThrow(/pid 42.*version old/);
+  expect(mocks.retire).toHaveBeenCalledExactlyOnceWith(incumbent);
+  expect(mocks.sleep).toHaveBeenCalledTimes(15);
+  expect(mocks.bind).not.toHaveBeenCalled();
+});
+
+test("installed start refuses when an older incumbent rejects shutdown", async () => {
+  mocks.discover.mockResolvedValue(incumbent);
+  mocks.occupants.mockResolvedValue([{ pid: 42, executable: incumbent.executablePath }]);
+  mocks.retire.mockRejectedValue(new Error("shutdown returned HTTP 403"));
+  await expect(launch()).rejects.toThrow(/pid 42.*version old.*failed to retire/);
+  expect(mocks.bind).not.toHaveBeenCalled();
+});
 
 test.each(["wrong image", "unhealthy", "dev record"])(
   "live record is not sufficient for reuse: %s",
@@ -245,7 +287,10 @@ test("a foreign listener winning the bind race is named, without a second bind",
 
 test("the installed incumbent winning the bind race opens once without a tray", async () => {
   process.argv.push("--open");
-  mocks.discover.mockResolvedValueOnce(null).mockResolvedValueOnce(incumbent);
+  mocks.discover.mockResolvedValueOnce(null).mockResolvedValueOnce({
+    ...incumbent,
+    version: "new",
+  });
   mocks.occupants
     .mockResolvedValueOnce([])
     .mockResolvedValueOnce([{ pid: 42, executable: incumbent.executablePath }]);
