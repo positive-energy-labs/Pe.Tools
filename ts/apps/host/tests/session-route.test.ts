@@ -84,13 +84,19 @@ test("session CLI rejects empty, invalid, and non-envelope output", () => {
   // pre-session-CLI output it exists to reject.
   const guideless = '{"result":{},"resolved":{},"diagnostics":[],"nextSteps":[]}';
   expect(() => validatePeRevitEnvelope(guideless, args, launch)).toThrow("non-envelope");
-  // The generated validator checks all eight required envelope fields instead of restating them.
+  // The generated validator checks all nine required envelope fields instead of restating them.
   const sevenField =
     '{"result":{},"resolved":{},"diagnostics":[],"nextSteps":[],"guide":"g","related":[],"binary":{}}';
   expect(() => validatePeRevitEnvelope(sevenField, args, launch)).toThrow("non-envelope");
-  const envelope =
+  const eightField =
     '{"result":{},"resolved":{},"diagnostics":[],"nextSteps":[],"guide":"g","related":[],"binary":{},"command":{}}';
+  expect(() => validatePeRevitEnvelope(eightField, args, launch)).toThrow("non-envelope");
+  const envelope = eightField.slice(0, -1) + ',"exitCode":0}';
   expect(validatePeRevitEnvelope(envelope, args, launch)).toBe(envelope);
+  for (const exitCode of [-1, 5, 1.5, "0", null])
+    expect(() =>
+      validatePeRevitEnvelope(JSON.stringify({ ...JSON.parse(envelope), exitCode }), args, launch),
+    ).toThrow("non-envelope");
 });
 
 test("checkout pin answers with an envelope against isolated SDK roots", async () => {
@@ -142,33 +148,19 @@ test("CLI stdout (the JSON envelope) relays verbatim, even for failed verdicts",
   expect(outcome).toEqual({ status: 200, bodyJson: envelope });
 });
 
-// A start whose minted id (`{installed|project-stem}-{yy}`) already names a registry row. WHICH
-// verdict that earns is the SDK's to decide and it has moved: `session.id-collision` refused it
-// outright, beta.122 answers `session.generation-displaced` — an ADVISORY on a start that
-// SUCCEEDS, minting a new generation and moving the pointer off the old one (field-observed
-// 2026-08-20, installed lane, id installed-25, custody controlled). The first shape is the
-// captured beta.122 envelope; the second is the refusal shape. The route must relay both the
-// same way, because it is not the route's business which one the SDK chose. /instances reads
-// `diagnostics[0].detail` + `nextSteps` straight off this response.
+// Checkout next steps use the bare forms; the route relays both advisories and refusals untouched.
 const existingIdVerdicts = [
   {
     code: "session.generation-displaced",
-    detail:
-      "id 'installed-25' is already registered: generation 20260821010410920 [stopped] stopped at 2026-08-21T01:05:12.4896453Z (installed payload); this start mints a NEW generation and moves the current pointer off it",
-    fix: "`pe-revit session hr --id installed-25 --restart` refreshes that session in place; pass a different --id to keep both",
-    nextSteps: [
-      "pe-revit doc list --id installed-25",
-      "pe-revit session stop --id installed-25 --unsaved keep  (when done)",
-    ],
+    detail: "id 'pe.app-25' is already registered: this start mints a new generation",
+    fix: "pe-revit hr --restart",
+    nextSteps: ["pe-revit doc open <path>", "pe-revit stop  (when done)"],
   },
   {
-    code: "session.id-collision",
-    detail: "Session id 'installed-25' is already registered (state stopped).",
-    fix: "pe-revit session hr --id installed-25 --restart",
-    nextSteps: [
-      "pe-revit session hr --id installed-25 --restart — boot a fresh process under the same id",
-      "pe-revit session reset --id installed-25 --unsaved discard --restart — recover a wedged row",
-    ],
+    code: "session.id-in-use",
+    detail: "session id 'pe.app-25' belongs to a different key",
+    fix: "pass a different --id",
+    nextSteps: ["pe-revit session list", "pe-revit guide session"],
   },
 ];
 
@@ -176,12 +168,14 @@ for (const verdict of existingIdVerdicts) {
   test(`a start on an existing id relays ${verdict.code} byte-for-byte`, async () => {
     const envelope = JSON.stringify({
       result: null,
-      resolved: { id: "installed-25", how: "minted", lane: "installed" },
+      resolved: { id: "pe.app-25", how: "cwd-project" },
       diagnostics: [{ code: verdict.code, detail: verdict.detail, fix: verdict.fix }],
       nextSteps: verdict.nextSteps,
       guide: "session",
       related: [],
-      binary: null,
+      binary: {},
+      command: {},
+      exitCode: verdict.code === "session.id-in-use" ? 3 : 0,
     });
     const outcome = await Effect.runPromise(
       executeSessionCli(sessionStartArgv({ year: "25" }), () => Effect.succeed(envelope), 1_000, {

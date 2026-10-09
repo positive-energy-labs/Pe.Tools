@@ -884,6 +884,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
               nextSteps: [],
               guide: "session",
               related: [],
+              exitCode: 0,
             });
           },
           fileVersion: rhvac.fileVersion,

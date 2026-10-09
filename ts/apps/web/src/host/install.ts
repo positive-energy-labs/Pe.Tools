@@ -1,3 +1,5 @@
+import type { UpdatePlan } from "@pe/host-contracts/pe-revit-contract";
+
 /**
  * The route head's own host calls, at the sanctioned altitude. `design-adherence`'s
  * `hostBelowRoute` metric counts `fetch(` outside `routes/`, `host/`, `state/`, `integrations/`
@@ -15,7 +17,9 @@ type UpdateAvailability = {
   updateAvailable: boolean;
   /** No Revit, or every one idle with nothing unsaved: the update applies without asking. */
   quiet: boolean;
-  revits?: { pid: number; year: number; idle: boolean; unsaved: string[] }[];
+  planId?: string;
+  revits?: UpdatePlan["revits"];
+  blockers?: UpdatePlan["blockers"];
   error?: string;
 };
 
@@ -24,6 +28,9 @@ type UpdateAcknowledgement = {
   reason?: string;
   installedVersion?: string | null;
   latestVersion?: string | null;
+  planId?: string;
+  requestId?: string;
+  receiptPath?: string;
   error?: string;
   status: number;
 };
@@ -40,8 +47,12 @@ export async function readUpdateAvailability(): Promise<UpdateAvailability> {
   return response.json() as Promise<UpdateAvailability>;
 }
 
-export async function acknowledgeUpdate(): Promise<UpdateAcknowledgement> {
-  const response = await fetch("/host/update", { method: "POST" });
+export async function acknowledgeUpdate(planId: string): Promise<UpdateAcknowledgement> {
+  const response = await fetch("/host/update", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ planId }),
+  });
   const body = (await response.json()) as Omit<UpdateAcknowledgement, "status">;
   return { ...body, status: response.status };
 }

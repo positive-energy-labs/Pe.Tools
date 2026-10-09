@@ -93,7 +93,7 @@ async function readRecordedSession(
   session: { id: string; process: { pid: number; processStartUtc: string } },
   read: SdkReceiptReader,
 ) {
-  const args = sessionListArgv({ id: session.id });
+  const args = sessionListArgv({ pid: session.process.pid });
   const envelope = parsePeRevitEnvelope<SessionListResult>(
     await read(args),
     args,
@@ -141,6 +141,8 @@ async function dispatch(input: StepInput, requestId: string, read: SdkReceiptRea
     `pe-revit ${state ?? "answered no state"}`;
   if (envelope.diagnostics.some((d: Diagnostic) => d.code === "doc.missing-links"))
     throw new BridgeError(said, 409, { dispatched: true, result: envelope });
+  if (!state && (envelope.exitCode === 2 || envelope.exitCode === 3))
+    throw refuse(said, envelope.result);
   if (state === "ok") return envelope.result;
   const doc = args[0] === "doc";
   if (

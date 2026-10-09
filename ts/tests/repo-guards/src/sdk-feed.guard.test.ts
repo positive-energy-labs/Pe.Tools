@@ -1,12 +1,12 @@
 /**
- * THE SDK FEED GUARD. `eng/sdk-feed` is machine-local (`.gitignore` excludes the nupkgs, ADR 0006
- * amendment 2026-09-22), so a fresh worktree restores nothing until the pinned family is copied in.
+ * THE SDK FEED GUARD. `sdk adopt` reads a version folder in the manifest's release feed (ADR 0011).
  * `dotnet restore` says NU1301 with no fix; this guard says which files and where they come from.
  * The two pins move in lockstep (SDK doctor `lockstep-pins`); the guard repeats that so a half bump
  * fails here before it fails in Revit.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vite-plus/test";
 
@@ -25,12 +25,19 @@ it("pins Pe.Revit.Sdk and pe.revit.cli in lockstep", () => {
   expect(cliPin).toBe(sdkPin);
 });
 
-it(`carries the pinned SDK family ${sdkPin} in eng/sdk-feed`, () => {
+it(`carries the pinned SDK family ${sdkPin} in the release feed`, () => {
+  const { sdk } = json("product.payloads.json") as { sdk: { feed: string | null } };
+  const feed = sdk.feed
+    ? resolve(REPO, sdk.feed)
+    : resolve(process.env.USERPROFILE ?? homedir(), "source/feeds/pe-revit-sdk");
+  expect(readFileSync(resolve(REPO, "nuget.config"), "utf8")).toContain(
+    `key="pe-revit-sdk" value="${feed}"`,
+  );
   const missing = ["Pe.Revit.Sdk", "Pe.Revit.Cli"]
-    .map((id) => `eng/sdk-feed/${id}.${sdkPin}.nupkg`)
-    .filter((rel) => !existsSync(resolve(REPO, rel)));
+    .map((id) => resolve(feed, sdkPin, `${id}.${sdkPin}.nupkg`))
+    .filter((path) => !existsSync(path));
   expect(
     missing,
-    `copy the ${sdkPin} nupkgs from Pe.Revit.Sdk\\.artifacts\\feed (or the main checkout's eng/sdk-feed) into this worktree; never junction or symlink the dir`,
+    `publish ${sdkPin} into ${feed} with pe-revit release --feed, then pe-revit sdk adopt ${sdkPin}`,
   ).toEqual([]);
 });

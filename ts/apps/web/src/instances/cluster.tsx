@@ -830,17 +830,14 @@ export function InstancesCluster({
                         tone="act"
                         label="restart · discard edits"
                         reason={
-                          pickedWorld.row &&
-                          "kind" in pickedWorld.row &&
-                          pickedWorld.row.kind === "hr"
+                          pickedWorld.row && pickedWorld.row.shape.reload === "hot"
                             ? "Restart this development session and reopen its documents; unsaved changes are discarded"
                             : "HR restart is only available for development HR sessions"
                         }
                         disabled={
                           busy !== null ||
                           !pickedWorld.row ||
-                          !("kind" in pickedWorld.row) ||
-                          pickedWorld.row.kind !== "hr"
+                          pickedWorld.row.shape.reload !== "hot"
                         }
                         busy={busy === "restart"}
                         onClick={() => void runCommand("restart")}

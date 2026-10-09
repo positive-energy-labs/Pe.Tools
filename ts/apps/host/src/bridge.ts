@@ -145,13 +145,7 @@ function normalizeSessionLane(lane: string | null | undefined): Lane | null {
   return LANES.find((known) => known === normalized) ?? null;
 }
 
-/**
- * Custody as the SDK defines it: `controlled` = pe-revit holds this session's registry receipt
- * (full lifecycle + doc ops); `observed` = no receipt (status and doc reads only). The broker
- * cannot read the registry, so it discloses the only thing it CAN see — a session that reported
- * the sdkSessionId from its launch receipt was launched by pe-revit, and is therefore controlled.
- * The SDK resolver is the enforcement point; this is disclosure, never a second gate.
- */
+// Bridge-only connections have no SDK census row; sdkSessionId is an inference until that row is joined.
 function inferCustody(session: Pick<SessionTargetCandidate, "sdkSessionId">): Custody {
   return session.sdkSessionId ? "controlled" : "observed";
 }

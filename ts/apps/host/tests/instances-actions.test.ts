@@ -21,7 +21,11 @@ const openId = "a".repeat(32);
 const flag = (argv: readonly string[], name: string) => argv[argv.indexOf(name) + 1];
 
 type Answer =
-  | { result: unknown; diagnostics?: { code: string; detail: string; fix: null }[] }
+  | {
+      result: unknown;
+      exitCode?: number;
+      diagnostics?: { code: string; detail: string; fix: null }[];
+    }
   | Error;
 async function setup(
   answer: (args: readonly string[]) => Answer | Promise<Answer>,
@@ -58,6 +62,7 @@ async function setup(
     return JSON.stringify({
       ...JSON.parse(sdkEnvelope(reply.result)),
       diagnostics: reply.diagnostics ?? [],
+      exitCode: reply.exitCode ?? 0,
     });
   };
   const owner = new ActionJournal(join(dir, "actions.json"));
@@ -354,6 +359,7 @@ test("open binds the exact recorded incarnation and its receipt path; a foreign 
   expect(receipt.state).toBe("succeeded");
   const step = receipt.steps[0]!;
   expect(f.calls.map((c) => c.slice(0, 2).join(" "))).toEqual(["session list", "doc open"]);
+  expect(f.calls[0]).toEqual(["session", "list", "--pid", String(originalProcess.pid), "--json"]);
   const open = f.calls.at(-1)!;
   expect(flag(open, "--request-id")).toBe(step.id);
   expect(flag(open, "--expect-session")).toBe(receiptPath);
@@ -374,6 +380,23 @@ test("open binds the exact recorded incarnation and its receipt path; a foreign 
   expect(foreign).toMatchObject({ state: "failed", notDispatched: true });
   expect(f.calls.at(-1)?.slice(0, 2)).toEqual(["session", "list"]);
 });
+
+test.each([2, 3])(
+  "an empty-result SDK exit %s is a settled undispatched refusal",
+  async (exitCode) => {
+    const f = await setup(() => ({
+      result: {},
+      exitCode,
+      diagnostics: [{ code: "session.bad-invocation", detail: "invalid selector", fix: null }],
+    }));
+    const revision = await f.stage({ kind: "start", year: "2025", name: "other" });
+    expect(await f.admit("instances.start", {}, revision)).toMatchObject({
+      state: "failed",
+      notDispatched: true,
+      error: expect.stringContaining("invalid selector"),
+    });
+  },
+);
 
 test("a pre-admission SDK refusal is failed and undispatched; recovery settles a lost open from its op receipt", async () => {
   let mode: "refuse" | "hang" | "answer" = "refuse";

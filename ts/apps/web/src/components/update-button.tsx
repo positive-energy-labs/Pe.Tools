@@ -25,7 +25,9 @@ export function UpdateButton() {
   const available = useHostCall(readUpdateAvailability, ["host-update"]);
   const [current, setCurrent] = useState<string | null>(null);
   const update = useAction(async () => {
-    const body = await acknowledgeUpdate();
+    const planId = available.data?.planId;
+    if (!planId) throw new Error("Read an update plan before applying it.");
+    const body = await acknowledgeUpdate(planId);
     if (body.status === 409 && body.reason === "already-current" && body.installedVersion)
       return body.installedVersion;
     if (body.status >= 400 || body.accepted !== true)
@@ -44,7 +46,7 @@ export function UpdateButton() {
     update.mutate(undefined);
   }, [quiet, update]);
   const busy = (available.data?.revits ?? []).filter(
-    (revit) => !revit.idle || revit.unsaved.length,
+    (revit) => !revit.idle || revit.unknown || revit.documents.some((doc) => doc.isModified),
   );
   return (
     <div className="flex items-center gap-2">
@@ -75,11 +77,15 @@ export function UpdateButton() {
             kind="advisory"
             label={`${available.data?.latestVersion} is ready`}
             says={busy
-              .map((revit) =>
-                revit.unsaved.length
-                  ? `Revit ${revit.year} saves ${revit.unsaved.join(", ")} first`
-                  : `Revit ${revit.year} is busy`,
-              )
+              .map((revit) => {
+                const modified = revit.documents.filter((doc) => doc.isModified);
+                return revit.unknown
+                  ? `Revit ${revit.year} could not be inspected`
+                  : modified.length
+                    ? `Revit ${revit.year} saves ${modified.map((doc) => doc.title ?? doc.path ?? "untitled").join(", ")} first`
+                    : `Revit ${revit.year} is busy`;
+              })
+              .concat((available.data?.blockers ?? []).map((blocker) => blocker.detail))
               .join("; ")}
           />
           <ActionButton

@@ -36,7 +36,7 @@ import type {
   ProcessIdentity,
   SessionListResult,
   SessionObservation,
-  SessionReceipt,
+  SessionShape,
 } from "@pe/host-contracts/pe-revit-contract";
 import type {
   BridgeSessionListEntry,
@@ -495,10 +495,10 @@ const OBSERVED_VIEW = {
     "SDK bridge does not answer for this observed Revit process.",
   ],
 } satisfies Record<BridgeObservation["bridge"], readonly [InventoryPhase, string]>;
-const RECEIPT_LANE = {
+const SHAPE_LANE = {
   checkout: "dev",
   installed: "installed",
-} satisfies Record<SessionReceipt["payload"], HostLane>;
+} satisfies Record<SessionShape["payload"], HostLane>;
 
 function projectObservation(row: SessionObservation): ObservationView {
   switch (row.case) {
@@ -569,7 +569,7 @@ function inventoryView(
       id: observed ? String(row.process.pid) : row.id,
       brokerSessionId: row.brokerSessionId,
       custody: observed ? "observed" : "controlled",
-      lane: observed ? (session?.lane ?? undefined) : RECEIPT_LANE[row.receipt.payload],
+      lane: SHAPE_LANE[row.shape.payload],
       pid: process?.pid,
       session,
       row,

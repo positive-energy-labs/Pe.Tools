@@ -21,6 +21,7 @@ export const sdkEnvelope = (result: unknown) =>
     nextSteps: [],
     guide: "op",
     related: [],
+    exitCode: 0,
   });
 export const sdkSessions = async () =>
   sdkEnvelope({ sessions: [{ case: "controlled-active", process: originalProcess }] });
