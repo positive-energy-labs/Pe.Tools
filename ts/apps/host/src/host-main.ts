@@ -1,6 +1,29 @@
 import { NodeRuntime } from "@effect/platform-node";
+import { appendFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { hostProgram } from "./host-program.ts";
 import { resolveHostVersion } from "./host-lifecycle.ts";
+import { hostOwnership, productRoot } from "./host-ownership.ts";
+
+// The installer stub and the login Run key start the installed host with no stdio anyone reads, so
+// a host that dies before bind (a refused claim, a thrown binding) leaves nothing behind. Tee every
+// console line to logs/host.log on the installed lane; the dev lane keeps its launcher redirect.
+if (hostOwnership.lane === "installed") {
+  const dir = join(productRoot(), "logs");
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, "host.log");
+  for (const stream of [process.stdout, process.stderr] as const) {
+    const write = stream.write.bind(stream);
+    stream.write = ((chunk: string | Uint8Array, ...rest: never[]) => {
+      try {
+        appendFileSync(file, `${new Date().toISOString()} ${chunk}`);
+      } catch {
+        // The log is a courtesy; never let it take the host down.
+      }
+      return write(chunk, ...rest);
+    }) as typeof stream.write;
+  }
+}
 
 // Boot breadcrumb (pre-bind). The installed boot is otherwise silent until the "Listening" line, so a
 // launcher-killed slow/crashed boot leaves a 0-byte host.log that could mean five different things.

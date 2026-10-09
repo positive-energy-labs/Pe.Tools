@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   healthy: vi.fn(),
   retire: vi.fn(),
   sleep: vi.fn(),
+  alive: vi.fn(),
   claim: vi.fn(),
   release: vi.fn(),
   dispose: vi.fn(),
@@ -110,6 +111,7 @@ beforeEach(() => {
   mocks.healthy.mockResolvedValue(true);
   mocks.retire.mockResolvedValue(undefined);
   mocks.sleep.mockResolvedValue(undefined);
+  mocks.alive.mockReturnValue(false);
   mocks.update.mockResolvedValue(false);
   mocks.bind.mockReturnValue(undefined);
   mocks.claim.mockImplementation(async (_root: string, descriptor: ServiceHostDescriptor) => ({
@@ -136,6 +138,7 @@ beforeEach(() => {
       healthy: mocks.healthy,
       retire: mocks.retire,
       sleep: mocks.sleep,
+      alive: mocks.alive,
     }),
   );
   vi.spyOn(console, "log").mockImplementation(() => {});
@@ -225,13 +228,25 @@ test.each([false, true])(
   },
 );
 
-test("installed start refuses an older incumbent that still owns the port", async () => {
+test("installed start refuses an older incumbent whose process never exits", async () => {
   mocks.discover.mockResolvedValue(incumbent);
   mocks.occupants.mockResolvedValue([{ pid: 42, executable: incumbent.executablePath }]);
-  await expect(launch()).rejects.toThrow(/pid 42.*version old/);
+  // The port is released (tray disposal) but the pid lives on: the SDK claim would refuse.
+  mocks.alive.mockReturnValue(true);
+  await expect(launch()).rejects.toThrow(/pid 42.*version old.*still running/);
   expect(mocks.retire).toHaveBeenCalledExactlyOnceWith(incumbent);
-  expect(mocks.sleep).toHaveBeenCalledTimes(15);
+  expect(mocks.sleep).toHaveBeenCalledTimes(30);
   expect(mocks.bind).not.toHaveBeenCalled();
+});
+
+test("installed start waits for the retired pid to exit before binding", async () => {
+  mocks.discover.mockResolvedValue(incumbent);
+  mocks.occupants.mockResolvedValueOnce([{ pid: 42, executable: incumbent.executablePath }]);
+  mocks.occupants.mockResolvedValue([]);
+  mocks.alive.mockReturnValueOnce(true).mockReturnValueOnce(true).mockReturnValue(false);
+  await launch();
+  expect(mocks.sleep).toHaveBeenCalledTimes(2);
+  expect(mocks.bind).toHaveBeenCalledExactlyOnceWith(5180);
 });
 
 test("installed start refuses when an older incumbent rejects shutdown", async () => {

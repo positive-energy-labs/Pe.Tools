@@ -94,6 +94,14 @@ const bindingDependencies = {
     if (!response.ok) throw new Error(`shutdown returned HTTP ${response.status}`);
   },
   sleep,
+  alive: (pid: number) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  },
 };
 
 function describeOccupant(occupant: PortOccupant): string {
@@ -146,12 +154,14 @@ export async function prepareHostBinding(
         { cause },
       );
     }
-    for (let attempt = 0; attempt <= 15; attempt++) {
-      if (!(await dependencies.occupants(appBase, live.port)).some((owner) => owner.pid === live.pid))
-        break;
-      if (attempt === 15)
+    // Wait for the PROCESS to exit, not just the port: the SDK claim refuses while the retiring pid
+    // is alive (installed policy evicts nothing), and a host disposing its tray releases the port
+    // seconds before it exits. That race left 0.7.4's stub-relaunched host a silent claim loser.
+    for (let attempt = 0; attempt <= 30; attempt++) {
+      if (!dependencies.alive(live.pid)) break;
+      if (attempt === 30)
         throw new Error(
-          `Installed host refused: stale incumbent pid ${live.pid}, version ${live.version} still owns port ${live.port} after shutdown.`,
+          `Installed host refused: stale incumbent pid ${live.pid}, version ${live.version} is still running after shutdown.`,
         );
       await dependencies.sleep(1_000);
     }
