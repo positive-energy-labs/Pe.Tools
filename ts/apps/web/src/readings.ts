@@ -48,7 +48,7 @@ type Source = Pick<EventSource, "onopen" | "onmessage" | "onerror" | "close">;
 export const openEventSource = (url: string) => new EventSource(url);
 
 /** One browser connection. This map owns subscriptions and retained evidence, never owner truth. */
-class PeReadings {
+export class PeReadings {
   private readonly entries = new Map<
     string,
     {
@@ -163,7 +163,8 @@ class PeReadings {
   }
 
   private open() {
-    if (this.closed || this.entries.size === 0) return;
+    // Prerender and SSR have no window and no EventSource; the client subscribes again on hydration.
+    if (typeof window === "undefined" || this.closed || this.entries.size === 0) return;
     const generation = this.generation;
     const url = new URL(this.url());
     url.searchParams.set(
