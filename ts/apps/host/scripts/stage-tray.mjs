@@ -20,6 +20,7 @@ const result = spawnSync(
     "--self-contained",
     "true",
     "-p:PublishSingleFile=true",
+    "-p:EnableCompressionInSingleFile=true",
     "-p:IncludeNativeLibrariesForSelfExtract=true",
     "-o",
     output,
