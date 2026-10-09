@@ -1,22 +1,139 @@
 import { readFileSync } from "node:fs";
+import { readdir } from "node:fs/promises";
+import { execFile } from "node:child_process";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { Context, Deferred, Effect, Layer } from "effect";
 import { HttpRouter, HttpServer, HttpServerResponse as Response } from "effect/unstable/http";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
-import { sweepDeadServiceFiles } from "@pe/host-contracts/pe-service";
+import {
+  discoverService,
+  readServiceFile,
+  sweepDeadServiceFiles,
+  type ServiceFile,
+} from "@pe/host-contracts/pe-service";
 import {
   authorizeShutdownFor,
   claimServiceHost,
+  chooseServicePort,
   hostReplacementPolicy,
   rememberServicePort,
   type ServiceHostDescriptor,
   type ServiceHostHandle,
 } from "@pe/host-contracts/pe-service-host";
-import { hostOwnership, productRoot } from "./host-ownership.ts";
+import { hostOwnership, productRoot, type HostOwnership } from "./host-ownership.ts";
 
 // The dev script (`pnpm dev`) passes this to authorize a dev-over-dev takeover; it becomes
 // `hostReplacementPolicy` DATA (SDK-owned), not local probe logic (IPC-SEAM-SPEC D3).
 const DEV_TAKEOVER_ARGUMENT = "--take-over-host";
+const installedPort = 5180;
+
+export type PortOccupant = {
+  readonly pid: number;
+  readonly executable: string;
+  readonly serviceName?: string;
+};
+
+/** Read-only Windows census; SDK readers own record parsing. Never signal an occupant. */
+export async function readPortOccupants(appBase: string, port: number): Promise<PortOccupant[]> {
+  const { stdout } = await promisify(execFile)(
+    "powershell",
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      `$ErrorActionPreference='Stop'; $owners=@(Get-NetTCPConnection -State Listen | Where-Object { $_.LocalPort -eq ${port} -and $_.LocalAddress -in @('127.0.0.1','0.0.0.0','::') } | Select-Object -ExpandProperty OwningProcess -Unique); $rows=@(foreach ($ownerPid in $owners) { $p=Get-Process -Id $ownerPid; [pscustomobject]@{pid=$ownerPid;executable=$(if ($p.Path) {$p.Path} else {$p.ProcessName + ' (path unavailable)'})} }); ConvertTo-Json -InputObject $rows -Compress`,
+    ],
+    { windowsHide: true, timeout: 5_000 },
+  );
+  const occupants = JSON.parse(stdout) as PortOccupant[];
+  const entries = await readdir(join(appBase, "state", "service")).catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return [];
+      throw error;
+    },
+  );
+  const records = await Promise.all(
+    entries
+      .filter((entry) => entry.endsWith(".json"))
+      .map(async (entry) => {
+        const name = entry.slice(0, -5);
+        return { name, file: await readServiceFile(appBase, name) };
+      }),
+  );
+  return occupants.map((occupant) => ({
+    ...occupant,
+    serviceName: records.find(({ file }) => file?.pid === occupant.pid && file.port === port)?.name,
+  }));
+}
+
+const bindingDependencies = {
+  discover: discoverService,
+  choosePort: chooseServicePort,
+  occupants: readPortOccupants,
+  healthy: async (file: ServiceFile) => {
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${file.port}${file.health ?? hostProcessIdentity.healthPath}`,
+        { signal: AbortSignal.timeout(1_000), redirect: "manual" },
+      );
+      await response.body?.cancel();
+      return response.status >= 200 && response.status < 400;
+    } catch {
+      return false;
+    }
+  },
+};
+
+function describeOccupant(occupant: PortOccupant): string {
+  return `pid ${occupant.pid}, executable ${occupant.executable}${occupant.serviceName ? `, service '${occupant.serviceName}'` : ""}`;
+}
+
+/** Installed reuse/refusal happens before bind. Dev retains SDK port choice and takeover. */
+export async function prepareHostBinding(
+  open: boolean,
+  version: string,
+  ownership: HostOwnership = hostOwnership,
+  dependencies = bindingDependencies,
+): Promise<number | ServiceFile> {
+  const appBase = productRoot();
+  const live =
+    ownership.lane === "installed" || open
+      ? await dependencies.discover(appBase, ownership.serviceName, { verifyOwner: true })
+      : null;
+  if (ownership.lane === "dev") {
+    if (open && live?.version === version) return live;
+    return dependencies.choosePort(
+      appBase,
+      ownership.serviceName,
+      Number(new URL(hostProcessIdentity.defaultHostBaseUrl).port),
+    );
+  }
+  if (live) {
+    const owners = await dependencies.occupants(appBase, live.port);
+    const samePath = (a: string, b: string) =>
+      a.replaceAll("\\", "/").toLowerCase() === b.replaceAll("\\", "/").toLowerCase();
+    if (
+      live.lane === "installed" &&
+      live.executablePath &&
+      samePath(live.executablePath, ownership.executablePath) &&
+      owners.some(
+        (owner) => owner.pid === live.pid && samePath(owner.executable, live.executablePath!),
+      ) &&
+      (await dependencies.healthy(live))
+    )
+      return live;
+    throw new Error(
+      `Installed host refused: service '${ownership.serviceName}' has a live ${live.lane} record (${describeOccupant({ pid: live.pid, executable: live.executablePath ?? "unknown", serviceName: ownership.serviceName })}); not a verified serving installed incumbent. ${owners.map(describeOccupant).join("; ")}`,
+    );
+  }
+  const owners = await dependencies.occupants(appBase, installedPort);
+  if (owners.length)
+    throw new Error(
+      `Installed host cannot bind 127.0.0.1:${installedPort}: occupied by ${owners.map(describeOccupant).join("; ")}. No takeover or alternate port.`,
+    );
+  return installedPort;
+}
 
 /**
  * Lifecycle handles shared between the launch root and the request handlers (Pillar 3):
@@ -81,7 +198,10 @@ function buildHostDescriptor(port: number): ServiceHostDescriptor {
     // can only infer liveness from a TCP accept — and a reused port makes a stranger look like us.
     // Declaring the health path is what gets this leg the `health` rung instead of the `tcp` one.
     health: hostProcessIdentity.healthPath,
-    policy: hostReplacementPolicy(hostOwnership.lane, process.argv.includes(DEV_TAKEOVER_ARGUMENT)),
+    policy:
+      hostOwnership.lane === "installed"
+        ? { evicts: [] }
+        : hostReplacementPolicy(hostOwnership.lane, process.argv.includes(DEV_TAKEOVER_ARGUMENT)),
   };
 }
 

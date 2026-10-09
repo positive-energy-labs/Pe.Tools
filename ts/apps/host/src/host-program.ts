@@ -3,17 +3,13 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Deferred, Effect, Layer, type Scope } from "effect";
 import { capture } from "@pe/runtime";
-import { hostProcessIdentity } from "@pe/host-contracts/contracts";
-import { chooseServicePort } from "@pe/host-contracts/pe-service-host";
-import { discoverService, serviceFilePath } from "@pe/host-contracts/pe-service";
+import { serviceFilePath, type ServiceFile } from "@pe/host-contracts/pe-service";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { productRoot } from "@pe/host-contracts/service-identity";
-import { resolveHostVersion } from "./host-lifecycle.ts";
+import { prepareHostBinding, resolveHostVersion } from "./host-lifecycle.ts";
 import { makeHttpLive, resolveWebRoot } from "./app.ts";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
 import { makeInstalledUpdateReader, updateWhenNoRevit } from "./update-route.ts";
-
-const preferredPort = Number(new URL(hostProcessIdentity.defaultHostBaseUrl).port);
 
 /** The shared host lifecycle used by both installed startup and source web development. */
 export const hostProgram = (
@@ -28,23 +24,19 @@ export const hostProgram = (
       yield* Effect.sync(() =>
         capture("app_boot", { component: "host", version: resolveHostVersion() }),
       );
-      // Desktop entry: a same-version host that already serves (started by Revit or an earlier
-      // click) is the answer. Open it and exit; a second launch would otherwise evict it and drop
-      // Revit's bridge. An older host (left running across an upgrade) is replaced as usual.
       const open = process.argv.includes("--open");
-      if (open) {
-        const live = yield* Effect.promise(() =>
-          discoverService(productRoot(), hostOwnership.serviceName, { verifyOwner: true }),
+      const reuse = (incumbent: ServiceFile) => {
+        console.log(
+          `pe-host service '${hostOwnership.serviceName}' already serving on ${incumbent.port} (pid ${incumbent.pid})`,
         );
-        if (live?.version === resolveHostVersion()) {
-          console.log(`pe-host already serving on ${live.port} (pid ${live.pid}); opening it`);
-          openBrowser(live.port);
-          return;
-        }
+        if (open) openBrowser(incumbent.port);
+      };
+      const binding = yield* Effect.promise(() => prepareHostBinding(open, resolveHostVersion()));
+      if (typeof binding !== "number") {
+        reuse(binding);
+        return;
       }
-      const port = yield* Effect.promise(() =>
-        chooseServicePort(productRoot(), hostOwnership.serviceName, preferredPort),
-      );
+      const port = binding;
 
       const latch = yield* Deferred.make<void>();
       const handle = yield* Deferred.make<ServiceHostHandle>();
@@ -63,7 +55,7 @@ export const hostProgram = (
         webRoot: resolveWebRoot(),
       });
 
-      yield* Effect.forkDetach(
+      yield* Effect.forkScoped(
         Deferred.await(latch).pipe(
           Effect.andThen(Effect.sync(() => setTimeout(() => process.exit(0), 5_000).unref())),
         ),
@@ -72,14 +64,14 @@ export const hostProgram = (
       console.log(`pe-host binding http://127.0.0.1:${port || "dynamic"}`);
       if (open)
         // Open only once the claim holds, on the port the service file names.
-        yield* Effect.forkDetach(
+        yield* Effect.forkScoped(
           Deferred.await(handle).pipe(
             Effect.tap((claimed) => Effect.sync(() => openBrowser(claimed.serviceFile.port))),
           ),
         );
       // A host nobody clicked (login, Revit) updates the machine when no Revit runs; a click asks in the app.
       else
-        yield* Effect.forkDetach(
+        yield* Effect.forkScoped(
           Deferred.await(handle).pipe(
             Effect.andThen(Effect.promise(() => updateWhenNoRevit(updateReader))),
             Effect.andThen((handedOff) =>
@@ -92,7 +84,30 @@ export const hostProgram = (
           ? Effect.flatMap(Deferred.await(handle), (claimed) => web(claimed, webUrl))
           : Effect.never;
       yield* Effect.raceFirst(
-        Effect.raceFirst(Layer.launch(HttpLive), frontend),
+        Effect.raceFirst(
+          Layer.launch(HttpLive).pipe(
+            Effect.catchTag("ServeError", (error) => {
+              const cause = error.cause;
+              if (
+                hostOwnership.lane !== "installed" ||
+                typeof cause !== "object" ||
+                cause === null ||
+                !("code" in cause) ||
+                cause.code !== "EADDRINUSE"
+              )
+                return Effect.fail(error);
+              // A listener won between census and bind. Re-read it, never retry the bind.
+              return Effect.promise(() => prepareHostBinding(open, resolveHostVersion())).pipe(
+                Effect.flatMap((incumbent) =>
+                  typeof incumbent === "number"
+                    ? Effect.fail(error)
+                    : Effect.sync(() => reuse(incumbent)),
+                ),
+              );
+            }),
+          ),
+          frontend,
+        ),
         Deferred.await(latch).pipe(Effect.tap(() => Effect.sync(() => onShutdown?.()))),
       );
     }),
