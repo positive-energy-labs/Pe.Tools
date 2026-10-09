@@ -1,6 +1,8 @@
 {
   "short_name": "Pe.Tools",
   "name": "Pe.Tools",
+  "id": "/",
+  "scope": "/",
   "icons": [
     {
       "src": "favicon.ico",
@@ -18,8 +20,10 @@
       "sizes": "512x512"
     }
   ],
-  "start_url": ".",
+  "start_url": "/open",
   "display": "standalone",
-  "theme_color": "#76c7a3",
-  "background_color": "#ffffff"
+  "launch_handler": { "client_mode": "focus-existing" },
+  "shortcuts": [{ "name": "Open", "url": "/open" }],
+  "theme_color": "#42815e",
+  "background_color": "#fdfaf2"
 }

@@ -25,6 +25,14 @@ export function VersionChip() {
   const machine = machineOf(reading);
   const waiting = machine ? planWaits(machine) : null;
   useEffect(() => {
+    if (!("setAppBadge" in navigator)) return;
+    try {
+      void (waiting ? navigator.setAppBadge() : navigator.clearAppBadge()).catch(() => {});
+    } catch {
+      // App badging can reject outside an installed window.
+    }
+  }, [!!waiting]);
+  useEffect(() => {
     if (!state.open) return;
     close.current?.focus();
     const onKey = (event: KeyboardEvent) => {
