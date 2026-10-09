@@ -7,3 +7,10 @@
 @import "./base.css";
 @import "./design-lang.css";
 @import "./revit/revit.css";
+
+/* Reskin-lab seam: registered direction skins load after the house layers. Each theme file owns
+   a complete `:root[data-theme=<name>]` token restatement plus recipe overrides scoped under
+   `[data-theme]`; with no `data-theme` set none of it applies and the render is the default look.
+   One import line per direction — the only line direction PRs share.
+   Ruling: docs/features/design-system/LEDGER.md (reskin-lab, 2026-10-09). */
+@import "./theme/phosphor.css";

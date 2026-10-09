@@ -1,0 +1,65 @@
+/* ============================================================================================
+   phosphor — the instrument panel (reskin-lab prototype)
+   ============================================================================================
+   The exemplar direction: near-black grounds, a single phosphor-amber signal voice, pure
+   hairline rule-work. Radical claim: subtraction — the UI as test instrument.
+
+   THE SEAM CONTRACT every src/theme/<name>.css follows:
+   (a) a complete `--pe-*` token restatement under `:root[data-theme="<name>"]` — every ground,
+       ink, and meaning role present, each as its `light-dark()` pair so the app's own light/dark
+       toggle stays live (mode authority is untouched: `.dark` class + inline `color-scheme`; a
+       theme must NOT declare `color-scheme` — the inline style from the init script always wins).
+   (b) shape overrides re-declaring recipe selectors, scoped under `[data-theme="<name>"]`.
+   (c) its own font imports.
+   Density numbers are NOT restated — 20px rows / 24px controls / 10px floor are law and shared.
+   Guards: hex + numeric color literals are legal HERE only; one owner per authored class.
+   ========================================================================================== */
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap");
+
+:root[data-theme="phosphor"] {
+  /* Grounds — near-black planes, no mid-gray murk; light mode is paper-tape white. */
+  --pe-page: light-dark(#0a0c0a, #f2f1e8);
+  --pe-artifact: light-dark(#101410, #fbfaf3);
+  --pe-recess: light-dark(#050705, #e7e5d8);
+  --pe-document: light-dark(#0d110d, #fffef8);
+  --pe-select: light-dark(rgb(255 196 0 / 0.16), rgb(146 106 0 / 0.16));
+  --pe-scrim: light-dark(rgb(0 0 0 / 82%), rgb(26 22 12 / 55%));
+
+  /* Ink + rules — one ink voice; rule-work carries the structure. */
+  --pe-ink: light-dark(#d9e6cb, #1d221c);
+  --pe-ink-2: light-dark(#7e8f79, #5c6a57);
+  --pe-ink-mute: light-dark(#5a6a55, #8a8878);
+  --pe-line: light-dark(#243024, #c9c3ac);
+  --pe-line-2: light-dark(#384936, #a9a288);
+
+  /* Meaning — phosphor amber is the only loud voice; green stays reserved for done. */
+  --pe-pea: light-dark(#ffc400, #a57900);
+  --pe-pea-ink: light-dark(#ffd44d, #7a5a00);
+  --pe-alarm: light-dark(#ff5c33, #bd3a1e);
+  --pe-caution: light-dark(#ffc400, #a57900);
+  --pe-done: light-dark(#4ade60, #2e7d3a);
+  --pe-commit: light-dark(#ffc400, #a57900);
+  --pe-on-commit: light-dark(#0a0c0a, #fffef8);
+  --pe-nav: light-dark(#57c7a4, #1f6e57);
+
+  /* Shape — zero radius, zero artifact shadow: elevation is inversion, not blur. The live token
+     is `--radius` (base.css), projected by design-lang.css through every rounded-* utility. */
+  --radius: 0px;
+
+  /* Type — the mono token binds IBM Plex Mono; numerals in data cells become instrument
+     readouts. Body/display faces and every tier size stay shared (the type tiers are law). */
+  --font-mono: "IBM Plex Mono", monospace;
+}
+
+/* Shape posture — stamped outlines, no fills; recipe selectors re-declared under scope. */
+[data-theme="phosphor"] [data-tone] {
+  border-radius: 0;
+}
+
+[data-theme="phosphor"] [data-surface="artifact"] {
+  box-shadow: none;
+}
+
+[data-theme="phosphor"] [data-surface="recess"] {
+  background: var(--pe-recess);
+}
