@@ -25,10 +25,10 @@ export function PeaGroup({ fixture }: { fixture: boolean }) {
       <OutcomeLine kind="busy" label="reading providers" />
     );
   return (
-    <div className="flex flex-col gap-1" aria-label="providers">
+    <div className="flex min-w-0 flex-col gap-1" aria-label="providers">
       {providers.list.map((provider) => (
         <div key={provider.id} className="hairline-b flex flex-col py-1">
-          <span className="flex items-center gap-2">
+          <span className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">{provider.name}</span>
             <span
               className="min-w-0 truncate face-mono"
@@ -61,7 +61,7 @@ export function PeaGroup({ fixture }: { fixture: boolean }) {
               )}
             </span>
           </span>
-          <span className="face-mono text-ink-2">
+          <span className="break-all face-mono text-ink-2">
             {provider.harness} ·{" "}
             {provider.auth.kind === "subscription"
               ? "subscription"
@@ -110,8 +110,8 @@ function AddEndpoint({ providers }: { providers: ProvidersState }) {
     }
   };
   return (
-    <div className="flex flex-col gap-1 pt-1" aria-label="add endpoint">
-      <span className="flex items-center gap-2">
+    <div className="flex min-w-0 flex-col gap-1 pt-1" aria-label="add endpoint">
+      <span className="flex flex-wrap items-center gap-2">
         <span>Add endpoint</span>
         <Switcher
           ariaLabel="harness"

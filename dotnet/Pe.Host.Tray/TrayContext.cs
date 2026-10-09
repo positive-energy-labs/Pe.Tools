@@ -254,13 +254,24 @@ internal sealed class TrayWindow : Form {
         StartPosition = FormStartPosition.Manual;
         AutoScaleMode = AutoScaleMode.None;
         Text = "Pe.Tools machine";
+        DpiChanged += (_, e) => PositionAboveTaskbar(Screen.FromRectangle(e.SuggestedRectangle).WorkingArea,
+            e.DeviceDpiNew);
     }
 
     public void PositionAboveTaskbar() {
         var work = Screen.FromPoint(Cursor.Position).WorkingArea;
-        Size = new Size(Math.Min(380, work.Width), Math.Min(700, work.Height));
-        Location = new Point(work.Right - Width, work.Bottom - Height);
+        Location = work.Location;
+        PositionAboveTaskbar(work, DeviceDpi);
     }
+
+    private void PositionAboveTaskbar(Rectangle work, int dpi) {
+        var size = SizeFor(work.Size, dpi);
+        Bounds = new Rectangle(work.Right - size.Width, work.Bottom - size.Height, size.Width, size.Height);
+    }
+
+    internal static Size SizeFor(Size work, int dpi) =>
+        new(Math.Min((int)Math.Round(380 * dpi / 96f), work.Width),
+            Math.Min((int)Math.Round(700 * dpi / 96f), work.Height));
 
     protected override void WndProc(ref Message message) {
         if (message.Msg == _taskbarCreated) TaskbarRestarted?.Invoke(this, EventArgs.Empty);

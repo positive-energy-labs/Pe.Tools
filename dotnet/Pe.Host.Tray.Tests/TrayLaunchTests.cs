@@ -6,6 +6,14 @@ namespace Pe.Host.Tray.Tests;
 
 public class TrayLaunchTests {
     [Test]
+    public void TraySizeScalesWithMonitorDpiAndClampsToWorkArea() {
+        Assert.That(TrayWindow.SizeFor(new System.Drawing.Size(3840, 2200), 192),
+            Is.EqualTo(new System.Drawing.Size(760, 1400)));
+        Assert.That(TrayWindow.SizeFor(new System.Drawing.Size(600, 500), 192),
+            Is.EqualTo(new System.Drawing.Size(600, 500)));
+    }
+
+    [Test]
     public void LaunchPinsParentAndServiceIncarnationWithoutAssumingPort5180() {
         var path = Path.GetTempFileName();
         try {

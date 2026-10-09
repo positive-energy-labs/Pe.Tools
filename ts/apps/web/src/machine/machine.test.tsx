@@ -14,13 +14,16 @@ import { AppChrome, AppDevtools } from "#/route/app-chrome";
 
 import { MachineBody } from "./body";
 import { chipText, machineOf } from "./model";
+import { MachinePage } from "./page";
 
 vi.mock("#/host/install", () => ({ acknowledgeUpdate: vi.fn(async () => "request-1") }));
 vi.mock("#/open/lifecycle", async (original) => ({
   ...(await original<typeof import("#/open/lifecycle")>()),
   useInstancesBasis: () => null,
 }));
-vi.mock("#/components/feedback-picker", () => ({ FeedbackPicker: () => null }));
+vi.mock("#/components/feedback-picker", () => ({
+  FeedbackPicker: () => <button>feedback</button>,
+}));
 vi.mock("@tanstack/react-devtools", () => ({
   TanStackDevtools: () => <div data-testid="devtools-launcher" />,
 }));
@@ -97,7 +100,10 @@ test("the chip says the version, or the update that waits", () => {
 test("the version chip badges a waiting plan and clears it otherwise", () => {
   const setAppBadge = vi.fn().mockResolvedValue(undefined);
   const clearAppBadge = vi.fn().mockResolvedValue(undefined);
-  vi.stubGlobal("navigator", Object.assign(Object.create(navigator), { setAppBadge, clearAppBadge }));
+  vi.stubGlobal(
+    "navigator",
+    Object.assign(Object.create(navigator), { setAppBadge, clearAppBadge }),
+  );
   history.replaceState(null, "", "/open?demo=waiting-plan");
   render(<AppChrome pathname="/open" />);
   expect(setAppBadge).toHaveBeenCalledOnce();
@@ -124,6 +130,20 @@ test("a host that went away is the honest gap: last confirmed leg, then disconne
 describe("shells", () => {
   beforeEach(() => history.replaceState(null, "", "/?demo=blocked-plan"));
   afterEach(() => history.replaceState(null, "", "/"));
+
+  test("the tray page fills and scrolls its viewport without a feedback picker", () => {
+    render(
+      <>
+        <MachinePage reading={MACHINE_SEEDS["no-revit"]} fixture shell="tray" />
+        <AppChrome pathname="/machine" />
+      </>,
+    );
+    const main = screen.getByRole("main", { name: "machine" });
+    expect(main.className).toContain("w-full");
+    expect(main.className).toContain("overflow-y-auto");
+    expect(main.className).not.toContain("w-[380px]");
+    expect(screen.queryByRole("button", { name: "feedback" })).toBeNull();
+  });
 
   test("the tray window wears no app chrome; every other page wears the version chip", () => {
     const { container } = render(<AppChrome pathname="/machine" />);
