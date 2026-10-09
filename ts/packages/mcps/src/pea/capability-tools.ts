@@ -1,3 +1,4 @@
+import { contextFetch as fetch, invocationContext } from "#invocation-context";
 import {
   instancesReading,
   scheduleReads,
@@ -61,13 +62,8 @@ import { coerceJsonObject } from "../shared/coerce.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
 import { bundledPeaSkills } from "./skills.ts";
 
-type PeaProductToolContext = { hostBaseUrl?: string; workspaceKey?: string };
-let productContext: PeaProductToolContext = {};
-export function configurePeaProductToolContext(next: PeaProductToolContext): void {
-  productContext = next;
-}
 function base(): string {
-  return resolveHostBaseUrl(productContext.hostBaseUrl).replace(/\/$/, "");
+  return resolveHostBaseUrl(invocationContext()?.hostBaseUrl).replace(/\/$/, "");
 }
 export const peaHostBaseUrl = base;
 
@@ -100,7 +96,7 @@ export type Scope = ThreadHead & { thread: string };
 
 /** The live head of `PE_THREAD` (the harness child's thread); else none. */
 export async function scopeOf(): Promise<Scope | null> {
-  const thread = process.env.PE_THREAD;
+  const thread = invocationContext()?.thread;
   if (!thread) return null;
   const response = await fetch(`${base()}/pe/scope/${encodeURIComponent(thread)}`);
   const head = threadHeadSchema.parse(await response.json());

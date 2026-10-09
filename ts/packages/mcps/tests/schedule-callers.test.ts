@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { setup } from "../../../apps/host/tests/schedule-test-fixture.ts";
 import { PeaCliCommands } from "../src/pea/PeaCliCommands.ts";
 import { peRead, peDo } from "../src/pea/capability-tools.ts";
+import { withInvocationContext } from "../src/shared/invocation-context.ts";
 
 test("Gunshi Schedule read and human apply use exact HTTP action and frozen Work bases", async () => {
   const f = await setup();
@@ -66,7 +67,6 @@ test("Pea Schedule A/B/A reads honor the thread head and cannot perform human-on
   const f = await setup();
   vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://host");
   // A harness child's call: `PE_THREAD` names the thread and the host answers its live head.
-  vi.stubEnv("PE_THREAD", "t");
   const inner = globalThis.fetch;
   vi.stubGlobal("fetch", (input: string | URL | Request, init?: RequestInit) =>
     new URL(input instanceof Request ? input.url : String(input), "http://host").pathname ===
@@ -75,7 +75,9 @@ test("Pea Schedule A/B/A reads honor the thread head and cannot perform human-on
       : inner(input as string, init),
   );
   const run = (tool: typeof peRead | typeof peDo, input: unknown) =>
-    tool.execute!(input as never, { agent: { toolCallId: "schedule-call" } } as never);
+    withInvocationContext({ thread: "t" }, () =>
+      tool.execute!(input as never, { agent: { toolCallId: "schedule-call" } } as never),
+    );
   const start = f.sent.length;
   for (const target of [undefined, { kind: "open", ref: f.b }, undefined]) {
     const result = await run(peRead, {

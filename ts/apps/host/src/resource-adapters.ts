@@ -1,3 +1,4 @@
+import { invocationContext, hostFetch as fetch } from "@pe/mcps/context";
 import { Effect } from "effect";
 import { readingKey, actionStatusSchema, type ReadingFrame } from "@pe/agent-contracts";
 import { OwnerReads, resourceSnapshot, type ResourceObserver, type OwnerValue } from "@pe/runtime";
@@ -144,6 +145,7 @@ export function hostResourceObserver(
 ): ResourceObserver {
   const inventoryReads = new OwnerReads();
   return (request, publish) => {
+    const headers = invocationContext()?.headers;
     const key = readingKey(request);
     const accept = (result: OwnerValue<unknown>) => publish(resourceSnapshot(key, result));
     /** Read the host's own HTTP surface once, or on the host's own timer. Never the client's. */
@@ -154,6 +156,7 @@ export function hostResourceObserver(
           paths.map(async ([path, init]) => {
             const response = await read(new URL(path, origin), {
               ...init,
+              headers: { ...Object.fromEntries(new Headers(init?.headers)), ...headers },
               signal: controller.signal,
             });
             const value: unknown = await response.json().catch(() => null);

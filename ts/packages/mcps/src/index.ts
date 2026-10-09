@@ -2,7 +2,6 @@ export {
   PeaCliCommands,
   buildCapabilities,
   bundledPeaSkills,
-  configurePeaProductToolContext,
   createCapabilityCatalogSource,
   createRouteRegistrations,
   peDo,

@@ -1,3 +1,4 @@
+import { invocationContext, hostFetch as fetch } from "@pe/mcps/context";
 import { admitScheduleAction, recoverScheduleAction, readSchedule } from "./schedule-actions.ts";
 import { admitInstancesAction, recoverInstancesAction } from "./instances-actions.ts";
 import { instancesActions } from "@pe/agent-contracts";
@@ -195,6 +196,7 @@ export function makeCallRoute(
             const response = await fetch(`${forwardBase}/call`, {
               method: "POST",
               headers: {
+                ...invocationContext()?.headers,
                 "content-type": "application/json",
                 ...(sessionHeader ? { [HOST_RPC_BRIDGE_SESSION_HEADER]: sessionHeader } : {}),
                 ...(documentHeader ? { [HOST_RPC_DOCUMENT_HEADER]: documentHeader } : {}),
@@ -410,6 +412,7 @@ export function makeCallRoute(
             const response = await fetch(`${forwardBase}${req.url}`, {
               method: req.method,
               headers: {
+                ...invocationContext()?.headers,
                 "content-type": "application/json",
                 [HOST_RPC_BRIDGE_SESSION_HEADER]: req.headers[HOST_RPC_BRIDGE_SESSION_HEADER] ?? "",
                 [HOST_RPC_DOCUMENT_HEADER]: req.headers[HOST_RPC_DOCUMENT_HEADER] ?? "",
@@ -551,6 +554,7 @@ export function makeCallRoute(
         if (forwardBase) {
           const response = await fetch(`${forwardBase}${req.url}`, {
             headers: {
+              ...invocationContext()?.headers,
               [HOST_RPC_BRIDGE_SESSION_HEADER]: req.headers[HOST_RPC_BRIDGE_SESSION_HEADER] ?? "",
               [HOST_RPC_DOCUMENT_HEADER]: req.headers[HOST_RPC_DOCUMENT_HEADER] ?? "",
             },
@@ -627,6 +631,7 @@ export function makeCallRoute(
         if (forwardBase) {
           const forwarded = await fetch(`${forwardBase}${req.url}`, {
             headers: {
+              ...invocationContext()?.headers,
               [HOST_RPC_BRIDGE_SESSION_HEADER]: req.headers[HOST_RPC_BRIDGE_SESSION_HEADER] ?? "",
               [HOST_RPC_DOCUMENT_HEADER]: req.headers[HOST_RPC_DOCUMENT_HEADER] ?? "",
             },
@@ -802,9 +807,10 @@ export function makeCallRoute(
           if (forwardBase) {
             const response = await fetch(`${forwardBase}${req.url}`, {
               method: req.method,
+              headers: { ...invocationContext()?.headers },
               ...(req.method === "POST"
                 ? {
-                    headers: { "content-type": "application/json" },
+                    headers: { ...invocationContext()?.headers, "content-type": "application/json" },
                     body: JSON.stringify(await Effect.runPromise(req.json)),
                   }
                 : {}),

@@ -5,7 +5,7 @@ import { createCaptureViewTool } from "../shared/capture-view.ts";
 import { diagram } from "../shared/diagram.ts";
 import { revitApiFetch, revitApiSearch } from "../shared/rvt-api.ts";
 import { peDo, peFind, peRead, peaHostBaseUrl, scopeOf, targetSet } from "./capability-tools.ts";
-export { configurePeaProductToolContext, peDo, peFind, peRead } from "./capability-tools.ts";
+export { peDo, peFind, peRead } from "./capability-tools.ts";
 export {
   buildCapabilities,
   createCapabilityCatalogSource,

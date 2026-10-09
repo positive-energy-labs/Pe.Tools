@@ -1,3 +1,4 @@
+import { contextFetch as fetch, invocationContext } from "#invocation-context";
 import { actionListFilterSchema, type ActionListFilter } from "@pe/agent-contracts";
 import {
   canonicalRouteInput,
@@ -29,11 +30,12 @@ function getRetained(key: string) {
   } catch {
     /* unavailable outside a browser */
   }
-  return retained.get(key);
+  return (invocationContext()?.admissions ?? retained).get(key);
 }
 function retain(key: string, value?: ActionAdmission) {
-  if (value) retained.set(key, value);
-  else retained.delete(key);
+  const admissions = invocationContext()?.admissions ?? retained;
+  if (value) admissions.set(key, value);
+  else admissions.delete(key);
   try {
     if (value)
       (Object.hasOwn(globalThis, "window") ? globalThis.localStorage : undefined)?.setItem(
@@ -50,8 +52,9 @@ function retain(key: string, value?: ActionAdmission) {
  * Admissions this client has posted and not yet seen settle, so a stop control can name them.
  * Keyed by id; the value is the endpoint that owns the journal row.
  */
-const inFlight = new Map<string, string>();
-export const runningAdmissions = () => [...inFlight].map(([id, base]) => ({ id, base }));
+const localInFlight = new Map<string, string>();
+const inFlight = () => invocationContext()?.running ?? localInFlight;
+export const runningAdmissions = () => [...inFlight()].map(([id, base]) => ({ id, base }));
 
 /**
  * Stop a running action: the host signals its in-flight bridge request past the session gate, and
@@ -191,7 +194,7 @@ export async function submitAction(
     row = actionReceiptSchema.parse(await response.json());
   }
   if (!row) throw Error(`Action '${admission.id}' has no receipt`);
-  inFlight.set(admission.id, base);
+  inFlight().set(admission.id, base);
   try {
     if (
       row.kind !== admission.kind ||
@@ -215,7 +218,7 @@ export async function submitAction(
     }
     return row;
   } finally {
-    inFlight.delete(admission.id);
+    inFlight().delete(admission.id);
   }
 }
 export function actionResult(row: ActionReceipt | DetachedAction): unknown {

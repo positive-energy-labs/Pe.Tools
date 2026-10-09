@@ -1,4 +1,7 @@
-import { Deferred, Effect, Layer, Stream } from "effect";
+import { requestIdentityLayer } from "./request-identity.ts";
+import { createShare, shareIntentFile, shareRoute, tailscaleCommand, type ShareOwner } from "./share.ts";
+import { mcpRoute } from "./mcp-route.ts";
+import { Deferred, Effect, Layer, Stream, Option } from "effect";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
 import { NodeHttpClient, NodeHttpServer, NodeServices } from "@effect/platform-node";
 import { readFileSync } from "node:fs";
@@ -19,7 +22,7 @@ import {
   resolveHostVersion,
   ServiceFileLive,
 } from "./host-lifecycle.ts";
-import { hostOwnership } from "./host-ownership.ts";
+import { hostOwnership, productRoot } from "./host-ownership.ts";
 import { staticSpaLayer } from "./static-spa.ts";
 import { peRoutesLayer } from "./pe-routes.ts";
 import { capturesRoute } from "./captures-route.ts";
@@ -144,6 +147,7 @@ export interface HttpLiveOptions {
   readonly capabilities: PeaRuntimeCapabilities;
   /** Injected listener for socket lifecycle tests. */
   readonly nodeServer?: Server;
+  readonly share?: ShareOwner;
   /** Browser origin of the separately owned dev frontend. API requests stay here. */
   readonly webUrl?: Deferred.Deferred<string>;
   /** Boot-scoped shutdown latch + service token, injected by the launch root. */
@@ -191,6 +195,23 @@ export function makeHttpLive(options: HttpLiveOptions) {
     ServiceFileLive.pipe(Layer.provide(ServerLive)),
   );
 
+  const port = () => {
+    const address = nodeServer.address();
+    return address && typeof address !== "string" ? address.port : options.port;
+  };
+  const share = options.share ?? createShare({
+    installed: hostOwnership.lane === "installed",
+    port,
+    run: tailscaleCommand(),
+    ...shareIntentFile(join(productRoot(), "state", "share.json")),
+  });
+  const identity = requestIdentityLayer({
+    port,
+    frontendOrigin: () => options.webUrl
+      ? Option.getOrUndefined(Effect.runSync(Deferred.poll(options.webUrl)).pipe(Option.map(Effect.runSync)))
+      : undefined,
+    share,
+  });
   const webUrl = options.webUrl;
   const webRoot = options.webRoot;
   const spa: SpaFallback = webUrl
@@ -199,11 +220,14 @@ export function makeHttpLive(options: HttpLiveOptions) {
       ? () => Effect.sync(() => Response.html(readFileSync(join(webRoot, "index.html"), "utf8")))
       : () => emptyNotFound;
   const CommonAppLive = Layer.mergeAll(
+    identity,
+    shareRoute(share),
+    mcpRoute(() => `http://127.0.0.1:${port()}`),
     capturesRoute(spa),
     pagesRoute(),
     adminShutdownRoute,
     updateRoutes,
-    peRoutesLayer(options.routeRegistrations),
+    peRoutesLayer(options.routeRegistrations, share),
     demoRoutes(),
     webUrl
       ? HttpRouter.add("GET", "/*", (req) => (isNavigation(req) ? spa(req) : emptyNotFound))
