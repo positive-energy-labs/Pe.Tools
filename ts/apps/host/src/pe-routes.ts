@@ -1,5 +1,6 @@
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
+import type { MachineShareAdapter } from "./machine.ts";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -346,6 +347,7 @@ export function makeHostPeRoutes(
   bridge: RevitBridge["Service"] | undefined,
   registrationsFactory: typeof createRouteRegistrations = createRouteRegistrations,
   update: UpdateReader["Service"] = makeInstalledUpdateReader(),
+  share?: MachineShareAdapter,
 ) {
   const sourceRoot = hostOwnership.sourceRoot;
   const worldRoot = resolvePeaProductHomePath();
@@ -372,7 +374,7 @@ export function makeHostPeRoutes(
   });
   // Every provider is probed once in the background; the list says `unknown` until then.
   const providers = createProviders({ shellPath: () => shellPath });
-  const machine = createMachine(machineSources(bridge, providers, update));
+  const machine = createMachine(machineSources(bridge, providers, update, share));
   const threads = createHarnessThreads({
     providers,
     root: productHarnessThreadsPath(),
@@ -413,7 +415,7 @@ export function makeHostPeRoutes(
 }
 
 /** {@link makeHostPeRoutes} on the host's router. Harness children die when the launch scope closes. */
-export const peRoutesLayer = (registrationsFactory?: typeof createRouteRegistrations) =>
+export const peRoutesLayer = (registrationsFactory?: typeof createRouteRegistrations, share?: MachineShareAdapter) =>
   HttpRouter.use((router) =>
     Effect.gen(function* () {
       const { address } = yield* HttpServer.HttpServer;
@@ -425,6 +427,7 @@ export const peRoutesLayer = (registrationsFactory?: typeof createRouteRegistrat
         bridge,
         registrationsFactory,
         update,
+        share,
       );
       yield* Effect.addFinalizer(() => Effect.sync(() => machine.close()));
       yield* Effect.addFinalizer(() => Effect.promise(() => threads.close()));

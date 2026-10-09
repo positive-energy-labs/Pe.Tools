@@ -1,3 +1,4 @@
+import { contextFetch as fetch } from "#invocation-context";
 import { type ActionReceipt } from "@pe/agent-contracts";
 import { readAction, type DetachedAction } from "./takeoff-action-client.ts";
 import { runCapability, CANCEL_KEY } from "./admission.ts";

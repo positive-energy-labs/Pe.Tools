@@ -1,5 +1,5 @@
 import { familyFixturesDir } from "./checkout-paths.ts";
-import { devHostProxy } from "./dev-proxy.ts";
+import { checkoutIngress, devHostProxy } from "./dev-proxy.ts";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { devtools } from "@tanstack/devtools-vite";
@@ -26,6 +26,7 @@ const config = defineConfig(({ mode }) => {
 
   return {
     plugins: [
+      checkoutIngress(),
       tanstackStart({
         router: {
           quoteStyle: "double",
@@ -51,6 +52,9 @@ const config = defineConfig(({ mode }) => {
       }) as never,
     ],
     server: {
+      host: "127.0.0.1",
+      allowedHosts: ["127.0.0.1"],
+      cors: false,
       fs: {
         allow: [searchForWorkspaceRoot(import.meta.dirname), familyFixturesDir],
       },

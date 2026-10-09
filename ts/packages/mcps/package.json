@@ -20,7 +20,12 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
-    }
+    },
+    "./context": {
+      "browser": "./src/shared/invocation-context.browser.ts",
+      "default": "./src/shared/invocation-context.ts"
+    },
+    "./server": "./src/server.ts"
   },
   "publishConfig": {
     "access": "public"
@@ -47,5 +52,11 @@
     "bumpp": "^11.1.0",
     "typescript": "^6.0.3",
     "vite-plus": "catalog:"
+  },
+  "imports": {
+    "#invocation-context": {
+      "browser": "./src/shared/invocation-context.browser.ts",
+      "default": "./src/shared/invocation-context.ts"
+    }
   }
 }

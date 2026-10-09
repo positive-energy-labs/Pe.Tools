@@ -1,3 +1,4 @@
+import { withInvocationContext } from "../src/shared/invocation-context.ts";
 import type { PodList } from "@pe/host-contracts/operation-types";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -351,8 +352,6 @@ const turn: Head = {
 /** A harness child's call: `PE_THREAD` names the thread, and the host answers its live head. */
 async function withHead<T>(head: Head, body: () => Promise<T>): Promise<T> {
   const inner = globalThis.fetch;
-  const prior = process.env.PE_THREAD;
-  process.env.PE_THREAD = head.thread;
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     return url.pathname === `/pe/scope/${encodeURIComponent(head.thread)}`
@@ -360,11 +359,9 @@ async function withHead<T>(head: Head, body: () => Promise<T>): Promise<T> {
       : inner(input as string, init);
   }) as typeof fetch;
   try {
-    return await body();
+    return await withInvocationContext({ thread: head.thread }, body);
   } finally {
     globalThis.fetch = inner;
-    if (prior === undefined) delete process.env.PE_THREAD;
-    else process.env.PE_THREAD = prior;
   }
 }
 const run = (tool: ExecutableTool, input: unknown, head = turn) =>

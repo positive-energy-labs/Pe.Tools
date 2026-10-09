@@ -1,3 +1,4 @@
+import { contextFetch as fetch } from "#invocation-context";
 ﻿import {
   scheduleReadingSchema,
   scheduleCatalogSchema,
