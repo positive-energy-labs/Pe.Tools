@@ -68,6 +68,12 @@ Verified mechanics:
 - `.Tests` configurations force off `DeployAddin` and `LaunchRevit`.
 - Non-release interactive builds pin `AssemblyInformationalVersion` to stable `dev` to reduce hot-reload baseline churn from generated metadata.
 
+## SDK pin and release feed
+
+`pe-revit sdk adopt <version> --plan` shows the adoption steps; `pe-revit sdk adopt <version>` applies them. The verb repins `global.json` and `.config/dotnet-tools.json`, points `nuget.config` at the release feed, restores the tool, regenerates the vendored TypeScript contract, reports removed exports, installs the bootstrap for the manifest's years, and writes a receipt. Review removed exports and cut consumers over before claiming acceptance.
+
+The default feed is `%USERPROFILE%\source\feeds\pe-revit-sdk`, with each release in `<feed>/<version>/`. `product.payloads.json` sets `sdk.feed` to override the feed and `sdk.clientDir` to name the generated client directory. Pe.Tools uses a null feed and `ts/packages/host-contracts/src/vendor/generated`. `eng/sdk-feed` is no longer a package source; its copied nupkgs are gitignored and disposable. Fresh worktrees use the same feed folder.
+
 ## Session launch decision
 
 **No IDE is part of a session's lifecycle.** `pe-revit session` starts, converges, restarts, and stops every Revit this repo drives; there is no Rider plugin, no run/debug configuration in the launch contract, and no bridge to install. The durable model is:
@@ -82,8 +88,8 @@ MSBuild solution configuration (Debug.R24 / Debug.R25 / Debug.R26)
 The active solution configuration is the year authority. What an IDE build still contributes is exactly one thing: it writes the **package-local fixed-path output** (`bin/obj`, not `.artifacts/`) that a dev-lane session copies from and that the hot-reload emitter baselines against. Any build that writes that path — Rider, VS Code, or `dotnet build /p:PeIsolatedBuild=false` — serves equally, and none of them launches Revit.
 
 ```powershell
-dotnet tool run pe-revit -- session start --project .\dotnet\Pe.App\Pe.App.csproj --year 25  # open Revit on this checkout
-dotnet tool run pe-revit -- session hr --id pe.app-25                                  # apply your latest edit (hot, else cold swap)
+dotnet tool run pe-revit -- start                                                     # open Revit on this checkout
+dotnet tool run pe-revit -- hr                                                        # apply your latest edit (hot, else cold swap)
 dotnet tool run pe-revit -- session list --json                                        # the session registry
 ```
 
