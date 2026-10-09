@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Context, Deferred, Effect, Layer } from "effect";
 import { HttpRouter, HttpServer, HttpServerResponse as Response } from "effect/unstable/http";
@@ -182,4 +183,36 @@ export const adminShutdownRoute = HttpRouter.add(
       yield* Effect.forkDetach(Deferred.succeed(latch, undefined));
       return yield* Response.json({ shuttingDown: true, lane: hostOwnership.lane });
     }),
+);
+
+/** Edge app mode is the desktop window (host ledger 2026-10-08): Edge ships with Windows, `--app`
+ * drops the tabs and address bar, and the product's own profile keeps the window apart from the
+ * user's browsing. The default browser is the fallback when Edge is absent. */
+export function openWindow(port: number): void {
+  const url = `http://127.0.0.1:${port}/`;
+  const edge = [process.env["ProgramFiles(x86)"], process.env.ProgramFiles]
+    .filter((root): root is string => root !== undefined)
+    .map((root) => join(root, "Microsoft", "Edge", "Application", "msedge.exe"))
+    .find((candidate) => existsSync(candidate));
+  console.log(`pe-host opening ${url}${edge ? " in an Edge app window" : ""}`);
+  // detached: on Windows a non-detached child dies with this process, and the reuse path exits at once.
+  const [command, args] = edge
+    ? [
+        edge,
+        [`--app=${url}`, `--user-data-dir=${join(productRoot(), "edge-app")}`, "--no-first-run"],
+      ]
+    : ["cmd.exe", ["/c", "start", "", url]];
+  // windowsHide only for cmd: it passes SW_HIDE, which a GUI exe may apply to its first window.
+  spawn(command, args, { detached: true, windowsHide: !edge, stdio: "ignore" }).unref();
+}
+
+/** The tray's Open window: the same Edge app window as `--open`, authorized by the claim token. */
+export const adminWindowRoute = HttpRouter.add("POST", "/admin/window", (request) =>
+  Effect.gen(function* () {
+    const handle = yield* Deferred.await((yield* HostLifecycle).handle);
+    if (!authorizeShutdownFor(handle)(request.headers, null))
+      return yield* Response.json({ error: "Forbidden" }, { status: 403 });
+    openWindow(handle.serviceFile.port);
+    return yield* Response.json({ opened: true });
+  }),
 );

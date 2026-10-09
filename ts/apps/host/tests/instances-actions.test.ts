@@ -229,6 +229,7 @@ test("start launches the staged session under its step id, then opens the staged
   expect(flag(startArgv!, "--expect-session")).toBe("absent");
   expect(flag(startArgv!, "--year")).toBe("2025");
   expect(startArgv).not.toContain("--quarantine");
+  expect(startArgv).not.toContain("--background");
   expect(startArgv).not.toContain("C:/Tower.rvt");
   expect(openArgv!.slice(0, 3)).toEqual(["doc", "open", "C:/Tower.rvt"]);
   expect(flag(openArgv!, "--id")).toBe("dev");
@@ -246,6 +247,18 @@ test("only the person's staged quarantine choice reaches session start", async (
   expect((await f.launch()).staged?.value).toMatchObject({ quarantine: true });
   expect((await f.admit("instances.start", {}, revision)).state).toBe("succeeded");
   expect(f.calls.at(-1)).toContain("--quarantine");
+});
+
+test("a staged background posture reaches session start as --background", async () => {
+  const f = await setup(() => ({ result: { state: "ok", phase: "ready", id: "dev" } }), []);
+  const revision = await f.stage({
+    kind: "start",
+    year: "2025",
+    name: "dev",
+    posture: "background",
+  });
+  expect((await f.admit("instances.start", {}, revision)).state).toBe("succeeded");
+  expect(f.calls.at(-1)).toContain("--background");
 });
 
 test("allowing missing links is staged explicitly for open and its omission result stays in the receipt", async () => {
@@ -774,6 +787,7 @@ test("a failed start keeps the staged launch for the person to retry", async () 
       year: "2025",
       name: "dev",
       quarantine: false,
+      posture: "foreground",
       missingLinks: "refuse",
     },
   });

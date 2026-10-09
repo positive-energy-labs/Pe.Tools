@@ -83,11 +83,14 @@ export async function readRequestIdentity(
   if (
     "principal" in result &&
     result.principal.kind !== "local" &&
-    (pathname === BRIDGE_PATH || pathname === "/admin/shutdown" || pathname === "/pe/share")
+    (pathname === BRIDGE_PATH ||
+      pathname === "/admin/shutdown" ||
+      pathname === "/admin/window" ||
+      pathname === "/pe/share")
   )
     result = refuse(
       "identity.local-only",
-      "The bridge, SDK shutdown, and share switch are local-only.",
+      "The bridge, SDK shutdown, window and share switch are local-only.",
     );
   options.share.observe(result, pathname, host);
   return result;

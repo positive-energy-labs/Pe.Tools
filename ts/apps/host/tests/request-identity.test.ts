@@ -141,6 +141,7 @@ test("the global reader gates routes, static fallback, unmatched paths and upgra
     "/mcp",
     "/api/bridge",
     "/admin/shutdown",
+    "/admin/window",
     "/pe/share",
   ] as const;
   let reached = 0;
@@ -185,7 +186,7 @@ test("the global reader gates routes, static fallback, unmatched paths and upgra
       new Request(`http://127.0.0.1:5180${path}`, { headers: remote }),
     );
     expect(tailnet.status).toBe(
-      ["/api/bridge", "/admin/shutdown", "/pe/share"].includes(path) ? 403 : 200,
+      ["/api/bridge", "/admin/shutdown", "/admin/window", "/pe/share"].includes(path) ? 403 : 200,
     );
     if (tailnet.ok)
       expect(await tailnet.json()).toHaveProperty(

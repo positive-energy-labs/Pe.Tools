@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Deferred, Effect, Layer, type Scope } from "effect";
 import { capture } from "@pe/runtime";
@@ -8,7 +7,7 @@ import { chooseServicePort } from "@pe/host-contracts/pe-service-host";
 import { discoverService, serviceFilePath } from "@pe/host-contracts/pe-service";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { productRoot } from "@pe/host-contracts/service-identity";
-import { resolveHostVersion } from "./host-lifecycle.ts";
+import { openWindow, resolveHostVersion } from "./host-lifecycle.ts";
 import { makeHttpLive, resolveWebRoot } from "./app.ts";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
 import { makeInstalledUpdateReader, updateWhenNoRevit } from "./update-route.ts";
@@ -38,7 +37,7 @@ export const hostProgram = (
         );
         if (live?.version === resolveHostVersion()) {
           console.log(`pe-host already serving on ${live.port} (pid ${live.pid}); opening it`);
-          openBrowser(live.port);
+          openWindow(live.port);
           return;
         }
       }
@@ -74,7 +73,7 @@ export const hostProgram = (
         // Open only once the claim holds, on the port the service file names.
         yield* Effect.forkDetach(
           Deferred.await(handle).pipe(
-            Effect.tap((claimed) => Effect.sync(() => openBrowser(claimed.serviceFile.port))),
+            Effect.tap((claimed) => Effect.sync(() => openWindow(claimed.serviceFile.port))),
           ),
         );
       // A host nobody clicked (login, Revit) updates the machine when no Revit runs; a click asks in the app.
@@ -127,25 +126,4 @@ export async function startInstalledTray(handle: ServiceHostHandle): Promise<() 
     child.stdin?.end();
     await exited;
   };
-}
-
-/** Edge app mode is the desktop window (host ledger 2026-10-08): Edge ships with Windows, `--app`
- * drops the tabs and address bar, and the product's own profile keeps the window apart from the
- * user's browsing. The default browser is the fallback when Edge is absent. */
-function openBrowser(port: number): void {
-  const url = `http://127.0.0.1:${port}/`;
-  const edge = [process.env["ProgramFiles(x86)"], process.env.ProgramFiles]
-    .filter((root): root is string => root !== undefined)
-    .map((root) => join(root, "Microsoft", "Edge", "Application", "msedge.exe"))
-    .find((candidate) => existsSync(candidate));
-  console.log(`pe-host opening ${url}${edge ? " in an Edge app window" : ""}`);
-  // detached: on Windows a non-detached child dies with this process, and the reuse path exits at once.
-  const [command, args] = edge
-    ? [
-        edge,
-        [`--app=${url}`, `--user-data-dir=${join(productRoot(), "edge-app")}`, "--no-first-run"],
-      ]
-    : ["cmd.exe", ["/c", "start", "", url]];
-  // windowsHide only for cmd: it passes SW_HIDE, which a GUI exe may apply to its first window.
-  spawn(command, args, { detached: true, windowsHide: !edge, stdio: "ignore" }).unref();
 }

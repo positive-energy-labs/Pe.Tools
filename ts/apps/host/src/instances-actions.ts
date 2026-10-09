@@ -332,6 +332,7 @@ export async function admitInstancesAction(
               year: staged.year,
               ...selection,
               quarantine: staged.quarantine,
+              background: staged.posture === "background",
               requestId,
               expectSession,
             });

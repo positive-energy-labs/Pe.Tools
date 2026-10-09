@@ -18,6 +18,7 @@ export const instancesLaunchSchema = z.discriminatedUnion("kind", [
     name: z.string().max(64),
     document: documentSelector.optional(),
     quarantine: z.boolean().default(false),
+    posture: z.enum(["foreground", "background"]).default("foreground"),
     missingLinks: z.enum(["allow", "refuse"]).default("refuse"),
   }),
 ]);
@@ -32,7 +33,7 @@ export const instancesDocumentSchema = z.strictObject({
 export type InstancesDocument = z.infer<typeof instancesDocumentSchema>;
 export const instancesRouteState = {
   route: "instances",
-  title: "Instances",
+  title: "Open",
   description:
     "Select Revit sessions and stage documents. Refresh to discover installed years, sessions and recents. Pea may propose a launch (an open or a start); a person stages it, and open/start launch exactly the staged value, never a proposal. Other lifecycle commands are human-only.",
   schema: instancesDocumentSchema,
