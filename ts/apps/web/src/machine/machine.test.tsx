@@ -24,6 +24,7 @@ vi.mock("#/components/feedback-picker", () => ({ FeedbackPicker: () => null }));
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
 });
 
 const body = (reading: Reading<Machine>, shell: "drawer" | "tray" = "drawer") =>
@@ -90,6 +91,20 @@ test("the chip says the version, or the update that waits", () => {
   expect(chipText(machineOf({ state: "absent" }))).toBe("Pe.Tools");
 });
 
+test("the version chip badges a waiting plan and clears it otherwise", () => {
+  const setAppBadge = vi.fn().mockResolvedValue(undefined);
+  const clearAppBadge = vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal("navigator", Object.assign(Object.create(navigator), { setAppBadge, clearAppBadge }));
+  history.replaceState(null, "", "/open?demo=waiting-plan");
+  render(<AppChrome pathname="/open" />);
+  expect(setAppBadge).toHaveBeenCalledOnce();
+  cleanup();
+  history.replaceState(null, "", "/open?demo=no-revit");
+  render(<AppChrome pathname="/open" />);
+  expect(clearAppBadge).toHaveBeenCalledOnce();
+  history.replaceState(null, "", "/");
+});
+
 test("a host that went away is the honest gap: last confirmed leg, then disconnected", () => {
   body(MACHINE_SEEDS.disconnected);
   expect(screen.getByRole("status").textContent).toContain(
@@ -128,5 +143,32 @@ describe("shells", () => {
     body(MACHINE_SEEDS["no-revit"], "drawer");
     for (const name of ["open window", "quit host"])
       expect(screen.getByRole("button", { name }).hasAttribute("disabled")).toBe(true);
+  });
+
+  test("install appears only for a captured prompt in the drawer", () => {
+    let standalone = false;
+    vi.stubGlobal("matchMedia", () => ({ matches: standalone }));
+    const prompt = vi.fn().mockResolvedValue(undefined);
+    body(MACHINE_SEEDS["no-revit"]);
+    expect(screen.queryByRole("button", { name: "Install as app" })).toBeNull();
+    const event = Object.assign(new Event("beforeinstallprompt", { cancelable: true }), { prompt });
+    fireEvent(window, event);
+    expect(event.defaultPrevented).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Install as app" }));
+    expect(prompt).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: "Install as app" })).toBeNull();
+    fireEvent(window, Object.assign(new Event("beforeinstallprompt"), { prompt }));
+    expect(screen.getByRole("button", { name: "Install as app" })).toBeTruthy();
+    fireEvent(window, new Event("appinstalled"));
+    expect(screen.queryByRole("button", { name: "Install as app" })).toBeNull();
+    cleanup();
+    body(MACHINE_SEEDS["no-revit"], "tray");
+    fireEvent(window, Object.assign(new Event("beforeinstallprompt"), { prompt }));
+    expect(screen.queryByRole("button", { name: "Install as app" })).toBeNull();
+    cleanup();
+    standalone = true;
+    body(MACHINE_SEEDS["no-revit"]);
+    fireEvent(window, Object.assign(new Event("beforeinstallprompt"), { prompt }));
+    expect(screen.queryByRole("button", { name: "Install as app" })).toBeNull();
   });
 });

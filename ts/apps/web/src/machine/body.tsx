@@ -5,7 +5,7 @@
  * critical state, one open at a time, Update opening by itself while a plan waits or a receipt
  * runs. The host footer closes it. Everything drawn is the host's one `Machine` reading.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Machine, MachineSession, Reading } from "@pe/agent-contracts";
 
 import { Accordion } from "#/components/lang/accordion";
@@ -35,6 +35,8 @@ import { UpdateGroup } from "./update";
 import { SEED_REFUSAL } from "./use-machine";
 
 export type Shell = "drawer" | "tray";
+
+type InstallPrompt = Event & { prompt: () => Promise<void> };
 
 function RevitRow({
   session,
@@ -106,6 +108,21 @@ function HostFooter({
 }) {
   const host = machine.host;
   const [said, setSaid] = useState<string | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<InstallPrompt | null>(null);
+  useEffect(() => {
+    if (shell === "tray") return;
+    const onPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as InstallPrompt);
+    };
+    const onInstalled = () => setInstallPrompt(null);
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, [shell]);
   const run = (verb: "window" | "shutdown") =>
     void hostAdmin(verb).then(setSaid, (caught: unknown) => setSaid(String(caught)));
   const trayOnly =
@@ -169,6 +186,16 @@ function HostFooter({
           />
         </span>
       </span>
+      {shell === "drawer" && installPrompt && !matchMedia("(display-mode: standalone)").matches ? (
+        <ActionButton
+          label="Install as app"
+          reason="install Pe.Tools in this Edge profile"
+          onClick={() => {
+            void installPrompt.prompt().catch(() => {});
+            setInstallPrompt(null);
+          }}
+        />
+      ) : null}
       {said ? <OutcomeLine kind="advisory" label={said} /> : null}
     </div>
   );
