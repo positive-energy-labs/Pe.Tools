@@ -13,7 +13,7 @@
     "dev:no-revit": "vp exec node scripts/dev-watch.ts --take-over-host --no-revit",
     "attach": "vp exec node --import jiti/register src/dev.ts",
     "build": "vp pack",
-    "build:payload": "vp pack && pnpm --filter @pe/web build && node scripts/stage-web.mjs",
+    "build:payload": "vp pack && pnpm --filter @pe/web build && node scripts/stage-web.mjs && node scripts/stage-tray.mjs",
     "test": "vp test",
     "check": "vp check"
   },

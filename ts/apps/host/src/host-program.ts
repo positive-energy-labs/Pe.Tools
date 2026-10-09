@@ -1,11 +1,11 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Deferred, Effect, Layer, type Scope } from "effect";
 import { capture } from "@pe/runtime";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { chooseServicePort } from "@pe/host-contracts/pe-service-host";
-import { discoverService } from "@pe/host-contracts/pe-service";
+import { discoverService, serviceFilePath } from "@pe/host-contracts/pe-service";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { productRoot } from "@pe/host-contracts/service-identity";
 import { resolveHostVersion } from "./host-lifecycle.ts";
@@ -53,7 +53,11 @@ export const hostProgram = (
         port,
         webUrl,
         capabilities: hostCapabilities,
-        lifecycle: { latch, handle },
+        lifecycle: {
+          latch,
+          handle,
+          startTray: hostOwnership.lane === "installed" ? startInstalledTray : undefined,
+        },
         webRoot: resolveWebRoot(),
       });
 
@@ -91,6 +95,37 @@ export const hostProgram = (
       );
     }),
   );
+
+/** Claim-owned child: EOF asks the shim to dispose, and the finalizer awaits its actual exit. */
+export async function startInstalledTray(handle: ServiceHostHandle): Promise<() => Promise<void>> {
+  const child = spawn(
+    join(dirname(hostOwnership.executablePath), "tray", "Pe.Host.Tray.exe"),
+    [
+      "--parent-pid",
+      String(handle.serviceFile.pid),
+      "--parent-start",
+      handle.serviceFile.processStartUtc,
+      "--service-file",
+      serviceFilePath(productRoot(), hostOwnership.serviceName),
+    ],
+    { windowsHide: true, stdio: ["pipe", "ignore", "ignore"] },
+  );
+  child.stdin?.on("error", (error) => console.warn(`pe-host tray pipe: ${String(error)}`));
+  const exited = new Promise<void>((resolve) => {
+    child.once("close", (code, signal) => {
+      if (code !== 0) console.warn(`pe-host tray exited: ${code ?? signal}`);
+      resolve();
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    child.once("spawn", resolve);
+    child.once("error", reject);
+  });
+  return async () => {
+    child.stdin?.end();
+    await exited;
+  };
+}
 
 /** Edge app mode is the desktop window (host ledger 2026-10-08): Edge ships with Windows, `--app`
  * drops the tabs and address bar, and the product's own profile keeps the window apart from the
