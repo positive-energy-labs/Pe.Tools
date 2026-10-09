@@ -16,6 +16,7 @@ import { ActionButton } from "../components/lang/action-button";
 import { useAction, useHostCall } from "#/readings";
 import { inspectAtomRegistry } from "../state/atom-inspect";
 import { appAtomRegistry, routeSearch } from "../route/route-owner";
+import { RESKIN_STORAGE_KEY, reskinThemes } from "../theme/registry";
 import {
   acknowledgeUpdate,
   readInstallStatus,
@@ -32,7 +33,13 @@ if (import.meta.env.DEV)
 
 interface MyRouterContext {}
 
-const THEME_INIT_SCRIPT = `(function(){try{var stored=window.localStorage.getItem('theme');var mode=(stored==='light'||stored==='dark'||stored==='auto')?stored:'auto';var prefersDark=window.matchMedia('(prefers-color-scheme: dark)').matches;var resolved=mode==='auto'?(prefersDark?'dark':'light'):mode;var root=document.documentElement;root.classList.remove('light','dark');root.classList.add(resolved);if(mode==='auto'){root.removeAttribute('data-theme')}else{root.setAttribute('data-theme',mode)}root.style.colorScheme=resolved;}catch(e){}})();`;
+const THEME_INIT_SCRIPT = `(function(){try{var stored=window.localStorage.getItem('theme');var mode=(stored==='light'||stored==='dark'||stored==='auto')?stored:'auto';var prefersDark=window.matchMedia('(prefers-color-scheme: dark)').matches;var resolved=mode==='auto'?(prefersDark?'dark':'light'):mode;var root=document.documentElement;root.classList.remove('light','dark');root.classList.add(resolved);root.style.colorScheme=resolved;}catch(e){}})();`;
+
+// The reskin-lab direction, applied before first paint beside the light/dark init. "data-theme"
+// names the direction (src/theme/registry.ts owns the attribute and storage); the light/dark
+// machinery above no longer writes it — its state rides the .dark class + color-scheme.
+// Ruling: docs/features/design-system/LEDGER.md (reskin-lab, 2026-10-09).
+const RESKIN_INIT_SCRIPT = `(function(){try{var themes=${JSON.stringify(reskinThemes)};var stored=window.localStorage.getItem(${JSON.stringify(RESKIN_STORAGE_KEY)});var root=document.documentElement;if(stored&&themes.indexOf(stored)>=0){root.setAttribute('data-theme',stored)}else{root.removeAttribute('data-theme')}}catch(e){}})();`;
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
   validateSearch: routeSearch,
@@ -75,6 +82,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
     <html lang="en" data-pe suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: RESKIN_INIT_SCRIPT }} />
         <HeadContent />
       </head>
       <body>

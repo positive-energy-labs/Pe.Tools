@@ -18,9 +18,11 @@
  *  2. bare hairlines     var(--line) / var(--line-2). The canon hairlines are --pe-line /
  *                        --pe-line-2 (base.css); the bare names died with the Lens
  *                        vocabulary.
- *  3. hex literals       #rrggbb / #rrggbbaa outside base.css. THE LAW in the canon
- *                        header: "no component, no route, and no CSS file downstream may name
- *                        a colour literal" — a colour is a one-line edit in base.css.
+ *  3. hex literals       #rrggbb / #rrggbbaa outside base.css and theme/*.css. THE LAW in the
+ *                        canon header: "no component, no route, and no CSS file downstream may
+ *                        name a colour literal" — a colour is a one-line edit in base.css. The
+ *                        reskin-lab seam (LEDGER 2026-10-09) makes src/theme/** the one
+ *                        sanctioned second home: a direction skin IS a colour naming.
  *  4. sub-10px type      text-[Npx] with N < 10. The 10px floor from the type-tier ruling
  *                        (ops enforced it on itself; the flagship pass finished the job).
  *  5. inline backgrounds  background: in TypeScript/TSX style objects. The shared veil uses
@@ -93,6 +95,9 @@ const JSON_FILES: Entry[] = collect(ROOT, "", [], /\.json$/);
 
 describe("design guard â€” current token authority", () => {
   it("declares each authored class in one CSS owner", () => {
+    // The three owners below are the only places a class may be authored. Reskin-lab theme files
+    // (src/theme/**) may re-declare RECIPE selectors scoped under [data-theme="<name>"] — scoped
+    // attribute-selector overrides, not new class vocabulary, so they stay outside this census.
     const owners = ["base.css", "design-lang.css", "components/lang/lang.css"];
     const declarations = new Map<string, string[]>();
     for (const owner of owners) {
@@ -335,10 +340,16 @@ describe("design guard — maintained surface hard zeros", () => {
     assertZero("bareLine", offences);
   });
 
-  it("no hex colour literal outside base.css (a colour is a one-line edit there)", () => {
+  it("no hex colour literal outside base.css and the reskin-lab theme files", () => {
+    // base.css names the house colours; a reskin-lab direction (src/theme/**, LEDGER 2026-10-09)
+    // is the one sanctioned second home — a direction skin IS a colour naming. Everywhere else
+    // the law holds: a colour is a one-line edit in base.css.
     const re = /(?<![\w#])#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?:[0-9a-fA-F]{2})?\b/g;
     const offences = scan(
-      FILES.filter((f) => f.rel !== "base.css").map((f) => ({ ...f, text: stripComments(f.text) })),
+      FILES.filter((f) => !isFoundationOrTheme(f.rel)).map((f) => ({
+        ...f,
+        text: stripComments(f.text),
+      })),
       re,
     );
     assertZero("hex", offences);
@@ -458,7 +469,7 @@ describe("design guard — maintained surface hard zeros", () => {
   });
 
   it("has no static numeric CSS colors outside the foundation", () => {
-    const files = FILES.filter((f) => f.rel !== "base.css").map((f) => ({
+    const files = FILES.filter((f) => !isFoundationOrTheme(f.rel)).map((f) => ({
       ...f,
       text: maskTemplateExpressions(stripComments(f.text)),
     }));
@@ -1234,6 +1245,13 @@ describe("design checks — code holds the boundary", () => {
 
 const isTsx = (f: Entry) => f.rel.endsWith(".tsx");
 const inLang = (f: Entry) => f.rel.startsWith("components/lang/");
+
+/** base.css names the house values; src/theme/** (the reskin-lab direction skins, LEDGER
+ *  2026-10-09) is the one sanctioned second home for colour literals and static paints —
+ *  restating the palette is a theme file's entire substance. Every other value law (density
+ *  heights, type tiers, motion, elevation, dash roles) still applies to theme files. */
+const isFoundationOrTheme = (rel: string): boolean =>
+  rel === "base.css" || rel.startsWith("theme/");
 
 const assertZero = (name: string, offences: Offence[]) => {
   expect(
