@@ -407,6 +407,14 @@ export function machineSources(
     sessions: async () => {
       const { result } = await sdk<SessionListResult>(sessionListArgv({ all: true }));
       if (!Array.isArray(result.sessions)) throw Error("SDK session census has no sessions array.");
+      if (!Array.isArray(result.processReadErrors))
+        throw Error("SDK session census has no process read evidence.");
+      if (result.processReadErrors.length)
+        throw Error(
+          `SDK process census incomplete: ${result.processReadErrors
+            .map((error) => `PID ${error.candidatePid}: ${error.detail}`)
+            .join("; ")}`,
+        );
       return result.sessions;
     },
     documents: async (process) => {
