@@ -356,7 +356,7 @@ test("SDK adapter uses the all-row census and pid document read, refusing a diff
     });
   const sources = machineSources(undefined, {} as Providers, f.sources.update);
   try {
-    sdkRun.mockResolvedValueOnce(envelope({ sessions: [row] }));
+    sdkRun.mockResolvedValueOnce(envelope({ sessions: [row], processReadErrors: [] }));
     expect(await sources.sessions()).toEqual([row]);
     expect(sdkRun).toHaveBeenLastCalledWith(["session", "list", "--all", "--json"]);
     sdkRun.mockResolvedValueOnce(envelope(docs, row.process));
@@ -369,6 +369,59 @@ test("SDK adapter uses the all-row census and pid document read, refusing a diff
   } finally {
     sdkRun.mockReset();
     f.machine.close();
+  }
+});
+
+test("SDK process read errors fail the real census adapter and restart the full automatic wait", async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  const adapter = machineSources(undefined, {} as Providers, f.sources.update);
+  const machine = createMachine(
+    { ...f.sources, sessions: adapter.sessions },
+    {
+      automaticUpdates: { peaActive: () => false, handoff: vi.fn() },
+    },
+  );
+  const census = (processReadErrors: unknown[] = []) =>
+    JSON.stringify({
+      result: { sessions: [], processReadErrors },
+      exitCode: 0,
+      diagnostics: [],
+      resolved: {},
+      binary: {},
+      command: {},
+      nextSteps: [],
+      guide: "session",
+      related: [],
+    });
+  Object.assign(f.sources.update.current(), {
+    plan: { planId: "idle-plan", available: true, blockers: [], revits: [] },
+  });
+  vi.mocked(f.sources.attachments).mockResolvedValue([]);
+  sdkRun.mockResolvedValue(census());
+  try {
+    await machine.refresh();
+    vi.advanceTimersByTime(120_000);
+    sdkRun.mockResolvedValueOnce(
+      census([
+        { candidatePid: 42, detail: "process access denied", observedAtUtc: row.observedAtUtc },
+      ]),
+    );
+    const failed = await machine.refresh();
+    expect(failed.legs.sessions?.error).toContain("process access denied");
+    expect(f.sources.update.apply).not.toHaveBeenCalled();
+    await machine.refresh();
+    vi.advanceTimersByTime(119_999);
+    await machine.refresh();
+    expect(f.sources.update.apply).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    await machine.refresh();
+    expect(f.sources.update.apply).toHaveBeenCalledExactlyOnceWith("idle-plan", true);
+  } finally {
+    machine.close();
+    f.machine.close();
+    sdkRun.mockReset();
+    vi.useRealTimers();
   }
 });
 
