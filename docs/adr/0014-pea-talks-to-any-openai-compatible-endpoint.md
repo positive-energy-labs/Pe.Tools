@@ -2,6 +2,13 @@
 
 Date: 2026-09-30. Status: accepted. Source: kaitpw, inference-routing conversation.
 
+> Superseded in part, 2026-10-09 (host ledger, MACHINE CONTROL PLANE ruling 7): inbound share of the
+> installed host over the user's tailnet is a product switch (`share.ts` owns one Tailscale Serve
+> mapping; `request-identity.ts` verifies the Serve identity header before every handler). The
+> inference-endpoint rule below is untouched: Pea still talks to one OpenAI-compatible endpoint and
+> how a user reaches a private endpoint stays hosting advice.
+
+
 ## Context
 
 Pea needs inference on machines that are not the developer's PC: a Revit runner laptop, a shared
