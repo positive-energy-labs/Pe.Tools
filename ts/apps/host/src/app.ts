@@ -192,10 +192,6 @@ export function makeHttpLive(options: HttpLiveOptions) {
     host: "127.0.0.1",
     port: options.port,
   }).pipe(Layer.provide(RetireSocketsLive));
-  const ClaimedServerLive = Layer.mergeAll(
-    ServerLive,
-    ServiceFileLive.pipe(Layer.provide(ServerLive)),
-  );
 
   const port = () => {
     const address = nodeServer.address();
@@ -244,8 +240,14 @@ export function makeHttpLive(options: HttpLiveOptions) {
 
   if (options.capabilities.revit) {
     const revitComposition = (options.revitCompositionFactory ?? makeRevitComposition)(spa);
-    return HttpRouter.serve(Layer.mergeAll(revitComposition.routes, CommonAppLive)).pipe(
-      Layer.provide(ClaimedServerLive),
+    // Install the request handler before acquiring/publishing the service claim. A request
+    // accepted while claim acquisition awaits SDK work must not be stranded without a handler.
+    return ServiceFileLive.pipe(
+      Layer.provideMerge(
+        HttpRouter.serve(Layer.mergeAll(revitComposition.routes, CommonAppLive)).pipe(
+          Layer.provideMerge(ServerLive),
+        ),
+      ),
       Layer.provide(NodeHttpClient.layerUndici),
       Layer.provide(revitComposition.provider),
       Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),
@@ -254,18 +256,20 @@ export function makeHttpLive(options: HttpLiveOptions) {
     );
   }
 
-  return HttpRouter.serve(
-    Layer.mergeAll(
-      noRevitBoundary(),
-      callRoute,
-      opsCatalogRoute(spa),
-      noRevitHostStatusRoute,
-      CommonAppLive,
+  return ServiceFileLive.pipe(
+    Layer.provideMerge(
+      HttpRouter.serve(
+        Layer.mergeAll(
+          noRevitBoundary(),
+          callRoute,
+          opsCatalogRoute(spa),
+          noRevitHostStatusRoute,
+          CommonAppLive,
+        ),
+      ).pipe(Layer.provideMerge(ServerLive)),
     ),
-  ).pipe(
     // The empty in-memory bridge registry admits no native connection on this composition.
     Layer.provide(RevitBridgeLive),
-    Layer.provide(ClaimedServerLive),
     Layer.provide(NodeHttpClient.layerUndici),
     Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),
     Layer.provide(UpdateLive),
