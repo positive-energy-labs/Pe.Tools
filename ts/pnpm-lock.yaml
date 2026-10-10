@@ -59,6 +59,8 @@ overrides:
 pnpmfileChecksum: sha256-o67yEFBwLUO/jgHp2d9DPtNvgEAEkiWkBOmIRuxfqV0=
 
 patchedDependencies:
+  '@agentclientprotocol/claude-agent-acp@0.84.0': ca4ecb63cb7f049733fbcd2b050d407b36ee62dcafd6c494e90e8fe5489cde16
+  '@agentclientprotocol/codex-acp@2.1.0': 10c1d7dc4e84bc4fc6bf426327d631b5a56a25c692ec6e3dd6f9400f1279efcb
   vite-plus@0.2.1: ec4550f35894920e3b7936089232d1d01a00fdf491b57911927884cde8bc5a09
 
 importers:
@@ -79,10 +81,10 @@ importers:
     dependencies:
       '@agentclientprotocol/claude-agent-acp':
         specifier: 'catalog:'
-        version: 0.84.0(@anthropic-ai/sdk@0.128.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))
+        version: 0.84.0(patch_hash=ca4ecb63cb7f049733fbcd2b050d407b36ee62dcafd6c494e90e8fe5489cde16)(@anthropic-ai/sdk@0.128.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))
       '@agentclientprotocol/codex-acp':
         specifier: 'catalog:'
-        version: 2.1.0
+        version: 2.1.0(patch_hash=10c1d7dc4e84bc4fc6bf426327d631b5a56a25c692ec6e3dd6f9400f1279efcb)
       '@agentclientprotocol/sdk':
         specifier: 'catalog:'
         version: 1.5.1(zod@4.3.6)
@@ -4364,7 +4366,7 @@ snapshots:
 
   '@acemir/cssom@0.9.31': {}
 
-  '@agentclientprotocol/claude-agent-acp@0.84.0(@anthropic-ai/sdk@0.128.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))':
+  '@agentclientprotocol/claude-agent-acp@0.84.0(patch_hash=ca4ecb63cb7f049733fbcd2b050d407b36ee62dcafd6c494e90e8fe5489cde16)(@anthropic-ai/sdk@0.128.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))':
     dependencies:
       '@agentclientprotocol/sdk': 1.5.1(zod@4.6.5)
       '@anthropic-ai/claude-agent-sdk': 0.3.284(@anthropic-ai/sdk@0.128.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.6.5)
@@ -4374,7 +4376,7 @@ snapshots:
       - '@anthropic-ai/sdk'
       - '@modelcontextprotocol/sdk'
 
-  '@agentclientprotocol/codex-acp@2.1.0':
+  '@agentclientprotocol/codex-acp@2.1.0(patch_hash=10c1d7dc4e84bc4fc6bf426327d631b5a56a25c692ec6e3dd6f9400f1279efcb)':
     dependencies:
       '@agentclientprotocol/sdk': 1.5.1(zod@4.3.6)
       '@openai/codex': 0.159.2

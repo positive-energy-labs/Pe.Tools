@@ -1,0 +1,21 @@
+diff --git a/dist/acp-agent.js b/dist/acp-agent.js
+index 27f71cad24b8f10591655f83a136d00d18d755e2..67d4e92cb801330bd3d00126c70042cfa0805711 100644
+--- a/dist/acp-agent.js
++++ b/dist/acp-agent.js
+@@ -1530,6 +1530,7 @@ export class ClaudeAcpAgent {
+             const cliPath = await claudeCliPath();
+             ({ stdout } = await execFileAsync(cliPath, ["auth", "status", "--json"], {
+                 timeout: AUTH_STATUS_PROBE_TIMEOUT_MS,
++                windowsHide: true,
+             }));
+         }
+         catch (error) {
+@@ -1715,7 +1716,7 @@ export class ClaudeAcpAgent {
+         // `claude auth logout` is non-interactive and idempotent.
+         const cliPath = await claudeCliPath();
+         try {
+-            await execFileAsync(cliPath, ["auth", "logout"]);
++            await execFileAsync(cliPath, ["auth", "logout"], { windowsHide: true });
+         }
+         catch (error) {
+             const stderr = typeof error === "object" && error && "stderr" in error
