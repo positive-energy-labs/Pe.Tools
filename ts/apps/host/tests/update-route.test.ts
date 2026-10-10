@@ -390,6 +390,118 @@ test("invalid plan identity refuses before writing an admission or invoking the 
   }
 });
 
+test.each(["direct", "recovered", "persisted"] as const)(
+  "failed SDK diagnostic survives %s admission and restart without inventing a receipt leg",
+  async (mode) => {
+    const f = await fixture();
+    const detail = "Access to the path 'C:\\sdk\\sessions\\installed-update-25' is denied.";
+    const diagnostic = `op.failed: ${detail}`;
+    let requestId = "5f871e2c-01db-400e-a0ae-65cb79a3e22f";
+    const failed = () => ({
+      ...receipt(requestId, "failed"),
+      restartYears: [],
+      legs: [
+        {
+          name: "download",
+          status: "ok",
+          observedAtUtc: "2026-10-10T08:51:34.7368843Z",
+          detail: null,
+          exitCode: null,
+        },
+      ],
+    });
+    const runner: UpdateRunner = vi.fn(async (args) => {
+      if (args[1] === "apply") {
+        requestId = args[args.indexOf("--request-id") + 1]!;
+        if (mode === "recovered") throw Error("ack lost");
+        return {
+          ...envelope(failed(), 1),
+          diagnostics: [{ code: "op.failed", detail, fix: null }],
+        };
+      }
+      if (args[0] === "op") {
+        const answer = recovered(failed());
+        return {
+          ...answer,
+          exitCode: 1,
+          result: {
+            ...(answer.result as object),
+            response: {
+              requestId,
+              key: "update.apply",
+              verdict: "failed",
+              result: failed(),
+              code: "op.failed",
+              detail,
+            },
+          },
+        };
+      }
+      return envelope(plan);
+    });
+    try {
+      if (mode === "persisted")
+        await writeFile(
+          f.path,
+          JSON.stringify({
+            requestId,
+            planId: plan.planId,
+            admittedAtUtc: "2026-10-10T08:51:00Z",
+            receiptObservedAtUtc: "2026-10-10T08:51:45Z",
+            receipt: failed(),
+          }),
+        );
+      const reader = f.make(runner);
+      const result =
+        mode === "persisted" ? await reader.refresh(false) : await reader.apply(plan.planId);
+      expect(result.receipt).toEqual(failed());
+      expect(result.receiptLeg.error).toBe(diagnostic);
+      const restarted = await f.make(runner).refresh(false);
+      expect(restarted.receipt).toEqual(failed());
+      expect(restarted.receiptLeg.error).toBe(diagnostic);
+      const lifecycle = {
+        latch: Effect.runSync(Deferred.make<void>()),
+        handle: Effect.runSync(Deferred.make<ServiceHostHandle>()),
+      };
+      const web = HttpRouter.toWebHandler(
+        updateRoutes.pipe(
+          Layer.provideMerge(
+            Layer.mergeAll(
+              Layer.succeed(UpdateReader, reader),
+              Layer.succeed(HostLifecycle, lifecycle),
+            ),
+          ),
+        ),
+        { disableLogger: true },
+      );
+      try {
+        const response = await web.handler(
+          new Request("http://host/host/update", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ planId: plan.planId }),
+          }),
+          Context.empty() as never,
+        );
+        expect(response.status).toBe(409);
+        expect(await response.json()).toMatchObject({
+          accepted: false,
+          requestId,
+          error: diagnostic,
+          receipt: failed(),
+        });
+      } finally {
+        await web.dispose();
+      }
+      expect(vi.mocked(runner).mock.calls.filter(([args]) => args[1] === "apply")).toHaveLength(
+        mode === "persisted" ? 0 : 1,
+      );
+    } finally {
+      await f.close();
+    }
+  },
+);
+
 test("automatic admission excludes new Pea work through download and handoff, terminal refusal releases it", async () => {
   const f = await fixture();
   try {
