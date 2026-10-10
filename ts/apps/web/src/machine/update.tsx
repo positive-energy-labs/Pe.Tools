@@ -60,7 +60,10 @@ function Receipt({ machine, gap }: { machine: Machine; gap: boolean }) {
       </span>
       {requestId ? <span className="face-mono text-ink-2">request {requestId}</span> : null}
       {receiptLeg.error ? (
-        <OutcomeLine kind="refused" label={`Receipt read failed: ${receiptLeg.error}`} />
+        <OutcomeLine
+          kind="refused"
+          label={`${receipt?.state === "failed" ? "Update failed" : "Receipt read failed"}: ${receiptLeg.error}`}
+        />
       ) : null}
       {restorationFailed ? (
         <span data-tone="caution">

@@ -100,6 +100,7 @@ const admissionSchema = z.object({
   admittedAtUtc: z.string(),
   receiptObservedAtUtc: z.string().nullable(),
   receipt: receiptSchema.nullable(),
+  receiptError: z.string().nullable().default(null),
 });
 type Admission = z.infer<typeof admissionSchema>;
 export type UpdateRunner = (args: string[], detached?: boolean) => Promise<Envelope<unknown>>;
@@ -124,6 +125,7 @@ export function createUpdateReader(options: {
   let refreshingFeed = false;
   let applying: Promise<MachineUpdate> | undefined;
   let automaticPending = false;
+  let terminalDiagnosticPending = false;
   let value: MachineUpdate = {
     plan: null,
     receipt: null,
@@ -139,12 +141,18 @@ export function createUpdateReader(options: {
         admission = admissionSchema.parse(JSON.parse(await readFile(options.path, "utf8")));
         if (admission.receipt)
           validateReceipt(admission.receipt, admission.requestId, admission.planId);
+        terminalDiagnosticPending =
+          admission.receipt?.state === "failed" && !admission.receiptError;
         value = {
           ...value,
           requestId: admission.requestId,
           admittedPlanId: admission.planId,
           receipt: admission.receipt,
-          receiptLeg: { ...value.receiptLeg, observedAtUtc: admission.receiptObservedAtUtc },
+          receiptLeg: {
+            ...value.receiptLeg,
+            observedAtUtc: admission.receiptObservedAtUtc,
+            error: admission.receiptError,
+          },
         };
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -168,6 +176,7 @@ export function createUpdateReader(options: {
       }
       await rename(temporary, options.path);
       admission = record;
+      terminalDiagnosticPending = false;
       if (record.receipt && ["ok", "failed", "refused"].includes(record.receipt.state))
         automaticPending = false;
       value = {
@@ -184,7 +193,9 @@ export function createUpdateReader(options: {
   async function recover() {
     if (
       !admission ||
-      (admission.receipt && ["ok", "failed", "refused"].includes(admission.receipt.state))
+      (admission.receipt &&
+        ["ok", "failed", "refused"].includes(admission.receipt.state) &&
+        !terminalDiagnosticPending)
     )
       return;
     const attemptedAtUtc = now();
@@ -198,6 +209,8 @@ export function createUpdateReader(options: {
             requestId: z.string(),
             key: z.literal("update.apply"),
             result: z.unknown(),
+            code: z.string().nullable().optional(),
+            detail: z.string().nullable().optional(),
           }),
         })
         .parse(envelope.result);
@@ -211,15 +224,19 @@ export function createUpdateReader(options: {
         admission.requestId,
         admission.planId,
       );
+      if (terminalDiagnosticPending && receipt.state !== admission.receipt?.state)
+        throw Error("Diagnostic recovery changed the already confirmed terminal update state.");
       if (envelope.diagnostics.length && !["ok", "failed", "refused"].includes(receipt.state))
         throw Error(said(envelope));
       const observedAtUtc = now();
+      const receiptError = failureDiagnostic(receipt, envelope, result.response);
       await persist({
         ...admission,
         receipt,
         receiptObservedAtUtc: observedAtUtc,
+        receiptError,
       });
-      value = { ...value, receiptLeg: { observedAtUtc, attemptedAtUtc, error: null } };
+      value = { ...value, receiptLeg: { observedAtUtc, attemptedAtUtc, error: receiptError } };
     } catch (error) {
       value = {
         ...value,
@@ -300,6 +317,7 @@ export function createUpdateReader(options: {
         admittedAtUtc: now(),
         receiptObservedAtUtc: null,
         receipt: null,
+        receiptError: null,
       };
       // Flush and atomically install identity BEFORE the detached child can have effects.
       await persist(record);
@@ -317,12 +335,14 @@ export function createUpdateReader(options: {
         );
         const receipt = validateReceipt(envelope.result, record.requestId, planId);
         const observedAtUtc = now();
+        const receiptError = failureDiagnostic(receipt, envelope);
         await persist({
           ...record,
           receipt,
           receiptObservedAtUtc: observedAtUtc,
+          receiptError,
         });
-        value = { ...value, receiptLeg: { observedAtUtc, attemptedAtUtc, error: null } };
+        value = { ...value, receiptLeg: { observedAtUtc, attemptedAtUtc, error: receiptError } };
       } catch (error) {
         value = {
           ...value,
@@ -350,6 +370,16 @@ function said(envelope: Envelope<unknown>) {
     envelope.diagnostics.map((d) => `${d.code}: ${d.detail}`).join("; ") ||
     `SDK exit ${envelope.exitCode}`
   );
+}
+
+function failureDiagnostic(
+  receipt: UpdateReceipt,
+  envelope: Envelope<unknown>,
+  response?: { code?: string | null; detail?: string | null },
+) {
+  if (receipt.state !== "failed") return null;
+  if (response?.detail) return `${response.code ?? "update.failed"}: ${response.detail}`;
+  return envelope.diagnostics.length ? said(envelope) : null;
 }
 
 export class UpdateReader extends Context.Service<
