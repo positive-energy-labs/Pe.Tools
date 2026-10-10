@@ -26,6 +26,7 @@ const options: IdentityOptions = {
       url: "https://box.tailabc.ts.net",
       refusal: null,
       callers: [],
+      allowRemoteAdministration: true,
       refused: [],
     }),
   },
@@ -41,7 +42,6 @@ afterEach(async () => {
 });
 
 async function fixture() {
-  let guarded = true;
   let beforePost: () => Promise<void> = async () => {};
   const posts: Record<string, unknown>[] = [];
   const seen: Array<{ path: string; login: string | null }> = [];
@@ -50,7 +50,7 @@ async function fixture() {
     const url = new URL(input instanceof Request ? input.url : String(input));
     const login = new Headers(init?.headers).get("tailscale-user-login");
     seen.push({ path: url.pathname, login });
-    if (url.pathname === "/pe/access") return Response.json({ guarded });
+    if (url.pathname === "/pe/access") return Response.json({ guarded: true });
     if (url.pathname.startsWith("/pe/scope/")) {
       await Promise.resolve();
       return Response.json({
@@ -194,9 +194,6 @@ async function fixture() {
     posts,
     seen,
     rows,
-    setGuarded: (value: boolean) => {
-      guarded = value;
-    },
     holdPost: (wait: () => Promise<void>) => {
       beforePost = wait;
     },
@@ -235,38 +232,24 @@ test("SDK HTTP initialization, tool discovery, notifications, versions, Origin, 
   expect((await f.send({ jsonrpc: "2.0", id: 1, method: "tools/list" })).status).toBe(400);
 });
 
-test("Guarded refuses pe_do at the switch for local and tailnet; pe_read runs; Full access admits", async () => {
+test("MCP tool operations do not consult the harness agent approval preference", async () => {
   const f = await fixture();
   for (const caller of [local, remote("one")]) {
     const session = await f.init(caller);
-    const refused = await (await f.call("pe_do", { key: "op:pod.member.write" }, session)).json();
-    expect(refused.result).toMatchObject({
-      isError: true,
-      content: [{ text: expect.stringContaining("machine access switch is Guarded") }],
-    });
-    expect(f.posts).toHaveLength(0);
+    const result = await (await f.call("pe_do", { key: "op:pod.member.write" }, session)).json();
+    expect(result.result.isError, JSON.stringify(result)).not.toBe(true);
+    expect(JSON.parse(result.result.content[0].text)).toMatchObject({ ok: true });
     const read = await (await f.call("pe_read", { key: "op:pod.list" }, session, 4)).json();
     expect(read.result.isError, JSON.stringify(read)).not.toBe(true);
     expect(JSON.parse(read.result.content[0].text)).toMatchObject({ ok: true });
   }
-  const session = await f.init(remote("one"));
-  f.setGuarded(false);
-  const result = await (await f.call("pe_do", { key: "op:pod.member.write" }, session)).json();
-  expect(result.result.isError, JSON.stringify(result)).not.toBe(true);
-  expect(JSON.parse(result.result.content[0].text)).toMatchObject({ ok: true });
-  expect(f.posts).toHaveLength(1);
+  expect(f.posts).toHaveLength(2);
   expect(f.posts[0]).toMatchObject({ actor: "agent", key: "pod.member.write" });
-  f.setGuarded(true);
-  expect(
-    (await (await f.call("pe_do", { key: "op:pod.member.write" }, session, 5)).json()).result
-      .isError,
-  ).toBe(true);
-  expect(f.posts).toHaveLength(1);
+  expect(f.seen.some((request) => request.path === "/pe/access")).toBe(false);
 });
 
 test("concurrent principals retain separate thread scope, headers, and admission identities", async () => {
   const f = await fixture();
-  f.setGuarded(false);
   const [one, two] = await Promise.all([
     f.init({ ...remote("one"), "x-pe-thread": "one" }),
     f.init({ ...remote("two"), "x-pe-thread": "two" }),
@@ -292,7 +275,6 @@ test("concurrent principals retain separate thread scope, headers, and admission
 
 test("transport disconnect does not cancel an admitted action; replay reads the retained receipt", async () => {
   const f = await fixture();
-  f.setGuarded(false);
   const session = await f.init(remote("one"));
   let release!: () => void;
   f.holdPost(

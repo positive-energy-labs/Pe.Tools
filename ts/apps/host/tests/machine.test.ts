@@ -100,10 +100,22 @@ function fixture() {
     attachments: vi.fn(async () => [attached]),
     years: vi.fn(async () => [2025]),
     providers: vi.fn(async () => ({
-      providers: [{ id: "codex", readiness: { state: "ready" as const } }],
+      providers: [
+        {
+          id: "codex",
+          harness: "codex" as const,
+          name: "Codex",
+          auth: { kind: "subscription" as const },
+          readiness: { state: "ready" as const },
+          models: [],
+          traits: [],
+          probedAt: null,
+        },
+      ],
       access: { guarded: true },
     })),
     update: {
+      automaticPending: () => false,
       current: () => update,
       refresh: vi.fn(async () => update),
       apply: vi.fn(async () => update),
@@ -113,6 +125,95 @@ function fixture() {
   };
   return { sources, machine: createMachine(sources, { periodMs: 60_000 }) };
 }
+
+test("receipt recovery ticks independently of the feed and installed-years clocks", async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  try {
+    await f.machine.refresh();
+    vi.advanceTimersByTime(5_000);
+    await f.machine.refresh();
+    expect(f.sources.update.refresh).toHaveBeenNthCalledWith(2, false);
+    expect(f.sources.years).toHaveBeenCalledTimes(1);
+  } finally {
+    f.machine.close();
+    vi.useRealTimers();
+  }
+});
+
+test("automatic update requires two continuous Revit-free minutes and waits for Pea", async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  let busy = false;
+  const handoff = vi.fn();
+  const machine = createMachine(f.sources, {
+    automaticUpdates: { peaActive: () => busy, handoff },
+  });
+  const plan = { planId: "idle-plan", available: true, blockers: [], revits: [] };
+  Object.assign(f.sources.update.current(), { plan });
+  vi.mocked(f.sources.sessions).mockResolvedValue([]);
+  vi.mocked(f.sources.attachments).mockResolvedValue([]);
+  try {
+    await machine.refresh();
+    vi.advanceTimersByTime(119_999);
+    await machine.refresh();
+    expect(f.sources.update.apply).not.toHaveBeenCalled();
+    vi.mocked(f.sources.sessions).mockResolvedValue([row]);
+    await machine.refresh();
+    vi.mocked(f.sources.sessions).mockResolvedValue([]);
+    await machine.refresh();
+    vi.advanceTimersByTime(120_000);
+    busy = true;
+    await machine.refresh();
+    expect(f.sources.update.apply).not.toHaveBeenCalled();
+    busy = false;
+    await machine.refresh();
+    expect(f.sources.update.apply).toHaveBeenCalledExactlyOnceWith("idle-plan", true);
+  } finally {
+    machine.close();
+    f.machine.close();
+    vi.useRealTimers();
+  }
+});
+
+test("failed absence observations reset the automatic wait and a Pea turn starting during recheck blocks admission", async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  let busy = false;
+  const machine = createMachine(f.sources, {
+    automaticUpdates: { peaActive: () => busy, handoff: vi.fn() },
+  });
+  Object.assign(f.sources.update.current(), {
+    plan: { planId: "idle-plan", available: true, blockers: [], revits: [] },
+  });
+  vi.mocked(f.sources.sessions).mockResolvedValue([]);
+  vi.mocked(f.sources.attachments).mockResolvedValue([]);
+  try {
+    await machine.refresh();
+    vi.advanceTimersByTime(120_000);
+    vi.mocked(f.sources.attachments).mockRejectedValueOnce(Error("attachment observation failed"));
+    await machine.refresh();
+    await machine.refresh();
+    expect(f.sources.update.apply).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(120_000);
+    vi.mocked(f.sources.sessions).mockRejectedValueOnce(Error("census failed"));
+    await machine.refresh();
+    await machine.refresh();
+    expect(f.sources.update.apply).not.toHaveBeenCalled();
+    vi.mocked(f.sources.update.refresh).mockImplementation(async (feed) => {
+      if (feed) busy = true;
+      return f.sources.update.current();
+    });
+    vi.advanceTimersByTime(120_000);
+    await machine.refresh();
+    expect(busy).toBe(true);
+    expect(f.sources.update.apply).not.toHaveBeenCalled();
+  } finally {
+    machine.close();
+    f.machine.close();
+    vi.useRealTimers();
+  }
+});
 
 test("many SSE subscribers and concurrent refreshes share one census and one owner subscription", async () => {
   const f = fixture();
@@ -338,17 +439,33 @@ test("health aggregates every attachment while an ambiguous snapshot has no atta
   );
 });
 
-test("the update feed is read at boot, on a new observer, and on its own clock, never on the tick", async () => {
+test("observers share the feed clock instead of resetting its deadline", async () => {
   const { sources, machine } = fixture();
   const stop = machine.observe(() => {});
   await machine.refresh();
   await machine.refresh();
   await machine.refresh();
-  expect(sources.update.refresh).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(sources.update.refresh).mock.calls.filter(([feed]) => feed)).toHaveLength(1);
   const again = machine.observe(() => {});
   await machine.refresh();
-  expect(sources.update.refresh).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(sources.update.refresh).mock.calls.filter(([feed]) => feed)).toHaveLength(1);
   again();
   stop();
   machine.close();
+});
+
+test("provider read errors expose the safe snapshot alongside refusal evidence", async () => {
+  const f = fixture();
+  try {
+    const safe = await f.sources.providers();
+    vi.mocked(f.sources.providers).mockResolvedValue({
+      ...safe,
+      readError: "persisted providers unreadable",
+    });
+    const value = await f.machine.refresh();
+    expect(value.providers).toEqual(safe.providers);
+    expect(value.legs.providers?.error).toContain("persisted providers unreadable");
+  } finally {
+    f.machine.close();
+  }
 });

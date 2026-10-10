@@ -7,8 +7,7 @@
  * Stop always passes `--unsaved keep` for a lay user; discard is offered only for a checkout
  * session (host ledger 2026-10-09 ruling 9). hr restarts and discards, so it arms first too.
  */
-import { useMemo, useState } from "react";
-import { useAtomValue } from "@effect/atom-react";
+import { useState } from "react";
 import {
   instancesActions,
   instancesRouteState,
@@ -29,8 +28,8 @@ import {
   selectorWords,
   unsavedOf,
 } from "#/machine/session";
-import { previousOf, useAction } from "#/readings";
-import { docAtom } from "#/route/route-work";
+import { useAction } from "#/readings";
+import { useRouteWork } from "#/route/route-work";
 import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 export interface WorkBasis {
@@ -47,11 +46,8 @@ export const INSTANCES_WORK: WorkKey = {
 
 /** The instances Work revision, for a shell that holds no route handle (the drawer, the tray). */
 export function useInstancesBasis(enabled: boolean): WorkBasis | null {
-  const atom = useMemo(() => docAtom(instancesRouteState, INSTANCES_WORK), []);
-  const slice = previousOf(useAtomValue(atom));
-  return enabled && slice && slice.revision !== null
-    ? { key: INSTANCES_WORK, revision: slice.revision }
-    : null;
+  const work = useRouteWork(instancesRouteState, enabled ? INSTANCES_WORK : null);
+  return work.revision !== null ? { key: INSTANCES_WORK, revision: work.revision } : null;
 }
 
 type Command = "open" | "restart" | "stop";

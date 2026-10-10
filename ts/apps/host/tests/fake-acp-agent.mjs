@@ -7,7 +7,7 @@
 // `FAKE_ACP_AUTH` (`account` by default, `none`), and `required` refuses `session/new`. `session/resume` picks a stored
 // session up with no replay and refuses the id "lost"; `session/fork` answers a new id.
 import { Readable, Writable } from "node:stream";
-import { existsSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   AgentSideConnection,
@@ -15,6 +15,9 @@ import {
   PROTOCOL_VERSION,
   RequestError,
 } from "@agentclientprotocol/sdk";
+
+if (process.env.FAKE_ACP_LOG)
+  appendFileSync(process.env.FAKE_ACP_LOG, `${JSON.stringify({ pid: process.pid })}\n`);
 
 const shape = process.env.FAKE_ACP_SHAPE === "config" ? "config" : "models";
 const pinnedModel =
@@ -104,10 +107,13 @@ new AgentSideConnection(
     async newSession() {
       const auth = process.env.FAKE_ACP_AUTH ?? "account";
       if (auth === "required") throw RequestError.authRequired();
-      await conn.extNotification("_auth/status_update", {
-        authStatus:
-          auth === "none" ? { kind: "none", label: "Not logged in" } : { kind: "account" },
-      });
+      const report = () =>
+        conn.extNotification("_auth/status_update", {
+          authStatus:
+            auth === "none" ? { kind: "none", label: "Not logged in" } : { kind: "account" },
+        });
+      if (process.env.FAKE_ACP_AUTH_LATE) setTimeout(report, 20);
+      else await report();
       return session("fake-session");
     },
     resumeSession({ sessionId }) {

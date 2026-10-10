@@ -274,6 +274,7 @@ const base = (over: Partial<Machine> = {}): Machine => ({
     receiptLeg: { observedAtUtc: null, attemptedAtUtc: null, error: null },
   },
   share: {
+    allowRemoteAdministration: true,
     desired: "off",
     state: "off",
     url: "https://office-pc.tail1234.ts.net",
@@ -282,8 +283,26 @@ const base = (over: Partial<Machine> = {}): Machine => ({
     refused: [],
   },
   providers: [
-    { id: "claude", readiness: { state: "ready" } },
-    { id: "codex", readiness: { state: "refused", step: "signed-in", message: "not signed in" } },
+    {
+      id: "claude",
+      harness: "claude",
+      name: "Claude",
+      auth: { kind: "subscription" },
+      readiness: { state: "ready" },
+      models: [],
+      traits: [],
+      probedAt: null,
+    },
+    {
+      id: "codex",
+      harness: "codex",
+      name: "Codex",
+      auth: { kind: "subscription" },
+      readiness: { state: "refused", step: "signed-in", message: "not signed in" },
+      models: [],
+      traits: [],
+      probedAt: null,
+    },
   ],
   access: { guarded: true },
   legs: {

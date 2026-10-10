@@ -42,6 +42,7 @@ export interface MachineShareAdapter {
 export const unavailableShare: MachineShareAdapter = {
   read: async () => ({
     desired: "off",
+    allowRemoteAdministration: true,
     state: "unknown",
     url: null,
     refusal: { code: "share.not-configured", detail: "Serve adapter is not configured." },
@@ -57,7 +58,9 @@ export interface MachineSources {
   documents(this: void, process: ProcessIdentity): Promise<DocListResult>;
   attachments(this: void): Promise<readonly MachineAttachment[]>;
   years(this: void): Promise<readonly number[]>;
-  providers(this: void): Promise<{ providers: readonly MachineProvider[]; access: Access }>;
+  providers(
+    this: void,
+  ): Promise<{ providers: readonly MachineProvider[]; access: Access; readError?: string | null }>;
   readonly update: UpdateReader["Service"];
   readonly share: MachineShareAdapter;
   subscribe?(this: void, notify: () => void): () => void;
@@ -66,14 +69,23 @@ export interface MachineSources {
 /** One clock, one in-flight refresh, full confirmed data retained independently of every leg. */
 export function createMachine(
   sources: MachineSources,
-  options: { now?: () => string; periodMs?: number; updatePeriodMs?: number } = {},
+  options: {
+    now?: () => string;
+    periodMs?: number;
+    updatePeriodMs?: number;
+    automaticUpdates?: { peaActive(): boolean; handoff(): void };
+  } = {},
 ) {
   const now = options.now ?? (() => new Date().toISOString());
   // The update feed is GitHub's API at 60 unauthenticated calls an hour: it has its own clock, read
-  // at boot, when a new observer arrives (the drawer's recheck reopens the stream), and every
-  // updatePeriodMs. The 5 s machine tick never touches it (it did, and emptied the quota in minutes).
+  // at boot and every updatePeriodMs. Recheck and newly eligible automatic updates read explicitly.
+  // The 5 s machine tick recovers receipts without reading the feed.
   const updatePeriodMs = options.updatePeriodMs ?? 30 * 60_000;
   let updateDueAt = 0;
+  let yearsDueAt = 0;
+  let noRevitSince: number | null = null;
+  let eligibleBefore = false;
+  let automaticPlan: string | null = null;
   const listeners = new Set<(value: Machine) => void>();
   let inFlight: Promise<Machine> | undefined;
   let timer: ReturnType<typeof setInterval> | undefined;
@@ -116,7 +128,7 @@ export function createMachine(
     if (closed) return Promise.resolve(latest);
     if (inFlight) return inFlight;
     inFlight = (async () => {
-      const [censusRead] = await Promise.all([
+      const [censusRead, attachmentsRead] = await Promise.all([
         read("sessions", sources.sessions, (value) => {
           sessions = value;
         }),
@@ -129,12 +141,24 @@ export function createMachine(
         read("peers", sources.peers, (value) => {
           peers = value;
         }),
-        read("years", sources.years, (value) => {
-          years = value;
-        }),
+        Date.now() >= yearsDueAt
+          ? read(
+              "years",
+              () => {
+                return sources.years().then((value) => {
+                  yearsDueAt = Date.now() + updatePeriodMs;
+                  return value;
+                });
+              },
+              (value) => {
+                years = value;
+              },
+            )
+          : Promise.resolve(true),
         read("providers", sources.providers, (value) => {
           providers = value.providers;
           access = value.access;
+          if (value.readError) throw Error(value.readError);
         }),
         read(
           "share",
@@ -143,17 +167,62 @@ export function createMachine(
             share = value;
           },
         ),
-        Date.now() >= updateDueAt
-          ? read(
-              "update",
-              () => {
-                updateDueAt = Date.now() + updatePeriodMs;
-                return sources.update.refresh();
-              },
-              () => {},
-            )
-          : Promise.resolve(true),
+        read(
+          "update",
+          () => {
+            const checkFeed = Date.now() >= updateDueAt;
+            if (checkFeed) updateDueAt = Date.now() + updatePeriodMs;
+            return sources.update.refresh(checkFeed);
+          },
+          () => {},
+        ),
       ]);
+      const policy = options.automaticUpdates;
+      if (
+        !censusRead ||
+        !attachmentsRead ||
+        (sessions ?? []).some(
+          (row) => row.case !== "gone-receipt" && row.case !== "failed-receipt",
+        ) ||
+        attachments.length ||
+        sessions === null
+      )
+        noRevitSince = null;
+      else noRevitSince ??= Date.now();
+      const eligible =
+        policy !== undefined &&
+        noRevitSince !== null &&
+        Date.now() - noRevitSince >= 120_000 &&
+        !policy.peaActive();
+      // A newly empty fleet or completed Pea turn needs a fresh plan, even inside the feed interval.
+      if (eligible && !eligibleBefore) await sources.update.refresh(true);
+      eligibleBefore = eligible;
+      if (eligible && policy && !policy.peaActive() && !closed) {
+        const update = sources.update.current();
+        const plan = update.plan;
+        if (
+          plan?.available &&
+          !plan.revits.length &&
+          !plan.blockers.length &&
+          !update.planLeg.error &&
+          plan.planId !== automaticPlan &&
+          (!update.requestId ||
+            (update.receipt && ["ok", "failed", "refused"].includes(update.receipt.state)))
+        ) {
+          automaticPlan = plan.planId;
+          await read(
+            "automatic-update",
+            () => sources.update.apply(plan.planId, true),
+            (applied) => {
+              if (
+                applied.receipt?.state === "running" &&
+                applied.receipt?.legs.some((leg) => leg.name === "handoff" && leg.status === "ok")
+              )
+                policy.handoff();
+            },
+          );
+        }
+      }
       if (censusRead)
         await Promise.all(
           (sessions ?? []).map(async (row) => {
@@ -246,7 +315,6 @@ export function createMachine(
   function observe(accept: (value: Machine) => void) {
     if (closed) throw Error("Machine owner is retired.");
     listeners.add(accept);
-    updateDueAt = 0;
     if (latest.legs.sessions) accept(latest);
     if (listeners.size === 1) {
       const notify = () => {
@@ -396,10 +464,17 @@ export function machineSources(
           return number;
         },
       ),
-    providers: async () => ({ providers: providers.readiness(), access: providers.access() }),
+    providers: () => providers.snapshot(),
     update,
     share,
-    subscribe: (notify) => (bridge ? bridge.subscribe(() => notify()) : () => {}),
+    subscribe: (notify) => {
+      const unbridge = bridge?.subscribe(() => notify());
+      const unproviders = providers.subscribe(notify);
+      return () => {
+        unbridge?.();
+        unproviders();
+      };
+    },
   };
 }
 

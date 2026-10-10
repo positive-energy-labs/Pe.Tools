@@ -64,7 +64,7 @@ test("the host-owned /pe surface answers without Revit", async () => {
     };
     expect(catalog.sources["route registry"]).toBe("ok");
     expect(catalog.sources.skills).toBe("ok");
-    expect(catalog.sources.catalog).toMatch(/bridge catalog unavailable/);
+    expect(catalog.sources.catalog).toMatch(/bridge catalog unavailable|did not answer/);
     // pod.list is host-local: the pods answer with Revit closed.
     expect(catalog.sources["pod.json"]).toBe("ok");
     expect(catalog.sessions).toEqual([]);

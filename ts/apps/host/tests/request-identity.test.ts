@@ -13,6 +13,7 @@ import { createServer } from "node:http";
 import { once } from "node:events";
 
 const share: MachineShare = {
+  allowRemoteAdministration: true,
   desired: "on",
   state: "on",
   url: "https://box.tailabc.ts.net",
@@ -250,4 +251,89 @@ test("invocation identity never leaks to other origins", async () => {
   } finally {
     globalThis.fetch = original;
   }
+});
+
+test("remote administration Off denies only machine-control mutations, including normalized spellings", async () => {
+  const disabled: IdentityOptions = {
+    ...options,
+    share: { ...options.share, read: async () => ({ ...share, allowRemoteAdministration: false }) },
+  };
+  for (const [method, path] of [
+    ["POST", "/pe/providers"],
+    ["DELETE", "/pe/providers/x"],
+    ["POST", "/pe/providers/x/probe"],
+    ["POST", "/pe/providers/x/open-login"],
+    ["PUT", "/pe/access"],
+    ["POST", "/host/update"],
+    ["POST", "/pe/%70roviders"],
+    ["POST", "/pe//providers"],
+    ["POST", "/pe/providers/"],
+    ["POST", "/x/../pe/providers?unused=true"],
+  ]) {
+    expect(
+      await readRequestIdentity(remote, path!, disabled, method),
+      `${method} ${path}`,
+    ).toHaveProperty("refusal.code", "identity.remote-administration");
+    expect(await readRequestIdentity(local, path!, disabled, method)).toHaveProperty(
+      "principal.kind",
+      "local",
+    );
+    expect(await readRequestIdentity(remote, path!, options, method)).toHaveProperty(
+      "principal.kind",
+      "tailnet",
+    );
+  }
+  for (const [method, path] of [
+    ["GET", "/pe/providers"],
+    ["GET", "/pe/access"],
+    ["GET", "/host/update"],
+    ["POST", "/call"],
+    ["POST", "/actions"],
+    ["POST", "/mcp"],
+  ])
+    expect(await readRequestIdentity(remote, path!, disabled, method)).toHaveProperty(
+      "principal.kind",
+      "tailnet",
+    );
+});
+
+test("the actual router supplies the mutation method to the remote administration boundary", async () => {
+  const disabled: IdentityOptions = {
+    ...options,
+    share: { ...options.share, read: async () => ({ ...share, allowRemoteAdministration: false }) },
+  };
+  let reached = 0;
+  const routes = (["/pe/providers", "/pe/access", "/host/update", "/call"] as const).map((path) =>
+    HttpRouter.add(
+      "*",
+      path,
+      Effect.sync(() => {
+        reached++;
+        return HttpServerResponse.jsonUnsafe({ principal: invocationContext()?.principal });
+      }),
+    ),
+  );
+  const app = HttpRouter.toWebHandler(Layer.mergeAll(requestIdentityLayer(disabled), ...routes), {
+    disableLogger: true,
+  });
+  disposals.push(app.dispose);
+  for (const [method, path] of [
+    ["POST", "/pe/providers"],
+    ["PUT", "/pe/access"],
+    ["POST", "/host/update"],
+  ])
+    expect(
+      (await app.handler(new Request(`http://127.0.0.1:5180${path}`, { method, headers: remote })))
+        .status,
+    ).toBe(403);
+  expect(reached).toBe(0);
+  for (const [method, path] of [
+    ["GET", "/pe/providers"],
+    ["POST", "/call"],
+  ])
+    expect(
+      (await app.handler(new Request(`http://127.0.0.1:5180${path}`, { method, headers: remote })))
+        .status,
+    ).toBe(200);
+  expect(reached).toBe(2);
 });

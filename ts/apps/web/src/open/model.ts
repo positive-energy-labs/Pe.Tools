@@ -46,6 +46,22 @@ export const docSelectorOf = (recent: RecentDocument): string =>
 const same = (a: string | null | undefined, b: string | null | undefined) =>
   !!a && !!b && a.toLowerCase() === b.toLowerCase();
 
+function cloudIdentity(value: {
+  path: string | null;
+  region?: string | null;
+  projectGuid?: string | null;
+  modelGuid?: string | null;
+}): string | null {
+  const path = /^cld:\/\/([^/]+)\/([^/]+)\/([^/]+)$/i.exec(value.path ?? "");
+  const guid = (segment: string | undefined) => segment?.match(/^\{([^}]+)\}/)?.[1] ?? segment;
+  const region = value.region ?? path?.[1];
+  const project = value.projectGuid ?? guid(path?.[2]);
+  const model = value.modelGuid ?? guid(path?.[3]);
+  return region && project && model
+    ? JSON.stringify([region, project, model].map((part) => part.toLowerCase()))
+    : null;
+}
+
 export function modelRows(
   sessions: readonly MachineSession[],
   recents: readonly RecentDocument[],
@@ -56,12 +72,18 @@ export function modelRows(
   const claimed = new Set<(typeof held)[number]>();
   const rows: DocRow[] = [];
   for (const recent of recents) {
-    if (rows.some((row) => same(row.path, recent.path))) continue;
+    const identity = recent.isCloud ? cloudIdentity(recent) : null;
+    if (
+      rows.some((row) =>
+        identity ? identity === cloudIdentity({ path: row.selector }) : same(row.path, recent.path),
+      )
+    )
+      continue;
     const open =
-      held.find(
-        (entry) =>
-          same(entry.document.path, recent.path) ||
-          (recent.isCloud && same(entry.document.title, recent.title)),
+      held.find((entry) =>
+        identity
+          ? identity === cloudIdentity(entry.document)
+          : same(entry.document.path, recent.path),
       ) ?? null;
     if (open) claimed.add(open);
     rows.push({
@@ -94,6 +116,7 @@ export function modelRows(
 
 /** The launcher's own picks. `target` is a Running key, or "new" for a new Revit. */
 export interface LaunchDraft {
+  /** A discovered row key or the staged SDK selector, preserved before discovery arrives. */
   readonly doc: string | null;
   readonly year: number | null;
   readonly target: string | null;
@@ -148,12 +171,34 @@ export function launchPlan(
 ): LaunchPlan {
   const sessions = machine?.revit.sessions ?? [];
   const years = machine?.revit.years ?? [];
-  const doc = rows.find((row) => row.key === draft.doc) ?? null;
+  const identity = cloudIdentity({ path: draft.doc });
+  const doc =
+    rows.find(
+      (row) =>
+        same(row.key, draft.doc) ||
+        same(row.selector, draft.doc) ||
+        (identity && identity === cloudIdentity({ path: row.selector })),
+    ) ??
+    (draft.doc
+      ? ({
+          key: draft.doc,
+          title: draft.doc.split(/[\\/]/).at(-1) ?? draft.doc,
+          path: draft.doc,
+          selector: draft.doc,
+          cloud: draft.doc.toLowerCase().startsWith("cld://"),
+          savedYear: null,
+          savedYearFailure: null,
+          lastYear: null,
+          openIn: null,
+        } satisfies DocRow)
+      : null);
+  const explicit = sessions.find((session) => keyOf(session) === draft.target);
   // The default year is an installed one: the file's own, else the one that last opened it.
   const installed = (candidate: number | null | undefined) =>
     candidate != null && years.includes(candidate) ? candidate : null;
   const year =
     draft.year ??
+    explicit?.row.year ??
     (doc?.openIn
       ? doc.openIn.session.row.year
       : (installed(doc?.savedYear) ?? installed(doc?.lastYear))) ??
@@ -182,7 +227,10 @@ export function launchPlan(
   let refusal: string | null = null;
   let caution: string | null = null;
   let note: string | null = null;
-  if (year === null)
+  const missingTarget = draft.target !== null && draft.target !== "new" && !picked;
+  if (missingTarget)
+    refusal = `Selected Revit '${draft.target}' is no longer available; choose another target or a new Revit.`;
+  else if (year === null)
     refusal = "No installed Revit year is known yet; the machine reading has none.";
   else if (doc?.savedYear && doc.savedYear > year)
     refusal = `${doc.title} was saved in Revit ${doc.savedYear}; Revit ${year} cannot open a newer file.`;
@@ -252,6 +300,11 @@ export function launchPlan(
             posture: draft.posture,
             missingLinks: links,
           };
+  }
+  if (missingTarget) {
+    launch = null;
+    argv = [];
+    verb = "Open in selected Revit";
   }
   return { doc, year, live, target: picked, verb, argv, refusal, caution, note, launch };
 }

@@ -4,7 +4,7 @@ import type { MachineShareAdapter } from "./machine.ts";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { Effect, Option, Stream } from "effect";
+import { Deferred, Effect, Option, Stream } from "effect";
 import { HttpEffect, HttpRouter, HttpServer } from "effect/unstable/http";
 import {
   addressSchema,
@@ -56,6 +56,7 @@ import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
 import { createMachine, machineSources } from "./machine.ts";
 import { UpdateReader } from "./update-reader.ts";
 import { makeInstalledUpdateReader } from "./update-route.ts";
+import { HostLifecycle } from "./host-lifecycle.ts";
 import { bindActionWorkspace } from "./takeoff-actions.ts";
 import { familySpecAsset, familySpecHandlers } from "./family-spec.ts";
 
@@ -348,6 +349,7 @@ export function makeHostPeRoutes(
   registrationsFactory: typeof createRouteRegistrations = createRouteRegistrations,
   update: UpdateReader["Service"] = makeInstalledUpdateReader(),
   share?: MachineShareAdapter,
+  updateHandoff?: () => void,
 ) {
   const sourceRoot = hostOwnership.sourceRoot;
   const worldRoot = resolvePeaProductHomePath();
@@ -374,9 +376,9 @@ export function makeHostPeRoutes(
   });
   // Every provider is probed once in the background; the list says `unknown` until then.
   const providers = createProviders({ shellPath: () => shellPath });
-  const machine = createMachine(machineSources(bridge, providers, update, share));
   const threads = createHarnessThreads({
     providers,
+    updatePending: update.automaticPending,
     root: productHarnessThreadsPath(),
     worldRoot,
     // The same kernel the Pea MCP server declares, for the harness that cannot read it from there.
@@ -387,6 +389,12 @@ export function makeHostPeRoutes(
       });
     },
     mcpServer: (threadId) => peaMcpServer(sourceRoot, hostBaseUrl, threadId),
+  });
+  const machine = createMachine(machineSources(bridge, providers, update, share), {
+    automaticUpdates:
+      hostOwnership.lane === "installed" && updateHandoff
+        ? { peaActive: threads.active, handoff: updateHandoff }
+        : undefined,
   });
   const registrations = registrationsFactory({ hostBaseUrl });
   for (const registration of registrations) {
@@ -415,22 +423,29 @@ export function makeHostPeRoutes(
 }
 
 /** {@link makeHostPeRoutes} on the host's router. Harness children die when the launch scope closes. */
-export const peRoutesLayer = (registrationsFactory?: typeof createRouteRegistrations, share?: MachineShareAdapter) =>
+export const peRoutesLayer = (
+  registrationsFactory?: typeof createRouteRegistrations,
+  share?: MachineShareAdapter,
+) =>
   HttpRouter.use((router) =>
     Effect.gen(function* () {
       const { address } = yield* HttpServer.HttpServer;
       const hostBaseUrl = `http://127.0.0.1:${address._tag === "TcpAddress" ? address.port : 0}`;
       const bridge = Option.getOrUndefined(yield* Effect.serviceOption(RevitBridge));
       const update = yield* UpdateReader;
+      const lifecycle = Option.getOrUndefined(yield* Effect.serviceOption(HostLifecycle));
       const { providers, threads, routes, catalog, machine } = makeHostPeRoutes(
         hostBaseUrl,
         bridge,
         registrationsFactory,
         update,
         share,
+        lifecycle ? () => Effect.runSync(Deferred.succeed(lifecycle.latch, undefined)) : undefined,
       );
       yield* Effect.addFinalizer(() => Effect.sync(() => machine.close()));
       yield* Effect.addFinalizer(() => Effect.promise(() => threads.close()));
+      // Installed policy keeps observing even when every browser and tray drawer is closed.
+      if (hostOwnership.lane === "installed") machine.observe(() => {});
       // With Revit present the op and pod rows describe the connected session, so a session
       // arriving or leaving drops the 30 s cache; without Revit there is no bridge to watch.
       if (bridge)

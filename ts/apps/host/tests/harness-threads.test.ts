@@ -10,6 +10,8 @@ import { createHarnessThreads, IDLE_CHILD_MS, WAITING_MS } from "../src/harness/
 import * as adapter from "../src/harness/adapter.ts";
 import { peaCodexProjectConfig, userCodexMcpServers } from "../src/harness/user-shell.ts";
 import { productProvidersPath } from "../src/product-paths.ts";
+import { createUpdateReader, type UpdateRunner } from "../src/update-reader.ts";
+import type { Envelope } from "@pe/host-contracts/pe-revit-contract";
 
 let root = "";
 let previousLocalAppData: string | undefined;
@@ -22,7 +24,7 @@ type Host = {
 const hosts: Host[] = [];
 const mcpServer = () => ({ name: "pea", command: "unused", args: [], env: [] });
 /** Threads and providers behind one fetch, as the host's router mounts them. No probe at start. */
-const host = (): Host => {
+const host = (updatePending?: () => boolean): Host => {
   const consoles: string[] = [];
   const providers = createProviders({
     shellPath: async () => "C:\\canary-bin;C:\\also",
@@ -30,6 +32,7 @@ const host = (): Host => {
     openConsole: async (command) => void consoles.push(command),
   });
   const threads = createHarnessThreads({
+    updatePending,
     root,
     worldRoot: tmpdir(),
     mcpServer,
@@ -102,6 +105,81 @@ async function until(
 }
 const kinds = (events: HarnessEvent[]) =>
   events.map((e) => (e.kind === "update" ? `update:${e.update.sessionUpdate}` : e.kind));
+
+test("automatic update admission refuses a new Pea prompt through download and releases on confirmed refusal", async () => {
+  const planId = "64f25f46-dfa6-4ee6-b973-d7f6a8b523c4";
+  let release!: () => void;
+  const download = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let requestId = "";
+  let state = "running";
+  const receipt = () => ({
+    state,
+    requestId,
+    planId,
+    receiptPath: "fixture.receipt.json",
+    reopen: [],
+    restartYears: [],
+    legs: [],
+  });
+  const answer = (result: unknown): Envelope<unknown> => ({
+    result,
+    exitCode: state === "running" ? 4 : 3,
+    diagnostics: [],
+    resolved: null,
+    binary: {} as Envelope<unknown>["binary"],
+    command: {} as Envelope<unknown>["command"],
+    nextSteps: [],
+    guide: "update",
+    related: [],
+  });
+  const run: UpdateRunner = async (args) => {
+    if (args[0] === "update") {
+      requestId = args[args.indexOf("--request-id") + 1]!;
+      await download;
+      return answer(receipt());
+    }
+    return answer({ requestId, response: { requestId, key: "update.apply", result: receipt() } });
+  };
+  const updates = createUpdateReader({
+    path: join(root, "auto-update.json"),
+    run,
+    installed: true,
+    pid: 123,
+  });
+  const threads = host(updates.automaticPending);
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  await until(read, id, (body) => body.events.some((event) => event.kind === "session"));
+  const applying = updates.apply(planId, true);
+  try {
+    expect(updates.automaticPending()).toBe(true);
+    const refused = await call("POST", `/pe/threads/${id}/prompt`, {
+      text: "new turn during download",
+    });
+    expect(refused.status).toBe(409);
+    expect(refused.json.error).toContain("updating");
+    expect((await read(id)).events.some((e) => e.kind === "prompt" || e.kind === "queued")).toBe(
+      false,
+    );
+    release();
+    await applying;
+    expect(updates.automaticPending()).toBe(true);
+    state = "refused";
+    await updates.refresh(false);
+    expect(updates.automaticPending()).toBe(false);
+    expect((await call("POST", `/pe/threads/${id}/prompt`, { text: "after refusal" })).status).toBe(
+      200,
+    );
+    await until(read, id, (body) => !body.running && turnEnds(body).length === 1);
+  } finally {
+    release();
+    await applying;
+    await threads.close();
+  }
+});
 const turnEnds = (body: HarnessThreadBody) => body.events.filter((e) => e.kind === "turn_end");
 /** The open asks: `permission_request`s with no `permission_resolved`. */
 const openAsks = (body: HarnessThreadBody) =>

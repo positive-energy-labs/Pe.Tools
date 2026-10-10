@@ -6,7 +6,7 @@ import type {
   UpdatePlan,
   UpdateReceipt,
 } from "@pe/host-contracts/pe-revit-contract";
-import type { Access, Readiness } from "./harness-thread.ts";
+import type { Access, Provider } from "./harness-thread.ts";
 import type { DocumentRef } from "./target.ts";
 
 /** Last confirmed data lives in the field; a failed attempt changes only this evidence. */
@@ -87,6 +87,7 @@ export interface MachineUpdate {
 
 /** Wave 4 implements the Serve adapter; desired intent never proves an active mapping. */
 export interface MachineShare {
+  readonly allowRemoteAdministration: boolean;
   readonly desired: "off" | "on";
   readonly state: "off" | "on" | "refused" | "unknown";
   readonly url: string | null;
@@ -103,7 +104,4 @@ export interface MachineShare {
   }[];
 }
 
-export interface MachineProvider {
-  readonly id: string;
-  readonly readiness: Readiness;
-}
+export type MachineProvider = Provider;

@@ -1,14 +1,8 @@
-import { accessSchema } from "@pe/agent-contracts";
 import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
 import { HttpEffect, HttpRouter } from "effect/unstable/http";
 import { createPeaMcpServer, WebStandardStreamableHTTPServerTransport } from "@pe/mcps/server";
-import {
-  invocationContext,
-  hostFetch,
-  type InvocationContext,
-  type RequestPrincipal,
-} from "@pe/mcps/context";
+import { invocationContext, type InvocationContext, type RequestPrincipal } from "@pe/mcps/context";
 
 const version = "2025-11-25";
 const principalKey = (principal: RequestPrincipal) => JSON.stringify(principal);
@@ -77,16 +71,6 @@ export function createMcpDoor(hostBaseUrl: () => string, makeServer = createPeaM
           thread,
           admissions: new Map(),
           running: new Map(),
-          beforeTool: async (name) => {
-            if (name !== "pe_do") return;
-            const response = await hostFetch(`${hostBaseUrl()}/pe/access`, {
-              headers: caller.headers,
-            });
-            if (!response.ok || accessSchema.parse(await response.json()).guarded)
-              throw Error(
-                "The machine access switch is Guarded. HTTP MCP pe_do requires Full access; tailnet identity is not human approval. Stage the work for a human or explicitly change the access switch.",
-              );
-          },
         };
         const server = await makeServer(context);
         const transport = new WebStandardStreamableHTTPServerTransport({

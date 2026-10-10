@@ -13,12 +13,10 @@ import { Press } from "#/components/lang/press";
 import { MachineBody } from "./body";
 import { closeMachine, drawerState, openMachine, subscribeDrawer } from "./door";
 import { chipText, machineOf, planWaits } from "./model";
-import { useMachine, useUpdateConsent } from "./use-machine";
+import { useMachine } from "./use-machine";
 
 export function VersionChip() {
   const { reading, fixture } = useMachine();
-  // The chip is mounted on every page: it is where a quiet plan applies without asking, once.
-  useUpdateConsent(reading, fixture, true);
   const state = useSyncExternalStore(subscribeDrawer, drawerState, drawerState);
   const chip = useRef<HTMLButtonElement>(null);
   const close = useRef<HTMLButtonElement>(null);

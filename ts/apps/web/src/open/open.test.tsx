@@ -7,13 +7,21 @@
 import { useState } from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vite-plus/test";
-import { instancesRouteState, type Machine } from "@pe/agent-contracts";
+import { instancesRouteState, type Machine, type MachineSession } from "@pe/agent-contracts";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRouter,
+  RouterProvider,
+} from "@tanstack/react-router";
+import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 
 import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { Launcher } from "./launcher";
 import type { OpenHandle } from "./manifest";
-import { EMPTY_DRAFT, launchPlan, modelRows, type LaunchDraft } from "./model";
+import { EMPTY_DRAFT, launchPlan, modelRows, type DocRow, type LaunchDraft } from "./model";
 import { RunningBlock, RunningList } from "./running";
+import { OpenPage } from "./route";
 import { BACKGROUND_BOOTING, CHECKOUT_HOT, MACHINE_SEEDS, OBSERVED_ICON, RECENTS } from "./seeds";
 
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
@@ -24,6 +32,7 @@ HTMLElement.prototype.scrollIntoView = vi.fn();
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
 });
 
 const machine = (MACHINE_SEEDS["blocked-plan"] as { observation: Machine }).observation;
@@ -32,7 +41,95 @@ const row = (title: string) => rows.find((candidate) => candidate.title === titl
 const key = { binding: "workspace" as const, route: "instances", target: null, work: "instances" };
 const basis = { key, revision: 7 };
 
+test("the frozen Open route renders and drafts without opening a host transport", async () => {
+  const transports: string[] = [];
+  class Source {
+    onopen = null;
+    onmessage = null;
+    onerror = null;
+    constructor(url: string) {
+      transports.push(url);
+    }
+    close() {}
+  }
+  vi.stubGlobal("EventSource", Source);
+  const fetch = vi.fn();
+  vi.stubGlobal("fetch", fetch);
+  history.replaceState(null, "", "/open?demo=refresh");
+  try {
+    const router = createRouter({
+      routeTree: createRootRoute({ component: OpenPage }),
+      history: createMemoryHistory({ initialEntries: ["/open?demo=refresh"] }),
+    });
+    await router.load();
+    render(<RouterProvider router={router} />);
+    expect(await screen.findByTestId("open-route")).toBeTruthy();
+    fireEvent.click(screen.getByText("Riverside MEP.rvt"));
+    expect(
+      screen.getByRole("button", { name: /^Open in Revit/ }).getAttribute("aria-disabled"),
+    ).toBe("true");
+    await Promise.resolve();
+    expect(transports).toEqual([]);
+    expect(fetch).not.toHaveBeenCalled();
+  } finally {
+    history.replaceState(null, "", "/");
+  }
+});
+
 describe("launch plan", () => {
+  test("an explicit target that disappears refuses instead of starting a Revit", () => {
+    const plan = launchPlan(
+      { ...EMPTY_DRAFT, doc: row("Riverside MEP.rvt"), target: "retired-session" },
+      machine,
+      rows,
+    );
+    expect(plan.refusal).toContain("no longer available");
+    expect(plan.launch).toBeNull();
+  });
+
+  test("cloud identity matches region, project and model across labels", () => {
+    const project = "11111111-1111-1111-1111-111111111111";
+    const model = "22222222-2222-2222-2222-222222222222";
+    const source = `cld://US/${project}/${model}`;
+    const held = {
+      ...CHECKOUT_HOT,
+      documents: [{ ...CHECKOUT_HOT.documents![0]!, path: source, title: "Tower.rvt" }],
+    } as MachineSession;
+    const recent = {
+      ...RECENTS.result.recents[0]!,
+      isCloud: true,
+      title: "Tower.rvt",
+      region: "US",
+      projectGuid: project,
+      modelGuid: model,
+      path: `cld://US/{${project}}OldProject/{${model}}Tower.rvt`,
+    } as RecentDocument;
+    expect(modelRows([held], [recent])[0]!.openIn?.session).toBe(held);
+    expect(
+      modelRows(
+        [held],
+        [recent, { ...recent, path: recent.path.replace("OldProject", "RenamedProject") }],
+      ),
+    ).toHaveLength(1);
+    const discovered = modelRows([held], [recent]);
+    expect(launchPlan({ ...EMPTY_DRAFT, doc: source }, machine, discovered).refusal).toContain(
+      "already open",
+    );
+    for (const different of [
+      { ...recent, region: "EMEA", path: recent.path.replace("US", "EMEA") },
+      {
+        ...recent,
+        projectGuid: "33333333-3333-3333-3333-333333333333",
+        path: recent.path.replaceAll(project, "33333333-3333-3333-3333-333333333333"),
+      },
+      {
+        ...recent,
+        modelGuid: "44444444-4444-4444-4444-444444444444",
+        path: recent.path.replaceAll(model, "44444444-4444-4444-4444-444444444444"),
+      },
+    ])
+      expect(modelRows([held], [different])[0]!.openIn).toBeNull();
+  });
   test("a file saved in a newer Revit is refused in every installed year", () => {
     const plan = launchPlan({ ...EMPTY_DRAFT, doc: row("Pier 9 Annex.rvt") }, machine, rows);
     expect(plan.year).toBe(2026);
@@ -77,33 +174,46 @@ describe("launch plan", () => {
   });
 });
 
-function handleWith(write = vi.fn(async (_patches: unknown, _revision?: number) => null)) {
+function handleWith(
+  write = vi.fn(async (_patches: unknown, _revision?: number) => null),
+  doc = instancesRouteState.schema.parse({}),
+) {
   return {
     work: {
       key,
       revision: 7,
       current: true,
       write,
-      doc: instancesRouteState.schema.parse({}),
+      doc,
     },
     note: vi.fn(),
   } as unknown as OpenHandle;
 }
 
-function Harness({ handle, initial }: { handle: OpenHandle; initial: LaunchDraft }) {
+function Harness({
+  handle,
+  initial,
+  world = machine,
+  docs = rows,
+}: {
+  handle: OpenHandle;
+  initial: LaunchDraft;
+  world?: Machine | null;
+  docs?: DocRow[];
+}) {
   const [draft, setDraft] = useState(initial);
   return (
     <>
       <Launcher
         handle={handle}
-        machine={machine}
-        rows={rows}
+        machine={world}
+        rows={docs}
         draft={draft}
         setDraft={setDraft}
         fixture={false}
       />
       <RunningList
-        sessions={machine.revit.sessions}
+        sessions={world?.revit.sessions ?? null}
         loading={false}
         basis={basis}
         refusal={null}
@@ -121,6 +231,96 @@ function Harness({ handle, initial }: { handle: OpenHandle; initial: LaunchDraft
     </>
   );
 }
+
+test("a staged undiscovered document survives the launch press", async () => {
+  const document = "C:\\Models\\NotInRecents.rvt";
+  const handle = handleWith(
+    undefined,
+    instancesRouteState.schema.parse({
+      launch: {
+        staged: {
+          value: {
+            kind: "start",
+            year: "2025",
+            name: "",
+            document,
+          },
+        },
+      },
+    }),
+  );
+  render(<Harness handle={handle} initial={EMPTY_DRAFT} docs={[]} />);
+  await screen.findByText(document);
+  fireEvent.click(screen.getByRole("button", { name: "Start Revit 2025 and open" }));
+  await waitFor(() => expect(runSemanticAction).toHaveBeenCalled());
+  expect(handle.work.write).not.toHaveBeenCalled();
+});
+
+test("late discovery resolves staged picks without erasing a person's edits", async () => {
+  const document = rows.find((doc) => doc.title === "Riverside MEP.rvt")!.selector;
+  const handle = handleWith(
+    undefined,
+    instancesRouteState.schema.parse({
+      launch: {
+        staged: {
+          value: {
+            kind: "start",
+            year: "2025",
+            name: "staged",
+            document,
+          },
+        },
+      },
+    }),
+  );
+  const rendered = render(<Harness handle={handle} initial={EMPTY_DRAFT} world={null} docs={[]} />);
+  fireEvent.change(screen.getByRole("textbox", { name: "session name" }), {
+    target: { value: "person-edited" },
+  });
+  rendered.rerender(<Harness handle={handle} initial={EMPTY_DRAFT} docs={rows} />);
+  expect((screen.getByRole("textbox", { name: "session name" }) as HTMLInputElement).value).toBe(
+    "person-edited",
+  );
+  expect(screen.getByText("Riverside MEP.rvt")).not.toBeNull();
+  expect(document).toContain("Riverside");
+});
+
+test.each([{ id: "pe-app-25-main" }, { pid: 2402 }])(
+  "a staged exact target survives missing readings and resolves later: %j",
+  async (session) => {
+    const selector = "C:\\Models\\NotInRecents.rvt";
+    const handle = handleWith(
+      undefined,
+      instancesRouteState.schema.parse({
+        launch: {
+          staged: {
+            value: {
+              kind: "open",
+              session,
+              document: selector,
+            },
+          },
+        },
+      }),
+    );
+    const rendered = render(
+      <Harness handle={handle} initial={EMPTY_DRAFT} world={null} docs={[]} />,
+    );
+    expect(screen.getByText(/is no longer available/, { selector: "p" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "new Revit" }).getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+    rendered.rerender(<Harness handle={handle} initial={EMPTY_DRAFT} docs={[]} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: `Open in Revit ${"id" in session ? 2025 : 2024}` }),
+    );
+    await waitFor(() => expect(runSemanticAction).toHaveBeenCalled());
+    expect(handle.work.write).not.toHaveBeenCalled();
+    expect(vi.mocked(runSemanticAction).mock.calls[0]![1]).toMatchObject({
+      session: { selection: session },
+    });
+  },
+);
 
 test("Open here on an icon-started Revit stages and dispatches by pid", async () => {
   const write = vi.fn(async (_patches: unknown, _revision?: number) => null);

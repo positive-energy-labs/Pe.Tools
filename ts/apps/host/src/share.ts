@@ -8,7 +8,11 @@ import type { MachineShare } from "@pe/agent-contracts";
 import type { IdentityResult } from "./request-identity.ts";
 
 type Mapping = { authority: string; target: string };
-type Intent = { desired: "on" | "off"; mapping: Mapping | null };
+type Intent = {
+  desired: "on" | "off";
+  mapping: Mapping | null;
+  allowRemoteAdministration?: boolean;
+};
 type ServeStatus = {
   TCP?: Record<string, unknown>;
   Web?: Record<string, { Handlers?: Record<string, unknown> }>;
@@ -42,6 +46,8 @@ export function shareIntentFile(path: string): Pick<ShareOptions, "load" | "save
         const value = JSON.parse(await readFile(path, "utf8")) as Intent;
         if (
           (value.desired !== "on" && value.desired !== "off") ||
+          (value.allowRemoteAdministration !== undefined &&
+            typeof value.allowRemoteAdministration !== "boolean") ||
           (value.mapping !== null &&
             (typeof value.mapping?.authority !== "string" ||
               typeof value.mapping?.target !== "string"))
@@ -66,6 +72,7 @@ export function createShare(options: ShareOptions) {
   const listeners = new Set<() => void>();
   let intent: Intent = { desired: "off", mapping: null };
   let state: MachineShare = {
+    allowRemoteAdministration: true,
     desired: "off",
     state: "unknown",
     url: null,
@@ -74,12 +81,15 @@ export function createShare(options: ShareOptions) {
     refused: [],
   };
   let serial = Promise.resolve();
+  let checkedAt = Number.NEGATIVE_INFINITY;
+  let inFlight: Promise<MachineShare> | undefined;
   const notify = () => {
     for (const listener of listeners) listener();
   };
   const refused = (code: string, detail: string) => {
     state = {
       ...state,
+      allowRemoteAdministration: intent.allowRemoteAdministration ?? true,
       desired: intent.desired,
       state: "refused",
       url: null,
@@ -96,8 +106,16 @@ export function createShare(options: ShareOptions) {
     );
     return next;
   }
-  async function status() {
+  async function loadIntent() {
     intent = (await options.load()) ?? { desired: "off", mapping: null };
+    state = {
+      ...state,
+      desired: intent.desired,
+      allowRemoteAdministration: intent.allowRemoteAdministration ?? true,
+    };
+  }
+  async function status() {
+    await loadIntent();
     const identity = JSON.parse(await options.run(["status", "--json"])) as {
       BackendState?: string;
       Self?: { DNSName?: string };
@@ -151,11 +169,22 @@ export function createShare(options: ShareOptions) {
       await status();
     } catch (error) {
       refused("share.unavailable", String(error));
+    } finally {
+      checkedAt = Date.parse(now());
     }
     return state;
   }
   return {
-    read: () => exclusive(inspect),
+    read: () => {
+      const age = Date.parse(now()) - checkedAt;
+      if (age >= 0 && age < 5_000) return Promise.resolve(state);
+      if (inFlight) return inFlight;
+      const next = exclusive(inspect).finally(() => {
+        if (inFlight === next) inFlight = undefined;
+      });
+      inFlight = next;
+      return next;
+    },
     current: () => state,
     subscribe(listener: () => void) {
       listeners.add(listener);
@@ -168,6 +197,14 @@ export function createShare(options: ShareOptions) {
         if (!options.installed)
           return refused("share.installed-only", "Use the Share switch on the installed host.");
         try {
+          checkedAt = Number.NEGATIVE_INFINITY;
+          if (!on) {
+            await loadIntent();
+            intent = { ...intent, desired: "off" };
+            await options.save(intent);
+            state = { ...state, desired: "off", url: null };
+            notify();
+          }
           const before = await status();
           intent = { ...intent, desired: on ? "on" : "off" };
           if (before.occupied && !before.exact) {
@@ -194,6 +231,28 @@ export function createShare(options: ShareOptions) {
             return refused("share.not-verified", "Serve did not confirm the requested mapping.");
           return state;
         } catch (error) {
+          return refused("share.unavailable", String(error));
+        } finally {
+          checkedAt = Date.parse(now());
+          notify();
+        }
+      });
+    },
+    setRemoteAdministration(allowRemoteAdministration: boolean) {
+      return exclusive(async () => {
+        if (!options.installed)
+          return refused(
+            "share.installed-only",
+            "Use the installed host to change remote administration.",
+          );
+        try {
+          await loadIntent();
+          intent = { ...intent, allowRemoteAdministration };
+          await options.save(intent);
+          state = { ...state, allowRemoteAdministration };
+          return state;
+        } catch (error) {
+          checkedAt = Number.NEGATIVE_INFINITY;
           return refused("share.unavailable", String(error));
         } finally {
           notify();
@@ -243,14 +302,19 @@ export const shareRoute = (share: ShareOwner) =>
         !body ||
         typeof body !== "object" ||
         Object.keys(body).length !== 1 ||
-        !("on" in body) ||
-        typeof body.on !== "boolean"
+        ((!("on" in body) || typeof body.on !== "boolean") &&
+          (!("allowRemoteAdministration" in body) ||
+            typeof body.allowRemoteAdministration !== "boolean"))
       )
         return HttpServerResponse.jsonUnsafe(
-          { error: "Expected { on: boolean }" },
+          { error: "Expected { on: boolean } or { allowRemoteAdministration: boolean }" },
           { status: 400 },
         );
-      const value = yield* Effect.promise(() => share.set(body.on as boolean));
+      const value = yield* Effect.promise(() =>
+        "on" in body
+          ? share.set(body.on as boolean)
+          : share.setRemoteAdministration(body.allowRemoteAdministration as boolean),
+      );
       return HttpServerResponse.jsonUnsafe(value, {
         status: value.state === "refused" ? 409 : 200,
       });

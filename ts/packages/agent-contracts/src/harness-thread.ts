@@ -107,7 +107,7 @@ export const addProviderRequestSchema = z.object({
 export type AddProviderRequest = z.infer<typeof addProviderRequestSchema>;
 
 /** Guarded starts a session in the harness's own auto mode; unguarded in its full-access mode. */
-export const accessSchema = z.object({ guarded: z.boolean() });
+export const accessSchema = z.object({ guarded: z.boolean(), readError: z.string().optional() });
 export type Access = z.infer<typeof accessSchema>;
 
 /** One ACP `session/update` notification body, kept verbatim. The web switches on `sessionUpdate`. */

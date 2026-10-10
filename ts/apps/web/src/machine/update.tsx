@@ -10,7 +10,8 @@ import { ActionButton } from "#/components/lang/action-button";
 import { LegStrip } from "#/components/lang/leg-strip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { PidChip } from "#/components/lang/process";
-import { dirty } from "#/readings";
+import { dirty, useAction } from "#/readings";
+import { recheckUpdate } from "#/host/install";
 
 import { blockersOf, disconnected, hhmm, machineOf, receiptRunning } from "./model";
 import { SEED_REFUSAL, useUpdateConsent } from "./use-machine";
@@ -19,12 +20,19 @@ const mb = (bytes: number) => `${Math.round(bytes / 1_048_576)} MB`;
 
 function Receipt({ machine, gap }: { machine: Machine; gap: boolean }) {
   const receipt = machine.update.receipt;
-  if (!receipt) return null;
-  const last = receipt.legs.at(-1);
+  const { requestId, receiptLeg } = machine.update;
+  if (!receipt && !requestId && !receiptLeg.error) return null;
+  const last = receipt?.legs.at(-1);
+  const restorationFailed =
+    receipt?.state === "ok" &&
+    receipt.legs.some(
+      (leg) =>
+        (leg.name.startsWith("reopen:") || leg.name === "relaunch") && leg.status === "failed",
+    );
   return (
     <div className="flex flex-col gap-1 pt-1" aria-label="update receipt">
       <LegStrip
-        legs={receipt.legs}
+        legs={receipt?.legs ?? []}
         unobserved={
           gap ? "not observed: the host is down; the next host reads the receipt" : undefined
         }
@@ -36,19 +44,29 @@ function Receipt({ machine, gap }: { machine: Machine; gap: boolean }) {
             <span className="face-mono">{hhmm(last?.observedAtUtc)}</span> ·{" "}
             <span data-tone="caution">disconnected</span>
           </>
-        ) : receipt.state === "ok" ? (
+        ) : receipt?.state === "ok" ? (
           <span data-tone="done">updated · read from the receipt</span>
-        ) : receipt.state === "failed" || receipt.state === "refused" ? (
+        ) : receipt?.state === "failed" || receipt?.state === "refused" ? (
           <span data-tone="alarm">
             update {receipt.state}
             {last?.detail ? `: ${last.detail}` : ""}
           </span>
         ) : (
           <>
-            {receipt.state} · <span className="face-mono">{last?.name ?? "admitted"}</span>
+            {receipt?.state ?? "awaiting receipt"} ·{" "}
+            <span className="face-mono">{last?.name ?? "admitted"}</span>
           </>
         )}
       </span>
+      {requestId ? <span className="face-mono text-ink-2">request {requestId}</span> : null}
+      {receiptLeg.error ? (
+        <OutcomeLine kind="refused" label={`Receipt read failed: ${receiptLeg.error}`} />
+      ) : null}
+      {restorationFailed ? (
+        <span data-tone="caution">
+          Updated. Some documents or the app did not reopen; reopen them from Open.
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -56,16 +74,29 @@ function Receipt({ machine, gap }: { machine: Machine; gap: boolean }) {
 export function UpdateGroup({ reading, fixture }: { reading: Reading<Machine>; fixture: boolean }) {
   const machine = machineOf(reading);
   const consent = useUpdateConsent(reading, fixture);
+  const check = useAction<void, void>(async () => {
+    try {
+      await recheckUpdate();
+    } finally {
+      dirty({ kind: "machine" });
+    }
+  });
   if (!machine) return null;
   const gap = disconnected(reading);
   const { plan, planLeg } = machine.update;
   const recheck = (
-    <ActionButton
-      label="recheck"
-      reason={fixture ? SEED_REFUSAL : "read the update feed again and re-plan against every Revit"}
-      disabled={fixture || gap}
-      onClick={() => dirty({ kind: "machine" })}
-    />
+    <>
+      <ActionButton
+        label="recheck"
+        reason={
+          fixture ? SEED_REFUSAL : "read the update feed again and re-plan against every Revit"
+        }
+        disabled={fixture || gap}
+        busy={check.isPending}
+        onClick={() => check.mutate()}
+      />
+      {check.error ? <OutcomeLine kind="refused" label={check.error.message} /> : null}
+    </>
   );
   if (!plan)
     return (

@@ -6,10 +6,22 @@ import { dirty } from "#/readings";
 
 /** `PUT /pe/share`. A 409 is the host's refusal, drawn from the reading it updates. */
 export async function switchShare(on: boolean): Promise<void> {
+  return setShare({ on });
+}
+
+export async function switchRemoteAdministration(
+  allowRemoteAdministration: boolean,
+): Promise<void> {
+  return setShare({ allowRemoteAdministration });
+}
+
+async function setShare(
+  body: { on: boolean } | { allowRemoteAdministration: boolean },
+): Promise<void> {
   const response = await fetch("/pe/share", {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ on }),
+    body: JSON.stringify(body),
   });
   if (!response.ok && response.status !== 409) {
     const body = (await response.json().catch(() => null)) as { error?: string } | null;

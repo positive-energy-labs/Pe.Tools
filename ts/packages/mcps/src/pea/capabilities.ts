@@ -25,6 +25,7 @@ import {
   HOST_RPC_SDK_SESSION_HEADER,
   HOST_RPC_BRIDGE_SESSION_HEADER,
   isTsOnlyOperationKey,
+  tsOnlyOperationCatalog,
   type HostOpResponse,
   type PodList,
 } from "@pe/host-contracts/operation-types";
@@ -316,6 +317,8 @@ export function createCapabilityCatalogSource(options: {
         hostBaseUrl: base,
         ...scope,
         timeoutMs: SOURCE_BUDGET_MS,
+        // Host-owned reads must not wait for the independent native catalog source.
+        catalogOverride: tsOnlyOperationCatalog,
       });
       const [ops, pods, sessions] = await Promise.allSettled([
         fetchOps(base, scope),
@@ -323,7 +326,9 @@ export function createCapabilityCatalogSource(options: {
         caller.call("bridge.sessions.list"),
       ]);
       const opsValue =
-        ops.status === "fulfilled" ? ops.value : { operations: [] as OpsCatalogEntry[] };
+        ops.status === "fulfilled"
+          ? ops.value
+          : { operations: [...tsOnlyOperationCatalog] as OpsCatalogEntry[] };
       sources.catalog =
         ops.status === "rejected"
           ? `did not answer: ${message(ops.reason)}`

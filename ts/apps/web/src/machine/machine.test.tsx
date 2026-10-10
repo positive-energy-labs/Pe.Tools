@@ -9,20 +9,36 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vite-plus/tes
 import type { Machine, Reading } from "@pe/agent-contracts";
 
 import { acknowledgeUpdate } from "#/host/install";
+import { switchRemoteAdministration, switchShare } from "#/host/machine";
+import { Press } from "#/components/lang/press";
 import { MACHINE_SEEDS } from "#/open/seeds";
 import { AppChrome, AppDevtools } from "#/route/app-chrome";
 
 import { MachineBody } from "./body";
 import { chipText, machineOf } from "./model";
 import { MachinePage } from "./page";
+import { ShareGroup } from "./share";
+import { UpdateGroup } from "./update";
 
-vi.mock("#/host/install", () => ({ acknowledgeUpdate: vi.fn(async () => "request-1") }));
-vi.mock("#/open/lifecycle", async (original) => ({
-  ...(await original<typeof import("#/open/lifecycle")>()),
-  useInstancesBasis: () => null,
+vi.mock("#/host/machine", async (original) => ({
+  ...(await original<typeof import("#/host/machine")>()),
+  switchShare: vi.fn(async () => {}),
+  switchRemoteAdministration: vi.fn(async () => {}),
 }));
+
+vi.mock("#/host/install", () => ({
+  acknowledgeUpdate: vi.fn(async () => "request-1"),
+  recheckUpdate: vi.fn(async () => {}),
+}));
+vi.mock("#/open/lifecycle", async (original) => {
+  const real = await original<typeof import("#/open/lifecycle")>();
+  return {
+    ...real,
+    useInstancesBasis: (enabled: boolean) => (enabled ? null : real.useInstancesBasis(false)),
+  };
+});
 vi.mock("#/components/feedback-picker", () => ({
-  FeedbackPicker: () => <button>feedback</button>,
+  FeedbackPicker: () => <Press>feedback</Press>,
 }));
 vi.mock("@tanstack/react-devtools", () => ({
   TanStackDevtools: () => <div data-testid="devtools-launcher" />,
@@ -39,7 +55,74 @@ const body = (reading: Reading<Machine>, shell: "drawer" | "tray" = "drawer") =>
 const header = (label: string) =>
   within(screen.getByRole("region", { name: label })).getAllByRole("button")[0]!;
 
+test("a frozen Machine page does not open a host transport for lifecycle controls", async () => {
+  const source = vi.fn();
+  const fetch = vi.fn();
+  vi.stubGlobal("EventSource", source);
+  vi.stubGlobal("fetch", fetch);
+  render(<MachinePage reading={MACHINE_SEEDS["blocked-plan"]} fixture shell="tray" />);
+  await Promise.resolve();
+  expect(screen.getByRole("main", { name: "machine" })).toBeTruthy();
+  expect(source).not.toHaveBeenCalled();
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+describe("update client errors", () => {
+  test("a recovery error carries the admitted identity instead of disappearing behind accepted", async () => {
+    const { acknowledgeUpdate: admit } =
+      await vi.importActual<typeof import("#/host/install")>("#/host/install");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          { accepted: true, requestId: "exact-request", error: "receipt unavailable" },
+          { status: 202 },
+        ),
+      ),
+    );
+    await expect(admit("plan")).rejects.toThrow("receipt unavailable (request exact-request)");
+  });
+
+  test("Recheck explicitly reads the feed and reports a failed acquisition", async () => {
+    const { recheckUpdate } =
+      await vi.importActual<typeof import("#/host/install")>("#/host/install");
+    const fetch = vi.fn(async () => Response.json({ planLeg: { error: "feed unavailable" } }));
+    vi.stubGlobal("fetch", fetch);
+    await expect(recheckUpdate()).rejects.toThrow("feed unavailable");
+    expect(fetch).toHaveBeenCalledWith("/host/update?recheck=1");
+  });
+});
+
 describe("groups", () => {
+  test("Pea rows and header follow the same snapshot without a second provider fetch", () => {
+    const machine = machineOf(MACHINE_SEEDS["no-revit"])!;
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const rendered = body({ state: "ready", observation: machine });
+    fireEvent.click(header("Pea"));
+    expect(header("Pea").textContent).toContain("1 of 2 last ready");
+    expect(screen.getByText("Codex")).toBeTruthy();
+    const next: Machine = {
+      ...machine,
+      providers: machine
+        .providers!.filter((provider) => provider.id === "claude")
+        .map((provider) => ({
+          ...provider,
+          readiness: { state: "unknown", message: "The last probe expired." },
+        })),
+    };
+    rendered.rerender(
+      <MachineBody
+        reading={{ state: "ready", observation: next }}
+        fixture={false}
+        shell="drawer"
+      />,
+    );
+    expect(header("Pea").textContent).toContain("no provider ready");
+    expect(screen.queryByText("Codex")).toBeNull();
+    expect(screen.getByText("○ The last probe expired.")).toBeTruthy();
+    expect(fetch).not.toHaveBeenCalled();
+  });
   test("a blocked plan opens Update by itself and leaves the rest folded", () => {
     body(MACHINE_SEEDS["blocked-plan"]);
     expect(header("Update").getAttribute("aria-expanded")).toBe("true");
@@ -67,6 +150,68 @@ describe("groups", () => {
 });
 
 describe("consent", () => {
+  test("receipt recovery failure retains request identity without a confirmed receipt", () => {
+    const machine = machineOf(MACHINE_SEEDS["no-revit"])!;
+    render(
+      <UpdateGroup
+        reading={{
+          state: "ready",
+          observation: {
+            ...machine,
+            update: {
+              ...machine.update,
+              requestId: "exact-request",
+              receipt: null,
+              receiptLeg: {
+                observedAtUtc: null,
+                attemptedAtUtc: "2026-10-10T00:00:00Z",
+                error: "op unavailable",
+              },
+            },
+          },
+        }}
+        fixture={false}
+      />,
+    );
+    expect(screen.getByLabelText("update receipt").textContent).toContain("exact-request");
+    expect(screen.getByLabelText("update receipt").textContent).toContain(
+      "Receipt read failed: op unavailable",
+    );
+  });
+
+  test("a verified update retains restoration warnings", () => {
+    const machine = machineOf(MACHINE_SEEDS["receipt-handoff"])!;
+    render(
+      <UpdateGroup
+        reading={{
+          state: "ready",
+          observation: {
+            ...machine,
+            update: {
+              ...machine.update,
+              receipt: {
+                ...machine.update.receipt!,
+                state: "ok",
+                legs: [
+                  {
+                    name: "reopen:cloud",
+                    status: "failed",
+                    observedAtUtc: "2026-10-10T00:00:00Z",
+                    detail: "Reopen failed",
+                    exitCode: 1,
+                  },
+                ],
+              },
+            },
+          },
+        }}
+        fixture={false}
+      />,
+    );
+    expect(screen.getByLabelText("update receipt").textContent).toContain(
+      "Updated. Some documents or the app did not reopen",
+    );
+  });
   test("is refused while a blocker stands, with the blocking Revit's pid", () => {
     body(MACHINE_SEEDS["blocked-plan"]);
     const blocker = screen.getByLabelText("blocker");
@@ -125,6 +270,41 @@ test("a host that went away is the honest gap: last confirmed leg, then disconne
   const unobserved = [...receipt.querySelectorAll("[data-seam]")].map((chip) => chip.textContent);
   expect(unobserved).toEqual(["install", "reopen", "relaunch"]);
   expect(screen.getByRole("button", { name: "recheck" }).hasAttribute("disabled")).toBe(true);
+});
+
+describe("sharing", () => {
+  test("a refused desired-on share can be cancelled and its separate admin preference is visible", () => {
+    const initial = machineOf(MACHINE_SEEDS["no-revit"])!;
+    const machine: Machine = {
+      ...initial,
+      share: {
+        ...initial.share!,
+        desired: "on",
+        state: "refused",
+        url: null,
+        refusal: { code: "share.unavailable", detail: "Synthetic unavailable" },
+      },
+    };
+    render(<ShareGroup machine={machine} fixture={false} stale={false} />);
+    const sharing = screen.getByRole("switch", { name: "Share over tailnet" });
+    expect(sharing.getAttribute("aria-checked")).toBe("true");
+    expect(sharing.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(sharing);
+    expect(switchShare).toHaveBeenCalledWith(false);
+    fireEvent.click(screen.getByRole("switch", { name: "Allow remote machine administration" }));
+    expect(switchRemoteAdministration).toHaveBeenCalledWith(false);
+  });
+
+  test("fixtures and disconnected controls cannot change sharing or administration", () => {
+    const machine = machineOf(MACHINE_SEEDS["no-revit"])!;
+    render(<ShareGroup machine={machine} fixture={true} stale={false} />);
+    for (const control of screen.getAllByRole("switch")) {
+      expect(control.hasAttribute("data-disabled")).toBe(true);
+      fireEvent.click(control);
+    }
+    expect(switchShare).not.toHaveBeenCalled();
+    expect(switchRemoteAdministration).not.toHaveBeenCalled();
+  });
 });
 
 describe("shells", () => {

@@ -5,7 +5,12 @@ import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http
 import { HostLifecycle } from "./host-lifecycle.ts";
 import { hostOwnership, productRoot } from "./host-ownership.ts";
 import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
-import { createUpdateReader, UpdateReader, type UpdateRunner } from "./update-reader.ts";
+import {
+  createUpdateReader,
+  isUpdatePlanId,
+  UpdateReader,
+  type UpdateRunner,
+} from "./update-reader.ts";
 
 /** Detached apply must outlive this host's libuv kill-on-close job. */
 export const updateVerb: UpdateRunner = (verbArgs, detached = false) => {
@@ -59,26 +64,17 @@ export const makeInstalledUpdateReader = () =>
     manifest: join(productRoot(), "product.payloads.json"),
   });
 
-/** Login applies only with no Revit, through the same durable admission as the HTTP action. */
-export async function updateWhenNoRevit(reader = makeInstalledUpdateReader()): Promise<boolean> {
-  if (hostOwnership.lane !== "installed") return false;
-  await new Promise((resolve) => setTimeout(resolve, 60_000));
-  const { plan } = await reader.refresh();
-  if (!plan?.available || plan.revits.length > 0) return false;
-  const applied = await reader.apply(plan.planId, true).catch(() => null);
-  return (
-    applied?.receipt?.legs.some((leg) => leg.name === "handoff" && leg.status === "ok") === true
-  );
-}
-
 export const updateRoutes = Layer.mergeAll(
-  HttpRouter.add("GET", "/host/update", () =>
+  HttpRouter.add("GET", "/host/update", (request) =>
     Effect.gen(function* () {
       const reader = yield* UpdateReader;
-      // Machine is the clock. GET only acquires before the first observation.
+      // Ordinary readers share Machine's clock; Recheck explicitly reads the feed and plan.
       const current = reader.current();
       return Response.jsonUnsafe(
-        current.planLeg.attemptedAtUtc ? current : yield* Effect.promise(reader.refresh),
+        !new URL(request.url, "http://host").searchParams.has("recheck") &&
+          current.planLeg.attemptedAtUtc
+          ? current
+          : yield* Effect.promise(() => reader.refresh()),
       );
     }),
   ),
@@ -91,15 +87,22 @@ export const updateRoutes = Layer.mergeAll(
         );
       const body = yield* request.json.pipe(Effect.catch(() => Effect.succeed(null)));
       const planId = (body as { planId?: unknown } | null)?.planId;
-      if (typeof planId !== "string" || !planId.trim())
-        return Response.jsonUnsafe({ error: "An update planId is required." }, { status: 400 });
+      if (!isUpdatePlanId(planId))
+        return Response.jsonUnsafe(
+          { error: "An update planId must be a canonical UUID." },
+          { status: 400 },
+        );
       const reader = yield* UpdateReader;
       const outcome = yield* Effect.tryPromise(() => reader.apply(planId)).pipe(
         Effect.catch((error) => Effect.succeed({ error: String(error) })),
       );
       if ("error" in outcome) return Response.jsonUnsafe(outcome, { status: 409 });
       const receipt = outcome.receipt;
-      if (receipt?.legs.some((leg) => leg.name === "handoff" && leg.status === "ok")) {
+      const refused = receipt?.state === "refused" || receipt?.state === "failed";
+      if (
+        receipt?.state === "running" &&
+        receipt.legs.some((leg) => leg.name === "handoff" && leg.status === "ok")
+      ) {
         const { latch } = yield* HostLifecycle;
         yield* Effect.forkDetach(
           Effect.sleep("1 second").pipe(Effect.andThen(Deferred.succeed(latch, undefined))),
@@ -107,14 +110,16 @@ export const updateRoutes = Layer.mergeAll(
       }
       return Response.jsonUnsafe(
         {
-          accepted: true,
+          accepted: !refused,
           requestId: outcome.requestId,
           planId,
           receiptPath: receipt?.receiptPath ?? null,
           receipt,
-          error: outcome.receiptLeg.error,
+          error:
+            outcome.receiptLeg.error ??
+            (refused ? (receipt?.legs.at(-1)?.detail ?? `Update ${receipt?.state}.`) : null),
         },
-        { status: 202 },
+        { status: refused ? 409 : 202 },
       );
     }),
   ),

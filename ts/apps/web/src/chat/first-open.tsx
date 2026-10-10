@@ -11,19 +11,23 @@ import { Switch } from "#/components/lang/switch";
 import { Switcher } from "#/components/lang/switcher";
 import { readinessSub, type ProvidersState } from "#/workbench/provider/providers";
 
-/** The access switch, in this card and in Settings: on = the harness's guarded mode. */
+/** Agent approvals choose the harness mode for new sessions. HTTP and MCP access are separate. */
 export function AccessSwitch({ providers }: { providers: ProvidersState }) {
   const guarded = providers.access?.guarded;
   return (
     <label className="flex items-center gap-2 t-small">
       <Switch
         checked={guarded ?? true}
-        disabled={guarded === undefined}
+        disabled={guarded === undefined || providers.access?.readError !== undefined}
         onCheckedChange={(next) => void providers.setAccess(next)}
       />
-      <span>Pea asks before each change</span>
+      <span>Agent approvals</span>
       <span className="text-ink-2">
-        {guarded === undefined ? "reading…" : guarded ? "guarded, for new users" : "full access"}
+        {guarded === undefined
+          ? "reading…"
+          : guarded
+            ? "harness approval mode for new sessions"
+            : "harness full access for new sessions"}
       </span>
     </label>
   );

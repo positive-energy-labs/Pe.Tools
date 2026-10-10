@@ -1,4 +1,4 @@
-﻿import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Deferred, Effect, Layer } from "effect";
@@ -16,7 +16,7 @@ vi.mock("../src/host-ownership.ts", async (original) => {
 });
 
 const plan: UpdatePlan = {
-  planId: "checked-plan",
+  planId: "a64fc2d5-49ee-4ca5-9861-e1a050ae62cb",
   observedAtUtc: "2026-10-09T00:00:00Z",
   product: "Pe.Tools",
   current: "0.7.0",
@@ -153,6 +153,7 @@ test("GET carries the full validated plan, POST returns persisted request and re
     expect(body.plan).toEqual(plan);
     expect(body.plan.effects.reopen).toEqual(["C:/saved.rvt"]);
     expect((await post({})).status).toBe(400);
+    expect((await post({ planId: "not-a-uuid" })).status).toBe(400);
     const admitted = await post({ planId: plan.planId });
     expect(admitted.status).toBe(202);
     const evidence = await admitted.json();
@@ -182,6 +183,11 @@ test("GET carries the full validated plan, POST returns persisted request and re
       ],
       detached: true,
     });
+    f.confirm(receipt(saved.requestId, "refused"));
+    await f.reader.refresh(false);
+    const refusal = await post({ planId: plan.planId });
+    expect(refusal.status).toBe(409);
+    expect(await refusal.json()).toMatchObject({ accepted: false, requestId: saved.requestId });
   } finally {
     await web.dispose();
     await f.close();
@@ -252,7 +258,7 @@ test("a disconnected admission stays pending across restart and blocks a second 
     expect(reading.receipt).toBeNull();
     expect(reading.requestId).toBe(first.requestId);
     expect(reading.admittedPlanId).toBe(plan.planId);
-    await expect(successor.apply("different-plan")).rejects.toThrow(
+    await expect(successor.apply("d8125ca6-8a92-4668-a43c-6176d8849f5c")).rejects.toThrow(
       "no confirmed terminal receipt",
     );
     await successor.apply(plan.planId);
@@ -300,6 +306,109 @@ test("malformed plans and failed reads retain the full last plan, one refresh sh
     expect(failed.plan).toBe(plan);
     expect(failed.planLeg.error).not.toBeNull();
     expect(failed.planLeg.observedAtUtc).toBe((await first).planLeg.observedAtUtc);
+  } finally {
+    await f.close();
+  }
+});
+
+test("an authoritative pre-effect refusal survives restart without locking the next plan", async () => {
+  const f = await fixture();
+  try {
+    const refused: UpdateRunner = async (args) => {
+      if (args[1] === "check") return envelope(plan);
+      if (args[1] === "apply")
+        return {
+          ...envelope(receipt(args[args.indexOf("--request-id") + 1]!, "refused"), 3),
+          diagnostics: [{ code: "update.plan-stale", detail: "Revit census changed", fix: null }],
+        };
+      throw Error("there was no SDK operation");
+    };
+    const first = await f.make(refused).apply(plan.planId);
+    expect(first.receipt?.state).toBe("refused");
+    const next = await f
+      .make(async (args) => {
+        const requestId = args[args.indexOf("--request-id") + 1]!;
+        return envelope(
+          { ...receipt(requestId), planId: "d8125ca6-8a92-4668-a43c-6176d8849f5c" },
+          4,
+        );
+      })
+      .apply("d8125ca6-8a92-4668-a43c-6176d8849f5c");
+    expect(next.requestId).not.toBe(first.requestId);
+  } finally {
+    await f.close();
+  }
+});
+
+test("receipt-only refresh never reads the feed and preserves terminal refusals", async () => {
+  const f = await fixture();
+  try {
+    const admitted = await f.reader.apply(plan.planId);
+    f.confirm(receipt(admitted.requestId!, "ok"));
+    expect((await f.reader.refresh(false)).receipt?.state).toBe("ok");
+    expect(f.calls.filter(({ args }) => args[1] === "check")).toHaveLength(0);
+  } finally {
+    await f.close();
+  }
+});
+
+test("lost acknowledgement recovers a terminal refusal even when op result includes its diagnostic", async () => {
+  const f = await fixture();
+  try {
+    let id = "";
+    const runner: UpdateRunner = async (args) => {
+      if (args[1] === "apply") {
+        id = args[args.indexOf("--request-id") + 1]!;
+        throw Error("ack lost");
+      }
+      if (args[0] === "op")
+        return {
+          ...recovered(receipt(id, "refused")),
+          exitCode: 3,
+          diagnostics: [{ code: "update.plan-stale", detail: "census changed", fix: null }],
+        };
+      return envelope(plan);
+    };
+    const result = await f.make(runner).apply(plan.planId);
+    expect(result.receipt?.state).toBe("refused");
+    expect(result.receiptLeg.error).toBeNull();
+    expect((await f.make(runner).refresh(false)).receipt?.state).toBe("refused");
+  } finally {
+    await f.close();
+  }
+});
+
+test("invalid plan identity refuses before writing an admission or invoking the SDK", async () => {
+  const f = await fixture();
+  try {
+    await expect(f.reader.apply("not-a-uuid")).rejects.toThrow("canonical UUID");
+    await expect(readFile(f.path)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(f.calls).toEqual([]);
+    expect((await f.reader.apply(plan.planId)).receipt?.state).toBe("running");
+  } finally {
+    await f.close();
+  }
+});
+
+test("automatic admission excludes new Pea work through download and handoff, terminal refusal releases it", async () => {
+  const f = await fixture();
+  try {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const reader = f.make(async (args, detached) => {
+      if (args[1] === "apply") await gate;
+      return f.run(args, detached);
+    });
+    const applying = reader.apply(plan.planId, true);
+    expect(reader.automaticPending()).toBe(true);
+    release();
+    const admitted = await applying;
+    expect(reader.automaticPending()).toBe(true);
+    f.confirm(receipt(admitted.requestId!, "refused"));
+    await reader.refresh(false);
+    expect(reader.automaticPending()).toBe(false);
   } finally {
     await f.close();
   }

@@ -5,17 +5,22 @@
  * that readies it; an endpoint is probed by the host before it is saved.
  */
 import { useState } from "react";
-import type { HarnessId } from "@pe/agent-contracts";
+import type { HarnessId, Machine } from "@pe/agent-contracts";
 
 import { Input } from "#/components/lang/input";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Press } from "#/components/lang/press";
 import { Switcher } from "#/components/lang/switcher";
-import { readinessSub, useProviders, type ProvidersState } from "#/workbench/provider/providers";
+import {
+  isFresh,
+  readinessSub,
+  useProviders,
+  type ProvidersState,
+} from "#/workbench/provider/providers";
 import { errorMessage } from "#/workbench/provider/use-workbench";
 
-export function PeaGroup({ fixture }: { fixture: boolean }) {
-  const providers = useProviders("", !fixture);
+export function PeaGroup({ fixture, machine }: { fixture: boolean; machine: Machine }) {
+  const providers = useProviders("", !fixture, machine);
   if (fixture)
     return <span className="text-ink-2">Fixture: provider details are read from a live host.</span>;
   if (!providers.list)
@@ -32,7 +37,9 @@ export function PeaGroup({ fixture }: { fixture: boolean }) {
             <span className="font-semibold">{provider.name}</span>
             <span
               className="min-w-0 truncate face-mono"
-              data-tone={provider.readiness.state === "ready" ? undefined : "caution"}
+              data-tone={
+                provider.readiness.state === "ready" && isFresh(provider) ? undefined : "caution"
+              }
               title={readinessSub(provider)}
             >
               {readinessSub(provider)}

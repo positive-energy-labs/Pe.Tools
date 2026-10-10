@@ -8,7 +8,7 @@ import { productRoot } from "@pe/host-contracts/service-identity";
 import { openWindow, prepareHostBinding, resolveHostVersion } from "./host-lifecycle.ts";
 import { makeHttpLive, resolveWebRoot } from "./app.ts";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
-import { makeInstalledUpdateReader, updateWhenNoRevit } from "./update-route.ts";
+import { makeInstalledUpdateReader } from "./update-route.ts";
 
 /** The shared host lifecycle used by both installed startup and source web development. */
 export const hostProgram = (
@@ -68,16 +68,6 @@ export const hostProgram = (
             Effect.tap((claimed) => Effect.sync(() => openWindow(claimed.serviceFile.port))),
           ),
         );
-      // A host nobody clicked (login, Revit) updates the machine when no Revit runs; a click asks in the app.
-      else
-        yield* Effect.forkScoped(
-          Deferred.await(handle).pipe(
-            Effect.andThen(Effect.promise(() => updateWhenNoRevit(updateReader))),
-            Effect.andThen((handedOff) =>
-              handedOff ? Deferred.succeed(latch, undefined) : Effect.void,
-            ),
-          ),
-        );
       const frontend =
         web && webUrl
           ? Effect.flatMap(Deferred.await(handle), (claimed) => web(claimed, webUrl))
@@ -114,35 +104,77 @@ export const hostProgram = (
 
 /** Claim-owned child: EOF asks the shim to dispose, and the finalizer awaits its actual exit. */
 export async function startInstalledTray(handle: ServiceHostHandle): Promise<() => Promise<void>> {
-  const child = spawn(
-    join(dirname(hostOwnership.executablePath), "tray", "Pe.Host.Tray.exe"),
-    [
-      "--parent-pid",
-      String(handle.serviceFile.pid),
-      "--parent-start",
-      handle.serviceFile.processStartUtc,
-      "--service-file",
-      serviceFilePath(productRoot(), hostOwnership.serviceName),
-    ],
-    { windowsHide: true, stdio: ["pipe", "ignore", "ignore"] },
-  );
-  child.stdin?.on("error", (error) => console.warn(`pe-host tray pipe: ${String(error)}`));
-  const exited = new Promise<void>((resolve) => {
-    child.once("close", (code, signal) => {
-      if (code !== 0) console.warn(`pe-host tray exited: ${code ?? signal}`);
-      resolve();
+  let stopping = false;
+  let retries = 0;
+  let recovery: ReturnType<typeof setTimeout> | undefined;
+  let current: { child: ReturnType<typeof spawn>; exited: Promise<void> };
+  const recover = () => {
+    if (stopping || recovery) return;
+    if (retries >= 3) {
+      console.warn("pe-host tray recovery exhausted; tray unavailable until the host restarts");
+      return;
+    }
+    recovery = setTimeout(
+      () => {
+        recovery = undefined;
+        if (!stopping)
+          void launch().catch((error) => {
+            console.warn(`pe-host tray recovery: ${String(error)}`);
+            recover();
+          });
+      },
+      1_000 * 2 ** retries++,
+    );
+  };
+  const launch = async () => {
+    const child = spawn(
+      join(dirname(hostOwnership.executablePath), "tray", "Pe.Host.Tray.exe"),
+      [
+        "--parent-pid",
+        String(handle.serviceFile.pid),
+        "--parent-start",
+        handle.serviceFile.processStartUtc,
+        "--service-file",
+        serviceFilePath(productRoot(), hostOwnership.serviceName),
+      ],
+      { windowsHide: true, stdio: ["pipe", "ignore", "ignore"] },
+    );
+    child.stdin?.on("error", (error) => console.warn(`pe-host tray pipe: ${String(error)}`));
+    const exited = new Promise<void>((resolve) => {
+      child.once("close", (code, signal) => {
+        if (code !== 0) console.warn(`pe-host tray exited: ${code ?? signal}`);
+        resolve();
+        recover();
+      });
     });
-  });
-  await new Promise<void>((resolve, reject) => {
-    child.once("spawn", resolve);
-    child.once("error", reject);
-  });
+    current = { child, exited };
+    await new Promise<void>((resolve, reject) => {
+      child.once("spawn", resolve);
+      child.once("error", reject);
+      child.once("close", () => reject(Error("Tray exited before startup")));
+    });
+  };
+  try {
+    await launch();
+  } catch (error) {
+    stopping = true;
+    if (recovery) clearTimeout(recovery);
+    throw error;
+  }
   return async () => {
+    stopping = true;
+    if (recovery) clearTimeout(recovery);
+    const { child, exited } = current;
     child.stdin?.end();
     // A shim that does not dispose on EOF must not hold the host: the installer stub gives a
     // handed-off host 120 s to exit, and a successor's claim waits on this pid. Bounded, then killed.
-    const timer = new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 5_000));
-    if ((await Promise.race([exited, timer])) === "timeout") {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const timer = new Promise<"timeout">((resolve) => {
+      timeout = setTimeout(() => resolve("timeout"), 5_000);
+    });
+    const outcome = await Promise.race([exited, timer]);
+    clearTimeout(timeout);
+    if (outcome === "timeout") {
       console.warn("pe-host tray did not exit on EOF within 5 s; killing it");
       child.kill();
       await exited;

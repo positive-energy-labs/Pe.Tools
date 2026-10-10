@@ -37,8 +37,8 @@ const describeLaunch = (value: unknown) => {
 };
 
 /** A staged launch, read back into the launcher's picks. */
-function draftOf(launch: InstancesLaunch, machine: Machine | null, rows: readonly DocRow[]) {
-  const doc = rows.find((row) => row.selector === launch.document)?.key ?? null;
+function draftOf(launch: InstancesLaunch) {
+  const doc = launch.document ?? null;
   if (launch.kind === "start")
     return {
       ...EMPTY_DRAFT,
@@ -50,16 +50,10 @@ function draftOf(launch: InstancesLaunch, machine: Machine | null, rows: readonl
       name: launch.name,
       missingLinks: launch.missingLinks,
     } satisfies LaunchDraft;
-  const session = (machine?.revit.sessions ?? []).find((candidate) =>
-    "pid" in launch.session
-      ? candidate.row.case === "observed-active" && candidate.row.process.pid === launch.session.pid
-      : candidate.row.case !== "observed-active" && candidate.row.id === launch.session.id,
-  );
   return {
     ...EMPTY_DRAFT,
     doc,
-    year: session?.row.year ?? null,
-    target: session ? keyOf(session) : null,
+    target: "pid" in launch.session ? `pid:${launch.session.pid}` : launch.session.id,
     missingLinks: launch.missingLinks,
   } satisfies LaunchDraft;
 }
@@ -87,12 +81,12 @@ export function Launcher({
   const stagedKey = JSON.stringify(staged ?? null);
   // A staged launch (a person's, or an accepted proposal) becomes the launcher's picks once.
   useEffect(() => {
-    if (staged) setDraft(draftOf(staged, machine, rows));
+    if (staged) setDraft(draftOf(staged));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- staged is identified by stagedKey
   }, [stagedKey]);
   const plan = launchPlan(draft, machine, rows);
   const years = machine?.revit.years ?? [];
-  const isNew = plan.target === null;
+  const isNew = draft.target === "new" || (draft.target === null && plan.target === null);
   const refusal =
     plan.refusal ??
     (fixture ? "Fixture: nothing on this page reaches a host." : null) ??
@@ -201,10 +195,20 @@ export function Launcher({
           <Tag>on</Tag>
           <Switcher
             ariaLabel="target Revit"
-            value={plan.target ? keyOf(plan.target) : "new"}
+            value={draft.target ?? (plan.target ? keyOf(plan.target) : "new")}
             onChange={(target) => setDraft({ ...draft, target })}
             options={[
               { value: "new", label: "new Revit", title: `start a new Revit ${plan.year ?? ""}` },
+              ...(draft.target && draft.target !== "new" && !plan.target
+                ? [
+                    {
+                      value: draft.target,
+                      label: `${draft.target} unavailable`,
+                      title: "The selected Revit is unavailable; choose another target",
+                      disabled: true,
+                    },
+                  ]
+                : []),
               ...plan.live.map((session) => ({
                 value: keyOf(session),
                 label: (

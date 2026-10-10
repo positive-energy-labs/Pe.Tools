@@ -112,10 +112,13 @@ function useWorldLog(handle: OpenHandle, fixture: boolean) {
   const workspaceId = handle.work.key.work!;
   const inventory = useInventory(!fixture);
   const sessions = useMemo(() => inventoryOf(previousOf(inventory)?.sessions ?? []), [inventory]);
-  useSessionEvents(sessions, (event) =>
-    handle.note(event.label, "bridge-observed world event", event.kind === "gap", undefined, {
-      at: event.atMs,
-    }),
+  useSessionEvents(
+    sessions,
+    (event) =>
+      handle.note(event.label, "bridge-observed world event", event.kind === "gap", undefined, {
+        at: event.atMs,
+      }),
+    !fixture,
   );
   const unresolved = useHostCall(
     (signal) => readScopedActionStatuses({ kind: "instances", workspaceId }, "", signal),

@@ -103,6 +103,8 @@ const admissionSchema = z.object({
 });
 type Admission = z.infer<typeof admissionSchema>;
 export type UpdateRunner = (args: string[], detached?: boolean) => Promise<Envelope<unknown>>;
+export const isUpdatePlanId = (id: unknown): id is string =>
+  typeof id === "string" && z.uuid().safeParse(id).success && id === id.toLowerCase();
 
 /** One persisted recovery handle. A lost acknowledgement is never permission to dispatch again. */
 export function createUpdateReader(options: {
@@ -119,7 +121,9 @@ export function createUpdateReader(options: {
   let loaded = false;
   let loading: Promise<void> | undefined;
   let refreshing: Promise<MachineUpdate> | undefined;
+  let refreshingFeed = false;
   let applying: Promise<MachineUpdate> | undefined;
+  let automaticPending = false;
   let value: MachineUpdate = {
     plan: null,
     receipt: null,
@@ -164,6 +168,8 @@ export function createUpdateReader(options: {
       }
       await rename(temporary, options.path);
       admission = record;
+      if (record.receipt && ["ok", "failed", "refused"].includes(record.receipt.state))
+        automaticPending = false;
       value = {
         ...value,
         requestId: record.requestId,
@@ -176,7 +182,11 @@ export function createUpdateReader(options: {
   }
 
   async function recover() {
-    if (!admission) return;
+    if (
+      !admission ||
+      (admission.receipt && ["ok", "failed", "refused"].includes(admission.receipt.state))
+    )
+      return;
     const attemptedAtUtc = now();
     try {
       const envelope = await options.run(opResultArgv({ requestId: admission.requestId }));
@@ -196,12 +206,13 @@ export function createUpdateReader(options: {
         result.response.requestId !== admission.requestId
       )
         throw Error("op result returned a different update request.");
-      if (envelope.diagnostics.length) throw Error(said(envelope));
       const receipt = validateReceipt(
         result.response.result,
         admission.requestId,
         admission.planId,
       );
+      if (envelope.diagnostics.length && !["ok", "failed", "refused"].includes(receipt.state))
+        throw Error(said(envelope));
       const observedAtUtc = now();
       await persist({
         ...admission,
@@ -217,8 +228,10 @@ export function createUpdateReader(options: {
     }
   }
 
-  function refresh(): Promise<MachineUpdate> {
-    if (refreshing) return refreshing;
+  function refresh(checkFeed = true): Promise<MachineUpdate> {
+    if (refreshing)
+      return checkFeed && !refreshingFeed ? refreshing.then(() => refresh(true)) : refreshing;
+    refreshingFeed = checkFeed;
     refreshing = (async () => {
       if (!options.installed) return value;
       try {
@@ -231,23 +244,25 @@ export function createUpdateReader(options: {
       }
       const attemptedAtUtc = now();
       await Promise.all([
-        (async () => {
-          try {
-            const envelope = await options.run(updateCheckArgv({ manifest: options.manifest }));
-            if (envelope.exitCode !== 0) throw Error(said(envelope));
-            const plan = validateUpdatePlan(envelope.result);
-            value = {
-              ...value,
-              plan,
-              planLeg: { observedAtUtc: now(), attemptedAtUtc, error: null },
-            };
-          } catch (error) {
-            value = {
-              ...value,
-              planLeg: { ...value.planLeg, attemptedAtUtc, error: String(error) },
-            };
-          }
-        })(),
+        checkFeed
+          ? (async () => {
+              try {
+                const envelope = await options.run(updateCheckArgv({ manifest: options.manifest }));
+                if (envelope.exitCode !== 0) throw Error(said(envelope));
+                const plan = validateUpdatePlan(envelope.result);
+                value = {
+                  ...value,
+                  plan,
+                  planLeg: { observedAtUtc: now(), attemptedAtUtc, error: null },
+                };
+              } catch (error) {
+                value = {
+                  ...value,
+                  planLeg: { ...value.planLeg, attemptedAtUtc, error: String(error) },
+                };
+              }
+            })()
+          : Promise.resolve(),
         applying ? Promise.resolve() : recover(),
       ]);
       return value;
@@ -258,12 +273,15 @@ export function createUpdateReader(options: {
   }
 
   function apply(planId: string, noShortcutArgs = false): Promise<MachineUpdate> {
+    if (!isUpdatePlanId(planId))
+      return Promise.reject(Error("An update planId must be a canonical UUID."));
     if (!options.installed) return Promise.reject(Error("Only the installed app updates itself."));
     if (applying)
       return applying.then((result) => {
         if (admission?.planId !== planId) throw Error("Another update request is admitted.");
         return result;
       });
+    if (noShortcutArgs) automaticPending = true;
     applying = (async () => {
       if (refreshing) await refreshing;
       if (!loaded) await load();
@@ -315,11 +333,16 @@ export function createUpdateReader(options: {
       return value;
     })().finally(() => {
       applying = undefined;
+      if (
+        !admission ||
+        (admission.receipt && ["ok", "failed", "refused"].includes(admission.receipt.state))
+      )
+        automaticPending = false;
     });
     return applying;
   }
 
-  return { refresh, apply, current: () => value };
+  return { refresh, apply, current: () => value, automaticPending: () => automaticPending };
 }
 
 function said(envelope: Envelope<unknown>) {

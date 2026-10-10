@@ -88,6 +88,10 @@ internal sealed class BridgeConnectionSupervisor : IDisposable {
     private async Task<RuntimeActionResult> TryConnectAsync(string reason, CancellationToken cancellationToken) {
         Log.Information("Host bridge supervisor connect requested: Reason={Reason}", reason);
 
+        // Installed host lifetime belongs to login and explicit open, including after Quit or a crash.
+        if (TsHostLauncher.Lane == "installed")
+            return await this.ConnectRuntimeAsync(cancellationToken).ConfigureAwait(false);
+
         var hostLaunchResult = HostBridgeConnector.EnsureTsHostRunning();
         if (!hostLaunchResult.Success)
             Log.Warning("Host bridge supervisor could not ensure a TS host; trying the service file's address anyway: {Message}", hostLaunchResult.Message);

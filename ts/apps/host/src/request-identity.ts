@@ -32,8 +32,20 @@ export async function readRequestIdentity(
   headers: Readonly<Record<string, string | undefined>>,
   path: string,
   options: IdentityOptions,
+  method = "GET",
 ): Promise<IdentityResult> {
-  const pathname = new URL(path, "http://127.0.0.1").pathname;
+  let pathname: string;
+  try {
+    pathname =
+      new URL(
+        decodeURIComponent(new URL(path, "http://127.0.0.1").pathname)
+          .replaceAll("\\", "/")
+          .replace(/\/{2,}/g, "/"),
+        "http://127.0.0.1",
+      ).pathname.replace(/\/$/, "") || "/";
+  } catch {
+    return { refusal: { code: "identity.path", detail: "Request path cannot be normalized." } };
+  }
   const host = headers.host ?? "";
   const origin = headers.origin;
   const refuse = (code: string, detail: string): IdentityResult => ({ refusal: { code, detail } });
@@ -79,6 +91,15 @@ export async function readRequestIdentity(
                   ...(origin !== undefined ? { origin } : {}),
                 },
               };
+    if (
+      "principal" in result &&
+      share.allowRemoteAdministration === false &&
+      remoteAdministration(pathname, method)
+    )
+      result = refuse(
+        "identity.remote-administration",
+        "Remote machine administration is disabled on this host. Product operations remain available.",
+      );
   }
   if (
     "principal" in result &&
@@ -86,7 +107,8 @@ export async function readRequestIdentity(
     (pathname === BRIDGE_PATH ||
       pathname === "/admin/shutdown" ||
       pathname === "/admin/window" ||
-      pathname === "/pe/share")
+      pathname === "/pe/share" ||
+      pathname.startsWith("/pe/share/"))
   )
     result = refuse(
       "identity.local-only",
@@ -96,6 +118,17 @@ export async function readRequestIdentity(
   return result;
 }
 
+/** One boundary for machine control; HTTP/MCP product operations keep their own normal access. */
+function remoteAdministration(path: string, method: string): boolean {
+  return (
+    (method !== "GET" &&
+      method !== "HEAD" &&
+      (path === "/pe/providers" || path.startsWith("/pe/providers/"))) ||
+    (method === "PUT" && path === "/pe/access") ||
+    (method === "POST" && path === "/host/update")
+  );
+}
+
 /** A global router middleware also covers unmatched/static requests and WebSocket upgrades. */
 export const requestIdentityLayer = (options: IdentityOptions) =>
   HttpRouter.middleware(
@@ -103,7 +136,7 @@ export const requestIdentityLayer = (options: IdentityOptions) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
         const identity = yield* Effect.promise(() =>
-          readRequestIdentity(request.headers, request.originalUrl, options),
+          readRequestIdentity(request.headers, request.originalUrl, options, request.method),
         );
         if ("refusal" in identity) return HttpServerResponse.jsonUnsafe(identity, { status: 403 });
         const services = yield* Effect.context<never>();

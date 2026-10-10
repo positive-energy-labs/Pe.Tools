@@ -25,7 +25,8 @@ import { mergePath } from "./user-shell.ts";
  * Providers: one harness with one auth source. A subscription provider (the harness's own login)
  * exists for every harness with id = harness id; endpoint providers are user-added and live in
  * `providers.json` under product state with their key, which never leaves this module except as
- * child env. Readiness, models and traits come from one probe per provider, cached per host start.
+ * child env. Readiness, models and traits retain their probe timestamp; endpoint use revalidates
+ * an observation older than one minute. Reading machine state never makes an inference request.
  */
 
 type ProviderRecord = {
@@ -38,6 +39,7 @@ type EndpointRecord = ProviderRecord & { auth: AddProviderRequest["auth"] };
 type Probed = Pick<Provider, "readiness" | "models" | "traits" | "probedAt">;
 
 const PROBE_MS = 20_000;
+const FRESH_MS = 60_000;
 const log = {
   info: (message: string) => Effect.runSync(Effect.logInfo(message)),
   warn: (message: string) => Effect.runSync(Effect.logWarning(message)),
@@ -182,6 +184,7 @@ async function upstream(
     headers: { ...headers, "content-type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(PROBE_MS),
+    redirect: "error",
   }).catch((e: unknown) => {
     throw new Refusal(`${step}: ${url} unreachable: ${String(e)}`);
   });
@@ -302,7 +305,10 @@ async function acpProbe(
   env: Record<string, string | undefined>,
 ): Promise<Omit<Probed, "probedAt">> {
   const none = { models: [], traits: [] };
-  let authStatus: AuthStatus | null = null;
+  let reportAuth!: (status: AuthStatus) => void;
+  const authReported = new Promise<AuthStatus>((resolve) => {
+    reportAuth = resolve;
+  });
   let opened: ReturnType<typeof openAdapter>;
   try {
     opened = openAdapter(record.harness, tmpdir(), env, () => ({
@@ -310,8 +316,8 @@ async function acpProbe(
       requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
       // `_auth/status_update` from both adapters (seen 2026-10-08): kind `account` or `none`.
       extNotification: async (method, params) => {
-        if (method.endsWith("auth/status_update"))
-          authStatus = (params as { authStatus?: AuthStatus }).authStatus ?? null;
+        const status = (params as { authStatus?: AuthStatus }).authStatus;
+        if (method.endsWith("auth/status_update") && status?.kind) reportAuth(status);
       },
     }));
   } catch (error) {
@@ -356,7 +362,8 @@ async function acpProbe(
     if ("refused" in session) return { readiness: signedOut(session.refused), ...none };
     const state = session as Parameters<typeof sessionOffer>[0];
     const offer = sessionOffer(state);
-    const status = authStatus as AuthStatus | null;
+    // Session metadata can precede auth notification; absence is not proof of sign-in.
+    const status = record.auth.kind === "subscription" ? await authReported : null;
     // An endpoint provider is not a login: Claude reports "Not logged in" under ANTHROPIC_* env.
     if (record.auth.kind === "subscription" && status?.kind === "none")
       return {
@@ -395,7 +402,7 @@ async function acpProbe(
       ...none,
     };
   } finally {
-    void stopChild(child);
+    await stopChild(child);
   }
 }
 
@@ -458,21 +465,45 @@ function openConsole(command: string, env: Record<string, string | undefined>): 
 
 export function createProviders(options: ProvidersOptions) {
   const cache = new Map<string, Probed>();
+  const knownKeys = new Set<string>();
   const inFlight = new Map<string, Promise<Provider>>();
+  const listeners = new Set<() => void>();
+  const notify = () => {
+    for (const listener of listeners) listener();
+  };
+  let providerReadError: string | null = null;
 
-  /** Read once, then kept: this module is the file's only writer. */
-  let saved: EndpointRecord[] | null = null;
+  /** Re-read before writes so external damage cannot be replaced by a cached valid list. */
   const stored = (): EndpointRecord[] => {
-    if (saved) return saved;
     const path = productProvidersPath();
-    if (!existsSync(path)) return (saved = []);
-    const parsed = storedSchema.safeParse(JSON.parse(readFileSync(path, "utf8")));
-    if (!parsed.success) log.warn(`${path} does not parse; no endpoint providers listed`);
-    return (saved = parsed.data?.providers ?? []);
+    try {
+      const parsed = existsSync(path)
+        ? storedSchema.parse(JSON.parse(readFileSync(path, "utf8")))
+        : { providers: [] };
+      const ids = parsed.providers.map((record) => record.id);
+      if (
+        new Set(ids).size !== ids.length ||
+        ids.some((id) => harnessIds.some((harness) => harness === id))
+      )
+        throw Error("Duplicate provider identity");
+      for (const record of parsed.providers) {
+        normalizeBaseUrl(record.harness, record.auth.baseUrl);
+        if (!record.id || !record.name || !record.auth.apiKey || /\s/.test(record.auth.apiKey))
+          throw Error("Invalid provider record");
+        knownKeys.add(record.auth.apiKey);
+      }
+      providerReadError = null;
+      return parsed.providers;
+    } catch {
+      // Never include parser excerpts: they can contain credential bytes.
+      providerReadError = `Cannot read ${path}. Repair or restore the file before changing providers; its bytes are preserved.`;
+      return [];
+    }
   };
   const save = (records: EndpointRecord[]) => {
+    stored();
+    if (providerReadError) throw Error(providerReadError);
     writeJson(productProvidersPath(), { providers: records });
-    saved = records;
   };
   const records = (): ProviderRecord[] => [
     ...harnessIds.map((harness) => ({
@@ -485,6 +516,10 @@ export function createProviders(options: ProvidersOptions) {
   ];
   const get = (id: string) => records().find((r) => r.id === id) ?? null;
 
+  const fresh = (id: string) => {
+    const time = cache.get(id)?.probedAt;
+    return time !== null && time !== undefined && Date.now() - Date.parse(time) < FRESH_MS;
+  };
   const view = (record: ProviderRecord): Provider => ({
     id: record.id,
     harness: record.harness,
@@ -521,7 +556,7 @@ export function createProviders(options: ProvidersOptions) {
   ): Promise<Record<string, string>> {
     const out = await userPath();
     if (record.auth.kind === "endpoint") {
-      const provider = cache.has(record.id) ? view(record) : await probe(record);
+      const provider = fresh(record.id) ? view(record) : await probe(record);
       if (provider.readiness.state !== "ready")
         throw new Error(
           provider.readiness.state === "refused"
@@ -537,13 +572,13 @@ export function createProviders(options: ProvidersOptions) {
   }
 
   async function probeRecord(record: ProviderRecord): Promise<Probed> {
-    const probedAt = new Date().toISOString();
+    const probedAt = () => new Date().toISOString();
     const probed = await acpProbe(record, {
       ...process.env,
       ...(await userPath()),
       ...authEnv(record),
     });
-    if (probed.readiness.state !== "ready") return { ...probed, probedAt };
+    if (probed.readiness.state !== "ready") return { ...probed, probedAt: probedAt() };
     let endpointModels: HarnessModel[] | null = null;
     try {
       if (record.auth.kind === "endpoint")
@@ -560,19 +595,37 @@ export function createProviders(options: ProvidersOptions) {
         readiness: { state: "refused", step: error.step, message: error.message },
         models: [],
         traits: [],
-        probedAt,
+        probedAt: probedAt(),
       };
     }
-    return { ...probed, ...(endpointModels ? { models: endpointModels } : {}), probedAt };
+    return {
+      ...probed,
+      ...(endpointModels ? { models: endpointModels } : {}),
+      probedAt: probedAt(),
+    };
   }
 
   function probe(record: ProviderRecord): Promise<Provider> {
     const running = inFlight.get(record.id);
     if (running) return running;
     const next = probeRecord(record)
+      .catch(
+        (error): Probed => ({
+          readiness: {
+            state: "unknown",
+            message: `The probe failed: ${String(error?.message ?? error)}`,
+          },
+          models: [],
+          traits: [],
+          probedAt: new Date().toISOString(),
+        }),
+      )
       .then((probed) => {
+        const current = get(record.id);
+        if (!current || JSON.stringify(current) !== JSON.stringify(record)) return view(record);
         cache.set(record.id, probed);
         log.info(`provider ${record.id} probed: ${probed.readiness.state}`);
+        notify();
         return view(record);
       })
       .finally(() => inFlight.delete(record.id));
@@ -582,10 +635,16 @@ export function createProviders(options: ProvidersOptions) {
 
   const readAccess = (): Access => {
     const path = productAccessPath();
-    const parsed = existsSync(path)
-      ? accessSchema.safeParse(JSON.parse(readFileSync(path, "utf8")))
-      : null;
-    return parsed?.success ? parsed.data : { guarded: true };
+    try {
+      return existsSync(path)
+        ? accessSchema.parse(JSON.parse(readFileSync(path, "utf8")))
+        : { guarded: true };
+    } catch {
+      return {
+        guarded: true,
+        readError: `Cannot read ${path}. Agent approvals stay guarded. Repair or restore the file before changing approvals; its bytes are preserved.`,
+      };
+    }
   };
 
   if (options.probeOnStart ?? true)
@@ -598,6 +657,8 @@ export function createProviders(options: ProvidersOptions) {
 
   /** Add: the endpoint is checked before anything is written; a refusal is `{step, message}`. */
   async function add(input: AddProviderRequest): Promise<Response> {
+    stored();
+    if (providerReadError) return json({ error: providerReadError }, 409);
     const id = `${input.harness}-${slug(input.name)}`;
     if (id === `${input.harness}-`)
       return json({ step: "endpoint", message: "Name the provider." }, 400);
@@ -627,8 +688,12 @@ export function createProviders(options: ProvidersOptions) {
     const probed = await probeRecord(record);
     if (probed.readiness.state === "refused" && probed.readiness.step === "endpoint")
       return json({ step: probed.readiness.step, message: probed.readiness.message }, 400);
+    // The probe yields; another request may have claimed this identity meanwhile.
+    if (get(id))
+      return json({ error: `A provider ${id} exists; remove it or pick another name.` }, 409);
     save([...stored(), record]);
     cache.set(id, probed);
+    notify();
     log.info(`provider ${id} added (${probed.readiness.state})`);
     return json(view(record));
   }
@@ -650,13 +715,21 @@ export function createProviders(options: ProvidersOptions) {
       if (method !== "PUT") return json({ error: `No route ${method} ${url.pathname}` }, 404);
       const input = await body(accessSchema);
       if (input instanceof Response) return input;
-      writeJson(productAccessPath(), input);
+      const current = readAccess();
+      if (current.readError) return json({ error: current.readError }, 409);
+      writeJson(productAccessPath(), { guarded: input.guarded });
+      notify();
       log.info(`access set: guarded ${input.guarded}`);
       return json(input);
     }
     const [, , , rawId, verb] = url.pathname.split("/"); // "", "pe", "providers", id, verb
     if (!rawId) {
-      if (method === "GET") return json(records().map(view));
+      if (method === "GET") {
+        const list = records().map(view);
+        return Response.json(list, {
+          headers: providerReadError ? { "x-pe-provider-read-error": "state-unreadable" } : {},
+        });
+      }
       if (method !== "POST") return json({ error: `No route ${method} ${url.pathname}` }, 404);
       const input = await body(addProviderRequestSchema);
       return input instanceof Response ? input : add(input);
@@ -667,6 +740,7 @@ export function createProviders(options: ProvidersOptions) {
       case "GET ":
         return json(view(record));
       case "DELETE ": {
+        if (providerReadError) return json({ error: providerReadError }, 409);
         if (record.auth.kind === "subscription")
           return json(
             { error: "A subscription provider is the harness's own login; it cannot be removed." },
@@ -674,6 +748,7 @@ export function createProviders(options: ProvidersOptions) {
           );
         save(stored().filter((r) => r.id !== record.id));
         cache.delete(record.id);
+        notify();
         log.info(`provider ${record.id} removed`);
         return new Response(null, { status: 204 });
       }
@@ -703,27 +778,64 @@ export function createProviders(options: ProvidersOptions) {
 
   return {
     get,
-    /** Machine projects the existing probe cache; it never starts a second provider probe. */
-    readiness: () =>
-      records().map((record) => ({ id: record.id, readiness: view(record).readiness })),
+    /** Every shell receives the same safe provider views and the same read failure. */
+    snapshot: async () => {
+      const all = records();
+      const access = readAccess();
+      return {
+        providers: all.map(view),
+        access,
+        readError: providerReadError ?? access.readError ?? null,
+      };
+    },
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    readiness: () => records().map(view),
     env,
     models: (id: string) => cache.get(id)?.models ?? [],
+    invalidate: (id: string, message: string) => {
+      cache.set(id, {
+        readiness: { state: "unknown", message },
+        models: [],
+        traits: [],
+        probedAt: new Date().toISOString(),
+      });
+      notify();
+    },
     validateModel: async (record: ProviderRecord, modelId: string) => {
       if (record.auth.kind === "endpoint")
-        await checkEndpoint(
-          record.harness,
-          record.auth.baseUrl,
-          record.auth.apiKey,
-          modelId,
-          record.harness === "codex" ? cache.get(record.id)?.models : undefined,
-        );
+        try {
+          await checkEndpoint(
+            record.harness,
+            record.auth.baseUrl,
+            record.auth.apiKey,
+            modelId,
+            record.harness === "codex" ? cache.get(record.id)?.models : undefined,
+          );
+        } catch (error) {
+          cache.set(record.id, {
+            readiness:
+              error instanceof Refusal
+                ? { state: "refused", step: "endpoint", message: error.message }
+                : { state: "unknown", message: "Endpoint validation failed." },
+            models: [],
+            traits: [],
+            probedAt: new Date().toISOString(),
+          });
+          notify();
+          throw error;
+        }
     },
     access: readAccess,
     /** Every endpoint key, so no thread record keeps one even when a harness echoes it. */
-    keys: () =>
-      stored()
-        .map((r) => r.auth.apiKey)
-        .filter(Boolean),
+    keys: () => {
+      stored();
+      return [...knownKeys];
+    },
     /** The web handler for `/pe/providers*` and `/pe/access`. */
     fetch: (request: Request) =>
       handle(request).catch((error) => json({ error: String(error?.message ?? error) }, 502)),

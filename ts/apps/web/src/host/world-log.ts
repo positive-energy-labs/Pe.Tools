@@ -73,13 +73,14 @@ function toWorldEvent(event: HostEvent, sessions: SessionInventory[]): SessionEv
 export function useSessionEvents(
   sessions: SessionInventory[],
   onEvent: (event: SessionEvent) => void,
+  enabled = true,
 ): void {
-  const revit = previousOf(useHostStatus())?.capabilities.revit === true;
+  const revit = previousOf(useHostStatus(enabled))?.capabilities.revit === true;
   // Label enrichment and the sink only: the stream must not reopen on session-list churn.
   const latest = useRef({ sessions, onEvent });
   latest.current = { sessions, onEvent };
   useHostEvents<HostEvent>(
-    revit,
+    enabled && revit,
     useCallback((event) => {
       const world = toWorldEvent(event, latest.current.sessions);
       if (world) latest.current.onEvent(world);

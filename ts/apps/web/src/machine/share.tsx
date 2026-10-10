@@ -9,7 +9,7 @@ import type { Machine } from "@pe/agent-contracts";
 
 import { OutcomeLine } from "#/components/lang/outcome";
 import { SwitchRow } from "#/components/lang/switch-row";
-import { switchShare } from "#/host/machine";
+import { switchRemoteAdministration, switchShare } from "#/host/machine";
 
 import { hhmm } from "./model";
 import { SEED_REFUSAL } from "./use-machine";
@@ -35,7 +35,7 @@ export function ShareGroup({
     ? SEED_REFUSAL
     : stale
       ? "The host is not answering; the switch waits for it."
-      : share.state === "refused"
+      : share.state === "refused" && share.desired !== "on"
         ? (share.refusal?.detail ?? "The host refused to share.")
         : null;
   const url = share.url?.replace(/^https?:\/\//, "");
@@ -43,7 +43,7 @@ export function ShareGroup({
     <div className="flex flex-col gap-1" aria-label="share">
       <SwitchRow
         label="Share over tailnet"
-        checked={share.state === "on"}
+        checked={share.desired === "on"}
         refusal={refusal}
         says="serve this host to people on your tailnet; their tailnet identity is the credential"
         onCheckedChange={(on) => {
@@ -51,8 +51,29 @@ export function ShareGroup({
           switchShare(on).catch((caught: unknown) => setError(String(caught)));
         }}
       />
+      <SwitchRow
+        label="Allow remote machine administration"
+        checked={share.allowRemoteAdministration}
+        refusal={
+          fixture
+            ? SEED_REFUSAL
+            : stale
+              ? "The host is not answering; the switch waits for it."
+              : null
+        }
+        says="local switch; remote callers can manage providers, agent approvals and host updates when on"
+        onCheckedChange={(allowed) => {
+          setError(null);
+          switchRemoteAdministration(allowed).catch((caught: unknown) => setError(String(caught)));
+        }}
+      />
+      <span className="text-ink-2">
+        Turning administration off keeps shared HTTP and MCP product operations available.
+      </span>
       {share.refusal && share.state === "refused" ? (
-        <span className="face-mono text-ink-2">{share.refusal.code}</span>
+        <span className="face-mono text-ink-2">
+          {share.refusal.code} · {share.refusal.detail}
+        </span>
       ) : null}
       {url ? (
         <span className="flex items-center gap-2">

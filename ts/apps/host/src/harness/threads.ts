@@ -102,6 +102,8 @@ export type HarnessThreadsOptions = {
   developerInstructions?: () => Promise<string>;
   /** Providers: the child's auth env, the access setting, and the keys a record never keeps. */
   providers: Providers;
+  /** Automatic update admission excludes new harness work through installer handoff. */
+  updatePending?: () => boolean;
 };
 
 const emptyHead: ThreadHead = { defaultTarget: null, revision: 0 };
@@ -559,7 +561,11 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   }
 
   async function ensure(t: Thread): Promise<Live> {
-    await t.retiring;
+    if (options.updatePending?.())
+      throw Error("Pe.Tools is updating; try this after the update finishes.");
+    if (t.retiring) await t.retiring;
+    if (options.updatePending?.())
+      throw Error("Pe.Tools is updating; try this after the update finishes.");
     if (t.stopped) throw new Error("The thread was stopped");
     if (!t.live) {
       t.session = "started";
@@ -576,6 +582,10 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           if (t.live !== connecting || t.stopped) return;
           t.live = null;
           t.session = "closed";
+          options.providers.invalidate(
+            t.meta.providerId,
+            "The harness failed to start; probe again.",
+          );
           append(t, {
             kind: "error",
             turnId: t.running,
@@ -742,8 +752,10 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       append(t, { kind: "turn_end", turnId, stopReason: result.stopReason });
     } catch (error) {
       // A stopped thread's open turn is ended by restart recovery, not by "connection closed".
-      if (!t.stopped)
+      if (!t.stopped) {
+        options.providers.invalidate(t.meta.providerId, "The harness turn failed; probe again.");
         append(t, { kind: "error", turnId, message: String((error as Error)?.message ?? error) });
+      }
     }
     disarm(t);
     t.running = null;
@@ -752,6 +764,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   }
 
   function runNext(t: Thread) {
+    if (options.updatePending?.()) return;
     const next = t.meta.queued.shift();
     if (!next) return;
     writeMeta(t);
@@ -832,6 +845,11 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       );
     if (url.pathname === "/pe/threads" && method === "POST") {
       const { providerId, title } = await input(createThreadRequestSchema);
+      if (options.updatePending?.())
+        return json(
+          { error: "Pe.Tools is updating; create this thread after the update finishes." },
+          409,
+        );
       const record = options.providers.get(providerId);
       if (!record) return json({ error: `No provider ${providerId}` }, 400);
       const now = new Date().toISOString();
@@ -873,6 +891,8 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         return new Response(null, { status: 204 });
       case "POST prompt": {
         const { text } = await input(promptRequestSchema);
+        if (options.updatePending?.())
+          return json({ error: "Pe.Tools is updating; send this after the update finishes." }, 409);
         const turnId = randomUUID();
         if (t.running) {
           t.meta.queued.push({ turnId, text });
@@ -1019,6 +1039,11 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   }
 
   return {
+    /** Automatic updates wait for every turn and harness action to finish. */
+    active: () =>
+      [...threads.values()].some(
+        (t) => t.running !== null || t.busy > 0 || t.meta.queued.length > 0,
+      ),
     /** The thread head store; the `thread-head` Reading observes it. */
     heads,
     /** The web handler for `/pe/threads*` and `/pe/scope/:id`. Bad input is 400; a harness refusal 502. */

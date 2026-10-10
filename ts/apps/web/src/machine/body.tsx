@@ -298,7 +298,7 @@ export function MachineBody({
             label: "Pea",
             state: pea.text,
             tone: pea.tone,
-            body: <PeaGroup fixture={fixture} />,
+            body: <PeaGroup fixture={fixture} machine={machine} />,
           },
         ]}
       />

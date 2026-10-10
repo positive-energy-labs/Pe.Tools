@@ -31,7 +31,7 @@ type HostRpcCallerOptions = HostSessionScope & {
   actor?: "human" | "agent";
   /** Persist caller view identity before submitting a mutation; reads never invoke this. */
   beforeAdmission?: (id: string) => Promise<void>;
-  /** Test seam: skip the live /ops fetch and use this catalog. */
+  /** Known host metadata or an injected catalog; skips the live /ops enrichment fetch. */
   catalogOverride?: readonly HostOperationDefinition[];
 };
 
@@ -64,7 +64,10 @@ export type OpsCatalog = {
   bridgeCatalogError?: string;
 };
 
-async function loadCatalog(hostBaseUrl: string, scope: HostSessionScope): Promise<OpsCatalog> {
+async function loadCatalog(
+  hostBaseUrl: string,
+  scope: HostSessionScope & Pick<HostRpcCallerOptions, "timeoutMs">,
+): Promise<OpsCatalog> {
   const base = trimTrailingSlash(hostBaseUrl);
   // A catalog describes one Revit process. Sharing it across selectors can make Pea discover an
   // operation in the dev session and then invoke it in another session where that contract does not exist.
@@ -79,7 +82,7 @@ async function loadCatalog(hostBaseUrl: string, scope: HostSessionScope): Promis
   // 2026-08-19/20 dead end — no port, no hint, indistinguishable from a wrong-lane resolution.
   const response = await fetch(`${base}/ops`, {
     headers,
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(Math.max(scope.timeoutMs ?? 30_000, 1)),
   }).catch((error: unknown) => {
     throw new HostCallError(`host.ops.catalog: GET ${base}/ops failed: ${String(error)}`, 0, {
       operationKey: "host.ops.catalog",

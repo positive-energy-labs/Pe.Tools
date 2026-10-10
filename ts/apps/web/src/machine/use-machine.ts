@@ -3,7 +3,7 @@
  * (`?demo=<name>`) the reading is a recorded fixture and nothing reaches a host; a mutation there
  * is refused with that reason instead of being sent.
  */
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 import type { Machine, Reading } from "@pe/agent-contracts";
 
 import { frozenDemo } from "#/host/demo-client";
@@ -36,16 +36,17 @@ export function useMachine(): { reading: Reading<Machine>; fixture: boolean } {
 }
 
 /**
- * Consent binds the plan id at the moment of the press (host ledger 2026-10-08). `quiet` applies a
- * quiet plan without asking, once per app open; only the always-mounted version chip passes it.
+ * Consent binds the plan id at the moment of the press. Automatic admission belongs to the host.
  */
-export function useUpdateConsent(reading: Reading<Machine>, fixture: boolean, quiet = false) {
+export function useUpdateConsent(reading: Reading<Machine>, fixture: boolean) {
   const machine = machineOf(reading);
   const [requestId, setRequestId] = useState<string | null>(null);
   const run = useCallback(async (planId: string) => {
-    const admitted = await acknowledgeUpdate(planId);
-    dirty({ kind: "machine" });
-    return admitted;
+    try {
+      return await acknowledgeUpdate(planId);
+    } finally {
+      dirty({ kind: "machine" });
+    }
   }, []);
   const apply = useAction(run, setRequestId);
   const waiting = machine ? planWaits(machine) : null;
@@ -57,21 +58,9 @@ export function useUpdateConsent(reading: Reading<Machine>, fixture: boolean, qu
         ? "No update plan waits for consent."
         : waiting.blockers.length
           ? "Resolve the blocker above first; the host re-plans when it clears."
-          : requestId
+          : requestId && machine?.update.requestId === requestId && machine.update.receipt === null
             ? "This plan was admitted; the receipt follows."
             : null;
-  const started = useRef(false);
-  const autoApply =
-    quiet &&
-    !fixture &&
-    refusal === null &&
-    waiting?.quiet === true &&
-    machine?.host?.payload === "installed";
-  useEffect(() => {
-    if (!autoApply || started.current || !waiting) return;
-    started.current = true;
-    apply.mutate(waiting.planId);
-  }, [autoApply, waiting, apply]);
   return {
     plan: waiting,
     refusal,

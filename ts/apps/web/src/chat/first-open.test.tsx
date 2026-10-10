@@ -54,7 +54,7 @@ test("every provider refused: one row each, its own verb, the access switch, and
   expect(screen.getByText("Open providers")).toBeTruthy();
   fireEvent.click(screen.getByText("Probe"));
   expect(providers.probe).toHaveBeenCalledWith("claude-probe");
-  expect(screen.getByText("Pea asks before each change")).toBeTruthy();
+  expect(screen.getByText("Agent approvals")).toBeTruthy();
 
   fireEvent.click(screen.getByText("Use your own app"));
   expect(
