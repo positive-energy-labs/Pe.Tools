@@ -5,7 +5,6 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Effect, FileSystem, Schema, Semaphore } from "effect";
 import { HttpBody, HttpClient, UrlParams } from "effect/unstable/http";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { productIdentity, productPathNames } from "@pe/host-contracts/contracts";
 import {
   ApsAuthFlowKind,
@@ -16,6 +15,7 @@ import {
   type ApsTokenResult,
 } from "@pe/host-contracts/operation-types";
 import { LocalOpError } from "./local-error.ts";
+import { runHostChild } from "./host-child.ts";
 import { productApsCredentialsPath } from "./product-paths.ts";
 
 const APS_AUTH_BASE_URL = "https://developer.api.autodesk.com/authentication/v2";
@@ -30,7 +30,7 @@ const tokenStoreLock = Semaphore.makeUnsafe(1);
 type ApsAuthEffect<A> = Effect.Effect<
   A,
   LocalOpError,
-  ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | HttpClient.HttpClient
+  FileSystem.FileSystem | HttpClient.HttpClient
 >;
 
 type NormalizedApsTokenRequest = {
@@ -557,19 +557,14 @@ const runPowershell = Effect.fnUntraced(function* (
     `$inputArgs = @(${inputArgs})\n${command}`,
     "utf16le",
   ).toString("base64");
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const output = yield* spawner
-    .string(
-      ChildProcess.make("powershell.exe", [
-        "-NoProfile",
-        "-NonInteractive",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-EncodedCommand",
-        encodedCommand,
-      ]),
-    )
-    .pipe(Effect.mapError((error) => new LocalOpError(operationKey, errorMessage(error))));
+  const { stdout: output } = yield* runHostChild("powershell.exe", [
+    "-NoProfile",
+    "-NonInteractive",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-EncodedCommand",
+    encodedCommand,
+  ]).pipe(Effect.mapError((error) => new LocalOpError(operationKey, errorMessage(error))));
   const trimmed = output.trim();
   if (!trimmed)
     return yield* Effect.fail(
@@ -579,10 +574,10 @@ const runPowershell = Effect.fnUntraced(function* (
 });
 
 const openBrowser = Effect.fnUntraced(function* (url: string) {
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  yield* spawner
-    .string(ChildProcess.make("rundll32.exe", ["url.dll,FileProtocolHandler", url]))
-    .pipe(Effect.mapError((error) => new LocalOpError("aps.auth.login", errorMessage(error))));
+  // The browser is an explicit login surface; do not hide its first GUI window.
+  yield* runHostChild("rundll32.exe", ["url.dll,FileProtocolHandler", url], {
+    windowsHide: false,
+  }).pipe(Effect.mapError((error) => new LocalOpError("aps.auth.login", errorMessage(error))));
 });
 
 function createCallbackListener(): {

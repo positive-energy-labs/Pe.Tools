@@ -7,12 +7,12 @@ import {
   type SdkReading,
 } from "@pe/agent-contracts";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
-import { execFile, spawn } from "node:child_process";
 import { join } from "node:path";
 import { docListArgv, doctorArgv, sessionListArgv } from "@pe/host-contracts/pe-revit-contract";
 import { checkoutLayout } from "@pe/host-contracts/service-identity";
 import { type HostLane } from "./host-ownership.ts";
 import { peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-launch.ts";
+import { runHostChild } from "./host-child.ts";
 
 /**
  * Control plane for Revit sessions — NOT a catalog op. Session lifecycle belongs to the SDK
@@ -114,96 +114,16 @@ export function executeSessionCli<R>(
 // the resolved CLI does not speak this verb (e.g. a pre-session installed shim) — fail loudly
 // instead of relaying a blank 200.
 export const runPeRevitCli: SessionCliRunner = (args) =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const launch = peRevitLauncher();
-      const running = yield* Effect.acquireRelease(
-        Effect.try({
-          try: () => {
-            const child = spawn(launch.cmd, [...launch.args, ...args], {
-              cwd: launch.cwd,
-              windowsHide: true,
-              detached: process.platform !== "win32",
-              stdio: ["ignore", "pipe", "pipe"],
-            });
-            let closed = false;
-            let stdout = "";
-            child.stdout.setEncoding("utf8");
-            child.stdout.on("data", (chunk: string) => {
-              stdout += chunk;
-            });
-            child.stderr.resume();
-            const exited = new Promise<void>((resolve) =>
-              child.once("close", () => {
-                closed = true;
-                resolve();
-              }),
-            );
-            const output = new Promise<string>((resolve, reject) => {
-              child.once("error", reject);
-              child.stdout.once("error", reject);
-              child.stderr.once("error", reject);
-              child.once("close", () => resolve(stdout));
-            });
-            return {
-              child,
-              exited,
-              needsCleanup: () => !closed,
-              output,
-            };
-          },
-          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
-        }),
-        (running) =>
-          Effect.promise(async () => {
-            if (!running.needsCleanup()) return;
-            const { child } = running;
-            // Preserve the adapter's process-tree cleanup without spawning a visible taskkill console.
-            if (child.pid && process.platform === "win32")
-              await new Promise<void>((resolve) =>
-                execFile(
-                  "taskkill",
-                  ["/pid", String(child.pid), "/T", "/F"],
-                  { windowsHide: true, timeout: 5000 },
-                  (error) => {
-                    if (error) child.kill();
-                    resolve();
-                  },
-                ),
-              );
-            else if (child.pid) {
-              try {
-                process.kill(-child.pid, "SIGTERM");
-              } catch {
-                child.kill();
-              }
-            }
-            let deadline: ReturnType<typeof setTimeout> | undefined;
-            try {
-              await Promise.race([
-                running.exited,
-                new Promise<never>((_resolve, reject) => {
-                  deadline = setTimeout(
-                    () => reject(Error("The CLI child did not close after termination.")),
-                    5000,
-                  );
-                }),
-              ]);
-            } finally {
-              clearTimeout(deadline);
-            }
-          }),
-      );
-      const stdout = yield* Effect.tryPromise({
-        try: () => running.output,
-        catch: (error) => (error instanceof Error ? error : new Error(String(error))),
-      });
-      return yield* Effect.try({
-        try: () => validatePeRevitEnvelope(stdout, args, launch),
-        catch: (error) => (error instanceof Error ? error : new Error(String(error))),
-      });
-    }),
-  );
+  Effect.gen(function* () {
+    const launch = peRevitLauncher();
+    const { stdout } = yield* runHostChild(launch.cmd, [...launch.args, ...args], {
+      cwd: launch.cwd,
+    });
+    return yield* Effect.try({
+      try: () => validatePeRevitEnvelope(stdout, args, launch),
+      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+    });
+  });
 
 /** One SDK observation owner; the browser's former fleet timer lives here. */
 const sdkReads = new OwnerReads();

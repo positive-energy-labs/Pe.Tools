@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { executeSessionCli, runPeRevitCli } from "../src/session-route.ts";
+import { runHostChild } from "../src/host-child.ts";
 
 const envelope = JSON.stringify({
   result: null,
@@ -34,10 +35,34 @@ async function fixture<T>(source: string, run: (args: string[], root: string) =>
 }
 
 test("the native spawn and Windows termination adapter both retain hidden windows", async () => {
-  const source = await readFile(new URL("../src/session-route.ts", import.meta.url), "utf8");
-  expect(source).toMatch(/spawn\(launch\.cmd,[\s\S]*?windowsHide: true/);
+  const source = await readFile(new URL("../src/host-child.ts", import.meta.url), "utf8");
+  expect(source).toContain("windowsHide: options.windowsHide ?? true");
   expect(source).toMatch(/execFile\([\s\S]*?"taskkill"[\s\S]*?windowsHide: true/);
   expect(source).toContain("needsCleanup: () => !closed");
+});
+
+test("every product Effect command uses the native hidden runner", async () => {
+  for (const name of ["session-route", "aps-auth", "rhvac-ops"]) {
+    const source = await readFile(new URL(`../src/${name}.ts`, import.meta.url), "utf8");
+    expect(source).not.toContain("ChildProcess.make(");
+    expect(source).toContain("runHostChild(");
+  }
+});
+
+test("the shared native runner preserves stdout, diagnostics and a real nonzero exit", async () => {
+  const result = await Effect.runPromise(
+    runHostChild(
+      process.execPath,
+      [
+        "-e",
+        "process.stdout.write('result'); process.stderr.write('diagnostic'); process.exitCode = 7;",
+      ],
+      { all: true },
+    ),
+  );
+  expect(result.stdout).toBe("result");
+  expect(result.output).toContain("diagnostic");
+  expect(result.exitCode).toBe(7);
 });
 
 test("SDK refusal output survives a real nonzero child exit while stderr drains", async () => {
