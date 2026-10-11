@@ -21,6 +21,7 @@ import { ActionButton } from "#/components/lang/action-button";
 import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
 import { PidChip } from "#/components/lang/process";
 import {
+  executionRefusal,
   phaseOf,
   pidOf,
   processOf,
@@ -59,6 +60,8 @@ export async function runLifecycle(
   basis: WorkBasis,
   unsaved?: "keep" | "discard",
 ) {
+  const refusal = executionRefusal(session.row);
+  if (refusal) throw Error(refusal);
   const key: InstancesActionKey = `instances.${command}`;
   const process = processOf(session.row);
   if (!process) throw Error("This Revit has no process yet; wait until it is launched.");
@@ -102,7 +105,11 @@ export function RevitControls({
   const row = session.row;
   const phase = phaseOf(row);
   const checkout = row.shape.payload === "checkout";
-  const blocked = refusal ?? (basis ? null : "Reading the instances Work before any verb runs.");
+  const ownershipRefusal = executionRefusal(row);
+  const blocked =
+    refusal ??
+    ownershipRefusal ??
+    (basis ? null : "Reading the instances Work before any verb runs.");
   const unsaved = unsavedOf(session);
   const action = useAction(
     async ({ command, policy }: { command: Command; policy?: "keep" | "discard" }) => {
@@ -146,11 +153,12 @@ export function RevitControls({
           <ActionButton
             label="open here"
             reason={
-              phase === "ready"
+              ownershipRefusal ??
+              (phase === "ready"
                 ? "make this Revit the launcher's target"
-                : `this Revit is ${phase}; it opens nothing until it answers`
+                : `this Revit is ${phase}; it opens nothing until it answers`)
             }
-            disabled={phase !== "ready"}
+            disabled={ownershipRefusal !== null || phase !== "ready"}
             onClick={onHere}
           />
         ) : null}
@@ -186,13 +194,14 @@ export function RevitControls({
                   label="stop, keep work"
                   reason={`pe-revit session stop ${selectorWords(row)} --unsaved keep`}
                   busy={busy}
+                  disabled={blocked !== null || busy}
                   onClick={() => run("stop", "keep")}
                 />
                 {checkout ? (
                   <ActionButton
                     label="stop, discard edits"
                     reason={`pe-revit session stop ${selectorWords(row)} --unsaved discard; offered only for a checkout session`}
-                    disabled={busy}
+                    disabled={blocked !== null || busy}
                     onClick={() => run("stop", "discard")}
                   />
                 ) : null}
@@ -203,6 +212,7 @@ export function RevitControls({
                 label="restart"
                 reason={`pe-revit session hr ${selectorWords(row)} --restart`}
                 busy={busy}
+                disabled={blocked !== null || busy}
                 onClick={() => run("restart")}
               />
             )}

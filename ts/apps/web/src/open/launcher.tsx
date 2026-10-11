@@ -23,7 +23,7 @@ import { Input } from "#/components/lang/input";
 import { Press } from "#/components/lang/press";
 import { ShapeCells } from "#/components/lang/process";
 import { Switcher } from "#/components/lang/switcher";
-import { keyOf, nameOf, phaseOf, pidOf, processOf } from "#/machine/session";
+import { executionRefusal, keyOf, nameOf, phaseOf, pidOf, processOf } from "#/machine/session";
 import type { OpenHandle } from "#/open/manifest";
 import { EMPTY_DRAFT, launchPlan, type DocRow, type LaunchDraft } from "#/open/model";
 import { useAction } from "#/readings";
@@ -217,8 +217,11 @@ export function Launcher({
                     {pidOf(session.row)}
                   </span>
                 ),
-                title: `${nameOf(session.row)} · ${phaseOf(session.row)}`,
-                disabled: phaseOf(session.row) !== "ready",
+                title:
+                  executionRefusal(session.row) ??
+                  `${nameOf(session.row)} · ${phaseOf(session.row)}`,
+                disabled:
+                  executionRefusal(session.row) !== null || phaseOf(session.row) !== "ready",
               })),
             ]}
           />
