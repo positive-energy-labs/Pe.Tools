@@ -16,6 +16,8 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 
 ### Additions
 
+- 2026-10-10, `pass.release` governs every release through final artifact identity, the prior consumer's upgrade path and independently verified outcomes. It delegates commands to `execute` and evidence standards to `prove`; publication alone is not completion.
+
 - 2026-10-04, `loop.tune` added after the TC perf round (Tuner with the fork; prevents "tuned by ear"). It owns the measure, census, rule, purge, re-measure loop; the browser-measurement mechanics went to `execute` and the sequence-by-collision law to `delegate`. The round's evidence: three measurement passes lost to throttling, reloads and CLI-per-call before one counted; every guessed constant was wrong within the hour and every rule held.
 
 ### The unit: a stance

@@ -27,6 +27,7 @@ Authority runs user, then skill, then this file. A stance is a posture, not a pr
 | lens | `prove` | Assayer striking the Hallmark, Thomas on another's claim — a claim is stamped with its lane or not at all | plausible, not real: done on a mock, a count, a screenshot, or another agent's word | no | no |  |
 | lens | `purge` | Shiva at the winnowing floor, Occam, the Iconoclast, the burn boss — delete at least as much as you add | bloat: adding to a place that already has too much | no | no |  |
 | pass | `relay` | Herald — the message to the next session | the dropped baton: the next session re-derives what this one knew | no | **yes** | baton delivered |
+| pass | `release` | Ferryman — the crossing ends on the other bank | premature release closure: shipped bytes never made the crossing | no | no | exact published bytes reached the consumer, promised outcomes proven, failures and gaps recorded |
 | loop | `close` | Keystone — a settled surface needs its backend real | shims for done: a settled surface over a fake backend | yes | no | shims zero or deferred, workflow driven by hand |
 | loop | `diagnose` | Coroner — something is broken | guessed fix: a diff before a cause | yes | no | cause, wound, red loop |
 | loop | `goal` | Crusade — an unattended push at a number | wheel-spinning: the same wave sent twice at a plateau | yes | **yes** | two dry waves |
