@@ -14,8 +14,8 @@ $uri = 'http://127.0.0.1:' + $claim.port + $hostPayload[0].service.health
 $health = Invoke-RestMethod $uri -TimeoutSec 5
 if ($health.processId -ne $process.Id) { throw 'Responsive host identity disagrees with service claim.' }
 $trayPath = Join-Path (Split-Path $exe) 'tray\Pe.Host.Tray.exe'
-$trays = @(Get-CimInstance Win32_Process -Filter "Name='Pe.Host.Tray.exe'" | Where-Object { $_.ExecutablePath -eq $trayPath -and $_.ParentProcessId -eq $process.Id })
+$trays = @(Get-Process Pe.Host.Tray -ErrorAction SilentlyContinue | ForEach-Object { [PeConsoleObserver]::ProcessAt([uint32]$_.Id) } | Where-Object { $_.Executable -eq $trayPath -and $_.ParentPid -eq $process.Id })
 if ($trays.Count -ne 1) { throw 'Exactly one installed tray child required.' }
 # Process and window census are observations. Tray icon and interactive window behavior require UI evidence.
 $windows = @(Get-Process | Where-Object MainWindowHandle -ne 0 | Select-Object Id, ProcessName, MainWindowTitle)
-@{ observedAtUtc = [datetime]::UtcNow.ToString('o'); version = $manifest.version; instanceId = $claim.instanceId; pid = $process.Id; processStartUtc = $process.StartTime.ToUniversalTime().ToString('o'); executable = $process.Path; executableHash = (Get-FileHash $exe).Hash; health = $health; tray = $trays | Select-Object ProcessId, ParentProcessId, ExecutablePath; windows = $windows; uiBehavior = 'UNPROVEN' } | ConvertTo-Json -Depth 15 | Set-Content -LiteralPath $Output
+@{ observedAtUtc = [datetime]::UtcNow.ToString('o'); version = $manifest.version; instanceId = $claim.instanceId; pid = $process.Id; processStartUtc = $process.StartTime.ToUniversalTime().ToString('o'); executable = $process.Path; executableHash = (Get-FileHash $exe).Hash; health = $health; tray = $trays; windows = $windows; uiBehavior = 'UNPROVEN' } | ConvertTo-Json -Depth 15 | Set-Content -LiteralPath $Output

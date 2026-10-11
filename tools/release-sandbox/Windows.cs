@@ -65,7 +65,7 @@ public static class PeConsoleObserver {
     var title = new StringBuilder(256); GetWindowText(hwnd,title,title.Capacity);
     return new Window { Handle=hwnd.ToInt64().ToString("X"), Class=name, Pid=pid, Visible=visible, Minimized=minimized, Cloaked=cloaked, Bounds=rect, OnScreen=onScreen, Displayed=visible && !minimized && cloaked == 0 && onScreen, ControlSentinel=title.ToString()=="PE_CONSOLE_OBSERVER_CONTROL" };
   }
-  static ProcessEvidence ProcessAt(uint pid) {
+  public static ProcessEvidence ProcessAt(uint pid) {
     var result = new ProcessEvidence { Pid=pid };
     try { using(var process=Process.GetProcessById((int)pid)) result.StartUtc=process.StartTime.ToUniversalTime().ToString("o"); } catch(Exception e) { result.Error=e.GetType().Name; }
     var handle=OpenProcess(0x1400,false,pid);
