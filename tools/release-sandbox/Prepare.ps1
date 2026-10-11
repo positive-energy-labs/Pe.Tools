@@ -18,6 +18,8 @@ foreach ($role in 'previousMsi', 'candidateMsi', 'previousReceipt', 'candidateRe
 }
 $names = @{}
 foreach ($file in $files) {
+    if ($file.role -notin 'previousMsi', 'candidateMsi', 'previousReceipt', 'candidateReceipt', 'vcRuntime', 'dotnetRuntime', 'recoveryZip') { throw "Unsupported input role: $($file.role)" }
+    if (@($files | Where-Object role -eq $file.role).Count -ne 1) { throw "Duplicate input role: $($file.role)" }
     if ($file.name -notmatch '^[a-zA-Z0-9][a-zA-Z0-9._-]*$' -or $names.ContainsKey($file.name)) { throw 'Invalid or duplicate staged filename.' }
     $names[$file.name] = $true
     if ($file.sha256 -notmatch '^[a-fA-F0-9]{64}$') { throw "Invalid hash: $($file.name)" }
@@ -37,6 +39,8 @@ Copy-Item -LiteralPath $specPath -Destination "$run\input\source-spec.json"
 foreach ($file in $files) { Copy-Item -LiteralPath $file.path -Destination "$run\input\$($file.name)" }
 Copy-Item -LiteralPath "$PSScriptRoot\Guest.ps1" -Destination "$run\input\Guest.ps1"
 Copy-Item -LiteralPath "$PSScriptRoot\Observe.ps1" -Destination "$run\input\Observe.ps1"
+Copy-Item -LiteralPath "$PSScriptRoot\Boundary.ps1" -Destination "$run\input\Boundary.ps1"
+Copy-Item -LiteralPath "$PSScriptRoot\Windows.cs" -Destination "$run\input\Windows.cs"
 $config | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath "$run\input\gate.json" -Encoding UTF8
 $inputPath = [Security.SecurityElement]::Escape("$run\input")
 $outputPath = [Security.SecurityElement]::Escape("$run\evidence")

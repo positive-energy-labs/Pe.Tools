@@ -196,9 +196,15 @@ Require `previousMsi`, `candidateMsi`, `previousReceipt`, and `candidateReceipt`
 Each receipt binds `version`, `sourceCommit` (full SHA), and `sha256` of the final MSI.
 The input mapping is read-only. The evidence mapping is the only writable host mapping.
 Run `powershell -NoProfile -ExecutionPolicy Bypass -File tools/release-sandbox/Check.ps1` for preparation checks.
-The guest currently refuses before installation because SDK beta.192's previous-release updater supports only published GitHub latest.
-Candidate admission in a later SDK cannot repair that old caller. Until a released predecessor supports the candidate feed,
-this is preparation and observation tooling, not an installer or self-update acceptance gate.
+The guest installs the real previous MSI into its OS-known install root. It requires the previous installed updater's
+published GitHub feed to offer the exact expected candidate version, SHA256 and length before admitting an update.
+It then uses the previous host's `POST /host/update` consent path, reads the SDK terminal receipt, and checks the responsive
+successor against the installed claim's PID, process start, path, version and tray child. Direct MSI installation proves only admission.
+`recoveryZip` optionally supplies a hashed external SDK CLI ZIP with `Pe.Revit.Cli.exe` at its root for an unavailable previous host.
+Recovery results cannot pass the normal host self-update gate. Optional `vcRuntime` and `dotnetRuntime` files install guest prerequisites.
+The calibrated native console observer retains create/show events and refuses dropped events or visible product consoles.
+Tray child presence does not prove the tray icon or app-window interaction; those remain separate UI proof.
+An unpublished candidate cannot pass the GitHub-only predecessor check. Publishing and Sandbox launch are separate authorized steps.
 No Revit or Autodesk login is permitted in this Sandbox lane.
 
 `CreateBundleModule` owns the Pe.App year staging used by both transports.
