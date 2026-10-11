@@ -154,7 +154,9 @@ dotnet tool run pe-revit -- session stop --id pe.app-25-probe --unsaved discard 
 
 Bare `start` (no `--project`) is the **installed** lane — every product on its fixed installed path, no checkout, no build, no copy. That is what an end user runs, and it is the only lane that proves installed behavior. Adding `--project` makes it the **dev** lane. Name which one any claim used; they run different bytes and prove different things.
 
-Every session pe-revit starts is `controlled`, so `session list`, `doc open|save|close|list`, `op run|wait|cancel|result|list`, and stop/reset work against it. `--unsaved keep|discard` is required on stop, reset and `doc close`. HR applies only to checkout HR sessions: a cold restart discards unsaved edits by default, takes a fresh document checkpoint, and reopens recoverable documents without restoring views. Never-saved documents are dropped. Plain/snapshot and installed sessions refuse HR. A Revit the user launched is `observed`: readable, never mutable. Do not add a Pe.Tools-side guard for that — the SDK resolver refuses it before the verb runs.
+Every session pe-revit starts is `controlled`. `session list` also reports observed Revit processes and diagnostic rows. A row's presence, custody or bridge readiness does not authorize execution: the SDK's `execution` verdict does. A normally opened installed Revit can be adopted by a targeted mutation when the SDK independently proves its successfully loaded payload belongs to the same installation. Missing, foreign or conflicting loaded owners refuse execution. Pe.Tools relays that verdict and does not infer eligibility from diagnostic rows.
+
+HR applies only to checkout HR sessions. A cold restart discards unsaved edits by default, takes a fresh document checkpoint, and reopens recoverable documents without restoring views. Never-saved documents are dropped. Plain/snapshot and installed sessions refuse HR. Other lifecycle and document actions retain the SDK's unsaved policy and receipt rules.
 
 ## Packaging and release decisions
 
@@ -281,13 +283,19 @@ The SDK service-file contract (`ServiceFile` and the shipped TypeScript client) 
 
 That boundary is deliberately narrower than Revit orchestration:
 
-- One product root plus service name means one active host. Dev and installed callers can explicitly take over that incarnation; simultaneous same-name hosts require different roots or names.
+- One product root plus service name means one active host. Dev takeover can retire only a verified dev incarnation from the same checkout. Installed replacement can retire only a verified incumbent from the canonical installation. Neither path evicts an unknown process or crosses payload lanes.
 - `Pe.App` is a client of the healthy shared host, not a lane supervisor. Loading or reconnecting a Revit add-in is not permission to replace the host.
 - Host discovery does not choose a Revit process. Raw `/call`, web, Pea, scripting, capture, and operation surfaces must preserve an explicit bridge-session selector; ambiguity is a hard failure.
 - Script execution performs the requested targeted call only. It must not build, converge, or restart the dev session. Agents inspect freshness and invoke SDK lifecycle actions explicitly.
 - A clean checkout may launch its checkout-pinned source host without a staged `Pe.Host.exe`, but that launch path is not a build or Revit-convergence path.
 
 The acceptance bar is the field drive in `Pe.Revit.Sdk/RUNTIME_ACCEPTANCE.md` — one operator, released artifacts, a real Revit, cold start through stop. There is no second rig. Per-run records are disposable (the surviving pin decision is in `docs/features/host/LEDGER.md`).
+
+Strict execution belongs to one runtime owner. Source host, Pea/MCP and Revit use the actual checkout containing their modules or SDK payload descriptor. `PE_TOOLS_SOURCE_ROOT` must agree with that checkout. Installed host and Pea require a Node SEA at the exact manifest-declared executable under the canonical product root; a copied executable cannot claim installation ownership. Bridge registration and SDK resolution must match lane, checkout or installation root, service name and process incarnation before dispatch. An explicit id, pid, URL or path cannot waive these checks. Read-only diagnostics can show every runtime without selecting one for execution.
+
+SDK invocation must also preserve that owner. Checkout execution uses `dotnet tool run pe-revit --` with the owning checkout as its working directory. Installed execution uses that installation's SDK entrypoint and manifest. Ambient command overrides, global-tool fallback and another checkout's launcher are not execution authority. The beta.193 client adoption and consumer checks remain an acceptance requirement; the current beta.192 vendor must not be cited as proof of the new launcher guarantees.
+
+Installed startup first tests the fixed loopback port with an exclusive bind/free probe. An occupied port uses native `netstat -ano -p tcp` and `Get-Process`, together with the SDK service receipt, incarnation, canonical executable and health proof. CIM availability is not a startup requirement. Failed owner discovery refuses reuse or eviction; it never authorizes another installed port.
 
 ### Runtime topology: readiness is not routing
 
@@ -297,11 +305,12 @@ flowchart LR
   Vite -->|API proxy to claimed endpoint| SourceHost["Worktree Pe.Host<br/>Effect API and Revit bridge"]
   Pea["Pea / MCP / raw caller"] -->|service-file baseUrl + selector| SourceHost
   SourceHost -->|bridgeSessionId| DevSession["dev-lane session (converged, hot reload)"]
-  SourceHost -->|bridgeSessionId| RoutedInstalled["installed-lane session"]
-  InstalledHost["Installed Pe.Host<br/>separate dynamic port"] --> RoutedInstalled
+  InstalledWeb["Installed browser / Pea"] --> InstalledHost["Installed Pe.Host<br/>manifest-declared port"]
+  InstalledHost -->|bridgeSessionId, same installation| RoutedInstalled["installed-lane session"]
   SDK["pe-revit session<br/>private SDK bridge /status"] --> Controlled["SDK-ready controlled Revit"]
   Test["pe-revit test (fresh rung)"] --> FreshRevit["ephemeral controlled Revit"]
-  Controlled -. "Pe.Tools registration joins this lane" .-> RoutedInstalled
+  Controlled -. "verified owner selects its own host" .-> DevSession
+  Controlled -. "verified owner selects its own host" .-> RoutedInstalled
 ```
 
 A running web app plus an SDK-ready session are not connected unless Pe.Tools registers a
@@ -314,6 +323,8 @@ callers therefore carry two independent coordinates:
 
 Never infer one coordinate from the other. Typegen, Pea, browser operations, raw calls, settings,
 capture, and scripting must preserve both; a requested/returned selector mismatch is a hard failure.
+
+The page retains its owner in `import.meta.env.PE_RUNTIME_SERVICE`. `hostFetch` sends `x-pe-runtime-service`; EventSource uses `peRuntimeService`. Vite refuses a foreign page owner before proxying and binds accepted requests to its own checkout service. Host `readRequestIdentity` checks HTTP and WebSocket ownership before routing and refuses browser API requests with missing owner metadata. Port reuse cannot relabel an already loaded page. Machine's `runtimeMatch` and the version chip report owner match, refusal, disconnection or unknown evidence; a verified owner match does not prove fresh payload bytes.
 
 Key local roots:
 
@@ -355,7 +366,7 @@ The clean source-linked CLI model is:
 - `pea --installed ...` is the explicit installed-lane selector. Use it in installed-lane validation and scripts where ambiguity would be expensive.
 - `pea --dev ...` is the explicit source-linked selector: it routes through the shim's `pea.dev.txt` marker (written by `pe-revit dev link`) and runs the Pea app from `ts/apps/pea`.
 - `PEA_RUNTIME=dev` is a local shell convenience only. Do not use ambient environment selection as proof of lane.
-- `Pe.App`'s lane comes from `PePayloadContext.SourceRoot`: a checkout root recorded by an SDK dev-link session descriptor ⇒ dev lane; absent ⇒ the fixed installed layout (`bin\host\Pe.Host.exe`). There is no loader, no `Pe.App.runtime.json` descriptor, and no ambient lane inference.
+- `Pe.App` captures startup ownership through `PePayloadContext`: a verified `SourceRoot` selects that checkout; installed payload provenance selects `InstallRoot` and its fixed host layout (`bin\host\Pe.Host.exe`). Missing checkout metadata is not permission to guess an installed owner. Environment overrides cannot change that startup identity.
 
 This source-linked shape is intentionally about developer iteration, not installer payload ownership. A shim's `{name}.dev.txt` marker is a per-shim capability registration written by `pe-revit dev link`. It does not prove packaged installed behavior and should not be used as installed-lane evidence.
 
@@ -399,14 +410,13 @@ One PATH entry — the product shims dir — is the condoned way onto PATH; ever
 file in that dir. A shim runs dev when ITS `{name}.dev.txt` exists (written by `dev link`), installed
 otherwise; `--installed` / `PE_LANE=installed` forces the installed target.
 
-Worktree identity is by location, like git: clients derive their checkout root by walking up from
-cwd (`.git` + `Pe.Tools.slnx`), so an agent working in a worktree automatically addresses that
-worktree's dev host — no env vars. `PE_LANE` / `PE_TOOLS_SOURCE_ROOT` are spawn plumbing (a
-supervisor telling its child who it is), never user configuration. To target explicitly, `--host`
-(and `PE_TOOLS_HOST_BASE_URL`) accept a URL or a lane token: `installed`, `dev` (this location's
-worktree), or a path inside any checkout. `pe-revit service list` is the phone book;
-`pe-revit session list` shows the session registry (pe-revit-launched Revits only; a user-launched
-Revit is visible only through the host bridge).
+Worktree identity comes from the actual module checkout (`.git` + `Pe.Tools.slnx`); caller location
+and spawn plumbing must agree. The SDK shim selects the current checkout's pinned launcher rather
+than relabeling another checkout's sources. `PE_LANE` and `PE_TOOLS_SOURCE_ROOT` are checked spawn
+plumbing, never a cross-runtime override. `--host` and `PE_TOOLS_HOST_BASE_URL` may select an exact
+URL or service only when discovery proves it belongs to this runtime owner. Other checkouts,
+opposite lanes and unverified hosts refuse. `pe-revit service list` and `pe-revit session list`
+are diagnostic inventories; the latter includes controlled, observed and ineligible rows.
 
 If you used the old flow on this machine, clean up once: delete `%LOCALAPPDATA%\Positive Energy\Pe.Tools\bin\pea\*.cmd`
 and remove the `bin\pea` / Pe.Dev.Cli output-dir entries from your user PATH (the SDK never writes those).

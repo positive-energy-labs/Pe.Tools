@@ -77,6 +77,14 @@ Design Automation workitem
 
 Do not route automation through `Pe.App`; desktop and automation are sibling shells over shared DA-safe runtime pieces.
 
+### Runtime ownership
+
+Execution stays within one checkout or one installation. Dev CLI, host/web and Revit must prove the same checkout; installed adapters must prove the same canonical installation. Module location and SDK payload provenance establish ownership. Environment values, explicit session selectors, URLs and reachable ports cannot override it. Unknown or foreign owners refuse bridge registration and execution before dispatch. Installed host and Pea require the manifest-declared Node SEA path. Read-only machine diagnostics can display other runtimes without authorizing them.
+
+The SDK owns session execution eligibility and adoption. A normal user-opened installed Revit remains eligible when the SDK independently proves the successfully loaded payload's installation owner. Pe.Tools projects the SDK's verdict rather than deriving permission from custody, a session-list row or bridge readiness. Installed updates must refuse affected dev sessions rather than treat them as an installed fleet. Checkout HR remains within its checkout.
+
+Browser ownership persists in the page's module graph. `hostFetch` and EventSource carry that identity through Vite and host request admission, so a reused port cannot redirect a stale page into another runtime. Machine's `runtimeMatch` feeds the existing version chip. Owner match and payload freshness remain separate facts; disconnected, refused and unknown evidence cannot display as verified. The source seams are [service-identity.ts](../ts/packages/host-contracts/src/service-identity.ts), [request-identity.ts](../ts/apps/host/src/request-identity.ts) and [runtime.ts](../ts/apps/web/src/host/runtime.ts). [BUILD.md](BUILD.md#shared-service-primitive-and-explicit-lifecycle) owns launcher, lifecycle and proof-lane decisions; the [host ledger](features/host/LEDGER.md) owns the ruling and remaining acceptance.
+
 ## Document data ladder
 
 Use this ladder when deciding how deep a Revit document surface should be:
