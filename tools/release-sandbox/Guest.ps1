@@ -5,12 +5,6 @@ $run = 'C:\GateEvidence'
 Start-Transcript "$run\transcript.txt" | Out-Null
 . C:\GateInput\Boundary.ps1
 $hookStarted = $false
-function Cli($exe, $arguments, $name) {
-    & $exe @arguments --json > "$run\$name.json" 2> "$run\$name.stderr.txt"
-    $code = $LASTEXITCODE
-    @{ name = $name; argv = $arguments; executable = $exe; sha256 = (Get-FileHash $exe).Hash; exitCode = $code } | ConvertTo-Json -Compress | Add-Content "$run\commands.jsonl"
-    return Get-Content "$run\$name.json" -Raw | ConvertFrom-Json
-}
 function Install($file, $arguments, $name) {
     $p = Start-Process $file -ArgumentList $arguments -PassThru -WindowStyle Hidden
     if (!$p.WaitForExit(600000)) { throw "$name timed out; no retry" }
@@ -56,7 +50,7 @@ try {
     $cli = Join-Path $root 'shims\pe-revit.exe'
     $candidate = @($config.files | Where-Object role -eq 'candidateMsi')[0]
     $length = (Get-Item ('C:\GateInput\' + $candidate.name)).Length
-    $planEnvelope = Cli $cli @('--installed', 'update', 'check', '--manifest', $manifest) 'previous-update-check'
+    $planEnvelope = Invoke-GateSdk $cli @('--installed', 'update', 'check', '--manifest', $manifest) 'previous-update-check'
     AssertCandidate $planEnvelope.result $config $length
     $exe = Join-Path $root 'bin\host\Pe.Host.exe'
     if (!(Get-Process Pe.Host -ErrorAction SilentlyContinue)) { Start-Process $exe -WindowStyle Hidden -PassThru | Out-Null }
@@ -66,9 +60,9 @@ try {
         if ($recovery.Count -ne 1) { throw 'Previous host unavailable; no hashed external SDK recovery package supplied.' }
         Expand-Archive ('C:\GateInput\' + $recovery[0].name) C:\GateRecovery
         $recoveryCli = 'C:\GateRecovery\Pe.Revit.Cli.exe'
-        $recoveryPlan = Cli $recoveryCli @('update', 'check', '--manifest', $manifest) 'recovery-check'
+        $recoveryPlan = Invoke-GateSdk $recoveryCli @('update', 'check', '--manifest', $manifest) 'recovery-check'
         AssertCandidate $recoveryPlan.result $config $length
-        $apply = Cli $recoveryCli @('update', 'apply', $recoveryPlan.result.planId, '--manifest', $manifest) 'recovery-apply'
+        $apply = Invoke-GateSdk $recoveryCli @('update', 'apply', $recoveryPlan.result.planId, '--manifest', $manifest) 'recovery-apply'
         $requestId = $apply.result.requestId
         $admittedPlanId = $recoveryPlan.result.planId
         $cli = $recoveryCli
@@ -93,7 +87,7 @@ try {
     $deadline = [datetime]::UtcNow.AddMinutes(10); $index = 0
     do {
         Check 'No Revit during update' (@(Get-Process Revit -ErrorAction SilentlyContinue).Count -eq 0) ''
-        $poll = Cli $cli @('--installed', 'op', 'result', $requestId) ('receipt-' + $index++)
+        $poll = Invoke-GateSdk $cli @('--installed', 'op', 'result', $requestId) ('receipt-' + $index++)
         $receipt = $poll.result.response.result
         try { AssertTerminal $receipt; break } catch { $receiptError = $_.Exception.Message }
         if ($receipt.state -in 'failed', 'refused') { throw "Update terminal failure: $($receipt | ConvertTo-Json -Depth 20 -Compress)" }

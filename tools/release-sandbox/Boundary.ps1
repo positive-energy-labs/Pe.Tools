@@ -1,3 +1,9 @@
+function Invoke-GateSdk($exe, $arguments, $name) {
+    & $exe @arguments --json > "$run\$name.json" 2> "$run\$name.stderr.txt"
+    $code = $LASTEXITCODE
+    @{ name = $name; argv = $arguments; executable = $exe; sha256 = (Get-FileHash $exe).Hash; exitCode = $code } | ConvertTo-Json -Compress | Add-Content "$run\commands.jsonl"
+    return Get-Content "$run\$name.json" -Raw | ConvertFrom-Json
+}
 function AssertCandidate($plan, $config, [long]$candidateLength) {
     $msi = @($config.files | Where-Object role -eq 'candidateMsi')[0]
     if (!$plan.available -or $plan.current -ne $config.previousVersion -or $plan.latest -ne $config.candidateVersion -or $plan.msi.digest -ne ('sha256:' + $msi.sha256.ToLowerInvariant()) -or $plan.msi.size -ne $candidateLength) { throw 'Published feed does not offer the exact expected candidate.' }

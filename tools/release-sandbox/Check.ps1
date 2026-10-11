@@ -3,6 +3,11 @@ $scratch = Join-Path $env:TEMP ('pe-sandbox-check-' + [guid]::NewGuid().ToString
 New-Item -ItemType Directory $scratch | Out-Null
 try {
     . "$PSScriptRoot\Boundary.ps1"
+    $run = $scratch
+    $fakeSdk = Join-Path $scratch 'fake-sdk.ps1'
+    '@{ result = @{ state = ''ok''; received = $args } } | ConvertTo-Json -Depth 5' | Set-Content $fakeSdk
+    $fake = Invoke-GateSdk (Join-Path $PSHOME 'powershell.exe') @('-NoProfile', '-File', $fakeSdk, '--installed', 'value with spaces') 'fake-sdk'
+    if ($fake.result.state -ne 'ok' -or $fake.result.received[0] -ne '--installed' -or $fake.result.received[1] -ne 'value with spaces' -or $fake.result.received[2] -ne '--json') { throw 'SDK invocation argv or JSON boundary broke.' }
     foreach ($script in Get-ChildItem $PSScriptRoot -Filter '*.ps1') {
         $tokens = $null; $errors = $null
         [Management.Automation.Language.Parser]::ParseFile($script.FullName, [ref]$tokens, [ref]$errors) | Out-Null
