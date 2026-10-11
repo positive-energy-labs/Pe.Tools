@@ -52,7 +52,7 @@ export function runtimeIdentity(reading: Reading<Machine>, fixture = false) {
   const match =
     reading.state !== "ready"
       ? "stale"
-      : host.payload === "checkout" && !host.sourceRoot
+      : (host.payload === "checkout" ? !host.sourceRoot : !host.installedRoot)
         ? "identity unverified"
         : host.runtimeMatch === "verified"
           ? "Revit matched"
@@ -65,6 +65,7 @@ export function runtimeIdentity(reading: Reading<Machine>, fixture = false) {
     text: `${owner} · ${host.version} · ${match}`,
     detail: [
       host.sourceRoot,
+      host.installedRoot,
       host.serviceName,
       `PID ${host.process.pid}`,
       match,

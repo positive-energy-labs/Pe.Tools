@@ -6,7 +6,11 @@ import { chipText, machineOf, runtimeIdentity } from "./model";
 const original = machineOf(MACHINE_SEEDS["no-revit"])!;
 const matched: Machine = {
   ...original,
-  host: { ...original.host!, runtimeMatch: "verified" },
+  host: {
+    ...original.host!,
+    installedRoot: "C:\\Users\\demo\\AppData\\Local\\Positive Energy\\Pe.Tools",
+    runtimeMatch: "verified",
+  },
 };
 const ready = (observation: Machine): Reading<Machine> => ({ state: "ready", observation });
 
@@ -17,6 +21,9 @@ test("matched ownership is displayed only for a current real reading", () => {
   expect(chipText(stale)).toBe("Installed · 0.7.0 · stale");
   expect(chipText(ready(matched), true)).toBe("Fixture · 0.7.0");
   expect(chipText({ state: "absent" })).toBe("Runtime unknown");
+  expect(
+    chipText(ready({ ...matched, host: { ...matched.host!, installedRoot: null } })),
+  ).toContain("identity unverified");
 });
 
 test("checkout name never substitutes for owner evidence", () => {
