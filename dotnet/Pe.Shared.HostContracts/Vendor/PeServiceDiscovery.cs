@@ -30,13 +30,15 @@ namespace Pe.Revit.ServiceClient;
 
 /// <summary>The live owner's coordinates projected from a service file: the actually bound port.</summary>
 public sealed class DiscoveredService {
-    public DiscoveredService(int pid, int port, string lane, string version, string? health = null, string? sessionId = null) {
+    public DiscoveredService(int pid, int port, string lane, string version, string? health = null, string? sessionId = null, string? sourceRoot = null, string? executablePath = null) {
         Pid = pid;
         Port = port;
         Lane = lane;
         Version = version;
         Health = health;
         SessionId = sessionId;
+        SourceRoot = sourceRoot;
+        ExecutablePath = executablePath;
     }
 
     public int Pid { get; }
@@ -51,6 +53,8 @@ public sealed class DiscoveredService {
 
     /// <summary>Schema 3, optional: the Revit session this host belongs to, when the host knew it.</summary>
     public string? SessionId { get; }
+    public string? SourceRoot { get; }
+    public string? ExecutablePath { get; }
 }
 
 public static class PeServiceDiscovery {
@@ -114,7 +118,9 @@ public static class PeServiceDiscovery {
             StringField(text, "lane") ?? "",
             StringField(text, "version") ?? "",
             StringField(text, "health"),
-            StringField(text, "sessionId")
+            StringField(text, "sessionId"),
+            StringField(text, "sourceRoot"),
+            StringField(text, "executablePath")
         );
     }
 
