@@ -36,7 +36,7 @@ public static class PeConsoleObserver {
   [StructLayout(LayoutKind.Sequential)] struct ProcessInfo { public IntPtr Process,Thread; public uint Pid,ThreadId; }
   [StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left, Top, Right, Bottom; }
   public sealed class Window {
-    public string Handle, Class;
+    public string Handle, Class, Title;
     public uint Pid;
     public bool Visible, Minimized, OnScreen, Displayed;
     public int Cloaked;
@@ -63,7 +63,7 @@ public static class PeConsoleObserver {
     var left = GetSystemMetrics(76); var top = GetSystemMetrics(77);
     var onScreen = rect.Right > left && rect.Left < left + GetSystemMetrics(78) && rect.Bottom > top && rect.Top < top + GetSystemMetrics(79);
     var title = new StringBuilder(256); GetWindowText(hwnd,title,title.Capacity);
-    return new Window { Handle=hwnd.ToInt64().ToString("X"), Class=name, Pid=pid, Visible=visible, Minimized=minimized, Cloaked=cloaked, Bounds=rect, OnScreen=onScreen, Displayed=visible && !minimized && cloaked == 0 && onScreen, ControlSentinel=title.ToString()=="PE_CONSOLE_OBSERVER_CONTROL" };
+    return new Window { Handle=hwnd.ToInt64().ToString("X"), Class=name, Title=title.ToString(), Pid=pid, Visible=visible, Minimized=minimized, Cloaked=cloaked, Bounds=rect, OnScreen=onScreen, Displayed=visible && !minimized && cloaked == 0 && onScreen, ControlSentinel=IsControlTitle(title.ToString()) };
   }
   public static ProcessEvidence ProcessAt(uint pid) {
     var result = new ProcessEvidence { Pid=pid };
@@ -110,13 +110,50 @@ public static class PeConsoleObserver {
   public static EventEvidence[] DrainEvents() { var result=new List<EventEvidence>(); EventEvidence item; while(events.TryDequeue(out item)) result.Add(item); return result.ToArray(); }
   public static int DroppedEvents() { return dropped; }
   public static void StopEvents() { if(pump!=null) { PostThreadMessage(pumpId,0x12,IntPtr.Zero,IntPtr.Zero); if(!pump.Join(5000)) throw new TimeoutException("Hook retirement"); pump=null; } }
+  static string controlTitle;
+  static bool IsControlTitle(string title) {
+    var active=Volatile.Read(ref controlTitle);
+    return active!=null && title!=null && title.Trim()==active;
+  }
+  static bool MatchesControl(EventEvidence item, string handle, DateTime started) {
+    return item.Window.Handle==handle && item.Window.Displayed && IsControlTitle(item.Window.Title) && DateTime.Parse(item.AtUtc).ToUniversalTime()>=started;
+  }
+  static void WaitForControl(Func<bool> displayed, int timeoutMilliseconds) {
+    var elapsed=Stopwatch.StartNew();
+    while(elapsed.ElapsedMilliseconds<timeoutMilliseconds) {
+      if(displayed()) return;
+      Thread.Sleep(20);
+    }
+    throw new TimeoutException("Control console was not displayed before the calibration deadline");
+  }
   public static uint PulseControl() {
     var startup=new Startup(); startup.Size=(uint)Marshal.SizeOf(typeof(Startup));
-    ProcessInfo process;
+    var process=new ProcessInfo();
     var cmd=Environment.GetEnvironmentVariable("ComSpec");
-    if(!CreateProcess(cmd,new StringBuilder("\""+cmd+"\" /c \"title PE_CONSOLE_OBSERVER_CONTROL & pause >nul\""),IntPtr.Zero,IntPtr.Zero,false,0x10,IntPtr.Zero,null,ref startup,out process)) throw new InvalidOperationException("Control CreateProcess:"+Marshal.GetLastWin32Error());
-    try { Thread.Sleep(250); TerminateProcess(process.Process,0); WaitForSingleObject(process.Process,5000); return process.Pid; }
-    finally { CloseHandle(process.Thread); CloseHandle(process.Process); }
+    var caption="PE_CONSOLE_OBSERVER_CONTROL_"+Guid.NewGuid().ToString("N");
+    if(Interlocked.CompareExchange(ref controlTitle,caption,null)!=null) throw new InvalidOperationException("Control pulse already active");
+    var started=DateTime.UtcNow;
+    try {
+      if(!CreateProcess(cmd,new StringBuilder("\""+cmd+"\" /c \"title "+caption+" & pause >nul\""),IntPtr.Zero,IntPtr.Zero,false,0x10,IntPtr.Zero,null,ref startup,out process)) throw new InvalidOperationException("Control CreateProcess:"+Marshal.GetLastWin32Error());
+      WaitForControl(()=> {
+        foreach(var window in Read()) {
+          if(!window.Displayed || !window.ControlSentinel) continue;
+          foreach(var item in events)
+            if(MatchesControl(item,window.Handle,started)) return true;
+        }
+        return false;
+      },5000);
+      return process.Pid;
+    }
+    finally {
+      try {
+        if(process.Process!=IntPtr.Zero) {
+          if(WaitForSingleObject(process.Process,0)!=0 && !TerminateProcess(process.Process,0)) throw new InvalidOperationException("Control termination failed");
+          if(WaitForSingleObject(process.Process,5000)!=0) throw new TimeoutException("Control retirement");
+        }
+      }
+      finally { CloseHandle(process.Thread); CloseHandle(process.Process); Interlocked.Exchange(ref controlTitle,null); }
+    }
   }
   public static Window[] Read() {
     var found = new List<Window>();

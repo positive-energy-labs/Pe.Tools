@@ -8,6 +8,37 @@ try {
     . "$PSScriptRoot\UpdateReceipt.ps1"
     . "$PSScriptRoot\CompareSdkClosure.ps1"
     & "$PSScriptRoot\CheckAutomatic.ps1"
+    Add-Type -Path "$PSScriptRoot\Windows.cs"
+    $privateStatic = [Reflection.BindingFlags]'NonPublic,Static'
+    $activeControl = [PeConsoleObserver].GetField('controlTitle', $privateStatic)
+    $caption = 'PE_CONSOLE_OBSERVER_CONTROL_' + [guid]::NewGuid().ToString('N')
+    $activeControl.SetValue($null, $caption)
+    $controlTitle = [PeConsoleObserver].GetMethod('IsControlTitle', $privateStatic)
+    foreach ($title in $caption, (' ' + $caption + ' ')) {
+        if (!$controlTitle.Invoke($null, @($title))) { throw 'Exact trimmed control caption was refused.' }
+    }
+    foreach ($title in '', 'PE_CONSOLE_OBSERVER_CONTROL', ('PE_CONSOLE_OBSERVER_CONTROL_' + [guid]::NewGuid().ToString('N')), ($caption + '-other'), ('other-' + $caption)) {
+        if ($controlTitle.Invoke($null, @($title))) { throw 'Unrelated caption was accepted as the control.' }
+    }
+    $controlMatch = [PeConsoleObserver].GetMethod('MatchesControl', $privateStatic)
+    $controlStarted = [DateTime]::UtcNow
+    $controlEvent = [PeConsoleObserver+EventEvidence]::new()
+    $controlEvent.AtUtc = $controlStarted.ToString('o')
+    $controlEvent.Window = [PeConsoleObserver+Window]::new(); $controlEvent.Window.Handle = 'control'; $controlEvent.Window.Displayed = $true; $controlEvent.Window.Title = $caption
+    if (!$controlMatch.Invoke($null, @($controlEvent, 'control', $controlStarted)) -or $controlMatch.Invoke($null, @($controlEvent, 'foreign', $controlStarted)) -or $controlMatch.Invoke($null, @($controlEvent, 'control', $controlStarted.AddSeconds(1)))) { throw 'Control event accepted a different window or old event.' }
+    $controlEvent.Window.Title = $caption + '-foreign'; $controlEvent.Window.ControlSentinel = $true
+    if ($controlMatch.Invoke($null, @($controlEvent, 'control', $controlStarted))) { throw 'Stale sentinel flag accepted a foreign control caption.' }
+    $activeControl.SetValue($null, $null)
+    if ($controlTitle.Invoke($null, @($caption))) { throw 'Retired control caption remained eligible.' }
+    $controlWait = [PeConsoleObserver].GetMethod('WaitForControl', $privateStatic)
+    $controlDelay = [Diagnostics.Stopwatch]::StartNew()
+    $controlWait.Invoke($null, @([Func[bool]]{ $controlDelay.ElapsedMilliseconds -ge 40 }, 1000))
+    $refused = $false
+    try { $controlWait.Invoke($null, @([Func[bool]]{ $false }, 40)) } catch {
+        if ($_.Exception.GetBaseException() -isnot [TimeoutException]) { throw }
+        $refused = $true
+    }
+    if (!$refused) { throw 'Never-visible control did not time out.' }
     foreach ($exit in 0, 7) {
         $process = Start-Process (Join-Path $PSHOME 'powershell.exe') -ArgumentList ('-NoProfile -NonInteractive -Command exit ' + $exit) -PassThru -WindowStyle Hidden
         $handle = $process.Handle
