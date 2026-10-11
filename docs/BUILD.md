@@ -193,7 +193,7 @@ Repo-owned Sandbox preparation is `tools/release-sandbox/Prepare.ps1 -Spec <json
 It stages explicit hashed files and creates `acceptance.wsb`; it never launches Sandbox or executes an installer.
 The spec contains `previousVersion`, `candidateVersion`, and `files` rows with `role`, `name`, `path`, and `sha256`.
 Require `previousMsi`, `candidateMsi`, `previousReceipt`, and `candidateReceipt` roles.
-Each receipt binds `version`, `sourceCommit` (full SHA), and `sha256` of the final MSI.
+Each original SDK installer receipt binds `releaseVersion`, `productKind: Msi`, `sourceRevision` (full SHA), and `sha256` of the final MSI.
 The input mapping is read-only. The evidence mapping is the only writable host mapping.
 Run `powershell -NoProfile -ExecutionPolicy Bypass -File tools/release-sandbox/Check.ps1` for preparation checks.
 The guest installs the real previous MSI into its OS-known install root. It requires the previous installed updater's

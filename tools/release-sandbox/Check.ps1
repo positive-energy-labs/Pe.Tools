@@ -17,7 +17,7 @@ try {
         $files += @{ role = $role; name = $role + '.msi'; path = $path; sha256 = $hash }
         $role = $release + 'Receipt'
         $path = Join-Path $scratch ($role + '.json')
-        @{ version = $(if ($release -eq 'previous') { '1' } else { '2' }); sourceCommit = ('a' * 40); sha256 = $hash } | ConvertTo-Json | Set-Content $path
+        @{ releaseVersion = $(if ($release -eq 'previous') { '1' } else { '2' }); productKind = 'Msi'; sourceRevision = ('a' * 40); sha256 = $hash } | ConvertTo-Json | Set-Content $path
         $files += @{ role = $role; name = $role + '.json'; path = $path; sha256 = (Get-FileHash $path).Hash }
     }
     $spec = Join-Path $scratch 'spec.json'

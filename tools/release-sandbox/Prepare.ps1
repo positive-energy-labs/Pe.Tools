@@ -32,7 +32,7 @@ foreach ($release in 'previous', 'candidate') {
     if ([IO.Path]::GetExtension($msi.name) -ne '.msi') { throw 'Final distributables must be MSI files.' }
     $receiptFile = @($files | Where-Object role -eq ($release + 'Receipt'))[0]
     $receipt = Get-Content -LiteralPath $receiptFile.path -Raw | ConvertFrom-Json
-    if ($receipt.version -ne $config.($release + 'Version') -or $receipt.sha256 -ne $msi.sha256 -or $receipt.sourceCommit -notmatch '^[a-fA-F0-9]{40}$') { throw "Release source receipt does not bind $release version, source commit and final MSI hash." }
+    if ($receipt.releaseVersion -ne $config.($release + 'Version') -or $receipt.productKind -ne 'Msi' -or $receipt.sha256 -ne $msi.sha256 -or $receipt.sourceRevision -notmatch '^[a-fA-F0-9]{40}$') { throw "SDK installer receipt does not bind $release version, source revision and final MSI hash." }
 }
 New-Item -ItemType Directory -Path "$run\input", "$run\evidence" | Out-Null
 Copy-Item -LiteralPath $specPath -Destination "$run\input\source-spec.json"
