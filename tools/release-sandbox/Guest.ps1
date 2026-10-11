@@ -42,7 +42,7 @@ try {
         $oldMsi=@($config.files|Where-Object role -eq 'previousMsi')[0]
         Install msiexec.exe ('/i "'+(Join-Path $inputRoot $oldMsi.name)+'" /qn /norestart /l*v "'+$run+'\previous-install.log"') 'Previous release direct admission'
     }
-    @([PeConsoleObserver]::DrainEvents())|ConvertTo-Json -Depth 20|Set-Content "$run\admission-window-events.json"
+    ConvertTo-Json -InputObject @([PeConsoleObserver]::DrainEvents()) -Depth 20|Set-Content "$run\admission-window-events.json"
     Check 'Admission zero dropped events' ([PeConsoleObserver]::DroppedEvents() -eq 0) ''
     $installed=Get-Content $manifest -Raw|ConvertFrom-Json
     Check 'Authentic previous installed version' ($installed.version -eq $config.previousVersion) $installed.version
@@ -92,7 +92,7 @@ try {
     $quietDeadline=$quietStarted.AddSeconds(120)
     while([datetime]::UtcNow -lt $quietDeadline) {NoRevit;$quiet=Observe ('quiet-'+[datetime]::UtcNow.ToString('HHmmss'));Check 'Successor identity stable' ($quiet.pid -eq $after.pid -and $quiet.instanceId -eq $after.instanceId) $quiet.pid;Start-Sleep -Seconds 5}
     @{startedUtc=$quietStarted.ToString('o');completedUtc=[datetime]::UtcNow.ToString('o');seconds=([datetime]::UtcNow-$quietStarted).TotalSeconds}|ConvertTo-Json|Set-Content "$run\quiet-interval.json"
-    $events=@([PeConsoleObserver]::DrainEvents());$events | ConvertTo-Json -Depth 25 | Set-Content "$run\window-events.json"
+    $events=@([PeConsoleObserver]::DrainEvents());ConvertTo-Json -InputObject $events -Depth 25 | Set-Content "$run\window-events.json"
     Check 'Zero dropped events' ([PeConsoleObserver]::DroppedEvents() -eq 0) ''
     Assert-GateConsoleEvents $events $root
     & "$inputRoot\CaptureDesktop.ps1" -Output "$run\desktop-physical.png"
@@ -103,7 +103,7 @@ try {
             if ($hookStarted) {
                 try {
                     $remaining=@([PeConsoleObserver]::DrainEvents())
-                    $remaining | ConvertTo-Json -Depth 25 | Set-Content "$run\remaining-events.json"
+                    ConvertTo-Json -InputObject $remaining -Depth 25 | Set-Content "$run\remaining-events.json"
                     @{droppedEvents=[PeConsoleObserver]::DroppedEvents()} | ConvertTo-Json | Set-Content "$run\observer-final.json"
                     Check 'Final zero dropped events' ([PeConsoleObserver]::DroppedEvents() -eq 0) ''
                     Assert-GateConsoleEvents $remaining $root
