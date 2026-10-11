@@ -3,6 +3,26 @@ $scratch = Join-Path $env:TEMP ('pe-sandbox-check-' + [guid]::NewGuid().ToString
 New-Item -ItemType Directory $scratch | Out-Null
 try {
     . "$PSScriptRoot\Boundary.ps1"
+    . "$PSScriptRoot\Evidence.ps1"
+    $evidence = Join-Path $scratch 'evidence'
+    New-Item -ItemType Directory (Join-Path $evidence 'nested') -Force | Out-Null
+    $activePath = Join-Path $evidence 'nested\redirect.txt'
+    'active stdout bytes' | Set-Content $activePath
+    $writer = [IO.File]::Open($activePath, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::Read)
+    try {
+        Complete-GateEvidence $evidence {} @{ state = 'PROVEN' }
+        $hashes = Get-Content "$evidence\output-hashes.json" -Raw | ConvertFrom-Json
+        if (@($hashes | Where-Object Path -eq $activePath).Count -ne 1 -or (Get-Content "$evidence\result.json" -Raw | ConvertFrom-Json).state -ne 'PROVEN') { throw 'Active redirected file or nested evidence was omitted.' }
+    } finally { $writer.Dispose() }
+    foreach ($failure in 'cleanup', 'hash') {
+        $refused = $false
+        try {
+            if ($failure -eq 'cleanup') { Complete-GateEvidence $evidence { throw 'Injected cleanup failure' } @{ state = 'PROVEN' } }
+            else { Complete-GateEvidence $evidence {} @{ state = 'PROVEN' } { param($path) throw 'Injected hash failure' } }
+        } catch { $refused = $true }
+        $failed = Get-Content "$evidence\result.json" -Raw | ConvertFrom-Json
+        if (!$refused -or $failed.state -eq 'PROVEN' -or ($failure -eq 'hash' -and !$failed.collectionFailed) -or ($failure -eq 'cleanup' -and !$failed.cleanupFailed)) { throw 'Finalization failure retained false success.' }
+    }
     $run = $scratch
     $fakeSdk = Join-Path $scratch 'fake-sdk.ps1'
     '@{ result = @{ state = ''ok''; received = $args } } | ConvertTo-Json -Depth 5' | Set-Content $fakeSdk

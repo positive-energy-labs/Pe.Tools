@@ -4,9 +4,11 @@ if ($env:USERNAME -ne 'WDAGUtilityAccount' -or !(Test-Path 'C:\GateInput\gate.js
 $run = 'C:\GateEvidence'
 Start-Transcript "$run\transcript.txt" | Out-Null
 . C:\GateInput\Boundary.ps1
+. C:\GateInput\Evidence.ps1
 $hookStarted = $false
 function Install($file, $arguments, $name) {
     $p = Start-Process $file -ArgumentList $arguments -PassThru -WindowStyle Hidden
+    $handle = $p.Handle
     if (!$p.WaitForExit(600000)) { throw "$name timed out; no retry" }
     Check $name ($p.ExitCode -in 0, 3010) $p.ExitCode
 }
@@ -108,16 +110,20 @@ try {
     Check 'Observer dropped no events' ([PeConsoleObserver]::DroppedEvents() -eq 0) ([PeConsoleObserver]::DroppedEvents())
     $ownedShows = @($events | Where-Object { $_.Window.Displayed -and @($_.Ancestry | Where-Object { $_.Executable -like ($root + '\*') }).Count })
     Check 'No visible product console' ($ownedShows.Count -eq 0) $ownedShows
-    @{ state = $(if ($mode -eq 'previous-host-self-update') { 'PROVEN' } else { 'UNPROVEN' }); lane = 'installed-sandbox'; mode = $mode; requestId = $requestId; uiBehavior = 'Tray child verified; tray icon and app window interaction UNPROVEN' } | ConvertTo-Json | Set-Content "$run\result.json"
+    $successResult = @{ state = $(if ($mode -eq 'previous-host-self-update') { 'PROVEN' } else { 'UNPROVEN' }); lane = 'installed-sandbox'; mode = $mode; requestId = $requestId; uiBehavior = 'Tray child verified; tray icon and app window interaction UNPROVEN' }
 } catch {
     $_.Exception.ToString() | Set-Content "$run\failure.txt"
     @{ state = 'UNPROVEN'; reason = $_.Exception.Message } | ConvertTo-Json | Set-Content "$run\result.json"
 } finally {
-    if ($hookStarted) {
-        @([PeConsoleObserver]::DrainEvents()) | ConvertTo-Json -Depth 20 | Set-Content "$run\remaining-window-events.json"
-        @{ droppedEvents = [PeConsoleObserver]::DroppedEvents() } | ConvertTo-Json | Set-Content "$run\observer-final.json"
-        [PeConsoleObserver]::StopEvents()
-    }
-    Stop-Transcript | Out-Null
-    Get-ChildItem -LiteralPath $run -File -Recurse | Where-Object Name -ne 'output-hashes.json' | Get-FileHash -Algorithm SHA256 | Select-Object Hash, Path | ConvertTo-Json | Set-Content "$run\output-hashes.json"
+    Complete-GateEvidence $run {
+        try {
+            if ($hookStarted) {
+                try {
+                    @([PeConsoleObserver]::DrainEvents()) | ConvertTo-Json -Depth 20 | Set-Content "$run\remaining-window-events.json"
+                    @{ droppedEvents = [PeConsoleObserver]::DroppedEvents() } | ConvertTo-Json | Set-Content "$run\observer-final.json"
+                    Check 'Final observer dropped no events' ([PeConsoleObserver]::DroppedEvents() -eq 0) ([PeConsoleObserver]::DroppedEvents())
+                } finally { [PeConsoleObserver]::StopEvents() }
+            }
+        } finally { Stop-Transcript | Out-Null }
+    } $successResult
 }
