@@ -113,6 +113,26 @@ test("browser document navigation and static assets retain normal routing", asyn
       options,
     ),
   ).toHaveProperty("principal");
+  expect(
+    await readRequestIdentity(
+      {
+        host: local.host,
+        "sec-fetch-site": "same-origin",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-dest": "empty",
+        accept: "text/html",
+      },
+      "/events",
+      options,
+    ),
+  ).toMatchObject({ refusal: { code: "runtime.owner-missing" } });
+  expect(
+    await readRequestIdentity(
+      { host: local.host, "sec-fetch-site": "same-origin", "sec-fetch-dest": "script" },
+      "/pe/readings",
+      options,
+    ),
+  ).toMatchObject({ refusal: { code: "runtime.owner-missing" } });
 });
 
 test("Node HTTP forwarding preserves the verified authority and identity on the wire", async () => {

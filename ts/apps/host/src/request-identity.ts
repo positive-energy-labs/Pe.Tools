@@ -75,10 +75,14 @@ export async function readRequestIdentity(
   const refuse = (code: string, detail: string): IdentityResult => ({ refusal: { code, detail } });
   const browser = origin !== undefined || headers["sec-fetch-site"] !== undefined;
   const navigation =
-    (method === "GET" || method === "HEAD") && (headers.accept ?? "").includes("text/html");
+    (method === "GET" || method === "HEAD") &&
+    (headers.accept ?? "").includes("text/html") &&
+    (headers["sec-fetch-mode"] === "navigate" ||
+      ["document", "iframe"].includes(headers["sec-fetch-dest"] ?? ""));
   const staticResource =
     (method === "GET" || method === "HEAD") &&
-    ["script", "style", "image", "font", "manifest"].includes(headers["sec-fetch-dest"] ?? "");
+    ["script", "style", "image", "font", "manifest"].includes(headers["sec-fetch-dest"] ?? "") &&
+    /\.(?:m?js|css|png|jpe?g|gif|svg|ico|woff2?|ttf|webmanifest|map)$/i.test(pathname);
   if (
     browser &&
     !navigation &&
