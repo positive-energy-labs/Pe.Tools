@@ -218,6 +218,7 @@ const plan = (sessions: readonly MachineSession[], blocked: boolean): UpdatePlan
     available: true,
     blockers: revits.flatMap((revit) => revit.blockers),
     current: "0.7.0",
+    installedRoot: "C:\\Users\\demo\\AppData\\Local\\Positive Energy\\Pe.Tools",
     latest: "0.7.1",
     effects: {
       close: revits.map((revit) => ({ pid: revit.pid, processStartUtc: revit.processStartUtc })),
