@@ -6,6 +6,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { hostProcessIdentity, productIdentity } from "./contracts/product.ts";
+export { HOST_RUNTIME_SERVICE_HEADER } from "./contracts/product.ts";
 import { normalizeSourceRoot, sourceServiceName } from "./vendor/pe-service.ts";
 
 export type HostLane = "dev" | "installed";
