@@ -27,6 +27,7 @@ export const sdkEnvelope = (result: unknown, resolved: Resolved | null = null) =
   });
 export const observedProcess: ObservedActive = {
   case: "observed-active",
+  execution: null,
   process: originalProcess,
   bridge: { bridge: "missing-endpoint" },
   observedAtUtc: originalProcess.processStartUtc,
