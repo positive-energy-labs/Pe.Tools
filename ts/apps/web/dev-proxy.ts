@@ -78,6 +78,7 @@ export function devHostProxy(target: string): Record<string, ProxyOptions> {
           if (
             req.method === "GET" &&
             /^\/(?:ops|captures)(?:\?|$)/.test(req.url ?? "") &&
+            req.headers["sec-fetch-mode"] === "navigate" &&
             req.headers.accept?.includes("text/html")
           )
             return req.url;
