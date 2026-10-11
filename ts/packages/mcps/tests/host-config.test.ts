@@ -2,9 +2,22 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, afterEach, expect, test, vi } from "vite-plus/test";
-import { checkoutRootFrom, sourceHostServiceName } from "@pe/host-contracts/service-identity";
+import {
+  checkoutRootFrom,
+  sourceHostServiceName,
+  productRoot,
+} from "@pe/host-contracts/service-identity";
+import { productInstallLayout } from "@pe/host-contracts/contracts";
 import { discoverHostBaseUrl, resolveLaneAndRoot } from "../src/shared/host-config.ts";
 import { serviceFilePath } from "@pe/host-contracts/pe-service";
+import { contextFetch } from "@pe/mcps/context";
+
+const { sea } = vi.hoisted(() => ({ sea: { bundled: false } }));
+vi.mock("node:sea", async (original) => ({
+  ...(await original<typeof import("node:sea")>()),
+  isSea: () => sea.bundled,
+}));
+const executable = process.execPath;
 
 let appBase: string;
 const sourceRoot = checkoutRootFrom(import.meta.dirname)!;
@@ -17,8 +30,51 @@ beforeEach(() => {
   vi.stubEnv("PE_TOOLS_HOST_SERVICE_NAME", "");
 });
 afterEach(() => {
+  process.execPath = executable;
+  sea.bundled = false;
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
   rmSync(appBase, { recursive: true, force: true });
+});
+
+test.each(["host", "pea"] as const)(
+  "canonical installed %s SEA resolves the same installed owner",
+  (role) => {
+    sea.bundled = true;
+    vi.stubEnv("PE_LANE", "installed");
+    process.execPath = join(productRoot(), productInstallLayout[`VersionedApp:${role}`]);
+    expect(resolveLaneAndRoot()).toEqual({
+      lane: "installed",
+      sourceRoot: null,
+      serviceName: "host",
+      installedRoot: productRoot(),
+    });
+  },
+);
+
+test.each(["Pe.Host.exe", "pea.exe"])(
+  "copied %s SEA never authorizes installed context",
+  (name) => {
+    sea.bundled = true;
+    vi.stubEnv("PE_LANE", "installed");
+    process.execPath = join(appBase, name);
+    expect(() => resolveLaneAndRoot()).toThrow(/must execute/);
+  },
+);
+
+test("non-SEA source cannot claim installed even with canonical host executable spelling", () => {
+  vi.stubEnv("PE_LANE", "installed");
+  process.execPath = join(productRoot(), productInstallLayout["VersionedApp:host"]);
+  expect(() => resolveLaneAndRoot()).toThrow(/Source CLI code/);
+});
+
+test("installed host contextFetch stamps its canonical installed owner", async () => {
+  sea.bundled = true;
+  vi.stubEnv("PE_LANE", "installed");
+  process.execPath = join(productRoot(), productInstallLayout["VersionedApp:host"]);
+  const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}"));
+  await contextFetch("http://127.0.0.1:19999/host/status");
+  expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get("x-pe-runtime-service")).toBe("host");
 });
 function receipt(patch: Record<string, unknown> = {}) {
   const path = serviceFilePath(

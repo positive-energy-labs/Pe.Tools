@@ -41,7 +41,14 @@ export function resolveLaneAndRoot(): {
   const sourceRoot = lane === "dev" ? moduleRoot : null;
   if (lane === "installed" && process.env[sourceRootVariable]?.trim())
     throw Error("An installed CLI cannot claim a checkout source root.");
-  const installedRoot = lane === "installed" ? installedRuntimeRoot("pea") : null;
+  // This shared context runs in both packaged Host and Pea. Infer only a canonical Host entry;
+  // all remaining installed callers must pass the canonical Pea validator (copies still refuse).
+  const installedApp =
+    normalizeSourceRoot(process.execPath) ===
+    normalizeSourceRoot(join(productRoot(), productInstallLayout["VersionedApp:host"]))
+      ? "host"
+      : "pea";
+  const installedRoot = lane === "installed" ? installedRuntimeRoot(installedApp) : null;
   const baseServiceName = hostServiceName(lane, sourceRoot);
   const serviceName =
     process.env[hostProcessIdentity.serviceNameVariable]?.trim() || baseServiceName;
