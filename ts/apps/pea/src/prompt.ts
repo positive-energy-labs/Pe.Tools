@@ -9,22 +9,21 @@
  */
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import type {
   HarnessEvent,
   HarnessId,
   HarnessThreadBody,
   HarnessThreadSummary,
 } from "@pe/agent-contracts";
-import { hostProcessIdentity } from "@pe/host-contracts/contracts";
-import { productRoot } from "@pe/host-contracts/service-identity";
+import { hostProcessIdentity, productInstallLayout } from "@pe/host-contracts/contracts";
 import {
   checkoutLayout,
-  checkoutRootFrom,
-  sourceHostServiceName,
+  productRoot,
   sourceRootVariable,
 } from "@pe/host-contracts/service-identity";
-import { ensureRunning } from "@pe/host-contracts/pe-service";
+import { ensureRunning, readServiceFile } from "@pe/host-contracts/pe-service";
+import { discoverHostBaseUrl, resolveHostBaseUrl, resolveLaneAndRoot } from "@pe/mcps";
+import { contextFetch as fetch, invocationContext } from "@pe/mcps/context";
 
 const sourceHostStartupTimeoutMs = 45_000;
 
@@ -90,6 +89,8 @@ export async function runPeaPrompt(request: PeaPromptRequest): Promise<number> {
 }
 
 export async function runPeaPromptTurn(request: PeaPromptRequest): Promise<PeaPromptResult> {
+  const held = invocationContext();
+  if (held?.hostBaseUrl) resolveHostBaseUrl(held.hostBaseUrl);
   const host = await ensureTsHostRunning();
   const base = `${host}/pe/threads`;
   // An older host without providers answers 404 on this route; name it up front.
@@ -252,72 +253,56 @@ async function* streamEvents(url: string, signal: AbortSignal): AsyncGenerator<H
 }
 
 async function ensureTsHostRunning(): Promise<string> {
-  const explicit = process.env[hostProcessIdentity.hostBaseUrlVariable]?.trim();
-  if (explicit) return explicit;
+  const owner = resolveLaneAndRoot();
+  // Resolve an explicit address through the same receipt guard as MCP before any request or spawn.
+  const existing = discoverHostBaseUrl();
+  if (existing) return existing;
 
-  // An installed caller must supervise the installed incarnation even when a healthy dev host
-  // currently owns the preferred port. The service primitive performs the authenticated takeover.
-  const installed = await resolveInstalledHostLaunch();
-  if (installed) {
-    const result = await ensureRunning(installed.appBase, hostProcessIdentity.serviceName, {
-      entryPath: installed.entryPath,
-      health: hostProcessIdentity.healthPath,
-      shutdown: hostProcessIdentity.shutdownPath,
-      lane: "installed",
-    });
-    if (result.state === "failed") {
-      throw new Error(`Unable to start the installed Pe.Tools host: ${result.reason}`);
-    }
-    return `http://127.0.0.1:${result.file.port}`;
-  }
-
-  // Dev lane: one SDK ensureRunning pass scoped to THIS worktree's service name — discover a healthy
-  // same-checkout host (matchSourceRoot), evict a stale one, or spawn the source spelling and wait.
-  // Never the shared default port, which may belong to another worktree's host.
-  // #attach, never #dev: a supervisor-style spawn must not carry --take-over-host (evicting a
-  // healthy incumbent livelocks respawn-vs-respawn) nor node --watch (refused spawns must exit,
-  // not linger as orphaned watchers). Takeover stays a human spelling (`pnpm dev`).
-  // ponytail: it still boots middleware-mode Vite this headless lane never uses; split a web-less
-  // entry if the cold-start budget (45s) ever matters here.
-  const sourceRoot = checkoutRootFrom(path.dirname(fileURLToPath(import.meta.url)));
-  if (!sourceRoot) throw new Error("The dev lane needs a Pe.Tools checkout above pea's sources.");
-  const serviceName = sourceHostServiceName(sourceRoot);
-  const override = process.env.PE_TOOLS_HOST_LAUNCH_COMMAND?.trim();
-  const result = await ensureRunning(productRoot(), serviceName, {
-    spawnCommand: {
-      command: override ?? "vp",
-      args: override ? [] : ["run", "@pe/host#attach"],
-      cwd: path.join(sourceRoot, checkoutLayout.ts),
-      shell: true,
-    },
-    matchSourceRoot: sourceRoot,
+  const appBase = owner.installedRoot ?? productRoot();
+  const launch =
+    owner.lane === "installed"
+      ? { entryPath: path.join(appBase, productInstallLayout["VersionedApp:host"]) }
+      : {
+          spawnCommand: {
+            command: "vp",
+            args: [
+              "run",
+              "@pe/host#attach",
+              ...(owner.serviceName.endsWith("-no-revit") ? ["--", "--no-revit"] : []),
+            ],
+            cwd: path.join(owner.sourceRoot!, checkoutLayout.ts),
+            shell: true,
+          },
+          matchSourceRoot: owner.sourceRoot!,
+          timeoutMs: sourceHostStartupTimeoutMs,
+          spawnEnv: {
+            [sourceRootVariable]: owner.sourceRoot!,
+            [hostProcessIdentity.serviceNameVariable]: owner.serviceName,
+          },
+        };
+  if (launch.entryPath && !existsSync(launch.entryPath))
+    throw new Error(`installed host entry is missing: ${launch.entryPath}`);
+  const result = await ensureRunning(appBase, owner.serviceName, {
+    ...launch,
     health: hostProcessIdentity.healthPath,
     shutdown: hostProcessIdentity.shutdownPath,
-    lane: "dev",
-    timeoutMs: sourceHostStartupTimeoutMs,
-    spawnEnv: {
-      [sourceRootVariable]: sourceRoot,
-      [hostProcessIdentity.serviceNameVariable]: serviceName,
-    },
+    lane: owner.lane,
   });
   if (result.state === "failed")
     throw new Error(
-      `Unable to start this worktree's dev host ('${serviceName}'): ${result.reason}`,
+      `Unable to start this runtime's host ('${owner.serviceName}'): ${result.reason}`,
     );
-  return `http://127.0.0.1:${result.file.port}`;
-}
-
-async function resolveInstalledHostLaunch(): Promise<{
-  appBase: string;
-  entryPath: string;
-} | null> {
-  // Fixed installed layout under the product root (service-identity.ts pins it): this pea is
-  // `<root>\bin\pea\pea.exe` and the host it supervises is `<root>\bin\host\Pe.Host.exe`.
-  // Being inside `bin\pea` is what makes this the installed lane; there is no pointer or receipt.
-  const appBase = productRoot();
-  const peaDirectory = path.join(appBase, "bin", "pea");
-  if (path.relative(peaDirectory, path.dirname(process.execPath)) !== "") return null;
-  const entryPath = path.join(appBase, "bin", "host", "Pe.Host.exe");
-  if (!existsSync(entryPath)) throw new Error(`installed host entry is missing: ${entryPath}`);
-  return { appBase, entryPath };
+  // The SDK acknowledgement alone is not execution authority. Re-read this runtime's actual receipt
+  // after startup and require its verified address to agree with the acknowledged incarnation.
+  const claimed = await readServiceFile(appBase, owner.serviceName);
+  const verified = resolveHostBaseUrl();
+  if (
+    !claimed?.instanceId ||
+    claimed.instanceId !== result.file.instanceId ||
+    claimed.pid !== result.file.pid ||
+    claimed.processStartUtc !== result.file.processStartUtc ||
+    verified !== `http://127.0.0.1:${result.file.port}`
+  )
+    throw new Error("Started host acknowledgement disagrees with this runtime's verified service.");
+  return verified;
 }

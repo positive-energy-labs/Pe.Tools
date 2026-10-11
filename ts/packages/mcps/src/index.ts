@@ -20,6 +20,7 @@ export type { PeaCliCommandOptions } from "./pea/PeaCliCommands.ts";
 export {
   discoverHostBaseUrl,
   resolveHostBaseUrl,
+  resolveLaneAndRoot,
   resolveWorkspaceKey,
 } from "./shared/host-config.ts";
 export { HostRpcCaller } from "./shared/host-rpc-caller.ts";
