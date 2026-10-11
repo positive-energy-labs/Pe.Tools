@@ -100,6 +100,7 @@ try {
     if (Test-Path ($receipt.receiptPath + '.legs.jsonl')) { Copy-Item -LiteralPath ($receipt.receiptPath + '.legs.jsonl') -Destination "$run\raw-legs.jsonl" }
     $after = Observe $root 'after'
     Check 'Responsive candidate identity' ($after.version -eq $config.candidateVersion -and (!$before -or $after.instanceId -ne $before.instanceId)) $after
+    & C:\GateInput\ReadInstalledMcp.ps1 -InstallRoot $root -Output "$run\installed-mcp"
     Copy-Item $manifest "$run\candidate-manifest.json"
     Start-Sleep -Seconds 45
     $events = @([PeConsoleObserver]::DrainEvents())
@@ -118,5 +119,5 @@ try {
         [PeConsoleObserver]::StopEvents()
     }
     Stop-Transcript | Out-Null
-    Get-ChildItem -LiteralPath $run -File | Where-Object Name -ne 'output-hashes.json' | Get-FileHash -Algorithm SHA256 | Select-Object Hash, Path | ConvertTo-Json | Set-Content "$run\output-hashes.json"
+    Get-ChildItem -LiteralPath $run -File -Recurse | Where-Object Name -ne 'output-hashes.json' | Get-FileHash -Algorithm SHA256 | Select-Object Hash, Path | ConvertTo-Json | Set-Content "$run\output-hashes.json"
 }

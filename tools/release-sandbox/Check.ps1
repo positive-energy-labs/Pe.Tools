@@ -28,6 +28,63 @@ try {
     $spec = Join-Path $scratch 'spec.json'
     @{ previousVersion = '1'; candidateVersion = '2'; files = $files } | ConvertTo-Json -Depth 10 | Set-Content $spec
     $wsb = & "$PSScriptRoot\Prepare.ps1" -Spec $spec -RunDirectory "$scratch\run"
+    $mcpStaged = "$scratch\run\input\ReadInstalledMcp.ps1"
+    if (!(Test-Path $mcpStaged) -or (Get-FileHash $mcpStaged).Hash -ne (Get-FileHash "$PSScriptRoot\ReadInstalledMcp.ps1").Hash) { throw 'Installed MCP helper was not staged byte-identically.' }
+    $stagedHashes = Get-Content "$scratch\run\input-hashes.json" -Raw | ConvertFrom-Json
+    if (!@($stagedHashes | Where-Object { $_.Path -eq $mcpStaged -and $_.Hash -eq (Get-FileHash $mcpStaged).Hash }).Count) { throw 'MCP staged helper hash missing.' }
+    foreach ($mode in 'ok', 'tool-failed', 'close-failed', 'malformed-map') {
+        $fixtureOutput = Join-Path $scratch ('mcp-' + $mode)
+        New-Item -ItemType Directory $fixtureOutput | Out-Null
+        $job = Start-Job -ArgumentList $fixtureOutput, $mode -ScriptBlock {
+            param($directory, $mode)
+            $ErrorActionPreference = 'Stop'
+            $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
+            try {
+                $listener.Start(); $listener.LocalEndpoint.Port | Set-Content "$directory\port.txt"
+                for ($index = 0; $index -lt 4; $index++) {
+                    $client = $listener.AcceptTcpClient(); $stream = $client.GetStream()
+                    $reader = [IO.StreamReader]::new($stream, [Text.Encoding]::UTF8, $false, 1024, $true)
+                    $line = $reader.ReadLine(); $method = $line.Split(' ')[0]; $headers = @{}
+                    while (($line = $reader.ReadLine()) -ne '') { $colon = $line.IndexOf(':'); $headers[$line.Substring(0, $colon).ToLowerInvariant()] = $line.Substring($colon + 1).Trim() }
+                    $body = ''
+                    if ($headers['content-length']) { $buffer = New-Object char[] ([int]$headers['content-length']); $offset = 0; while ($offset -lt $buffer.Length) { $read = $reader.Read($buffer, $offset, $buffer.Length - $offset); if (!$read) { throw 'Fixture request body ended early.' }; $offset += $read }; $body = -join $buffer }
+                    @{ method = $method; headers = $headers; body = $body } | ConvertTo-Json -Depth 8 -Compress | Add-Content "$directory\calls.jsonl"
+                    $status = 200; $sessionHeader = ''; $value = @{}
+                    if ($headers['x-pe-runtime-service'] -ne 'host') { throw 'Fixture request lost owner header.' }
+                    if ($index -eq 0) { $value = @{ jsonrpc = '2.0'; id = 1; result = @{ protocolVersion = '2025-11-25' } }; $sessionHeader = "mcp-session-id: fixture-session`r`n" }
+                    else {
+                        if ($headers['mcp-session-id'] -ne 'fixture-session' -or $headers['mcp-protocol-version'] -ne '2025-11-25') { throw 'Fixture request lost protocol/session identity.' }
+                        if ($index -eq 1) { if (($body | ConvertFrom-Json).method -ne 'notifications/initialized') { throw 'Wrong MCP notification.' }; $status = 202 }
+                        elseif ($index -eq 2) {
+                            $call = $body | ConvertFrom-Json
+                            if ($call.method -ne 'tools/call' -or $call.params.name -ne 'pe_find' -or @($call.params.arguments.PSObject.Properties).Count -ne 0) { throw 'Expected read-only pe_find with empty arguments.' }
+                            $map = @{ map = @(@{ id = 'fixture-read' }); sources = @(@{ kind = 'fixture' }); sessions = @() } | ConvertTo-Json -Depth 8 -Compress
+                            if ($mode -eq 'malformed-map') { $map = '{}' }
+                            $value = @{ jsonrpc = '2.0'; id = 2; result = @{ isError = ($mode -eq 'tool-failed'); content = @(@{ type = 'text'; text = $map }) } }
+                        } else { if ($method -ne 'DELETE') { throw 'MCP session was not closed.' }; if ($mode -eq 'close-failed') { $status = 500 } }
+                    }
+                    $json = $value | ConvertTo-Json -Depth 15 -Compress; $bytes = [Text.Encoding]::UTF8.GetBytes($json)
+                    $head = [Text.Encoding]::ASCII.GetBytes("HTTP/1.1 $status Fixture`r`nContent-Type: application/json`r`nContent-Length: $($bytes.Length)`r`nConnection: close`r`n$sessionHeader`r`n")
+                    $stream.Write($head, 0, $head.Length); $stream.Write($bytes, 0, $bytes.Length); $stream.Flush(); $reader.Dispose(); $client.Dispose()
+                }
+            } finally { $listener.Stop() }
+        }
+        try {
+            $deadline = [datetime]::UtcNow.AddSeconds(15)
+            while (!(Test-Path "$fixtureOutput\port.txt") -and [datetime]::UtcNow -lt $deadline -and $job.State -eq 'Running') { Start-Sleep -Milliseconds 100 }
+            if (!(Test-Path "$fixtureOutput\port.txt")) { throw 'Owned MCP fixture did not start.' }
+            $port = (Get-Content "$fixtureOutput\port.txt" -Raw).Trim()
+            $failed = $false
+            try { Invoke-GateMcpRead ('http://127.0.0.1:' + $port) $fixtureOutput } catch { $failed = $true }
+            $proof = Get-Content "$fixtureOutput\protocol-result.json" -Raw | ConvertFrom-Json
+            if ($failed -ne ($mode -ne 'ok') -or ($proof.state -eq 'PROVEN') -ne ($mode -eq 'ok') -or $proof.cleanupFailed -ne ($mode -eq 'close-failed')) { throw "MCP protocol/cleanup result wrong for $mode." }
+            $calls = @(Get-Content "$fixtureOutput\calls.jsonl" | ForEach-Object { $_ | ConvertFrom-Json })
+            if ($calls.Count -ne 4 -or $calls[3].method -ne 'DELETE') { throw 'MCP fixture was not closed after tool/error response.' }
+            $job | Wait-Job -Timeout 5 | Out-Null
+            $job | Receive-Job -ErrorAction Stop | Out-Null
+            if ($job.State -ne 'Completed') { throw 'MCP fixture did not terminate.' }
+        } finally { if ($job.State -eq 'Running') { $job | Stop-Job }; $job | Remove-Job -Force }
+    }
     $config = Get-Content $spec -Raw | ConvertFrom-Json
     $plan = [pscustomobject]@{ available = $true; current = '1'; latest = '2'; msi = @{ digest = 'sha256:' + $files[2].sha256.ToLowerInvariant(); size = 20 }; revits = @(); effects = @{ restartYears = @(); reopen = @() }; blockers = @() }
     AssertCandidate $plan $config 20
@@ -48,7 +105,7 @@ try {
     $refused = $false
     try { & "$PSScriptRoot\Prepare.ps1" -Spec $spec -RunDirectory "$scratch\bad" | Out-Null } catch { $refused = $_.Exception.Message -like 'Input hash mismatch:*' }
     if (!$refused -or (Test-Path "$scratch\bad")) { throw 'Corrupt release must refuse before staging.' }
-    'PASS: script syntax, exact mapping isolation, input hashes, corrupt-input refusal, candidate binding, terminal receipt boundary. No Sandbox or installer executed.'
+    'PASS: syntax, safe mappings, input hashes, refusal boundaries; real HTTP MCP init/pe_find/DELETE with owner/session headers, malformed tool/map and cleanup failure handling. No Sandbox or installer executed.'
 } finally {
     $resolved = [IO.Path]::GetFullPath($scratch)
     $tempRoot = [IO.Path]::GetFullPath($env:TEMP).TrimEnd('\') + '\'

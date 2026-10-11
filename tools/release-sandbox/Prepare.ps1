@@ -40,6 +40,7 @@ foreach ($file in $files) { Copy-Item -LiteralPath $file.path -Destination "$run
 Copy-Item -LiteralPath "$PSScriptRoot\Guest.ps1" -Destination "$run\input\Guest.ps1"
 Copy-Item -LiteralPath "$PSScriptRoot\Observe.ps1" -Destination "$run\input\Observe.ps1"
 Copy-Item -LiteralPath "$PSScriptRoot\Boundary.ps1" -Destination "$run\input\Boundary.ps1"
+Copy-Item -LiteralPath "$PSScriptRoot\ReadInstalledMcp.ps1" -Destination "$run\input\ReadInstalledMcp.ps1"
 Copy-Item -LiteralPath "$PSScriptRoot\Windows.cs" -Destination "$run\input\Windows.cs"
 $config | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath "$run\input\gate.json" -Encoding UTF8
 $inputPath = [Security.SecurityElement]::Escape("$run\input")
