@@ -6,8 +6,8 @@ using Pe.Shared.HostContracts.SettingsStorage;
 namespace Pe.Shared.HostContracts.Bridge;
 
 public static class BridgeProtocol {
-    // 23: pod-less supplied drafts and Family Foundry before/after change evidence
-    public const int ContractVersion = 23;
+    // 24: runtime owner is required before bridge registration authorizes dispatch.
+    public const int ContractVersion = 24;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
@@ -72,7 +72,9 @@ public sealed record BridgeRegistrationRequest(
     string? SessionDescriptorPath = null,
     string? Lane = null,
     string? SdkSessionId = null,
-    string? BuildStamp = null
+    string? BuildStamp = null,
+    string? SourceRoot = null,
+    string? ServiceName = null
 );
 
 public sealed record BridgeRegistrationAck(

@@ -350,6 +350,10 @@ export type BridgeSessionListEntry = BridgeSessionsListData["sessions"][number];
 export type HostProbeData = Schema.Schema.Type<typeof hostProbeDataSchema>;
 
 export const hostProbeDataSchema = Schema.Struct({
+  runtimeMatch: Schema.optional(
+    Schema.Literals(["verified", "disconnected", "unknown", "refused"]),
+  ),
+  runtimeRefusal: Schema.optional(Schema.NullOr(Schema.String)),
   bridgeContractVersion: Schema.Number,
   bridgeIsConnected: Schema.Boolean,
   bridgePath: Schema.String,

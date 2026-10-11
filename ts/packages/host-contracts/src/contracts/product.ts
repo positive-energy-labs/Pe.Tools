@@ -3,6 +3,7 @@
 // product-owned path names, transport env vars, and scripting identity.
 
 import { payload, productIdentity as generatedIdentity } from "../vendor/generated/product.g.ts";
+export const HOST_RUNTIME_SERVICE_HEADER = "x-pe-runtime-service";
 export { productInstallLayout } from "../vendor/generated/product.g.ts";
 
 export const productIdentity = {

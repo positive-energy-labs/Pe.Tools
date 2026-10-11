@@ -6,7 +6,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { hostProcessIdentity, productIdentity } from "./contracts/product.ts";
-import { sourceServiceName } from "./vendor/pe-service.ts";
+import { normalizeSourceRoot, sourceServiceName } from "./vendor/pe-service.ts";
 
 export type HostLane = "dev" | "installed";
 
@@ -60,4 +60,24 @@ export function hostServiceName(lane: HostLane, sourceRoot: string | null): stri
   if (lane === "installed") return hostProcessIdentity.serviceName;
   if (!sourceRoot) throw new Error("A dev host requires a source root for service identity.");
   return sourceHostServiceName(sourceRoot);
+}
+
+/** Ownership authorizes execution; matching ownership does not attest loaded code freshness. */
+export function runtimeOwnerRejection(
+  expected: { lane: HostLane; sourceRoot: string | null; serviceName: string },
+  actual: { lane?: string | null; sourceRoot?: string | null; serviceName?: string | null },
+): string | null {
+  if (actual.lane !== expected.lane)
+    return `Runtime lane '${actual.lane ?? "unknown"}' does not match '${expected.lane}'.`;
+  if (actual.serviceName !== expected.serviceName)
+    return `Runtime service '${actual.serviceName ?? "unknown"}' does not match '${expected.serviceName}'.`;
+  if (expected.lane === "dev") {
+    if (
+      !actual.sourceRoot ||
+      !expected.sourceRoot ||
+      normalizeSourceRoot(actual.sourceRoot) !== normalizeSourceRoot(expected.sourceRoot)
+    )
+      return `Runtime checkout '${actual.sourceRoot ?? "unknown"}' does not match '${expected.sourceRoot}'.`;
+  } else if (actual.sourceRoot) return "Installed runtime must not report a checkout source root.";
+  return null;
 }

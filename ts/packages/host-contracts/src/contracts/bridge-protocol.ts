@@ -6,7 +6,7 @@ import type { SessionObservation } from "../vendor/generated/pe-revit-contract.t
 import type { HostLane } from "../service-identity.ts";
 
 export const HOST_CONTRACT_VERSION = 55 as const;
-export const BRIDGE_CONTRACT_VERSION = 23 as const;
+export const BRIDGE_CONTRACT_VERSION = 24 as const;
 export const BRIDGE_PATH = "/api/bridge" as const;
 export const HOST_RPC_SDK_SESSION_HEADER = "x-pe-sdk-session" as const;
 /** Private exact attachment identity; never an SDK name or selector language. */
@@ -127,6 +127,8 @@ export const bridgeRegistrationRequestSchema = Schema.Struct({
   buildStamp: nullableString,
   contractVersion: Schema.Number,
   lane: nullableString,
+  sourceRoot: nullableString,
+  serviceName: nullableString,
   processId: Schema.Number,
   processStartUtcUnixMs: Schema.optional(Schema.NullOr(Schema.Number)),
   sdkSessionId: nullableString,
