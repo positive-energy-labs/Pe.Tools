@@ -1,129 +1,114 @@
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
-if ($env:USERNAME -ne 'WDAGUtilityAccount' -or !(Test-Path 'C:\GateInput\gate.json') -or !(Test-Path 'C:\GateEvidence')) { throw 'Windows Sandbox mapped gate inputs required.' }
-$run = 'C:\GateEvidence'
-Start-Transcript "$run\transcript.txt" | Out-Null
-. C:\GateInput\Boundary.ps1
-. C:\GateInput\Evidence.ps1
-$hookStarted = $false
-function Install($file, $arguments, $name) {
-    $p = Start-Process $file -ArgumentList $arguments -PassThru -WindowStyle Hidden
-    $handle = $p.Handle
-    if (!$p.WaitForExit(600000)) { throw "$name timed out; no retry" }
-    Check $name ($p.ExitCode -in 0, 3010) $p.ExitCode
-}
-function Observe($root, $name) {
-    $deadline = [datetime]::UtcNow.AddSeconds(90)
-    do {
-        try { & C:\GateInput\Observe.ps1 -InstallRoot $root -Output "$run\$name.json"; return Get-Content "$run\$name.json" -Raw | ConvertFrom-Json } catch { $lastObservationError = $_.Exception.Message }
-        Start-Sleep -Seconds 1
-    } while ([datetime]::UtcNow -lt $deadline)
-    throw "$name readiness timed out: $lastObservationError"
-}
-function Check($name, [bool]$passed, $detail) {
-    @{ name = $name; passed = $passed; detail = $detail; observedAtUtc = [datetime]::UtcNow.ToString('o') } | ConvertTo-Json -Depth 10 -Compress | Add-Content "$run\checks.jsonl"
-    if (!$passed) { throw $name }
+param([string]$InputDirectory='C:\GateInput',[string]$Output='C:\GateEvidence')
+$inputRoot=$InputDirectory
+$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
+if ($env:USERNAME -ne 'WDAGUtilityAccount' -or ($inputRoot -ne 'C:\GateInput' -and $inputRoot -notlike 'C:\GateEvidence\*') -or ($Output -ne 'C:\GateEvidence' -and $Output -notlike 'C:\GateEvidence\*')) {throw 'Owned mapped guest required'}
+$run=$Output;if(Test-Path "$run\result.json"){throw 'Fresh output required'}
+$run=$Output;New-Item -ItemType Directory $run -Force | Out-Null;Start-Transcript "$run\transcript.txt" | Out-Null
+. "$inputRoot\Boundary.ps1"
+. "$inputRoot\Evidence.ps1"
+. "$inputRoot\AutomaticBoundary.ps1"
+. "$inputRoot\Automatic.ps1"
+. "$inputRoot\UpdateReceipt.ps1"
+. "$inputRoot\CompareSdkClosure.ps1"
+. "$inputRoot\InstalledClosure.ps1"
+$hookStarted=$false
+function Check($name,[bool]$passed,$detail) {@{name=$name;passed=$passed;detail=$detail;atUtc=[datetime]::UtcNow.ToString('o')} | ConvertTo-Json -Depth 20 -Compress | Add-Content "$run\checks.jsonl";if (!$passed){throw $name}}
+function NoRevit {Check 'No Revit' (@(Get-Process Revit -ErrorAction SilentlyContinue).Count -eq 0) ''}
+function Observe($name) {$deadline=[datetime]::UtcNow.AddSeconds(90);do {try {& "$inputRoot\Observe.ps1" -InstallRoot $root -Output "$run\$name.json";return (Get-Content "$run\$name.json" -Raw | ConvertFrom-Json)} catch {$lastError=$_.Exception.Message};Start-Sleep -Seconds 1} while([datetime]::UtcNow -lt $deadline);throw "Observer readiness timeout: $lastError"}
+function Install($file,$arguments,$name) {
+    $process=Start-Process $file -ArgumentList $arguments -PassThru -WindowStyle Hidden;$handle=$process.Handle
+    if(!$process.WaitForExit(600000)){throw "$name timed out; no retry"}
+    Check $name ($process.ExitCode -in 0,3010) $process.ExitCode
 }
 try {
-    Copy-Item C:\GateInput\source-spec.json "$run\source-spec.json"
-    $config = Get-Content C:\GateInput\gate.json -Raw | ConvertFrom-Json
-    foreach ($file in $config.files) {
-        Check "input $($file.name)" ((Get-FileHash -LiteralPath "C:\GateInput\$($file.name)").Hash -eq $file.sha256) $file.sha256
+    $config=Get-Content "$inputRoot\gate.json" -Raw | ConvertFrom-Json;Copy-Item "$inputRoot\source-spec.json" "$run\source-spec.json";Copy-Item "$inputRoot\gate.json" "$run\gate.json"
+    Check 'Different exact versions' ($config.previousVersion -ne $config.candidateVersion) $config.candidateVersion
+    foreach ($script in $config.scripts) {Check ('Script '+$script.name) ((Get-FileHash (Join-Path $inputRoot $script.name)).Hash -eq $script.sha256) $script.sha256}
+    foreach ($file in $config.files) {Check ('Input '+$file.name) ((Get-FileHash (Join-Path $inputRoot $file.name)).Hash -eq $file.sha256) $file.sha256}
+    $candidate=@($config.files | Where-Object role -eq 'candidateMsi');$source=@($config.files | Where-Object role -eq 'candidateReceipt')
+    Check 'One final candidate MSI and receipt' ($candidate.Count -eq 1 -and $source.Count -eq 1) ''
+    $receipt=Get-Content (Join-Path $inputRoot $source[0].name) -Raw | ConvertFrom-Json
+    Check 'Original exact final candidate receipt' ($receipt.productKind -eq 'Msi' -and $receipt.releaseVersion -eq $config.candidateVersion -and $receipt.sha256 -eq $candidate[0].sha256 -and $receipt.sourceRevision -eq $config.sourceRevision -and $receipt.sourceRevision -match '^[0-9a-f]{40}$') $receipt
+    $root=Join-Path $env:LOCALAPPDATA 'Positive Energy\Pe.Tools';$manifest=Join-Path $root 'product.payloads.json';$cli=Join-Path $root 'shims\pe-revit.exe'
+    NoRevit;Add-Type -Path "$inputRoot\Windows.cs";[PeConsoleObserver]::StartEvents();$hookStarted=$true
+    $controlPid=[PeConsoleObserver]::PulseControl();Start-Sleep -Milliseconds 500;$control=@([PeConsoleObserver]::DrainEvents());$control | ConvertTo-Json -Depth 20 | Set-Content "$run\observer-control.json"
+    Check 'Native observer calibrated' (@($control | Where-Object {$_.Window.Displayed -and ($_.Window.ControlSentinel -or @($_.Ancestry | Where-Object Pid -eq $controlPid).Count)}).Count -gt 0 -and [PeConsoleObserver]::DroppedEvents() -eq 0) $controlPid
+    $retainedInputs=@($config.files|Where-Object role -eq 'previousIdentity')
+    if(!$retainedInputs.Count) {
+        foreach($role in 'vcRuntime','dotnetRuntime') {
+            $prerequisite=@($config.files|Where-Object role -eq $role)
+            if($prerequisite.Count) {Install (Join-Path $inputRoot $prerequisite[0].name) ('/install /quiet /norestart /log "'+$run+'\'+$role+'.log"') $role}
+        }
+        $oldMsi=@($config.files|Where-Object role -eq 'previousMsi')[0]
+        Install msiexec.exe ('/i "'+(Join-Path $inputRoot $oldMsi.name)+'" /qn /norestart /l*v "'+$run+'\previous-install.log"') 'Previous release direct admission'
     }
-    Check 'No Revit process' (@(Get-Process Revit -ErrorAction SilentlyContinue).Count -eq 0) 'No Autodesk product is launched by this gate.'
-    Add-Type -Path C:\GateInput\Windows.cs
-    [PeConsoleObserver]::StartEvents(); $hookStarted = $true
-    $controlPid = [PeConsoleObserver]::PulseControl()
-    Start-Sleep -Milliseconds 500
-    $control = @([PeConsoleObserver]::DrainEvents())
-    $control | ConvertTo-Json -Depth 15 | Set-Content "$run\observer-control.json"
-    Check 'Observer positive control' (@($control | Where-Object { $_.Window.Displayed -and ($_.Window.ControlSentinel -or @($_.Ancestry | Where-Object Pid -eq $controlPid).Count) }).Count -gt 0) $controlPid
-    foreach ($role in 'vcRuntime', 'dotnetRuntime') {
-        $prerequisite = @($config.files | Where-Object role -eq $role)
-        if ($prerequisite.Count -eq 1) { Install ('C:\GateInput\' + $prerequisite[0].name) ('/install /quiet /norestart /log "' + $run + '\' + $role + '.log"') $role }
+    @([PeConsoleObserver]::DrainEvents())|ConvertTo-Json -Depth 20|Set-Content "$run\admission-window-events.json"
+    Check 'Admission zero dropped events' ([PeConsoleObserver]::DroppedEvents() -eq 0) ''
+    $installed=Get-Content $manifest -Raw|ConvertFrom-Json
+    Check 'Authentic previous installed version' ($installed.version -eq $config.previousVersion) $installed.version
+    Copy-Item $manifest "$run\previous-manifest.json";Assert-GateInstalledClosure 'previous'
+    if(!$retainedInputs.Count -and !(Get-Process Pe.Host -ErrorAction SilentlyContinue)) {Start-Process (Join-Path $root 'bin\host\Pe.Host.exe') -ArgumentList '--open' -WindowStyle Hidden|Out-Null}
+    try {$before=Observe 'before'} catch {
+        $_.Exception.ToString()|Set-Content "$run\previous-host-unavailable.txt"
+        $recovery=@($config.files|Where-Object role -eq 'recoveryZip')
+        if(!$recovery.Count){throw 'Previous host unavailable; normal automatic update FALSIFIED; no external recovery input'}
+        Expand-Archive (Join-Path $inputRoot $recovery[0].name) "$run\external-sdk"
+        $cli="$run\external-sdk\Pe.Revit.Cli.exe"
+        $recoveryPlan=Invoke-GateSdk $cli @('update','check','--manifest',$manifest) 'external-recovery-check';AssertCandidate $recoveryPlan.result $config (Get-Item (Join-Path $inputRoot $candidate[0].name)).Length
+        $apply=Invoke-GateSdk $cli @('update','apply',$recoveryPlan.result.planId,'--manifest',$manifest) 'external-recovery-apply'
+        $binding=[pscustomobject]@{requestId=$apply.result.requestId;planId=$recoveryPlan.result.planId};$mode='external-sdk-recovery'
     }
-    $oldMsi = @($config.files | Where-Object role -eq 'previousMsi')[0]
-    Install msiexec.exe ('/i "C:\GateInput\' + $oldMsi.name + '" /qn /norestart /l*v "' + $run + '\previous-install.log"') 'Previous release admission'
-    $root = Join-Path $env:LOCALAPPDATA 'Positive Energy\Pe.Tools'
-    $manifest = Join-Path $root 'product.payloads.json'
-    $installed = Get-Content $manifest -Raw | ConvertFrom-Json
-    Check 'Previous release installed identity' ($installed.version -eq $config.previousVersion) $installed.version
-    Copy-Item $manifest "$run\previous-manifest.json"
-    $cli = Join-Path $root 'shims\pe-revit.exe'
-    $candidate = @($config.files | Where-Object role -eq 'candidateMsi')[0]
-    $length = (Get-Item ('C:\GateInput\' + $candidate.name)).Length
-    $planEnvelope = Invoke-GateSdk $cli @('--installed', 'update', 'check', '--manifest', $manifest) 'previous-update-check'
-    AssertCandidate $planEnvelope.result $config $length
-    $exe = Join-Path $root 'bin\host\Pe.Host.exe'
-    if (!(Get-Process Pe.Host -ErrorAction SilentlyContinue)) { Start-Process $exe -WindowStyle Hidden -PassThru | Out-Null }
-    try { $before = Observe $root 'before' } catch {
-        $_.Exception.ToString() | Set-Content "$run\previous-host-unavailable.txt"
-        $recovery = @($config.files | Where-Object role -eq 'recoveryZip')
-        if ($recovery.Count -ne 1) { throw 'Previous host unavailable; no hashed external SDK recovery package supplied.' }
-        Expand-Archive ('C:\GateInput\' + $recovery[0].name) C:\GateRecovery
-        $recoveryCli = 'C:\GateRecovery\Pe.Revit.Cli.exe'
-        $recoveryPlan = Invoke-GateSdk $recoveryCli @('update', 'check', '--manifest', $manifest) 'recovery-check'
-        AssertCandidate $recoveryPlan.result $config $length
-        $apply = Invoke-GateSdk $recoveryCli @('update', 'apply', $recoveryPlan.result.planId, '--manifest', $manifest) 'recovery-apply'
-        $requestId = $apply.result.requestId
-        $admittedPlanId = $recoveryPlan.result.planId
-        $cli = $recoveryCli
-        $mode = 'external-sdk-recovery'
+    if($before) {
+        Check 'Previous responsive installed identity' ($before.version -eq $config.previousVersion) $before
+        if($retainedInputs.Count) {$retained=Get-Content (Join-Path $inputRoot $retainedInputs[0].name) -Raw|ConvertFrom-Json;Check 'Exact retained previous incarnation' ($before.pid -eq $retained.pid -and $before.processStartUtc -eq $retained.processStartUtc -and $before.instanceId -eq $retained.instanceId) $retained}
+        $sourceReceipt=$receipt;$binding=Wait-GateAutomaticAdmission;$mode='previous-host-automatic-update'
     }
-    if ($before) {
-        $mode = 'previous-host-self-update'
-        $claim = Get-Content "$root\state\service\host.json" -Raw | ConvertFrom-Json
-        $url = 'http://127.0.0.1:' + $claim.port + '/host/update'
-        $update = Invoke-RestMethod ($url + '?recheck') -TimeoutSec 30
-        $update | ConvertTo-Json -Depth 20 | Set-Content "$run\host-update-check.json"
-        AssertCandidate $update.plan $config $length
-        $body = @{ planId = $update.plan.planId } | ConvertTo-Json -Compress
-        $body | Set-Content "$run\host-update-request.json"
-        $reply = Invoke-RestMethod $url -Method Post -ContentType application/json -Headers @{ 'x-pe-service-token' = $claim.token; Origin = 'http://127.0.0.1:' + $claim.port } -Body $body -TimeoutSec 90
-        $reply | ConvertTo-Json -Depth 20 | Set-Content "$run\host-update-ack.json"
-        Check 'Host accepted update' $reply.accepted $reply
-        $requestId = $reply.requestId
-        $admittedPlanId = $update.plan.planId
-    }
-    Check 'Update request identity' ($requestId -match '^[a-f0-9-]{36}$') $requestId
-    $deadline = [datetime]::UtcNow.AddMinutes(10); $index = 0
-    do {
-        Check 'No Revit during update' (@(Get-Process Revit -ErrorAction SilentlyContinue).Count -eq 0) ''
-        $poll = Invoke-GateSdk $cli @('--installed', 'op', 'result', $requestId) ('receipt-' + $index++)
-        $receipt = $poll.result.response.result
-        try { AssertTerminal $receipt; break } catch { $receiptError = $_.Exception.Message }
-        if ($receipt.state -in 'failed', 'refused') { throw "Update terminal failure: $($receipt | ConvertTo-Json -Depth 20 -Compress)" }
-        Start-Sleep -Seconds 2
-    } while ([datetime]::UtcNow -lt $deadline)
-    AssertTerminal $receipt
-    Check 'Terminal receipt bound to request and plan' ($receipt.requestId -eq $requestId -and $receipt.planId -eq $admittedPlanId -and $poll.result.requestId -eq $requestId -and $poll.result.response.requestId -eq $requestId) $receipt
-    $receipt | ConvertTo-Json -Depth 20 | Set-Content "$run\terminal-receipt.json"
-    Copy-Item -LiteralPath $receipt.receiptPath -Destination "$run\raw-started-receipt.json"
-    if (Test-Path ($receipt.receiptPath + '.legs.jsonl')) { Copy-Item -LiteralPath ($receipt.receiptPath + '.legs.jsonl') -Destination "$run\raw-legs.jsonl" }
-    $after = Observe $root 'after'
-    Check 'Responsive candidate identity' ($after.version -eq $config.candidateVersion -and (!$before -or $after.instanceId -ne $before.instanceId)) $after
-    & C:\GateInput\ReadInstalledMcp.ps1 -InstallRoot $root -Output "$run\installed-mcp"
+    $requestId=$binding.requestId;$admittedPlanId=$binding.planId
+    $terminal=Wait-GateUpdate $requestId $admittedPlanId
+    $terminal | ConvertTo-Json -Depth 25 | Set-Content "$run\terminal-receipt.json"
+    Copy-Item $terminal.receiptPath "$run\raw-started.json";Copy-Item ($terminal.receiptPath+'.legs.jsonl') "$run\raw-legs.jsonl"
+    $work=Join-Path $env:TEMP ('Pe.Revit.Sdk\update\'+$requestId);Copy-Item $work "$run\sdk-work" -Recurse
+    $stub=Get-Content "$run\sdk-work\update.ps1" -Raw
+    $waitLine=[regex]::Match($stub,'(?m)^\$waitPids = @\(([^)]*)\)').Groups[1].Value
+    $waitIds=@($waitLine.Split(',') | ForEach-Object {$_.Trim()})
+    if($before){Check 'Automatic stub waits original host PID' ($waitIds -contains [string]$before.pid) $waitIds}
+    $consumed=@(Get-ChildItem "$run\sdk-work" -Recurse -Filter '*.msi');Check 'One exact consumed final candidate MSI' ($consumed.Count -eq 1 -and (Get-FileHash $consumed[0].FullName).Hash -eq $candidate[0].sha256) $candidate[0].sha256
+    $after=Observe 'after';Check 'Responsive successor incarnation' ($after.version -eq $config.candidateVersion -and (!$before -or $after.instanceId -ne $before.instanceId)) $after
+    Assert-GateInstalledClosure
+    & "$inputRoot\ReadInstalledMcp.ps1" -InstallRoot $root -Output "$run\installed-mcp"
     Copy-Item $manifest "$run\candidate-manifest.json"
-    Start-Sleep -Seconds 45
-    $events = @([PeConsoleObserver]::DrainEvents())
-    $events | ConvertTo-Json -Depth 20 | Set-Content "$run\window-events.json"
-    Check 'Observer dropped no events' ([PeConsoleObserver]::DroppedEvents() -eq 0) ([PeConsoleObserver]::DroppedEvents())
-    $ownedShows = @($events | Where-Object { $_.Window.Displayed -and @($_.Ancestry | Where-Object { $_.Executable -like ($root + '\*') }).Count })
-    Check 'No visible product console' ($ownedShows.Count -eq 0) $ownedShows
-    $successResult = @{ state = $(if ($mode -eq 'previous-host-self-update') { 'PROVEN' } else { 'UNPROVEN' }); lane = 'installed-sandbox'; mode = $mode; requestId = $requestId; uiBehavior = 'Tray child verified; tray icon and app window interaction UNPROVEN' }
-} catch {
-    $_.Exception.ToString() | Set-Content "$run\failure.txt"
-    @{ state = 'UNPROVEN'; reason = $_.Exception.Message } | ConvertTo-Json | Set-Content "$run\result.json"
-} finally {
+    # Observe helper already binds the actual claimed port/PID/tray. Read current claim for canonical status.
+    $claimAfter=Get-Content "$root\state\service\host.json" -Raw | ConvertFrom-Json
+    $status=Invoke-RestMethod ('http://127.0.0.1:'+$claimAfter.port+'/host/status') -Headers @{'x-pe-runtime-service'='host'} -TimeoutSec 10
+    $status | ConvertTo-Json -Depth 20 | Set-Content "$run\successor-status.json"
+    Check 'Successor canonical installed owner' ($status.installedRoot -eq $root -and $status.serviceName -eq 'host' -and $status.sourceRoot -eq $null -and $status.processId -eq $after.pid) $status
+    $second=Start-Process (Join-Path $root 'bin\host\Pe.Host.exe') -ArgumentList '--open' -WindowStyle Hidden -PassThru
+    $secondHandle=$second.Handle
+    if(!$second.WaitForExit(60000)){throw 'Second --open did not exit; no retry'}
+    Check 'Second open exits successfully' ($second.ExitCode -eq 0) $second.ExitCode
+    $reused=Observe 'second-open'
+    Check 'Second open reuses exact successor identity and tray' ($reused.pid -eq $after.pid -and $reused.processStartUtc -eq $after.processStartUtc -and $reused.instanceId -eq $after.instanceId -and (($reused.tray|ConvertTo-Json -Compress) -eq ($after.tray|ConvertTo-Json -Compress))) $reused
+    $quietStarted=[datetime]::UtcNow
+    $quietDeadline=$quietStarted.AddSeconds(120)
+    while([datetime]::UtcNow -lt $quietDeadline) {NoRevit;$quiet=Observe ('quiet-'+[datetime]::UtcNow.ToString('HHmmss'));Check 'Successor identity stable' ($quiet.pid -eq $after.pid -and $quiet.instanceId -eq $after.instanceId) $quiet.pid;Start-Sleep -Seconds 5}
+    @{startedUtc=$quietStarted.ToString('o');completedUtc=[datetime]::UtcNow.ToString('o');seconds=([datetime]::UtcNow-$quietStarted).TotalSeconds}|ConvertTo-Json|Set-Content "$run\quiet-interval.json"
+    $events=@([PeConsoleObserver]::DrainEvents());$events | ConvertTo-Json -Depth 25 | Set-Content "$run\window-events.json"
+    Check 'Zero dropped events' ([PeConsoleObserver]::DroppedEvents() -eq 0) ''
+    Assert-GateConsoleEvents $events $root
+    & "$inputRoot\CaptureDesktop.ps1" -Output "$run\desktop-physical.png"
+    $successResult=@{state=$(if($mode -eq 'previous-host-automatic-update'){'PROVEN'}else{'UNPROVEN'});lane='installed-sandbox';mode=$mode;previous=$config.previousVersion;candidate=$config.candidateVersion;requestId=$requestId;planId=$admittedPlanId;ui='Physical full desktop captured; human image inspection separately required';directAdmission='Separate from automatic update';recovery='Never proves ordinary automatic update'}
+} catch {$_.Exception.ToString() | Set-Content "$run\failure.txt";@{state='UNPROVEN';reason=$_.Exception.Message} | ConvertTo-Json | Set-Content "$run\result.json"} finally {
     Complete-GateEvidence $run {
         try {
             if ($hookStarted) {
                 try {
-                    @([PeConsoleObserver]::DrainEvents()) | ConvertTo-Json -Depth 20 | Set-Content "$run\remaining-window-events.json"
-                    @{ droppedEvents = [PeConsoleObserver]::DroppedEvents() } | ConvertTo-Json | Set-Content "$run\observer-final.json"
-                    Check 'Final observer dropped no events' ([PeConsoleObserver]::DroppedEvents() -eq 0) ([PeConsoleObserver]::DroppedEvents())
-                } finally { [PeConsoleObserver]::StopEvents() }
+                    $remaining=@([PeConsoleObserver]::DrainEvents())
+                    $remaining | ConvertTo-Json -Depth 25 | Set-Content "$run\remaining-events.json"
+                    @{droppedEvents=[PeConsoleObserver]::DroppedEvents()} | ConvertTo-Json | Set-Content "$run\observer-final.json"
+                    Check 'Final zero dropped events' ([PeConsoleObserver]::DroppedEvents() -eq 0) ''
+                    Assert-GateConsoleEvents $remaining $root
+                } finally {[PeConsoleObserver]::StopEvents()}
             }
-        } finally { Stop-Transcript | Out-Null }
+        } finally {Stop-Transcript | Out-Null}
     } $successResult
 }

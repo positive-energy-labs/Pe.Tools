@@ -4,6 +4,41 @@ New-Item -ItemType Directory $scratch | Out-Null
 try {
     . "$PSScriptRoot\Boundary.ps1"
     . "$PSScriptRoot\Evidence.ps1"
+    . "$PSScriptRoot\AutomaticBoundary.ps1"
+    . "$PSScriptRoot\UpdateReceipt.ps1"
+    . "$PSScriptRoot\CompareSdkClosure.ps1"
+    & "$PSScriptRoot\CheckAutomatic.ps1"
+    foreach ($exit in 0, 7) {
+        $process = Start-Process (Join-Path $PSHOME 'powershell.exe') -ArgumentList ('-NoProfile -NonInteractive -Command exit ' + $exit) -PassThru -WindowStyle Hidden
+        $handle = $process.Handle
+        if (!$process.WaitForExit(15000) -or $process.ExitCode -ne $exit) { throw 'Short-lived process collector lost exit code.' }
+    }
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    Add-Type -AssemblyName System.IO.Compression
+    $packageDirectory = Join-Path $scratch 'sdk-package'; $shims = Join-Path $scratch 'sdk-shims'
+    New-Item -ItemType Directory $packageDirectory, $shims | Out-Null
+    '<package><metadata><version>0.1.0-beta.196</version></metadata></package>' | Set-Content "$packageDirectory\Pe.Revit.Cli.nuspec"
+    foreach ($name in 'Pe.Revit.Cli.exe', 'Pe.Revit.Cli.dll', 'Pe.Revit.Cli.deps.json', 'Pe.Revit.Cli.runtimeconfig.json', 'loader/net48/Pe.Revit.Loader.dll', 'loader/net8.0-windows/Pe.Revit.Loader.dll', 'bridge/net48/Pe.Revit.Bridge.dll', 'bridge/net8.0-windows/Pe.Revit.Bridge.dll', 'bootstrap/net48/Pe.Revit.Loader.Bootstrap.dll', 'bootstrap/net8.0-windows/Pe.Revit.Loader.Bootstrap.dll') {
+        $original = Join-Path $packageDirectory ('tools/net8.0/any/' + $name)
+        $installed = Join-Path $shims $(if ($name -eq 'Pe.Revit.Cli.exe') { 'pe-revit.exe' } else { $name })
+        New-Item -ItemType Directory (Split-Path $original), (Split-Path $installed) -Force | Out-Null
+        $name | Set-Content $original; Copy-Item $original $installed
+    }
+    $package = Join-Path $scratch 'sdk-closure.nupkg'; $archive = [IO.Compression.ZipFile]::Open($package, [IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($file in Get-ChildItem $packageDirectory -File -Recurse) {
+            $name = $file.FullName.Substring($packageDirectory.Length + 1).Replace('\', '/')
+            $entry = $archive.CreateEntry($name); $output = $entry.Open(); $input = [IO.File]::OpenRead($file.FullName)
+            try { $input.CopyTo($output) } finally { $input.Dispose(); $output.Dispose() }
+        }
+    } finally { $archive.Dispose() }
+    CompareSdkClosure $package $shims '0.1.0-beta.196' "$scratch\sdk-closure.json"
+    foreach ($bad in 'version', 'bytes') {
+        if ($bad -eq 'bytes') { 'changed runtime' | Set-Content "$shims\Pe.Revit.Cli.dll" }
+        $refused = $false
+        try { CompareSdkClosure $package $shims $(if ($bad -eq 'version') { '0.1.0-beta.197' } else { '0.1.0-beta.196' }) "$scratch\sdk-refused-$bad.json" } catch { $refused = $true }
+        if (!$refused) { throw 'Original SDK closure accepted changed version or bytes.' }
+    }
     $evidence = Join-Path $scratch 'evidence'
     New-Item -ItemType Directory (Join-Path $evidence 'nested') -Force | Out-Null
     $activePath = Join-Path $evidence 'nested\redirect.txt'
@@ -45,8 +80,17 @@ try {
         @{ releaseVersion = $(if ($release -eq 'previous') { '1' } else { '2' }); productKind = 'Msi'; sourceRevision = ('a' * 40); sha256 = $hash } | ConvertTo-Json | Set-Content $path
         $files += @{ role = $role; name = $role + '.json'; path = $path; sha256 = (Get-FileHash $path).Hash }
     }
+    foreach ($release in 'previous', 'candidate') {
+        $path = Join-Path $scratch ($release + '.zip'); 'archive fixture' | Set-Content $path
+        $hash = (Get-FileHash $path).Hash; $files += @{ role = $release + 'Zip'; name = $release + '.zip'; path = $path; sha256 = $hash }
+        $path = Join-Path $scratch ($release + '-archive-receipt.json')
+        @{ releaseVersion = $(if ($release -eq 'previous') { '1' } else { '2' }); productKind = 'InstallZip'; sourceRevision = ('a' * 40); sha256 = $hash } | ConvertTo-Json | Set-Content $path
+        $files += @{ role = $release + 'ZipReceipt'; name = $release + '-archive-receipt.json'; path = $path; sha256 = (Get-FileHash $path).Hash }
+    }
+    $path = Join-Path $scratch 'sdk.nupkg'; 'exact package fixture' | Set-Content $path
+    $files += @{ role = 'sdkPackage'; name = 'sdk.nupkg'; path = $path; sha256 = (Get-FileHash $path).Hash }
     $spec = Join-Path $scratch 'spec.json'
-    @{ previousVersion = '1'; candidateVersion = '2'; files = $files } | ConvertTo-Json -Depth 10 | Set-Content $spec
+    @{ previousVersion = '1'; candidateVersion = '2'; expectedSdkVersion = '0.1.0-beta.196'; files = $files } | ConvertTo-Json -Depth 10 | Set-Content $spec
     $wsb = & "$PSScriptRoot\Prepare.ps1" -Spec $spec -RunDirectory "$scratch\run"
     $mcpStaged = "$scratch\run\input\ReadInstalledMcp.ps1"
     if (!(Test-Path $mcpStaged) -or (Get-FileHash $mcpStaged).Hash -ne (Get-FileHash "$PSScriptRoot\ReadInstalledMcp.ps1").Hash) { throw 'Installed MCP helper was not staged byte-identically.' }
@@ -118,6 +162,23 @@ try {
     $refused = $false
     try { AssertTerminal $receipt } catch { $refused = $true }
     if (!$refused) { throw 'Handoff accepted as terminal update.' }
+    Assert-GateConsoleEvents @(@{ Window = @{ Displayed = $true }; Ancestry = @(@{ Executable = 'C:\Foreign\console.exe' }) }) 'C:\FixtureProduct'
+    $refused = $false
+    try { Assert-GateConsoleEvents @(@{ Window = @{ Displayed = $true }; Ancestry = @(@{ Executable = 'C:\FixtureProduct\bin\host\Pe.Host.exe' }) }) 'C:\FixtureProduct' } catch { $refused = $true }
+    if (!$refused) { throw 'Final drain allowed a product-owned visible console.' }
+    $request = '11111111-2222-3333-4444-555555555555'; $planId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+    $rawDirectory = Join-Path $scratch 'raw-receipts'; New-Item -ItemType Directory $rawDirectory | Out-Null
+    $startedPath = Join-Path $rawDirectory ($request + '.123-456.started.json')
+    @{ requestId = $request; key = 'update.apply'; body = @{ requestId = $request; planId = $planId; receiptPath = $startedPath; legs = @(); state = 'running' } } | ConvertTo-Json -Depth 6 | Set-Content $startedPath
+    '{"name":"install","status":"started"}' | Set-Content ($startedPath + '.legs.jsonl')
+    $raw = Read-GateUpdateReceipt $rawDirectory $request $planId "$scratch\raw-observation"
+    if ($raw.state -ne 'running' -or (Test-Path "$scratch\absent-installed-cli.exe")) { throw 'Missing CLI observation fixture broke.' }
+    '{"name":"install","status":"ok","exitCode":0}' | Add-Content ($startedPath + '.legs.jsonl')
+    '{"name":"done","status":"ok"}' | Add-Content ($startedPath + '.legs.jsonl')
+    $raw = Read-GateUpdateReceipt $rawDirectory $request $planId "$scratch\raw-terminal"; AssertTerminal $raw
+    $refused = $false
+    try { Read-GateUpdateReceipt $rawDirectory $request 'bbbbbbbb-bbbb-cccc-dddd-eeeeeeeeeeee' "$scratch\wrong-plan" | Out-Null } catch { $refused = $true }
+    if (!$refused) { throw 'Wrong plan accepted by raw receipt observer.' }
     $xml = [xml](Get-Content $wsb -Raw)
     $maps = @($xml.Configuration.MappedFolders.MappedFolder)
     if ($maps.Count -ne 2 -or $maps[0].ReadOnly -ne 'true' -or $maps[1].ReadOnly -ne 'false' -or $maps[0].SandboxFolder -ne 'C:\GateInput' -or $maps[1].SandboxFolder -ne 'C:\GateEvidence' -or $xml.Configuration.ClipboardRedirection -ne 'Disable') { throw 'Unsafe Sandbox mappings.' }

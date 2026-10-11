@@ -52,3 +52,7 @@ function Invoke-GateMcpRead([string]$BaseUrl, [string]$Output) {
     @{ state = $(if ($failure) { 'UNPROVEN' } else { 'PROVEN' }); lane = 'mcp-read-protocol'; reason = $failure; cleanupFailed = $cleanupFailed; tool = 'pe_find'; inference = 'not invoked' } | ConvertTo-Json | Set-Content "$Output\protocol-result.json"
     if ($failure) { throw $failure }
 }
+
+function Assert-GateConsoleEvents($events, [string]$InstallRoot) {
+    if (@($events | Where-Object { $_.Window.Displayed -and @($_.Ancestry | Where-Object { $_.Executable -like ($InstallRoot.TrimEnd('\') + '\*') }).Count }).Count) { throw 'Displayed product console in observer drain' }
+}

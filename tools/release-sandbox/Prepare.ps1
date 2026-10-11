@@ -13,12 +13,12 @@ foreach ($name in 'previousVersion', 'candidateVersion') {
 }
 if ($config.previousVersion -eq $config.candidateVersion) { throw 'The releases must differ.' }
 $files = @($config.files)
-foreach ($role in 'previousMsi', 'candidateMsi', 'previousReceipt', 'candidateReceipt') {
+foreach ($role in 'previousMsi', 'candidateMsi', 'previousReceipt', 'candidateReceipt', 'previousZip', 'previousZipReceipt', 'candidateZip', 'candidateZipReceipt', 'sdkPackage') {
     if (@($files | Where-Object role -eq $role).Count -ne 1) { throw "Require exactly one $role" }
 }
 $names = @{}
 foreach ($file in $files) {
-    if ($file.role -notin 'previousMsi', 'candidateMsi', 'previousReceipt', 'candidateReceipt', 'vcRuntime', 'dotnetRuntime', 'recoveryZip') { throw "Unsupported input role: $($file.role)" }
+    if ($file.role -notin 'previousMsi', 'candidateMsi', 'previousReceipt', 'candidateReceipt', 'previousZip', 'previousZipReceipt', 'candidateZip', 'candidateZipReceipt', 'sdkPackage', 'previousIdentity', 'vcRuntime', 'dotnetRuntime', 'recoveryZip') { throw "Unsupported input role: $($file.role)" }
     if (@($files | Where-Object role -eq $file.role).Count -ne 1) { throw "Duplicate input role: $($file.role)" }
     if ($file.name -notmatch '^[a-zA-Z0-9][a-zA-Z0-9._-]*$' -or $names.ContainsKey($file.name)) { throw 'Invalid or duplicate staged filename.' }
     $names[$file.name] = $true
@@ -33,16 +33,23 @@ foreach ($release in 'previous', 'candidate') {
     $receiptFile = @($files | Where-Object role -eq ($release + 'Receipt'))[0]
     $receipt = Get-Content -LiteralPath $receiptFile.path -Raw | ConvertFrom-Json
     if ($receipt.releaseVersion -ne $config.($release + 'Version') -or $receipt.productKind -ne 'Msi' -or $receipt.sha256 -ne $msi.sha256 -or $receipt.sourceRevision -notmatch '^[a-fA-F0-9]{40}$') { throw "SDK installer receipt does not bind $release version, source revision and final MSI hash." }
+    $zip = @($files | Where-Object role -eq ($release + 'Zip'))[0]
+    $zipReceiptFile = @($files | Where-Object role -eq ($release + 'ZipReceipt'))[0]
+    $zipReceipt = Get-Content -LiteralPath $zipReceiptFile.path -Raw | ConvertFrom-Json
+    if ($zipReceipt.productKind -ne 'InstallZip' -or $zipReceipt.releaseVersion -ne $receipt.releaseVersion -or $zipReceipt.sourceRevision -ne $receipt.sourceRevision -or $zipReceipt.sha256 -ne $zip.sha256) { throw "Original $release archive receipt does not match final installer source/version/hash." }
+    if ($release -eq 'candidate') { $candidateSource = $receipt.sourceRevision }
 }
+if ($config.expectedSdkVersion -notmatch '^0\.1\.0-beta\.[0-9]+$') { throw 'Expected SDK package version required' }
+$config | Add-Member -NotePropertyName sourceRevision -NotePropertyValue $candidateSource -Force
 New-Item -ItemType Directory -Path "$run\input", "$run\evidence" | Out-Null
 Copy-Item -LiteralPath $specPath -Destination "$run\input\source-spec.json"
 foreach ($file in $files) { Copy-Item -LiteralPath $file.path -Destination "$run\input\$($file.name)" }
-Copy-Item -LiteralPath "$PSScriptRoot\Guest.ps1" -Destination "$run\input\Guest.ps1"
-Copy-Item -LiteralPath "$PSScriptRoot\Observe.ps1" -Destination "$run\input\Observe.ps1"
-Copy-Item -LiteralPath "$PSScriptRoot\Boundary.ps1" -Destination "$run\input\Boundary.ps1"
-Copy-Item -LiteralPath "$PSScriptRoot\ReadInstalledMcp.ps1" -Destination "$run\input\ReadInstalledMcp.ps1"
-Copy-Item -LiteralPath "$PSScriptRoot\Evidence.ps1" -Destination "$run\input\Evidence.ps1"
-Copy-Item -LiteralPath "$PSScriptRoot\Windows.cs" -Destination "$run\input\Windows.cs"
+$scripts = @()
+foreach ($name in 'Guest.ps1', 'Observe.ps1', 'Boundary.ps1', 'Evidence.ps1', 'AutomaticBoundary.ps1', 'Automatic.ps1', 'UpdateReceipt.ps1', 'CompareSdkClosure.ps1', 'InstalledClosure.ps1', 'ReadInstalledMcp.ps1', 'CaptureDesktop.ps1', 'Windows.cs') {
+    Copy-Item -LiteralPath "$PSScriptRoot\$name" -Destination "$run\input\$name"
+    $scripts += @{ name = $name; sha256 = (Get-FileHash -LiteralPath "$run\input\$name").Hash }
+}
+$config | Add-Member -NotePropertyName scripts -NotePropertyValue $scripts -Force
 $config | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath "$run\input\gate.json" -Encoding UTF8
 $inputPath = [Security.SecurityElement]::Escape("$run\input")
 $outputPath = [Security.SecurityElement]::Escape("$run\evidence")
