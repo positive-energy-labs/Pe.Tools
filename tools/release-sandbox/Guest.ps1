@@ -118,7 +118,11 @@ try {
     $_.Exception.ToString() | Set-Content "$run\failure.txt"
     @{ state = 'UNPROVEN'; reason = $_.Exception.Message } | ConvertTo-Json | Set-Content "$run\result.json"
 } finally {
-    if ($hookStarted) { [PeConsoleObserver]::StopEvents() }
+    if ($hookStarted) {
+        @([PeConsoleObserver]::DrainEvents()) | ConvertTo-Json -Depth 20 | Set-Content "$run\remaining-window-events.json"
+        @{ droppedEvents = [PeConsoleObserver]::DroppedEvents() } | ConvertTo-Json | Set-Content "$run\observer-final.json"
+        [PeConsoleObserver]::StopEvents()
+    }
     Stop-Transcript | Out-Null
     Get-ChildItem -LiteralPath $run -File | Where-Object Name -ne 'output-hashes.json' | Get-FileHash -Algorithm SHA256 | Select-Object Hash, Path | ConvertTo-Json | Set-Content "$run\output-hashes.json"
 }
