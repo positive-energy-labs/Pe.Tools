@@ -189,6 +189,18 @@ Package outputs:
 
 **Testing the installer:** Windows Sandbox, runbook at `%USERPROFILE%\WindowsSandbox\InstallerTests\README.md`. SDK `--msi-authoring` only proves the MSI builds and passes ICE.
 
+Repo-owned Sandbox preparation is `tools/release-sandbox/Prepare.ps1 -Spec <json> -RunDirectory <new-directory>`.
+It stages explicit hashed files and creates `acceptance.wsb`; it never launches Sandbox or executes an installer.
+The spec contains `previousVersion`, `candidateVersion`, and `files` rows with `role`, `name`, `path`, and `sha256`.
+Require `previousMsi`, `candidateMsi`, `previousReceipt`, and `candidateReceipt` roles.
+Each receipt binds `version`, `sourceCommit` (full SHA), and `sha256` of the final MSI.
+The input mapping is read-only. The evidence mapping is the only writable host mapping.
+Run `powershell -NoProfile -ExecutionPolicy Bypass -File tools/release-sandbox/Check.ps1` for preparation checks.
+The guest currently refuses before installation because SDK beta.192's previous-release updater supports only published GitHub latest.
+Candidate admission in a later SDK cannot repair that old caller. Until a released predecessor supports the candidate feed,
+this is preparation and observation tooling, not an installer or self-update acceptance gate.
+No Revit or Autodesk login is permitted in this Sandbox lane.
+
 `CreateBundleModule` owns the Pe.App year staging used by both transports.
 `CreateInstallerModule` owns the host/Pea SEA payload builds plus the product release-signing
 boundary. The MSI also lays Desktop and Start Menu shortcuts to `Pe.Host.exe --open` from the host
