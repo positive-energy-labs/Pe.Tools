@@ -2,6 +2,7 @@ import type { IncomingMessage } from "node:http";
 import type { Plugin, ProxyOptions } from "vite-plus";
 import {
   HOST_RUNTIME_SERVICE_HEADER,
+  hostProcessIdentity,
   sourceHostServiceName,
 } from "@pe/host-contracts/service-identity";
 import { checkoutRoot } from "./checkout-paths.ts";
@@ -30,6 +31,10 @@ export function checkoutIngress(): Plugin {
 
 /** Product APIs only. TanStack owns documents and server-function routes. */
 export function devHostProxy(target: string): Record<string, ProxyOptions> {
+  const base = sourceHostServiceName(checkoutRoot);
+  const serviceName = process.env[hostProcessIdentity.serviceNameVariable]?.trim() || base;
+  if (serviceName !== base && serviceName !== `${base}-no-revit`)
+    throw new Error("Dev frontend and host must belong to the same checkout.");
   return {
     "^/(?:call|events|ops|schemas|host|pe|mcp|demo|captures|pages)(?:/|\\?|$)|^/api/bridge(?:/|\\?|$)|^/actions(?:/(?:recover|resume|cancel))?(?:\\?|$)|^/(?:family/readings|families/readings|schedules/readings)(?:\\?|$)":
       {
@@ -37,7 +42,6 @@ export function devHostProxy(target: string): Record<string, ProxyOptions> {
         changeOrigin: true,
         ws: true,
         configure(proxy) {
-          const serviceName = sourceHostServiceName(checkoutRoot);
           // Bind each request, not a prior health probe: the port can change owners between them.
           proxy.on("proxyReq", (outgoing) => {
             outgoing.setHeader(HOST_RUNTIME_SERVICE_HEADER, serviceName);

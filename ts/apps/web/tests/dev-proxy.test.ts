@@ -1,9 +1,28 @@
 import { expect, test, vi } from "vite-plus/test";
 import { EventEmitter } from "node:events";
 import type { IncomingMessage } from "node:http";
-import { sourceHostServiceName } from "@pe/host-contracts/service-identity";
+import { hostProcessIdentity, sourceHostServiceName } from "@pe/host-contracts/service-identity";
 import { checkoutRoot } from "../checkout-paths.ts";
 import { devHostProxy, isCheckoutRequest } from "../dev-proxy.ts";
+
+test("same-checkout no-Revit host is distinct; foreign configured owner refuses", () => {
+  try {
+    const base = sourceHostServiceName(checkoutRoot);
+    vi.stubEnv(hostProcessIdentity.serviceNameVariable, `${base}-no-revit`);
+    const proxy = new EventEmitter();
+    Object.values(devHostProxy("http://127.0.0.1:5180"))[0]!.configure?.(
+      proxy as never,
+      {} as never,
+    );
+    const outgoing = { setHeader: vi.fn() };
+    proxy.emit("proxyReq", outgoing);
+    expect(outgoing.setHeader).toHaveBeenCalledWith("x-pe-runtime-service", `${base}-no-revit`);
+    vi.stubEnv(hostProcessIdentity.serviceNameVariable, "host-foreign");
+    expect(() => devHostProxy("http://127.0.0.1:5180")).toThrow("checkout");
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
 
 test("every HTTP and websocket proxy request binds this checkout, replacing caller identity", () => {
   const proxy = new EventEmitter();
