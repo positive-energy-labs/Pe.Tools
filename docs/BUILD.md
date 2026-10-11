@@ -144,15 +144,15 @@ Do not document or depend on removed public `pe-dev` command groups (`doctor`, `
 
 ### A durable session, for work one command cannot hold
 
-`pe-revit session start` when the Revit must outlive a single verb: a worktree proving a change beside the user's own session, or an end-user-shaped run on the installed payload.
+Use `pe-revit session start` when Revit must outlive a single verb. The checkout-pinned CLI starts that checkout's payload; installed proof uses the actual installed product shim.
 
 ```powershell
-dotnet tool run pe-revit -- session start --year 25 --id pe.app-25-probe --json          # installed payload
+& "$env:LOCALAPPDATA\Positive Energy\Pe.Tools\shims\pe-revit.exe" --installed session start --year 25 --id pe.app-25-probe --json
 dotnet tool run pe-revit -- session start --project .\dotnet\Pe.App\Pe.App.csproj --year 25 --background --json   # this checkout's bytes, an agent's Revit
-dotnet tool run pe-revit -- session stop --id pe.app-25-probe --unsaved discard --json   # stop only the session you started
+& "$env:LOCALAPPDATA\Positive Energy\Pe.Tools\shims\pe-revit.exe" --installed session stop --id pe.app-25-probe --unsaved discard --json
 ```
 
-Bare `start` (no `--project`) is the **installed** lane — every product on its fixed installed path, no checkout, no build, no copy. That is what an end user runs, and it is the only lane that proves installed behavior. Adding `--project` makes it the **dev** lane. Name which one any claim used; they run different bytes and prove different things.
+Omitting `--project` does not grant installed authority. The checkout CLI can infer its own RevitBundle project; it refuses an installed start, including source `--installed`. The actual installed shim with `--installed` starts the installed payload from its fixed product root. Stop and other targeted mutations use the same execution authority as the session they act on. Stop only the session you started, and name its payload lane in the proof.
 
 Every session pe-revit starts is `controlled`. `session list` also reports observed Revit processes and diagnostic rows. A row's presence, custody or bridge readiness does not authorize execution: the SDK's `execution` verdict does. A normally opened installed Revit can be adopted by a targeted mutation when the SDK independently proves its successfully loaded payload belongs to the same installation. Missing, foreign or conflicting loaded owners refuse execution. Pe.Tools relays that verdict and does not infer eligibility from diagnostic rows.
 
@@ -202,8 +202,7 @@ The guest installs the real previous MSI into its OS-known install root. It requ
 published GitHub feed to offer the exact expected candidate version, SHA256 and length before admitting an update.
 It then uses the previous host's `POST /host/update` consent path, reads the SDK terminal receipt, and checks the responsive
 successor against the installed claim's PID, process start, path, version and tray child. Direct MSI installation proves only admission.
-`recoveryZip` optionally supplies a hashed external SDK CLI ZIP with `Pe.Revit.Cli.exe` at its root for an unavailable previous host.
-Recovery results cannot pass the normal host self-update gate. Optional `vcRuntime` and `dotnetRuntime` files install guest prerequisites.
+The historical beta.192 bootstrap recovery used `recoveryZip`, a hashed external SDK CLI ZIP with `Pe.Revit.Cli.exe` at its root, when the previous host was unavailable. That result proves recovery only and cannot pass the normal host self-update gate. SDK beta.193 requires actual installed product authority for `update apply`; an external ZIP or checkout CLI cannot acquire it through flags or a manifest path. The recovery option is not a supported beta.193 apply path. Optional `vcRuntime` and `dotnetRuntime` files install guest prerequisites.
 The calibrated native console observer retains create/show events and refuses dropped events or visible product consoles.
 Tray child presence does not prove the tray icon or app-window interaction; those remain separate UI proof.
 An unpublished candidate cannot pass the GitHub-only predecessor check. Publishing and Sandbox launch are separate authorized steps.
@@ -504,7 +503,7 @@ adapter; a future Pea/host workflow can replace it when product use proves the r
 | Attached proof                    | `dotnet tool run pe-revit -- test --project <P> --attach [--id <name>]`; add the pea doors (`pe_find`, `pe_read`, `pea --prompt`) when Pea's view of the fleet or product probes should accompany the proof. |
 | Apply your latest edit            | `dotnet tool run pe-revit -- session hr --id <name>`                                                                             |
 | What Revit is running             | `dotnet tool run pe-revit -- session list --json`                                                                                |
-| Durable installed-lane session    | `dotnet tool run pe-revit -- session start --year 25 --json`                                                                     |
+| Durable installed-lane session    | `& "$env:LOCALAPPDATA\Positive Energy\Pe.Tools\shims\pe-revit.exe" --installed session start --year 25 --json`                     |
 | Product host/log/script check     | `pea host ...`, `pea script ...`                                                                                                 |
 | Package artifacts/MSI             | `dotnet run --project .\build\Build.csproj -c Release -- pack`                                                                   |
 | Package one year                  | `dotnet run --project .\build\Build.csproj -c Release -- pack --configuration Release.R25`                                       |
