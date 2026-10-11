@@ -1,5 +1,10 @@
 import type { IncomingMessage } from "node:http";
 import type { Plugin, ProxyOptions } from "vite-plus";
+import {
+  HOST_RUNTIME_SERVICE_HEADER,
+  sourceHostServiceName,
+} from "@pe/host-contracts/service-identity";
+import { checkoutRoot } from "./checkout-paths.ts";
 
 export function isCheckoutRequest(req: Pick<IncomingMessage, "headers" | "socket">): boolean {
   const authority = `127.0.0.1:${req.socket.localPort}`;
@@ -32,9 +37,16 @@ export function devHostProxy(target: string): Record<string, ProxyOptions> {
         changeOrigin: true,
         ws: true,
         configure(proxy) {
-          // Origin and identity headers pass unchanged; only the local backend Host changes.
+          const serviceName = sourceHostServiceName(checkoutRoot);
+          // Bind each request, not a prior health probe: the port can change owners between them.
+          proxy.on("proxyReq", (outgoing) => {
+            outgoing.setHeader(HOST_RUNTIME_SERVICE_HEADER, serviceName);
+          });
           proxy.on("proxyReqWs", (outgoing, req, socket) => {
-            if (isCheckoutRequest(req)) return;
+            if (isCheckoutRequest(req)) {
+              outgoing.setHeader(HOST_RUNTIME_SERVICE_HEADER, serviceName);
+              return;
+            }
             outgoing.destroy();
             socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
           });

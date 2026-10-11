@@ -1,9 +1,7 @@
 /**
  * The Machine reading, said in words: the version chip, the status line, and each group's
- * critical state. Pure functions of the one reading the host computes (host ledger 2026-10-09
- * ruling 2); a shell never computes machine state of its own. No connected flag exists: the
- * reading arriving is the answer, and a reading that stopped arriving says so only inside the
- * machine body.
+ * critical state. Runtime ownership comes from the host's enforced connections; stale readings
+ * never certify a current match.
  */
 import type { Machine, MachineSession, Reading } from "@pe/agent-contracts";
 import type { UpdateBlocker, UpdatePlan, UpdateRevit } from "@pe/host-contracts/pe-revit-contract";
@@ -38,11 +36,50 @@ export const planWaits = (machine: Machine): UpdatePlan | null => {
     : null;
 };
 
-/** `Pe.Tools 0.7.0`, or `0.7.1 ready` while a plan waits for consent. */
-export function chipText(machine: Machine | null): string {
-  const waiting = machine && planWaits(machine);
-  if (waiting) return `${waiting.latest} ready`;
-  return machine?.host ? `Pe.Tools ${machine.host.version}` : "Pe.Tools";
+export function runtimeIdentity(reading: Reading<Machine>, fixture = false) {
+  const host = machineOf(reading)?.host;
+  if (!host) return { text: "Runtime unknown", detail: "Host identity has not been read." };
+  if (fixture)
+    return {
+      text: `Fixture · ${host.version}`,
+      detail: "Simulated machine; no runtime identity is verified.",
+    };
+  const checkout = host.sourceRoot
+    ?.replace(/[\\/]+$/, "")
+    .split(/[\\/]/)
+    .at(-1);
+  const owner = host.payload === "installed" ? "Installed" : `Dev ${checkout ?? "unknown"}`;
+  const match =
+    reading.state !== "ready"
+      ? "stale"
+      : host.payload === "checkout" && !host.sourceRoot
+        ? "identity unverified"
+        : host.runtimeMatch === "verified"
+          ? "Revit matched"
+          : host.runtimeMatch === "refused"
+            ? "runtime refused"
+            : host.runtimeMatch === "disconnected"
+              ? "no Revit link"
+              : "identity unverified";
+  return {
+    text: `${owner} · ${host.version} · ${match}`,
+    detail: [
+      host.sourceRoot,
+      host.serviceName,
+      `PID ${host.process.pid}`,
+      match,
+      match === "Revit matched" ? "Verified runtime ownership, not payload freshness." : null,
+      match === "runtime refused" ? host.runtimeRefusal : null,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+  };
+}
+
+export function chipText(reading: Reading<Machine>, fixture = false): string {
+  const identity = runtimeIdentity(reading, fixture);
+  const waiting = reading.state === "ready" && planWaits(reading.observation);
+  return identity.text + (waiting ? ` · ${waiting.latest} ready` : "");
 }
 
 /** `UpdateBlocker` has no pid: the Revit is the `plan.revits[]` row holding the same blocker. */

@@ -1,6 +1,27 @@
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
+import { EventEmitter } from "node:events";
 import type { IncomingMessage } from "node:http";
+import { sourceHostServiceName } from "@pe/host-contracts/service-identity";
+import { checkoutRoot } from "../checkout-paths.ts";
 import { devHostProxy, isCheckoutRequest } from "../dev-proxy.ts";
+
+test("every HTTP and websocket proxy request binds this checkout, replacing caller identity", () => {
+  const proxy = new EventEmitter();
+  const config = Object.values(devHostProxy("http://127.0.0.1:5180"))[0]!;
+  config.configure?.(proxy as never, {} as never);
+  const outgoing = { setHeader: vi.fn(), destroy: vi.fn() };
+  const request = {
+    headers: { host: "127.0.0.1:8123", "x-pe-runtime-service": "host-foreign" },
+    socket: { localPort: 8123 },
+  };
+  proxy.emit("proxyReq", outgoing, request);
+  proxy.emit("proxyReqWs", outgoing, request, { end: vi.fn() });
+  expect(outgoing.setHeader.mock.calls).toEqual([
+    ["x-pe-runtime-service", sourceHostServiceName(checkoutRoot)],
+    ["x-pe-runtime-service", sourceHostServiceName(checkoutRoot)],
+  ]);
+  expect(outgoing.destroy).not.toHaveBeenCalled();
+});
 
 test("checkout ingress accepts only its bound authority and exact optional Origin", () => {
   const request = (headers: IncomingMessage["headers"]) =>

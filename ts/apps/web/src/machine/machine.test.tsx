@@ -233,13 +233,13 @@ describe("consent", () => {
 });
 
 test("the chip says the version, or the update that waits", () => {
-  const said = (name: keyof typeof MACHINE_SEEDS) => chipText(machineOf(MACHINE_SEEDS[name]));
-  expect(said("blocked-plan")).toBe("0.7.1 ready");
-  expect(said("waiting-plan")).toBe("0.7.1 ready");
-  expect(said("receipt-handoff")).toBe("Pe.Tools 0.7.0");
-  expect(said("disconnected")).toBe("Pe.Tools 0.7.0");
-  expect(said("no-revit")).toBe("Pe.Tools 0.7.0");
-  expect(chipText(machineOf({ state: "absent" }))).toBe("Pe.Tools");
+  const said = (name: keyof typeof MACHINE_SEEDS) => chipText(MACHINE_SEEDS[name]);
+  expect(said("blocked-plan")).toBe("Installed · 0.7.0 · identity unverified · 0.7.1 ready");
+  expect(said("waiting-plan")).toBe("Installed · 0.7.0 · identity unverified · 0.7.1 ready");
+  expect(said("receipt-handoff")).toBe("Installed · 0.7.0 · identity unverified");
+  expect(said("disconnected")).toBe("Installed · 0.7.0 · stale");
+  expect(said("no-revit")).toBe("Installed · 0.7.0 · identity unverified");
+  expect(chipText({ state: "absent" })).toBe("Runtime unknown");
 });
 
 test("the version chip badges a waiting plan and clears it otherwise", () => {
@@ -330,7 +330,7 @@ describe("shells", () => {
     expect(container.innerHTML).toBe("");
     cleanup();
     render(<AppChrome pathname="/open" />);
-    const chip = screen.getByRole("button", { name: "0.7.1 ready" });
+    const chip = screen.getByRole("button", { name: "Fixture · 0.7.0 · 0.7.1 ready" });
     fireEvent.click(chip);
     expect(screen.getByRole("complementary", { name: "this machine" })).toBeTruthy();
     fireEvent.keyDown(document, { key: "Escape" });
