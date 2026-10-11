@@ -1,11 +1,11 @@
 import { Effect } from "effect";
 import { execFile } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 import { sessionStartArgv } from "@pe/host-contracts/pe-revit-contract";
 import {
   docListArgs,
@@ -58,26 +58,60 @@ test("recents and open documents are both doc list reads", () => {
 
 // --- launcher / envelope validation ------------------------------------------------------------
 
-test("dev host selects its checkout CLI even when an installed shim exists", () => {
-  expect(
-    peRevitLauncher({ lane: "dev", sourceRoot: "C:\\repo\\Pe.Tools" }, undefined, () => true),
-  ).toEqual({
+test("ambient executable overrides cannot redirect the checkout launcher", () => {
+  vi.stubEnv("PE_REVIT_CMD", "C:\\foreign\\pe-revit.exe");
+  try {
+    expect(peRevitLauncher({ lane: "dev", sourceRoot: "C:\\repo\\Pe.Tools" })).toEqual({
+      cmd: "dotnet",
+      args: ["tool", "run", "pe-revit", "--"],
+      cwd: join("C:\\repo\\Pe.Tools"),
+    });
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+test("dev host selects its checkout CLI without installed fallback", () => {
+  expect(peRevitLauncher({ lane: "dev", sourceRoot: "C:\\repo\\Pe.Tools" })).toEqual({
     cmd: "dotnet",
     args: ["tool", "run", "pe-revit", "--"],
     cwd: join("C:\\repo\\Pe.Tools"),
   });
-  expect(() => peRevitLauncher({ lane: "dev", sourceRoot: null }, undefined, () => true)).toThrow(
+  expect(() => peRevitLauncher({ lane: "dev", sourceRoot: null })).toThrow(
     "requires devWorkingDirectory",
   );
 });
 
-test("installed host runs the MSI-laid pe-revit.exe shim directly", () => {
-  // Only the native shim exists; a retired pe-revit.cmd is never looked for.
-  const launch = peRevitLauncher({ lane: "installed", sourceRoot: null }, undefined, (path) =>
-    path.toLowerCase().endsWith("pe-revit.exe"),
-  );
-  expect(launch.args).toEqual([]);
-  expect(launch.cmd.toLowerCase().endsWith(join("shims", "pe-revit.exe").toLowerCase())).toBe(true);
+test("installed host selects its own shim explicitly despite ambient overrides", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pe-installed-launch-"));
+  const shim = join(root, "Positive Energy", "Pe.Tools", "shims", "pe-revit.exe");
+  vi.stubEnv("LOCALAPPDATA", root);
+  vi.stubEnv("PE_REVIT_CMD", "C:\\foreign\\pe-revit.exe");
+  vi.stubEnv("PE_LANE", "dev");
+  try {
+    await mkdir(dirname(shim), { recursive: true });
+    await writeFile(shim, "");
+    expect(peRevitLauncher({ lane: "installed", sourceRoot: null })).toEqual({
+      cmd: shim,
+      args: ["--installed"],
+    });
+  } finally {
+    vi.unstubAllEnvs();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("missing installed shim refuses instead of falling back to global dotnet", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pe-installed-missing-"));
+  vi.stubEnv("LOCALAPPDATA", root);
+  try {
+    expect(() => peRevitLauncher({ lane: "installed", sourceRoot: null })).toThrow(
+      "Installed pe-revit shim is missing",
+    );
+  } finally {
+    vi.unstubAllEnvs();
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("session CLI rejects empty, invalid, and non-envelope output", () => {

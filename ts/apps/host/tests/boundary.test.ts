@@ -2,12 +2,17 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Deferred, Effect, Layer } from "effect";
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-types";
 import { makeHttpLive } from "../src/app.ts";
 import { hostOwnership, productRoot } from "../src/host-ownership.ts";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
+
+vi.mock("../src/pe-revit-launch.ts", async (original) => ({
+  ...(await original<typeof import("../src/pe-revit-launch.ts")>()),
+  peRevitLauncher: () => ({ cmd: process.execPath, args: [] }),
+}));
 
 /**
  * The one vertical boundary test (owner's philosophy: one seam test, no unit sprawl). It boots the
@@ -32,10 +37,8 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
   writeFileSync(join(webDir, "a.txt"), "alpha");
 
   const prevLocalAppData = process.env.LOCALAPPDATA;
-  const prevPeRevitCmd = process.env.PE_REVIT_CMD;
   const prevWebDist = process.env.PE_TOOLS_WEB_DIST;
   process.env.LOCALAPPDATA = localAppData;
-  process.env.PE_REVIT_CMD = process.execPath;
   process.env.PE_TOOLS_WEB_DIST = webDir;
   // appBase is resolved the same way the running host resolves it (LOCALAPPDATA now = temp).
   const appBase = productRoot();
@@ -147,8 +150,6 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     await done.catch(() => {});
     if (prevLocalAppData === undefined) delete process.env.LOCALAPPDATA;
     else process.env.LOCALAPPDATA = prevLocalAppData;
-    if (prevPeRevitCmd === undefined) delete process.env.PE_REVIT_CMD;
-    else process.env.PE_REVIT_CMD = prevPeRevitCmd;
     if (prevWebDist === undefined) delete process.env.PE_TOOLS_WEB_DIST;
     else process.env.PE_TOOLS_WEB_DIST = prevWebDist;
     rmSync(localAppData, { recursive: true, force: true });

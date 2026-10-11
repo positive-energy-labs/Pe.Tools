@@ -10,19 +10,12 @@ export type { PeRevitLaunch } from "@pe/host-contracts/pe-revit-cli";
 
 export function peRevitLauncher(
   ownership: Pick<HostOwnership, "lane" | "sourceRoot"> = hostOwnership,
-  override: string | undefined = process.env.PE_REVIT_CMD,
-  fileExists?: (path: string) => boolean,
 ): PeRevitLaunch {
-  return peRevitLaunch(
-    {
-      lane: ownership.lane,
-      // The dotnet tool manifest + product.payloads.json live at the checkout root.
-      devWorkingDirectory: ownership.sourceRoot,
-      vendorName: productIdentity.vendorName,
-      productName: productIdentity.productName,
-    },
-    override,
-    process.env.LOCALAPPDATA,
-    ...(fileExists ? [fileExists] : []),
-  );
+  return peRevitLaunch({
+    lane: ownership.lane,
+    // The dotnet tool manifest + product.payloads.json live at the checkout root.
+    devWorkingDirectory: ownership.sourceRoot,
+    vendorName: productIdentity.vendorName,
+    productName: productIdentity.productName,
+  });
 }

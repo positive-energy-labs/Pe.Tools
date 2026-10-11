@@ -9,6 +9,11 @@ import { readServiceFile } from "@pe/host-contracts/pe-service";
 import { makeHttpLive } from "../src/app.ts";
 import { hostOwnership, productRoot } from "../src/host-ownership.ts";
 
+vi.mock("../src/pe-revit-launch.ts", async (original) => ({
+  ...(await original<typeof import("../src/pe-revit-launch.ts")>()),
+  peRevitLauncher: () => ({ cmd: process.execPath, args: [] }),
+}));
+
 const claim = vi.hoisted(() => ({ before: async () => {} }));
 vi.mock("@pe/host-contracts/pe-service-host", async (original) => {
   const sdk = await original<typeof import("@pe/host-contracts/pe-service-host")>();
@@ -24,9 +29,7 @@ vi.mock("@pe/host-contracts/pe-service-host", async (original) => {
 test("HTTP requests answer during claim acquisition and discovery only publishes a serving host", async () => {
   const localAppData = mkdtempSync(join(tmpdir(), "pe-startup-ready-"));
   const previousLocalAppData = process.env.LOCALAPPDATA;
-  const previousPeRevitCmd = process.env.PE_REVIT_CMD;
   process.env.LOCALAPPDATA = localAppData;
-  process.env.PE_REVIT_CMD = process.execPath;
   const nodeServer = createServer();
   let enterClaim!: () => void;
   let releaseClaim!: () => void;
@@ -81,8 +84,6 @@ test("HTTP requests answer during claim acquisition and discovery only publishes
     claim.before = async () => {};
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;
     else process.env.LOCALAPPDATA = previousLocalAppData;
-    if (previousPeRevitCmd === undefined) delete process.env.PE_REVIT_CMD;
-    else process.env.PE_REVIT_CMD = previousPeRevitCmd;
     rmSync(localAppData, { recursive: true, force: true });
   }
 }, 15_000);

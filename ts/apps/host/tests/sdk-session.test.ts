@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
+import { checkoutRootFrom, productRoot } from "@pe/host-contracts/service-identity";
 import { peRevitLauncher } from "../src/pe-revit-launch.ts";
 import { resolveSdkSession } from "../src/sdk-session.ts";
 import { RevitBridgeLive, type BridgeSessionView } from "../src/bridge.ts";
@@ -29,7 +29,7 @@ const bridge = (sockets: BridgeSessionView[] = [socket]) => ({
 });
 
 test.each([
-  { payload: "installed", sourceRoot: null },
+  { payload: "installed", sourceRoot: null, installedRoot: productRoot() },
   { payload: "checkout", sourceRoot: "C:/checkout-B" },
   { payload: "checkout", sourceRoot: null },
   { payload: null, sourceRoot: null },

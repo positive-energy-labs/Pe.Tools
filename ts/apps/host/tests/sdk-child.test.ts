@@ -2,9 +2,15 @@ import { Effect } from "effect";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 import { executeSessionCli, runPeRevitCli } from "../src/session-route.ts";
 import { runHostChild } from "../src/host-child.ts";
+import { peRevitLauncher } from "../src/pe-revit-launch.ts";
+
+vi.mock("../src/pe-revit-launch.ts", async (original) => ({
+  ...(await original<typeof import("../src/pe-revit-launch.ts")>()),
+  peRevitLauncher: vi.fn(() => ({ cmd: process.execPath, args: [] })),
+}));
 
 const envelope = JSON.stringify({
   result: null,
@@ -21,15 +27,13 @@ const envelope = JSON.stringify({
 /** Exercise the production runner against an owned Node child, without an SDK or Revit launch. */
 async function fixture<T>(source: string, run: (args: string[], root: string) => Promise<T>) {
   const root = await mkdtemp(join(tmpdir(), "pe-sdk-child-"));
-  const original = process.env.PE_REVIT_CMD;
   try {
     const script = join(root, "child.cjs");
     await writeFile(script, source);
-    process.env.PE_REVIT_CMD = process.execPath;
+    vi.mocked(peRevitLauncher).mockReturnValue({ cmd: process.execPath, args: [] });
     return await run([script], root);
   } finally {
-    if (original === undefined) delete process.env.PE_REVIT_CMD;
-    else process.env.PE_REVIT_CMD = original;
+    vi.mocked(peRevitLauncher).mockReset();
     await rm(root, { recursive: true, force: true });
   }
 }
@@ -96,7 +100,7 @@ test("the production runner rejects malformed output from a real child", async (
 
 test("a missing native executable returns a 500 without an admitted child", async () => {
   await fixture("", async (_args, root) => {
-    process.env.PE_REVIT_CMD = join(root, "missing-executable");
+    vi.mocked(peRevitLauncher).mockReturnValue({ cmd: join(root, "missing-executable"), args: [] });
     const outcome = await Effect.runPromise(
       executeSessionCli(["session", "list"], runPeRevitCli, 1000, { action: "list" }),
     );
