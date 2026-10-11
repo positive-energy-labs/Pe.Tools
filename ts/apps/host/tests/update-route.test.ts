@@ -16,6 +16,7 @@ vi.mock("../src/host-ownership.ts", async (original) => {
 });
 
 const plan: UpdatePlan = {
+  installedRoot: "C:/installed-Pe.Tools",
   planId: "a64fc2d5-49ee-4ca5-9861-e1a050ae62cb",
   observedAtUtc: "2026-10-09T00:00:00Z",
   product: "Pe.Tools",

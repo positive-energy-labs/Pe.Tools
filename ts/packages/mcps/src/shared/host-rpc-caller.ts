@@ -3,10 +3,10 @@ import { type ActionReceipt } from "@pe/agent-contracts";
 import { readAction, type DetachedAction } from "./takeoff-action-client.ts";
 import { runCapability, CANCEL_KEY } from "./admission.ts";
 import { Effect } from "effect";
+import { resolveHostBaseUrl } from "./host-config.ts";
 /** What a /call response says it actually ran against; headers absent means no Revit session. */
 export type ResolvedTarget = { session: string | null; document: string | null };
 import {
-  hostProcessIdentity,
   type HostOperationCostTier,
   type HostOperationDefinition,
   type HostOperationNeeds,
@@ -171,7 +171,7 @@ export class HostRpcCaller {
   constructor(options: HostRpcCallerOptions = {}) {
     this.options = {
       ...options,
-      hostBaseUrl: options.hostBaseUrl ?? hostProcessIdentity.defaultHostBaseUrl,
+      hostBaseUrl: options.hostBaseUrl ?? resolveHostBaseUrl(),
     };
   }
 
@@ -328,7 +328,7 @@ const runHostRpcEffect = Effect.fnUntraced(function* (
   request: unknown,
   options: HostRpcCallerOptions,
 ) {
-  const base = trimTrailingSlash(options.hostBaseUrl ?? hostProcessIdentity.defaultHostBaseUrl);
+  const base = trimTrailingSlash(options.hostBaseUrl ?? resolveHostBaseUrl());
   return yield* Effect.tryPromise({
     try: async () => {
       const headers: Record<string, string> = { "content-type": "application/json" };

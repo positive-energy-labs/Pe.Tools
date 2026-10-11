@@ -39,8 +39,15 @@ function resolvePeaWorld() {
 export function getHostStatus(
   bridge: BridgeSessionView,
   capabilities: PeaRuntimeCapabilities = hostCapabilities,
+  runtimeRefusal: string | null = null,
 ) {
   return Effect.succeed({
+    runtimeMatch: bridge.connected
+      ? (bridge.runtimeMatch ?? "unknown")
+      : runtimeRefusal
+        ? "refused"
+        : "disconnected",
+    runtimeRefusal,
     bridgeContractVersion: BRIDGE_CONTRACT_VERSION,
     bridgeIsConnected: bridge.connected,
     bridgePath: BRIDGE_PATH,
@@ -54,6 +61,7 @@ export function getHostStatus(
     runtimeIdentity: RUNTIME_IDENTITY,
     serviceName: hostOwnership.serviceName,
     sourceRoot: hostOwnership.sourceRoot,
+    installedRoot: hostOwnership.installedRoot,
     world: resolvePeaWorld(),
   } satisfies HostProbeData);
 }

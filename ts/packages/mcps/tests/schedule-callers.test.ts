@@ -6,12 +6,13 @@ import { setup } from "../../../apps/host/tests/schedule-test-fixture.ts";
 import { PeaCliCommands } from "../src/pea/PeaCliCommands.ts";
 import { peRead, peDo } from "../src/pea/capability-tools.ts";
 import { withInvocationContext } from "../src/shared/invocation-context.ts";
+import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
 
 test("Gunshi Schedule read and human apply use exact HTTP action and frozen Work bases", async () => {
   const f = await setup();
   const output = vi.spyOn(console, "log").mockImplementation(() => {});
   try {
-    const host = new PeaCliCommands({ hostBaseUrl: "http://host" }).hostCommand();
+    const host = new PeaCliCommands({ hostBaseUrl: fakeRuntimeHost() }).hostCommand();
     const command = host.subCommands!.operations;
     const request = join(f.dir, "request.json");
     await writeFile(request, JSON.stringify({ scheduleId: 42 }), "utf8");
@@ -65,7 +66,7 @@ test("Gunshi Schedule read and human apply use exact HTTP action and frozen Work
 
 test("Pea Schedule A/B/A reads honor the thread head and cannot perform human-only apply", async () => {
   const f = await setup();
-  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://host");
+  fakeRuntimeHost();
   // A harness child's call: `PE_THREAD` names the thread and the host answers its live head.
   const inner = globalThis.fetch;
   vi.stubGlobal("fetch", (input: string | URL | Request, init?: RequestInit) =>

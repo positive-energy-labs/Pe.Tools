@@ -3,6 +3,8 @@ import type { HttpServerRequest, HttpServerResponse } from "effect/unstable/http
 import { HttpServerResponse as Response } from "effect/unstable/http";
 import { capture } from "@pe/runtime";
 import { randomUUID } from "node:crypto";
+import { runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
+import { hostOwnership } from "./host-ownership.ts";
 import {
   BRIDGE_CONTRACT_VERSION,
   computeBridgeSessionId,
@@ -28,6 +30,9 @@ type Session = {
   readonly processStartUtcUnixMs: number | null;
   // Observed selector metadata, never process identity or custody authority.
   readonly lane: Lane | null;
+  readonly sourceRoot: string | null;
+  readonly installedRoot: string | null;
+  readonly serviceName: string;
   readonly sdkSessionId: string | null;
   readonly buildStamp: string | null;
   readonly state: Ref.Ref<BridgeStateSnapshot>;
@@ -101,6 +106,10 @@ export type BridgeSessionView = {
   readonly processId?: number;
   readonly processStartUtcUnixMs?: number | null;
   readonly lane?: Lane | null;
+  readonly sourceRoot?: string | null;
+  readonly installedRoot?: string | null;
+  readonly serviceName?: string | null;
+  readonly runtimeMatch?: "verified" | "unknown" | "disconnected" | "refused";
   /** The id `pe-revit session list` prints for this session, when the payload reported one. */
   readonly sdkSessionId?: string | null;
   readonly buildStamp?: string | null;
@@ -129,8 +138,15 @@ export type HostBridgeEvent = {
 const EVENT_STREAM_CAPACITY = 500;
 
 function getBridgeRegistrationRejection(registration: BridgeRegistrationRequest) {
+  if (
+    !Number.isInteger(registration.processId) ||
+    registration.processId <= 0 ||
+    !Number.isFinite(registration.processStartUtcUnixMs) ||
+    (registration.processStartUtcUnixMs ?? 0) <= 0
+  )
+    return "Bridge registration requires a verified process incarnation.";
   return registration.contractVersion === BRIDGE_CONTRACT_VERSION
-    ? null
+    ? runtimeOwnerRejection(hostOwnership, registration)
     : `Unsupported bridge contract version '${registration.contractVersion}'. Expected '${BRIDGE_CONTRACT_VERSION}'.`;
 }
 
@@ -158,6 +174,7 @@ export class RevitBridge extends Context.Service<
     >;
     readonly snapshot: (bridgeSessionId?: string) => Effect.Effect<BridgeSessionView>;
     readonly list: Effect.Effect<readonly BridgeSessionView[]>;
+    readonly lastRegistrationRefusal: Effect.Effect<string | null>;
     readonly handleConnection: (
       req: HttpServerRequest.HttpServerRequest,
     ) => Effect.Effect<HttpServerResponse.HttpServerResponse>;
@@ -233,6 +250,7 @@ export const RevitBridgeLive = Layer.effect(
   RevitBridge,
   Effect.gen(function* () {
     const sessions = yield* Ref.make(new Map<string, Session>());
+    const lastRegistrationRefusal = yield* Ref.make<string | null>(null);
     const events = yield* Effect.acquireRelease(
       PubSub.sliding<HostBridgeEvent>(EVENT_STREAM_CAPACITY),
       PubSub.shutdown,
@@ -256,6 +274,10 @@ export const RevitBridgeLive = Layer.effect(
         processId: session.processId,
         processStartUtcUnixMs: session.processStartUtcUnixMs,
         lane: session.lane,
+        sourceRoot: session.sourceRoot,
+        installedRoot: session.installedRoot,
+        serviceName: session.serviceName,
+        runtimeMatch: "verified",
         sdkSessionId: session.sdkSessionId,
         buildStamp: session.buildStamp,
         state: yield* Ref.get(session.state),
@@ -311,6 +333,7 @@ export const RevitBridgeLive = Layer.effect(
             }
             const rejection = getBridgeRegistrationRejection(frame.registration);
             if (rejection) {
+              yield* Ref.set(lastRegistrationRefusal, rejection.slice(0, 512));
               yield* send({
                 kind: "RegistrationAck",
                 registrationAck: {
@@ -322,12 +345,9 @@ export const RevitBridgeLive = Layer.effect(
             }
             const initialGate = yield* Deferred.make<void>();
             yield* Deferred.succeed(initialGate, void 0);
-            // Broker-assigned identity: hash(pid + processStartUtc) when the client reported
-            // process identity; bridge-${uuid} fallback otherwise (deleting it is later hardening).
+            // Registration admitted a valid process incarnation before assigning its broker id.
             const registration = frame.registration;
-            const sessionId =
-              (yield* Effect.promise(() => computeBridgeSessionId(registration))) ??
-              `bridge-${randomUUID()}`;
+            const sessionId = (yield* Effect.promise(() => computeBridgeSessionId(registration)))!;
             const registeredSession = {
               send,
               requests: yield* Ref.make<ReadonlyMap<string, BridgeRequest>>(new Map()),
@@ -335,6 +355,9 @@ export const RevitBridgeLive = Layer.effect(
               processId: frame.registration.processId,
               processStartUtcUnixMs: frame.registration.processStartUtcUnixMs ?? null,
               lane: normalizeSessionLane(frame.registration.lane),
+              sourceRoot: frame.registration.sourceRoot ?? null,
+              installedRoot: frame.registration.installedRoot ?? null,
+              serviceName: frame.registration.serviceName!,
               sdkSessionId: frame.registration.sdkSessionId ?? null,
               buildStamp: frame.registration.buildStamp ?? null,
               state: yield* Ref.make(frame.registration.state),
@@ -355,6 +378,7 @@ export const RevitBridgeLive = Layer.effect(
               );
             }
             session = registeredSession;
+            yield* Ref.set(lastRegistrationRefusal, null);
             yield* Ref.update(sessions, (map) =>
               new Map(map).set(registeredSession.sessionId, registeredSession),
             );
@@ -670,6 +694,14 @@ export const RevitBridgeLive = Layer.effect(
       return yield* Effect.all([...map.values()].map((session) => viewSession(session)));
     });
 
-    return { invoke, snapshot, list, handleConnection, events, subscribe };
+    return {
+      invoke,
+      snapshot,
+      list,
+      handleConnection,
+      events,
+      subscribe,
+      lastRegistrationRefusal: Ref.get(lastRegistrationRefusal),
+    };
   }),
 );

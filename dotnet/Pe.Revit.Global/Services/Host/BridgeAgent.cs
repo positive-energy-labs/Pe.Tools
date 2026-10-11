@@ -552,7 +552,7 @@ internal sealed class BridgeAgent : IDisposable {
         Log.Information(
             "Host bridge session identity: ProcessStartUtcUnixMs={ProcessStartUtcUnixMs}, Lane={Lane}, SdkSessionId={SdkSessionId}, BuildStamp={BuildStamp}, SessionDescriptorPath={SessionDescriptorPath}",
             identity.ProcessStartUtcUnixMs,
-            identity.Lane,
+            HostEndpoint.ConfiguredLane,
             identity.SdkSessionId,
             identity.BuildStamp,
             identity.SessionDescriptorPath
@@ -563,9 +563,12 @@ internal sealed class BridgeAgent : IDisposable {
             this.BuildStateSnapshot(),
             identity.ProcessStartUtcUnixMs > 0 ? identity.ProcessStartUtcUnixMs : null,
             identity.SessionDescriptorPath,
-            identity.Lane,
+            HostEndpoint.ConfiguredLane,
             identity.SdkSessionId,
-            identity.BuildStamp
+            identity.BuildStamp,
+            HostEndpoint.ConfiguredSourceRoot,
+            HostEndpoint.ConfiguredServiceName,
+            HostEndpoint.ConfiguredInstalledRoot
         );
         this._transportSession.Write(new BridgeFrame(
             BridgeFrameKind.Registration,

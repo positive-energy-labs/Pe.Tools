@@ -65,7 +65,8 @@ import { resolveHostBaseUrl } from "../shared/host-config.ts";
 import { bundledPeaSkills } from "./skills.ts";
 
 function base(): string {
-  return resolveHostBaseUrl(invocationContext()?.hostBaseUrl).replace(/\/$/, "");
+  // Hosted tools inherit the authority already admitted by the host middleware.
+  return (invocationContext()?.hostBaseUrl ?? resolveHostBaseUrl()).replace(/\/$/, "");
 }
 export const peaHostBaseUrl = base;
 

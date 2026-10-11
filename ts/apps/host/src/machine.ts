@@ -389,7 +389,19 @@ export function machineSources(
       const file = await readServiceFile(productRoot(), hostOwnership.serviceName);
       if (!file || file.pid !== process.pid)
         throw Error("This host has no matching SDK service identity.");
+      const attachments = bridge ? await Effect.runPromise(bridge.list) : [];
+      const runtimeRefusal = bridge
+        ? await Effect.runPromise(bridge.lastRegistrationRefusal)
+        : null;
       return {
+        runtimeMatch: attachments.length
+          ? attachments.every((attachment) => attachment.runtimeMatch === "verified")
+            ? ("verified" as const)
+            : ("unknown" as const)
+          : runtimeRefusal
+            ? ("refused" as const)
+            : ("disconnected" as const),
+        runtimeRefusal,
         serviceName: hostOwnership.serviceName,
         instanceId: file.instanceId,
         version: file.version,
@@ -399,6 +411,7 @@ export function machineSources(
         startedBy: null,
         autostart: await readAutostart(hostOwnership.executablePath),
         sourceRoot: file.sourceRoot ?? null,
+        installedRoot: hostOwnership.installedRoot,
         uptimeSeconds: process.uptime(),
         canonicalUrl: `http://127.0.0.1:${file.port}`,
       };

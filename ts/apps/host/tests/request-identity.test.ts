@@ -11,6 +11,31 @@ import type { MachineShare } from "@pe/agent-contracts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
 import { createServer } from "node:http";
 import { once } from "node:events";
+import {
+  HOST_RUNTIME_SERVICE_HEADER,
+  HOST_RUNTIME_SERVICE_QUERY,
+} from "@pe/host-contracts/contracts";
+import { hostOwnership } from "../src/host-ownership.ts";
+
+test.each(["/call", "/revit-bridge", "/host/update", "/pe/action", "/mcp"])(
+  "wrong checkout header refuses %s before routing",
+  async (path) => {
+    expect(
+      await readRequestIdentity(
+        { host: "127.0.0.1:5180", [HOST_RUNTIME_SERVICE_HEADER]: "host-source-other" },
+        path,
+        options,
+      ),
+    ).toMatchObject({ refusal: { code: "runtime.owner-mismatch" } });
+    expect(
+      await readRequestIdentity(
+        { host: "127.0.0.1:5180", [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName },
+        path,
+        options,
+      ),
+    ).toHaveProperty("principal");
+  },
+);
 
 const share: MachineShare = {
   allowRemoteAdministration: true,
@@ -26,11 +51,68 @@ const options: IdentityOptions = {
   frontendOrigin: () => "http://127.0.0.1:8123",
   share: { read: async () => share, observe: () => {} },
 };
-const local = { host: "127.0.0.1:5180" };
-const remote = { host: "box.tailabc.ts.net", "tailscale-user-login": "operator@example.com" };
+const local = { host: "127.0.0.1:5180", [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName };
+const remote = {
+  host: "box.tailabc.ts.net",
+  "tailscale-user-login": "operator@example.com",
+  [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName,
+};
 const disposals: Array<() => Promise<void>> = [];
 afterEach(async () => {
   await Promise.all(disposals.splice(0).map((dispose) => dispose()));
+});
+
+test.each(["/call", "/events", "/pe/readings", "/api/bridge", "/host/status"])(
+  "stale browser cannot enter %s without its original runtime owner",
+  async (path) => {
+    const browser = {
+      host: local.host,
+      "sec-fetch-site": "same-origin",
+      "sec-fetch-mode": "cors",
+      "sec-fetch-dest": "empty",
+    };
+    expect(await readRequestIdentity(browser, path, options)).toMatchObject({
+      refusal: { code: "runtime.owner-missing" },
+    });
+    expect(
+      await readRequestIdentity(
+        browser,
+        `${path}?${HOST_RUNTIME_SERVICE_QUERY}=${hostOwnership.serviceName}`,
+        options,
+      ),
+    ).toHaveProperty("principal");
+    expect(
+      await readRequestIdentity(
+        { ...browser, [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName },
+        `${path}?${HOST_RUNTIME_SERVICE_QUERY}=host`,
+        options,
+      ),
+    ).toMatchObject({ refusal: { code: "runtime.owner-mismatch" } });
+    expect(
+      await readRequestIdentity(
+        browser,
+        `${path}?${HOST_RUNTIME_SERVICE_QUERY}=${hostOwnership.serviceName}&${HOST_RUNTIME_SERVICE_QUERY}=foreign`,
+        options,
+      ),
+    ).toMatchObject({ refusal: { code: "runtime.owner-mismatch" } });
+  },
+);
+
+test("browser document navigation and static assets retain normal routing", async () => {
+  expect(
+    await readRequestIdentity(
+      { host: local.host, "sec-fetch-mode": "navigate", accept: "text/html" },
+      "/open",
+      options,
+    ),
+  ).toHaveProperty("principal");
+  expect(
+    await readRequestIdentity(
+      { host: local.host, "sec-fetch-dest": "script" },
+      "/assets/app.js",
+      options,
+    ),
+  ).toHaveProperty("principal");
 });
 
 test("Node HTTP forwarding preserves the verified authority and identity on the wire", async () => {

@@ -1,5 +1,4 @@
 import { sdkSession, readSessionScope } from "./sdk-session.ts";
-import { invocationContext, hostFetch as fetch } from "@pe/mcps/context";
 import { admitScheduleAction, recoverScheduleAction, readSchedule } from "./schedule-actions.ts";
 import { admitInstancesAction, recoverInstancesAction } from "./instances-actions.ts";
 import { instancesActions } from "@pe/agent-contracts";
@@ -88,7 +87,6 @@ import {
   HOST_RPC_DOCUMENT_HEADER,
   HOST_RPC_ORIGIN_HEADER,
   isTsOnlyOperationKey,
-  tsOnlyOperationCatalog,
   tsOnlyOperationSchemas,
   type TsOnlyOperationKey,
   type HostSessionScope,
@@ -107,9 +105,6 @@ const said = (error: unknown): string =>
  * untouched — the Revit side owns validation, so runtime-registered ops need
  * zero host changes. Errors are problem-JSON with a real HTTP status.
  */
-// ponytail: dev-only escape — PE_TOOLS_CALL_FORWARD=<base-url> makes this host a pure
-// /call proxy (e.g. to the installed host that owns the Revit bridge) while still serving
-// the checkout's web UI with HMR. Delete when an installed-lane session can dial a dev host.
 
 export type CallRouteDispatch = (
   ...args: Parameters<typeof dispatchTsOnlyOperation>
@@ -136,8 +131,11 @@ export function makeCallRoute(
   },
 ) {
   const CALL_FORWARD_BASE = process.env.PE_TOOLS_CALL_FORWARD?.trim().replace(/\/$/, "");
+  if (CALL_FORWARD_BASE || composition?.forwardBase)
+    throw Error(
+      "Host forwarding is disabled: execution requires this runtime's own host and Revit.",
+    );
   const captureOperation = composition?.captureHostOp ?? captureHostOp;
-  const forwardBase = composition ? composition.forwardBase : CALL_FORWARD_BASE;
   const dispatch: CallRouteDispatch = (...args) =>
     (composition?.dispatch ?? dispatchTsOnlyOperation)(...args);
   const observations = () => (captures ??= hostTakeoffCaptures());
@@ -173,68 +171,6 @@ export function makeCallRoute(
       // a missing header is counted as "unknown", never rejected. No registry, no validation.
       const origin = req.headers[HOST_RPC_ORIGIN_HEADER]?.trim() || "unknown";
       const body = yield* req.json.pipe(Effect.mapError(() => invalidBody("unreadable JSON body")));
-      if (forwardBase) {
-        if (
-          !isRecord(body) ||
-          !tsOnlyOperationCatalog.some((row) => row.key === body.key && row.intent === "Read")
-        )
-          return yield* Effect.fail(
-            new BridgeError(
-              "Forwarded native/mutation calls require the integrated admission host",
-              409,
-              { notDispatched: true },
-            ),
-          );
-        const sessionHeader = req.headers[HOST_RPC_BRIDGE_SESSION_HEADER]?.trim();
-        const documentHeader = req.headers[HOST_RPC_DOCUMENT_HEADER]?.trim();
-        const forwarded = yield* Effect.tryPromise({
-          try: async () => {
-            const response = await fetch(`${forwardBase}/call`, {
-              method: "POST",
-              headers: {
-                ...invocationContext()?.headers,
-                "content-type": "application/json",
-                ...(sessionHeader ? { [HOST_RPC_BRIDGE_SESSION_HEADER]: sessionHeader } : {}),
-                ...(documentHeader ? { [HOST_RPC_DOCUMENT_HEADER]: documentHeader } : {}),
-                [HOST_RPC_ORIGIN_HEADER]: origin, // provenance survives the dev proxy hop
-                ...(req.headers[ACTOR_HEADER] ? { [ACTOR_HEADER]: req.headers[ACTOR_HEADER] } : {}),
-              },
-              body: JSON.stringify(body),
-            });
-            return {
-              status: response.status,
-              json: (await response.json()) as unknown,
-              headers: Object.fromEntries(
-                [
-                  RESOLVED_SESSION_HEADER,
-                  RESOLVED_DOCUMENT_HEADER,
-                  "x-pe-takeoff-capture-id",
-                ].flatMap((key) => {
-                  const value = response.headers.get(key);
-                  return value ? [[key, value]] : [];
-                }),
-              ),
-            };
-          },
-          catch: (cause) =>
-            new BridgeError(`call forward to ${forwardBase} failed: ${String(cause)}`, 503),
-        });
-        // Merge this checkout's TS-only catalog entries into a forwarded catalog so the ops
-        // page lists both surfaces (the forward target may run an older TS-only set).
-        if (isRecord(body) && body.key === "host.ops.catalog" && forwarded.status === 200) {
-          const catalog = forwarded.json as { operations?: { key?: string }[] };
-          if (Array.isArray(catalog.operations)) {
-            const seen = new Set(catalog.operations.map((op) => op.key));
-            catalog.operations.push(
-              ...tsOnlyOperationCatalog.filter((entry) => !seen.has(entry.key)),
-            );
-          }
-        }
-        return Response.jsonUnsafe(forwarded.json ?? null, {
-          status: forwarded.status,
-          headers: forwarded.headers,
-        });
-      }
       if (!isRecord(body) || typeof body.key !== "string")
         return yield* Effect.fail(invalidBody("body must be { key: string, request?: object }"));
       // The /call envelope is exactly { key, request? }. Reject any other top-level key so
@@ -403,31 +339,6 @@ export function makeCallRoute(
     RevitBridge.use((bridge) =>
       Effect.tryPromise({
         try: async () => {
-          if (forwardBase) {
-            const response = await fetch(`${forwardBase}${req.url}`, {
-              method: req.method,
-              headers: {
-                ...invocationContext()?.headers,
-                "content-type": "application/json",
-                [HOST_RPC_BRIDGE_SESSION_HEADER]: req.headers[HOST_RPC_BRIDGE_SESSION_HEADER] ?? "",
-                [HOST_RPC_DOCUMENT_HEADER]: req.headers[HOST_RPC_DOCUMENT_HEADER] ?? "",
-                ...(req.headers[ACTOR_HEADER] ? { [ACTOR_HEADER]: req.headers[ACTOR_HEADER] } : {}),
-              },
-              ...(req.method === "POST"
-                ? { body: JSON.stringify(await Effect.runPromise(req.json)) }
-                : {}),
-            });
-            if (
-              ["artifact", "parameters-cache"].includes(
-                new URL(req.url, "http://host").searchParams.get("format") ?? "",
-              )
-            )
-              return Response.uint8Array(new Uint8Array(await response.arrayBuffer()), {
-                status: response.status,
-                contentType: response.headers.get("content-type") ?? "application/json",
-              });
-            return Response.jsonUnsafe(await response.json(), { status: response.status });
-          }
           if (req.method === "GET") {
             const query = new URL(req.url, "http://host").searchParams;
             const id = query.get("id");
@@ -555,16 +466,6 @@ export function makeCallRoute(
     Effect.tryPromise({
       try: async () => {
         const query = new URL(req.url, "http://host").searchParams;
-        if (forwardBase) {
-          const response = await fetch(`${forwardBase}${req.url}`, {
-            headers: {
-              ...invocationContext()?.headers,
-              [HOST_RPC_BRIDGE_SESSION_HEADER]: req.headers[HOST_RPC_BRIDGE_SESSION_HEADER] ?? "",
-              [HOST_RPC_DOCUMENT_HEADER]: req.headers[HOST_RPC_DOCUMENT_HEADER] ?? "",
-            },
-          });
-          return Response.jsonUnsafe(await response.json(), { status: response.status });
-        }
         const id = query.get("capture");
         if (id && query.has("text")) return Response.jsonUnsafe(await observations().savedText(id));
         if (id) return Response.jsonUnsafe(await observations().saved(id));
@@ -600,11 +501,6 @@ export function makeCallRoute(
   const actions = HttpRouter.add("POST", "/actions", (req) =>
     Effect.gen(function* () {
       const body = yield* req.json;
-      if (forwardBase)
-        return Response.jsonUnsafe(
-          { error: "Mutation forwarding is not admitted by this host", notDispatched: true },
-          { status: 409 },
-        );
       const bridge = yield* RevitBridge;
       const row = yield* Effect.tryPromise({
         try: () => admit(body, bridge),
@@ -632,16 +528,6 @@ export function makeCallRoute(
     Effect.tryPromise({
       try: async () => {
         const query = new URL(req.url, "http://host").searchParams;
-        if (forwardBase) {
-          const forwarded = await fetch(`${forwardBase}${req.url}`, {
-            headers: {
-              ...invocationContext()?.headers,
-              [HOST_RPC_BRIDGE_SESSION_HEADER]: req.headers[HOST_RPC_BRIDGE_SESSION_HEADER] ?? "",
-              [HOST_RPC_DOCUMENT_HEADER]: req.headers[HOST_RPC_DOCUMENT_HEADER] ?? "",
-            },
-          });
-          return Response.jsonUnsafe(await forwarded.json(), { status: forwarded.status });
-        }
         if (query.has("file")) {
           const path = query.get("file")!;
           return Response.jsonUnsafe({
@@ -726,10 +612,6 @@ export function makeCallRoute(
             const body = await Effect.runPromise(req.json);
             if (!isRecord(body) || typeof body.id !== "string")
               throw Error("An original action ID is required");
-            if (forwardBase)
-              throw Error(
-                "Action controls require the exact owning host journal; forwarding is unsupported",
-              );
             const controlled = (await owner().list(undefined, body.id))[0];
             if (body.kind !== undefined && body.kind !== controlled?.kind)
               throw Error("Original admission kind mismatch");
@@ -808,19 +690,6 @@ export function makeCallRoute(
     RevitBridge.use((bridge) =>
       Effect.tryPromise({
         try: async () => {
-          if (forwardBase) {
-            const response = await fetch(`${forwardBase}${req.url}`, {
-              method: req.method,
-              headers: { ...invocationContext()?.headers },
-              ...(req.method === "POST"
-                ? {
-                    headers: { ...invocationContext()?.headers, "content-type": "application/json" },
-                    body: JSON.stringify(await Effect.runPromise(req.json)),
-                  }
-                : {}),
-            });
-            return Response.jsonUnsafe(await response.json(), { status: response.status });
-          }
           if (req.method === "POST") {
             const body = await Effect.runPromise(req.json);
             if (!isRecord(body) || typeof body.key !== "string")
@@ -852,7 +721,6 @@ export function makeCallRoute(
     RevitBridge.use((bridge) =>
       Effect.tryPromise({
         try: async () => {
-          if (forwardBase) throw Error("Schedule readings require their exact owning host");
           const body = await Effect.runPromise(req.json);
           if (!isRecord(body) || typeof body.key !== "string")
             throw Error("Schedule read key required");
