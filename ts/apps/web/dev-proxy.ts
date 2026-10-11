@@ -82,7 +82,7 @@ export function devHostProxy(target: string): Record<string, ProxyOptions> {
           )
             return req.url;
           if (
-            (req.headers.origin || req.headers["sec-fetch-mode"]) &&
+            (req.headers.origin || req.headers["sec-fetch-site"]) &&
             !req.headers[HOST_RUNTIME_SERVICE_HEADER] &&
             !new URL(req.url ?? "/", target).searchParams.has(HOST_RUNTIME_SERVICE_QUERY)
           ) {

@@ -61,7 +61,11 @@ test("a stale browser page cannot follow a port into another checkout", () => {
 test("unbound browser API requests refuse before the proxy supplies its owner", async () => {
   const config = Object.values(devHostProxy("http://127.0.0.1:5180"))[0]!;
   const response = { statusCode: 200, end: vi.fn() };
-  const req = { method: "POST", url: "/call", headers: { "sec-fetch-mode": "cors" } };
+  const req = {
+    method: "POST",
+    url: "/call",
+    headers: { "sec-fetch-mode": "cors", "sec-fetch-site": "same-origin" },
+  };
   expect(await config.bypass?.(req as never, response as never, config)).toBe(false);
   expect(response.statusCode).toBe(403);
   expect(response.end).toHaveBeenCalled();
