@@ -28,6 +28,7 @@ You are counsel: you argue and you are liable. An agent's report is testimony. T
 | plausible, not real: done on a mock, a count, a screenshot, or another agent's word | `prove` |
 | bloat: adding to a place that already has too much | `purge` |
 | the dropped baton: the next session re-derives what this one knew | `relay` |
+| premature release closure: shipped bytes never made the crossing | `release` |
 | shims for done: a settled surface over a fake backend | `close` |
 | guessed fix: a diff before a cause | `diagnose` |
 | wheel-spinning: the same wave sent twice at a plateau | `goal` |
