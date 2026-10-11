@@ -1,3 +1,4 @@
+import { runtimeStreamUrl } from "#/host/runtime";
 /**
  * The read layer. One EventSource, one AtomRegistry, one vocabulary (fable law 5).
  *
@@ -45,7 +46,7 @@ type Frame = (ReadingFrame & { stale?: boolean }) | { kind: "stale"; key: string
 type Source = Pick<EventSource, "onopen" | "onmessage" | "onerror" | "close">;
 
 /** The one place the web opens an SSE stream: Readings, and a harness thread's tail. */
-export const openEventSource = (url: string) => new EventSource(url);
+export const openEventSource = (url: string) => new EventSource(runtimeStreamUrl(url));
 
 /** One browser connection. This map owns subscriptions and retained evidence, never owner truth. */
 export class PeReadings {

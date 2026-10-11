@@ -24,13 +24,13 @@ test("same-checkout no-Revit host is distinct; foreign configured owner refuses"
   }
 });
 
-test("every HTTP and websocket proxy request binds this checkout, replacing caller identity", () => {
+test("every HTTP and websocket proxy request binds this checkout", () => {
   const proxy = new EventEmitter();
   const config = Object.values(devHostProxy("http://127.0.0.1:5180"))[0]!;
   config.configure?.(proxy as never, {} as never);
   const outgoing = { setHeader: vi.fn(), destroy: vi.fn() };
   const request = {
-    headers: { host: "127.0.0.1:8123", "x-pe-runtime-service": "host-foreign" },
+    headers: { host: "127.0.0.1:8123" },
     socket: { localPort: 8123 },
   };
   proxy.emit("proxyReq", outgoing, request);
@@ -40,6 +40,31 @@ test("every HTTP and websocket proxy request binds this checkout, replacing call
     ["x-pe-runtime-service", sourceHostServiceName(checkoutRoot)],
   ]);
   expect(outgoing.destroy).not.toHaveBeenCalled();
+});
+
+test("a stale browser page cannot follow a port into another checkout", () => {
+  const request = {
+    headers: { host: "127.0.0.1:8123", "x-pe-runtime-service": "host-foreign" },
+    socket: { localPort: 8123 },
+    url: "/call",
+  };
+  expect(isCheckoutRequest(request)).toBe(false);
+  expect(
+    isCheckoutRequest({
+      ...request,
+      headers: { host: "127.0.0.1:8123" },
+      url: "/pe/readings?peRuntimeService=host-foreign",
+    }),
+  ).toBe(false);
+});
+
+test("unbound browser API requests refuse before the proxy supplies its owner", async () => {
+  const config = Object.values(devHostProxy("http://127.0.0.1:5180"))[0]!;
+  const response = { statusCode: 200, end: vi.fn() };
+  const req = { method: "POST", url: "/call", headers: { "sec-fetch-mode": "cors" } };
+  expect(await config.bypass?.(req as never, response as never, config)).toBe(false);
+  expect(response.statusCode).toBe(403);
+  expect(response.end).toHaveBeenCalled();
 });
 
 test("checkout ingress accepts only its bound authority and exact optional Origin", () => {

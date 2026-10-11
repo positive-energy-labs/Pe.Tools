@@ -1,3 +1,4 @@
+import { hostFetch } from "#/host/runtime";
 /**
  * The route layer's one reach to the host. §7 ("nothing below the route reaches the host") puts
  * every route-state write behind this file, so `use-route.ts` owns sequencing and refusal and
@@ -12,7 +13,7 @@ export async function postRouteWrite(
   url: string,
   body: Record<string, unknown>,
 ): Promise<RouteWriteResponse> {
-  const response = await fetch(url, {
+  const response = await hostFetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -28,7 +29,7 @@ export async function postRouteWrite(
 export async function getRouteSalvage(
   url: string,
 ): Promise<{ from: string; value: unknown } | null> {
-  const response = await fetch(url);
+  const response = await hostFetch(url);
   if (response.status === 404) return null;
   const body = (await response.json().catch(() => null)) as
     | { from: string; value: unknown }

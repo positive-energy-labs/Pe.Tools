@@ -1,3 +1,4 @@
+import { hostFetch } from "#/host/runtime";
 import {
   HOST_RPC_SDK_SESSION_HEADER,
   HOST_RPC_BRIDGE_SESSION_HEADER,
@@ -52,7 +53,7 @@ async function postCall(
   // queue-provenance §1: `web:<route>` — the current path is the route id at call time.
   headers[HOST_RPC_ORIGIN_HEADER] = `web:${window.location.pathname}`;
 
-  const response = await fetch(hostUrl("/call", options?.baseURL), {
+  const response = await hostFetch(hostUrl("/call", options?.baseURL), {
     method: "POST",
     headers,
     body: JSON.stringify({ key, request }),

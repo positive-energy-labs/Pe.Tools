@@ -4,6 +4,7 @@
 
 import { payload, productIdentity as generatedIdentity } from "../vendor/generated/product.g.ts";
 export const HOST_RUNTIME_SERVICE_HEADER = "x-pe-runtime-service";
+export const HOST_RUNTIME_SERVICE_QUERY = "peRuntimeService";
 export { productInstallLayout } from "../vendor/generated/product.g.ts";
 
 export const productIdentity = {

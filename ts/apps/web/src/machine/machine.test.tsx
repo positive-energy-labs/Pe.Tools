@@ -89,7 +89,7 @@ describe("update client errors", () => {
     const fetch = vi.fn(async () => Response.json({ planLeg: { error: "feed unavailable" } }));
     vi.stubGlobal("fetch", fetch);
     await expect(recheckUpdate()).rejects.toThrow("feed unavailable");
-    expect(fetch).toHaveBeenCalledWith("/host/update?recheck=1");
+    expect(fetch).toHaveBeenCalledWith("/host/update?recheck=1", { headers: expect.any(Headers) });
   });
 });
 
