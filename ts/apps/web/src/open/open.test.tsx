@@ -212,7 +212,7 @@ describe("launch plan", () => {
     );
     expect(plan.argv).toEqual([
       "pe-revit session start --year 2024 --background --quarantine",
-      'pe-revit doc open "C:\\Models\\Riverside MEP.rvt" --id <minted> --conflict keep --links refuse',
+      'pe-revit doc open "C:\\Models\\Riverside MEP.rvt" --id <minted> --unsynced keep --links refuse',
     ]);
     expect(plan.note).toContain("two commands");
     expect(plan.launch).toMatchObject({ kind: "start", posture: "background", quarantine: true });

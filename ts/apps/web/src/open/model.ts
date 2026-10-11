@@ -265,7 +265,7 @@ export function launchPlan(
       ...(picked.row.case === "observed-active"
         ? [cli(sessionStartArgv({ pid: picked.row.process.pid }))]
         : []),
-      cli(docOpenArgv({ source: doc.selector, ...selection, links, conflict: "keep" })),
+      cli(docOpenArgv({ source: doc.selector, ...selection, links, unsynced: "keep" })),
     ];
     launch = { kind: "open", session: selection, document: doc.selector, missingLinks: links };
   } else {
@@ -287,7 +287,7 @@ export function launchPlan(
                 source: doc.selector,
                 id: name || "<minted>",
                 links,
-                conflict: "keep",
+                unsynced: "keep",
               }),
             ),
           ]
