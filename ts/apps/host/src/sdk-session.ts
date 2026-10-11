@@ -16,6 +16,8 @@ import { BridgeError, type RevitBridge } from "./bridge.ts";
 import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
 import { runPeRevitCli } from "./session-route.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";
+import { hostOwnership } from "./host-ownership.ts";
+import { hostServiceName, runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
 
 const readSdk: SdkReceiptReader = (args) =>
   Effect.runPromise(
@@ -90,6 +92,25 @@ export async function resolveSdkSession(
       envelope,
     );
   resolved ??= envelope?.resolved ?? undefined;
+  const resolvedLane =
+    resolved?.payload === "checkout"
+      ? "dev"
+      : resolved?.payload === "installed"
+        ? "installed"
+        : null;
+  const rejection = runtimeOwnerRejection(hostOwnership, {
+    lane: resolvedLane,
+    sourceRoot: resolved?.sourceRoot,
+    installedRoot: resolved?.installedRoot,
+    serviceName:
+      resolvedLane && (resolvedLane === "installed" || resolved?.sourceRoot)
+        ? hostServiceName(resolvedLane, resolved?.sourceRoot ?? null)
+        : null,
+  });
+  if (rejection) {
+    cache.delete(key);
+    throw refuse(rejection, envelope);
+  }
   const start = resolved?.processStartUtc ? Date.parse(resolved.processStartUtc) : NaN;
   if (
     !resolved ||
@@ -111,6 +132,11 @@ export async function resolveSdkSession(
     throw refuse("The SDK resolved process has no unique bridge attachment", envelope);
   }
   const socket = matches[0]!;
+  const socketRejection = runtimeOwnerRejection(hostOwnership, socket);
+  if (socketRejection) {
+    cache.delete(key);
+    throw refuse(socketRejection, envelope);
+  }
   if (
     held &&
     (socket.sessionId !== held.sessionId ||

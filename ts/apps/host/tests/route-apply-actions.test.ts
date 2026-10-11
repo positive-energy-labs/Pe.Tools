@@ -23,6 +23,7 @@ import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import { admitFamilyAction, readFamily, recoverFamilyAction } from "../src/family-actions.ts";
 import { documentMarks } from "../src/document-marks.ts";
 import { sdkEnvelope, sdkSessions } from "./native-receipt-fixture.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -156,6 +157,9 @@ async function setup(sdk: (args: readonly string[]) => Promise<string> = sdkSess
       {
         sessionId: "A",
         connected: true,
+        lane: hostOwnership.lane,
+        sourceRoot: hostOwnership.sourceRoot,
+        serviceName: hostOwnership.serviceName,
         processId: 42,
         processStartUtcUnixMs: 1000,
         state: {

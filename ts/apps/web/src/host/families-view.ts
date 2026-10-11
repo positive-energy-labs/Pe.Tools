@@ -1,10 +1,11 @@
+import { hostFetch } from "#/host/runtime";
 import type { FamiliesView } from "@pe/agent-contracts";
 import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
 
 const url = (path = "") => peUrl(resolveWorkbenchConfig(), `/route-view/families${path}`);
 
 export async function publishFamiliesView(view: FamiliesView): Promise<number> {
-  const response = await fetch(url(), {
+  const response = await hostFetch(url(), {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(view),
@@ -14,7 +15,7 @@ export async function publishFamiliesView(view: FamiliesView): Promise<number> {
 }
 
 export async function releaseFamiliesView(instance: string): Promise<void> {
-  await fetch(url(`/${instance}`), { method: "DELETE", keepalive: true });
+  await hostFetch(url(`/${instance}`), { method: "DELETE", keepalive: true });
 }
 
 export async function acknowledgeFamiliesQuery(input: {
@@ -24,7 +25,7 @@ export async function acknowledgeFamiliesQuery(input: {
   query: string;
   counts: FamiliesView["counts"];
 }): Promise<void> {
-  const response = await fetch(url("/ack"), {
+  const response = await hostFetch(url("/ack"), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),

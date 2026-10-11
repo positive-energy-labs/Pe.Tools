@@ -1,5 +1,7 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
+import { createServer } from "node:net";
+import { once } from "node:events";
 import { Effect, Layer } from "effect";
 import { HttpServer } from "effect/unstable/http";
 import { ServeError } from "effect/unstable/http/HttpServerError";
@@ -20,7 +22,9 @@ const mocks = vi.hoisted(() => ({
     sourceRoot: null,
   } as HostOwnership,
   discover: vi.fn(),
+  receipt: vi.fn(),
   choosePort: vi.fn(),
+  portAvailable: vi.fn(),
   occupants: vi.fn(),
   healthy: vi.fn(),
   retire: vi.fn(),
@@ -53,6 +57,7 @@ vi.mock("node:child_process", async (original) => ({
 }));
 vi.mock("@pe/host-contracts/pe-service", async (original) => ({
   ...(await original<object>()),
+  readServiceFile: mocks.receipt,
   sweepDeadServiceFiles: async () => [],
 }));
 vi.mock("@pe/host-contracts/pe-service-host", async (original) => ({
@@ -106,7 +111,9 @@ beforeEach(() => {
   Object.assign(mocks.ownership, { lane: "installed", serviceName: "host", sourceRoot: null });
   process.argv = ["node", "host"];
   mocks.discover.mockResolvedValue(null);
+  mocks.receipt.mockResolvedValue(null);
   mocks.choosePort.mockResolvedValue(0);
+  mocks.portAvailable.mockResolvedValue(true);
   mocks.occupants.mockResolvedValue([]);
   mocks.healthy.mockResolvedValue(true);
   mocks.retire.mockResolvedValue(undefined);
@@ -134,6 +141,7 @@ beforeEach(() => {
     originalPrepare(open, version, mocks.ownership, {
       discover: mocks.discover,
       choosePort: mocks.choosePort,
+      portAvailable: mocks.portAvailable,
       occupants: mocks.occupants,
       healthy: mocks.healthy,
       retire: mocks.retire,
@@ -162,6 +170,7 @@ const trays = () => mocks.spawn.mock.calls.filter(([, args]) => args.includes("-
 const windows = () => mocks.spawn.mock.calls.filter(([, args]) => args.includes("start"));
 
 test("foreign occupant refuses before bind and names pid, executable, and recorded service", async () => {
+  mocks.portAvailable.mockResolvedValue(false);
   mocks.occupants.mockResolvedValue([
     { pid: 900, executable: "C:/foreign.exe", serviceName: "other-service" },
   ]);
@@ -173,6 +182,69 @@ test("foreign occupant refuses before bind and names pid, executable, and record
   expect(mocks.choosePort).not.toHaveBeenCalled();
   expect(mocks.claim).not.toHaveBeenCalled();
   expect(mocks.spawn).not.toHaveBeenCalled();
+});
+
+test("a free installed port starts when the optional Windows owner census is denied", async () => {
+  mocks.occupants.mockRejectedValue(
+    new Error("Get-NetTCPConnection: Cannot connect to CIM server. Access is denied."),
+  );
+  await launch();
+  expect(mocks.bind).toHaveBeenCalledExactlyOnceWith(5180);
+  expect(mocks.claim).toHaveBeenCalledOnce();
+  expect(mocks.occupants).not.toHaveBeenCalled();
+  expect(mocks.retire).not.toHaveBeenCalled();
+});
+
+test("an occupied port with denied census refuses without signalling or evicting the unknown listener", async () => {
+  mocks.portAvailable.mockResolvedValue(false);
+  mocks.occupants.mockRejectedValue(new Error("Get-NetTCPConnection: Access is denied."));
+  await expect(launch()).rejects.toThrow(/5180.*occupied.*owner census unavailable/);
+  expect(mocks.bind).not.toHaveBeenCalled();
+  expect(mocks.claim).not.toHaveBeenCalled();
+  expect(mocks.retire).not.toHaveBeenCalled();
+  expect(mocks.choosePort).not.toHaveBeenCalled();
+});
+
+test("installed reuse still refuses when listener identity cannot be established", async () => {
+  process.argv.push("--open");
+  mocks.discover.mockResolvedValue({ ...incumbent, version: "new" });
+  mocks.occupants.mockRejectedValue(new Error("Listener identity unavailable"));
+  await expect(launch()).rejects.toThrow("Listener identity unavailable");
+  expect(mocks.bind).not.toHaveBeenCalled();
+  expect(mocks.claim).not.toHaveBeenCalled();
+  expect(mocks.retire).not.toHaveBeenCalled();
+  expect(windows()).toHaveLength(0);
+});
+
+test("native TCP census recognises only exact listening endpoints with valid process ids", () => {
+  expect(
+    lifecycle.tcpListenerPids(
+      "Active Connections\r\n  Proto Local Address Foreign Address State PID\r\n TCP 127.0.0.1:5180 0.0.0.0:0 LISTENING 42\r\n TCP [::]:5180 [::]:0 LISTENING 42\r\n TCP 0.0.0.0:5180 0.0.0.0:0 LISTENING 84\r\n TCP 127.0.0.1:51801 0.0.0.0:0 LISTENING 99\r\n TCP 127.0.0.1:5180 127.0.0.1:6000 ESTABLISHED 99",
+      5180,
+    ),
+  ).toEqual([42, 84]);
+  expect(() =>
+    lifecycle.tcpListenerPids("TCP 127.0.0.1:5180 0.0.0.0:0 LISTENING nope", 5180),
+  ).toThrow("invalid process id");
+  expect(() => lifecycle.tcpListenerPids("TCP 127.0.0.1:5180 LISTENING 42", 5180)).toThrow(
+    "Unrecognized",
+  );
+});
+
+test("exclusive loopback probe refuses an actual listener and releases its successful probe", async () => {
+  const server = createServer();
+  server.listen({ host: "127.0.0.1", port: 0, exclusive: true });
+  await once(server, "listening");
+  const port = (server.address() as { port: number }).port;
+  try {
+    expect(await lifecycle.installedPortAvailable(port)).toBe(false);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+  expect(await lifecycle.installedPortAvailable(port)).toBe(true);
+  expect(await lifecycle.installedPortAvailable(port)).toBe(true);
 });
 
 test("installed start binds only 5180; tray belongs to the winning claim and disposes before release", async () => {
@@ -286,9 +358,8 @@ test("claim loser never starts the tray or opens a window", async () => {
 });
 
 test("a foreign listener winning the bind race is named, without a second bind", async () => {
-  mocks.occupants
-    .mockResolvedValueOnce([])
-    .mockResolvedValueOnce([{ pid: 901, executable: "C:/racer.exe" }]);
+  mocks.portAvailable.mockResolvedValueOnce(true).mockResolvedValue(false);
+  mocks.occupants.mockResolvedValue([{ pid: 901, executable: "C:/racer.exe" }]);
   mocks.bind.mockReturnValue(
     Effect.fail(
       new ServeError({ cause: Object.assign(new Error("busy"), { code: "EADDRINUSE" }) }),
@@ -306,9 +377,7 @@ test("the installed incumbent winning the bind race opens once without a tray", 
     ...incumbent,
     version: "new",
   });
-  mocks.occupants
-    .mockResolvedValueOnce([])
-    .mockResolvedValueOnce([{ pid: 42, executable: incumbent.executablePath }]);
+  mocks.occupants.mockResolvedValue([{ pid: 42, executable: incumbent.executablePath }]);
   mocks.bind.mockReturnValue(
     Effect.fail(
       new ServeError({ cause: Object.assign(new Error("busy"), { code: "EADDRINUSE" }) }),
@@ -331,7 +400,7 @@ test("dev still accepts SDK port 0 and explicit takeover, without a tray", async
   await launch();
   expect(mocks.choosePort).toHaveBeenCalledWith("C:/product", "host-source-test", 5180);
   expect(mocks.bind).toHaveBeenCalledExactlyOnceWith(0);
-  expect(mocks.claim.mock.calls[0]![1].policy).toEqual({ evicts: ["installed", "dev"] });
+  expect(mocks.claim.mock.calls[0]![1].policy).toEqual({ evicts: ["dev"] });
   expect(mocks.occupants).not.toHaveBeenCalled();
   expect(mocks.spawn).not.toHaveBeenCalled();
 });
@@ -342,11 +411,53 @@ test("dev --open still reuses its same-version service", async () => {
     serviceName: "host-source-test",
     sourceRoot: "C:/checkout",
   });
-  mocks.discover.mockResolvedValue({ ...incumbent, lane: "dev", version: "dev", port: 6000 });
+  mocks.discover.mockResolvedValue({
+    ...incumbent,
+    lane: "dev",
+    sourceRoot: "C:/checkout",
+    version: "dev",
+    port: 6000,
+  });
   process.argv.push("--open");
   await launch();
   expect(mocks.bind).not.toHaveBeenCalled();
   expect(mocks.occupants).not.toHaveBeenCalled();
   expect(windows()).toHaveLength(1);
   expect(windows()[0]![1]).toContain("http://127.0.0.1:6000/");
+});
+
+test.each([
+  { lane: "installed", sourceRoot: null },
+  { lane: "dev", sourceRoot: "C:/checkout-B" },
+  { lane: "dev", sourceRoot: null },
+])("dev takeover refuses foreign or unknown same-name receipt %j", async (owner) => {
+  Object.assign(mocks.ownership, {
+    lane: "dev",
+    serviceName: "host-source-test",
+    sourceRoot: "C:/checkout",
+  });
+  mocks.receipt.mockResolvedValue({ ...incumbent, ...owner });
+  process.argv.push("--take-over-host");
+  await expect(launch()).rejects.toThrow(/Dev host service claim refused/);
+  expect(mocks.claim).not.toHaveBeenCalled();
+  expect(mocks.retire).not.toHaveBeenCalled();
+});
+
+test("dev open refuses a same-name receipt for another checkout before reuse", async () => {
+  Object.assign(mocks.ownership, {
+    lane: "dev",
+    serviceName: "host-source-test",
+    sourceRoot: "C:/checkout",
+  });
+  mocks.discover.mockResolvedValue({
+    ...incumbent,
+    lane: "dev",
+    sourceRoot: "C:/checkout-B",
+    version: "dev",
+  });
+  process.argv.push("--open");
+  await expect(launch()).rejects.toThrow(/Dev host reuse refused/);
+  expect(mocks.bind).not.toHaveBeenCalled();
+  expect(mocks.claim).not.toHaveBeenCalled();
+  expect(windows()).toHaveLength(0);
 });

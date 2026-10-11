@@ -75,7 +75,16 @@ export const hostStatusRoute = HttpRouter.add("GET", hostProcessIdentity.healthP
     const bridge = yield* RevitBridge;
     const sessions = yield* bridge.list;
     return yield* Response.json(
-      yield* getHostStatus({ connected: sessions.some((session) => session.connected) }),
+      yield* getHostStatus(
+        {
+          connected: sessions.length > 0,
+          runtimeMatch: sessions.every((session) => session.runtimeMatch === "verified")
+            ? "verified"
+            : "unknown",
+        },
+        undefined,
+        yield* bridge.lastRegistrationRefusal,
+      ),
     );
   }),
 );

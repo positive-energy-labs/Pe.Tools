@@ -2,6 +2,8 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { request as httpRequest } from "node:http";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
+import { resolveLaneAndRoot } from "./host-config.ts";
 import type { InvocationContext } from "./invocation-context.browser.ts";
 export type { InvocationContext, RequestPrincipal } from "./invocation-context.browser.ts";
 
@@ -52,11 +54,19 @@ export const hostFetch: typeof fetch = async (input, init) => {
 /** Forward only to the bound host. External docs/assets never receive operator identity. */
 export const contextFetch: typeof fetch = (input, init) => {
   const held = invocationContext();
-  if (!held?.hostBaseUrl) return globalThis.fetch(input, init);
+  if (!held?.hostBaseUrl) {
+    const url = URL.parse(input instanceof Request ? input.url : String(input));
+    if (url?.hostname !== "127.0.0.1") return globalThis.fetch(input, init);
+    const headers = new Headers(input instanceof Request ? input.headers : undefined);
+    new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
+    headers.set(HOST_RUNTIME_SERVICE_HEADER, resolveLaneAndRoot().serviceName);
+    return globalThis.fetch(input, { ...init, headers });
+  }
   const url = new URL(input instanceof Request ? input.url : String(input), held?.hostBaseUrl);
   if (url.origin !== new URL(held.hostBaseUrl).origin) return globalThis.fetch(input, init);
   const headers = new Headers(input instanceof Request ? input.headers : undefined);
   new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
   for (const [key, value] of Object.entries(held.headers ?? {})) headers.set(key, value);
+  headers.set(HOST_RUNTIME_SERVICE_HEADER, resolveLaneAndRoot().serviceName);
   return hostFetch(input, { ...init, headers });
 };

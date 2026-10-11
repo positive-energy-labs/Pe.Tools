@@ -2,6 +2,7 @@ import type { ObservedActive, Resolved } from "@pe/host-contracts/pe-revit-contr
 import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { rhvacOpen } from "../src/rhvac-ops.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
 
 /** Explicit real-Jet integration helper; the owning host supplies its existing platform layer. */
 export const readRhvacFixture = (path: string) =>
@@ -26,6 +27,7 @@ export const sdkEnvelope = (result: unknown, resolved: Resolved | null = null) =
   });
 export const observedProcess: ObservedActive = {
   case: "observed-active",
+  execution: null,
   process: originalProcess,
   bridge: { bridge: "missing-endpoint" },
   observedAtUtc: originalProcess.processStartUtc,
@@ -39,6 +41,9 @@ export const observedProcess: ObservedActive = {
   year: 2025,
 };
 export const sdkResolved: Resolved = {
+  payload: hostOwnership.lane === "dev" ? "checkout" : "installed",
+  sourceRoot: hostOwnership.sourceRoot,
+  installedRoot: null,
   pid: originalProcess.pid,
   processStartUtc: originalProcess.processStartUtc,
   id: null,

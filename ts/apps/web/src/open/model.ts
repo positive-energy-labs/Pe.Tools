@@ -11,7 +11,7 @@ import {
   type RecentDocument,
 } from "@pe/host-contracts/pe-revit-contract";
 
-import { keyOf, phaseOf, pidOf, selectionOf } from "#/machine/session";
+import { executionRefusal, keyOf, phaseOf, pidOf, selectionOf } from "#/machine/session";
 
 export type HeldModel = NonNullable<MachineSession["documents"]>[number];
 
@@ -204,13 +204,17 @@ export function launchPlan(
       : (installed(doc?.savedYear) ?? installed(doc?.lastYear))) ??
     (years.length ? Math.max(...years) : null);
   const live = sessions.filter((session) => session.row.year === year && pidOf(session.row));
-  const ready = live.find((session) => phaseOf(session.row) === "ready");
+  const ready = live.find(
+    (session) => phaseOf(session.row) === "ready" && !executionRefusal(session.row),
+  );
   const picked =
     draft.target === "new"
       ? null
       : (live.find((session) => keyOf(session) === draft.target) ??
         (draft.target === null
-          ? doc?.openIn && doc.openIn.session.row.year === year
+          ? doc?.openIn &&
+            doc.openIn.session.row.year === year &&
+            !executionRefusal(doc.openIn.session.row)
             ? doc.openIn.session
             : doc
               ? (ready ?? null)
@@ -236,6 +240,7 @@ export function launchPlan(
     refusal = `${doc.title} was saved in Revit ${doc.savedYear}; Revit ${year} cannot open a newer file.`;
   else if (doc?.openIn)
     refusal = `${doc.title} is already open in Revit ${doc.openIn.session.row.year} (pid ${pidOf(doc.openIn.session.row)}).`;
+  else if (picked && executionRefusal(picked.row)) refusal = executionRefusal(picked.row);
   else if (picked && phaseOf(picked.row) !== "ready")
     refusal = `Revit ${year} pid ${pidOf(picked.row)} is ${phaseOf(picked.row)}; it opens nothing until it answers.`;
   else if (!doc && picked)
@@ -260,7 +265,7 @@ export function launchPlan(
       ...(picked.row.case === "observed-active"
         ? [cli(sessionStartArgv({ pid: picked.row.process.pid }))]
         : []),
-      cli(docOpenArgv({ source: doc.selector, ...selection, links, conflict: "keep" })),
+      cli(docOpenArgv({ source: doc.selector, ...selection, links, unsynced: "keep" })),
     ];
     launch = { kind: "open", session: selection, document: doc.selector, missingLinks: links };
   } else {
@@ -282,7 +287,7 @@ export function launchPlan(
                 source: doc.selector,
                 id: name || "<minted>",
                 links,
-                conflict: "keep",
+                unsynced: "keep",
               }),
             ),
           ]
@@ -305,6 +310,10 @@ export function launchPlan(
     launch = null;
     argv = [];
     verb = "Open in selected Revit";
+  }
+  if (picked && executionRefusal(picked.row)) {
+    launch = null;
+    argv = [];
   }
   return { doc, year, live, target: picked, verb, argv, refusal, caution, note, launch };
 }

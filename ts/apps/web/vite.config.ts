@@ -1,5 +1,6 @@
 import { familyFixturesDir } from "./checkout-paths.ts";
-import { checkoutIngress, devHostProxy } from "./dev-proxy.ts";
+import { checkoutIngress, checkoutServiceName, devHostProxy } from "./dev-proxy.ts";
+import { hostProcessIdentity } from "@pe/host-contracts/service-identity";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { devtools } from "@tanstack/devtools-vite";
@@ -8,7 +9,7 @@ import { defineConfig, loadEnv, searchForWorkspaceRoot } from "vite-plus";
 
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 
-const config = defineConfig(({ mode }) => {
+const config = defineConfig(({ mode, command }) => {
   // Server-only secrets (LLAMA_CLOUD_API_KEY, ANTHROPIC_API_KEY) live in the
   // workspace-root .env, one level above apps/web. Vite only surfaces
   // VITE_-prefixed vars to import.meta.env, so lift the ones our API route
@@ -25,6 +26,11 @@ const config = defineConfig(({ mode }) => {
   }
 
   return {
+    define: {
+      "import.meta.env.PE_RUNTIME_SERVICE": JSON.stringify(
+        command === "build" ? hostProcessIdentity.serviceName : checkoutServiceName(),
+      ),
+    },
     plugins: [
       checkoutIngress(),
       tanstackStart({

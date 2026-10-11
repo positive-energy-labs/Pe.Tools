@@ -1,3 +1,4 @@
+import { hostFetch } from "#/host/runtime";
 /**
  * The harness-thread wire, typed (`@pe/agent-contracts` harness-thread.ts lists every route). The
  * web never talks to a harness: it reads the host's event log and posts the user's verbs.
@@ -14,7 +15,7 @@ import { openEventSource } from "#/readings";
 
 export function harnessClient(origin: string) {
   const call = async <T>(path: string, method = "GET", body?: object, signal?: AbortSignal) => {
-    const response = await fetch(`${origin}/pe${path}`, {
+    const response = await hostFetch(`${origin}/pe${path}`, {
       method,
       signal,
       // The host refuses a bodiless non-GET without the json content type (415).

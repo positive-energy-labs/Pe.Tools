@@ -2,6 +2,7 @@ import { execFile, spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { createServer } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
 import { Context, Deferred, Effect, Layer } from "effect";
@@ -17,15 +18,14 @@ import {
   authorizeShutdownFor,
   claimServiceHost,
   chooseServicePort,
-  hostReplacementPolicy,
   rememberServicePort,
   type ServiceHostDescriptor,
   type ServiceHostHandle,
 } from "@pe/host-contracts/pe-service-host";
 import { hostOwnership, productRoot, type HostOwnership } from "./host-ownership.ts";
+import { runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
 
-// The dev script (`pnpm dev`) passes this to authorize a dev-over-dev takeover; it becomes
-// `hostReplacementPolicy` DATA (SDK-owned), not local probe logic (IPC-SEAM-SPEC D3).
+// The dev script authorizes same-checkout dev takeover only; the SDK owns cooperative retirement.
 const DEV_TAKEOVER_ARGUMENT = "--take-over-host";
 const installedPort = 5180;
 
@@ -35,15 +35,54 @@ export type PortOccupant = {
   readonly serviceName?: string;
 };
 
+/** A successful exclusive bind proves availability; the actual host bind and SDK claim still arbitrate races. */
+export function installedPortAvailable(port: number): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const server = createServer().unref();
+    server.once("error", (error: NodeJS.ErrnoException) => {
+      if (error.code === "EADDRINUSE" || error.code === "EACCES") resolve(false);
+      else reject(error);
+    });
+    server.listen({ host: "127.0.0.1", port, exclusive: true }, () =>
+      server.close((error) => (error ? reject(error) : resolve(true))),
+    );
+  });
+}
+
+/** Native netstat's numeric listener rows; unknown formats never establish an owner. */
+export function tcpListenerPids(stdout: string, port: number): number[] {
+  const endpoints = new Set([`127.0.0.1:${port}`, `0.0.0.0:${port}`, `[::]:${port}`]);
+  const pids = new Set<number>();
+  for (const line of stdout.split(/\r?\n/)) {
+    const fields = line.trim().split(/\s+/);
+    if (fields[0] !== "TCP") continue;
+    if (fields.length !== 5) throw Error("Unrecognized native TCP owner census row.");
+    if (fields[3] !== "LISTENING" || !endpoints.has(fields[1]!)) continue;
+    const pid = Number(fields[4]);
+    if (!/^[1-9]\d*$/.test(fields[4]!) || !Number.isSafeInteger(pid))
+      throw Error("Native TCP owner census returned an invalid process id.");
+    pids.add(pid);
+  }
+  return [...pids];
+}
+
 /** Read-only Windows census; SDK readers own record parsing. Never signal an occupant. */
 export async function readPortOccupants(appBase: string, port: number): Promise<PortOccupant[]> {
+  // Get-NetTCPConnection requires CIM, which is unavailable even to SYSTEM in Windows Sandbox.
+  // netstat reads the native TCP table; Get-Process/SDK discovery retain independent PID/path/start proof.
+  const tcp = await promisify(execFile)("netstat", ["-ano", "-p", "tcp"], {
+    windowsHide: true,
+    timeout: 5_000,
+  });
+  const pids = tcpListenerPids(tcp.stdout, port);
+  if (pids.length === 0) return [];
   const { stdout } = await promisify(execFile)(
     "powershell",
     [
       "-NoProfile",
       "-NonInteractive",
       "-Command",
-      `$ErrorActionPreference='Stop'; $owners=@(Get-NetTCPConnection -State Listen | Where-Object { $_.LocalPort -eq ${port} -and $_.LocalAddress -in @('127.0.0.1','0.0.0.0','::') } | Select-Object -ExpandProperty OwningProcess -Unique); $rows=@(foreach ($ownerPid in $owners) { $p=Get-Process -Id $ownerPid; [pscustomobject]@{pid=$ownerPid;executable=$(if ($p.Path) {$p.Path} else {$p.ProcessName + ' (path unavailable)'})} }); ConvertTo-Json -InputObject $rows -Compress`,
+      `$ErrorActionPreference='Stop'; $owners=@(${pids.join(",")}); $rows=@(foreach ($ownerPid in $owners) { $p=Get-Process -Id $ownerPid; [pscustomobject]@{pid=$ownerPid;executable=$(if ($p.Path) {$p.Path} else {$p.ProcessName + ' (path unavailable)'})} }); ConvertTo-Json -InputObject $rows -Compress`,
     ],
     { windowsHide: true, timeout: 5_000 },
   );
@@ -71,6 +110,7 @@ export async function readPortOccupants(appBase: string, port: number): Promise<
 const bindingDependencies = {
   discover: discoverService,
   choosePort: chooseServicePort,
+  portAvailable: installedPortAvailable,
   occupants: readPortOccupants,
   healthy: async (file: ServiceFile) => {
     try {
@@ -85,11 +125,14 @@ const bindingDependencies = {
     }
   },
   retire: async (file: ServiceFile) => {
-    const response = await fetch(`http://127.0.0.1:${file.port}${hostProcessIdentity.shutdownPath}`, {
-      method: "POST",
-      headers: { "x-pe-service-token": file.token },
-      signal: AbortSignal.timeout(5_000),
-    });
+    const response = await fetch(
+      `http://127.0.0.1:${file.port}${hostProcessIdentity.shutdownPath}`,
+      {
+        method: "POST",
+        headers: { "x-pe-service-token": file.token },
+        signal: AbortSignal.timeout(5_000),
+      },
+    );
     await response.body?.cancel();
     if (!response.ok) throw new Error(`shutdown returned HTTP ${response.status}`);
   },
@@ -121,6 +164,13 @@ export async function prepareHostBinding(
       ? await dependencies.discover(appBase, ownership.serviceName, { verifyOwner: true })
       : null;
   if (ownership.lane === "dev") {
+    if (live) {
+      const rejection = runtimeOwnerRejection(ownership, {
+        ...live,
+        serviceName: ownership.serviceName,
+      });
+      if (rejection) throw Error(`Dev host reuse refused: ${rejection}`);
+    }
     if (open && live?.version === version) return live;
     return dependencies.choosePort(
       appBase,
@@ -166,12 +216,19 @@ export async function prepareHostBinding(
       await dependencies.sleep(1_000);
     }
   }
-  const owners = await dependencies.occupants(appBase, installedPort);
-  if (owners.length)
-    throw new Error(
-      `Installed host cannot bind 127.0.0.1:${installedPort}: occupied by ${owners.map(describeOccupant).join("; ")}. No takeover or alternate port.`,
-    );
-  return installedPort;
+  if (await dependencies.portAvailable(installedPort)) return installedPort;
+  let detail: string;
+  try {
+    const owners = await dependencies.occupants(appBase, installedPort);
+    detail = owners.length
+      ? owners.map(describeOccupant).join("; ")
+      : "unknown listener or inaccessible port";
+  } catch (cause) {
+    detail = `owner census unavailable: ${String(cause)}`;
+  }
+  throw new Error(
+    `Installed host cannot bind 127.0.0.1:${installedPort}: occupied or inaccessible; ${detail}. No takeover or alternate port.`,
+  );
 }
 
 /**
@@ -237,10 +294,10 @@ function buildHostDescriptor(port: number): ServiceHostDescriptor {
     // can only infer liveness from a TCP accept — and a reused port makes a stranger look like us.
     // Declaring the health path is what gets this leg the `health` rung instead of the `tcp` one.
     health: hostProcessIdentity.healthPath,
-    policy:
-      hostOwnership.lane === "installed"
-        ? { evicts: [] }
-        : hostReplacementPolicy(hostOwnership.lane, process.argv.includes(DEV_TAKEOVER_ARGUMENT)),
+    policy: {
+      evicts:
+        hostOwnership.lane === "dev" && process.argv.includes(DEV_TAKEOVER_ARGUMENT) ? ["dev"] : [],
+    },
   };
 }
 
@@ -285,6 +342,19 @@ export const ServiceFileLive = Layer.effectDiscard(
     console.log(
       `pe-host service claim requested name=${hostOwnership.serviceName} leaseHandoff=${Boolean(process.env.PE_SERVICE_LEASE_PATH)}`,
     );
+    if (hostOwnership.lane === "dev") {
+      const existing = yield* Effect.promise(() =>
+        readServiceFile(appBase, hostOwnership.serviceName),
+      );
+      if (existing) {
+        const rejection = runtimeOwnerRejection(hostOwnership, {
+          ...existing,
+          serviceName: hostOwnership.serviceName,
+        });
+        if (rejection)
+          return yield* Effect.die(new Error(`Dev host service claim refused: ${rejection}`));
+      }
+    }
     const handle = yield* Effect.acquireRelease(
       Effect.promise(() => claimServiceHost(appBase, buildHostDescriptor(port))).pipe(
         Effect.flatMap((result) =>

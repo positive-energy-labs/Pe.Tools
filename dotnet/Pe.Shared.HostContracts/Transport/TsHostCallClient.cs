@@ -31,8 +31,10 @@ public static class TsHostCallClient {
             Encoding.UTF8,
             "application/json"
         );
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
+        httpRequest.Headers.Add(HostEndpoint.RuntimeServiceHeader, HostEndpoint.ConfiguredServiceName);
         using var response = HttpClient
-            .PostAsync(url, content, cancellation.Token)
+            .SendAsync(httpRequest, cancellation.Token)
             .GetAwaiter()
             .GetResult();
         var responseText = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();

@@ -2,6 +2,11 @@ import { expect, test, vi } from "vite-plus/test";
 
 import { updateVerb } from "../src/update-route.ts";
 
+vi.mock("../src/pe-revit-launch.ts", async (original) => ({
+  ...(await original<typeof import("../src/pe-revit-launch.ts")>()),
+  peRevitLauncher: () => ({ cmd: process.execPath, args: [] }),
+}));
+
 // A detached `update apply` prints its envelope at handoff and the installer stub keeps the stdout
 // pipe open while it waits for this host to exit. The runner must resolve on the envelope, not on
 // pipe close, or the host and the stub wait on each other (0.7.4 login update, 2026-10-09).
@@ -17,9 +22,8 @@ test("a detached run resolves on its envelope while the pipe stays open", async 
     related: [],
     exitCode: 4,
   });
-  // The override is one executable; the verb args become node's argv, so the "verb" is a script that
+  // The mocked launcher selects an owned Node child; the verb is a script that
   // prints the envelope handed to it and then holds the pipe open like the stub does.
-  vi.stubEnv("PE_REVIT_CMD", process.execPath);
   const started = Date.now();
   const result = await Promise.race([
     updateVerb(
@@ -28,7 +32,6 @@ test("a detached run resolves on its envelope while the pipe stays open", async 
     ),
     new Promise<"slow">((resolve) => setTimeout(() => resolve("slow"), 3000)),
   ]);
-  vi.unstubAllEnvs();
   expect(result).not.toBe("slow");
   expect(Date.now() - started).toBeLessThan(3000);
 });

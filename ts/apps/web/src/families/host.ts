@@ -1,3 +1,4 @@
+import { hostFetch } from "#/host/runtime";
 import { type AppliedFilter, type DocumentRef, type WorkKey } from "@pe/agent-contracts";
 import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
 import {
@@ -37,7 +38,7 @@ export async function readFamiliesObservation(
   document: DocumentRef,
   filter: AppliedFilter,
 ): Promise<FamiliesObservation> {
-  const response = await fetch(hostUrl("/families/readings"), {
+  const response = await hostFetch(hostUrl("/families/readings"), {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -54,7 +55,7 @@ export async function readFamiliesObservation(
 export async function latestFamiliesObservation(
   work: WorkKey,
 ): Promise<FamiliesObservation | null> {
-  const response = await fetch(
+  const response = await hostFetch(
     hostUrl(`/families/readings?work=${encodeURIComponent(JSON.stringify(work))}`),
   );
   const body = await response.json();
@@ -63,14 +64,14 @@ export async function latestFamiliesObservation(
 }
 
 export async function archivedFamiliesObservations(): Promise<FamiliesObservationSummary[]> {
-  const response = await fetch(hostUrl("/families/readings"));
+  const response = await hostFetch(hostUrl("/families/readings"));
   const body = await response.json();
   if (!response.ok) throw Error(body.error ?? `Families archive failed (${response.status})`);
   return body as FamiliesObservationSummary[];
 }
 
 export async function archivedFamiliesObservation(id: string): Promise<FamiliesObservation> {
-  const response = await fetch(hostUrl(`/families/readings?id=${encodeURIComponent(id)}`));
+  const response = await hostFetch(hostUrl(`/families/readings?id=${encodeURIComponent(id)}`));
   const body = await response.json();
   if (!response.ok) throw Error(body.error ?? `Families observation failed (${response.status})`);
   return body as FamiliesObservation;

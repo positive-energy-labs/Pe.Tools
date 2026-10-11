@@ -1,6 +1,11 @@
 import { Effect } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
-import { BRIDGE_PATH } from "@pe/host-contracts/contracts";
+import {
+  BRIDGE_PATH,
+  HOST_RUNTIME_SERVICE_HEADER,
+  HOST_RUNTIME_SERVICE_QUERY,
+} from "@pe/host-contracts/contracts";
+import { hostOwnership } from "./host-ownership.ts";
 import { withInvocationContext, type RequestPrincipal } from "@pe/mcps/context";
 import type { MachineShare } from "@pe/agent-contracts";
 
@@ -34,6 +39,25 @@ export async function readRequestIdentity(
   options: IdentityOptions,
   method = "GET",
 ): Promise<IdentityResult> {
+  const expectedService = headers[HOST_RUNTIME_SERVICE_HEADER];
+  let queryServices: string[];
+  try {
+    queryServices = new URL(path, "http://127.0.0.1").searchParams.getAll(
+      HOST_RUNTIME_SERVICE_QUERY,
+    );
+  } catch {
+    return { refusal: { code: "identity.path", detail: "Request path cannot be normalized." } };
+  }
+  if (
+    (expectedService !== undefined && expectedService !== hostOwnership.serviceName) ||
+    queryServices.some((value) => value !== hostOwnership.serviceName)
+  )
+    return {
+      refusal: {
+        code: "runtime.owner-mismatch",
+        detail: `Caller requires '${expectedService ?? queryServices.join(",")}', but this host is '${hostOwnership.serviceName}'.`,
+      },
+    };
   let pathname: string;
   try {
     pathname =
@@ -49,6 +73,27 @@ export async function readRequestIdentity(
   const host = headers.host ?? "";
   const origin = headers.origin;
   const refuse = (code: string, detail: string): IdentityResult => ({ refusal: { code, detail } });
+  const browser = origin !== undefined || headers["sec-fetch-site"] !== undefined;
+  const navigation =
+    (method === "GET" || method === "HEAD") &&
+    (headers.accept ?? "").includes("text/html") &&
+    (headers["sec-fetch-mode"] === "navigate" ||
+      ["document", "iframe"].includes(headers["sec-fetch-dest"] ?? ""));
+  const staticResource =
+    (method === "GET" || method === "HEAD") &&
+    ["script", "style", "image", "font", "manifest"].includes(headers["sec-fetch-dest"] ?? "") &&
+    /\.(?:m?js|css|png|jpe?g|gif|svg|ico|woff2?|ttf|webmanifest|map)$/i.test(pathname);
+  if (
+    browser &&
+    !navigation &&
+    !staticResource &&
+    expectedService === undefined &&
+    queryServices.length === 0
+  )
+    return refuse(
+      "runtime.owner-missing",
+      "Browser API requests require their original runtime service identity.",
+    );
   let result: IdentityResult;
   if (host === `127.0.0.1:${options.port()}`) {
     const proxyIdentity = Object.keys(headers).some((key) => key.startsWith("tailscale-"));

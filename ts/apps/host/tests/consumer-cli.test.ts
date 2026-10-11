@@ -12,6 +12,8 @@ import { RevitBridge } from "../src/bridge.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { opsCatalogRoute } from "../src/ops-catalog.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
+import { fakeRuntimeHost } from "../../../packages/mcps/tests/runtime-host-fixture.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
 
 // Only native execution and SDK inventory are substituted. Gunshi, HTTP, admission,
 // durable steps, catalogue, local file/stdin decoding and original-ID replay are real.
@@ -55,6 +57,9 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
         : ["A", "B"].map((sessionId) => ({
             sessionId,
             connected: true,
+            lane: hostOwnership.lane,
+            sourceRoot: hostOwnership.sourceRoot,
+            serviceName: hostOwnership.serviceName,
             processId: sessionId === "A" ? 42 : 43,
             processStartUtcUnixMs: 1000,
             state: {
@@ -117,6 +122,7 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  fakeRuntimeHost(base);
   const printed: string[] = [];
   const log = vi.spyOn(console, "log").mockImplementation((...args) => {
     printed.push(args.join(" "));

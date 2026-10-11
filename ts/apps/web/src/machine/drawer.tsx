@@ -1,9 +1,6 @@
 /**
- * The machine layer's one door on every web page: a version chip bottom-left reading
- * `Pe.Tools <version>`, or `<next> ready` while an update plan waits for consent. Update is the
- * only machine state that surfaces outside the drawer (host ledger 2026-10-09 ruling 3). The chip
- * slides in a 380 px drawer holding the machine body; Esc and × close it and focus returns to the
- * chip. The tray route draws the same body without this chrome, so neither renders there.
+ * The machine layer's door: current version and runtime ownership at bottom-right.
+ * Esc and × close the drawer and return focus. The tray draws the same body without this chrome.
  */
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { X } from "lucide-react";
@@ -12,7 +9,7 @@ import { Press } from "#/components/lang/press";
 
 import { MachineBody } from "./body";
 import { closeMachine, drawerState, openMachine, subscribeDrawer } from "./door";
-import { chipText, machineOf, planWaits } from "./model";
+import { chipText, planWaits, runtimeIdentity } from "./model";
 import { useMachine } from "./use-machine";
 
 export function VersionChip() {
@@ -20,8 +17,8 @@ export function VersionChip() {
   const state = useSyncExternalStore(subscribeDrawer, drawerState, drawerState);
   const chip = useRef<HTMLButtonElement>(null);
   const close = useRef<HTMLButtonElement>(null);
-  const machine = machineOf(reading);
-  const waiting = machine ? planWaits(machine) : null;
+  const waiting = reading.state === "ready" ? planWaits(reading.observation) : null;
+  const identity = runtimeIdentity(reading, fixture);
   useEffect(() => {
     if (!("setAppBadge" in navigator)) return;
     try {
@@ -47,7 +44,7 @@ export function VersionChip() {
   };
   return (
     <>
-      <span className="fixed bottom-2 left-2 z-sticky">
+      <span className="fixed right-2 bottom-2 z-sticky">
         <Press
           ref={chip}
           tone="quiet"
@@ -56,14 +53,10 @@ export function VersionChip() {
           aria-expanded={state.open}
           aria-controls="machine-drawer"
           data-tone={waiting ? "caution" : undefined}
-          title={
-            waiting
-              ? `Pe.Tools ${waiting.latest} is ready; open this machine to update`
-              : "this machine: Revit, update, share, Pea and the host"
-          }
+          title={identity.detail}
           onClick={() => (state.open ? shut() : openMachine())}
         >
-          <span className="face-mono">{chipText(machine)}</span>
+          <span className="face-mono">{chipText(reading, fixture)}</span>
         </Press>
       </span>
       {state.open ? (
@@ -71,7 +64,7 @@ export function VersionChip() {
           id="machine-drawer"
           aria-label="this machine"
           data-surface="page"
-          className="hairline-r fixed inset-y-0 left-0 z-popup flex w-[380px] flex-col gap-2 overflow-y-auto px-3 pt-2 pb-12"
+          className="hairline-l fixed inset-y-0 right-0 z-popup flex w-[380px] max-w-full flex-col gap-2 overflow-y-auto px-3 pt-2 pb-12"
         >
           <span className="flex h-(--control-h) items-center gap-2">
             <span className="font-semibold">This machine</span>
@@ -88,6 +81,7 @@ export function VersionChip() {
               </Press>
             </span>
           </span>
+          <p className="break-all text-ink-2">{identity.detail}</p>
           <MachineBody
             key={state.group ?? "auto"}
             reading={reading}

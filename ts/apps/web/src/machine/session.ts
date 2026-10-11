@@ -32,6 +32,12 @@ export function processOf(row: SessionObservation): ProcessIdentity | null {
 
 export const pidOf = (row: SessionObservation) => processOf(row)?.pid ?? null;
 
+/** The SDK owns eligibility; diagnostic visibility never grants execution. */
+export const executionRefusal = (row: SessionObservation): string | null =>
+  row.execution?.allowed === true
+    ? null
+    : (row.execution?.detail ?? "Runtime ownership has not been verified by the SDK.");
+
 export const custodyOf = (row: SessionObservation) =>
   row.case === "observed-active" ? ("observed" as const) : ("controlled" as const);
 

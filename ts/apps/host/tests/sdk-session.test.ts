@@ -5,14 +5,18 @@ import { promisify } from "node:util";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
+import { checkoutRootFrom, productRoot } from "@pe/host-contracts/service-identity";
 import { peRevitLauncher } from "../src/pe-revit-launch.ts";
 import { resolveSdkSession } from "../src/sdk-session.ts";
 import { RevitBridgeLive, type BridgeSessionView } from "../src/bridge.ts";
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { sdkEnvelope, sdkResolved, sdkSessions } from "./native-receipt-fixture.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
 
 const socket: BridgeSessionView = {
+  lane: hostOwnership.lane,
+  sourceRoot: hostOwnership.sourceRoot,
+  serviceName: hostOwnership.serviceName,
   connected: true,
   sessionId: "attachment",
   processId: 42,
@@ -22,6 +26,25 @@ const bridge = (sockets: BridgeSessionView[] = [socket]) => ({
   list: Effect.sync(() => sockets),
   snapshot: (id?: string) =>
     Effect.sync(() => sockets.find((s) => s.sessionId === id) ?? { connected: false }),
+});
+
+test.each([
+  { payload: "installed", sourceRoot: null, installedRoot: productRoot() },
+  { payload: "checkout", sourceRoot: "C:/checkout-B" },
+  { payload: "checkout", sourceRoot: null },
+  { payload: null, sourceRoot: null },
+])("SDK exact process with wrong or missing owner %j refuses execution", async (owner) => {
+  await expect(
+    resolveSdkSession(bridge(), { session: { id: "explicit" } }, async () =>
+      sdkEnvelope({ state: "ok", documents: [] }, { ...sdkResolved, ...owner }),
+    ),
+  ).rejects.toMatchObject({ evidence: { notDispatched: true } });
+});
+
+test("matching SDK process cannot authorize a foreign bridge owner", async () => {
+  await expect(
+    resolveSdkSession(bridge([{ ...socket, sourceRoot: "C:/checkout-B" }]), {}, sdkSessions),
+  ).rejects.toMatchObject({ evidence: { notDispatched: true } });
 });
 
 test.each([undefined, { id: "4242" }, { pid: 4242 }])(

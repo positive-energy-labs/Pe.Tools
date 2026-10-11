@@ -75,9 +75,10 @@ const SHELL = doc("project-a Shell.rvt", "C:\\Models\\project-a Shell.rvt", {
 });
 
 /** A checkout Revit this checkout's dev session controls, hot reload, one unsaved cloud model. */
-export const CHECKOUT_HOT: MachineSession = {
+export const CHECKOUT_HOT = {
   row: {
     case: "controlled-active",
+    execution: { allowed: true, code: null, detail: null },
     id: "pe-app-25-main",
     year: 2025,
     detail: "",
@@ -114,12 +115,13 @@ export const CHECKOUT_HOT: MachineSession = {
   },
   documents: [TOWER, SHELL],
   documentsLeg: read,
-};
+} satisfies MachineSession;
 
 /** A Revit someone started from its icon: observed, addressed by pid, documents from doc list. */
 export const OBSERVED_ICON: MachineSession = {
   row: {
     case: "observed-active",
+    execution: { allowed: true, code: null, detail: null },
     year: 2024,
     observedAtUtc: AT,
     shape: shape({}),
@@ -147,6 +149,7 @@ export const OBSERVED_ICON: MachineSession = {
 export const BACKGROUND_BOOTING: MachineSession = {
   row: {
     case: "controlled-pending",
+    execution: { allowed: true, code: null, detail: null },
     id: "pe-app-26-installed",
     year: 2026,
     detail: "Revit is inside its startup window.",
@@ -171,7 +174,24 @@ export const BACKGROUND_BOOTING: MachineSession = {
   documentsLeg: { observedAtUtc: null, attemptedAtUtc: null, error: null },
 };
 
-const SESSIONS = [CHECKOUT_HOT, OBSERVED_ICON, BACKGROUND_BOOTING];
+const SESSIONS = [
+  {
+    ...CHECKOUT_HOT,
+    row: {
+      ...CHECKOUT_HOT.row,
+      shape: shape({}),
+      project: null,
+      worktree: "C:\\Users\\demo\\AppData\\Local\\Positive Energy\\Pe.Tools",
+      receipt: {
+        payload: "installed" as const,
+        generationRoot: `${REGISTRY}\\installed`,
+        receiptPath: `${REGISTRY}\\sessions\\pe-app-25-main.json`,
+      },
+    },
+  },
+  OBSERVED_ICON,
+  BACKGROUND_BOOTING,
+];
 
 const revitOf = (session: MachineSession, blocked: boolean): UpdateRevit => {
   const process =
@@ -183,7 +203,7 @@ const revitOf = (session: MachineSession, blocked: boolean): UpdateRevit => {
   return {
     answering: session.documents !== null,
     blockers:
-      blocked && session === CHECKOUT_HOT
+      blocked && session.documents?.some((document) => document.isModified)
         ? [
             {
               code: "update.modified-cloud-document",
@@ -218,6 +238,7 @@ const plan = (sessions: readonly MachineSession[], blocked: boolean): UpdatePlan
     available: true,
     blockers: revits.flatMap((revit) => revit.blockers),
     current: "0.7.0",
+    installedRoot: "C:\\Users\\demo\\AppData\\Local\\Positive Energy\\Pe.Tools",
     latest: "0.7.1",
     effects: {
       close: revits.map((revit) => ({ pid: revit.pid, processStartUtc: revit.processStartUtc })),

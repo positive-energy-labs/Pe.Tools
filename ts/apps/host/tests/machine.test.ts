@@ -37,6 +37,7 @@ vi.mock("../src/session-route.ts", async (original) => {
 
 const row: ObservedActive = {
   case: "observed-active",
+  execution: { allowed: true, code: null, detail: null },
   year: 2025,
   observedAtUtc: "2026-10-09T00:00:00Z",
   process: { pid: 42, processStartUtc: "2026-10-09T00:00:00.1230000Z", executable: "Revit.exe" },

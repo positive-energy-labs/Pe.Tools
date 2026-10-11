@@ -1,3 +1,4 @@
+import { hostFetch } from "#/host/runtime";
 import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
 
 export type Feedback = {
@@ -15,7 +16,7 @@ export type Feedback = {
 
 /** Resolves once the host has handed the note to PostHog; throws the host's reason otherwise. */
 export async function sendFeedback(feedback: Feedback): Promise<void> {
-  const response = await fetch(peUrl(resolveWorkbenchConfig(), "/feedback"), {
+  const response = await hostFetch(peUrl(resolveWorkbenchConfig(), "/feedback"), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(feedback),

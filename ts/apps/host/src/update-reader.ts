@@ -32,6 +32,7 @@ const receiptSchema: z.ZodType<UpdateReceipt> = z.object({
   legs: z.array(leg),
 });
 const planSchema: z.ZodType<UpdatePlan> = z.object({
+  installedRoot: z.string(),
   available: z.boolean(),
   blockers: z.array(blocker),
   current: z.string(),

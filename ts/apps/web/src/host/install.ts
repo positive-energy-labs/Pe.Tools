@@ -1,6 +1,7 @@
-﻿/** Update mutation only. Machine owns checks and durable receipt recovery. */
+import { hostFetch } from "#/host/runtime";
+/** Update mutation only. Machine owns checks and durable receipt recovery. */
 export async function acknowledgeUpdate(planId: string): Promise<string> {
-  const response = await fetch("/host/update", {
+  const response = await hostFetch("/host/update", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ planId }),
@@ -18,7 +19,7 @@ export async function acknowledgeUpdate(planId: string): Promise<string> {
 }
 
 export async function recheckUpdate(): Promise<void> {
-  const response = await fetch("/host/update?recheck=1");
+  const response = await hostFetch("/host/update?recheck=1");
   const body = (await response.json()) as { planLeg?: { error: string | null } };
   if (!response.ok || body.planLeg?.error)
     throw Error(body.planLeg?.error ?? `Update check failed (${response.status}).`);

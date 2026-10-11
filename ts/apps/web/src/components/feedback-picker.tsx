@@ -116,7 +116,7 @@ export function FeedbackPicker() {
           style={{ left: box.x, top: box.y, width: box.width, height: box.height }}
         />
       )}
-      <div {...{ [CHROME]: "" }} data-react-grab-ignore className="fixed right-2 bottom-2 z-popup">
+      <div {...{ [CHROME]: "" }} data-react-grab-ignore className="fixed bottom-2 left-2 z-popup">
         <ActionButton
           label={picking ? "cancel feedback" : "feedback"}
           icon={MessageSquarePlus}

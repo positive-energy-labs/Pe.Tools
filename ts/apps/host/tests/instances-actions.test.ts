@@ -234,7 +234,7 @@ test("start launches the staged session under its step id, then opens the staged
   expect(openArgv!.slice(0, 3)).toEqual(["doc", "open", "C:/Tower.rvt"]);
   expect(flag(openArgv!, "--id")).toBe("dev");
   expect(flag(openArgv!, "--links")).toBe("refuse");
-  expect(flag(openArgv!, "--conflict")).toBe("keep");
+  expect(flag(openArgv!, "--unsynced")).toBe("keep");
   expect(flag(openArgv!, "--request-id")).toBe(open!.id);
   expect(flag(openArgv!, "--expect-session")).toBe(receiptPath);
   expect(flag(openArgv!, "--expect-doc")).toBe("absent");
@@ -406,7 +406,7 @@ test("open binds the exact recorded incarnation and its receipt path; a foreign 
   expect(flag(open, "--request-id")).toBe(step.id);
   expect(flag(open, "--expect-session")).toBe(receiptPath);
   expect(flag(open, "--expect-doc")).toBe("absent");
-  expect(flag(open, "--conflict")).toBe("keep");
+  expect(flag(open, "--unsynced")).toBe("keep");
 
   // The proven open retired its staged launch; the person stages it again for the foreign attempt.
   const restaged = await f.stage({

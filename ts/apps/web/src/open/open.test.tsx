@@ -18,6 +18,7 @@ import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 
 import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { Launcher } from "./launcher";
+import { runLifecycle } from "./lifecycle";
 import type { OpenHandle } from "./manifest";
 import { EMPTY_DRAFT, launchPlan, modelRows, type DocRow, type LaunchDraft } from "./model";
 import { RunningBlock, RunningList } from "./running";
@@ -77,6 +78,50 @@ test("the frozen Open route renders and drafts without opening a host transport"
 });
 
 describe("launch plan", () => {
+  test("foreign and unverified diagnostics are never default execution targets", () => {
+    for (const execution of [
+      {
+        allowed: false,
+        code: "session.no-match",
+        detail: "This Revit belongs to another checkout.",
+      },
+      null,
+    ]) {
+      const session = { ...CHECKOUT_HOT, row: { ...CHECKOUT_HOT.row, execution } };
+      const reading = { ...machine, revit: { ...machine.revit, sessions: [session] } };
+      const plan = launchPlan(
+        { ...EMPTY_DRAFT, doc: row("Riverside MEP.rvt"), year: 2025 },
+        reading,
+        rows,
+      );
+      expect(plan.live).toHaveLength(1);
+      expect(plan.target).toBeNull();
+      const explicit = launchPlan(
+        { ...EMPTY_DRAFT, doc: row("Riverside MEP.rvt"), year: 2025, target: "pe-app-25-main" },
+        reading,
+        rows,
+      );
+      expect(explicit.refusal).toContain(execution?.detail ?? "ownership has not been verified");
+      expect(explicit.launch).toBeNull();
+    }
+  });
+
+  test("lifecycle refuses an ineligible diagnostic row before creating an action", async () => {
+    const session = {
+      ...CHECKOUT_HOT,
+      row: {
+        ...CHECKOUT_HOT.row,
+        execution: {
+          allowed: false,
+          code: "session.no-match",
+          detail: "This Revit belongs to another checkout.",
+        },
+      },
+    };
+    await expect(runLifecycle("stop", session, basis, "keep")).rejects.toThrow("another checkout");
+    expect(runSemanticAction).not.toHaveBeenCalled();
+  });
+
   test("an explicit target that disappears refuses instead of starting a Revit", () => {
     const plan = launchPlan(
       { ...EMPTY_DRAFT, doc: row("Riverside MEP.rvt"), target: "retired-session" },
@@ -167,7 +212,7 @@ describe("launch plan", () => {
     );
     expect(plan.argv).toEqual([
       "pe-revit session start --year 2024 --background --quarantine",
-      'pe-revit doc open "C:\\Models\\Riverside MEP.rvt" --id <minted> --conflict keep --links refuse',
+      'pe-revit doc open "C:\\Models\\Riverside MEP.rvt" --id <minted> --unsynced keep --links refuse',
     ]);
     expect(plan.note).toContain("two commands");
     expect(plan.launch).toMatchObject({ kind: "start", posture: "background", quarantine: true });
