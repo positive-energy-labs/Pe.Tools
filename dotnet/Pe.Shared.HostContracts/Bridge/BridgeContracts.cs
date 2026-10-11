@@ -74,7 +74,8 @@ public sealed record BridgeRegistrationRequest(
     string? SdkSessionId = null,
     string? BuildStamp = null,
     string? SourceRoot = null,
-    string? ServiceName = null
+    string? ServiceName = null,
+    string? InstalledRoot = null
 );
 
 public sealed record BridgeRegistrationAck(

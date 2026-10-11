@@ -128,6 +128,7 @@ export const bridgeRegistrationRequestSchema = Schema.Struct({
   contractVersion: Schema.Number,
   lane: nullableString,
   sourceRoot: nullableString,
+  installedRoot: nullableString,
   serviceName: nullableString,
   processId: Schema.Number,
   processStartUtcUnixMs: Schema.optional(Schema.NullOr(Schema.Number)),

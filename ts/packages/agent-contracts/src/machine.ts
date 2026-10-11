@@ -35,6 +35,7 @@ export interface MachineHost {
   /** Host/Revit ownership only; never a code-freshness claim. */
   readonly runtimeMatch?: "verified" | "disconnected" | "unknown" | "refused";
   readonly runtimeRefusal?: string | null;
+  readonly installedRoot?: string | null;
   readonly serviceName: string;
   readonly instanceId: string;
   readonly version: string;

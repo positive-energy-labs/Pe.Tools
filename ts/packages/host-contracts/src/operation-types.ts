@@ -367,6 +367,7 @@ export const hostProbeDataSchema = Schema.Struct({
   runtimeIdentity: Schema.String,
   serviceName: Schema.String,
   sourceRoot: Schema.optional(Schema.NullOr(Schema.String)),
+  installedRoot: Schema.optional(Schema.NullOr(Schema.String)),
   world: Schema.Struct({
     id: Schema.String,
     root: Schema.String,

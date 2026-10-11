@@ -5,7 +5,8 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { hostProcessIdentity, productIdentity } from "./contracts/product.ts";
+import { isSea } from "node:sea";
+import { hostProcessIdentity, productIdentity, productInstallLayout } from "./contracts/product.ts";
 export {
   HOST_RUNTIME_SERVICE_HEADER,
   HOST_RUNTIME_SERVICE_QUERY,
@@ -26,6 +27,19 @@ export function productRoot(): string {
     productIdentity.vendorName,
     productIdentity.productName,
   );
+}
+
+/** Installed executables must run at the manifest's canonical installed location. */
+export function installedRuntimeRoot(
+  app: "host" | "pea",
+  executablePath = process.execPath,
+  bundled = isSea(),
+): string {
+  const root = productRoot();
+  const expected = join(root, productInstallLayout[`VersionedApp:${app}`]);
+  if (!bundled || normalizeSourceRoot(executablePath) !== normalizeSourceRoot(expected))
+    throw Error(`Installed ${app} must execute from '${expected}'.`);
+  return root;
 }
 
 /** Worktree-scoped dev-host name for a checkout root (SDK hash — byte-stable across languages). */
@@ -69,8 +83,18 @@ export function hostServiceName(lane: HostLane, sourceRoot: string | null): stri
 
 /** Ownership authorizes execution; matching ownership does not attest loaded code freshness. */
 export function runtimeOwnerRejection(
-  expected: { lane: HostLane; sourceRoot: string | null; serviceName: string },
-  actual: { lane?: string | null; sourceRoot?: string | null; serviceName?: string | null },
+  expected: {
+    lane: HostLane;
+    sourceRoot: string | null;
+    serviceName: string;
+    installedRoot?: string | null;
+  },
+  actual: {
+    lane?: string | null;
+    sourceRoot?: string | null;
+    serviceName?: string | null;
+    installedRoot?: string | null;
+  },
 ): string | null {
   if (actual.lane !== expected.lane)
     return `Runtime lane '${actual.lane ?? "unknown"}' does not match '${expected.lane}'.`;
@@ -83,6 +107,15 @@ export function runtimeOwnerRejection(
       normalizeSourceRoot(actual.sourceRoot) !== normalizeSourceRoot(expected.sourceRoot)
     )
       return `Runtime checkout '${actual.sourceRoot ?? "unknown"}' does not match '${expected.sourceRoot}'.`;
-  } else if (actual.sourceRoot) return "Installed runtime must not report a checkout source root.";
+    if (actual.installedRoot) return "Checkout runtime must not report an installation root.";
+  } else {
+    if (actual.sourceRoot) return "Installed runtime must not report a checkout source root.";
+    if (
+      !expected.installedRoot ||
+      !actual.installedRoot ||
+      normalizeSourceRoot(actual.installedRoot) !== normalizeSourceRoot(expected.installedRoot)
+    )
+      return `Runtime installation '${actual.installedRoot ?? "unknown"}' does not match '${expected.installedRoot ?? "unknown"}'.`;
+  }
   return null;
 }
