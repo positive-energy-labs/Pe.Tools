@@ -11,6 +11,7 @@ import {
   address,
   documentRows,
   findCapabilities,
+  recentRows,
   type CapabilityCatalog,
   type ThreadHead,
 } from "@pe/agent-contracts";
@@ -113,6 +114,7 @@ test("native catalog survives SDK latency while host-only sources keep their sho
           reject(init.signal?.reason);
         });
       });
+    if (url.pathname === "/instances/readings") return Response.json({ result: { recents: [] } });
     expect(url.pathname).toBe("/call");
     const key = JSON.parse(typeof init?.body === "string" ? init.body : "{}").key;
     return Response.json(key === "pod.list" ? pods : { sessions: [] });
@@ -604,6 +606,126 @@ test("an open document is a doc: row: pe_find finds it, pe_read returns its ment
   };
   expect(done.isError).toBe(true);
   expect(done.content).toContain("a pointer and not an action");
+});
+
+test("a recent document is a recent: row: pe_find finds it, pe_read returns its mention with openWith, pe_do refuses", async () => {
+  fakeRuntimeHost("http://127.0.0.1:9");
+  const base = catalog();
+  base.recents = [
+    {
+      title: "Belmont Plant",
+      path: "C:\\Jobs\\Belmont Plant.rvt",
+      isCloud: false,
+      region: null,
+      projectGuid: null,
+      modelGuid: null,
+      year: 2024,
+      savedYear: 2024,
+      rank: 1,
+    },
+  ];
+  const served = { ...base, capabilities: [...base.capabilities, ...recentRows(base)] };
+  vi.stubGlobal("fetch", async () => Response.json(served));
+  const key = "recent:C:\\Jobs\\Belmont Plant.rvt";
+  const found = (await run(peFind, { query: "belmont plant" })) as {
+    matches: Array<{ key: string; kind: string }>;
+  };
+  expect(found.matches[0]).toMatchObject({ key, kind: "recent" });
+  const read = (await run(peRead, { key, timeoutSeconds: 30 })) as {
+    ok: boolean;
+    kind: string;
+    result: { facts: Record<string, unknown> };
+  };
+  expect(read).toMatchObject({ ok: true, kind: "recent" });
+  expect(read.result.facts).toMatchObject({
+    path: "C:\\Jobs\\Belmont Plant.rvt",
+    year: 2024,
+    open: false,
+    openWith: "C:\\Jobs\\Belmont Plant.rvt",
+  });
+  const done = (await run(peDo, { key, timeoutSeconds: 30 })) as {
+    isError: boolean;
+    content: string;
+  };
+  expect(done.isError).toBe(true);
+  expect(done.content).toContain("is a recent document, a pointer");
+  expect(done.content).toContain("route:instances.propose");
+});
+
+test("recents ride the catalog from the host's SDK reading: cached, never awaited past their budget, a failure is a source", async () => {
+  fakeRuntimeHost("http://127.0.0.1:19");
+  const recent = {
+    title: "Plant",
+    path: "C:\\Jobs\\Plant.rvt",
+    isCloud: false,
+    region: null,
+    projectGuid: null,
+    modelGuid: null,
+    year: 2025,
+    savedYear: 2025,
+    savedYearFailure: null,
+    rank: 1,
+  };
+  let recentsReads = 0;
+  let answer: () => Promise<Response> = async () =>
+    Response.json({ result: { state: "ok", recents: [recent], sources: [] } });
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname === "/instances/readings") {
+      expect(url.searchParams.get("read")).toBe("recents");
+      recentsReads += 1;
+      return answer();
+    }
+    if (url.pathname === "/ops") return Response.json({ operations: ops });
+    const key = JSON.parse(typeof init?.body === "string" ? init.body : "{}").key;
+    return Response.json(key === "pod.list" ? pods : { sessions: [] });
+  });
+  const source = createCapabilityCatalogSource({
+    hostBaseUrl: "http://127.0.0.1:19",
+    registrations: [],
+  });
+  const first = await source.read();
+  expect(first.sources.recents).toBe("ok");
+  expect(recentRows(first).map((row) => row.key)).toEqual(["recent:C:\\Jobs\\Plant.rvt"]);
+  await source.read({ bridgeSessionId: "other" });
+  expect(recentsReads).toBe(1);
+
+  // A slow read: the catalog answers at the budget without them; the next read has them.
+  vi.useFakeTimers();
+  try {
+    const slow = createCapabilityCatalogSource({
+      hostBaseUrl: "http://127.0.0.1:19",
+      registrations: [],
+    });
+    answer = () =>
+      new Promise((resolve) =>
+        setTimeout(
+          () => resolve(Response.json({ result: { state: "ok", recents: [recent], sources: [] } })),
+          5_000,
+        ),
+      );
+    const reading = slow.read();
+    await vi.advanceTimersByTimeAsync(2_000);
+    const early = await reading;
+    expect(early.recents).toEqual([]);
+    expect(early.sources.recents).toMatch(/^still reading/);
+    expect(early.capabilities.length).toBeGreaterThan(0);
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect((await slow.read()).recents).toHaveLength(1);
+  } finally {
+    vi.useRealTimers();
+  }
+
+  // A failure names itself in sources; the rest of the catalog stands.
+  answer = async () => Response.json({ error: "pe-revit missing" }, { status: 503 });
+  const failing = createCapabilityCatalogSource({
+    hostBaseUrl: "http://127.0.0.1:19",
+    registrations: [],
+  });
+  const failed = await failing.read();
+  expect(failed.sources.recents).toMatch(/^did not answer: .*503/);
+  expect(failed.recents).toEqual([]);
+  expect(failed.sources.catalog).toBe("ok");
 });
 
 test("an exact-open turn Target reads and writes route Work under its document's Address (E2E-J1)", async () => {

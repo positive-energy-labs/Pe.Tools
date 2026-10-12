@@ -148,7 +148,7 @@ async function routeWorkScope(target: Target): Promise<{ query: string; target: 
 export const peFind = createTool({
   id: "pe_find",
   description:
-    "Find a capability. No query returns the map: connected Revit sessions with their active document and custody, counts per kind, top rows per kind, and which sources answered. A query ranks rows across host operations (op:), the collaborative route documents you co-edit with the user and their commands (route:), pod buttons the user presses in Revit's Do palette (pod:), skills (skill:), and documents open in Revit (doc:<session>/<openId>, the same pointer the user @-mentions). Filter with kind, needs, mutates. Every row you may run is visible; nothing is tiered, and human-only rows (the person's presses) are not offered. Then pe_read a non-mutating row or pe_do any row.",
+    "Find a capability. No query returns the map: connected Revit sessions with their active document and custody, counts per kind, top rows per kind, and which sources answered. A query ranks rows across host operations (op:), the collaborative route documents you co-edit with the user and their commands (route:), pod buttons the user presses in Revit's Do palette (pod:), skills (skill:), documents open in Revit (doc:<session>/<openId>, the same pointer the user @-mentions), and Revit's recent documents, not open (recent:<path> or recent:cloud:<region>/<project>/<model>). Filter with kind, needs, mutates. Every row you may run is visible; nothing is tiered, and human-only rows (the person's presses) are not offered. Then pe_read a non-mutating row or pe_do any row.",
   inputSchema: z.object({
     query: z.string().optional().describe("Keywords describing what you need."),
     kind: capabilityKindSchema.optional(),
@@ -227,7 +227,7 @@ type RunInput = z.infer<typeof runInputSchema>;
 export const peRead = createTool({
   id: "pe_read",
   description:
-    "Run one capability that does not mutate: an op: row with mutates false, a route: document read, a skill: body, or a doc: row's mention (its session, openId, address and custody, read now). Refuses mutating rows with a hint to use pe_do. Split from pe_do so reads never wait on an approval prompt. Runs under this thread's Scope; the result names the revision and the resolved target.",
+    "Run one capability that does not mutate: an op: row with mutates false, a route: document read, a skill: body, or a doc: row's mention (its session, openId, address and custody, read now), or a recent: row's mention (its path, year and the openWith source that opens it). Refuses mutating rows with a hint to use pe_do. Split from pe_do so reads never wait on an approval prompt. Runs under this thread's Scope; the result names the revision and the resolved target.",
   inputSchema: runInputSchema,
   execute: (input, context) =>
     executeTool(input, context, (row) =>
@@ -247,7 +247,9 @@ export const peDo = createTool({
       (row) =>
         row.kind === "document"
           ? `'${row.key}' is a document, a pointer and not an action; pass its session and openId to an op as target {kind: open, ref: {session, openId}}.`
-          : null,
+          : row.kind === "recent"
+            ? `'${row.key}' is a recent document, a pointer and not an action; open it first: pe_read it for openWith, then propose the open with pe_do route:instances.propose, path [launch, proposal], value {value: {kind: open, session: {id}, document: <openWith>}}; the person stages it and opens.`
+            : null,
       true,
     ),
 });
@@ -506,7 +508,8 @@ async function dispatch(
         elapsedMs: result.elapsedMs,
       };
     }
-    case "document": {
+    case "document":
+    case "recent": {
       // Reading a document pointer is its mention: the facts a first hop needs, read now.
       if (!catalog) throw Error("A document row needs the catalog it was read from.");
       return { ok: true, target: scopeTarget, result: mentionOf(row, catalog) };

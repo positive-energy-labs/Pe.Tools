@@ -87,6 +87,54 @@ test("a menu row reads: an op titled by its key takes its description's first cl
   });
 });
 
+test("recent documents group after Documents, say their folder or cloud project, and drop when the inventory has them open", () => {
+  const recents = mentionRows(catalog, "").filter((row) => row.kind === "recent");
+  expect(recents.map((row) => row.title)).toEqual([
+    "Boiler Plant Retrofit",
+    "MEP_Belmont_R26",
+    "PE Duct Tag",
+  ]);
+  const kinds = mentionRows(catalog, "").map((row) => row.kind);
+  expect(kinds.indexOf("recent")).toBe(kinds.lastIndexOf("document") + 1);
+  expect(MENTION_KINDS.recent.group).toBe("Recent");
+  expect(mentionFace(recents[0]!, catalog)).toMatchObject({
+    fact: "Projects\\2611 Boiler Plant",
+    detail: expect.stringContaining("C:\\Projects\\2611 Boiler Plant\\Boiler Plant Retrofit.rvt"),
+  });
+  expect(mentionFace(recents[1]!, catalog).fact).toBe("cloud · Belmont Studio");
+  const picked = pickMention({ ...EMPTY_CHAT_DRAFT, text: "@boil" }, 5, recents[0]!, catalog);
+  expect(picked.draft.mentions[0]).toMatchObject({
+    kind: "recent",
+    facts: { openWith: "C:\\Projects\\2611 Boiler Plant\\Boiler Plant Retrofit.rvt", open: false },
+  });
+
+  // The person opened it: the inventory's doc: row wins and the recent one goes.
+  const inventory = CHAT_SEEDS.send.readings.inventory;
+  const [session] = inventory.sessions;
+  const opened = liveCatalog(
+    catalog,
+    {
+      sessions: [
+        {
+          ...session!,
+          openDocuments: [
+            ...(session!.openDocuments ?? []),
+            {
+              openId: "open-9",
+              title: "Boiler Plant Retrofit",
+              address: "C:\\Projects\\2611 Boiler Plant\\Boiler Plant Retrofit.rvt",
+              isFamilyDocument: false,
+              isActive: false,
+            },
+          ],
+        },
+      ],
+    },
+    catalog.at,
+  );
+  expect(mentionRows(opened, "boiler").map((row) => row.kind)).toEqual(["document"]);
+});
+
 test("open documents come from the live inventory, not the catalog's own rows", () => {
   const stale = {
     ...catalog,

@@ -13,6 +13,7 @@ export const capabilityKindSchema = z.enum([
   "pod",
   "skill",
   "document",
+  "recent",
 ]);
 export type CapabilityKind = z.infer<typeof capabilityKindSchema>;
 
@@ -70,12 +71,32 @@ export const capabilitySessionSchema = z.object({
     .optional(),
 });
 
+/** One entry of Revit's per-year recent documents, as `pe-revit doc list --recent` reads it. */
+export const capabilityRecentSchema = z.object({
+  title: z.string(),
+  /** A local path, or the `cld://<region>/{project}<name>/{model}<name>.rvt` a cloud model opens by. */
+  path: z.string(),
+  isCloud: z.boolean(),
+  region: z.string().nullable(),
+  projectGuid: z.string().nullable(),
+  modelGuid: z.string().nullable(),
+  /** The Revit year whose recent list holds it. */
+  year: z.number(),
+  /** The year the file was saved in; null for a cloud model or an unreadable file. */
+  savedYear: z.number().nullable(),
+  /** 1 is that year's most recent. */
+  rank: z.number(),
+});
+export type CapabilityRecent = z.infer<typeof capabilityRecentSchema>;
+
 /** What `GET /pe/capabilities` serves: rows plus the orientation `pe_find` folds in. */
 export const capabilityCatalogSchema = z.object({
   at: z.string(),
   /** The bridge session the op rows were read from, when one answered. */
   bridgeSessionId: z.string().optional(),
   sessions: z.array(capabilitySessionSchema),
+  /** Revit's recent documents (no Revit needed); absent when the catalog was built without them. */
+  recents: z.array(capabilityRecentSchema).optional(),
   /** Per-source outcome; a source that could not answer says why instead of hiding rows. */
   sources: z.record(z.string(), z.string()),
   capabilities: z.array(capabilitySchema),

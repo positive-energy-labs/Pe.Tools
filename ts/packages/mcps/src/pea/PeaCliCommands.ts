@@ -151,18 +151,18 @@ export class PeaCliCommands {
     return define({
       name: "find",
       description:
-        "Find in the one capability catalog (ops, route documents, pods, skills, open documents) — the same rows and ranking pe_find gives Pea. --mention prints the pointer Pea gets when the user @-mentions a row.",
+        "Find in the one capability catalog (ops, route documents, pods, skills, open and recent documents) — the same rows and ranking pe_find gives Pea. --mention prints the pointer Pea gets when the user @-mentions a row.",
       args: {
         host: commonArgs.host,
         bridgeSessionId: {
           type: "string",
           description:
-            "Revit session whose operations to include; without it only host operations, pods, skills, and open documents are searched.",
+            "Revit session whose operations to include; without it only host operations, pods, skills, and open and recent documents are searched.",
         },
         kind: {
           type: "string",
           description:
-            "Optional kind filter: op, route-doc, route-command, pod, skill, or document.",
+            "Optional kind filter: op, route-doc, route-command, pod, skill, document, or recent.",
         },
         needs: {
           type: "string",
@@ -181,6 +181,7 @@ export class PeaCliCommands {
       examples: [
         "pea find schedules",
         "pea find --kind document",
+        "pea find --kind recent belmont",
         "pea find riser --json",
         "pea find --mention doc:<session>/<openId>",
       ].join("\n"),

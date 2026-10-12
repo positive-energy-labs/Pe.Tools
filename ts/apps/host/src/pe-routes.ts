@@ -15,6 +15,7 @@ import {
   familiesViewCommandSchema,
   familiesViewSchema,
   readingKey,
+  recentRows,
   routeStatePatchSchema,
   START_FRESH,
   type CapabilityCatalog,
@@ -190,10 +191,10 @@ export function createPeRoutes(options: PeRoutesOptions) {
             ? sdkSessionSelectionSchema.parse(JSON.parse(query.get("sdk")!))
             : undefined,
         });
-        // Open documents are rows too, so every door's one search finds them to mention.
+        // Open and recent documents are rows too, so every door's one search finds them to mention.
         return json({
           ...catalog,
-          capabilities: [...catalog.capabilities, ...documentRows(catalog)],
+          capabilities: [...catalog.capabilities, ...documentRows(catalog), ...recentRows(catalog)],
         });
       } catch (error) {
         return json({ error: message(error) }, 502);

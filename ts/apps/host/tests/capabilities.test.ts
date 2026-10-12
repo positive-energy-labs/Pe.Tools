@@ -69,6 +69,8 @@ test("the host-owned /pe surface answers without Revit", async () => {
     // pod.list is host-local: the pods answer with Revit closed.
     expect(catalog.sources["pod.json"]).toBe("ok");
     expect(catalog.sessions).toEqual([]);
+    // Recents read without Revit; whatever they answered in their own budget is named.
+    expect(catalog.sources.recents).toMatch(/^(ok|still reading|did not answer)/);
     const keys = catalog.capabilities.map((row) => row.key);
     expect(keys).toContain("op:host.shell.open");
     expect(keys).toContain("workflow:instances.start");
@@ -120,7 +122,7 @@ test("the host-owned /pe surface answers without Revit", async () => {
   }
 }, 40_000);
 
-test("GET /pe/capabilities serves each open document as a doc: row beside the catalog's rows", async () => {
+test("GET /pe/capabilities serves each open document as a doc: row and each unopened recent one as a recent: row", async () => {
   const app = createPeRoutes({
     registrations: [],
     store: { getState: async () => null, setState: async () => {} },
@@ -135,7 +137,7 @@ test("GET /pe/capabilities serves each open document as a doc: row beside the ca
             openDocuments: [
               {
                 openId: "o1",
-                address: null,
+                address: "C:\\Models\\Riser.rvt",
                 title: "Riser",
                 isFamilyDocument: false,
                 isActive: true,
@@ -143,6 +145,18 @@ test("GET /pe/capabilities serves each open document as a doc: row beside the ca
             ],
           },
         ],
+        recents: [
+          { title: "Riser", path: "C:\\Models\\Riser.rvt", rank: 1 },
+          { title: "Plant", path: "C:\\Models\\Plant.rvt", rank: 2 },
+        ].map((recent) => ({
+          ...recent,
+          isCloud: false,
+          region: null,
+          projectGuid: null,
+          modelGuid: null,
+          year: 2025,
+          savedYear: 2025,
+        })),
         capabilities: [],
       }),
     },
@@ -150,5 +164,10 @@ test("GET /pe/capabilities serves each open document as a doc: row beside the ca
   const response = await app.fetch(new Request("http://local/pe/capabilities"));
   expect(response.status).toBe(200);
   const catalog = (await response.json()) as { capabilities: { key: string; kind: string }[] };
-  expect(catalog.capabilities).toMatchObject([{ key: "doc:b1/o1", kind: "document" }]);
+  expect(catalog.capabilities).toMatchObject([
+    // Riser is open: its doc: row wins, so only Plant is a recent: row.
+    { key: "doc:b1/o1", kind: "document" },
+    { key: "recent:C:\\Models\\Plant.rvt", kind: "recent" },
+  ]);
+  expect(catalog.capabilities).toHaveLength(2);
 });

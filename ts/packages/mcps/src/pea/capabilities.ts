@@ -15,7 +15,8 @@ import {
  * `pe_find` ranks it, `pe_read`/`pe_do` dispatch by kind, the web `/ops` route renders it.
  *
  * Assembled on request (ops and pods cached 30 s per bridge selector; sessions and their open
- * documents read on every request), not at boot: the op and pod sources describe whichever Revit
+ * documents read on every request; Revit's recent documents cached 5 min for the whole machine and
+ * never awaited past their own 2 s), not at boot: the op and pod sources describe whichever Revit
  * session is connected right now. Host-only sources have a 2 s budget;
  * the native catalog allows SDK resolution and bridge dispatch. Sources are read with
  * `Promise.allSettled`, and a source that did not answer is named in `sources`.
@@ -31,9 +32,11 @@ import {
   type PodList,
 } from "@pe/host-contracts/operation-types";
 import {
+  capabilityRecentSchema,
   catalogSessions,
   type Capability,
   type CapabilityCatalog,
+  type CapabilityRecent,
   type RouteStateSpec,
 } from "@pe/agent-contracts";
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
@@ -313,69 +316,125 @@ export function createCapabilityCatalogSource(options: {
   const base = options.hostBaseUrl.replace(/\/$/, "");
   const routes = options.registrations.map((registration) => registration.spec);
   const cache = new Map<string, { at: number; catalog: CapabilityCatalog }>();
+  const recents = recentsSource(base);
   return {
     invalidate: () => cache.clear(),
+    // Recents are the machine's, not the scope's: one source, its own cache and budget.
     read: async (scope = {}) => {
-      const cacheKey = JSON.stringify(scope);
-      const hit = cache.get(cacheKey);
-      const caller = new HostRpcCaller({
-        hostBaseUrl: base,
-        ...scope,
-        timeoutMs: SOURCE_BUDGET_MS,
-        // Host-owned reads must not wait for the independent native catalog source.
-        catalogOverride: tsOnlyOperationCatalog,
-      });
-      if (hit && Date.now() - hit.at < CATALOG_TTL_MS) {
-        // Ops and pods may be 30 s old; the open documents never are (a closed one is no target).
-        const live = await caller.call("bridge.sessions.list").then(
-          (answer) => ({ sessions: catalogSessions(answer.sessions), status: "ok" }),
-          (error) => ({ sessions: [], status: `did not answer: ${message(error)}` }),
-        );
-        return {
-          ...hit.catalog,
-          at: new Date().toISOString(),
-          sessions: live.sessions,
-          sources: { ...hit.catalog.sources, sessions: live.status },
-        };
-      }
-
-      const sources: Record<string, string> = { "route registry": "ok", skills: "ok" };
-      const [ops, pods, sessions] = await Promise.allSettled([
-        fetchOps(base, scope),
-        caller.call("pod.list"),
-        caller.call("bridge.sessions.list"),
-      ]);
-      const opsValue =
-        ops.status === "fulfilled"
-          ? ops.value
-          : { operations: [...tsOnlyOperationCatalog] as OpsCatalogEntry[] };
-      sources.catalog =
-        ops.status === "rejected"
-          ? `did not answer: ${message(ops.reason)}`
-          : opsValue.bridgeCatalogError
-            ? `bridge catalog unavailable: ${opsValue.bridgeCatalogError}`
-            : "ok";
-      sources["pod.json"] =
-        pods.status === "rejected" ? `did not answer: ${message(pods.reason)}` : "ok";
-      sources.sessions =
-        sessions.status === "rejected" ? `did not answer: ${message(sessions.reason)}` : "ok";
-      const sessionList: Sessions = sessions.status === "fulfilled" ? sessions.value.sessions : [];
-      const catalog: CapabilityCatalog = {
-        at: new Date().toISOString(),
-        bridgeSessionId: opsValue.bridgeSessionId,
-        sessions: catalogSessions(sessionList),
-        sources,
-        capabilities: buildCapabilities({
-          ops: opsValue.operations ?? [],
-          routes,
-          pods: pods.status === "fulfilled" ? pods.value : null,
-          skills: bundledPeaSkills,
-        }),
+      const [catalog, recent] = await Promise.all([readScoped(scope), recents()]);
+      return {
+        ...catalog,
+        recents: recent.recents,
+        sources: { ...catalog.sources, recents: recent.status },
       };
-      cache.set(cacheKey, { at: Date.now(), catalog });
-      return catalog;
     },
   };
+
+  async function readScoped(scope: HostSessionScope): Promise<CapabilityCatalog> {
+    const cacheKey = JSON.stringify(scope);
+    const hit = cache.get(cacheKey);
+    const caller = new HostRpcCaller({
+      hostBaseUrl: base,
+      ...scope,
+      timeoutMs: SOURCE_BUDGET_MS,
+      // Host-owned reads must not wait for the independent native catalog source.
+      catalogOverride: tsOnlyOperationCatalog,
+    });
+    if (hit && Date.now() - hit.at < CATALOG_TTL_MS) {
+      // Ops and pods may be 30 s old; the open documents never are (a closed one is no target).
+      const live = await caller.call("bridge.sessions.list").then(
+        (answer) => ({ sessions: catalogSessions(answer.sessions), status: "ok" }),
+        (error) => ({ sessions: [], status: `did not answer: ${message(error)}` }),
+      );
+      return {
+        ...hit.catalog,
+        at: new Date().toISOString(),
+        sessions: live.sessions,
+        sources: { ...hit.catalog.sources, sessions: live.status },
+      };
+    }
+
+    const sources: Record<string, string> = { "route registry": "ok", skills: "ok" };
+    const [ops, pods, sessions] = await Promise.allSettled([
+      fetchOps(base, scope),
+      caller.call("pod.list"),
+      caller.call("bridge.sessions.list"),
+    ]);
+    const opsValue =
+      ops.status === "fulfilled"
+        ? ops.value
+        : { operations: [...tsOnlyOperationCatalog] as OpsCatalogEntry[] };
+    sources.catalog =
+      ops.status === "rejected"
+        ? `did not answer: ${message(ops.reason)}`
+        : opsValue.bridgeCatalogError
+          ? `bridge catalog unavailable: ${opsValue.bridgeCatalogError}`
+          : "ok";
+    sources["pod.json"] =
+      pods.status === "rejected" ? `did not answer: ${message(pods.reason)}` : "ok";
+    sources.sessions =
+      sessions.status === "rejected" ? `did not answer: ${message(sessions.reason)}` : "ok";
+    const sessionList: Sessions = sessions.status === "fulfilled" ? sessions.value.sessions : [];
+    const catalog: CapabilityCatalog = {
+      at: new Date().toISOString(),
+      bridgeSessionId: opsValue.bridgeSessionId,
+      sessions: catalogSessions(sessionList),
+      sources,
+      capabilities: buildCapabilities({
+        ops: opsValue.operations ?? [],
+        routes,
+        pods: pods.status === "fulfilled" ? pods.value : null,
+        skills: bundledPeaSkills,
+      }),
+    };
+    cache.set(cacheKey, { at: Date.now(), catalog });
+    return catalog;
+  }
+}
+
+// Recents change when a person opens a file in Revit: minutes, not seconds.
+const RECENTS_TTL_MS = 5 * 60_000;
+// The catalog waits this long for them, then answers without; the read finishes for the next one.
+const RECENTS_BUDGET_MS = 2_000;
+// The host relays `pe-revit doc list --recent` (about 1 s; it reads each file's saved year).
+const RECENTS_READ_MS = 65_000;
+
+type Recents = { recents: CapabilityRecent[]; status: string };
+
+/** Revit's recent documents through the host's own SDK reading. A failure is a `sources` entry. */
+function recentsSource(base: string): () => Promise<Recents> {
+  let entry: { until: number; answer: Promise<Recents> } | undefined;
+  return () => {
+    if (!entry || Date.now() > entry.until) {
+      const answer: Promise<Recents> = fetchRecents(base).then(
+        (recents) => ({ recents, status: "ok" }),
+        (error) => {
+          // A failed read retries on the catalog's cadence, not the recents'.
+          if (entry?.answer === answer) entry.until = Date.now() + CATALOG_TTL_MS;
+          return { recents: [], status: `did not answer: ${message(error)}` };
+        },
+      );
+      entry = { until: Date.now() + RECENTS_TTL_MS, answer };
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<Recents>((resolve) => {
+      timer = setTimeout(
+        () => resolve({ recents: [], status: `still reading after ${RECENTS_BUDGET_MS} ms` }),
+        RECENTS_BUDGET_MS,
+      );
+    });
+    return Promise.race([entry.answer, late]).finally(() => clearTimeout(timer));
+  };
+}
+
+async function fetchRecents(base: string): Promise<CapabilityRecent[]> {
+  const response = await fetch(`${base}/instances/readings?read=recents`, {
+    signal: AbortSignal.timeout(RECENTS_READ_MS),
+  });
+  if (!response.ok) throw new Error(`GET ${base}/instances/readings answered ${response.status}`);
+  // The SDK envelope; `result.recents` is absent when no Revit year has a recent list.
+  const envelope = (await response.json()) as { result?: { recents?: unknown } };
+  return z.array(capabilityRecentSchema).parse(envelope.result?.recents ?? []);
 }
 
 async function fetchOps(base: string, scope: HostSessionScope) {

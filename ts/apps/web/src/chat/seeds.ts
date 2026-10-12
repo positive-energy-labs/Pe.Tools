@@ -344,11 +344,24 @@ const INVENTORY = {
   ],
 } satisfies { sessions: readonly BridgeSessionListEntry[] };
 
-/** `GET /pe/capabilities` as a hostless page sees it: the seed inventory's session and one row of
- * each kind. No `doc:` rows: the `@` menu reads open documents from the inventory. */
+/** `GET /pe/capabilities` as a hostless page sees it: the seed inventory's session, Revit's recent
+ * documents and one row of each kind. No `doc:` or `recent:` rows: the `@` menu derives them. */
 const CATALOG = {
   at: at(29).toISOString(),
   sessions: catalogSessions(INVENTORY.sessions),
+  recents: [
+    recent(
+      "Boiler Plant Retrofit",
+      "C:\\Projects\\2611 Boiler Plant\\Boiler Plant Retrofit.rvt",
+      1,
+    ),
+    recent(
+      "MEP_Belmont_R26",
+      "cld://US/{bd39078b-b752-475d-9de5-e542894a9eaa}Belmont%20Studio/{890eeb3d-5633-4964-be48-0aa4f686ed1d}MEP_Belmont_R26.rvt",
+      2,
+    ),
+    recent("PE Duct Tag", "C:\\Standards\\Families\\Annotation\\PE Duct Tag.rfa", 3),
+  ],
   sources: { ops: "ok", routes: "ok", pods: "ok", skills: "ok" },
   capabilities: [
     row(
@@ -433,6 +446,21 @@ function row(
     input: {},
     source: "seed",
     rank: 0,
+  };
+}
+
+function recent(title: string, path: string, rank: number) {
+  const cloud = /^cld:\/\/(\w+)\/\{([^}]+)\}[^/]*\/\{([^}]+)\}/.exec(path);
+  return {
+    title,
+    path,
+    isCloud: cloud !== null,
+    region: cloud?.[1] ?? null,
+    projectGuid: cloud?.[2] ?? null,
+    modelGuid: cloud?.[3] ?? null,
+    year: 2026,
+    savedYear: cloud ? null : 2026,
+    rank,
   };
 }
 

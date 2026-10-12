@@ -12,6 +12,7 @@ import {
   Box,
   Cog,
   FileText,
+  History,
   PanelsTopLeft,
   Sparkles,
   SquareTerminal,
@@ -25,6 +26,9 @@ import {
   mentionOf,
   mentionToken,
   parseDocumentKey,
+  recentKey,
+  recentRows,
+  recentSegments,
   type Capability,
   type CapabilityCatalog,
   type CapabilityKind,
@@ -38,6 +42,7 @@ export const MENTION_KINDS: Record<
   { group: string; word: string; icon: LucideIcon }
 > = {
   document: { group: "Documents", word: "document", icon: FileText },
+  recent: { group: "Recent", word: "recent", icon: History },
   skill: { group: "Skills", word: "skill", icon: Sparkles },
   "route-doc": { group: "Route plugins", word: "route", icon: PanelsTopLeft },
   "route-command": { group: "Commands", word: "command", icon: SquareTerminal },
@@ -70,6 +75,19 @@ export function mentionFace(
       detail: [row.description, address, doc.session].filter(Boolean).join(" · "),
     };
   }
+  if (row.kind === "recent") {
+    const recent = catalog.recents?.find((entry) => recentKey(entry) === row.key);
+    const words = recent ? recentSegments(recent) : [];
+    return {
+      title: row.title,
+      // A cloud model says its project; a local file its last two folders.
+      fact: recent?.isCloud
+        ? ["cloud", words.at(-2)].filter(Boolean).join(" · ")
+        : words.slice(0, -1).slice(-2).join("\\") || null,
+      mono: false,
+      detail: [row.description, recent?.path].filter(Boolean).join(" · "),
+    };
+  }
   if (row.kind !== "op")
     return { title: row.title, fact: null, mono: false, detail: row.description };
   // `op:parameter-links.read` → `parameter-links.read`: the group head already says "op".
@@ -89,8 +107,9 @@ export function mentionQuery(text: string, caret: number): { start: number; quer
   return match ? { start: caret - match[1]!.length - 1, query: match[1]! } : null;
 }
 
-/** The catalog the `@` menu reads: every non-document row as the catalog read it, the open
- * documents from the live inventory (a closed document is no target, and a catalog may be old). */
+/** The catalog the `@` menu reads: every other row as the catalog read it, the open documents
+ * from the live inventory (a closed document is no target, and a catalog may be old), and the
+ * recent ones less whatever the inventory says is open now. */
 export function liveCatalog(
   catalog: CapabilityCatalog,
   inventory: { sessions: readonly BridgeSessionListEntry[] } | undefined,
@@ -105,7 +124,8 @@ export function liveCatalog(
     ...live,
     capabilities: [
       ...documentRows(live),
-      ...catalog.capabilities.filter((row) => row.kind !== "document"),
+      ...recentRows(live),
+      ...catalog.capabilities.filter((row) => row.kind !== "document" && row.kind !== "recent"),
     ],
   };
 }

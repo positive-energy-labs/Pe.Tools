@@ -1,7 +1,7 @@
 import { cli } from "gunshi";
 import { expect, test, vi } from "vite-plus/test";
 import type { HostOpResponse } from "@pe/host-contracts/operation-types";
-import { documentRows } from "@pe/agent-contracts";
+import { documentRows, recentRows } from "@pe/agent-contracts";
 import { PeaCliCommands } from "../src/pea/PeaCliCommands.ts";
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
 
@@ -165,6 +165,19 @@ test("pea find prints key, kind and title per row of the host's catalog; --menti
     title: "Riser: apply",
     actor: "human",
   } as const;
+  const recents = [
+    {
+      title: "Plant",
+      path: "C:\\Jobs\\Plant.rvt",
+      isCloud: false,
+      region: null,
+      projectGuid: null,
+      modelGuid: null,
+      year: 2025,
+      savedYear: 2025,
+      rank: 1,
+    },
+  ];
   const host = fakeRuntimeHost("http://127.0.0.1:9");
   const urls: URL[] = [];
   vi.stubGlobal("fetch", async (input: string | URL | Request) => {
@@ -172,8 +185,14 @@ test("pea find prints key, kind and title per row of the host's catalog; --menti
     return Response.json({
       at,
       sessions,
+      recents,
       sources: {},
-      capabilities: [skill, humanOnly, ...documentRows({ sessions })],
+      capabilities: [
+        skill,
+        humanOnly,
+        ...documentRows({ sessions }),
+        ...recentRows({ sessions, recents }),
+      ],
     });
   });
   const output = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -209,6 +228,19 @@ test("pea find prints key, kind and title per row of the host's catalog; --menti
         revit: "2025",
         custody: "controlled",
       },
+    });
+    // Revit's recent documents are rows too; the mention carries the source that opens them.
+    output.mockClear();
+    await cli(["--kind", "recent", "plant"], command);
+    expect(output.mock.calls.map(([line]) => line)).toEqual([
+      "recent:C:\\Jobs\\Plant.rvt  recent  Plant",
+    ]);
+    output.mockClear();
+    await cli(["--mention", "recent:C:\\Jobs\\Plant.rvt"], command);
+    expect(JSON.parse(output.mock.calls[0]![0] as string).facts).toMatchObject({
+      year: 2025,
+      open: false,
+      openWith: "C:\\Jobs\\Plant.rvt",
     });
   } finally {
     output.mockRestore();
