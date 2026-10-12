@@ -1,4 +1,10 @@
-import type { HarnessEvent, HarnessThreadBody } from "@pe/agent-contracts";
+import {
+  attachmentKind,
+  emptyThreadLifecycle,
+  type HarnessEvent,
+  type HarnessThreadBody,
+  type PromptAttachment,
+} from "@pe/agent-contracts";
 import { stringify } from "../components/lang/code-format.ts";
 
 /** The thread body with every event the stream has appended since it was fetched. */
@@ -18,10 +24,13 @@ export function emptyChatState(): ChatState {
     models: [],
     traits: [],
     running: false,
-    queued: [],
     lastSeq: 0,
     session: "closed",
+    promptCapabilities: null,
     events: [],
+    head: { defaultTarget: null, revision: 0 },
+    lifecycle: emptyThreadLifecycle(),
+    activity: { state: "idle", pending: 0, lastSeq: 0, message: null },
   };
 }
 
@@ -43,6 +52,8 @@ export type ToolCall = {
   title: string;
   args: unknown;
   target?: string;
+  /** The harness's own caption of the act (ACP `title`), latest wins; `title` stays the tool id. */
+  caption?: string;
   parentMessageId?: string;
   /** Images the call produced so far. */
   images: string[];
@@ -70,6 +81,12 @@ export type ChatPart =
   | { type: "image"; image: string; name?: string }
   | { type: "file"; name: string; mimeType: string }
   | { type: "tool-call"; call: ToolCall; approval?: Approval };
+
+/** A sent attachment as the user's bubble draws it: what crossed as an image is a thumbnail. */
+const sentPart = (a: PromptAttachment): ChatPart =>
+  attachmentKind(a) === "image"
+    ? { type: "image", image: `data:${a.mimeType};base64,${a.data}`, name: a.name }
+    : { type: "file", name: a.name, mimeType: a.mimeType };
 
 /** One row of the chat transcript. `system` is a quiet line the host wrote, never a speaker. */
 export interface ChatMessage {
@@ -154,7 +171,6 @@ function fold(state: ChatState): Fold {
   const calls = new Map<string, ToolCall>();
   const approvals = new Map<string, Approval>();
   const questions = new Map<string, Question>();
-  const queued = new Map<string, string>();
   let open: ChatMessage | undefined;
   let turn = false;
   let failure: string | undefined;
@@ -205,8 +221,12 @@ function fold(state: ChatState): Fold {
       calls.set(call.id, call);
       row.parts.push({ type: "tool-call", call });
     }
-    const name = body.name ?? body.title;
-    if (name) call.title = toolId(name);
+    // `name` is the tool's identity and arrives once; `title` is the harness's caption of the act,
+    // and every update may rewrite it (a whole command line, a question). A caption never
+    // replaces the identity — it was, and the transcript echoed the command as the tool's name.
+    if (body.name) call.title = toolId(body.name);
+    else if (body.title && call.title === "tool") call.title = toolId(body.title);
+    if (body.title) call.caption = body.title;
     if (body.rawInput !== undefined) {
       const input = mcpInput(body.rawInput);
       if (input.tool) call.title = input.tool;
@@ -228,18 +248,14 @@ function fold(state: ChatState): Fold {
 
   for (const event of state.events) {
     switch (event.kind) {
-      case "queued":
-        queued.set(event.turnId, event.text);
-        break;
       case "prompt":
-        queued.delete(event.turnId);
         close(false);
         failure = undefined;
         turn = true;
         rows.push({
           id: `you-${event.seq}`,
           role: "user",
-          parts: [{ type: "text", text: event.text }],
+          parts: [{ type: "text", text: event.text }, ...(event.attachments ?? []).map(sentPart)],
           running: false,
           ...at(event),
         });
@@ -336,7 +352,6 @@ function fold(state: ChatState): Fold {
     questions: [...questions.values()],
     turn,
     failure,
-    queued: [...queued].map(([turnId, text]) => ({ turnId, text })),
     title,
   };
   folds.set(state, result);
@@ -351,8 +366,6 @@ interface Fold {
   /** A prompt's turn has not ended. */
   turn: boolean;
   failure?: string;
-  /** Prompts accepted behind a running turn that have not started (`queued` with no `prompt`). */
-  queued: { turnId: string; text: string }[];
   /** The newest `title_changed`, else the body's title. */
   title: string;
 }
@@ -371,10 +384,6 @@ export function selectMessages(state: ChatState): ChatMessage[] {
   return rows.filter(
     (message) => message.running || message.parts.some((part) => part.type !== "reasoning"),
   );
-}
-
-export function selectQueued(state: ChatState): Fold["queued"] {
-  return fold(state).queued;
 }
 
 export function selectTitle(state: ChatState): string {
@@ -450,6 +459,12 @@ export function selectSkillCommands(state: ChatState): { name: string; descripti
   });
 }
 
+/** A prompt that opens with `/name` ran a skill: the command and the rest of the line. A path (`/usr/bin`) is not one. */
+export function skillInvocation(prompt: string): { name: string; args: string } | undefined {
+  const match = /^\/([A-Za-z][\w:.-]*)(?:\s+([\s\S]*))?$/.exec(prompt.trim());
+  return match ? { name: match[1]!, args: (match[2] ?? "").trim() } : undefined;
+}
+
 /**
  * The one rule for "is this tool output entry an image", fitted to what the image tools really
  * return (`capture_view`, `read_image` in packages/mcps: `{ text, mediaType, byteSize, data }`,
@@ -489,7 +504,7 @@ const looksBase64 = (value: string) =>
 
 const outputEntries = (output: unknown): unknown[] => (Array.isArray(output) ? output : [output]);
 
-/** Which images a tool call produced. The transcript strip and the trace lane both read this. */
+/** Which images a tool call produced. The transcript strip reads this. */
 function toolImages(output: unknown): string[] {
   return outputEntries(output).flatMap((part) => toolImage(part)?.url ?? []);
 }
@@ -550,12 +565,32 @@ export function selectBreakdown(state: ChatState): ContextBreakdown | undefined 
   return { contextWindow: size, totalTokens: used, segments };
 }
 
+/**
+ * The most specific statement of what a call did: the harness's caption when it says more than
+ * the target (a whole command line around the path, a question with no target), else the target.
+ * A one-word caption ("Terminal", "grep", the tool's own id) is a label, never a statement.
+ * `emitted`: the text is machine-written (it carries the call's own argument), so it reads in
+ * mono; a caption with no argument in it is the harness talking (a question), so it reads as prose.
+ */
+export function toolDetail(call: ToolCall): { text: string; emitted: boolean } | undefined {
+  const caption = call.caption && /\s/.test(call.caption.trim()) ? call.caption : undefined;
+  if (caption && (!call.target || caption.includes(call.target)))
+    return { text: caption, emitted: call.target !== undefined };
+  return call.target ? { text: call.target, emitted: true } : undefined;
+}
+
 function toolTarget(args: unknown): string | undefined {
   const record = readRecord(args);
   // pe_read / pe_do: the capability key is what the user reads on the card.
   if (typeof record?.key === "string") return record.key;
+  // The harness's `Skill` tool names the skill it runs.
   const candidate =
-    record?.path ?? record?.file_path ?? record?.file ?? record?.query ?? record?.command;
+    record?.skill ??
+    record?.path ??
+    record?.file_path ??
+    record?.file ??
+    record?.query ??
+    record?.command;
   if (typeof candidate === "string") return candidate;
   if (typeof args === "string" && args.length <= 64) return args;
   return undefined;

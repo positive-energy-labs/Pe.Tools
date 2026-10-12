@@ -9,13 +9,17 @@ export function ComposerBank({
   deletedThreadIds,
   prompt,
   handle,
-  topBar,
+  controls,
+  work,
 }: {
   currentThreadId: string;
   deletedThreadIds: ReadonlySet<string>;
   prompt?: string;
   handle: ChatHandle;
-  topBar: ReactNode;
+  /** The bottom row's lead: pickers and state (`ComposerControls`). */
+  controls: ReactNode;
+  /** The box's top section: live asks and staged Work (`ComposerWork`). */
+  work: ReactNode;
 }) {
   const [visited, setVisited] = useState(() => new Set([currentThreadId]));
   useEffect(() => {
@@ -39,7 +43,12 @@ export function ComposerBank({
           threadId === currentThreadId && prompt ? { text: prompt, attachments: [] } : undefined;
         return (
           <Activity key={threadId} mode={threadId === currentThreadId ? "visible" : "hidden"}>
-            <ThreadComposer handle={handle} topBar={topBar} initialDraft={initialDraft} />
+            <ThreadComposer
+              handle={handle}
+              controls={controls}
+              work={work}
+              initialDraft={initialDraft}
+            />
           </Activity>
         );
       })}

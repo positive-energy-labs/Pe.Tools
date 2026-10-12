@@ -4,9 +4,17 @@
  * second copy. Every action runs the provider's verb over the harness-thread wire.
  */
 import { z } from "zod";
+import {
+  attachmentRefusal,
+  threadHeadSchema,
+  type DocumentRequest,
+  type PromptAttachment,
+  type PromptCapabilities,
+} from "@pe/agent-contracts";
 
 import { defineRoute, type RouteManifest } from "#/route";
-import type { WorkbenchAttachment } from "#/workbench/prompt";
+import { previousOf, targetInventory } from "#/readings";
+import { targetClosure } from "#/chat/thread-navigation";
 import type { ChatState } from "#/workbench/chat-state";
 import { CHAT_SEEDS, type ChatPage } from "#/chat/seeds";
 
@@ -14,7 +22,7 @@ export type ChatReading = "head" | "inventory" | "receipts";
 
 export interface PromptInput {
   text: string;
-  attachments?: WorkbenchAttachment[];
+  attachments?: PromptAttachment[];
 }
 
 /** What the route needs from the live surface to run its actions; absent on seeds. */
@@ -29,14 +37,23 @@ export interface ChatRouteDeps {
   forkThread?: () => Promise<void>;
   /** Why the first send cannot create a thread now (providers loading, none ready). */
   newRefusal?: string;
+  /** What the thread's harness reads (null until its first session) and its name, for the
+   * attachment refusal; the host enforces the same rule. */
+  promptCapabilities?: PromptCapabilities | null;
+  providerName?: string;
+  /** The target a draft holds before its first send creates a thread (a thread's lives on its head). */
+  draftTarget?: DocumentRequest | null;
 }
+
+/** A closed target is a saved request the live inventory no longer holds; no turn rides on it. */
+const CLOSED_SEND = "Its document is closed: choose a live document or clear the target";
 
 const promptInput = z.object({
   text: z.string(),
   attachments: z.array(z.unknown()).optional(),
 });
 
-export type ChatActionKey = "send" | "cancel" | "new" | "fork";
+export type ChatActionKey = "send" | "stop" | "new" | "fork";
 
 export const chatManifest = (
   deps: ChatRouteDeps,
@@ -53,25 +70,37 @@ export const chatManifest = (
     },
     actions: {
       send: {
-        label: deps.running ? "queue" : "send",
-        says: "sends this prompt, or queues it after the active turn, under the thread target",
+        label: "send",
+        says: "sends this prompt under the thread target; while Pea answers, it stops that turn first",
         needs: "host",
         actor: "human",
         input: promptInput as unknown as z.ZodType<never>,
         dirties: ["head", "receipts"],
-        ready: (_ctx, input) => {
+        ready: (ctx, input) => {
           if (!deps.send) return "Chat is not ready";
           if (!deps.ready) return "Thread state is loading";
           // The first send creates the thread.
           if (!deps.thread && deps.newRefusal) return deps.newRefusal;
+          const target = deps.thread
+            ? (threadHeadSchema.safeParse(previousOf(ctx.readings.head)).data?.defaultTarget ??
+              null)
+            : (deps.draftTarget ?? null);
+          if (targetClosure(target, targetInventory(ctx.readings.inventory as never)))
+            return CLOSED_SEND;
           const prompt = input as PromptInput | undefined;
-          if (prompt?.attachments?.length) return "Attachments do not cross the harness wire yet";
-          return prompt && !prompt.text.trim() ? "Enter a prompt" : null;
+          if (!prompt) return null;
+          if (!prompt.text.trim() && !prompt.attachments?.length)
+            return "Enter a prompt or attachment";
+          return attachmentRefusal(
+            prompt.attachments ?? [],
+            deps.promptCapabilities ?? null,
+            deps.providerName ?? "This harness",
+          );
         },
         run: async (_ctx, input) => deps.send?.(input as PromptInput),
       },
-      cancel: {
-        label: "cancel",
+      stop: {
+        label: "stop",
         says: "stops the running turn; its open permission asks expire, unanswered",
         needs: "host",
         actor: "human",

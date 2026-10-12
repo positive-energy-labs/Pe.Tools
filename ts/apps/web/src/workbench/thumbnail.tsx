@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Dialog, DialogContent } from "#/components/lang/dialog";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 
 /**
  * The one image thumbnail in chat: composer chips, sent attachments, and the images a tool call
@@ -19,12 +19,7 @@ export function Thumbnail({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Press
-        type="button"
-        hover="bare"
-        title={`Open ${name} full size`}
-        onClick={() => setOpen(true)}
-      >
+      <Button label={`Open ${name} full size`} onClick={() => setOpen(true)}>
         <img
           src={src}
           alt={name}
@@ -34,7 +29,7 @@ export function Thumbnail({
               : "hairline-x-faint hairline-y-faint max-h-40 object-contain"
           }
         />
-      </Press>
+      </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent pad="none" aria-label={name}>
           <img src={src} alt={name} className="max-h-[calc(100dvh-4rem)] w-full object-contain" />

@@ -35,7 +35,10 @@ export function useThreadScope(threadId: string, enabled = true, observed?: Read
 
   const current: ThreadHead = head ?? { defaultTarget: null, revision: 0 };
   /** True when the head moved; otherwise `refusal` says why, in the head's own words. */
-  const set = async (defaultTarget: DocumentRequest | null): Promise<boolean> => {
+  const set = async (
+    defaultTarget: DocumentRequest | null,
+    displayLabel?: string,
+  ): Promise<boolean> => {
     const attempt = ++generation.current;
     setRefusal(null);
     if (!enabled) {
@@ -51,7 +54,11 @@ export function useThreadScope(threadId: string, enabled = true, observed?: Read
       const response = await hostFetch(scopeUrl(threadId), {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ defaultTarget, expectedRevision: parsed.data.revision }),
+        body: JSON.stringify({
+          defaultTarget,
+          expectedRevision: parsed.data.revision,
+          displayLabel,
+        }),
       });
       const result = putTargetResultSchema.safeParse(await response.json().catch(() => null)).data;
       if (attempt !== generation.current) return false;

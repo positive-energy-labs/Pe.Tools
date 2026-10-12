@@ -24,22 +24,12 @@ const PROSE_CLASS = [
   // variant belongs on the paragraph: `prose-p:last:mb-0` is the last paragraph inside the box.
   "prose-p:my-0 prose-p:mb-[0.8em] prose-p:last:mb-0",
   "prose-headings:font-sans prose-headings:text-ink prose-headings:mt-[0.9em] prose-headings:mb-[0.35em]",
+  // A list is spaced like the paragraphs around it, not twice as loose: items sit a breath apart.
+  "prose-ul:my-[0.6em] prose-ol:my-[0.6em] prose-li:my-[0.2em]",
   "prose-a:underline prose-a:underline-offset-2",
-  "prose-code:rounded-none prose-code:border-[0.5px] prose-code:border-line prose-code:px-[5px] prose-code:py-px",
-  "prose-code:before:content-none prose-code:after:content-none",
-  // A table wears Table's cell grammar (see master-table-header.tsx / master-table-body.tsx):
-  // `border-separate` + per-cell `border-l`/`first:border-l-0` so no edge doubles, the recess
-  // ground and small-caps under the head, hairline row rules, tabular figures. GFM's own
-  // `text-align` lands as an inline style and still wins, so a `---:` column stays right-aligned.
-  "prose-table:my-2 prose-table:w-full prose-table:border-separate prose-table:border-spacing-0",
-  "prose-table:border-[0.5px] prose-table:border-line prose-table:t-small",
-  "prose-thead:on-recess",
-  "prose-th:t-small prose-th:t-upper prose-th:border-b prose-th:border-l prose-th:border-line",
-  "prose-th:px-2 prose-th:py-1 prose-th:text-left prose-th:font-normal prose-th:text-ink",
-  "prose-th:first:border-l-0",
-  "prose-td:hairline-b-inset prose-td:border-l prose-td:border-line prose-td:first:border-l-0",
-  "prose-td:px-2 prose-td:py-1 prose-td:tabular-nums",
-  "prose-tr:last:[&_td]:border-b-0",
+  // A table wears Table's cell grammar; the role lives in lang.css (`.prose-pe table`). It was
+  // utilities here, and `prose-thead:on-recess` / `prose-th:t-upper` never rendered (classes, not
+  // utilities), so the head had no ground and no case.
 ].join(" ");
 
 /** Flatten the `code` child's children — markdown gives text nodes, streaming gives several. */
@@ -85,7 +75,7 @@ const MARKDOWN_COMPONENTS: Components = {
   // A table is the one block that can be wider than the lane. It gets its own scroll box so it
   // scrolls inside the message instead of widening the chat column.
   table: ({ node: _node, ...props }) => (
-    <div className="my-2 max-w-full overflow-x-auto">
+    <div className="my-[0.8em] max-w-full overflow-x-auto">
       {/* DOMAIN (kept hand table): GFM tables in prose; the markdown renderer owns them. */}
       <table {...props} />
     </div>

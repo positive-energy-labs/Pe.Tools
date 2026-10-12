@@ -1,14 +1,8 @@
-export interface WorkbenchAttachment {
-  name?: string;
-  mimeType?: string;
-  text?: string;
-  data?: string;
-  size?: number;
-}
+import type { PromptAttachment } from "@pe/agent-contracts";
 
 export interface ChatDraft {
   text: string;
-  attachments: WorkbenchAttachment[];
+  attachments: PromptAttachment[];
 }
 
 export const EMPTY_CHAT_DRAFT: ChatDraft = { text: "", attachments: [] };

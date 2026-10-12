@@ -9,7 +9,7 @@ import { CHAT_PLUGIN_ROUTES } from "#/workbench/chat-plugins";
  * (validateSearch + the middlewares below); nothing hand-rolls `new URL().searchParams`.
  *   thread — which thread is open (empty/absent = latest existing thread, else the empty
  *            state)
- *   mode   — chat | trace | world view depth (default stripped from the URL)
+ *   mode   — threads | world sidebar view (default stripped from the URL)
  *   turn   — turn number to focal-scroll on open/share (absent = tail)
  *   plugin — the route hosted in the plugin pane; focus — the group path (canonical JSON) the
  *            head's drill-in scoped it to. Opening a plugin any other way clears the focus.

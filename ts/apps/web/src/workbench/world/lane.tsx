@@ -14,7 +14,7 @@ import {
   type Blast,
   type CacheView,
 } from "../world-cache";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import {
   BLAST_BASE,
   BLAST_TONE,
@@ -105,24 +105,21 @@ export function SessionStrip({
               ]}
             />
 
-            <Press
-              type="button"
-              tone="quiet"
-              size="icon"
-              state="selected"
-              aria-pressed={diff}
+            <Button
+              label="Highlight what changed"
+              pressed={diff}
               onClick={() => setWorld((previous) => ({ ...previous, diff: !previous.diff }))}
-              title={
+              reason={
                 cache.hasBaseline && sendNumber
                   ? `Highlight what changed vs send #${sendNumber - 1}`
                   : cache.hasBaseline
                     ? "Highlight what changed since the last send"
                     : "No previous send to compare yet"
               }
-              disabled={!cache.hasBaseline}
+              refusal={cache.hasBaseline ? null : "No previous send to compare against yet."}
             >
               Δ
-            </Press>
+            </Button>
           </div>
         </div>
       </div>
@@ -173,12 +170,7 @@ export function SessionStrip({
           const blast = blastOf(layer.rank);
           return (
             <div key={layer.id} className="hairline-b-faint [&>button]:w-full">
-              <Press
-                tone="quiet"
-                state={changed ? "selected" : "rest"}
-                type="button"
-                onClick={() => toggle(layer.id)}
-              >
+              <Button label={layer.label} pressed={changed} onClick={() => toggle(layer.id)}>
                 <span
                   className={cn(
                     WORLD_ROW,
@@ -213,7 +205,7 @@ export function SessionStrip({
                     ▸
                   </span>
                 </span>
-              </Press>
+              </Button>
               {isOpen ? (
                 <div className="pt-0 pr-3 pb-2.5 pl-[29px] t-prose face-mono">
                   <p className="mt-0 mb-1.5 text-ink-2">{PLAIN_CAP[layer.id] ?? layer.label}</p>
@@ -269,7 +261,11 @@ function ItemRow({
   const hasBody = Boolean(item.body);
   return (
     <li className="overflow-hidden [&>button]:w-full">
-      <Press type="button" tone="quiet" disabled={!hasBody} onClick={() => hasBody && onToggle()}>
+      <Button
+        label={item.name}
+        refusal={hasBody ? null : `${item.name} has no body to show.`}
+        onClick={() => hasBody && onToggle()}
+      >
         <PressContent geometry="baseline">
           <span className="min-w-0 flex-1 t-small face-mono">
             <span className="block overflow-hidden text-ellipsis whitespace-nowrap">
@@ -305,7 +301,7 @@ function ItemRow({
             ) : null}
           </span>
         </PressContent>
-      </Press>
+      </Button>
       {open && item.body ? <Code code={item.body} lang="plaintext" wrap /> : null}
     </li>
   );

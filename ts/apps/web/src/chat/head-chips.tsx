@@ -1,16 +1,9 @@
-/**
- * The composer's two chips (agent LEDGER 2026-10-08, protoui round 1 verdict A): the head ladder,
- * provider then model, and the traits the provider offers. Before a thread exists both edit the
- * composer draft, which the first send binds; after, the provider is fixed (fork to change) and
- * model and traits go to the thread.
- */
-import { Popover } from "@base-ui/react/popover";
+/** The composer's ladder: provider › model › one rung per provider trait (effort, fast). Before a
+ *  thread exists every rung edits the draft, which the first send binds; after, the provider is
+ *  fixed (fork to change) and the model and traits go to the thread. */
 import type { TraitOption } from "@pe/agent-contracts";
-import { PopupFrame } from "#/components/lang/list-popup";
-import { Press } from "#/components/lang/press";
-import { Switch } from "#/components/lang/switch";
-import { Switcher } from "#/components/lang/switcher";
-import { Ladder } from "#/route/ladder";
+import { Ladder, type Rung } from "#/route/ladder";
+import { ProviderMark } from "#/components/lang/provider-mark";
 import { useWorkbench } from "#/workbench/provider";
 import { isReady, readinessSub } from "#/workbench/provider/providers";
 
@@ -20,20 +13,32 @@ const isToggle = (trait: TraitOption) =>
   (trait.options.length === 2 && trait.options.every((o) => o.id === "on" || o.id === "off"));
 const isOn = (trait: TraitOption) => trait.current === true || trait.current === "on";
 
-/** `high · fast`: each select's current option, then each toggle's word only when on. */
-const traitsLabel = (traits: readonly TraitOption[]) =>
-  traits
-    .map((trait) =>
-      isToggle(trait)
-        ? isOn(trait)
-          ? trait.name.replace(/ mode$/i, "").toLowerCase()
-          : ""
-        : trait.kind === "select"
-          ? (trait.options.find((o) => o.id === trait.current)?.name ?? "").toLowerCase()
-          : "",
-    )
-    .filter(Boolean)
-    .join(" · ");
+/** One rung for a trait: a select's options, or a toggle's two words (`fast` / `not fast`). */
+function traitRung(trait: TraitOption, pick: (id: string, value: string | boolean) => void): Rung {
+  const word = trait.name.replace(/ mode$/i, "").toLowerCase();
+  if (isToggle(trait))
+    return {
+      key: trait.id,
+      label: isOn(trait) ? word : `not ${word}`,
+      silent: !isOn(trait),
+      placeholder: `choose ${word}`,
+      options: [
+        { id: "on", label: word },
+        { id: "off", label: `not ${word}` },
+      ],
+      picked: (id) => (id === "on") === isOn(trait),
+      pick: (id) => pick(trait.id, trait.kind === "boolean" ? id === "on" : id),
+    };
+  const options = trait.kind === "select" ? trait.options : [];
+  return {
+    key: trait.id,
+    label: (options.find((o) => o.id === trait.current)?.name ?? `default ${word}`).toLowerCase(),
+    placeholder: `choose ${word}`,
+    options: options.map((o) => ({ id: o.id, label: o.name })),
+    picked: (id) => id === trait.current,
+    pick: (id) => pick(trait.id, id),
+  };
+}
 
 /** The head in force: the thread's when one is open, else the draft's. */
 function useHead() {
@@ -50,6 +55,7 @@ function useHead() {
       list,
       fallback,
       providerName: chat.providerName || summary?.providerName || "provider",
+      harness: list.find((item) => item.id === providerId)?.harness ?? null,
       models: chat.models,
       modelId: chat.modelId ?? summary?.modelId ?? null,
       traits: chat.traits,
@@ -65,6 +71,7 @@ function useHead() {
     list,
     fallback,
     providerName: draft.providerId ? (provider?.name ?? draft.providerId) : "Pea default",
+    harness: provider?.harness ?? null,
     models: provider?.models ?? [],
     modelId: draft.modelId,
     traits: (provider?.traits ?? []).map(
@@ -80,7 +87,7 @@ function useHead() {
 
 const DEFAULT = "pea-default";
 
-/** Chip 1: provider › model. Level 1 refuses a provider that is not ready, and, once a thread is
+/** provider › model › traits. Rung 1 refuses a provider that is not ready, and, once a thread is
  * bound, every other provider: a thread never changes provider. */
 export function HeadLadder() {
   const head = useHead();
@@ -90,9 +97,14 @@ export function HeadLadder() {
     : "default model";
   return (
     <Ladder
-      face="inline"
+      face="control"
+      // Open on the model; the first trait (effort) ends the walk, or the model when there is none.
+      openOn="model"
+      closeOn={[head.traits[0]?.id ?? "model"]}
+      // Who runs it, as its maker's mark before the model (kaitpw, 2026-10-12).
+      mark={<ProviderMark harness={head.harness} />}
       caution={!head.fallback}
-      title="provider › model; the thread binds the provider at its first send"
+      title="provider › model › traits; the thread binds the provider at its first send"
       levels={[
         {
           key: "provider",
@@ -131,64 +143,8 @@ export function HeadLadder() {
           picked: (id) => id === head.modelId,
           pick: head.pickModel,
         },
+        ...head.traits.map((trait) => traitRung(trait, head.pickTrait)),
       ]}
     />
-  );
-}
-
-/** Chip 2: the provider's traits (effort, fast); hidden when it offers none. */
-export function TraitsChip() {
-  const head = useHead();
-  if (head.traits.length === 0) return null;
-  return (
-    <Popover.Root>
-      <Popover.Trigger
-        render={<Press tone="quiet" size="caption" />}
-        title="traits the provider offers for this thread"
-      >
-        <span className="face-mono">{traitsLabel(head.traits) || "traits"}</span>
-      </Popover.Trigger>
-      <PopupFrame side="top" align="start" label="traits">
-        <div className="grid grid-cols-[auto_auto] items-center gap-x-3 gap-y-2 p-2 t-small">
-          {head.traits.map((trait) => (
-            <TraitRow key={trait.id} trait={trait} pick={head.pickTrait} />
-          ))}
-        </div>
-      </PopupFrame>
-    </Popover.Root>
-  );
-}
-
-function TraitRow({
-  trait,
-  pick,
-}: {
-  trait: TraitOption;
-  pick: (id: string, value: string | boolean) => void;
-}) {
-  return (
-    <>
-      <span className="text-ink-2">{trait.name}</span>
-      {isToggle(trait) ? (
-        <Switch
-          aria-label={trait.name}
-          checked={isOn(trait)}
-          onCheckedChange={(on) =>
-            pick(trait.id, trait.kind === "boolean" ? on : on ? "on" : "off")
-          }
-        />
-      ) : trait.kind === "select" ? (
-        <Switcher
-          ariaLabel={trait.name}
-          value={trait.current ?? ""}
-          onChange={(value) => pick(trait.id, value)}
-          options={trait.options.map((o) => ({
-            value: o.id,
-            label: o.name,
-            title: `${trait.name}: ${o.name}`,
-          }))}
-        />
-      ) : null}
-    </>
   );
 }

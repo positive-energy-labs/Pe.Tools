@@ -1,22 +1,15 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
+import { ArrowDown } from "lucide-react";
+import { Button } from "#/components/lang/button";
+import { useWorkbench } from "#/workbench/provider";
 import { annotation } from "#/components/anatomy";
 import { Moments } from "../moments";
 import { EmptyState, emptyMark } from "#/components/lang/empty";
-import { formatTime } from "./context-strip";
+import { formatTime } from "./moments";
 import { useLensModel } from "./model";
-import type { Mode } from "../depth";
 import type { ChatState } from "../chat-state";
 
-export function Lens({
-  state,
-  mode,
-  sideOpen = true,
-}: {
-  state: ChatState;
-  mode: Mode;
-  sideOpen?: boolean;
-  /** The tool call pinned open in the transcript — it owns the inspect window while set. */
-}) {
+export function Lens({ state }: { state: ChatState }) {
   const {
     messages,
     moments,
@@ -34,11 +27,59 @@ export function Lens({
     bandRefs,
     registerMoment,
     onBandClick,
-  } = useLensModel({ state, mode, sideOpen }); // eslint-disable-line react-hooks/exhaustive-deps
+    awayFromTail,
+  } = useLensModel({ state });
   const previewRef = useRef<HTMLSpanElement>(null);
+  const { updateThread, threads } = useWorkbench();
+  const updateRead = useRef(updateThread);
+  updateRead.current = updateThread;
+  const observedRevision = useRef<number | undefined>(undefined);
+  let seenSeq = 0;
+  for (let index = state.events.length - 1; index >= 0; index--) {
+    const event = state.events[index]!;
+    if (
+      event.kind === "turn_end" ||
+      event.kind === "error" ||
+      event.kind === "permission_request" ||
+      event.kind === "question_request"
+    ) {
+      seenSeq = event.seq;
+      break;
+    }
+  }
+  const summary = threads.find(
+    (thread) => thread.id === state.id && thread.activity.lastSeq >= seenSeq,
+  );
+  const observed = summary ?? (state.activity.lastSeq >= seenSeq ? state : undefined);
+  observedRevision.current = observed?.lifecycle.revision;
+  const readReady = observed !== undefined;
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller || !state.id || !readReady) return;
+    const expectedRevision = observedRevision.current;
+    let acknowledged = false;
+    const read = () => {
+      if (
+        acknowledged ||
+        document.visibilityState !== "visible" ||
+        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 40
+      )
+        return;
+      acknowledged = true;
+      void updateRead.current(state.id, { expectedRevision, readSeq: seenSeq });
+    };
+    const timer = setTimeout(read, 300);
+    scroller.addEventListener("scroll", read);
+    document.addEventListener("visibilitychange", read);
+    return () => {
+      clearTimeout(timer);
+      scroller.removeEventListener("scroll", read);
+      document.removeEventListener("visibilitychange", read);
+    };
+  }, [readReady, scrollerRef, seenSeq, state.id]);
 
   return (
-    <div {...annotation("frame")} ref={frameRef} data-mode={mode}>
+    <div {...annotation("frame")} ref={frameRef}>
       <div {...annotation("scroller")} ref={scrollerRef}>
         <div {...annotation("grid")}>
           <div
@@ -90,6 +131,15 @@ export function Lens({
             <div {...annotation("reticle-focal")} ref={csFocalRef} />
             <div {...annotation("caret")} ref={caretRef} />
             <span {...annotation("dial-preview")} ref={previewRef} hidden />
+            {awayFromTail ? (
+              <div className="chat-tail-rail">
+                <Button
+                  icon={ArrowDown}
+                  label="Jump to latest turn in timeline"
+                  onClick={() => window.dispatchEvent(new Event("pe:focus-tail"))}
+                />
+              </div>
+            ) : null}
           </div>
 
           <div {...annotation("chat")} ref={chatRef}>
@@ -103,11 +153,21 @@ export function Lens({
                 </EmptyState>
               </div>
             ) : null}
-            <Moments messages={messages} register={registerMoment} />
+            <Moments messages={messages} register={registerMoment} harness={state.harness} />
           </div>
         </div>
       </div>
       {moments.length > 0 ? <div {...annotation("scrim")} aria-hidden="true" /> : null}
+      {awayFromTail ? (
+        <div className="chat-tail-floater">
+          <Button
+            icon={ArrowDown}
+            label="Jump to latest turn"
+            kind="framed"
+            onClick={() => window.dispatchEvent(new Event("pe:focus-tail"))}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

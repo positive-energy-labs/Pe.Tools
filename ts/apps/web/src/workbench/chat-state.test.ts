@@ -9,12 +9,13 @@ import {
   selectApprovals,
   selectMessages,
   selectQuestions,
-  selectQueued,
   selectRunStatus,
   selectTitle,
   selectToolCalls,
   selectTurnFailure,
   selectWaitingSeconds,
+  skillInvocation,
+  toolDetail,
   type ChatState,
 } from "./chat-state";
 
@@ -181,24 +182,6 @@ describe("harness event projection", () => {
     ]);
   });
 
-  it("lists a queued prompt until its prompt event starts it", () => {
-    const queued = [
-      ...LOG.slice(0, 14),
-      { seq: 15, at, kind: "queued", turnId: "t3", text: "Then the sheets." },
-      { seq: 16, at, kind: "queued", turnId: "t4", text: "And the views." },
-    ] satisfies HarnessEvent[];
-    expect(selectQueued(state(queued))).toEqual([
-      { turnId: "t3", text: "Then the sheets." },
-      { turnId: "t4", text: "And the views." },
-    ]);
-    const started = [
-      ...queued,
-      { seq: 17, at, kind: "turn_end", turnId: "t2", stopReason: "end_turn" },
-      { seq: 18, at, kind: "prompt", turnId: "t3", text: "Then the sheets." },
-    ] satisfies HarnessEvent[];
-    expect(selectQueued(state(started))).toEqual([{ turnId: "t4", text: "And the views." }]);
-  });
-
   it("settles an ask: a reject denies the call, a host restart expires it", () => {
     const denied = [
       ...LOG,
@@ -248,6 +231,61 @@ describe("harness event projection", () => {
       result: { hits: [{ key: "op:schedules.read" }] },
       status: "completed",
     });
+  });
+
+  it("keeps the tool id when an update recaptions the call", () => {
+    // claude-code-acp names the tool once, then rewrites `title` with the act (a command line).
+    const log = [
+      { seq: 1, at, kind: "prompt", turnId: "t1", text: "Find clones." },
+      update(2, "t1", {
+        sessionUpdate: "tool_call",
+        toolCallId: "g1",
+        name: "Grep",
+        title: "grep",
+        status: "pending",
+        rawInput: {},
+      }),
+      update(3, "t1", {
+        sessionUpdate: "tool_call_update",
+        toolCallId: "g1",
+        title: 'grep "clone" C:\Pods',
+        rawInput: { pattern: "clone", path: "C:\Pods" },
+      }),
+      update(4, "t1", {
+        sessionUpdate: "tool_call",
+        toolCallId: "q1",
+        name: "AskUserQuestion",
+        title: "Which clone should open?",
+        rawInput: { questions: [] },
+      }),
+    ] satisfies HarnessEvent[];
+    const [grep, ask] = selectToolCalls(state(log));
+    expect(grep).toMatchObject({ title: "Grep", target: "C:\Pods" });
+    expect(toolDetail(grep!)).toEqual({ text: 'grep "clone" C:\Pods', emitted: true });
+    expect(toolDetail(ask!)).toEqual({ text: "Which clone should open?", emitted: false });
+  });
+
+  it("names the skill a Skill call runs, and reads a slash prompt as that skill", () => {
+    const log = [
+      { seq: 1, at, kind: "prompt", turnId: "t1", text: "/review-schedule Mechanical" },
+      update(2, "t1", {
+        sessionUpdate: "tool_call",
+        toolCallId: "s1",
+        name: "Skill",
+        rawInput: { skill: "review-schedule", args: "Mechanical" },
+      }),
+    ] satisfies HarnessEvent[];
+    expect(selectToolCalls(state(log))[0]).toMatchObject({
+      title: "Skill",
+      target: "review-schedule",
+    });
+    expect(skillInvocation("/review-schedule  Mechanical Equipment")).toEqual({
+      name: "review-schedule",
+      args: "Mechanical Equipment",
+    });
+    expect(skillInvocation("/prove")).toEqual({ name: "prove", args: "" });
+    expect(skillInvocation("/usr/bin/revit is missing")).toBeUndefined();
+    expect(skillInvocation("run /prove")).toBeUndefined();
   });
 
   it("unwraps codex's MCP result wrapper the same way", () => {

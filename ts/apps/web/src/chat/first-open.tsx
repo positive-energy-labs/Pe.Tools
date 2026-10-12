@@ -5,7 +5,7 @@
  */
 import { useState } from "react";
 import type { Provider } from "@pe/agent-contracts";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { openMachine } from "#/machine/door";
 import { Switch } from "#/components/lang/switch";
 import { Switcher } from "#/components/lang/switcher";
@@ -39,30 +39,24 @@ function ReadyVerb({ provider, providers }: { provider: Provider; providers: Pro
   if (readiness.state === "ready") return null;
   if (provider.auth.kind === "endpoint")
     return (
-      <Press tone="quiet" size="caption" frame="line" onClick={() => openMachine("pea")}>
+      <Button kind="framed" label="Open providers" onClick={() => openMachine("pea")}>
         Open providers
-      </Press>
+      </Button>
     );
   if (readiness.state === "unknown")
     return (
-      <Press
-        tone="quiet"
-        size="caption"
-        frame="line"
-        onClick={() => void providers.probe(provider.id)}
-      >
+      <Button kind="framed" label="Probe" onClick={() => void providers.probe(provider.id)}>
         Probe
-      </Press>
+      </Button>
     );
   return (
-    <Press
-      tone="quiet"
-      size="caption"
-      frame="line"
+    <Button
+      kind="framed"
+      label={readiness.step === "installed" ? "Install" : "Sign in"}
       onClick={() => void providers.openLogin(provider.id)}
     >
       {readiness.step === "installed" ? "Install" : "Sign in"}
-    </Press>
+    </Button>
   );
 }
 
@@ -160,16 +154,15 @@ function OwnAppDoor({ host }: { host: string }) {
           <div className="flex items-center gap-2">
             <span>{snippet.app}</span>
             <span className="text-ink-2">{snippet.where}</span>
-            <Press
-              tone="quiet"
-              size="caption"
+            <Button
+              label={copied === snippet.app ? "copied" : "copy"}
               onClick={() => {
                 void navigator.clipboard?.writeText(snippet.text);
                 setCopied(snippet.app);
               }}
             >
               {copied === snippet.app ? "copied" : "copy"}
-            </Press>
+            </Button>
           </div>
           <pre className="face-mono overflow-auto rounded-sm px-2 py-1" data-surface="recess">
             {snippet.text}

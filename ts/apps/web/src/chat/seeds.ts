@@ -3,7 +3,7 @@
  * through `useRoute`'s demo owner; nothing here renders or holds state. Each seed is a thread body
  * whose `events` are the harness log the host would have written.
  */
-import { address, type HarnessEvent, type Seed } from "@pe/agent-contracts";
+import { address, type HarnessEvent, type PromptAttachment, type Seed } from "@pe/agent-contracts";
 import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
 
 import { emptyChatState, type ChatState } from "#/workbench/chat-state";
@@ -13,7 +13,7 @@ const at = (minute: number) => new Date(Date.UTC(2026, 7, 30, 19, minute));
 /** A log from bare event bodies: `seq`, `at` and the turn id are filled in order. */
 function log(
   ...bodies: (
-    | { kind: "prompt"; text: string }
+    | { kind: "prompt"; text: string; attachments?: PromptAttachment[] }
     | { kind: "update"; update: { sessionUpdate: string; [key: string]: unknown } }
     | Omit<Extract<HarnessEvent, { kind: "permission_request" }>, "seq" | "at" | "turnId">
     | { kind: "turn_end"; stopReason: string }
@@ -29,6 +29,10 @@ function log(
 const say = (text: string) => ({
   kind: "update" as const,
   update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } },
+});
+const think = (text: string) => ({
+  kind: "update" as const,
+  update: { sessionUpdate: "agent_thought_chunk", content: { type: "text", text } },
 });
 const tool = (toolCallId: string, name: string, rawInput: unknown, status = "pending") => ({
   kind: "update" as const,
@@ -181,6 +185,107 @@ const CHAT_DIAGRAM_STATE: ChatState = {
   ),
 };
 
+/** A 96x60 PNG of a riser photo. */
+const RISER_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAGAAAAA8CAIAAAAWtijjAAAAh0lEQVR4nO3YsQnAMBRDQe8/QGrXmS0Yj+ANEheBL/DBG0BcqfaMqZda+YLwAAECBAhQcJVAV793AgQIECBAgAABAgQIECBAgAABAvQn0ObKYwMECBAgQMEBAgQIEKDgAAECBKgUyB/08QcBAgQIECBAgAABAgQIECBAgAABAgQIECBAgDKAFi2h3G4k+qcoAAAAAElFTkSuQmCC";
+
+const DUCT_SIZES_CSV =
+  "run,cfm,velocity_fpm,size_in\nMain A,4800,1900,30x16\nBranch A1,2400,1500,20x14\nBranch A2,2400,1500,20x14\nMain B,3200,1700,24x16\nBranch B1,1600,1300,16x12\nBranch B2,1600,1300,16x12";
+
+/** The composer's three kinds as they cross: an image block, an embedded text file, a linked PDF. */
+const ATTACHED = {
+  riser: { name: "riser.png", mimeType: "image/png", size: 192, data: RISER_PNG },
+  sizes: {
+    name: "duct-sizes.csv",
+    mimeType: "text/csv",
+    size: DUCT_SIZES_CSV.length,
+    text: DUCT_SIZES_CSV,
+  },
+  submittal: {
+    name: "damper-submittal.pdf",
+    mimeType: "application/pdf",
+    size: 184_320,
+    data: "JVBERi0xLjcK",
+  },
+} satisfies Record<string, PromptAttachment>;
+
+/** The user attaches a photo and a CSV, then a submittal PDF; the harness reads the linked file. */
+const CHAT_ATTACH_STATE: ChatState = {
+  ...THREAD,
+  promptCapabilities: { image: true, embeddedContext: true },
+  events: log(
+    {
+      kind: "prompt",
+      text: "Is Branch B2 sized right?",
+      attachments: [ATTACHED.riser, ATTACHED.sizes],
+    },
+    say(
+      "The photo shows the riser dropping into Main B with a reducer at the first tee. " +
+        "In duct-sizes.csv Branch B2 carries 1600 cfm at 1300 fpm in 16x12, the same as Branch B1, " +
+        "so the size holds if the reducer in the photo is the only transition.",
+    ),
+    { kind: "turn_end", stopReason: "end_turn" },
+    {
+      kind: "prompt",
+      text: "Here is the damper submittal. Does its pressure drop change that?",
+      attachments: [ATTACHED.submittal],
+    },
+    tool("pdf", "Read", {
+      file_path: "C:\\Pe\\threads\\demo-review\\attachments\\turn-2\\damper-submittal.pdf",
+    }),
+    done("pdf", "Ruskin CD50, 16x12: 0.04 in. w.g. at 1300 fpm."),
+    say(
+      "The submittal lists 0.04 in. w.g. across the damper at 1300 fpm. " +
+        "That leaves Branch B2 inside its budget; 16x12 stands.",
+    ),
+    { kind: "turn_end", stopReason: "end_turn" },
+  ),
+};
+
+/** What the harness advertises at session start; the composer's slash menu reads the latest. */
+const SKILL_COMMANDS = {
+  kind: "update" as const,
+  update: {
+    sessionUpdate: "available_commands_update",
+    availableCommands: [
+      { name: "review-schedule", description: "Review a schedule for blanks, outliers and drift." },
+      { name: "execute", description: "Choose and report the proof lane." },
+      { name: "prove", description: "Test a claim against its falsifier." },
+      { name: "docs", description: "Decide where durable knowledge lands." },
+      { name: "compact", description: "Clear history but keep a summary." },
+    ],
+  },
+};
+
+/** The user types `/review-schedule`; Claude answers with its `Skill` tool, then works the skill. */
+const CHAT_SKILL_STATE: ChatState = {
+  ...THREAD,
+  events: log(
+    SKILL_COMMANDS,
+    { kind: "prompt", text: "/review-schedule Mechanical Equipment Schedule" },
+    tool("skill", "Skill", { skill: "review-schedule", args: "Mechanical Equipment Schedule" }),
+    done("skill", "Launching skill: review-schedule"),
+    tool("sched", "mcp__pea__pe_read", { key: "op:schedules.read" }),
+    done("sched", { ok: true, key: "op:schedules.read", revision: 3, rows: 38, blanks: 4 }),
+    think("Four blank marks out of 38; outliers are worth a second read before I summarize."),
+    tool("find", "mcp__pea__pe_find", { query: "schedule outliers" }),
+    done("find", { ok: true, matches: 2 }),
+    think("Two matches. AHU-2 is the one to lead with."),
+    tool("bash", "Bash", {
+      command:
+        "python -c \"import json;print(json.dumps(open(r'C:/Users/kaitp/pea-tests/20261007-hcb/test1/work/Census.json').read()))\"",
+    }),
+    done("bash", "Exit 0"),
+    tool("apply", "mcp__pea__pe_do", { key: "op:schedules.apply", rows: [12, 13] }),
+    done("apply", { error: true, message: "Schedule is locked by another user." }, "failed"),
+    say(
+      "Mechanical Equipment Schedule: 38 rows, 4 with a blank Mark. " +
+        "AHU-2 lists 8000 cfm against a 4800 cfm main; check that row first.",
+    ),
+    { kind: "turn_end", stopReason: "end_turn" },
+  ),
+};
+
 /** Threads the seed pretends exist, as the thread list reads them. */
 export const CHAT_SEED_THREADS = [
   { id: "demo-review", title: "Level 2 coordination review", updatedAt: at(37).toISOString() },
@@ -196,6 +301,13 @@ const HEAD = {
     address: DEMO_ADDRESS,
   },
   revision: 3,
+};
+
+/** The same document, bound under a session the inventory no longer holds: a closed target. */
+const CLOSED_HEAD = {
+  defaultTarget: { kind: "named", session: "pe.app-25", address: DEMO_ADDRESS },
+  revision: 4,
+  displayLabel: "Operations Demo.rvt",
 };
 
 const INVENTORY = {
@@ -237,7 +349,25 @@ export const CHAT_SEEDS = {
     readings: { head: HEAD, inventory: INVENTORY, receipts: [] },
     page: {},
   },
-  cancel: {
+  attach: {
+    title: "the user attached a photo, a CSV and a PDF; pea read all three",
+    work: CHAT_ATTACH_STATE,
+    readings: { head: HEAD, inventory: INVENTORY, receipts: [] },
+    page: {},
+  },
+  skill: {
+    title: "the user ran a slash skill; the harness advertised its commands",
+    work: CHAT_SKILL_STATE,
+    readings: { head: HEAD, inventory: INVENTORY, receipts: [] },
+    page: {},
+  },
+  closed: {
+    title: "a thread whose bound session has closed; send refuses until a live document is chosen",
+    work: CHAT_ATTACH_STATE,
+    readings: { head: CLOSED_HEAD, inventory: INVENTORY, receipts: [] },
+    page: {},
+  },
+  stop: {
     title: "pea mid-turn, with an approval owed",
     work: CHAT_SEED_STATE,
     readings: { head: HEAD, inventory: INVENTORY, receipts: [] },

@@ -1,13 +1,10 @@
-/**
- * THE CHAT HEAD'S PROPOSAL SUMMARY (journeys chat-summary spec): live asks, then one line per Work
- * the thread's document holds, counts only. `review ▾` expands one Work into at most five groups
- * from the contract's `summarize`; a group's accept and deny are `fanOut`s of the same cell
- * transitions the route draws on each cell. Every exit opens the route in Chat's plugin pane.
- * It never lists cells and never draws a confirmation sheet.
- */
+/** The composer's Work rows: one line per Work the thread's document holds, counts only; `review ▾`
+ *  expands it into at most five groups whose accept and deny are `fanOut`s of the route's own cell
+ *  transitions. Every exit opens the route in Chat's plugin pane; it never lists cells. */
 import { useMemo, useState, type ReactNode } from "react";
+import { ChevronRight } from "lucide-react";
 import { fanOut, type CellGroup, type TrichotomyCellLike } from "@pe/agent-contracts";
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import {
   fanOutWord,
   runFanOut,
@@ -16,8 +13,7 @@ import {
   workSummary,
   type CellWire,
   type FanOutOutcome,
-} from "#/components/lang/band";
-import { Press } from "#/components/lang/press";
+} from "#/components/work/band";
 import { Verdict } from "#/components/lang/verdict";
 export interface HeadWork {
   id: string;
@@ -104,14 +100,14 @@ export function ProposalHead({ asks, works }: { asks: readonly ReactNode[]; work
   return (
     <div
       aria-label="Pea proposals"
-      className="hairline-t hairline-b flex flex-col px-2 py-1 t-prose"
+      className="hairline-b-faint flex flex-col gap-1 px-(--gutter) py-1.5"
     >
-      {asks.length > 0 && <div className="hairline-b mb-1">{asks}</div>}
+      {asks.length > 0 && <div className="hairline-b-faint mb-1 pb-1">{asks}</div>}
       {shown.map((parts) => (
         <WorkLine key={parts[0]!.id} parts={parts} />
       ))}
       {rest.length ? (
-        <Press tone="quiet" size="value" onClick={() => setAll(true)}>
+        <Button kind="framed" label="Show the remaining routes" onClick={() => setAll(true)}>
           {[
             `+${rest.length} more route${rest.length === 1 ? "" : "s"} with changes`,
             ...(["proposed", "staged"] as const).flatMap((field) => {
@@ -119,12 +115,14 @@ export function ProposalHead({ asks, works }: { asks: readonly ReactNode[]; work
               return n ? [`${n} ${field}`] : [];
             }),
           ].join(" · ")}
-        </Press>
+        </Button>
       ) : null}
     </div>
   );
 }
-/** One line per Work: what · the counts (the review toggle) · revision · a refusal · the commit. */
+/** One line per Work, read left to right (chat polish round 2, 2026-10-12): the review toggle names
+ *  what is staged and how much in words · where, with the revision as the one machine value ·
+ *  a refusal · the one commit. */
 function WorkLine({ parts }: { parts: HeadWork[] }) {
   const [open, setOpen] = useState(false);
   const work = parts[0]!;
@@ -132,48 +130,59 @@ function WorkLine({ parts }: { parts: HeadWork[] }) {
   const counts = tally(groups.flat());
   return (
     <div className="flex flex-col" data-work={work.id}>
-      <div className="flex h-(--item-h) min-w-0 items-center gap-3">
-        <span className="min-w-0 shrink truncate">
-          <b>{work.route}</b> <span className="text-ink-2">· {work.subject}</span>
-        </span>
-        <Press
-          tone="quiet"
-          size="caption"
+      <div className="flex min-h-(--control-h) min-w-0 items-center gap-2">
+        <Button
+          kind="framed"
           aria-expanded={open}
-          aria-label={`review ${open ? "▴" : "▾"}`}
-          title="Show the changes by group"
+          // The e2e journeys press this by name (`review ▾`); the face says what is staged.
+          label={`review ${open ? "▴" : "▾"}`}
+          reason="Show the changes by group"
           onClick={() => setOpen(!open)}
         >
-          <span className="whitespace-nowrap">
-            <Counts {...counts} /> {open ? "▴" : "▾"}
+          <ChevronRight
+            aria-hidden
+            className={`size-3.5 shrink-0 transition-transform ${open ? "rotate-90" : ""}`}
+          />
+          <span className="min-w-0 truncate">
+            <b>{work.subject}</b>
+            <span className="text-ink-2">
+              {" · "}
+              <Counts {...counts} />
+            </span>
           </span>
-        </Press>
-        <span className="shrink-0 t-small face-mono text-ink-2">
-          {work.wire.revision === null ? "unwritten" : `r${work.wire.revision}`}
+        </Button>
+        <span className="shrink-0 text-ink-2">
+          in {work.route} ·{" "}
+          <span className="face-mono">
+            {work.wire.revision === null ? "unwritten" : `r${work.wire.revision}`}
+          </span>
           {work.stale ? " · stale" : ""}
           {work.conflict ? " · changed elsewhere" : ""}
         </span>
         {work.conflict && work.reload ? (
-          <Press tone="quiet" size="caption" onClick={work.reload}>
+          <Button kind="framed" label="reload" onClick={work.reload}>
             reload
-          </Press>
+          </Button>
         ) : null}
         <span className="ml-auto flex min-w-0 items-center gap-2">
           {work.refusal ? (
             <span
-              className="min-w-0 truncate t-small"
+              className="min-w-0 truncate"
               data-tone="caution"
               title={`${work.commit.word} refused: ${work.refusal}`}
             >
               {work.refusal}
             </span>
           ) : null}
-          <ActionButton
+          <Button
+            kind="framed"
             label={work.commit.word}
             reason={counts.staged ? COMMIT_REASON : "nothing staged"}
-            disabled={!counts.staged}
+            refusal={counts.staged ? null : "nothing staged"}
             onClick={work.commit.run}
-          />
+          >
+            {work.commit.word}
+          </Button>
         </span>
       </div>
       {open
@@ -211,9 +220,14 @@ function Groups({ work, groups }: { work: HeadWork; groups: CellGroup[] }) {
         );
       })}
       {more > 0 ? (
-        <Press tone="nav" size="value" onClick={() => work.open()}>
-          … {more} more group{more === 1 ? "" : "s"} · open in {work.route} ›
-        </Press>
+        <Button
+          kind="nav"
+          direction="forward"
+          label={`open ${more} more group${more === 1 ? "" : "s"} in ${work.route}`}
+          onClick={() => work.open()}
+        >
+          … {more} more group{more === 1 ? "" : "s"} · open in {work.route}
+        </Button>
       ) : null}
     </div>
   );
@@ -300,7 +314,7 @@ function GroupRow({
         <span className="truncate face-mono" title={[body, ...facts].filter(Boolean).join(" · ")}>
           {body}
           {facts.length ? (
-            <span className="t-small text-ink-2">
+            <span className="text-ink-2">
               {body ? " · " : ""}
               {facts.join(" · ")}
             </span>
@@ -328,20 +342,20 @@ function GroupRow({
             </Verdict>
           ) : null}
           <UnstageAll wire={work.wire} cells={work.cells} keys={keys} done={done} compact />
-          <Press
-            tone="nav"
-            size="caption"
-            aria-label={`open ${label} in ${work.route}`}
-            title={`Open ${label} in ${work.route}`}
+          <Button
+            kind="nav"
+            direction="forward"
+            label={`open ${label} in ${work.route}`}
+            reason={`Open ${label} in ${work.route}`}
             onClick={() => work.open(group.path)}
           >
-            review ›
-          </Press>
+            review
+          </Button>
         </span>
       </div>
       {outcome ? (
         <span
-          className="truncate pl-2 t-small"
+          className="truncate pl-2"
           data-tone={outcome.refusal ? "caution" : "done"}
           title={outcome.refusal ? "nothing was written" : undefined}
         >

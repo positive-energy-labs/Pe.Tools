@@ -15,9 +15,9 @@
  *     rail + the ⌗ glyph.
  *
  * What remains here is the keep-as-CSS zone — the stuff a Tailwind class genuinely can't express:
- * (1) JS-driven geometry — map-dial, candlestick, fisheye trace lane, parallax grid — positioned
- * by inline styles the rAF/scroll controller sets per frame; (2) [data-mode] lane widths;
- * (3) pseudo-elements, descendant/state selectors, and keyframe animations (caret blink, sheen).
+ * (1) JS-driven geometry — the map-dial and its reticle — positioned by inline styles the
+ * rAF/scroll controller sets per frame; (2) pseudo-elements, descendant/state selectors, and
+ * keyframe animations (caret blink, sheen).
  */
 [data-annotation="frame"] {
   font-family: var(--font-body);
@@ -33,8 +33,8 @@
 }
 
 /* ===== Lens view: focal planes ======================================== */
-/* --vp (the scroll aperture height) is fed in px by a ResizeObserver. The map-dial gutter and
-   trace fisheye use a small rAF scroll handler (they need measured pixel heights). */
+/* --vp (the scroll aperture height) is fed in px by a ResizeObserver. The map-dial gutter uses a
+   small rAF scroll handler (it needs measured pixel heights). */
 [data-annotation="frame"] {
   min-height: 0;
   height: 100%; /* fill the ChatShell main row (was a grid child in apps/website) */
@@ -78,6 +78,26 @@
   touch-action: none;
   user-select: none;
 }
+/* A thread that fits the lane (an empty one included) has nowhere to navigate: no rail at all.
+   `data-scrolls` is set by the lens's measure on every resize of the box or its content. */
+[data-annotation="frame"]:not([data-scrolls]) [data-annotation="dial"] {
+  visibility: hidden;
+}
+.chat-tail-rail {
+  position: absolute;
+  bottom: var(--space-unit);
+  right: 0;
+  z-index: 8;
+}
+.chat-tail-floater {
+  position: absolute;
+  bottom: var(--gutter);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  background: var(--pe-page);
+  --pe-on: var(--pe-page);
+}
 [data-annotation="dial-strip"] {
   position: absolute;
   inset: 0 auto 0 0;
@@ -104,7 +124,7 @@
      and a fixed inset put the number underneath it.
      It spills over the transcript, so it wears the page ground to stay legible. */
   right: 100%;
-  margin-right: 4px;
+  margin-right: 12px;
   top: 50%;
   transform: translateY(-50%);
   font-family: var(--font-mono);
@@ -175,7 +195,9 @@
   pointer-events: none;
   z-index: 6;
 }
-[data-annotation="dial-band"].focal [data-annotation="dial-number"] {
+/* The focal readout speaks only while the pointer is on the dial: at rest the turn heads already
+   say "#n", and a resting number crowded the pane's top-right corner. */
+[data-annotation="dial"]:hover [data-annotation="dial-band"].focal [data-annotation="dial-number"] {
   opacity: 1;
   color: var(--pe-ink);
 }
@@ -216,29 +238,20 @@
 [data-annotation="reticle-focal"] {
   display: none;
 }
+/* The viewport on the rail is a soft fill behind the bands, the way a scrollbar thumb sits in
+   its track: no box, no caret. A ruled box plus a pointer read as a stray widget hung under the
+   pane head; the focal band (wider, full strength) already says which turn is at the axis. */
 [data-annotation="reticle-wick"] {
   position: absolute;
-  left: 1px;
+  left: 4px;
   right: 1px;
-  border: 1px solid color-mix(in srgb, var(--pe-ink) 70%, transparent);
-  border-radius: 0;
+  background: var(--fill-veil);
   pointer-events: none;
-  z-index: 3;
+  z-index: -1; /* under the bands, inside the dial's own stacking context */
 }
-[data-annotation="reticle-cap"] {
-  display: none;
-}
+[data-annotation="reticle-cap"],
 [data-annotation="dial"] [data-annotation="caret"] {
-  position: absolute;
-  left: -1px;
-  width: 0;
-  height: 0;
-  border-top: 6px solid transparent;
-  border-bottom: 6px solid transparent;
-  border-left: 7px solid var(--pe-ink);
-  transform: translateY(-50%);
-  pointer-events: none;
-  z-index: 5;
+  display: none;
 }
 /* chat — near plane, the real scroll. The composer floats over the bottom; pad the tail by its
    live height (+ the pb-4 gap below it) so the last turn always clears the input box. */
@@ -246,21 +259,23 @@
   /* ONE MEASURE, CENTRED IN THE LANE. A transcript that grows to the window runs 150+ characters
      a line on a wide monitor, and at that length paragraph breaks stop registering at all — the
      eye loses the return sweep before it finds them.
-     A px knob, not `ch`: this box's own font is 10px while the prose inside it is 11px, so `ch`
-     here measures the wrong type. 750px is ~135 characters at the measured 5.5px prose character.
-     Turn `--chat-measure` if that reads long or short. */
+     A px knob, not `ch`: this box's own font is not the prose's, so `ch` here measures the wrong
+     type. 750px less the 20px lanes holds ~95 characters of the 15px conversation face, the long
+     end of a reading line. The composer (`.dl-composer-frame`) shares this measure and inset;
+     turn `--chat-measure` for both if that reads long or short. */
   /* width:100% or an unbreakable line grows this box to the full measure, under the dial. */
   width: 100%;
   max-width: var(--chat-measure, 750px);
   margin-inline: auto;
-  padding: 14px 20px;
+  padding: 28px 20px 16px;
 }
 [data-annotation="moment"] {
-  /* ONE rhythm: a moment is spaced like any other row (3px), so a run of folded tool turns reads
-     as one list instead of N widely-spaced islands. The air is spent at the speaker handoff
-     instead — see the hairline rules below, which own both the rule and the padding.
-     The left inset is the transcript's lane, not a focus mark: the dial answers "where am I". */
-  padding: 3px 0 3px 10px;
+  /* ONE rhythm: consecutive moments of one speaker sit a body gap apart (8px), so a run of tool
+     turns reads as one list instead of N islands. The air is spent at the speaker handoff
+     instead — see the rules below, which own both the hairline and the padding.
+     The left inset is the transcript's lane, not a focus mark (the dial answers "where am I");
+     a tool row's hover fill spends it. */
+  padding: 4px 0 4px 10px;
   scroll-margin-top: 12px;
 }
 
@@ -274,205 +289,87 @@
 }
 /* A hairline at every you↔pea boundary: the transcript reads as a ledger of alternating speaker
    compartments. Same-role runs stay unruled (the rule marks the handoff, not every message). */
-[data-annotation="moment"][data-role="user"] + [data-annotation="moment"][data-role="assistant"],
-[data-annotation="moment"][data-role="assistant"] + [data-annotation="moment"][data-role="user"] {
+[data-annotation="moment"]:not([data-role="user"]) + [data-annotation="moment"][data-role="user"] {
   border-top: 0.5px solid var(--pe-line);
-  margin-top: 10px;
-  padding-top: 10px;
+  margin-top: 28px;
+  padding-top: 24px;
 }
-[data-annotation="tool-marker"] {
-  /* full-width ledger row: identifiers pack left, the mono status owns the right edge. A flex row,
-     not a grid: the grid's 1fr middle track gapped the name from its key and spilled any span
-     without an explicit column onto a second row. */
+/* A host line is an aside between speakers: it stands off both, never glued to a head. */
+[data-annotation="moment"][data-role="system"] {
+  margin-block: 8px;
+}
+/* Your words get their answer close: Pea's head sits under the bubble, not a compartment away. */
+[data-annotation="moment"][data-role="user"] + [data-annotation="moment"][data-role="assistant"] {
+  margin-top: 12px;
+}
+/* A tool row and a run's summary row are ONE row: a list item at --item-h, the name, then what it
+   acted on, then its outcome right behind it (a status pinned to the far edge sat a lane away
+   from the words it judged). The row's inset is spent outside the text, a negative margin of the
+   same size, so the glyph stays flush with the prose while the hover fill gets air. */
+[data-annotation="tool-marker"],
+[data-annotation="tool-run"] > summary {
   display: flex;
   flex-wrap: nowrap;
-  align-items: baseline;
-  gap: 7px;
-  /* The marker is a grid item; min-width:0 lets its track shrink to the lane (default `auto`
-     grows the track to the long target's min-content) so the target can ellipsis-truncate. */
+  align-items: center;
+  gap: 8px;
+  /* min-width:0 lets the row shrink to the lane so the target can ellipsis-truncate. */
   min-width: 0;
-  max-width: 100%;
-  /* NO left rail. The ⌗ glyph already marks a tool row, and the rails stacked a second vertical
-     ruling beside the moment's own — so a tool row starts flush with the prose and the artifacts
-     beside it. Outcome still reads on the right (ok/err), failure still in caution. */
-  padding: 1px 7px 1px 0;
-  border-radius: 0; /* instrument surface — hard square */
+  min-height: var(--item-h);
+  margin-inline: calc(-1 * var(--item-pad-x));
+  padding: 0 var(--item-pad-x);
   font-size: var(--type-small-size);
   line-height: var(--type-small-line-height);
   color: var(--pe-ink-2);
-  transition:
-    background var(--motion-control) ease,
-    border-color var(--motion-control) ease,
-    border-width var(--motion-control) ease;
+  cursor: pointer;
+  transition: background var(--motion-control) ease;
 }
-/* the tool name and outcome stay fixed; only the target arg truncates */
-[data-annotation="tool-marker"] > span:first-child {
-  white-space: nowrap;
-}
-[data-annotation="tool-marker"] > span:last-child {
-  margin-left: auto;
-  flex: none;
-}
-/* every middle identifier shrinks and ellipses rather than wrapping the row */
+/* every identifier shrinks and ellipses rather than wrapping the row… */
 [data-annotation="tool-marker"] > * {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* tool = pea acting → SOLID pea rail (dashed is reserved for seam; a tool call is real).
-   memory = the memory lane's taxonomy hue. */
-/* focal stub → heavier rail + tint, but ONLY the single tool at the focal point (`.tool-focal`,
-   set per-marker by the scroll controller), not the whole message's tool group. Hover still tints
-   the whole hovered message's markers (a separate, coarser affordance). */
-[data-annotation="tool-marker"].tool-focal,
-[data-annotation="moment"].hover [data-annotation="tool-marker"] {
-  background: color-mix(in srgb, var(--pe-pea) 6%, transparent);
+/* …except the name (reading ink: it says what Pea did) and the outcome, which hold. */
+[data-annotation="tool-marker"] > span:first-child {
+  flex: none;
+  color: var(--pe-ink);
 }
+[data-annotation="tool-marker"] > span:last-child {
+  flex: none;
+}
+/* The outcome rides the row's right edge; the name and what it acted on take the rest. */
+[data-annotation="tool-marker"] > .dl-tool-status {
+  margin-left: auto;
+}
+/* Hover is a fill, never a hue. */
+[data-annotation="tool-marker"]:hover,
+[data-annotation="tool-run"] > summary:hover {
+  background-image: var(--fill-veil);
+}
+/* the opened call is the selected one */
+[data-annotation="tool-marker"][data-open] {
+  background-color: var(--pe-select);
+  --pe-on: var(--pe-select);
+}
+/* What the call acted on, as the machine wrote it. */
 [data-annotation="tool-marker"] code {
-  min-width: 0;
   font-family: var(--font-mono);
-  font-size: var(--type-small-size);
-  color: var(--pe-ink-2);
-  /* Reset the global `code` pill (border + muted fill) — the marker target is inline. */
+  /* Reset the global `code` pill (border + muted fill): the marker target is inline. */
   background: transparent;
   border: 0;
   padding: 0;
-  border-radius: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-[data-annotation="trace-frame"] {
-  position: relative;
-  height: 100%;
-  overflow: hidden;
-  background-image: repeating-linear-gradient(
-    to bottom,
-    transparent 0 27px,
-    color-mix(in srgb, var(--pe-ink) 5%, transparent) 27px 28px
-  );
-}
-
-/* trace lane: a static list of fixed-height header rows. The lane still translates so the focal
-   row rides the focal axis; the row's full I/O renders in the pinned inspect window instead of
-   expanding in place (no max-height churn). */
-[data-annotation="trace-pin"] {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  padding-top: 8px;
-  will-change: transform;
-}
-[data-annotation="trace-cell"] {
-  margin: 0 12px 4px;
-  height: 28px;
-  border: 0.5px solid var(--pe-line);
-  border-radius: 0; /* trace row — hard square */
-  overflow: hidden;
-  background: var(--pe-page);
-  --pe-on: var(--pe-page);
-  opacity: 0.62;
-  transition:
-    border-color var(--motion-control) ease,
-    opacity var(--motion-control) ease;
-}
-[data-annotation="trace-cell"].hover {
-  opacity: 1;
-  border-color: color-mix(in srgb, var(--pe-pea) 40%, transparent);
-}
-[data-annotation="trace-cell"].focal {
-  opacity: 1;
-  /* emphasis by intensity of the row's own hue — no glow, no elevation */
-  border-color: color-mix(in srgb, var(--pe-pea) 70%, transparent);
-}
-
-/* Pinned inspect window: the focal/hovered tool's prettified I/O, fixed at the lane top —
-   inspection is chronological, so "the current tool" reads at one static spot while the row
-   list below previews what's coming. Opaque over the sliding rows. */
-[data-annotation="inspect"] {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 2;
-  /* Bottom edge lands half a row above the focal row: focal axis (in frame coords) is
-     FOCAL*vp - HEAD_H = 0.5*vp - 40px; focal row top ≈ axis - 14px; minus 1.5 rows (32px each)
-     leaves the previous row half visible → 0.5*vp - 70px. */
-  max-height: calc(var(--vp, 560px) / 2 - 70px);
-  display: flex;
-  flex-direction: column;
-  background: var(--pe-page);
-  --pe-on: var(--pe-page);
-  border-bottom: 0.5px solid var(--pe-line-2);
-}
-[data-annotation="inspect"] [data-annotation="cell-head"] {
-  flex: none;
-}
-[data-annotation="inspect"] pre {
-  margin: 0;
-  padding: 3px 8px 6px;
-  font-family: var(--font-mono);
-  font-size: var(--type-small-size);
-  line-height: var(--type-small-line-height);
-  color: var(--pe-ink-2);
-  white-space: pre-wrap;
-  word-break: break-word;
-  min-height: 0;
-  overflow: auto;
-}
-/* hybrid row: sans title on the left, machine-measured metadata (status/duration) right-aligned
-   in mono. Tight density so the collapsed strip stays ~28px. */
-[data-annotation="trace-cell"] [data-annotation="cell-head"],
-[data-annotation="inspect"] [data-annotation="cell-head"] {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 5px 8px;
-  background: var(--pe-recess);
-  --pe-on: var(--pe-recess);
-  white-space: nowrap;
-}
-[data-annotation="trace-cell"] [data-annotation="cell-title"],
-[data-annotation="inspect"] [data-annotation="cell-title"] {
-  min-width: 0;
-  font-size: var(--type-prose-size);
-  color: var(--pe-ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-[data-annotation="trace-cell"] [data-annotation="cell-meta"],
-[data-annotation="inspect"] [data-annotation="cell-meta"] {
-  display: inline-flex;
-  flex: none;
-  align-items: baseline;
-  gap: 8px;
-  color: var(--pe-ink-2);
-}
-[data-annotation="inspect"] [data-annotation="tool-image"] {
-  display: block;
-  width: 100%;
-  height: auto;
-  border-top: 0.5px solid var(--pe-line);
-  min-height: 0;
-  overflow: auto;
-}
-
-/* the focal scrim — top vignette only */
+/* the scroll edge: text leaving under the pane head fades out over one row. It was a vignette
+   over the top third of the lane, which dimmed whatever sat there (the first turn of every
+   thread read as disabled). */
 [data-annotation="scrim"] {
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 6;
-  background: linear-gradient(
-    to bottom,
-    color-mix(in srgb, var(--pe-page) 55%, transparent) 0%,
-    color-mix(in srgb, var(--pe-page) 15%, transparent) 20%,
-    transparent 35%
-  );
+  background: linear-gradient(to bottom, var(--pe-page) 0, transparent var(--item-h));
 }
 
 /* ===== Loading / streaming / pending — baked into the elements ======== */
@@ -522,9 +419,6 @@
     animation: none;
     opacity: 0.6;
   }
-  [data-annotation="trace-cell"] {
-    transition: none;
-  }
 }
 
 /* ===== World inspector — rendered inside .side-body; the panel's styling is Tailwind in world.tsx.
@@ -544,80 +438,172 @@
   }
 }
 
-/* ===== Tool runs, opened calls, pinned inspection ===================== */
-/* A turn that is only tool calls folds behind one summary row: the transcript reads as prose with
-   machinery tucked under it, not as N banners. The marker rows inside keep their own grammar. */
+/* ===== Tool runs and opened calls ===================================== */
+/* Consecutive calls fold behind one summary row (a run of whole tool turns, or the calls between
+   two sentences): the transcript reads as prose with machinery tucked under it, not as N banners.
+   The summary wears the marker's row geometry above; its disclosure leads, where the eye starts.
+   A call row is a control (click opens its I/O here). */
 [data-annotation="tool-run"] > summary {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
-  min-width: 0;
-  cursor: pointer;
   list-style: none;
-  padding: 1px 7px 1px 0;
-  font-size: var(--type-small-size);
-  line-height: var(--type-small-line-height);
-  color: var(--pe-ink-2);
 }
 [data-annotation="tool-run"] > summary::-webkit-details-marker {
   display: none;
 }
-[data-annotation="tool-run"] > summary::after {
+[data-annotation="tool-run"] > summary::before {
   content: "▸";
-  margin-left: auto;
-  color: var(--pe-ink-2);
+  flex: none;
+  transition: transform var(--motion-control) ease;
 }
-[data-annotation="tool-run"][open] > summary::after {
-  content: "▾";
+[data-annotation="tool-run"][open] > summary::before {
+  transform: rotate(90deg);
 }
-[data-annotation="tool-run"] > summary:hover {
-  background: color-mix(in srgb, var(--pe-pea) 6%, transparent);
-}
-/* The count leads and holds its line: it is the one fact the folded row must always say.
-   Without this it shrank to a sliver and wrapped "112 calls" under the tool list. */
-[data-annotation="tool-run"] > summary span:first-child {
+/* The count leads and holds its line: it is the one fact the folded row must always say. */
+[data-annotation="tool-run"] > summary > span {
   flex: none;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
-/* The tool list is the elastic part — it takes the slack and ellipsises. */
-[data-annotation="tool-run"] > summary span:last-child {
+[data-annotation="tool-run"] > summary > span:first-child {
+  color: var(--pe-ink);
+}
+/* The latest activity is the elastic part: it takes the slack and truncates, so the count leads
+   and the failures ("4 failed") sit on the row's right edge. Marks centre on the row's line. */
+[data-annotation="tool-run"] > summary > .dl-tool-run-latest {
   flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-/* A marker is a control now (click opens its I/O here and pins it in the trace lane). */
-[data-annotation="tool-marker"] {
-  cursor: pointer;
+/* An opened run's calls hang under its summary, inset past the disclosure, with air at the end
+   so the next sentence does not butt the last call. Later turns of a whole-turn run (separate
+   moments, `data-in-run`) take the same inset. */
+[data-annotation="tool-run"][open] > :not(summary),
+[data-annotation="moment"][data-in-run] > .dl-message-body {
+  padding-left: var(--gutter);
 }
-[data-annotation="tool-marker"]:hover,
-[data-annotation="tool-marker"][data-open] {
-  background: color-mix(in srgb, var(--pe-pea) 8%, transparent);
+[data-annotation="tool-run"][open] > :not(summary) {
+  padding-block: 2px 6px;
 }
 
-/* the opened call's own I/O, inline under its marker: two `Code` blocks, each its own frame
-   with its own clamp, so the container only stacks them. */
+/* An opened call is one object: the artifact plane (`data-surface`, set in moments.tsx) wraps the
+   row and its I/O. The row is the frame's head (the selected fill), the I/O its body, and the
+   `Code` blocks inside draw no edge of their own, so there is one edge, not three. The frame
+   outdents by its border and the row's inset, so the row's text stays where the closed row had it. */
+[data-annotation="tool-run"] [data-tool-id][data-surface="artifact"] {
+  gap: 0;
+  margin-inline: calc(-1 * (var(--item-pad-x) + 1px));
+}
+[data-tool-id][data-surface="artifact"] > [data-annotation="tool-marker"] {
+  margin-inline: 0;
+}
+/* the opened call's own I/O: two `Code` blocks stacked; their recess heads part them */
 [data-annotation="tool-body"] {
   display: grid;
-  gap: 3px;
+  /* the track is the lane, never the longest line: a pane scrolls its own overflow */
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
 }
-
-/* A pinned inspection is a held reading: it gets the full lane height and scrolls, where the
-   transient hover preview stays a peek above the rows. */
-[data-annotation="inspect"][data-pinned] {
-  max-height: calc(var(--vp, 560px) - 48px);
-  overflow: auto;
-  border-bottom-color: var(--pe-pea);
+[data-annotation="tool-body"] [data-slot="artifact-frame"] {
+  border: 0;
 }
-/* the unpin control rides the top of the pinned window, above its own scroll */
-[data-annotation="inspect"][data-pinned] > button {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  align-self: flex-end;
-  background: var(--pe-page);
-  --pe-on: var(--pe-page);
+[data-annotation="tool-body"] [data-slot="artifact-frame"] + [data-slot="artifact-frame"] {
+  border-top: 1px solid var(--pe-line);
+}
+/* Tool I/O is machine detail under a row of the same: its mono sits at the inline ratio, the same
+   size as the row's own code, a step under the chrome rung the heads keep. */
+[data-annotation="tool-body"] [data-code-pane] {
+  font-size: calc(var(--type-small-size) * 0.9);
+  line-height: 18px;
+}
+
+/* R3 keeps one reading measure for the transcript and its floating composer. */
+[data-chat="surface"]
+  [data-annotation="moment"]:not([data-role="user"])
+  + [data-annotation="moment"][data-role="user"] {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+[data-chat="surface"] [data-annotation="chat"] {
+  padding: var(--gutter);
+  max-width: var(--chat-measure);
+}
+[data-chat="surface"] [data-annotation="moment"] {
+  padding: 0;
+  margin-block: 0 var(--space-unit);
+  border-top: 0;
+}
+[data-chat="surface"]
+  [data-annotation="moment"][data-role="user"]
+  + [data-annotation="moment"][data-role="assistant"] {
+  margin-top: var(--space-unit);
+}
+[data-chat="surface"] [data-slot="pane-title"][data-heading="name"] {
+  font-family: var(--font-body);
+}
+[data-chat="surface"] [data-slot="surface"] {
+  border: 1px solid var(--pe-line);
+  border-radius: var(--radius);
+}
+[data-chat="surface"] .dl-composer-frame {
+  max-width: var(--chat-measure);
+  padding: var(--space-unit) var(--gutter) var(--gutter);
+}
+[data-chat="surface"] .dl-composer-box {
+  border-color: var(--pe-line-2);
+  box-shadow: var(--shadow-float);
+  border-radius: var(--radius);
+}
+[data-chat="surface"] .dl-message-bubble {
+  border-radius: var(--radius);
+  padding: calc(var(--space-unit) * 2) var(--gutter);
+}
+[data-chat="surface"] .prose-pe p {
+  margin-block: 0 var(--gutter);
+}
+[data-chat="surface"] .prose-pe p:last-child {
+  margin-bottom: 0;
+}
+[data-chat="surface"] .prose-pe :not(pre) > code {
+  font-size: var(--type-small-size);
+}
+[data-chat="surface"] .prose-pe table {
+  border: 0;
+  font-size: var(--type-prose-size);
+}
+[data-chat="surface"] .prose-pe :is(th, td) {
+  padding: var(--space-unit) var(--gutter) var(--space-unit) 0;
+  border-left: 0;
+  border-bottom: 1px solid var(--pe-line);
+}
+[data-chat="surface"] .prose-pe thead th {
+  text-transform: none;
+  letter-spacing: normal;
+  background: transparent;
+  color: var(--pe-ink-mute);
+  font-size: var(--type-small-size);
+}
+[data-chat="surface"] [data-annotation="tool-run"] > .dl-tool-run-summary {
+  gap: calc(var(--space-unit) * 1.5);
+  font-size: var(--type-small-size);
+}
+[data-chat="surface"] [data-new-call] {
+  animation: chat-new-call var(--motion-pulse) ease-out;
+}
+@keyframes chat-new-call {
+  from {
+    background: var(--pe-veil);
+    box-shadow: inset 2px 0 var(--pe-ink-2);
+  }
+  to {
+    background: transparent;
+    box-shadow: inset 2px 0 transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-chat="surface"] [data-new-call] {
+    animation: none;
+    box-shadow: inset 2px 0 var(--pe-ink-2);
+  }
 }
