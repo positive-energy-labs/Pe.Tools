@@ -366,6 +366,8 @@ export const hostProbeDataSchema = Schema.Struct({
   processId: Schema.optional(Schema.Number),
   runtimeIdentity: Schema.String,
   serviceName: Schema.String,
+  // The host's release version ('dev' on a checkout; 'unknown' when the installed manifest is unreadable). Lets a browser or a person see which host answered.
+  version: Schema.String,
   sourceRoot: Schema.optional(Schema.NullOr(Schema.String)),
   installedRoot: Schema.optional(Schema.NullOr(Schema.String)),
   world: Schema.Struct({

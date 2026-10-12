@@ -523,3 +523,25 @@ test("provider read errors expose the safe snapshot alongside refusal evidence",
     f.machine.close();
   }
 });
+
+test("a leg that never settles is a leg error after its deadline, not a frame that never comes", async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  f.machine.close();
+  f.sources.years = vi.fn(() => new Promise<never>(() => {}));
+  const machine = createMachine(f.sources, { periodMs: 60_000 });
+  const seen: Machine[] = [];
+  try {
+    machine.observe((value) => seen.push(value));
+    await vi.advanceTimersByTimeAsync(14_000);
+    expect(seen).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(seen.length).toBeGreaterThan(0);
+    const latest = seen.at(-1)!;
+    expect(latest.legs.years?.error).toMatch(/years leg exceeded/);
+    expect(latest.revit.sessions).not.toBeNull();
+  } finally {
+    machine.close();
+    vi.useRealTimers();
+  }
+});

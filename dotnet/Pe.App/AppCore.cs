@@ -66,9 +66,6 @@ public sealed class AppCore : IPePayload {
 
         PostHogAnalytics.Initialize();
         PostHogAnalytics.Capture("app_boot", new Dictionary<string, object?> {
-            ["component"] = "revit",
-            ["version"] = typeof(AppCore).Assembly
-                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
             ["revit_version"] = context.Application.ControlledApplication.VersionNumber,
         });
         Autodesk.Windows.ComponentManager.ItemExecuted += OnRibbonItemExecuted;

@@ -277,14 +277,29 @@ const makeAtoms = (source: Readings) => {
   const family = Atom.family((serialized: string) =>
     Atom.make<Reading<unknown>>((get) => {
       let reading: Reading<unknown> = absent;
+      let deadline: ReturnType<typeof setTimeout> | undefined;
+      const set = (next: Reading<unknown>) => {
+        if (next === reading) return;
+        reading = next;
+        get.setSelf(reading);
+        clearTimeout(deadline);
+        // The `loading` state has advertised a deadline since it existed; nothing enforced it, so a
+        // host that never answers was a spinner with no end (DELL_PE, 2026-10-12). Now it fails.
+        if (reading.state === "loading")
+          deadline = setTimeout(
+            () => {
+              console.error(`reading ${serialized}: the host sent nothing before its deadline`);
+              set({ state: "failed", message: "The host sent no reading in 30 s." });
+            },
+            Math.max(0, reading.deadline - Date.now()),
+          );
+      };
       get.addFinalizer(
-        source.subscribe(JSON.parse(serialized) as ReadingRequest, (frame) => {
-          const next = advance(reading, frame);
-          if (next === reading) return;
-          reading = next;
-          get.setSelf(reading);
-        }),
+        source.subscribe(JSON.parse(serialized) as ReadingRequest, (frame) =>
+          set(advance(reading, frame)),
+        ),
       );
+      get.addFinalizer(() => clearTimeout(deadline));
       return reading;
     }).pipe(Atom.setIdleTTL(0)),
   );

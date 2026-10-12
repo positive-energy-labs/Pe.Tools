@@ -21,7 +21,17 @@ import {
 import type { BridgeSessionView } from "./bridge.ts";
 import { readFileStringOrEmpty, statOrNull } from "./files/index.ts";
 import { resolvePeaProductHomePath, type PeaRuntimeCapabilities } from "@pe/mcps";
+import { resolveHostVersion } from "./host-lifecycle.ts";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
+
+/** Status must answer even when the installed manifest is unreadable; the throw belongs to boot. */
+function hostVersion(): string {
+  try {
+    return resolveHostVersion();
+  } catch {
+    return "unknown";
+  }
+}
 import { LocalOpError } from "./local-error.ts";
 
 const RUNTIME_IDENTITY = `pe-host-ts/${process.version}`;
@@ -58,6 +68,7 @@ export function getHostStatus(
     executablePath: hostOwnership.executablePath,
     lane: hostOwnership.lane,
     processId: hostOwnership.processId,
+    version: hostVersion(),
     runtimeIdentity: RUNTIME_IDENTITY,
     serviceName: hostOwnership.serviceName,
     sourceRoot: hostOwnership.sourceRoot,

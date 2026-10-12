@@ -71,6 +71,7 @@ test("exports generic operation request and response typing", () => {
     hostContractVersion: 0,
     runtimeIdentity: "test",
     serviceName: "host",
+    version: "dev",
   } satisfies HostOpResponse<"host.status">;
   expect(noRequest).toEqual({});
   expect(status.bridgeIsConnected).toBe(false);
@@ -181,6 +182,7 @@ test("exports TS-only admin operation schemas", () => {
     hostContractVersion: 34,
     runtimeIdentity: "test",
     serviceName: "host",
+    version: "dev",
   });
   expect(decoded.bridgeIsConnected).toBe(false);
 

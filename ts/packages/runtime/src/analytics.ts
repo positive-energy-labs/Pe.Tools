@@ -100,13 +100,41 @@ export function boundedPayload(value: unknown): {
   return { json: json.slice(0, ANALYTICS_PAYLOAD_BUDGET), truncated: true, bytes };
 }
 
-function distinctId(): string {
-  const user = process.env.USERNAME ?? process.env.USER ?? "unknown";
-  return `${hostname()}\\${user}`;
+// Upper-cased to match .NET's Environment.MachineName, so the host and the add-in are one person.
+function machineName(): string {
+  return hostname().toUpperCase();
 }
 
+function distinctId(): string {
+  const user = process.env.USERNAME ?? process.env.USER ?? "unknown";
+  return `${machineName()}\\${user}`;
+}
+
+/**
+ * Every event names what sent it. Without `version` and `lane` a field incident is a hunt through
+ * `app_boot` rows (DELL_PE, 2026-10-12: a 0.7.0 host under a 0.7.17 add-in, found by hand).
+ * Only the host imports this module, so `component` is a constant here.
+ */
 function baseProperties(): Record<string, unknown> {
-  return { machine: hostname(), os: process.platform };
+  const lane = process.env.PE_LANE ?? "dev";
+  return {
+    machine: machineName(),
+    os: process.platform,
+    component: "host",
+    lane,
+    version: lane === "installed" ? installedVersion() : "dev",
+  };
+}
+
+let cachedVersion: string | undefined;
+
+function installedVersion(): string {
+  cachedVersion ??= (() => {
+    const version = (readJson(installedManifestPath()) as { version?: unknown } | undefined)
+      ?.version;
+    return typeof version === "string" && version ? version : "unknown";
+  })();
+  return cachedVersion;
 }
 
 function loadConfig(): AnalyticsConfig | null {

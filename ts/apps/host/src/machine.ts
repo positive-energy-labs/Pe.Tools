@@ -67,6 +67,23 @@ export interface MachineSources {
 }
 
 /** One clock, one in-flight refresh, full confirmed data retained independently of every leg. */
+/**
+ * Every leg refreshes under one deadline. The first `machine` frame waits for every leg, so one
+ * leg that never settles (a `pe-revit` spawn with no timeout, an APS call) was a tray that read
+ * "reading this machine" forever (DELL_PE, 2026-10-12). Now it is a leg error in the frame.
+ */
+const LEG_DEADLINE_MS = 15_000;
+
+function withDeadline<A>(promise: Promise<A>, ms: number, key: string): Promise<A> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(Error(`${key} leg exceeded ${ms} ms`)), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
 export function createMachine(
   sources: MachineSources,
   options: {
@@ -115,7 +132,7 @@ export function createMachine(
   async function read<A>(key: string, acquire: () => Promise<A>, accept: (value: A) => void) {
     const attemptedAtUtc = now();
     try {
-      accept(await acquire());
+      accept(await withDeadline(acquire(), LEG_DEADLINE_MS, key));
       legs[key] = { observedAtUtc: now(), attemptedAtUtc, error: null };
       return true;
     } catch (error) {

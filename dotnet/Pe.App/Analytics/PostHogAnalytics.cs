@@ -1,10 +1,14 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Pe.Revit.ServiceClient;
+using Pe.Shared.HostContracts.Transport;
 using Pe.Shared.Product;
+using Serilog;
 using Serilog.Core;
 using Serilog.Events;
 using System.IO;
 using System.Net.Http;
+using System.Reflection;
 using System.Text;
 
 namespace Pe.App.Analytics;
@@ -26,6 +30,12 @@ internal static class PostHogAnalytics {
 
     /// <summary>Set from the document tracker so events carry the active model's title.</summary>
     internal static string? CurrentDocumentTitle { get; set; }
+
+    /// <summary>The add-in's own release version ("dev" on a checkout build).</summary>
+    internal static readonly string AppVersion = typeof(PostHogAnalytics).Assembly
+        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
+
+    private static string? _reportedHostVersion;
 
     internal static bool Enabled => _apiKey != null;
 
@@ -62,7 +72,11 @@ internal static class PostHogAnalytics {
     internal static void Capture(string eventName, Dictionary<string, object?> properties) {
         if (_apiKey == null) return;
         try {
+            // Every event names what sent it (mirrors baseProperties in analytics.ts).
             properties["machine"] = Environment.MachineName;
+            properties.TryAdd("component", "revit");
+            properties["version"] = AppVersion;
+            properties["lane"] = HostEndpoint.ConfiguredLane ?? "unknown";
             if (CurrentDocumentTitle != null) properties["doc_title"] = CurrentDocumentTitle;
             var body = JsonConvert.SerializeObject(new {
                 api_key = _apiKey,
@@ -75,6 +89,23 @@ internal static class PostHogAnalytics {
                 new StringContent(body, Encoding.UTF8, "application/json"));
         } catch {
             // Swallow: telemetry is best-effort.
+        }
+    }
+
+    /// <summary>
+    ///     An installed add-in beside a host of another version is the stale-host install defect
+    ///     (host ledger 2026-10-12: a 0.7.0 host survived two upgrades under a 0.7.17 add-in). The
+    ///     host's service file carries the version it booted with; one event per differing version.
+    /// </summary>
+    internal static void ReportHostVersion() {
+        try {
+            var host = PeServiceDiscovery.TryDiscover(ProductRuntimeLayout.ForCurrentUser().RootPath, HostEndpoint.ServiceName)?.Version;
+            if (host == null || host == AppVersion || host == _reportedHostVersion) return;
+            _reportedHostVersion = host;
+            Log.Warning("Installed host {HostVersion} does not match add-in {AppVersion}.", host, AppVersion);
+            Capture("version_mismatch", new Dictionary<string, object?> { ["host_version"] = host });
+        } catch {
+            // Telemetry is best-effort.
         }
     }
 
