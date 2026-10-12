@@ -12,11 +12,11 @@ import {
 } from "@pe/agent-contracts";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
-import type { CellWire } from "#/components/lang/band";
+import type { CellWire } from "#/components/work/band";
 import { EmptyState } from "#/components/lang/empty";
 import { List } from "#/components/lang/list-popup";
 import { Pane } from "#/components/lang/pane";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { Switcher } from "#/components/lang/switcher";
 import { tokenRef } from "#/lib/token";
 import { CARD_META, CARD_STATES, type Card, type CardState } from "./cards";
@@ -211,21 +211,21 @@ export function FeedbackCard({
         {verbs ? (
           <span className="flex flex-wrap items-center gap-1">
             {verbs.map((verb) => (
-              <Press
+              <Button
                 key={verb.word}
-                frame="line"
-                size="caption"
-                title={verb.refusal ?? verb.title}
-                disabled={!!verb.refusal}
+                label={verb.word}
+                kind="framed"
+                reason={verb.title}
+                refusal={verb.refusal ? verb.refusal : null}
                 onClick={() => void verb.run().then((refusal) => setSaid(refusal?.message ?? null))}
               >
                 {verb.word}
-              </Press>
+              </Button>
             ))}
             {onClose ? (
-              <Press size="caption" tone="quiet" title="unpin (Esc)" onClick={onClose}>
+              <Button label="unpin" reason="unpin (Esc)" onClick={onClose}>
                 ×
-              </Press>
+              </Button>
             ) : null}
           </span>
         ) : null}
@@ -272,17 +272,16 @@ export function RoomsInbox({
   const shown = filter === "all" ? cards : cards.filter((card) => card.state === filter);
   return (
     <Pane
-      kind="content"
       title="inbox"
       meta={said ?? `${cards.length}`}
       scroll="clip"
       flush
       actions={
         <>
-          <Press
-            frame="line"
-            size="caption"
-            title="Copies every mark and note on this document as markdown, for Claude or Pea"
+          <Button
+            label="copy markdown"
+            kind="framed"
+            reason="Copies every mark and note on this document as markdown, for Claude or Pea"
             onClick={() =>
               void navigator.clipboard.writeText(markdown()).then(
                 () => say("copied"),
@@ -291,15 +290,15 @@ export function RoomsInbox({
             }
           >
             copy markdown
-          </Press>
-          <Press
-            frame="line"
-            size="caption"
-            title="Downloads the plan as drawn now, callouts and marks included"
+          </Button>
+          <Button
+            label="snap PNG"
+            kind="framed"
+            reason="Downloads the plan as drawn now, callouts and marks included"
             onClick={() => void snap().then((missing) => say(missing ?? "saved"))}
           >
             snap PNG
-          </Press>
+          </Button>
         </>
       }
     >

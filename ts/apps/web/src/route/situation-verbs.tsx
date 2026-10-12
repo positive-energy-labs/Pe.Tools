@@ -1,10 +1,10 @@
 /** The Situation's verb row: each verb button with its flag, and the board that stands them up. */
 import { Fragment, createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
-import { actionRecipe } from "#/components/lang/action-button";
+import type { LucideIcon } from "lucide-react";
 import { FactChip } from "#/components/lang/chip";
 import { Kbd } from "#/components/lang/kbd";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { changedInRevit } from "#/readings";
 import type { RouteAction } from "./manifest";
 import type { ActionHandle, RouteHandle } from "./use-route";
@@ -21,6 +21,8 @@ export function SituationAction({
   action,
   chord = action.chord,
   commit,
+  icon: Icon,
+  tone: standing,
 }: {
   handle: RouteHandle<any, any, any, any>;
   name: string;
@@ -28,6 +30,11 @@ export function SituationAction({
   /** The chord drawn beside it; defaults to the manifest's. A stage passes its own (`stage.ts`). */
   chord?: string;
   commit?: boolean;
+  /** Draw the verb as a single-icon press (kaitpw, 2026-10-12: new, fork, send). The label is
+   *  its accessible name; the title still says what it does, why it is refused, and its chord. */
+  icon?: LucideIcon;
+  /** The verb's standing tone (Stop's alarm); a refusal or a stale read's caution outranks it. */
+  tone?: "alarm";
 }) {
   const outcome = handle.outcome?.key === name ? handle.outcome : null;
   const busy = handle.busy?.key === name ? handle.busy : null;
@@ -60,27 +67,38 @@ export function SituationAction({
         ? changedInRevit(handle.readings[rereads])
         : rereads === "work" && handle.work.changed;
   const reason = `${action.refusal ?? `${stale ? "Revit changed this document since the last read. " : ""}${action.says}`}${chord ? ` · ${chord}` : ""}`;
+  const refusal = stopped ? (action.refusal ?? "Another action is running") : null;
+  const tone = refusedNow || stale ? "caution" : standing;
   return (
-    <span className="group relative inline-flex">
+    <span className="relative inline-flex">
       <Popover.Root open={shown} onOpenChange={(o) => !o && outcome && setDismissed(outcome.at)}>
         <Popover.Trigger
           render={
-            <Press
-              frame="line"
-              tone={commit ? "neutral" : "quiet"}
-              size="value"
-              state={stopped ? "disabled" : "rest"}
-              aria-disabled={stopped}
-              data-tone={refusedNow || stale ? "caution" : undefined}
-              title={reason}
-              onClick={() => void action.run()}
-              style={{ fontWeight: commit ? 600 : undefined }}
-            >
-              {action.label}
-              {action.count !== null ? (
-                <span className="face-mono text-ink-2">{action.count}</span>
-              ) : null}
-            </Press>
+            Icon ? (
+              // One glyph (kaitpw, 2026-10-12): the label is its name and its tooltip.
+              <Button
+                kind={commit ? "commit" : "framed"}
+                icon={Icon}
+                label={`${action.label.charAt(0).toUpperCase()}${action.label.slice(1)}: ${action.says}${chord ? ` · ${chord}` : ""}`}
+                refusal={refusal}
+                data-tone={tone}
+                onClick={() => void action.run()}
+              />
+            ) : (
+              <Button
+                kind={commit ? "commit" : "framed"}
+                label={action.label}
+                reason={reason}
+                refusal={refusal === null ? null : reason}
+                data-tone={tone}
+                onClick={() => void action.run()}
+              >
+                <span className="t-sentence">{action.label}</span>
+                {action.count !== null ? (
+                  <span className="face-mono text-ink-2">{action.count}</span>
+                ) : null}
+              </Button>
+            )
           }
         />
         <Popover.Portal>
@@ -93,22 +111,21 @@ export function SituationAction({
             <Popover.Popup
               data-surface="artifact"
               data-tone={outcome?.refusal ? "caution" : undefined}
-              className="max-w-[60ch] rounded-lg px-3 py-1.5 t-prose ring-1 ring-line outline-none"
+              className="max-w-[60ch] px-3 py-1.5 t-prose float-surface"
             >
               {busy ? (
                 <span className="flex items-baseline gap-3">
                   <span>
                     running <span className="face-mono">{busy.seconds} s</span>
                   </span>
-                  <Press
-                    frame="line"
-                    tone="quiet"
-                    size="value"
-                    title="Signal the running operation. It stops at its next checkpoint; what it already wrote stands."
+                  <Button
+                    kind="framed"
+                    label="stop"
+                    reason="Signal the running operation. It stops at its next checkpoint; what it already wrote stands."
                     onClick={handle.stop}
                   >
                     stop
-                  </Press>
+                  </Button>
                 </span>
               ) : outcome?.refusal ? (
                 <span>
@@ -133,11 +150,6 @@ export function SituationAction({
           </Popover.Positioner>
         </Popover.Portal>
       </Popover.Root>
-      {stopped ? (
-        <span role="tooltip" data-surface="artifact" className={actionRecipe().reason()}>
-          {reason}
-        </span>
-      ) : null}
     </span>
   );
 }
@@ -191,11 +203,10 @@ export function ActionBoard({
   >;
   const head = (
     <span className="w-[9rem]">
-      <Press
-        tone="quiet"
-        size="label"
+      <Button
+        label="verbs"
         aria-expanded={open}
-        title={
+        reason={
           open
             ? "back to the row"
             : "stand the verbs up: why each is refused or what it does, and what it dispatches"
@@ -203,7 +214,7 @@ export function ActionBoard({
         onClick={() => setOpen((value) => !value)}
       >
         <Turn open={open} /> verbs
-      </Press>
+      </Button>
     </span>
   );
   if (!open)

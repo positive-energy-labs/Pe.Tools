@@ -9,9 +9,9 @@ import { StatLine } from "#/components/anatomy";
 import { FactChip } from "#/components/lang/chip";
 import { StateDot } from "#/components/master-table/cells";
 import { fmtNum } from "#/components/master-table/model";
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { Pane } from "#/components/lang/pane";
-import type { PaneShortcut } from "#/components/lang/pane";
+import { ScopeKeys, type ScopeKey } from "#/route/keys";
 import { TakeoffEditCell, TakeoffProposalRows } from "#/takeoff/proposals";
 import type { Verdict } from "#/takeoff/atlas";
 import { FLAG_MEANING } from "#/takeoff/model";
@@ -56,7 +56,7 @@ function RoomPanel({
   wires: TakeoffsController["wires"];
   live: boolean;
   fieldsMode: "columns" | "panel";
-  shortcuts: readonly PaneShortcut[];
+  shortcuts: readonly ScopeKey[];
   onDecide: (room: ModelRoom, flag: string, verb: Verdict) => void;
   onPatch: (patch: RoomEdit) => void;
   url: string;
@@ -67,13 +67,9 @@ function RoomPanel({
     .filter((x): x is { flag: string; verb: Verdict } => x.verb !== undefined);
 
   return (
-    <Pane
-      id="room"
-      kind="inspector"
-      title="room"
-      meta={`${zone.zone.key} · ${zone.zone.lane.label}`}
-      shortcuts={shortcuts}
-    >
+    <Pane id="room" title="room" meta={`${zone.zone.key} · ${zone.zone.lane.label}`}>
+      <ScopeKeys keys={shortcuts} />
+
       <div className="hairline-rows -m-2">
         <div className="px-2.5 py-2">
           <h2 className="t-title text-ink">{room.name}</h2>
@@ -155,20 +151,32 @@ function RoomPanel({
                   <p className="face-mono text-ink-2">{FLAG_MEANING[flag] ?? "no blurb"}</p>
 
                   <span className="mt-0.5 flex gap-1">
-                    <ActionButton
-                      tone={live ? "commit" : "act"}
+                    <Button
+                      kind={live ? "commit" : "framed"}
                       label="accept · a"
-                      disabled={live && decisionRefusal(room, flag) !== null}
+                      refusal={
+                        live && decisionRefusal(room, flag) !== null
+                          ? decideReason(live, room, "accept", flag)
+                          : null
+                      }
                       reason={decideReason(live, room, "accept", flag)}
                       onClick={() => onDecide(room, flag, "accept")}
-                    />
-                    <ActionButton
-                      tone={live ? "commit" : "act"}
+                    >
+                      accept · a
+                    </Button>
+                    <Button
+                      kind={live ? "commit" : "framed"}
                       label="dismiss · d"
-                      disabled={live && decisionRefusal(room, flag) !== null}
+                      refusal={
+                        live && decisionRefusal(room, flag) !== null
+                          ? decideReason(live, room, "dismiss", flag)
+                          : null
+                      }
                       reason={decideReason(live, room, "dismiss", flag)}
                       onClick={() => onDecide(room, flag, "dismiss")}
-                    />
+                    >
+                      dismiss · d
+                    </Button>
                   </span>
                 </li>
               ))}

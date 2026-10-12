@@ -1,6 +1,6 @@
 import { StatLine } from "#/components/anatomy";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { fmtNum } from "#/components/master-table/model";
 import { ROOM_STATES, STATE_META, stateInk, type RoomState } from "#/takeoff/room-state";
 import type { ModelRoom, ModelZone } from "#/takeoff/world";
@@ -52,9 +52,9 @@ export function LevelStats({
         head={
           <>
             <span className="t-small t-upper min-w-0 flex-1 truncate">{level} — level totals</span>
-            <Press type="button" onClick={onClose} tone="quiet" size="value">
+            <Button label="close level stats" onClick={onClose}>
               ×
-            </Press>
+            </Button>
           </>
         }
       >

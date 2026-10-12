@@ -1,5 +1,5 @@
 import { Pane } from "#/components/lang/pane";
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { AnatomyDrawing } from "#/family/anatomy";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 
@@ -21,9 +21,8 @@ export function FamilyWorkspaceAnatomy() {
   } = useFamilyWorkspace();
   return (
     <Pane
-      kind="visual"
+      scroll="clip"
       flush
-      headerSurface="recess"
       title="anatomy"
       meta={anatomyCollapsed ? "collapsed" : stageType}
       help={
@@ -32,15 +31,18 @@ export function FamilyWorkspaceAnatomy() {
           : `Drawn from the ${stageType} type's own numbers in the profile — a reading of the document, not a render of Revit.`
       }
       actions={
-        <ActionButton
+        <Button
           label={anatomyCollapsed ? "show" : "hide"}
-          onClick={() => setAnatomyCollapsed((current) => !current)}
           reason={
             anatomyCollapsed
               ? "Show the drawing again. It is drawn from the profile's own numbers for the type on stage — it is a reading of the document, not a render of Revit."
               : "Collapse the drawing. Its header strip stays, so nothing about the page's shape changes except the height."
           }
-        />
+          kind="framed"
+          onClick={() => setAnatomyCollapsed((current) => !current)}
+        >
+          {anatomyCollapsed ? "show" : "hide"}
+        </Button>
       }
     >
       <AnatomyDrawing

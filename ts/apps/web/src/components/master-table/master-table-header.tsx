@@ -2,7 +2,7 @@ import { useContext, type ReactNode } from "react";
 import { ListFilter } from "lucide-react";
 import type { ReactTable, RowData } from "@tanstack/react-table";
 
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import type { ResolvedColumn } from "#/components/master-table/master-table-columns";
 import type { Column } from "#/components/master-table/model";
 import type { MasterTableFeatures } from "#/components/master-table/tanstack-adapter";
@@ -131,13 +131,11 @@ function LeafHeader<Row>({
       )}
     >
       {column.sort ? (
-        <Press
+        <Button
           type="button"
           onClick={(event) => onSort(event.shiftKey)}
-          title="Sort by this column. Clicking again flips the direction; shift-click appends it as a tie-breaker behind the sorts already applied, numbered in the header."
-          tone="quiet"
-          size="caption"
-          hover="bare"
+          label={`sort ${column.label}`}
+          reason="Sort by this column. Clicking again flips the direction; shift-click appends it as a tie-breaker behind the sorts already applied, numbered in the header."
         >
           <PressContent geometry="block">
             <span className="t-small t-upper">{column.header ?? column.label}</span>
@@ -148,7 +146,7 @@ function LeafHeader<Row>({
               </span>
             )}
           </PressContent>
-        </Press>
+        </Button>
       ) : (
         <span className="t-small t-upper block">{column.header ?? column.label}</span>
       )}
@@ -169,14 +167,11 @@ function ConditionPress<Row>({
 }) {
   return (
     <div className="mt-0.5 flex normal-case">
-      <Press
+      <Button
         type="button"
-        tone="quiet"
-        size="caption"
-        hover="bare"
-        aria-pressed={said.length > 0}
-        aria-label={`filter ${column.label}`}
-        title={
+        pressed={said.length > 0}
+        label={`filter ${column.label}`}
+        reason={
           said.length
             ? `Narrowed by ${said.join(" and ")}. Click to add another condition on this column; edit or remove one from its chip in the query box.`
             : "Filter this column: opens the query box on it, with its operators and values."
@@ -187,7 +182,7 @@ function ConditionPress<Row>({
           <ListFilter aria-hidden className="size-3 shrink-0" />
           {said.length > 0 && <span className="face-mono truncate">{said.join(" · ")}</span>}
         </PressContent>
-      </Press>
+      </Button>
     </div>
   );
 }

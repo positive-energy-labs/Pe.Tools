@@ -1,7 +1,7 @@
 import { useContext, useEffect, useRef } from "react";
 import { ChatFocus } from "#/route/situation-ladder";
 import { sameValue, type AppliedFilter, type FamiliesRouteDocument } from "@pe/agent-contracts";
-import { reviewTransitions, type CellWire } from "#/components/lang/band";
+import { reviewTransitions, type CellWire } from "#/components/work/band";
 import { cellFromTrichotomy, StateCell } from "#/components/lang/cell";
 import { SectionLabel } from "#/families/readout-primitives";
 import { useFamiliesWorkspace } from "#/families/workspace-context";

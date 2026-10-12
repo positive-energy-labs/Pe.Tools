@@ -1,6 +1,6 @@
 /** The Situation's grids: the ledger behind the gauge and the page log column. */
 import { useState, type ReactNode } from "react";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { Switcher } from "#/components/lang/switcher";
 import { Inspect, inspectableOf } from "./inspect";
 import type { RouteManifest } from "./manifest";
@@ -85,22 +85,27 @@ export function PageLog({
         {/* On the title line: the head is a fixed height, so a line under the rows would be clipped. */}
         <span className="ml-auto flex items-center gap-1">
           {open && shown.length > CAP ? (
-            <Press type="button" tone="quiet" size="caption" onClick={() => setAll(!all)}>
-              {all ? "newest 7 ▴" : `${shown.length - CAP} more ▸`}
-            </Press>
+            <Button
+              label={all ? "newest 7 ▴" : `${shown.length - CAP} more ▸`}
+              onClick={() => setAll(!all)}
+            >
+              {all ? (
+                "newest 7 ▴"
+              ) : (
+                <span className="face-mono">{`${shown.length - CAP} more ▸`}</span>
+              )}
+            </Button>
           ) : null}
           {collapsible && open ? (
-            <Press
-              type="button"
-              tone="quiet"
-              size="caption"
+            <Button
+              label="hide ▴"
               onClick={() => {
                 setOpen(false);
                 setAll(false);
               }}
             >
               hide ▴
-            </Press>
+            </Button>
           ) : null}
         </span>
       </div>

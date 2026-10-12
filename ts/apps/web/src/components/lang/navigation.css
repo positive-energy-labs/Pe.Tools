@@ -1,0 +1,298 @@
+/* Navigation (navigation.tsx): the pane declares the text edge (`--gutter`). The roster cancels the
+   pane inset so a row's fill runs edge to edge; its rows, heads and tail pad back to the same edge. */
+[data-navigation-roster] {
+  --shelf-ground: var(--pe-on);
+  margin-inline: calc(var(--gutter) * -1);
+  margin-bottom: calc(var(--gutter) * -1);
+}
+[data-navigation-item] .dl-row {
+  font-size: var(--type-small-size);
+  padding-inline: var(--gutter);
+}
+[data-navigation-item] .dl-row[data-lines] {
+  min-height: 0;
+  padding-block: calc(var(--space-unit) * 2);
+}
+[data-navigation-item] .dl-row-label {
+  gap: 2px;
+}
+/* Every line is a label in the body face (none is a measurement); ages are tabular so they align. */
+[data-navigation-item] .dl-row-sub,
+[data-navigation-item] .dl-row-eyebrow {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-size: var(--type-small-size);
+  font-variant-numeric: tabular-nums;
+  color: var(--pe-ink-2);
+}
+[data-slot="nav-line"] {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+[data-slot="nav-state"] {
+  font-family: var(--font-body);
+  font-size: var(--type-small-size);
+  font-weight: var(--weight-regular);
+}
+/* The trailing slot (state, age, unread) reads in the body face; ages are tabular. */
+[data-navigation-item] .dl-row-meta {
+  font-family: var(--font-body);
+  font-size: var(--type-small-size);
+  font-variant-numeric: tabular-nums;
+}
+/* A meta slot holding a word (a policy, a target name) declares it; only readings stay mono. */
+[data-slot="nav-mark"] {
+  margin-right: 0.4em;
+}
+[data-slot="nav-unread"] {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--pe-ink);
+}
+[data-navigation-item] .dl-row[data-active] {
+  background: var(--pe-select);
+  --pe-on: var(--pe-select);
+}
+[data-navigation-item] .dl-row[data-active]::before {
+  top: 0;
+  bottom: 0;
+}
+/* The search field wears `dl-control`; this only lays out its parts. */
+[data-navigation-search] {
+  display: flex;
+  height: var(--control-h);
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+  overflow: hidden;
+  color: var(--pe-ink-2);
+}
+[data-navigation-search] > svg {
+  flex-shrink: 0;
+  margin-left: var(--gutter);
+}
+[data-navigation-search] svg {
+  width: 1.2em;
+  height: 1.2em;
+}
+[data-navigation-search] input {
+  padding-left: 4px;
+}
+/* Parts sit inside the frame's hairline, so the field stays one control height. */
+[data-navigation-search] > button {
+  height: calc(var(--control-h) - 2px);
+}
+/* Filters read as shelf heads: item height, the head's type; they wrap at a narrow pane. */
+/* Each trigger pads its own hover fill; the strip steps back by that pad so the words keep the edge. */
+[data-navigation-filters] {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  margin-inline-start: calc(var(--item-pad-x) * -1);
+}
+[data-navigation-filter] {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  height: var(--item-h);
+  align-items: center;
+  gap: 2px;
+}
+[data-navigation-filter] > [data-list-trigger] {
+  max-width: 100%;
+  height: 100%;
+  font-weight: var(--weight-strong);
+  color: var(--pe-ink-2);
+}
+[data-navigation-filter] > [data-list-trigger]:hover,
+[data-navigation-filter][data-active] > [data-list-trigger] {
+  color: var(--pe-ink);
+}
+[data-navigation-filter] > .dl-button {
+  flex-shrink: 0;
+  height: var(--item-h);
+}
+/* A toggle (Unread) is a framed control on the strip's line, its count quiet. */
+[data-navigation-filters] > .dl-button {
+  min-height: 0;
+  height: calc(var(--item-h) - 2px);
+  align-self: center;
+  margin-inline-start: var(--item-pad-x);
+}
+[data-navigation-filters] > .dl-button > [data-slot="count"] {
+  font-variant-numeric: tabular-nums;
+  color: var(--pe-ink-mute);
+}
+[data-navigation-search] > button:last-child {
+  margin-right: 4px;
+}
+[data-navigation-item][data-unread] .dl-row-label {
+  font-weight: var(--weight-strong);
+}
+[data-navigation-item] .dl-row-sub,
+[data-navigation-item] .dl-row-eyebrow {
+  font-weight: var(--weight-regular);
+}
+[data-navigation-item] .dl-row:focus-visible {
+  outline: 1px solid var(--pe-line-2);
+  outline-offset: -1px;
+}
+[data-navigation] {
+  width: 100%;
+  min-width: 0;
+  font-family: var(--font-body);
+}
+[data-navigation-group] {
+  min-width: 0;
+}
+[data-navigation-item] .dl-row:hover {
+  background-image: var(--fill-veil);
+}
+/* The group head is a disclosure, not a selection: the roster's ground (read above the head, whose
+   own --pe-on the select paint rewrites on aria-expanded), never the select fill. */
+[data-navigation-group] > button {
+  display: flex;
+  width: 100%;
+  height: var(--item-h);
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: var(--shelf-ground, transparent);
+  color: var(--pe-ink-2);
+  font-size: var(--type-small-size);
+  font-weight: var(--weight-strong);
+  text-align: left;
+  cursor: pointer;
+}
+[data-navigation-group] > button > :first-child::first-letter {
+  text-transform: uppercase;
+}
+[data-navigation-group] > button:hover {
+  color: var(--pe-ink);
+}
+[data-navigation-group] > button:focus-visible {
+  outline: 1px solid var(--pe-line-2);
+  outline-offset: -1px;
+}
+/* Inside the roster, heads, rows and the tail pad back to the text edge the roster gave up. */
+[data-navigation-roster] :is([data-navigation-group] > button, [data-navigation-more]) {
+  padding-inline: var(--gutter);
+}
+/* A stacked shelf steps aside (`display: contents`) so its head sticks to the scroller, not the
+   shelf: head i holds i heads down from the top and (n-1-i) up from the foot (inline style), on
+   the pane ground so rows pass under it. Its home marks where it sits unstuck. */
+[data-navigation-group][data-stack] {
+  display: contents;
+}
+[data-navigation-group][data-stack] > button {
+  position: sticky;
+  z-index: 1;
+}
+[data-slot="shelf-home"] {
+  display: block;
+  height: 0;
+}
+[data-navigation-group] > button > svg {
+  width: 1.2em;
+  height: 1.2em;
+  transition: transform var(--motion-control);
+}
+[data-navigation-group] > button[aria-expanded="true"] > svg {
+  transform: rotate(90deg);
+}
+[data-navigation-group] > button > [data-slot="count"] {
+  font-weight: var(--weight-regular);
+  font-variant-numeric: tabular-nums;
+  color: var(--pe-ink-mute);
+}
+/* The shelf's rule runs from its count to its chevron. */
+[data-navigation-group] > button > [data-slot="rule"] {
+  flex: 1;
+  height: 1px;
+  margin-inline: 4px;
+  background: var(--pe-line);
+}
+[data-navigation-group][data-dim] .dl-row {
+  color: var(--pe-ink-2);
+}
+[data-navigation-more] {
+  display: flex;
+  width: 100%;
+  min-height: var(--item-h);
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pe-ink-2);
+  font-size: var(--type-small-size);
+  cursor: pointer;
+}
+[data-navigation-more]:hover {
+  color: var(--pe-ink);
+  background-image: var(--fill-veil);
+}
+[data-navigation-more] > [data-slot="count"] {
+  margin-left: auto;
+  color: var(--pe-ink-mute);
+}
+/* Two rows: title/activity above, target/provider below. */
+[data-navigation-item][data-layout="title-target"] .dl-row {
+  align-items: flex-start;
+  padding-block: var(--space-unit);
+  min-height: var(--item-h);
+}
+[data-navigation-item][data-layout="title-target"] .dl-row-lead {
+  align-self: flex-start;
+  padding-top: var(--space-unit);
+}
+[data-navigation-item][data-layout="title-target"] .dl-row-label {
+  gap: 0;
+}
+[data-navigation-item][data-layout="title-target"] .dl-row-sub {
+  color: var(--pe-ink-mute);
+  font-size: var(--type-small-size);
+}
+[data-navigation-item][data-layout="title-target"] .dl-row-sub > [data-slot="nav-line"] {
+  width: 100%;
+}
+[data-navigation-item][data-layout="title-target"] .dl-row-label,
+[data-navigation-item][data-layout="title-target"][data-unread] .dl-row-label {
+  font-weight: var(--font-weight-regular, 400);
+}
+[data-navigation-item][data-layout="title-target"] [data-slot="nav-time"],
+[data-navigation-item][data-layout="title-target"] [data-slot="nav-state"] {
+  flex-shrink: 0;
+  font-size: var(--type-small-size);
+}
+[data-navigation-item][data-layout="title-target"] [data-slot="nav-time"] {
+  color: var(--pe-ink-mute);
+}
+[data-navigation-item][data-layout="title-target"] [data-slot="nav-state"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-unit);
+}
+[data-navigation-item][data-layout="title-target"] [data-slot="nav-provider"] {
+  display: inline-flex;
+  flex-shrink: 0;
+  min-height: 1lh;
+  align-items: center;
+}
+[data-navigation-item][data-layout="title-target"] [data-slot="nav-state"] > svg {
+  width: 1.2em;
+  height: 1.2em;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-navigation-item][data-layout="title-target"] .animate-spin {
+    animation: none;
+  }
+}

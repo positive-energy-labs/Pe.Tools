@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { Undo2 } from "lucide-react";
 import {
   availableTransitions,
   fanOut,
@@ -20,7 +21,7 @@ import {
   type CellTransitionKind,
   type StateCellProps,
 } from "#/components/lang/cell";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { Verdict } from "#/components/lang/verdict";
 import { useScopeKeys } from "#/route/keys";
 
@@ -80,9 +81,9 @@ export function WorkStanding({
           <span className="w-[9rem] t-small t-upper text-ink-mute">discarded</span>
           <span>{receipt.text}</span>
           <span className="ml-auto">
-            <Press frame="line" tone="quiet" size="value" onClick={receipt.dismiss}>
+            <Button kind="framed" label="dismiss" onClick={receipt.dismiss}>
               dismiss
-            </Press>
+            </Button>
           </span>
         </div>
       ) : null}
@@ -95,9 +96,9 @@ export function WorkStanding({
           <span className="w-[9rem] t-small t-upper text-ink-mute">unresolved</span>
           <span>{unresolved.join(" · ")}</span>
           {conflict && reload ? (
-            <Press frame="line" tone="quiet" size="value" onClick={reload}>
+            <Button kind="framed" label="reload" onClick={reload}>
               reload
-            </Press>
+            </Button>
           ) : null}
           {startFresh ? <StartFresh run={startFresh} aside={startFreshAside} /> : null}
         </div>
@@ -335,7 +336,7 @@ export function UnstageAll({
   cells: Record<string, TrichotomyCellLike>;
   keys: readonly string[];
   done: (outcome: FanOutOutcome) => void;
-  /** An icon and a count, for a one-line row; the words move to the title. */
+  /** A framed revert button with its count, for a one-line row; the words move to the title. */
   compact?: boolean;
 }) {
   const staged = useMemo(
@@ -363,27 +364,27 @@ export function UnstageAll({
     },
   ]);
   if (!staged) return null;
-  return (
-    <Verdict
-      kind="unstage"
-      title={
-        armed
-          ? `Press again to clear your ${staged} staged values in one write; Escape cancels`
-          : `Clear your ${staged} staged values in one write (asks first); Pea's proposals stay`
-      }
-      onClick={() => {
-        if (!armed) return setArmed(true);
-        setArmed(false);
-        void runFanOut(wire, cells, keys, "unstage").then(done);
-      }}
+  const title = armed
+    ? `Press again to clear your ${staged} staged values in one write; Escape cancels`
+    : `Clear your ${staged} staged values in one write (asks first); Pea's proposals stay`;
+  const press = () => {
+    if (!armed) return setArmed(true);
+    setArmed(false);
+    void runFanOut(wire, cells, keys, "unstage").then(done);
+  };
+  return compact ? (
+    <Button
+      kind="framed"
+      icon={Undo2}
+      label={`Revert ${staged} staged`}
+      reason={title}
+      onClick={press}
     >
-      {armed
-        ? compact
-          ? `${staged}? again`
-          : `unstage ${staged} staged? press again`
-        : compact
-          ? String(staged)
-          : `unstage all (${staged})`}
+      <span className="face-mono">{armed ? `${staged}? again` : staged}</span>
+    </Button>
+  ) : (
+    <Verdict kind="unstage" title={title} onClick={press}>
+      {armed ? `unstage ${staged} staged? press again` : `unstage all (${staged})`}
     </Verdict>
   );
 }
@@ -406,11 +407,10 @@ function StartFresh({ run, aside }: { run: () => void; aside?: ReactNode }) {
   return (
     <span className="flex flex-col gap-1">
       <span className="flex items-baseline gap-2">
-        <Press
-          frame="line"
-          tone="quiet"
-          size="value"
-          title={
+        <Button
+          kind="framed"
+          label={armed ? "start fresh? press again" : "start fresh"}
+          reason={
             armed
               ? "Press again to set the saved Work aside, untouched on disk, and start an empty one; Escape keeps it"
               : "Sets the saved Work aside, untouched on disk, and starts a new empty Work here (asks first). Pea cannot do this."
@@ -422,11 +422,11 @@ function StartFresh({ run, aside }: { run: () => void; aside?: ReactNode }) {
           }}
         >
           {armed ? "start fresh? press again" : "start fresh"}
-        </Press>
+        </Button>
         {armed ? (
-          <Press frame="line" tone="quiet" size="value" onClick={() => setArmed(false)}>
+          <Button kind="framed" label="keep it" onClick={() => setArmed(false)}>
             keep it
-          </Press>
+          </Button>
         ) : null}
       </span>
       {armed ? aside : null}

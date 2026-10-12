@@ -1,11 +1,7 @@
 /**
- * useCollection — the one headless list behaviour and the ONE key owner for every list
- * (ix-list design; census R3–R9, R12, R14–R17). It knows nothing about pixels: it turns items
- * into visible rows (filtered, grouped, laddered), holds the cursor, the selection and the query,
- * says the list's status, and binds its keys on the scope node it sits in (`useScopeKeys`), so
- * help hangs them off that pane.
- *
- * Identity is by key, never by object (R16): rebuilt item arrays are fine.
+ * useCollection: the one headless list behaviour and the one key owner for every list. It knows
+ * no pixels: it turns items into visible rows, holds cursor, selection and query, and binds keys
+ * on the scope node (`useScopeKeys`). Identity is by key, never by object.
  */
 import { useEffect, useId, useMemo, useState } from "react";
 
@@ -13,10 +9,10 @@ import { useScopeKeys, type ScopeKey } from "#/route/keys";
 
 type FilterMode = "none" | "substring" | "fuzzy";
 type SelectMode = "none" | "single" | "multi";
-/** Empty (nothing in scope) is not no-match (the query hid everything): two exits (R17). */
+/** Empty (nothing in scope) is not no-match (the query hid everything): two exits. */
 type CollectionStatus = "ready" | "empty" | "no-match" | "pending" | "failed" | "refused";
 
-/** One ladder rung (R12): its label, and its items given the path picked above it. */
+/** One ladder rung: its label, and its items given the path picked above it. */
 export interface Level<T> {
   label: string;
   items: (path: readonly T[]) => readonly T[];
@@ -28,7 +24,7 @@ export interface Level<T> {
   multi?: boolean;
   /** The items do not depend on the path: a query shows this rung's hits once, not per parent. */
   independent?: boolean;
-  /** Present, the rung cannot list yet and says why (R8). */
+  /** Present, the rung cannot list yet and says why. */
   refusal?: string | null;
   /** What an empty rung says instead of the list's `empty`. */
   note?: string;
@@ -50,27 +46,27 @@ export interface CollectionOptions<T> {
   onCursorChange?: (key: string | null) => void;
   /** A pick: Enter or click on a row (a create row calls `onCreate` instead). */
   onPick?: (item: T, path: readonly T[]) => void;
-  /** Present, a sentinel row offers the typed text as a new value (R9). */
+  /** Present, a sentinel row offers the typed text as a new value. */
   onCreate?: (text: string) => void;
-  /** A ladder: the list walks these levels; Enter picks and advances (R12). */
+  /** A ladder: the list walks these levels; Enter picks and advances. */
   levels?: readonly Level<T>[];
   /** The rung a ladder opens on (the first one still unbound). */
   startLevel?: number;
-  /** Remote options: pending and failed are states of the list, not rows (R7). */
+  /** Remote options: pending and failed are states of the list, not rows. */
   status?: "ready" | "pending" | "failed";
-  /** A row that refuses picks, and why (R8): keys and clicks both skip it. */
+  /** A row that refuses picks, and why: keys and clicks both skip it. */
   refusalOf?: (item: T) => string | null | undefined;
   /** Escape with nothing to clear: the popup's close. */
   onEscape?: () => void;
-  /** Tab / Shift-Tab leave the list (the in-cell contract, R13): true when the move was taken. */
+  /** Tab / Shift-Tab leave the list (the in-cell contract): true when the move was taken. */
   onTab?: (back: boolean) => boolean;
-  /** A query owned outside the list (the composer's text after "/", R14). */
+  /** A query owned outside the list (the composer's text after "/"). */
   query?: string;
-  /** False, typing never puts the cursor on the top hit: Enter keeps free text (R9). */
+  /** False, typing never puts the cursor on the top hit: Enter keeps free text. */
   autoCursor?: boolean;
-  /** The query the list opens with (a cell opened by a printable key, R13). */
+  /** The query the list opens with (a cell opened by a printable key). */
   initialQuery?: string;
-  /** The element the keys listen on: the list itself, or the input that owns it (R14). */
+  /** The element the keys listen on: the list itself, or the input that owns it. */
   target: HTMLElement | null;
 }
 
@@ -281,7 +277,7 @@ export function useCollection<T>(options: CollectionOptions<T>) {
   };
 
   const escape = () => {
-    // A query owned outside the list (R14) is not the list's to clear: Escape closes.
+    // A query owned outside the list is not the list's to clear: Escape closes.
     if (query && options.query === undefined) return setQuery("");
     if (levels && depth > (options.startLevel ?? 0)) {
       setPath(path.slice(0, depth - 1));
@@ -377,7 +373,7 @@ export function useCollection<T>(options: CollectionOptions<T>) {
     (definition): ScopeKey => ({
       ...definition,
       options: {
-        // The list's own input owns typing; these keys still reach the list from it (R14).
+        // The list's own input owns typing; these keys still reach the list from it.
         ignoreInputs: false,
         enabled: options.target !== null,
       },
@@ -386,7 +382,7 @@ export function useCollection<T>(options: CollectionOptions<T>) {
   useScopeKeys(keys, options.target);
 
   const optionId = (key: string) => `${listId}-${key.replace(/[^\w-]/g, "_")}`;
-  // The cursored row stays in view as the keys move it (MAP ruling 46).
+  // The cursored row stays in view as the keys move it.
   const cursorId = cursor ? optionId(cursor.key) : null;
   useEffect(() => {
     if (cursorId) document.getElementById(cursorId)?.scrollIntoView?.({ block: "nearest" });

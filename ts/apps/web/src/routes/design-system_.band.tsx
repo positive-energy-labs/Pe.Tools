@@ -1,8 +1,8 @@
 /** /design-system/band — one proposal language over a Families matrix: every verb is the cell's. */
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ActionButton } from "#/components/lang/action-button";
-import { fanOutWord, WorkSentence, workSummary, type FanOutOutcome } from "#/components/lang/band";
+import { Button } from "#/components/lang/button";
+import { fanOutWord, WorkSentence, workSummary, type FanOutOutcome } from "#/components/work/band";
 import { FactChip } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Section } from "#/components/lang/section";
@@ -92,11 +92,14 @@ function BandRoute() {
                 cells={cells}
                 wire={wire}
                 commit={
-                  <ActionButton
+                  <Button
+                    kind="framed"
                     label="plan · SIMULATED"
                     reason="Plan the staged cells; the fixture writes nothing"
                     onClick={() => say(`SIMULATED · plan of ${staged} staged cells`)}
-                  />
+                  >
+                    plan · SIMULATED
+                  </Button>
                 }
               />
               <div className="h-[26rem]">
@@ -104,12 +107,14 @@ function BandRoute() {
                   {...view}
                   searchPlaceholder="search families, types, values…"
                   actions={
-                    <ActionButton
-                      tone="agent"
+                    <Button
+                      kind="framed"
                       label="accept all · Voltage"
                       reason="Accept every standing Voltage proposal in one write; your own staged values are skipped"
                       onClick={() => aggregate(acceptVoltage(matrix))}
-                    />
+                    >
+                      accept all · Voltage
+                    </Button>
                   }
                 >
                   <Table {...view} activeKey={picked} onRowClick={(r) => setPicked(r.key)} />

@@ -5,8 +5,8 @@ import { showFamilyCell, type FamiliesPatchCell, type PodDraftSource } from "@pe
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { ActionButton } from "#/components/lang/action-button";
-import { ReviewRow } from "#/components/lang/band";
+import { Button } from "#/components/lang/button";
+import { ReviewRow } from "#/components/work/band";
 import { ValueDiff } from "#/components/lang/value-diff";
 import type { Column } from "#/components/master-table/model";
 import { Table } from "#/components/master-table/table";
@@ -289,7 +289,7 @@ export function FamiliesCarryOverLine() {
     <div className="flex flex-wrap items-baseline gap-2 px-4 py-1 t-small" role="status">
       <span>the old Work {said.filter(Boolean).join("; ")}</span>
       {resolved || scope ? (
-        <ActionButton
+        <Button
           label="restore these"
           reason={[
             scope ? "Stage the old scope again" : null,
@@ -300,14 +300,20 @@ export function FamiliesCarryOverLine() {
             .filter(Boolean)
             .join(", and ")
             .concat(", in one write")}
+          kind="framed"
           onClick={() => void store.actions.restore(salvaged)}
-        />
+        >
+          restore these
+        </Button>
       ) : null}
-      <ActionButton
+      <Button
         label="dismiss"
         reason="Keep the fresh Work as it is; the old one stays set aside"
+        kind="framed"
         onClick={store.actions.dismissCarryOver}
-      />
+      >
+        dismiss
+      </Button>
     </div>
   );
 }

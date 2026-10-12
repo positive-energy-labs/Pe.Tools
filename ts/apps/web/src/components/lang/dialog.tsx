@@ -4,14 +4,14 @@ import * as React from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 
 import { tv } from "#/lib/tv";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { X as RiCloseLine } from "lucide-react";
 
 export const dialogRecipe = tv({
   slots: {
     overlay: "fixed inset-0 isolate z-modal bg-scrim supports-backdrop-filter:backdrop-blur-xs",
     content:
-      "fixed top-1/2 left-1/2 z-modal grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg text-ink ring-1 ring-line outline-none sm:max-w-lg",
+      "fixed top-1/2 left-1/2 z-modal grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto text-ink shadow-modal outline-none sm:max-w-lg",
     header: "flex flex-col gap-1",
     title: "t-title",
   },
@@ -60,11 +60,8 @@ function DialogContent({
           <span className="absolute top-3 right-3">
             <DialogPrimitive.Close
               data-slot="dialog-close"
-              render={<Press tone="neutral" size="icon" />}
-            >
-              <RiCloseLine />
-              <span className="sr-only">Close</span>
-            </DialogPrimitive.Close>
+              render={<Button label="Close" icon={RiCloseLine} />}
+            />
           </span>
         )}
       </DialogPrimitive.Popup>

@@ -1,0 +1,94 @@
+/* Pane: the focused pane (innermost, the one whose keys bind) wears the line-2 outline. */
+[data-slot="pane"] {
+  outline: 1px solid transparent;
+  outline-offset: 2px;
+  transition: outline-color var(--motion-control);
+}
+[data-slot="pane"]:focus-within:not(:has([data-slot="pane"]:focus-within)) {
+  z-index: var(--z-sticky);
+  outline-color: var(--pe-line-2);
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="pane"] {
+    transition: none;
+  }
+}
+/* Pane title: sentence case at the reading rung; the first letter is raised here so call sites
+   write the plain word. */
+[data-slot="pane-title"] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-small-size);
+  font-weight: var(--weight-strong);
+  line-height: var(--type-title-line-height);
+  color: var(--pe-ink);
+}
+[data-slot="pane-title"]::first-letter {
+  text-transform: uppercase;
+}
+/* A name takes the display face the route heads wear. */
+[data-slot="pane-title"][data-heading="name"] {
+  font-family: var(--font-display);
+  font-size: var(--type-title-size);
+  letter-spacing: -0.01em;
+}
+/* Side-by-side pane heads share one baseline whatever the title's size or face: each lead sets its
+   trimmed baseline a fixed distance above the rail's foot (centring each measured 1.6px apart). */
+[data-slot="pane-header"] [data-slot="rail-lead"] {
+  align-self: stretch;
+  align-items: flex-end;
+  padding-bottom: calc(var(--rail-h) * 0.36 - 0.3rem);
+}
+/* Trimmed to the baseline, then one fixed pad for descenders (the ellipsis clips overflow). */
+[data-slot="pane-header"] [data-slot="rail-lead"] > :not(:has(svg)) {
+  text-box: trim-end text alphabetic;
+  padding-bottom: 0.3rem;
+}
+
+/* Pane views share the header's line and use an underline, leaving framed switches to controls. */
+.dl-pane-tabs {
+  display: flex;
+  align-self: stretch;
+  align-items: stretch;
+  gap: calc(var(--space-unit) * 4);
+  height: var(--rail-h);
+}
+.dl-pane-tabs > button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-unit);
+  padding: 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  font-size: var(--type-small-size);
+  font-weight: var(--weight-strong);
+  color: var(--pe-ink-2);
+  cursor: pointer;
+}
+.dl-pane-tabs > button > span::first-letter {
+  text-transform: uppercase;
+}
+.dl-pane-tabs > button[aria-pressed="true"] {
+  border-bottom-color: var(--pe-ink);
+  color: var(--pe-ink);
+}
+.dl-pane-tabs small {
+  font-size: var(--type-small-size);
+  font-weight: var(--weight-regular);
+  color: var(--pe-ink-mute);
+}
+[data-slot="pane-header"]:has(.dl-pane-tabs) [data-slot="rail-lead"] {
+  padding-bottom: 0;
+  align-items: center;
+}
+.dl-pane-tabs button:focus-visible {
+  outline: 1px solid var(--pe-line-2);
+  outline-offset: -2px;
+}
+[data-slot="pane-header"] [data-slot="rail-lead"] > .dl-pane-tabs {
+  padding-bottom: 0;
+  text-box: normal;
+}

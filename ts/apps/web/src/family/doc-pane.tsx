@@ -6,7 +6,7 @@ import { FactChip, Tag } from "#/components/lang/chip";
 import { useEffect, useRef } from "react";
 import { useGroundedDoc } from "#/grounded-doc/engine";
 import { PagePane } from "#/grounded-doc/view/page-pane";
-import { ReviewRow, type CellWire } from "#/components/lang/band";
+import { ReviewRow, type CellWire } from "#/components/work/band";
 import { Switcher } from "#/components/lang/switcher";
 
 import type { ProtoProposal, ProtoSpec } from "#/family/world";

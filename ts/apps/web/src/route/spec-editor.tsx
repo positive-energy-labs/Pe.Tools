@@ -26,7 +26,7 @@ import {
   type SettingsSnapshot,
 } from "@pe/agent-contracts";
 
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { FactChip, Tag } from "#/components/lang/chip";
 import { Code, JsonEditor } from "#/components/lang/code";
@@ -44,7 +44,7 @@ import {
   WorkSentence,
   WorkStanding,
   workSummary,
-} from "#/components/lang/band";
+} from "#/components/work/band";
 import {
   actionResult,
   saveSettingsAction,
@@ -274,12 +274,19 @@ function ProposalLane({ work, readSha }: { work: MemberWorkHandle; readSha: stri
         <>
           <Tag>pea</Tag>
           {moved ? (
-            <ActionButton
+            <Button
+              kind="framed"
               label="adopt disk bytes"
-              disabled={busy}
+              refusal={
+                busy
+                  ? "The member changed on disk after these proposals were made. Adopting discards them and the staged fields."
+                  : null
+              }
               reason="The member changed on disk after these proposals were made. Adopting discards them and the staged fields."
               onClick={() => void work.actions.adopt.run({ sha256: readSha } as never)}
-            />
+            >
+              adopt disk bytes
+            </Button>
           ) : null}
         </>
       }
@@ -290,12 +297,19 @@ function ProposalLane({ work, readSha }: { work: MemberWorkHandle; readSha: stri
           cells={fields}
           wire={wire}
           commit={
-            <ActionButton
+            <Button
+              kind="framed"
               label="save"
-              reason={work.actions.save.refusal ?? "Write every staged field to the member"}
-              disabled={work.actions.save.refusal != null || busy}
+              refusal={
+                work.actions.save.refusal != null || busy
+                  ? (work.actions.save.refusal ?? "Write every staged field to the member")
+                  : null
+              }
+              reason="Write every staged field to the member"
               onClick={() => void work.actions.save.run().catch(() => undefined)}
-            />
+            >
+              save
+            </Button>
           }
         />
         <WorkStanding
@@ -579,6 +593,13 @@ export function SpecEditor({
             : hostErrors.length
               ? `The host called this draft invalid: ${hostErrors.length === 1 ? "1 error" : `${hostErrors.length} errors`}, first ${hostErrors[0]!.path || "the member"}: ${hostErrors[0]!.message}.`
               : null;
+  const saveWhy =
+    saveReason ??
+    (viaWork
+      ? "Write the draft with the staged fields on top; refuses if the member changed on disk."
+      : "Overwrite this member; refuses if it changed on disk since it was read.");
+  const saveAsWhy =
+    saveReason ?? "File the draft as a new member beside this one; apply reads saved members only.";
 
   return (
     <div className="flex min-h-0 flex-col gap-1.5">
@@ -642,29 +663,26 @@ export function SpecEditor({
                 { value: "raw", label: "raw", title: "Edit the JSON text." },
               ]}
             />
-            <ActionButton
-              tone="commit"
+            <Button
+              kind="commit"
               label="save"
               busy={saving}
-              disabled={!!saveReason || saving || !basisSha}
-              reason={
-                saveReason ??
-                (viaWork
-                  ? "Write the draft with the staged fields on top; refuses if the member changed on disk."
-                  : "Overwrite this member; refuses if it changed on disk since it was read.")
-              }
+              refusal={saveReason || saving || !basisSha ? saveWhy : null}
+              reason={saveWhy}
               onClick={() => save(false)}
-            />
-            <ActionButton
+            >
+              save
+            </Button>
+            <Button
+              kind="framed"
               label="save as new"
               busy={saving}
-              disabled={!!saveReason || saving}
-              reason={
-                saveReason ??
-                "File the draft as a new member beside this one; apply reads saved members only."
-              }
+              refusal={saveReason || saving ? saveAsWhy : null}
+              reason={saveAsWhy}
               onClick={() => save(true)}
-            />
+            >
+              save as new
+            </Button>
           </>
         }
       >

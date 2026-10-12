@@ -166,8 +166,12 @@ describe("design guard â€” current token authority", () => {
     expect(blockOf(base, ".t-small {")).not.toMatch(/\bcolor\s*:/);
     expect(blockOf(base, ".face-mono {")).toMatch(/font-family:\s*var\(--font-mono\)/);
     expect(blockOf(base, ".face-mono {")).toMatch(/font-variant-numeric:\s*tabular-nums/);
-    expect(blockOf(base, ".t-upper {")).toMatch(/font-weight:\s*var\(--weight-medium\)/);
-    expect(blockOf(base, ".t-upper {")).toMatch(/letter-spacing:\s*0\.08em/);
+    expect(blockOf(base, ".t-upper {")).toMatch(/font-weight:\s*var\(--weight-strong\)/);
+    expect(base).toMatch(/:root\s*\{[^}]*--type-small-size:\s*12px;/);
+    expect(base).toMatch(/:root\s*\{[^}]*--gutter:\s*8px;/);
+    expect(base).not.toMatch(/--type-(navigation|conversation|composer)-/);
+    expect(blockOf(base, ".t-upper {")).toMatch(/letter-spacing:\s*var\(--track-upper\)/);
+    expect(base).toMatch(/:root\s*\{[^}]*--track-upper:\s*0\.06em;/);
     expect(blockOf(base, ".t-upper {")).toMatch(/text-transform:\s*uppercase/);
   });
 
@@ -967,7 +971,7 @@ const AUTHORING =
 const COLOR_ROLE =
   "(?:page|artifact|recess|select|document|scrim|ink|ink-2|ink-mute|line|line-2|pea|pea-ink|alarm|caution|done|commit|on-commit|nav|on|viz-[1-6])(?:/[\\d.]+)?";
 const MEANING_FILL_STROKE = new RegExp(
-  `^(?:(?:bg|text|fill|stroke|from|via|to)-${COLOR_ROLE}|border(?:-[xytrblse])?-${COLOR_ROLE}|divide-${COLOR_ROLE}|ring-${COLOR_ROLE}|outline-${COLOR_ROLE}|hairline-(?:(?:[tblrxy])(?:-2|-faint)?|rows)|boundary-[tl]|on-(?:page|artifact|recess|select)|(?:ink|commit|alarm|pea|caution)-wash(?:-artifact)?|caution-hatch|inset-ring)$`,
+  `^(?:(?:bg|text|fill|stroke|from|via|to)-${COLOR_ROLE}|border(?:-[xytrblse])?-${COLOR_ROLE}|divide-${COLOR_ROLE}|ring-${COLOR_ROLE}|outline-${COLOR_ROLE}|hairline-(?:(?:[tblrxy])(?:-2|-faint)?|rows)|boundary-[tl]|on-(?:page|recess|select)|(?:ink|commit|alarm|pea|caution)-wash(?:-artifact)?|caution-hatch)$`,
 );
 const ALLOWLIST_VIOLATIONS = CLASS_USES.filter(
   (use) =>
@@ -1085,6 +1089,8 @@ const BAD_RECIPE_GRIDS = [...REQUIRED_RECIPE_GRIDS]
   .sort();
 
 const REQUIRED_SPECIMEN_PATHS = [
+  "#/components/lang/navigation",
+  "#/components/lang/conversation",
   "#/components/lang/arming-strip",
   "#/components/lang/artifact-frame",
   "#/components/lang/cell",
@@ -1094,11 +1100,9 @@ const REQUIRED_SPECIMEN_PATHS = [
   "#/components/lang/empty",
   "#/components/lang/help",
   "#/components/lang/outcome",
-  "#/components/lang/press",
+  "#/components/lang/button",
   "#/components/lang/section",
   "#/components/lang/switcher",
-  "#/components/lang/action-button",
-  "#/components/lang/card",
   "#/components/lang/dialog",
   "#/components/lang/input",
   "#/components/lang/label",
@@ -1122,6 +1126,30 @@ describe("design checks — code holds the boundary", () => {
       offences,
       report(offences.map((offence) => ({ ...offence, match: offence.token }))),
     ).toEqual([]);
+  });
+
+  it("paints the artifact ground only at the plane, and the plane draws its edge", () => {
+    // The plane (lang.css), the wash utilities (base.css, design-lang.css) and the token specimen
+    // are the whole vocabulary. Any other route to the ground (a `--pe-artifact` in a rule or a
+    // style, `bg-artifact`, the deleted `on-artifact`) is a smear with no hairline.
+    const OWNERS = new Set([
+      "base.css",
+      "design-lang.css",
+      "components/lang/lang.css",
+      "design-system/specimens/tokens.tsx",
+    ]);
+    const strays = scan(
+      FILES.filter((file) => !OWNERS.has(file.rel)).map((file) => ({
+        ...file,
+        text: stripComments(file.text),
+      })),
+      /--pe-artifact|\b(?:bg|on)-artifact\b/g,
+    );
+    expect(strays, report(strays)).toEqual([]);
+    const lang = stripComments(FILES.find((file) => file.rel === "components/lang/lang.css")!.text);
+    expect(lang).toMatch(
+      /:where\(\s*\[data-surface="artifact"\]:not\(\[data-surface="artifact"\] \*\),[^{]*\)\s*\{[^}]*border:\s*1px solid var\(--pe-line\)/,
+    );
   });
 
   it("data-tone values come from the closed tone set", () => {

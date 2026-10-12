@@ -12,7 +12,7 @@ import {
   type RouteStatePatch,
 } from "@pe/agent-contracts";
 
-import { reviewTransitions, type CellWire } from "#/components/lang/band";
+import { reviewTransitions, type CellWire } from "#/components/work/band";
 import { cellFromTrichotomy, type StateCellProps } from "#/components/lang/cell";
 import { EmptyState } from "#/components/lang/empty";
 import { CellListSelect } from "#/components/lang/list-popup";

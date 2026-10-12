@@ -1,16 +1,6 @@
 /**
- * SECTION — the page-chrome unit (ruled 2026-08-16, ops-pass batch:
- * "every new route hand-rolled the same Section/SectionHead chrome — three near-identical
- * copies — the most visible thing lang/ is missing").
- *
- * CONSUMERS: src/ops/** (44 OpSection sites migrate here); route section heads shed their
- * hand-rolled copies during their passes.
- *
- * The head is the t-small t-upper ROLE (C2, 2026-09-01): upper + tracking + medium + ink-2 in one word;
- * the tier owns the whole look, so the call site names no case, weight or ink. HelpTip may sit
- * beside the title (the one legal home for region orientation) and an optional right-aligned
- * aside carries counts and controls. Plain content is never enclosed — a section is a head
- * and a hairline, not a box.
+ * The page-chrome unit: a head (the `t-small t-upper` role) and a hairline, never a box. HelpTip may
+ * sit beside the title and an optional right-aligned aside carries counts and controls.
  */
 import { tv } from "#/lib/tv";
 
@@ -58,10 +48,8 @@ export function Section({
 }
 
 /**
- * PROVENANCE — the composed-read honesty line (ruled 2026-08-16, ops-pass batch): what was
- * measured, when, and what was left out. Machine-measured by definition, so mono; quiet, so
- * secondary ink; never a badge — freshness that matters becomes queue work, this line is the
- * receipt of how the view was assembled (SURFACE-PHILOSOPHY §3).
+ * Provenance: the composed-read honesty line (what was measured, when, what was left out). Mono,
+ * secondary ink, never a badge; freshness that matters becomes queue work.
  */
 export function Provenance({ children }: { children: React.ReactNode }) {
   const { provenance } = sectionRecipe();

@@ -1,7 +1,7 @@
 import type { Column, TableState } from "#/components/master-table/model";
 import { token } from "#/lib/token";
 import { PressContent } from "#/components/anatomy/press-content";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { cellFromTrichotomy } from "#/components/lang/cell";
 import { parameterText } from "#/family/family-model";
 import { NavStateCell } from "#/family/marks";
@@ -103,19 +103,17 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
         const dim = world.geomBySlug.get(slug)?.dims.find((entry) => entry.property === property);
         return (
           <span className="flex h-(--item-h) min-w-0 items-center px-(--item-pad-x)">
-            <Press
-              type="button"
+            <Button
+              label={`${row.name} geom`}
               onClick={() => setInspect({ kind: "part", slug })}
               // Row-specific facts only; what a geom row IS lives on the table's HelpTip.
-              title={`${slug}.${property} — a bindable ${row.dataType} dimension that no parameter drives; it is ${literal} for every type. ${dim?.note ?? ""} Click to open ${slug} in the inspector.`}
-              tone="quiet"
-              size="caption"
+              reason={`${slug}.${property} — a bindable ${row.dataType} dimension that no parameter drives; it is ${literal} for every type. ${dim?.note ?? ""} Click to open ${slug} in the inspector.`}
             >
               <PressContent geometry="block">
-                {row.name}
+                <span className="face-mono">{row.name}</span>
                 <span className="ml-1">geom</span>
               </PressContent>
-            </Press>
+            </Button>
           </span>
         );
       }
@@ -186,14 +184,15 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
               {row.kind === "live-only" ? (
                 <span>{row.name}</span>
               ) : (
-                <Press
-                  type="button"
+                <Button
+                  label={row.name}
+                  kind="nav"
+                  direction="forward"
                   onClick={() => setInspect({ kind: "param", name: row.name })}
-                  title={`Open ${row.name} in the inspector below the spec — where its FAMILY-LEVEL value is edited, along with its formula, its consumers, and its citation. The type columns on this row only ever hold overrides; the value they inherit lives there.`}
-                  tone="nav"
+                  reason={`Open ${row.name} in the inspector below the spec — where its FAMILY-LEVEL value is edited, along with its formula, its consumers, and its citation. The type columns on this row only ever hold overrides; the value they inherit lives there.`}
                 >
                   {row.name}
-                </Press>
+                </Button>
               )}
               {row.isInstance && <span className="ml-1">inst</span>}
               {properties.filter((entry) => entry.property !== "formula").map(propertyCell)}
@@ -214,17 +213,16 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
                 {isFormula(authored) && drives.length > 0 && <span> · </span>}
                 {drives.length > 0 && <span>→ </span>}
                 {drives.map((entry, index) => (
-                  <Press
+                  <Button
                     key={`${entry.slug}.${entry.property}`}
-                    type="button"
+                    label={`${entry.slug}.${entry.property}`}
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => setInspect({ kind: "part", slug: entry.slug })}
-                    title={`${row.name} drives ${entry.slug}.${entry.property}. Click to open ${entry.slug} in the inspector — its non-bindable metadata (direction, system type, where its frame sits) lives there, because no parameter can drive those.`}
-                    tone="quiet"
+                    reason={`${row.name} drives ${entry.slug}.${entry.property}. Click to open ${entry.slug} in the inspector — its non-bindable metadata (direction, system type, where its frame sits) lives there, because no parameter can drive those.`}
                   >
                     {index > 0 && <span>, </span>}
                     {entry.slug}.{entry.property}
-                  </Press>
+                  </Button>
                 ))}
               </span>
             )}

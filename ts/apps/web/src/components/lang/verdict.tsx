@@ -1,14 +1,12 @@
 /**
- * The review verbs, one colour language wherever they draw (ruling 30): a grid cell, a Work
- * sentence, a chat proposal group, a tool approval. Each wears the mark it answers: accept takes
- * Pea's proposal (pea ink), unstage clears your own staged edit (caution, its square's colour), deny
- * stays neutral. The person's commit (apply, write) is `ActionButton tone="commit"`, never these.
- * Without children the verb is its icon and its kind is its name.
+ * The review verbs (accept, deny, unstage) in one colour language wherever they draw. Without
+ * children the verb is its icon and its kind is its name. The person's commit is a Button, never these.
  */
 import type { ComponentProps } from "react";
 import { Check, Undo2, X } from "lucide-react";
 
 import "./lang.css";
+import "./cell.css";
 
 export type VerdictKind = "accept" | "deny" | "unstage";
 

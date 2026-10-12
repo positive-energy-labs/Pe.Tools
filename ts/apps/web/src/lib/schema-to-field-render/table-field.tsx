@@ -1,4 +1,4 @@
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { StateCell } from "#/components/lang/cell";
 import { EmptyState } from "#/components/lang/empty";
 import { Input } from "#/components/lang/input";
@@ -298,11 +298,14 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
                     defaultValue={columnKey}
                     onBlur={(event) => renameColumn(columnKey, event.currentTarget.value)}
                   />
-                  <ActionButton
+                  <Button
                     label="remove"
                     reason={`Drop the "${columnKey}" column from every row of this table. The change lives in the form until save writes it.`}
+                    kind="framed"
                     onClick={() => removeColumn(columnKey)}
-                  />
+                  >
+                    remove
+                  </Button>
                 </span>
               ),
               cell: ({ row, index }) => (
@@ -320,11 +323,14 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
             right: true,
             width: "w-24",
             cell: ({ index }) => (
-              <ActionButton
+              <Button
                 label="remove"
                 reason={`Drop row ${index + 1} from this table. The change lives in the form until save writes it.`}
+                kind="framed"
                 onClick={() => field.remove(index)}
-              />
+              >
+                remove
+              </Button>
             ),
           },
         ]}
@@ -337,16 +343,22 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
         </span>
         <FieldOptions options={primaryColumnOptions} />
         <div className="flex items-center gap-2">
-          <ActionButton
+          <Button
             label="add column"
             reason="Add a dynamic column to this table. Every existing row gains the key, empty. The change lives in the form until save writes it."
+            kind="framed"
             onClick={addColumn}
-          />
-          <ActionButton
+          >
+            add column
+          </Button>
+          <Button
             label="add row"
             reason="Append a row built from the schema's own defaults for this table. The change lives in the form until save writes it."
+            kind="framed"
             onClick={addRow}
-          />
+          >
+            add row
+          </Button>
         </div>
       </div>
     </div>

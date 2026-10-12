@@ -5,7 +5,7 @@ import {
 } from "@tanstack/react-router";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { routeTree } from "./routeTree.gen";
 
 function NotFound() {
@@ -25,9 +25,9 @@ function RouteError({ error, reset }: ErrorComponentProps) {
     <main className="grid min-h-screen place-items-center">
       <div>
         <OutcomeLine kind="error" label="route failed" says={error.message} />
-        <Press tone="nav" onClick={reset}>
+        <Button label="retry" kind="nav" direction="forward" onClick={reset}>
           retry
-        </Press>
+        </Button>
       </div>
     </main>
   );

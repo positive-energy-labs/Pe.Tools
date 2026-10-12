@@ -3,7 +3,7 @@ import type { Column } from "#/components/master-table/model";
 import { ReadCell } from "#/components/master-table/cells";
 import { cellFromTrichotomy, type StateCellProps } from "#/components/lang/cell";
 import { PressContent } from "#/components/anatomy/press-content";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { NavStateCell } from "#/family/marks";
 import { parameterText } from "#/family/family-model";
 import {
@@ -46,8 +46,8 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
     width: "w-28",
     right: options.align === "right",
     header: options.header ? (
-      <Press
-        type="button"
+      <Button
+        label={typeName}
         onClick={() => {
           setStageType(typeName);
           setDrillType(typeName);
@@ -56,14 +56,12 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
           // once and make the type column read-only for no reason the drill-in explains.
           setOverlay("draft");
         }}
-        title={`Drill into "${typeName}". The table pane swaps to the same table, narrowed to this one type and opened up with the spine and the crossing verbs. "← all types" in the pane header, or Esc, comes back.`}
-        tone="quiet"
-        size="label"
+        reason={`Drill into "${typeName}". The table pane swaps to the same table, narrowed to this one type and opened up with the spine and the crossing verbs. "← all types" in the pane header, or Esc, comes back.`}
       >
         <PressContent geometry="block">
           {typeName} <span>⤢</span>
         </PressContent>
-      </Press>
+      </Button>
     ) : undefined,
     title: `What "${typeName}" overrides in the DRAFT. An empty cell INHERITS — the family value shows through as the grey placeholder, which is the only place the family level appears now that it has no column of its own. Typing creates the override; clearing hands the type back to the family. Under the ⇄ live and ⇄ saved overlays this same column shows Revit's number and the disk's number instead, read-only, in place.`,
     cell: (row) => {

@@ -1,0 +1,70 @@
+/* Button: one rule family. Hover is the veil, focus the house outline, refusal italic muted ink. */
+.dl-button {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  border-width: 1px;
+  border-style: solid;
+  border-radius: var(--control-radius);
+  color: var(--pe-ink-2);
+}
+/* A framed button takes the control frame; every other kind draws no edge. */
+.dl-button:not(.dl-control) {
+  border-color: transparent;
+  background-color: transparent;
+}
+.dl-button:is(.dl-control, [data-kind="quiet"]:hover, [aria-pressed="true"]) {
+  color: var(--pe-ink);
+}
+.dl-button.dl-control {
+  padding: 0 var(--control-pad-x);
+}
+.dl-button[data-kind="nav"] {
+  color: var(--pe-nav);
+}
+.dl-button[data-kind="nav"]:hover:not(:disabled, [aria-disabled="true"]) {
+  text-decoration: underline 1px;
+}
+/* A washed tone (Stop's alarm, a stale verb's caution) draws its ink and wash over the frame. */
+.dl-button[data-tone][data-wash] {
+  border-color: color-mix(in srgb, var(--tone) 55%, transparent);
+  background-color: color-mix(in srgb, var(--tone) 10%, var(--pe-on));
+  color: var(--tone);
+}
+.dl-button[data-tone="commit"][data-fill="solid"] {
+  background-color: var(--pe-commit);
+  color: var(--pe-on-commit);
+}
+.dl-button:hover:not(:disabled, [aria-disabled="true"]) {
+  background-image: var(--fill-veil);
+}
+.dl-button:focus-visible {
+  outline: 1px solid var(--pe-line-2);
+}
+.dl-button:is(:disabled, [aria-disabled="true"]) {
+  cursor: not-allowed;
+  font-style: italic;
+  color: var(--pe-ink-mute);
+}
+.dl-button > svg {
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+}
+.dl-button[data-icon-only] {
+  flex: none;
+  justify-content: center;
+  height: var(--control-h);
+  aspect-ratio: 1;
+  padding: 0;
+}
+.dl-button[data-icon-only] > svg {
+  width: 16px;
+  height: 16px;
+}
+:is(.dl-row, [data-row]) .dl-button:is(.dl-control, [data-icon-only]) {
+  min-height: var(--item-h);
+  height: var(--item-h);
+}

@@ -5,7 +5,7 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { Switcher } from "#/components/lang/switcher";
 import type { Point2, Viewport2 } from "#/lib/affine-frame";
 import { useScopeKeys } from "#/route/keys";
@@ -259,9 +259,9 @@ export function RoomsSketch({
           options={TOOLS}
         />
         {said ? (
-          <Press size="caption" tone="quiet" title="dismiss" onClick={() => setSaid(null)}>
+          <Button label="dismiss" reason="dismiss" onClick={() => setSaid(null)}>
             {said} ×
-          </Press>
+          </Button>
         ) : null}
       </div>
       {placing ? (

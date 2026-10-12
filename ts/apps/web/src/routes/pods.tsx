@@ -12,7 +12,7 @@ import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { List } from "#/components/lang/list-popup";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { RunsList } from "#/route/runs-list";
 import { Surface } from "#/components/lang/surface";
 import {
@@ -238,7 +238,7 @@ export function PodsRouteContent({
         grow
         resize={{ target: "start", defaultSize: 300, minSize: 220, persist: "pods:members" }}
         start={
-          <Pane kind="navigation" flush title="members" meta={String(pods.length)} side="left">
+          <Pane flush title="members" meta={String(pods.length)}>
             {pods
               .filter((item) => item.diagnostics.length)
               .map((item) => (
@@ -280,7 +280,7 @@ export function PodsRouteContent({
             grow
             resize={{ target: "end", defaultSize: 300, minSize: 220, persist: "pods:runs" }}
             start={
-              <Pane kind="content" title="spec" meta={member?.path}>
+              <Pane title="spec" meta={member?.path}>
                 {member && !member.path.endsWith(".json") ? (
                   <EmptyState story="scope" exit="pick a JSON member to edit it">
                     {member.path} is source, not a spec
@@ -307,24 +307,20 @@ export function PodsRouteContent({
             }
             end={
               <Pane
-                kind="inspector"
                 title="runs"
                 meta={
                   <span className="flex items-center gap-1.5">
                     <span className="face-mono">{runs.length}</span>
-                    <Press
-                      type="button"
-                      tone="quiet"
-                      size="label"
-                      disabled={!member}
-                      title="A draft's run belongs to no member: the whole pod lists it."
+                    <Button
+                      label={runScope === "pod" ? "whole pod" : "this member"}
+                      refusal={member ? null : "This draft has no member yet, so its runs belong to the whole pod."}
+                      reason="A draft's run belongs to no member: the whole pod lists it."
                       onClick={() => setPodRuns(!podRuns)}
                     >
                       {runScope === "pod" ? "whole pod" : "this member"}
-                    </Press>
+                    </Button>
                   </span>
                 }
-                side="right"
               >
                 <RunsList
                   runs={runs}

@@ -19,11 +19,7 @@ export function UiLayoutSpecimens() {
         recipe={paneRecipe}
         render={(props) => (
           <div className="h-32 w-56">
-            <Pane
-              kind={(props.kind as "navigation" | "visual" | "content" | "inspector") ?? "content"}
-              scroll={props.scroll as "auto" | "clip" | "visible"}
-              title="pane"
-            >
+            <Pane scroll={props.scroll as "auto" | "clip" | "visible"} title="pane">
               body
             </Pane>
           </div>

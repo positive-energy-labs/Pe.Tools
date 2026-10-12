@@ -3,7 +3,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { availableTransitions, transitionPatches, type FamilyDraft } from "@pe/agent-contracts";
 
-import type { CellWire } from "#/components/lang/band";
+import type { CellWire } from "#/components/work/band";
 import type { FieldState } from "#/family/host";
 import { initialDraft, savedFrom } from "#/family/model";
 import { familySource } from "#/family/source";

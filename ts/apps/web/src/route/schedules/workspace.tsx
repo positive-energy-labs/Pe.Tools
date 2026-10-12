@@ -19,7 +19,7 @@ import { emptyTableState, useTableState } from "#/components/master-table/view";
 import { Pane } from "#/components/lang/pane";
 import { useMeasuredParse } from "#/host/measured-parse";
 import type { HostCallOptions } from "#/host/client";
-import type { CellWire } from "#/components/lang/band";
+import type { CellWire } from "#/components/work/band";
 import {
   scheduleLock,
   scheduleShownText,
@@ -250,74 +250,79 @@ export function ScheduleGridWorkspace({
     ) : undefined;
 
   return (
-    <Pane
-      kind="content"
-      flush
-      title={snapshot?.scheduleName ?? "schedule"}
-      headerless
-      scroll="clip"
-      onActivate={onFocus.grid}
+    // Focus arriving from outside the grid's pane is the edge a stage revalidates on.
+    <div
+      className="contents"
+      onFocusCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onFocus.grid();
+      }}
     >
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="flex min-h-0 flex-1 flex-col">
-          {snapshot ? (
-            <TableFrame
-              // A schedule switch remounts the box: no draft or typed text outlives its schedule.
-              key={snapshot.scheduleId}
-              label="schedule rows"
-              rows={snapshot.rows}
-              columns={gridColumns}
-              rowKey={(row) => String(row.rowNumber)}
-              state={tableState}
-              onStateChange={setTableState}
-              searchPlaceholder="search any field, or type a column name"
-              actions={facts}
-            >
-              <Table
+      <Pane flush scroll="clip">
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col">
+            {snapshot ? (
+              <TableFrame
+                // A schedule switch remounts the box: no draft or typed text outlives its schedule.
+                key={snapshot.scheduleId}
+                label="schedule rows"
                 rows={snapshot.rows}
                 columns={gridColumns}
                 rowKey={(row) => String(row.rowNumber)}
-                label="schedule rows"
                 state={tableState}
                 onStateChange={setTableState}
-                activeKey={locatedRow}
-                cellEdit={cellEdit}
-                gutter={(row) => {
-                  const owed = snapshot.columns.filter(
-                    (column) =>
-                      cells[scheduleCellKey(row.rowNumber, column.columnNumber)]?.proposal != null,
-                  ).length;
-                  return owed > 0
-                    ? {
-                        count: owed,
-                        tone: "caution" as const,
-                        title: `${owed} pea proposal${owed === 1 ? "" : "s"} on this row await${owed === 1 ? "s" : ""} a verdict — accept stages, deny clears`,
-                      }
-                    : null;
-                }}
-                empty={
-                  <EmptyState story="scope" exit="press r to read it again, or Ctrl K for another">
-                    this schedule has no rows
+                searchPlaceholder="search any field, or type a column name"
+                actions={facts}
+              >
+                <Table
+                  rows={snapshot.rows}
+                  columns={gridColumns}
+                  rowKey={(row) => String(row.rowNumber)}
+                  label="schedule rows"
+                  state={tableState}
+                  onStateChange={setTableState}
+                  activeKey={locatedRow}
+                  cellEdit={cellEdit}
+                  gutter={(row) => {
+                    const owed = snapshot.columns.filter(
+                      (column) =>
+                        cells[scheduleCellKey(row.rowNumber, column.columnNumber)]?.proposal !=
+                        null,
+                    ).length;
+                    return owed > 0
+                      ? {
+                          count: owed,
+                          tone: "caution" as const,
+                          title: `${owed} pea proposal${owed === 1 ? "" : "s"} on this row await${owed === 1 ? "s" : ""} a verdict — accept stages, deny clears`,
+                        }
+                      : null;
+                  }}
+                  empty={
+                    <EmptyState
+                      story="scope"
+                      exit="press r to read it again, or Ctrl K for another"
+                    >
+                      this schedule has no rows
+                    </EmptyState>
+                  }
+                />
+              </TableFrame>
+            ) : (
+              <div className="grid h-full place-items-center p-6">
+                {hydrated ? (
+                  <EmptyState
+                    story="scope"
+                    exit="press Ctrl K to choose one (type to filter, ↑/↓ then Enter), or ask pea to open one"
+                  >
+                    no schedule open
                   </EmptyState>
-                }
-              />
-            </TableFrame>
-          ) : (
-            <div className="grid h-full place-items-center p-6">
-              {hydrated ? (
-                <EmptyState
-                  story="scope"
-                  exit="press Ctrl K to choose one (type to filter, ↑/↓ then Enter), or ask pea to open one"
-                >
-                  no schedule open
-                </EmptyState>
-              ) : (
-                <OutcomeLine kind="busy" label="connecting to the workbench" />
-              )}
-            </div>
-          )}
-        </div>
-      </section>
-    </Pane>
+                ) : (
+                  <OutcomeLine kind="busy" label="connecting to the workbench" />
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+      </Pane>
+    </div>
   );
 }

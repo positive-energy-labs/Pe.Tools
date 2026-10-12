@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { ListPopup } from "#/components/lang/list-popup";
 import { ReadCell, StateDot, VERDICT_INK, VerdictCell } from "#/components/master-table/cells";
 import type { Column, TableState, Verdict } from "#/components/master-table/model";
@@ -142,11 +142,14 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
 
     return (
       <span className={className}>
-        <ActionButton
+        <Button
           label="bind…"
-          onClick={() => setBinding({ slug, property })}
           reason={`Bind ${slug}.${property} to a parameter — its one crossing, and the only verb that changes what CAN be said about this number. Offers every ${dataType} parameter already in the profile, or a new one named "${newName}" seeded with ${literal}. The ghost row then disappears into the parameter row that now represents it. Nothing leaves the page.`}
-        />
+          kind="framed"
+          onClick={() => setBinding({ slug, property })}
+        >
+          bind…
+        </Button>
       </span>
     );
   };

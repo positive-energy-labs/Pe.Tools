@@ -10,10 +10,11 @@ import { OwnerInspector } from "#/state/owner-inspector";
 
 export function AppChrome({ pathname }: { pathname: string }) {
   if (pathname === "/machine") return null;
+  const tutorialChrome = pathname === "/chat" || pathname.startsWith("/chat/");
   return (
     <>
-      <VersionChip />
-      <FeedbackPicker />
+      <VersionChip hideTrigger={tutorialChrome} />
+      <FeedbackPicker hideTrigger={tutorialChrome} />
     </>
   );
 }
@@ -22,7 +23,9 @@ export function AppDevtools({ pathname, shell }: { pathname: string; shell?: str
   if (pathname === "/open" || (pathname === "/machine" && shell === "tray")) return null;
   return (
     <TanStackDevtools
-      config={{ position: "middle-left" }}
+      // The bottom corners belong to the product's own chrome (feedback left, machine chip right);
+      // the dev-only trigger waits, fixed and hidden until hover, on the right edge's middle.
+      config={{ position: "middle-right", triggerMode: "fixed", hideUntilHover: true }}
       plugins={[
         { name: "Tanstack Router", render: <TanStackRouterDevtoolsPanel /> },
         { name: "Route owners", render: <OwnerInspector /> },

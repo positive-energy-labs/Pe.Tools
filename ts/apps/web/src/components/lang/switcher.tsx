@@ -1,14 +1,6 @@
 /**
- * SWITCHER — the exclusive mode switch, promoted from ui/ (ruled 2026-08-16, R10).
- *
- * CONSUMERS: /family workspace (overlay ⇄ live), /family doc pane (text ⇄ sheet),
- * /design-system/swatch.
- *
- * RULINGS EMBODIED: the active choice is a FILL (`--pe-select`, the ground ladder's fourth
- * rung), never a hue — selection is a place you are standing, not a state of the data, so it
- * spends nothing from the meaning band and cannot be confused with commit or drift. Hover is
- * the one veil. Each option's `title` is REQUIRED: a mode whose consequence is not stated is
- * a mystery toggle.
+ * The exclusive mode switch. The active choice is the select fill, never a hue; hover is the one
+ * veil. Each option's `title` is required: a mode whose consequence is not stated is a mystery toggle.
  */
 import type { ReactNode } from "react";
 
@@ -18,17 +10,18 @@ import "./lang.css";
 
 export const switcherRecipe = tv({
   slots: {
-    // The group carries the item height and the options fill it: a switcher and a `ActionButton` in one
-    // pane header must measure the same, and a 20px option inside a bordered group is 22px
-    // (two-height law, annotation round 2026-08-31).
-    base: "inline-flex h-(--item-h) shrink-0 items-center rounded-sm border border-line-2",
+    // A segmented control wears `dl-control`, so it measures identical to a field beside it. The
+    // options fill the frame edge to edge; the picked one is the select fill.
+    base: "dl-control inline-flex shrink-0 items-stretch overflow-hidden",
     option:
-      "veil h-full cursor-pointer border-0 bg-transparent px-1.5 t-small face-mono tracking-[0.05em] text-ink-2",
+      // Options are words a person picks, so they read in the body face (law 6: mono is what a
+      // machine measured); a measured count inside a label brings its own `face-mono`.
+      "veil cursor-pointer border-0 bg-transparent px-(--control-pad-x) t-small text-ink-2 enabled:hover:text-ink",
   },
   variants: {
     state: {
       rest: {},
-      active: { option: "on-select text-ink" },
+      active: { option: "on-select font-semibold text-ink" },
       disabled: { option: "cursor-not-allowed text-ink-mute italic" },
     },
   },

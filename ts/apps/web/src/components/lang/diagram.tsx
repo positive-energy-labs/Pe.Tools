@@ -1,15 +1,7 @@
 /**
- * DIAGRAM — a `mermaid` fence drawn as an SVG, for `Code` (ledger, 2026-09-16).
- *
- * `beautiful-mermaid` renders without a DOM and takes CSS variable colors (`tokenRef`), so the drawing follows
- * the theme without a re-render. It loads lazily on the first diagram, in its own chunk, and every
- * source is laid out once per page (`cache`). Author `style`/`classDef`/`linkStyle` lines are
- * stripped so a model cannot paint off the house palette. The SVG goes in inline (the `var()`
- * colors need it), so it is sanitized first: no script, no foreignObject, no `on*`, no link that
- * leaves the document.
- *
- * ponytail: renders on the main thread (~45 ms warm for 30-50 nodes, measured). The library is
- * DOM-free, so a Worker is the upgrade if a large MEP graph profiles as jank.
+ * A `mermaid` fence drawn as an SVG for `Code`. Colors are CSS variables so it follows the theme;
+ * author style lines are stripped and the SVG is sanitized before it goes in inline.
+ * ponytail: renders on the main thread (~45 ms warm); a Worker is the upgrade if a large graph janks.
  */
 import { useEffect, useState } from "react";
 import { tokenRef } from "#/lib/token";

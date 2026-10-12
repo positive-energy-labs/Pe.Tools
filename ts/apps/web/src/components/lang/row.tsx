@@ -1,16 +1,8 @@
 /**
- * ROW — the one list item, and the one table row (ix-list design; census R2, R3, R8, R10, R11).
- *
- * Every list-shaped thing draws its items with this: sidebar threads, palette hits, the head
- * ladder, combobox options, the slash menu, member and schedule rails, route lists, and (`as="tr"`) table
- * rows. One recipe, one height (`--item-h`), one type rung (`t-small`, sans; mono comes from a
- * column or the meta slot, never a call site).
- *
- * STATES ARE DATA, NEVER HUES. `cursor` (where the keys are), `selected` (in the set), `active`
- * (the open or current item) and `pending` / `failed` are separate attributes, painted in
- * lang.css: the cursor is the veil, selection the one select fill, active a rail mark, pending
- * quiet italic, failed the caution squiggle. A refusal is `aria-disabled` plus its reason, said
- * in the row, not a greyed guess.
+ * The one list item and table row (`as="tr"`): one height, one type rung, mono only from a column
+ * or the meta slot. States are data attributes (cursor, selected, active, pending, failed), never
+ * hues; a refusal is `aria-disabled` and greyed, its reason only the `title` (never drawn).
+ * Painted in lang.css.
  */
 import type { ReactNode } from "react";
 
@@ -28,7 +20,7 @@ export const rowRecipe = tv({
     actions: "dl-row-actions",
   },
   variants: {
-    lines: { 1: {}, 2: {} },
+    lines: { 1: {}, 2: {}, 3: {} },
   },
   defaultVariants: { lines: 1 },
 });
@@ -43,7 +35,7 @@ export interface RowState {
   active?: boolean;
   pending?: boolean;
   failed?: boolean;
-  /** Present, the row refuses picks and says why. */
+  /** Present, the row refuses picks and is greyed; the reason is its tooltip, not drawn text. */
   refusal?: string | null;
 }
 
@@ -51,6 +43,14 @@ type RowProps = RowState & {
   id?: string;
   role?: string;
   title?: string;
+  tabIndex?: number;
+  onKeyDown?: React.KeyboardEventHandler<HTMLElement>;
+  onDoubleClick?: React.MouseEventHandler<HTMLElement>;
+  onContextMenu?: React.MouseEventHandler<HTMLElement>;
+  draggable?: boolean;
+  onDragStart?: React.DragEventHandler<HTMLElement>;
+  onDragOver?: React.DragEventHandler<HTMLElement>;
+  onDrop?: React.DragEventHandler<HTMLElement>;
   onClick?: (event: React.MouseEvent<HTMLElement>) => void;
   onMouseMove?: () => void;
   onMouseEnter?: () => void;
@@ -63,9 +63,13 @@ type RowProps = RowState & {
         label: ReactNode;
         /** A second line: only with `lines={2}`, which is two item heights. */
         sub?: ReactNode;
-        lines?: 1 | 2;
+        lines?: 1 | 2 | 3;
+        /** Target and time above a navigation item's title; three lines reserve one item height each. */
+        eyebrow?: ReactNode;
+        /** The row's state (an activity, an age, a mark): the trailing slot of the first line. */
         meta?: ReactNode;
-        /** Row verbs: revealed on hover or focus-within at zero footprint; never the pick. */
+        /** Row verbs (usually one menu): they take the meta slot in place on hover, keyboard
+         *  focus or an open menu; without hover, a tap on the slot opens them. Never the pick. */
         actions?: ReactNode;
         children?: never;
       }
@@ -113,6 +117,14 @@ export function Row(props: RowProps) {
     onMouseLeave: props.onMouseLeave,
     "data-key": props["data-key"],
     title: refusal ?? props.title,
+    tabIndex: props.tabIndex,
+    onKeyDown: props.onKeyDown,
+    onDoubleClick: props.onDoubleClick,
+    onContextMenu: props.onContextMenu,
+    draggable: props.draggable,
+    onDragStart: props.onDragStart,
+    onDragOver: props.onDragOver,
+    onDrop: props.onDrop,
     ...states,
   };
   if (props.as === "tr") {
@@ -129,31 +141,47 @@ export function Row(props: RowProps) {
     );
   }
   const slots = rowRecipe({ lines: props.lines ?? 1 });
+  const fact = props.meta != null ? <span className="dl-row-fact">{props.meta}</span> : null;
   return (
-    <div {...shared} className={slots.base()} data-lines={props.lines === 2 ? 2 : undefined}>
+    <div
+      {...shared}
+      className={slots.base()}
+      data-lines={props.lines !== 1 ? props.lines : undefined}
+    >
       {props.lead != null ? <span className={slots.lead()}>{props.lead}</span> : null}
       <span className={slots.label()}>
-        {props.label}
-        {props.lines === 2 && props.sub != null ? (
+        {props.lines === 3 ? <span className="dl-row-eyebrow">{props.eyebrow}</span> : null}
+        {/* The first line: the title, then one trailing slot where the state and the verbs
+            share a cell (lang.css), so a sub line runs the full width under it. */}
+        <span className="dl-row-line">
+          <span className="dl-row-title">{props.label}</span>
+          {fact || props.actions != null ? (
+            <span className={slots.meta()}>
+              {fact}
+              {props.actions != null ? (
+                <span className={slots.actions()} onClick={(event) => event.stopPropagation()}>
+                  {props.actions}
+                </span>
+              ) : null}
+            </span>
+          ) : null}
+        </span>
+        {props.lines !== 1 && props.sub != null ? (
           <span className={slots.sub()}>{props.sub}</span>
         ) : null}
       </span>
-      {refusal ? <span className={slots.meta()}>{refusal}</span> : null}
-      {props.meta != null ? <span className={slots.meta()}>{props.meta}</span> : null}
-      {props.actions != null ? (
-        <span className={slots.actions()} onClick={(event) => event.stopPropagation()}>
-          {props.actions}
-        </span>
-      ) : null}
     </div>
   );
 }
 
-/** A group's section head, sticky inside its scroll container (R4). */
+/** A group's section head, sticky inside its scroll container. A group named with blank
+ *  space is an unnamed section — a menu's verb cluster — and draws as a rule, not a head. */
 export function RowGroupHead({ label, count }: { label: ReactNode; count?: number }) {
+  if (typeof label === "string" && label.trim() === "")
+    return <div className="dl-row-sep" role="separator" />;
   return (
     <div className="dl-row-head" role="presentation" data-surface="recess">
-      {label}
+      <span>{label}</span>
       {count != null ? <span className="dl-row-meta">{count}</span> : null}
     </div>
   );

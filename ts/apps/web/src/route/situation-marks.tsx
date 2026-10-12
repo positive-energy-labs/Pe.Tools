@@ -2,7 +2,7 @@
 import type { ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { Kbd } from "#/components/lang/kbd";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { useScopeKeys } from "./keys";
 
 /** A slot in the sentence: an operable value with its io mark (`r`, `w`, `rw`) as a superscript. */
@@ -57,7 +57,7 @@ export function SituationChoice({
         <Popover.Positioner side="bottom" align="start" sideOffset={6} className="isolate z-popup">
           <Popover.Popup
             data-surface="artifact"
-            className="max-h-96 w-80 max-w-(--available-width) overflow-auto rounded-lg p-2 t-prose text-ink ring-1 ring-line outline-none"
+            className="max-h-96 w-80 max-w-(--available-width) overflow-auto p-2 t-prose text-ink float-surface"
           >
             {children}
           </Popover.Popup>
@@ -83,14 +83,12 @@ export function PaletteKey({ open }: { open: () => void }) {
     },
   ]);
   return (
-    <Press
-      tone="quiet"
-      size="value"
-      aria-label="Open the palette"
-      title="Switch what this page shows: every rung of the sentence, type to filter (Ctrl K)"
+    <Button
+      label="Open the palette"
+      reason="Switch what this page shows: every rung of the sentence, type to filter (Ctrl K)"
       onClick={open}
     >
-      <Kbd mute>Ctrl K</Kbd>
-    </Press>
+      <Kbd mute hotkey="Mod+K" />
+    </Button>
   );
 }

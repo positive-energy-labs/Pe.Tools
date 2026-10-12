@@ -1,18 +1,11 @@
-/**
- * THE LADDER — one popup per Situation ladder (Situation glossary), composed on the one list
- * (`ListPopup` + `levels`, ix-list R12). The trigger is the ladder's terminal word in the
- * sentence; the popup opens on the first unbound rung, shows every rung as a breadcrumb, and a
- * pick binds its rung and advances. A route hands it rungs as plain data; the list draws them.
- *
- * Marks: dotted underline = operable and held; dashed = empty or reported by the world, not chosen;
- * the caution tone = the ladder is incomplete or its feed disagrees. `face="inline"` is the same
- * ladder as a chip in running chrome (the composer's head): the trigger says the whole path.
- */
-import { useRef, type ReactNode } from "react";
+/** One popup per Situation ladder: rungs as plain data, a pick binds its rung and advances.
+ *  `word` is the terminal word in a sentence (dotted held, dashed derived, caution incomplete);
+ *  `control` is a framed trigger beside buttons that reads the whole path. */
+import { useRef, useState, type ReactNode } from "react";
 
 import type { Collection, Level } from "#/components/lang/collection";
 import { ListPopup } from "#/components/lang/list-popup";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 
 interface RungOption {
   id: string;
@@ -38,6 +31,8 @@ export interface Rung {
   /** Why the list is empty or missing ("reading…", "read failed", "bind a session first"). */
   note?: string;
   multi?: boolean;
+  /** Left out of the trigger's path while true (an off toggle); its crumb still says it. */
+  silent?: boolean;
   picked?: (id: string) => boolean;
   checked?: (id: string) => boolean | "mixed";
   pick: (id: string) => void;
@@ -56,9 +51,19 @@ export function Ladder({
   open,
   onOpenChange,
   face = "word",
+  mark,
+  openOn,
+  closeOn,
 }: {
   levels: readonly Rung[];
-  face?: "word" | "inline";
+  face?: "word" | "control";
+  /** A glyph that stands for the first rung (the composer's provider mark): the complete ladder
+   *  reads `mark second · third` instead of `first › second › third`. */
+  mark?: ReactNode;
+  /** The rung key it opens on, complete or not (default: the first unbound, else the last). */
+  openOn?: string;
+  /** Rung keys whose pick closes the popup instead of advancing (default: only the last rung does). */
+  closeOn?: readonly string[];
   /** The bound value was reported by the world, not chosen (house law 8): dashed. */
   derived?: boolean;
   /** The world disagrees with the binding ("needs initialization"): caution tone. */
@@ -70,13 +75,30 @@ export function Ladder({
   onOpenChange?: (open: boolean) => void;
 }) {
   const collection = useRef<Collection<Hit> | null>(null);
+  const [own, setOwn] = useState(false);
+  const isOpen = open ?? own;
+  const setOpen = (next: boolean) => {
+    setOwn(next);
+    onOpenChange?.(next);
+  };
   const unbound = levels.findIndex((rung) => rung.label === null);
   const complete = unbound < 0;
-  const word = !complete
-    ? levels[unbound]!.placeholder
-    : face === "inline"
-      ? levels.map((rung) => rung.label).join(" › ")
-      : (levels.at(-1)?.label ?? "");
+  const shown = levels.filter((rung) => !rung.silent);
+  const word = !complete ? (
+    levels[unbound]!.placeholder
+  ) : mark ? (
+    <>
+      {mark}
+      {shown
+        .filter((rung) => rung !== levels[0])
+        .map((rung) => rung.label)
+        .join(" · ")}
+    </>
+  ) : face === "control" ? (
+    shown.map((rung) => rung.label).join(" › ")
+  ) : (
+    (levels.at(-1)?.label ?? "")
+  );
   const rungOf = (hit: Hit) => levels.find((rung) => rung.key === hit.rung)!;
   const rungs: Level<Hit>[] = levels.map((rung) => ({
     label: rung.key,
@@ -87,14 +109,19 @@ export function Ladder({
     multi: rung.multi,
     refusal: rung.options === null ? (rung.note ?? `needs ${rung.key}`) : null,
     note: rung.note ?? `no ${rung.key}`,
-    onPick: (hit) => rung.pick(hit.id),
+    onPick: (hit) => {
+      rung.pick(hit.id);
+      if (closeOn?.includes(rung.key)) setOpen(false);
+    },
   }));
   const selected = levels.flatMap((rung) =>
     (rung.options ?? [])
       .filter((option) => rung.picked?.(option.id))
       .map((option) => `${rung.key}:${option.id}`),
   );
-  const name = `Choose ${levels[complete ? levels.length - 1 : unbound]?.key ?? ""}`;
+  const opening = levels.findIndex((rung) => rung.key === openOn);
+  const start = opening >= 0 ? opening : complete ? levels.length - 1 : unbound;
+  const name = `Choose ${levels[start]?.key ?? ""}`;
   return (
     <ListPopup<Hit>
       anchor="trigger"
@@ -102,8 +129,8 @@ export function Ladder({
       trigger={word}
       title={title}
       disabled={disabled}
-      open={open}
-      onOpenChange={onOpenChange}
+      open={isOpen}
+      onOpenChange={setOpen}
       derived={derived || !complete}
       caution={caution || !complete}
       aria-label={name}
@@ -113,7 +140,7 @@ export function Ladder({
       onCollection={(current) => {
         collection.current = current;
       }}
-      startLevel={complete ? levels.length - 1 : unbound}
+      startLevel={start}
       keyOf={(hit) => `${hit.rung}:${hit.id}`}
       labelOf={(hit) => `${hit.label} ${hit.sub ?? ""}`.trim()}
       groupOf={(hit) => hit.group}
@@ -128,9 +155,12 @@ export function Ladder({
         <>
           {levels[level]?.extra}
           {levels[level]?.multi && level < levels.length - 1 ? (
-            <Press size="value" onClick={() => collection.current?.backTo(level + 1)}>
+            <Button
+              label={`show ${levels[level + 1]?.key}`}
+              onClick={() => collection.current?.backTo(level + 1)}
+            >
               show {levels[level + 1]?.key}
-            </Press>
+            </Button>
           ) : null}
         </>
       )}

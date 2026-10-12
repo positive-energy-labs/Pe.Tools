@@ -6,7 +6,7 @@ import type {
 } from "@pe/agent-contracts";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { EmptyState } from "#/components/lang/empty";
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { Input } from "#/components/lang/input";
 import {
   FieldOptionPicker,
@@ -121,13 +121,20 @@ export function DefinitionCard({
             aria-label="definition id"
             title="The definition's id — how assignments and receipts refer to it"
           />
-          <ActionButton
+          <Button
             label="remove"
+            kind="framed"
             icon={Trash2}
-            disabled={disabled}
+            refusal={
+              disabled
+                ? "Remove this definition and its assignments from the draft (local until saved)"
+                : null
+            }
             onClick={() => onChange(removeDefinition(profile, definition.id))}
             reason="Remove this definition and its assignments from the draft (local until saved)"
-          />
+          >
+            remove
+          </Button>
         </>
       }
     >
@@ -289,13 +296,20 @@ export function DefinitionCard({
       <div className="px-3 py-2">
         <div className="mb-1.5 flex items-center justify-between">
           <span className="">Assignments</span>
-          <ActionButton
+          <Button
             label="add assignment"
+            kind="framed"
             icon={Plus}
-            disabled={disabled}
+            refusal={
+              disabled
+                ? "Bind this definition to a set of source elements (empty set = every element in the category)"
+                : null
+            }
             onClick={() => onChange(addAssignment(profile, definition.id))}
             reason="Bind this definition to a set of source elements (empty set = every element in the category)"
-          />
+          >
+            add assignment
+          </Button>
         </div>
         {assignments.length === 0 ? (
           <EmptyState story="scope" exit="add an assignment and bind source elements">
@@ -322,13 +336,18 @@ export function DefinitionCard({
                     enabled
                   </label>
                   <span className="truncate">{assignment.id}</span>
-                  <ActionButton
+                  <Button
                     label="remove"
+                    kind="framed"
                     icon={Trash2}
-                    disabled={disabled}
+                    refusal={
+                      disabled ? "Remove this assignment from the draft (local until saved)" : null
+                    }
                     onClick={() => onChange(removeAssignment(profile, assignment.id))}
                     reason="Remove this assignment from the draft (local until saved)"
-                  />
+                  >
+                    remove
+                  </Button>
                 </div>
                 <Field label="Source elements">
                   <FieldOptionPicker

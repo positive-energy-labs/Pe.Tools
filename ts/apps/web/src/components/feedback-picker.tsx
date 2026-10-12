@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { MessageSquarePlus, Send } from "lucide-react";
 
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { PopupFrame } from "#/components/lang/list-popup";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Textarea } from "#/components/lang/textarea";
@@ -23,15 +23,23 @@ const PAD = 20;
 const NOTE_LABEL = "feedback note";
 /** Chrome the picture leaves out; the pick mark stays in so the crop shows what was meant. */
 const CHROME = "data-feedback-chrome";
+const START_FEEDBACK = "pe:start-feedback";
 
-export function FeedbackPicker() {
+/** Use the one picker from a tutorial or a message's own feedback control. */
+export function startFeedback(element?: Element) {
+  window.dispatchEvent(new CustomEvent(START_FEEDBACK, { detail: element }));
+}
+
+export function FeedbackPicker({ hideTrigger = false }: { hideTrigger?: boolean }) {
   const grab = useRef<Grab | null>(null);
+  const capture = useRef(0);
   const [picking, setPicking] = useState(false);
   const [hover, setHover] = useState<Rect | null>(null);
   const [picked, setPicked] = useState<Picked | null>(null);
   const [note, setNote] = useState("");
 
   const close = () => {
+    capture.current++;
     setPicking(false);
     setHover(null);
     setPicked(null);
@@ -58,6 +66,31 @@ export function FeedbackPicker() {
     });
   }, close);
   const submit = () => picked && note.trim() && !send.isPending && send.mutate(picked);
+
+  useEffect(() => {
+    const start = (event: Event) => {
+      const element = (event as CustomEvent<Element | undefined>).detail;
+      close();
+      setPicking(true);
+      if (!element) return;
+      const attempt = capture.current;
+      void import("react-grab/primitives")
+        .then(async (g) => {
+          grab.current = g;
+          const context = await g.getElementContext(element);
+          if (attempt === capture.current && element.isConnected)
+            setPicked({ element, rect: g.getElementBounds(element), context });
+        })
+        .catch(() => {
+          /* The regular picker remains available when direct capture fails. */
+        });
+    };
+    window.addEventListener(START_FEEDBACK, start);
+    return () => {
+      capture.current++;
+      window.removeEventListener(START_FEEDBACK, start);
+    };
+  }, []);
 
   useScopeKeys([
     {
@@ -116,18 +149,27 @@ export function FeedbackPicker() {
           style={{ left: box.x, top: box.y, width: box.width, height: box.height }}
         />
       )}
-      <div {...{ [CHROME]: "" }} data-react-grab-ignore className="fixed bottom-2 left-2 z-popup">
-        <ActionButton
-          label={picking ? "cancel feedback" : "feedback"}
-          icon={MessageSquarePlus}
-          onClick={() => (picking ? close() : setPicking(true))}
-          reason={
-            picking
-              ? "Stop picking without sending a note"
-              : "Pick one thing on this page and send a note about it"
-          }
-        />
-      </div>
+      {!hideTrigger || picking ? (
+        <div
+          {...{ [CHROME]: "" }}
+          data-react-grab-ignore
+          className="fixed bottom-(--gutter) left-(--gutter) z-popup flex h-(--rail-h) items-center"
+        >
+          <Button
+            kind="framed"
+            label={picking ? "cancel feedback" : "feedback"}
+            icon={MessageSquarePlus}
+            onClick={() => (picking ? close() : setPicking(true))}
+            reason={
+              picking
+                ? "Stop picking without sending a note"
+                : "Pick one thing on this page and send a note about it"
+            }
+          >
+            {picking ? "cancel feedback" : "feedback"}
+          </Button>
+        </div>
+      ) : null}
       <Popover.Root
         open={!!picked}
         // Only cancel and Esc drop a note; a stray outside click must not lose typed text.
@@ -153,20 +195,20 @@ export function FeedbackPicker() {
               />
               {send.error && <OutcomeLine kind="error" label={send.error.message} />}
               <div className="flex justify-end gap-2">
-                <ActionButton label="cancel" onClick={close} reason="Drop this note" />
-                <ActionButton
-                  tone="commit"
+                <Button kind="framed" label="cancel" onClick={close} reason="Drop this note">
+                  cancel
+                </Button>
+                <Button
+                  kind="commit"
                   label="send"
                   icon={Send}
                   busy={send.isPending}
-                  disabled={!note.trim() || send.isPending}
+                  refusal={note.trim() ? null : "Write a note first"}
                   onClick={submit}
-                  reason={
-                    note.trim()
-                      ? "Send this note and a picture of the marked element to PostHog"
-                      : "Write a note first"
-                  }
-                />
+                  reason="Send this note and a picture of the marked element to PostHog"
+                >
+                  send
+                </Button>
               </div>
             </div>
           </PopupFrame>

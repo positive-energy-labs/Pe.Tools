@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Section } from "#/components/lang/section";
 import type { RecipeMetadata } from "#/lib/tv";
 
-type ImportPath = `#/components/${"lang" | "ui"}/${string}`;
+type ImportPath = `#/components/${"lang" | "work"}/${string}`;
 export type GridVariantProps = Record<string, string | boolean>;
 type Axis = readonly [name: string, values: readonly string[]];
 

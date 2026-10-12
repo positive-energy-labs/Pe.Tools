@@ -61,7 +61,12 @@ const familyTypes: Dialog = {
         { cells: ["Takeoff Length Projection (default)", `12"`, "=", ""] },
         { cells: ["Takeoff Length (default)", `4"`, "=", ""] },
         {
-          cells: ["Takeoff Fixed Length (default)", `1"`, `=if(Duct Diameter > 16", Duct Diameter * 0.25, 1")`, ""],
+          cells: [
+            "Takeoff Fixed Length (default)",
+            `1"`,
+            `=if(Duct Diameter > 16", Duct Diameter * 0.25, 1")`,
+            "",
+          ],
           disabled: true,
         },
         { cells: ["Duct Radius (default)", `6"`, "=", { checked: true }] },
@@ -132,7 +137,10 @@ const ashraeA: Dialog = {
                 { text: "Round", depth: 1, open: true },
                 { text: "Elbows", depth: 2, open: true },
                 { text: "CD3-11", depth: 3, selected: true },
-                ...["CD3-12", "CD3-15", "CD3-2", "CD3-20", "CD3-21"].map((text) => ({ text, depth: 3 })),
+                ...["CD3-12", "CD3-15", "CD3-2", "CD3-20", "CD3-21"].map((text) => ({
+                  text,
+                  depth: 3,
+                })),
               ],
             },
           ],
@@ -240,7 +248,10 @@ const roundElbow: Palette = {
         { name: "Loss Method Settings", button: "Edit..." },
       ],
     },
-    { text: "Mechanical - Flow", rows: [{ name: "Pressure Drop", value: "0.0000 in-wg", disabled: true }] },
+    {
+      text: "Mechanical - Flow",
+      rows: [{ name: "Pressure Drop", value: "0.0000 in-wg", disabled: true }],
+    },
     {
       text: "Identity Data",
       rows: [
@@ -323,7 +334,21 @@ const familyAlreadyExists: Task = {
 
 const ribbon: Ribbon = {
   t: "ribbon",
-  tabs: ["Architecture", "Structure", "Steel", "Precast", "Systems", "Insert", "Annotate", "Analyze", "Massing & Site", "Collaborate", "View", "Manage", "Add-Ins"],
+  tabs: [
+    "Architecture",
+    "Structure",
+    "Steel",
+    "Precast",
+    "Systems",
+    "Insert",
+    "Annotate",
+    "Analyze",
+    "Massing & Site",
+    "Collaborate",
+    "View",
+    "Manage",
+    "Add-Ins",
+  ],
   selected: "Systems",
   modify: "Modify | Place Duct",
   panels: [
@@ -438,7 +463,14 @@ const sharedParameters: Dialog = {
     { t: "button", text: "Browse...", at: { x: 225.5, y: 59, w: 89, h: 22.5 } },
     { t: "button", text: "Create...", at: { x: 321.5, y: 59, w: 89, h: 22.5 } },
     { t: "label", text: "Parameter group:", at: { x: 11.5, y: 92 } },
-    { t: "field", text: "", drop: true, disabled: true, at: { x: 11.5, y: 110.5, w: 263.5, h: 17 }, h: 17 },
+    {
+      t: "field",
+      text: "",
+      drop: true,
+      disabled: true,
+      at: { x: 11.5, y: 110.5, w: 263.5, h: 17 },
+      h: 17,
+    },
     { t: "label", text: "Parameters:", at: { x: 11.5, y: 139.5 } },
     { t: "list", items: [], at: { x: 11.5, y: 155.5, w: 263.5, h: 229.5 } },
     { t: "group", text: "Parameters", at: { x: 285, y: 155.5, w: 126, h: 124.5 } },
@@ -474,7 +506,10 @@ const routing: readonly [string, readonly string[], number?][] = [
   ["Junction", ["Round Takeoff: Standard", "Round Tee: Standard"], 1],
   ["Cross", ["Round Cross: Standard"]],
   ["Transition", ["Round Transition - Angle: 45 Degree"]],
-  ["Multi-shape Transition Rectangular to Round", ["Rectangular to Round Transition - Angle: 45 Degree"]],
+  [
+    "Multi-shape Transition Rectangular to Round",
+    ["Rectangular to Round Transition - Angle: 45 Degree"],
+  ],
   ["Multi-shape Transition Rectangular to Oval", ["None"]],
   ["Multi-shape Transition Oval to Round", ["Oval to Round Transition - Length: Standard"]],
   ["Union", ["Round Union: Standard"]],
@@ -488,7 +523,11 @@ const routingPreferences: Dialog = {
   h: 555,
   grip: true,
   body: [
-    { t: "group", text: "Duct Type: Taps / Short Radius", at: { x: 13.5, y: 51, w: 476.5, h: 454 } },
+    {
+      t: "group",
+      text: "Duct Type: Taps / Short Radius",
+      at: { x: 13.5, y: 51, w: 476.5, h: 454 },
+    },
     { t: "button", text: "Duct Size...", at: { x: 25, y: 66, w: 117, h: 21 } },
     { t: "button", text: "Load Family...", at: { x: 164, y: 66, w: 108.5, h: 21 } },
     {
@@ -533,12 +572,20 @@ function RevitSpecimens() {
           a={ashraeA}
           b={ashraeB}
           notes={ashraeNotes}
-          labels={["View All off: filtered list, OK enabled", "View All on: every table, OK disabled"]}
+          labels={[
+            "View All off: filtered list, OK enabled",
+            "View All on: every table, OK disabled",
+          ]}
         />
       </Specimen>
       <section className="flex flex-wrap items-start gap-8">
         <Specimen title="Properties · Round Elbow">
-          <Revit spec={roundElbow} notes={[{ at: "Mechanical/Loss Method Settings", text: "Opens ASHRAE Table Settings." }]} />
+          <Revit
+            spec={roundElbow}
+            notes={[
+              { at: "Mechanical/Loss Method Settings", text: "Opens ASHRAE Table Settings." },
+            ]}
+          />
         </Specimen>
         <Specimen title="Family Types (flow)">
           <Revit spec={familyTypes} />

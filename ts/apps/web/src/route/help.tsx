@@ -12,7 +12,9 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { CircleHelp } from "lucide-react";
 
 import { Kbd } from "#/components/lang/kbd";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
+import { startFeedback } from "#/components/feedback-picker";
+import { MachineHelpTrigger } from "#/machine/drawer";
 import { readKeyMeta, useHotkeyRegistrations, useScopeKeys, type KeyMeta } from "./keys";
 
 interface Region {
@@ -59,7 +61,7 @@ function Rows({ keys }: { keys: readonly Bound[] }) {
       {keys.map((k) => (
         <Fragment key={`${k.hotkey}:${k.name}`}>
           <dt>
-            <Kbd mute={Boolean(k.refusal)}>{k.hotkey}</Kbd>
+            <Kbd mute={Boolean(k.refusal)} hotkey={k.hotkey} />
           </dt>
           <dd
             className={k.refusal ? "text-ink-mute" : "text-ink"}
@@ -188,7 +190,17 @@ function Chart({
   );
 }
 
-function HelpBody({ docs, name }: { docs: ReactNode; name: string }) {
+function HelpBody({
+  docs,
+  name,
+  utilities,
+  close,
+}: {
+  docs: ReactNode;
+  name: string;
+  utilities?: boolean;
+  close: () => void;
+}) {
   const { hotkeys } = useHotkeyRegistrations();
   const layout = useMemo(measureRegions, []);
   const bound: Bound[] = hotkeys.flatMap((reg) => {
@@ -222,11 +234,33 @@ function HelpBody({ docs, name }: { docs: ReactNode; name: string }) {
         </div>
       )}
       {docs ? <div className="shrink-0 overflow-y-auto px-8 pt-3 pb-8 t-prose">{docs}</div> : null}
+      {utilities ? (
+        <div className="hairline-t flex shrink-0 items-center gap-3 px-8 py-3">
+          <Button
+            label="Send feedback"
+            onClick={() => {
+              close();
+              startFeedback();
+            }}
+          >
+            Send feedback
+          </Button>
+          <MachineHelpTrigger onOpen={close} />
+        </div>
+      ) : null}
     </div>
   );
 }
 
-export function RouteHelpButton({ docs, name }: { docs?: ReactNode; name: string }) {
+export function RouteHelpButton({
+  docs,
+  name,
+  utilities = false,
+}: {
+  docs?: ReactNode;
+  name: string;
+  utilities?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   useScopeKeys([
     {
@@ -239,15 +273,18 @@ export function RouteHelpButton({ docs, name }: { docs?: ReactNode; name: string
   return (
     <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
       <DialogPrimitive.Trigger
-        render={<Press tone="quiet" size="icon" />}
-        title="how this route works — its regions and every key bound right now (Alt+/)"
-      >
-        <CircleHelp className="size-4" strokeWidth={1.5} />
-      </DialogPrimitive.Trigger>
+        render={
+          <Button
+            label="How this route works"
+            reason="how this route works — its regions and every key bound right now (Alt+/)"
+            icon={CircleHelp}
+          />
+        }
+      />
       <DialogPrimitive.Portal>
         <DialogPrimitive.Popup className="fixed inset-0 z-modal outline-none">
           <div data-surface="page" className="absolute inset-0" onClick={() => setOpen(false)} />
-          <HelpBody docs={docs} name={name} />
+          <HelpBody docs={docs} name={name} utilities={utilities} close={() => setOpen(false)} />
         </DialogPrimitive.Popup>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>

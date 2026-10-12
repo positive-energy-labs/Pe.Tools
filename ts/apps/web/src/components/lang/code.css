@@ -12,6 +12,14 @@
   line-height: var(--type-small-line-height);
 }
 
+/* A code block's head is a label line, not a pane head: it takes the row rung. */
+.dl-code-frame {
+  --rail-h: var(--item-h);
+}
+.dl-code-frame .dl-button[data-icon-only] {
+  height: var(--item-h);
+}
+
 [data-code-pane] pre.th-code {
   font: inherit;
   margin: 0;

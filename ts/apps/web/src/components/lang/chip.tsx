@@ -1,22 +1,7 @@
 /**
- * CHIPS — two components, because round 1 proved they are two things wearing one name.
- *
- * CONSUMERS: `FactChip` — the arming strip's plan hash and count (already, below), soon the
- * master-table header facts; `NarrowChip` — soon, the addressing sentence's narrowing row.
- *
- * RULINGS EMBODIED:
- * - THE ROUND-1 GAP CENSUS: canon `ui/chip` is a STATE FACT — no removal affordance, no count
- *   slot — so a NARROWING chip could not be built from it. Every one of the five builders
- *   hand-rolled the removable form. Splitting them is the fix; merging them would give the fact
- *   chip an `onRemove` nobody fills, which SURFACE-PHILOSOPHY §6 names as the expensive kind of
- *   slot ("a promise in the type that misleads the next reader").
- * - TONE COMES FROM THE MEANING TOKENS and nowhere else. A chip may not mint a hue.
- * - `dashed` IS RESERVED FOR SEAM — typed but unproven, a fixture, a stand-in. The border style
- *   IS that meaning; nothing else in the language may use it.
- * - CHIPS NARROW BUT NEVER HIDE. `NarrowChip`'s count is of rows still in scope, and removing
- *   one widens the view back out — it never reveals rows that were being concealed.
- * - `title` is required on both: a chip states a fact; the title says what the fact means and
- *   what would change it.
+ * Two chips: `FactChip` is a machine-measured state fact (no press), `NarrowChip` a removable
+ * narrowing that scopes the view and never hides rows. `title` is required on both; tone comes from
+ * the meaning tokens only, and `dashed` means seam (typed but unproven) and nothing else.
  */
 import { X } from "lucide-react";
 
@@ -26,9 +11,9 @@ import "./lang.css";
 
 export const chipRecipe = tv({
   slots: {
-    base: "inline-flex h-[18px] max-w-[34ch] items-center gap-[5px] overflow-hidden whitespace-nowrap border border-line px-[5px] t-small face-mono tracking-[0.03em] text-ink-2",
+    base: "inline-flex h-[calc(var(--item-h)-4px)] max-w-[34ch] items-center gap-1 overflow-hidden whitespace-nowrap rounded-sm border border-line px-(--control-pad-x) t-small face-mono text-ink-2",
     label: "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap",
-    count: "text-ink-2 tabular-nums",
+    count: "text-ink-mute tabular-nums",
     remove:
       "veil grid size-3 cursor-pointer place-items-center border-0 bg-transparent text-ink-2 focus-visible:outline focus-visible:outline-line-2 [&>svg]:size-[9px]",
     tag: "t-small t-upper tabular-nums",
@@ -115,7 +100,7 @@ export function NarrowChip({
       data-surface="artifact"
       title={title}
     >
-      {/* One width for every narrowing (the base's cap, ruling 19); the full text rides the title. */}
+      {/* One width for every narrowing (the base's cap); the full text rides the title. */}
       {onEdit ? (
         <button
           type="button"

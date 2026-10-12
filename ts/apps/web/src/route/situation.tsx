@@ -27,7 +27,7 @@ import {
   workSummary,
   type CellWire,
   type WorkSummary,
-} from "#/components/lang/band";
+} from "#/components/work/band";
 import { useHostEvents } from "#/readings";
 import { situationCells } from "./cells";
 import { Ladder } from "./ladder";
@@ -254,7 +254,7 @@ export function Situation({
         <div className="flex flex-wrap gap-x-10 gap-y-1 px-3 pt-2 pb-1">
           <div className="flex min-w-[32rem] flex-[3] flex-col">
             <div className="mb-1.5 flex items-baseline justify-between gap-3">
-              <p className="min-w-0 t-prose text-ink-2 [&_b]:font-semibold [&_b]:text-ink">
+              <p className="min-w-0 t-small text-ink-2 [&_b]:font-semibold [&_b]:text-ink">
                 {/* Stages are an optional layer: one stage draws no switcher (ledger 2026-09-22). */}
                 {stages.length > 1 ? (
                   <b>

@@ -11,10 +11,12 @@ import {
   ListChips,
   ListInput,
   ListPopup,
+  ListSegmentInput,
   PopupFrame,
 } from "#/components/lang/list-popup";
 import { Popover } from "@base-ui/react/popover";
-import { Press } from "#/components/lang/press";
+import { MoreHorizontal } from "lucide-react";
+import { Button } from "#/components/lang/button";
 import { Row, RowGroupHead, rowRecipe } from "#/components/lang/row";
 import { Table } from "#/components/master-table/table";
 
@@ -46,6 +48,11 @@ export function LangListSpecimens() {
             <Row label="pending" pending />
             <Row label="failed" failed />
             <Row label="refused" refusal="read-only in Revit" />
+            <Row
+              label="verbs take the meta slot on hover"
+              meta="3m"
+              actions={<Button icon={MoreHorizontal} label="Row actions" />}
+            />
           </div>
         )}
       />
@@ -64,6 +71,7 @@ export function LangListSpecimens() {
             aria-label="multi list"
           />
           <FreeText />
+          <SegmentInput />
           <List {...common} aria-label="inline list" filter="substring" />
           <ListPopup
             {...common}
@@ -72,8 +80,8 @@ export function LangListSpecimens() {
             aria-label="popup list"
           />
           <Popover.Root>
-            <Popover.Trigger render={<Press tone="quiet" size="caption" />}>
-              plan 1/3
+            <Popover.Trigger render={<Button label="plan 1/3" />}>
+              <span className="face-mono">plan 1/3</span>
             </Popover.Trigger>
             <PopupFrame side="top" align="end" label="plain popup">
               <div className="grid w-64 p-1.5 t-small text-ink-2">
@@ -98,6 +106,33 @@ export function LangListSpecimens() {
         </div>
       </SpecimenFrame>
     </>
+  );
+}
+
+/** The pick fixes or frees the input: "fixed" disables it and shows the fixed value. */
+function SegmentInput() {
+  const [pick, setPick] = useState("fixed");
+  const [value, setValue] = useState("");
+  return (
+    <ListSegmentInput
+      popup={{
+        "aria-label": "segment",
+        triggerLabel: pick,
+        trigger: <span className="face-mono">{pick}</span>,
+        items: ["fixed", "free"],
+        keyOf: (k) => k,
+        labelOf: (k) => k,
+        selected: [pick],
+        empty: "no picks",
+        onPick: setPick,
+        row: (k) => ({ label: k }),
+      }}
+      aria-label="segment input"
+      disabled={pick === "fixed"}
+      placeholder={pick === "fixed" ? "https://api.example.com" : "type a URL"}
+      value={pick === "fixed" ? "" : value}
+      onChange={(event) => setValue(event.target.value)}
+    />
   );
 }
 

@@ -2,7 +2,7 @@ import { actionReceiptSchema, type ActionReceipt } from "@pe/agent-contracts";
 import { peReadings, dirty, previousOf, useAction, useReading, type Readings } from "#/readings";
 import { actionControls, type ActionControlKey } from "@pe/agent-contracts";
 import { controlAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { Code, stringify } from "#/components/lang/code";
 import { outputRenderers } from "#/ops/renderers";
@@ -75,13 +75,20 @@ export function ActionReceiptView({
       foot={
         <div className="flex flex-wrap gap-2">
           {(Object.keys(actionControls) as ActionControlKey[]).map((key) => (
-            <ActionButton
+            <Button
               key={key}
+              kind="framed"
               label={CONTROL_LABEL[key]}
               reason={actionControls[key].says}
-              disabled={control.isPending || !CONTROL_REACHES[key](row?.state)}
+              refusal={
+                control.isPending || !CONTROL_REACHES[key](row?.state)
+                  ? actionControls[key].says
+                  : null
+              }
               onClick={() => control.mutate(key)}
-            />
+            >
+              {CONTROL_LABEL[key]}
+            </Button>
           ))}
         </div>
       }

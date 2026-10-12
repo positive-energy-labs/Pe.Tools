@@ -49,9 +49,7 @@ test("the draft grid is the one Table: cells commit, headings edit, columns and 
   expect(last.rows).toHaveLength(2);
 
   fireEvent.click(
-    within(screen.getByRole("grid"))
-      .getAllByTitle(/Remove this row/)
-      .at(-1)!,
+    within(screen.getByRole("grid")).getAllByRole("button", { name: "Remove row" }).at(-1)!,
   );
   expect(last.rows.map((row) => row.key)).toEqual(["row-a"]);
 });

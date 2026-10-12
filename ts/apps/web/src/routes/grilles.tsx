@@ -22,7 +22,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
 import { FactChip } from "#/components/lang/chip";
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { Surface } from "#/components/lang/surface";
 import { FieldChart, stepField } from "#/grilles/chart";
@@ -75,7 +75,7 @@ function GrillesRoute() {
 
   const drawing = (
     <Pane
-      kind="visual"
+      scroll="clip"
       flush
       title="drawing"
       meta={
@@ -84,19 +84,22 @@ function GrillesRoute() {
           : "plan + section A-A of the active profile · type on any dimension to set it for every row; rib auto-spaces"
       }
       actions={
-        <ActionButton
+        <Button
           label={drawingCollapsed ? "show" : "hide"}
+          kind="framed"
           onClick={() => setDrawingCollapsed((c) => !c)}
           reason={
             drawingCollapsed
               ? "Show the drawing again."
               : "Collapse the drawing. Its header strip stays, so only the height changes."
           }
-        />
+        >
+          {drawingCollapsed ? "show" : "hide"}
+        </Button>
       }
     >
       {active && !drawingCollapsed && (
-        <div className="h-full overflow-auto">
+        <div data-surface="artifact" className="h-full overflow-auto">
           <SpecDrawing g={active} set={setAll} px={26} />
         </div>
       )}
@@ -105,22 +108,27 @@ function GrillesRoute() {
 
   const table = (
     <Pane
-      kind="content"
       flush
       title="profiles"
       meta={`${rows.length} candidate profiles · ${picked.size} on the export sheet`}
       actions={
         <>
-          <ActionButton
+          <Button
             label={`export ${picked.size} drawing${picked.size === 1 ? "" : "s"}`}
+            kind="framed"
             onClick={() => setExporting(true)}
             reason="Open the export sheet: the ticked profiles drawn read-only on one page, print to PDF or save each as .svg."
-          />
-          <ActionButton
+          >
+            {`export ${picked.size} drawing${picked.size === 1 ? "" : "s"}`}
+          </Button>
+          <Button
             label="reset"
+            kind="framed"
             onClick={() => setRows(seedRows())}
             reason="Throw away every edit and re-read the six workbook rows."
-          />
+          >
+            reset
+          </Button>
         </>
       }
     >
@@ -138,7 +146,6 @@ function GrillesRoute() {
 
   const chart = (
     <Pane
-      kind="inspector"
       flush
       title="field"
       meta={`free % vs qty, per opening width · ${field.length} buildable profiles for this stock`}

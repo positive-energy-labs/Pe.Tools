@@ -4,8 +4,7 @@ import type { StateCellProps } from "#/components/lang/cell";
 import { FactChip, Tag } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Press } from "#/components/lang/press";
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { CounterExample, Gap, Law } from "#/design-system/exhibit";
 import { PARAM_ROWS, cellProps } from "#/design-system/specimens-data";
 
@@ -102,7 +101,9 @@ export function StructureLaws({ owner }: { owner: (name: string) => string }) {
       >
         <Tag>live proof · RealTable below</Tag>
         <CounterExample why="visible-only options shrink while the person is trying to widen scope">
-          <Press state="selected">visible states only</Press>
+          <Button label="visible states only" pressed>
+            visible states only
+          </Button>
         </CounterExample>
         <Gap>
           a static specimen cannot prove vocabulary stability. The RealTable below is the live
@@ -113,17 +114,21 @@ export function StructureLaws({ owner }: { owner: (name: string) => string }) {
       <Law
         name="refuse per option"
         owner={owner("refuse per option")}
-        ruling="Keep an unavailable option in place and give it its own reason. ActionButton requires the reason at every call site."
+        ruling="Keep an unavailable option in place and give it its own reason. Button carries the reason as its refusal at every call site."
       >
-        <ActionButton
-          tone="commit"
+        <Button
+          kind="commit"
           label="sync to .r10"
           onClick={noop}
-          disabled
+          refusal="no .r10 target bound - bind one before syncing"
           reason="no .r10 target bound - bind one before syncing"
-        />
-        <CounterExample why="Press can be disabled without explaining why, so it cannot carry a world action">
-          <Press disabled>sync to .r10</Press>
+        >
+          sync to .r10
+        </Button>
+        <CounterExample why="a bare Button with no refusal stays live, so a world action that cannot run still looks available">
+          <Button kind="framed" label="sync to .r10" onClick={noop}>
+            sync to .r10
+          </Button>
         </CounterExample>
       </Law>
 

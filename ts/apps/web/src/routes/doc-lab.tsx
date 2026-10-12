@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { FlaskConical, X } from "lucide-react";
 
 import { FactChip } from "#/components/lang/chip";
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { Pane } from "#/components/lang/pane";
 import { Surface } from "#/components/lang/surface";
 import { GroundedDocView } from "#/grounded-doc/GroundedDocView";
@@ -57,18 +57,21 @@ function DocLabRoute() {
                 fixture · sample
               </FactChip>
             )}
-            <ActionButton
+            <Button
               label="remove"
+              kind="framed"
               icon={X}
               onClick={engine.clear}
               reason="Forget this document and return to the upload surface — the parse cache keeps the result for a re-parse"
-            />
+            >
+              remove
+            </Button>
           </div>
         ) : undefined
       }
     >
       <Surface>
-        <Pane kind="content" title="document" scroll="clip" flush>
+        <Pane title="document" scroll="clip" flush>
           <div className="flex min-h-8 shrink-0 items-center gap-3 px-4 py-1">
             {focused ? (
               <>
@@ -77,11 +80,14 @@ function DocLabRoute() {
                   {focused.id}
                 </span>
                 {engine.pinned && (
-                  <ActionButton
+                  <Button
                     label="unpin"
+                    kind="framed"
                     onClick={engine.clearPin}
                     reason="Release the pin so hover drives the focus again"
-                  />
+                  >
+                    unpin
+                  </Button>
                 )}
               </>
             ) : (
@@ -95,12 +101,15 @@ function DocLabRoute() {
             engine={engine}
             className="min-h-0 flex-1"
             emptyExtra={
-              <ActionButton
+              <Button
                 label="load the sample document"
+                kind="framed"
                 icon={FlaskConical}
                 onClick={() => engine.setDoc(SAMPLE_DOC)}
                 reason="FIXTURE — load the checked-in sample parse; no API key and no network involved"
-              />
+              >
+                load the sample document
+              </Button>
             }
           />
         </Pane>

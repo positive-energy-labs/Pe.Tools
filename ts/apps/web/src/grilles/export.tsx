@@ -10,8 +10,7 @@ import { token } from "#/lib/token";
 import type { SheetRow } from "./sheet";
 import { SpecDrawing } from "./spec-drawing";
 import { frac, pct } from "./math";
-import { Press } from "#/components/lang/press";
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { Input } from "#/components/lang/input";
 
 export function ExportSheet({
@@ -60,14 +59,17 @@ export function ExportSheet({
         <span>
           {rows.length} grille{rows.length === 1 ? "" : "s"} · print → PDF, or save each as .svg
         </span>
-        <ActionButton
+        <Button
           label="print / save PDF"
           reason="Hands this sheet to the browser's print dialog, where it becomes a PDF. Nothing in the model or the row set changes."
+          kind="framed"
           onClick={() => window.print()}
-        />
-        <Press type="button" tone="quiet" size="label" onClick={onClose}>
+        >
+          print / save PDF
+        </Button>
+        <Button label="close" onClick={onClose}>
           close
-        </Press>
+        </Button>
       </div>
 
       <div id="grille-export-sheet" className="mx-auto max-w-[1100px] p-8">
@@ -108,11 +110,14 @@ export function ExportSheet({
                 <span className="ml-auto">
                   free area <b>{pct(r.freeArea)}</b> · {r.actualFreeArea.toFixed(1)} in²
                 </span>
-                <ActionButton
+                <Button
                   label=".svg"
                   reason="Saves this one drawing as a standalone .svg file, tokens baked in. Nothing in the model or the row set changes."
+                  kind="framed"
                   onClick={() => downloadSvg(r.id)}
-                />
+                >
+                  .svg
+                </Button>
               </figcaption>
               <div className="overflow-x-auto">
                 <SpecDrawing g={r} px={px} id={`-${r.id}`} />

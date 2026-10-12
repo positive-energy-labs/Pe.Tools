@@ -1,35 +1,31 @@
 /* PE's portable design foundation. The app imports this file; standalone artifacts may link it. */
 :root {
   /* Ground */
-  --pe-page: light-dark(#fdfaf2, #15120d);
-  --pe-artifact: light-dark(#f1eee6, #1e1c16);
-  --pe-recess: light-dark(#e4e1d9, #27251f);
-  --pe-select: light-dark(#d9d6ce, #33302a);
+  --pe-page: light-dark(#f7f3ea, #16140f);
+  --pe-artifact: light-dark(#efeadf, #1c1915);
+  --pe-recess: light-dark(#e4ded0, #262219);
+  --pe-select: light-dark(#e4ded0, #262219);
   --pe-document: #fff;
   --pe-scrim: rgb(0 0 0 / 80%);
+  /* What a lifted plane casts: black in dark, where a pale shade would read as a glow. */
+  --pe-shade: light-dark(#38352d, #000);
 
   /* Ink */
-  --pe-ink: light-dark(#38352d, #eeebe2);
-  --pe-ink-2: light-dark(#5f5a4e, #c1bcae);
-  --pe-ink-mute: light-dark(#888682, #868481);
-  --pe-line: light-dark(
-    color-mix(in srgb, #38352d 12%, transparent),
-    color-mix(in srgb, #eeebe2 14%, transparent)
-  );
-  --pe-line-2: light-dark(
-    color-mix(in srgb, #38352d 22%, transparent),
-    color-mix(in srgb, #eeebe2 26%, transparent)
-  );
+  --pe-ink: light-dark(#2b2721, #e6dfd2);
+  --pe-ink-2: light-dark(#625a4e, #a59b8b);
+  --pe-ink-mute: light-dark(#8e8679, #6e665a);
+  --pe-line: light-dark(#e0d9ca, #2a2620);
+  --pe-line-2: light-dark(#c5bbaa, #403a30);
 
   /* Meaning */
-  --pe-pea: light-dark(#42815e, #74b48f);
-  --pe-pea-ink: light-dark(#296948, #8dcda7);
-  --pe-alarm: light-dark(#8e4120, #fba381);
-  --pe-caution: light-dark(#77531b, #ddb47e);
+  --pe-pea: light-dark(#4f7d55, #93ad86);
+  --pe-pea-ink: var(--pe-pea);
+  --pe-alarm: light-dark(#a9512f, #d2846b);
+  --pe-caution: light-dark(#86662a, #c7a466);
   --pe-done: light-dark(#486531, #a7c890);
-  --pe-commit: light-dark(#325e88, #92c1f1);
-  --pe-on-commit: light-dark(#fdfaf2, #15120d);
-  --pe-nav: light-dark(#325e88, #92c1f1);
+  --pe-commit: light-dark(#3f6485, #8ea7c0);
+  --pe-on-commit: var(--pe-page);
+  --pe-nav: var(--pe-commit);
 
   /* Plumbing and parallel data-viz palette */
   --pe-on: var(--pe-page);
@@ -41,37 +37,43 @@
   --viz-5: light-dark(oklch(0.47 0.085 58), oklch(0.795 0.085 58));
   --viz-6: light-dark(oklch(0.47 0.055 85), oklch(0.795 0.055 85));
 
+  /* Radii: a surface takes --radius, a freestanding control --control-radius; nothing else rounds. */
   --radius: 0.125rem;
+  --control-radius: 3px;
   --space-unit: 0.25rem;
-  /* The two heights (density round 1, verdict 2026-08-31): every list-shaped row — table row,
-     menu/combobox/command item, pick-list item — sits at --item-h; every freestanding control —
-     input, select trigger — at --control-h. A third tier waits for a surface that demands it. */
-  --item-h: 1.25rem;
-  --control-h: 1.5rem;
+  /* Geometry: every list row is --item-h, every freestanding control --control-h. */
+  --item-h: 24px;
+  --control-h: 24px;
+  /* The pane separation and the pane's inner inset. */
   --gutter: 8px;
-  --rail-h: 24px;
-  --item-pad-x: 0.125rem;
-  /* The second inset role, and the only one: a cell whose BODY carries a mark (pea's corner
-     fold, the unsaved square) must leave the mark room. Everything else is --item-pad-x
-     (annotation round 2, 2026-08-31 — the census found five edge paddings in the wild). */
-  --item-mark-pad-x: 0.625rem;
-  --font-body: "Open Sans", system-ui, -apple-system, sans-serif;
+  --rail-h: 40px;
+  --item-pad-x: 8px;
+  --item-mark-pad-x: 12px;
+  --control-pad-x: 6px;
+  --chat-measure: 944px;
+  --font-body: "Open Sans", "Segoe UI", system-ui, sans-serif;
   --font-display: "Spectral", Georgia, "Times New Roman", serif;
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+  --font-mono: "Cascadia Code", Consolas, monospace;
+  /* Chrome wears regular and strong only; medium and bold are for prose. */
   --weight-regular: 400;
   --weight-medium: 500;
   --weight-strong: 600;
   --weight-bold: 700;
-  --type-small-size: 10px;
-  --type-small-line-height: 1.2;
-  --type-prose-size: 11px;
-  --type-prose-line-height: 1.4;
-  --type-title-size: 16px;
-  --type-title-line-height: 1.3;
+  --weight-mono: 350;
+  --type-mono-inline: 0.9em;
+  /* Type: small is the one chrome rung, prose is reading text, then title, head, display. */
+  --type-small-size: 12px;
+  --type-small-line-height: 20px;
+  --type-prose-size: 13px;
+  --type-prose-line-height: 20px;
+  --type-title-size: 15px;
+  --type-title-line-height: 24px;
   --type-head-size: 24px;
   --type-head-line-height: 1.2;
   --type-display-size: 40px;
   --type-display-line-height: 1.15;
+  --track-upper: 0.06em;
+  --track-mono: 0;
   --dash-seam: 3 2;
   --dash-reference: 12 3 2 3;
   --dash-void: 4 3;
@@ -86,7 +88,7 @@
     transparent 2px 4px
   );
   --fill-veil: linear-gradient(var(--pe-veil), var(--pe-veil));
-  --shadow-float: 0 2px 8px color-mix(in srgb, var(--pe-ink) 18%, transparent);
+  --shadow-float: 0 8px 24px color-mix(in srgb, var(--pe-shade) 14%, transparent);
   --shadow-modal: 0 4px 24px color-mix(in srgb, var(--pe-scrim) 50%, transparent);
   --z-raised: 10;
   --z-sticky: 20;
@@ -94,6 +96,23 @@
   --z-modal: 50;
   --z-notice: 60;
   --z-dev: 9999;
+}
+
+/* Dense geometry for tables a pilot scans: rows, gutters and the type ladder only. Set it on a route root. */
+[data-density="dense"] {
+  --item-h: 20px;
+  --control-h: 24px;
+  --rail-h: 24px;
+  --item-pad-x: 2px;
+  --item-mark-pad-x: 10px;
+  --type-small-size: 10px;
+  --type-small-line-height: 1.2;
+  --type-prose-size: 11px;
+  --type-prose-line-height: 1.4;
+  --type-title-size: 16px;
+  --type-title-line-height: 1.3;
+  --track-upper: 0.08em;
+  --track-mono: 0.04em;
 }
 
 @layer base {
@@ -109,18 +128,13 @@
     min-height: 100%;
   }
 
-  /* THE SCROLLBAR LAW (annotation round, 2026-08-31): one treatment everywhere. Thin, no track,
-     and the thumb is invisible until the pointer is inside the scroller it belongs to — a bar is
-     a position readout, not chrome. The gutter is reserved either way, so nothing shifts on
-     hover. The page body's bar is hidden outright (`no-scrollbar` on the scroll-away `main`). */
+  /* Scrollbar law: thin, no track, thumb visible only while the pointer is inside its scroller. */
   [data-pe] {
     color-scheme: light;
   }
 
-  /* `scrollbar-width` does NOT inherit — declaring it once on the root styled the root and
-     nothing else, and every inner scroller computed `auto` (measured in Chrome, 2026-08-31).
-     `:where()` keeps this at zero specificity so `no-scrollbar` still wins. `scrollbar-color`
-     DOES inherit, but it rides the same declaration so the law reads as one thing. */
+  /* `scrollbar-width` does not inherit, so every scroller declares it; `:where()` keeps
+     specificity zero so `no-scrollbar` still wins. */
   :where([data-pe], [data-pe] *) {
     scrollbar-width: thin;
     scrollbar-color: transparent transparent;
@@ -141,10 +155,7 @@
     font-family: var(--font-body);
     font-size: var(--type-small-size);
     line-height: var(--type-small-line-height);
-    /* ONE APPARENT SIZE across the three faces. A px is a px, but the eye reads x-height: at
-       10px, ui-monospace's x-height measures 0.52em against Open Sans's 0.54, so a mono path or
-       count set at the same size as its sans label reads a step smaller. Pinning every face to
-       the body font's own 0.54 leaves sans untouched and lifts mono and display onto its line. */
+    /* One apparent size across faces: pin every face to Open Sans's 0.54 x-height. */
     font-size-adjust: 0.54;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -177,7 +188,7 @@
 
   [data-pe] code {
     border: 1px solid var(--pe-line);
-    border-radius: 0.375rem;
+    border-radius: var(--radius);
     background: var(--pe-recess);
     padding: 0.0625rem 0.375rem;
     font-size: 0.9em;
@@ -233,10 +244,6 @@
   background: var(--pe-page);
   --pe-on: var(--pe-page);
 }
-[data-pe] .on-artifact {
-  background: var(--pe-artifact);
-  --pe-on: var(--pe-artifact);
-}
 [data-pe] .on-recess {
   background: var(--pe-recess);
   --pe-on: var(--pe-recess);
@@ -280,7 +287,7 @@
   font-family: var(--font-mono);
   font-size: var(--type-small-size);
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.09em;
+  letter-spacing: var(--track-upper);
   text-transform: uppercase;
 }
 
@@ -362,9 +369,13 @@
   font-size: var(--type-small-size);
   line-height: var(--type-small-line-height);
 }
-[data-pe] .prose-pe :where(code, pre) {
+/* A prose `pre` is the artifact plane by another route (base.css loads without lang.css), so it
+   draws the same edge. Inline code is an ink wash (lang.css), not artifact ground. */
+[data-pe] .prose-pe :where(pre) {
   background: var(--pe-artifact);
   --pe-on: var(--pe-artifact);
+  outline: 1px solid var(--pe-line);
+  outline-offset: -1px;
 }
 [data-pe] .prose-pe :where(p, ul, ol, li, pre) {
   font-weight: var(--weight-regular);
@@ -402,10 +413,12 @@
   letter-spacing: -0.01em;
   line-height: var(--type-head-line-height);
 }
-/* A rail is one line at --rail-h (lang/rail.tsx): the head rung's line box (24px × 1.2 = 28.8px)
-   would make it scroll and clip, so a title in a rail lead sits on the rail's line. */
-[data-pe] [data-slot="rail-lead"] .t-head {
-  line-height: var(--rail-h);
+/* A rail is one line at --rail-h; a route head in its lead keeps its own line box and the rail
+   grows to hold it, or the display face's ascenders clip. */
+[data-pe] [data-slot="rail"]:has(> [data-slot="rail-lead"] .t-head) {
+  height: auto;
+  min-height: var(--rail-h);
+  padding-block: var(--space-unit);
 }
 [data-pe] .t-display {
   font-size: var(--type-display-size);
@@ -416,14 +429,22 @@
 [data-pe] .face-mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--track-mono);
 }
 [data-pe] .face-display {
   font-family: var(--font-display);
 }
 [data-pe] .t-upper {
-  font-weight: var(--weight-medium);
-  letter-spacing: 0.08em;
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--track-upper);
+  text-transform: uppercase;
+}
+
+/* Sentence case for lowercase data words; only the first letter is set, so the DOM text stays. */
+[data-pe] .t-sentence {
+  display: inline-block;
+}
+[data-pe] .t-sentence::first-letter {
   text-transform: uppercase;
 }
 
@@ -431,13 +452,10 @@
    explainers compose fake Revit UI without images, so Revit's light-theme chrome lives here, the
    one file allowed to name a colour. Not house style; never consume --rv-* elsewhere. */
 :root {
-  /* Sampled from kaitpw's Revit 2025 on Windows 11 at 200% (.artifacts/revit-mock/ref/user-*).
-     Windows draws control lines one device pixel wide at any scale, so --rv-hair is 0.5px: one
-     device pixel on a 2x screen, rounded up to 1px on a 1x screen. */
+  /* Sampled from Revit 2025 on Windows 11 at 200%; --rv-hair is one device pixel on a 2x screen. */
   --rv-font: "Segoe UI", "Segoe UI Variable", Tahoma, system-ui, sans-serif;
   --rv-type: 12px;
-  /* 8pt: GDI hints it to 21 device px at 200%, so 10.5px; 9pt is --rv-type. Measured on every
-     button, label, tree row and group title in the captures. */
+  /* 8pt, GDI-hinted to 10.5px at 200%; 9pt is --rv-type. */
   --rv-type-small: 10.5px;
   --rv-type-instruction: 16px;
   --rv-type-tiny: 11px;

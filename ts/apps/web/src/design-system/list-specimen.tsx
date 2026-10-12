@@ -8,7 +8,7 @@ import { Pencil, Trash2 } from "lucide-react";
 
 import { FactChip } from "#/components/lang/chip";
 import { CellListSelect, List, ListInput, ListPopup } from "#/components/lang/list-popup";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { Table } from "#/components/master-table/table";
 import { CHAT_SEEDS, CHAT_SEED_STATE, CHAT_SEED_THREADS } from "#/chat/seeds";
 import { DEMO_FAMILIES } from "#/families/seeds";
@@ -174,22 +174,8 @@ export function SidebarPanel({ say }: { say: (text: string) => void }) {
         active: t.id === current,
         actions: (
           <>
-            <Press
-              size="icon"
-              tone="quiet"
-              title="rename"
-              onClick={() => say(`rename “${t.title}”`)}
-            >
-              <Pencil />
-            </Press>
-            <Press
-              size="icon"
-              tone="quiet"
-              title="delete"
-              onClick={() => say(`delete “${t.title}”`)}
-            >
-              <Trash2 />
-            </Press>
+            <Button icon={Pencil} label="rename" onClick={() => say(`rename “${t.title}”`)} />
+            <Button icon={Trash2} label="delete" onClick={() => say(`delete “${t.title}”`)} />
           </>
         ),
       })}
@@ -226,9 +212,9 @@ export function LadderPanel({ say }: { say: (text: string) => void }) {
       empty="no Revit session is running"
       onPick={(item, path) => say(`bound ${[...path, item].map((i) => i.label).join(" › ")}`)}
       footer={
-        <Press tone="quiet" size="value" onClick={() => say("target cleared")}>
+        <Button label="Clear target" onClick={() => say("target cleared")}>
           Clear target
-        </Press>
+        </Button>
       }
       row={(i) => ({
         label: i.label,

@@ -8,7 +8,7 @@ import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useStat
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
 import { FactChip } from "#/components/lang/chip";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import {
@@ -394,19 +394,17 @@ export function RoomsPlan({
       {LAYERS.map((layer) => {
         const on = layers.includes(layer);
         return (
-          <Press
+          <Button
             key={layer}
-            type="button"
-            frame="line"
-            size="caption"
-            state={on ? "selected" : "rest"}
-            aria-pressed={on}
-            disabled={!trace.data}
-            title={trace.data ? LAYER_SAYS[layer] : (trace.none ?? "reading the trace")}
+            label={layer}
+            kind="framed"
+            pressed={on}
+            refusal={trace.data ? null : (trace.none ?? "reading the trace")}
+            reason={LAYER_SAYS[layer]}
             onClick={() => setLayers(toggleLayer(layers, layer))}
           >
             {layer}
-          </Press>
+          </Button>
         );
       })}
       {!trace.data && trace.none ? (

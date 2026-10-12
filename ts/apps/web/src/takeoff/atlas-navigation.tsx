@@ -9,6 +9,7 @@ import { onPlan } from "#/takeoff/room-actions";
 import { ZoneStateBar } from "#/takeoff/zone-state-bar";
 import { ZoneThumb } from "#/takeoff/zone-plan";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
+import { ScopeKeys } from "#/route/keys";
 import { levelsOf } from "#/takeoff/plan-image";
 
 export function AtlasNavigation() {
@@ -16,14 +17,9 @@ export function AtlasNavigation() {
     useAtlasWorkspace();
   return (
     <Suspense fallback={<div className="t-small t-upper p-2 text-ink-2">reading zones…</div>}>
-      <Pane
-        id="zones"
-        kind="navigation"
-        flush
-        title="zones"
-        meta={`${world.zones.length} declared`}
-        shortcuts={scopeShortcuts}
-      >
+      <Pane id="zones" flush title="zones" meta={`${world.zones.length} declared`}>
+        <ScopeKeys keys={scopeShortcuts} />
+
         <div className="hairline-b px-2 py-1.5">
           <div className="t-small t-upper mb-1">room states — one per room</div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">

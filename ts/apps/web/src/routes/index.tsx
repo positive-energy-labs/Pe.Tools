@@ -20,7 +20,6 @@ import {
 } from "lucide-react";
 
 import { RouteShell, emptyManifest } from "#/route";
-import { Card } from "#/components/lang/card";
 
 /** Not cut over yet: an empty manifest is a legal manifest and the shell renders one. */
 const manifest = emptyManifest("index", "Positive Energy");
@@ -53,7 +52,7 @@ const TOOLS = [
     title: "Chat",
     label: "Workbench",
     icon: MessageSquare,
-    description: "The Pea agent workbench — chat, trace, and the context world inspector.",
+    description: "The Pea agent workbench — chat and the context world inspector.",
   },
   {
     to: "/families",
@@ -212,8 +211,8 @@ function App() {
 
         <section className="mt-12 grid gap-4 sm:grid-cols-2">
           {TOOLS.map((tool) => (
-            <div key={tool.to} className="flex flex-col gap-1.5 [&>[data-slot=card]]:flex-1">
-              <Card render={<Link to={tool.to} />}>
+            <div key={tool.to} className="flex flex-col gap-1.5">
+              <Link to={tool.to} className="hairline flex flex-1 flex-col gap-3 p-5 text-ink">
                 <div className="flex items-center justify-between">
                   <span className="inline-flex size-9 items-center justify-center">
                     <tool.icon className="size-4.5" />
@@ -225,7 +224,7 @@ function App() {
                   <h2 className="t-title mt-0.5 text-ink">{tool.title}</h2>
                   <p className="t-prose mt-1.5 text-ink-2">{tool.description}</p>
                 </div>
-              </Card>
+              </Link>
               {"satellites" in tool && (
                 <p className="t-small face-mono flex flex-wrap gap-x-2 px-1 text-ink-2">
                   {tool.satellites.map((satellite) => (

@@ -106,7 +106,7 @@
  */
 import { useEffect } from "react";
 
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { Code, stringify } from "#/components/lang/code";
 import { PaneSplit } from "#/components/lang/pane";
 import { buildReceiptSummary } from "#/family/build";
@@ -138,11 +138,14 @@ export function FamilyWorkspace({ store }: { store: FamilyStore }) {
         {store.editFailure && (
           <div role="alert">
             <span>{store.editFailure.message} Your input is retained for this member.</span>
-            <ActionButton
+            <Button
               label="retry staging"
               reason="Retry the retained input against its original Work revision"
+              kind="framed"
               onClick={() => void store.actions.flush().catch(() => undefined)}
-            />
+            >
+              retry staging
+            </Button>
           </div>
         )}
         <FamilyAuditPanes />

@@ -42,7 +42,8 @@
   --radius-sm: var(--radius);
   --radius-md: var(--radius);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-xl: var(--radius);
+  --radius-control: var(--control-radius);
   --shadow-sm: var(--shadow-float);
   --shadow-lg: var(--shadow-modal);
 }
@@ -62,7 +63,7 @@
     font-family: var(--font-mono);
     font-size: var(--type-small-size);
     font-variant-numeric: tabular-nums;
-    letter-spacing: 0.04em;
+    letter-spacing: var(--track-mono);
     line-height: var(--type-small-line-height);
   }
 }
@@ -89,8 +90,13 @@
   --pe-on: color-mix(in srgb, var(--pe-alarm) 10%, var(--pe-artifact));
 }
 
-@utility inset-ring {
-  box-shadow: inset 0 0 0 1px var(--pe-line);
+/* THE FLOATING PLANE: every popover, menu, tooltip and hint card. One radius, one lift, so a thing
+   that floats always reads as floating. Its edge is the artifact plane's (lang.css), which is why
+   it takes `data-surface="artifact"` and never draws a ring of its own: a Tailwind ring beside an
+   elevation utility is silently replaced by it (measured, chat polish 2026-10-11). */
+@utility float-surface {
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-float);
 }
 
 @utility hairline-t {

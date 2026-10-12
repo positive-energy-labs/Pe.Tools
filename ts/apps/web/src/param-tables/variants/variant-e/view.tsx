@@ -5,7 +5,7 @@ import { fmtNum, StateCell, type StateCellProps } from "#/components/lang/cell";
 import { FactChip } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { Switcher } from "#/components/lang/switcher";
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { Pane } from "#/components/lang/pane";
 import { Surface } from "#/components/lang/surface";
 import { FC_UNITS } from "#/param-tables/variants/data";
@@ -202,7 +202,7 @@ export function VariantE() {
 
   return (
     <Surface>
-      <Pane kind="content" title="parameter table" scroll="clip" flush>
+      <Pane title="parameter table" scroll="clip" flush>
         <div className="flex min-h-0 flex-1 flex-col">
           <ArtifactFrame
             head={
@@ -249,11 +249,17 @@ export function VariantE() {
                   >
                     fixture · ProjectA_Clone_Aug_11
                   </FactChip>
-                  <ActionButton
-                    tone="commit"
+                  <Button
+                    kind="commit"
                     label="Apply staged writes"
                     onClick={apply}
-                    disabled={applicable.length === 0}
+                    refusal={
+                      applicable.length === 0
+                        ? refusals.length > 0
+                          ? "every staged write refuses — the edited fact only targets formula-owned types"
+                          : "nothing is staged — edit a design fact in the authored lane first"
+                        : null
+                    }
                     reason={
                       applicable.length > 0
                         ? `Writes ${applicable.length} type parameter${applicable.length === 1 ? "" : "s"} (${stagedRows} rows) in ProjectA_Clone_Aug_11${refusals.length > 0 ? ` — ${refusals.length} target${refusals.length === 1 ? "" : "s"} will refuse (formula-owned)` : ""} · mock, in-memory`
@@ -261,7 +267,9 @@ export function VariantE() {
                           ? "every staged write refuses — the edited fact only targets formula-owned types"
                           : "nothing is staged — edit a design fact in the authored lane first"
                     }
-                  />
+                  >
+                    Apply staged writes
+                  </Button>
                 </span>
               </span>
             }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { RouteStatePatch, ScheduleGridDocument } from "@pe/agent-contracts";
-import type { CellWire } from "#/components/lang/band";
-import { Press } from "#/components/lang/press";
+import type { CellWire } from "#/components/work/band";
+import { Button } from "#/components/lang/button";
 import { staleAnswer } from "./columns";
 
 const values = (n: number) => `${n} changed value${n === 1 ? "" : "s"}`;
@@ -43,9 +43,9 @@ export function StaleResolve({
         <span className="text-ink-2">
           {unread} refused as changed in Revit; the readback failed, so what Revit holds is unread
         </span>
-        <Press frame="line" tone="quiet" size="value" onClick={() => void readAgain()}>
+        <Button kind="framed" label="read again" onClick={() => void readAgain()}>
           read again
-        </Press>
+        </Button>
       </div>
     ) : null;
   const contested = stale.filter((s) => cells[s.key]!.proposal != null);
@@ -69,12 +69,11 @@ export function StaleResolve({
     <div className="flex flex-col gap-1 t-prose" data-slot="stale-resolve">
       {n ? (
         <span className="flex flex-wrap items-baseline gap-2">
-          <Press
-            frame="line"
-            tone="neutral"
-            size="value"
-            disabled={others > 0}
-            title={
+          <Button
+            kind="framed"
+            label={`Overwrite ${values(n)}`}
+            refusal={others > 0 ? `${others} other staged cell${others === 1 ? "" : "s"} would push too; push or drop ${others === 1 ? "it" : "them"} first.` : null}
+            reason={
               others > 0
                 ? `${others} other staged cell${others === 1 ? "" : "s"} would push too; push or drop ${others === 1 ? "it" : "them"} first`
                 : "Stage yours again over what Revit holds now, then push exactly these cells."
@@ -82,16 +81,15 @@ export function StaleResolve({
             onClick={() => void overwrite()}
           >
             Overwrite {values(n)}
-          </Press>
-          <Press
-            frame="line"
-            tone="quiet"
-            size="value"
-            title="Unstage each; Revit's value stands. Nothing is pushed."
+          </Button>
+          <Button
+            kind="framed"
+            label={`Keep Revit's ${n} value${n === 1 ? "" : "s"}`}
+            reason="Unstage each; Revit's value stands. Nothing is pushed."
             onClick={() => void answer("deny")}
           >
             Keep Revit's {n} value{n === 1 ? "" : "s"}
-          </Press>
+          </Button>
           {contested.length ? (
             <span className="text-ink-2">skipped {contested.length} (Pea proposed)</span>
           ) : null}

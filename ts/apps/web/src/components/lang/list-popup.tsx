@@ -1,17 +1,14 @@
 /**
- * LIST and LIST POPUP — the containers of the one list grammar (ix-list design).
- *
- * `<List>` is inline: a pane body, a rail, a sidebar (R1). `<ListPopup>` is the same `<List>` in a
- * Base UI `Popover`, which is used for positioning only; every row, key and state is ours.
- * Anchors (R14): `trigger` (a button that opens it), `caret` (a point in text the caller owns, the
- * composer's slash menu), and `cell`, which is `CellListSelect`: a table cell that mounts NO
- * popup machinery at rest and opens from its td (R13).
+ * `<List>` is the inline list (pane body, rail, sidebar); `<ListPopup>` is the same list in a Base UI
+ * Popover used for positioning only. Anchors: `trigger`, `caret` (a point in caller-owned text), and
+ * `cell` (CellListSelect: mounts no popup machinery at rest, opens from its td).
  */
-import { useContext, useEffect, useState, type ReactNode } from "react";
+import { useContext, useEffect, useState, type ComponentProps, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { ChevronDown } from "lucide-react";
 
 import { CellHost } from "#/components/lang/cell";
+import { Input } from "#/components/lang/input";
 import { useCellNavigation } from "#/components/master-table/cell-navigation";
 
 import {
@@ -43,16 +40,16 @@ type ListProps<T> = Omit<CollectionOptions<T>, "target"> & {
   /** Show a search input when the list is filterable and holds more than this many items. */
   searchAbove?: number;
   searchPlaceholder?: string;
-  /** Empty and no-match are different stories with different exits (R17). */
+  /** Empty and no-match are different stories with different exits. */
   empty: ReactNode;
   noMatch?: string;
   failure?: string;
   createLabel?: (text: string) => string;
-  /** An input outside the list that owns its keys and query (the composer, R14). */
+  /** An input outside the list that owns its keys and query (the composer). */
   owner?: HTMLElement | null;
   /** Rows scroll inside this height; group heads stick. */
   maxHeight?: string;
-  /** Verbs under the rows that are not rows (the head picker's "Clear target", R11); a ladder's
+  /** Verbs under the rows that are not rows (the head picker's "Clear target"); a ladder's
    * footer may differ per rung. */
   footer?: ReactNode | ((level: number) => ReactNode);
   /** Hand the collection to the caller (a table reads its selection, the composer its cursor). */
@@ -74,7 +71,7 @@ export function List<T>(props: ListProps<T>) {
   const [listEl, setListEl] = useState<HTMLDivElement | null>(null);
   const [inputEl, setInputEl] = useState<HTMLInputElement | null>(null);
   const total = props.items?.length ?? Infinity;
-  // A list that creates always takes typing: the typed text is the new value (R9).
+  // A list that creates always takes typing: the typed text is the new value.
   const searchable =
     props.owner === undefined &&
     (props.onCreate !== undefined ||
@@ -87,7 +84,7 @@ export function List<T>(props: ListProps<T>) {
   props.onCollection?.(collection);
   const { status, visible, query } = collection;
   const footer = typeof props.footer === "function" ? props.footer(collection.level) : props.footer;
-  // An owner (the composer's textarea, a free-text input) points at the list and its cursor (R14).
+  // An owner (the composer's textarea, a free-text input) points at the list and its cursor.
   const owner = props.owner;
   const active = collection.inputProps["aria-activedescendant"];
   useEffect(() => {
@@ -131,13 +128,19 @@ export function List<T>(props: ListProps<T>) {
       // An inline list fills a flex rail; in a popup the frame is a block and this is inert.
       className="flex min-h-0 flex-1 flex-col"
       data-list=""
-      // An input-owned list never takes focus from its owner: a click picks, the caret stays (R14).
+      // An input-owned list never takes focus from its owner: a click picks, the caret stays.
       onMouseDown={props.owner !== undefined ? (event) => event.preventDefault() : undefined}
     >
-      {props.levels && props.levels.length > 1 ? (
+      {props.levels &&
+      props.levels.length > 1 &&
+      // A ladder whose first rung has no word (a menu) shows crumbs only once it has walked in.
+      (collection.level > 0 || props.levels[0]!.label) ? (
         <div className="hairline-b flex flex-wrap items-baseline gap-1 px-2 py-1 t-small">
           {props.levels.map((rung, depth) => {
             const step = collection.path[depth];
+            const word = rung.crumb ?? (step !== undefined ? props.labelOf(step) : rung.label);
+            // A rung with no word (a menu's drill-in) draws no crumb: its parent's word says it.
+            if (!word) return null;
             return (
               <span key={depth} className="inline-flex items-baseline gap-1">
                 {depth > 0 ? <span className="text-ink-mute">›</span> : null}
@@ -150,7 +153,7 @@ export function List<T>(props: ListProps<T>) {
                   className={depth === collection.level ? "text-ink underline" : "text-ink-2"}
                   onClick={() => collection.backTo(depth)}
                 >
-                  {rung.crumb ?? (step !== undefined ? props.labelOf(step) : rung.label)}
+                  {word}
                 </button>
               </span>
             );
@@ -162,7 +165,8 @@ export function List<T>(props: ListProps<T>) {
           ref={setInputEl}
           {...collection.inputProps}
           aria-label={`${props["aria-label"]} search`}
-          className="hairline-b mx-1 h-(--control-h) bg-transparent px-2 t-small outline-none"
+          // The one control frame: a list's search is the same field as any other in the kit.
+          className="dl-control m-1 px-2 t-small outline-none"
           placeholder={props.searchPlaceholder ?? "search…"}
           value={query}
           onChange={(event) => collection.setQuery(event.target.value)}
@@ -200,7 +204,7 @@ type PopupFrameProps = {
   children: ReactNode;
   anchor?: Element | null;
   label: string;
-  /** An input-owned popup (R14) never takes focus: the owner keeps the caret and the keys. */
+  /** An input-owned popup never takes focus: the owner keeps the caret and the keys. */
   owned?: boolean;
   side?: "top" | "bottom";
   align?: "start" | "end";
@@ -221,7 +225,7 @@ export function PopupFrame({
         anchor={anchor ?? undefined}
         side={side}
         align={align}
-        sideOffset={4}
+        sideOffset={6}
         className="isolate z-popup"
       >
         <Popover.Popup
@@ -230,7 +234,7 @@ export function PopupFrame({
           finalFocus={owned ? false : undefined}
           data-list-popup=""
           data-surface="artifact"
-          className="block min-w-48 max-w-(--available-width) overflow-hidden rounded-lg py-1 text-ink ring-1 ring-line outline-none"
+          className="block min-w-48 max-w-[min(36rem,var(--available-width))] overflow-hidden p-1 text-ink float-surface"
         >
           {children}
         </Popover.Popup>
@@ -240,20 +244,55 @@ export function PopupFrame({
 }
 
 /**
- * The trigger's shapes, one recipe (R19: face by role, not by call site). `inline` is a quiet word
- * in running chrome (a chip, a head), `fill` stretches to its cell or column head (mono, item
+ * The trigger's shapes, one recipe (face by role, not by call site). `inline` is a quiet word
+ * in running chrome (a chip, a head), `control` wears the control frame beside buttons, `fill` stretches to its cell or column head (mono, item
  * height, chevron on the right edge), `field` is a form field at control height.
  */
 const TRIGGER_FACE = {
   /** A word in a sentence (the Situation ladder): dotted when held, dashed when derived or open. */
   word: "cursor-pointer border-b border-current border-dotted whitespace-nowrap data-derived:border-dashed disabled:cursor-not-allowed disabled:text-ink-2",
   inline: "inline-flex min-w-0 cursor-pointer items-center gap-1 t-small",
+  /** A picker beside buttons: the one control frame at control height, as wide as its words. */
+  control:
+    "dl-control inline-flex h-(--control-h) min-w-0 cursor-pointer items-center gap-1 px-(--control-pad-x) t-small not-data-tone:text-ink",
   fill: "flex h-(--item-h) w-full min-w-0 cursor-pointer items-center justify-between gap-1 px-1 t-small face-mono",
   field:
-    "flex min-h-(--control-h) w-full min-w-0 cursor-pointer items-center justify-between gap-1 rounded-md border border-line bg-line/20 px-2 t-small dark:bg-line/30",
+    "dl-control flex w-full min-w-0 cursor-pointer items-center justify-between gap-1 px-(--control-pad-x) t-small",
+  /** The left edge of a `ListSegmentInput`: no frame of its own, a rule between it and the input. */
+  segment:
+    "flex shrink-0 cursor-pointer items-center gap-1 border-r border-line px-2 t-small transition-colors outline-none hover:bg-line/30 focus-visible:bg-line/30 data-popup-open:bg-line/40 disabled:cursor-not-allowed",
+  /** A glyph alone (a row's "…" menu): item-high square, no frame, no chevron — the glyph is the
+   *  verb. Its ink rises on hover and while open; the row's own ground shows through. */
+  icon: "inline-flex size-(--item-h) shrink-0 cursor-pointer items-center justify-center text-ink-2 outline-none hover:text-ink focus-visible:outline focus-visible:outline-line-2 data-popup-open:text-ink [&>svg]:size-[1.2em]",
 } as const;
 
 type TriggerFace = keyof typeof TRIGGER_FACE;
+
+/** A popup's trigger in one of the kit's faces; the chevron is the face's own. Any Base UI
+ *  `Popover.Root` takes it, so a non-list popup opens from the same face. */
+function PopupTrigger({
+  face = "inline",
+  children,
+  ...props
+}: Omit<ComponentProps<typeof Popover.Trigger>, "className" | "children"> & {
+  face?: TriggerFace;
+  children: ReactNode;
+  "data-derived"?: string;
+  "data-tone"?: string;
+}) {
+  return (
+    <Popover.Trigger className={TRIGGER_FACE[face]} data-list-trigger={face} {...props}>
+      {face === "word" || face === "icon" ? (
+        children
+      ) : (
+        <>
+          <span className="flex min-w-0 flex-1 items-center gap-1 truncate">{children}</span>
+          <ChevronDown aria-hidden className="size-3 shrink-0 text-ink-2" />
+        </>
+      )}
+    </Popover.Trigger>
+  );
+}
 
 /** A popup list opened by a trigger or anchored to a caret the caller owns. */
 export function ListPopup<T>({
@@ -268,6 +307,7 @@ export function ListPopup<T>({
   open: controlled,
   onOpenChange,
   caret,
+  side,
   ...list
 }: ListProps<T> & {
   anchor: "trigger" | "caret";
@@ -286,6 +326,8 @@ export function ListPopup<T>({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   caret?: Element | null;
+  /** anchor=caret: which side of it the list opens on (the composer's opens above the box). */
+  side?: "top" | "bottom";
 }) {
   const [own, setOwn] = useState(false);
   const open = controlled ?? own;
@@ -296,29 +338,22 @@ export function ListPopup<T>({
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       {anchor === "trigger" ? (
-        <Popover.Trigger
-          className={TRIGGER_FACE[face]}
+        <PopupTrigger
+          face={face}
           aria-haspopup="listbox"
           aria-label={triggerLabel}
           title={title}
           disabled={disabled}
-          data-list-trigger={face}
           data-derived={derived ? "" : undefined}
           data-tone={caution ? "caution" : undefined}
         >
-          {face === "word" ? (
-            trigger
-          ) : (
-            <>
-              <span className="flex min-w-0 flex-1 items-center gap-1 truncate">{trigger}</span>
-              <ChevronDown aria-hidden className="size-3 shrink-0 text-ink-2" />
-            </>
-          )}
-        </Popover.Trigger>
+          {trigger}
+        </PopupTrigger>
       ) : null}
       {open ? (
         <PopupFrame
           anchor={anchor === "caret" ? caret : undefined}
+          side={side}
           label={list["aria-label"]}
           owned={list.owner !== undefined}
         >
@@ -339,7 +374,7 @@ export function ListPopup<T>({
   );
 }
 
-/** A multi trigger's face: the picked values as chips at item density, or what none means (R6). */
+/** A multi trigger's face: the picked values as chips at item density, or what none means. */
 export function ListChips({ labels, none }: { labels: readonly ReactNode[]; none: ReactNode }) {
   if (!labels.length) return <span className="truncate text-ink-2">{none}</span>;
   return (
@@ -354,8 +389,32 @@ export function ListChips({ labels, none }: { labels: readonly ReactNode[]; none
 }
 
 /**
- * FREE TEXT WITH SUGGESTIONS (R9, replaces `<datalist>`). The input owns the value, the query and
- * the keys (R14); the list only suggests, so Enter keeps what was typed unless a row is cursored.
+ * A FIELD WHOSE KIND IS PICKED ON ITS LEFT EDGE: one perimeter, a segment trigger, an embedded
+ * input. The pick decides what the input takes; a pick that fixes the value disables the input and
+ * shows the fixed value as its placeholder.
+ */
+export function ListSegmentInput<T>({
+  popup,
+  ...input
+}: {
+  popup: Omit<ListProps<T>, "select"> & {
+    selected: readonly string[];
+    trigger: ReactNode;
+    triggerLabel: string;
+    title?: string;
+  };
+} & Omit<ComponentProps<typeof Input>, "surface">) {
+  return (
+    <span className="dl-control flex w-full min-w-0 items-stretch overflow-hidden">
+      <ListPopup<T> {...popup} select="single" anchor="trigger" face="segment" />
+      <Input {...input} surface="embedded" />
+    </span>
+  );
+}
+
+/**
+ * Free text with suggestions (replaces `<datalist>`). The input owns the value, the query and
+ * the keys; the list only suggests, so Enter keeps what was typed unless a row is cursored.
  */
 export function ListInput({
   id,
@@ -389,7 +448,7 @@ export function ListInput({
         disabled={disabled}
         value={value}
         autoComplete="off"
-        className={`h-(--control-h) w-full min-w-0 rounded-md border border-line bg-line/20 px-2 t-small outline-none placeholder:text-ink-2 focus-visible:border-line-2 dark:bg-line/30${mono ? " face-mono" : ""}`}
+        className={`dl-control w-full min-w-0 px-(--control-pad-x) t-small outline-none placeholder:text-ink-2${mono ? " face-mono" : ""}`}
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
         onChange={(event) => {
@@ -423,7 +482,7 @@ export function ListInput({
 }
 
 /**
- * THE IN-CELL SELECT (R13). At rest it is one button in the cell and nothing else: no popover
+ * The in-cell select. At rest it is one button in the cell and nothing else: no popover
  * root, no portal, no collection. The table's Enter/F2 edit opens it (it declares itself the
  * cell's editor); the list opens under the td; Tab/Shift-Tab close it and move the cell; Escape or
  * a pick close it and hand focus back to the td.
@@ -442,7 +501,7 @@ export function CellListSelect<T>({
   title?: string;
 }) {
   const [open, setOpen] = useState(false);
-  // A printable key on the td opens the list already filtered by it (R13).
+  // A printable key on the td opens the list already filtered by it.
   const [initial, setInitial] = useState("");
   const host = useContext(CellHost);
   const move = useCellNavigation();

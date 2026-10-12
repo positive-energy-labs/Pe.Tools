@@ -1,8 +1,6 @@
 /**
- * LEG STRIP — the update receipt as the legs the SDK recorded (machine control plane,
- * design-system ledger 2026-10-09). An observed leg is a fact chip in its status's meaning; the
- * stages not yet observed follow it. While the host is gone they are dashed: not observed is a
- * stand-in, never a success (the honest gap, host ledger 2026-10-09 ruling 6).
+ * The update receipt as the legs the SDK recorded. An observed leg is a fact chip in its status's
+ * meaning; stages not yet observed follow it, dashed while the host is gone (not observed is never success).
  */
 import { FactChip } from "./chip";
 

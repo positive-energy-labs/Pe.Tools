@@ -148,7 +148,7 @@ const SPECIMENS: readonly Specimen[] = [
   {
     id: "picker",
     name: "ListPopup · picker chip",
-    consumers: "chat/head-chips.tsx (Ladder face=inline) → the chat composer, families",
+    consumers: "chat/head-chips.tsx (Ladder face=control) → the chat composer",
     shape: "ListPopup face=inline · searchable · two-line rows · collision fit",
     defects: [
       "FIXED — the list grammar cutover: one trigger recipe with three faces (inline, fill, field); the chip and the facet differ only by face.",

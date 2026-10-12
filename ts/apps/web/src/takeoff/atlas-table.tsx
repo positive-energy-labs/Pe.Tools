@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { Table } from "#/components/master-table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
 import { fmtNum } from "#/components/master-table/model";
@@ -9,6 +9,7 @@ import { Pane, PaneSplit } from "#/components/lang/pane";
 import { RoomPanelFromStore } from "#/takeoff/room-panel";
 import type { AtlasRow as Row } from "#/takeoff/controller";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
+import { ScopeKeys } from "#/route/keys";
 
 export function AtlasTable() {
   const {
@@ -46,16 +47,9 @@ export function AtlasTable() {
       : null;
   return (
     <Suspense fallback={<div className="t-small t-upper p-2 text-ink-2">reading rooms…</div>}>
-      <Pane
-        id="rooms"
-        kind="content"
-        flush
-        title="rooms"
-        help="Rooms in the current scope. Filter, select, or review the visible rows. Focus this pane for j/k movement and a/d decisions."
-        headerless
-        scroll="clip"
-        shortcuts={reviewShortcuts}
-      >
+      <Pane id="rooms" flush scroll="clip">
+        <ScopeKeys keys={reviewShortcuts} />
+
         <PaneSplit
           axis="horizontal"
           resize={{
@@ -93,20 +87,18 @@ export function AtlasTable() {
               searchPlaceholder="room / type / zone…"
               chips={chips}
               modes={
-                <Press
-                  type="button"
+                <Button
+                  kind="framed"
+                  label={`fields · ${fieldsMode}`}
                   onClick={() => setFieldsMode(fieldsMode === "panel" ? "columns" : "panel")}
-                  title={
+                  reason={
                     fieldsMode === "panel"
                       ? "Manual J fields are edited in the room panel for the cursor row; the table stays narrow. Click to move them back into the table as columns."
                       : "Manual J fields are table columns. Click to edit them in the room panel instead and narrow the table."
                   }
-                  tone="neutral"
-                  size="caption"
-                  frame="line"
                 >
                   fields · {fieldsMode}
-                </Press>
+                </Button>
               }
             >
               <Table

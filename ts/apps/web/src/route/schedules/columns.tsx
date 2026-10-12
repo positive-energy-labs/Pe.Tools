@@ -7,7 +7,7 @@ import {
   type MeasuredValue,
 } from "@pe/agent-contracts";
 import type { ScheduleGridDocument } from "@pe/agent-contracts";
-import { reviewTransitions, type CellWire } from "#/components/lang/band";
+import { reviewTransitions, type CellWire } from "#/components/work/band";
 import type { CellTransition, StateCellProps } from "#/components/lang/cell";
 import { cellFromTrichotomy, StateCell } from "#/components/lang/cell";
 import type { Column } from "#/components/master-table/model";

@@ -35,7 +35,7 @@ test("row scale adds no height: its verbs are an absolute overlay inside the one
   const cell = container.querySelector(".dl-cell")!;
   // the value is the only in-flow content; everything else is the overlay
   expect([...cell.children].map((el) => el.className)).toEqual(["dl-acts"]);
-  const css = readFileSync(join(import.meta.dirname, "lang.css"), "utf8");
+  const css = readFileSync(join(import.meta.dirname, "cell.css"), "utf8");
   const rule = css.slice(css.indexOf(".dl-acts {"), css.indexOf("}", css.indexOf(".dl-acts {")));
   expect(rule).toContain("position: absolute");
   expect(rule).toContain("display: none");

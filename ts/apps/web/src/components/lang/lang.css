@@ -1,30 +1,38 @@
-/* Ruling 4: the head's height rung, the tall one beside --item-h. */
-:root {
+/* Shared grammar: tones, planes, selection, the row, the control frame. A primitive's own CSS lives beside its tsx. */
+/* --head-h is re-derived in every density scope: a custom property's var() resolves where it is declared. */
+:root,
+[data-density] {
   --head-h: calc(var(--item-h) * 5);
 }
-/* Closed semantic tones. Call sites declare state; the language owns its rendering. */
+/* Tones: call sites declare state; the language owns its rendering. */
 :where([data-tone="alarm"]) {
-  color: var(--pe-alarm);
+  --tone: var(--pe-alarm);
+  color: var(--tone);
 }
 
 :where([data-tone="caution"]) {
-  color: var(--pe-caution);
+  --tone: var(--pe-caution);
+  color: var(--tone);
 }
 
 :where([data-tone="done"]) {
-  color: var(--pe-done);
+  --tone: var(--pe-done);
+  color: var(--tone);
 }
 
 :where([data-tone="commit"]) {
-  color: var(--pe-commit);
+  --tone: var(--pe-commit);
+  color: var(--tone);
 }
 
 :where([data-tone="nav"]) {
-  color: var(--pe-nav);
+  --tone: var(--pe-nav);
+  color: var(--tone);
 }
 
 :where([data-tone="pea"]) {
-  color: var(--pe-pea-ink);
+  --tone: var(--pe-pea-ink);
+  color: var(--tone);
 }
 
 :where([data-tone][data-wash]) {
@@ -32,12 +40,11 @@
   background: color-mix(in srgb, currentColor 10%, var(--pe-on));
 }
 
-/* THE ONE SELECTION PAINT (census R18). The attribute states and the `on-select` class were two
-   mechanisms for one meaning; they are one rule now. Selection is a fill, never a hue, and it
-   re-grounds what sits on it (`--pe-on`), which the class did and the attributes did not. */
+/* The one selection paint: a fill, never a hue, re-grounding what sits on it (`--pe-on`). */
 :where(
   [aria-selected="true"],
-  [aria-expanded="true"],
+  /* A text field that owns an open list is where you type, not a picked thing: it keeps its ground. */
+  [aria-expanded="true"]:not(textarea, input),
   [aria-pressed="true"],
   [data-selected],
   [data-highlighted],
@@ -47,9 +54,8 @@
   --pe-on: var(--pe-select);
 }
 
-/* The pick mark: the element a feedback note is about. It floats over arbitrary page content, so it
-   wears the hover veil (never the opaque select fill, which would hide the target) plus a full-ink
-   outline: line-2 is 22% ink and vanished over real content and in the note's picture. */
+/* The pick mark: the element a feedback note is about. The veil, never the opaque select fill (it
+   would hide the target), plus a full-ink outline (line-2 vanished over real content). */
 .pick-mark {
   background-image: var(--fill-veil);
   outline: 2px solid var(--pe-ink);
@@ -61,13 +67,22 @@
   fill: var(--pe-select);
 }
 
-/* Closed semantic planes. Call sites name the plane; the language owns its ground and ink. */
+/* Planes: call sites name the plane; the language owns its ground and ink. */
 :where([data-surface="page"]) {
   --pe-surface: var(--pe-page);
 }
 
 :where([data-surface="artifact"]) {
   --pe-surface: var(--pe-artifact);
+}
+
+/* THE ARTIFACT EDGE: artifact ground never appears without a 1px --pe-line hairline. A border, not
+   an outline: outline is the focus ring's property (a pane's transparent ring erased the edge), and
+   positioned children (rows, sticky heads) paint over an inset outline, never over a border.
+   Unlayered, it is the call-site `border border-line` (one edge); `.seam-border` still dashes it.
+   Artifact ground inside artifact ground is a wash: no edge, except a frame, which is an object. */
+:where([data-surface="artifact"]:not([data-surface="artifact"] *), [data-slot="artifact-frame"]) {
+  border: 1px solid var(--pe-line);
 }
 
 :where([data-surface="recess"]) {
@@ -118,430 +133,8 @@
   }
 }
 
-/* =============================================================================================
-   StateCell precedence — the only hand CSS left in components/lang.
-   =============================================================================================
-
-   Recipes own every independent mark. CSS stays here because StateCell's marks compose by
-   cascade order: capability owns the body, proposals yield to it, one squiggle wins, and the
-   unsaved mark composes last. Encoding that precedence as recipe combinations would duplicate
-   the state machine and let the renderer disagree with `readCell`.
-
-   SCOPING: every rule is scoped by a `dl-` class. No element selectors, no ancestor scope —
-   these primitives must render correctly anywhere on any route, including routes still on the
-   old token vocabulary.
-
-   ══ THE SLOT TABLE (what may say what — ruled through two rounds) ══════════════════════════
-     CELL BODY (fill + ring)  → pea's PROPOSAL, and UNEDITABLE/DISABLED. Nothing else. Ever.
-     TEXT DECORATION          → the squiggle family: state of the VALUE, ranked by colour.
-     TEXT WEIGHT              → BOLD = unsaved. Reserved; no other use anywhere.
-     CORNER / EDGE MARK       → authorship: top-right fold = pea proposed · bottom-left square
-                                = unsaved, its COLOUR carrying whose.
-     INLINE GHOST TOKEN       → the other side's value, struck, in alarm ink (drift).
-     COLOUR + ICON            → verbs and outcomes only. Never inside a data cell — icons break
-                                table ergonomics the moment a value runs long.
-     FOOTLINE                 → the cell's testimony; one per cell, one line, clamped.
-     PLAIN UNDERLINE          → citation. Lives on the footline's source name, never on the
-                                value — so it can never contend with the squiggle slot.
-
-   ══ PRECEDENCE (the CSS below matches this exactly, by cascade order) ══════════════════════
-     1. uneditable/disabled owns the body. A cell that cannot be written cannot show a
-        proposal you could accept.
-     2. pea's proposal owns the body otherwise.
-     3. the squiggle slot: drift ▸ stale ▸ unverified. One winner draws; losers draw nothing.
-     4. UNSAVED draws the bottom-left square and composes with everything above.
-     5. citation never contends (different element).
-   ============================================================================================= */
-
-/* ── THE CELL · cell.tsx ───────────────────────────────────────────────────────────────────
-   One grammar at any scale: the chat card's staged values, the table's cells and the key's
-   specimens are the same treatment, which is the property that won round 1. */
-
-.dl-cell {
-  position: relative;
-  display: inline-block;
-  padding: 1px var(--item-pad-x);
-  background: var(--dl-cell-fill, transparent);
-  box-shadow: var(--dl-cell-ring, none);
-  color: var(--dl-cell-ink, inherit);
-  font-style: var(--dl-cell-italic, normal);
-}
-
-/* ── ROW SCALE (ruled 2026-08-16): inside a table the cell IS the td's content box — one
-      clipped line, full-bleed. The body wash therefore covers the entire cell body, not a
-      pill around the value. No footline, no inline ghost at this scale (they live in the
-      table's readout band + the title); a cell CLIPS rather than expands or wraps, so row
-      height and column alignment are uniform by construction. Declared before the body rules
-      so their mark-spacing overrides still win the cascade. */
-.dl-cell[data-scale="row"] {
-  display: block;
-  width: 100%;
-  height: 100%;
-  /* % height does not resolve inside a td, so the fallback IS the law. The row's rule is drawn
-     inside the cell (`hairline-b-inset`) and costs no height, so this is the whole --item-h,
-     with no 1px fudge (annotation round 2, 2026-08-31). */
-  min-height: var(--item-h);
-  padding-top: 0;
-  padding-bottom: 0;
-  line-height: var(--item-h);
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-/* 2 · pea's proposal owns the body: a wash mixed INTO whatever ground the cell sits on (so it
-      never floats), a pea ring, the top-right fold — and the bottom-left unsaved square in
-      pea's own ink. Fold and square TRAVEL TOGETHER on an open proposal: the fold says pea
-      authored it, the square says nothing has been written yet, and they are the same fact seen
-      from two sides. */
-.dl-cell[data-body="proposed"] {
-  --dl-cell-fill: color-mix(in srgb, var(--pe-pea-ink) 20%, var(--pe-on));
-  --dl-cell-ring: inset 0 0 0 1.5px color-mix(in srgb, var(--pe-pea) 70%, transparent);
-  --dl-cell-square: var(--pe-pea-ink);
-  /* the mark inset, plus the fold's own clearance on the right */
-  padding-right: calc(var(--item-mark-pad-x) + 4px);
-  padding-left: var(--item-mark-pad-x);
-}
-.dl-cell[data-body="proposed"]::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  border-top: 9px solid var(--pe-pea-ink);
-  border-left: 9px solid transparent;
-}
-
-/* THE COUNTER-PROPOSAL (ruled 2026-08-31, review deletion): pea argues against a value that is
-   already staged or written — proposal and staged both stand, values differing. The fold ALONE
-   draws (pea authored an argument here); the body stays with the staged/shown value, because a
-   wash would claim the shown value is pea's, which is exactly what it is not. */
-.dl-cell[data-contest] {
-  padding-right: calc(var(--item-mark-pad-x) + 4px);
-}
-.dl-cell[data-contest]::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  border-top: 9px solid var(--pe-pea-ink);
-  border-left: 9px solid transparent;
-}
-/* At row scale the counter value rides the same line, after the value: one row, no height. */
-.dl-cell[data-scale="row"][data-contest] {
-  display: flex;
-  align-items: center;
-  gap: var(--item-pad-x);
-}
-.dl-cell[data-scale="row"][data-contest] > .dl-cell-input {
-  flex: 1 1 0;
-}
-.dl-counter {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-family: var(--font-mono);
-  font-size: var(--type-small-size);
-  font-style: normal;
-  color: var(--pe-pea-ink);
-}
-
-/* 1 · uneditable/disabled owns the body — declared AFTER the proposal so the CASCADE, not
-      discipline, enforces precedence. Greyed italic is the settled "look but don't touch". */
-.dl-cell[data-body="locked"] {
-  --dl-cell-fill: color-mix(in srgb, var(--pe-ink) 6%, var(--pe-on));
-  --dl-cell-ink: var(--pe-ink-mute);
-  --dl-cell-italic: italic;
-  --dl-cell-ring: none;
-}
-/* a cell that cannot be written has no authorship marks to make: no fold, no square. */
-.dl-cell[data-body="locked"]::after,
-.dl-cell[data-body="locked"]::before {
-  content: none;
-}
-/* a SEAM (no real element behind it) keeps the reserved dashed edge and nothing else. The
-   dashed border style means "typed but unproven" and nothing else may use it. */
-.dl-cell[data-seam] {
-  --dl-cell-ring: none;
-  outline: 1px dashed var(--pe-line-2);
-  outline-offset: -1px;
-}
-
-/* 4 · UNSAVED — the bottom-left square, plus bold when the unsaved change is YOURS. Bold is
-      reserved for this and appears nowhere else in the language. Pea's open proposal already
-      owns the body, so adding weight there would spend the reserved axis on something the wash
-      already says. */
-.dl-cell[data-unsaved] {
-  --dl-cell-square: var(--pe-caution);
-  font-weight: var(--weight-bold);
-  padding-left: var(--item-mark-pad-x);
-}
-.dl-cell[data-unsaved="pea"] {
-  --dl-cell-square: var(--pe-pea-ink);
-  font-weight: inherit;
-}
-/* ONE square, two authors — the shape is identical, only `--dl-cell-square` differs, so the two
-   can never diverge into two marks, with the colour axis doing "whose". */
-.dl-cell[data-body="proposed"]::before,
-.dl-cell[data-unsaved]::before {
-  content: "";
-  position: absolute;
-  left: 2px;
-  bottom: 2px;
-  width: 5px;
-  height: 5px;
-  background: var(--dl-cell-square);
-}
-
-/* ── LOCATE (ruled 2026-08-31, critic verdict 14) ─────────────────────────────────────────
-   THE MARKS ARE THE LOCATE TARGET. On an editable cell the input owns the content box (the caret
-   law), so the clickable body is the cell's padding — and the padding is exactly where the marks
-   live: the proposal fold reserves 14px on the right, the unsaved square 10px on the left. Both
-   already mean "there is something to go look at", so both already carry the click; this rule
-   only makes the affordance VISIBLE and stops it being an accident of mark spacing. Measured
-   2026-08-31 on /family: a proposed editable row cell is 179×19 with the input inset 10/14/2/3,
-   and `elementFromPoint` at either mark corner resolves to the cell, not the input.
-   The input keeps its own text cursor, so the caret is never mislabelled. */
-.dl-cell[data-locate] {
-  cursor: pointer;
-}
-.dl-cell[data-locate] .dl-cell-input {
-  cursor: text;
-}
-
-/* ── THE EDITABLE CELL (ruled 2026-08-16, R8) ─────────────────────────────────────────────
-   The input IS the value slot: transparent, full-bleed, inheriting the cell's ink, weight and
-   style, so every mark (wash, ring, fold, square, squiggle) composes around a caret instead of
-   a text node. Focus is a hairline, never a hue (the lang focus law) — an inset ring, because
-   the cell may already carry a wash that a background fill would erase. */
-.dl-cell-input {
-  width: 100%;
-  min-width: 0;
-  height: 100%;
-  padding: 0;
-  border: 0;
-  outline: none;
-  background: transparent;
-  font: inherit;
-  font-style: inherit;
-  font-weight: inherit;
-  color: inherit;
-  line-height: inherit;
-  /* numeric cells right-align on the WRAPPER; the input must follow, not reset to start. */
-  text-align: inherit;
-}
-/* An emptied value is a value: its mark draws in the cell's own ink, not placeholder grey. */
-.dl-cell-input[data-empty]::placeholder {
-  color: inherit;
-  font-style: inherit;
-  opacity: 1;
-}
-.dl-cell-input::placeholder {
-  color: var(--pe-ink-mute);
-  font-style: italic;
-}
-.dl-cell:has(.dl-cell-input:focus-visible) {
-  box-shadow:
-    var(--dl-cell-ring, 0 0 transparent),
-    inset 0 0 0 1px var(--pe-line-2);
-}
-
-/* THE REFUSAL NOTE (R8, folding families' RefusalNote into the grammar): absolutely
-   positioned so the row can NEVER grow — §3's "restore AND say why, near the cell, without
-   resizing the row". Caution, dismiss-on-click, full sentence in the title. It suppresses
-   mousedown so it cannot steal the caret from the input it sits over. */
-.dl-refuse {
-  position: absolute;
-  top: 1px;
-  right: 1px;
-  bottom: 1px;
-  z-index: 5;
-  display: inline-flex;
-  align-items: center;
-  max-width: 75%;
-  padding: 0 5px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-family: var(--font-mono);
-  font-size: var(--type-small-size);
-  font-style: italic;
-  color: var(--pe-caution);
-  background: color-mix(in srgb, var(--pe-caution) 12%, var(--pe-on));
-  border: 0;
-  border-left: 2px solid var(--pe-caution);
-  cursor: pointer;
-}
-
-/* Pea's words under a refusal: a closed disclosure hanging below the note, so the row never grows. */
-.dl-refuse-detail {
-  position: absolute;
-  top: 100%;
-  right: 1px;
-  z-index: 6;
-  max-width: 60ch;
-  font-size: var(--type-small-size);
-  color: var(--pe-ink-2);
-  background: var(--pe-on);
-}
-.dl-cell-line > .dl-refuse-detail {
-  position: static;
-}
-
-/* at card scale the note sits in the value line, beside the cell; there is no row to protect. */
-.dl-cell-line > .dl-refuse {
-  position: static;
-  max-width: 36ch;
-}
-
-/* THE CELL'S VERBS (verdict 2026-09-18). Row scale: ZERO footprint — an overlay on the trailing
-   edge, drawn only while the cell is hovered, focused or in flight, so the row never widens or
-   grows. The overlay takes the cell's own ground so the value under it does not show through. */
-.dl-acts {
-  position: absolute;
-  top: 1px;
-  right: 1px;
-  bottom: 1px;
-  z-index: 4;
-  display: none;
-  align-items: center;
-  background: var(--dl-cell-fill, var(--pe-on));
-}
-.dl-cell:hover > .dl-acts,
-.dl-cell:focus-within > .dl-acts,
-.dl-cell[data-focus] > .dl-acts,
-.dl-cell[aria-busy="true"] > .dl-acts {
-  display: inline-flex;
-}
-/* THE REVIEW VERBS (`Verdict`, ruling 30): one mark wherever accept, deny and unstage draw. Each
-   wears the mark it answers: accept takes Pea's proposal (pea ink), unstage clears your own staged
-   edit (caution, its square's colour), deny stays neutral. Hover is the one veil. */
-.dl-verdict {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  height: var(--item-h);
-  padding: 0 6px;
-  border: 0;
-  background: transparent;
-  color: var(--pe-ink);
-  font-size: var(--type-small-size);
-  font-weight: var(--weight-medium);
-  white-space: nowrap;
-  cursor: pointer;
-}
-.dl-verdict[data-kind="accept"] {
-  color: var(--pe-pea-ink);
-}
-.dl-verdict[data-kind="unstage"] {
-  color: var(--pe-caution);
-}
-.dl-verdict:hover,
-.dl-verdict:focus-visible {
-  background-image: var(--fill-veil);
-}
-.dl-verdict:disabled {
-  color: var(--pe-ink-2);
-  cursor: progress;
-}
-.dl-verdict > svg {
-  width: 12px;
-  height: 12px;
-  flex-shrink: 0;
-}
-/* In a cell's overlay the verb is a square the height of the row. */
-.dl-acts > .dl-verdict {
-  width: calc(var(--item-h) - 2px);
-  height: 100%;
-  padding: 0;
-}
-/* A review row (`ReviewRow`) is a list for acting: its verbs are always drawn, and the value
-   clears them so it truncates before the overlay instead of under it. */
-.dl-review .dl-cell[data-scale="row"] {
-  padding-right: calc(var(--acts, 0) * (var(--item-h) - 2px) + 4px);
-}
-.dl-review .dl-cell > .dl-acts {
-  display: inline-flex;
-}
-/* in flight: the cell says it is being written, and nothing else about it changes. */
-.dl-cell[aria-busy="true"] {
-  cursor: progress;
-}
-
-/* 3 · THE SQUIGGLE FAMILY — one decoration family, ranked by colour. The decoration says
-      "state of the value"; the colour says which state; the two primary text colours are
-      untouched. Rides on the TEXT, never on the box. */
-.dl-sq {
-  text-decoration-line: underline;
-  text-decoration-style: wavy;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
-}
-.dl-sq[data-state="drift"] {
-  text-decoration-color: var(--pe-alarm);
-}
-.dl-sq[data-state="stale"] {
-  text-decoration-color: var(--pe-caution);
-}
-.dl-sq[data-state="unverified"] {
-  text-decoration-color: var(--pe-ink-mute);
-}
-
-/* NEVER (ruled 2026-08-16) — nothing was ever attempted here. Draws NO squiggle: the squiggle
-   family distrusts an existing value, and here nothing exists to distrust. The value alone goes
-   muted. Distinct from locked (no italic, no fill — the cell is writable, just untouched). */
-.dl-cell[data-never] {
-  --dl-cell-ink: var(--pe-ink-mute);
-}
-
-/* drift's second half: the other side's value as a struck ghost token, INLINE, so the one alarm
-   is unmissable and still costs zero row height. */
-.dl-ghost {
-  font-family: var(--font-mono);
-  font-size: var(--type-small-size);
-  color: var(--pe-alarm);
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
-  white-space: nowrap;
-}
-
-.dl-cell-line {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px;
-}
-
-/* the footline — one per cell, one line, clamped, so a grid never re-flows.
-   ponytail: the clamp truncates real sentences, including RFI citations. A clamped row may need
-   a disclosure; ceiling accepted until a reader complains. */
-.dl-foot {
-  display: block;
-  margin-top: 1px;
-  font-family: var(--font-mono);
-  font-size: var(--type-small-size);
-  letter-spacing: 0.02em;
-  font-style: normal;
-  font-weight: var(--weight-regular);
-  line-height: var(--type-small-line-height);
-  color: var(--pe-ink-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* 5 · a PLAIN underline is a citation, on the SOURCE NAME in the footline — a different element
-      from the value — so it can never occupy the squiggle's slot. */
-.dl-cite {
-  text-decoration: underline solid var(--pe-line-2);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 2px;
-}
-
-/* ── ROW · row.tsx — the one list item and table row (ix-list design). States are data:
-   cursor = the veil (the hover law, never a hue) · selected = the one select fill (above) ·
-   active = the left rail · pending = quiet italic · failed = the caution squiggle on the label ·
-   refused = aria-disabled, italic, with its reason in the meta slot. */
+/* Row (row.tsx): states are data. cursor = the veil · selected = the select fill · active = the
+   left rail · pending = italic · failed = caution squiggle on the label · refused = aria-disabled. */
 .dl-row {
   position: relative;
   display: flex;
@@ -562,8 +155,7 @@ tr.dl-row {
   /* a table's values stay copyable */
   user-select: auto;
 }
-/* In a table the active row is the one a side pane shows: the select fill, as tables drew it
-   before the one row; a rail on a table row would have no cell to sit in. */
+/* In a table the active row takes the select fill: a rail on a tr would have no cell to sit in. */
 tr.dl-row[data-active] {
   background-color: var(--pe-select);
   --pe-on: var(--pe-select);
@@ -573,6 +165,88 @@ tr.dl-row[data-active]::before {
 }
 .dl-row[data-lines="2"] {
   min-height: calc(var(--item-h) * 2);
+}
+.dl-row[data-lines="3"] {
+  min-height: calc(var(--item-h) * 3);
+}
+.dl-row-eyebrow {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  overflow: hidden;
+  color: var(--pe-ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--type-small-size);
+}
+.dl-row-meta [data-fact="word"] {
+  font-family: var(--font-body);
+}
+/* INLINE CODE: a machine token inside a sentence, and the quietest mark in it. It sizes off its
+   sentence, not off a rung: base.css pins every face to one x-height (font-size-adjust 0.54), so
+   at 1em mono sits on the sans x-height exactly, yet Cascadia's wide caps then read a size large;
+   0.9em seats it just under the line. The small rung read as a footnote, a step-down rung sat
+   well below it. Cascadia's strokes are heavier than Open Sans at one nominal weight, so it takes
+   --weight-mono. A soft wash, no stroke: a bordered chip outshouted the prose around it. A token
+   split across lines keeps its padding and corners on every fragment. Bold stays unsaved. */
+[data-pe] .prose-pe :not(pre) > code {
+  font-size: var(--type-mono-inline);
+  font-weight: var(--weight-mono);
+  padding: 0.05em 0.3em;
+  border: 0;
+  background: color-mix(in srgb, var(--pe-ink) 6%, transparent);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.prose-pe :not(pre) > code::before,
+.prose-pe :not(pre) > code::after {
+  content: none;
+}
+/* PROSE TABLES wear Table's cell grammar (master-table-header/-body): the recess ground and
+   small caps under the head, faint column rules, hairline row rules, tabular figures, square
+   corners. Separate borders so no edge doubles. GFM's own
+   `text-align` lands inline and still wins, so a `---:` column stays right-aligned. */
+.prose-pe table {
+  width: 100%;
+  margin: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 0.5px solid var(--pe-line);
+  font-variant-numeric: tabular-nums;
+}
+.prose-pe :is(th, td) {
+  padding: calc(var(--space-unit) * 1.5) var(--gutter);
+  border: 0;
+  text-align: left;
+  vertical-align: top;
+}
+.prose-pe :is(th, td) + :is(th, td) {
+  border-left: 0.5px solid var(--pe-line);
+}
+[data-pe] .prose-pe thead th {
+  background: var(--pe-recess);
+  --pe-on: var(--pe-recess);
+  border-bottom: 0.5px solid var(--pe-line);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--track-upper);
+  text-transform: uppercase;
+  vertical-align: bottom;
+}
+.prose-pe tbody tr + tr td {
+  border-top: 0.5px solid var(--pe-line);
+}
+/* The quiet inline trigger: a word with a row-sized hit box; the veil is held while its list is open. */
+[data-list-trigger="inline"] {
+  height: var(--item-h);
+  padding: 0 var(--item-pad-x);
+  border-radius: var(--control-radius);
+}
+[data-list-trigger="inline"]:not([data-tone]) {
+  color: var(--pe-ink-2);
+}
+[data-list-trigger="inline"]:hover,
+[data-list-trigger="inline"][data-popup-open] {
+  background-image: var(--fill-veil);
+  color: var(--pe-ink);
 }
 .dl-row[data-cursor] {
   background-image: var(--fill-veil);
@@ -590,7 +264,7 @@ tr.dl-row[data-active]::before {
   color: var(--pe-ink-2);
   font-style: italic;
 }
-.dl-row[data-failed] .dl-row-label {
+.dl-row[data-failed] .dl-row-title {
   text-decoration: underline wavy var(--pe-caution);
   text-underline-offset: 3px;
 }
@@ -612,48 +286,97 @@ tr.dl-row[data-active]::before {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* A row's second line is words; a measured value opts into `face-mono` itself. */
 .dl-row-sub {
   overflow: hidden;
-  font-family: var(--font-mono);
+  font-family: var(--font-body);
   color: var(--pe-ink-2);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+.dl-row-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+.dl-row-title {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* THE TRAILING SLOT: the state (`.dl-row-fact`) and the verbs (`.dl-row-actions`) stack in one
+   grid cell, right-aligned, as wide as the wider and one line tall, so a swap never shifts the
+   row. With hover the verbs replace the state on hover, keyboard focus, the list cursor or an
+   open menu; without hover the state stays and the verbs lie unseen over it, so a tap opens them. */
 .dl-row-meta {
+  display: inline-grid;
   flex-shrink: 0;
+  align-items: center;
+  justify-items: end;
   font-family: var(--font-mono);
   color: var(--pe-ink-2);
   white-space: nowrap;
 }
-/* row verbs: zero footprint until the row is hovered or holds focus (the StateCell overlay idiom) */
+.dl-row-meta > * {
+  grid-area: 1 / 1;
+}
+.dl-row-fact {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 .dl-row-actions {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  display: none;
+  display: inline-flex;
   align-items: center;
   gap: 2px;
-  padding-right: 2px;
-  background: var(--pe-on);
+  visibility: hidden;
 }
 /* Glyphs sit on the row's type scale, one recipe for every call site: a lead mark, thumbnail or
-   row verb is one text line tall (1.2em of t-small), and a verb's hit box is the row height. */
+   row verb is one text line tall (1.2em of t-small); a verb is one line square, the slot's height. */
 .dl-row-lead > svg,
 .dl-row-lead > img,
 .dl-row-actions svg {
   width: 1.2em;
   height: 1.2em;
 }
-.dl-row-actions > button,
-.dl-row-actions > a {
-  width: var(--item-h);
-  height: var(--item-h);
+.dl-row .dl-row-meta > .dl-row-actions > :is(.dl-button, button, a) {
+  width: auto;
+  min-height: 0;
+  height: 1lh;
+  aspect-ratio: 1;
 }
-.dl-row:hover > .dl-row-actions,
-.dl-row:focus-within > .dl-row-actions,
-.dl-row[data-cursor] > .dl-row-actions {
-  display: inline-flex;
+.dl-row-actions .dl-button:focus-visible {
+  outline-offset: -1px;
+}
+@media (hover: hover) {
+  .dl-row:is(:hover, :focus-visible, :has(:focus-visible), [data-cursor]) .dl-row-actions,
+  .dl-row-actions:has([aria-expanded="true"]) {
+    visibility: visible;
+  }
+  .dl-row:is(:hover, :focus-visible, :has(:focus-visible), [data-cursor])
+    .dl-row-meta:has(> .dl-row-actions)
+    > .dl-row-fact,
+  .dl-row-meta:has([aria-expanded="true"]) > .dl-row-fact {
+    visibility: hidden;
+  }
+}
+@media (hover: none) {
+  .dl-row-actions {
+    justify-self: stretch;
+    visibility: visible;
+    opacity: 0;
+  }
+  .dl-row .dl-row-meta > .dl-row-actions > :is(.dl-button, button, a) {
+    flex: 1;
+    aspect-ratio: auto;
+  }
+}
+.dl-row-sep {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--pe-line);
 }
 .dl-row-head {
   position: sticky;
@@ -665,7 +388,36 @@ tr.dl-row[data-active]::before {
   min-height: var(--item-h);
   padding: 0 var(--item-mark-pad-x);
   font-size: var(--type-small-size);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: var(--weight-strong);
   color: var(--pe-ink-2);
+}
+/* A group head reads like the roster's shelves: sentence case, its count quiet. */
+.dl-row-head > :first-child::first-letter {
+  text-transform: uppercase;
+}
+.dl-row-head > .dl-row-meta {
+  font-family: var(--font-body);
+  font-weight: var(--weight-regular);
+  color: var(--pe-ink-mute);
+}
+
+/* The control frame: one height, hairline, radius and ground for every freestanding control. An
+   embedded field (inside a frame) never wears it. Unlayered on purpose: utilities cannot restyle half of it. */
+.dl-control {
+  box-sizing: border-box;
+  /* a floor, not a height: a multi pick's chips may wrap */
+  min-height: var(--control-h);
+  border: 1px solid var(--pe-line);
+  border-radius: var(--control-radius);
+  background-color: color-mix(in srgb, var(--pe-line) 20%, transparent);
+  transition: border-color var(--motion-control);
+}
+.dl-control:is(:hover, :focus-visible, :focus-within):not(:disabled, :has(input:disabled)) {
+  border-color: var(--pe-line-2);
+}
+.dl-control[aria-invalid="true"] {
+  border-color: var(--pe-caution);
+}
+.dl-control:is(:disabled, :has(input:disabled)) {
+  background-color: transparent;
 }

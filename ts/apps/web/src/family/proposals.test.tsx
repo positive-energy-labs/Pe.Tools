@@ -3,7 +3,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { transitionPatches } from "@pe/agent-contracts";
 
-import type { CellWire } from "#/components/lang/band";
+import type { CellWire } from "#/components/work/band";
 import { AnatomyDrawing } from "#/family/anatomy";
 import type { FieldState } from "#/family/host";
 import { initialDraft, savedFrom } from "#/family/model";

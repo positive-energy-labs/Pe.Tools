@@ -233,7 +233,6 @@ function DataTablesRoute() {
       }
     >
       <Pane
-        kind="content"
         title={draft?.name ?? "table"}
         meta={draft ? `${draft.columns.length}×${draft.rows.length}` : undefined}
         scroll="clip"

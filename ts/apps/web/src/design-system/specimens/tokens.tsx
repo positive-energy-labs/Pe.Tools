@@ -208,7 +208,7 @@ export function TokenSpecimens() {
               className="grid grid-cols-[2.25rem_minmax(0,10rem)_minmax(0,1fr)] items-center gap-x-3 gap-y-1 py-1 sm:grid-cols-[2.25rem_minmax(0,10rem)_minmax(0,1fr)_minmax(0,20rem)]"
             >
               <span
-                className="h-5 w-9"
+                className="hairline h-5 w-9"
                 style={{ backgroundColor: `var(${t.token})` }}
                 title={values[t.token] ?? t.token}
               />

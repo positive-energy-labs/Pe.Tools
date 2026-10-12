@@ -12,6 +12,7 @@ import { LangWorkflowSpecimens } from "./lang-workflow";
 import { UiInputSpecimens } from "./ui-inputs";
 import { UiLayoutSpecimens } from "./ui-layout";
 import { UiSurfaceSpecimens } from "./ui-surfaces";
+import { LangChatSpecimens } from "./lang-chat";
 
 export function SwatchSpecimens() {
   return (
@@ -44,6 +45,7 @@ export function SwatchSpecimens() {
         </div>
         <LangWorkflowSpecimens />
         <LangListSpecimens />
+        <LangChatSpecimens />
         <LangCellSpecimens />
         <LangStatusSpecimens />
         <LangMachineSpecimens />

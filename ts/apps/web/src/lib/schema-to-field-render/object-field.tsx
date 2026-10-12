@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { Input } from "#/components/lang/input";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { FieldLegendRow, FieldMessages } from "./field-metadata";
@@ -84,14 +84,17 @@ export function ObjectField({
                   <FieldRenderer path={childPath} node={valueNode!} />
                 )}
               </div>
-              <ActionButton
+              <Button
                 label="remove key"
                 reason={`Drop ${key} from ${label}. The change lives in the form until save writes it.`}
+                kind="framed"
                 onClick={() => {
                   const { [key]: _dropped, ...rest } = value;
                   field.change(rest);
                 }}
-              />
+              >
+                remove key
+              </Button>
             </div>
           );
         })}
@@ -105,13 +108,11 @@ export function ObjectField({
             placeholder="new key"
             onChange={(event) => setNewKey(event.currentTarget.value)}
           />
-          <ActionButton
+          <Button
             label="add key"
-            disabled={keyRefusal !== null}
-            reason={
-              keyRefusal ??
-              `Add ${newKey} to ${label}, built from the schema's defaults. The change lives in the form until save writes it.`
-            }
+            reason={`Add ${newKey} to ${label}, built from the schema's defaults. The change lives in the form until save writes it.`}
+            kind="framed"
+            refusal={keyRefusal}
             onClick={() => {
               field.change({
                 ...value,
@@ -119,7 +120,9 @@ export function ObjectField({
               });
               setNewKey("");
             }}
-          />
+          >
+            add key
+          </Button>
         </div>
       ) : null}
     </fieldset>

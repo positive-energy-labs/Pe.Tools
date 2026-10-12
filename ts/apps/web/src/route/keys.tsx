@@ -14,6 +14,7 @@
  */
 import { createContext, use, useMemo, type ReactNode, type RefObject } from "react";
 import {
+  formatForDisplay,
   useHotkeys,
   useHotkeyRegistrations,
   type UseHotkeyDefinition,
@@ -23,6 +24,8 @@ import type { RouteHandle } from "./use-route";
 
 /** The help page reads every binding back through this; nothing keeps a second list of keys. */
 export { useHotkeyRegistrations };
+/** A chord as this platform spells it (Ctrl+K on Windows, ⌘ K on macOS); `Kbd` prints it. */
+export { formatForDisplay as chordLabel };
 
 /** A chord, in the library's template-string grammar (`Mod+Enter`, `Escape`, `R`). */
 export type Chord = UseHotkeyDefinition["hotkey"];
@@ -147,14 +150,15 @@ export function KeysNode({
 }) {
   return (
     <KeyScope id={id} hidden={hidden}>
-      <NodeChords keys={keys} />
+      <ScopeKeys keys={keys} />
       {children}
     </KeyScope>
   );
 }
 
 /** Inside the node it declares, so `useScopeKeys` reads that node and not the one above it. */
-function NodeChords({ keys }: { keys: readonly ScopeKey[] }) {
+/** Bind chords on the enclosing scope node from inside its tree (a pane body). */
+export function ScopeKeys({ keys }: { keys: readonly ScopeKey[] }) {
   useScopeKeys(keys);
   return null;
 }

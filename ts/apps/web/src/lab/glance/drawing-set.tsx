@@ -7,7 +7,7 @@ import { VizChip } from "#/ops/primitives";
 import { asNumber, asRecord, asRecords, asString } from "#/ops/registry";
 import type { SyntheticOp, SyntheticViewProps } from "#/lab/synthetic";
 import { SheetCanvas } from "#/ops/views/detail/schedules";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { PressContent } from "#/components/anatomy/press-content";
 
 const DETAIL_BUDGET = 10;
@@ -104,12 +104,11 @@ function Thumbnail({
   onSelect: () => void;
 }) {
   return (
-    <Press
-      type="button"
-      tone="neutral"
-      state={selected ? "selected" : "rest"}
+    <Button
+      label={`${sheet.sheetNumber} — ${sheet.sheetName}`}
+      pressed={selected}
       onClick={onSelect}
-      title={
+      reason={
         entry
           ? `${sheet.sheetNumber} — ${sheet.sheetName}`
           : `${sheet.sheetNumber} — ${sheet.sheetName} (not detailed: outside the ${DETAIL_BUDGET}-sheet budget)`
@@ -120,7 +119,7 @@ function Thumbnail({
         <span className="truncate">{sheet.sheetNumber}</span>
         {entry && <span className="truncate">{sheet.sheetName}</span>}
       </PressContent>
-    </Press>
+    </Button>
   );
 }
 

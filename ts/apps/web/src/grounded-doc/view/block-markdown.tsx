@@ -2,12 +2,11 @@ import { FileUp, Link2 } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { Input } from "#/components/lang/input";
 import type { GroundedDocEngine } from "#/grounded-doc/engine";
 import { Markdown } from "#/workbench/prose";
 import { cn } from "#/lib/utils";
-import { Press } from "#/components/lang/press";
 import { ImagesPane, MarkdownBlock } from "./images-pane";
 import { PagePane } from "./page-pane";
 import { PressContent } from "#/components/anatomy/press-content";
@@ -87,12 +86,10 @@ function UploadSurface({ engine, extra }: { engine: GroundedDocEngine; extra?: R
 
   return (
     <div className="flex w-full max-w-sm flex-col items-center gap-2">
-      <Press
-        type="button"
-        tone="neutral"
-        size="label"
-        state={dragOver ? "selected" : "rest"}
-        disabled={parsing}
+      <Button
+        label="upload a PDF"
+        pressed={dragOver}
+        busy={parsing}
         onClick={() => inputRef.current?.click()}
         onDragOver={(event) => {
           event.preventDefault();
@@ -136,7 +133,7 @@ function UploadSurface({ engine, extra }: { engine: GroundedDocEngine; extra?: R
             onChange={(event) => handleFiles(event.target.files)}
           />
         </PressContent>
-      </Press>
+      </Button>
 
       {!parsing && (
         <div className="flex w-full items-center gap-1.5">
@@ -152,16 +149,15 @@ function UploadSurface({ engine, extra }: { engine: GroundedDocEngine; extra?: R
               placeholder="…or paste a public PDF URL"
             />
           </div>
-          <ActionButton
+          <Button
             label="parse"
+            reason="Send the URL to LlamaCloud and ground the parse against its pages"
+            kind="framed"
+            refusal={url.trim() ? null : "paste a public PDF URL first"}
             onClick={submitUrl}
-            disabled={!url.trim()}
-            reason={
-              url.trim()
-                ? "Send the URL to LlamaCloud and ground the parse against its pages"
-                : "paste a public PDF URL first"
-            }
-          />
+          >
+            parse
+          </Button>
         </div>
       )}
       {!parsing && extra}

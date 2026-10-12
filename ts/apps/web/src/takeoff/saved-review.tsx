@@ -14,7 +14,7 @@ import type { z } from "zod";
 import { SavedCaptureText } from "#/takeoff/saved-capture-text";
 import { TakeoffsControllerOwner } from "#/takeoff/route";
 import { RouteShell } from "#/route";
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { List } from "#/components/lang/list-popup";
 import { useReading, previousOf } from "#/readings";
 import { emptyManifest } from "#/route";
@@ -73,11 +73,14 @@ export function SavedTakeoffsView({
       <RouteShell
         manifest={savedManifest}
         head={
-          <ActionButton
+          <Button
+            kind="framed"
             label="live"
             reason="Explicitly return to document selection in Revit"
             onClick={() => select({ work: undefined })}
-          />
+          >
+            live
+          </Button>
         }
       />
       {capture && reading.state !== "failed" ? (

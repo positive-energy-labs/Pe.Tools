@@ -28,7 +28,7 @@ import {
   transitionPatches,
 } from "@pe/agent-contracts";
 
-import type { CellWire } from "#/components/lang/band";
+import type { CellWire } from "#/components/work/band";
 import { previousOf, useHostCall } from "#/readings";
 import { NATIVE_READ_WAIT_S } from "#/route/waits";
 import { useRoute } from "#/route/use-route";

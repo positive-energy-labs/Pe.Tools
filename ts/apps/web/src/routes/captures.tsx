@@ -73,7 +73,7 @@ function CapturesRoute() {
 
   return (
     <Surface head={<RouteShell manifest={manifest} handle={handle} />}>
-      <Pane kind="content" title="captures" meta={captures ? String(captures.length) : undefined}>
+      <Pane title="captures" meta={captures ? String(captures.length) : undefined}>
         {failure ? <OutcomeLine kind="error" label="captures unread" says={failure} /> : null}
         {captures ? <CapturesList captures={captures} focus={sha} /> : null}
       </Pane>

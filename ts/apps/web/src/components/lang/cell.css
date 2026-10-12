@@ -1,0 +1,346 @@
+/* The cell grammar (cell.tsx, verdict.tsx). Marks compose by cascade order, so the order here is the
+   precedence: uneditable owns the body, then pea's proposal, then one squiggle (drift > stale >
+   unverified), then the unsaved square; a citation never contends. Body = proposal or locked only;
+   bold = unsaved only; icons never go inside a data cell. Every rule is `dl-` scoped. */
+
+.dl-cell {
+  position: relative;
+  display: inline-block;
+  padding: 1px var(--item-pad-x);
+  background: var(--dl-cell-fill, transparent);
+  box-shadow: var(--dl-cell-ring, none);
+  color: var(--dl-cell-ink, inherit);
+  font-style: var(--dl-cell-italic, normal);
+}
+
+/* Row scale: the cell is the td's content box, one clipped line, full-bleed; no footline or ghost.
+   Declared before the body rules so their mark-spacing overrides win. */
+.dl-cell[data-scale="row"] {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* % height does not resolve inside a td; the row's rule is drawn inside the cell, so this is the whole --item-h. */
+  min-height: var(--item-h);
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: var(--item-h);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 2 · pea's proposal owns the body: a wash mixed into the cell's ground, a pea ring, the top-right
+   fold and the unsaved square in pea's ink (fold = pea authored it, square = not written yet). */
+.dl-cell[data-body="proposed"] {
+  --dl-cell-fill: color-mix(in srgb, var(--pe-pea-ink) 20%, var(--pe-on));
+  --dl-cell-ring: inset 0 0 0 1.5px color-mix(in srgb, var(--pe-pea) 70%, transparent);
+  --dl-cell-square: var(--pe-pea-ink);
+  /* the mark inset, plus the fold's own clearance on the right */
+  padding-right: calc(var(--item-mark-pad-x) + 4px);
+  padding-left: var(--item-mark-pad-x);
+}
+.dl-cell[data-body="proposed"]::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  border-top: 9px solid var(--pe-pea-ink);
+  border-left: 9px solid transparent;
+}
+
+/* Counter-proposal: pea argues against a staged or written value. The fold alone draws; a wash
+   would claim the shown value is pea's. */
+.dl-cell[data-contest] {
+  padding-right: calc(var(--item-mark-pad-x) + 4px);
+}
+.dl-cell[data-contest]::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  border-top: 9px solid var(--pe-pea-ink);
+  border-left: 9px solid transparent;
+}
+/* At row scale the counter value rides the same line, after the value. */
+.dl-cell[data-scale="row"][data-contest] {
+  display: flex;
+  align-items: center;
+  gap: var(--item-pad-x);
+}
+.dl-cell[data-scale="row"][data-contest] > .dl-cell-input {
+  flex: 1 1 0;
+}
+.dl-counter {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: var(--type-small-size);
+  font-style: normal;
+  color: var(--pe-pea-ink);
+}
+
+/* 1 · uneditable/disabled owns the body, declared after the proposal so the cascade enforces it. */
+.dl-cell[data-body="locked"] {
+  --dl-cell-fill: color-mix(in srgb, var(--pe-ink) 6%, var(--pe-on));
+  --dl-cell-ink: var(--pe-ink-mute);
+  --dl-cell-italic: italic;
+  --dl-cell-ring: none;
+}
+/* a cell that cannot be written makes no authorship marks. */
+.dl-cell[data-body="locked"]::after,
+.dl-cell[data-body="locked"]::before {
+  content: none;
+}
+/* a SEAM (no real element behind it) keeps the dashed edge: "typed but unproven", nothing else. */
+.dl-cell[data-seam] {
+  --dl-cell-ring: none;
+  outline: 1px dashed var(--pe-line-2);
+  outline-offset: -1px;
+}
+
+/* 4 · UNSAVED: the bottom-left square, plus bold when the change is yours (pea's wash already says it). */
+.dl-cell[data-unsaved] {
+  --dl-cell-square: var(--pe-caution);
+  font-weight: var(--weight-bold);
+  padding-left: var(--item-mark-pad-x);
+}
+.dl-cell[data-unsaved="pea"] {
+  --dl-cell-square: var(--pe-pea-ink);
+  font-weight: inherit;
+}
+/* One square, two authors: only `--dl-cell-square` differs. */
+.dl-cell[data-body="proposed"]::before,
+.dl-cell[data-unsaved]::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  bottom: 2px;
+  width: 5px;
+  height: 5px;
+  background: var(--dl-cell-square);
+}
+
+/* Locate: on an editable cell the input owns the content box, so the clickable body is the padding
+   where the fold and square live; this only makes that visible. The input keeps its text cursor. */
+.dl-cell[data-locate] {
+  cursor: pointer;
+}
+.dl-cell[data-locate] .dl-cell-input {
+  cursor: text;
+}
+
+/* The editable cell: the input is the value slot, transparent and inheriting ink, weight and style
+   so every mark composes around a caret. Focus is an inset hairline (a fill would erase the wash). */
+.dl-cell-input {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-style: inherit;
+  font-weight: inherit;
+  color: inherit;
+  line-height: inherit;
+  /* numeric cells right-align on the wrapper; the input must follow. */
+  text-align: inherit;
+}
+/* An emptied value is a value: its mark draws in the cell's ink, not placeholder grey. */
+.dl-cell-input[data-empty]::placeholder {
+  color: inherit;
+  font-style: inherit;
+  opacity: 1;
+}
+.dl-cell-input::placeholder {
+  color: var(--pe-ink-mute);
+  font-style: italic;
+}
+.dl-cell:has(.dl-cell-input:focus-visible) {
+  box-shadow:
+    var(--dl-cell-ring, 0 0 transparent),
+    inset 0 0 0 1px var(--pe-line-2);
+}
+
+/* Refusal note: absolutely positioned so the row never grows; dismiss-on-click, and it suppresses
+   mousedown so it cannot steal the caret from the input under it. */
+.dl-refuse {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  max-width: 75%;
+  padding: 0 5px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: var(--type-small-size);
+  font-style: italic;
+  color: var(--pe-caution);
+  background: color-mix(in srgb, var(--pe-caution) 12%, var(--pe-on));
+  border: 0;
+  border-left: 2px solid var(--pe-caution);
+  cursor: pointer;
+}
+
+/* Pea's words under a refusal: a disclosure hanging below the note. */
+.dl-refuse-detail {
+  position: absolute;
+  top: 100%;
+  right: 1px;
+  z-index: 6;
+  max-width: 60ch;
+  font-size: var(--type-small-size);
+  color: var(--pe-ink-2);
+  background: var(--pe-on);
+}
+.dl-cell-line > .dl-refuse-detail {
+  position: static;
+}
+
+/* at card scale the note sits in the value line; there is no row to protect. */
+.dl-cell-line > .dl-refuse {
+  position: static;
+  max-width: 36ch;
+}
+
+/* The cell's verbs: a zero-footprint overlay on the trailing edge, drawn while hovered, focused or
+   in flight, on the cell's own ground so the value under it does not show through. */
+.dl-acts {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  z-index: 4;
+  display: none;
+  align-items: center;
+  background: var(--dl-cell-fill, var(--pe-on));
+}
+.dl-cell:hover > .dl-acts,
+.dl-cell:focus-within > .dl-acts,
+.dl-cell[data-focus] > .dl-acts,
+.dl-cell[aria-busy="true"] > .dl-acts {
+  display: inline-flex;
+}
+/* Verdict: accept wears pea ink (the proposal it takes), unstage wears caution (your staged edit),
+   deny stays neutral. Hover is the one veil. */
+.dl-verdict {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: var(--item-h);
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: var(--pe-ink);
+  font-size: var(--type-small-size);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.dl-verdict[data-kind="accept"] {
+  color: var(--pe-pea-ink);
+}
+.dl-verdict[data-kind="unstage"] {
+  color: var(--pe-caution);
+}
+.dl-verdict:hover,
+.dl-verdict:focus-visible {
+  background-image: var(--fill-veil);
+}
+.dl-verdict:disabled {
+  color: var(--pe-ink-2);
+  cursor: progress;
+}
+.dl-verdict > svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+/* In a cell's overlay the verb is a square the height of the row. */
+.dl-acts > .dl-verdict {
+  width: calc(var(--item-h) - 2px);
+  height: 100%;
+  padding: 0;
+}
+/* A review row always draws its verbs; the value clears them and truncates before the overlay. */
+.dl-review .dl-cell[data-scale="row"] {
+  padding-right: calc(var(--acts, 0) * (var(--item-h) - 2px) + 4px);
+}
+.dl-review .dl-cell > .dl-acts {
+  display: inline-flex;
+}
+/* in flight: only the cursor changes. */
+.dl-cell[aria-busy="true"] {
+  cursor: progress;
+}
+
+/* 3 · The squiggle family: state of the value, ranked by colour, on the text and never the box. */
+.dl-sq {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.dl-sq[data-state="drift"] {
+  text-decoration-color: var(--pe-alarm);
+}
+.dl-sq[data-state="stale"] {
+  text-decoration-color: var(--pe-caution);
+}
+.dl-sq[data-state="unverified"] {
+  text-decoration-color: var(--pe-ink-mute);
+}
+
+/* NEVER: nothing was attempted, so no squiggle (nothing to distrust); the value just mutes. Writable, unlike locked. */
+.dl-cell[data-never] {
+  --dl-cell-ink: var(--pe-ink-mute);
+}
+
+/* drift's second half: the other side's value, struck, inline at zero row height. */
+.dl-ghost {
+  font-family: var(--font-mono);
+  font-size: var(--type-small-size);
+  color: var(--pe-alarm);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  white-space: nowrap;
+}
+
+.dl-cell-line {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+
+/* The footline: one per cell, one line, clamped so a grid never re-flows.
+   ponytail: the clamp truncates real sentences (RFI citations); a disclosure may be needed. */
+.dl-foot {
+  display: block;
+  margin-top: 1px;
+  font-family: var(--font-mono);
+  font-size: var(--type-small-size);
+  letter-spacing: 0.02em;
+  font-style: normal;
+  font-weight: var(--weight-regular);
+  line-height: var(--type-small-line-height);
+  color: var(--pe-ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 5 · a plain underline is a citation on the footline's source name, never the squiggle's slot. */
+.dl-cite {
+  text-decoration: underline solid var(--pe-line-2);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}

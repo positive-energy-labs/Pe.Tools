@@ -14,7 +14,7 @@ import {
 } from "@pe/agent-contracts";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
-import type { CellWire } from "#/components/lang/band";
+import type { CellWire } from "#/components/work/band";
 import { EmptyState } from "#/components/lang/empty";
 import { List } from "#/components/lang/list-popup";
 import { OutcomeLine } from "#/components/lang/outcome";
@@ -361,13 +361,7 @@ function RoomsBody({
     />
   );
   const regionsPane = (
-    <Pane
-      kind="content"
-      title="regions"
-      meta={snapshot ? `${rows.length}` : undefined}
-      scroll="clip"
-      flush
-    >
+    <Pane title="regions" meta={snapshot ? `${rows.length}` : undefined} scroll="clip" flush>
       <RoomsTable
         rows={rows}
         cells={doc?.edits ?? {}}
@@ -392,7 +386,7 @@ function RoomsBody({
       grow
       resize={{ target: "end", defaultSize: 760, minSize: 420, persist: "pe.rooms.tableWidth" }}
       start={
-        <Pane kind="visual" title="plan" meta={page.view || undefined} scroll="clip" flush>
+        <Pane title="plan" meta={page.view || undefined} scroll="clip" flush>
           <RoomsPlan
             rows={onView}
             plan={image}
@@ -481,7 +475,7 @@ function RoomsHistory({ receipts }: { receipts: Reading<unknown> }) {
     .filter((receipt) => receipt.key.startsWith("rooms."))
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   return (
-    <Pane kind="content" title="history" meta={`${rows.length}`}>
+    <Pane title="history" meta={`${rows.length}`}>
       {receipts.state === "failed" ? (
         <OutcomeLine kind="error" label="receipts unread" says={receipts.message} />
       ) : null}

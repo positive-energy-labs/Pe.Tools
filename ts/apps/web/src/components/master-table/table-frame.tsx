@@ -10,7 +10,7 @@ import type { RowData } from "@tanstack/react-table";
 
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { NarrowChip } from "#/components/lang/chip";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { resolveStateColumn } from "#/components/master-table/master-table-columns";
 import type { Column, QueryVocabulary, TableState } from "#/components/master-table/model";
 import { ConditionTarget, QueryBox } from "#/components/master-table/query";
@@ -120,10 +120,11 @@ export function TableFrame<Row extends RowData>({
         <>
           {modes}
           {selection && reach.length > 0 && (
-            <Press
+            <Button
               type="button"
-              tone="quiet"
-              size="label"
+              label={
+                selectedShown === reach.length ? `clear ${reach.length}` : `select ${reach.length}`
+              }
               onClick={() => {
                 const next = new Set(selection.selected);
                 if (selectedShown === reach.length) for (const key of reach) next.delete(key);
@@ -132,7 +133,7 @@ export function TableFrame<Row extends RowData>({
               }}
             >
               {selectedShown === reach.length ? `clear ${reach.length}` : `select ${reach.length}`}
-            </Press>
+            </Button>
           )}
           {actions}
         </>

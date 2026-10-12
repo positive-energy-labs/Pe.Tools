@@ -12,7 +12,7 @@ import {
 } from "@pe/agent-contracts";
 import type { ReactNode } from "react";
 
-import { ReviewRow, reviewTransitions, type CellWire } from "#/components/lang/band";
+import { ReviewRow, reviewTransitions, type CellWire } from "#/components/work/band";
 import { cellFromTrichotomy, fmtNum, StateCell } from "#/components/lang/cell";
 import { useCellNavigation } from "#/components/master-table/cell-navigation";
 

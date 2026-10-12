@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { reviewTransitions } from "#/components/lang/band";
+import { reviewTransitions } from "#/components/work/band";
 import type { FamilyStore } from "#/family/store";
 import {
   consumersOf,

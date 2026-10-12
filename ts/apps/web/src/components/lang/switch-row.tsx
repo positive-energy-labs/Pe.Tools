@@ -1,9 +1,8 @@
 import { Switch } from "./switch";
 
 /**
- * A switch with its refusal beside it (machine control plane, design-system ledger 2026-10-09).
- * A refused switch is disabled and says why on the surface, not in a title: the reader needs the
- * reason to decide what to change, and a disabled switch with no words reads as broken.
+ * A switch with its refusal beside it: a refused switch is disabled and says why on the surface,
+ * not in a title.
  */
 export function SwitchRow({
   label,

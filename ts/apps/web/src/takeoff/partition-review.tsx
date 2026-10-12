@@ -1,7 +1,7 @@
 import { useId, useState } from "react";
 import type { PartitionReviewData } from "@pe/agent-contracts";
 import { List } from "#/components/lang/list-popup";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { token } from "#/lib/token";
 import law from "./visual-law.json";
 
@@ -260,9 +260,13 @@ function ReviewList({
         label: reviewLabel(shape),
         active: selected === shape.key,
         actions: onFlag ? (
-          <Press tone="quiet" size="caption" onClick={() => onFlag(shape.key)}>
-            {flags.includes(shape.key) ? "unflag" : "flag"} {shape.id}
-          </Press>
+          <Button
+            label={`${flags.includes(shape.key) ? "unflag" : "flag"} ${shape.id}`}
+            onClick={() => onFlag(shape.key)}
+          >
+            {flags.includes(shape.key) ? "unflag" : "flag"}{" "}
+            <span className="face-mono">{shape.id}</span>
+          </Button>
         ) : undefined,
       })}
     />

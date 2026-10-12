@@ -2,7 +2,7 @@
 import { useContext, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { Gauge } from "lucide-react";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { StateDot } from "#/components/master-table/cells";
 import { ThemeToggle } from "#/components/lang/theme-toggle";
 import { RouteHelpButton } from "./help";
@@ -75,17 +75,19 @@ function StateGauge({
   return (
     <Popover.Root>
       <Popover.Trigger
-        render={<Press tone="quiet" size="icon" />}
-        title="route state: what is bound, what ran, and the route's nouns"
-        aria-label="Route state"
-      >
-        <Gauge className="size-4" strokeWidth={1.5} />
-      </Popover.Trigger>
+        render={
+          <Button
+            label="Route state"
+            reason="route state: what is bound, what ran, and the route's nouns"
+            icon={Gauge}
+          />
+        }
+      />
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="end" sideOffset={6} className="isolate z-popup">
           <Popover.Popup
             data-surface="artifact"
-            className="flex max-h-(--available-height) w-[44rem] max-w-(--available-width) flex-col gap-3 overflow-auto rounded-lg p-3 t-prose text-ink ring-1 ring-line outline-none"
+            className="flex max-h-(--available-height) w-[44rem] max-w-(--available-width) flex-col gap-3 overflow-auto p-3 t-prose text-ink float-surface"
           >
             {children}
             <FlowMatrix handle={handle} />
@@ -102,18 +104,24 @@ export function Cluster({
   handle,
   lamp,
   state,
+  helpUtilities = false,
 }: {
   handle: RouteHandle<any, any, any, any>;
   lamp: ReactNode;
   /** What the state gauge shows above the inspector (Chat hands in its ledger and log). */
   state?: ReactNode;
+  helpUtilities?: boolean;
 }) {
   const chrome = useContext(HostedChrome);
   return (
     <span className="flex shrink-0 items-center gap-1">
       {lamp}
       <StateGauge handle={handle}>{state}</StateGauge>
-      <RouteHelpButton name={handle.manifest.name} docs={handle.manifest.docs} />
+      <RouteHelpButton
+        name={handle.manifest.name}
+        docs={handle.manifest.docs}
+        utilities={helpUtilities}
+      />
       <ThemeToggle />
       {chrome}
     </span>

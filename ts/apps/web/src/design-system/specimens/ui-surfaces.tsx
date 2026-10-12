@@ -1,6 +1,5 @@
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { useState } from "react";
-import { Card, cardRecipe } from "#/components/lang/card";
 import {
   Dialog,
   DialogContent,
@@ -21,22 +20,10 @@ export function UiSurfaceSpecimens() {
           <Rail
             ground="recess"
             lead={<span className="t-small t-upper">lead and trail</span>}
-            trail={<Press size="label">open</Press>}
+            trail={<Button label="open">open</Button>}
           />
         </div>
       </SpecimenFrame>
-      <RecipeGrid
-        name="Card"
-        importPath="#/components/lang/card"
-        recipe={cardRecipe}
-        render={() => (
-          <div className="w-80">
-            <Card>
-              <span className="t-title">Overhead Coiling Door 421</span>
-            </Card>
-          </div>
-        )}
-      />
       <RecipeGrid
         name="Dialog"
         importPath="#/components/lang/dialog"
@@ -57,9 +44,9 @@ function DialogSpecimen() {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Press size="label" onClick={() => setOpen(true)}>
+      <Button label="open dialog" onClick={() => setOpen(true)}>
         open dialog
-      </Press>
+      </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>

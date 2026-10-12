@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Moon, Sun, SunMoon } from "lucide-react";
 
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 
 type ThemeMode = "light" | "dark" | "auto";
 
@@ -66,9 +66,5 @@ export function ThemeToggle() {
   const label = `Theme: ${LABEL[mode]}${mode === "auto" ? " (system)" : ""}. Click to change.`;
 
   // Icon only, like every other control in a head cluster; the mode rides the title.
-  return (
-    <Press onClick={cycle} aria-label={label} title={label} size="icon" tone="quiet">
-      <Icon className="size-4" strokeWidth={1.5} />
-    </Press>
-  );
+  return <Button onClick={cycle} label={label} icon={<Icon strokeWidth={1.5} aria-hidden />} />;
 }

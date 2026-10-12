@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 
 import { filledValue, type PivotRow } from "#/families/pivot";
 import type { TypeRow } from "#/families/matrix-columns";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { familyCellKey } from "@pe/agent-contracts";
 import type { PatchOverlay } from "#/families/patch-overlay";
 
@@ -166,7 +166,7 @@ export function PivotMinimap({
   if (!open) return null;
   return (
     <div
-      className="z-popup border shadow-float"
+      className="z-popup shadow-float"
       data-surface="artifact"
       style={{
         position: "fixed",
@@ -180,14 +180,13 @@ export function PivotMinimap({
         <span>
           {rows.length} × {types.length}
         </span>
-        <Press
-          type="button"
-          size="caption"
+        <Button
+          label="hide the minimap"
+          reason="hide the minimap"
           onClick={() => onOpenChange(false)}
-          title="hide the minimap"
         >
           ×
-        </Press>
+        </Button>
       </div>
       <div style={{ position: "relative", width: size.w, height: size.h }}>
         <canvas

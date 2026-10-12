@@ -1,16 +1,7 @@
 /**
- * C# for `@tanstack/highlight` — Pods are C# scripts, so C# is the one language the
- * upstream language set is missing and we own (ledger, 2026-09-15).
- *
- * Modelled on the package's own pattern languages (`languages/python.js`). The pattern
- * walker `collectPatternRanges` lives in the package's `internal/` folder, which its
- * `exports` map does not publish, so the 25 lines below are a local copy: patterns run in
- * order and the first to claim a span keeps it, so comments and strings must lead and
- * keywords must beat the `Name(` call rule (otherwise `if (` reads as a function).
- *
- * ponytail: regex tokenizer, not a parser. Nested interpolation braces, raw string
- * literals (`"""`), and generic-versus-less-than ambiguity are the known ceiling; a real
- * parser is the upgrade path if Pod authoring ever needs it.
+ * C# for `@tanstack/highlight` (Pods are C# scripts). Regex tokenizer in the package's pattern
+ * style: comments and strings lead, keywords beat the `Name(` call rule.
+ * ponytail: not a parser; nested interpolation, raw strings and generics ambiguity are the ceiling.
  */
 import {
   defineLanguage,

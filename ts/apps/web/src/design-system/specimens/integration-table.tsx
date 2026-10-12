@@ -6,7 +6,7 @@ import { CellStateKey } from "#/components/lang/cell-key";
 import { FactChip, Tag } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { Provenance, Section } from "#/components/lang/section";
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { Table } from "#/components/master-table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
 import { useTableState } from "#/components/master-table/view";
@@ -132,14 +132,16 @@ export function RealTable() {
         foot={
           <>
             <Tag>2 unsaved · 1 refused by Revit</Tag>
-            <ActionButton
-              tone="commit"
+            <Button
+              kind="commit"
               label="apply to Revit"
               icon={Upload}
               onClick={noop}
-              disabled
+              refusal="fixture data — there is no model behind this table to write to"
               reason="fixture data — there is no model behind this table to write to"
-            />
+            >
+              apply to Revit
+            </Button>
           </>
         }
       >

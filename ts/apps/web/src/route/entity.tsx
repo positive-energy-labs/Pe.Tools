@@ -269,10 +269,8 @@ export function EntityRouteView({
         end={
           specHidden ? null : (
             <Pane
-              kind="inspector"
               title={confirming ? "plan" : sheet ? sheet.title : showOutput ? "output" : "spec"}
               meta={def.entity}
-              side="right"
               actions={
                 !confirming && !sheet && hasOutput ? (
                   <Switcher

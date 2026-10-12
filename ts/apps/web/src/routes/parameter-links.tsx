@@ -14,7 +14,7 @@ import {
 import { ArmingStrip } from "#/components/lang/arming-strip";
 import { FactChip } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { Surface } from "#/components/lang/surface";
 import { EvaluationView, RuntimeStatusBar } from "#/parameter-links/Evaluation";
@@ -29,7 +29,7 @@ import {
   sameProfile,
   type ProfileChange,
 } from "#/parameter-links/model";
-import { ReviewRow, type CellWire } from "#/components/lang/band";
+import { ReviewRow, type CellWire } from "#/components/work/band";
 import { previousOf } from "#/readings";
 import { RouteShell, useRoute } from "#/route";
 import { Situation } from "#/route/situation";
@@ -297,10 +297,11 @@ export function ParameterLinksRouteContent({ thread }: { thread?: string } = {})
             onCollapsedChange: (collapsed) => setRightOpen(!collapsed),
             collapsedSize: 40,
             collapseBelow: 170,
+            title: "evaluation",
           },
         }}
         start={
-          <Pane kind="content" title="profile" scroll="clip" flush>
+          <Pane title="profile" scroll="clip" flush>
             <div className="min-w-0 flex-1 overflow-y-auto">
               {route.work.revision === null ? (
                 <OutcomeLine kind="busy" label="hydrating route state" />
@@ -351,11 +352,17 @@ export function ParameterLinksRouteContent({ thread }: { thread?: string } = {})
                   ) : null}
                   {/* The editor's own save, as the spec editor carries its own: a Work write of the
                   buffer, not a route verb. */}
-                  <ActionButton
-                    tone="commit"
+                  <Button
+                    kind="commit"
                     label="save draft"
                     icon={Save}
-                    disabled={busy != null || !editing || !hasUnsavedEdits}
+                    refusal={
+                      busy != null || !editing || !hasUnsavedEdits
+                        ? hasUnsavedEdits
+                          ? "Write the local edits onto the shared document, where pea can see them"
+                          : "no unsaved local edits — the shared document already matches"
+                        : null
+                    }
                     onClick={() => {
                       if (editing) void saveDraft(editing);
                     }}
@@ -364,7 +371,9 @@ export function ParameterLinksRouteContent({ thread }: { thread?: string } = {})
                         ? "Write the local edits onto the shared document, where pea can see them"
                         : "no unsaved local edits — the shared document already matches"
                     }
-                  />
+                  >
+                    save draft
+                  </Button>
                   <ProfileEditor
                     profile={editing}
                     disabled={busy != null || peaActive}
@@ -377,14 +386,7 @@ export function ParameterLinksRouteContent({ thread }: { thread?: string } = {})
           </Pane>
         }
         end={
-          <Pane
-            kind="flank"
-            title="evaluation"
-            side="right"
-            flush
-            collapsed={!rightOpen}
-            onCollapsedChange={(collapsed) => setRightOpen(!collapsed)}
-          >
+          <Pane title="evaluation" flush>
             <div className="flex h-full flex-col gap-4">
               <RuntimeStatusBar
                 status={status}

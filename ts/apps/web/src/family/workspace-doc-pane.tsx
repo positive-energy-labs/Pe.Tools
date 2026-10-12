@@ -5,9 +5,8 @@ import { EmptyState } from "#/components/lang/empty";
 import { FactChip, Tag } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { List } from "#/components/lang/list-popup";
-import { Press } from "#/components/lang/press";
 import { Switcher } from "#/components/lang/switcher";
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { Pane } from "#/components/lang/pane";
 import { SpecSheet, SpecText, ProposalCard } from "#/family/doc-pane";
 import { NavStateCell } from "#/family/marks";
@@ -87,18 +86,18 @@ export function FamilyWorkspaceDocPane() {
                 {dim.property}
               </span>
               {bound != null ? (
-                <Press
-                  type="button"
+                <Button
+                  label={bound}
+                  kind="nav"
+                  direction="forward"
                   onClick={() => {
                     setInspect({ kind: "param", name: bound });
                     setPinnedParam(bound);
                   }}
-                  title={`Driven by "${bound}", currently ${authoredText(draft.authored[bound]) ?? "—"}. Click to select that parameter: the value is edited on its row and in its own inspector, never in two places.`}
-                  tone="nav"
-                  size="caption"
+                  reason={`Driven by "${bound}", currently ${authoredText(draft.authored[bound]) ?? "—"}. Click to select that parameter: the value is edited on its row and in its own inspector, never in two places.`}
                 >
-                  {bound}
-                </Press>
+                  <span className="face-mono">{bound}</span>
+                </Button>
               ) : (
                 <>
                   <span className="min-w-0 flex-1">
@@ -290,13 +289,15 @@ export function FamilyWorkspaceDocPane() {
           <span className="t-small t-upper min-w-0 flex-1 truncate text-ink">
             {inspect.kind === "part" ? inspect.slug : inspect.name}
           </span>
-          <ActionButton
+          <Button
             label="esc"
-            tone="nav"
+            reason="Close the inspector and give the pane back to the spec. Esc does the same. Nothing is decided by closing — every edit here landed the moment you made it."
+            kind="nav"
             direction="back"
             onClick={() => setInspect(null)}
-            reason="Close the inspector and give the pane back to the spec. Esc does the same. Nothing is decided by closing — every edit here landed the moment you made it."
-          />
+          >
+            esc
+          </Button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {inspect.kind === "part"
@@ -312,9 +313,7 @@ export function FamilyWorkspaceDocPane() {
 
   const docPane = (
     <Pane
-      kind="inspector"
       flush
-      headerSurface="recess"
       // The proposal stack and camera scroll independently: locating a citation keeps its card visible.
       scroll="clip"
       // The pane is a COLUMN: the spec and its proposals scroll in the upper half, the inspector
@@ -370,12 +369,19 @@ export function FamilyWorkspaceDocPane() {
               }
             }}
           />
-          <ActionButton
+          <Button
             label={attaching ? "attaching" : "attach PDF"}
-            disabled={attaching}
-            onClick={() => upload.current?.click()}
             reason="Parse a cut sheet and save its pages and blocks beside the captured family"
-          />
+            kind="framed"
+            refusal={
+              attaching
+                ? "Parse a cut sheet and save its pages and blocks beside the captured family"
+                : null
+            }
+            onClick={() => upload.current?.click()}
+          >
+            {attaching ? "attaching" : "attach PDF"}
+          </Button>
         </>
       }
     >

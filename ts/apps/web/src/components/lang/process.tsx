@@ -1,13 +1,7 @@
 /**
- * PROCESS FACTS — the marks a running Revit is addressed and described by (machine control plane,
- * design-system ledger 2026-10-09). Both are `FactChip`s: machine-measured, so mono, and neither
- * is a control.
- *
- * - `PidChip` is the exact process id. An icon-started Revit has no session name, so the SDK
- *   addresses it by this number; the chip is the one place the number is drawn.
- * - `ShapeCells` is the SDK's `SessionShape`, one cell per axis, in the SDK's words. A cell is
- *   never coloured: the word that departs from a plain installed Revit ("checkout", "hot",
- *   "background", "quarantine") already says so.
+ * Process facts: `PidChip` is the exact process id (the only place the number is drawn);
+ * `ShapeCells` is the SDK's `SessionShape`, one uncoloured cell per axis, in the SDK's words.
+ * Both are `FactChip`s: mono, not controls.
  */
 import type { SessionShape } from "@pe/host-contracts/pe-revit-contract";
 

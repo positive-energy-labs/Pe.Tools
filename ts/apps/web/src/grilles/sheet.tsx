@@ -12,7 +12,7 @@ import { Tag } from "#/components/lang/chip";
 
 import type { Grille, GrilleInput } from "./math";
 import { SHEET_ROWS, frac, pct, solve } from "./math";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 
 export type SheetRow = Grille & { id: string };
 
@@ -127,9 +127,9 @@ export function Sheet({
       state={tableState}
       onStateChange={setTableState}
       summary={
-        <Press type="button" tone="quiet" size="label" onClick={add}>
+        <Button label="+ profile" onClick={add}>
           + profile
-        </Press>
+        </Button>
       }
       selection={{ selected: picked, onChange: onPickedChange }}
     >

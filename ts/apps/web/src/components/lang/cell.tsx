@@ -1,33 +1,7 @@
 /**
- * STATE CELL — the one grammar, at any scale.
- *
- * CONSUMERS: master-table cells; the trichotomy reviewer (soon); pea's chat proposal card
- * (soon — the card's staged values are this same treatment one scale up); `CellStateKey`, which
- * renders its specimens through this component precisely so the key cannot lie about the table.
- *
- * RULINGS EMBODIED:
- * - ROUND 1 WAS WON BY "one cell grammar everywhere" — the chat card's staged values, the table
- *   cells and the arming strip being the same treatment at three scales was named load-bearing.
- *   This component is the first of those three; the other two are built from the same tokens.
- * - THE WEAK ANCHOR (round-1 ruling grill): **cell-BODY treatment is reserved for pea proposals
- *   and uneditable/disabled.** Everything else — drift, freshness, staging — lives at
- *   edges/text/decoration. Variant e's everything-is-a-wash was not adopted.
- * - c's AXIS LAW: ONE decoration family (the squiggle) carries "state of the value", ranked by
- *   colour — drift ▸ stale ▸ unverified. One winner draws; the losers draw nothing. A PLAIN
- *   underline is a CITATION, and it lives on the footline's source name — a different element —
- *   so it can never contend for the squiggle's slot.
- * - ROUND-2 RULING NOTE 1: pea's open proposal keeps BOTH the fold and the unsaved square, in
- *   pea's own ink. The square's presence means "nothing is written yet"; its COLOUR carries
- *   authorship. Your own staged edit gets the same shape in caution, plus bold.
- * - BOLD IS RESERVED FOR UNSAVED, everywhere, always — and only for YOUR unsaved edit, because
- *   pea's cell already owns the body and the wash has said it.
- * - ONE FOOTLINE, ONE LINE, CLAMPED, ranked capReason ▸ note ▸ citation. Stacking these is what
- *   killed variant e's density (round 1 measured a 2.1× row-height spread).
- * - ICONS NEVER GO INSIDE A DATA CELL — they break table ergonomics the moment a value runs long.
- *
- * PRECEDENCE, in order (enforced by cascade in lang.css, not by discipline here):
- *   1 uneditable owns the body · 2 pea's proposal owns it otherwise · 3 the squiggle slot ·
- *   4 unsaved composes on top · 5 citation never contends.
+ * The cell: one grammar for a value at any scale (table td, card line, key specimen).
+ * Body fill is only a pea proposal or locked; bold is only unsaved; one squiggle wins; icons
+ * never go inside a data cell. Precedence is the cascade order in cell.css.
  */
 import {
   createContext,
@@ -44,6 +18,7 @@ import { useScopeKeys } from "#/route/keys";
 
 import { Verdict } from "./verdict";
 import "./lang.css";
+import "./cell.css";
 
 export const stateCellRecipe = tv({
   slots: {
@@ -371,8 +346,7 @@ export function StateCell(props: StateCellProps) {
         ) : (
           shown
         )}
-        {/* SPECIMEN: /design-system/band's words, on the row's one line: a contest a title alone
-            hides from keyboard, touch and no-hover readers (E2E-J2 ruling). */}
+        {/* A contest on the row's one line: a title alone hides it from keyboard, touch and no-hover readers. */}
         {read.contested ? (
           <span className={slots.counter()}>pea proposes {props.counterValue}</span>
         ) : null}
@@ -428,9 +402,8 @@ export function StateCell(props: StateCellProps) {
       </span>,
     );
 
-  // RULED 2026-08-31: a card-scale cell in a constrained context may not wrap to two lines, and
-  // the 10px floor forbids shrinking the footline — so it collapses to the same hover the row
-  // scale uses. `title` on the wrapper, `cellFactsText`, one ranking for both.
+  // A constrained card-scale cell may not wrap or shrink its footline: it collapses to the row
+  // scale's hover (`title` on the wrapper, `cellFactsText`, one ranking for both).
   const hoverFoot = props.foot === "hover";
   return (
     <span

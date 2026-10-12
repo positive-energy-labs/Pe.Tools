@@ -1,10 +1,9 @@
 import { Plus, Trash2 } from "lucide-react";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { Tag } from "#/components/lang/chip";
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { Input } from "#/components/lang/input";
 import { EmptyState } from "#/components/lang/empty";
-import { Press } from "#/components/lang/press";
 import { ListPopup } from "#/components/lang/list-popup";
 import { TextCell } from "#/components/master-table/cells";
 import type { Column } from "#/components/master-table/model";
@@ -147,20 +146,16 @@ export function DraftEditor({
                       }
                       row={(kind) => ({ label: <span className="face-mono">{kind.label}</span> })}
                     />
-                    <Press
+                    <Button
                       type="button"
-                      title={
-                        draft.columns.length === 1
-                          ? "a table keeps at least one column"
-                          : "Remove this column and its values from the draft"
+                      icon={Trash2}
+                      label="Remove column"
+                      reason="Remove this column and its values from the draft"
+                      refusal={
+                        draft.columns.length === 1 ? "a table keeps at least one column" : null
                       }
-                      tone="quiet"
-                      state="disabled"
-                      disabled={draft.columns.length === 1}
                       onClick={() => removeColumn(columnIndex)}
-                    >
-                      <Trash2 className="size-3" />
-                    </Press>
+                    />
                   </span>
                 ),
                 cell: ({ row, index }) => (
@@ -176,34 +171,39 @@ export function DraftEditor({
               key: "verbs",
               label: "verbs",
               header: (
-                <ActionButton
+                <Button
+                  kind="framed"
                   label="col"
                   icon={Plus}
                   onClick={addColumn}
                   reason="Add a column to the draft"
-                />
+                >
+                  col
+                </Button>
               ),
               width: "w-16",
               cell: ({ index }) => (
-                <Press
+                <Button
                   type="button"
-                  title="Remove this row — it is deleted in Revit on apply"
-                  tone="quiet"
+                  icon={Trash2}
+                  label="Remove row"
+                  reason="Remove this row — it is deleted in Revit on apply"
                   onClick={() => removeRow(index)}
-                >
-                  <Trash2 className="size-3" />
-                </Press>
+                />
               ),
             },
           ]}
         />
         <div className="px-1 py-0.5">
-          <ActionButton
+          <Button
+            kind="framed"
             label="add row"
             icon={Plus}
             onClick={addRow}
             reason="Add a row with a fresh stable key"
-          />
+          >
+            add row
+          </Button>
         </div>
       </ArtifactFrame>
     </div>

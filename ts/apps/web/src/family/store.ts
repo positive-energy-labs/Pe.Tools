@@ -25,7 +25,7 @@ import {
   type SettingsSnapshot,
 } from "@pe/agent-contracts";
 
-import type { CellWire } from "#/components/lang/band";
+import type { CellWire } from "#/components/work/band";
 import type { TableState } from "#/components/master-table/model";
 import { projectBuildReceipt, type BuildFacts, type BuildRefusal } from "#/family/build";
 import type { EvidenceSlice, FamilySnapshot, FieldState } from "#/family/host";

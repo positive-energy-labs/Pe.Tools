@@ -2,7 +2,7 @@ import { familyCellAddress } from "@pe/agent-contracts";
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { ReadCell } from "#/components/master-table/cells";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import type { Column, QueryVocabulary } from "#/components/master-table/model";
 import { TableFrame } from "#/components/master-table/table-frame";
 import {
@@ -335,17 +335,15 @@ export function FamiliesPivot({ empty, above }: { empty?: ReactNode; above?: Rea
           query={vocabulary}
           chips={scopeChips}
           actions={
-            <Press
-              type="button"
-              frame="line"
-              size="caption"
-              state={map ? "selected" : "rest"}
+            <Button
+              label="map"
+              kind="framed"
+              pressed={map}
               onClick={() => setMap(!map)}
-              title={map ? "hide the minimap" : "show the minimap"}
-              aria-pressed={map}
+              reason={map ? "hide the minimap" : "show the minimap"}
             >
               map
-            </Press>
+            </Button>
           }
         >
           <TypeGrid

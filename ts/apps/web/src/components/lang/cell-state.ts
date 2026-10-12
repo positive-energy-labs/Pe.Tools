@@ -6,8 +6,7 @@ import {
 } from "@pe/agent-contracts";
 import type React from "react";
 
-/** The one squiggle slot. Ranked; exactly one may draw. `never` is NOT here on purpose —
- * nothing exists to distrust, so it draws no squiggle (ruled 2026-08-16, consolidation batch). */
+/** The one squiggle slot. Ranked; exactly one may draw. `never` is not here: nothing exists to distrust. */
 type Unsettled = "drift" | "stale" | "unverified";
 
 /** A refusal a cell says: the person's sentence, and optionally words written for Pea. */
@@ -31,18 +30,15 @@ interface StateCellBase {
    */
   modelValue?: string;
   /**
-   * A stale staged cell's A (ask A, 2026-09-19): the value the person reviewed against before Revit
+   * A stale staged cell's A: the value the person reviewed against before Revit
    * moved under it (`basis.stale[].was`; null when unread). Present on drift, the cell reads in
    * words: "you reviewed A · Revit now C · yours B", C being `modelValue` and B the value.
    */
   reviewed?: string | null;
   /**
-   * The epistemic ladder — how much do we know about this value (ruled 2026-08-16):
-   * `fresh` checked recently · `stale` checked long ago · `unverified` a value exists but was
-   * never checked · `never` nothing was ever attempted — no reading, no value. The first three
-   * rank in the squiggle slot below `agree`; `never` draws NO squiggle at all (there is nothing
-   * to distrust) — the value slot renders muted. "Not started is a state, not a zero"
-   * (SURFACE-PHILOSOPHY §1) finally has its rung; three routes were borrowing `unverified`.
+   * How much we know about this value: `fresh` checked recently · `stale` checked long ago ·
+   * `unverified` a value exists but was never checked · `never` nothing was ever attempted.
+   * The first three rank in the squiggle slot below `agree`; `never` draws no squiggle and mutes the value.
    */
   fresh?: "fresh" | "stale" | "unverified" | "never";
   /** Whether the model holds the same value. `drift` is the ONE alarm. */
@@ -51,31 +47,29 @@ interface StateCellBase {
   stage?: "clean" | "proposed" | "staged";
   /**
    * Who staged it — pea's square is pea's ink, yours is caution and carries the bold.
-   * RULED 2026-08-16 (consolidation batch): authorship is a QUALIFIER of staging, not a fifth
-   * axis — it only reads when `stage` is not clean. Census tables count four axes + qualifier.
+   * A qualifier of staging, not a fifth axis: it only reads when `stage` is not clean.
    * Only Pea proposes, so `cellFromTrichotomy` reads a staged value equal to the standing
    * proposal as Pea's (accepted verbatim) and anything else as yours; hand-written callers
    * that have no proposal behind the staging pass "you".
    */
   stagedBy?: "pea" | "you";
   /**
-   * THE COUNTER-PROPOSAL (ruled 2026-08-31, review deletion): pea's standing proposed value when
-   * it is NOT what the cell shows — proposal and staged both present, values differing. Draws the
+   * The counter-proposal: pea's standing proposed value when
+   * it is not what the cell shows — proposal and staged both present, values differing. Draws the
    * fold alone (no body wash — the shown value is not pea's) and rides the facts/footline. This
    * is pea's in-cell voice against a staged value; its other channel is chat.
    */
   counterValue?: string;
   /**
-   * THE ORIGINAL (ruled 2026-10-06, kaitpw): a proposed cell DRAWS Pea's value, so what the model
+   * The original: a proposed cell draws Pea's value, so what the model
    * holds under it rides here — the row-scale title and the card footline say "currently X".
    * `cellFromTrichotomy` fills it from the value the caller passed, which is the current one.
    */
   currentValue?: string;
   /**
    * Whether the cell can be written at all. Anything but `editable` owns the body.
-   * RULED 2026-08-31 (proposal-state demiurge): `readonly` and `excluded` were one rendering
-   * under two names — they collapse into `locked` and the distinction rides `capReason`, which
-   * is the only place it was ever legible. `nohome` stays: it draws the seam.
+   * `readonly` and `excluded` are one rendering: `locked`, with the distinction in `capReason`.
+   * `nohome` draws the seam.
    */
   cap?: "editable" | "locked" | "nohome";
   /** Why it refuses edits. Present exactly when `cap` is not `editable`; ranks first on the footline. */
@@ -85,25 +79,19 @@ interface StateCellBase {
   confidence?: "high" | "low";
   note?: string;
   /**
-   * ROW SCALE (ruled 2026-08-16, kaitpw): inside a table a cell is ONE CLIPPED LINE — the value
-   * plus the zero-footprint marks (full-bleed body wash, squiggle, fold, square). No footline,
-   * no inline ghost: prose facts and the model's ghost value live in the table's READOUT BAND
-   * (and the title, as the hover shortcut). Fat rows are never allowed; a cell clips rather
-   * than expands, so column alignment and row height are uniform by construction. "card"
-   * (default) keeps the footline — pea's card and standalone specimens have room for it.
+   * "row": inside a table a cell is one clipped line, the value plus zero-footprint marks. No
+   * footline or inline ghost; those facts live in the table's readout band and the title.
+   * "card" (default) keeps the footline.
    */
   scale?: "card" | "row";
   /**
-   * Where the card-scale footline goes. RULED 2026-08-31 (per-cell grounding): the footline may
-   * not wrap a cell to two lines, and the 10px floor forbids shrinking it — so inside a
-   * constrained context (a table cell at card scale) it collapses to `hover`, the same `title`
-   * the row scale uses. `inline` keeps it where the card has room: pea's chat card, specimens.
-   * Row scale is always hover; this only reads at card scale.
+   * Where the card-scale footline goes. It may not wrap to two lines nor shrink below the 10px
+   * floor, so in a constrained context it collapses to `hover` (the `title` row scale uses);
+   * `inline` keeps it where the card has room. Row scale is always hover.
    */
   foot?: "inline" | "hover";
   /**
-   * NUMERIC COMMIT (ruled 2026-08-16, fit reviews #2 — §3's named silent-swallow defect, killed
-   * here): present ⇒ the commit path parses per `parseCell` before `onCommit` sees anything. A
+   * Numeric commit: present ⇒ the commit path parses per `parseCell` before `onCommit` sees anything. A
    * refused parse (blank, not a number) RETURNS a reason, so the built-in refusal note fires —
    * never a silent restore. Integers truncate, `min` clamps, and `onCommit` receives the
    * normalized text (`fmtNum`, `digits`).
@@ -112,23 +100,15 @@ interface StateCellBase {
   /** Placeholder for the editable value slot — e.g. an inherited value the cell would take. */
   placeholder?: string;
   /**
-   * Locate what this cell describes (ruled 2026-08-16, fit reviews — families #14): a click on
-   * the cell BODY when not editing. The marks stay non-focusable and an editable cell's clicks
-   * belong to the caret — the input swallows them — so locate never contends with editing.
-   *
-   * RULED 2026-08-31 (critic verdict 14 — RE-OPENABLE): on an editable cell the input fills the
-   * body, so "the body" was a 2px strip of padding and the affordance was effectively unclickable.
-   * THE CELL'S MARKS ARE THE LOCATE TARGET: the proposal fold and the unsaved square already
-   * render outside the input and already mean "there is something to go look at", so they carry
-   * the click. A cell with `onLocate` and NO mark still locates on its body — there is nothing to
-   * aim at, but nothing is stolen either.
+   * Locate what this cell describes: a click on the cell body when not editing. An editable
+   * cell's input swallows its clicks, so the proposal fold and the unsaved square (outside the
+   * input) are the locate target there. A cell with `onLocate` and no mark locates on its body.
    */
   onLocate?: () => void;
   /** Cell-to-cell navigation hook (Enter/Tab/arrows). Return true when the move was taken. */
   onNavigate?: (dir: "up" | "down" | "left" | "right") => boolean;
   /**
-   * THE CELL'S OWN VERBS (verdict 2026-09-18: approve/deny belong to the cell, as transitions of
-   * the language). The caller decides which kinds are available; the cell draws exactly these,
+   * The cell's own verbs, as transitions. The caller decides which kinds are available; the cell draws exactly these,
    * in this order, and holds NO availability logic. Typing is `stage` and stays `onCommit`.
    * Card scale draws them inline after the value. Row scale costs zero footprint: they overlay
    * the trailing edge while the cell is hovered or focused, and a focused table cell takes
@@ -148,11 +128,10 @@ export type StateCellProps = StateCellBase &
   (
     | {
         /**
-         * THE EDITABLE CELL (ruled 2026-08-16, consolidation batch R8 — families #6, "the strongest
-         * finding of the sweep"). Present ⇒ the value slot renders as a caret-safe input; every mark
+         * The editable cell. Present ⇒ the value slot renders as a caret-safe input; every mark
          * stays OUTSIDE the text box ("do not steal the caret"). Return a string to REFUSE the
          * commit: the cell restores the prior value and shows a dismissible caution note carrying
-         * the reason — §3's "restore AND say why, near the cell, without resizing the row". Requires
+         * the reason, near the cell, without resizing the row. Requires
          * `scale="row"` and a string `value`; `cap` other than editable wins and renders locked.
          * An async commit (a Work write) may return a promise of that refusal: it restores the same
          * way when the refusal arrives, so typed text is never left looking accepted.
@@ -165,7 +144,7 @@ export type StateCellProps = StateCellBase &
       }
     | {
         /**
-         * THE MEASURED CELL (ruled 2026-09-22), one kind beside `numeric`. A bare number stages at once
+         * The measured cell, one kind beside `numeric`. A bare number stages at once
          * with the column's display unit and never calls Revit, so the cell reads "300 CFM" the moment
          * it is staged and what is reviewed is what is applied. Text carrying a unit shows as typed
          * until commit, then ONE read-only host parse answers with Revit's unrounded value,
@@ -238,7 +217,7 @@ export interface CellTransition {
 const showJson = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
 
 /**
- * THE ONE READER (ruled 2026-08-31, proposal-state demiurge). A trichotomy cell —
+ * The one reader. A trichotomy cell —
  * `agent-contracts/src/trichotomy.ts`, proposal → staged → committed — plus the caller's own
  * facts (the shown value, agreement, freshness, capability) becomes `StateCellProps` HERE, so no
  * route re-derives the mapping and no two surfaces can disagree about what a proposal looks like.
@@ -267,7 +246,7 @@ export function cellFromTrichotomy(
         ? "delete"
         : show(proposal.value)
       : undefined;
-  // A standing proposal is what the cell DRAWS (ruled 2026-10-06); the caller's value, which is
+  // A standing proposal is what the cell DRAWS; the caller's value, which is
   // the current one, moves to `currentValue` and the tooltip. A deletion draws the empty mark.
   const proposedText =
     stage === "proposed" ? (proposal?.delete === true ? "" : show(proposal?.value)) : undefined;
@@ -342,8 +321,7 @@ export function readCell(p: StateCellProps): CellRead {
             ? "unverified"
             : null,
     never: p.fresh === "never",
-    // An open proposal is unsaved too, but its square is drawn off `body: "proposed"` — see
-    // lang.css. This slot is only for a STAGED value, whose author is the open question.
+    // An open proposal is unsaved too, but its square is drawn off `body: "proposed"` (cell.css). This slot is only for a STAGED value, whose author is the open question.
     unsaved: !locked && stage === "staged" ? (p.stagedBy ?? "you") : null,
   };
 }
@@ -351,8 +329,7 @@ export function readCell(p: StateCellProps): CellRead {
 /**
  * Cell state, in the order attention is owed: fix drift, review the proposal, commit the staged,
  * re-read the stale, check the unverified, leave clean alone, and locked last — nothing to do.
- * A state column with no explicit `sort` orders by this (SURFACE-PHILOSOPHY §1: state columns
- * sort in the order the work happens, not alphabetically).
+ * A state column with no explicit `sort` orders by this, not alphabetically.
  */
 export const CELL_STATE_ORDER = [
   "drift",

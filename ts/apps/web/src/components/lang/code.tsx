@@ -1,24 +1,10 @@
 /**
- * CODE — the one read-only highlighted block, and the one editable JSON surface.
- *
- * RULINGS EMBODIED (docs/features/design-system/LEDGER.md, 2026-09-15):
- * - A code block is a MACHINE-OPERATED OBJECT, so it wears `artifactFrameRecipe`: one ground
- *   shift plus one inset hairline, no radius, no shadow. Its head band carries the language on
- *   the left and the machine-measured facts on the right — line count, copy, and "show all".
- * - `Code` owns the height clamp; the container owns show/hide.
- * - `@tanstack/highlight` is the only highlighter. C# is ours because Pods are C# scripts.
- * - One `stringify` lives in code-format, and `Code` takes a string, so the byte count is a fact the
- *   caller can see before it hands the block over.
- *
- * WHY TWO EXPORTS AND NOT ONE `editable` FLAG (ledger line 18): a textarea owns caret,
- * selection, and the native undo stack, and paint is a pure function of a string. One component
- * with a flag would have to own both and would own neither well. `Code` is paint with chrome;
- * `JsonEditor` is paint under a live textarea and nothing else — its callers frame it.
- *
- * ponytail: no virtualization, no folding. Above 64 KB the block stops tokenizing rather than
- * growing a windowing layer; the systemic fix for large tool output is Owed in the ledger.
+ * `Code` is the read-only highlighted block (paint with chrome, height clamp owned here);
+ * `JsonEditor` is paint under a live textarea, framed by its caller. Highlighting is
+ * @tanstack/highlight only; `Code` takes a string.
  */
 import { useMemo, useState, type ComponentProps } from "react";
+import { Check, Copy } from "lucide-react";
 import { useCopy } from "#/lib/use-copy";
 import { createHighlighter, type HighlightDecoration } from "@tanstack/highlight/core";
 import { css } from "@tanstack/highlight/languages/css";
@@ -39,7 +25,7 @@ import { yaml } from "@tanstack/highlight/languages/yaml";
 
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { csharp } from "#/components/lang/csharp-language";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { diagramKind, useDiagram } from "#/components/lang/diagram";
 
 import "./code.css";
@@ -82,7 +68,7 @@ function holdsGrammar(tag: string): boolean {
 
 /** Past this many bytes the block shows a slice and never tokenizes; see the header. */
 const TOKENIZE_LIMIT = 64 * 1024;
-const FRAME_CLASS = "not-prose";
+const FRAME_CLASS = "not-prose dl-code-frame";
 
 interface CodeProps {
   code: string;
@@ -94,6 +80,8 @@ interface CodeProps {
   lang?: string;
   /** Head label; falls back to the language. */
   title?: string;
+  /** The copy icon's name, when `Copy <title>` reads badly (a title of `in`). */
+  copyLabel?: string;
   decorations?: readonly HighlightDecoration[];
   lineNumbers?: boolean;
   /** Default true: cap at 32rem and scroll. `false` lets the block run its full height. */
@@ -117,6 +105,7 @@ export function Code({
   code,
   lang,
   title,
+  copyLabel,
   decorations,
   lineNumbers,
   clamp = true,
@@ -163,8 +152,11 @@ export function Code({
       label={title ?? lang ?? "code"}
       head={
         <>
-          {(title ?? lang) ? (
-            <span className="t-small t-upper text-ink-2">{title ?? lang}</span>
+          {/* A caller's title is a label; a fence's tag is what the author typed, said verbatim. */}
+          {title ? (
+            <span className="t-small t-upper text-ink-2">{title}</span>
+          ) : lang ? (
+            <span className="t-small face-mono">{lang}</span>
           ) : null}
           {noGrammar ? (
             <span className="t-small face-mono" data-tone="caution">
@@ -179,36 +171,40 @@ export function Code({
         </>
       }
       headTrail={
-        <span className="flex items-baseline gap-2">
+        <span className="flex items-center gap-2">
           <span className="t-small face-mono tabular-nums text-ink-mute">
             {lines} {lines === 1 ? "line" : "lines"}
           </span>
           {gated && !showAll ? (
-            <Press tone="quiet" size="label" onClick={() => setShowAll(true)}>
+            <Button label="show all" onClick={() => setShowAll(true)}>
               show all
-            </Press>
+            </Button>
           ) : null}
           {failed ? (
             <>
               <span className="t-small face-mono" data-tone="caution" title={failed}>
                 invalid diagram
               </span>
-              <Press tone="quiet" size="label" onClick={() => setSourceOpen(!sourceOpen)}>
+              <Button
+                label={sourceOpen ? "hide source" : "show source"}
+                onClick={() => setSourceOpen(!sourceOpen)}
+              >
                 {sourceOpen ? "hide source" : "show source"}
-              </Press>
+              </Button>
             </>
           ) : drawable && complete ? (
-            <Press
-              tone="quiet"
-              size="label"
+            <Button
+              label={view === "diagram" ? "source" : "diagram"}
               onClick={() => setView(view === "diagram" ? "source" : "diagram")}
             >
               {view === "diagram" ? "source" : "diagram"}
-            </Press>
+            </Button>
           ) : null}
-          <Press tone="quiet" size="label" onClick={() => copy(code)}>
-            {copied ? "copied" : "copy"}
-          </Press>
+          <Button
+            label={copied ? "Copied" : (copyLabel ?? `Copy ${title ?? lang ?? "code"}`)}
+            icon={copied ? <Check size={13} /> : <Copy size={13} />}
+            onClick={() => copy(code)}
+          />
         </span>
       }
     >

@@ -20,7 +20,7 @@ import { exportSeed, type Reading } from "@pe/agent-contracts";
 import { FactChip } from "#/components/lang/chip";
 import { Code, stringify } from "#/components/lang/code";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { Section } from "#/components/lang/section";
 
 import { PageLog } from "./situation-grids";
@@ -85,16 +85,13 @@ function Row({ name, raw, children }: { name: string; raw?: unknown; children: R
         <span className="w-28 shrink-0 t-small face-mono text-ink-2">{name}</span>
         <span className="min-w-0 flex-1 t-small">{children}</span>
         {raw === undefined ? null : (
-          <Press
-            type="button"
-            tone="quiet"
-            size="label"
+          <Button
+            label={`raw JSON of ${name}`}
             aria-expanded={open}
-            title={`raw JSON of ${name}`}
             onClick={() => setOpen((value) => !value)}
           >
             <span className="face-mono text-ink-mute">{open ? "{–}" : "{…}"}</span>
-          </Press>
+          </Button>
         )}
       </div>
       {open && raw !== undefined ? (
@@ -361,15 +358,13 @@ function InspectorBody<W, R extends string, P, A extends string>({
       <Section
         label="Last outcome"
         aside={
-          <Press
-            type="button"
-            tone="quiet"
-            size="label"
-            title="copy this moment as a Seed — the Work, every ready Reading, and the Page"
+          <Button
+            label="copy Seed"
+            reason="copy this moment as a Seed — the Work, every ready Reading, and the Page"
             onClick={() => void navigator.clipboard?.writeText(seed())}
           >
             copy Seed
-          </Press>
+          </Button>
         }
       >
         {busy ? (

@@ -4,7 +4,7 @@
  */
 import type { GroundedDocEngine } from "#/grounded-doc/engine";
 import type { ParsedPage } from "#/grounded-doc/types";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { anchorRef, pageKey } from "./block-markdown";
 
 export function PagePane({
@@ -80,10 +80,8 @@ function PageCanvas({
           const isPinned = engine.pinned?.blockId === block.id;
           const isApprox = engine.ambiguousBlockIds.has(block.id);
           return block.bboxes.map((bbox, index) => (
-            <Press
-              type="button"
-              tone={isApprox ? "quiet" : page.screenshotUrl ? "neutral" : "neutral"}
-              state={isFocused ? (isApprox ? "focused" : "focused") : "rest"}
+            <Button
+              label={block.kind}
               key={`${block.id}-${index}`}
               data-block-id={block.id}
               data-citation-lit={isFocused ? "true" : undefined}
@@ -96,7 +94,7 @@ function PageCanvas({
                   : undefined
               }
               style={{ ...toPercent(bbox), position: "absolute" }}
-              title={
+              reason={
                 isApprox
                   ? `${block.kind} — approximate region (parser gave a sibling block the same box)`
                   : `${block.kind} — click to ${isPinned ? "unpin" : "pin"}`
@@ -107,22 +105,19 @@ function PageCanvas({
               {!page.screenshotUrl && (
                 <span className="absolute left-0.5 top-0.5">{block.kind}</span>
               )}
-            </Press>
+            </Button>
           ));
         })}
 
         {images.map((image) => {
-          const isFocused = engine.focus?.blockId === image.id;
           const isPinned = engine.pinned?.blockId === image.id;
           return (
-            <Press
-              type="button"
-              tone="neutral"
-              state={isFocused ? "focused" : "rest"}
+            <Button
+              label={`${image.category} image`}
               key={image.id}
               ref={anchorRef(refs, image.id)}
               style={{ ...toPercent(image.bbox), position: "absolute" }}
-              title={`${image.category} image — click to ${isPinned ? "unpin" : "pin"}`}
+              reason={`${image.category} image — click to ${isPinned ? "unpin" : "pin"}`}
               onMouseEnter={() => engine.hoverBlock(image.id, "page")}
               onClick={() => engine.pinBlock(image.id, "page")}
             />
