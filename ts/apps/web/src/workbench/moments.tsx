@@ -34,6 +34,7 @@ import {
   type ChatMessage,
   type ChatPart,
   type ToolCall,
+  formatBytes,
 } from "./chat-state";
 import { Markdown } from "./prose";
 import { Code, stringify } from "#/components/lang/code";
@@ -42,7 +43,8 @@ import { ActionLine, ProposedLine } from "./record-lines";
 import { Button } from "#/components/lang/button";
 import { annotation } from "#/components/anatomy";
 import { PressContent } from "#/components/anatomy/press-content";
-import { FactChip } from "#/components/lang/chip";
+import { FactChip, FileChip } from "#/components/lang/chip";
+import { isPdf, openPdf } from "./open-pdf";
 import { Thumbnail } from "./thumbnail";
 import { useCopy } from "#/lib/use-copy";
 import { startFeedback } from "#/components/feedback-picker";
@@ -384,14 +386,19 @@ function Part({ part }: { part: Exclude<ChatPart, CallPart> }): ReactNode {
 
 type AttachmentPart = Extract<ChatPart, { type: "image" | "file" }>;
 
-/** A sent file: an image is a thumbnail that opens full size; anything else is a name chip. */
+/** A sent file: an image is a thumbnail that opens full size; a file is a name and size chip, a PDF's name opens it. */
 function Attachment({ part }: { part: AttachmentPart }) {
-  if (part.type === "file")
+  if (part.type === "file") {
+    const { name, mimeType, data, size } = part;
     return (
-      <FactChip title={`${part.name} (${part.mimeType}), sent with this message`}>
-        <span>{part.name}</span> <span className="text-ink-2">{part.mimeType}</span>
-      </FactChip>
+      <FileChip
+        name={name}
+        meta={formatBytes(size)}
+        title={`${name} (${mimeType}), sent with this message`}
+        open={isPdf(mimeType, data) ? () => openPdf(data) : undefined}
+      />
     );
+  }
   return <Thumbnail src={part.image} name={part.name ?? "attachment"} />;
 }
 

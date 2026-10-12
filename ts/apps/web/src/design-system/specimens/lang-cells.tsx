@@ -1,6 +1,6 @@
 import { CellStateKey, cellStateKeyRecipe } from "#/components/lang/cell-key";
 import { StateCell, stateCellRecipe } from "#/components/lang/cell";
-import { FactChip, NarrowChip, Tag, chipRecipe } from "#/components/lang/chip";
+import { FactChip, FileChip, NarrowChip, Tag, chipRecipe } from "#/components/lang/chip";
 
 import { RecipeGrid } from "./recipe-grid";
 
@@ -51,6 +51,18 @@ export function LangCellSpecimens() {
               label="needs a person"
               count={3}
               title="Removing this widens the view."
+              onRemove={noop}
+            />
+            <FileChip
+              name="damper-submittal.pdf"
+              meta="180.0 KB"
+              title="A PDF opens in the browser"
+              open={noop}
+            />
+            <FileChip
+              name="riser-notes.txt"
+              meta="640 B"
+              title="Attached to the next message"
               onRemove={noop}
             />
             <NarrowChip

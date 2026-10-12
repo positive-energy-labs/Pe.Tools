@@ -32,7 +32,10 @@ const KINDS = ["quiet", "framed", "commit"] as const;
 export function LangPressSpecimens() {
   return (
     <>
-      <SpecimenFrame name="Button · kind × state (rest, pressed, refused, busy, icon-only)" importPath="#/components/lang/button">
+      <SpecimenFrame
+        name="Button · kind × state (rest, pressed, refused, busy, icon-only)"
+        importPath="#/components/lang/button"
+      >
         <div className="grid grid-cols-[auto_repeat(5,auto)] items-center justify-start gap-x-4 gap-y-2">
           {KINDS.map((kind) => (
             <Fragment key={kind}>

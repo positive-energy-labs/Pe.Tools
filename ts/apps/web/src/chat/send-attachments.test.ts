@@ -76,6 +76,6 @@ it("the user turn draws a prompt event's image as a thumbnail and its text file 
   expect(user?.parts).toEqual([
     { type: "text", text: "look" },
     { type: "image", image: "data:image/png;base64,iVBO", name: "riser.png" },
-    { type: "file", name: "sizes.csv", mimeType: "text/csv" },
+    { type: "file", name: "sizes.csv", mimeType: "text/csv", size: 7 },
   ]);
 });

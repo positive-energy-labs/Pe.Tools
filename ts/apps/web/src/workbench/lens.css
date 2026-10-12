@@ -514,7 +514,7 @@
    size as the row's own code, a step under the chrome rung the heads keep. */
 [data-annotation="tool-body"] [data-code-pane] {
   font-size: calc(var(--type-small-size) * 0.9);
-  line-height: 18px;
+  line-height: var(--type-small-line-height);
 }
 
 /* R3 keeps one reading measure for the transcript and its floating composer. */

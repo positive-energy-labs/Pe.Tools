@@ -1,9 +1,8 @@
-// One attached file as a chip: thumbnail for images, size for the rest, a remove button.
-import { X } from "lucide-react";
-import { chipRecipe } from "#/components/lang/chip";
-import { Button } from "#/components/lang/button";
+// One attached file in the composer: thumbnail for images, size for the rest, a PDF opens.
+import { FileChip } from "#/components/lang/chip";
 import { Thumbnail } from "#/workbench/thumbnail";
 import { formatBytes } from "#/workbench/chat-state";
+import { isPdf, openPdf } from "#/workbench/open-pdf";
 import type { PromptAttachment } from "@pe/agent-contracts";
 
 export function AttachmentChip({
@@ -13,25 +12,20 @@ export function AttachmentChip({
   attachment: PromptAttachment;
   onRemove: () => void;
 }) {
-  const { base, label, count } = chipRecipe();
-  const name = attachment.name;
-  const image = !!attachment.data && attachment.mimeType.startsWith("image/");
+  const { name, mimeType, data, size } = attachment;
+  const image = !!data && mimeType.startsWith("image/");
   return (
-    <span
-      className={base({ class: image ? "h-auto py-[3px]" : undefined })}
-      data-surface="artifact"
+    <FileChip
+      name={name}
+      meta={image ? undefined : formatBytes(size)}
       title={`${name} is attached to the next message`}
-    >
-      {image ? (
-        <Thumbnail
-          src={`data:${attachment.mimeType};base64,${attachment.data}`}
-          name={name}
-          fit="chip"
-        />
-      ) : null}
-      <span className={label()}>{name}</span>
-      {!image ? <span className={count()}>{formatBytes(attachment.size)}</span> : null}
-      <Button icon={X} label={`Remove ${name}`} onClick={onRemove} />
-    </span>
+      lead={
+        image ? (
+          <Thumbnail src={`data:${mimeType};base64,${data}`} name={name} fit="chip" />
+        ) : undefined
+      }
+      open={isPdf(mimeType, data) ? () => openPdf(data) : undefined}
+      onRemove={onRemove}
+    />
   );
 }

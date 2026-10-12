@@ -225,20 +225,45 @@ test("normal-message controls sit after content, copy only markdown and target t
   expect(screen.queryByRole("button", { name: /fork/i })).toBeNull();
 });
 
+test("a sent PDF's name opens it in the browser through a blob URL", () => {
+  const open = vi.spyOn(window, "open").mockReturnValue(null);
+  const create = vi.fn((_blob: Blob) => "blob:http://pe/submittal");
+  URL.createObjectURL = create;
+  URL.revokeObjectURL = vi.fn();
+  const sent = message(
+    "you-2",
+    [
+      {
+        type: "file",
+        name: "damper.pdf",
+        mimeType: "application/pdf",
+        size: 9,
+        data: "JVBERi0xLjcK",
+      },
+    ],
+    "user",
+  );
+  fireEvent.click(show([sent]).getByRole("button", { name: "Open damper.pdf" }));
+  const blob = create.mock.calls[0]![0];
+  expect(blob.type).toBe("application/pdf");
+  expect(blob.size).toBe(9);
+  expect(open).toHaveBeenCalledWith("blob:http://pe/submittal", "_blank", "noopener");
+});
+
 test("a user turn draws its sent files, and a slash prompt draws the skill as a chip", () => {
   const sent = message(
     "you-1",
     [
       { type: "image", image: "data:image/png;base64,AAAA", name: "riser.png" },
-      { type: "file", name: "duct-sizes.csv", mimeType: "text/csv" },
+      { type: "file", name: "duct-sizes.csv", mimeType: "text/csv", size: 1536 },
       { type: "text", text: "/review-schedule Mechanical Equipment" },
     ],
     "user",
   );
   const screen = show([sent]);
   expect(screen.getByAltText("capture")).toBeTruthy();
-  expect(screen.getByTitle(/duct-sizes\.csv \(text\/csv\)/).textContent).toContain(
-    "duct-sizes.csv",
+  expect(screen.getByTitle(/duct-sizes\.csv \(text\/csv\)/).textContent).toBe(
+    "duct-sizes.csv1.5 KB",
   );
   const bubble = screen.container.querySelector(".dl-message-bubble")!;
   expect(bubble.querySelector("[data-surface=artifact]")?.textContent).toBe("/review-schedule");

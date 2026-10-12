@@ -3,7 +3,10 @@
  * narrowing that scopes the view and never hides rows. `title` is required on both; tone comes from
  * the meaning tokens only, and `dashed` means seam (typed but unproven) and nothing else.
  */
+import type { ReactNode } from "react";
 import { X } from "lucide-react";
+
+import { Button } from "#/components/lang/button";
 
 import { tv } from "#/lib/tv";
 
@@ -135,4 +138,41 @@ export function NarrowChip({
 export function Tag({ children }: { children: React.ReactNode }) {
   const { tag } = chipRecipe();
   return <span className={tag()}>{children}</span>;
+}
+
+interface FileChipProps {
+  name: string;
+  /** A measured fact after the name, e.g. the formatted size. */
+  meta?: string;
+  /** What the chip is, for the hover. */
+  title: string;
+  /** Drawn before the name, e.g. an image thumbnail. */
+  lead?: ReactNode;
+  /** Present, the name opens the file outside the page (a nav-out press). */
+  open?: () => void;
+  /** Present, the chip carries a remove press. */
+  onRemove?: () => void;
+}
+
+/** One file as a chip: optional lead, the name (a nav-out press when it opens), its size, remove. */
+export function FileChip({ name, meta, title, lead, open, onRemove }: FileChipProps) {
+  const { base, label, count } = chipRecipe();
+  return (
+    <span
+      className={base({ class: lead ? "h-auto py-[3px]" : undefined })}
+      data-surface="artifact"
+      title={title}
+    >
+      {lead}
+      {open ? (
+        <Button kind="nav" direction="out" label={`Open ${name}`} onClick={open}>
+          <span className={label()}>{name}</span>
+        </Button>
+      ) : (
+        <span className={label()}>{name}</span>
+      )}
+      {meta ? <span className={count()}>{meta}</span> : null}
+      {onRemove ? <Button icon={X} label={`Remove ${name}`} onClick={onRemove} /> : null}
+    </span>
+  );
 }

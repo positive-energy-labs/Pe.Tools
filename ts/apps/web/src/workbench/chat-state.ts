@@ -79,14 +79,14 @@ export type ChatPart =
   | { type: "text"; text: string }
   | { type: "reasoning"; text: string }
   | { type: "image"; image: string; name?: string }
-  | { type: "file"; name: string; mimeType: string }
+  | { type: "file"; name: string; mimeType: string; size: number; data?: string }
   | { type: "tool-call"; call: ToolCall; approval?: Approval };
 
 /** A sent attachment as the user's bubble draws it: what crossed as an image is a thumbnail. */
 const sentPart = (a: PromptAttachment): ChatPart =>
   attachmentKind(a) === "image"
     ? { type: "image", image: `data:${a.mimeType};base64,${a.data}`, name: a.name }
-    : { type: "file", name: a.name, mimeType: a.mimeType };
+    : { type: "file", name: a.name, mimeType: a.mimeType, size: a.size, data: a.data };
 
 /** One row of the chat transcript. `system` is a quiet line the host wrote, never a speaker. */
 export interface ChatMessage {
