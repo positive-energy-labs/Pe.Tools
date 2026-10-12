@@ -142,7 +142,6 @@ const server = createServer(async (request, response) => {
     }
     append(
       { kind: "prompt", turnId, text: JSON.parse(body).text },
-      { kind: "queued", turnId: "turn-q", text: "later" },
       chunk(turnId, "Hello"),
       { kind: "update", turnId: null, update: { sessionUpdate: "available_commands_update" } },
       { kind: "update", turnId, update: { sessionUpdate: "tool_call", toolCallId: "tc" } },

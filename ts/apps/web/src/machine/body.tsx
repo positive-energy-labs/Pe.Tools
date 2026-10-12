@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import type { Machine, MachineSession, Reading } from "@pe/agent-contracts";
 
 import { Accordion } from "#/components/lang/accordion";
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { PidChip } from "#/components/lang/process";
 import { hostAdmin } from "#/host/machine";
@@ -183,32 +183,41 @@ function HostFooter({
             : (host.autostart ?? "unknown")}
         </span>
         <span className="ml-auto flex gap-1">
-          <ActionButton
+          <Button
             label="open window"
+            kind="framed"
             reason={refusal ?? "open this host in its Edge app window"}
-            disabled={refusal !== null}
+            refusal={refusal}
             onClick={() => run("window")}
-          />
-          <ActionButton
+          >
+            open window
+          </Button>
+          <Button
             label="quit host"
+            kind="framed"
             reason={
               refusal ??
               "stop this host; every Revit keeps running; the next login or the Pe.Tools icon starts it again"
             }
-            disabled={refusal !== null}
+            refusal={refusal}
             onClick={() => run("shutdown")}
-          />
+          >
+            quit host
+          </Button>
         </span>
       </span>
       {shell === "drawer" && installPrompt && !matchMedia("(display-mode: standalone)").matches ? (
-        <ActionButton
+        <Button
           label="Install as app"
+          kind="framed"
           reason="install Pe.Tools in this Edge profile"
           onClick={() => {
             void installPrompt.prompt().catch(() => {});
             setInstallPrompt(null);
           }}
-        />
+        >
+          Install as app
+        </Button>
       ) : null}
       {said ? <OutcomeLine kind="advisory" label={said} /> : null}
     </div>

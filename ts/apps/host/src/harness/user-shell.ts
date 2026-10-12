@@ -1,36 +1,60 @@
 import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * The PATH a fresh PowerShell has after the user's profile ran, read once per host start. A harness
- * child inherits the host's env, and the host inherited whatever launched it (under the dev runner,
- * three `node_modules/.bin` entries lead); the user's profile entries and anything installed since
- * never reach it, so the agents guess (kaitpw 2026-10-04). The shell starts from the registry PATH,
- * machine then user, not from the host's, else the host's entries lead the capture too. Null when
- * not on Windows or the shell did not answer in time: the child keeps the host's PATH.
+ * The PATH a fresh PowerShell has after its standard profiles ran, read per child launch. A harness
+ * child otherwise inherits whatever launched the host; profile changes and newly installed tools
+ * need a fresh capture. The shell starts from the registry PATH,
+ * machine then user, not from the host's. A failed Windows capture refuses startup instead of
+ * silently using stale PATH. Aliases, functions and other terminal-only state are not exported.
  */
 export function captureUserShellPath(): Promise<string | null> {
   if (process.platform !== "win32") return Promise.resolve(null);
   const script = [
     "$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')",
-    "if (Test-Path $PROFILE) { try { . $PROFILE } catch {} }",
+    "$profiles = @($PROFILE.AllUsersAllHosts, $PROFILE.AllUsersCurrentHost, $PROFILE.CurrentUserAllHosts, $PROFILE.CurrentUserCurrentHost)",
+    "foreach ($profilePath in $profiles) { if (Test-Path -LiteralPath $profilePath) { try { . $profilePath } catch { exit 1 } } }",
     "Write-Output ('PE_SHELL_PATH=' + $env:Path)",
   ].join("; ");
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     execFile(
-      "powershell.exe",
+      userPowerShell(),
       ["-NoLogo", "-NonInteractive", "-NoProfile", "-Command", script],
       { timeout: 10_000, windowsHide: true, encoding: "utf8" },
       (error, stdout) => {
         const line = String(stdout ?? "")
           .split(/\r?\n/)
           .findLast((item) => item.startsWith("PE_SHELL_PATH="));
-        resolve(!error && line ? line.slice("PE_SHELL_PATH=".length).trim() || null : null);
+        const path = line?.slice("PE_SHELL_PATH=".length).trim();
+        if (error || !path) {
+          reject(
+            new Error(
+              `PowerShell PATH capture failed (${error?.killed ? "10 second timeout" : "profile or shell error"}). Check the profiles for ${userPowerShell()} before retrying.`,
+            ),
+          );
+          return;
+        }
+        resolve(path);
       },
     );
   });
+}
+
+/** Prefer the standard PowerShell 7 install; otherwise use Windows PowerShell, independent of stale PATH. */
+export function userPowerShell(): string {
+  const pwsh = join(process.env.ProgramFiles ?? "C:\\Program Files", "PowerShell", "7", "pwsh.exe");
+  return existsSync(pwsh)
+    ? pwsh
+    : join(
+        process.env.SystemRoot ?? "C:\\Windows",
+        "System32",
+        "WindowsPowerShell",
+        "v1.0",
+        "powershell.exe",
+      );
 }
 
 /** The user's entries first, then the host's entries it lacks, so nothing the host had is lost. */

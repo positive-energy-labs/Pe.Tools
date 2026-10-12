@@ -11,9 +11,36 @@ import { ActionJournal } from "../src/action-journal.ts";
 import { RevitBridge } from "../src/bridge.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { opsCatalogRoute } from "../src/ops-catalog.ts";
+import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 import { fakeRuntimeHost } from "../../../packages/mcps/tests/runtime-host-fixture.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
+
+test("untargeted /ops without bridge attachments returns local operations without SDK discovery", async () => {
+  const sdk = vi.fn(async () => {
+    throw new Error("SDK discovery should not run without a bridge attachment");
+  });
+  const invoke = vi.fn(() => Effect.die("native catalog should not run"));
+  const bridge = { list: Effect.succeed([]), invoke } as unknown as RevitBridge["Service"];
+  const web = HttpRouter.toWebHandler(
+    opsCatalogRoute(() => Effect.die("not navigation"), sdk).pipe(
+      Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
+    ),
+    { disableLogger: true },
+  );
+  try {
+    const response = await web.handler(new Request("http://host/ops"), Context.empty() as never);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      operations: tsOnlyOperationCatalog,
+      bridgeCatalogError: "No Revit session is connected to the bridge.",
+    });
+    expect(sdk).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalled();
+  } finally {
+    await web.dispose();
+  }
+});
 
 // Only native execution and SDK inventory are substituted. Gunshi, HTTP, admission,
 // durable steps, catalogue, local file/stdin decoding and original-ID replay are real.

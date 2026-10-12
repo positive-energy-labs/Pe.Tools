@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { createProviders } from "../src/harness/providers.ts";
+import { cleanHarnessEnv, createProviders } from "../src/harness/providers.ts";
 import { productAccessPath, productProvidersPath } from "../src/product-paths.ts";
 
 let root: string;
@@ -36,6 +36,56 @@ const add = {
   name: "Synthetic",
   auth: { kind: "endpoint", baseUrl: "https://synthetic.invalid", apiKey: "synthetic-key" },
 };
+
+test("each child gets fresh PATH and a capture failure is visible in provider readiness", async () => {
+  let captures = 0;
+  let failed = false;
+  const providers = createProviders({
+    probeOnStart: false,
+    shellPath: async () => {
+      if (failed) throw new Error("synthetic profile failure");
+      return `C:\\capture-${++captures}`;
+    },
+  });
+  const record = providers.get("claude")!;
+  for (const capture of [1, 2]) {
+    const env = await providers.env(record);
+    const pathKey = Object.keys(env).find((key) => key.toUpperCase() === "PATH")!;
+    expect(env[pathKey]?.startsWith(`C:\\capture-${capture};`)).toBe(true);
+  }
+  failed = true;
+  await expect(providers.env(record)).rejects.toThrow("synthetic profile failure");
+  const response = await providers.fetch(request("providers/claude/probe", "POST", {}));
+  expect((await response.json()).readiness).toEqual({
+    state: "unknown",
+    message: "The probe failed: synthetic profile failure",
+  });
+});
+
+test("known auth overrides are removed case-insensitively while login homes and tool paths remain", () => {
+  const inherited = {
+    openai_api_key: "synthetic",
+    ANTHROPIC_AUTH_TOKEN: "synthetic",
+    CLAUDE_CODE_USE_BEDROCK: "1",
+    CLAUDE_CODE_OAUTH_TOKEN: "synthetic",
+    CODEX_CONFIG: "synthetic",
+    MODEL_PROVIDER: "foreign",
+    PEA_ENDPOINT_API_KEY: "synthetic",
+    PATH: "tools",
+    CODEX_HOME: "login-home",
+    CLAUDE_CONFIG_DIR: "claude-home",
+    AWS_PROFILE: "other-tool-account",
+    CUSTOM_UNKNOWN_AUTH: "outside-boundary",
+  };
+  expect(cleanHarnessEnv(inherited)).toEqual({
+    PATH: "tools",
+    CODEX_HOME: "login-home",
+    CLAUDE_CONFIG_DIR: "claude-home",
+    AWS_PROFILE: "other-tool-account",
+    CUSTOM_UNKNOWN_AUTH: "outside-boundary",
+  });
+  expect(inherited.openai_api_key).toBe("synthetic");
+});
 
 test.each([
   "{broken synthetic-key",

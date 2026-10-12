@@ -15,12 +15,11 @@ import {
   type Machine,
 } from "@pe/agent-contracts";
 
-import { ActionButton } from "#/components/lang/action-button";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { ReviewRow, type CellWire } from "#/components/lang/band";
+import { ReviewRow, type CellWire } from "#/components/work/band";
 import { Tag } from "#/components/lang/chip";
 import { Input } from "#/components/lang/input";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { ShapeCells } from "#/components/lang/process";
 import { Switcher } from "#/components/lang/switcher";
 import { executionRefusal, keyOf, nameOf, phaseOf, pidOf, processOf } from "#/machine/session";
@@ -168,9 +167,9 @@ export function Launcher({
               <span className="min-w-0 max-w-[32rem] truncate face-mono text-ink-2">
                 {plan.doc.path}
               </span>
-              <Press tone="quiet" size="caption" onClick={() => setDraft({ ...draft, doc: null })}>
+              <Button label="clear" onClick={() => setDraft({ ...draft, doc: null })}>
                 clear
-              </Press>
+              </Button>
             </>
           ) : (
             <span className="text-ink-2">
@@ -284,14 +283,20 @@ export function Launcher({
             />
           ) : null}
           <span className="ml-auto">
-            <ActionButton
-              tone="commit"
+            <Button
+              kind="commit"
               label={plan.verb}
               reason={refusal ?? plan.argv.join("  then  ")}
-              disabled={refusal !== null || plan.launch === null}
+              refusal={
+                refusal !== null || plan.launch === null
+                  ? (refusal ?? plan.argv.join("  then  "))
+                  : null
+              }
               busy={launch.isPending}
               onClick={() => launch.mutate(undefined)}
-            />
+            >
+              {plan.verb}
+            </Button>
           </span>
         </div>
         {[plan.refusal, plan.caution].filter(Boolean).map((line) => (

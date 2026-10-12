@@ -154,6 +154,8 @@ export const targetKey = (target: DocumentRequest | null): string =>
 export const threadHeadSchema = z.object({
   defaultTarget: documentRequestSchema.nullable(),
   revision: z.number().int().nonnegative(),
+  /** Display snapshot only. It never participates in target resolution or admission. */
+  displayLabel: z.string().max(300).optional(),
 });
 export type ThreadHead = z.infer<typeof threadHeadSchema>;
 
@@ -161,6 +163,7 @@ export type ThreadHead = z.infer<typeof threadHeadSchema>;
 export const putTargetSchema = z.object({
   defaultTarget: documentRequestSchema.nullable(),
   expectedRevision: z.number().int().nonnegative(),
+  displayLabel: z.string().max(300).optional(),
 });
 export type PutTarget = z.infer<typeof putTargetSchema>;
 

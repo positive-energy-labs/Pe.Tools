@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { resolveWorkbenchConfig } from "../config";
 import { selectRunStatus, selectTurnFailure } from "../chat-state";
 import { previousOf, useHostStatus } from "#/readings";
 import { appAtomRegistry, useRouteOwner } from "#/route/route-owner";
 import { createChatPageStore } from "../store";
-import type { WorkbenchAttachment } from "../prompt";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";
 import { WorkbenchContext } from "./thread-summary";
 import { chatLoading, useThreadStream } from "./thread-stream";
@@ -15,6 +14,9 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { CHAT_SEEDS } from "#/chat/seeds";
 import { errorMessage } from "./use-workbench";
 import { EMPTY_HEAD, isReady, useProviders, type HeadDraft } from "./providers";
+import { targetKey, type DocumentRequest, type PromptAttachment } from "@pe/agent-contracts";
+import { demoThreads } from "#/chat/thread-navigation";
+import { mergeThreadRoster, mergeThreadSummary } from "./thread-merge";
 
 export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const config = useMemo(() => resolveWorkbenchConfig(), []);
@@ -37,7 +39,9 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const info = previousOf(hostStatus);
   const client = useMemo(() => harnessClient(config.origin), [config.origin]);
   const [threads, setThreads] = useState<StoredThreadSummary[]>([]);
+  const rosterEpoch = useRef(0);
   const [draft, setDraft] = useState<HeadDraft>(EMPTY_HEAD);
+  const [draftTarget, setDraftTarget] = useState<DocumentRequest | null>(null);
   const [error, setError] = useState<string>();
 
   // `?demo=<seed>`: the transcript shows that seed's thread and nothing is fetched.
@@ -49,8 +53,23 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   );
   const refreshThreads = useCallback(async () => {
     if (demo) return;
+    const started = rosterEpoch.current;
     const listed = await client.threads();
-    setThreads([...listed].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)));
+    if (started === rosterEpoch.current)
+      setThreads((current) => mergeThreadRoster(current, listed));
+  }, [client, demo]);
+  useEffect(() => {
+    if (demo) {
+      setThreads(demoThreads(demo));
+      return;
+    }
+    return client.summaries(
+      (listed) => {
+        rosterEpoch.current++;
+        setThreads((current) => mergeThreadRoster(current, listed));
+      },
+      (caught) => setError(errorMessage(caught)),
+    );
   }, [client, demo]);
 
   const stream = useThreadStream({
@@ -110,6 +129,18 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const createThread = useCallback(async () => {
     if (newRefusal || !drafted) throw Error(newRefusal ?? "no provider is ready");
     const created = await client.create(drafted.id);
+    if (draftTarget) {
+      const displayLabel = threads.find(
+        (thread) => targetKey(thread.head.defaultTarget) === targetKey(draftTarget),
+      )?.head.displayLabel;
+      const outcome = await client.target(created.id, {
+        defaultTarget: draftTarget,
+        revision: created.head.revision,
+        displayLabel,
+      });
+      if (!outcome.ok)
+        throw Error("The new thread target changed; choose its target before sending");
+    }
     if (draft.modelId && draft.modelId !== created.modelId)
       await client.model(created.id, draft.modelId);
     for (const [id, value] of Object.entries(draft.traits))
@@ -117,16 +148,15 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     await refreshThreads();
     await gotoThread(created.id);
     return created.id;
-  }, [client, draft, drafted, gotoThread, newRefusal, refreshThreads]);
+  }, [client, draft, draftTarget, drafted, gotoThread, newRefusal, refreshThreads]);
 
   const sendPrompt = useCallback(
-    async (text: string, attachments?: WorkbenchAttachment[]) => {
+    async (text: string, attachments?: PromptAttachment[]) => {
       const prompt = text.trim();
-      if (!prompt) throw Error("Enter a prompt");
-      if (attachments?.length) throw Error("Attachments do not cross the harness wire yet");
-      // The host queues a send behind a running turn; the browser never gates on it.
+      if (!prompt && !attachments?.length) throw Error("Enter a prompt or attachment");
+      // A send on a running turn is the host's interrupt; the browser never gates on it.
       const ok = await attempt(async () =>
-        client.prompt(currentThreadId || (await createThread()), prompt),
+        client.prompt(currentThreadId || (await createThread()), prompt, attachments),
       );
       if (!ok) throw Error("Send failed");
     },
@@ -187,6 +217,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       providers,
       draft,
       setDraft,
+      draftTarget,
+      setDraftTarget,
       newRefusal,
       missingThread,
       currentThreadId,
@@ -199,8 +231,41 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       operationError,
       sendPrompt,
       cancel: onThread((id) => client.cancel(id)),
-      newThread: async () =>
-        void (await navigate({ search: (previous) => ({ ...previous, thread: undefined }) })),
+      newThread: async (target = null) => {
+        setDraftTarget(target);
+        await navigate({ search: (previous) => ({ ...previous, thread: undefined }) });
+      },
+      updateThread: (threadId, change) =>
+        attempt(async () => {
+          if (demo && change.readSeq !== undefined) return;
+          if (demo)
+            throw Error(
+              "Fixture threads are read-only; open a real thread to change its lifecycle",
+            );
+          const current =
+            threads.find((item) => item.id === threadId) ??
+            (chat.id === threadId ? chat : undefined);
+          const updated = await client
+            .update(threadId, {
+              expectedRevision: current?.lifecycle.revision,
+              ...change,
+            })
+            .catch((caught) => {
+              if (
+                change.readSeq !== undefined &&
+                change.explicitUnread === undefined &&
+                (caught as { status?: number }).status === 409
+              )
+                return undefined;
+              throw caught;
+            });
+          if (!updated) return;
+          setThreads((previous) =>
+            previous.map((item) =>
+              item.id === updated.id ? mergeThreadSummary(item, updated) : item,
+            ),
+          );
+        }),
       openThread: (threadId) => void gotoThread(threadId),
       renameThread: async (threadId, title) =>
         void (await attempt(async () => {
@@ -231,6 +296,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       error,
       forkThread,
       draft,
+      draftTarget,
       info,
       isRunning,
       loading,

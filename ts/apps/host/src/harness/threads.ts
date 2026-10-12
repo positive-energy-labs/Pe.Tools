@@ -10,9 +10,11 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   type ClientSideConnection,
+  type ContentBlock,
   PROTOCOL_VERSION,
   type CreateElicitationRequest,
   type CreateElicitationResponse,
@@ -23,7 +25,12 @@ import {
   type SetSessionConfigOptionRequest,
 } from "@agentclientprotocol/sdk";
 import {
+  attachmentKind,
+  attachmentRefusal,
   createThreadRequestSchema,
+  emptyThreadLifecycle,
+  threadLifecycleSchema,
+  updateThreadRequestSchema,
   forkThreadRequestSchema,
   permissionResponseSchema,
   promptRequestSchema,
@@ -34,17 +41,18 @@ import {
   type HarnessEvent,
   type HarnessThreadBody,
   type HarnessThreadSummary,
+  type PromptAttachment,
   type PutTargetResult,
   type ThreadHead,
 } from "@pe/agent-contracts";
 import { Effect } from "effect";
 import { z } from "zod";
 import { openAdapter, stopChild } from "./adapter.ts";
-import { accessModes, sessionOffer, traitsOf, type Providers } from "./providers.ts";
+import { accessModes, sessionOffer, type Providers } from "./providers.ts";
 
 /** The thread wire of ADR 0015; contract and route list in `@pe/agent-contracts` `harness-thread.ts`. */
 
-type Meta = Omit<HarnessThreadSummary, "lastSeq"> & {
+type Meta = Omit<HarnessThreadSummary, "lastSeq" | "activity"> & {
   acpSessionId: string | null;
   models: HarnessThreadBody["models"];
   traits: HarnessThreadBody["traits"];
@@ -52,10 +60,10 @@ type Meta = Omit<HarnessThreadSummary, "lastSeq"> & {
   traitValues: Record<string, string | boolean>;
   /** The thread head the Pea MCP child reads through `GET /pe/scope/:id`. */
   head: ThreadHead;
-  /** Prompts accepted while a turn ran; a restarted host runs them after resume. */
-  queued: HarnessThreadBody["queued"];
   /** The thread this one was forked from; `acpSessionId` is null when the fork crossed providers. */
   forkOf: { threadId: string; acpSessionId: string | null } | null;
+  /** What the last `initialize` advertised; the attachment refusal reads it before a child runs. */
+  promptCapabilities: HarnessThreadBody["promptCapabilities"];
 };
 type Live = { conn: ClientSideConnection; sessionId: string; configOptions: SessionConfigOption[] };
 type Pending<R> = { turnId: string | null; resolve: (response: R) => void };
@@ -67,9 +75,11 @@ type Thread = {
   /** The log as text, carried by the next prompt when the session is new over an existing log. */
   refeed: string | null;
   session: HarnessThreadBody["session"];
-  /** Set by delete or host shutdown: the turn in flight stops logging and nothing queued starts. */
+  /** Set by delete or host shutdown: the turn in flight stops logging. */
   stopped: boolean;
   running: string | null;
+  /** Settles when the running turn has logged its end; an interrupting prompt waits on it. */
+  turn: Promise<void>;
   pending: Map<string, Pending<RequestPermissionResponse>>;
   questions: Map<string, Pending<CreateElicitationResponse>>;
   listeners: Set<(event: HarnessEvent) => void>;
@@ -79,6 +89,8 @@ type Thread = {
   idle: ReturnType<typeof setTimeout> | null;
   busy: number;
   retiring: Promise<void> | null;
+  attention: HarnessThreadSummary["activity"];
+  asks: Set<string>;
 };
 type Append = HarnessEvent extends infer E
   ? E extends HarnessEvent
@@ -110,6 +122,8 @@ const emptyHead: ThreadHead = { defaultTarget: null, revision: 0 };
 /** A turn with no session update for this long gets a `waiting` marker, and again each period. */
 export const WAITING_MS = 60_000;
 export const IDLE_CHILD_MS = 15 * 60_000;
+/** How long a prompt waits for the turn it interrupts to end before refusing. */
+export const INTERRUPT_MS = 10_000;
 /** Thrown by `input` on a body route sent without a JSON content type; served as 415. */
 class NotJson extends Error {}
 const warn = (message: string) => Effect.runSync(Effect.logWarning(message));
@@ -127,7 +141,7 @@ const CODEX_QUESTION_RULE =
   "You are running inside Pea, a chat surface. When you need an answer from the user: if the request_user_input tool is available, call it and wait for its result; otherwise write the question as your final message and end your turn, and the answer arrives as the next user message. Never use async message delivery, never call the sleep tool, and never wait inside a turn.";
 
 /**
- * The child's env on top of the host's: the provider's (the user's shell PATH and its auth source),
+ * The provider's complete child environment (the user's shell PATH and its auth source),
  * and for Codex its developer instructions. The user's own Codex MCP servers are kept out by the
  * project-level config the routes write in the world root, never here: codex-acp replaces a
  * CODEX_CONFIG `mcp_servers`.
@@ -136,8 +150,9 @@ async function childEnv(
   record: NonNullable<ReturnType<Providers["get"]>>,
   options: HarnessThreadsOptions,
   modelId?: string | null,
-): Promise<Record<string, string>> {
+): Promise<NodeJS.ProcessEnv> {
   const env = await options.providers.env(record, modelId);
+  env.PYTHONIOENCODING ??= "utf-8";
   if (record.harness !== "codex") return env;
   const config = env.CODEX_CONFIG ? (JSON.parse(env.CODEX_CONFIG) as object) : {};
   const developer_instructions = [await options.developerInstructions?.(), CODEX_QUESTION_RULE]
@@ -161,7 +176,8 @@ function transcript(events: HarnessEvent[]): string {
   for (const e of events) {
     if (e.kind === "prompt") {
       flush();
-      lines.push(`User: ${e.text}`);
+      const names = e.attachments?.map((a) => a.name).join(", ");
+      lines.push(`User: ${e.text}${names ? ` [attached: ${names}]` : ""}`);
     } else if (e.kind === "update" && e.update.sessionUpdate === "agent_message_chunk") {
       const content = (e.update as { content?: { type?: string; text?: string } }).content;
       if (content?.type === "text" && content.text) said += content.text;
@@ -184,6 +200,42 @@ function transcript(events: HarnessEvent[]): string {
   return `[Pea resumed this thread from its own record; the earlier harness session is gone. The transcript so far, oldest first. Continue from it; do not repeat it.]\n\n${kept}\n\n[End of transcript.]`;
 }
 
+/**
+ * The prompt as ACP content (mined from the Mastra path, `47c37fb2^:ts/packages/runtime/src/
+ * message-contents.ts`: images as images, text files as labelled text, other files as files): an
+ * image is an `image` block, a text file an embedded `resource`, any other file is written to `dir`
+ * and linked, because claude-agent-acp drops resource blobs and codex-acp inlines them as base64.
+ */
+function promptBlocks(dir: string, text: string, attachments: PromptAttachment[] = []) {
+  const blocks: ContentBlock[] = text ? [{ type: "text", text }] : [];
+  for (const a of attachments) {
+    const kind = attachmentKind(a);
+    if (kind === "image") blocks.push({ type: "image", data: a.data!, mimeType: a.mimeType });
+    else if (kind === "text")
+      blocks.push({
+        type: "resource",
+        resource: {
+          uri: `file:///${encodeURIComponent(a.name)}`,
+          mimeType: a.mimeType,
+          text: a.text!,
+        },
+      });
+    else {
+      mkdirSync(dir, { recursive: true });
+      const path = join(dir, basename(a.name));
+      writeFileSync(path, Buffer.from(a.data!, "base64"));
+      blocks.push({
+        type: "resource_link",
+        uri: pathToFileURL(path).href,
+        name: a.name,
+        mimeType: a.mimeType,
+        size: a.size,
+      });
+    }
+  }
+  return blocks;
+}
+
 /** tmp + rename, so a crash mid-write never leaves a torn file. */
 function writeJson(path: string, value: unknown) {
   writeFileSync(`${path}.tmp`, JSON.stringify(value, null, 2));
@@ -193,6 +245,10 @@ function writeJson(path: string, value: unknown) {
 export function createHarnessThreads(options: HarnessThreadsOptions) {
   const threads = new Map<string, Thread>();
   const headListeners = new Set<(threadId: string, head: ThreadHead) => void>();
+  const summaryListeners = new Set<() => void>();
+  const notifySummaries = () => {
+    for (const listener of summaryListeners) listener();
+  };
   /** Heads of ids that are not harness threads: an MCP child or the web may name a thread first. */
   const headsDir = join(options.root, ".heads");
   mkdirSync(headsDir, { recursive: true });
@@ -208,8 +264,9 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         : [];
       const meta = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8")) as Meta;
       meta.head ??= emptyHead;
-      meta.queued ??= [];
+      meta.lifecycle = threadLifecycleSchema.parse(meta.lifecycle ?? emptyThreadLifecycle());
       meta.forkOf ??= null;
+      meta.promptCapabilities ??= null;
       // Threads from before providers ran on the harness's own login.
       meta.providerId ??= meta.harness;
       meta.providerName ??= options.providers.get(meta.harness)?.name ?? meta.harness;
@@ -222,7 +279,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   }
 
   function fresh(meta: Meta, events: HarnessEvent[] = []): Thread {
-    return {
+    const t: Thread = {
       meta,
       child: null,
       events,
@@ -231,6 +288,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       session: "closed",
       stopped: false,
       running: null,
+      turn: Promise.resolve(),
       pending: new Map(),
       questions: new Map(),
       listeners: new Set(),
@@ -239,7 +297,11 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       idle: null,
       busy: 0,
       retiring: null,
+      attention: { state: "idle", pending: 0, lastSeq: 0, message: null },
+      asks: new Set(),
     };
+    for (const event of events) projectActivity(t, event);
+    return t;
   }
 
   /** A new thread on disk, spawned now so the model and trait pickers fill before the first prompt. */
@@ -252,6 +314,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       events.map((e) => `${JSON.stringify(e)}\n`).join(""),
     );
     threads.set(meta.id, t);
+    notifySummaries();
     ensure(t).catch(() => {}); // a failure to start is an `error` event
     return t;
   }
@@ -270,9 +333,65 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       .reduce((text, key) => text.replaceAll(key, `…${key.slice(-4)}`), line);
     const full = JSON.parse(redacted) as HarnessEvent;
     t.events.push(full);
+    projectActivity(t, full);
     appendFileSync(join(options.root, t.meta.id, "events.jsonl"), `${redacted}\n`);
+    if (
+      ["turn_end", "error", "permission_request", "question_request"].includes(full.kind) &&
+      t.meta.lifecycle.snoozedUntil &&
+      full.seq > t.meta.lifecycle.snoozedSeq
+    ) {
+      t.meta.lifecycle.snoozedUntil = null;
+      t.meta.lifecycle.status = "active";
+      t.meta.lifecycle.reopenedAt = full.at;
+      t.meta.lifecycle.revision++;
+      writeMeta(t);
+    }
     for (const listener of t.listeners) listener(full);
+    if (full.kind !== "update" || full.update.sessionUpdate === "config_option_update")
+      notifySummaries();
     return full;
+  }
+
+  function isActivity(event: HarnessEvent) {
+    return (
+      [
+        "prompt",
+        "turn_end",
+        "error",
+        "permission_request",
+        "question_request",
+        "permission_resolved",
+        "question_resolved",
+      ].includes(event.kind) ||
+      (event.kind === "update" &&
+        ["agent_message_chunk", "agent_thought_chunk", "tool_call", "tool_call_update"].includes(
+          String(event.update.sessionUpdate),
+        ))
+    );
+  }
+
+  function activity(t: Thread): HarnessThreadSummary["activity"] {
+    return { ...t.attention };
+  }
+  function projectActivity(t: Thread, event: HarnessEvent) {
+    const value = t.attention;
+    if (event.kind !== "update" && isActivity(event)) value.lastSeq = event.seq;
+    if (event.kind === "prompt") {
+      value.state = "running";
+      value.message = null;
+    }
+    if (event.kind === "turn_end" || event.kind === "error") {
+      value.state = event.kind === "error" ? "failed" : "idle";
+      value.message = event.kind === "error" ? event.message : null;
+    }
+    if (event.kind === "permission_request" || event.kind === "question_request")
+      t.asks.add(event.requestId);
+    if (event.kind === "permission_resolved" || event.kind === "question_resolved")
+      t.asks.delete(event.requestId);
+    value.pending = t.asks.size;
+    if (value.pending) value.state = "waiting";
+    else if (event.kind === "permission_resolved" || event.kind === "question_resolved")
+      value.state = t.running ? "running" : "idle";
   }
 
   const summary = (t: Thread): HarnessThreadSummary => ({
@@ -285,6 +404,9 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     updatedAt: t.events.at(-1)?.at ?? t.meta.updatedAt,
     modelId: t.meta.modelId,
     lastSeq: t.events.length,
+    head: t.meta.head,
+    lifecycle: t.meta.lifecycle,
+    activity: activity(t),
   });
 
   const body = (t: Thread): HarnessThreadBody => ({
@@ -292,8 +414,8 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     models: t.meta.models,
     traits: t.meta.traits,
     running: t.running !== null,
-    queued: t.meta.queued,
     session: t.session,
+    promptCapabilities: t.meta.promptCapabilities,
     events: t.events,
   });
 
@@ -317,13 +439,18 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     const current = readHead(threadId);
     if (current.revision !== input.expectedRevision)
       return { ok: false, why: "stale", head: current };
-    const head = { defaultTarget: input.defaultTarget, revision: current.revision + 1 };
+    const head = {
+      defaultTarget: input.defaultTarget,
+      revision: current.revision + 1,
+      ...(input.displayLabel ? { displayLabel: input.displayLabel } : {}),
+    };
     const t = threads.get(threadId);
     if (t) {
       t.meta.head = head;
       writeMeta(t);
     } else writeJson(headFile(threadId), head);
     for (const listener of headListeners) listener(threadId, head);
+    notifySummaries();
     return { ok: true, why: "set", head };
   }
 
@@ -405,66 +532,61 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       );
     const env = await childEnv(record, options, t.meta.modelId);
     if (t.stopped) throw new Error("The thread was stopped before its harness connected");
-    // The host env unchanged (a user's own ANTHROPIC_API_KEY stays), plus the child's own.
-    const { child, conn, stderr } = openAdapter(
-      harness,
-      options.worldRoot,
-      { ...process.env, ...env },
-      () => ({
-        sessionUpdate: ({ update }) => {
-          if (t.child !== child || t.stopped) return;
-          append(t, { kind: "update", turnId: t.running, update });
-          if (t.running) arm(t);
-          if (update.sessionUpdate === "config_option_update") {
-            t.meta.traits = traitsOf(update.configOptions);
-            writeMeta(t);
-          }
-          if (update.sessionUpdate === "session_info_update" && update.title) {
-            t.meta.title = update.title;
-            writeMeta(t);
-            append(t, { kind: "title_changed", title: update.title });
-          }
-          scheduleIdle(t);
-        },
-        requestPermission: (request: RequestPermissionRequest) =>
-          new Promise<RequestPermissionResponse>((resolve) => {
-            if (t.child !== child || t.stopped)
-              return resolve({ outcome: { outcome: "cancelled" } });
-            clearIdle(t);
-            const requestId = randomUUID();
-            const turnId = t.running;
-            append(t, {
-              kind: "permission_request",
-              turnId,
-              requestId,
-              toolCall: { ...request.toolCall, title: request.toolCall.title ?? undefined },
-              options: request.options.map(({ optionId, name, kind }) => ({
-                optionId,
-                name,
-                kind,
-              })),
-            });
-            t.pending.set(requestId, { turnId, resolve });
-          }),
-        // A form is the question card. A URL elicitation (MCP OAuth) has no place in Pea: declined.
-        createElicitation: (request: CreateElicitationRequest) =>
-          new Promise<CreateElicitationResponse>((resolve) => {
-            if (t.child !== child || t.stopped) return resolve({ action: "decline" });
-            clearIdle(t);
-            if (request.mode !== "form") return resolve({ action: "decline" });
-            const requestId = randomUUID();
-            const turnId = t.running;
-            append(t, {
-              kind: "question_request",
-              turnId,
-              requestId,
-              message: request.message,
-              requestedSchema: request.requestedSchema as Record<string, unknown>,
-            });
-            t.questions.set(requestId, { turnId, resolve });
-          }),
-      }),
-    );
+    let live: Live | undefined;
+    const { child, conn, stderr } = openAdapter(harness, options.worldRoot, env, () => ({
+      sessionUpdate: ({ update }) => {
+        if (t.child !== child || t.stopped) return;
+        if (update.sessionUpdate === "config_option_update") {
+          if (live) live.configOptions = update.configOptions;
+          acceptConfiguration(t, update.configOptions);
+        }
+        // Persist before notifying readers; an SSE-triggered GET must see this configuration.
+        append(t, { kind: "update", turnId: t.running, update });
+        if (t.running) arm(t);
+        if (update.sessionUpdate === "session_info_update" && update.title) {
+          t.meta.title = update.title;
+          writeMeta(t);
+          append(t, { kind: "title_changed", title: update.title });
+        }
+        scheduleIdle(t);
+      },
+      requestPermission: (request: RequestPermissionRequest) =>
+        new Promise<RequestPermissionResponse>((resolve) => {
+          if (t.child !== child || t.stopped) return resolve({ outcome: { outcome: "cancelled" } });
+          clearIdle(t);
+          const requestId = randomUUID();
+          const turnId = t.running;
+          append(t, {
+            kind: "permission_request",
+            turnId,
+            requestId,
+            toolCall: { ...request.toolCall, title: request.toolCall.title ?? undefined },
+            options: request.options.map(({ optionId, name, kind }) => ({
+              optionId,
+              name,
+              kind,
+            })),
+          });
+          t.pending.set(requestId, { turnId, resolve });
+        }),
+      // A form is the question card. A URL elicitation (MCP OAuth) has no place in Pea: declined.
+      createElicitation: (request: CreateElicitationRequest) =>
+        new Promise<CreateElicitationResponse>((resolve) => {
+          if (t.child !== child || t.stopped) return resolve({ action: "decline" });
+          clearIdle(t);
+          if (request.mode !== "form") return resolve({ action: "decline" });
+          const requestId = randomUUID();
+          const turnId = t.running;
+          append(t, {
+            kind: "question_request",
+            turnId,
+            requestId,
+            message: request.message,
+            requestedSchema: request.requestedSchema as Record<string, unknown>,
+          });
+          t.questions.set(requestId, { turnId, resolve });
+        }),
+    }));
     t.child = child;
     child.on("exit", (code, signal) => {
       if (t.child !== child || t.session === "closed") return;
@@ -490,8 +612,14 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     // No session verb restores the user's model or traits (drive 2026-10-01: a sonnet thread came
     // back opus), so both are re-applied below.
     const wantModel = t.meta.modelId;
+    const wantTraits = { ...t.meta.traitValues };
     const prior = t.meta.acpSessionId;
     const caps = init.agentCapabilities?.sessionCapabilities;
+    const prompt = init.agentCapabilities?.promptCapabilities;
+    t.meta.promptCapabilities = {
+      image: Boolean(prompt?.image),
+      embeddedContext: Boolean(prompt?.embeddedContext),
+    };
     let state: Exclude<HarnessThreadBody["session"], "closed"> = "started";
     let session: NewSessionResponse | null = null;
     // `session/resume` picks the stored session up with no replay; the log already holds it.
@@ -537,7 +665,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     writeMeta(t);
     t.session = state;
     append(t, { kind: "session", state, acpSessionId: session.sessionId });
-    const live = { conn, sessionId: session.sessionId, configOptions };
+    live = { conn, sessionId: session.sessionId, configOptions };
     const notReapplied = (what: string) => (error: unknown) =>
       void append(t, {
         kind: "error",
@@ -546,7 +674,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       });
     if (wantModel && wantModel !== t.meta.modelId)
       await setModel(t, live, wantModel).catch(notReapplied(`model ${wantModel}`));
-    for (const [id, value] of Object.entries(t.meta.traitValues))
+    for (const [id, value] of Object.entries(wantTraits))
       if (t.meta.traits.find((trait) => trait.id === id)?.current !== value)
         await setTrait(t, live, id, value).catch(notReapplied(`${id} ${String(value)}`));
     // The access setting picks the mode every session starts in: no mode picker, no plan mode.
@@ -609,7 +737,6 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     !t.busy &&
     !t.running &&
     !t.retiring &&
-    !t.meta.queued.length &&
     !t.pending.size &&
     !t.questions.size;
 
@@ -662,8 +789,10 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   async function setModel(t: Thread, live: Live, modelId: string) {
     const option = live.configOptions.find((o) => o.category === "model");
     // An adapter with no model config option takes the unstable `session/set_model`.
-    const setUnstable = () =>
-      live.conn.extMethod("session/set_model", { sessionId: live.sessionId, modelId });
+    const setUnstable = async () => {
+      await live.conn.extMethod("session/set_model", { sessionId: live.sessionId, modelId });
+      t.meta.modelId = modelId;
+    };
     if (option)
       await configure(t, live, { configId: option.id, value: modelId }).catch(
         (error: { code?: number }) => {
@@ -673,9 +802,23 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       );
     else if (t.meta.models.length > 0) await setUnstable();
     else throw new Error(`${t.meta.harness} offers no model choice`);
-    t.meta.modelId = modelId;
+    if (!t.meta.modelId) throw new Error("The harness did not report its selected model");
     writeMeta(t);
-    append(t, { kind: "model_changed", modelId });
+    append(t, { kind: "model_changed", modelId: t.meta.modelId });
+  }
+
+  function acceptConfiguration(t: Thread, configOptions: SessionConfigOption[]) {
+    const offer = sessionOffer({ configOptions });
+    if (configOptions.some((option) => option.category === "model")) {
+      t.meta.modelId = offer.modelId;
+      if (options.providers.get(t.meta.providerId)?.auth.kind === "subscription")
+        t.meta.models = offer.models;
+    }
+    t.meta.traits = offer.traits;
+    t.meta.traitValues = Object.fromEntries(
+      offer.traits.flatMap((trait) => (trait.current === null ? [] : [[trait.id, trait.current]])),
+    );
+    writeMeta(t);
   }
 
   /** ACP `session/set_config_option`; the answer restates every option, so traits follow it. */
@@ -690,10 +833,10 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       ...(typeof change.value === "boolean" ? { type: "boolean" } : {}),
     } as SetSessionConfigOptionRequest;
     const answer = await live.conn.setSessionConfigOption(request);
-    if (answer?.configOptions) {
-      live.configOptions = answer.configOptions;
-      t.meta.traits = traitsOf(answer.configOptions);
-    }
+    if (!answer?.configOptions)
+      throw new Error("The harness did not acknowledge its configuration");
+    live.configOptions = answer.configOptions;
+    acceptConfiguration(t, answer.configOptions);
   }
 
   async function setTrait(t: Thread, live: Live, id: string, value: string | boolean) {
@@ -702,16 +845,10 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     if (typeof value !== (trait.kind === "boolean" ? "boolean" : "string"))
       throw new Error(`trait ${id} takes a ${trait.kind === "boolean" ? "boolean" : "string"}`);
     await configure(t, live, { configId: id, value });
-    t.meta.traits = t.meta.traits.map((o) =>
-      o.id !== id
-        ? o
-        : o.kind === "boolean"
-          ? { ...o, current: value as boolean }
-          : { ...o, current: value as string },
-    );
-    t.meta.traitValues[id] = value;
-    writeMeta(t);
-    append(t, { kind: "trait_changed", traitId: id, value });
+    const accepted = t.meta.traits.find((option) => option.id === id)?.current;
+    if (accepted === undefined || accepted === null)
+      throw new Error(`The harness did not report a value for trait ${id}`);
+    append(t, { kind: "trait_changed", traitId: id, value: accepted });
   }
 
   /**
@@ -736,10 +873,10 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     t.waiting = null;
   }
 
-  async function run(t: Thread, turnId: string, text: string) {
+  async function run(t: Thread, turnId: string, text: string, attachments?: PromptAttachment[]) {
     clearIdle(t);
     t.running = turnId;
-    append(t, { kind: "prompt", turnId, text });
+    append(t, { kind: "prompt", turnId, text, ...(attachments ? { attachments } : {}) });
     arm(t);
     try {
       const live = await ensure(t);
@@ -747,7 +884,11 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       t.refeed = null;
       const result = await live.conn.prompt({
         sessionId: live.sessionId,
-        prompt: [{ type: "text", text: refeed ? `${refeed}\n\n${text}` : text }],
+        prompt: promptBlocks(
+          join(options.root, t.meta.id, "attachments", turnId),
+          refeed ? `${refeed}\n\n${text}` : text,
+          attachments,
+        ),
       });
       append(t, { kind: "turn_end", turnId, stopReason: result.stopReason });
     } catch (error) {
@@ -759,16 +900,28 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     }
     disarm(t);
     t.running = null;
-    if (!t.stopped) runNext(t);
     scheduleIdle(t);
   }
 
-  function runNext(t: Thread) {
-    if (options.updatePending?.()) return;
-    const next = t.meta.queued.shift();
-    if (!next) return;
-    writeMeta(t);
-    void run(t, next.turnId, next.text);
+  /** ACP `session/cancel` on the running turn; its open asks settle as cancelled. */
+  async function cancel(t: Thread) {
+    settleAsks(t, "cancel");
+    const live = t.running ? await t.live?.catch(() => null) : null;
+    if (live) await live.conn.cancel({ sessionId: live.sessionId });
+    return Boolean(live);
+  }
+
+  /** Cancel the running turn and wait for its end; false when it outlives {@link INTERRUPT_MS}. */
+  async function interrupt(t: Thread) {
+    const turn = t.turn;
+    await cancel(t);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const ended = await Promise.race([
+      turn.then(() => true),
+      new Promise<boolean>((resolve) => (timer = setTimeout(resolve, INTERRUPT_MS, false))),
+    ]);
+    clearTimeout(timer);
+    return ended;
   }
 
   function stream(t: Thread, after: number, signal: AbortSignal): Response {
@@ -827,6 +980,64 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     const url = new URL(request.url);
     const [, , , id, verb] = url.pathname.split("/"); // "", "pe", "threads", id, verb
     const method = request.method;
+    if (url.pathname === "/pe/threads/stream" && method === "GET") {
+      const encoder = new TextEncoder();
+      let cleanup = () => {};
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            let scheduled: ReturnType<typeof setTimeout> | undefined;
+            const send = () => {
+              scheduled = undefined;
+              try {
+                controller.enqueue(
+                  encoder.encode(`data: ${JSON.stringify([...threads.values()].map(summary))}\n\n`),
+                );
+              } catch {
+                cleanup();
+              }
+            };
+            // Coalesce token bursts; this is one projection stream, never one child stream per row.
+            const dirty = () => {
+              scheduled ??= setTimeout(send, 100);
+            };
+            const close = () => {
+              cleanup();
+              try {
+                controller.close();
+              } catch {}
+            };
+            const heartbeat = setInterval(() => {
+              try {
+                controller.enqueue(encoder.encode(": heartbeat\n\n"));
+              } catch {
+                cleanup();
+              }
+            }, 15_000);
+            cleanup = () => {
+              clearTimeout(scheduled);
+              clearInterval(heartbeat);
+              summaryListeners.delete(dirty);
+              request.signal.removeEventListener("abort", close);
+            };
+            summaryListeners.add(dirty);
+            send();
+            if (request.signal.aborted) close();
+            else request.signal.addEventListener("abort", close, { once: true });
+          },
+          cancel() {
+            cleanup();
+          },
+        }),
+        {
+          headers: {
+            "content-type": "text/event-stream",
+            "cache-control": "no-cache",
+            connection: "keep-alive",
+          },
+        },
+      );
+    }
     // Only routes that read a body require JSON; cancel and delete take none.
     const input = async <T>(schema: z.ZodType<T>) => {
       if (!request.headers.get("content-type")?.startsWith("application/json")) throw new NotJson();
@@ -867,8 +1078,9 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         traits: [],
         traitValues: {},
         head: emptyHead,
-        queued: [],
         forkOf: null,
+        promptCapabilities: null,
+        lifecycle: emptyThreadLifecycle(),
       });
       return json(summary(t));
     }
@@ -879,36 +1091,120 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       case "GET ":
         return json(body(t));
       case "PUT ": {
-        t.meta.title = (await input(z.object({ title: z.string().min(1) }))).title;
+        const change = await input(updateThreadRequestSchema);
+        const state = activity(t);
+        const lifecycleChange = Object.keys(change).some(
+          (key) => !["expectedRevision", "title", "readSeq"].includes(key),
+        );
+        if (
+          (lifecycleChange || change.readSeq !== undefined) &&
+          change.expectedRevision !== t.meta.lifecycle.revision
+        )
+          return json(
+            {
+              error: "Thread lifecycle changed in another window; review it and try again",
+              thread: summary(t),
+            },
+            409,
+          );
+        if (
+          (change.status === "archived" || change.status === "settled") &&
+          (state.state === "running" || state.pending)
+        )
+          return json(
+            { error: "Finish or stop the running turn and answer its asks before archiving" },
+            409,
+          );
+        if (change.snoozedUntil && state.pending)
+          return json({ error: "Answer pending asks before snoozing" }, 409);
+        if (change.readSeq !== undefined && change.readSeq > t.events.length)
+          return json({ error: "Cannot mark unseen events as read" }, 400);
+        if (change.snoozedUntil && Date.parse(change.snoozedUntil) <= Date.now())
+          return json({ error: "Choose a future snooze time" }, 400);
+        const { title, expectedRevision: _expected, ...lifecycle } = change;
+        if (title !== undefined) t.meta.title = title;
+        const previousRead = t.meta.lifecycle.readSeq;
+        const wasExplicitUnread = t.meta.lifecycle.explicitUnread;
+        const wasSnoozed = t.meta.lifecycle.snoozedUntil !== null;
+        Object.assign(t.meta.lifecycle, lifecycle);
+        if (change.readSeq !== undefined)
+          t.meta.lifecycle.readSeq = Math.max(previousRead, change.readSeq);
+        if (change.readSeq !== undefined && change.explicitUnread === undefined)
+          t.meta.lifecycle.explicitUnread = false;
+        if (change.snoozedUntil) {
+          t.meta.lifecycle.snoozedSeq = state.lastSeq;
+          t.meta.lifecycle.status = "active";
+        }
+        if (change.snoozedUntil === null && wasSnoozed)
+          t.meta.lifecycle.reopenedAt = new Date().toISOString();
+        if (change.status === "settled") {
+          t.meta.lifecycle.pinned = false;
+          t.meta.lifecycle.snoozedUntil = null;
+          t.meta.lifecycle.order = null;
+          t.meta.lifecycle.settledAt = new Date().toISOString();
+        }
+        if (change.pinned === true || change.status === "active") {
+          t.meta.lifecycle.status = "active";
+          t.meta.lifecycle.settledAt = null;
+          t.meta.lifecycle.snoozedUntil = null;
+          t.meta.lifecycle.reopenedAt = new Date().toISOString();
+        }
+        if (
+          lifecycleChange ||
+          (wasExplicitUnread && change.readSeq !== undefined && change.explicitUnread === undefined)
+        )
+          t.meta.lifecycle.revision++;
         writeMeta(t);
-        append(t, { kind: "title_changed", title: t.meta.title });
+        if (title !== undefined) append(t, { kind: "title_changed", title: t.meta.title });
+        notifySummaries();
         return json(summary(t));
       }
       case "DELETE ":
         threads.delete(t.meta.id);
         await stop(t);
         rmSync(join(options.root, t.meta.id), { recursive: true, force: true });
+        notifySummaries();
         return new Response(null, { status: 204 });
       case "POST prompt": {
-        const { text } = await input(promptRequestSchema);
+        const { text, attachments: sent } = await input(promptRequestSchema);
+        const attachments = sent?.length ? sent : undefined;
         if (options.updatePending?.())
           return json({ error: "Pe.Tools is updating; send this after the update finishes." }, 409);
-        const turnId = randomUUID();
-        if (t.running) {
-          t.meta.queued.push({ turnId, text });
-          writeMeta(t);
-          append(t, { kind: "queued", turnId, text });
-          return json({ turnId }, 202);
+        if (t.meta.lifecycle.status === "archived")
+          return json({ error: "Restore this archived thread before sending" }, 409);
+        if (attachments) {
+          // The harness says what it reads at `initialize`; learn it before admitting the turn.
+          if (!t.meta.promptCapabilities) await ensure(t).catch(() => null);
+          const refusal = attachmentRefusal(
+            attachments,
+            t.meta.promptCapabilities,
+            t.meta.providerName,
+          );
+          if (refusal) return json({ error: refusal }, 400);
         }
-        void run(t, turnId, text);
+        // A prompt on a running turn interrupts it: that turn ends cancelled, then this one starts.
+        while (t.running)
+          if (!(await interrupt(t)))
+            return json(
+              {
+                error: `${t.meta.providerName} did not stop the running turn within ${INTERRUPT_MS / 1000} s; press Stop, then send again`,
+              },
+              409,
+            );
+        if (t.stopped) return json({ error: `No thread ${id}` }, 404);
+        if (t.meta.lifecycle.status === "settled" || t.meta.lifecycle.snoozedUntil)
+          t.meta.lifecycle.reopenedAt = new Date().toISOString();
+        t.meta.lifecycle.status = "active";
+        t.meta.lifecycle.settledAt = null;
+        t.meta.lifecycle.snoozedUntil = null;
+        t.meta.lifecycle.revision++;
+        writeMeta(t);
+        const turnId = randomUUID();
+        t.turn = run(t, turnId, text, attachments);
         return json({ turnId });
       }
-      case "POST cancel": {
-        settleAsks(t, "cancel");
-        const live = t.running ? await t.live?.catch(() => null) : null;
-        if (live) await live.conn.cancel({ sessionId: live.sessionId });
-        return json({ cancelled: Boolean(live) });
-      }
+      case "POST cancel":
+        return json({ cancelled: await cancel(t) });
       case "POST permission": {
         const { requestId, optionId } = await input(permissionResponseSchema);
         return resolvePermission(t, requestId, optionId, "user")
@@ -945,8 +1241,8 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
             models: [],
             traits: [],
             traitValues: same ? { ...t.meta.traitValues } : {},
-            queued: [],
             forkOf: { threadId: t.meta.id, acpSessionId: same ? t.meta.acpSessionId : null },
+            lifecycle: emptyThreadLifecycle(),
           },
           [...t.events],
         );
@@ -1010,8 +1306,8 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     return json({ error: `No route ${method} ${url.pathname}` }, 404);
   }
 
-  // Restart recovery: a turn open in the log ended with the host that ran it. Its open asks expire,
-  // the turn ends in an error, and prompts queued behind it run once the harness resumes.
+  // Restart recovery: a turn open in the log ended with the host that ran it. Its open asks expire
+  // and the turn ends in an error.
   for (const t of threads.values()) {
     const resolved = new Set(
       t.events.flatMap((e) =>
@@ -1035,15 +1331,55 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     const last = t.events.findLast((e) => e.kind === "prompt");
     if (last?.kind === "prompt" && !ended.has(last.turnId))
       append(t, { kind: "error", turnId: last.turnId, message: "host restarted during this turn" });
-    runNext(t);
   }
+
+  const sweep = setInterval(() => {
+    const now = Date.now();
+    let changed = false;
+    for (const t of threads.values()) {
+      const lifecycle = t.meta.lifecycle;
+      const state = activity(t);
+      if (lifecycle.snoozedUntil && Date.parse(lifecycle.snoozedUntil) <= now) {
+        lifecycle.snoozedUntil = null;
+        lifecycle.reopenedAt = new Date().toISOString();
+        lifecycle.revision++;
+        writeMeta(t);
+        changed = true;
+      }
+      const threshold =
+        lifecycle.autoSettle === "1d"
+          ? 86_400_000
+          : lifecycle.autoSettle === "7d"
+            ? 604_800_000
+            : null;
+      const at = Math.max(
+        Date.parse(t.events.findLast(isActivity)?.at ?? t.meta.createdAt),
+        Date.parse(lifecycle.reopenedAt ?? t.meta.createdAt),
+      );
+      if (
+        threshold &&
+        lifecycle.status === "active" &&
+        !lifecycle.pinned &&
+        !lifecycle.snoozedUntil &&
+        state.state !== "running" &&
+        !state.pending &&
+        now - at >= threshold
+      ) {
+        lifecycle.status = "settled";
+        lifecycle.settledAt = new Date().toISOString();
+        lifecycle.order = null;
+        lifecycle.revision++;
+        writeMeta(t);
+        changed = true;
+      }
+    }
+    if (changed) notifySummaries();
+  }, 60_000);
+  sweep.unref();
 
   return {
     /** Automatic updates wait for every turn and harness action to finish. */
-    active: () =>
-      [...threads.values()].some(
-        (t) => t.running !== null || t.busy > 0 || t.meta.queued.length > 0,
-      ),
+    active: () => [...threads.values()].some((t) => t.running !== null || t.busy > 0),
     /** The thread head store; the `thread-head` Reading observes it. */
     heads,
     /** The web handler for `/pe/threads*` and `/pe/scope/:id`. Bad input is 400; a harness refusal 502. */
@@ -1060,6 +1396,9 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
             ),
       ),
     /** Host shutdown: stop every harness child and its tree. */
-    close: () => Promise.all([...threads.values()].map(stop)),
+    close: () => {
+      clearInterval(sweep);
+      return Promise.all([...threads.values()].map(stop));
+    },
   };
 }

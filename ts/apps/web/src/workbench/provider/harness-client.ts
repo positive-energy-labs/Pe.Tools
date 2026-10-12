@@ -9,7 +9,9 @@ import type {
   HarnessEvent,
   HarnessThreadBody,
   HarnessThreadSummary,
+  PromptAttachment,
   Provider,
+  UpdateThreadRequest,
 } from "@pe/agent-contracts";
 import { openEventSource } from "#/readings";
 
@@ -52,9 +54,30 @@ export function harnessClient(origin: string) {
     body: (id: string, signal?: AbortSignal) =>
       call<HarnessThreadBody>(thread(id), "GET", undefined, signal),
     rename: (id: string, title: string) => call<HarnessThreadSummary>(thread(id), "PUT", { title }),
+    update: (id: string, change: UpdateThreadRequest) =>
+      call<HarnessThreadSummary>(thread(id), "PUT", change),
+    summaries: (
+      onChange: (threads: HarnessThreadSummary[]) => void,
+      onFault: (error: Error) => void,
+    ) => {
+      const events = openEventSource(`${origin}/pe/threads/stream`);
+      events.onmessage = (message) => onChange(JSON.parse(message.data) as HarnessThreadSummary[]);
+      events.onerror = () => onFault(new Error("Thread list disconnected; reconnecting."));
+      return () => events.close();
+    },
+    target: (id: string, head: HarnessThreadSummary["head"]) =>
+      call<{ ok: boolean; head: HarnessThreadSummary["head"] }>(
+        `/scope/${encodeURIComponent(id)}`,
+        "PUT",
+        {
+          defaultTarget: head.defaultTarget,
+          expectedRevision: head.revision,
+          displayLabel: head.displayLabel,
+        },
+      ),
     remove: (id: string) => call<void>(thread(id), "DELETE"),
-    prompt: (id: string, text: string) =>
-      call<{ turnId: string }>(`${thread(id)}/prompt`, "POST", { text }),
+    prompt: (id: string, text: string, attachments?: PromptAttachment[]) =>
+      call<{ turnId: string }>(`${thread(id)}/prompt`, "POST", { text, attachments }),
     cancel: (id: string) => call<void>(`${thread(id)}/cancel`, "POST"),
     permission: (id: string, requestId: string, optionId: string) =>
       call<void>(`${thread(id)}/permission`, "POST", { requestId, optionId }),

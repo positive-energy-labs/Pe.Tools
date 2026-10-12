@@ -11,7 +11,7 @@ import {
   isTsOnlyOperationKey,
   tsOnlyOperationCatalog,
 } from "@pe/host-contracts/operation-types";
-import { RevitBridge } from "./bridge.ts";
+import { NoRevitSession, RevitBridge } from "./bridge.ts";
 // Runtime operation catalog for browsers/typegen: proxies host.ops.catalog to the
 // connected Revit session (the standard selector header targets one; ?session is the raw query form)
 // op keys + request/response JSON Schemas as plain JSON. The host-local (TS-only) ops
@@ -44,6 +44,14 @@ export const opsCatalogRoute = (spa: SpaFallback, sdk?: SdkReceiptReader) =>
       const result = yield* Effect.result(
         Effect.gen(function* () {
           const scope = yield* Effect.try(() => readSessionScope(req.headers));
+          if (
+            !scope.session &&
+            !scope.bridgeSessionId &&
+            !scope.openDocumentId &&
+            !sessionParam &&
+            (yield* bridge.list).length === 0
+          )
+            return yield* Effect.fail(new NoRevitSession());
           const session = yield* sdkSession(
             bridge,
             { ...scope, bridgeSessionId: sessionHeader ?? sessionParam },

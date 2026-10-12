@@ -17,7 +17,7 @@ import {
   type WorkKey,
 } from "@pe/agent-contracts";
 
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
 import { PidChip } from "#/components/lang/process";
 import {
@@ -139,36 +139,61 @@ export function RevitControls({
     <div className="flex min-w-0 flex-col gap-1">
       <span className="flex flex-wrap items-center justify-end gap-1">
         {hr && row.shape.reload === "hot" ? (
-          <ActionButton
+          <Button
             label="hr"
+            kind="framed"
             reason={
               blocked ??
               `pe-revit session hr ${selectorWords(row)} --restart: restart this development Revit and reopen its documents; unsaved edits are discarded`
             }
-            disabled={blocked !== null || busy}
+            refusal={
+              blocked !== null || busy
+                ? (blocked ??
+                  `pe-revit session hr ${selectorWords(row)} --restart: restart this development Revit and reopen its documents; unsaved edits are discarded`)
+                : null
+            }
             onClick={() => setArmed(armed === "hr" ? null : "hr")}
-          />
+          >
+            hr
+          </Button>
         ) : null}
         {onHere ? (
-          <ActionButton
+          <Button
             label="open here"
+            kind="framed"
             reason={
               ownershipRefusal ??
               (phase === "ready"
                 ? "make this Revit the launcher's target"
                 : `this Revit is ${phase}; it opens nothing until it answers`)
             }
-            disabled={ownershipRefusal !== null || phase !== "ready"}
+            refusal={
+              ownershipRefusal !== null || phase !== "ready"
+                ? (ownershipRefusal ??
+                  (phase === "ready"
+                    ? "make this Revit the launcher's target"
+                    : `this Revit is ${phase}; it opens nothing until it answers`))
+                : null
+            }
             onClick={onHere}
-          />
+          >
+            open here
+          </Button>
         ) : null}
-        <ActionButton
+        <Button
           label={phase === "unresponsive" ? "force stop" : "stop"}
+          kind="framed"
           reason={blocked ?? `pe-revit session stop ${selectorWords(row)}`}
-          disabled={blocked !== null || busy}
+          refusal={
+            blocked !== null || busy
+              ? (blocked ?? `pe-revit session stop ${selectorWords(row)}`)
+              : null
+          }
           busy={busy && armed === "stop"}
           onClick={() => setArmed(armed === "stop" ? null : "stop")}
-        />
+        >
+          {phase === "unresponsive" ? "force stop" : "stop"}
+        </Button>
       </span>
       {armed ? (
         <div data-surface="recess" className="flex flex-col gap-1 px-2 py-1.5">
@@ -189,34 +214,53 @@ export function RevitControls({
           <span className="flex flex-wrap items-center gap-1.5">
             {armed === "stop" ? (
               <>
-                <ActionButton
-                  tone="commit"
+                <Button
+                  kind="commit"
                   label="stop, keep work"
                   reason={`pe-revit session stop ${selectorWords(row)} --unsaved keep`}
                   busy={busy}
-                  disabled={blocked !== null || busy}
+                  refusal={
+                    blocked !== null
+                      ? `pe-revit session stop ${selectorWords(row)} --unsaved keep`
+                      : null
+                  }
                   onClick={() => run("stop", "keep")}
-                />
+                >
+                  stop, keep work
+                </Button>
                 {checkout ? (
-                  <ActionButton
+                  <Button
                     label="stop, discard edits"
+                    kind="framed"
                     reason={`pe-revit session stop ${selectorWords(row)} --unsaved discard; offered only for a checkout session`}
-                    disabled={blocked !== null || busy}
+                    refusal={
+                      blocked !== null || busy
+                        ? `pe-revit session stop ${selectorWords(row)} --unsaved discard; offered only for a checkout session`
+                        : null
+                    }
                     onClick={() => run("stop", "discard")}
-                  />
+                  >
+                    stop, discard edits
+                  </Button>
                 ) : null}
               </>
             ) : (
-              <ActionButton
-                tone="commit"
+              <Button
+                kind="commit"
                 label="restart"
                 reason={`pe-revit session hr ${selectorWords(row)} --restart`}
                 busy={busy}
-                disabled={blocked !== null || busy}
+                refusal={
+                  blocked !== null ? `pe-revit session hr ${selectorWords(row)} --restart` : null
+                }
                 onClick={() => run("restart")}
-              />
+              >
+                restart
+              </Button>
             )}
-            <ActionButton label="cancel" reason="disarm" onClick={() => setArmed(null)} />
+            <Button label="cancel" kind="framed" reason="disarm" onClick={() => setArmed(null)}>
+              cancel
+            </Button>
           </span>
         </div>
       ) : null}

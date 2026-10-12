@@ -1,9 +1,14 @@
 import { createContext } from "react";
-import type { HarnessThreadSummary, PeaSessionDescriptor } from "@pe/agent-contracts";
+import type {
+  DocumentRequest,
+  HarnessThreadSummary,
+  PeaSessionDescriptor,
+  PromptAttachment,
+  UpdateThreadRequest,
+} from "@pe/agent-contracts";
 import { type WorkbenchEndpointConfig } from "../config";
 import { type ChatState, type ThreadBody } from "../chat-state";
 import { type ChatPageStore } from "../store";
-import { type WorkbenchAttachment } from "../prompt";
 import type * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import type { HeadDraft, ProvidersState } from "./providers";
@@ -23,6 +28,8 @@ export interface WorkbenchContextValue {
   /** The head a thread binds at first send; read only while no thread is open. */
   draft: HeadDraft;
   setDraft: (draft: HeadDraft) => void;
+  draftTarget: DocumentRequest | null;
+  setDraftTarget: (target: DocumentRequest | null) => void;
   /** Why the first send cannot create a thread now (none ready, the pick refused); else undefined. */
   newRefusal?: string;
   /** The URL's thread is one the host does not know (404). */
@@ -37,10 +44,11 @@ export interface WorkbenchContextValue {
   world?: PeaSessionDescriptor;
   isRunning: boolean;
   operationError?: string;
-  sendPrompt: (text: string, attachments?: WorkbenchAttachment[]) => Promise<void>;
+  sendPrompt: (text: string, attachments?: PromptAttachment[]) => Promise<void>;
   cancel: () => Promise<void>;
   /** Opens an empty draft; the thread is created at its first send. */
-  newThread: () => Promise<void>;
+  newThread: (target?: DocumentRequest | null) => Promise<void>;
+  updateThread: (threadId: string, change: UpdateThreadRequest) => Promise<boolean>;
   openThread: (threadId: string) => void;
   renameThread: (threadId: string, title: string) => Promise<void>;
   deleteThread: (threadId: string) => Promise<boolean>;

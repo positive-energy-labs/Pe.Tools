@@ -5,18 +5,36 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { X } from "lucide-react";
 
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 
 import { MachineBody } from "./body";
 import { closeMachine, drawerState, openMachine, subscribeDrawer } from "./door";
 import { chipText, planWaits, runtimeIdentity } from "./model";
 import { useMachine } from "./use-machine";
 
-export function VersionChip() {
+/** The tutorial's machine door uses the same observation and drawer as global chrome. */
+export function MachineHelpTrigger({ onOpen }: { onOpen?: () => void }) {
+  const { reading, fixture } = useMachine();
+  return (
+    <Button
+      label="This machine"
+      reason={runtimeIdentity(reading, fixture).detail}
+      onClick={() => {
+        onOpen?.();
+        openMachine();
+      }}
+    >
+      This machine · <span className="face-mono">{chipText(reading, fixture)}</span>
+    </Button>
+  );
+}
+
+export function VersionChip({ hideTrigger = false }: { hideTrigger?: boolean }) {
   const { reading, fixture } = useMachine();
   const state = useSyncExternalStore(subscribeDrawer, drawerState, drawerState);
   const chip = useRef<HTMLButtonElement>(null);
   const close = useRef<HTMLButtonElement>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
   const waiting = reading.state === "ready" ? planWaits(reading.observation) : null;
   const identity = runtimeIdentity(reading, fixture);
   useEffect(() => {
@@ -29,36 +47,40 @@ export function VersionChip() {
   }, [!!waiting]);
   useEffect(() => {
     if (!state.open) return;
+    returnFocus.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
     close.current?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       closeMachine();
-      chip.current?.focus();
+      (chip.current ?? (returnFocus.current?.isConnected ? returnFocus.current : null))?.focus();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [state.open]);
   const shut = () => {
     closeMachine();
-    chip.current?.focus();
+    (chip.current ?? (returnFocus.current?.isConnected ? returnFocus.current : null))?.focus();
   };
   return (
     <>
-      <span className="fixed right-2 bottom-2 z-sticky">
-        <Press
-          ref={chip}
-          tone="quiet"
-          size="caption"
-          frame="line"
-          aria-expanded={state.open}
-          aria-controls="machine-drawer"
-          data-tone={waiting ? "caution" : undefined}
-          title={identity.detail}
-          onClick={() => (state.open ? shut() : openMachine())}
-        >
-          <span className="face-mono">{chipText(reading, fixture)}</span>
-        </Press>
-      </span>
+      {/* Chat reaches this drawer through its tutorial; other routes keep the global door. */}
+      {!hideTrigger ? (
+        <span className="fixed right-(--gutter) bottom-(--gutter) z-sticky flex h-(--rail-h) items-center">
+          <Button
+            ref={chip}
+            label={chipText(reading, fixture)}
+            kind="framed"
+            aria-expanded={state.open}
+            aria-controls="machine-drawer"
+            data-tone={waiting ? "caution" : undefined}
+            reason={identity.detail}
+            onClick={() => (state.open ? shut() : openMachine())}
+          >
+            <span className="face-mono">{chipText(reading, fixture)}</span>
+          </Button>
+        </span>
+      ) : null}
       {state.open ? (
         <aside
           id="machine-drawer"
@@ -69,16 +91,7 @@ export function VersionChip() {
           <span className="flex h-(--control-h) items-center gap-2">
             <span className="font-semibold">This machine</span>
             <span className="ml-auto">
-              <Press
-                ref={close}
-                tone="quiet"
-                size="icon"
-                title="close (Esc)"
-                aria-label="close"
-                onClick={shut}
-              >
-                <X className="size-4" strokeWidth={1.5} />
-              </Press>
+              <Button ref={close} label="close" reason="close (Esc)" icon={X} onClick={shut} />
             </span>
           </span>
           <p className="break-all text-ink-2">{identity.detail}</p>

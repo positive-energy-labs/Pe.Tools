@@ -6,7 +6,7 @@
  */
 import type { Machine, Reading } from "@pe/agent-contracts";
 
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "#/components/lang/button";
 import { LegStrip } from "#/components/lang/leg-strip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { PidChip } from "#/components/lang/process";
@@ -89,15 +89,24 @@ export function UpdateGroup({ reading, fixture }: { reading: Reading<Machine>; f
   const { plan, planLeg } = machine.update;
   const recheck = (
     <>
-      <ActionButton
+      <Button
         label="recheck"
+        kind="framed"
         reason={
           fixture ? SEED_REFUSAL : "read the update feed again and re-plan against every Revit"
         }
-        disabled={fixture || gap}
+        refusal={
+          fixture || gap
+            ? fixture
+              ? SEED_REFUSAL
+              : "read the update feed again and re-plan against every Revit"
+            : null
+        }
         busy={check.isPending}
         onClick={() => check.mutate()}
-      />
+      >
+        recheck
+      </Button>
       {check.error ? <OutcomeLine kind="refused" label={check.error.message} /> : null}
     </>
   );
@@ -185,14 +194,16 @@ export function UpdateGroup({ reading, fixture }: { reading: Reading<Machine>; f
           : ""}
       </span>
       <span className="flex flex-wrap items-center gap-2">
-        <ActionButton
-          tone="commit"
+        <Button
+          kind="commit"
           label={`close ${closing} Revit${closing === 1 ? "" : "s"} and update`}
           reason={consent.refusal ?? `pe-revit update apply ${plan.planId}`}
-          disabled={consent.refusal !== null}
+          refusal={consent.refusal}
           busy={consent.pending}
           onClick={() => void consent.consent()}
-        />
+        >
+          {`close ${closing} Revit${closing === 1 ? "" : "s"} and update`}
+        </Button>
         {recheck}
       </span>
       {consent.refusal && blockers.length ? (

@@ -10,7 +10,7 @@ import type { Machine, Reading } from "@pe/agent-contracts";
 
 import { acknowledgeUpdate } from "#/host/install";
 import { switchRemoteAdministration, switchShare } from "#/host/machine";
-import { Press } from "#/components/lang/press";
+import { Button } from "#/components/lang/button";
 import { MACHINE_SEEDS } from "#/open/seeds";
 import { AppChrome, AppDevtools } from "#/route/app-chrome";
 
@@ -38,7 +38,7 @@ vi.mock("#/open/lifecycle", async (original) => {
   };
 });
 vi.mock("#/components/feedback-picker", () => ({
-  FeedbackPicker: () => <Press>feedback</Press>,
+  FeedbackPicker: () => <Button label="feedback">feedback</Button>,
 }));
 vi.mock("@tanstack/react-devtools", () => ({
   TanStackDevtools: () => <div data-testid="devtools-launcher" />,
@@ -269,7 +269,9 @@ test("a host that went away is the honest gap: last confirmed leg, then disconne
   expect(receipt.textContent).toContain("Last confirmed handoff at 17:20 · disconnected");
   const unobserved = [...receipt.querySelectorAll("[data-seam]")].map((chip) => chip.textContent);
   expect(unobserved).toEqual(["install", "reopen", "relaunch"]);
-  expect(screen.getByRole("button", { name: "recheck" }).hasAttribute("disabled")).toBe(true);
+  expect(screen.getByRole("button", { name: "recheck" }).getAttribute("aria-disabled")).toBe(
+    "true",
+  );
 });
 
 describe("sharing", () => {
@@ -350,11 +352,11 @@ describe("shells", () => {
   test("only the tray shell can quit the host and open a window", () => {
     body(MACHINE_SEEDS["no-revit"], "tray");
     for (const name of ["open window", "quit host"])
-      expect(screen.getByRole("button", { name }).hasAttribute("disabled")).toBe(false);
+      expect(screen.getByRole("button", { name }).getAttribute("aria-disabled")).toBeNull();
     cleanup();
     body(MACHINE_SEEDS["no-revit"], "drawer");
     for (const name of ["open window", "quit host"])
-      expect(screen.getByRole("button", { name }).hasAttribute("disabled")).toBe(true);
+      expect(screen.getByRole("button", { name }).getAttribute("aria-disabled")).toBe("true");
   });
 
   test("install appears only for a captured prompt in the drawer", () => {

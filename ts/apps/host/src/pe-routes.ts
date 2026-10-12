@@ -24,7 +24,7 @@ import {
   createRouteRegistrations,
   resolvePeaProductHomePath,
   materializeBundledPeaSkills,
-  peaAgentInstructionsFor,
+  peaAgentInstructions,
 } from "@pe/mcps";
 import {
   captureUserShellPath,
@@ -365,29 +365,26 @@ export function makeHostPeRoutes(
         Effect.logWarning(`Pea's Codex project config was not written: ${String(error)}`),
       ),
     );
-  // Once per host start: the profile-loaded PATH every child gets.
-  const shellPath = captureUserShellPath().then((captured) => {
-    Effect.runSync(
-      captured
-        ? Effect.logInfo(`user shell PATH captured (${captured.split(";").length} entries)`)
-        : Effect.logWarning("user shell PATH not captured: harness children keep the host's PATH"),
-    );
-    return captured;
-  });
+  const shellPath = () =>
+    captureUserShellPath().then((captured) => {
+      Effect.runSync(
+        captured
+          ? Effect.logInfo(`user shell PATH captured (${captured.split(";").length} entries)`)
+          : Effect.logWarning(
+              "user shell PATH not captured: harness children keep the host's PATH",
+            ),
+      );
+      return captured;
+    });
   // Every provider is probed once in the background; the list says `unknown` until then.
-  const providers = createProviders({ shellPath: () => shellPath });
+  const providers = createProviders({ shellPath });
   const threads = createHarnessThreads({
     providers,
     updatePending: update.automaticPending,
     root: productHarnessThreadsPath(),
     worldRoot,
     // The same kernel the Pea MCP server declares, for the harness that cannot read it from there.
-    developerInstructions: async () => {
-      const sessions = bridge ? await Effect.runPromise(bridge.list).catch(() => []) : [];
-      return peaAgentInstructionsFor({
-        revit: sessions.some((session) => session.connected && Boolean(session.sessionId)),
-      });
-    },
+    developerInstructions: async () => peaAgentInstructions,
     mcpServer: (threadId) => peaMcpServer(sourceRoot, hostBaseUrl, threadId),
   });
   const machine = createMachine(machineSources(bridge, providers, update, share), {

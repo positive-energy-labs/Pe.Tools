@@ -103,6 +103,18 @@ export const accessModes = {
 
 const CODEX_PROVIDER = "pea_endpoint";
 
+/** Known inference overrides only; CLI files, credential stores and endpoint billing remain outside this boundary. */
+export function cleanHarnessEnv(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return Object.fromEntries(
+    Object.entries(source).filter(
+      ([key]) =>
+        !/^(?:ANTHROPIC_|OPENAI_|AZURE_OPENAI_|CLAUDE_CODE_(?:OAUTH_|API_KEY|USE_|SUBAGENT_MODEL)|CODEX_(?:API_KEY|CONFIG)$|MODEL_PROVIDER$|PEA_ENDPOINT_API_KEY$|AWS_BEARER_TOKEN_BEDROCK$|BEDROCK_BASE_URL$)/i.test(
+          key,
+        ),
+    ),
+  );
+}
+
 /**
  * The auth part of a child's env. Codex ignores OPENAI_BASE_URL under a ChatGPT login (FALSIFIED
  * 2026-10-01), so an endpoint goes in as a custom model provider the way T3 Code does it: codex-acp
@@ -338,7 +350,7 @@ async function acpProbe(
           step: "endpoint",
           message: `The harness refused the endpoint: ${detail}`,
         }
-      : isAbsolute(adapterCli(record.harness))
+      : isAbsolute(adapterCli(record.harness, env))
         ? {
             state: "refused",
             step: "signed-in",
@@ -549,12 +561,9 @@ export function createProviders(options: ProvidersOptions) {
     return path ? { [key]: mergePath(path, process.env[key]) } : {};
   };
 
-  /** The child env for a provider on top of the host's: the user's PATH, then the auth source. */
-  async function env(
-    record: ProviderRecord,
-    modelId?: string | null,
-  ): Promise<Record<string, string>> {
-    const out = await userPath();
+  /** A complete child environment. Never merge the host environment back over this boundary. */
+  async function env(record: ProviderRecord, modelId?: string | null): Promise<NodeJS.ProcessEnv> {
+    const out = { ...cleanHarnessEnv(process.env), ...(await userPath()) };
     if (record.auth.kind === "endpoint") {
       const provider = fresh(record.id) ? view(record) : await probe(record);
       if (provider.readiness.state !== "ready")
@@ -574,7 +583,7 @@ export function createProviders(options: ProvidersOptions) {
   async function probeRecord(record: ProviderRecord): Promise<Probed> {
     const probedAt = () => new Date().toISOString();
     const probed = await acpProbe(record, {
-      ...process.env,
+      ...cleanHarnessEnv(process.env),
       ...(await userPath()),
       ...authEnv(record),
     });
@@ -762,12 +771,12 @@ export function createProviders(options: ProvidersOptions) {
           );
         const readiness = cache.get(record.id)?.readiness;
         const install = readiness?.state === "refused" && readiness.step === "installed";
-        const command = install ? adapters[record.harness].install : adapterLogin(record.harness);
+        const childEnv = await env(record);
+        const command = install
+          ? adapters[record.harness].install
+          : adapterLogin(record.harness, adapterCli(record.harness, childEnv));
         log.info(`provider ${record.id}: opening a console for \`${command}\``);
-        void (options.openConsole ?? openConsole)(command, {
-          ...process.env,
-          ...(await env(record)),
-        })
+        void (options.openConsole ?? openConsole)(command, childEnv)
           .then(() => probe(record))
           .catch((error) => log.warn(`provider ${record.id} re-probe failed: ${String(error)}`));
         return json({ opened: true });

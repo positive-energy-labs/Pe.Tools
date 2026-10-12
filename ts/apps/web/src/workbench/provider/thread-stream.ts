@@ -21,8 +21,8 @@ const bodyAtoms = Atom.family((key: string) => {
   ).pipe(Atom.autoDispose);
 });
 
-/** Events that change the body's own fields (model, traits, session): re-read it. The queue and
- * the title fold from the log (`selectQueued`, `selectTitle`). */
+/** Events that change the body's own fields (model, traits, session): re-read it. The title
+ * folds from the log (`selectTitle`). */
 const bodyEvents = new Set<HarnessEvent["kind"]>([
   "turn_end",
   "error",
@@ -87,8 +87,10 @@ export function useThreadStream(options: {
             ? { ...previous, events: [...previous.events, event], fault: null }
             : previous,
         );
-        if (bodyEvents.has(event.kind)) invalidate();
-        if (listEvents.has(event.kind)) onListChange.current?.();
+        const configuration =
+          event.kind === "update" && event.update.sessionUpdate === "config_option_update";
+        if (bodyEvents.has(event.kind) || configuration) invalidate();
+        if (listEvents.has(event.kind) || configuration) onListChange.current?.();
       },
       onFault: (fault) =>
         setLive((previous) => (previous.key === key ? { ...previous, fault } : previous)),

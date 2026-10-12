@@ -39,26 +39,29 @@ export const adapters: Record<
  * dispatched in index.ts), so no second Node ships; a source host runs the adapter's bin under its
  * own Node. The adapter drives the user's own CLI (`adapterCli`), never a shipped one.
  */
-export function adapterLaunch(harness: HarnessId): {
+export function adapterLaunch(
+  harness: HarnessId,
+  env: NodeJS.ProcessEnv = process.env,
+): {
   command: string;
   args: string[];
   env: Record<string, string>;
 } {
-  const cli = adapterCli(harness);
+  const cli = adapterCli(harness, env);
   // A SEA has no fallback CLI: without this path the codex adapter would re-run Pe.Host.exe itself.
   if (isSea() && !isAbsolute(cli))
     throw new Error(`${adapters[harness].title} is not installed (no ${cli}.exe found).`);
-  const env: Record<string, string> = isAbsolute(cli)
+  const cliEnv: Record<string, string> = isAbsolute(cli)
     ? { [harness === "claude" ? "CLAUDE_CODE_EXECUTABLE" : "CODEX_PATH"]: cli }
     : {};
-  if (isSea()) return { command: process.execPath, args: ["--adapter", harness], env };
+  if (isSea()) return { command: process.execPath, args: ["--adapter", harness], env: cliEnv };
   const override = process.env[`PE_HARNESS_ADAPTER_${harness.toUpperCase()}`];
   const pkgJson = createRequire(import.meta.url).resolve(`${adapters[harness].pkg}/package.json`);
   const bin = JSON.parse(readFileSync(pkgJson, "utf8")).bin as Record<string, string>;
   return {
     command: process.execPath,
     args: [override ?? join(dirname(pkgJson), Object.values(bin)[0]!)],
-    env,
+    env: cliEnv,
   };
 }
 
@@ -69,7 +72,7 @@ export function openAdapter(
   env: Record<string, string | undefined>,
   client: ConstructorParameters<typeof ClientSideConnection>[0],
 ) {
-  const launch = adapterLaunch(harness);
+  const launch = adapterLaunch(harness, env);
   const child = spawn(launch.command, launch.args, {
     cwd,
     stdio: ["pipe", "pipe", "pipe"],
@@ -93,8 +96,8 @@ export function openAdapter(
  * first `<cli>.exe` on PATH, else the bare name (not installed). Only native exes count, because
  * the Claude SDK spawns its executable without a shell.
  */
-export function adapterCli(harness: HarnessId): string {
-  const local = process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local");
+export function adapterCli(harness: HarnessId, env: NodeJS.ProcessEnv = process.env): string {
+  const local = env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local");
   const official =
     harness === "claude"
       ? join(homedir(), ".local", "bin", "claude.exe")
@@ -104,6 +107,7 @@ export function adapterCli(harness: HarnessId): string {
     encoding: "utf8",
     windowsHide: true,
     timeout: 5000,
+    env,
   });
   return found.status === 0 ? found.stdout.split(/\r?\n/)[0]!.trim() : adapters[harness].cli;
 }

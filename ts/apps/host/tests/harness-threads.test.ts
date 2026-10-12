@@ -6,7 +6,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HarnessEvent, HarnessThreadBody, Provider, ThreadHead } from "@pe/agent-contracts";
 import { createProviders } from "../src/harness/providers.ts";
-import { createHarnessThreads, IDLE_CHILD_MS, WAITING_MS } from "../src/harness/threads.ts";
+import {
+  createHarnessThreads,
+  IDLE_CHILD_MS,
+  INTERRUPT_MS,
+  WAITING_MS,
+} from "../src/harness/threads.ts";
 import * as adapter from "../src/harness/adapter.ts";
 import { peaCodexProjectConfig, userCodexMcpServers } from "../src/harness/user-shell.ts";
 import { productProvidersPath } from "../src/product-paths.ts";
@@ -61,10 +66,12 @@ beforeAll(async () => {
   process.env.PE_HARNESS_ADAPTER_CODEX = process.env.PE_HARNESS_ADAPTER_CLAUDE;
 });
 afterEach(() => {
+  vi.unstubAllEnvs();
   delete process.env.FAKE_ACP_SHAPE;
   delete process.env.FAKE_ACP_AUTH;
   delete process.env.FAKE_ACP_GATE;
   delete process.env.FAKE_ACP_NATIVE_CURRENT;
+  delete process.env.FAKE_ACP_PROMPT;
   vi.useRealTimers();
 });
 afterAll(async () => {
@@ -161,9 +168,7 @@ test("automatic update admission refuses a new Pea prompt through download and r
     });
     expect(refused.status).toBe(409);
     expect(refused.json.error).toContain("updating");
-    expect((await read(id)).events.some((e) => e.kind === "prompt" || e.kind === "queued")).toBe(
-      false,
-    );
+    expect((await read(id)).events.some((e) => e.kind === "prompt")).toBe(false);
     release();
     await applying;
     expect(updates.automaticPending()).toBe(true);
@@ -293,7 +298,7 @@ test("idle reaping keeps history and choices, and a prompt waits for exact-child
   }
 });
 
-test("connect, model/trait RPCs, active turns, queued work and asks prevent idle reaping", async () => {
+test("connect, model/trait RPCs, active turns and asks prevent idle reaping", async () => {
   process.env.FAKE_ACP_SHAPE = "config";
   const gates = await mkdtemp(join(root, "gates-"));
   process.env.FAKE_ACP_GATE = gates;
@@ -336,17 +341,14 @@ test("connect, model/trait RPCs, active turns, queued work and asks prevent idle
               ? openQuestions(b).length > 0
               : lastEcho(b) === "echo: hang",
       );
-      const queued = await call("POST", `/pe/threads/${id}/prompt`, { text: "queued" });
-      expect(queued.status).toBe(202);
       await vi.advanceTimersByTimeAsync(2 * IDLE_CHILD_MS);
       const active = await read(id);
       expect(active.session).toBe("started");
       expect(active.running).toBe(true);
-      expect(active.queued).toHaveLength(1);
       await call("POST", `/pe/threads/${id}/cancel`);
       await untilIo(
         () => read(id),
-        (b) => !b.running && b.queued.length === 0,
+        (b) => !b.running,
       );
     }
   } finally {
@@ -355,7 +357,7 @@ test("connect, model/trait RPCs, active turns, queued work and asks prevent idle
   }
 });
 
-test("a thread prompts, parks a permission, cancels, queues, renames, and replays over SSE", async () => {
+test("a thread prompts, parks a permission, cancels, interrupts, renames, and replays over SSE", async () => {
   process.env.FAKE_ACP_SHAPE = "config";
   const threads = host();
   const call = caller(threads);
@@ -399,6 +401,20 @@ test("a thread prompts, parks a permission, cancels, queues, renames, and replay
   body = await until(read, id, (b) => openAsks(b).length === 1);
   expect(body.running).toBe(true);
   const ask = openAsks(body)[0]!;
+  for (const change of [
+    { status: "settled" },
+    { status: "archived" },
+    { snoozedUntil: "2099-10-11T12:00:00.000Z" },
+  ])
+    expect(
+      (
+        await call("PUT", `/pe/threads/${id}`, {
+          expectedRevision: body.lifecycle.revision,
+          ...change,
+        })
+      ).status,
+    ).toBe(409);
+  expect((await read(id)).activity).toMatchObject({ state: "waiting", pending: 1 });
   expect(ask.toolCall).toMatchObject({ toolCallId: "t-ask permission", title: "fake tool" });
   expect(
     (await call("POST", `/pe/threads/${id}/permission`, { requestId: "nope", optionId: "yes" }))
@@ -433,27 +449,28 @@ test("a thread prompts, parks a permission, cancels, queues, renames, and replay
   expect(cancelled).not.toHaveProperty("optionId");
   expect(turnEnds(body).at(-1)).toMatchObject({ stopReason: "cancelled" });
 
-  // Cancel mid-turn, and a prompt sent while running waits in the queue, logged as `queued`.
+  // A prompt sent while a turn runs interrupts it: the turn ends cancelled, then the new one starts.
   await call("POST", `/pe/threads/${id}/prompt`, { text: "hang" });
-  await until(read, id, (b) => b.running);
-  const queued = await call("POST", `/pe/threads/${id}/prompt`, { text: "slow" });
-  expect(queued.status).toBe(202);
-  body = await read(id);
-  expect(body.queued).toEqual([{ turnId: queued.json.turnId, text: "slow" }]);
-  expect(body.events.at(-1)).toMatchObject({
-    kind: "queued",
-    turnId: queued.json.turnId,
-    text: "slow",
+  await until(read, id, (b) => lastEcho(b) === "echo: hang");
+  const interrupting = await call("POST", `/pe/threads/${id}/prompt`, { text: "slow" });
+  expect(interrupting.status).toBe(200);
+  body = await until(read, id, (b) => turnEnds(b).length === 5 && !b.running);
+  expect(
+    body.events
+      .flatMap((e) =>
+        e.kind === "prompt"
+          ? [`prompt ${e.text}`]
+          : e.kind === "turn_end"
+            ? [`end ${e.stopReason}`]
+            : [],
+      )
+      .slice(-4),
+  ).toEqual(["prompt hang", "end cancelled", "prompt slow", "end end_turn"]);
+  expect(body.events.findLast((e) => e.kind === "prompt")).toMatchObject({
+    turnId: interrupting.json.turnId,
   });
   // Cancel reads no body, so it needs no content type.
   expect((await bare(threads, "POST", `/pe/threads/${id}/cancel`)).status).toBe(200);
-  body = await until(read, id, (b) => turnEnds(b).length === 5 && !b.running);
-  expect(
-    turnEnds(body)
-      .slice(-2)
-      .map((e) => e.kind === "turn_end" && e.stopReason),
-  ).toEqual(["cancelled", "end_turn"]);
-  expect(body.queued).toEqual([]);
   expect(body.events.map((e) => e.seq)).toEqual(body.events.map((_, i) => i + 1));
 
   // Model and traits (config option branch) go through ACP and land in the log.
@@ -576,6 +593,35 @@ test("the thread head lives in meta.json, falls back for unknown ids, and is obs
   });
 });
 
+test("a prompt whose interrupt the harness ignores is refused, never queued", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "stubborn" });
+  await until(read, id, (b) => lastEcho(b) === "echo: stubborn");
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const said = (b: HarnessThreadBody) =>
+    b.events.some(
+      (e) =>
+        e.kind === "update" &&
+        (e.update as { content?: { text?: string } }).content?.text === "ignoring cancel",
+    );
+  const refused = call("POST", `/pe/threads/${id}/prompt`, { text: "after" });
+  await untilIo(() => read(id), said);
+  await vi.advanceTimersByTimeAsync(INTERRUPT_MS);
+  expect(await refused).toEqual({
+    status: 409,
+    json: {
+      error: "Claude Code did not stop the running turn within 10 s; press Stop, then send again",
+    },
+  });
+  const body = await read(id);
+  expect(body.running).toBe(true);
+  expect(body.events.filter((e) => e.kind === "prompt").map((e) => e.text)).toEqual(["stubborn"]);
+  await threads.close();
+});
+
 test("a restarted host expires open asks, ends the open turn, resumes, and keeps the model", async () => {
   // The `models` shape: no config option, so the model goes through `session/set_model`.
   const first = host();
@@ -587,8 +633,6 @@ test("a restarted host expires open asks, ends the open turn, resumes, and keeps
   await call("POST", `/pe/threads/${id}/prompt`, { text: "permission" });
   const parked = await until(read, id, (b) => openAsks(b).length === 1);
   const turnId = parked.events.findLast((e) => e.kind === "prompt")!.turnId;
-  const queued = await call("POST", `/pe/threads/${id}/prompt`, { text: "after restart" });
-  expect(queued.status).toBe(202);
   await first.close();
 
   // A torn thread directory is skipped, never fatal.
@@ -597,12 +641,16 @@ test("a restarted host expires open asks, ends the open turn, resumes, and keeps
 
   const second = host();
   const reread = reader(second);
+  const recall = caller(second);
+  expect((await recall("POST", `/pe/threads/${id}/prompt`, { text: "after restart" })).status).toBe(
+    200,
+  );
   const resumed = await until(
     reread,
     id,
-    (b) => b.session === "resumed" && !b.running && b.queued.length === 0,
+    (b) => b.session === "resumed" && !b.running && turnEnds(b).length === 1,
   );
-  const tail = resumed.events.slice(parked.events.length + 1);
+  const tail = resumed.events.slice(parked.events.length);
   expect(kinds(tail)).toEqual([
     "permission_resolved",
     "error",
@@ -615,7 +663,7 @@ test("a restarted host expires open asks, ends the open turn, resumes, and keeps
   ]);
   expect(tail[0]).toMatchObject({ by: "expired", requestId: openAsks(parked)[0]!.requestId });
   expect(tail[1]).toMatchObject({ turnId, message: "host restarted during this turn" });
-  expect(tail[2]).toMatchObject({ turnId: queued.json.turnId, text: "after restart" });
+  expect(tail[2]).toMatchObject({ text: "after restart" });
   expect(resumed.modelId).toBe("m2");
   expect(
     (await caller(second)("GET", "/pe/threads")).json.map((t: { id: string }) => t.id),
@@ -795,6 +843,62 @@ const said = (body: HarnessThreadBody, name: string) =>
     )
     .find((text) => text.startsWith(`${name}=`))
     ?.slice(name.length + 1);
+
+test("subscription children exclude inherited inference credentials without changing the host", async () => {
+  const names = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"];
+  for (const name of names) vi.stubEnv(name, "synthetic-inherited-credential");
+  const threads = host();
+  for (const provider of ["claude", "codex"]) {
+    const body = await envOf(threads, provider);
+    for (const name of names) expect(said(body, name)).toBe("");
+  }
+  for (const name of names) expect(process.env[name]).toBe("synthetic-inherited-credential");
+});
+
+test("Pea children default Python output to UTF-8 and keep an explicit encoding", async () => {
+  vi.stubEnv("PYTHONIOENCODING", undefined);
+  for (const provider of ["claude", "codex"])
+    expect(said(await envOf(host(), provider), "PYTHONIOENCODING")).toBe("utf-8");
+  vi.stubEnv("PYTHONIOENCODING", "cp1252");
+  for (const provider of ["claude", "codex"])
+    expect(said(await envOf(host(), provider), "PYTHONIOENCODING")).toBe("cp1252");
+  expect(process.env.PYTHONIOENCODING).toBe("cp1252");
+});
+
+test("unsolicited config changes persist before turn end and replace the live config ids", async () => {
+  process.env.FAKE_ACP_SHAPE = "config";
+  const threads = host();
+  const call = caller(threads);
+  const {
+    json: { id },
+  } = await call("POST", "/pe/threads", { providerId: "claude" });
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "settings" });
+  const body = await until(reader(threads), id, (b) =>
+    b.events.some((e) => e.kind === "update" && e.update.sessionUpdate === "config_option_update"),
+  );
+  expect(body.running).toBe(true);
+  expect(body.modelId).toBe("m2");
+  expect(body.traits.map((trait) => trait.current)).toEqual(["high", true]);
+  await call("POST", `/pe/threads/${id}/cancel`);
+  await until(reader(threads), id, (b) => !b.running);
+  expect((await call("POST", `/pe/threads/${id}/model`, { modelId: "m1" })).status).toBe(200);
+});
+
+test("configuration acknowledgements win over requested model and trait values", async () => {
+  process.env.FAKE_ACP_SHAPE = "config";
+  vi.stubEnv("FAKE_ACP_CLAMP", "true");
+  const threads = host();
+  const call = caller(threads);
+  const created = await call("POST", "/pe/threads", { providerId: "claude" });
+  const id = created.json.id;
+  expect((await call("POST", `/pe/threads/${id}/model`, { modelId: "m2" })).json.modelId).toBe(
+    "m1",
+  );
+  const result = await call("POST", `/pe/threads/${id}/trait`, { id: "effort", value: "high" });
+  expect(result.json.traits[0].current).toBe("low");
+  expect(result.json.events.at(-1)).toMatchObject({ kind: "trait_changed", value: "low" });
+});
+
 async function envOf(threads: Host, providerId: string) {
   const call = caller(threads);
   const created = await call("POST", "/pe/threads", { providerId });
@@ -860,6 +964,9 @@ test("providers list from the probe: readiness follows the adapter's own auth re
 });
 
 test("an endpoint provider is checked before save, and every thread carries its provider's env", async () => {
+  vi.stubEnv("ANTHROPIC_BASE_URL", "https://inherited.invalid");
+  vi.stubEnv("MODEL_PROVIDER", "inherited-provider");
+  vi.stubEnv("OPENAI_API_KEY", "synthetic-inherited-key");
   process.env.FAKE_ACP_SHAPE = "config";
   process.env.FAKE_ACP_NATIVE_CURRENT = "gpt-4.1-mini";
   const hits: string[] = [];
@@ -994,6 +1101,7 @@ test("an endpoint provider is checked before save, and every thread carries its 
 
     // Endpoint: Codex gets the custom provider, Claude the Anthropic base URL and token.
     const codexEnd = await envOf(threads, "codex-vps");
+    expect(said(codexEnd, "OPENAI_API_KEY")).toBe("");
     expect([codexEnd.providerId, codexEnd.providerName]).toEqual(["codex-vps", "VPS"]);
     expect(said(codexEnd, "MODEL_PROVIDER")).toBe("pea_endpoint");
     const config = JSON.parse(said(codexEnd, "CODEX_CONFIG")!);
@@ -1035,6 +1143,7 @@ test("an endpoint provider is checked before save, and every thread carries its 
     expect(unsupported.json.message).toContain("Codex metadata");
     expect(inferred).not.toContain("gpt-4.1-mini");
     const claudeEnd = await envOf(threads, "claude-gate");
+    expect(said(claudeEnd, "MODEL_PROVIDER")).toBe("");
     expect(said(claudeEnd, "ANTHROPIC_BASE_URL")).toBe(`${origin}/ok`);
     expect(said(claudeEnd, "ANTHROPIC_AUTH_TOKEN")).toBe("…8765");
     expect(said(claudeEnd, "CODEX_CONFIG")).toBe("");
@@ -1107,4 +1216,98 @@ test("a turn that hears nothing for 60 s is marked waiting, once per 60 s, until
   await settle((b) => !b.running);
   await vi.advanceTimersByTimeAsync(3 * WAITING_MS);
   expect(waiting(await read(id))).toHaveLength(2);
+});
+
+// A 1x1 PNG, the same fixture the Mastra-era attachment test used.
+const PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+const png = { name: "riser.png", mimeType: "image/png", size: 68, data: PNG };
+const csv = {
+  name: "duct-sizes.csv",
+  mimeType: "text/csv",
+  size: 24,
+  text: "tag,cfm\nSA-1,400\nSA-2,250",
+};
+const pdf = { name: "spec.pdf", mimeType: "application/pdf", size: 5, data: "aGVsbG8=" };
+/** What the fake said it received besides text (`blocks: <json>` for the last prompt). */
+const blocksSeen = (body: HarnessThreadBody) => {
+  const prompt = body.events.findLastIndex((e) => e.kind === "prompt");
+  const said = body.events
+    .slice(prompt)
+    .flatMap((e) =>
+      e.kind === "update" && e.update.sessionUpdate === "agent_message_chunk"
+        ? [(e.update as { content?: { text?: string } }).content?.text ?? ""]
+        : [],
+    )
+    .find((text) => text.startsWith("blocks: "));
+  return said ? JSON.parse(said.slice("blocks: ".length)) : null;
+};
+
+test("attachments reach the harness as an image block, an embedded text resource and a linked file", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  await until(read, id, (body) => body.promptCapabilities !== null);
+  expect((await read(id)).promptCapabilities).toEqual({ image: true, embeddedContext: true });
+  const sent = await call("POST", `/pe/threads/${id}/prompt`, {
+    text: "look",
+    attachments: [png, csv, pdf],
+  });
+  expect(sent.status).toBe(200);
+  const body = await until(read, id, (b) => turnEnds(b).length === 1);
+  // The log keeps what was sent, so a reload draws the user's turn with its files.
+  expect(body.events.find((e) => e.kind === "prompt")).toMatchObject({
+    text: "look",
+    attachments: [png, csv, pdf],
+  });
+  expect(lastEcho(body)).toBe("echo: look");
+  expect(blocksSeen(body)).toEqual([
+    { type: "image", mimeType: "image/png", data: PNG },
+    {
+      type: "resource",
+      uri: "file:///duct-sizes.csv",
+      mimeType: "text/csv",
+      text: "tag,cfm\nSA-1,400\nSA-2,250",
+    },
+    {
+      type: "resource_link",
+      name: "spec.pdf",
+      mimeType: "application/pdf",
+      size: 5,
+      bytes: "aGVsbG8=",
+    },
+  ]);
+  // Attachments alone are a prompt.
+  expect(
+    (await call("POST", `/pe/threads/${id}/prompt`, { text: "", attachments: [csv] })).status,
+  ).toBe(200);
+  expect((await call("POST", `/pe/threads/${id}/prompt`, { text: " " })).status).toBe(400);
+  await until(read, id, (b) => turnEnds(b).length === 2);
+  await threads.close();
+});
+
+test("a harness that does not read images or embedded text refuses those attachments before the turn", async () => {
+  process.env.FAKE_ACP_PROMPT = "none";
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  await until(read, id, (body) => body.promptCapabilities !== null);
+  const refused = await call("POST", `/pe/threads/${id}/prompt`, {
+    text: "look",
+    attachments: [png, csv, pdf],
+  });
+  expect(refused.status).toBe(400);
+  expect(refused.json.error).toBe(
+    "Claude Code cannot read attached images or text files: remove riser.png, duct-sizes.csv to send",
+  );
+  expect((await read(id)).events.some((e) => e.kind === "prompt")).toBe(false);
+  // A linked file needs no capability.
+  expect(
+    (await call("POST", `/pe/threads/${id}/prompt`, { text: "look", attachments: [pdf] })).status,
+  ).toBe(200);
+  const body = await until(read, id, (b) => turnEnds(b).length === 1);
+  expect(blocksSeen(body)).toMatchObject([{ type: "resource_link", name: "spec.pdf" }]);
+  await threads.close();
 });

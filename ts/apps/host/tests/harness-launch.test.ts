@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "vite-plus/test";
-import { rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { adapterCli, adapterLaunch, adapterLogin, peaMcpServer } from "../src/harness/adapter.ts";
@@ -22,6 +22,23 @@ test("installed subscription login quotes a native path for PowerShell", () => {
   );
   expect(adapterLogin("codex", "codex")).toBe("codex login");
 });
+
+test.runIf(process.platform === "win32")(
+  "CLI lookup uses the refreshed child's PATH, not the host PATH",
+  () => {
+    const root = mkdtempSync(join(tmpdir(), "pe-cli-path-"));
+    roots.push(root);
+    const bin = join(root, "fresh-tools");
+    mkdirSync(bin);
+    const cli = join(bin, "codex.exe");
+    writeFileSync(cli, "lookup fixture, never executed");
+    const env: NodeJS.ProcessEnv = { ...process.env, LOCALAPPDATA: root };
+    for (const key of Object.keys(env)) if (key.toUpperCase() === "PATH") delete env[key];
+    env.Path = `${bin};${process.env.SystemRoot}\\System32`;
+    expect(adapterCli("codex", env)).toBe(cli);
+    expect(adapterLaunch("codex", env).env.CODEX_PATH).toBe(cli);
+  },
+);
 
 test("installed MCP uses sibling Pea and exact host/thread while dev keeps source execution", () => {
   const root = join(tmpdir(), "relocated Pe.Tools");

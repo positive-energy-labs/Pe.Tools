@@ -10,7 +10,7 @@ import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 import { Surface } from "#/components/lang/surface";
 import { Section } from "#/components/lang/section";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { WorkStanding } from "#/components/lang/band";
+import { WorkStanding } from "#/components/work/band";
 import { frozenDemo } from "#/host/demo-client";
 import { useSessionEvents } from "#/host/world-log";
 import { machineOf } from "#/machine/model";
