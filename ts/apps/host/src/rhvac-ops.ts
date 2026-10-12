@@ -1,8 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { Effect, FileSystem, Option, Stream } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { Effect, FileSystem, Option } from "effect";
 import type {
   RhvacAssemblyCatalogData,
   RhvacExtractData,
@@ -23,6 +22,7 @@ import {
 } from "./files/index.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { LocalOpError } from "./local-error.ts";
+import { runHostChild } from "./host-child.ts";
 
 /**
  * RHVAC .r10 local ops. An .r10 file is an Access 97 Jet database only the
@@ -185,16 +185,11 @@ export const rhvacLaunch = Effect.fnUntraced(function* (
     });
     return { path: input.path, launched: true, simulated: true };
   }
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  // `start` is a cmd builtin, not an executable; the empty string is its window-title argument,
-  // without which cmd treats a quoted path as the title and opens nothing.
-  const command = ChildProcess.make("cmd.exe", ["/c", "start", "", input.path]);
-  const exitCode = yield* Effect.scoped(
-    Effect.gen(function* () {
-      const handle = yield* spawner.spawn(command);
-      return yield* handle.exitCode;
-    }),
-  ).pipe(Effect.mapError((error) => new LocalOpError(key, describeError(error))));
+  // Hide only the shell wrapper; `start` opens the requested application normally.
+  // The empty argument is `start`'s window title, so a quoted path stays the target.
+  const { exitCode } = yield* runHostChild("cmd.exe", ["/c", "start", "", input.path]).pipe(
+    Effect.mapError((error) => new LocalOpError(key, describeError(error))),
+  );
   if (exitCode !== 0)
     return yield* Effect.fail(
       new LocalOpError(key, `the shell refused to open ${input.path} (exit ${exitCode})`),
@@ -356,28 +351,18 @@ const runRhvacScript = Effect.fnUntraced(function* (
       ),
     );
 
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const command = ChildProcess.make(PS32_EXE, [
-    "-NoProfile",
-    "-NonInteractive",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-File",
-    scriptPath,
-    ...scriptArgs,
-  ]);
-  const run = Effect.scoped(
-    Effect.gen(function* () {
-      const handle = yield* spawner.spawn(command);
-      // `all` interleaves stdout + stderr, so script throw sites land in the error note.
-      return yield* Effect.all(
-        {
-          output: Stream.mkString(Stream.decodeText(handle.all)),
-          exitCode: handle.exitCode,
-        },
-        { concurrency: "unbounded" },
-      );
-    }),
+  const run = runHostChild(
+    PS32_EXE,
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      scriptPath,
+      ...scriptArgs,
+    ],
+    { all: true },
   );
   const outcome = yield* Effect.timeout(run, timeoutMs).pipe(
     Effect.mapError(

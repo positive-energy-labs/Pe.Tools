@@ -1,4 +1,7 @@
+import type { HostSessionScope } from "@pe/host-contracts/operation-types";
+import { contextFetch as fetch, invocationContext } from "#invocation-context";
 import {
+  sdkSessionSelectionSchema,
   instancesReading,
   scheduleReads,
   type ScheduleReadKey,
@@ -25,13 +28,11 @@ import { readScheduleCapture } from "../shared/schedule-client.ts";
  *
  * `pe_find` ranks the one capability catalog (no query → the map plus the connected sessions).
  * `pe_read` runs any row with `mutates: false`. `pe_do` runs any row. Two runners rather than one
- * because approval is per tool category: `pe_read` is `read` and never prompts under the `ask`
- * access level, `pe_do` is `execute` and does. Op calls may override their target without changing
- * the Scope frozen into the turn at admission (`turnOf`), and every
- * result carries `revision` (the Scope revision it ran under) and `target` (what the host actually
+ * so a harness that asks before a tool call can let reads through and ask for `pe_do`. Op calls may override their target without changing
+ * the thread head's default Target, and every result carries `revision` (the Scope revision it ran under) and `target` (what the host actually
  * resolved to), so the transcript card shows what was touched, not what was typed.
  */
-import { createTool } from "@mastra/core/tools";
+import { createTool } from "../shared/tool.ts";
 import z from "zod";
 import {
   capabilityCatalogSchema,
@@ -49,28 +50,23 @@ import {
   settingsRouteState,
   putTargetResultSchema,
   putTargetSchema,
-  turnOf,
+  threadHeadSchema,
   type Capability,
   type CapabilityCatalog,
   type DocumentRequest,
   type TargetInventory,
   type DocumentRef,
+  type ThreadHead,
 } from "@pe/agent-contracts";
 import { HostRpcCaller, type ResolvedTarget } from "../shared/host-rpc-caller.ts";
 import type { RevitCatalogLoadedFamilies } from "@pe/host-contracts/generated";
 import { coerceJsonObject } from "../shared/coerce.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
 import { bundledPeaSkills } from "./skills.ts";
-import { ownedTurnDocuments } from "./owned-documents.ts";
-export { ownedTurnDocuments } from "./owned-documents.ts";
 
-type PeaProductToolContext = { hostBaseUrl?: string; workspaceKey?: string };
-let productContext: PeaProductToolContext = {};
-export function configurePeaProductToolContext(next: PeaProductToolContext): void {
-  productContext = next;
-}
 function base(): string {
-  return resolveHostBaseUrl(productContext.hostBaseUrl).replace(/\/$/, "");
+  // Hosted tools inherit the authority already admitted by the host middleware.
+  return (invocationContext()?.hostBaseUrl ?? resolveHostBaseUrl()).replace(/\/$/, "");
 }
 export const peaHostBaseUrl = base;
 
@@ -98,9 +94,21 @@ const targetSession = (target: Target): string | undefined =>
 const targetDocument = (target: Target): DocumentRef | null =>
   target?.kind === "open" ? target.ref : null;
 
-/** The turn's frozen default Target; a call outside a chat turn (CLI, MCP) runs with none. */
-function targetOf(context: unknown): { target: Target; revision: number } {
-  const turn = turnOf(context);
+/** A thread's head as a tool reads it. */
+export type Scope = ThreadHead & { thread: string };
+
+/** The live head of `PE_THREAD` (the harness child's thread); else none. */
+export async function scopeOf(): Promise<Scope | null> {
+  const thread = invocationContext()?.thread;
+  if (!thread) return null;
+  const response = await fetch(`${base()}/pe/scope/${encodeURIComponent(thread)}`);
+  const head = threadHeadSchema.parse(await response.json());
+  return { thread, ...head };
+}
+
+/** The Scope's default Target; a call with no Scope runs with none. */
+async function targetOf(): Promise<{ target: Target; revision: number }> {
+  const turn = await scopeOf();
   return turn
     ? { target: turn.defaultTarget, revision: turn.revision }
     : { target: null, revision: 0 };
@@ -152,13 +160,11 @@ export const peFind = createTool({
     mutates: z.boolean().optional(),
     limit: z.number().int().min(1).max(50).default(8),
   }),
-  execute: async (input, context) => {
-    const { target, revision } = targetOf(context);
-    const catalog = await readCatalog(
-      target,
-      undefined,
-      target?.kind === "open" ? target.ref.session : undefined,
-    );
+  execute: async (input) => {
+    const { target, revision } = await targetOf();
+    const catalog = await readCatalog(target, undefined, {
+      bridgeSessionId: targetSession(target),
+    });
     if ("isError" in catalog) return catalog;
     // A human-only row is the person's press, never Pea's move: it is not offered at all.
     const offered = catalog.capabilities.filter((row) => row.actor !== "human");
@@ -173,7 +179,7 @@ export const peFind = createTool({
         defaultDocument: targetDocument(target),
         sources: catalog.sources,
         map: capabilityMap(offered),
-        hint: "Query pe_find for rows. pe_read runs a row that does not mutate; pe_do runs any row and is approval-gated. A session's custody says what the SDK will allow (observed = reads only). defaultDocument is the exact lifetime frozen for this turn. Op target overrides affect one call only. Session work requires an exact session ID; host work needs no document. target_set changes later turns.",
+        hint: "Query pe_find for rows. pe_read runs a row that does not mutate; pe_do runs any row and is approval-gated. The SDK decides session resolution, adoption and refusal. defaultDocument is the thread's default document, read live per call. Op target overrides affect one call only. Session work accepts SDK id-or-pid selection; host work needs no document. target_set changes later turns.",
       };
     const rows = findCapabilities(offered, input);
     return {
@@ -205,10 +211,10 @@ const runInputSchema = z.object({
   key: z.string().min(1).describe("A capability key from pe_find."),
   input: z.unknown().optional().describe("Matches the row's input schema."),
   target: z
-    .union([z.string().min(1), documentRequestSchema])
+    .union([sdkSessionSelectionSchema, documentRequestSchema.options[0]])
     .optional()
     .describe(
-      "Op calls only: exact session ID for session work, or an exact open/named document request. Overrides only this call; omission keeps the frozen turn default.",
+      "Op calls only: SDK selection {id: name} or {pid: number} for session work, or {kind: open, ref: {session, openId}} for an exact product document. Overrides only this call; omission keeps the frozen turn default.",
     ),
   expectedRevision: z
     .number()
@@ -236,7 +242,7 @@ export const peRead = createTool({
 export const peDo = createTool({
   id: "pe_do",
   description:
-    "Do one capability by key from pe_find. Approval-gated because it may mutate; use pe_read for rows that do not. Human-only rows refuse. Op calls accept an exact per-call target override; omission uses the frozen turn default. The result separately names Scope revision and actual target. For Takeoffs actions, retain input.actionId from the admitted result to recover the same attempt; never mint another ID after an uncertain outcome.",
+    "Do one capability by key from pe_find. Approval-gated because it may mutate; use pe_read for rows that do not. Human-only rows refuse. Op calls accept an exact per-call target override; omission uses the thread's default Target, read live. The result separately names Scope revision and actual target. For Takeoffs actions, retain input.actionId from the first result to recover the same attempt; never mint another ID after an uncertain outcome.",
   inputSchema: runInputSchema,
   execute: (input, context) => executeTool(input, context, () => null, true),
 });
@@ -247,9 +253,10 @@ async function executeTool(
   gate: (row: Capability) => string | null,
   replayOperations = false,
 ): Promise<Record<string, unknown>> {
-  const admittedTurn = turnOf(context);
-  if (admittedTurn) ownedTurnDocuments.startCall(admittedTurn.id);
-  const { target: defaultTarget, revision } = targetOf(context);
+  const scope = await scopeOf();
+  const { target: defaultTarget, revision } = scope
+    ? { target: scope.defaultTarget, revision: scope.revision }
+    : { target: null, revision: 0 };
   // A known operation attempt replays before catalog or target discovery.
   if (
     replayOperations &&
@@ -299,33 +306,26 @@ async function executeTool(
         };
       }
       const requested = input.target;
-      const target =
-        typeof requested === "object" && requested?.kind === "open" ? requested.ref : undefined;
       const caller = new HostRpcCaller({
         hostBaseUrl: base(),
         actor: "agent",
         requestId: id,
-        bridgeSessionId: target?.session ?? (typeof requested === "string" ? requested : undefined),
-        openDocumentId: target?.openId,
+        ...transportScope(requested),
         timeoutMs: input.timeoutSeconds * 1000,
       });
       const result = await caller.callOperation(key, payload);
       return { ok: result.ok, key: input.key, target: defaultTarget, revision, result };
     }
   }
-  const overrideSession =
-    typeof input.target === "string"
-      ? input.target
-      : input.target?.kind === "open"
-        ? input.target.ref.session
-        : input.target?.session;
   const catalog = await readCatalog(
     defaultTarget,
     undefined,
-    overrideSession ?? targetSession(defaultTarget),
+    transportScope(input.target, defaultTarget),
   );
   if ("isError" in catalog) return catalog;
   const row = catalog.capabilities.find((candidate) => candidate.key === input.key);
+  // TODO: with no Target, a row that needs a document is absent from the catalog and refuses as
+  // "Unknown capability" instead of "no document" (ACP spike 2026-09-26, REPORT2.md reduced run).
   if (!row)
     return refuse(
       input.key,
@@ -342,6 +342,14 @@ async function executeTool(
     );
   const refusal = gate(row);
   if (refusal) return refuse(row.key, defaultTarget, revision, refusal);
+  // TODO: a temporary document needs an owner that releases it when the harness turn ends.
+  if (row.key === "op:family.temporary.acquire")
+    return refuse(
+      row.key,
+      defaultTarget,
+      revision,
+      "family.temporary.acquire has no turn-owned release on the harness lane.",
+    );
   if (input.target !== undefined && row.kind !== "op" && row.kind !== "pod")
     return refuse(
       row.key,
@@ -355,23 +363,12 @@ async function executeTool(
       input,
       defaultTarget,
       requestIdentity(context),
-      turnOf(context)?.id,
-      turnOf(context)?.thread,
+      scope?.thread,
       catalog,
     );
-    const turn = turnOf(context);
-    const cleanup = !outcome.ok && turn ? await ownedTurnDocuments.releaseCurrent(turn.id) : [];
-    return {
-      key: row.key,
-      kind: row.kind,
-      revision,
-      ...outcome,
-      ...(cleanup.length ? { cleanup } : {}),
-    };
+    return { key: row.key, kind: row.kind, revision, ...outcome };
   } catch (error) {
-    const turn = turnOf(context);
-    const cleanup = turn ? await ownedTurnDocuments.releaseCurrent(turn.id) : [];
-    return { ...refuse(row.key, defaultTarget, revision, message(error)), cleanup };
+    return refuse(row.key, defaultTarget, revision, message(error));
   }
 }
 
@@ -382,7 +379,6 @@ async function dispatch(
   input: RunInput,
   defaultTarget: Target,
   requestId: string,
-  turnId?: string,
   viewThread?: string,
   catalog?: CapabilityCatalog,
 ): Promise<Outcome> {
@@ -406,7 +402,10 @@ async function dispatch(
         const query = new URLSearchParams(
           Object.entries(reading)
             .filter(([, value]) => value !== undefined)
-            .map(([key, value]) => [key, String(value)]),
+            .map(([key, value]) => [
+              key,
+              typeof value === "object" ? JSON.stringify(value) : String(value),
+            ]),
         );
         const response = await fetch(`${base()}/instances/readings?${query.toString()}`, {
           signal: AbortSignal.timeout(input.timeoutSeconds * 1000),
@@ -487,39 +486,8 @@ async function dispatch(
         };
       }
       const call = () => caller.callOperation(key, payload, "compact");
-      let result: Awaited<ReturnType<typeof call>>;
-      if (key === "family.temporary.acquire") {
-        if (!turnId) throw new Error("Adaptive temporary acquisition requires an admitted turn.");
-        const acquisitionId = z.uuid().parse(payload.acquisitionId);
-        const releaseId = crypto.randomUUID();
-        result = (await ownedTurnDocuments.acquire(
-          turnId,
-          acquisitionId,
-          call,
-          async () => {
-            if (!target.bridgeSessionId)
-              throw Error("Original temporary-document session is unavailable");
-            const released = (await runCapability(
-              "document.temporary.release",
-              { acquisitionId, releaseId },
-              {
-                hostBaseUrl: base(),
-                bridgeSessionId: target.bridgeSessionId,
-                actionId: releaseId,
-                actor: "agent",
-                timeoutMs: 30_000,
-                receipt: true,
-              },
-              { kind: "operation", needs: "session", mutates: true },
-            )) as ActionReceipt | DetachedAction;
-            return released.state === "succeeded"
-              ? released.result
-              : { status: "recovery-required", receipt: released };
-          },
-          JSON.stringify([target, payload]),
-          { session: target.bridgeSessionId, releaseId },
-        )) as Awaited<ReturnType<typeof call>>;
-      } else result = await call();
+
+      const result = await call();
       return {
         ok: result.ok,
         target:
@@ -540,15 +508,9 @@ async function dispatch(
     case "pod": {
       const pod = parsePodKey(row.key);
       if (!pod) throw new Error(`Malformed pod key '${row.key}'.`);
-      const selector =
-        typeof input.target === "string"
-          ? input.target
-          : input.target?.kind === "open"
-            ? input.target.ref.session
-            : (input.target?.session ?? targetSession(defaultTarget));
       const definition = await new HostRpcCaller({
         hostBaseUrl: base(),
-        bridgeSessionId: selector,
+        ...transportScope(input.target, defaultTarget),
       }).getOperation("scripting.execute");
       if (!definition) throw Error("Public scripting operation metadata unavailable");
       const target = await operationTarget(
@@ -582,7 +544,7 @@ async function dispatch(
     case "route-doc":
     case "route-command": {
       if (row.key === "route:families.view" || row.key === "route:families.set-query") {
-        if (!viewThread) throw Error("The admitted turn has no thread.");
+        if (!viewThread) throw Error("This MCP server has no thread (PE_THREAD is unset).");
         const query = new URLSearchParams({ thread: viewThread });
         if (row.key === "route:families.view" && typeof payload.instance === "string")
           query.set("instance", payload.instance);
@@ -740,15 +702,32 @@ async function dispatch(
   }
 }
 
+/** SDK selection and product document references travel on different fields. */
+function transportScope(target: RunInput["target"], fallback: Target = null): HostSessionScope {
+  if (target && !("kind" in target)) return { session: target };
+  const document = target ?? fallback;
+  return document?.kind === "open"
+    ? { bridgeSessionId: document.ref.session, openDocumentId: document.ref.openId }
+    : document
+      ? { bridgeSessionId: document.session }
+      : {};
+}
+
 async function operationTarget(
   row: Capability,
   override: RunInput["target"],
   defaultTarget: Target,
-) {
+): Promise<HostSessionScope> {
   if (row.needs === "nothing") {
     if (override !== undefined) throw Error("This capability needs no Revit target.");
     return {};
   }
+  if (row.needs === "session") {
+    if (override && "kind" in override) throw Error("A session capability takes SDK id or pid");
+    return { session: override };
+  }
+  if (override && !("kind" in override))
+    throw Error("A document capability requires an exact open document reference");
   const { sessions } = await new HostRpcCaller({ hostBaseUrl: base(), timeoutMs: 30_000 }).call(
     "bridge.sessions.list",
   );
@@ -770,14 +749,8 @@ async function operationTarget(
       ]),
     ),
   };
-  if (row.needs === "session" && typeof override !== "string")
-    throw Error("A session capability requires an explicit exact session ID.");
-  if (row.needs !== "session" && typeof override === "string")
-    throw Error("A document capability requires an open or named document request.");
   const resolution = resolveCallTarget(
-    row.needs === "session"
-      ? { needs: "session", target: override as string }
-      : { needs: row.needs, target: typeof override === "object" ? override : undefined },
+    { needs: row.needs, target: override },
     defaultTarget,
     inventory,
   );
@@ -833,7 +806,7 @@ function parseTarget(value: unknown): ResolvedTarget | null {
   if (!value || typeof value !== "object") return null;
   const record = value as { session?: unknown; document?: unknown };
   return {
-    session: typeof record.session === "string" ? record.session.replace(/^session:/, "") : null,
+    session: typeof record.session === "string" ? record.session : null,
     document: typeof record.document === "string" ? record.document : null,
   };
 }
@@ -865,13 +838,15 @@ async function routeFetch(path: string, body?: unknown): Promise<Record<string, 
 export async function readCatalog(
   target: Target = null,
   hostBaseUrl?: string,
-  session?: string,
+  scope: HostSessionScope = {},
 ): Promise<CapabilityCatalog | { isError: true; content: string }> {
   let url = hostBaseUrl;
   try {
     url ??= base();
-    const query = session ? new URLSearchParams({ session }).toString() : targetQuery(target);
-    const response = await fetch(`${url}/pe/capabilities?${query}`);
+    const query = new URLSearchParams(targetQuery(target));
+    if (scope.bridgeSessionId) query.set("session", scope.bridgeSessionId);
+    if (scope.session) query.set("sdk", JSON.stringify(scope.session));
+    const response = await fetch(`${url}/pe/capabilities?${query.toString()}`);
     const parsed = capabilityCatalogSchema.safeParse(await response.json());
     if (!response.ok || !parsed.success)
       return { isError: true, content: `GET ${url}/pe/capabilities failed (${response.status}).` };
@@ -904,15 +879,14 @@ function requestIdentity(context: unknown): string {
 export const targetSet = createTool({
   id: "target_set",
   description:
-    "Propose the default Target for later turns. Name an exact open document (kind open, with its session and openId) or a saved document Address plus the session holding it (kind named). null removes the document default. Every call resolves this default against the live inventory, so closing or reopening a document never silently redirects a call. Host work needs no document; session operations take an explicit session target. Use an op target override for a document detour within this turn. The new revision applies on the next turn.",
+    "Propose the default Target for later calls. Name an exact open document (kind open, with its session and openId) or a saved document Address plus the session holding it (kind named). null removes the document default. Every call resolves this default against the live inventory, so closing or reopening a document never silently redirects a call. Host work needs no document; session operations take an explicit session target. Use an op target override for a document detour within this turn. The new revision applies to the next call.",
   inputSchema: z.object({ defaultTarget: documentRequestSchema.nullable() }),
-  execute: async (input, context) => {
-    const turn = turnOf(context);
-    if (!turn) return { isError: true, content: "target_set needs a chat turn; none is admitted." };
+  execute: async (input) => {
+    const turn = await scopeOf();
+    if (!turn) return { isError: true, content: "target_set needs a thread; none is bound." };
     const body = putTargetSchema.parse({
       defaultTarget: input.defaultTarget,
       expectedRevision: turn.revision,
-      turn: turn.id,
     });
     const response = await fetch(`${base()}/pe/scope/${encodeURIComponent(turn.thread)}`, {
       method: "PUT",
@@ -924,14 +898,11 @@ export const targetSet = createTool({
     if (!result.ok)
       return {
         isError: true,
-        content:
-          result.why === "stale"
-            ? `The thread head is at revision ${result.head.revision}, not ${turn.revision}; it changed under you.`
-            : "Another turn holds the thread head; wait for it to end.",
+        content: `The thread head is at revision ${result.head.revision}, not ${turn.revision}; it changed under you.`,
       };
     return {
       head: result.head,
-      note: `This turn keeps revision ${turn.revision}; the next turn runs under the new Target.`,
+      note: `The new Target (revision ${result.head.revision}) applies to the next call.`,
     };
   },
 });

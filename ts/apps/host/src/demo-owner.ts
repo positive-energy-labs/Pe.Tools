@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import { createDemoRhvac } from "./demo-rhvac.ts";
+import { hostOwnership } from "./host-ownership.ts";
 import { Context, Effect, Layer } from "effect";
 import { HttpEffect, HttpRouter } from "effect/unstable/http";
 import {
@@ -351,7 +352,9 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         processId: 42,
         processStartUtcUnixMs: 1000,
         custody: "controlled",
-        lane: "dev",
+        lane: hostOwnership.lane,
+        sourceRoot: hostOwnership.sourceRoot,
+        serviceName: hostOwnership.serviceName,
         state: {
           openDocuments: [
             {
@@ -862,28 +865,37 @@ export async function createDemoOwner(parent: string, raw: unknown) {
           ...settings,
           workspace: work,
           sdk: async (args) => {
-            if (!args.includes("session"))
+            if (args[0] !== "session" && args[0] !== "doc")
               throw Error("Unsupported simulated SDK receipt recovery");
             return JSON.stringify({
-              result: {
-                sessions: [
-                  {
-                    case: "controlled-active",
-                    process: {
-                      pid: 42,
-                      processStartUtc: "1970-01-01T00:00:01.0000000Z",
-                      executable: join(root, "SIMULATED.exe"),
+              result:
+                args[0] === "doc"
+                  ? { state: "ok", documents: [] }
+                  : {
+                      sessions: [
+                        {
+                          case: "controlled-active",
+                          process: {
+                            pid: 42,
+                            processStartUtc: "1970-01-01T00:00:01.0000000Z",
+                            executable: join(root, "SIMULATED.exe"),
+                          },
+                        },
+                      ],
                     },
-                  },
-                ],
-              },
               diagnostics: [],
-              resolved: null,
+              resolved: {
+                pid: 42,
+                processStartUtc: "1970-01-01T00:00:01.0000000Z",
+                payload: hostOwnership.lane === "dev" ? "checkout" : "installed",
+                sourceRoot: hostOwnership.sourceRoot,
+              },
               binary: {},
               command: {},
               nextSteps: [],
               guide: "session",
               related: [],
+              exitCode: 0,
             });
           },
           fileVersion: rhvac.fileVersion,

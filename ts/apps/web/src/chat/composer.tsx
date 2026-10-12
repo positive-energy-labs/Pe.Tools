@@ -12,7 +12,9 @@ import {
 } from "react";
 import { Paperclip, X } from "lucide-react";
 import { QueuedMessages } from "./queued-messages";
-import { ControlChips } from "#/chat/control-chips";
+import { HeadLadder, TraitsChip } from "#/chat/head-chips";
+import { FirstOpenCard } from "#/chat/first-open";
+import { isReady } from "#/workbench/provider/providers";
 import { Textarea } from "#/components/lang/textarea";
 import { Pane, type PaneShortcut } from "#/components/lang/pane";
 import { useWorkbench } from "#/workbench/provider";
@@ -26,8 +28,8 @@ import { Thumbnail } from "#/workbench/thumbnail";
 import { useSend, type ChatHandle } from "#/chat/composer-head";
 import { SituationAction } from "#/route/situation-verbs";
 
-/** A skill the thread's inspect lists: the one thing the slash menu offers. `new` and `fork` are
- * route verbs (`chat/manifest.ts`); mode switches are the mode dial. */
+/** A slash command the harness advertises (`available_commands_update`). `new` is a route verb
+ * (`chat/manifest.ts`). */
 interface SlashCommand {
   name: string;
   description: string;
@@ -46,7 +48,9 @@ function Composer({
   draft: ChatDraft;
   setDraft: Dispatch<SetStateAction<ChatDraft>>;
 }) {
-  const { chat } = useWorkbench();
+  const { chat, providers, config } = useWorkbench();
+  // Loaded and none ready: the composer carries the first-open doors and Send says why it waits.
+  const noneReady = providers.list !== undefined && !providers.list.some(isReady);
   const isRunning = selectRunStatus(chat) !== "idle";
   const { text, attachments } = draft;
   const send = useSend(handle, draft, (sent) =>
@@ -99,7 +103,7 @@ function Composer({
   // The slash menu's keys are the list's (R14); Tab also picks, so the composer reads its cursor.
   const menu = useRef<Collection<SlashCommand> | null>(null);
 
-  const commands = useMemo<SlashCommand[]>(() => selectSkillCommands(chat.inspect), [chat.inspect]);
+  const commands = useMemo<SlashCommand[]>(() => selectSkillCommands(chat), [chat]);
   const slash = text.startsWith("/") ? text.slice(1).split(/\s+/)[0]!.toLowerCase() : undefined;
   const showMenu =
     !menuDismissed &&
@@ -107,7 +111,7 @@ function Composer({
     !text.includes(" ") &&
     filterItems(commands, (command) => command.name, "substring", slash).length > 0;
 
-  const pick = (command: SlashCommand) => setText(`Use the ${command.name} skill: `);
+  const pick = (command: SlashCommand) => setText(`/${command.name} `);
 
   const sendCurrent = () => {
     void send.run();
@@ -248,6 +252,7 @@ function Composer({
             </div>
           ) : null}
 
+          {noneReady ? <FirstOpenCard providers={providers} origin={config.origin} /> : null}
           <div className="p-2 px-2 py-1.5">
             <Textarea
               name="input"
@@ -257,7 +262,7 @@ function Composer({
               aria-haspopup="listbox"
               size="compact"
               surface="embedded"
-              placeholder="Ask Pea…  ( / for skills )"
+              placeholder={noneReady ? "no provider is ready" : "Ask Pea…  ( / for skills )"}
               rows={1}
               autoFocus
               value={text}
@@ -273,7 +278,7 @@ function Composer({
                 void addFiles(files);
               }}
             />
-            {/* Control row: attachments + session controls (model/access), then Send — the same
+            {/* Control row: attachments + the head chips (provider › model, traits), then Send — the same
               manifest verb Enter runs, with the Situation's flag (moved here from the head,
               2026-09-14: a composer's send belongs beside its text). */}
             <div className="flex items-center gap-1.5 pt-1">
@@ -295,8 +300,14 @@ function Composer({
               {/* Thread verbs: the same route actions the shell lists, refusals shown the same way. */}
               <SituationAction handle={handle} name="new" action={handle.actions.new} />
               <SituationAction handle={handle} name="fork" action={handle.actions.fork} />
-              <ControlChips />
+              <HeadLadder />
+              <TraitsChip />
               <span className="ml-auto flex items-center gap-1.5">
+                {noneReady ? (
+                  <span className="t-small" data-tone="caution">
+                    no provider is ready
+                  </span>
+                ) : null}
                 {isRunning ? (
                   <SituationAction handle={handle} name="cancel" action={handle.actions.cancel} />
                 ) : null}

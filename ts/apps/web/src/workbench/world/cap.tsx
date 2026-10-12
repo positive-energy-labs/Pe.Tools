@@ -12,14 +12,7 @@ import {
 } from "../world-cache";
 
 export const PLAIN_CAP: Record<string, string> = {
-  tools:
-    "The actions the agent can take — reading and editing files, running commands, plus any connected outside tools. Expand a tool to see its input/output schema.",
-  "system-prompt":
-    "The agent's core identity, your environment, and the project rules it started with.",
-  skills: "On-demand playbooks the agent can load mid-task — markdown corpus, not a stable prefix.",
-  memory:
-    "What the agent remembers about you and this project — your name, preferences, past decisions.",
-  messages: "The conversation tail — always uncached, reprocessed every send.",
+  messages: "The context this thread has used, as the harness counts it.",
 };
 
 export function useCacheView(
@@ -46,19 +39,11 @@ export function useCacheView(
 }
 
 const SEGMENT_TONES: Record<string, string> = {
-  tools: token("viz-6"),
-  "system-prompt": token("viz-3"),
-  skills: token("viz-2"),
-  memory: token("viz-5"),
   messages: token("viz-1"),
 };
 
 export function tone(id: string): string {
   return SEGMENT_TONES[id] ?? token("viz-3");
-}
-
-export function tint(id: string): string {
-  return `color-mix(in srgb, ${tone(id)} 25%, transparent)`;
 }
 
 export function fmtTok(tokens: number): string {

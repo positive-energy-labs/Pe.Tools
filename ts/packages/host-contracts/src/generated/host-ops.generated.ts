@@ -1199,6 +1199,167 @@ export namespace FamilyCapture {
   }
 }
 
+/** Load the open family into a disposable project, place each selected type, export plan/elevation/3D PNGs and inspect project warnings, resolved failures, nested name duplicates and exposed instance connectors. Closes the scratch project without saving and never saves the family. */
+export namespace FamilyLoadTest {
+  export namespace Req {
+    export interface Request {
+      outDir: string;
+      types?: string[] | null;
+      template?: null | string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      familyName: string;
+      sameNameAlreadyExisted: boolean;
+      loadDecisions: FamilyLoadDecision[];
+      nestedFamilies: FamilyLoadNested[];
+      duplicateNames: string[];
+      rows: FamilyLoadInstance[];
+      warnings: RevitWarningRow[];
+      failures: FamilyLoadFailure[];
+      images: FamilyVerifyImage[];
+    }
+    export interface FamilyLoadDecision {
+      family: string;
+      shared: boolean;
+      inUse: boolean;
+      overwrite: boolean;
+    }
+    /**
+     * LoadedIds belong to the scratch project; EmbeddedCount includes non-shared definitions inside the loaded family.
+     */
+    export interface FamilyLoadNested {
+      name: string;
+      sourceCount: number;
+      loadedIds: number[];
+      embeddedCount: number;
+    }
+    export interface FamilyLoadInstance {
+      type: string;
+      id?: number | null;
+      connectors: FamilyVerifyConnector[];
+      error?: null | string;
+    }
+    /**
+     * Positions and sizes are inches; normals are unit vectors. Direction is In, Out, Bidirectional, or null when the domain has none.
+     *             Drives maps a connector parameter (Flow, Width, Voltage...) to the family parameter associated with it; family documents only.
+     */
+    export interface FamilyVerifyConnector {
+      domain: string;
+      system: string;
+      origin: FamilyVerifyPoint;
+      normal: FamilyVerifyPoint;
+      shape: string;
+      diameter?: null | number;
+      width?: null | number;
+      height?: null | number;
+      direction?: null | string;
+      drives?: null | {
+        [k: string]: string;
+      };
+    }
+    export interface FamilyVerifyPoint {
+      x: number;
+      y: number;
+      z: number;
+    }
+    /**
+     * One warning the document holds, as Revit's Review Warnings dialog lists it.
+     */
+    export interface RevitWarningRow {
+      /**
+       * Revit's severity name: Warning, Error, or DocumentCorruption.
+       */
+      severity: string;
+      /**
+       * The warning text.
+       */
+      description: string;
+      /**
+       * Ids of the elements the warning is about.
+       */
+      elementIds: number[];
+      /**
+       * Ids of elements Revit lists alongside, such as the other side of a join or overlap.
+       */
+      additionalElementIds: number[];
+    }
+    export interface FamilyLoadFailure {
+      severity: string;
+      description: string;
+      failingElementIds: number[];
+      additionalElementIds: number[];
+      resolution: string;
+    }
+    export interface FamilyVerifyImage {
+      view: string;
+      path: string;
+    }
+  }
+}
+
+/** Inspect every selected family type and Yes/No toggle off/on: geometry census in inches and geometry-only plan, X/Y elevations and isometric PNGs. Rolls back all family changes. Family editor images can draw invisible geometry; read the visibility census too. */
+export namespace FamilyLook {
+  export namespace Req {
+    export interface Request {
+      outDir: string;
+      types?: string[] | null;
+      toggles?: string[] | null;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      rows: FamilyLookRow[];
+    }
+    export interface FamilyLookRow {
+      type: string;
+      state: string;
+      elements: FamilyLookElement[];
+      images: FamilyVerifyImage[];
+    }
+    export interface FamilyLookElement {
+      id: number;
+      kind: string;
+      name: string;
+      visible: boolean;
+      bounds?: null | FamilyVerifyBounds;
+      connector?: null | FamilyVerifyConnector;
+    }
+    export interface FamilyVerifyBounds {
+      min: FamilyVerifyPoint;
+      max: FamilyVerifyPoint;
+    }
+    export interface FamilyVerifyPoint {
+      x: number;
+      y: number;
+      z: number;
+    }
+    /**
+     * Positions and sizes are inches; normals are unit vectors. Direction is In, Out, Bidirectional, or null when the domain has none.
+     *             Drives maps a connector parameter (Flow, Width, Voltage...) to the family parameter associated with it; family documents only.
+     */
+    export interface FamilyVerifyConnector {
+      domain: string;
+      system: string;
+      origin: FamilyVerifyPoint;
+      normal: FamilyVerifyPoint;
+      shape: string;
+      diameter?: null | number;
+      width?: null | number;
+      height?: null | number;
+      direction?: null | string;
+      drives?: null | {
+        [k: string]: string;
+      };
+    }
+    export interface FamilyVerifyImage {
+      view: string;
+      path: string;
+    }
+  }
+}
+
 /** Open a loaded family from the active project in the Revit family editor and activate it (saves to a scratch .rfa to make activation possible). */
 export namespace FamilyOpen {
   export namespace Req {
@@ -3206,6 +3367,49 @@ export namespace RevitCatalogSchedules {
   }
 }
 
+/** List the document's review warnings as Revit's Review Warnings dialog shows them: severity, text, the elements each is about, and the elements listed alongside. Read-only. */
+export namespace RevitCatalogWarnings {
+  export namespace Req {
+    export interface Request {}
+  }
+  export namespace Res {
+    /**
+     * What revit.catalog.warnings read.
+     */
+    export interface Response {
+      /**
+       * How many warnings the document holds.
+       */
+      count: number;
+      /**
+       * Every warning, in the order Revit reports them.
+       */
+      rows: RevitWarningRow[];
+    }
+    /**
+     * One warning the document holds, as Revit's Review Warnings dialog lists it.
+     */
+    export interface RevitWarningRow {
+      /**
+       * Revit's severity name: Warning, Error, or DocumentCorruption.
+       */
+      severity: string;
+      /**
+       * The warning text.
+       */
+      description: string;
+      /**
+       * Ids of the elements the warning is about.
+       */
+      elementIds: number[];
+      /**
+       * Ids of elements Revit lists alongside, such as the other side of a join or overlap.
+       */
+      additionalElementIds: number[];
+    }
+  }
+}
+
 /** Read open, active, and selected document session context from connected Revit. Use only when the question spans multiple open documents or there is no active document; revit.context.summary covers single-document orientation. */
 export namespace RevitContextDocumentSession {
   export namespace Req {
@@ -3235,6 +3439,119 @@ export namespace RevitContextDocumentSession {
       cloudProjectGuid?: null | string;
       cloudModelGuid?: null | string;
       cloudModelUrn?: null | string;
+    }
+  }
+}
+
+/** Read the tail of the journal Revit is recording for this session: the only record of what the person did in the UI (ribbon commands, dialog answers, error dialogs, transactions). Each row carries its line index, timestamp when present, and kind. Pass afterLine to poll for lines past the last one seen; pass kinds to keep only commands, dialogs, errors or transactions. */
+export namespace RevitContextJournal {
+  export namespace Req {
+    /**
+     * Request for revit.context.journal: read the tail of the journal Revit is recording for this session.
+     */
+    export interface Request {
+      /**
+       * Most rows to answer. Default 200, capped at 2000.
+       */
+      maxLines?: number | null;
+      /**
+       * 0-based index of the last line already seen; answers the rows after it, oldest first, so a page can poll. Omit for the newest rows.
+       */
+      afterLine?: number | null;
+      /**
+       * Keep only these kinds: command, dialog, error, transaction, other. Omit for every kind.
+       */
+      kinds?: string[] | null;
+    }
+  }
+  export namespace Res {
+    /**
+     * What revit.context.journal read.
+     */
+    export interface Response {
+      /**
+       * The journal file Revit is recording to.
+       */
+      path: string;
+      /**
+       * Lines in the file at read time; the newest index is TotalLines - 1.
+       */
+      totalLines: number;
+      /**
+       * The matching lines, oldest first, blank lines dropped.
+       */
+      rows: RevitJournalRow[];
+    }
+    /**
+     * One journal line Revit wrote.
+     */
+    export interface RevitJournalRow {
+      /**
+       * 0-based index of the line in the journal file; pass as afterLine to read past it.
+       */
+      line: number;
+      /**
+       * The journal timestamp on this line (its `dd-MMM-yyyy HH:mm:ss.fff` text) when it has one, else null.
+       */
+      at?: null | string;
+      /**
+       * command, dialog, error, transaction, or other, by the line's prefix.
+       */
+      kind: string;
+      /**
+       * The line, trimmed.
+       */
+      text: string;
+    }
+  }
+}
+
+/** Make or refresh this document's lens: a 3D view (default name 'Pe lens') with its section box around the elements, medium detail, hidden lines, and links, levels, grids, rooms, spaces and zones hidden. Answers the view id to pass to revit.context.show-elements. Adds or updates that one view and changes nothing else; the document may be headless. */
+export namespace RevitContextLens {
+  export namespace Req {
+    /**
+     * Request for revit.context.lens: box a 3D view around elements so a window or a capture can look at them.
+     */
+    export interface Request {
+      /**
+       * Model element ids to box, from any handle-returning op.
+       */
+      elementIds: number[];
+      /**
+       * The 3D view's name; made when missing, refreshed when present. Default "Pe lens".
+       */
+      name?: null | string;
+      /**
+       * Room around the elements' union box, in feet. Default 4.
+       */
+      paddingFeet?: null | number;
+    }
+  }
+  export namespace Res {
+    /**
+     * What revit.context.lens made or refreshed.
+     */
+    export interface Response {
+      /**
+       * The lens view's id, for revit.context.show-elements or revit.context.view-image.
+       */
+      viewId: number;
+      /**
+       * That view's name.
+       */
+      viewName: string;
+      /**
+       * True when the view was made by this call; false when an existing one was refreshed.
+       */
+      created: boolean;
+      /**
+       * How many of the elements had geometry and sit inside the box.
+       */
+      boxed: number;
+      /**
+       * One line on what happened.
+       */
+      note: string;
     }
   }
 }
@@ -3492,7 +3809,7 @@ export namespace RevitContextViewImage {
       registration?: null | RevitViewImageRegistration;
       registrationRefusal?: null | RevitViewImageRegistrationRefusal;
       /**
-       * Host route for exactly the registered PNG, keyed by ImageSha256;
+       * Host captures route for exactly the registered PNG (the host keeps every taking), keyed by ImageSha256;
        * null exactly when Registration is. FilePath stays the host-side record.
        *
        */
@@ -6557,6 +6874,8 @@ export interface HostOps {
   "family.apply": { request: FamilyApply.Req.Request; response: FamilyApply.Res.Response };
   "family.build": { request: FamilyBuild.Req.Request; response: FamilyBuild.Res.Response };
   "family.capture": { request: FamilyCapture.Req.Request; response: FamilyCapture.Res.Response };
+  "family.loadTest": { request: FamilyLoadTest.Req.Request; response: FamilyLoadTest.Res.Response };
+  "family.look": { request: FamilyLook.Req.Request; response: FamilyLook.Res.Response };
   "family.open": { request: FamilyOpen.Req.Request; response: FamilyOpen.Res.Response };
   "family.plan": { request: FamilyPlan.Req.Request; response: FamilyPlan.Res.Response };
   "family.temporary.acquire": { request: FamilyTemporaryAcquire.Req.Request; response: FamilyTemporaryAcquire.Res.Response };
@@ -6580,7 +6899,10 @@ export interface HostOps {
   "revit.catalog.project-browser": { request: RevitCatalogProjectBrowser.Req.Request; response: RevitCatalogProjectBrowser.Res.Response };
   "revit.catalog.project-index": { request: RevitCatalogProjectIndex.Req.Request; response: RevitCatalogProjectIndex.Res.Response };
   "revit.catalog.schedules": { request: RevitCatalogSchedules.Req.Request; response: RevitCatalogSchedules.Res.Response };
+  "revit.catalog.warnings": { request: RevitCatalogWarnings.Req.Request; response: RevitCatalogWarnings.Res.Response };
   "revit.context.document-session": { request: RevitContextDocumentSession.Req.Request; response: RevitContextDocumentSession.Res.Response };
+  "revit.context.journal": { request: RevitContextJournal.Req.Request; response: RevitContextJournal.Res.Response };
+  "revit.context.lens": { request: RevitContextLens.Req.Request; response: RevitContextLens.Res.Response };
   "revit.context.show-elements": { request: RevitContextShowElements.Req.Request; response: RevitContextShowElements.Res.Response };
   "revit.context.summary": { request: RevitContextSummary.Req.Request; response: RevitContextSummary.Res.Response };
   "revit.context.view-image": { request: RevitContextViewImage.Req.Request; response: RevitContextViewImage.Res.Response };
@@ -6635,6 +6957,8 @@ export const hostOpKeys = [
   "family.apply",
   "family.build",
   "family.capture",
+  "family.loadTest",
+  "family.look",
   "family.open",
   "family.plan",
   "family.temporary.acquire",
@@ -6658,7 +6982,10 @@ export const hostOpKeys = [
   "revit.catalog.project-browser",
   "revit.catalog.project-index",
   "revit.catalog.schedules",
+  "revit.catalog.warnings",
   "revit.context.document-session",
+  "revit.context.journal",
+  "revit.context.lens",
   "revit.context.show-elements",
   "revit.context.summary",
   "revit.context.view-image",

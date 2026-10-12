@@ -416,6 +416,8 @@ export function StateCell(props: StateCellProps) {
   // SPECIMEN: /design-system/band. A counter fold without its value makes accept/deny illegible
   // in hoverless compact heads.
   if (counterValue != null) facts.push(`pea proposes ${counterValue}`);
+  if (props.stage === "proposed" && props.currentValue != null)
+    facts.push(`currently ${props.currentValue}`);
   if (note != null) facts.push(confidence != null ? `${confidence} confidence — ${note}` : note);
   // A low confidence with nothing else to say still has to say it; silence would read as high.
   else if (confidence === "low") facts.push("low confidence");

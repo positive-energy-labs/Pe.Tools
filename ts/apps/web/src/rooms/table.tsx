@@ -142,6 +142,7 @@ export function RoomsTable({
       return {
         ...cellFromTrichotomy(cell, {
           value: authored ? shown(authored.value) : held,
+          currentValue: held || "(blank)",
           cap: "editable",
           note:
             authored && shown(authored.value) !== held

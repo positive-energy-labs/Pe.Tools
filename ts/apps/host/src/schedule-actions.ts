@@ -1,3 +1,4 @@
+import { resolveSdkSession } from "./sdk-session.ts";
 import { createHash } from "node:crypto";
 import { Effect } from "effect";
 import {
@@ -92,6 +93,11 @@ export async function readSchedule(
   if (key === "schedule.grid.work")
     return captures.scheduleWork(scheduleReads[key].input.parse(raw.input).workspaceId);
   const target = documentRefSchema.parse(raw.target);
+  await resolveSdkSession(
+    bridge,
+    { bridgeSessionId: target.session, openDocumentId: target.openId },
+    deps.sdk,
+  );
   const { session, doc } = await current(bridge, target);
   if (!session.processId || session.processStartUtcUnixMs == null)
     throw refused("Original process identity unavailable");

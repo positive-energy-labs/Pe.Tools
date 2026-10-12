@@ -1,6 +1,7 @@
 import { dirname } from "node:path";
 import { familyFixturesDir } from "./checkout-paths.ts";
-import { devHostProxy } from "./dev-proxy.ts";
+import { checkoutIngress, checkoutServiceName, devHostProxy } from "./dev-proxy.ts";
+import { hostProcessIdentity } from "@pe/host-contracts/service-identity";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { devtools } from "@tanstack/devtools-vite";
@@ -9,7 +10,7 @@ import { defineConfig, loadEnv, searchForWorkspaceRoot } from "vite-plus";
 
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 
-const config = defineConfig(({ mode }) => {
+const config = defineConfig(({ mode, command }) => {
   // Server-only secrets (LLAMA_CLOUD_API_KEY, ANTHROPIC_API_KEY) live in the
   // workspace-root .env, one level above apps/web. Vite only surfaces
   // VITE_-prefixed vars to import.meta.env, so lift the ones our API route
@@ -33,8 +34,12 @@ const config = defineConfig(({ mode }) => {
       "import.meta.env.VITE_DUCTS_FIXTURE": JSON.stringify(
         ductsFixture ? `/@fs/${ductsFixture.replaceAll("\\", "/")}` : "",
       ),
+      "import.meta.env.PE_RUNTIME_SERVICE": JSON.stringify(
+        command === "build" ? hostProcessIdentity.serviceName : checkoutServiceName(),
+      ),
     },
     plugins: [
+      checkoutIngress(),
       tanstackStart({
         router: {
           quoteStyle: "double",
@@ -60,6 +65,9 @@ const config = defineConfig(({ mode }) => {
       }) as never,
     ],
     server: {
+      host: "127.0.0.1",
+      allowedHosts: ["127.0.0.1"],
+      cors: false,
       fs: {
         allow: [
           searchForWorkspaceRoot(import.meta.dirname),
@@ -76,6 +84,8 @@ const config = defineConfig(({ mode }) => {
       dedupe: ["react", "react-dom"],
       alias: { "@family-fixtures": familyFixturesDir },
     },
+    // Feedback notes name the picked component; minified names would read `p`.
+    build: { rolldownOptions: { output: { keepNames: true } } },
     optimizeDeps: {
       // ponytail: the dev host's optimizer held its bundle until static-import crawl end and the
       // crawl never ended on 2026-09-11 (504 Outdated Optimize Dep forever, `deps_temp_*` never

@@ -92,7 +92,7 @@ const familyPageSchema = z.object({
 });
 
 export type FamilyReadingKey = "family" | "profile" | "receipts" | "inventory";
-export type FamilyAction = "read" | "build";
+export type FamilyAction = "read" | "build" | "attach_spec";
 
 type Ctx = RouteCtx<FamilyRouteDocument, FamilyReadingKey, FamilyPage>;
 
@@ -292,6 +292,7 @@ const familyDemoDraft = (raw: string): FamilyDraft => ({
   reading: raw,
   cells: familyDemoFields(raw),
   takenAt: null,
+  spec: null,
 });
 
 const DEMO_POD = "demo";
@@ -431,6 +432,23 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
     },
     page: familyPageSchema,
     actions: {
+      attach_spec: {
+        label: "attach PDF",
+        says: "Parse and file a portable cut sheet beside the captured family.",
+        needs: "nothing",
+        actor: "any",
+        input: familyDraftRouteState.commands.attach_spec.input,
+        dirties: [],
+        rereads: "work",
+        stage: "audit",
+        ready: (ctx: Ctx) =>
+          (ctx.page as FamilyPage & EntityPage).pod && (ctx.page as FamilyPage & EntityPage).path
+            ? null
+            : "Capture the family into a pod first",
+        run: async (ctx: Ctx, input: unknown) => {
+          await ctx.command("attach_spec", input);
+        },
+      },
       read: {
         label: "read family",
         says: "Read the open family's spec from Revit into the draft; files nothing. Proposals stay.",

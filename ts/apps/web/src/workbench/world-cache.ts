@@ -1,10 +1,7 @@
 import type { ContextBreakdown, ContextItem, ContextSegment } from "./chat-state";
 
+/** Request position of each segment the harness reports (`usage_update`): used, then free. */
 const REQUEST_RANK: Record<string, number> = {
-  tools: 0,
-  "system-prompt": 1,
-  skills: 1,
-  memory: 1,
   messages: 2,
   free: 9,
 };
@@ -104,28 +101,4 @@ export function cacheTotals(
     else cached += layer.tokens;
   }
   return { cached, reprocessed };
-}
-
-type MemoryWindows = NonNullable<ContextBreakdown["memoryWindows"]>;
-
-export function budgetFillPct(value: number, cap: number): number {
-  return Math.max(0, Math.min(100, cap > 0 ? (value / cap) * 100 : 0));
-}
-
-export function budgetBarModel(
-  tools: number,
-  system: number,
-  mw: MemoryWindows,
-  cache: Pick<CacheView, "hasBaseline" | "horizonRank">,
-): { obsCap: number; msgCap: number; total: number; horizon: number | null } {
-  const obsCap = mw.reflectionThreshold;
-  const msgCap = mw.observationThreshold;
-  const total = tools + system + obsCap + msgCap || 1;
-  const horizon =
-    cache.hasBaseline && cache.horizonRank !== null
-      ? ((cache.horizonRank <= 0 ? 0 : cache.horizonRank === 1 ? tools : tools + system + obsCap) /
-          total) *
-        100
-      : null;
-  return { obsCap, msgCap, total, horizon };
 }

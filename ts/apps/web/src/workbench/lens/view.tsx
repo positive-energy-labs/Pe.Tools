@@ -1,9 +1,8 @@
 import { useRef } from "react";
 import { annotation } from "#/components/anatomy";
-import { modeDepth } from "../depth";
 import { Moments } from "../moments";
 import { EmptyState, emptyMark } from "#/components/lang/empty";
-import { ContextStrip, formatTime } from "./context-strip";
+import { formatTime } from "./context-strip";
 import { useLensModel } from "./model";
 import type { Mode } from "../depth";
 import type { ChatState } from "../chat-state";
@@ -104,7 +103,6 @@ export function Lens({
                 </EmptyState>
               </div>
             ) : null}
-            <ContextStrip state={state} depth={modeDepth(mode)} />
             <Moments messages={messages} register={registerMoment} />
           </div>
         </div>

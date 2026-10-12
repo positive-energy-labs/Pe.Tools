@@ -10,27 +10,31 @@
 
 import { Route as rootRouteImport } from "./routes/__root";
 import { Route as IndexRouteImport } from "./routes/index";
+import { Route as CapturesRouteImport } from "./routes/captures";
 import { Route as ChatRouteImport } from "./routes/chat";
 import { Route as DataTablesRouteImport } from "./routes/data-tables";
 import { Route as DesignSystemRouteImport } from "./routes/design-system";
 import { Route as DocLabRouteImport } from "./routes/doc-lab";
-import { Route as DuctsRouteImport } from "./routes/ducts";
+import { Route as DuctLossRouteImport } from "./routes/duct-loss";
 import { Route as FamiliesRouteImport } from "./routes/families";
 import { Route as FamilyRouteImport } from "./routes/family";
 import { Route as GrillesRouteImport } from "./routes/grilles";
-import { Route as InstancesRouteImport } from "./routes/instances";
 import { Route as LabRouteImport } from "./routes/lab";
+import { Route as MachineRouteImport } from "./routes/machine";
+import { Route as OpenRouteImport } from "./routes/open";
 import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as ParamTablesRouteImport } from "./routes/param-tables";
 import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
 import { Route as PodsRouteImport } from "./routes/pods";
 import { Route as RoomsRouteImport } from "./routes/rooms";
 import { Route as SchedulesRouteImport } from "./routes/schedules";
+import { Route as SettingsRouteImport } from "./routes/settings";
 import { Route as TakeoffsRouteImport } from "./routes/takeoffs";
 import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
 import { Route as DesignSystemBandRouteImport } from "./routes/design-system_.band";
 import { Route as DesignSystemListRouteImport } from "./routes/design-system_.list";
 import { Route as DesignSystemPopoversRouteImport } from "./routes/design-system_.popovers";
+import { Route as DesignSystemRevitRouteImport } from "./routes/design-system_.revit";
 import { Route as DesignSystemSwatchRouteImport } from "./routes/design-system_.swatch";
 import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
 import { Route as ApiPdfAuditParseParseIdRouteImport } from "./routes/api/pdf-audit/parse.$parseId";
@@ -38,6 +42,11 @@ import { Route as ApiPdfAuditParseParseIdRouteImport } from "./routes/api/pdf-au
 const IndexRoute = IndexRouteImport.update({
   id: "/",
   path: "/",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const CapturesRoute = CapturesRouteImport.update({
+  id: "/captures",
+  path: "/captures",
   getParentRoute: () => rootRouteImport,
 } as any);
 const ChatRoute = ChatRouteImport.update({
@@ -60,9 +69,9 @@ const DocLabRoute = DocLabRouteImport.update({
   path: "/doc-lab",
   getParentRoute: () => rootRouteImport,
 } as any);
-const DuctsRoute = DuctsRouteImport.update({
-  id: "/ducts",
-  path: "/ducts",
+const DuctLossRoute = DuctLossRouteImport.update({
+  id: "/duct-loss",
+  path: "/duct-loss",
   getParentRoute: () => rootRouteImport,
 } as any);
 const FamiliesRoute = FamiliesRouteImport.update({
@@ -80,14 +89,19 @@ const GrillesRoute = GrillesRouteImport.update({
   path: "/grilles",
   getParentRoute: () => rootRouteImport,
 } as any);
-const InstancesRoute = InstancesRouteImport.update({
-  id: "/instances",
-  path: "/instances",
-  getParentRoute: () => rootRouteImport,
-} as any);
 const LabRoute = LabRouteImport.update({
   id: "/lab",
   path: "/lab",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const MachineRoute = MachineRouteImport.update({
+  id: "/machine",
+  path: "/machine",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const OpenRoute = OpenRouteImport.update({
+  id: "/open",
+  path: "/open",
   getParentRoute: () => rootRouteImport,
 } as any);
 const OpsRoute = OpsRouteImport.update({
@@ -120,6 +134,11 @@ const SchedulesRoute = SchedulesRouteImport.update({
   path: "/schedules",
   getParentRoute: () => rootRouteImport,
 } as any);
+const SettingsRoute = SettingsRouteImport.update({
+  id: "/settings",
+  path: "/settings",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const TakeoffsRoute = TakeoffsRouteImport.update({
   id: "/takeoffs",
   path: "/takeoffs",
@@ -145,6 +164,11 @@ const DesignSystemPopoversRoute = DesignSystemPopoversRouteImport.update({
   path: "/design-system/popovers",
   getParentRoute: () => rootRouteImport,
 } as any);
+const DesignSystemRevitRoute = DesignSystemRevitRouteImport.update({
+  id: "/design-system_/revit",
+  path: "/design-system/revit",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const DesignSystemSwatchRoute = DesignSystemSwatchRouteImport.update({
   id: "/design-system_/swatch",
   path: "/design-system/swatch",
@@ -163,54 +187,62 @@ const ApiPdfAuditParseParseIdRoute = ApiPdfAuditParseParseIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
+  "/captures": typeof CapturesRoute;
   "/chat": typeof ChatRoute;
   "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
-  "/ducts": typeof DuctsRoute;
+  "/duct-loss": typeof DuctLossRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/grilles": typeof GrillesRoute;
-  "/instances": typeof InstancesRoute;
   "/lab": typeof LabRoute;
+  "/machine": typeof MachineRoute;
+  "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
   "/pods": typeof PodsRoute;
   "/rooms": typeof RoomsRoute;
   "/schedules": typeof SchedulesRoute;
+  "/settings": typeof SettingsRoute;
   "/takeoffs": typeof TakeoffsRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
   "/design-system/list": typeof DesignSystemListRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
+  "/design-system/revit": typeof DesignSystemRevitRoute;
   "/design-system/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute;
+  "/captures": typeof CapturesRoute;
   "/chat": typeof ChatRoute;
   "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
-  "/ducts": typeof DuctsRoute;
+  "/duct-loss": typeof DuctLossRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/grilles": typeof GrillesRoute;
-  "/instances": typeof InstancesRoute;
   "/lab": typeof LabRoute;
+  "/machine": typeof MachineRoute;
+  "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
   "/pods": typeof PodsRoute;
   "/rooms": typeof RoomsRoute;
   "/schedules": typeof SchedulesRoute;
+  "/settings": typeof SettingsRoute;
   "/takeoffs": typeof TakeoffsRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
   "/design-system/list": typeof DesignSystemListRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
+  "/design-system/revit": typeof DesignSystemRevitRoute;
   "/design-system/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
@@ -218,27 +250,31 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
   "/": typeof IndexRoute;
+  "/captures": typeof CapturesRoute;
   "/chat": typeof ChatRoute;
   "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
-  "/ducts": typeof DuctsRoute;
+  "/duct-loss": typeof DuctLossRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/grilles": typeof GrillesRoute;
-  "/instances": typeof InstancesRoute;
   "/lab": typeof LabRoute;
+  "/machine": typeof MachineRoute;
+  "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
   "/pods": typeof PodsRoute;
   "/rooms": typeof RoomsRoute;
   "/schedules": typeof SchedulesRoute;
+  "/settings": typeof SettingsRoute;
   "/takeoffs": typeof TakeoffsRoute;
   "/design-system_/arming": typeof DesignSystemArmingRoute;
   "/design-system_/band": typeof DesignSystemBandRoute;
   "/design-system_/list": typeof DesignSystemListRoute;
   "/design-system_/popovers": typeof DesignSystemPopoversRoute;
+  "/design-system_/revit": typeof DesignSystemRevitRoute;
   "/design-system_/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
@@ -247,81 +283,93 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
   fullPaths:
     | "/"
+    | "/captures"
     | "/chat"
     | "/data-tables"
     | "/design-system"
     | "/doc-lab"
-    | "/ducts"
+    | "/duct-loss"
     | "/families"
     | "/family"
     | "/grilles"
-    | "/instances"
     | "/lab"
+    | "/machine"
+    | "/open"
     | "/ops"
     | "/param-tables"
     | "/parameter-links"
     | "/pods"
     | "/rooms"
     | "/schedules"
+    | "/settings"
     | "/takeoffs"
     | "/design-system/arming"
     | "/design-system/band"
     | "/design-system/list"
     | "/design-system/popovers"
+    | "/design-system/revit"
     | "/design-system/swatch"
     | "/api/pdf-audit/parse"
     | "/api/pdf-audit/parse/$parseId";
   fileRoutesByTo: FileRoutesByTo;
   to:
     | "/"
+    | "/captures"
     | "/chat"
     | "/data-tables"
     | "/design-system"
     | "/doc-lab"
-    | "/ducts"
+    | "/duct-loss"
     | "/families"
     | "/family"
     | "/grilles"
-    | "/instances"
     | "/lab"
+    | "/machine"
+    | "/open"
     | "/ops"
     | "/param-tables"
     | "/parameter-links"
     | "/pods"
     | "/rooms"
     | "/schedules"
+    | "/settings"
     | "/takeoffs"
     | "/design-system/arming"
     | "/design-system/band"
     | "/design-system/list"
     | "/design-system/popovers"
+    | "/design-system/revit"
     | "/design-system/swatch"
     | "/api/pdf-audit/parse"
     | "/api/pdf-audit/parse/$parseId";
   id:
     | "__root__"
     | "/"
+    | "/captures"
     | "/chat"
     | "/data-tables"
     | "/design-system"
     | "/doc-lab"
-    | "/ducts"
+    | "/duct-loss"
     | "/families"
     | "/family"
     | "/grilles"
-    | "/instances"
     | "/lab"
+    | "/machine"
+    | "/open"
     | "/ops"
     | "/param-tables"
     | "/parameter-links"
     | "/pods"
     | "/rooms"
     | "/schedules"
+    | "/settings"
     | "/takeoffs"
     | "/design-system_/arming"
     | "/design-system_/band"
     | "/design-system_/list"
     | "/design-system_/popovers"
+    | "/design-system_/revit"
     | "/design-system_/swatch"
     | "/api/pdf-audit/parse"
     | "/api/pdf-audit/parse/$parseId";
@@ -329,27 +377,31 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute;
+  CapturesRoute: typeof CapturesRoute;
   ChatRoute: typeof ChatRoute;
   DataTablesRoute: typeof DataTablesRoute;
   DesignSystemRoute: typeof DesignSystemRoute;
   DocLabRoute: typeof DocLabRoute;
-  DuctsRoute: typeof DuctsRoute;
+  DuctLossRoute: typeof DuctLossRoute;
   FamiliesRoute: typeof FamiliesRoute;
   FamilyRoute: typeof FamilyRoute;
   GrillesRoute: typeof GrillesRoute;
-  InstancesRoute: typeof InstancesRoute;
   LabRoute: typeof LabRoute;
+  MachineRoute: typeof MachineRoute;
+  OpenRoute: typeof OpenRoute;
   OpsRoute: typeof OpsRoute;
   ParamTablesRoute: typeof ParamTablesRoute;
   ParameterLinksRoute: typeof ParameterLinksRoute;
   PodsRoute: typeof PodsRoute;
   RoomsRoute: typeof RoomsRoute;
   SchedulesRoute: typeof SchedulesRoute;
+  SettingsRoute: typeof SettingsRoute;
   TakeoffsRoute: typeof TakeoffsRoute;
   DesignSystemArmingRoute: typeof DesignSystemArmingRoute;
   DesignSystemBandRoute: typeof DesignSystemBandRoute;
   DesignSystemListRoute: typeof DesignSystemListRoute;
   DesignSystemPopoversRoute: typeof DesignSystemPopoversRoute;
+  DesignSystemRevitRoute: typeof DesignSystemRevitRoute;
   DesignSystemSwatchRoute: typeof DesignSystemSwatchRoute;
   ApiPdfAuditParseRoute: typeof ApiPdfAuditParseRouteWithChildren;
 }
@@ -361,6 +413,13 @@ declare module "@tanstack/react-router" {
       path: "/";
       fullPath: "/";
       preLoaderRoute: typeof IndexRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/captures": {
+      id: "/captures";
+      path: "/captures";
+      fullPath: "/captures";
+      preLoaderRoute: typeof CapturesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/chat": {
@@ -391,11 +450,11 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DocLabRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/ducts": {
-      id: "/ducts";
-      path: "/ducts";
-      fullPath: "/ducts";
-      preLoaderRoute: typeof DuctsRouteImport;
+    "/duct-loss": {
+      id: "/duct-loss";
+      path: "/duct-loss";
+      fullPath: "/duct-loss";
+      preLoaderRoute: typeof DuctLossRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/families": {
@@ -419,18 +478,25 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof GrillesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/instances": {
-      id: "/instances";
-      path: "/instances";
-      fullPath: "/instances";
-      preLoaderRoute: typeof InstancesRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
     "/lab": {
       id: "/lab";
       path: "/lab";
       fullPath: "/lab";
       preLoaderRoute: typeof LabRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/machine": {
+      id: "/machine";
+      path: "/machine";
+      fullPath: "/machine";
+      preLoaderRoute: typeof MachineRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/open": {
+      id: "/open";
+      path: "/open";
+      fullPath: "/open";
+      preLoaderRoute: typeof OpenRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/ops": {
@@ -475,6 +541,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof SchedulesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/settings": {
+      id: "/settings";
+      path: "/settings";
+      fullPath: "/settings";
+      preLoaderRoute: typeof SettingsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/takeoffs": {
       id: "/takeoffs";
       path: "/takeoffs";
@@ -508,6 +581,13 @@ declare module "@tanstack/react-router" {
       path: "/design-system/popovers";
       fullPath: "/design-system/popovers";
       preLoaderRoute: typeof DesignSystemPopoversRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/design-system_/revit": {
+      id: "/design-system_/revit";
+      path: "/design-system/revit";
+      fullPath: "/design-system/revit";
+      preLoaderRoute: typeof DesignSystemRevitRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/design-system_/swatch": {
@@ -547,27 +627,31 @@ const ApiPdfAuditParseRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CapturesRoute: CapturesRoute,
   ChatRoute: ChatRoute,
   DataTablesRoute: DataTablesRoute,
   DesignSystemRoute: DesignSystemRoute,
   DocLabRoute: DocLabRoute,
-  DuctsRoute: DuctsRoute,
+  DuctLossRoute: DuctLossRoute,
   FamiliesRoute: FamiliesRoute,
   FamilyRoute: FamilyRoute,
   GrillesRoute: GrillesRoute,
-  InstancesRoute: InstancesRoute,
   LabRoute: LabRoute,
+  MachineRoute: MachineRoute,
+  OpenRoute: OpenRoute,
   OpsRoute: OpsRoute,
   ParamTablesRoute: ParamTablesRoute,
   ParameterLinksRoute: ParameterLinksRoute,
   PodsRoute: PodsRoute,
   RoomsRoute: RoomsRoute,
   SchedulesRoute: SchedulesRoute,
+  SettingsRoute: SettingsRoute,
   TakeoffsRoute: TakeoffsRoute,
   DesignSystemArmingRoute: DesignSystemArmingRoute,
   DesignSystemBandRoute: DesignSystemBandRoute,
   DesignSystemListRoute: DesignSystemListRoute,
   DesignSystemPopoversRoute: DesignSystemPopoversRoute,
+  DesignSystemRevitRoute: DesignSystemRevitRoute,
   DesignSystemSwatchRoute: DesignSystemSwatchRoute,
   ApiPdfAuditParseRoute: ApiPdfAuditParseRouteWithChildren,
 };

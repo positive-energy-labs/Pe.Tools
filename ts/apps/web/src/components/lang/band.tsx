@@ -262,6 +262,7 @@ export function ReviewRow({
   show,
   transitions,
   editor,
+  mark = true,
 }: {
   wire: CellWire;
   address: string;
@@ -277,23 +278,34 @@ export function ReviewRow({
    * staged value is refined where it is reviewed. Its verbs are its own.
    */
   editor?: ReactNode;
+  /**
+   * The trailing `proposed · pea` word. A narrow sidebar card turns it off (ruled 2026-10-06,
+   * kaitpw): the cell's own proposed state is the indicator and its title carries the author.
+   */
+  mark?: boolean;
 }) {
   const props = cellFromTrichotomy(cell, facts, show);
   const verbs = transitions ?? reviewTransitions(wire, address, cell);
   const by = props.stage === "staged" ? props.stagedBy : "pea";
   return (
     <div
-      className="dl-review my-px grid h-(--item-h) grid-cols-[minmax(6rem,14rem)_minmax(0,22rem)_7rem] items-center gap-2"
+      className={`dl-review my-px grid h-(--item-h) items-center gap-2 ${
+        mark
+          ? "grid-cols-[minmax(6rem,14rem)_minmax(0,22rem)_7rem]"
+          : "grid-cols-[minmax(6rem,14rem)_minmax(0,22rem)]"
+      }`}
       style={{ "--acts": verbs.length } as CSSProperties}
     >
       <span className="min-w-0 truncate">{label}</span>
       {editor ?? <StateCell {...props} scale="row" transitions={verbs} />}
-      <span
-        className="truncate t-small face-mono text-ink-2"
-        data-tone={by === "pea" ? "pea" : undefined}
-      >
-        {props.counterValue != null ? "contested" : props.stage} · {by === "pea" ? "pea" : "you"}
-      </span>
+      {mark ? (
+        <span
+          className="truncate t-small face-mono text-ink-2"
+          data-tone={by === "pea" ? "pea" : undefined}
+        >
+          {props.counterValue != null ? "contested" : props.stage} · {by === "pea" ? "pea" : "you"}
+        </span>
+      ) : null}
     </div>
   );
 }

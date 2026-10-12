@@ -5,10 +5,15 @@ import {
   readingRequestsSchema,
   type ReadingFrame,
   type ReadingRequest,
+  type ThreadHead,
 } from "@pe/agent-contracts";
 import type { RouteWorkspace } from "./route-workspace.ts";
-import type { ScopeStore } from "./scope-store.ts";
 import type { OwnerValue } from "./owner-read.ts";
+
+/** Who answers the `thread-head` Reading: the host's harness thread store. */
+export interface ThreadHeadSource {
+  observe(threadId: string, listener: (value: OwnerValue<ThreadHead>) => void): () => void;
+}
 
 export type ResourceObserver = (
   request: ReadingRequest,
@@ -21,14 +26,14 @@ export const resourceSnapshot = (key: string, result: OwnerValue<unknown>): Read
 
 export function observeResources(
   work: RouteWorkspace,
-  scopes: ScopeStore,
+  heads: ThreadHeadSource,
   host?: ResourceObserver,
 ): ResourceObserver {
   return (request, publish) => {
     const key = readingKey(request);
     const accept = (value: OwnerValue<unknown>) => publish(resourceSnapshot(key, value));
     if (request.kind === "work") return work.observe(request, request.route, accept);
-    if (request.kind === "thread-head") return scopes.observe(request.thread, accept);
+    if (request.kind === "thread-head") return heads.observe(request.thread, accept);
     // The host owns the document-close edge, so the receipt for an addressless Work it swept rides
     // the same World stream the tab already reads; the Work itself is gone before the tab asks.
     if (request.kind === "world") {

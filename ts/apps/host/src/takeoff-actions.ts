@@ -1,3 +1,4 @@
+import { resolveSdkSession } from "./sdk-session.ts";
 import { preparedTakeoffSchema } from "@pe/agent-contracts";
 import {
   readOriginalProcess,
@@ -95,8 +96,10 @@ export async function admitTakeoffAction(
   };
   const validate = async () => {
     const document = await current();
-    const selected = (await Effect.runPromise(bridge.list)).find(
-      (session) => session.sessionId === target.session,
+    const selected = await resolveSdkSession(
+      bridge,
+      { bridgeSessionId: target.session, openDocumentId: target.openId },
+      deps.sdk,
     );
     if (!selected?.processId || selected.processStartUtcUnixMs == null)
       throw refused("Original process identity is unavailable");

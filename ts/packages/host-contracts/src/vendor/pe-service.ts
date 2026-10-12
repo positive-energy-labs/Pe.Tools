@@ -723,12 +723,14 @@ async function spawnAndWait(
           cwd: opts.spawnCommand.cwd,
           shell: opts.spawnCommand.shell ?? false,
           detached: true,
+          windowsHide: true,
           stdio: ["ignore", logFd, logFd],
           env: spawnEnv,
         })
       : spawn(opts.entryPath!, [...(opts.spawnArgs ?? [])], {
           cwd: dirname(opts.entryPath!),
           detached: true,
+          windowsHide: true,
           stdio: ["ignore", logFd, logFd],
           env: spawnEnv,
         });
@@ -864,7 +866,7 @@ async function killByPid(
   try {
     const { execFile } = await import("node:child_process");
     await new Promise<void>((resolve, reject) => {
-      execFile("taskkill", ["/PID", String(pid), "/T", "/F"], { timeout: 5_000 }, (error) =>
+      execFile("taskkill", ["/PID", String(pid), "/T", "/F"], { timeout: 5_000, windowsHide: true }, (error) =>
         error ? reject(error) : resolve(),
       );
     });
@@ -906,7 +908,7 @@ async function pidIdentity(pid: number): Promise<{ path: string; startUtc: strin
           "-Command",
           `$p=Get-Process -Id ${pid}; [pscustomobject]@{path=$p.Path;startUtc=$p.StartTime.ToUniversalTime().ToString('o')} | ConvertTo-Json -Compress`,
         ],
-        { timeout: 3_000 },
+        { timeout: 3_000, windowsHide: true },
         (error, stdout) => {
           if (error) return resolve(null);
           try {

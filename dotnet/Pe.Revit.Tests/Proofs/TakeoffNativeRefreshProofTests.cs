@@ -28,7 +28,7 @@ public sealed class TakeoffNativeRefreshProofTests
                 while (TakeoffCarriers.Preflight(doc, TakeoffCarrierStage.Materialization).MissingCarrierGuids.Count > 0)
                     TakeoffCarriers.InitializeNext(doc, TakeoffCarrierStage.Materialization);
                 var type = new FilteredElementCollector(doc).OfClass(typeof(FilledRegionType)).FirstElementId();
-                zone = FilledRegion.Create(doc, type, view.Id, [Kernel.ToLoop(Square(0, 0, 30), 0)]);
+                zone = FilledRegion.Create(doc, type, view.Id, Kernel.ToLoops(Square(0, 0, 30), [], 0));
                 zoneGuid = Guid.NewGuid();
                 TakeoffCarriers.WriteIdentity(zone, TakeoffCarriers.RoleZoningRegion, zoneGuid);
                 TakeoffCarriers.WriteProvenance(zone,

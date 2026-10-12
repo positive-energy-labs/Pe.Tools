@@ -27,10 +27,18 @@ internal static class TsHostLauncher {
         _context ?? throw new InvalidOperationException("TsHostLauncher.Capture must run in Startup before the host is resolved.");
 
     public static void Capture(PePayloadContext context) {
+        if (context.Lane == "installed" && !PathsEqual(context.InstallRoot, ProductRuntimeLayout.ForCurrentUser().RootPath))
+            throw new InvalidOperationException("The installed payload root is not the canonical product installation.");
         _context = context;
         // Pin only the process-local NAME; the port is re-read from the service file on every
         // resolve so a takeover/restart can never leave a stale address behind.
         HostEndpoint.ConfiguredServiceName = ServiceName;
+        HostEndpoint.ConfiguredLane = context.Lane;
+        HostEndpoint.ConfiguredSourceRoot = context.SourceRoot;
+        HostEndpoint.ConfiguredInstalledRoot = context.Lane == "installed" ? context.InstallRoot : null;
+        HostEndpoint.ConfiguredExecutablePath = context.Lane == "installed"
+            ? InstalledProduct.Open(context.InstallRoot!)?.Resolve(HostEndpoint.ServiceName)?.EntryPath
+            : null;
     }
 
     public static TsHostLaunchResult EnsureRunning() {

@@ -3,6 +3,7 @@ import {
   ArrowUpRight,
   FileScan,
   FlaskConical,
+  Image,
   Boxes,
   LayoutDashboard,
   LayoutGrid,
@@ -15,6 +16,7 @@ import {
   Table,
   Table2,
   Terminal,
+  Wind,
 } from "lucide-react";
 
 import { RouteShell, emptyManifest } from "#/route";
@@ -30,6 +32,14 @@ export const Route = createFileRoute("/")({ component: App });
  * typed-URL-only while still paying the maintained styling guard. `/design-system`'s satellite
  * exhibits are reachable through the satellite links on its card. */
 const TOOLS = [
+  {
+    to: "/open",
+    title: "Open",
+    label: "Revit",
+    icon: Server,
+    description:
+      "Start a Revit, open a model, and see which Revit holds it: the launcher, every recent document across installed years, and each running Revit with its shape, documents and verbs.",
+  },
   {
     to: "/family",
     title: "Family",
@@ -78,6 +88,14 @@ const TOOLS = [
       "The custom wood floor grille calculator — profiles in a sheet, the active one drawn to submittal scale, the buildable field charted; export a sheet to PDF or .svg.",
   },
   {
+    to: "/duct-loss",
+    title: "Duct Loss",
+    label: "Duct friction",
+    icon: Wind,
+    description:
+      "The imperial duct friction loss formula, live — type a duct and airflow, read Δp with every intermediate term beside the equation.",
+  },
+  {
     to: "/pods",
     title: "Pods",
     label: "Pods",
@@ -100,6 +118,14 @@ const TOOLS = [
     icon: FlaskConical,
     description:
       "Composed glances — many host calls gathered into one drawing, run against a session you pick.",
+  },
+  {
+    to: "/captures",
+    title: "Captures",
+    label: "Revit data",
+    icon: Image,
+    description:
+      "Every picture taken of a Revit view, newest first — who took it, which view, the receipt, and the URL a page or a chat links.",
   },
   {
     to: "/ops",
@@ -141,12 +167,12 @@ const TOOLS = [
       "Cross-element parameter links — co-edit the link profile with pea, preview the projected target writes, then apply to reconcile them.",
   },
   {
-    to: "/instances",
-    title: "Instances",
-    label: "Fleet",
-    icon: Server,
+    to: "/settings",
+    title: "Settings",
+    label: "Pea",
+    icon: Settings2,
     description:
-      "Every Revit world pe-revit and the bridge know about — the sessions pea controls and starts and stops, the one it only observes (your own Revit), each session's companion legs, and the ledger of what happened.",
+      "Whether Pea asks before each change. Providers and sign-in live in the machine drawer, behind the version chip.",
   },
   {
     to: "/design-system",
@@ -175,8 +201,7 @@ function App() {
       <main className="py-16">
         <section className="max-w-2xl">
           <p className="t-small t-upper mb-3 text-ink-2">
-            <span className="t-upper">Internal tools</span> ·{" "}
-            <span className="t-small face-mono">update proof 0.6.22</span>
+            <span className="t-upper">Internal tools</span>
           </p>
           <p className="t-display face-display text-ink">Healthy people, healthy planet.</p>
           <p className="t-prose mt-4 text-ink-2">

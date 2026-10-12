@@ -38,3 +38,13 @@ Start from a template in `kit/`, never from a blank file. `kit/index.html` is th
 - Put the page under `.artifacts/<topic>/`. It is thrown away; a winner is rewritten on real primitives by `protoui` and `close`, never promoted.
 - Open the page for the user and give its absolute path in a code block.
 - Refuse the page when the demo would have to reimplement the product's own live state beyond a pure function or two. A faithful fake of a complex surface costs more than the real route, and a partial one misleads. Prototype on the route with `protoui` instead.
+
+## Hosted pages (the product serves them)
+
+A page the host serves lives under `Documents/Pe.Tools/Pages/<slug>/` or inside a Pod at `Pods/<pod>/pages/<slug>/`, and opens at `/pages/<slug>/` (a pod page is `/pages/<pod>--<slug>/`). Its doors are `/pages/pe.js` (find, read, do, script, picture, diff, reading, kernel, state, describe) and `/pages/revit.js` (Revit windows as specs, and projections from facts). The header of each file is the whole reference; the pages ledger holds the decisions. Laws for these pages, ruled 2026-10-05:
+
+- A script over about a screen lives as a file beside the page (`checks/census.csx`), and `pe.script` takes its path. C# as a template string in the HTML is for one-liners.
+- A reading is `{ source, at, rows }`: what produced it, when, and the rows. Every table or facsimile drawn from Revit projects a reading and shows its `at`, so a stale one is visibly stale.
+- A page never stores a dependency on a Pod. It calls op keys, and the live host answers availability. A page that needs a Pod ships inside that Pod.
+- Promotion: a script run from two pages, or on a schedule, becomes a Pod entrypoint and the pages call its key.
+- The page describes itself: `pe.describe` writes a markdown projection of the state beside the snapshot, so an agent reads what the page says, not its reducer.

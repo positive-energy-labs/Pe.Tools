@@ -8,4 +8,7 @@ import { isSea } from "node:sea";
 // working without weakening the installed lane's PE_LANE authority (isSea() is true in the bundle,
 // so this never fires there, and an explicit PE_LANE always wins). Import this FIRST from every
 // source entry point, before host-ownership evaluates the lane at module load.
-if (!isSea() && !process.env.PE_LANE) process.env.PE_LANE = "dev";
+// Inside the SEA with no PE_LANE (a desktop shortcut or a bare double-click, which cannot set env),
+// the lane is installed by the same doctrine: the SEA is only ever the installed payload. The host
+// then registers the ordinary `host` service, so a Revit started later joins it as the incumbent.
+if (!process.env.PE_LANE) process.env.PE_LANE = isSea() ? "installed" : "dev";

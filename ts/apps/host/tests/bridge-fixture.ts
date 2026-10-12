@@ -2,7 +2,8 @@ import { Effect, Queue } from "effect";
 import { type HttpServerRequest } from "effect/unstable/http";
 import { BRIDGE_CONTRACT_VERSION, type BridgeFrame } from "@pe/host-contracts/contracts";
 import { RevitBridge } from "../src/bridge.ts";
-export const connectTestBridge = () =>
+import { hostOwnership } from "../src/host-ownership.ts";
+export const connectTestBridge = (processId = 42, ownership: Record<string, unknown> = {}) =>
   Effect.gen(function* () {
     const bridge = yield* RevitBridge;
     const incoming = yield* Queue.make<string>();
@@ -24,9 +25,14 @@ export const connectTestBridge = () =>
       JSON.stringify({
         kind: "Registration",
         registration: {
-          processId: 42,
+          processId,
           processStartUtcUnixMs: 1000,
+          sdkSessionId: "4242",
           contractVersion: BRIDGE_CONTRACT_VERSION,
+          lane: hostOwnership.lane,
+          sourceRoot: hostOwnership.sourceRoot,
+          serviceName: hostOwnership.serviceName,
+          ...ownership,
           state: {
             activeDocumentIsFamilyDocument: false,
             activeDocumentIsModelInCloud: false,
@@ -59,5 +65,5 @@ export const connectTestBridge = () =>
     );
     const ack = yield* Queue.take(outgoing);
     const target = { session: ack.registrationAck!.sessionId!, openId: "selected-open" };
-    return { bridge, incoming, outgoing, connection, target };
+    return { bridge, incoming, outgoing, connection, target, ack };
   });

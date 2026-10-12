@@ -16,7 +16,7 @@ public class CmdApsAuth : IExternalCommand {
     ) {
         try {
             new Ballogger()
-                .AddDebug(LogEventLevel.Information, new StackFrame(), ApsAuthActions.LoginParameterServiceStatusDetail())
+                .AddDebug(LogEventLevel.Information, new StackFrame(), ApsAuthActions.RevitSignInStatusDetail())
                 .Show();
             return Result.Succeeded;
         } catch (Exception ex) {

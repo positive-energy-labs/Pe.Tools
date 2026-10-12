@@ -69,12 +69,17 @@ export type ApsLogoutResult = Schema.Schema.Type<typeof apsLogoutResultSchema>;
 // Preserve the long-standing operation-types import surface while the transport constant itself
 // lives below the generated-contract boundary (host-typegen must not import its own output).
 export {
+  HOST_RPC_SDK_SESSION_HEADER,
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
   HOST_RPC_ORIGIN_HEADER,
 } from "./contracts/bridge-protocol.js";
 
 export const hostSessionScopeSchema = Schema.Struct({
+  session: Schema.optional(
+    Schema.Union([Schema.Struct({ id: Schema.String }), Schema.Struct({ pid: Schema.Number })]),
+  ),
+  // Private exact attachment and product document lifetime, never selector text.
   bridgeSessionId: Schema.optional(Schema.String),
   openDocumentId: Schema.optional(Schema.String),
 });
@@ -345,15 +350,10 @@ export type BridgeSessionListEntry = BridgeSessionsListData["sessions"][number];
 export type HostProbeData = Schema.Schema.Type<typeof hostProbeDataSchema>;
 
 export const hostProbeDataSchema = Schema.Struct({
-  // Mastra tenant health (D4): a failed agent-runtime init degrades /pe/* to 503 instead of
-  // taking the host down; this is where that state becomes observable (spawned hosts run
-  // stdio-ignored). `error` is the persisted init failure, null when available or not yet settled.
-  agentRuntime: Schema.optional(
-    Schema.Struct({
-      available: Schema.Boolean,
-      error: Schema.NullOr(Schema.String),
-    }),
+  runtimeMatch: Schema.optional(
+    Schema.Literals(["verified", "disconnected", "unknown", "refused"]),
   ),
+  runtimeRefusal: Schema.optional(Schema.NullOr(Schema.String)),
   bridgeContractVersion: Schema.Number,
   bridgeIsConnected: Schema.Boolean,
   bridgePath: Schema.String,
@@ -364,10 +364,10 @@ export const hostProbeDataSchema = Schema.Struct({
   hostContractVersion: Schema.Number,
   lane: Schema.optional(Schema.Literals(["dev", "installed"])),
   processId: Schema.optional(Schema.Number),
-  resourceId: Schema.String,
   runtimeIdentity: Schema.String,
   serviceName: Schema.String,
   sourceRoot: Schema.optional(Schema.NullOr(Schema.String)),
+  installedRoot: Schema.optional(Schema.NullOr(Schema.String)),
   world: Schema.Struct({
     id: Schema.String,
     root: Schema.String,

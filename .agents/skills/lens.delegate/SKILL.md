@@ -31,10 +31,11 @@ Mode: no fan-out without a posture table first. Task, who (model and thinking), 
 - Cross lines only after the clean readings exist. Handing one agent two unrelated bodies is where the new idea comes from; cross before the clean readings and you cannot say what produced it.
 - Convergence means the panel was too wide. When independent readings agree, the agreement is the finding and the extra agents were paid for nothing; widen only where the first readings disagreed.
 - One writing line, one tree. Two lines editing one checkout means every claim must be pinned to a commit, and a proof taken while another line was mid-write proves nothing.
+- Sequence by collision, not by topic. Give each line a disjoint file set and name it in the brief; a line that measures a running surface flies alone, because any line that saves reloads the server under it and voids the reading (two full passes lost this way, 2026-10-04). A shared contract two lines code against is written in both briefs, verbatim.
 - Leave it better than you found it. Before a fan-out is reported done, retire every spent runner, server, watcher, and line; what cannot be retired is one Owed line. Let go of any resource no foreseeable future needs. An anti-pattern seen on the way is one Owed line, not a fix.
 
 ## Models [scope: repo]
 
-Astra 6, Opus 5.5 and Sol 6 are close in capability, so the choice matters less than it did. Default to the cheapest model that can do the task. Fable 5.1 is for taste: design, UX and architecture opinion, never an implementation line. A second provider on a panel buys a different reading, not a better one.
+Use Sol 6.1 (`gpt-6.1-sol`) for delegated implementation work unless the user explicitly chooses another model. Resolve provider/model IDs from the live tool catalog; do not substitute Sol 6 or older Codex defaults. Choose thinking effort for the task. Fable 5.1 is for taste: design, UX and architecture opinion, never an implementation line. A second provider on a panel buys a different reading, not a better one.
 
 Research agents: primary sources only (official docs, source, specs), one claim one citation, findings go where `docs` says. Clone third-party source locally and sync before reading; grep beats the web.

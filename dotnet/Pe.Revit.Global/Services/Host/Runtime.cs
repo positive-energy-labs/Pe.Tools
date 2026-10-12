@@ -32,7 +32,7 @@ public static class HostRuntime {
     private static readonly object Sync = new();
     private static BridgeAgent? _agent;
     internal static string? SessionId => _agent?.SessionId;
-    private static BridgeConnectionOptions _connectionOptions = BridgeConnectionOptions.FromEnvironment();
+    private static BridgeConnectionOptions? _connectionOptions;
     private static SettingsRuntimeRegistry? _moduleRegistry;
     private static RevitTaskQueue? _revitTaskQueue;
     private static Action<string?>? _onDisconnected;
@@ -45,7 +45,7 @@ public static class HostRuntime {
     ) {
         lock (Sync) {
             Log.Information("Host runtime initializing.");
-            _connectionOptions = BridgeConnectionOptions.FromEnvironment();
+            _connectionOptions = null;
             var registry = new SettingsRuntimeRegistry();
             configureModules?.Invoke(registry);
             _moduleRegistry = registry;
@@ -53,9 +53,7 @@ public static class HostRuntime {
             _onDisconnected = onDisconnected;
             _lastError = null;
             Log.Information(
-                "Host runtime initialized: BridgeUri={BridgeUri}, ConnectTimeoutMs={ConnectTimeoutMs}, Modules={ModuleCount}",
-                _connectionOptions.BridgeUri,
-                _connectionOptions.ConnectTimeoutMs,
+                "Host runtime initialized: Modules={ModuleCount}",
                 registry.GetModules().Count()
             );
         }
@@ -79,9 +77,9 @@ public static class HostRuntime {
 
             moduleRegistry = _moduleRegistry;
             revitTaskQueue = _revitTaskQueue;
-            // Re-resolve on every connect: the lane-aware launcher pins the service name and the
-            // service file's port can change under takeover/restart. The Initialize-time snapshot
-            // predates both, so reusing it dialed the installed host from dev sessions.
+            // The host may start after payload initialization. Discover its verified owner on
+            // every attempt so refusals stay retryable and replacement ports are never guessed.
+            _connectionOptions = null;
             try {
                 connectionOptions = _connectionOptions = BridgeConnectionOptions.FromEnvironment();
             } catch (Exception ex) {
@@ -155,7 +153,7 @@ public static class HostRuntime {
 
             var disconnectStopwatch = Stopwatch.StartNew();
             Log.Information("Host runtime disconnect starting: BridgeUri={BridgeUri}",
-                _connectionOptions.BridgeUri);
+                _connectionOptions?.BridgeUri);
             _agent.Dispose();
             _agent = null;
             Log.Information("Host runtime disconnect completed in {ElapsedMs} ms.",
@@ -190,8 +188,8 @@ public static class HostRuntime {
             if (_agent != null) {
                 return _agent.GetStatus() with {
                     IsInitialized = _moduleRegistry != null,
-                    BridgeUri = _connectionOptions.BridgeUri.ToString(),
-                    ProcessId = _connectionOptions.ProcessId,
+                    BridgeUri = _connectionOptions?.BridgeUri.ToString() ?? string.Empty,
+                    ProcessId = Process.GetCurrentProcess().Id,
                     LastError = _lastError ?? _agent.LastError
                 };
             }
@@ -200,8 +198,8 @@ public static class HostRuntime {
             return new RuntimeStatus(
                 _moduleRegistry != null,
                 false,
-                _connectionOptions.BridgeUri.ToString(),
-                _connectionOptions.ProcessId,
+                _connectionOptions?.BridgeUri.ToString() ?? string.Empty,
+                Process.GetCurrentProcess().Id,
                 activeDocument != null,
                 activeDocument?.Title,
                 _moduleRegistry?.GetModules().Count() ?? 0,

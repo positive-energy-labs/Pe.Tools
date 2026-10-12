@@ -9,6 +9,7 @@ const canonicalFixtures: Record<
   { canonicalReviewUrl: string; fixtureKind: FixtureKind } | undefined
 > = {
   "/": { canonicalReviewUrl: "/", fixtureKind: "inherent-static" },
+  "/captures": { canonicalReviewUrl: "/captures", fixtureKind: "live-route" },
   "/chat": { canonicalReviewUrl: "/chat?demo=diagram", fixtureKind: "demo-fixture" },
   "/data-tables": { canonicalReviewUrl: "/data-tables", fixtureKind: "live-route" },
   "/ducts": { canonicalReviewUrl: "/ducts", fixtureKind: "live-route" },
@@ -16,12 +17,17 @@ const canonicalFixtures: Record<
   "/families": { canonicalReviewUrl: "/families?demo=apply", fixtureKind: "demo-fixture" },
   "/family": { canonicalReviewUrl: "/family?demo=apply", fixtureKind: "demo-fixture" },
   "/grilles": { canonicalReviewUrl: "/grilles", fixtureKind: "inherent-static" },
-  "/instances": { canonicalReviewUrl: "/instances?demo=refresh", fixtureKind: "demo-fixture" },
+  "/machine": {
+    canonicalReviewUrl: "/machine?shell=tray&demo=blocked-plan",
+    fixtureKind: "demo-fixture",
+  },
+  "/open": { canonicalReviewUrl: "/open?demo=refresh", fixtureKind: "demo-fixture" },
   "/ops": { canonicalReviewUrl: "/ops", fixtureKind: "live-route" },
   "/parameter-links": { canonicalReviewUrl: "/parameter-links", fixtureKind: "live-route" },
   "/rooms": { canonicalReviewUrl: "/rooms", fixtureKind: "live-route" },
   "/pods": { canonicalReviewUrl: "/pods?demo=browse", fixtureKind: "demo-fixture" },
   "/schedules": { canonicalReviewUrl: "/schedules?demo=apply", fixtureKind: "demo-fixture" },
+  "/settings": { canonicalReviewUrl: "/settings", fixtureKind: "live-route" },
   "/takeoffs": { canonicalReviewUrl: "/takeoffs?demo=sync", fixtureKind: "demo-fixture" },
 } as const;
 

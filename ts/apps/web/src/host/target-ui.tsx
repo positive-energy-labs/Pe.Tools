@@ -8,7 +8,7 @@ import type { Lane } from "#/readings";
  *
  * Colour (2026-08-16 shared-chrome pass): lanes are TAXONOMY — they spend the viz ladder
  * (label carries the meaning; colour only speeds it up). Resolution states spend meaning
- * roles: a resolved live connection is `--pe-done` (the /instances phase verdict precedent),
+ * roles: a resolved live connection is `--pe-done` (the /open phase precedent),
  * ambiguity and a dangling pin are `--pe-caution` (attention/stale — a busy or stale target
  * is not the model disagreeing), and "nothing there" is a hairline. No blue: pinned-by-you
  * is authorship, and authorship never buys the commit hue.

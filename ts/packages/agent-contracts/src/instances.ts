@@ -1,32 +1,25 @@
 import { z } from "zod";
 import { nativeProcessSchema } from "./action-receipts.ts";
-import { documentRefSchema } from "./target.ts";
+import { sdkSessionSelectionSchema, sdkDocumentRefSchema } from "./sdk-session.ts";
 import type { RouteStateSpec } from "./route-state.ts";
 import { trichotomyCellSchema } from "./trichotomy.ts";
-const SDK_SESSION_SELECTOR_PREFIX = "session:";
-export const sdkSessionSelectorSchema = z.templateLiteral([
-  SDK_SESSION_SELECTOR_PREFIX,
-  z.string().min(1),
-]);
-export type SdkSessionSelector = z.infer<typeof sdkSessionSelectorSchema>;
-export const sdkSessionSelectorOf = (target: string): SdkSessionSelector =>
-  sdkSessionSelectorSchema.parse(`${SDK_SESSION_SELECTOR_PREFIX}${target}`);
-export const sdkSessionTargetOf = (selector: SdkSessionSelector): string =>
-  selector.slice(SDK_SESSION_SELECTOR_PREFIX.length);
-
 const documentSelector = z.string().trim().min(1);
 /** What open/start launches: a document into a session, or a new session. */
 export const instancesLaunchSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("open"),
-    session: sdkSessionSelectorSchema,
+    session: sdkSessionSelectionSchema,
     document: documentSelector,
+    missingLinks: z.enum(["allow", "refuse"]).default("refuse"),
   }),
   z.object({
     kind: z.literal("start"),
     year: z.string().regex(/^20\d{2}$/),
     name: z.string().max(64),
     document: documentSelector.optional(),
+    quarantine: z.boolean().default(false),
+    posture: z.enum(["foreground", "background"]).default("foreground"),
+    missingLinks: z.enum(["allow", "refuse"]).default("refuse"),
   }),
 ]);
 export type InstancesLaunch = z.infer<typeof instancesLaunchSchema>;
@@ -40,7 +33,7 @@ export const instancesDocumentSchema = z.strictObject({
 export type InstancesDocument = z.infer<typeof instancesDocumentSchema>;
 export const instancesRouteState = {
   route: "instances",
-  title: "Instances",
+  title: "Open",
   description:
     "Select Revit sessions and stage documents. Refresh to discover installed years, sessions and recents. Pea may propose a launch (an open or a start); a person stages it, and open/start launch exactly the staged value, never a proposal. Other lifecycle commands are human-only.",
   schema: instancesDocumentSchema,
@@ -50,11 +43,14 @@ export const instancesRouteState = {
 } satisfies RouteStateSpec<typeof instancesDocumentSchema>;
 
 export const instancesSessionSchema = z.strictObject({
-  id: z.string().min(1),
+  selection: sdkSessionSelectionSchema,
   process: nativeProcessSchema,
 });
 const workInput = z.object({ workspaceId: z.string().min(1) });
 const sessionInput = workInput.extend({ session: instancesSessionSchema });
+/** Explicit unsaved-work policy for stop and close. Development HR restart always discards. */
+export const instancesUnsavedSchema = z.enum(["keep", "discard"]);
+const unsaved = instancesUnsavedSchema;
 export const instancesActions = {
   "instances.start": {
     says: "Start the authored staged session through the SDK under this action id; the receipt is the SDK envelope.",
@@ -71,38 +67,38 @@ export const instancesActions = {
     input: sessionInput,
   },
   "instances.restart": {
-    says: "Restart the explicitly supplied session incarnation. Human-only.",
+    says: "Restart the explicitly supplied development session, discarding unsaved changes and reopening its documents. Human-only.",
     dirties: ["sdk"],
     needs: "nothing",
     actor: "human",
-    input: sessionInput,
+    input: sessionInput.strict(),
   },
   "instances.stop": {
-    says: "Stop the explicitly supplied session incarnation. Human-only.",
+    says: "Stop the explicitly supplied session incarnation, keeping or discarding unsaved changes as the person chose. Human-only.",
     dirties: ["sdk"],
     needs: "nothing",
     actor: "human",
-    input: sessionInput.extend({ force: z.boolean().default(false) }),
+    input: sessionInput.extend({ force: z.boolean().default(false), unsaved }),
   },
   "instances.close": {
-    says: "Close the explicitly supplied document lifetime by its published openId. Human-only.",
+    says: "Close the explicitly supplied document lifetime by its published openId, keeping or discarding unsaved changes as the person chose. Human-only.",
     dirties: ["sdk"],
     needs: "nothing",
     actor: "human",
-    input: sessionInput.extend({ document: documentRefSchema, intent: z.string().min(1) }),
+    input: sessionInput.extend({ document: sdkDocumentRefSchema, unsaved }),
   },
 } as const;
 export type InstancesActionKey = keyof typeof instancesActions;
 
 export const instancesReading = {
-  says: "Read SDK sessions, installed years, recents or current documents without changing authored Instances Work.",
+  says: "Read SDK sessions, installed years, recents or open documents without changing authored Instances Work.",
   dirties: [],
   needs: "nothing",
   actor: "any",
   mutates: false,
   input: z.object({
-    read: z.enum(["sessions", "doctor", "recents", "current"]),
-    id: z.string().optional(),
+    read: z.enum(["sessions", "doctor", "recents", "documents"]),
+    session: sdkSessionSelectionSchema.optional(),
     year: z.string().optional(),
     all: z.boolean().optional(),
   }),

@@ -178,6 +178,21 @@ internal static class AutomationCommandRunner {
                     json
                 );
                 return 0;
+            case "versions":
+                WriteResult(
+                    await service.BrowseVersionsAsync(
+                            repoRoot,
+                            RequirePositional(args, 2, "project-root model path"),
+                            ReadOptionValue(args, "--version-id"),
+                            ReadOptionValue(args, "--out"),
+                            refresh,
+                            message => WriteAutomationProgress(message, json),
+                            cancellationToken
+                        )
+                        .ConfigureAwait(false),
+                    json
+                );
+                return 0;
             default:
                 return WriteAutomationUsageAndReturn();
             }
@@ -510,6 +525,13 @@ internal static class AutomationCommandRunner {
             foreach (var model in inventory.Models)
                 Console.WriteLine($"- {model.ModelPath} [year {model.RevitYear?.ToString() ?? "?"}]");
             break;
+        case AutomationApsItemVersionsResult versions:
+            Console.WriteLine($"APS item versions for {versions.ModelPath} [{versions.ItemId}]");
+            foreach (var version in versions.Versions)
+                Console.WriteLine($"- {version.Id} [{version.CreatedAt?.ToString("O") ?? "time unknown"}] [Revit {version.RevitYear?.ToString() ?? "?"}] {(version.HasDownload ? "downloadable" : "no source download")}");
+            if (versions.DownloadedPath is not null)
+                Console.WriteLine($"Downloaded {versions.SelectedVersionId} -> {versions.DownloadedPath} [{versions.DownloadFormat}] SHA-256 {versions.Sha256}");
+            break;
         case ScheduleAuditManifest manifest:
             Console.WriteLine($"Hub: {manifest.Hub}");
             Console.WriteLine($"Models: {manifest.Models.Count}");
@@ -605,6 +627,7 @@ internal static class AutomationCommandRunner {
               pe-dev automation browse cd <folder-name> [--refresh] [--json]
               pe-dev automation browse up [--json]
               pe-dev automation browse models [--name-contains <text>] [--recurse <true|false>] [--refresh] [--out <path>] [--json]
+              pe-dev automation browse versions <project-root-model-path> [--version-id <exact APS id> --out <new-local-file>] [--refresh] [--json]
               pe-dev automation manifest create --path <manifest-path> [--json]
               pe-dev automation manifest show --path <manifest-path> [--json]
               pe-dev automation manifest list --path <manifest-path> [--json]

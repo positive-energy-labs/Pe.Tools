@@ -179,11 +179,13 @@ function settle(
 }
 
 const sessionOf = (target: ExecutionTarget) =>
-  target.kind === "session"
-    ? target.session
-    : target.kind === "document"
-      ? target.ref.session
-      : null;
+  target.kind === "sdk-session"
+    ? `sdk:${canonicalRouteInput(target.selection)}`
+    : target.kind === "session"
+      ? target.session
+      : target.kind === "document"
+        ? target.ref.session
+        : null;
 /**
  * An uncertain attempt blocks only what it could have touched: the same document lifetime, or a
  * session and anything on it. Never the whole host: one crashed script must not refuse every
@@ -193,7 +195,7 @@ const overlaps = (a: ExecutionTarget, b: ExecutionTarget) =>
   a.kind !== "host" &&
   b.kind !== "host" &&
   sessionOf(a) === sessionOf(b) &&
-  (a.kind === "session" || b.kind === "session" || a.ref.openId === b.ref.openId);
+  (a.kind !== "document" || b.kind !== "document" || a.ref.openId === b.ref.openId);
 
 /** The attempt without its terminal fields, so a new settlement never inherits a stale one. */
 const unsettled = (row: ActionReceipt) => {

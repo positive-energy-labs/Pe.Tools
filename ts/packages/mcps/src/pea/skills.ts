@@ -135,9 +135,67 @@ description: Write and run a C# Revit script when code is the clearest way to in
 - Treat compiler and runtime diagnostics as steering; fix the first one before rerunning.
 - Keep terminal output compact; write artifacts for broad evidence. Return structured results for anything a later step reads.
 
+Building or fixing a family from a cut sheet follows build-revit-family.
+
 A Pod is a workspace with a root pod.json declaring entrypoints; the build-pod skill defines it and owns building or adapting one.
 
 For a probe, report the answer and the permission mode it ran under. For a mutation, add the script path, diagnostics, and the verification readback.
+`,
+  },
+  {
+    name: "build-revit-family",
+    content: String.raw`---
+name: build-revit-family
+description: Build, extend, or fix a Revit family from a manufacturer cut sheet or submittal. Use when the user asks to build out, rebuild, add types, sizes, connectors, clearances, or accessories to a family, or to make a family match a spec sheet.
+---
+
+# Build Revit Family
+
+A family is a spatial claim. Counts and flexed formulas prove that numbers hold, never that a solid sits on the side the drawing shows. The user should never have to be your eyes.
+
+## Method
+
+1. Attach the sheet: pe_do key=route:family.attach_spec with the PDF. Tables give sizes; drawings give sides, offsets, and which openings exist. Read the page renders in the Pod spec folder as images, not only the text.
+2. Inventory before building, then align on it: every size column is a type; every opening drawn is a connector (supply, return, outside air, each pipe, drain, power); every option is a Yes/No toggle; every clearance zone is a block. A ruling about one axis never removes items on another: "no three-phase" removes electrical variants, not cabinet sizes. Ask.
+3. Parameters: search the parameters service cache for PE_ shared parameters first (PE_G_Dim_*, PE_M_Fan_AirFlow, PE_M_PerfCool_CapacityRated, PE_M_Fan_Filter, PE_E_*). Create a family parameter only when no PE parameter fits, and name it in your report. Sheet dimensions are type parameters.
+4. Clearances: nest the company clearance family (!Mechanical Equipment_Clearance_Rectangular_UH in the PE library, or the one the user names) once per zone, always on. Ask before modeling clearance as plain solids.
+5. Verify after every geometry write: family.look with the family's Yes/No toggles, then read the plan and the connection-side elevation beside the matching page. Check in its census that every inventory connector exists in every type and toggle state. Before calling it done, run family.loadTest and read its warnings, duplicate names, and images. A PROVEN without both is UNPROVEN.
+
+## Gut check first
+
+Parameters are the obvious review. What a project feels when the family loads is the connectors, the toggles, the orientation and the nested families, and that view decides what the parameters beneath must be. Write it before you align and again before you report done, per type and per toggle state:
+
+- Every connector: domain, system classification, flow direction, shape and size, and the family parameter that drives each of its size, flow, pressure drop, voltage and load. A connector whose size or flow nothing drives is a finding, not a detail.
+- Every toggle and variant: which solids and connectors each state shows, and which connectors stay in the project unconnected while the option is off.
+- Orientation: the hand, which side the connections and the control box sit on, where the origin is, and what the flip controls do.
+- Nested families by name, shared or not, and what each one schedules as.
+
+Census this with a script when the look census does not carry it; never report it from memory.
+
+## Sheet letters
+
+- A cut sheet's lettered dimensions are labels local to one drawing and its table, never identities. The same letter often means different things on different pages: on the Magic Aire HCB submittal, L is the supply opening height for sizes 04 to 20 and an offset for 30/40, where J is the height.
+- For each table, map every letter to its meaning by finding where its drawing dimensions it. Name parameters by meaning (Supply Opening Height), never by letter. Show the per-table map when you align; a letter whose meaning changes between tables is a finding.
+- Check each mapping against the cabinet: an opening must fit inside its face, and its offsets plus its size must not exceed the face.
+
+## Accessories
+
+Mixing boxes, filter racks, curbs and their top, back and bottom variants have no free shape. Present the three shapes with their costs and let the user choose, per family or as a company standard:
+
+- Nested family behind a Yes/No toggle keeps the accessory schedulable with its model-number types. Its connectors are not the host's, so each needs a host stub and a host connector. No connector can hide, so every variant's connectors stay in the project unconnected while that option is off; three outside-air variants mean three dangling connectors. Users must remember the toggles.
+- Host geometry is the simplest and carries fully through family capture. The accessory is no longer a schedulable element of its own, and its connectors still dangle when the option is off.
+- A model group of separate families, placed together and ungrouped after placement, keeps each part's own connectors and schedule rows, and nothing dangles. The parts are not driven by the host's size parameters, and edits happen after placement.
+
+## Revit laws
+
+- A connector inside a nested family is not the host's connector, and no connector can be hidden. An accessory opening (a mixing box outside-air collar) needs a host-owned stub extrusion that copies the collar footprint, with the connector on the stub's face; the stub follows the toggle, the connector stays.
+- A connector hosted on a nested instance face does not follow the instance. Host it on a host extrusion locked to formula-driven planes.
+- Nested families with one name merge into one loaded family in a project. Give every nested family a unique name.
+- A rectangular connector's width axis comes from the host face, not the edge argument. Rotate it about its normal, then census the width direction.
+- A nested family's type slot cannot be associated. Make its size parameters instance and associate those.
+- A value set before a dimension is labeled does not drive it. Set it again after labeling.
+
+Report the inventory with each item built or not, the PE and family parameters used, and the look and loadTest verdicts with the image paths you read.
 `,
   },
   {
@@ -218,10 +276,10 @@ Every route works the same way. You write proposals; the person stages them, and
 1. Read first: pe_read key=route:<route>. It returns the document, its revision, the schema, the agent write mask, and the commands. The mask is the truth about what you may write: only the proposal rungs it names.
 2. Keys come from the route read. On a route keyed by what Revit has loaded (families), new cell keys come from the route read's scopeTypes. Family names for a scope still come from the catalog read (revit.catalog.loaded-families). Copy names exactly; never compose them from ids. The door refuses an unknown key by name.
 3. Write only proposals: pe_do key=route:<route>.propose with patches to proposal rungs and expectedRevision from your read. A patch path is an array of segments, e.g. ["cells","<key>","proposal"] or ["scope","proposal"], never pointer strings. Never write staged. If a route has no proposal rung, describe the change in chat and let the person make it.
-4. Propose even when access is Trusted. A change the person could review on a route goes through that route; do not reach the same values through a script, an op, or a file edit. Trusted runs tools; it does not skip the person's review.
+4. Propose even when the harness runs tools without asking. A change the person could review on a route goes through that route; do not reach the same values through a script, an op, or a file edit. A tool that runs unasked does not skip the person's review.
 5. What the person sees: each proposal sits on its own cell next to the current value, with accept and deny on that cell. The Chat head shows a compact summary and opens the route inside Chat. A staged value beside a different proposal of yours is a counter-proposal; do not overwrite it.
 6. Commit is the person's. Plan, apply, save, push, and sync are human verbs; do not press them or ask to. Say which verb to press and what it consumes: the staged values at the current revision, never open proposals. Instances is the one exception: open or start runs exactly what the person staged, so you may run it when they ask.
-7. A proposal is not a permission request. Do not use ask_user to get a proposal approved; it waits in the route as Work and survives reload. Use ask_user only for a decision only the person can make. An ask lives only as long as your turn.
+7. A proposal is not a permission request. When the harness asks the person to allow a tool call, that ask lives only as long as your turn and approves the call, not your proposal; a proposal waits in the route as Work and survives reload. For a decision only the person can make, ask in chat.
 
 ## Families
 
@@ -358,7 +416,9 @@ export const retiredPeaSkillNames: readonly string[] = [
   "author-pe-settings",
 ];
 
+/** Codex reads repo skills from `.agents/skills` under its cwd; Claude Code from `.claude/skills`. */
 export const peaStandardSkillsRoot = path.join(".agents", "skills");
+export const peaClaudeSkillsRoot = path.join(".claude", "skills");
 export const peaProductHomeEnvVar = "PE_TOOLS_PRODUCT_HOME";
 
 export interface PeaProductHomeOptions {
@@ -378,7 +438,8 @@ export function resolvePeaStandardSkillsRoot(options: PeaProductHomeOptions = {}
 }
 
 export function resolvePeaSkillPaths(options: PeaProductHomeOptions = {}): string[] {
-  return [resolvePeaStandardSkillsRoot(options)];
+  const home = resolvePeaProductHomePath(options);
+  return [path.join(home, peaStandardSkillsRoot), path.join(home, peaClaudeSkillsRoot)];
 }
 
 export interface MaterializedPeaSkill {
@@ -387,31 +448,28 @@ export interface MaterializedPeaSkill {
   status: "created" | "updated" | "unchanged";
 }
 
+/** Writes every bundled skill under each harness root; retires the product's former names there. */
 export async function materializeBundledPeaSkills(
   options: PeaProductHomeOptions = {},
 ): Promise<MaterializedPeaSkill[]> {
-  const skillsRoot = resolvePeaStandardSkillsRoot(options);
-  await mkdir(skillsRoot, { recursive: true });
-
-  for (const name of retiredPeaSkillNames) {
-    if (bundledPeaSkills.some((skill) => skill.name === name))
-      throw new Error(`Pea skill '${name}' is both bundled and retired.`);
-    await rm(path.join(skillsRoot, name), { recursive: true, force: true });
-  }
-
   const materialized: MaterializedPeaSkill[] = [];
-  for (const skill of bundledPeaSkills) {
-    const skillPath = path.join(skillsRoot, skill.name, "SKILL.md");
-    await mkdir(path.dirname(skillPath), { recursive: true });
-    const content = `${skill.content.trimEnd()}\n`;
-    const existing = await readExisting(skillPath);
-    const status = existing == null ? "created" : existing === content ? "unchanged" : "updated";
-    if (status !== "unchanged") {
-      await writeFile(skillPath, content, "utf-8");
+  for (const skillsRoot of resolvePeaSkillPaths(options)) {
+    await mkdir(skillsRoot, { recursive: true });
+    for (const name of retiredPeaSkillNames) {
+      if (bundledPeaSkills.some((skill) => skill.name === name))
+        throw new Error(`Pea skill '${name}' is both bundled and retired.`);
+      await rm(path.join(skillsRoot, name), { recursive: true, force: true });
     }
-    materialized.push({ name: skill.name, path: skillPath, status });
+    for (const skill of bundledPeaSkills) {
+      const skillPath = path.join(skillsRoot, skill.name, "SKILL.md");
+      await mkdir(path.dirname(skillPath), { recursive: true });
+      const content = `${skill.content.trimEnd()}\n`;
+      const existing = await readExisting(skillPath);
+      const status = existing == null ? "created" : existing === content ? "unchanged" : "updated";
+      if (status !== "unchanged") await writeFile(skillPath, content, "utf-8");
+      materialized.push({ name: skill.name, path: skillPath, status });
+    }
   }
-
   return materialized;
 }
 

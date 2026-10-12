@@ -36,7 +36,7 @@ Override with **attached** only when the running session's documents, UI state, 
 dotnet tool run pe-revit -- test --project .\dotnet\Pe.Revit.Tests\Pe.Revit.Tests.csproj --attach --id pe.app-25 --filter "Name~SomeFocusedTest" --timeout-seconds 900 --json
 ```
 
-For freshness outside a test run, `pe-revit session converge` attaches the hot-reload emitter to a live session and `pe-revit session restart` is the mechanism that actually reloads. Run `pe-revit test --plan --project <P>` when the rung is not obvious, and `pe-revit guide test` for the refusal table.
+For freshness outside a test run, `pe-revit session hr --id <session>` hot-applies to a live session and `pe-revit session hr --id <session> --restart --unsaved keep|discard` is the cold swap that actually reloads. Run `pe-revit test --plan --project <P>` when the rung is not obvious, and `pe-revit guide test` for the refusal table.
 
 ## Shared Language
 
@@ -60,13 +60,13 @@ For freshness outside a test run, `pe-revit session converge` attaches the hot-r
 - Prefer explicit-year `dotnet test`, not raw artifact-path `dotnet vstest`.
 - Explicit-year `dotnet test -c Debug.R25.Tests ...` defaults to the `attached` verify target and runs against assemblies already loaded in a running session. Raw `dotnet test` is banned for this package; `pe-revit test --project <P>` is the sanctioned path.
 - `.Tests` build artifacts can be fresh while a running session's loaded assemblies are still stale. The build proves compilation, not loaded-assembly freshness.
-- After `pe-revit session restart`, treat the session's payload as fresh: restart materializes a new generation before stopping the old process.
-- AGENT GUIDANCE: the attached rung uses assemblies already loaded in the session. If runtime code changed, let `--attach` converge it (or `pe-revit session restart` for a rude edit) before reading the result; an isolated `dotnet build` is not runtime freshness proof.
+- After `pe-revit session hr --restart`, treat the session's payload as fresh: restart materializes a new generation before stopping the old process.
+- AGENT GUIDANCE: the attached rung uses assemblies already loaded in the session. If runtime code changed, let `--attach` converge it (or `pe-revit session hr --restart` for a rude edit) before reading the result; an isolated `dotnet build` is not runtime freshness proof.
 - Explicit-year raw `.Tests` runs are intentionally modeled as attached verification, not ordinary `Build`.
 - The pre-`VSTest` hook is an attached session check only. It is not proof of runtime freshness and not a substitute for converging or restarting the session.
 - Raw `dotnet test` still inherits the adapter defaults unless you override them. If you need a dedicated Revit the run owns and stops, use `pe-revit test --project <P>` instead of assuming the adapter will do the right thing.
-- The fresh rung intentionally avoids every existing session: it quarantines the deployed desktop add-in for the target year, launches one exact descendant Revit under an ephemeral session receipt, and stops only that incarnation. `session status` shows the row while it runs; `session gc` sweeps it if a run dies badly.
-- Do not assume an already-open test-owned Revit is safe to reuse for runtime freshness. If a stale one survives a failure or timeout, `pe-revit session gc` sweeps its ephemeral row; `--unstick` reclaims a verifiably orphaned year lease.
+- The fresh rung intentionally avoids every existing session: it quarantines the deployed desktop add-in for the target year, launches one exact descendant Revit under an ephemeral session receipt, and stops only that incarnation. `session list --all` shows the row while it runs and after a bad end; `session reset --id <session> --unsaved discard` is the one recovery verb.
+- Do not assume an already-open test-owned Revit is safe to reuse for runtime freshness. If a stale one survives a failure or timeout, `pe-revit session reset --id <session> --unsaved discard` ends it; `--unstick` reclaims a verifiably orphaned year lease.
 - Apply the correct code fix first; do not narrow the implementation just to stay hot-reload-safe.
 - Hot reload is not trustworthy after runtime member-shape changes such as added or removed members, method signature changes, constructor changes, enum shape changes, record shape changes, or new nested/private runtime types.
 - When those changes happen, treat the session as restart-required — that is what converge reports as `session.restart-required`.

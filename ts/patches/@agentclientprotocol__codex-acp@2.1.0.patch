@@ -1,0 +1,17 @@
+diff --git a/dist/index.js b/dist/index.js
+index 51d20c56055db123c6858304126902f9a0d80543..e94ce742955a513b121d3d7cfd57279e38834747 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -27304,10 +27304,10 @@ function startCodexConnection(codexPath, env) {
+   const spawnEnv = env ?? process.env;
+   let codex;
+   if (codexPath) {
+-    codex = process.platform === "win32" ? spawn(`"${codexPath}" app-server`, { shell: true, env: spawnEnv }) : spawn(codexPath, ["app-server"], { env: spawnEnv });
++    codex = process.platform === "win32" ? spawn(`"${codexPath}" app-server`, { shell: true, env: spawnEnv, windowsHide: true }) : spawn(codexPath, ["app-server"], { env: spawnEnv, windowsHide: true });
+   } else {
+     const bundledCodexPath = createRequire(import.meta.url).resolve("@openai/codex/bin/codex.js");
+-    codex = spawn(process.execPath, [bundledCodexPath, "app-server"], { env: spawnEnv });
++    codex = spawn(process.execPath, [bundledCodexPath, "app-server"], { env: spawnEnv, windowsHide: true });
+   }
+   attachLogs(codex);
+   const reader = createJSONRPCReader(codex.stdout);

@@ -39,20 +39,28 @@ export function analyticsEnabled(): boolean {
 
 /** Fire-and-forget event capture. Never throws, never blocks the caller. */
 export function capture(event: string, properties: Record<string, unknown>): void {
+  if (analyticsEnabled()) captureNow(event, properties).catch(() => undefined);
+}
+
+/** Awaited capture for user-authored events: throws when unconfigured or PostHog refuses. */
+export async function captureNow(
+  event: string,
+  properties: Record<string, unknown>,
+): Promise<void> {
   const config = analyticsConfig();
-  if (!config) return;
-  const body = JSON.stringify({
-    api_key: config.apiKey,
-    event,
-    distinct_id: distinctId(),
-    timestamp: new Date().toISOString(),
-    properties: { ...baseProperties(), ...properties },
-  });
-  fetch(`${config.host}/i/v0/e/`, {
+  if (!config) throw new Error("PostHog is not configured on this machine");
+  const response = await fetch(`${config.host}/i/v0/e/`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body,
-  }).catch(() => undefined);
+    body: JSON.stringify({
+      api_key: config.apiKey,
+      event,
+      distinct_id: distinctId(),
+      timestamp: new Date().toISOString(),
+      properties: { ...baseProperties(), ...properties },
+    }),
+  });
+  if (!response.ok) throw new Error(`PostHog refused the event (${response.status})`);
 }
 
 /** PostHog error-tracking event ($exception) from a caught error. */

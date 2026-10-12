@@ -1,22 +1,54 @@
-import { Pencil, Plus, Search, X } from "lucide-react";
+import { GitFork, Pencil, Plus, Search, X } from "lucide-react";
+import type { Provider } from "@pe/agent-contracts";
 import { Dialog, DialogContent } from "#/components/lang/dialog";
 import { List } from "#/components/lang/list-popup";
 import { EmptyState } from "#/components/lang/empty";
 import type { StoredThreadSummary } from "#/workbench/provider";
+import { isReady } from "#/workbench/provider/providers";
 import { Press } from "#/components/lang/press";
 import { Kbd } from "#/components/lang/kbd";
 
-function ThreadActions({
-  thread,
-  onRename,
-  onDelete,
-}: {
-  thread: StoredThreadSummary;
+interface ThreadVerbs {
+  providers: Provider[];
+  onFork: (id: string, providerId?: string) => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
-}) {
+}
+
+/** Rename, one fork press per ready provider (its own provider first), delete. */
+function ThreadActions({
+  thread,
+  providers,
+  onRename,
+  onFork,
+  onDelete,
+}: ThreadVerbs & { thread: StoredThreadSummary }) {
+  const own = (provider: Provider) => provider.id === thread.providerId;
+  const forks = providers.filter(isReady).sort((a, b) => Number(own(b)) - Number(own(a)));
   return (
     <>
+      {forks.map((provider) => {
+        const title = own(provider)
+          ? "Fork thread (same provider, context kept)"
+          : `Fork to ${provider.name} (transcript re-fed)`;
+        return (
+          <Press
+            key={provider.id}
+            type="button"
+            aria-label={title}
+            title={title}
+            tone="quiet"
+            state="rest"
+            onClick={(event) => {
+              event.stopPropagation();
+              onFork(thread.id, own(provider) ? undefined : provider.id);
+            }}
+          >
+            <GitFork />
+            {own(provider) ? null : <span className="t-small">{provider.name}</span>}
+          </Press>
+        );
+      })}
       <Press
         type="button"
         aria-label="Rename thread"
@@ -49,6 +81,10 @@ function ThreadActions({
   );
 }
 
+/** The thread's provider and model, the quiet second line under its title. */
+const threadSub = (thread: StoredThreadSummary) =>
+  [thread.providerName, thread.modelId].filter(Boolean).join(" · ");
+
 /**
  * Always-on sidebar thread list — the `threads` mode body, on the one list. Shows the 5 most
  * recent; everything else lives behind the ⌘K palette (onSearch). New/search live here.
@@ -58,17 +94,14 @@ export function ThreadsSidebar({
   currentThreadId,
   onSelect,
   onNew,
-  onRename,
-  onDelete,
   onSearch,
   limit = 5,
-}: {
+  ...verbs
+}: ThreadVerbs & {
   threads: StoredThreadSummary[];
   currentThreadId: string;
   onSelect: (id: string) => void;
   onNew: () => void;
-  onRename: (id: string, title: string) => void;
-  onDelete: (id: string) => void;
   onSearch: () => void;
   limit?: number;
 }) {
@@ -90,24 +123,17 @@ export function ThreadsSidebar({
           onPick={(thread) => onSelect(thread.id)}
           row={(thread) => ({
             label: thread.title,
+            sub: threadSub(thread),
+            lines: 2,
             // The open thread is the active item: the rail mark, never a hue or a frame.
             active: thread.id === currentThreadId,
-            actions: <ThreadActions thread={thread} onRename={onRename} onDelete={onDelete} />,
+            actions: <ThreadActions thread={thread} {...verbs} />,
           })}
         />
       </div>
 
       <div className="hairline-t-faint mt-auto flex flex-col gap-1 p-2">
-        {/* page-scoped acts: neutral ink, veil on hover — no blue (blue = writes beyond / nav) */}
-        <Press
-          type="button"
-          title="Start a new thread — the current one stays in the list"
-          tone="neutral"
-          onClick={onNew}
-        >
-          <Plus className="size-3.5" />
-          New thread
-        </Press>
+        <NewThreadButton onNew={onNew} />
         <Press
           type="button"
           title="Search every thread by title (⌘K)"
@@ -124,8 +150,23 @@ export function ThreadsSidebar({
   );
 }
 
+/** An empty draft: the composer head picks its provider and the first send binds it. */
+export function NewThreadButton({ onNew }: { onNew: () => void }) {
+  // page-scoped acts: neutral ink, veil on hover — no blue (blue = writes beyond / nav)
+  return (
+    <Press
+      type="button"
+      title="Open an empty draft; the thread is created at its first send"
+      tone="neutral"
+      onClick={onNew}
+    >
+      <Plus className="size-3.5" />
+      New thread
+    </Press>
+  );
+}
+
 type PaletteItem = { kind: "new" } | { kind: "thread"; thread: StoredThreadSummary };
-const NEW: PaletteItem = { kind: "new" };
 
 /** The thread palette (Ctrl/Cmd-K): the one List, fuzzy, in a Dialog. Full search across every thread. */
 export function ThreadDialog({
@@ -135,20 +176,17 @@ export function ThreadDialog({
   onOpenChange,
   onSelect,
   onNew,
-  onRename,
-  onDelete,
-}: {
+  ...verbs
+}: ThreadVerbs & {
   threads: StoredThreadSummary[];
   currentThreadId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: (id: string) => void;
   onNew: () => void;
-  onRename: (id: string, title: string) => void;
-  onDelete: (id: string) => void;
 }) {
   const items: PaletteItem[] = [
-    NEW,
+    { kind: "new" },
     ...threads.map((thread) => ({ kind: "thread" as const, thread })),
   ];
   return (
@@ -173,13 +211,13 @@ export function ThreadDialog({
           onEscape={() => onOpenChange(false)}
           row={(item) =>
             item.kind === "new"
-              ? { lead: <Plus />, label: "New thread", meta: <Kbd mute>⌘K</Kbd> }
+              ? { lead: <Plus />, label: "New thread" }
               : {
                   label: item.thread.title,
+                  sub: threadSub(item.thread),
+                  lines: 2,
                   active: item.thread.id === currentThreadId,
-                  actions: (
-                    <ThreadActions thread={item.thread} onRename={onRename} onDelete={onDelete} />
-                  ),
+                  actions: <ThreadActions thread={item.thread} {...verbs} />,
                 }
           }
         />

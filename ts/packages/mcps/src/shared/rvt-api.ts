@@ -2,7 +2,7 @@ import { extractRvtDocsText } from "./rvt-api/extractDocs.js";
 import { fetchLocalDoc } from "./rvt-api/local-docs.ts";
 import { searchWrapper } from "./rvt-api/searchDocs.ts";
 import { toolInputArgSchemas, revitApiQueryInputSchema } from "../shared/rvt-api/validators.ts";
-import { createTool } from "@mastra/core/tools";
+import { createTool } from "./tool.ts";
 import z from "zod";
 
 export const revitApiSearch = createTool({

@@ -2,7 +2,6 @@ using Autodesk.Revit.DB;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.Revit.Extensions.Id;
-using Pe.Shared.ApsAuth;
 using Pe.Shared.RevitData;
 using Pe.Shared.Product;
 using Pe.Shared.StorageRuntime;
@@ -80,8 +79,7 @@ public static class ParametersServiceCache {
         return new Parameters(httpClient, tokenProvider);
     }
 
-    private static string AcquireParameterServiceAccessToken() =>
-        TsApsAuthClient.AcquireAccessToken(ApsTokenRequest.ForParameterService()).AccessToken;
+    private static string AcquireParameterServiceAccessToken() => Pe.Revit.Loader.RevitAutodeskAuth.GetAccessToken();
 
     private static IReadOnlyList<string> WriteAdditionalFormats(
         ParametersApi.Parameters parameters,
@@ -278,9 +276,9 @@ internal sealed record ExplicitParametersServiceSettings(string AccountId, strin
 }
 
 public static class ApsAuthActions {
-    public static string LoginParameterServiceStatusDetail() {
-        var status = TsApsAuthClient.Login(ApsTokenRequest.ForParameterService());
-        return $"Persisted auth: {(status.Exists ? "present" : "missing")}, flow={status.FlowKind}, scope={status.ScopeProfile}, expiresUtc={status.ExpiresAtUtc?.ToString("O") ?? "(unknown)"}";
+    public static string RevitSignInStatusDetail() {
+        _ = Pe.Revit.Loader.RevitAutodeskAuth.GetAccessToken();
+        return "Autodesk sign-in is available in Revit.";
     }
 }
 

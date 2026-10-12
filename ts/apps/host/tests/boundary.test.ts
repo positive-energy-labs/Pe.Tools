@@ -2,37 +2,23 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Deferred, Effect, Layer } from "effect";
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-types";
 import { makeHttpLive } from "../src/app.ts";
 import { hostOwnership, productRoot } from "../src/host-ownership.ts";
-import { MastraRuntime } from "../src/mastra-runtime.ts";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 
+vi.mock("../src/pe-revit-launch.ts", async (original) => ({
+  ...(await original<typeof import("../src/pe-revit-launch.ts")>()),
+  peRevitLauncher: () => ({ cmd: process.execPath, args: [] }),
+}));
+
 /**
  * The one vertical boundary test (owner's philosophy: one seam test, no unit sprawl). It boots the
- * real `makeHttpLive` composition on an ephemeral port with a STUB Mastra tenant (a trivial Hono-
- * shaped fetch), then asserts the whole seam: service file, status, static SPA fallback, the Mastra
- * mount at its absolute path, and graceful token-authorized shutdown. The real pea runtime is
- * proven offline by `@pe/runtime`'s own `buildAgentControllerApp` test; here we only exercise the
- * host's mount/lifecycle plumbing, so the tenant is stubbed (keeps this hermetic â€” no product-home
- * writes, no model/auth). InstallGc is disabled so the test never spawns the install kernel.
+ * real `makeHttpLive` composition on an ephemeral port, then asserts the whole seam: service file,
+ * status, static SPA fallback, the host-owned `/pe` routes, and graceful token-authorized shutdown.
  */
-const StubMastraLive = Layer.succeed(MastraRuntime, {
-  fetch: (request: Request) => {
-    const url = new URL(request.url);
-    if (url.pathname === "/pe/inspect") {
-      return Promise.resolve(
-        new Response(JSON.stringify({ controllerId: "pea", resourceId: "test-resource" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      );
-    }
-    return Promise.resolve(new Response("not found", { status: 404 }));
-  },
-});
 
 async function waitFor<T>(fn: () => Promise<T | null>, timeoutMs = 10_000): Promise<T> {
   const deadline = Date.now() + timeoutMs;
@@ -44,17 +30,15 @@ async function waitFor<T>(fn: () => Promise<T | null>, timeoutMs = 10_000): Prom
   }
 }
 
-test("host boundary: service file, status, static SPA, mastra mount, graceful shutdown", async () => {
+test("host boundary: service file, status, static SPA, /pe routes, graceful shutdown", async () => {
   const localAppData = mkdtempSync(join(tmpdir(), "pe-host-boundary-"));
   const webDir = mkdtempSync(join(tmpdir(), "pe-host-web-"));
   writeFileSync(join(webDir, "index.html"), "<!doctype html><title>pe-spa</title>");
   writeFileSync(join(webDir, "a.txt"), "alpha");
 
   const prevLocalAppData = process.env.LOCALAPPDATA;
-  const prevPeRevitCmd = process.env.PE_REVIT_CMD;
   const prevWebDist = process.env.PE_TOOLS_WEB_DIST;
   process.env.LOCALAPPDATA = localAppData;
-  process.env.PE_REVIT_CMD = process.execPath;
   process.env.PE_TOOLS_WEB_DIST = webDir;
   // appBase is resolved the same way the running host resolves it (LOCALAPPDATA now = temp).
   const appBase = productRoot();
@@ -66,7 +50,6 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
       const HttpLive = makeHttpLive({
         capabilities: { revit: true },
         port: 0,
-        mastraLayer: StubMastraLive,
         lifecycle: { latch, handle },
         webRoot: webDir,
       });
@@ -94,15 +77,15 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
     // Discovery uses the same selector surface as /call and echoes its resolved identity so
     // typegen can reject an accidental dev-vs-installed lane mismatch.
     const ops = await fetch(`${base}/ops`, {
-      headers: { [HOST_RPC_BRIDGE_SESSION_HEADER]: "session:boundary" },
+      headers: { [HOST_RPC_BRIDGE_SESSION_HEADER]: "missing-attachment" },
     });
     expect(ops.status).toBe(200);
-    expect((await ops.json()) as { bridgeSessionId?: string }).toMatchObject({
-      bridgeSessionId: "session:boundary",
+    expect(await ops.json()).toMatchObject({
+      bridgeCatalogError: "The exact bridge attachment is no longer available",
     });
 
-    const conflictingOps = await fetch(`${base}/ops?session=dev:other`, {
-      headers: { [HOST_RPC_BRIDGE_SESSION_HEADER]: "session:boundary" },
+    const conflictingOps = await fetch(`${base}/ops?session=other-attachment`, {
+      headers: { [HOST_RPC_BRIDGE_SESSION_HEADER]: "missing-attachment" },
     });
     expect(conflictingOps.status).toBe(400);
 
@@ -135,17 +118,20 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
     expect(spa.status).toBe(200);
     expect(await spa.text()).toContain("pe-spa");
 
-    // (4) the Mastra mount answers /pe/inspect at its absolute path.
-    const inspect = await fetch(`${base}/pe/inspect`);
-    expect(inspect.status).toBe(200);
-    expect(await inspect.json()).toMatchObject({ controllerId: "pea" });
+    // (4) the host-owned harness surface answers at its absolute path.
+    const access = await fetch(`${base}/pe/access`);
+    expect(access.status).toBe(200);
 
     // (5) the release readout is lane-truthful: a source-lane host reports no installed release.
     const installStatus = await fetch(`${base}/host/install`);
     expect(installStatus.status).toBe(200);
     expect(await installStatus.json()).toMatchObject({ installed: false, releaseVersion: null });
 
-    // (6) graceful shutdown: the SDK claim token authorizes, then the server stops + file deleted.
+    // (6) the tray's Open window needs the claim token too; without it nothing is spawned.
+    const window = await fetch(`${base}/admin/window`, { method: "POST" });
+    expect(window.status).toBe(403);
+
+    // (7) graceful shutdown: the SDK claim token authorizes, then the server stops + file deleted.
     const shutdown = await fetch(`${base}/admin/shutdown`, {
       method: "POST",
       headers: {
@@ -164,8 +150,6 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
     await done.catch(() => {});
     if (prevLocalAppData === undefined) delete process.env.LOCALAPPDATA;
     else process.env.LOCALAPPDATA = prevLocalAppData;
-    if (prevPeRevitCmd === undefined) delete process.env.PE_REVIT_CMD;
-    else process.env.PE_REVIT_CMD = prevPeRevitCmd;
     if (prevWebDist === undefined) delete process.env.PE_TOOLS_WEB_DIST;
     else process.env.PE_TOOLS_WEB_DIST = prevWebDist;
     rmSync(localAppData, { recursive: true, force: true });

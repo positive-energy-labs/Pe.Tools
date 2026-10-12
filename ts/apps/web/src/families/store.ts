@@ -31,7 +31,7 @@ import { z } from "zod";
 import type { CellWire } from "#/components/lang/band";
 import type { TableState } from "#/components/master-table/model";
 import { useHostCall, previousOf, useReading } from "#/readings";
-import { useRoute, type EntityPage, type EntitySearch } from "#/route";
+import { useRoute, type EntityPage } from "#/route";
 import { usePodList } from "#/route/pods";
 import {
   archivedFamiliesObservation,
@@ -134,7 +134,7 @@ function applyDataOf(statuses: unknown, receipts: unknown) {
 /* ── The hook ──────────────────────────────────────────────────────────────── */
 
 export function useFamiliesStore(
-  options: { target?: string; thread?: string; entry?: EntitySearch; query?: string } = {},
+  options: { target?: string; thread?: string; query?: string; url?: boolean } = {},
 ) {
   const demo = useMemo(() => frozenDemo() !== null, []);
   const [pods, refreshPods] = usePodList(!demo);
@@ -142,10 +142,8 @@ export function useFamiliesStore(
     target: options.target ? (options.target as never) : null,
     thread: options.thread,
     provided: { pods },
-    page: {
-      ...options.entry,
-      ...(options.query === undefined ? {} : { query: options.query }),
-    } as never,
+    url: options.url ?? false,
+    page: (options.query === undefined ? {} : { query: options.query }) as never,
   });
   const [memory, setMemory] = useState<FamiliesPageMemory>(EMPTY_MEMORY);
   // The draft and the selection are Page: the verbs read them off `ctx.page`.

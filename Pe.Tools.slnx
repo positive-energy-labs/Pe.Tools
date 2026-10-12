@@ -47,6 +47,8 @@
     <!-- Pe.Host retired: replaced by the Effectified TS host at ts/apps/host
     (@pe/host). -->
     <Project Path="dotnet/Pe.Dev.Cli/Pe.Dev.Cli.csproj" />
+    <Project Path="dotnet/Pe.Host.Tray/Pe.Host.Tray.csproj" />
+    <Project Path="dotnet/Pe.Host.Tray.Tests/Pe.Host.Tray.Tests.csproj" />
     <Project Path="dotnet/Pe.Revit/Pe.Revit.csproj" />
     <Project Path="dotnet/Pe.Revit.FamilyFoundry/Pe.Revit.FamilyFoundry.csproj" />
     <Project Path="dotnet/Pe.Revit.Global/Pe.Revit.Global.csproj" />

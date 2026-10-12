@@ -2,7 +2,11 @@
   "product": "Pe.Tools",
   "vendor": "Positive Energy",
   "releases": "positive-energy-labs/Pe.Tools",
-  "version": "0.6.29",
+  "version": "0.7.20",
+  "sdk": {
+    "feed": null,
+    "clientDir": "ts/packages/host-contracts/src/vendor/generated"
+  },
   "telemetry": {
     "posthog": {
       "apiKey": "phc_xKiWciccdu558TVAT6ohYZ5tRQYGboW4WxF47na9QKTo",
@@ -15,6 +19,7 @@
     "smokeService": "host",
     "smokePaths": [
       "app/bin/host/Pe.Host.exe",
+      "app/bin/host/tray/Pe.Host.Tray.exe",
       "app/bin/host/web/client/index.html",
       "app/bin/pea/pea.exe"
     ]
@@ -86,13 +91,20 @@
       "name": "host",
       "source": "ts/apps/host/dist-installed",
       "entry": "Pe.Host.exe",
+      "shortcut": {
+        "name": "Pe.Tools",
+        "arguments": "--open",
+        "icon": "web/client/favicon.ico",
+        "description": "Open Pe.Tools in its own window; Revit joins this host when it starts"
+      },
       "dev": "vp run @pe/host#attach",
       "build": "pnpm --dir ts --filter @pe/host build:payload",
       "service": {
         "preferredPort": 5180,
         "health": "/host/status",
         "shutdown": "/admin/shutdown",
-        "tier": "managed"
+        "tier": "managed",
+        "autostart": true
       }
     },
     {
@@ -104,7 +116,7 @@
       "name": "pea",
       "source": "ts/apps/pea/dist-installed",
       "entry": "pea.exe",
-      "build": "pnpm --dir ts --filter @pe/pea build:installed"
+      "build": "pnpm --dir ts --filter @pe/pea build"
     },
     {
       "type": "PathShim",

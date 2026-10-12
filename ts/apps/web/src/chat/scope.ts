@@ -1,3 +1,4 @@
+import { hostFetch } from "#/host/runtime";
 import { useEffect, useRef, useState } from "react";
 import { peReadings, previousOf, useReading } from "#/readings";
 import {
@@ -47,7 +48,7 @@ export function useThreadScope(threadId: string, enabled = true, observed?: Read
       return false;
     }
     try {
-      const response = await fetch(scopeUrl(threadId), {
+      const response = await hostFetch(scopeUrl(threadId), {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ defaultTarget, expectedRevision: parsed.data.revision }),

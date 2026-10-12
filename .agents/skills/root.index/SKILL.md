@@ -27,6 +27,7 @@ Authority runs user, then skill, then this file. A stance is a posture, not a pr
 | lens | `prove` | Assayer striking the Hallmark, Thomas on another's claim — a claim is stamped with its lane or not at all | plausible, not real: done on a mock, a count, a screenshot, or another agent's word | no | no |  |
 | lens | `purge` | Shiva at the winnowing floor, Occam, the Iconoclast, the burn boss — delete at least as much as you add | bloat: adding to a place that already has too much | no | no |  |
 | pass | `relay` | Herald — the message to the next session | the dropped baton: the next session re-derives what this one knew | no | **yes** | baton delivered |
+| pass | `release` | Ferryman — the crossing ends on the other bank | premature release closure: shipped bytes never made the crossing | no | no | exact published bytes reached the consumer, promised outcomes proven, failures and gaps recorded |
 | loop | `close` | Keystone — a settled surface needs its backend real | shims for done: a settled surface over a fake backend | yes | no | shims zero or deferred, workflow driven by hand |
 | loop | `diagnose` | Coroner — something is broken | guessed fix: a diff before a cause | yes | no | cause, wound, red loop |
 | loop | `goal` | Crusade — an unattended push at a number | wheel-spinning: the same wave sent twice at a plateau | yes | **yes** | two dry waves |
@@ -34,6 +35,7 @@ Authority runs user, then skill, then this file. A stance is a posture, not a pr
 | loop | `muse` | Demiurge in the realm of forms — architecture, API, data shape, seam is open | first shape kept: a seam settled before the alternatives were seen | yes | no | two rounds adding no shape and killing none |
 | loop | `protoui` | Lineup and Toile — a product surface is unsettled | wrong product: canonizing a surface nobody felt | yes | no | two dry rounds |
 | loop | `teach` | Master — a concept the user wants to own | the answer handed over: the user owns nothing | yes | no | transfer demonstrated |
+| loop | `tune` | Tuner with the fork — a temperament, never a string | tuned by ear: a constant fixed by hand where a rule should hold | yes | no | before/after from one instrument, rule landed with its guard, purge done, open rulings listed |
 | slot | `docs` | where durable knowledge lives, this repo; rebuilt like Ise, swept like a sand mandala | lost decisions: verdicts in chat, nowhere else | - | - | - |
 | slot | `execute` | the proving ground and chain of custody — touch the right reality, then name exactly what answered | the wrong reality: a claim proved on a lane that cannot falsify it | - | - | - |
 | slot | `mine` | how retained Claude and Codex sessions become evidence, this repo | rumor: a finding without lineage | - | - | - |
@@ -49,6 +51,7 @@ A skill changes method, never authorization. Capture, instrumentation, and gloss
 2. **Quantify every change**. Restate the plan in your words before starting; misalignment is cheapest here. Gauge expected delta to data models, LOC, file topology, dependency tree, surface shape, modularity, performance, and testability. 
 3. **Chart the journey as it passes**. Handles are the substrate: consumed terminal commands, dependency changes, resource names, wave/round/agent/mux/worktree names label what is actually happening. Landmarks chart the way: a user-story fulfilled, a stance change, a realignment, a lesson. Waypoints are targets that unblock the queue. 
 4. **Stop only after proven**. A stop is reported with a stamp on the claim inside it. This is the wall every loop exits through.
+5. **End the turn on the whole account**. Before you end a turn, do every part of the ask that needs no verdict. The client shows the user only your last message, so that message stands alone: what changed, with its stamp; what you did not do, and why; then the next command or the numbered decision you need. Never end a turn on a status line, a promise ("I'll check X"), or a bare acknowledgement.
 
 Fix unexpected systemic signals, scope growth avoidance is an old maxim to forget. Eg. a user steer, time-box spent, excessive LOC, a repeated helper script, a misunderstanding. They are only noise if you choose to work around them. Fix the root cause by default and at the highest rung that fits. Fix above your layer? File it Owed and name the interim. Rungs:
 

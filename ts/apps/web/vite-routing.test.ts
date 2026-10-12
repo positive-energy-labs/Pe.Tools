@@ -1,7 +1,17 @@
 import { expect, test, vi } from "vite-plus/test";
 import { actionControls } from "@pe/agent-contracts";
 import config from "./vite.config";
-import { devHostProxy } from "./dev-proxy";
+import { checkoutServiceName, devHostProxy } from "./dev-proxy";
+
+test("served web binds checkout identity while distributable web binds installed identity", async () => {
+  const read = (command: string) => (config as Function)({ command, mode: "test" });
+  expect((await read("serve")).define["import.meta.env.PE_RUNTIME_SERVICE"]).toBe(
+    JSON.stringify(checkoutServiceName()),
+  );
+  expect((await read("build")).define["import.meta.env.PE_RUNTIME_SERVICE"]).toBe(
+    JSON.stringify("host"),
+  );
+});
 test("the dev proxy forwards every host action-control route", () => {
   // The host mounts POST /actions/<verb> for each control but action.read (GET /actions).
   // w8-revit: /actions/cancel was missing here and the stop control 404'd in dev.

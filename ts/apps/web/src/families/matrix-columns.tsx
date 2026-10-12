@@ -299,7 +299,7 @@ function YesNoCell({
           <StateCell
             {...cellFromTrichotomy(
               cell ?? { proposal: null, staged: null },
-              { value: shown, note: reason, scale: "row" },
+              { value: shown, currentValue: current || "(blank)", note: reason, scale: "row" },
               showFamilyCell,
             )}
           />
@@ -397,7 +397,7 @@ function ProposalCell({
       <StateCell
         {...cellFromTrichotomy(
           cell ?? { proposal: null, staged: null },
-          { value: shown, note, scale: "row" },
+          { value: shown, currentValue: current || "(blank)", note, scale: "row" },
           showFamilyCell,
         )}
         cap={lock ? "locked" : "editable"}

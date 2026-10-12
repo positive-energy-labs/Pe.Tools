@@ -20,7 +20,12 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
-    }
+    },
+    "./context": {
+      "browser": "./src/shared/invocation-context.browser.ts",
+      "default": "./src/shared/invocation-context.ts"
+    },
+    "./server": "./src/server.ts"
   },
   "publishConfig": {
     "access": "public"
@@ -33,8 +38,7 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@mastra/core": "1.61.0",
-    "@mastra/mcp": "1.13.1",
+    "@modelcontextprotocol/sdk": "catalog:",
     "@pe/agent-contracts": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "effect": "4.0.0-beta.92",
@@ -48,5 +52,11 @@
     "bumpp": "^11.1.0",
     "typescript": "^6.0.3",
     "vite-plus": "catalog:"
+  },
+  "imports": {
+    "#invocation-context": {
+      "browser": "./src/shared/invocation-context.browser.ts",
+      "default": "./src/shared/invocation-context.ts"
+    }
   }
 }

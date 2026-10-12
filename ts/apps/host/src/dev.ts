@@ -8,6 +8,9 @@ import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
 import { hostOwnership } from "./host-ownership.ts";
 import { hostProgram } from "./host-program.ts";
 
+if (process.argv.includes("--share"))
+  throw new Error("--share was removed. Use the Share switch on the installed host (/pe/share).");
+
 // Reject foreign spawn plumbing before claiming or evicting any checkout's host.
 if (
   resolve(hostOwnership.sourceRoot ?? "").toLowerCase() !==
@@ -29,7 +32,9 @@ const program = hostProgram(
         Effect.sync(() =>
           spawn(
             process.execPath,
-            [fileURLToPath(new URL("../scripts/dev-web.ts", import.meta.url))],
+            [
+              fileURLToPath(new URL("../scripts/dev-web.ts", import.meta.url)),
+            ],
             {
               cwd: new URL("../", import.meta.url),
               stdio: ["ignore", "inherit", "inherit", "ipc"],

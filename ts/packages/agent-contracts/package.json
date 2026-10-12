@@ -24,6 +24,7 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
+    "@pe/host-contracts": "workspace:*",
     "zod": "4.3.6"
   },
   "devDependencies": {

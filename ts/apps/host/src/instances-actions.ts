@@ -1,11 +1,10 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import {
   actionAdmissionSchema,
   instancesActions,
   instancesRouteState,
-  sdkSessionTargetOf,
+  type SdkSessionSelection,
+  type SdkDocumentRef,
+  canonicalRouteInput,
   transitionPatches,
   type InstancesActionKey,
   type InstancesLaunch,
@@ -18,18 +17,21 @@ import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import {
   docCloseArgv,
+  docListArgv,
+  type DocListResult,
   docOpenArgv,
   opResultArgv,
   sessionHrArgv,
   sessionListArgv,
   sessionStartArgv,
   sessionStopArgv,
-  type AdmissionResult,
   type Diagnostic,
-  type MutationKey,
-  type MutationRequestFile,
-  type MutationSessionExpectation,
+  type OpReceiptResponseResult,
+  type OpReceiptResult,
+  type OpStateResult,
+  type Resolved,
   type SessionListResult,
+  type SessionStartResult,
 } from "@pe/host-contracts/pe-revit-contract";
 import { ActionIncomplete, type ActionJournal } from "./action-journal.ts";
 import { BridgeError } from "./bridge.ts";
@@ -42,8 +44,6 @@ import { actionWorkspace } from "./takeoff-actions.ts";
 export type InstancesActionDependencies = {
   workspace?: RouteWorkspace;
   sdk?: SdkReceiptReader;
-  /** Where the caller-owned `--request-file` for each step id is materialized. */
-  requestDir?: string;
 };
 
 const refuse = (message: string, result?: unknown) =>
@@ -58,67 +58,57 @@ const mutate: SdkReceiptReader = (args) =>
     runPeRevitCli(args).pipe(Effect.provide(NodeServices.layer), Effect.timeout("15 minutes")),
   );
 
-const MUTATION_KEYS: Record<InstancesActionKey, MutationKey> = {
-  "instances.start": "session.start",
-  "instances.open": "doc.open",
-  "instances.restart": "session.hr",
-  "instances.stop": "session.stop",
-  "instances.close": "doc.close",
-};
-
-/** Refusals the SDK issues before admitting anything; every other diagnostic follows a dispatch. */
+/**
+ * Session-verb refusals the CLI raises before it admits or dispatches anything. A session `refused`
+ * without one of these may follow an effect (an unconfirmed kill, a blocked stop), so it stays
+ * unknown. A doc verb's `refused` never ran (ADR 0009 law 3).
+ */
 const NOT_DISPATCHED = new Set([
-  "op.request-file-invalid",
   "op.stale-expectation",
   "op.intent-conflict",
   "op.admission-unavailable",
-  "op.rejected",
+  "op.request-id-unusable",
   "session.bad-invocation",
-  "doc.bad-invocation",
-  // Refused before any effect (SDK beta.164): cold hr would drop documents, the file's Revit year
-  // matches no session, or a background session was asked for a window.
-  "session.hr-would-drop",
   "session.year-mismatch",
   "session.no-sessions-for-year",
-  "doc.revit-year-mismatch",
-  "doc.background-no-window",
 ]);
-/** Said beside a success, never instead of one: the verb ran and its result stands. */
-const ADVISORY = new Set(["doc.file-year-unread"]);
 
-/** Recorded per step: the expectation and the verb argv, with the request file named symbolically. */
-type StepInput = Omit<MutationRequestFile, "requestId"> & { readonly argv: readonly string[] };
-const REQUEST_FILE = "<request-file>";
+/**
+ * Recorded per step: the session expectation and the verb argv, with the request id named
+ * symbolically. The step id IS the SDK request id, minted only when the step is recorded, so a
+ * replay compares the same bytes.
+ */
+type SessionSelection = SdkSessionSelection | { id?: undefined };
+type StepInput = {
+  readonly expectSession?: string;
+  readonly argv: readonly string[];
+};
+const REQUEST_ID = "<request-id>";
 /** The union of every Instances action input; each verb reads only the fields its schema admitted. */
 type InstancesInput = {
   workspaceId: string;
-  session?: { id: string; process: { pid: number; processStartUtc: string; executable: string } };
+  session?: {
+    selection: SdkSessionSelection;
+    process: { pid: number; processStartUtc: string; executable: string };
+  };
   force?: boolean;
-  intent?: string;
-  document?: { session: string; openId: string };
+  unsaved?: "keep" | "discard";
+  document?: SdkDocumentRef;
 };
 type Prepared = {
   staged: import("@pe/agent-contracts").InstancesLaunch | null;
-  session?: { id: string; process: { pid: number; processStartUtc: string; executable: string } };
+  session?: {
+    selection: SdkSessionSelection;
+    process: { pid: number; processStartUtc: string; executable: string };
+  };
 };
-
-const requestFile = (
-  { key, session, document }: StepInput,
-  requestId: string,
-): MutationRequestFile => ({ requestId, key, session, document });
-async function materialize(dir: string, request: MutationRequestFile) {
-  await mkdir(dir, { recursive: true });
-  const path = join(dir, `${request.requestId}.json`);
-  await writeFile(path, JSON.stringify(request), "utf8");
-  return path;
-}
 
 /** The exact recorded session row for this pid/start pair; a mutable session name never selects. */
 async function readRecordedSession(
-  session: { id: string; process: { pid: number; processStartUtc: string } },
+  session: { selection: SdkSessionSelection; process: { pid: number; processStartUtc: string } },
   read: SdkReceiptReader,
-) {
-  const args = sessionListArgv({ id: session.id });
+): Promise<{ selection: SessionSelection; expectSession: string | null }> {
+  const args = sessionListArgv({ pid: session.process.pid });
   const envelope = parsePeRevitEnvelope<SessionListResult>(
     await read(args),
     args,
@@ -128,23 +118,26 @@ async function readRecordedSession(
     (row: SessionListResult["sessions"][number]) =>
       "process" in row &&
       row.process.pid === session.process.pid &&
-      row.process.processStartUtc === session.process.processStartUtc &&
-      "receipt" in row,
+      row.process.processStartUtc === session.process.processStartUtc,
   );
   if (rows.length !== 1 || envelope.diagnostics.length)
     throw refuse(
       "The supplied session incarnation is not the one the SDK records",
       envelope.result,
     );
-  const row = rows[0] as { receipt: { receiptPath: string } };
-  return { receiptPath: row.receipt.receiptPath, process: session.process };
+  const row = rows[0]!;
+  if (row.case === "observed-active")
+    return { selection: { pid: row.process.pid }, expectSession: null };
+  if (!("receipt" in row) || ("id" in session.selection && row.id !== session.selection.id))
+    throw refuse(
+      "The supplied session name does not match the SDK process receipt",
+      envelope.result,
+    );
+  return { selection: session.selection, expectSession: row.receipt.receiptPath };
 }
 
-/** Capture the exact row a named start will inspect, including a dead launch it may retire. */
-async function readStartExpectation(
-  id: string,
-  read: SdkReceiptReader,
-): Promise<MutationSessionExpectation> {
+/** The `--expect-session` a named start passes: `absent`, or the exact row it may retire. */
+async function readStartExpectation(id: string, read: SdkReceiptReader): Promise<string> {
   const args = sessionListArgv({ id });
   const envelope = parsePeRevitEnvelope<SessionListResult>(
     await read(args),
@@ -152,16 +145,46 @@ async function readStartExpectation(
     peRevitLauncher(),
   );
   const rows = (envelope.result as SessionListResult).sessions;
-  if (rows.length === 0) return { case: "absent" };
+  if (rows.length === 0) return "absent";
   if (rows.length !== 1) throw refuse(`The SDK returned more than one session named '${id}'`);
   const row = rows[0]!;
   if (!("receipt" in row))
     throw refuse(`Session '${id}' is observed but not controlled by this checkout`);
-  return {
-    case: "recorded",
-    receiptPath: row.receipt.receiptPath,
-    process: "process" in row ? row.process : null,
-  };
+  return row.receipt.receiptPath;
+}
+
+/** Run one recorded verb under its step id and settle it from the state the SDK derived (law 10). */
+async function dispatch(
+  input: StepInput,
+  requestId: string,
+  read: SdkReceiptReader,
+  keepEnvelope = false,
+) {
+  const args = input.argv.map((arg) => (arg === REQUEST_ID ? requestId : arg));
+  const envelope = parsePeRevitEnvelope(await read(args), args, peRevitLauncher());
+  const state = (envelope.result as { state?: string } | null)?.state;
+  const said =
+    envelope.diagnostics.map((d: Diagnostic) => `${d.code}: ${d.detail}`).join("; ") ||
+    `pe-revit ${state ?? "answered no state"}`;
+  if (envelope.diagnostics.some((d: Diagnostic) => d.code === "doc.missing-links"))
+    throw new BridgeError(said, 409, { dispatched: true, result: envelope });
+  if (!state && (envelope.exitCode === 2 || envelope.exitCode === 3))
+    throw refuse(said, envelope.result);
+  if (state === "ok") return keepEnvelope ? envelope : envelope.result;
+  const doc = args[0] === "doc";
+  if (
+    (state === "refused" || state === "bad-invocation") &&
+    (doc ||
+      (!(envelope.result as { legs?: readonly unknown[] }).legs?.length &&
+        envelope.diagnostics.some((d: Diagnostic) => NOT_DISPATCHED.has(d.code))))
+  )
+    throw refuse(said, envelope.result);
+  if (doc && state === "failed")
+    throw new BridgeError(said, 502, { dispatched: true, result: envelope.result });
+  if (doc && state === "cancelled") throw new BridgeError(said, 499, { result: envelope.result });
+  // timed-out, abandoned, running, transport-lost, or a session verb that did not finish: the
+  // outcome is unknown; recovery reads the durable op receipt.
+  throw new BridgeError(said, 504, { result: envelope.result });
 }
 
 export async function admitInstancesAction(
@@ -172,7 +195,6 @@ export async function admitInstancesAction(
 ) {
   const workspace = deps.workspace ?? actionWorkspace();
   const read = deps.sdk ?? mutate;
-  const requestDir = deps.requestDir ?? join(tmpdir(), "pe-instances-requests");
   const admission = actionAdmissionSchema.parse(raw);
   const key = admission.key as InstancesActionKey;
   const definition = instancesActions[key];
@@ -184,7 +206,9 @@ export async function admitInstancesAction(
   const session = input.session;
   if (
     session
-      ? admission.destination.kind !== "session" || admission.destination.session !== session.id
+      ? admission.destination.kind !== "sdk-session" ||
+        canonicalRouteInput(admission.destination.selection) !==
+          canonicalRouteInput(session.selection)
       : admission.destination.kind !== "host"
   )
     throw refuse("Instances destination must match the explicitly supplied session");
@@ -206,25 +230,99 @@ export async function admitInstancesAction(
         throw refuse("Stage a start first");
       if (
         key === "instances.open" &&
-        (staged?.kind !== "open" || sdkSessionTargetOf(staged.session) !== session?.id)
+        (staged?.kind !== "open" ||
+          canonicalRouteInput(staged.session) !== canonicalRouteInput(session?.selection))
       )
         throw refuse(
           "The staged open belongs to another session; explicitly stage the requested session",
         );
+      if (key === "instances.close") {
+        const document = input.document!;
+        if (
+          !session ||
+          canonicalRouteInput(document.session) !== canonicalRouteInput(session.selection)
+        )
+          throw refuse("SDK document belongs to another session");
+        const argv = docListArgv(document.session);
+        const envelope = parsePeRevitEnvelope<DocListResult, Resolved | null>(
+          await read(argv),
+          argv,
+          peRevitLauncher(),
+        );
+        if (
+          envelope.exitCode !== 0 ||
+          envelope.result.state !== "ok" ||
+          envelope.resolved?.pid !== session.process.pid ||
+          envelope.resolved.processStartUtc !== session.process.processStartUtc ||
+          !envelope.result.documents.some((doc) => doc.openId === document.openId)
+        )
+          throw refuse("The SDK document lifetime is not open in the original process", envelope);
+      }
       return { kind: "instances", staged, session, input: admission.input };
     },
     async (execution) => {
       const { staged, session: incarnation } = execution.prepared as Prepared;
       // The expectation is resolved once, before the step is recorded, so a replay compares the same bytes.
       const prior = execution.recorded("native", key);
-      const expectation = prior
-        ? (prior.input as StepInput).session
-        : incarnation
-          ? { case: "recorded" as const, ...(await readRecordedSession(incarnation, read)) }
-          : key === "instances.start" && staged?.kind === "start" && staged.name
-            ? await readStartExpectation(staged.name, read)
-            : { case: "absent" as const };
-      const id = incarnation?.id;
+      const priorAdoption = execution.recorded("native", `${key}.adopt`);
+      const selected = priorAdoption
+        ? { selection: { pid: incarnation!.process.pid }, expectSession: null }
+        : prior
+          ? {
+              selection: incarnation?.selection ?? {
+                id: staged?.kind === "start" ? staged.name || undefined : undefined,
+              },
+              expectSession: (prior.input as StepInput).expectSession,
+            }
+          : incarnation
+            ? await readRecordedSession(incarnation, read)
+            : {
+                selection: { id: staged?.kind === "start" ? staged.name || undefined : undefined },
+                expectSession:
+                  key === "instances.start" && staged?.kind === "start" && staged.name
+                    ? await readStartExpectation(staged.name, read)
+                    : "absent",
+              };
+      const selection: SessionSelection = selected.selection;
+      let expectSession = selected.expectSession;
+      const requestId = REQUEST_ID;
+      if (priorAdoption || expectSession === null) {
+        const adoptionInput: StepInput = priorAdoption
+          ? (priorAdoption.input as StepInput)
+          : {
+              argv: sessionStartArgv({ ...selection, requestId }),
+            };
+        const adoption = await execution.step("native", `${key}.adopt`, adoptionInput, (id) =>
+          dispatch(adoptionInput, id, read, true),
+        );
+        const envelope = parsePeRevitEnvelope<SessionStartResult, Resolved | null>(
+          JSON.stringify(adoption),
+          adoptionInput.argv,
+          peRevitLauncher(),
+        );
+        const adopted = envelope.result.session;
+        if (
+          !incarnation ||
+          envelope.resolved?.pid !== incarnation.process.pid ||
+          envelope.resolved.processStartUtc !== incarnation.process.processStartUtc ||
+          adopted?.case !== "controlled-active" ||
+          adopted.process.pid !== incarnation.process.pid ||
+          adopted.process.processStartUtc !== incarnation.process.processStartUtc ||
+          adopted.id !== envelope.resolved.id ||
+          envelope.result.id !== adopted.id ||
+          !adopted.receipt?.receiptPath ||
+          adopted.receipt.receiptPath === "absent"
+        )
+          throw new BridgeError(
+            "SDK adoption did not return the original process and a controlled receipt",
+            409,
+            { dispatched: true, result: envelope },
+          );
+        expectSession = adopted.receipt.receiptPath;
+        if (prior && expectSession !== (prior.input as StepInput).expectSession)
+          throw refuse("The recorded mutation does not expect the adopted receipt");
+      }
+      if (!expectSession) throw refuse("The recorded mutation has no session expectation");
       const argv = () => {
         switch (key) {
           case "instances.start":
@@ -232,65 +330,78 @@ export async function admitInstancesAction(
             return sessionStartArgv({
               project: resolveStartProject(hostOwnership.lane, hostOwnership.sourceRoot),
               year: staged.year,
-              id: staged.name || undefined,
-              doc: staged.document,
-              conflictPolicy: "keep",
-              requestFile: REQUEST_FILE,
+              ...selection,
+              quarantine: staged.quarantine,
+              background: staged.posture === "background",
+              requestId,
+              expectSession,
             });
           case "instances.open":
             if (staged?.kind !== "open") throw refuse("Stage an open first");
             return docOpenArgv({
-              path: staged.document,
-              id,
-              conflictPolicy: "keep",
-              requestFile: REQUEST_FILE,
+              source: staged.document,
+              ...selection,
+              links: staged.missingLinks,
+              unsynced: "keep",
+              requestId,
+              expectSession,
+              expectDoc: "absent",
             });
           case "instances.restart":
-            return sessionHrArgv({ id, restart: true, requestFile: REQUEST_FILE });
+            return sessionHrArgv({
+              ...selection,
+              restart: true,
+              requestId,
+              expectSession,
+            });
           case "instances.stop":
             return sessionStopArgv({
-              id,
+              ...selection,
+              unsaved: input.unsaved!,
               force: input.force,
-              requestFile: REQUEST_FILE,
+              requestId,
+              expectSession,
             });
           case "instances.close":
             return docCloseArgv({
-              id,
-              intent: input.intent!,
-              requestFile: REQUEST_FILE,
+              doc: input.document!.openId,
+              ...selection,
+              unsaved: input.unsaved!,
+              requestId,
+              expectSession,
+              expectDoc: input.document!.openId,
             });
         }
       };
-      const stepInput: StepInput = {
-        key: MUTATION_KEYS[key],
-        session: expectation,
-        document:
-          key === "instances.open"
-            ? { case: "absent" }
-            : key === "instances.close"
-              ? {
-                  case: "open",
-                  openId: input.document!.openId,
-                }
-              : null,
-        argv: argv(),
-      };
       // The step id IS the SDK request id: one caller-owned identity from admission to receipt.
-      const result = await execution.step("native", key, stepInput, async (requestId) => {
-        const file = await materialize(requestDir, requestFile(stepInput, requestId));
-        const args = stepInput.argv.map((arg) => (arg === REQUEST_FILE ? file : arg));
-        const envelope = parsePeRevitEnvelope(await read(args), args, peRevitLauncher());
-        const blocking = envelope.diagnostics.find((d: Diagnostic) => NOT_DISPATCHED.has(d.code));
-        if (blocking) throw refuse(`${blocking.code}: ${blocking.detail}`, envelope.result);
-        const failures = envelope.diagnostics.filter((d: Diagnostic) => !ADVISORY.has(d.code));
-        if (failures.length)
-          throw new BridgeError(
-            failures.map((d: Diagnostic) => `${d.code}: ${d.detail}`).join("; "),
-            502,
-            { result: envelope.result },
-          );
-        return envelope.result;
-      });
+      const stepInput: StepInput = { expectSession, argv: argv() };
+      const native = await execution.step("native", key, stepInput, (requestId) =>
+        dispatch(stepInput, requestId, read),
+      );
+      const openStarted = (started: SessionStartResult, document: string, links: string) => {
+        const openInput: StepInput = {
+          expectSession: started.session.receipt.receiptPath,
+          argv: docOpenArgv({
+            source: document,
+            id: started.id,
+            links,
+            unsynced: "keep",
+            requestId,
+            expectSession: started.session.receipt.receiptPath,
+            expectDoc: "absent",
+          }),
+        };
+        return execution.step("native", `${key}.open`, openInput, (requestId) =>
+          dispatch(openInput, requestId, read),
+        );
+      };
+      // A start that stages a document opens it as its own receipted op in the session it just
+      // started: `doc open --start` cannot name the session it would launch.
+      const opened =
+        key === "instances.start" && staged?.kind === "start" && staged.document
+          ? await openStarted(native as SessionStartResult, staged.document, staged.missingLinks)
+          : undefined;
+      const result = opened === undefined ? native : { session: native, document: opened };
       // Proven success consumed the staged launch: retire it (journaled once) so a second press
       // does not launch again. A failure, refusal or unknown outcome threw above and keeps it.
       if ((key === "instances.start" || key === "instances.open") && staged && workspace) {
@@ -337,7 +448,12 @@ async function retireLaunch(workspace: RouteWorkspace, key: WorkKey, consumed: I
   );
 }
 
-/** Settle a lost invocation from the SDK's own admission record under the original request id. */
+type OpRead = OpReceiptResponseResult | OpReceiptResult | OpStateResult;
+
+/**
+ * Settle lost document and supervisor invocations from their durable SDK op receipts.
+ * Reading a receipt never re-dispatches the original request.
+ */
 export const recoverInstancesAction = (
   id: string,
   owner: ActionJournal,
@@ -345,34 +461,79 @@ export const recoverInstancesAction = (
 ) =>
   owner.recover(id, async (step: ActionStep) => {
     const read = deps.sdk ?? mutate;
-    const requestDir = deps.requestDir ?? join(tmpdir(), "pe-instances-requests");
-    const file = await materialize(requestDir, requestFile(step.input as StepInput, step.id));
-    const args = opResultArgv({ requestId: step.id, requestFile: file });
-    const evidence = parsePeRevitEnvelope<AdmissionResult | { state: string; requestId: string }>(
-      await read(args),
-      args,
-      peRevitLauncher(),
-    );
+    const argv = (step.input as StepInput).argv;
+    const supervisor = argv[0] === "session";
+    const args = opResultArgv({ requestId: step.id });
+    const evidence = parsePeRevitEnvelope<OpRead>(await read(args), args, peRevitLauncher());
     const result = evidence.result;
     if (result.requestId !== step.id) return { step, evidence };
     const intent = { id: step.id, key: step.key, kind: step.kind, input: step.input };
-    if (result.state === "completed" && "response" in result && result.response !== null)
-      return { step: { ...intent, state: "succeeded", result: result.response ?? null }, evidence };
-    // `failed` is an SDK refusal before dispatch; `unknown-request` means it never admitted the id.
-    if (result.state === "failed" || result.state === "unknown-request")
+    const answered = "response" in result && result.response != null;
+    const unknownRequest = evidence.diagnostics.some((d) => d.code === "op.unknown-request");
+    let response = answered ? result.response : undefined;
+    let notDispatched = !supervisor || unknownRequest;
+    if (supervisor && !unknownRequest) {
+      const receipt =
+        "receipt" in result
+          ? (result.receipt as { requestId?: string; key?: string; verdict?: string } | null)
+          : null;
+      if (
+        !answered ||
+        receipt?.requestId !== step.id ||
+        receipt.key !== `session.${argv[1]}` ||
+        receipt.verdict !== result.state
+      )
+        return { step, evidence };
+      const terminal = parsePeRevitEnvelope<{ state: string; legs?: readonly unknown[] }>(
+        JSON.stringify(response),
+        argv,
+        peRevitLauncher(),
+      );
+      if (terminal.result?.state !== result.state) return { step, evidence };
+      const legs = terminal.result.legs;
+      notDispatched =
+        Array.isArray(legs) &&
+        legs.length === 0 &&
+        terminal.diagnostics.some((d) => NOT_DISPATCHED.has(d.code));
+      // Adoption needs resolved process evidence on resume; other supervisors return their payload.
+      response = step.key.endsWith(".adopt") ? terminal : terminal.result;
+    }
+    if (result.state === "ok" && answered)
+      return { step: { ...intent, state: "succeeded", result: response ?? null }, evidence };
+    // A document refusal never ran; a supervisor refusal can follow completed effect legs.
+    if (result.state === "refused" && (answered || unknownRequest))
       return {
         step: {
           ...intent,
           state: "failed",
-          // Keep the refusal detail the dispatch already recorded; the SDK record adds only the verdict.
-          error:
-            result.state === "failed"
-              ? `The SDK refused this admitted action${"error" in step && step.error ? `: ${step.error}` : ""}`
-              : "The SDK never admitted this action; nothing was dispatched",
+          error: unknownRequest
+            ? "The SDK never admitted this action; nothing was dispatched"
+            : `The SDK refused this admitted action${"error" in step && step.error ? `: ${step.error}` : ""}`,
           status: 409,
-          notDispatched: true,
+          ...(notDispatched ? { notDispatched: true } : {}),
         },
         evidence,
       };
+    if (result.state === "failed" && answered)
+      return {
+        step: {
+          ...intent,
+          state: "failed",
+          error: "The SDK recorded this action failed",
+          status: 502,
+        },
+        evidence,
+      };
+    if (result.state === "cancelled" && answered)
+      return {
+        step: {
+          ...intent,
+          state: "cancelled",
+          error: "The SDK cancelled this action",
+          status: 499,
+        },
+        evidence,
+      };
+    // running, timed-out, abandoned: the work may still land; it stays unknown.
     return { step, evidence };
   });

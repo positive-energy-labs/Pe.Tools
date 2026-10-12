@@ -187,19 +187,25 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
        * says so out loud (`data-locate` + the cursor rule in `lang.css`); the "2px strip" the
        * critic measured was `--item-pad-x` on read-only cells, not this one.
        */
-      const cell = (facts: StateCellProps) => (
-        <NavStateCell
-          {...cellFromTrichotomy(
-            proposalCell(proposals, overlay === "draft" && unsaved ? draftValue : null),
-            facts,
-            parameterText,
-          )}
-          onLocate={proposals[0] ? () => locate(proposals[0]!) : undefined}
-          transitions={transitionsAt(
-            proposals[0]?.id ?? settingsFieldPointer(["types", typeName, row.name]),
-          )}
-        />
-      );
+      const cell = (facts: StateCellProps) => {
+        const read = cellFromTrichotomy(
+          proposalCell(proposals, overlay === "draft" && unsaved ? draftValue : null),
+          facts,
+          parameterText,
+        );
+        return (
+          <NavStateCell
+            {...read}
+            // Under ⇄ live and ⇄ saved the number drawn is another substrate's, so the fold
+            // stays but the proposed value does not replace it.
+            {...(overlay === "draft" ? {} : { value: facts.value, currentValue: undefined })}
+            onLocate={proposals[0] ? () => locate(proposals[0]!) : undefined}
+            transitions={transitionsAt(
+              proposals[0]?.id ?? settingsFieldPointer(["types", typeName, row.name]),
+            )}
+          />
+        );
+      };
 
       // ── ⇄ LIVE: Revit's number, in the cell it is a reading of ──────────────────────────────
       if (overlay === "live") {
@@ -261,6 +267,13 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
       const displayUnit = world.live?.units?.[row.name];
       return cell({
         value: override ?? "",
+        // What the type holds today, for the tooltip when Pea's proposal is what the cell draws.
+        currentValue:
+          override !== undefined
+            ? override || "(blank)"
+            : authored
+              ? `${authored} (inherited)`
+              : "(blank)",
         placeholder: authored,
         note: `${
           proposals.length > 0

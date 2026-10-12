@@ -6,7 +6,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { CHAT_SEEDS } from "../src/chat/seeds";
 import { manifest as familiesManifest } from "../src/families/manifest";
 import { familyManifest } from "../src/family/manifest";
-import { INSTANCES_SEEDS } from "../src/instances/seeds";
+import { MACHINE_SEEDS, OPEN_SEEDS } from "../src/open/seeds";
 import { PODS_SEEDS } from "../src/route/seeds";
 import { SCHEDULE_SEEDS } from "../src/route/schedules/manifest";
 import { takeoffSeeds } from "../src/takeoff/actions";
@@ -29,11 +29,13 @@ describe("fixture census", () => {
       fixtureKind: "live-route",
     });
     expect(census.nonFixtureLiveRoutes.map(({ route }) => route)).toEqual([
+      "/captures",
       "/data-tables",
       "/ducts",
       "/ops",
       "/parameter-links",
       "/rooms",
+      "/settings",
     ]);
     expect(census.classifiedPrototypeRoutes).toContainEqual({
       route: "/lab",
@@ -52,7 +54,8 @@ describe("fixture census", () => {
       "/chat": CHAT_SEEDS,
       "/families": familiesManifest.seeds,
       "/family": familyManifest().seeds,
-      "/instances": INSTANCES_SEEDS,
+      "/machine": MACHINE_SEEDS,
+      "/open": OPEN_SEEDS,
       "/pods": PODS_SEEDS,
       "/schedules": SCHEDULE_SEEDS,
       "/takeoffs": takeoffSeeds,

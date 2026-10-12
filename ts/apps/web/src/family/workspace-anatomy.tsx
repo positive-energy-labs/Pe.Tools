@@ -16,6 +16,8 @@ export function FamilyWorkspaceAnatomy() {
     setAnatomyCollapsed,
     inspect,
     setInspect,
+    fields,
+    transitionsAt,
   } = useFamilyWorkspace();
   return (
     <Pane
@@ -51,6 +53,8 @@ export function FamilyWorkspaceAnatomy() {
         onFocus={setFocus}
         onInspect={(slug) => setInspect({ kind: "part", slug })}
         inspecting={inspect?.kind === "part" ? inspect.slug : null}
+        fields={fields}
+        transitionsAt={transitionsAt}
       />
     </Pane>
   );

@@ -45,12 +45,25 @@ const RECEIPT: Inspectable = {
   open: { kind: "route", to: "/ops", search: (id) => ({ actionId: id }) },
 };
 
+/** A kept view picture, opened in `/captures` focused on its row. Its id is the blob's sha. */
+const CAPTURE: Inspectable = {
+  label: (id) => `capture ${id.slice(0, 8)}`,
+  open: { kind: "route", to: "/captures", search: (id) => ({ sha: id }) },
+};
+
 /** The kinds every route opens, beside the ones its manifest declares. */
 export const inspectableOf = (
   declared: Readonly<Record<string, Inspectable>> | undefined,
   kind: string,
 ): Inspectable | undefined =>
-  declared?.[kind] ?? (kind === "member" ? MEMBER : kind === "receipt" ? RECEIPT : undefined);
+  declared?.[kind] ??
+  (kind === "member"
+    ? MEMBER
+    : kind === "receipt"
+      ? RECEIPT
+      : kind === "capture"
+        ? CAPTURE
+        : undefined);
 
 /** A capture's receipt: one log row whose label opens the first member it filed. */
 export function noteCaptured(

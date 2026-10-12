@@ -1,3 +1,4 @@
+import { runtimeStreamUrl } from "#/host/runtime";
 /**
  * The read layer. One EventSource, one AtomRegistry, one vocabulary (fable law 5).
  *
@@ -25,19 +26,7 @@ import {
 import * as Atom from "effect/unstable/reactivity/Atom";
 import { useAtomValue } from "@effect/atom-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { computeBridgeSessionId } from "@pe/host-contracts/contracts";
 import type { Custody, Lane } from "@pe/host-contracts/contracts";
-import type {
-  BridgeObservation,
-  ControlledActiveBridgeObservation,
-  Envelope,
-  FleetPhase,
-  PendingBridgeObservation,
-  ProcessIdentity,
-  SessionListResult,
-  SessionObservation,
-  SessionReceipt,
-} from "@pe/host-contracts/pe-revit-contract";
 import type {
   BridgeSessionListEntry,
   HostOpResponse,
@@ -47,7 +36,6 @@ import type {
 } from "@pe/host-contracts/operation-types";
 import { callHostRpc } from "#/host/client.ts";
 import { HOST_READ_WAIT_S } from "#/route/waits";
-import type { HostLane } from "@pe/host-contracts/service-identity";
 import { peUrl, resolveWorkbenchConfig } from "#/workbench/config.ts";
 
 export type { Lane };
@@ -57,8 +45,11 @@ export type { Lane };
 type Frame = (ReadingFrame & { stale?: boolean }) | { kind: "stale"; key: string };
 type Source = Pick<EventSource, "onopen" | "onmessage" | "onerror" | "close">;
 
+/** The one place the web opens an SSE stream: Readings, and a harness thread's tail. */
+export const openEventSource = (url: string) => new EventSource(runtimeStreamUrl(url));
+
 /** One browser connection. This map owns subscriptions and retained evidence, never owner truth. */
-class PeReadings {
+export class PeReadings {
   private readonly entries = new Map<
     string,
     {
@@ -79,7 +70,7 @@ class PeReadings {
 
   constructor(
     private readonly url: () => string,
-    private readonly connect: (url: string) => Source = (url) => new EventSource(url),
+    private readonly connect: (url: string) => Source = openEventSource,
   ) {}
 
   /** Retire this owner's transport. Idempotent, and one-way: no further request is ever issued. */
@@ -173,7 +164,8 @@ class PeReadings {
   }
 
   private open() {
-    if (this.closed || this.entries.size === 0) return;
+    // Prerender and SSR have no window and no EventSource; the client subscribes again on hydration.
+    if (typeof window === "undefined" || this.closed || this.entries.size === 0) return;
     const generation = this.generation;
     const url = new URL(this.url());
     url.searchParams.set(
@@ -387,7 +379,6 @@ export function useHostEvents<T>(enabled: boolean, onEvent: (event: T) => void) 
 
 export interface PeInfo {
   controllerId?: string;
-  resourceId?: string;
   capabilities: { revit?: boolean } & Record<string, unknown>;
   world?: unknown;
   bridgeIsConnected: boolean;
@@ -448,138 +439,6 @@ export function inventoryOf(entries: readonly BridgeSessionListEntry[]): Session
     }));
 }
 
-/** `unattached`: Revit runs and the SDK answers, but the Pe.Tools add-in has not connected to this host. */
-type InventoryPhase = FleetPhase | "failed" | "unattached";
-
-/** One Revit as the sentence speaks about it and /instances tables it. */
-export interface Inventory {
-  /** The pe-revit session id when the SDK knows this Revit, else the bridge session id. */
-  id: string;
-  brokerSessionId?: string | null;
-  custody: Custody;
-  phase: InventoryPhase;
-  detail: string;
-  /** Host/UI lane. The SDK payload source calls `dev` checkouts `checkout`. */
-  lane?: HostLane;
-  pid?: number;
-  /** Live bridge observation, when this Revit holds an open WebSocket to the host. */
-  session?: SessionInventory;
-  /** The SDK's own registry row, when `session list` knows this Revit. */
-  row?: SessionObservation;
-}
-
-type ObservationView = readonly [InventoryPhase, string, ProcessIdentity?];
-
-const assertNever = (value: never): never => {
-  throw new Error(`unhandled session observation: ${JSON.stringify(value)}`);
-};
-
-const ACTIVE_PHASE = {
-  ready: "ready",
-  "unresponsive-endpoint": "unresponsive",
-} satisfies Record<ControlledActiveBridgeObservation["bridge"], InventoryPhase>;
-const PENDING_PHASE = {
-  answering: "booting",
-  "missing-endpoint": "booting",
-} satisfies Record<PendingBridgeObservation["bridge"], InventoryPhase>;
-const OBSERVED_VIEW = {
-  answering: ["ready", "SDK bridge answers for this observed Revit process."],
-  "missing-endpoint": [
-    "unresponsive",
-    "SDK bridge endpoint is missing for this observed Revit process.",
-  ],
-  "unresponsive-endpoint": [
-    "unresponsive",
-    "SDK bridge does not answer for this observed Revit process.",
-  ],
-} satisfies Record<BridgeObservation["bridge"], readonly [InventoryPhase, string]>;
-const RECEIPT_LANE = {
-  checkout: "dev",
-  installed: "installed",
-} satisfies Record<SessionReceipt["payload"], HostLane>;
-
-function projectObservation(row: SessionObservation): ObservationView {
-  switch (row.case) {
-    case "controlled-active":
-      return [ACTIVE_PHASE[row.bridge.bridge], row.detail, row.process];
-    case "controlled-pending":
-      switch (row.attempt.attempt) {
-        case "awaiting-launch":
-          return ["booting", row.detail];
-        case "launched":
-          return [PENDING_PHASE[row.attempt.bridge.bridge], row.detail, row.attempt.process];
-        default:
-          return assertNever(row.attempt);
-      }
-    case "observed-active": {
-      const [phase, detail] = OBSERVED_VIEW[row.bridge.bridge];
-      return [phase, detail, row.process];
-    }
-    case "gone-receipt":
-      return ["gone", row.detail, row.process];
-    case "failed-receipt":
-      switch (row.failure.source) {
-        case "journal":
-          return ["failed", row.detail, row.failure.process];
-        case "receipt":
-          return ["failed", row.detail];
-        default:
-          return assertNever(row.failure);
-      }
-    default:
-      return assertNever(row);
-  }
-}
-
-/** Joins only one exact process incarnation; the SDK census owns every Revit's classification. */
-function inventoryView(
-  rows: readonly (SessionObservation & { brokerSessionId?: string | null })[],
-  sessions: readonly SessionInventory[],
-): Inventory[] {
-  const claimed = new Set<string>();
-  const known: Inventory[] = rows.map((row) => {
-    const [phase, detail, process] = projectObservation(row);
-    const session = process
-      ? sessions.find(
-          (candidate) =>
-            !claimed.has(candidate.sessionId) &&
-            candidate.processId === process.pid &&
-            candidate.processStartUtcUnixMs === Date.parse(process.processStartUtc),
-        )
-      : undefined;
-    if (session) claimed.add(session.sessionId);
-    const observed = row.case === "observed-active";
-    // One meaning for "ready" everywhere: the host bridge holds this Revit. The SDK bridge alone
-    // proves the payload loaded, not that scripts and operations can run (lamp and table agree).
-    const unattached = phase === "ready" && !session;
-    return {
-      phase: unattached ? "unattached" : phase,
-      detail: unattached
-        ? "Revit is running, but the Pe.Tools add-in has not attached to this host: scripts and operations wait until it does."
-        : detail,
-      id: observed ? String(row.process.pid) : row.id,
-      brokerSessionId: row.brokerSessionId,
-      custody: observed ? "observed" : "controlled",
-      lane: observed ? (session?.lane ?? undefined) : RECEIPT_LANE[row.receipt.payload],
-      pid: process?.pid,
-      session,
-      row,
-    } satisfies Inventory;
-  });
-  for (const session of sessions)
-    if (!claimed.has(session.sessionId))
-      known.push({
-        id: session.sessionId,
-        custody: "observed",
-        phase: "ready",
-        detail: "Host bridge is connected, but no exact SDK census row matched.",
-        lane: session.lane ?? undefined,
-        pid: session.processId,
-        session,
-      });
-  return known;
-}
-
 /** The tracked open-document inventory, as the broker publishes it. */
 export const useInventory = (enabled = true) =>
   useReading<{ sessions: BridgeSessionListEntry[] }>(enabled ? { kind: "inventory" } : null);
@@ -612,58 +471,6 @@ export function targetInventory(
     };
   }
   return { kind: "ready", sessions };
-}
-
-/** Every Revit the SDK census knows, joined to the ones the bridge can see. */
-export function useFleet() {
-  const inventory = useInventory();
-  // The SDK's default census is the live set; `--all` (the graveyard) is a census view, not a picker.
-  const census = useReading<Envelope<SessionListResult>>({ kind: "sdk", read: "sessions" });
-  const [brokerIds, setBrokerIds] = useState<ReadonlyMap<string, string>>(new Map());
-  const result = previousOf(census)?.result;
-  const rows = useMemo(() => result?.sessions ?? [], [result]);
-  const rowKey = (row: SessionObservation): string =>
-    row.case === "observed-active" ? String(row.process.pid) : row.id;
-  useEffect(() => {
-    let active = true;
-    void Promise.all(
-      rows.map(async (row): Promise<[string, string]> => {
-        const process = projectObservation(row)[2];
-        if (!process) return [rowKey(row), ""];
-        const id = await computeBridgeSessionId({
-          processId: process.pid,
-          processStartUtcUnixMs: Date.parse(process.processStartUtc),
-        });
-        return [rowKey(row), id ?? ""];
-      }),
-    ).then((pairs) => {
-      if (active) setBrokerIds(new Map(pairs));
-    });
-    return () => {
-      active = false;
-    };
-  }, [rows]);
-  const sessions = useMemo(() => inventoryOf(previousOf(inventory)?.sessions ?? []), [inventory]);
-  return {
-    worlds: inventoryView(
-      rows.map((row) => ({ ...row, brokerSessionId: brokerIds.get(rowKey(row)) ?? null })),
-      sessions,
-    ),
-    sessions,
-    unreadableReceipts: result?.unreadableReceipts ?? [],
-    processReadErrors: result?.processReadErrors ?? [],
-    registryRoot: result?.registryRoot,
-    isLoading: inventory.state === "loading" || census.state === "loading",
-    // Stale = no settled observation, not "a refetch is in flight".
-    stale: inventory.state !== "ready" || census.state !== "ready",
-    error:
-      inventory.state === "failed"
-        ? Error(inventory.message)
-        : census.state === "failed"
-          ? Error(census.message)
-          : null,
-    basis: ["sessions.list", "bridge.sessions.list"],
-  };
 }
 
 /* -- Host RPC: a call, not a subject ------------------------------------------------------ */

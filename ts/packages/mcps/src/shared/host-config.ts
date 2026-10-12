@@ -1,44 +1,84 @@
-import { isAbsolute } from "node:path";
+import { isAbsolute, join } from "node:path";
+import { isSea } from "node:sea";
 import { hostProcessIdentity, scriptingWorkspaceIdentity } from "@pe/host-contracts/contracts";
-import { discoverServiceSync } from "@pe/host-contracts/pe-service";
+import { discoverServiceSync, normalizeSourceRoot } from "@pe/host-contracts/pe-service";
+import { productInstallLayout } from "@pe/host-contracts/contracts";
 import {
   checkoutRootFrom,
   hostServiceName,
   productRoot,
   sourceRootVariable,
+  runtimeOwnerRejection,
+  installedRuntimeRoot,
 } from "@pe/host-contracts/service-identity";
 import { firstNonBlank } from "./cli-values.ts";
 
 /**
- * Identity by location, like git. Precedence: spawn-plumbing env (a supervisor telling the child
- * it just spawned who it is — never user configuration) → cwd walk (an agent working in a worktree
- * automatically addresses that worktree's host) → module path (last resort: where this code lives).
- * Every candidate is a checkout root, the one string every deriver hashes.
+ * Source modules execute for their actual checkout. Spawn plumbing and cwd must agree with it.
+ * Installed SEA executables execute only from their canonical manifest location.
  */
-function resolveLaneAndRoot(): { lane: "dev" | "installed"; sourceRoot: string | null } {
+export function resolveLaneAndRoot(): {
+  lane: "dev" | "installed";
+  sourceRoot: string | null;
+  serviceName: string;
+  installedRoot: string | null;
+} {
   const configured = process.env.PE_LANE?.trim().toLowerCase();
-  const located =
-    process.env[sourceRootVariable]?.trim() ||
-    (checkoutRootFrom(process.cwd()) ?? checkoutRootFrom(import.meta.dirname));
-  const lane =
-    configured === "installed"
-      ? ("installed" as const)
-      : configured === "dev" || located
-        ? ("dev" as const)
-        : ("installed" as const);
-  return { lane, sourceRoot: lane === "dev" ? located : null };
+  if (configured && configured !== "dev" && configured !== "installed")
+    throw Error(`Unknown runtime lane '${configured}'.`);
+  const bundled = isSea();
+  const moduleRoot = bundled ? null : checkoutRootFrom(import.meta.dirname);
+  if (configured === "installed" && moduleRoot)
+    throw Error("Source CLI code cannot claim the installed runtime lane.");
+  const cwdRoot = checkoutRootFrom(process.cwd());
+  const lane: "installed" | "dev" = bundled ? "installed" : "dev";
+  if (configured && configured !== lane)
+    throw Error(
+      `Configured runtime lane '${configured}' does not match the executable lane '${lane}'.`,
+    );
+  if (!bundled && !moduleRoot)
+    throw Error("Source CLI code requires its actual Pe.Tools checkout.");
+  const sourceRoot = lane === "dev" ? moduleRoot : null;
+  if (lane === "installed" && process.env[sourceRootVariable]?.trim())
+    throw Error("An installed CLI cannot claim a checkout source root.");
+  // This shared context runs in both packaged Host and Pea. Infer only a canonical Host entry;
+  // all remaining installed callers must pass the canonical Pea validator (copies still refuse).
+  const installedApp =
+    normalizeSourceRoot(process.execPath) ===
+    normalizeSourceRoot(join(productRoot(), productInstallLayout["VersionedApp:host"]))
+      ? "host"
+      : "pea";
+  const installedRoot = lane === "installed" ? installedRuntimeRoot(installedApp) : null;
+  const baseServiceName = hostServiceName(lane, sourceRoot);
+  const serviceName =
+    process.env[hostProcessIdentity.serviceNameVariable]?.trim() || baseServiceName;
+  if (
+    serviceName !== baseServiceName &&
+    !(lane === "dev" && serviceName === `${baseServiceName}-no-revit`)
+  )
+    throw Error(`Configured host service '${serviceName}' does not belong to this runtime.`);
+  const owner = { lane, sourceRoot, installedRoot, serviceName };
+  if (lane === "dev") {
+    for (const candidate of [process.env[sourceRootVariable]?.trim(), cwdRoot]) {
+      if (!candidate) continue;
+      const rejection = runtimeOwnerRejection(owner, { ...owner, sourceRoot: candidate });
+      if (rejection) throw Error(rejection);
+    }
+  }
+  return owner;
 }
 
 /**
  * A non-URL `--host` value is a lane token: `installed`, `dev` (this location's worktree), or a
- * path inside any checkout — resolved to that worktree's live service file through the same
- * byte-stable name hash the hosts register under. Returns undefined when the token is a URL.
+ * path inside the same checkout. Returns undefined when the token is a URL.
  */
 function laneTokenBaseUrl(token: string): string | null | undefined {
   if (/^https?:\/\//i.test(token)) return undefined;
+  const expected = resolveLaneAndRoot();
   if (token.toLowerCase() === "installed") {
-    const live = discoverServiceSync(productRoot(), hostServiceName("installed", null));
-    return live ? `http://127.0.0.1:${live.port}` : hostProcessIdentity.defaultHostBaseUrl;
+    if (expected.lane !== "installed")
+      throw Error("A checkout CLI cannot execute against the installed host.");
+    return discoverOwnHost(expected);
   }
   const root =
     token.toLowerCase() === "dev"
@@ -53,39 +93,60 @@ function laneTokenBaseUrl(token: string): string | null | undefined {
         : `host token '${token}' is neither a URL, 'installed', 'dev', nor a path inside a Pe.Tools checkout.`,
     );
   }
-  const live = discoverServiceSync(productRoot(), hostServiceName("dev", root));
-  return live ? `http://127.0.0.1:${live.port}` : null;
+  const rejection = runtimeOwnerRejection(expected, {
+    lane: "dev",
+    sourceRoot: root,
+    serviceName: expected.serviceName,
+  });
+  if (rejection) throw Error(rejection);
+  return discoverOwnHost(expected);
+}
+
+function discoverOwnHost(expected: ReturnType<typeof resolveLaneAndRoot>): string | null {
+  const live = discoverServiceSync(productRoot(), expected.serviceName);
+  if (!live) return null;
+  if (
+    expected.lane === "installed" &&
+    (!live.executablePath ||
+      normalizeSourceRoot(live.executablePath) !==
+        normalizeSourceRoot(
+          join(expected.installedRoot!, productInstallLayout["VersionedApp:host"]),
+        ))
+  )
+    throw Error("Installed host receipt has no verified canonical executable location.");
+  const rejection = runtimeOwnerRejection(expected, {
+    ...live,
+    installedRoot: expected.lane === "installed" ? expected.installedRoot : null,
+    serviceName: expected.serviceName,
+  });
+  if (rejection) throw Error(rejection);
+  return `http://127.0.0.1:${live.port}`;
 }
 
 /**
- * Discover this runtime's host base URL without failing: an explicit value or env override wins
- * (URL or lane token: `installed` | `dev` | a worktree path), else this lane/worktree's LIVE
- * service file (pid-checked — a crashed host's leftover file is never routed to), else the
- * installed preferred-port default on the installed lane only. Returns null when the dev host for
- * this worktree is simply not running — the default port belongs to whichever worktree claimed it
- * first, so falling back there would silently cross worktrees.
+ * Discover only this runtime's live service receipt. Explicit selectors must name that same
+ * owner and address. A missing receipt returns null; an unverifiable selector refuses execution.
  */
 export function discoverHostBaseUrl(value?: string): string | null {
   const explicit = firstNonBlank(value, process.env[hostProcessIdentity.hostBaseUrlVariable]);
   if (explicit) {
     const fromToken = laneTokenBaseUrl(explicit);
-    return fromToken === undefined ? explicit : fromToken;
+    if (fromToken !== undefined) return fromToken;
+    const own = discoverOwnHost(resolveLaneAndRoot());
+    if (!own || explicit.replace(/\/+$/, "") !== own)
+      throw Error(`Host URL '${explicit}' is not this runtime's verified service address.`);
+    return own;
   }
-  const { lane, sourceRoot } = resolveLaneAndRoot();
-  const live = discoverServiceSync(productRoot(), hostServiceName(lane, sourceRoot));
-  if (live) return `http://127.0.0.1:${live.port}`;
-  return lane === "installed" ? hostProcessIdentity.defaultHostBaseUrl : null;
+  return discoverOwnHost(resolveLaneAndRoot());
 }
 
 /** Strict form for call time: like {@link discoverHostBaseUrl}, but a missing dev host is an error. */
 export function resolveHostBaseUrl(value?: string): string {
   const discovered = discoverHostBaseUrl(value);
   if (discovered) return discovered;
-  const { sourceRoot } = resolveLaneAndRoot();
+  const { sourceRoot, lane } = resolveLaneAndRoot();
   throw new Error(
-    `No running dev host for this worktree${sourceRoot ? ` (${sourceRoot})` : ""}. ` +
-      `Start it with \`vp run @pe/host#dev\`, or pass an explicit host base URL or lane token ` +
-      `(--host <url | installed | dev | worktree-path> / ${hostProcessIdentity.hostBaseUrlVariable}).`,
+    `No running ${lane} host for this runtime${sourceRoot ? ` (${sourceRoot})` : ""}. Start its matching host before execution.`,
   );
 }
 

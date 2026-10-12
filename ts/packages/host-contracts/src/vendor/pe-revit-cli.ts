@@ -1,4 +1,4 @@
-// SDK-owned copy-in client. The generated contract defines the eight-field envelope.
+// SDK-owned copy-in client. The generated contract defines the nine-field envelope.
 // Process success is not a verdict; validation rejects empty, non-JSON, and non-envelope output.
 
 import { existsSync } from "node:fs";
@@ -17,7 +17,7 @@ export interface PeRevitLaunch {
 
 /** Everything the launch chain needs, passed in by the consumer (no product imports here). */
 export interface PeRevitLaunchInputs {
-  /** Host lane: "dev" routes to the repo-local tool, anything else uses the installed shim chain. */
+  /** Host lane: "dev" routes to the repo-local tool; "installed" uses the installed shim chain. */
   readonly lane: string;
   /** Dev-lane working directory: the dir holding the dotnet-tools manifest (.config/dotnet-tools.json)
    * and product.payloads.json. Required when lane === "dev"; ignored otherwise. */
@@ -32,19 +32,21 @@ export interface PeRevitLaunchInputs {
  * the host process started, so this is never memoized.
  *
  * The `override`, `localAppData`, and `fileExists` parameters are injectable for tests; production
- * callers pass none and get process.env.PE_REVIT_CMD / process.env.LOCALAPPDATA / real fs.
+ * callers pass none and get process.env.LOCALAPPDATA / real fs. Executable overrides are refused.
  */
 export function peRevitLaunch(
   inputs: PeRevitLaunchInputs,
-  override: string | undefined = process.env.PE_REVIT_CMD,
+  override: string | undefined = undefined,
   localAppData: string | undefined = process.env.LOCALAPPDATA,
   fileExists: (path: string) => boolean = existsSync,
 ): PeRevitLaunch {
-  if (override?.trim()) return { cmd: override.trim(), args: [] };
+  if (inputs.lane !== "dev" && inputs.lane !== "installed")
+    throw new Error(`Unknown pe-revit execution lane: ${inputs.lane}`);
+  if (override?.trim()) throw new Error("pe-revit executable overrides cross the execution boundary and are refused.");
   if (inputs.lane === "dev") {
     if (!inputs.devWorkingDirectory)
       throw new Error(
-        "Dev-lane pe-revit launch requires devWorkingDirectory (the dotnet tool-manifest root).",
+        "Checkout pe-revit launch requires devWorkingDirectory (the dotnet tool-manifest root).",
       );
     return {
       cmd: "dotnet",
@@ -55,14 +57,17 @@ export function peRevitLaunch(
       cwd: inputs.devWorkingDirectory,
     };
   }
+  // The installed CLI is the shim apphost the MSI lays (and `dev link` deploys): run it directly.
+  // There is no `.cmd` shim since the native MSI; looking for one fell through to `dotnet pe-revit`,
+  // which no product machine has, so every installed-host SDK reading failed.
   const installedShim = join(
     installRoot(inputs.vendorName, inputs.productName, localAppData),
     "shims",
-    "pe-revit.cmd",
+    "pe-revit.exe",
   );
-  return fileExists(installedShim)
-    ? { cmd: "cmd", args: ["/c", installedShim] }
-    : { cmd: "dotnet", args: ["pe-revit"] };
+  if (!fileExists(installedShim))
+    throw new Error(`Installed pe-revit shim is missing: ${installedShim}`);
+  return { cmd: installedShim, args: ["--installed"] };
 }
 
 /** Product root under `%LOCALAPPDATA%\<vendor>\<product>` (install receipts, shims, logs). */
@@ -110,7 +115,7 @@ export function validatePeRevitEnvelope(
   return stdout;
 }
 
-/** Structural type guard for the envelope's eight required top-level fields. */
+/** Structural type guard for the envelope's nine required top-level fields. */
 export function isPeRevitEnvelope(value: unknown): value is PeRevitEnvelope {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
@@ -122,7 +127,8 @@ export function isPeRevitEnvelope(value: unknown): value is PeRevitEnvelope {
     typeof v.command === "object" && v.command !== null &&
     Array.isArray(v.nextSteps) &&
     typeof v.guide === "string" &&
-    Array.isArray(v.related)
+    Array.isArray(v.related) &&
+    typeof v.exitCode === "number" && Number.isInteger(v.exitCode) && v.exitCode >= 0 && v.exitCode <= 4
   );
 }
 

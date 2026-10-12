@@ -78,7 +78,6 @@ function HostNode({ host }: { host: Record<string, unknown> }) {
   const connected = host.bridgeIsConnected === true;
   const lane = asLane(host.lane);
   const exePath = asString(host.executablePath);
-  const agent = asRecord(host.agentRuntime);
   const disconnectReason = asString(host.disconnectReason);
   return (
     <div className="flex min-w-0 flex-col gap-1.5 px-3 py-2.5">
@@ -101,14 +100,6 @@ function HostNode({ host }: { host: Record<string, unknown> }) {
         >
           bridge {connected ? "connected" : "disconnected"}
         </FactChip>
-        {agent && (
-          <FactChip
-            tone={agent.available === true ? "meta" : "caution"}
-            title="in-process agent runtime availability"
-          >
-            agent runtime {agent.available === true ? "up" : "down"}
-          </FactChip>
-        )}
       </div>
       {disconnectReason && (
         <span className="" style={{ color: token("caution") }}>
@@ -152,13 +143,7 @@ function SessionNode({
         <span className="min-w-0 truncate">{text(session.sessionId)}</span>
         {lane ? <DeployBadge lane={lane} /> : null}
         {custody && (
-          <FactChip
-            title={
-              custody === "controlled"
-                ? "pe-revit holds this session's registry receipt and owns its lifecycle"
-                : "pe-revit holds no receipt for this session; it can read status and documents only"
-            }
-          >
+          <FactChip title={"SDK custody disclosure; the SDK decides adoption and refusal"}>
             {custody}
           </FactChip>
         )}

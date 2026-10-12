@@ -12,7 +12,7 @@ import {
   type RouteStatePatch,
 } from "@pe/agent-contracts";
 import { changedInRevit, previousOf, useHostStatus } from "#/readings";
-import { refuse, useRoute, type EntitySearch } from "#/route";
+import { refuse, useRoute } from "#/route";
 import { KeysNode, manifestChords, useScopeKeys } from "#/route/keys";
 import { EntityRouteView } from "#/route/entity";
 import { ActionFlag } from "#/route/situation-verbs";
@@ -44,7 +44,6 @@ export function LiveScheduleGridWorkspace({
   framed,
   target: chosen = null,
   thread,
-  entry,
   url = true,
 }: {
   workspaceId?: string;
@@ -55,8 +54,6 @@ export function LiveScheduleGridWorkspace({
   target?: string | null;
   /** The thread whose head is the target store. */
   thread?: string;
-  /** The route's URL page state (stage, pod, path), read once at mount. */
-  entry?: EntitySearch;
   /** False in a chat pane, which does not own the URL. */
   url?: boolean;
 }) {
@@ -65,10 +62,8 @@ export function LiveScheduleGridWorkspace({
   const [pods, refreshPods] = usePodList(!demo);
   const handle = useRoute(manifest, {
     provided: { pods },
-    page: {
-      ...(workspaceId === undefined ? {} : { workspaceId }),
-      ...Object.fromEntries(Object.entries(entry ?? {}).filter(([, value]) => value)),
-    },
+    page: workspaceId === undefined ? {} : { workspaceId },
+    url,
     target: chosen,
     thread,
     work: (page, target) => (target ? page.workspaceId || undefined : undefined),

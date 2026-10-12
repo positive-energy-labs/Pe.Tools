@@ -30,6 +30,7 @@ events) uses, so one PostHog project carries product usage AND install-failure d
 | `ribbon_click` | AdWindows `ItemExecuted`, filtered to `Pe.App.Commands` | carries `doc_title`; retires as buttons migrate into Tasks |
 | `palette_action` | the Do palette's tab actions (`CmdPltCommands`) | tab=commands\|tasks\|scripts, item id, ok; the funnel ribbon buttons migrate into |
 | `$exception` | Serilog Error/Fatal sink (Revit) | PostHog error tracking |
+| `ui_feedback` | web feedback picker → host `POST /pe/feedback` | user note on one picked element: comment, url, selector, component + stack names, html, rect, cropped WebP `picture` data URL (≤256KB, else `picture_error`). Awaited: the popover keeps the note until PostHog accepts |
 
 Payloads are size-bounded at 256KB/side with `*_truncated: true` + byte size — truncation is
 itself a tuning signal, not silent loss.

@@ -1,5 +1,6 @@
+import { withInvocationContext } from "../src/shared/invocation-context.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { peDo, peRead, configurePeaProductToolContext } from "../src/pea/capability-tools.ts";
+import { peDo, peRead } from "../src/pea/capability-tools.ts";
 import { buildCapabilities } from "../src/pea/capabilities.ts";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 import { bodyText } from "./body-text.ts";
@@ -29,7 +30,6 @@ const receipt = (admission: Record<string, unknown>) => {
 };
 
 function host(prior?: Record<string, unknown>) {
-  configurePeaProductToolContext({ hostBaseUrl: "http://admission.test" });
   const posts: Record<string, unknown>[] = [];
   const reads: string[] = [];
   vi.stubGlobal("fetch", async (input: Request | string | URL, init?: RequestInit) => {
@@ -49,7 +49,7 @@ function host(prior?: Record<string, unknown>) {
         sessions: [],
         capabilities: buildCapabilities({ ops: operations, routes: [], pods: null, skills: [] }),
       });
-    if (url.pathname === "/ops") return Response.json({ operations });
+    if (url.pathname === "/ops") return Response.json({ operations, bridgeSessionId: "A" });
     if (url.pathname === "/call") {
       const body = JSON.parse(await bodyText(init));
       if (body.key === "bridge.sessions.list")
@@ -72,13 +72,14 @@ function host(prior?: Record<string, unknown>) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  configurePeaProductToolContext({});
 });
 
 const call = (tool: typeof peDo | typeof peRead, input: Record<string, unknown>, id = "attempt") =>
-  tool.execute!(
-    { timeoutSeconds: 30, ...input } as never,
-    { agent: { toolCallId: id } } as never,
+  withInvocationContext({ hostBaseUrl: "http://admission.test" }, () =>
+    tool.execute!(
+      { timeoutSeconds: 30, ...input } as never,
+      { agent: { toolCallId: id } } as never,
+    ),
   ) as Promise<Record<string, unknown>>;
 
 test("pe_do admits native operations and workflows with exact identity, actor, target and bases", async () => {
@@ -87,7 +88,9 @@ test("pe_do admits native operations and workflows with exact identity, actor, t
     await call(peDo, { key: "op:scripting.execute", target, input: { scriptContent: "x" } }),
   ).toMatchObject({ ok: true });
   for (const key of ["scripting.workspace.bootstrap", "pod.import", "pod.export"])
-    expect(await call(peDo, { key: `op:${key}`, target: "A" }, key)).toMatchObject({ ok: true });
+    expect(await call(peDo, { key: `op:${key}`, target: { id: "A" } }, key)).toMatchObject({
+      ok: true,
+    });
   const bases = { captureId: "c".repeat(64) };
   expect(
     await call(peDo, {

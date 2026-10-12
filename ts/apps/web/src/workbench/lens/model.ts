@@ -4,12 +4,15 @@ import { useCacheView } from "../world";
 import { useWorkbench } from "../provider";
 import { useCurrentThreadView } from "../thread-view";
 import { selectBreakdown, selectMessages } from "../chat-state";
-import { scrollTopForIntent, turnAtFocalPoint } from "../model";
+import { intentAt, scrollTopForIntent } from "../model";
 import type { Geom } from "./scale";
 import { FOCAL, HEAD_H, railLayout, type RailLayout } from "./scale";
 import { buildTraceCells, toMoments } from "./context-strip";
 import type { Mode } from "../depth";
 import type { ChatState } from "../chat-state";
+
+/** Within this many px of the bottom, the view counts as at the bottom and follows. */
+const FOLLOW_SLACK = 24;
 
 export function useLensModel({
   state,
@@ -80,9 +83,11 @@ export function useLensModel({
   const intent = useCallback(() => view.registry.get(view.atoms.lensIntent), [view]);
   const setIntent = view.actions.setLensIntent;
 
-  // The opening position is placed ONCE — the URL's turn, else the tail. After that the scroller
-  // is the user's: nothing here ever moves it again on its own (no tail-follow, F-J1).
+  // The opening position is placed ONCE — the URL's turn, else the tail. After that the view
+  // follows the newest event only while the user sits at the bottom; a scroll up stops it, a scroll
+  // back down (or jump-to-tail) resumes it. This overrules F-J1's no-follow (drive, 2026-10-01).
   const landedRef = useRef(false);
+  const followRef = useRef(false);
 
   const [, bumpMeasure] = useReducer((tick: number) => tick + 1, 0);
 
@@ -157,6 +162,8 @@ export function useLensModel({
     if (!scroller || !frame || !strip) return;
 
     const detailKeys = new Set(traceCells.map((cell) => cell.key));
+    const atBottom = () =>
+      scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < FOLLOW_SLACK;
 
     let geom: Geom[] = [];
     // Doc y → rail y (`railLayout`): the thread fits the rail like a scrollbar; nothing slides.
@@ -212,14 +219,12 @@ export function useLensModel({
       if (csFocalRef.current) csFocalRef.current.style.top = `${map.at(s + fy)}px`;
       if (caretRef.current) caretRef.current.style.top = `${map.at(s + fy)}px`;
 
-      // The intent tracks the turn on the focal axis (what a reload reopens). Not before the
-      // opening position has landed: a scroll before that is not the user's.
+      // The intent is what a reload reopens: the tail while at the bottom, else the focal turn.
+      // Not before the opening position has landed: a scroll before that is not the user's.
       if (landedRef.current) {
-        const current = intent();
         const metrics = { scrollTop: s, scrollHeight: scroller.scrollHeight, clientHeight: V };
-        const turn = turnAtFocalPoint(geom, metrics, FOCAL);
-        if (turn !== undefined && (current.kind !== "turn" || turn !== current.turn))
-          setIntent({ kind: "turn", turn });
+        const next = intentAt(geom, metrics, FOCAL, FOLLOW_SLACK);
+        if (next) setIntent(next);
       }
 
       // which stub sits on the focal axis?
@@ -312,7 +317,7 @@ export function useLensModel({
         clientHeight: scroller.clientHeight,
       };
       // The opening position, placed ONCE. A later re-measure (streaming text, an image, a tool
-      // body) never moves the scroller again: auto-scroll-to-bottom is gone.
+      // body) moves the scroller only to keep a following view at the bottom.
       const current = intent();
       if (!landedRef.current && geom.length > 0) {
         if (current.kind === "tail") {
@@ -326,6 +331,10 @@ export function useLensModel({
           scroller.scrollTop = scrollTopForIntent({ kind: "tail" }, geom, metrics, FOCAL);
           landedRef.current = true;
         }
+        // A short thread never scrolls, so the landing decides follow, not a scroll event.
+        followRef.current = landedRef.current && atBottom();
+      } else if (landedRef.current && followRef.current) {
+        scroller.scrollTop = scrollTopForIntent({ kind: "tail" }, geom, metrics, FOCAL);
       }
       sync();
     };
@@ -351,8 +360,11 @@ export function useLensModel({
     const ro = new ResizeObserver(measure);
     ro.observe(scroller);
     if (chatRef.current) ro.observe(chatRef.current);
-    // The scroller is read, never written: a scroll only re-draws the dial.
-    const onScroll = () => schedule();
+    // A scroll re-draws the dial and decides follow: at the bottom (within a line) follows.
+    const onScroll = () => {
+      followRef.current = atBottom();
+      schedule();
+    };
     scroller.addEventListener("scroll", onScroll, { passive: true });
 
     const chat = chatRef.current;

@@ -1,19 +1,15 @@
 /**
  * THE SHELL — the one route chrome: the chord bindings, and a head for a route that has not been
- * cut over to a Situation yet (name, host lamp, verb row). The Situation (`situation.tsx`) is the
- * one head; the shell draws none of its own when a route hands one in.
+ * cut over to a Situation yet (name, verb row). The Situation (`situation.tsx`) is the one head;
+ * the shell draws none of its own when a route hands one in.
  *
- * The lamp is one `host-status` Reading at 5s (ruling Q5) and the route gate reads the same value.
- * Installer/update UI is NOT here — it moved to `routes/__root.tsx` (ruling Q3).
+ * No connected-or-not lamp: those states left product chrome (host ledger 2026-10-09). Machine
+ * state, update included, is the version chip's drawer (`machine/drawer.tsx`).
  */
 import { useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { FactChip } from "#/components/lang/chip";
 import { ThemeToggle } from "#/components/lang/theme-toggle";
-import { StateDot } from "#/components/master-table/cells";
-import { useHostStatus } from "#/readings";
 
 import { RouteHelpButton } from "./help";
 import { HostedChrome } from "./hosted-chrome";
@@ -21,99 +17,6 @@ import { KeysNode, manifestChords } from "./keys";
 import type { RouteManifest } from "./manifest";
 import { SituationAction } from "./situation-verbs";
 import { useRoute, type RouteHandle } from "./use-route";
-
-/* ── The lamp ──────────────────────────────────────────────────────────────── */
-
-export interface Lamp {
-  tone: "done" | "alarm" | "mute" | "ink";
-  word: string;
-  says: string;
-  checked: string | null;
-}
-
-/**
- * `/host/status` → `bridgeIsConnected`. One `host-status` Reading, polled by the HOST at 5s: the
- * lamp cannot sit green after Revit closed, and every capability gate reads the same observation.
- */
-export function useHostLamp(enabled = true): Lamp {
-  const info = useHostStatus(enabled);
-  if (!enabled)
-    return {
-      tone: "mute",
-      word: "offline",
-      says: "no host contacted",
-      checked: null,
-    };
-  if (info.state === "failed")
-    return {
-      tone: "alarm",
-      word: "unreachable",
-      says: `the host did not answer /host/status — ${info.message}`,
-      checked: null,
-    };
-  if (info.state === "absent")
-    return {
-      tone: "mute",
-      word: "unknown",
-      says: "asking the host for its capabilities",
-      checked: null,
-    };
-  if (info.state === "loading")
-    return {
-      tone: "mute",
-      word: "checking",
-      says: "waiting for a current host status",
-      checked: null,
-    };
-  if (info.state === "stale")
-    return {
-      tone: "alarm",
-      word: "stale",
-      says: "the last host status is no longer current",
-      checked: null,
-    };
-  const seen = info.observation;
-  if (!seen.capabilities.revit)
-    return {
-      tone: "ink",
-      word: "no revit",
-      says: "the host answers, but it reports no Revit capability — nothing is attached",
-      checked: null,
-    };
-  if (!seen.bridgeIsConnected)
-    return {
-      tone: "ink",
-      word: "Revit not attached",
-      says: "the host answers, but no running Revit has attached its Pe.Tools add-in; scripts and operations wait until one does",
-      checked: null,
-    };
-  return {
-    tone: "done",
-    word: "Revit attached",
-    says: `a Revit holds an open connection to host ${seen.controllerId}; scripts and operations can run`,
-    checked: null,
-  };
-}
-
-function HostLamp({ live = true }: { live?: boolean }) {
-  const lamp = useHostLamp(live);
-  return (
-    <ArtifactFrame>
-      <span className="flex items-center gap-1.5 px-1">
-        <FactChip title={lamp.says}>
-          <span className="flex items-center gap-1.5">
-            <StateDot tone={lamp.tone} />
-            <span>
-              host · {lamp.word}
-              {lamp.checked ? ` · ${lamp.checked}` : ""}
-            </span>
-          </span>
-        </FactChip>
-        <ThemeToggle />
-      </span>
-    </ArtifactFrame>
-  );
-}
 
 /* ── The verb row ─────────────────────────────────────────────────────────── */
 
@@ -153,7 +56,6 @@ export interface ShellProps<W, R extends string, P, A extends string> {
   head?: ReactNode;
   /** A Situation owns the whole head row (name, chain lamp, verbs); the shell draws none of it. */
   situation?: ReactNode;
-  live?: boolean;
   children?: ReactNode;
 }
 
@@ -226,7 +128,6 @@ function BaselineShell<W, R extends string, P, A extends string>({
   aside,
   head,
   situation,
-  live,
   children,
 }: ShellProps<W, R, P, A>) {
   const chrome = useContext(HostedChrome);
@@ -247,7 +148,7 @@ function BaselineShell<W, R extends string, P, A extends string>({
               <span className="flex shrink-0 items-center gap-3">
                 {aside}
                 <RouteHelpButton name={manifest.name} docs={manifest.docs} />
-                <HostLamp live={live} />
+                <ThemeToggle />
                 {chrome}
               </span>
             </div>

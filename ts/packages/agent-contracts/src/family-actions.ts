@@ -1,6 +1,6 @@
 import type { ActionDefinition } from "./semantic-actions.ts";
 import { z } from "zod";
-import { specDocSchema, familyDocImageSchema } from "./family.ts";
+import { specDocSchema } from "./family.ts";
 import { documentRefSchema } from "./target.ts";
 import { workKeySchema } from "./route-state.ts";
 import { podDraftSourceSchema, podMemberSchema, podMemberSourceSchema } from "./settings.ts";
@@ -20,7 +20,7 @@ export const familyCaptureSchema = z.object({
     z.object({ kind: z.literal("parameter-links"), value: parameterLinksReadingSchema }),
     z.object({
       kind: z.literal("spec"),
-      value: specDocSchema.extend({ images: z.array(familyDocImageSchema) }),
+      value: specDocSchema,
     }),
   ]),
 });
@@ -150,13 +150,6 @@ export const familyReads = {
       /** A proposal evaluation is a labelled preview; only the staged profile can arm apply. */
       subject: z.enum(["staged", "proposal"]).default("staged"),
     }),
-  },
-  "family.parse-spec": {
-    says: "Read parsed spec blocks and image citations into a durable immutable reading.",
-    dirties: [],
-    needs: "nothing",
-    actor: "any",
-    input: z.object({ url: z.string().url() }),
   },
 } as const satisfies Record<string, ActionDefinition>;
 export type FamilyActionKey = keyof typeof familyActions;

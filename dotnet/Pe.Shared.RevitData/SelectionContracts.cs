@@ -158,3 +158,27 @@ public record RevitShowElementsData(
     string ViewName,
     string Note
 );
+
+/// <summary>Request for revit.context.lens: box a 3D view around elements so a window or a capture can look at them.</summary>
+/// <param name="ElementIds">Model element ids to box, from any handle-returning op.</param>
+/// <param name="Name">The 3D view's name; made when missing, refreshed when present. Default "Pe lens".</param>
+/// <param name="PaddingFeet">Room around the elements' union box, in feet. Default 4.</param>
+public record RevitLensRequest(
+    List<long> ElementIds,
+    string? Name = null,
+    double? PaddingFeet = null
+);
+
+/// <summary>What revit.context.lens made or refreshed.</summary>
+/// <param name="ViewId">The lens view's id, for revit.context.show-elements or revit.context.view-image.</param>
+/// <param name="ViewName">That view's name.</param>
+/// <param name="Created">True when the view was made by this call; false when an existing one was refreshed.</param>
+/// <param name="Boxed">How many of the elements had geometry and sit inside the box.</param>
+/// <param name="Note">One line on what happened.</param>
+public record RevitLensData(
+    long ViewId,
+    string ViewName,
+    bool Created,
+    int Boxed,
+    string Note
+);

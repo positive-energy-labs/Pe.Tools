@@ -199,8 +199,17 @@ public static class FamilyModelValidator {
             var path = $"$.connectors.{slug}";
             Plane(c.On, $"{path}.on", planes, d);
             if (c.At.Count != 2) d.Add(new(FamilyModelDiagnosticCodes.CenterTwoPlanes, $"{path}.at", "Two positioning planes that cross on the connector plane."));
-            foreach (var (p, i) in c.At.Select((p, i) => (p, i))) Plane(p, $"{path}.at[{i}]", planes, d);
-            if (c.At.Count == 2 && (Parallel(normals, c.At[0], c.At[1]) || Parallel(normals, c.At[0], c.On) || Parallel(normals, c.At[1], c.On)))
+            foreach (var (p, i) in c.At.Select((p, i) => (p, i))) {
+                if (ConnectorAt.IsMidway(p) && !ConnectorAt.TryMidway(p, out _, out _)) {
+                    d.Add(new(FamilyModelDiagnosticCodes.UnknownReference, $"{path}.at[{i}]", $"'{p}' is not 'midway:A|B' with two declared planes."));
+                    continue;
+                }
+                foreach (var q in ConnectorAt.Planes(p)) Plane(q, $"{path}.at[{i}]", planes, d);
+                if (ConnectorAt.TryMidway(p, out var ma, out var mb) && normals.ContainsKey(ma) && normals.ContainsKey(mb) && !Parallel(normals, ma, mb))
+                    d.Add(new(FamilyModelDiagnosticCodes.CenterParallel, $"{path}.at[{i}]", $"'{p}': the two midway planes must be parallel."));
+            }
+            var atAxes = c.At.Select(entry => ConnectorAt.Planes(entry)[0]).ToList();
+            if (c.At.Count == 2 && (Parallel(normals, atAxes[0], atAxes[1]) || Parallel(normals, atAxes[0], c.On) || Parallel(normals, atAxes[1], c.On)))
                 d.Add(new(FamilyModelDiagnosticCodes.CenterParallel, $"{path}.at", "on and the two at planes must be mutually crossing to fix one point."));
             if (!positions.Add($"{c.Domain}|{c.On}|{string.Join(",", c.At.OrderBy(s => s, StringComparer.Ordinal))}"))
                 d.Add(new(FamilyModelDiagnosticCodes.ConnectorPositionDuplicate, path, "Two connectors of one domain at one position are coincident; capture cannot tell them apart."));

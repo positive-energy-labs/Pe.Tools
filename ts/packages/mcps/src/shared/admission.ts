@@ -19,6 +19,7 @@ import {
   type ActionBases,
   type ExecutionTarget,
   type SemanticActionKey,
+  type SdkSessionSelection,
 } from "@pe/agent-contracts";
 import { isTsOnlyOperationKey, tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 import { HostRpcCaller } from "./host-rpc-caller.ts";
@@ -35,6 +36,7 @@ export interface AdmissionContext {
   hostBaseUrl: string;
   /** Explicit session selector; omitted means "the session the catalog answered from". */
   bridgeSessionId?: string;
+  session?: SdkSessionSelection;
   openDocumentId?: string;
   /** Required for mutation; never inferred from the transport. */
   actor?: "human" | "agent";
@@ -106,10 +108,9 @@ export async function readCapabilityIntent(
   // The host answers op.cancel itself, outside every gate (apps/host/src/bridge.ts cancelRequest).
   // The session catalog is served on the Revit thread the op being cancelled holds (w8-revit 4c).
   if (key === CANCEL_KEY) return { kind: "operation", needs: "nothing", mutates: false };
-  const prior =
-    context.actionId && !context.bridgeSessionId
-      ? await readAction(context.actionId, context.hostBaseUrl)
-      : undefined;
+  const prior = context.actionId
+    ? await readAction(context.actionId, context.hostBaseUrl)
+    : undefined;
   if (prior)
     return { kind: prior.kind, needs: "", mutates: true, destination: prior.destination, prior };
   const local = tsOnlyOperationCatalog.find((row) => row.key === key);
@@ -126,8 +127,8 @@ export async function readCapabilityIntent(
       needs: scheduleReads[key as ScheduleReadKey].needs,
       mutates: false,
     };
-  const session = await requireSession(key, context);
-  const catalog = await caller({ ...context, bridgeSessionId: session }).catalog();
+  const catalog = await caller(context).catalog();
+  const session = catalog.bridgeSessionId;
   const definition = catalog.ops.find((row) => row.key === key);
   if (definition)
     return {
@@ -149,34 +150,22 @@ const caller = (context: AdmissionContext) =>
   new HostRpcCaller({
     hostBaseUrl: context.hostBaseUrl,
     bridgeSessionId: context.bridgeSessionId,
+    session: context.session,
     openDocumentId: context.openDocumentId,
     timeoutMs: context.timeoutMs,
   });
 
-/**
- * The named session, or the one this host is connected to. A transport failure throws with its
- * URL; only a host that answers "no session" reads as none.
- */
-async function resolveSession(context: AdmissionContext): Promise<string | undefined> {
-  if (context.bridgeSessionId) return context.bridgeSessionId;
-  const summary = await caller(context)
-    .call("bridge.sessions.summary")
-    .catch((error: unknown) => {
-      throw new Error(
-        `The connected session could not be read from ${context.hostBaseUrl}/call: ${error instanceof Error ? error.message : String(error)}. Name it with --bridge-session-id.`,
-        { cause: error },
-      );
-    });
-  return summary.sessionId ?? undefined;
-}
-
+/** Only the host's SDK-resolved catalog can supply an implicit attachment. */
 async function requireSession(key: string, context: AdmissionContext): Promise<string> {
-  const session = await resolveSession(context);
-  if (session) return session;
-  throw new Error(
-    `'${key}' runs in a Revit session and none is connected to ${context.hostBaseUrl}. Start or attach one, or name it with --bridge-session-id (\`pea host status\` prints the connected session).`,
-  );
+  const catalog = await caller(context).catalog();
+  if (catalog.bridgeSessionId) return catalog.bridgeSessionId;
+  throw Error(catalog.bridgeCatalogError ?? `SDK resolution supplied no attachment for '${key}'`);
 }
+const exactDocument = (context: AdmissionContext) => {
+  if (!context.bridgeSessionId || !context.openDocumentId)
+    throw Error("An exact product DocumentRef is required; no session or document fallback");
+  return { session: context.bridgeSessionId, openId: context.openDocumentId };
+};
 
 /**
  * Run any catalogued capability by key. Reads go to `/call` (schedule readings to their host
@@ -206,9 +195,7 @@ export async function runCapability(
     return readScheduleCapture(
       key as ScheduleReadKey,
       input,
-      context.openDocumentId
-        ? { session: await requireSession(key, context), openId: context.openDocumentId }
-        : undefined,
+      context.openDocumentId ? exactDocument(context) : undefined,
       context.hostBaseUrl,
     );
   if (!intent.mutates)
@@ -222,15 +209,13 @@ export async function runCapability(
   if (intent.kind === "workflow" && !intent.prior) {
     if (intent.needs !== "nothing")
       admissionDestination(key, intent.needs, {
-        bridgeSessionId: await resolveSession(context),
+        bridgeSessionId: context.bridgeSessionId,
         openDocumentId: context.openDocumentId,
       });
     const action = await runSemanticAction(
       key as SemanticActionKey,
       input,
-      context.openDocumentId
-        ? { session: await requireSession(key, context), openId: context.openDocumentId }
-        : undefined,
+      context.openDocumentId ? exactDocument(context) : undefined,
       context.bases,
       context.actor,
       context.hostBaseUrl,
@@ -247,7 +232,10 @@ export async function runCapability(
     destination:
       intent.destination ??
       admissionDestination(key, intent.needs, {
-        bridgeSessionId: intent.session ?? (await resolveSession(context)),
+        bridgeSessionId:
+          intent.session ??
+          context.bridgeSessionId ??
+          (isTsOnlyOperationKey(key) ? undefined : await requireSession(key, context)),
         openDocumentId: context.openDocumentId,
       }),
     input,
@@ -270,6 +258,8 @@ export async function runCapability(
           ? prior.destination.session
           : undefined;
     const openId = prior.destination.kind === "document" ? prior.destination.ref.openId : undefined;
+    if (context.session)
+      throw Error("Recovery accepts the original exact destination, not a new SDK selector");
     if (
       (context.bridgeSessionId && context.bridgeSessionId !== session) ||
       (context.openDocumentId && context.openDocumentId !== openId)

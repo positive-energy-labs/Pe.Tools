@@ -25,11 +25,13 @@ addEventListener('load',()=>setTimeout(()=>{let steps=[],walk=null;try{if(__chec
 const pre=document.createElement('pre');pre.id='__check';pre.textContent=JSON.stringify({errors:__check.errors,walk,steps});document.body.appendChild(pre)},50));</script>"""
 
 
+def browsers():
+    found = [b for b in BROWSERS + [shutil.which(n) for n in ("msedge", "google-chrome", "chromium", "chrome")] if b and os.path.exists(b)]
+    return list(dict.fromkeys(found)) or sys.exit("no Edge or Chrome found; add its path to BROWSERS in check.py")
+
+
 def browser():
-    for b in BROWSERS + [shutil.which(n) for n in ("msedge", "google-chrome", "chromium", "chrome")]:
-        if b and os.path.exists(b):
-            return b
-    sys.exit("no Edge or Chrome found; add its path to BROWSERS in check.py")
+    return browsers()[0]
 
 
 def run(exe, page, shot, walk):
@@ -59,7 +61,7 @@ def main():
     sys.stdout.reconfigure(encoding="utf-8")
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     pages = [os.path.abspath(a) for a in args] or [os.path.join(HERE, t) for t in TEMPLATES]
-    exe, bad, kernels = browser(), 0, {}
+    exes, bad, kernels = browsers(), 0, {}
     for page in pages:
         name = os.path.basename(page)
         if not os.path.exists(page):
@@ -67,7 +69,10 @@ def main():
         k = KERNEL.search(open(page, encoding="utf-8").read())
         if k:
             kernels[name] = k.group(0)
-        r, why = run(exe, page, "--shot" in sys.argv, "--no-walk" not in sys.argv)
+        for exe in exes:   # Edge 154 headless returned an empty DOM on 2026-10-05; an empty dump means try the next browser
+            r, why = run(exe, page, "--shot" in sys.argv, "--no-walk" not in sys.argv)
+            if r or why != "the page never finished loading (no check result in the DOM)":
+                break
         errs = (r or {}).get("errors", []) + ([why] if why else []) + ([r["walk"]] if r and r["walk"] else [])
         if not k:
             errs.append("no kernel block (/* ==== kernel ... ==== end kernel ==== */)")

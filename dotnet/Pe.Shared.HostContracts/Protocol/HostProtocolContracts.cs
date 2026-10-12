@@ -37,7 +37,8 @@ public static class HostProtocol {
     //     new read-only op revit.resolve.unit-value parses typed text against a document's units
     // 54: FamilyParameterSnapshot gains DisplayUnit (the project's unit for the parameter's spec) and
     //     FamilyCaptureData gains ParameterUnits (the open family document's own units, by parameter)
-    public const int ContractVersion = 54;
+    // 55: revit.context.view-image imageUrl names /captures/<imageSha256>.png; /view-image is gone
+    public const int ContractVersion = 55;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]

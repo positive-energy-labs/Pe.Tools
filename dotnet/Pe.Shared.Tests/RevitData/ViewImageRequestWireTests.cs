@@ -60,7 +60,7 @@ public sealed class ViewImageRequestWireTests {
             RegistrationRefusal: RevitViewImageRegistrationRefusal.NoCrop);
         Assert.Multiple(() => {
             Assert.That(JsonConvert.SerializeObject(registered, BridgeSettings),
-                Does.Contain($"\"imageUrl\":\"/view-image/{sha}.png\""));
+                Does.Contain($"\"imageUrl\":\"/captures/{sha}.png\""));
             Assert.That(JsonConvert.SerializeObject(refused, BridgeSettings), Does.Not.Contain("imageUrl"));
         });
     }

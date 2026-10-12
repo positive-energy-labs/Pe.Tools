@@ -82,7 +82,7 @@ function FacetFilterSpecimen() {
   );
 }
 
-/** As `control-chips.tsx`'s `ChipList` composes it: an inline trigger, searchable, two-line rows. */
+/** An inline trigger, searchable, two-line rows (the chat head ladder wears the same face). */
 function PickerChipSpecimen() {
   const [picked, setPicked] = useState<string | null>(null);
   return (
@@ -148,7 +148,7 @@ const SPECIMENS: readonly Specimen[] = [
   {
     id: "picker",
     name: "ListPopup · picker chip",
-    consumers: "components/control-chips.tsx → the chat composer, families",
+    consumers: "chat/head-chips.tsx (Ladder face=inline) → the chat composer, families",
     shape: "ListPopup face=inline · searchable · two-line rows · collision fit",
     defects: [
       "FIXED — the list grammar cutover: one trigger recipe with three faces (inline, fill, field); the chip and the facet differ only by face.",

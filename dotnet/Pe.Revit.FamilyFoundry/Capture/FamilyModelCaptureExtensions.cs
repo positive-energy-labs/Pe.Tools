@@ -38,6 +38,7 @@ internal sealed class FamilyModelCapturer {
     private readonly List<FamilyModelUnmodeledFact> _un = [];
     private readonly List<RevitDataIssue> _issues = [];
     private readonly Dictionary<ElementId, string> _planeName = [];
+    private readonly HashSet<string> _placeholderNames = new(StringComparer.Ordinal);
     private readonly List<ReferencePlane> _refPlanes;
     private readonly List<Level> _levels;
     private readonly List<ModelCurve> _refLines;
@@ -155,6 +156,7 @@ internal sealed class FamilyModelCapturer {
             var name = rp.Name;
             if (!definesOrigin && (string.IsNullOrWhiteSpace(name) || name == "Reference Plane")) {
                 name = $"plane-{++unnamed}";
+                this._placeholderNames.Add(name);
                 this.Add(UnmodeledReason.PlaneNotNamed, $"$.refPlanes.{name}", ("revitName", rp.Name ?? ""));
             }
             name = Unique(name, k => datums.ContainsKey(k) || planes.ContainsKey(k));
@@ -203,6 +205,7 @@ internal sealed class FamilyModelCapturer {
         foreach (var line in this._refLines) {
             var name = $"line-{++n}";
             this._planeName[line.Id] = name;
+            this._placeholderNames.Add(name);
             this.Add(UnmodeledReason.PlaneNotNamed, $"$.refLines.{name}", ("element", "ModelCurve"), ("style", line.Name ?? ""));
             var on = line.SketchPlane?.Name ?? string.Empty;
             var from = this._alignments
@@ -347,7 +350,7 @@ internal sealed class FamilyModelCapturer {
                 continue;
             }
 
-            var slug = Unique(SlugFromPlanes(lockedTo) ?? (ext.IsSolid ? "extrusion" : "void"), result.ContainsKey);
+            var slug = this.FormSlug(ext, lockedTo, result.ContainsKey);
             var identity = string.Join("|", lockedTo.OrderBy(x => x, StringComparer.Ordinal)) + "|" + sketchPlane;
             if (!planeSets.Add(identity)) this.Add(UnmodeledReason.IdentityNotUnique, $"$.forms.{slug}", ("identity", identity));
             var visibility = ext.GetVisibility();
@@ -499,7 +502,28 @@ internal sealed class FamilyModelCapturer {
 
         var geometric = this.NamedPlanesThrough(support.Origin + support.Normal * offset,
             plane => Math.Abs(Math.Abs(plane.Normal.DotProduct(support.Normal)) - 1) < Tol);
-        return geometric.Count == 1 ? geometric[0] : null;
+        if (geometric.Count == 1) return geometric[0];
+        // A cap at offset zero lies on its own sketch plane, and Revit measures the offset from that plane. When other
+        // named planes coincide with it (the template's origin datum `Reference Plane` sits on `Ref. Level`), the
+        // sketch plane is the one the cap follows, so it names the cap rather than making it ambiguous.
+        var own = extrusion.Sketch?.SketchPlane?.Name;
+        return own != null && geometric.Contains(own) ? own : null;
+    }
+
+    /// <summary>
+    ///     A form's slug comes from the form, never from a plane name. The common prefix of author-named profile planes
+    ///     (`neck (Left)`, `neck (Right)` -> `neck`) is the author's own word for the form and is kept unless it is itself a
+    ///     plane name. Otherwise the slug is the form's subcategory, else its kind (`extrusion`, `void`), numbered from 1
+    ///     in document order. Capture-invented placeholders (`plane-3`, `line-2`) are positions, not names, so their prefix
+    ///     is never a slug: on 2026-10-06 that produced forms `plane` and `plane-1`, the second equal to a ref plane key.
+    /// </summary>
+    private string FormSlug(Extrusion ext, IReadOnlyList<string> lockedTo, Func<string, bool> formTaken) {
+        bool Taken(string key) => formTaken(key) || this._planeName.ContainsValue(key);
+        if (!lockedTo.Any(this._placeholderNames.Contains) && SlugFromPlanes(lockedTo) is { } named && !this._planeName.ContainsValue(named))
+            return Unique(named, Taken);
+        var stem = ext.Subcategory?.Name is { } sub && Slug(sub) is { Length: > 0 } subSlug ? subSlug : ext.IsSolid ? "extrusion" : "void";
+        for (var i = 1; ; i++)
+            if (!Taken($"{stem}-{i}")) return $"{stem}-{i}";
     }
 
     private string? Material(Extrusion ext) {
@@ -739,9 +763,9 @@ internal sealed class FamilyModelCapturer {
                 continue;
             }
 
-            var at = this.CrossingPlanesThrough(c.Origin, normal);
+            var at = this.CrossingPlanesThrough(c.Origin, normal) ?? this.MidwayAt(c.Origin, normal);
             if (at == null) {
-                this.Add(UnmodeledReason.ConnectorFaceNotOnPlane, "$.connectors", ("domain", domain.ToString()!), ("on", on), ("origin", Fmt(c.Origin)), ("reason", "no two crossing planes through the origin"));
+                this.Add(UnmodeledReason.ConnectorCenterNotOnPlanes, "$.connectors", this.CenterFacts(c, domain.Value, system.Value, on, normal));
                 continue;
             }
 
@@ -788,6 +812,60 @@ internal sealed class FamilyModelCapturer {
         }
 
         return result;
+    }
+
+    /// <summary>
+    ///     What capture can say about a connector whose face lies on <paramref name="on" /> but whose centre no two named
+    ///     planes cross. Revit centres a face-hosted connector on the face, typically midway between the face's bounding
+    ///     planes. `at` lists the named planes that do cross the centre; `midway` the nearest pair of parallel named planes
+    ///     the centre is equidistant from, per in-face direction no named plane crosses. Sizes keep their associations, so
+    ///     an author who declares the centre planes loses nothing.
+    /// </summary>
+    private (string Key, string Value)[] CenterFacts(ConnectorElement c, ConnectorDomain domain, ConnectorSystemType system, string on, XYZ normal) {
+        var facts = new List<(string Key, string Value)> { ("domain", domain.ToString()), ("systemType", system.ToString()), ("on", on), ("origin", Fmt(c.Origin)) };
+        if (domain != ConnectorDomain.Electrical) facts.Add(("shape", c.Shape.ToString()));
+        var at = this.NamedPlanesThrough(c.Origin, p => Math.Abs(p.Normal.DotProduct(normal)) < Tol);
+        if (at.Count > 0) facts.Add(("at", string.Join("|", at)));
+        var midway = this.InFaceDirections(c.Origin, normal).Select(direction => direction.Midway).OfType<string>().ToList();
+        if (midway.Count > 0) facts.Add(("midway", string.Join(", ", midway)));
+        if (domain is ConnectorDomain.Duct or ConnectorDomain.Pipe) {
+            var sizes = c.Shape == ConnectorProfileType.Round
+                ? new[] { ("diameter", BuiltInParameter.CONNECTOR_DIAMETER), ("radius", BuiltInParameter.CONNECTOR_RADIUS) }
+                : new[] { ("width", BuiltInParameter.CONNECTOR_WIDTH), ("height", BuiltInParameter.CONNECTOR_HEIGHT) };
+            foreach (var (key, bip) in sizes)
+                if (this.Length(c.get_Parameter(bip)) is { } size) facts.Add((key, size));
+        }
+        return facts.ToArray();
+    }
+
+    /// <summary>
+    ///     `at` for a face-centred connector: per in-face direction, the named plane through the centre (datums first, then
+    ///     by name), else the nearest midway pair (<see cref="ConnectorAt" />). Null when a direction has neither.
+    /// </summary>
+    private List<string>? MidwayAt(XYZ point, XYZ axis) {
+        var entries = this.InFaceDirections(point, axis).Select(direction => direction.Through ?? direction.Midway).ToList();
+        return entries.Count == 2 && entries.All(entry => entry != null) ? entries.Select(entry => entry!).ToList() : null;
+    }
+
+    /// <summary>Per in-face axis direction: the named plane through <paramref name="point" />, else the nearest pair of parallel named planes it lies midway between.</summary>
+    private List<(string? Through, string? Midway)> InFaceDirections(XYZ point, XYZ axis) {
+        var planes = this.NamedPlanes().Where(p => Math.Abs(p.Normal.DotProduct(axis)) < Tol && ToAxis(p.Normal) != null).ToList();
+        double Along(NamedPlane p, XYZ n) => (p.Origin - point).DotProduct(n);
+        return planes.GroupBy(p => ToAxis(p.Normal)!.Value.Unsigned()).OrderBy(direction => direction.Key)
+            .Select(direction => {
+                var through = direction.Where(p => Math.Abs(Along(p, p.Normal)) < FaceTol)
+                    .OrderByDescending(p => p.IsDatum).ThenBy(p => p.Name, StringComparer.Ordinal).Select(p => p.Name).FirstOrDefault();
+                if (through != null) return (through, (string?)null);
+                var n = direction.First().Normal;
+                var midway = (from a in direction
+                              from b in direction
+                              let da = Along(a, n)
+                              let db = Along(b, n)
+                              where da < -FaceTol && db > FaceTol && Math.Abs(da + db) < FaceTol
+                              orderby Math.Round(db, 6), a.Name, b.Name // coincident planes tie; the ordinal name breaks it
+                              select ConnectorAt.Midway(a.Name, b.Name)).FirstOrDefault();
+                return ((string?)null, midway);
+            }).ToList();
     }
 
     private static ConnectorSystemType? SystemTypeOf(MEPSystemClassification classification) =>

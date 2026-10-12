@@ -127,11 +127,13 @@ it("host work needs no Revit and bootstrap needs a session without a document", 
   expect(
     resolveCallTarget({ needs: "nothing" }, null, { kind: "failed", message: "offline" }),
   ).toEqual({ kind: "resolved", target: { kind: "host" } });
-  expect(resolveCallTarget({ needs: "session", target: "process-1" }, null, fleet)).toEqual({
-    kind: "resolved",
-    target: { kind: "session", session: "process-1" },
+  expect(callTargetSchema.parse({ needs: "session", target: { id: "4242" } })).toEqual({
+    needs: "session",
+    target: { id: "4242" },
   });
-  expect(callTargetSchema.safeParse({ needs: "session" }).success).toBe(false);
+  expect(callTargetSchema.safeParse({ needs: "session" }).success).toBe(true);
+  for (const target of ["session:dev", "4242", { id: "dev", pid: 42 }, { pid: 0 }])
+    expect(callTargetSchema.safeParse({ needs: "session", target }).success).toBe(false);
   expect(
     targetInventorySchema.safeParse({
       kind: "ready",

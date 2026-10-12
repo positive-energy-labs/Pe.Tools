@@ -46,7 +46,7 @@ That does not make `BUILD.md` a tool manual. The durable decision is: **when the
 
 - **Windows dotnet state can be poisoned.** Missing core Windows environment variables can break NuGet/MSBuild restore with errors such as `Value cannot be null. (Parameter 'path1')`. The build tool detects this and points to `tools/dotnet-sandbox-safe.ps1`; recovery notes live in that script's comment header.
 - **Revit process startup is expensive.** A cold start is 90-300s. Avoid touching a session unless its UI/document state is the subject of proof.
-- **The dev session is user-owned state.** A restart can cost minutes and reopens only the active document. Attached proof should be deliberate and evidence-based.
+- **HR sessions are disposable development state.** A cold HR restart discards unsaved edits and reopens all recoverable open documents, including documents opened outside the CLI. Use a plain or installed session for work that must survive. A restart can cost minutes; attached proof should be deliberate and evidence-based.
 - **Hot reload is useful but not proof by itself.** Treat an applied delta as a step toward a behavior/log/script/test proof, not as the final freshness claim. `buildStamp` is provenance only; loaded-path identity and a restart are the freshness facts.
 - **Terminal isolated outputs do not feed a session's loaded assemblies.** The safe compile lane writes `.artifacts/...`; a dev-lane session runs a byte copy of the package-local interactive build, and the installed lane runs neither.
 - **Installed and dev roots are separate.** Do not validate installed behavior against dev host/runtime roots.
@@ -68,6 +68,12 @@ Verified mechanics:
 - `.Tests` configurations force off `DeployAddin` and `LaunchRevit`.
 - Non-release interactive builds pin `AssemblyInformationalVersion` to stable `dev` to reduce hot-reload baseline churn from generated metadata.
 
+## SDK pin and release feed
+
+`pe-revit sdk adopt <version> --plan` shows the adoption steps; `pe-revit sdk adopt <version>` applies them. The verb repins `global.json` and `.config/dotnet-tools.json`, points `nuget.config` at the release feed, restores the tool, regenerates the vendored TypeScript contract, reports removed exports, installs the bootstrap for the manifest's years, and writes a receipt. Review removed exports and cut consumers over before claiming acceptance.
+
+The default feed is `%USERPROFILE%\source\feeds\pe-revit-sdk`, with each release in `<feed>/<version>/`. `product.payloads.json` sets `sdk.feed` to override the feed and `sdk.clientDir` to name the generated client directory. Pe.Tools uses a null feed and `ts/packages/host-contracts/src/vendor/generated`. `eng/sdk-feed` is no longer a package source; its copied nupkgs are gitignored and disposable. Fresh worktrees use the same feed folder.
+
 ## Session launch decision
 
 **No IDE is part of a session's lifecycle.** `pe-revit session` starts, converges, restarts, and stops every Revit this repo drives; there is no Rider plugin, no run/debug configuration in the launch contract, and no bridge to install. The durable model is:
@@ -82,8 +88,8 @@ MSBuild solution configuration (Debug.R24 / Debug.R25 / Debug.R26)
 The active solution configuration is the year authority. What an IDE build still contributes is exactly one thing: it writes the **package-local fixed-path output** (`bin/obj`, not `.artifacts/`) that a dev-lane session copies from and that the hot-reload emitter baselines against. Any build that writes that path — Rider, VS Code, or `dotnet build /p:PeIsolatedBuild=false` — serves equally, and none of them launches Revit.
 
 ```powershell
-dotnet tool run pe-revit -- session start --project .\dotnet\Pe.App\Pe.App.csproj --year 25  # open Revit on this checkout
-dotnet tool run pe-revit -- session hr --id pe.app-25                                  # apply your latest edit (hot, else cold swap)
+dotnet tool run pe-revit -- start                                                     # open Revit on this checkout
+dotnet tool run pe-revit -- hr                                                        # apply your latest edit (hot, else cold swap)
 dotnet tool run pe-revit -- session list --json                                        # the session registry
 ```
 
@@ -138,16 +144,19 @@ Do not document or depend on removed public `pe-dev` command groups (`doctor`, `
 
 ### A durable session, for work one command cannot hold
 
-`pe-revit session start` when the Revit must outlive a single verb: a worktree proving a change beside the user's own session, or an end-user-shaped run on the installed payload.
+Use `pe-revit session start` when Revit must outlive a single verb. The checkout-pinned CLI starts that checkout's payload; installed proof uses the actual installed product shim.
 
 ```powershell
-dotnet tool run pe-revit -- session start --year 25 --id pe.app-25-probe --json          # installed payload
-dotnet tool run pe-revit -- session start --project .\dotnet\Pe.App\Pe.App.csproj --year 25 --json   # this checkout's bytes
+& "$env:LOCALAPPDATA\Positive Energy\Pe.Tools\shims\pe-revit.exe" --installed session start --year 25 --id pe.app-25-probe --json
+dotnet tool run pe-revit -- session start --project .\dotnet\Pe.App\Pe.App.csproj --year 25 --background --json   # this checkout's bytes, an agent's Revit
+& "$env:LOCALAPPDATA\Positive Energy\Pe.Tools\shims\pe-revit.exe" --installed session stop --id pe.app-25-probe --unsaved discard --json
 ```
 
-Bare `start` (no `--project`) is the **installed** lane — every product on its fixed installed path, no checkout, no build, no copy. That is what an end user runs, and it is the only lane that proves installed behavior. Adding `--project` makes it the **dev** lane. Name which one any claim used; they run different bytes and prove different things.
+Omitting `--project` does not grant installed authority. The checkout CLI can infer its own RevitBundle project; it refuses an installed start, including source `--installed`. The actual installed shim with `--installed` starts the installed payload from its fixed product root. Stop and other targeted mutations use the same execution authority as the session they act on. Stop only the session you started, and name its payload lane in the proof.
 
-Every session pe-revit starts is `controlled`, so `session list`, `doc *`, `op list`, and stop/hr all work against it. A Revit the user launched is `observed`: readable, never mutable. Do not add a Pe.Tools-side guard for that — the SDK resolver refuses it before the verb runs.
+Every session pe-revit starts is `controlled`. `session list` also reports observed Revit processes and diagnostic rows. A row's presence, custody or bridge readiness does not authorize execution: the SDK's `execution` verdict does. A normally opened installed Revit can be adopted by a targeted mutation when the SDK independently proves its successfully loaded payload belongs to the same installation. Missing, foreign or conflicting loaded owners refuse execution. Pe.Tools relays that verdict and does not infer eligibility from diagnostic rows.
+
+HR applies only to checkout HR sessions. A cold restart discards unsaved edits by default, takes a fresh document checkpoint, and reopens recoverable documents without restoring views. Never-saved documents are dropped. Plain/snapshot and installed sessions refuse HR. Other lifecycle and document actions retain the SDK's unsaved policy and receipt rules.
 
 ## Packaging and release decisions
 
@@ -182,9 +191,29 @@ Package outputs:
 
 **Testing the installer:** Windows Sandbox, runbook at `%USERPROFILE%\WindowsSandbox\InstallerTests\README.md`. SDK `--msi-authoring` only proves the MSI builds and passes ICE.
 
+Repo-owned Sandbox preparation is `tools/release-sandbox/Prepare.ps1 -Spec <json> -RunDirectory <new-directory>`.
+It stages explicit hashed files and creates `acceptance.wsb`; it never launches Sandbox or executes an installer.
+The spec contains `previousVersion`, `candidateVersion`, and `files` rows with `role`, `name`, `path`, and `sha256`.
+Require `previousMsi`, `candidateMsi`, `previousReceipt`, and `candidateReceipt` roles.
+Each original SDK installer receipt binds `releaseVersion`, `productKind: Msi`, `sourceRevision` (full SHA), and `sha256` of the final MSI.
+The input mapping is read-only. The evidence mapping is the only writable host mapping.
+Run `powershell -NoProfile -ExecutionPolicy Bypass -File tools/release-sandbox/Check.ps1` for preparation checks.
+The guest installs the real previous MSI into its OS-known install root. It requires the previous installed updater's
+published GitHub feed to offer the exact expected candidate version, SHA256 and length before admitting an update.
+It then uses the previous host's `POST /host/update` consent path, reads the SDK terminal receipt, and checks the responsive
+successor against the installed claim's PID, process start, path, version and tray child. Direct MSI installation proves only admission.
+The historical beta.192 bootstrap recovery used `recoveryZip`, a hashed external SDK CLI ZIP with `Pe.Revit.Cli.exe` at its root, when the previous host was unavailable. That result proves recovery only and cannot pass the normal host self-update gate. SDK beta.193 requires actual installed product authority for `update apply`; an external ZIP or checkout CLI cannot acquire it through flags or a manifest path. The recovery option is not a supported beta.193 apply path. Optional `vcRuntime` and `dotnetRuntime` files install guest prerequisites.
+The calibrated native console observer retains create/show events and refuses dropped events or visible product consoles.
+Tray child presence does not prove the tray icon or app-window interaction; those remain separate UI proof.
+An unpublished candidate cannot pass the GitHub-only predecessor check. Publishing and Sandbox launch are separate authorized steps.
+No Revit or Autodesk login is permitted in this Sandbox lane.
+
 `CreateBundleModule` owns the Pe.App year staging used by both transports.
 `CreateInstallerModule` owns the host/Pea SEA payload builds plus the product release-signing
-boundary. SDK `pe-revit install package`
+boundary. The MSI also lays Desktop and Start Menu shortcuts to `Pe.Host.exe --open` from the host
+payload's `shortcut` block in `product.payloads.json` (SDK beta.178 `pe-revit msi`); a bare launch of
+the SEA with no `PE_LANE` is the installed lane and claims the ordinary `host` service, so a Revit
+started afterwards joins it. SDK `pe-revit install package`
 copies the manifest-declared sources into the portable zip and writes its release receipt;
 `pe-revit msi` consumes the same checked manifest and emits the MSI. Pe.Tools then signs that final
 MSI and refreshes only the receipt's MSI SHA-256 so the receipt describes the bytes that will be
@@ -201,6 +230,12 @@ On Windows, installer packaging rebuilds each Vite+ bundle with Node's direct SE
 temporary Node copy whose existing Authenticode signature has been removed. It then signs and
 verifies the final host and Pea executables. Injecting into the signed Node executable produces a
 malformed signature table and makes SignTool fail with `0x800700C1`.
+
+After that rebuild and before signing, `CreateInstallerModule.MakeGuiSubsystem` flips the host
+executable's PE subsystem from console to windowed: Node's apphost is a console image, and a host
+started from the login Run value or the Start Menu shortcut would otherwise own a console window
+whose close kills the host and its tray. Node black-holes stdout without a console; the installed
+lane tees its console to `logs/host.log` under the product root (`host-main.ts`).
 
 Installer packaging is deliberately complete-family: it rejects `--configuration`, requires every
 `Directory.Build.props` Revit year publish root, and requires the manifest `years` transport contract
@@ -247,13 +282,19 @@ The SDK service-file contract (`ServiceFile` and the shipped TypeScript client) 
 
 That boundary is deliberately narrower than Revit orchestration:
 
-- One product root plus service name means one active host. Dev and installed callers can explicitly take over that incarnation; simultaneous same-name hosts require different roots or names.
+- One product root plus service name means one active host. Dev takeover can retire only a verified dev incarnation from the same checkout. Installed replacement can retire only a verified incumbent from the canonical installation. Neither path evicts an unknown process or crosses payload lanes.
 - `Pe.App` is a client of the healthy shared host, not a lane supervisor. Loading or reconnecting a Revit add-in is not permission to replace the host.
 - Host discovery does not choose a Revit process. Raw `/call`, web, Pea, scripting, capture, and operation surfaces must preserve an explicit bridge-session selector; ambiguity is a hard failure.
 - Script execution performs the requested targeted call only. It must not build, converge, or restart the dev session. Agents inspect freshness and invoke SDK lifecycle actions explicitly.
 - A clean checkout may launch its checkout-pinned source host without a staged `Pe.Host.exe`, but that launch path is not a build or Revit-convergence path.
 
 The acceptance bar is the field drive in `Pe.Revit.Sdk/RUNTIME_ACCEPTANCE.md` — one operator, released artifacts, a real Revit, cold start through stop. There is no second rig. Per-run records are disposable (the surviving pin decision is in `docs/features/host/LEDGER.md`).
+
+Strict execution belongs to one runtime owner. Source host, Pea/MCP and Revit use the actual checkout containing their modules or SDK payload descriptor. `PE_TOOLS_SOURCE_ROOT` must agree with that checkout. Installed host and Pea require a Node SEA at the exact manifest-declared executable under the canonical product root; a copied executable cannot claim installation ownership. Bridge registration and SDK resolution must match lane, checkout or installation root, service name and process incarnation before dispatch. An explicit id, pid, URL or path cannot waive these checks. Read-only diagnostics can show every runtime without selecting one for execution.
+
+SDK invocation must also preserve that owner. Checkout execution uses `dotnet tool run pe-revit --` with the owning checkout as its working directory. Installed execution uses that installation's SDK entrypoint and manifest. Ambient command overrides, global-tool fallback and another checkout's launcher are not execution authority. The checkout pins beta.193 and copies its canonical clients; compilation and deterministic consumer checks do not substitute for native or installed acceptance.
+
+Installed startup first tests the fixed loopback port with an exclusive bind/free probe. An occupied port uses native `netstat -ano -p tcp` and `Get-Process`, together with the SDK service receipt, incarnation, canonical executable and health proof. CIM availability is not a startup requirement. Failed owner discovery refuses reuse or eviction; it never authorizes another installed port.
 
 ### Runtime topology: readiness is not routing
 
@@ -263,11 +304,12 @@ flowchart LR
   Vite -->|API proxy to claimed endpoint| SourceHost["Worktree Pe.Host<br/>Effect API and Revit bridge"]
   Pea["Pea / MCP / raw caller"] -->|service-file baseUrl + selector| SourceHost
   SourceHost -->|bridgeSessionId| DevSession["dev-lane session (converged, hot reload)"]
-  SourceHost -->|bridgeSessionId| RoutedInstalled["installed-lane session"]
-  InstalledHost["Installed Pe.Host<br/>separate dynamic port"] --> RoutedInstalled
+  InstalledWeb["Installed browser / Pea"] --> InstalledHost["Installed Pe.Host<br/>manifest-declared port"]
+  InstalledHost -->|bridgeSessionId, same installation| RoutedInstalled["installed-lane session"]
   SDK["pe-revit session<br/>private SDK bridge /status"] --> Controlled["SDK-ready controlled Revit"]
   Test["pe-revit test (fresh rung)"] --> FreshRevit["ephemeral controlled Revit"]
-  Controlled -. "Pe.Tools registration joins this lane" .-> RoutedInstalled
+  Controlled -. "verified owner selects its own host" .-> DevSession
+  Controlled -. "verified owner selects its own host" .-> RoutedInstalled
 ```
 
 A running web app plus an SDK-ready session are not connected unless Pe.Tools registers a
@@ -280,6 +322,8 @@ callers therefore carry two independent coordinates:
 
 Never infer one coordinate from the other. Typegen, Pea, browser operations, raw calls, settings,
 capture, and scripting must preserve both; a requested/returned selector mismatch is a hard failure.
+
+The page retains its owner in `import.meta.env.PE_RUNTIME_SERVICE`. `hostFetch` sends `x-pe-runtime-service`; EventSource uses `peRuntimeService`. Vite refuses a foreign page owner before proxying and binds accepted requests to its own checkout service. Host `readRequestIdentity` checks HTTP and WebSocket ownership before routing and refuses browser API requests with missing owner metadata. Port reuse cannot relabel an already loaded page. Machine's `runtimeMatch` and the version chip report owner match, refusal, disconnection or unknown evidence; a verified owner match does not prove fresh payload bytes.
 
 Key local roots:
 
@@ -299,11 +343,9 @@ Installed Pea ships at a fixed path; the installer lays it and MSI replaces it i
   bin\pea\
     pea.exe                           # the Node SEA (entry)
     bundle\                           # the SEA bundle sources
-    node_modules\                     # sidecars staged beside the exe (see apps/pea/scripts/stage-native-sidecars.mjs)
-    package.json                      # mastracode package-root decoy
 ```
 
-The payload is a Node SEA executable produced by Vite+/tsdown from `ts/apps/pea/src/main.ts`. Because a SEA cannot static-ESM-import external bare specifiers, `apps/pea/vite.config.ts` carries the `pe:sea-require-shim` plugin (identical to the host's): the win32 natives (duckdb/tokenizers/libsql) plus the JS sidecars that break when inlined (`drizzle-orm`, `get-stream`) are rewritten to runtime `createRequire` and staged into `node_modules\` beside the exe; `onnxruntime-node` is a throwing stub (no embedding feature runs — see SDK-LEDGER T9). `stage-native-sidecars.mjs` is the authority for the exact staged set. Build machines need Vite+ with Node 25.7.0+ and the `ts` dependency store; end-user machines run no `pnpm install`/`deploy`/resolution. The shim resolves the installed target by fixed path; `pea --installed` forces it; a `pea.dev.txt` (written by `pe-revit dev link`) routes to the checkout instead.
+The payload is a Node SEA executable produced by Vite+/tsdown from `ts/apps/pea/src/main.ts`. Host and Pea application code remain bundled into their SEAs. The two locked ACP adapters (`@agentclientprotocol/claude-agent-acp`, `codex-acp`) are bundled into the Host SEA, which runs one as its own child through `Pe.Host.exe --adapter claude|codex` (`ts/apps/host/src/index.ts`); no second Node ships. The adapters drive the user's own CLI: `adapterCli` resolves the official installer path (`%USERPROFILE%\.local\bin\claude.exe`, `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin\codex.exe`), else the first `<cli>.exe` on PATH, and passes it as `CLAUDE_CODE_EXECUTABLE` / `CODEX_PATH`; with none found the installed host refuses the harness as not installed, and readiness offers the vendor's one-line installer. The Pea MCP uses the sibling installed Pea SEA. PROVEN[artifact, packed `Pe.Host.exe` 2026-10-08: both adapters answer ACP initialize and session/new driving the user's claude.exe and codex.exe]. Build machines need Vite+ with Node 25.7.0+ and the `ts` dependency store; end-user machines run no package installation and need no global Node or npm; a subscription harness needs its vendor CLI installed and signed in by the user. The shim resolves the installed target by fixed path; `pea --installed` forces it; a `pea.dev.txt` (written by `pe-revit dev link`) routes to the checkout instead.
 
 Private `ts` packages are source-exported for development. Their Vite+ package configs use explicit `pack.entry` values so `vp pack` can still produce artifacts without mutating package exports back to `dist`; keep installed payload bundling as the artifact boundary instead of adding parallel `main` / `main-installed` source entrypoints.
 
@@ -323,7 +365,7 @@ The clean source-linked CLI model is:
 - `pea --installed ...` is the explicit installed-lane selector. Use it in installed-lane validation and scripts where ambiguity would be expensive.
 - `pea --dev ...` is the explicit source-linked selector: it routes through the shim's `pea.dev.txt` marker (written by `pe-revit dev link`) and runs the Pea app from `ts/apps/pea`.
 - `PEA_RUNTIME=dev` is a local shell convenience only. Do not use ambient environment selection as proof of lane.
-- `Pe.App`'s lane comes from `PePayloadContext.SourceRoot`: a checkout root recorded by an SDK dev-link session descriptor ⇒ dev lane; absent ⇒ the fixed installed layout (`bin\host\Pe.Host.exe`). There is no loader, no `Pe.App.runtime.json` descriptor, and no ambient lane inference.
+- `Pe.App` captures startup ownership through `PePayloadContext`: a verified `SourceRoot` selects that checkout; installed payload provenance selects `InstallRoot` and its fixed host layout (`bin\host\Pe.Host.exe`). Missing checkout metadata is not permission to guess an installed owner. Environment overrides cannot change that startup identity.
 
 This source-linked shape is intentionally about developer iteration, not installer payload ownership. A shim's `{name}.dev.txt` marker is a per-shim capability registration written by `pe-revit dev link`. It does not prove packaged installed behavior and should not be used as installed-lane evidence.
 
@@ -342,7 +384,8 @@ Source-linked web dev is one command, one checkout, and one browser origin. The 
 - `dev` authorizes same-checkout takeover. `attach` starts the same pair without takeover or a source watcher, for supervisors. `dev:no-revit` retains its separate service identity and disables native capabilities. No command changes SDK session custody.
 - React edits and Vite configuration reloads leave the backend process intact. Host source and shared workspace-package source edits restart the pair. Each listener remembers its own port preference; neither chooses another checkout as a fallback.
 - Host scope shutdown closes its frontend child. An unexpected frontend exit fails the host rather than leaving a half-running pair. The child also closes on IPC disconnect, including an abrupt backend exit.
-- `scripts/dev-watch.ts` watches Host `src` and each workspace package's `src`; it excludes app frontends, build output, and `node_modules`. Authorized Host shutdown retires the watcher before cleanup, then returns the command to the shell; later edits cannot resurrect the retired terminal. Node's built-in watch mode is unsuitable because it waits for edits after its child exits.
+- `scripts/dev-watch.ts` watches Host `src` and each workspace package's `src`; it excludes app frontends, build output, and `node_modules`. A notification counts only when the file's mtime postdates the watch: with NTFS last-access updates on (Windows 11 default, `fsutil behavior query DisableLastAccess`), Windows reports every read as a change, and jiti and Vite loading the sources restarted the pair in a loop (proved 2026-10-01: 5 restarts in 2 minutes before the filter, 0 after, one named restart per real write). Authorized Host shutdown retires the watcher before cleanup, then returns the command to the shell; later edits cannot resurrect the retired terminal. Node's built-in watch mode is unsuitable because it waits for edits after its child exits.
+- `vp run dev --share` also publishes the frontend to the tailnet with `tailscale serve --bg <vite port>`; the host stays loopback-only because Vite proxies every host route. The Tailscale CLI prints an enable link and waits when Serve is off for the tailnet, so it runs as a child of the frontend and that one rule (https 443) is turned off when the frontend exits, leaving other repos' shares alone.
 - Node runs `scripts/dev-watch.ts` and `scripts/dev-web.ts` with native type stripping. The Host source graph still runs through `jiti` because it contains TypeScript syntax that requires transformation; do not install that loader in the Vite child, where its default-only ESM wrapper hides named exports from Vite's config bundle.
 - Optimizer caches belong to individual frontend launches. This prevents concurrent or retiring launchers from deleting each other's bundles, at the cost of cold optimization after a backend restart. Normal frontend HMR and configuration reloads reuse the launch's cache.
 
@@ -366,14 +409,13 @@ One PATH entry — the product shims dir — is the condoned way onto PATH; ever
 file in that dir. A shim runs dev when ITS `{name}.dev.txt` exists (written by `dev link`), installed
 otherwise; `--installed` / `PE_LANE=installed` forces the installed target.
 
-Worktree identity is by location, like git: clients derive their checkout root by walking up from
-cwd (`.git` + `Pe.Tools.slnx`), so an agent working in a worktree automatically addresses that
-worktree's dev host — no env vars. `PE_LANE` / `PE_TOOLS_SOURCE_ROOT` are spawn plumbing (a
-supervisor telling its child who it is), never user configuration. To target explicitly, `--host`
-(and `PE_TOOLS_HOST_BASE_URL`) accept a URL or a lane token: `installed`, `dev` (this location's
-worktree), or a path inside any checkout. `pe-revit service list` is the phone book;
-`pe-revit session list` shows the session registry (pe-revit-launched Revits only; a user-launched
-Revit is visible only through the host bridge).
+Worktree identity comes from the actual module checkout (`.git` + `Pe.Tools.slnx`); caller location
+and spawn plumbing must agree. The SDK shim selects the current checkout's pinned launcher rather
+than relabeling another checkout's sources. `PE_LANE` and `PE_TOOLS_SOURCE_ROOT` are checked spawn
+plumbing, never a cross-runtime override. `--host` and `PE_TOOLS_HOST_BASE_URL` may select an exact
+URL or service only when discovery proves it belongs to this runtime owner. Other checkouts,
+opposite lanes and unverified hosts refuse. `pe-revit service list` and `pe-revit session list`
+are diagnostic inventories; the latter includes controlled, observed and ineligible rows.
 
 If you used the old flow on this machine, clean up once: delete `%LOCALAPPDATA%\Positive Energy\Pe.Tools\bin\pea\*.cmd`
 and remove the `bin\pea` / Pe.Dev.Cli output-dir entries from your user PATH (the SDK never writes those).
@@ -461,7 +503,7 @@ adapter; a future Pea/host workflow can replace it when product use proves the r
 | Attached proof                    | `dotnet tool run pe-revit -- test --project <P> --attach [--id <name>]`; add the pea doors (`pe_find`, `pe_read`, `pea --prompt`) when Pea's view of the fleet or product probes should accompany the proof. |
 | Apply your latest edit            | `dotnet tool run pe-revit -- session hr --id <name>`                                                                             |
 | What Revit is running             | `dotnet tool run pe-revit -- session list --json`                                                                                |
-| Durable installed-lane session    | `dotnet tool run pe-revit -- session start --year 25 --json`                                                                     |
+| Durable installed-lane session    | `& "$env:LOCALAPPDATA\Positive Energy\Pe.Tools\shims\pe-revit.exe" --installed session start --year 25 --json`                     |
 | Product host/log/script check     | `pea host ...`, `pea script ...`                                                                                                 |
 | Package artifacts/MSI             | `dotnet run --project .\build\Build.csproj -c Release -- pack`                                                                   |
 | Package one year                  | `dotnet run --project .\build\Build.csproj -c Release -- pack --configuration Release.R25`                                       |

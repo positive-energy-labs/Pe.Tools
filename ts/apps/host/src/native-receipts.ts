@@ -9,7 +9,9 @@ import { NodeServices } from "@effect/platform-node";
 import {
   opResultArgv,
   sessionListArgv,
-  type OpResult,
+  type OpReceiptResponseResult,
+  type OpReceiptResult,
+  type OpStateResult,
   type SessionListResult,
 } from "@pe/host-contracts/pe-revit-contract";
 import type { ActionStep } from "@pe/agent-contracts";
@@ -72,9 +74,12 @@ export async function readNativeReceipt(
   successor?: Successor,
 ): Promise<{ step: ActionStep; evidence: unknown }> {
   const args = nativeReceiptArgs(step.id, original, step.key);
-  const evidence = await sdkResult<OpResult>(args, read);
+  const evidence = await sdkResult<OpReceiptResponseResult | OpReceiptResult | OpStateResult>(
+    args,
+    read,
+  );
   const result = evidence.result;
-  const receipt = receiptSchema.safeParse(result.receipt);
+  const receipt = receiptSchema.safeParse("receipt" in result ? result.receipt : undefined);
   const unchanged = () => ({ step, evidence });
   const codes = evidence.diagnostics.map((diagnostic) => diagnostic.code);
   const replaced =
@@ -88,7 +93,7 @@ export async function readNativeReceipt(
     ((result.state === "abandoned" &&
       codes.includes("op.process-dead") &&
       !codes.includes("op.superseded-terminal")) ||
-      (result.state === "pending" && codes.includes("op.liveness-unknown") && replaced));
+      (result.state === "running" && codes.includes("op.liveness-unknown") && replaced));
   if (gone)
     return {
       step: {
@@ -109,10 +114,13 @@ export async function readNativeReceipt(
       },
       evidence: { sdk: evidence, ...(replaced ? { successor } : {}) },
     };
+  // Settled only when the answer is the receipt's own terminal verdict with its response: not
+  // `running`, not a dead incarnation's bare receipt, not a superseded or late answer.
   if (
-    result.state !== "completed" ||
+    !("response" in result) ||
     result.requestId !== step.id ||
     !receipt.success ||
+    result.state !== receipt.data.verdict ||
     receipt.data.requestId !== step.id ||
     receipt.data.key !== step.key ||
     receipt.data.pid !== original.pid ||

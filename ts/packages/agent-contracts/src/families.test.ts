@@ -17,9 +17,23 @@ describe("familiesRouteState", () => {
     const reading = {
       kind: "spec",
       value: {
+        jobId: "parse-1",
         fileName: "spec.pdf",
-        blocks: [{ id: "b", page: 1, kind: "text", md: "Model" }],
-        images: [{ id: "i", page: 1, category: "diagram" }],
+        pages: [
+          { page: 1, width: 100, height: 200, screenshotUrl: "spec/page-1.png", markdown: "Model" },
+        ],
+        blocks: [
+          { id: "b", page: 1, kind: "text", md: "Model", bboxes: [{ x: 1, y: 2, w: 3, h: 4 }] },
+        ],
+        images: [
+          {
+            id: "i",
+            page: 1,
+            category: "layout",
+            url: "spec/image-1.png",
+            bbox: { x: 1, y: 2, w: 3, h: 4 },
+          },
+        ],
       },
     };
     expect(familyCaptureSchema.shape.reading.parse(JSON.parse(JSON.stringify(reading)))).toEqual(

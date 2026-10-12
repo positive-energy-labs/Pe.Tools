@@ -12,20 +12,16 @@ import { existsSync, mkdtempSync } from "node:fs";
 import { createServer as createNodeServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 import { Deferred, Effect, Layer } from "effect";
 import { createServer as createViteServer } from "vite-plus";
 import { devHostProxy } from "../../web/dev-proxy.ts";
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
-import { createDeterministicRuntime } from "@pe/runtime/testing";
 import { address, bindWork } from "@pe/agent-contracts";
-import { resolvePeaWorld } from "@pe/runtime/pea";
 import { makeHttpLive } from "../src/app.ts";
 import { hostOwnership, productRoot } from "../src/host-ownership.ts";
 import { hostTakeoffCaptures } from "../src/takeoff-captures.ts";
-import { makeMastraRuntimeLive } from "../src/mastra-runtime.ts";
 
 type AnyManifest = {
   key: string;
@@ -91,7 +87,7 @@ let baseUrl = "";
 // The host's own origin: `/admin/shutdown` is not one of the paths `devHostProxy` forwards, so
 // posting it at `baseUrl` (the browser's vite server) 404s and `hostDone` never settles.
 let hostUrl = "";
-// biome-ignore lint/suspicious/noExplicitAny: playwright-core is imported by URL, untyped here.
+// biome-ignore lint/suspicious/noExplicitAny: the page type is not threaded through here.
 let browser: { close(): Promise<void>; newPage(): Promise<any> } | undefined;
 let hostDone: Promise<unknown> | undefined;
 let serviceToken = "";
@@ -99,7 +95,6 @@ let browserVite: Awaited<ReturnType<typeof createViteServer>> | undefined;
 
 beforeAll(async () => {
   process.env.LOCALAPPDATA = mkdtempSync(join(tmpdir(), "pe-demo-lane-"));
-  const databasePath = join(mkdtempSync(join(tmpdir(), "pe-demo-db-")), "demo-lane.db");
   const nodeServer = createNodeServer();
   const program = Effect.scoped(
     Effect.gen(function* () {
@@ -110,14 +105,6 @@ beforeAll(async () => {
           makeHttpLive({
             capabilities: { revit: false },
             lifecycle: { handle, latch },
-            // The demo lane never asks the model anything; the runtime only has to boot.
-            mastraLayer: makeMastraRuntimeLive({ revit: false }, undefined, async () =>
-              createDeterministicRuntime({
-                databasePath,
-                resourceId: resolvePeaWorld().id,
-                responses: [],
-              }),
-            ),
             nodeServer,
             port: 0,
             webRoot: null,
@@ -143,13 +130,7 @@ beforeAll(async () => {
   });
   await browserVite.listen();
   baseUrl = browserVite.resolvedUrls!.local[0]!.replace(/\/$/, "");
-  const playwrightUrl = pathToFileURL(
-    resolve(
-      import.meta.dirname,
-      "../../../node_modules/.pnpm/node_modules/playwright-core/index.mjs",
-    ),
-  );
-  const { chromium } = await import(playwrightUrl.href);
+  const { chromium } = await import("playwright-core");
   const executablePath = [
     "C:/Program Files/Google/Chrome/Application/chrome.exe",
     "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
@@ -244,7 +225,7 @@ for (const { path, manifest } of ROUTES)
  * capture files a new member into the owner's pod, apply files `output/<run>/receipt.json` there,
  * and `/pods` shows that receipt for the member. One loop per product route.
  */
-// biome-ignore lint/suspicious/noExplicitAny: playwright-core is imported by URL, untyped here.
+// biome-ignore lint/suspicious/noExplicitAny: the page type is not threaded through here.
 type Page = any;
 
 const SCRATCH = process.env.PE_DEMO_LANE_SHOTS;

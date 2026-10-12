@@ -14,6 +14,7 @@ import {
   productIdentity,
   productPathNames,
   scriptingWorkspaceIdentity,
+  HOST_RUNTIME_SERVICE_HEADER,
 } from "@pe/host-contracts/contracts";
 
 const checkoutRoot = checkoutRootFrom(import.meta.dirname)!;
@@ -70,7 +71,10 @@ const mirrors: readonly {
 }[] = [
   { csharpClass: "ProductIdentity", ts: productIdentity },
   { csharpClass: "ProductPathNames", ts: productPathNames },
-  { csharpClass: "HostEndpoint", ts: hostProcessIdentity },
+  {
+    csharpClass: "HostEndpoint",
+    ts: { ...hostProcessIdentity, runtimeServiceHeader: HOST_RUNTIME_SERVICE_HEADER },
+  },
   { csharpClass: "ScriptingWorkspaceLayout", ts: scriptingWorkspaceIdentity },
 ];
 

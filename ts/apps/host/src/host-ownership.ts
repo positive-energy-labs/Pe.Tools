@@ -3,9 +3,11 @@ import {
   checkoutRootFrom,
   hostServiceName,
   sourceRootVariable,
+  runtimeOwnerRejection,
+  installedRuntimeRoot,
   type HostLane,
 } from "@pe/host-contracts/service-identity";
-import type { PeaRuntimeCapabilities } from "@pe/runtime/pea";
+import type { PeaRuntimeCapabilities } from "@pe/mcps";
 
 export { productRoot } from "@pe/host-contracts/service-identity";
 
@@ -17,6 +19,7 @@ export type HostOwnership = {
   readonly processId: number;
   readonly serviceName: string;
   readonly sourceRoot: string | null;
+  readonly installedRoot: string | null;
 };
 
 const NO_REVIT_ARGUMENT = "--no-revit";
@@ -39,6 +42,9 @@ function resolveHostOwnership(): HostOwnership {
   if (!hostCapabilities.revit && lane !== "dev")
     throw new Error(`${NO_REVIT_ARGUMENT} is available only for the dev host.`);
   const sourceRoot = lane === "dev" ? resolveSourceRoot() : null;
+  if (lane === "installed" && process.env[sourceRootVariable]?.trim())
+    throw Error("An installed host cannot claim a checkout source root.");
+  const installedRoot = lane === "installed" ? installedRuntimeRoot("host") : null;
   const serviceName = serviceNameForCapabilities(
     hostServiceName(lane, sourceRoot),
     hostCapabilities,
@@ -55,6 +61,7 @@ function resolveHostOwnership(): HostOwnership {
     processId: process.pid,
     serviceName,
     sourceRoot,
+    installedRoot,
   };
 }
 
@@ -72,10 +79,18 @@ function resolveHostLane(): HostLane {
 }
 
 /**
- * The dev host's identity input: the checkout it serves. Spawn plumbing wins (a supervisor telling
- * the child what it just spawned); otherwise the checkout this module lives in. Host, MCP clients,
- * pea, and `TsHostLauncher` all hash the checkout root, so they agree by construction.
+ * The dev host's identity input is the checkout containing this module. Spawn plumbing must agree.
  */
 function resolveSourceRoot(): string | null {
-  return process.env[sourceRootVariable]?.trim() || checkoutRootFrom(import.meta.dirname);
+  const sourceRoot = checkoutRootFrom(import.meta.dirname);
+  const configured = process.env[sourceRootVariable]?.trim();
+  if (!sourceRoot) throw Error("A dev host must execute from a Pe.Tools checkout.");
+  if (configured) {
+    const rejection = runtimeOwnerRejection(
+      { lane: "dev", sourceRoot, serviceName: hostServiceName("dev", sourceRoot) },
+      { lane: "dev", sourceRoot: configured, serviceName: hostServiceName("dev", sourceRoot) },
+    );
+    if (rejection) throw Error(rejection);
+  }
+  return sourceRoot;
 }

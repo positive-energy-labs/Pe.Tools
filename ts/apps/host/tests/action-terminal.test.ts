@@ -307,7 +307,7 @@ const gone: [string, Parameters<typeof sdkRead>, boolean][] = [
   // Until then: unreadable pid, but the same SDK session re-registered as a new process.
   [
     "liveness is unknown and the session reconnected as a new pid",
-    ["pending", ["op.liveness-unknown"]],
+    ["running", ["op.liveness-unknown"]],
     true,
   ],
 ];
@@ -354,7 +354,7 @@ test("unreadable liveness without a successor process stays unknown", async () =
           readNativeReceipt(
             step,
             originalProcess,
-            sdkRead("pending", ["op.liveness-unknown"]),
+            sdkRead("running", ["op.liveness-unknown"]),
             successor,
           ),
         )

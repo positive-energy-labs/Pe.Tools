@@ -3,14 +3,16 @@ import { Agent, createServer as createNodeServer, get } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Deferred, Effect, Layer } from "effect";
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
-import { resolvePeaWorld } from "@pe/runtime/pea";
-import { createDeterministicRuntime } from "@pe/runtime/testing";
 import { makeHttpLive } from "../src/app.ts";
 import { hostOwnership, productRoot } from "../src/host-ownership.ts";
-import { makeMastraRuntimeLive } from "../src/mastra-runtime.ts";
+
+vi.mock("../src/pe-revit-launch.ts", async (original) => ({
+  ...(await original<typeof import("../src/pe-revit-launch.ts")>()),
+  peRevitLauncher: () => ({ cmd: process.execPath, args: [] }),
+}));
 
 /**
  * Socket retirement at the shared runtime seam. A retired host must hold no keep-alive socket a
@@ -19,7 +21,7 @@ import { makeMastraRuntimeLive } from "../src/mastra-runtime.ts";
  * this a browser reload after a same-port restart (the scenario's restart leg, and a dev-host
  * takeover in production) reuses the dead socket and waits forever.
  */
-async function launchHost(databasePath: string, port: number, previousToken?: string) {
+async function launchHost(port: number, previousToken?: string) {
   const nodeServer = createNodeServer();
   const program = Effect.scoped(
     Effect.gen(function* () {
@@ -30,14 +32,6 @@ async function launchHost(databasePath: string, port: number, previousToken?: st
           makeHttpLive({
             capabilities: { revit: false },
             lifecycle: { handle, latch },
-            // The real agent app: the socket under test carries a live controller session stream.
-            mastraLayer: makeMastraRuntimeLive({ revit: false }, undefined, async () =>
-              createDeterministicRuntime({
-                databasePath,
-                resourceId: resolvePeaWorld().id,
-                responses: [{ text: "unused" }],
-              }),
-            ),
             nodeServer,
             port,
             webRoot: null,
@@ -67,11 +61,11 @@ async function stopHost(host: Awaited<ReturnType<typeof launchHost>>) {
 
 type Probe = { status: number | "timeout"; reused: boolean; socketClosed: Promise<void> };
 
-/** A controller session stream on the agent's one socket: the connection is ACTIVE when the host retires. */
+/** A Reading stream on the agent's one socket: the connection is ACTIVE when the host retires. */
 function openStream(port: number, agent: Agent) {
   return new Promise<{ ended: Promise<void>; socketClosed: Promise<void> }>((resolve, reject) => {
     const request = get(
-      `http://127.0.0.1:${port}/api/agent-controller/pea/sessions/${resolvePeaWorld().id}/stream`,
+      `http://127.0.0.1:${port}/pe/resources?keys=${encodeURIComponent(JSON.stringify([{ kind: "thread-head", thread: "retire" }]))}`,
       { agent },
       (response) => {
         // A destroyed socket emits `close` without `end`; either means the stream is over.
@@ -115,20 +109,12 @@ function probe(port: number, agent: Agent): Promise<Probe> {
 test("a retired host closes its keep-alive sockets; the successor gets a fresh connection", async () => {
   const localAppData = mkdtempSync(join(tmpdir(), "pe-socket-retire-"));
   const previousLocalAppData = process.env.LOCALAPPDATA;
-  const previousPeRevitCmd = process.env.PE_REVIT_CMD;
   process.env.LOCALAPPDATA = localAppData;
-  process.env.PE_REVIT_CMD = process.execPath;
-  const databasePath = join(localAppData, "retire.db");
   const agent = new Agent({ keepAlive: true, maxSockets: 1 });
   let host: Awaited<ReturnType<typeof launchHost>> | undefined;
   try {
-    host = await launchHost(databasePath, 0);
+    host = await launchHost(0);
     const port = host.service.port;
-    await expect
-      .poll(async () => (await fetch(`${`http://127.0.0.1:${port}`}/pe/inspect`)).status, {
-        timeout: 15_000,
-      })
-      .toBe(200);
     const stream = await openStream(port, agent);
 
     const retired = host;
@@ -144,7 +130,7 @@ test("a retired host closes its keep-alive sockets; the successor gets a fresh c
       ]),
     ).resolves.toBe("closed");
 
-    host = await launchHost(databasePath, port, retired.service.token);
+    host = await launchHost(port, retired.service.token);
     const second = await probe(port, agent);
     expect(second.reused).toBe(false);
     expect(second.status).toBe(200);
@@ -153,8 +139,6 @@ test("a retired host closes its keep-alive sockets; the successor gets a fresh c
     if (host) await stopHost(host).catch(() => undefined);
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;
     else process.env.LOCALAPPDATA = previousLocalAppData;
-    if (previousPeRevitCmd === undefined) delete process.env.PE_REVIT_CMD;
-    else process.env.PE_REVIT_CMD = previousPeRevitCmd;
     try {
       rmSync(localAppData, { force: true, recursive: true, maxRetries: 50, retryDelay: 100 });
     } catch {

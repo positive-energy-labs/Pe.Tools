@@ -1,3 +1,5 @@
+import type { SdkReceiptReader } from "./native-receipts.ts";
+import { readSessionScope, sdkSession } from "./sdk-session.ts";
 import { Effect } from "effect";
 import {
   HttpRouter,
@@ -26,7 +28,7 @@ export type SpaFallback = (
 export const isNavigation = (req: HttpServerRequest.HttpServerRequest) =>
   (req.headers.accept ?? "").includes("text/html");
 
-export const opsCatalogRoute = (spa: SpaFallback) =>
+export const opsCatalogRoute = (spa: SpaFallback, sdk?: SdkReceiptReader) =>
   HttpRouter.add("GET", "/ops", (req) =>
     Effect.gen(function* () {
       if (isNavigation(req)) return yield* spa(req);
@@ -39,15 +41,17 @@ export const opsCatalogRoute = (spa: SpaFallback) =>
           { error: "Conflicting bridge session selectors in header and query." },
           { status: 400 },
         );
-      // Metadata is session-only; no selected session means the host catalogue alone.
-      const readSessionId = sessionHeader ?? sessionParam;
-      if (!readSessionId)
-        return Response.jsonUnsafe({
-          operations: tsOnlyOperationCatalog,
-          bridgeCatalogError: "Select a session for native operations",
-        });
       const result = yield* Effect.result(
-        bridge.invoke("host.ops.catalog", {}, readSessionId, null),
+        Effect.gen(function* () {
+          const scope = yield* Effect.try(() => readSessionScope(req.headers));
+          const session = yield* sdkSession(
+            bridge,
+            { ...scope, bridgeSessionId: sessionHeader ?? sessionParam },
+            sdk,
+          );
+          const result = yield* bridge.invoke("host.ops.catalog", {}, session.sessionId, null);
+          return { ...result, sessionId: session.sessionId };
+        }),
       );
       // A host-local op is canonical; its bridge namesake (pod.member.compose) is listed once.
       const bridgeOps =
@@ -62,14 +66,17 @@ export const opsCatalogRoute = (spa: SpaFallback) =>
         constants?: unknown;
         bridgeSessionId?: string;
         bridgeCatalogError?: string;
+        sdk?: unknown;
       } = {
         operations: [...bridgeOps, ...tsOnlyOperationCatalog],
-        bridgeSessionId: readSessionId,
+        bridgeSessionId: result._tag === "Success" ? result.success.sessionId : undefined,
       };
       if (result._tag === "Success")
         body.constants = (result.success.value as { constants?: unknown }).constants;
-      if (result._tag === "Failure")
+      if (result._tag === "Failure") {
         body.bridgeCatalogError = String(result.failure.message ?? result.failure);
+        if ("evidence" in result.failure) body.sdk = result.failure.evidence.result;
+      }
       return Response.jsonUnsafe(body);
     }),
   );

@@ -23,6 +23,7 @@ import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import { admitFamilyAction, readFamily, recoverFamilyAction } from "../src/family-actions.ts";
 import { documentMarks } from "../src/document-marks.ts";
 import { sdkEnvelope, sdkSessions } from "./native-receipt-fixture.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -156,6 +157,9 @@ async function setup(sdk: (args: readonly string[]) => Promise<string> = sdkSess
       {
         sessionId: "A",
         connected: true,
+        lane: hostOwnership.lane,
+        sourceRoot: hostOwnership.sourceRoot,
+        serviceName: hostOwnership.serviceName,
         processId: 42,
         processStartUtcUnixMs: 1000,
         state: {
@@ -1673,7 +1677,7 @@ test("a plan whose apply outcome is unknown refuses another apply until it is re
 test("an interrupted Families apply resumes from its exact durable FF run without native redispatch", async () => {
   let nativeResult: unknown;
   const env = await setup(async (args) =>
-    args.includes("result") ? sdkEnvelope(nativeResult) : sdkSessions(),
+    args.includes("result") ? sdkEnvelope(nativeResult) : sdkSessions(args),
   );
   const { apply, revision } = await stagedPlan(env, { [W]: staged("10") });
   env.unknown(true);
@@ -1685,7 +1689,7 @@ test("an interrupted Families apply resumes from its exact durable FF run withou
     interrupted.preparation as { value: { process: { pid: number; processStartUtc: string } } }
   ).value;
   nativeResult = {
-    state: "completed",
+    state: "ok",
     requestId: step.id,
     receipt: {
       requestId: step.id,

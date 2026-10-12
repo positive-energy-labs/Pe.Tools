@@ -1,0 +1,9 @@
+{
+  "mcp": {
+    "executor": {
+      "type": "remote",
+      "url": "https://executor.sh/positive-energy/mcp",
+      "enabled": true
+    }
+  }
+}

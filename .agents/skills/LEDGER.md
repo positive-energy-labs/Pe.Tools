@@ -4,6 +4,8 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 
 ## Decided
 
+- 2026-10-05, delegated implementation defaults to Sol 6.1 (`gpt-6.1-sol`) at the user's request; this replaces the Sol 6 model guidance that caused an outdated selection. Model IDs come from the live catalog, and an explicit user choice wins.
+
 ### Drivers
 
 - 2026-08-25, three drivers, named once: **purity** (a stance is portable; anything repo-shaped lives in a slot), **single source of truth** (one file owns each fact; mirrors are junctions, tables are projections, the check asserts the projection), **modularity** (one capability, one skill; merge on overlap, split on two stops). A fourth, softly: **gate over disposition** below the fold. Every line here derives from one of them.
@@ -11,6 +13,12 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 - 2026-08-25, the set is still finding its shape; renames are free and muscle memory is the cheaper loss.
 - 2026-08-25, usage as observed by the user: `triangulate`, `demiurge`, `close` open most sessions; `delegate` and `purge` are stacked near-always; `prove` fires by trigger; the rest fire from `index`, rarely typed. Self-routed descriptions must stay verbatim-tight; index-routed ones may loosen.
 - 2026-08-25, a number that fires a law is a gate; a number that sizes the work is a param and lives in the prompt or a `write` register. Where the failure is internal and uncountable, the disposition is the gate; do not dress it as a number. Gate pass source: `.artifacts/runs/skills-crusade-20260825/GATES-*.md`.
+
+### Additions
+
+- 2026-10-10, `pass.release` governs every release through final artifact identity, the prior consumer's upgrade path and independently verified outcomes. It delegates commands to `execute` and evidence standards to `prove`; publication alone is not completion.
+
+- 2026-10-04, `loop.tune` added after the TC perf round (Tuner with the fork; prevents "tuned by ear"). It owns the measure, census, rule, purge, re-measure loop; the browser-measurement mechanics went to `execute` and the sequence-by-collision law to `delegate`. The round's evidence: three measurement passes lost to throttling, reloads and CLI-per-call before one counted; every guessed constant was wrong within the hour and every rule held.
 
 ### The unit: a stance
 

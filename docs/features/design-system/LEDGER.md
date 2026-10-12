@@ -13,6 +13,7 @@ A rule lives in exactly one home — a type, a check, a swatch specimen, or
 Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the timeline.
 
 ## Decided
+- 2026-10-09, machine control plane primitives minted (wave 5, branch `mcp/w5-web`): `PidChip` and `ShapeCells` over `FactChip` (`components/lang/process.tsx`), `Accordion` whose header carries the group's critical state and whose open group is the caller's state (`accordion.tsx`), `LegStrip` with dashed not-observed stages while the host is gone (`leg-strip.tsx`), `SwitchRow` with its refusal on the surface (`switch-row.tsx`); specimens in `design-system/specimens/lang-machine.tsx`. The version chip and the 380 px shell are product owners in `machine/`, not kit. The host lamp the 2026-09-15 "One word says whether Revit can answer" line mounted is deleted (`route/shell.tsx`), and `ChainLamp` no longer names the host: connected-or-not left product chrome (host ledger 2026-10-09).
 - 2026-09-26, kaitpw: targeting or selecting a subject revalidates it. Choosing a view on `/rooms` reads it at once, with no refresh press; the same holds for schedules and every route. Families is the one exemption, for performance. This refines the 2026-09-22 freshness ruling (re-read on focus only when the document is marked changed): a new target is a new reading, not a re-read under the hands. Where the two still disagree, this one wins and the 2026-09-22 line is re-openable.
 - 2026-09-22, Every entity route declares its stages and no route file exceeds its line budget. `EntityRouteView.stages` is required (`route/schedules/stage.ts`, `families/stage.ts`, `family/stage.ts`); the route and stage chord nodes are one `KeysNode` fed by `manifestChords`/`stageChords`, `useScopeKeys` still the one door. `tests/repo-guards/src/line-budget.guard.test.ts` holds every top-level `apps/web/src/route/*.ts|tsx` to 600 lines. `route/situation.tsx` split into `situation-marks`, `situation-lamp`, `situation-ladder`, `situation-verbs`, `situation-grids`; `route/use-route.ts` into `route-owner`, `route-work`, `route-target`; importers name the file, no barrel.
 - 2026-09-22: Shared action declarations own prose, and dirties names declared Reading resources. Ops uses browser-only facts from semantic-actions.ts because its selected operation determines target needs; it does not add an executable workflow. Every catalog operation has a renderer or an explicit rawByDesign decision.
@@ -135,6 +136,39 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 - 2026-08-29 — `components/ui/` is folded into `components/lang/`: one grammar, no second tier.
   Chat views are product, and live in `chat/`.
 - 2026-08-29 — A losing prototype variant is deleted on verdict; only the winner's rewrite lives.
+- 2026-10-05 — The Revit facsimile (`apps/web/src/revit/`, specimens at `/design-system/revit`) is
+  a deliberate foreign body: stateless components that compose fake Revit chrome (ribbon, options
+  bar, Properties palette, TaskDialog, classic modal) for explainers, with no images. It is not
+  house style. Its literals live in the `--rv-*` block of `base.css` (the one file that may name a
+  colour); `revit.css` consumes only those tokens and is exempt from the house value rules by name
+  in `design-guard.test.ts` (`SKIP_FILES`); its classes still register through `styles.css` and
+  its TSX is scanned. Nothing outside `revit/` may consume `--rv-*` or `.rv-*`. Re-openable:
+  decided in an autonomous session against three critic rounds on Autodesk Help screenshots
+  (`.artifacts/revit-mock/critic-*.md`), not by kaitpw.
+- 2026-10-05 — Revit facsimile ground truth is kaitpw's own Revit 2025 on Windows 11 at 200%
+  (`.artifacts/revit-mock/ref/user-*.png`), not Autodesk Help images. Colours are sampled from
+  those captures. Control lines are one device pixel (`--rv-hair: 0.5px`). Text is Segoe UI at
+  9pt (12px: titles, grids) or 8pt (10.5px: buttons, labels, trees, group titles), and the app's
+  `font-size-adjust` is reset inside `.rv`. A dialog is mocked by pinning pieces with `RvAt` at
+  coordinates read off a 200% capture: subtract the window frame origin, then halve.
+  `.artifacts/revit-mock/compare.py` and `align.py` render the specimens at device scale 2 and
+  report per-line offsets. Mechanical Settings, Edit Shared Parameters and Routing Preferences
+  sit within 1px per text line. Re-openable, as above.
+- 2026-10-05 (supersedes the two entries above where they differ) — The Revit facsimile is one
+  declarative spec and one renderer: `apps/web/src/revit/revit.js`, plain JavaScript with JSDoc
+  types, so pages load it unbuilt. A window is a JSON value (`dialog`, `palette`, `task`, `ribbon`)
+  holding every piece and its state. The state words are `disabled`, `selected`, `checked`, `open`
+  and `default`, the same on every piece. Ids derive from text (`button:OK`, `tables/CD3-11`; a tree
+  row repeated under two parents takes its path). `set` derives a second state from a first, `diff`
+  lists what changed, `compare` draws two states with the changes ringed and listed, and notes pin
+  numbered badges on ids. Layout is flow (`row`/`col`) by default; an optional `at` box pins a piece
+  to a capture, which keeps Mechanical Settings, Edit Shared Parameters and Routing Preferences at
+  1px. The React pieces and `RvAt` are deleted; `apps/web/src/revit/index.tsx` only wraps the
+  renderer. Pages may consume `.rv-*` through `/pages/revit.css` (pages ledger, same date). Task
+  dialog fields are the journal's own (instruction, command links, common buttons, default), from
+  the dialog census in `.artifacts/revit-mock/journal-census.md`. Shape from a Fable critic round
+  (`.artifacts/revit-mock/reshape-fable.md`); the separate package and the `h`-parameterised
+  renderer it proposed were rejected for one file beside `base.css` and an HTML string. Re-openable.
 
 ### The language
 
@@ -357,6 +391,8 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 
 ### Route and state architecture (cross-route, owned here)
 
+- 2026-10-04, kaitpw: THE ADDRESS IS GENERATED FROM THE MANIFEST. A route names the Page keys the URL carries in `manifest.url`; `route/url.ts` derives the TanStack `validateSearch` reader and `stripSearchParams(defaults)` middleware from the page schema (Standard Schema, so zod is the one source), and `useRoute` syncs both ways: a Page move pushes one history entry per place, an address move (Back, Forward, a link) moves the Page. Every url key needs a default so a bare route URL stays bare. Replaces the hand-written `useEntityUrl`, `entitySearch` and per-route search shims; `url: false` on `useRoute` is for chat panes and seeds, which own no address. `view` is the declared home for UI variants. Proven on `/rooms` stage in a browser (push, strip, Back, Forward). Owed: port `/ducts` on `feat/pressure-drop` to `url` keys when it merges.
+
 - 2026-09-09 — Confirmed finish scope after the pause: fully cut over every retained route to the shared targeting, authored Work, readings, per-view state and operation contracts now. Concentrate complete product-workflow acceptance on Chat and Takeoffs; do not redesign every product.
 - 2026-09-09 — Chat acceptance must demonstrate a real turn using default document A, explicit per-call document B, then default A again without changing the default; retain the agreed temporary-document ownership, route-pane and navigation/recovery requirements.
 - 2026-09-09 — Takeoffs acceptance covers chosen-document opening, zone adoption, partition execution and honest loading/fresh/stale/error/recovery behavior. Native RHVAC sync closure is excluded from this goal; existing actions still follow shared contracts, and demos do not require real RHVAC files.
@@ -554,6 +590,11 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 - 2026-09-15, RP review fixes preserve Stage as Situation vocabulary, immutable transcript evidence and visible failures. The final producer audit supersedes repair of the retired Work replay protocol: delete that protocol and keep external uncertainty in ActionJournal. Renaming Situation remains deferred.
 - 2026-09-15 — Seeds are read-only proof inputs (counsel ruling under user delegation, "i defer to u"; re-openable). A seeded action refuses "frozen seed is read-only"; the demo lane proves render and parity, never a receipt. The `Ctx.external`/`Ctx.command` demo neutralizers are dead under this ruling and are deleted; the host `demo-lane.scenario` suite asserts render and parity only.
 - 2026-09-15 — Chat's send is a Situation action (kaitpw: "it uses primitives the way i want, keep it that way"). Its look is not liked; a children slot on the verb may replace the rendering later. Not a button component of its own.
+- 2026-10-08 — Feedback picker (`components/feedback-picker.tsx`, mounted at the root): pick one element, write a note, send. Built on `react-grab/primitives` for hit testing and component context, `modern-screenshot` for the picture. Notes go to PostHog as `ui_feedback` through host `POST /pe/feedback` (kaitpw: "notes go to posthog").
+- 2026-10-08 — Feedback send waits on PostHog and keeps the popover and typed note on failure (kaitpw: a note that vanished on a failed send is state lost forever). Enter sends, Shift+Enter breaks a line, like a chat composer. An outside click does not dismiss; Esc and cancel do.
+- 2026-10-08 — Feedback picks one element only; no whole-panel selection (kaitpw: "no to whole panels").
+- 2026-10-08 — `.pick-mark` (lang.css) is the feedback target mark: hover veil plus a 2px full-ink outline, captured in the picture as drawn. Specimen under "selection is a fill".
+- 2026-10-08 — Web builds keep function names (`rolldownOptions.output.keepNames`, +8.5% raw client JS) so a feedback note names the picked component in installed builds (minified, it read `p`).
 
 ## Tried & rejected
 
@@ -616,8 +657,12 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 - 2026-09-10 — Demo-lane browser proof landed: `apps/host/tests/demo-lane.scenario.test.ts` enumerates every seed from the manifests and asserts landmark, refusal parity on chord and button, fire, outcome line, no page error (21/21). It found a live chat defect (workbench never handed `session` to the chat manifest, so `send`/`cancel` always refused) and four seed defects. The primitive gained `ctx.command` and `ctx.external`, both neutralized under a seed; the demo lane subscribes no live Readings. `chat-flow` was asserting the retired scope/pin vocabulary and was rewritten, not the product. `routes/-chat.test.tsx`, `-instances.test.tsx`, `families/authored-rows.ts` deleted.
 - 2026-09-11 — Route-noun proto round (48 throwaway variants, `apps/web/src/design-system/proto/`, uncommitted): the standing line `[tone dot] [verdict word] — [one sentence]`, then at most one affordance which is the fix, then a `▸ record` disclosure, is the head shape that transfers across Target, Work, Reading, Action, Receipt, Shell, Keys and Seed. It is a head, not a surface: it cannot hold plural verdicts, has no honest word for `loading` or `checking`, and has no slot for a past or continuous fact. "Just clicks" replaces scrubbers and invented history: every lifecycle state is reached by 4 to 9 real user acts, each logging one spoken outcome line; a disabled control carries its refusal as its reason. Verdicts and tables: `.artifacts/handoffs/proto-nouns-20260911/ROUND-1.md`, `ROUND-2.md`. User promotion verdict still owed.
 - 2026-09-10 — Keys are one registration shape across three tiers (route manifest chord, pane `shortcuts`, widget `useHotkeys`) via `keyMeta({name, description, tier, region?, refusal?})`; pane keys gained `says` and `refusal` (a refused key reveals the card). The help page `route/help.tsx` (Alt+/) is rebuilt over registrations: measured panes with leaders per region, manifest chords in a band, `manifest.docs` below. No root manifest until a navigation chord exists; chat's palette and mode chords are tagged surface chords, not actions.
+- 2026-10-08 — react-grab `freeze()` during feedback picking: it halts every React update on the page, including the note popover, so the popover never rendered.
+- 2026-10-08 — `.pick-mark` outlined with `--pe-line-2`: 22% ink vanished over real content and in the note's picture; full ink holds.
+- 2026-10-08 — Rasterizing `document.body` for the feedback picture: it drops styles set on `<html>`, and the crop landed ~10px off its target; rasterize `document.documentElement`.
 
 ## Owed
+- 2026-10-04, `pe.css`: the host serves the house tokens (`base.css` values, `design-lang.css` projection) as one stylesheet a served page may link; the `design-guard` boundary must still hold. Consumer: `docs/features/pages/LEDGER.md` (every agent-authored page).
 - **IMPORTANT, deferred by kaitpw 2026-10-01 (his scope is bigger than this line):** a firm-wide catalog store fed by cited Pea proposals. Pea finds the manufacturer document for each product in a model, the grounded-doc engine (`/doc-lab`) parses it, and Pea proposes values (first: air-terminal pressure drop by model, size and airflow; then equipment static, coil, filter and valve drops) each citing the page and table cell. A person approves, edits or rejects beside the highlighted PDF; approved tables live in one firm-wide store reused across projects, and a script interpolates them onto every matching instance with provenance. Why: native duct pressure drop needs a drop on every terminal and unit connector, and per-product tables (a few dozen) replace per-instance entry (hundreds per model).
 - 2026-09-26, `master-table` does not virtualize rows. It froze at about 6,500 rows on `/ducts`, so that route lists the selected group only. Consumer: `/ducts`.
 - 2026-09-22, split `route/spec-editor.tsx` (717 lines) along its sections and drop its `LINE_BUDGET_ALLOW` row in `line-budget.guard.test.ts`.
@@ -857,3 +902,5 @@ Paid at the primitives; the rulings are above and the evidence is
 - Command palette mirrors route verbs; one palette each for `/families`, `/family`, `/schedules` (user ruling 2026-09-22).
 - `targeting/**` (instrument cluster, direction glyphs, stage strip; deleted by `43ff94b0`, base `f459801e`) is undecided; stand up a worktree at the base commit and screenshot the route head before ruling.
 - Owed exploration (2026-09-23): a batteries-included proposal review surface in the Situation head shared with Chat. Consolidate the existing WorkBand/Situation work body, Chat ProposalHead, and FamiliesProposalsBand while keeping one Work and cell-transition owner; shape and placement remain undecided.
+- Feedback picture rasterizes the whole page per send (2.5-6 s measured on /design-system); untested on canvas, 3D, and iframe routes.
+- Feedback events carry the picture as an inline data URL; PostHog shows it as text, and the reader copies it into a browser to see it.

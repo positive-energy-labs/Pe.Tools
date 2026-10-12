@@ -1,5 +1,6 @@
 /** Family UI projections of immutable readings. */
 import { z } from "zod";
+import { parsedDocViewSchema } from "./grounded-doc.ts";
 import {
   diagnosticSchema,
   familyExecutionOptionsSchema,
@@ -17,6 +18,10 @@ export const familyDraftSchema = z
   .object({
     /** Immutable draft baseline; it is not a claim about current Revit state. */
     reading: z.string().nullable().default(null),
+    spec: z
+      .object({ member: z.object({ pod: z.string(), path: z.string() }), doc: parsedDocViewSchema })
+      .nullable()
+      .default(null),
     cells: z.record(z.string(), settingsFieldStateSchema).default({}),
     /** When the Reading these staged rungs rest on was taken, on the host's clock. The change mark compares against this. */
     takenAt: z.string().nullable().default(null),
@@ -31,22 +36,26 @@ export const familyDraftRouteState = {
     "A captured family draft baseline with cells keyed by JSON pointer. Propose through cells.*.proposal; a person stages reviewed values before plan or apply.",
   schema: familyDraftSchema,
   agentWriteMask: trichotomyAgentMask(),
-  commands: {},
+  commands: {
+    attach_spec: {
+      description:
+        "Parse a PDF path, URL, or uploaded bytes and attach its portable pages and blocks beside a captured family member.",
+      actor: "any",
+      input: z
+        .object({
+          member: z.object({ pod: z.string().min(1), path: z.string().min(1) }),
+          source: z.union([
+            z.object({ path: z.string().min(1) }).strict(),
+            z.object({ url: z.url() }).strict(),
+            z.object({ fileName: z.string().min(1), base64: z.string().min(1) }).strict(),
+          ]),
+        })
+        .strict(),
+    },
+  },
 } satisfies RouteStateSpec<typeof familyDraftSchema>;
 
-export const specDocBlockSchema = z.object({
-  id: z.string(),
-  page: z.number(),
-  kind: z.string(),
-  md: z.string(),
-});
-export type SpecDocBlock = z.infer<typeof specDocBlockSchema>;
-
-export const specDocSchema = z.object({
-  parseId: z.string().nullish(),
-  fileName: z.string(),
-  blocks: z.array(specDocBlockSchema),
-});
+export const specDocSchema = parsedDocViewSchema;
 export type SpecDoc = z.infer<typeof specDocSchema>;
 
 import { podMemberSourceSchema } from "./settings.ts";
@@ -131,19 +140,10 @@ export const familyEvidenceSchema = z.union([
 ]);
 /* ── The document ──────────────────────────────────────────────────────────── */
 
-/** Parser-extracted figures/diagram crops — ids only; geometry stays in the parse
- * cache. Pea may cite an image id as a proposal source; the parser measured its
- * region, so image citations ground exactly (never estimated). */
-export const familyDocImageSchema = z.object({
-  id: z.string(),
-  page: z.number(),
-  category: z.string(),
-});
-
 export const familyProjectionSchema = z.object({
   bindings: routeBindingsSchema,
   stage: z.enum(["author", "evidence"]).optional(),
-  doc: specDocSchema.extend({ images: z.array(familyDocImageSchema).default([]) }).nullish(),
+  doc: specDocSchema.nullish(),
   evidence: familyEvidenceSchema.nullish(),
   plan: z
     .object({

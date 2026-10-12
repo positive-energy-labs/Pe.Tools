@@ -5,6 +5,7 @@ import { ActionButton, ActionGroup } from "#/components/lang/action-button";
 import { CounterExample, Demo, Gap } from "#/design-system/exhibit";
 
 import { ActionDemoCatalogue } from "../action-demo-catalogue";
+import { MachineSeedsDemo } from "../machine-seeds";
 
 const noop = () => {};
 
@@ -12,6 +13,7 @@ export function CatalogueActions() {
   return (
     <>
       <ActionDemoCatalogue />
+      <MachineSeedsDemo />
       <Demo
         label="Press"
         consumers="theme toggle, popover triggers, tabs, and surface machinery"

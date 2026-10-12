@@ -1,3 +1,4 @@
+import { resolveSdkSession, type SdkSession } from "./sdk-session.ts";
 import { freezeScript } from "./operation-script.ts";
 import { Ajv, type ValidateFunction } from "ajv";
 import { Effect, Schema } from "effect";
@@ -13,7 +14,7 @@ import {
   tsOnlyOperationSchemas,
 } from "@pe/host-contracts/operation-types";
 import { type ActionJournal } from "./action-journal.ts";
-import { BridgeError, resolveSessionTarget, type RevitBridge } from "./bridge.ts";
+import { BridgeError, type RevitBridge } from "./bridge.ts";
 import {
   readNativeReceipt,
   readOriginalProcess,
@@ -33,11 +34,11 @@ export function requireEligibleActor(
 export async function operationDefinition(
   key: string,
   bridge: RevitBridge["Service"],
-  selector?: string,
+  target?: SdkSession,
 ) {
   const local = tsOnlyOperationCatalog.find((row) => row.key === key);
   if (local) return local;
-  const target = await resolveGatewaySession(bridge, selector);
+  if (!target) throw refused("An SDK-resolved attachment is required");
   const result = await Effect.runPromise(
     Effect.result(bridge.invoke("host.ops.catalog", {}, target.sessionId, null)),
   );
@@ -56,34 +57,17 @@ export async function operationDefinition(
     requestSchemaJson: (raw as { requestSchemaJson?: string }).requestSchemaJson,
   };
 }
-async function resolveGatewaySession(bridge: RevitBridge["Service"], selector?: string) {
-  const sessions = (await Effect.runPromise(bridge.list))
-    .filter((s) => s.sessionId)
-    .map((s) => ({
-      ...s,
-      sessionId: s.sessionId!,
-      processId: s.processId ?? 0,
-      processStartUtcUnixMs: s.processStartUtcUnixMs ?? null,
-      sdkSessionId: s.sdkSessionId ?? null,
-      lane: s.lane ?? null,
-      documents: s.state?.openDocuments.flatMap((doc) => (doc.address ? [doc.address] : [])) ?? [],
-    }));
-  const target = resolveSessionTarget(sessions, selector);
-  if (target._tag !== "found")
-    throw refused(target._tag === "error" ? target.message : "No exact session available");
-  return target.session;
-}
-export async function gatewayTarget(
+export function gatewayTarget(
   key: string,
   needs: string,
-  bridge: RevitBridge["Service"],
-  selector?: string,
-  openId?: string,
-): Promise<ExecutionTarget> {
+  session?: SdkSession,
+  openDocumentId?: string,
+): Exclude<ExecutionTarget, { kind: "sdk-session" }> {
   if (isTsOnlyOperationKey(key)) return { kind: "host" };
-  const session = await resolveGatewaySession(bridge, selector);
-  if (needs === "nothing") return { kind: "session", session: session.sessionId };
-  const document = session.state?.openDocuments.find((doc) => doc.openId === openId);
+  if (!session) throw refused("An SDK-resolved attachment is required");
+  if (needs === "nothing" || needs === "session")
+    return { kind: "session", session: session.sessionId };
+  const document = session.state?.openDocuments.find((doc) => doc.openId === openDocumentId);
   if (
     !document ||
     (needs === "family-document" && !document.isFamilyDocument) ||
@@ -106,8 +90,12 @@ export async function admitGatewayAction(
   if (admission.kind !== "operation") throw refused("Operation admission kind required");
   if (Object.keys(admission.bases).length)
     throw refused("Independent operations do not consume Work bases");
+  if (admission.destination.kind === "sdk-session")
+    throw refused("An operation requires an exact attachment, not a lifecycle selection");
   const validate = async (process?: NativeProcess) => {
     const destination = admission.destination;
+    if (destination.kind === "sdk-session")
+      throw refused("Lifecycle selection is not a native destination");
     if (destination.kind === "host") {
       if (!isTsOnlyOperationKey(admission.key))
         throw refused("Native action needs an exact session");
@@ -116,7 +104,7 @@ export async function admitGatewayAction(
     if (isTsOnlyOperationKey(admission.key)) throw refused("Host action needs no Revit binding");
     const sessionId =
       destination.kind === "session" ? destination.session : destination.ref.session;
-    const session = await resolveGatewaySession(bridge, sessionId);
+    const session = await resolveSdkSession(bridge, { bridgeSessionId: sessionId }, sdk);
     if (
       session.sessionId !== sessionId ||
       (process &&
@@ -135,7 +123,7 @@ export async function admitGatewayAction(
     admission,
     async () => {
       const session = await validate();
-      const definition = await operationDefinition(admission.key, bridge, session?.sessionId);
+      const definition = await operationDefinition(admission.key, bridge, session);
       requireEligibleActor(definition, admission.actor);
       const actor = "actor" in definition ? definition.actor : undefined;
       if (definition.intent !== "Mutate")
@@ -158,11 +146,10 @@ export async function admitGatewayAction(
         if (!check(admission.input))
           throw refused(`Invalid native input: ${ajv.errorsText(check.errors)}`);
       }
-      const expected = await gatewayTarget(
+      const expected = gatewayTarget(
         admission.key,
         definition.needs,
-        bridge,
-        session?.sessionId,
+        session,
         admission.destination.kind === "document" ? admission.destination.ref.openId : undefined,
       );
       if (JSON.stringify(expected) !== JSON.stringify(admission.destination))
@@ -221,6 +208,8 @@ export async function admitGatewayAction(
           );
           if (admission.destination.kind === "host") return local(admission.key, input);
           const target = admission.destination;
+          if (target.kind === "sdk-session")
+            throw refused("Lifecycle selection is not a native destination");
           const answer = await Effect.runPromise(
             Effect.result(
               bridge.invoke(

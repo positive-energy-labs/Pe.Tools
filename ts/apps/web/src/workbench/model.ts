@@ -42,6 +42,22 @@ export function turnAtFocalPoint(
   return current?.turn;
 }
 
+/**
+ * The position a reload reopens: the tail while the view sits at the bottom (within `slack` px),
+ * so a reader following the newest turn comes back to the newest; else the turn on the focal axis.
+ */
+export function intentAt(
+  geometry: FocalGeometry[],
+  metrics: ScrollMetrics,
+  focal = 0.6,
+  slack = 24,
+): LensScrollIntent | undefined {
+  if (metrics.scrollHeight - metrics.scrollTop - metrics.clientHeight < slack)
+    return { kind: "tail" };
+  const turn = turnAtFocalPoint(geometry, metrics, focal);
+  return turn === undefined ? undefined : { kind: "turn", turn };
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }

@@ -17,7 +17,10 @@ test("resolves pea product home under the configured documents root", async () =
   try {
     const expected = path.join(profile.documentsRoot, "Pe.Tools");
     expect(resolvePeaProductHomePath()).toBe(expected);
-    expect(resolvePeaSkillPaths()).toEqual([path.join(expected, peaStandardSkillsRoot)]);
+    expect(resolvePeaSkillPaths()).toEqual([
+      path.join(expected, peaStandardSkillsRoot),
+      path.join(expected, ".claude", "skills"),
+    ]);
   } finally {
     await profile.dispose();
   }
@@ -72,8 +75,13 @@ test("materialization retires only the product's former skill directories", asyn
 
     const materialized = await materializeBundledPeaSkills();
 
-    expect(materialized.map((skill) => skill.name)).toEqual(
-      bundledPeaSkills.map((skill) => skill.name),
+    // Every bundled skill lands under each harness root: Codex's `.agents/skills`, Claude's `.claude/skills`.
+    expect(materialized.map((skill) => skill.name)).toEqual([
+      ...bundledPeaSkills.map((skill) => skill.name),
+      ...bundledPeaSkills.map((skill) => skill.name),
+    ]);
+    expect(new Set(materialized.map((skill) => path.dirname(path.dirname(skill.path))))).toEqual(
+      new Set(resolvePeaSkillPaths()),
     );
     await expect(access(path.dirname(retired))).rejects.toThrow();
     expect(await readFile(userOwned, "utf-8")).toBe("mine\n");

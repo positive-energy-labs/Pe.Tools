@@ -6,8 +6,8 @@ using Pe.Shared.HostContracts.SettingsStorage;
 namespace Pe.Shared.HostContracts.Bridge;
 
 public static class BridgeProtocol {
-    // 23: pod-less supplied drafts and Family Foundry before/after change evidence
-    public const int ContractVersion = 23;
+    // 24: runtime owner is required before bridge registration authorizes dispatch.
+    public const int ContractVersion = 24;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
@@ -59,7 +59,7 @@ public sealed record BridgeStateSnapshot(
 // The broker (TS host) derives the universal session id from hash(pid + processStartUtc); the
 // optional fields below are selectors/metadata (lane, sdkSessionId, buildStamp), never identity.
 //
-// SdkSessionId is the id `pe-revit session status` prints for this session (SessionRow.id) — the
+// SdkSessionId is the id `pe-revit session list` prints for this session (SessionRow.id) — the
 // name is QUALIFIED because the unqualified `sessionId` on this wire already means the BROKER's
 // hash. It replaced `sandboxId` at SDK beta.121, which retired the sandbox noun everywhere and
 // renamed the receipt field to `sessionId`. That is a wire rename, not an additive optional, and
@@ -72,7 +72,10 @@ public sealed record BridgeRegistrationRequest(
     string? SessionDescriptorPath = null,
     string? Lane = null,
     string? SdkSessionId = null,
-    string? BuildStamp = null
+    string? BuildStamp = null,
+    string? SourceRoot = null,
+    string? ServiceName = null,
+    string? InstalledRoot = null
 );
 
 public sealed record BridgeRegistrationAck(

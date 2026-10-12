@@ -1,4 +1,4 @@
-import { createTool } from "@mastra/core/tools";
+import { createTool } from "./tool.ts";
 import { DIAGRAM_TOOL_ID, diagramSpecSchema } from "@pe/agent-contracts";
 
 /**

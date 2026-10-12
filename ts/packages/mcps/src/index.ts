@@ -2,8 +2,6 @@ export {
   PeaCliCommands,
   buildCapabilities,
   bundledPeaSkills,
-  configurePeaProductToolContext,
-  ownedTurnDocuments,
   createCapabilityCatalogSource,
   createRouteRegistrations,
   peDo,
@@ -11,7 +9,6 @@ export {
   peRead,
   materializeBundledPeaSkills,
   peaProductHomeEnvVar,
-  peaProductToolMetadata,
   peaProductTools,
   peaStandardSkillsRoot,
   resolvePeaProductHomePath,
@@ -23,9 +20,11 @@ export type { PeaCliCommandOptions } from "./pea/PeaCliCommands.ts";
 export {
   discoverHostBaseUrl,
   resolveHostBaseUrl,
+  resolveLaneAndRoot,
   resolveWorkspaceKey,
 } from "./shared/host-config.ts";
 export { HostRpcCaller } from "./shared/host-rpc-caller.ts";
+export { startPeaMcp } from "./stdio.ts";
 export {
   ScriptingTools,
   bootstrapScriptWorkspace,
@@ -37,3 +36,9 @@ export {
   scriptPodExportInputSchema,
   scriptPodImportInputSchema,
 } from "./shared/scripting.ts";
+export {
+  peaAgentInstructions,
+  peaAgentInstructionsFor,
+  peaRevitOrientation,
+  type PeaRuntimeCapabilities,
+} from "./pea/instructions.ts";

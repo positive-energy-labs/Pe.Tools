@@ -1,60 +1,9 @@
 import { token } from "#/lib/token";
 import { annotation } from "#/components/anatomy";
-import { useState } from "react";
 import { toolTitle } from "@pe/agent-contracts";
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { Code, stringify } from "#/components/lang/code";
-import {
-  selectToolCalls,
-  formatBytes,
-  toolImages,
-  type ChatMessage,
-  type ChatState,
-  type ToolCall,
-} from "../chat-state";
-import { Press } from "#/components/lang/press";
-import { PressContent } from "#/components/anatomy/press-content";
+import { selectToolCalls, type ChatMessage, type ChatState, type ToolCall } from "../chat-state";
 import type { Moment, TraceCell } from "./scale";
-import { deferredResultSummary, useDeferredToolResult } from "../deferred-result";
-
-export function ContextStrip({ state, depth }: { state: ChatState; depth: "read" | "trace" }) {
-  const [open, setOpen] = useState(false);
-  const systemPrompt = state.inspect.systemPrompt;
-  const showContext = depth !== "read";
-
-  if (!(showContext && systemPrompt?.content)) return null;
-
-  return (
-    <div className="mt-[14px] mr-6 ml-[34px] grid gap-2">
-      {showContext && systemPrompt?.content ? (
-        <ArtifactFrame
-          head={
-            <span className="w-full [&>button]:w-full">
-              <Press
-                type="button"
-                tone="quiet"
-                size="caption"
-                title="Show or hide the resolved system prompt pea started with"
-                onClick={() => setOpen((value) => !value)}
-              >
-                <PressContent geometry="block">
-                  <span className="flex items-baseline justify-between gap-3 t-upper">
-                    <span>
-                      System prompt{systemPrompt.source ? ` · ${systemPrompt.source}` : ""}
-                    </span>
-                    <span>{open ? "hide" : "show"}</span>
-                  </span>
-                </PressContent>
-              </Press>
-            </span>
-          }
-        >
-          {open ? <Code code={systemPrompt.content} lang="plaintext" wrap /> : null}
-        </ArtifactFrame>
-      ) : null}
-    </div>
-  );
-}
 
 export function TraceCellView({
   cell,
@@ -84,31 +33,15 @@ function CellHeader({ call }: { call: ToolCall }) {
 }
 
 export function ToolCellBody({ call }: { call: ToolCall }) {
-  const deferred = useDeferredToolResult(call, true);
   const input = call.args;
-  const output = call.status === "completed" ? deferred.result : undefined;
+  const output = call.status === "completed" ? call.result : undefined;
   const error = call.status === "failed" ? call.error : undefined;
-  const images =
-    call.status === "completed" ? (deferred.ref ? toolImages(output) : call.images) : [];
+  const images = call.status === "completed" ? call.images : [];
   return (
     <>
       <CellHeader call={call} />
-      {deferred.ref ? (
-        <span className="t-small text-ink-2">
-          {deferredResultSummary(deferred.ref.summary)} · {formatBytes(deferred.ref.byteSize)}
-        </span>
-      ) : null}
       {input !== undefined ? <Code code={stringify(input)} lang="json" title="in" /> : null}
-      {deferred.pending ? (
-        <div className="t-prose text-ink-2">Loading full result…</div>
-      ) : deferred.error ? (
-        <div className="flex items-baseline gap-2 t-prose" data-tone="caution">
-          <span>{deferred.error.message}</span>
-          <Press type="button" tone="quiet" size="caption" onClick={deferred.retry}>
-            retry
-          </Press>
-        </div>
-      ) : images.length > 0 ? (
+      {images.length > 0 ? (
         images.map((src, index) => (
           <img key={index} {...annotation("tool-image")} src={src} alt="" />
         ))

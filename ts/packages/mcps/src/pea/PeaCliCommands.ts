@@ -174,11 +174,9 @@ export class PeaCliCommands {
         // by reading the output rather than by guessing.
         const hostBaseUrl = this.resolveHostBaseUrl(ctx.values.host);
         console.log(`host ${hostBaseUrl}`);
-        const catalog = await readCatalog(
-          undefined,
-          hostBaseUrl,
-          asOptionalString(ctx.values.bridgeSessionId),
-        );
+        const catalog = await readCatalog(undefined, hostBaseUrl, {
+          bridgeSessionId: asOptionalString(ctx.values.bridgeSessionId),
+        });
         if ("isError" in catalog) throw new Error(catalog.content);
         const rows = findCapabilities(catalog.capabilities, {
           query: firstNonBlank(ctx.values.query),

@@ -68,3 +68,5 @@ The surface that makes a firm model compute duct pressure drop: `/ducts` view `l
 - Promote the table reader and type rules (`.artifacts/pdrop/sa26/ctable.py`) into a package; the firm-wide cited catalog store is owed in `docs/features/design-system/LEDGER.md`; grille drops are its first consumer.
 - The native op key `ducts.apply` is shadowed on `pea host operations call` by the semantic action's stricter schema; the native op is reachable only through `ducts.preview-losses`/`ducts.apply-losses`.
 - `action-authority.guard.test.ts` fails on `rooms.trace` (predates this feature).
+- Port `/ducts` to `manifest.url` (`view`, `group`, `level`, `layers`, `selected`) when the branch merges: main's `route/url.ts` (2026-10-04) replaces the hand-written search mirror in `routes/ducts.tsx` and `ducts/route.tsx`; drop the `text()` numeric shim and the `replace: true` effect.
+- Where fan static pressure lands. Counsel: on the unit in Revit so it travels, and as a typed column on the Units card wall until the workbook can read it from Revit. kaitpw has not ruled.

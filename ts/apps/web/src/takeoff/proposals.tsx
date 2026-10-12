@@ -102,7 +102,12 @@ export function TakeoffEditCell({
     <StateCell
       {...cellFromTrichotomy(
         cell ?? { proposal: null, staged: null },
-        { value: show(shown), scale: "row", numeric: { integer, min: 0, digits } },
+        {
+          value: show(shown),
+          currentValue: show(value),
+          scale: "row",
+          numeric: { integer, min: 0, digits },
+        },
         show,
       )}
       transitions={cell ? reviewTransitions(wire, key, cell) : undefined}

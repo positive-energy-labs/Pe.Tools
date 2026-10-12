@@ -22,7 +22,6 @@ export const PROMPT_MAX = 200;
 const DEFAULTS = { mode: "threads" as const };
 
 export const chatSearchSchema = z.object({
-  variant: z.enum(["A", "B", "C"]).optional().catch(undefined),
   thread: z.string().optional(),
   // .catch keeps stale bookmarks (e.g. the old mode=chat) from throwing — they fall back to default.
   mode: z

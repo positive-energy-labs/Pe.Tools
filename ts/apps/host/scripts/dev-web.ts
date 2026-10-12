@@ -4,7 +4,11 @@ import { join, resolve } from "node:path";
 import { once } from "node:events";
 import { createServer } from "vite-plus";
 import { chooseServicePort, rememberServicePort } from "@pe/host-contracts/pe-service-host";
-import { checkoutRootFrom, productRoot } from "@pe/host-contracts/service-identity";
+import {
+  checkoutRootFrom,
+  hostProcessIdentity,
+  productRoot,
+} from "@pe/host-contracts/service-identity";
 
 if (!process.send) throw new Error("Run vp run dev from the host or workspace package.");
 const disconnected = once(process, "disconnect");
@@ -21,6 +25,7 @@ if (!sourceRoot || resolve(file.sourceRoot).toLowerCase() !== sourceRoot.toLower
 const name = file.name + "-web";
 const baseUrl = `http://127.0.0.1:${file.port}`;
 process.env.PE_TOOLS_HOST_BASE_URL = baseUrl;
+process.env[hostProcessIdentity.serviceNameVariable] = file.name;
 // Each launch owns its optimizer files, including after an abrupt backend/watch exit.
 const cacheDir = await mkdtemp(join(tmpdir(), "pe-vite-"));
 let vite: Awaited<ReturnType<typeof createServer>> | undefined;

@@ -1,15 +1,14 @@
+import { spawn } from "node:child_process";
+import { dirname, join } from "node:path";
 import { Deferred, Effect, Layer, type Scope } from "effect";
 import { capture } from "@pe/runtime";
-import { hostProcessIdentity } from "@pe/host-contracts/contracts";
-import { chooseServicePort } from "@pe/host-contracts/pe-service-host";
+import { serviceFilePath, type ServiceFile } from "@pe/host-contracts/pe-service";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { productRoot } from "@pe/host-contracts/service-identity";
-import { resolveHostVersion } from "./host-lifecycle.ts";
+import { openWindow, prepareHostBinding, resolveHostVersion } from "./host-lifecycle.ts";
 import { makeHttpLive, resolveWebRoot } from "./app.ts";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
-import { makeMastraRuntimeLive } from "./mastra-runtime.ts";
-
-const preferredPort = Number(new URL(hostProcessIdentity.defaultHostBaseUrl).port);
+import { makeInstalledUpdateReader } from "./update-route.ts";
 
 /** The shared host lifecycle used by both installed startup and source web development. */
 export const hostProgram = (
@@ -24,36 +23,161 @@ export const hostProgram = (
       yield* Effect.sync(() =>
         capture("app_boot", { component: "host", version: resolveHostVersion() }),
       );
-      const port = yield* Effect.promise(() =>
-        chooseServicePort(productRoot(), hostOwnership.serviceName, preferredPort),
-      );
+      const open = process.argv.includes("--open");
+      const reuse = (incumbent: ServiceFile) => {
+        console.log(
+          `pe-host service '${hostOwnership.serviceName}' already serving on ${incumbent.port} (pid ${incumbent.pid})`,
+        );
+        if (open) openWindow(incumbent.port);
+      };
+      const binding = yield* Effect.promise(() => prepareHostBinding(open, resolveHostVersion()));
+      if (typeof binding !== "number") {
+        reuse(binding);
+        return;
+      }
+      const port = binding;
 
       const latch = yield* Deferred.make<void>();
       const handle = yield* Deferred.make<ServiceHostHandle>();
       const webUrl = web ? yield* Deferred.make<string>() : undefined;
+      const updateReader = makeInstalledUpdateReader();
       const HttpLive = makeHttpLive({
         port,
         webUrl,
         capabilities: hostCapabilities,
-        mastraLayer: makeMastraRuntimeLive(hostCapabilities),
-        lifecycle: { latch, handle },
+        lifecycle: {
+          latch,
+          handle,
+          startTray: hostOwnership.lane === "installed" ? startInstalledTray : undefined,
+        },
+        updateReader,
         webRoot: resolveWebRoot(),
       });
 
-      yield* Effect.forkDetach(
+      yield* Effect.forkScoped(
         Deferred.await(latch).pipe(
           Effect.andThen(Effect.sync(() => setTimeout(() => process.exit(0), 5_000).unref())),
         ),
       );
 
       console.log(`pe-host binding http://127.0.0.1:${port || "dynamic"}`);
+      if (open)
+        // Open only once the claim holds, on the port the service file names.
+        yield* Effect.forkScoped(
+          Deferred.await(handle).pipe(
+            Effect.tap((claimed) => Effect.sync(() => openWindow(claimed.serviceFile.port))),
+          ),
+        );
       const frontend =
         web && webUrl
           ? Effect.flatMap(Deferred.await(handle), (claimed) => web(claimed, webUrl))
           : Effect.never;
       yield* Effect.raceFirst(
-        Effect.raceFirst(Layer.launch(HttpLive), frontend),
+        Effect.raceFirst(
+          Layer.launch(HttpLive).pipe(
+            Effect.catchTag("ServeError", (error) => {
+              const cause = error.cause;
+              if (
+                hostOwnership.lane !== "installed" ||
+                typeof cause !== "object" ||
+                cause === null ||
+                !("code" in cause) ||
+                cause.code !== "EADDRINUSE"
+              )
+                return Effect.fail(error);
+              // A listener won between census and bind. Re-read it, never retry the bind.
+              return Effect.promise(() => prepareHostBinding(open, resolveHostVersion())).pipe(
+                Effect.flatMap((incumbent) =>
+                  typeof incumbent === "number"
+                    ? Effect.fail(error)
+                    : Effect.sync(() => reuse(incumbent)),
+                ),
+              );
+            }),
+          ),
+          frontend,
+        ),
         Deferred.await(latch).pipe(Effect.tap(() => Effect.sync(() => onShutdown?.()))),
       );
     }),
   );
+
+/** Claim-owned child: EOF asks the shim to dispose, and the finalizer awaits its actual exit. */
+export async function startInstalledTray(handle: ServiceHostHandle): Promise<() => Promise<void>> {
+  let stopping = false;
+  let retries = 0;
+  let recovery: ReturnType<typeof setTimeout> | undefined;
+  let current: { child: ReturnType<typeof spawn>; exited: Promise<void> };
+  const recover = () => {
+    if (stopping || recovery) return;
+    if (retries >= 3) {
+      console.warn("pe-host tray recovery exhausted; tray unavailable until the host restarts");
+      return;
+    }
+    recovery = setTimeout(
+      () => {
+        recovery = undefined;
+        if (!stopping)
+          void launch().catch((error) => {
+            console.warn(`pe-host tray recovery: ${String(error)}`);
+            recover();
+          });
+      },
+      1_000 * 2 ** retries++,
+    );
+  };
+  const launch = async () => {
+    const child = spawn(
+      join(dirname(hostOwnership.executablePath), "tray", "Pe.Host.Tray.exe"),
+      [
+        "--parent-pid",
+        String(handle.serviceFile.pid),
+        "--parent-start",
+        handle.serviceFile.processStartUtc,
+        "--service-file",
+        serviceFilePath(productRoot(), hostOwnership.serviceName),
+      ],
+      { windowsHide: true, stdio: ["pipe", "ignore", "ignore"] },
+    );
+    child.stdin?.on("error", (error) => console.warn(`pe-host tray pipe: ${String(error)}`));
+    const exited = new Promise<void>((resolve) => {
+      child.once("close", (code, signal) => {
+        if (code !== 0) console.warn(`pe-host tray exited: ${code ?? signal}`);
+        resolve();
+        recover();
+      });
+    });
+    current = { child, exited };
+    await new Promise<void>((resolve, reject) => {
+      child.once("spawn", resolve);
+      child.once("error", reject);
+      child.once("close", () => reject(Error("Tray exited before startup")));
+    });
+  };
+  try {
+    await launch();
+  } catch (error) {
+    stopping = true;
+    if (recovery) clearTimeout(recovery);
+    throw error;
+  }
+  return async () => {
+    stopping = true;
+    if (recovery) clearTimeout(recovery);
+    const { child, exited } = current;
+    child.stdin?.end();
+    // A shim that does not dispose on EOF must not hold the host: the installer stub gives a
+    // handed-off host 120 s to exit, and a successor's claim waits on this pid. Bounded, then killed.
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const timer = new Promise<"timeout">((resolve) => {
+      timeout = setTimeout(() => resolve("timeout"), 5_000);
+    });
+    const outcome = await Promise.race([exited, timer]);
+    clearTimeout(timeout);
+    if (outcome === "timeout") {
+      console.warn("pe-host tray did not exit on EOF within 5 s; killing it");
+      child.kill();
+      await exited;
+    }
+  };
+}

@@ -159,6 +159,7 @@ export function scheduleCellState(
   return {
     ...cellFromTrichotomy(cell, {
       value: shown,
+      currentValue: current || "(blank)",
       ...(isStale ? { agree: "drift" as const, modelValue: current, reviewed: staleAt.was } : {}),
       cap: binding == null ? "nohome" : lock ? "locked" : "editable",
       capReason: lock ?? undefined,

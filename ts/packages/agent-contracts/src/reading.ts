@@ -1,3 +1,4 @@
+import { sdkSessionSelectionSchema } from "./sdk-session.ts";
 /**
  * Reading — anything observed from Revit, the host, or disk. One subject, one observation time,
  * one lifecycle. Readings arrive on one stream with gap frames. Receipts, inventory, files and
@@ -62,14 +63,15 @@ export type Reading<T> =
 /** Owner addresses, not a second state model. Projection inputs participate in identity. */
 export const sdkReadingSchema = z.strictObject({
   kind: z.literal("sdk"),
-  read: z.enum(["sessions", "doctor", "recents", "current"]),
-  id: z.string().min(1).optional(),
+  read: z.enum(["sessions", "doctor", "recents", "documents"]),
+  session: sdkSessionSelectionSchema.optional(),
   year: z.string().min(1).optional(),
   all: z.boolean().optional(),
 });
 export type SdkReading = z.infer<typeof sdkReadingSchema>;
 
 export const readingRequestSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("machine") }),
   sdkReadingSchema,
   z.discriminatedUnion("binding", [
     workKeySchema.options[0].extend({ kind: z.literal("work") }),
@@ -135,8 +137,6 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
     document: z.string().min(1).optional(),
     text: z.boolean().optional(),
   }),
-  /** Installed product version and the update the installer offers. */
-  z.strictObject({ kind: z.literal("install-status") }),
 ]);
 export type ReadingRequest = z.infer<typeof readingRequestSchema>;
 
@@ -186,4 +186,5 @@ export type ActionReadingKey =
   | "families"
   | "parameter-links"
   | "schedules"
-  | "sdk";
+  | "sdk"
+  | "machine";

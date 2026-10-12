@@ -15,7 +15,7 @@ import { PodsRouteContent } from "#/routes/pods";
 import { FamiliesRouteContent } from "#/routes/families";
 import { ParameterLinksRouteContent } from "#/routes/parameter-links";
 import { TakeoffsPane } from "#/takeoff/pane";
-import { InstancesPage } from "#/instances/route";
+import { OpenPage } from "#/open/route";
 import { RoomsRoute } from "#/rooms/route";
 import { DuctsRoute, type DuctsSearch } from "#/ducts/route";
 import type { ChatPluginRoute } from "./chat-plugins";
@@ -23,7 +23,7 @@ import type { ChatPluginRoute } from "./chat-plugins";
 type View = (props: { thread: string; visible: boolean }) => ReactNode;
 
 const views: Record<ChatPluginRoute, View> = {
-  instances: () => <HostedInstances />,
+  instances: () => <OpenPage />,
   takeoffs: ({ thread }) => <TakeoffsPane thread={thread} />,
   family: ({ thread }) => <FamilyRouteView thread={thread} url={false} />,
   families: ({ thread, visible }) => (
@@ -85,17 +85,9 @@ export function useChatPluginHost(
   return { slot, kept };
 }
 
-function HostedInstances() {
-  const [target, setTarget] = useState("");
-  return <InstancesPage target={target} setTarget={setTarget} />;
-}
-
 function HostedRooms() {
-  const [view, setView] = useState("");
   const [layers, setLayers] = useState("");
-  return (
-    <RoomsRoute view={view} focus="" layers={layers} setLayers={setLayers} setView={setView} />
-  );
+  return <RoomsRoute focus="" layers={layers} setLayers={setLayers} url={false} />;
 }
 
 /** A hosted view owns no URL: the page's URL half lives in local state. */

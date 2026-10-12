@@ -13,6 +13,7 @@ Tests and scripts resolve the root from `PE_PRIVATE_FIXTURES`, defaulting to `<r
 | `fixtures/project-a/web/` | Browser takeoff demo: `manifest.json`, extract, room map, TSVs, `zones.json` (45 declared zones) | derived from `rhvac/` |
 | `fixtures/project-b/rhvac/` | second RHVAC eval set, two levels | kaitpw |
 | `fixtures/project-c/partition/live`, `level2` | Partition captures | recaptured |
+| `fixtures/families/hcb/HCB.rfa` | Mechanical-equipment family: three extrusions on unnamed planes, two face-centred duct connectors, one electrical; read by `FamilyModelCaptureTests` | kaitpw, 2026-10-06 field capture |
 | `rewrite/` | inputs for the 2026-09 history rewrite | disposable after the rewrite |
 | `sdk-feed/` | optional home for the local NuGet feed if it leaves `eng/sdk-feed` | NuGet |
 

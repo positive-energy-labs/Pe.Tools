@@ -1,3 +1,4 @@
+import { withInvocationContext } from "../src/shared/invocation-context.ts";
 import type { PodList } from "@pe/host-contracts/operation-types";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -9,17 +10,16 @@ import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-typ
 import {
   address,
   findCapabilities,
-  turnContextKey,
   type CapabilityCatalog,
-  type Turn,
+  type ThreadHead,
 } from "@pe/agent-contracts";
 import { buildCapabilities } from "../src/pea/capabilities.ts";
 import { createRouteRegistrations } from "../src/pea/routes.ts";
 import { bundledPeaSkills } from "../src/pea/skills.ts";
 import { peDo, peFind, peRead } from "../src/pea/capability-tools.ts";
-import { ScopeStore, admitTurn } from "../../runtime/src/scope-store.ts";
 
 import { bodyText } from "./body-text.ts";
+import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
 
 const ops = [
   {
@@ -130,7 +130,7 @@ test("an op's [Op(Finds)] search terms find it when its key, title, and descript
 });
 
 async function find(input: Record<string, unknown>) {
-  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
+  fakeRuntimeHost("http://127.0.0.1:9");
   vi.stubGlobal("fetch", async () => Response.json(catalog()));
   return (await run(peFind, { limit: 50, ...input })) as {
     matches: Array<{ key: string; description: string; needs: string; input: unknown }>;
@@ -216,7 +216,7 @@ test("F-H6-3: plan and capture over loaded families are human verbs; Pea never f
     `workflow:${key}`,
   ]);
   for (const key of verbs) expect(rows.find((row) => row.key === key)?.actor).toBe("human");
-  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
+  fakeRuntimeHost("http://127.0.0.1:9");
   vi.stubGlobal("fetch", async () => Response.json(catalog()));
   try {
     const found = (await run(peFind, { query: "plan capture loaded families", limit: 50 })) as {
@@ -256,7 +256,7 @@ test.each([
   "set a parameter value on family types",
   "change type parameters for families",
 ])("F-B-1: family type changes find the Families propose door: %s", async (query) => {
-  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
+  fakeRuntimeHost("http://127.0.0.1:9");
   vi.stubGlobal("fetch", async () => Response.json(catalog()));
   try {
     const found = (await run(peFind, { query, limit: 50 })) as {
@@ -273,7 +273,7 @@ test.each([
 });
 
 test("F-B-2: a Families route read carries its proposed scope types", async () => {
-  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
+  fakeRuntimeHost("http://127.0.0.1:9");
   const calls: Array<{ url: URL; body?: Record<string, unknown> }> = [];
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
@@ -337,7 +337,7 @@ test("F-B-2: a Families route read names a missing scope and preserves a catalog
       true,
     ],
   ] as const) {
-    vi.stubEnv("PE_TOOLS_HOST_BASE_URL", `http://127.0.0.1:${port}`);
+    fakeRuntimeHost(`http://127.0.0.1:${port}`);
     vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(input instanceof Request ? input.url : String(input));
       const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
@@ -377,23 +377,32 @@ test("F-B-2: a Families route read names a missing scope and preserves a catalog
 });
 
 type ExecutableTool = { execute?: (input: never, context: never) => Promise<unknown> };
-const turn: Turn = {
-  id: "11111111-1111-4111-8111-111111111111",
+type Head = ThreadHead & { thread: string };
+const turn: Head = {
   thread: "t1",
   defaultTarget: { kind: "named", session: "b1", address: address("C:\\Models\\A.rvt") },
   revision: 4,
 };
-const run = (tool: ExecutableTool, input: unknown, admitted = turn) =>
-  tool.execute!(
-    input as never,
-    {
-      agent: { toolCallId: "call-1" },
-      requestContext: { [turnContextKey]: admitted },
-    } as never,
-  );
+/** A harness child's call: `PE_THREAD` names the thread, and the host answers its live head. */
+async function withHead<T>(head: Head, body: () => Promise<T>): Promise<T> {
+  const inner = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    return url.pathname === `/pe/scope/${encodeURIComponent(head.thread)}`
+      ? Response.json({ defaultTarget: head.defaultTarget, revision: head.revision })
+      : inner(input as string, init);
+  }) as typeof fetch;
+  try {
+    return await withInvocationContext({ thread: head.thread }, body);
+  } finally {
+    globalThis.fetch = inner;
+  }
+}
+const run = (tool: ExecutableTool, input: unknown, head = turn) =>
+  withHead(head, () => tool.execute!(input as never, { agent: { toolCallId: "call-1" } } as never));
 
 test("Families view Pea doors require a mounted pane and return an exact retained reference", async () => {
-  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
+  fakeRuntimeHost("http://127.0.0.1:9");
   const instance = "00000000-0000-4000-8000-000000000001";
   let mounted = false;
   let stale = false;
@@ -478,7 +487,7 @@ test("Families view Pea doors require a mounted pane and return an exact retaine
 test("pe_find reads native capabilities under an exact-open turn Target", async () => {
   // Name the host explicitly: without it `base()` discovers no running dev host for this
   // worktree and throws before any fetch, so the URL under test is never built.
-  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
+  fakeRuntimeHost("http://127.0.0.1:9");
   const calls: URL[] = [];
   vi.stubGlobal("fetch", async (input: string | URL | Request) => {
     calls.push(new URL(input instanceof Request ? input.url : String(input)));
@@ -506,7 +515,7 @@ test.each([
   "an exact-open turn Target reads and writes %s Work with Address %s (E2E-J1)",
   async (route, projectA) => {
     // Match the browser's binding, including the open lifetime used for unsaved Work and Save As.
-    vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
+    fakeRuntimeHost("http://127.0.0.1:9");
     const routeCalls: URL[] = [];
     vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(input instanceof Request ? input.url : String(input));
@@ -528,7 +537,7 @@ test.each([
         ? Response.json({ route, revision: 2, doc: {}, ok: true })
         : Response.json({ error: `unknown route '${route}'` }, { status: 404 });
     });
-    const open: Turn = {
+    const open: Head = {
       ...turn,
       defaultTarget: { kind: "open", ref: { session: "b1", openId: "project-a" } },
     };
@@ -577,8 +586,8 @@ test.each([
   },
 );
 
-test("an explicit document detour leaves the next call on the frozen turn default", async () => {
-  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
+test("an explicit document detour leaves the next call on the thread head default", async () => {
+  fakeRuntimeHost("http://127.0.0.1:9");
   const targets: string[][] = [];
   vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
     const url = new URL(input);
@@ -626,8 +635,8 @@ test("an explicit document detour leaves the next call on the frozen turn defaul
   }
 });
 
-test("real turn admission freezes an open lifetime; reopen needs an explicit override and host/session work needs no Work", async () => {
-  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
+test("the live head names an open lifetime; reopen needs an explicit override and host/session work needs no Work", async () => {
+  fakeRuntimeHost("http://127.0.0.1:9");
   let openId = "a";
   const dispatches: Array<{ key: string; session: string | null; document: string | null }> = [];
   const source = catalog();
@@ -673,32 +682,12 @@ test("real turn admission freezes an open lifetime; reopen needs an explicit ove
     return Response.json({ done: true });
   });
   try {
-    const head = {
+    const head: Head = {
+      thread: "t1",
       defaultTarget: { kind: "open", ref: { session: "b1", openId: "a" } },
       revision: 4,
     };
-    const scopes = new ScopeStore(
-      async () => ({
-        getState: async () => head,
-        setState: async () => {
-          throw Error("unexpected Work/head write");
-        },
-      }),
-      "resource",
-    );
-    let context: unknown;
-    await admitTurn(
-      scopes,
-      {
-        thread: { requireId: () => "t1" },
-        sendSignal: (_signal: unknown, options: unknown) => {
-          context = options;
-          return { accepted: Promise.resolve() };
-        },
-      } as never,
-      { content: "inspect" },
-    );
-    const call = (input: unknown) => peRead.execute!(input as never, context as never);
+    const call = (input: unknown) => run(peRead, input, head);
     expect(
       await call({ key: "op:revit.catalog.loaded-families", timeoutSeconds: 30 }),
     ).toMatchObject({ ok: true, revision: 4 });
@@ -735,7 +724,11 @@ test("real turn admission freezes an open lifetime; reopen needs an explicit ove
     ).toMatchObject({ ok: true });
     expect(
       await peRead.execute!(
-        { key: "op:revit.context.document-session", target: "idle", timeoutSeconds: 30 } as never,
+        {
+          key: "op:revit.context.document-session",
+          target: { id: "idle" },
+          timeoutSeconds: 30,
+        } as never,
         {} as never,
       ),
     ).toMatchObject({ ok: true });
@@ -745,9 +738,8 @@ test("real turn admission freezes an open lifetime; reopen needs an explicit ove
       ["b1", "a"],
       ["b1", "a2"],
       [null, null],
-      ["idle", null],
+      [null, null],
     ]);
-    expect(await scopes.read("t1")).toEqual(head);
   } finally {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
@@ -755,7 +747,7 @@ test("real turn admission freezes an open lifetime; reopen needs an explicit ove
 });
 
 test("the doors ride the host under the turn Target and name the revision and resolved target", async () => {
-  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
+  fakeRuntimeHost("http://127.0.0.1:9");
   const calls: Array<{ method: string; url: URL; headers: Headers; body?: unknown }> = [];
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
@@ -831,7 +823,7 @@ test("the doors ride the host under the turn Target and name the revision and re
     expect(map.sessions).toHaveLength(1);
     expect(map.revision).toBe(4);
     // The catalog is read for the turn's Target Address, never for a model-typed selector.
-    expect(calls[0]?.url.search).toBe("?target=C%3A%5CModels%5CA.rvt");
+    expect(calls[0]?.url.search).toBe("?target=C%3A%5CModels%5CA.rvt&session=b1");
 
     const op = (await run(peRead, {
       key: "op:revit.catalog.loaded-families",
@@ -909,7 +901,7 @@ test("Pea doors author native JSON and plan both family routes under the turn Ta
       "utf8",
     ),
   );
-  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
+  fakeRuntimeHost("http://127.0.0.1:9");
   const writes: Array<{ url: URL; body: Record<string, unknown> }> = [];
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
@@ -924,18 +916,10 @@ test("Pea doors author native JSON and plan both family routes under the turn Ta
     for (const route of ["family", "families"] as const) {
       const document = `C:\\Models\\FFRouteProof.${route === "family" ? "rfa" : "rvt"}`;
       const scoped = (input: unknown) =>
-        peDo.execute!(
-          input as never,
-          {
-            agent: { toolCallId: `ff-${route}` },
-            requestContext: {
-              [turnContextKey]: {
-                ...turn,
-                defaultTarget: { kind: "named", session: "ff-proof", address: document },
-              },
-            },
-          } as never,
-        );
+        run(peDo, input, {
+          ...turn,
+          defaultTarget: { kind: "named", session: "ff-proof", address: address(document) },
+        });
       const member = { pod: "pe-standards", path: "settings/ff-route-proof.json" };
       expect(
         await scoped({ key: "route:pods", workspaceId: "settings:resolved-file", input: {} }),

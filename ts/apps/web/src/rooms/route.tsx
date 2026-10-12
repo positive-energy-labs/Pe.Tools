@@ -97,23 +97,22 @@ function useRoomsTrace(
 const PLAN_PX = 8000;
 
 export function RoomsRoute({
-  view: urlView,
   focus,
   layers,
   setLayers,
-  setView,
+  url = true,
 }: {
-  view: string;
   /** The URL's `focus`: region labels, comma separated. */
   focus: string;
   /** The URL's `layers`: solver layers, comma separated. */
   layers: string;
   setLayers: (next: string) => void;
-  setView: (view: string) => void;
+  /** False in a chat pane, which does not own the URL. */
+  url?: boolean;
 }) {
   const [chosen] = useChooseTarget();
   const thread = useRouteThread();
-  const handle = useRoute(manifest, { target: chosen, thread, page: { view: urlView } });
+  const handle = useRoute(manifest, { target: chosen, thread, url });
   const [page, setPage] = handle.page;
   const ladder = useDocumentLadder(handle);
   const doc =
@@ -124,11 +123,6 @@ export function RoomsRoute({
   const plan = usePlanImage(handle.resolution, page.view || undefined, PLAN_PX);
   const trace = useRoomsTrace(doc, page.view, page.epoch);
   const [hovered, setHovered] = useState<string | null>(null);
-
-  // The view is the URL's too, so a link lands on the same plan.
-  useEffect(() => {
-    if (page.view !== urlView) setView(page.view);
-  }, [page.view]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const levels = snapshot?.levels ?? [];
   const level = levels.find((item) => item.views.includes(page.view)) ?? null;

@@ -4,13 +4,6 @@ export const MODES: Mode[] = ["threads", "trace", "world"];
 
 export const MODE_HINT: Record<Mode, string> = {
   threads: "Your recent threads — pick one, start fresh, or search all (⌘K).",
-  trace: "The detail lane: tool input/output, reasoning, memory, context.",
-  world:
-    "The world inspector: what Pea actually sent the model, ordered by request position, with cache state.",
+  trace: "The detail lane: tool input/output and reasoning.",
+  world: "The world inspector: the harness's own count of context used and free.",
 };
-
-export type Depth = "read" | "trace";
-
-export function modeDepth(mode: Mode): Depth {
-  return mode === "threads" ? "read" : "trace";
-}

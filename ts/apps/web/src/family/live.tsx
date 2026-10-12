@@ -1,7 +1,6 @@
 import { useEffect, useMemo } from "react";
 
 import { frozenDemo } from "#/host/demo-client";
-import type { EntityPage } from "#/route";
 import { EntityRouteView } from "#/route/entity";
 import { BuildStrip } from "#/family/build";
 import { usePodList } from "#/route/pods";
@@ -19,20 +18,18 @@ export function FamilyRouteView({
   target = null,
   thread,
   capture,
-  initial,
   url = true,
 }: {
   target?: string | null;
   thread?: string;
   /** `?capture=true`: capture the open family as soon as the route can. */
   capture?: boolean;
-  initial?: Partial<EntityPage>;
   /** False in a chat pane, which does not own the URL. */
   url?: boolean;
 }) {
   const demo = useMemo(() => frozenDemo() !== null, []);
   const [pods, refreshPods] = usePodList(!demo);
-  const store = useFamilyStore({ target, thread, pods, initial });
+  const store = useFamilyStore({ target, thread, pods, url });
   const captureReady = store.handle.actions.capture.refusal === null;
   const readReady = store.handle.actions.read.refusal === null;
   // Unread once the Work reading is current: a reload must not read over a draft still loading.

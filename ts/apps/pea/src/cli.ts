@@ -1,23 +1,15 @@
 import { cli, define } from "gunshi";
-import { PeaCliCommands, discoverHostBaseUrl, resolveWorkspaceKey } from "@pe/mcps";
+import { renderUsage } from "gunshi/renderer";
+import { harnessIds, type HarnessId } from "@pe/agent-contracts";
+import { PeaCliCommands, discoverHostBaseUrl, resolveWorkspaceKey, startPeaMcp } from "@pe/mcps";
+import type { PeaPromptRequest } from "./prompt.ts";
 
 export async function runPeaMain(args = process.argv.slice(2)): Promise<void> {
-  if (isRootAcpInvocation(args)) {
-    const { runPeaAcp } = await import("./runtime.ts");
-    const options = parsePeaRootAcpOptions(args);
-    await runPeaAcp({
-      modelId: options.modelId,
-      workspaceRoot: options.workspaceRoot,
-    });
-    return;
-  }
-
   if (isRootPromptInvocation(args)) {
     const { runPeaPrompt } = await import("./prompt.ts");
     const options = parsePeaRootPromptOptions(args);
     const exitCode = await runPeaPrompt(options);
-    // The headless runtime leaves live handles (storage, controllers) behind even after a
-    // best-effort close; exit explicitly so one-shot prompt runs always terminate.
+    // Exit explicitly so a dangling SSE socket never keeps a one-shot run alive.
     process.exit(exitCode);
   }
 
@@ -27,8 +19,8 @@ export async function runPeaMain(args = process.argv.slice(2)): Promise<void> {
     description: "Pea product/operator CLI.",
     subCommands: createPeaCliSubCommands(),
     fallbackToEntry: true,
-    // The banner goes to stdout; a --json command's stdout is exactly one JSON object.
-    ...(args.includes("--json") ? { renderHeader: null } : {}),
+    // JSON and MCP stdout are protocol streams.
+    ...(args.includes("--json") || args[0] === "mcp" ? { renderHeader: null } : {}),
   });
 }
 
@@ -39,30 +31,15 @@ export function createPeaCliCommand() {
     toKebab: true,
     examples: [
       "pea",
-      "pea --acp",
       'pea --prompt "Summarize the open Revit documents." --json',
       "pea host status",
+      "pea mcp --host dev",
       "pea script bootstrap",
       "pea script execute --source-path src\\SampleScript.cs",
     ].join("\n"),
     args: protocolArgs,
     run: async (ctx) => {
-      if (ctx.values.acp) {
-        const { runPeaAcp } = await import("./runtime.ts");
-        await runPeaAcp({
-          modelId: ctx.values.modelId,
-          workspaceRoot: ctx.values.workspaceRoot,
-        });
-        return;
-      }
-
-      const { runPeaTui } = await import("./runtime.ts");
-      await runPeaTui({
-        modelId: ctx.values.modelId,
-        workspaceRoot: ctx.values.workspaceRoot,
-      });
-
-      console.log("Run `pea --help` to list product commands.");
+      console.log(await renderUsage(ctx));
       console.log(`host      ${discoverHostBaseUrl() ?? "(not running — vp run @pe/host#dev)"}`);
       console.log(`workspace ${resolveWorkspaceKey()}`);
     },
@@ -72,15 +49,21 @@ export function createPeaCliCommand() {
 export function createPeaCliSubCommands() {
   return {
     ...new PeaCliCommands().commands(),
+    mcp: define({
+      name: "mcp",
+      description: "Serve Pea's tools over local stdio for an MCP client on this machine.",
+      args: {
+        host: { type: "string", description: "Host URL, installed, dev, or a worktree path." },
+      },
+      run: async (ctx) => {
+        await startPeaMcp(ctx.values.host);
+      },
+    }),
   };
 }
 
 export function getPeaCliCommandNames(): string[] {
   return Object.keys(createPeaCliSubCommands());
-}
-
-function isRootAcpInvocation(args: string[]): boolean {
-  return args.includes("--acp") && !args.some((arg) => arg === "--help" || arg === "-h");
 }
 
 function isRootPromptInvocation(args: string[]): boolean {
@@ -90,15 +73,10 @@ function isRootPromptInvocation(args: string[]): boolean {
   );
 }
 
-function parsePeaRootPromptOptions(args: string[]): {
-  prompt: string;
-  threadId?: string;
-  json?: boolean;
-  timeoutSeconds?: number;
-  workspaceRoot?: string;
-} {
+function parsePeaRootPromptOptions(args: string[]): PeaPromptRequest {
   const consumed = new Set<number>();
   const prompt = parseStringArg(args, consumed, "--prompt");
+  const modelId = parseStringArg(args, consumed, "--model", "--model-id", "--modelId");
   const threadId = parseStringArg(args, consumed, "--thread", "--thread-id", "--threadId");
   const timeoutSecondsText = parseStringArg(
     args,
@@ -106,8 +84,9 @@ function parsePeaRootPromptOptions(args: string[]): {
     "--timeout-seconds",
     "--timeoutSeconds",
   );
-  const workspaceRoot = parseStringArg(args, consumed, "--workspace-root", "--workspaceRoot");
+  const harness = parseStringArg(args, consumed, "--harness") ?? "claude";
   const json = parseBooleanArg(args, consumed, "--json");
+  const allow = parseBooleanArg(args, consumed, "--allow");
 
   const unexpected = args.filter((_, index) => !consumed.has(index));
   if (unexpected.length > 0) {
@@ -115,6 +94,9 @@ function parsePeaRootPromptOptions(args: string[]): {
   }
   if (!prompt || prompt.trim().length === 0) {
     throw new Error('Provide a prompt: pea --prompt "..." [--thread <id>] [--json]');
+  }
+  if (!harnessIds.includes(harness as HarnessId)) {
+    throw new Error(`--harness must be one of: ${harnessIds.join(", ")}.`);
   }
 
   let timeoutSeconds: number | undefined;
@@ -125,24 +107,15 @@ function parsePeaRootPromptOptions(args: string[]): {
     }
   }
 
-  return { prompt, threadId, json, timeoutSeconds, workspaceRoot };
-}
-
-function parsePeaRootAcpOptions(args: string[]): {
-  modelId?: string;
-  workspaceRoot?: string;
-} {
-  const consumed = new Set<number>();
-  const modelId = parseStringArg(args, consumed, "--model-id", "--modelId");
-  const workspaceRoot = parseStringArg(args, consumed, "--workspace-root", "--workspaceRoot");
-  parseBooleanArg(args, consumed, "--acp");
-
-  const unexpected = args.filter((_, index) => !consumed.has(index));
-  if (unexpected.length > 0) {
-    throw new Error(`Unsupported Pea ACP option: ${unexpected.join(" ")}`);
-  }
-
-  return { modelId, workspaceRoot };
+  return {
+    prompt,
+    harness: harness as HarnessId,
+    threadId,
+    modelId,
+    json,
+    timeoutSeconds,
+    allow,
+  };
 }
 
 function parseStringArg(
@@ -183,27 +156,24 @@ function parseBooleanArg(args: string[], consumed: Set<number>, ...names: string
   return found;
 }
 
-const workspaceArgs = {
-  workspaceRoot: {
-    type: "string",
-    description: "Pea product workspace root. Defaults to ~/Documents/Pe.Tools.",
-  },
-} as const;
-
 const protocolArgs = {
-  acp: {
-    type: "boolean",
-    description: "Run Pea as an ACP agent over stdio.",
-    default: false,
-  },
   prompt: {
     type: "string",
     description:
-      "Run one headless Pea turn and print { threadId, response }. Combine with --thread <id> to continue a thread and --json for machine-readable output.",
+      "Run one headless turn on a host harness thread and print { ok, threadId, harness, model, stopReason, response }.",
+  },
+  harness: {
+    type: "string",
+    description: "Harness for a new --prompt thread: claude (default) or codex.",
   },
   thread: {
     type: "string",
-    description: "Existing Pea thread id to continue in --prompt mode.",
+    description: "Existing harness thread id to continue in --prompt mode.",
+  },
+  allow: {
+    type: "boolean",
+    description: "Answer --prompt permission requests with allow_once (default reject_once).",
+    default: false,
   },
   json: {
     type: "boolean",
@@ -216,7 +186,6 @@ const protocolArgs = {
   },
   modelId: {
     type: "string",
-    description: "Optional model id to force for the runtime.",
+    description: "Optional model id for the --prompt harness thread.",
   },
-  ...workspaceArgs,
 } as const;

@@ -38,6 +38,7 @@ internal static class FamilyRefs {
         if (curve.GeometryCurve is not Arc arc || arc.Reference is null) throw new InvalidOperationException("Circle has no arc reference.");
         var dimension = doc.Document.FamilyCreate.NewDiameterDimension(view, arc.Reference, arc.Center + arc.XDirection * arc.Radius * 0.5);
         if (spec.Diameter?.Parameter is { } label) doc.LabelDimensions([(dimension, Param(doc, label))]);
+        // TODO: Revit refuses IsLocked on diameter dimensions (2026-10-06, HCB coil stubs); label it with a constant parameter instead.
         else dimension.IsLocked = true;
     }
 
