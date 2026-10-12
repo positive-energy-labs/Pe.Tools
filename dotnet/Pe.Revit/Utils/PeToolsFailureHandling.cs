@@ -165,7 +165,9 @@ public sealed class FamilyFailurePolicy {
         // "Constraints are not satisfied" (Old_Template Mitsubishi_PVFY-NAMU-E1: a one-way angular rig, 2026-09-08)
         ["constraintsNotSatisfied"] = new Guid("74441dd6-e6dd-41ea-a57c-04f4a4957f19"),
         // "Constraints defined by highlighted Lines and Dimensions cannot be satisfied" (Old_Template Panasonic FV-0511VK2, flaky)
-        ["sketchConstraintsNotSatisfied"] = new Guid("3012554f-816b-4e6a-9b74-6b3914c87737")
+        ["sketchConstraintsNotSatisfied"] = new Guid("3012554f-816b-4e6a-9b74-6b3914c87737"),
+        // "The family is connected in a network and can no longer keep the connectivity. Disconnect the family from the network?" (Chadds Round Elbow reload, 2026-10-08)
+        ["cantKeepConnectivity"] = new Guid("dd0a16ea-9d2c-467d-b02c-5d86474a5041")
     };
 
     public static readonly FamilyFailurePolicy Reject = new(null);
