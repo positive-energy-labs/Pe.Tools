@@ -3,6 +3,7 @@
 An agent or a person drops a folder of HTML under the product home and the host serves it at an open URL with doors into Revit: typed ops, show, captures, the thread target, and shared state. Captures are the one picture currency that every surface links. Source: muse rounds 1 and 2 of 2026-10-04 over the pressure-drop walkthrough (`.artifacts/pdrop/walkthru/`, gitignored) and the synthesized-views session of 2026-09-28.
 
 ## Decided
+- 2026-10-11: `capture_view` now uses the existing MCP media mapping to deliver the kept PNG beside its unchanged capture link and receipt, with a 5MB limit and a fetch confined to that returned capture on the bound host. The 2026-10-04 stringification failure below remains historical evidence of the earlier implementation.
 - 2026-10-04, kaitpw: arbitrary HTML is non-negotiable. A page is a folder with `index.html`. There is no typed page document and no required template, because diagrams, todo lists, cheatsheets and issue trackers each want their own UI, shaped by the user.
 - 2026-10-04, kaitpw: a page is served at an open URL (`/pages/<slug>/`), never only inside an iframe. An agent can then drive it with chrome-agent, both parties can write the same fields, and the page is a control surface and a shared scratchpad.
 - 2026-10-04, the home is `Documents/Pe.Tools/Pages/<slug>/` beside Pods. One root holds product pages and repo throwaways. It is outside git, so a page over an NDA model is safe by location. No registration: a dropped folder appears.
