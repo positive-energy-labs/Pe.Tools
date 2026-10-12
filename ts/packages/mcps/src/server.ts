@@ -3,8 +3,7 @@ import { withInvocationContext, type InvocationContext } from "./shared/invocati
 /** Pea's tool registration shared by stdio and HTTP transports. */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { peaProductTools } from "./pea/index.ts";
-import { readCatalog } from "./pea/capability-tools.ts";
-import { peaAgentInstructionsFor } from "./pea/instructions.ts";
+import { peaAgentInstructions } from "./pea/instructions.ts";
 import type { McpTool } from "./shared/tool.ts";
 
 type Content = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
@@ -41,12 +40,9 @@ function toContent(tool: McpTool, result: unknown): { content: Content[]; isErro
 }
 
 export async function createPeaMcpServer(context: InvocationContext): Promise<McpServer> {
-  // Revit orientation only when the host answers with a connected session, read once at startup.
-  const catalog = await withInvocationContext(context, () => readCatalog());
-  const revit = !("isError" in catalog) && catalog.sessions.length > 0;
   const server = new McpServer(
     { name: "pea", version: "0.0.0" },
-    { instructions: peaAgentInstructionsFor({ revit }) },
+    { instructions: peaAgentInstructions },
   );
   const calls = new Map<string | number, string>();
   for (const tool of Object.values(peaProductTools))

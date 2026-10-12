@@ -13,7 +13,7 @@ import {
   type CapabilityCatalog,
   type ThreadHead,
 } from "@pe/agent-contracts";
-import { buildCapabilities } from "../src/pea/capabilities.ts";
+import { buildCapabilities, createCapabilityCatalogSource } from "../src/pea/capabilities.ts";
 import { createRouteRegistrations } from "../src/pea/routes.ts";
 import { bundledPeaSkills } from "../src/pea/skills.ts";
 import { peDo, peFind, peRead } from "../src/pea/capability-tools.ts";
@@ -90,6 +90,48 @@ function catalog(): CapabilityCatalog {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+});
+
+test("native catalog survives SDK latency while host-only sources keep their short deadlines", async () => {
+  fakeRuntimeHost("http://127.0.0.1:19");
+  vi.useFakeTimers();
+  const deadlines: number[] = [];
+  const timeout = vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+    deadlines.push(ms);
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(new Error("source timed out")), ms);
+    return controller.signal;
+  });
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname === "/ops")
+      return new Promise<Response>((resolve, reject) => {
+        const timer = setTimeout(() => resolve(Response.json({ operations: ops })), 3187);
+        init?.signal?.addEventListener("abort", () => {
+          clearTimeout(timer);
+          reject(init.signal?.reason);
+        });
+      });
+    expect(url.pathname).toBe("/call");
+    const key = JSON.parse(typeof init?.body === "string" ? init.body : "{}").key;
+    return Response.json(key === "pod.list" ? pods : { sessions: [] });
+  });
+  try {
+    const source = createCapabilityCatalogSource({
+      hostBaseUrl: "http://127.0.0.1:19",
+      registrations: [],
+    });
+    const reading = source.read();
+    await vi.advanceTimersByTimeAsync(3187);
+    const result = await reading;
+    expect(result.sources.catalog).toBe("ok");
+    expect(result.capabilities.some((row) => row.key === "op:scripting.execute")).toBe(true);
+    expect(deadlines.filter((ms) => ms === 2000)).toHaveLength(2);
+    expect(deadlines.some((ms) => ms > 30_000)).toBe(true);
+  } finally {
+    timeout.mockRestore();
+    vi.useRealTimers();
+  }
 });
 
 test("an op's [Op(Finds)] search terms find it when its key, title, and description do not", () => {

@@ -1,4 +1,7 @@
 import { createTool } from "./tool.ts";
+import { createHash } from "node:crypto";
+import { contextFetch as fetch } from "#invocation-context";
+import { defaultReadImageMaxBytes, readImage, type ReadImageResult } from "./read-image.ts";
 import z from "zod";
 import type { HostRpcCaller } from "./host-rpc-caller.ts";
 
@@ -69,16 +72,16 @@ type RevitViewImageData = {
 
 /**
  * One-hop "let me see Revit": export a view through the host, which keeps it as a capture. The
- * tool answers small text naming the capture's URL and receipt id; pictures are for people
- * (pages ledger, 2026-10-04), and every surface links the same `/captures/<sha>.png`.
+ * tool delivers the kept PNG as MCP image content beside its URL and receipt id. Every surface
+ * links the same `/captures/<sha>.png`; only that returned capture is fetched from the bound host.
  */
 export function createCaptureViewTool(createHostRpcCaller: () => Promise<HostRpcCaller>) {
   return createTool({
     id: "capture_view",
     description:
-      "SEE a Revit view exactly as the user sees it — templates, VG overrides, and temporary hide/isolate all apply. Captures the active view (default), a view/sheet/viewport by id or name, or a schedule placed on a sheet, optionally cropped to elements / the selection / a scope box. Never creates or restyles views to take a picture. The host keeps the PNG as a capture; the answer names its URL (open it, or put it in a page as <img src>) and its receipt id. Use after placements/mutations so the user can check the result, or to show the user what you are looking at.",
+      "SEE a Revit view exactly as the user sees it — templates, VG overrides, and temporary hide/isolate all apply. Captures the active view (default), a view/sheet/viewport by id or name, or a schedule placed on a sheet, optionally cropped to elements / the selection / a scope box. Never creates or restyles views to take a picture. The answer includes the kept PNG as an image, its URL (open it, or put it in a page as <img src>), and its receipt id. Images over 5MB require a smaller pixelSize. Use after placements/mutations so the user can check the result, or to show the user what you are looking at.",
     inputSchema: captureViewInputSchema,
-    execute: async (input): Promise<{ text: string; isError?: boolean }> => {
+    execute: async (input): Promise<ReadImageResult> => {
       const caller = await createHostRpcCaller();
       const result = await caller.callOperation("revit.context.view-image", {
         target: input.target,
@@ -89,8 +92,6 @@ export function createCaptureViewTool(createHostRpcCaller: () => Promise<HostRpc
       if (!result.ok) return { text: `capture_view failed: ${result.message}`, isError: true };
       if (!result.capture)
         return { text: "capture_view: the host answered without keeping a capture", isError: true };
-      // TODO: a model that needs the pixels gets a server-side MCP image content block; the Pea MCP
-      // server stringifies tool results today, so base64 here reached Claude as 763k chars of text.
       const data = result.response as RevitViewImageData;
       const extras = [
         data.sheetNumber ? `on sheet ${data.sheetNumber}` : null,
@@ -99,9 +100,50 @@ export function createCaptureViewTool(createHostRpcCaller: () => Promise<HostRpc
           ? `model rect (${data.modelRect.minX.toFixed(1)},${data.modelRect.minY.toFixed(1)})→(${data.modelRect.maxX.toFixed(1)},${data.modelRect.maxY.toFixed(1)}) ft`
           : null,
       ].filter(Boolean);
-      return {
-        text: `${data.view?.label ?? "view"}: ${caller.hostBaseUrl.replace(/\/$/, "")}${result.capture.url} (capture ${result.capture.id}, ${data.byteSize} bytes, ${data.pixelSize}px${extras.length ? `; ${extras.join("; ")}` : ""})`,
-      };
+      const text = `${data.view?.label ?? "view"}: ${caller.hostBaseUrl.replace(/\/$/, "")}${result.capture.url} (capture ${result.capture.id}, ${data.byteSize} bytes, ${data.pixelSize}px${extras.length ? `; ${extras.join("; ")}` : ""})`;
+      try {
+        const sha = /^\/captures\/([0-9a-f]{64})\.png$/.exec(result.capture.url)?.[1];
+        if (!sha) throw new Error("The host returned an invalid capture URL");
+        if (data.byteSize > defaultReadImageMaxBytes)
+          throw new Error("Image exceeds the 5MB limit; capture again with a smaller pixelSize");
+        const response = await fetch(
+          `${caller.hostBaseUrl.replace(/\/$/, "")}${result.capture.url}`,
+          {
+            redirect: "error",
+            signal: AbortSignal.timeout(30_000),
+          },
+        );
+        if (!response.ok || response.headers.get("content-type")?.split(";")[0] !== "image/png")
+          throw new Error(`Capture PNG was not available (${response.status})`);
+        if (!response.body) throw new Error("Capture PNG had no body");
+        const reader = response.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let byteSize = 0;
+        try {
+          for (;;) {
+            const chunk = await reader.read();
+            if (chunk.done) break;
+            byteSize += chunk.value.byteLength;
+            if (byteSize > defaultReadImageMaxBytes)
+              throw new Error(
+                "Image exceeds the 5MB limit; capture again with a smaller pixelSize",
+              );
+            chunks.push(chunk.value);
+          }
+        } finally {
+          await reader.cancel().catch(() => {});
+        }
+        const bytes = Buffer.concat(chunks);
+        if (createHash("sha256").update(bytes).digest("hex") !== sha)
+          throw new Error("Capture PNG did not match its content hash");
+        return { text, mediaType: "image/png", byteSize, data: bytes.toString("base64") };
+      } catch (error) {
+        return {
+          text: `${text}\nImage not delivered: ${error instanceof Error ? error.message : String(error)}`,
+          isError: true,
+        };
+      }
     },
+    toModelOutput: readImage.toModelOutput,
   });
 }

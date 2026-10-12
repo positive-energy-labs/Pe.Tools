@@ -15,9 +15,9 @@ import {
  * `pe_find` ranks it, `pe_read`/`pe_do` dispatch by kind, the web `/ops` route renders it.
  *
  * Assembled on request (cached 30 s per bridge selector), not at boot: the op and pod sources
- * describe whichever Revit session is connected right now. Every live source has a 2 s budget
- * and is read with `Promise.allSettled`; a source that did not answer is named in `sources` and
- * contributes zero rows, so a no-Revit host answers in well under 3 s.
+ * describe whichever Revit session is connected right now. Host-only sources have a 2 s budget;
+ * the native catalog allows SDK resolution and bridge dispatch. Sources are read with
+ * `Promise.allSettled`, and a source that did not answer is named in `sources`.
  */
 import { z } from "zod";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
@@ -286,6 +286,8 @@ function parseSchema(json: string | undefined): Record<string, unknown> {
 
 const CATALOG_TTL_MS = 30_000;
 const SOURCE_BUDGET_MS = 2_000;
+// SDK resolution allows 30 s before native catalog dispatch; host-only sources keep their 2 s budget.
+const NATIVE_CATALOG_BUDGET_MS = 60_000;
 
 export interface CapabilityCatalogSource {
   /** The catalog for an SDK selection or an exact private attachment. */
@@ -373,7 +375,7 @@ async function fetchOps(base: string, scope: HostSessionScope) {
   if (scope.session) headers[HOST_RPC_SDK_SESSION_HEADER] = JSON.stringify(scope.session);
   const response = await fetch(`${base}/ops`, {
     headers,
-    signal: AbortSignal.timeout(SOURCE_BUDGET_MS),
+    signal: AbortSignal.timeout(NATIVE_CATALOG_BUDGET_MS),
   });
   if (!response.ok) throw new Error(`GET ${base}/ops answered ${response.status}`);
   return (await response.json()) as {

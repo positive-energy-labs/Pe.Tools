@@ -1,4 +1,3 @@
-import type { DocumentRequest } from "@pe/agent-contracts";
 import { HostRpcCaller } from "../shared/host-rpc-caller.js";
 import { readImage } from "../shared/read-image.ts";
 import { createCaptureViewTool } from "../shared/capture-view.ts";
@@ -23,17 +22,17 @@ export {
   peaStandardSkillsRoot,
 } from "./skills.ts";
 
-/** The session a frozen default Target names, for the tools that take a selector, not a Target. */
-const sessionOf = (target: DocumentRequest | null | undefined): string | undefined =>
-  target ? (target.kind === "open" ? target.ref.session : target.session) : undefined;
-
 const captureView = createCaptureViewTool(async () => {
   const target = (await scopeOf())?.defaultTarget;
-  // view-image needs an exact open document; a session alone is refused by the host.
+  if (target?.kind !== "open")
+    throw new Error(
+      "capture_view requires an exact selected open document. Discover documents with pe_find and select one with target_set.",
+    );
   return new HostRpcCaller({
     hostBaseUrl: peaHostBaseUrl(),
-    bridgeSessionId: sessionOf(target),
-    openDocumentId: target?.kind === "open" ? target.ref.openId : undefined,
+    actor: "agent",
+    bridgeSessionId: target.ref.session,
+    openDocumentId: target.ref.openId,
   });
 });
 
