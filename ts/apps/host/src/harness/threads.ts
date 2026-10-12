@@ -41,6 +41,7 @@ import {
   type HarnessEvent,
   type HarnessThreadBody,
   type HarnessThreadSummary,
+  type Mention,
   type PromptAttachment,
   type PutTargetResult,
   type ThreadHead,
@@ -177,7 +178,10 @@ function transcript(events: HarnessEvent[]): string {
     if (e.kind === "prompt") {
       flush();
       const names = e.attachments?.map((a) => a.name).join(", ");
-      lines.push(`User: ${e.text}${names ? ` [attached: ${names}]` : ""}`);
+      const keys = e.mentions?.map((m) => m.key).join(", ");
+      lines.push(
+        `User: ${e.text}${names ? ` [attached: ${names}]` : ""}${keys ? ` [mentioned: ${keys}]` : ""}`,
+      );
     } else if (e.kind === "update" && e.update.sessionUpdate === "agent_message_chunk") {
       const content = (e.update as { content?: { type?: string; text?: string } }).content;
       if (content?.type === "text" && content.text) said += content.text;
@@ -200,14 +204,41 @@ function transcript(events: HarnessEvent[]): string {
   return `[Pea resumed this thread from its own record; the earlier harness session is gone. The transcript so far, oldest first. Continue from it; do not repeat it.]\n\n${kept}\n\n[End of transcript.]`;
 }
 
+/** A mention for a harness that reads no embedded context: one line, the pointer and its facts. */
+const mentionLine = (m: Mention) =>
+  `[@${m.title} → ${m.key}, ${Object.entries(m.facts)
+    .map(([name, value]) => `${name}: ${value}`)
+    .join(", ")}, taken ${m.takenAt}]`;
+
 /**
  * The prompt as ACP content (mined from the Mastra path, `47c37fb2^:ts/packages/runtime/src/
  * message-contents.ts`: images as images, text files as labelled text, other files as files): an
  * image is an `image` block, a text file an embedded `resource`, any other file is written to `dir`
  * and linked, because claude-agent-acp drops resource blobs and codex-acp inlines them as base64.
+ * Each mention follows the text as one embedded `pe://<key>` JSON resource, or as a text line when
+ * the harness reads no embedded context; a mention is never refused.
  */
-function promptBlocks(dir: string, text: string, attachments: PromptAttachment[] = []) {
+function promptBlocks(
+  dir: string,
+  text: string,
+  attachments: PromptAttachment[] = [],
+  mentions: Mention[] = [],
+  embeddedContext = false,
+) {
   const blocks: ContentBlock[] = text ? [{ type: "text", text }] : [];
+  for (const m of mentions)
+    blocks.push(
+      embeddedContext
+        ? {
+            type: "resource",
+            resource: {
+              uri: `pe://${m.key}`,
+              mimeType: "application/json",
+              text: JSON.stringify(m),
+            },
+          }
+        : { type: "text", text: mentionLine(m) },
+    );
   for (const a of attachments) {
     const kind = attachmentKind(a);
     if (kind === "image") blocks.push({ type: "image", data: a.data!, mimeType: a.mimeType });
@@ -873,10 +904,22 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     t.waiting = null;
   }
 
-  async function run(t: Thread, turnId: string, text: string, attachments?: PromptAttachment[]) {
+  async function run(
+    t: Thread,
+    turnId: string,
+    text: string,
+    attachments?: PromptAttachment[],
+    mentions?: Mention[],
+  ) {
     clearIdle(t);
     t.running = turnId;
-    append(t, { kind: "prompt", turnId, text, ...(attachments ? { attachments } : {}) });
+    append(t, {
+      kind: "prompt",
+      turnId,
+      text,
+      ...(attachments ? { attachments } : {}),
+      ...(mentions ? { mentions } : {}),
+    });
     arm(t);
     try {
       const live = await ensure(t);
@@ -888,6 +931,9 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           join(options.root, t.meta.id, "attachments", turnId),
           refeed ? `${refeed}\n\n${text}` : text,
           attachments,
+          mentions,
+          // `ensure` read the harness's prompt capabilities at its `initialize`.
+          t.meta.promptCapabilities?.embeddedContext,
         ),
       });
       append(t, { kind: "turn_end", turnId, stopReason: result.stopReason });
@@ -1166,8 +1212,9 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         notifySummaries();
         return new Response(null, { status: 204 });
       case "POST prompt": {
-        const { text, attachments: sent } = await input(promptRequestSchema);
+        const { text, attachments: sent, mentions: named } = await input(promptRequestSchema);
         const attachments = sent?.length ? sent : undefined;
+        const mentions = named?.length ? named : undefined;
         if (options.updatePending?.())
           return json({ error: "Pe.Tools is updating; send this after the update finishes." }, 409);
         if (t.meta.lifecycle.status === "archived")
@@ -1200,7 +1247,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         t.meta.lifecycle.revision++;
         writeMeta(t);
         const turnId = randomUUID();
-        t.turn = run(t, turnId, text, attachments);
+        t.turn = run(t, turnId, text, attachments, mentions);
         return json({ turnId });
       }
       case "POST cancel":

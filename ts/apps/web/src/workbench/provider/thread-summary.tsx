@@ -3,7 +3,6 @@ import type {
   DocumentRequest,
   HarnessThreadSummary,
   PeaSessionDescriptor,
-  PromptAttachment,
   UpdateThreadRequest,
 } from "@pe/agent-contracts";
 import { type WorkbenchEndpointConfig } from "../config";
@@ -12,6 +11,7 @@ import { type ChatPageStore } from "../store";
 import type * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import type { HeadDraft, ProvidersState } from "./providers";
+import type { PromptRequest } from "./harness-client";
 
 export type StoredThreadSummary = HarnessThreadSummary;
 
@@ -44,7 +44,7 @@ export interface WorkbenchContextValue {
   world?: PeaSessionDescriptor;
   isRunning: boolean;
   operationError?: string;
-  sendPrompt: (text: string, attachments?: PromptAttachment[]) => Promise<void>;
+  sendPrompt: (input: PromptRequest) => Promise<void>;
   cancel: () => Promise<void>;
   /** Opens an empty draft; the thread is created at its first send. */
   newThread: (target?: DocumentRequest | null) => Promise<void>;

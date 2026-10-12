@@ -1,7 +1,9 @@
 import { cli } from "gunshi";
 import { expect, test, vi } from "vite-plus/test";
 import type { HostOpResponse } from "@pe/host-contracts/operation-types";
+import { documentRows } from "@pe/agent-contracts";
 import { PeaCliCommands } from "../src/pea/PeaCliCommands.ts";
+import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
 
 const statuses = [
   "Succeeded",
@@ -122,5 +124,96 @@ test("pea script execute --json prints the whole result as one JSON object", asy
     error.mockRestore();
     log.mockRestore();
     tools.mockRestore();
+  }
+});
+
+test("pea find prints key, kind and title per row of the host's catalog; --mention prints the pointer", async () => {
+  const at = "2026-10-12T12:00:00.000Z";
+  const sessions = [
+    {
+      sessionId: "b1",
+      custody: "controlled",
+      revitVersion: "2025",
+      openDocuments: [
+        {
+          openId: "o1",
+          address: "C:\\Models\\Riser.rvt",
+          title: "Mechanical Riser",
+          isFamilyDocument: false,
+          isActive: true,
+        },
+      ],
+    },
+  ];
+  const skill = {
+    key: "skill:riser-check",
+    kind: "skill",
+    title: "riser-check",
+    description: "Check a riser.",
+    needs: "nothing",
+    mutates: false,
+    actor: "any",
+    input: {},
+    source: "skills",
+    rank: 0,
+  } as const;
+  // A human-only press: pe_find never offers it, so neither does pea find.
+  const humanOnly = {
+    ...skill,
+    key: "route:riser.apply",
+    kind: "route-command",
+    title: "Riser: apply",
+    actor: "human",
+  } as const;
+  const host = fakeRuntimeHost("http://127.0.0.1:9");
+  const urls: URL[] = [];
+  vi.stubGlobal("fetch", async (input: string | URL | Request) => {
+    urls.push(new URL(input instanceof Request ? input.url : String(input)));
+    return Response.json({
+      at,
+      sessions,
+      sources: {},
+      capabilities: [skill, humanOnly, ...documentRows({ sessions })],
+    });
+  });
+  const output = vi.spyOn(console, "log").mockImplementation(() => {});
+  const disclosed = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const command = new PeaCliCommands({ hostBaseUrl: host }).findCommand();
+    await cli(["riser"], command);
+    expect(urls[0]?.pathname).toBe("/pe/capabilities");
+    expect(disclosed).toHaveBeenCalledWith(`host ${host}`);
+    // findCapabilities' ranking: the skill's key, title and description all say riser.
+    expect(output.mock.calls.map(([line]) => line)).toEqual([
+      "skill:riser-check  skill  riser-check",
+      "doc:b1/o1  document  Mechanical Riser",
+    ]);
+    output.mockClear();
+    await cli(["--kind", "document", "--json"], command);
+    expect(JSON.parse(output.mock.calls[0]![0] as string)).toMatchObject([
+      { key: "doc:b1/o1", kind: "document" },
+    ]);
+    output.mockClear();
+    await cli(["--mention", "doc:b1/o1"], command);
+    expect(JSON.parse(output.mock.calls[0]![0] as string)).toEqual({
+      key: "doc:b1/o1",
+      kind: "document",
+      title: "Mechanical Riser",
+      takenAt: at,
+      facts: {
+        session: "b1",
+        openId: "o1",
+        address: "C:\\Models\\Riser.rvt",
+        family: false,
+        active: true,
+        revit: "2025",
+        custody: "controlled",
+      },
+    });
+  } finally {
+    output.mockRestore();
+    disclosed.mockRestore();
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   }
 });

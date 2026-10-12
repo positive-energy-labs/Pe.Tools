@@ -1311,3 +1311,97 @@ test("a harness that does not read images or embedded text refuses those attachm
   expect(blocksSeen(body)).toMatchObject([{ type: "resource_link", name: "spec.pdf" }]);
   await threads.close();
 });
+
+const docMention = {
+  key: "doc:b1/o1",
+  kind: "document",
+  title: "Riser",
+  facts: { session: "b1", openId: "o1", address: "C:\\Models\\Riser.rvt", custody: "controlled" },
+  takenAt: "2026-10-12T12:00:00.000Z",
+};
+const skillMention = {
+  key: "skill:build-pod",
+  kind: "skill",
+  title: "build-pod",
+  facts: { description: "Build a Pod.", needs: "nothing", mutates: false },
+  takenAt: "2026-10-12T12:00:00.000Z",
+};
+/** What the fake said about the last prompt's block order (`order: <types>`). */
+const orderSeen = (body: HarnessThreadBody) => {
+  const prompt = body.events.findLastIndex((e) => e.kind === "prompt");
+  const said = body.events
+    .slice(prompt)
+    .flatMap((e) =>
+      e.kind === "update" && e.update.sessionUpdate === "agent_message_chunk"
+        ? [(e.update as { content?: { text?: string } }).content?.text ?? ""]
+        : [],
+    )
+    .find((text) => text.startsWith("order: "));
+  return said?.slice("order: ".length).split(",") ?? null;
+};
+
+test("mentions reach the harness as one pe:// JSON resource each, after the text block", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  const sent = await call("POST", `/pe/threads/${id}/prompt`, {
+    text: "size @Riser with @build-pod",
+    mentions: [docMention, skillMention],
+    attachments: [csv],
+  });
+  expect(sent.status).toBe(200);
+  const body = await until(read, id, (b) => turnEnds(b).length === 1);
+  // The log keeps the pointers, so a reload draws the chips.
+  expect(body.events.find((e) => e.kind === "prompt")).toMatchObject({
+    text: "size @Riser with @build-pod",
+    mentions: [docMention, skillMention],
+  });
+  expect(lastEcho(body)).toBe("echo: size @Riser with @build-pod");
+  expect(orderSeen(body)).toEqual(["text", "resource", "resource", "resource"]);
+  expect(blocksSeen(body)).toEqual([
+    {
+      type: "resource",
+      uri: "pe://doc:b1/o1",
+      mimeType: "application/json",
+      text: JSON.stringify(docMention),
+    },
+    {
+      type: "resource",
+      uri: "pe://skill:build-pod",
+      mimeType: "application/json",
+      text: JSON.stringify(skillMention),
+    },
+    { type: "resource", uri: "file:///duct-sizes.csv", mimeType: "text/csv", text: csv.text },
+  ]);
+  // A malformed mention is a 400, not a silent drop.
+  expect(
+    (
+      await call("POST", `/pe/threads/${id}/prompt`, {
+        text: "x",
+        mentions: [{ key: "doc:b1/o1" }],
+      })
+    ).status,
+  ).toBe(400);
+  await threads.close();
+});
+
+test("a harness that reads no embedded context gets each mention as a text line, never a refusal", async () => {
+  process.env.FAKE_ACP_PROMPT = "none";
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  await until(read, id, (body) => body.promptCapabilities !== null);
+  const sent = await call("POST", `/pe/threads/${id}/prompt`, {
+    text: "size @Riser",
+    mentions: [docMention],
+  });
+  expect(sent.status).toBe(200);
+  const body = await until(read, id, (b) => turnEnds(b).length === 1);
+  expect(lastEcho(body)).toBe(
+    "echo: size @Riser[@Riser → doc:b1/o1, session: b1, openId: o1, address: C:\\Models\\Riser.rvt, custody: controlled, taken 2026-10-12T12:00:00.000Z]",
+  );
+  expect(blocksSeen(body)).toBeNull();
+  await threads.close();
+});

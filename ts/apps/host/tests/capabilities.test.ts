@@ -8,6 +8,7 @@ import { documentsRootEnvVar } from "@pe/host-contracts/product-paths";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 import { makeHttpLive } from "../src/app.ts";
+import { createPeRoutes } from "../src/pe-routes.ts";
 import { hostOwnership, productRoot } from "../src/host-ownership.ts";
 
 /**
@@ -118,3 +119,36 @@ test("the host-owned /pe surface answers without Revit", async () => {
       }
   }
 }, 40_000);
+
+test("GET /pe/capabilities serves each open document as a doc: row beside the catalog's rows", async () => {
+  const app = createPeRoutes({
+    registrations: [],
+    store: { getState: async () => null, setState: async () => {} },
+    heads: { observe: () => () => {} },
+    capabilityCatalog: {
+      read: async () => ({
+        at: "2026-10-12T12:00:00.000Z",
+        sources: {},
+        sessions: [
+          {
+            sessionId: "b1",
+            openDocuments: [
+              {
+                openId: "o1",
+                address: null,
+                title: "Riser",
+                isFamilyDocument: false,
+                isActive: true,
+              },
+            ],
+          },
+        ],
+        capabilities: [],
+      }),
+    },
+  });
+  const response = await app.fetch(new Request("http://local/pe/capabilities"));
+  expect(response.status).toBe(200);
+  const catalog = (await response.json()) as { capabilities: { key: string; kind: string }[] };
+  expect(catalog.capabilities).toMatchObject([{ key: "doc:b1/o1", kind: "document" }]);
+});

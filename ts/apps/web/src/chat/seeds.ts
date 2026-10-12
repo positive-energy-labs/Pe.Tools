@@ -3,9 +3,22 @@
  * through `useRoute`'s demo owner; nothing here renders or holds state. Each seed is a thread body
  * whose `events` are the harness log the host would have written.
  */
-import { address, type HarnessEvent, type PromptAttachment, type Seed } from "@pe/agent-contracts";
+import {
+  address,
+  catalogSessions,
+  documentRows,
+  mentionOf,
+  mentionToken,
+  type Capability,
+  type CapabilityCatalog,
+  type HarnessEvent,
+  type Mention,
+  type PromptAttachment,
+  type Seed,
+} from "@pe/agent-contracts";
 import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
 
+import type { ChatReading } from "#/chat/manifest";
 import { emptyChatState, type ChatState } from "#/workbench/chat-state";
 
 const at = (minute: number) => new Date(Date.UTC(2026, 7, 30, 19, minute));
@@ -13,7 +26,7 @@ const at = (minute: number) => new Date(Date.UTC(2026, 7, 30, 19, minute));
 /** A log from bare event bodies: `seq`, `at` and the turn id are filled in order. */
 function log(
   ...bodies: (
-    | { kind: "prompt"; text: string; attachments?: PromptAttachment[] }
+    | { kind: "prompt"; text: string; attachments?: PromptAttachment[]; mentions?: Mention[] }
     | { kind: "update"; update: { sessionUpdate: string; [key: string]: unknown } }
     | Omit<Extract<HarnessEvent, { kind: "permission_request" }>, "seq" | "at" | "turnId">
     | { kind: "turn_end"; stopReason: string }
@@ -315,6 +328,8 @@ const INVENTORY = {
     {
       sessionId: "pe.app-26",
       connected: true,
+      custody: "controlled",
+      revitVersion: "2026",
       openDocumentCount: 1,
       openDocuments: [
         {
@@ -329,51 +344,181 @@ const INVENTORY = {
   ],
 } satisfies { sessions: readonly BridgeSessionListEntry[] };
 
+/** `GET /pe/capabilities` as a hostless page sees it: the seed inventory's session and one row of
+ * each kind. No `doc:` rows: the `@` menu reads open documents from the inventory. */
+const CATALOG = {
+  at: at(29).toISOString(),
+  sessions: catalogSessions(INVENTORY.sessions),
+  sources: { ops: "ok", routes: "ok", pods: "ok", skills: "ok" },
+  capabilities: [
+    row(
+      "skill:review-schedule",
+      "skill",
+      "review-schedule",
+      "Review a schedule for blanks, outliers and drift.",
+    ),
+    row(
+      "skill:build-pod",
+      "skill",
+      "build-pod",
+      "Turn a working script into a Pod the user can press.",
+    ),
+    row(
+      "route:schedules",
+      "route-doc",
+      "Schedules",
+      "Read the Schedules document you co-edit with the user.",
+    ),
+    row(
+      "route:schedules.apply",
+      "route-command",
+      "Schedules: apply",
+      "Apply the reviewed schedule rows to Revit.",
+    ),
+    row(
+      "op:revit.catalog.loaded-families",
+      "op",
+      "Loaded families",
+      "List the families loaded in the open document.",
+    ),
+    row(
+      "op:revit.context.open-views",
+      "op",
+      "Open views",
+      "The views open in the active document, with their ids.",
+    ),
+    // Ops the live catalog titles by their key: the menu reads their description instead.
+    row(
+      "op:parameter-links.read",
+      "op",
+      "parameter-links.read",
+      "Read the stored parameter-link profile and runtime status, and optionally evaluate the authored links.",
+    ),
+    row(
+      "op:parameter-links.apply",
+      "op",
+      "parameter-links.apply",
+      "Store the reviewed parameter-link draft and reconcile exactly the evaluated writes the human approved.",
+    ),
+    row(
+      "op:takeoffs.initialize",
+      "op",
+      "takeoffs.initialize",
+      "Write the shared parameters this document is missing before any takeoff runs.",
+    ),
+    row(
+      "op:parameters.list",
+      "op",
+      "parameters.list",
+      "List the parameters of the open document, with their groups and bindings.",
+    ),
+    row("pod:sheets.rename", "pod", "Sheets: rename", "Rename sheets from a pattern."),
+  ],
+} satisfies CapabilityCatalog;
+
+function row(
+  key: string,
+  kind: Capability["kind"],
+  title: string,
+  description: string,
+): Capability {
+  return {
+    key,
+    kind,
+    title,
+    description,
+    needs: kind === "op" || kind === "pod" ? "document" : "nothing",
+    mutates: kind === "route-command" || kind === "pod",
+    actor: "any",
+    input: {},
+    source: "seed",
+    rank: 0,
+  };
+}
+
+const byKey = (key: string) => CATALOG.capabilities.find((found) => found.key === key)!;
+const MENTIONED = [
+  mentionOf(documentRows(CATALOG)[0]!, CATALOG),
+  mentionOf(byKey("skill:review-schedule"), CATALOG),
+];
+
+/** The user points at a document and a skill with `@`; Pea's first hop uses the ids the mention
+ * carried, no search. */
+const CHAT_MENTION_STATE: ChatState = {
+  ...THREAD,
+  events: log(
+    {
+      kind: "prompt",
+      text: `Run ${mentionToken(MENTIONED[1]!)} over the mechanical schedules in ${mentionToken(MENTIONED[0]!)}.`,
+      mentions: MENTIONED,
+    },
+    tool("read", "mcp__pea__pe_read", {
+      key: "op:schedules.read",
+      target: { session: "pe.app-26", openId: "open-1" },
+    }),
+    done("read", { ok: true, key: "op:schedules.read", revision: 3, rows: 38, blanks: 4 }),
+    say(
+      "Read pe.app-26/open-1 (Operations Demo.rvt) straight from your mention: " +
+        "the Mechanical Equipment Schedule has 38 rows, 4 with a blank Mark. " +
+        "Following review-schedule, AHU-2 is the outlier to check first.",
+    ),
+    { kind: "turn_end", stopReason: "end_turn" },
+  ),
+};
+
+const READINGS = { head: HEAD, inventory: INVENTORY, receipts: [], capabilities: CATALOG };
+
 /** One seed per action. The map is total: every action key has a moment. */
 export const CHAT_SEEDS = {
   send: {
     title: "an idle thread ready for a prompt",
     work: CHAT_SEED_STATE,
-    readings: { head: HEAD, inventory: INVENTORY, receipts: [] },
+    readings: READINGS,
     page: {},
   },
   new: {
     title: "a thread to leave for a fresh one",
     work: CHAT_SEED_STATE,
-    readings: { head: HEAD, inventory: INVENTORY, receipts: [] },
+    readings: READINGS,
     page: {},
   },
   diagram: {
     title: "pea drew a duct system, after one rejected diagram call",
     work: CHAT_DIAGRAM_STATE,
-    readings: { head: HEAD, inventory: INVENTORY, receipts: [] },
+    readings: READINGS,
     page: {},
   },
   attach: {
     title: "the user attached a photo, a CSV and a PDF; pea read all three",
     work: CHAT_ATTACH_STATE,
-    readings: { head: HEAD, inventory: INVENTORY, receipts: [] },
+    readings: READINGS,
     page: {},
   },
   skill: {
     title: "the user ran a slash skill; the harness advertised its commands",
     work: CHAT_SKILL_STATE,
-    readings: { head: HEAD, inventory: INVENTORY, receipts: [] },
+    readings: READINGS,
+    page: {},
+  },
+  mention: {
+    title: "the user mentioned a document and a skill with @; pea used their ids",
+    work: CHAT_MENTION_STATE,
+    readings: READINGS,
     page: {},
   },
   closed: {
     title: "a thread whose bound session has closed; send refuses until a live document is chosen",
     work: CHAT_ATTACH_STATE,
-    readings: { head: CLOSED_HEAD, inventory: INVENTORY, receipts: [] },
+    readings: { ...READINGS, head: CLOSED_HEAD },
     page: {},
   },
   stop: {
     title: "pea mid-turn, with an approval owed",
     work: CHAT_SEED_STATE,
-    readings: { head: HEAD, inventory: INVENTORY, receipts: [] },
+    readings: READINGS,
     page: {},
   },
-} satisfies Record<string, Seed<ChatState, "head" | "inventory" | "receipts", ChatPage>>;
+} satisfies Record<string, Seed<ChatState, ChatReading, ChatPage>>;
 
 /** Chat's draft belongs to `createChatPageStore`; the route manifest owns no Page fields. */
 export type ChatPage = Record<string, never>;

@@ -6,7 +6,14 @@
  */
 import { z } from "zod";
 
-export const capabilityKindSchema = z.enum(["op", "route-doc", "route-command", "pod", "skill"]);
+export const capabilityKindSchema = z.enum([
+  "op",
+  "route-doc",
+  "route-command",
+  "pod",
+  "skill",
+  "document",
+]);
 export type CapabilityKind = z.infer<typeof capabilityKindSchema>;
 
 export const capabilityNeedsSchema = z.enum([

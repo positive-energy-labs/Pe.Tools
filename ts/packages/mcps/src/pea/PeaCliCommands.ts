@@ -4,7 +4,12 @@ import { define } from "gunshi";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { HostLogTarget, type HostOpResponse } from "@pe/host-contracts/operation-types";
-import { capabilityKindSchema, capabilityNeedsSchema, findCapabilities } from "@pe/agent-contracts";
+import {
+  capabilityKindSchema,
+  capabilityNeedsSchema,
+  findCapabilities,
+  mentionOf,
+} from "@pe/agent-contracts";
 import { HostRpcCaller } from "../shared/host-rpc-caller.js";
 import type { PodList } from "@pe/host-contracts/operation-types";
 import { readCatalog } from "./capability-tools.ts";
@@ -28,6 +33,7 @@ export class PeaCliCommands {
 
   commands() {
     return {
+      find: this.findCommand(),
       host: this.hostCommand(),
       script: this.scriptCommand(),
     };
@@ -40,7 +46,6 @@ export class PeaCliCommands {
       examples: [
         "pea host status",
         "pea host logs --target revit --tail 50",
-        "pea host operations search --query schedules",
         "pea host operations call --key revit.context.summary --request {}",
       ].join("\n"),
       subCommands: {
@@ -132,9 +137,8 @@ export class PeaCliCommands {
   private hostOperationsCommand() {
     return define({
       name: "operations",
-      description: "Search the capability catalog and call a generated public host operation.",
+      description: "Call a generated public host operation; `pea find` finds its key.",
       subCommands: {
-        search: this.hostOperationSearchCommand(),
         call: this.hostOperationCallCommand(),
       },
       run: () => {
@@ -143,22 +147,22 @@ export class PeaCliCommands {
     });
   }
 
-  private hostOperationSearchCommand() {
+  findCommand() {
     return define({
-      name: "search",
+      name: "find",
       description:
-        "Search the one capability catalog (ops, route documents, pods, skills) — the same rows and ranking pe_find gives the agent.",
+        "Find in the one capability catalog (ops, route documents, pods, skills, open documents) — the same rows and ranking pe_find gives Pea. --mention prints the pointer Pea gets when the user @-mentions a row.",
       args: {
         host: commonArgs.host,
         bridgeSessionId: {
           type: "string",
           description:
-            "Revit session whose operations to include; without it only host operations, pods, and skills are searched.",
+            "Revit session whose operations to include; without it only host operations, pods, skills, and open documents are searched.",
         },
-        query: { type: "string", description: "Optional search query." },
         kind: {
           type: "string",
-          description: "Optional kind filter: op, route-doc, route-command, pod, or skill.",
+          description:
+            "Optional kind filter: op, route-doc, route-command, pod, skill, or document.",
         },
         needs: {
           type: "string",
@@ -166,29 +170,48 @@ export class PeaCliCommands {
             "Optional needs filter: nothing, document, project-document, family-document, or session.",
         },
         limit: { type: "number", description: "Maximum rows to print.", default: 8 },
+        mention: {
+          type: "string",
+          description:
+            "Print the mention (key, kind, title, facts, takenAt) of this row key as JSON.",
+        },
+        json: { type: "boolean", description: "Print the matched rows as JSON.", default: false },
       },
       toKebab: true,
+      examples: [
+        "pea find schedules",
+        "pea find --kind document",
+        "pea find riser --json",
+        "pea find --mention doc:<session>/<openId>",
+      ].join("\n"),
       run: async (ctx) => {
-        // The URL is disclosed BEFORE the fetch: a bare `fetch failed` with no URL was the
-        // 2026-08-19/20 dead end — an empty catalog and a wrong-lane resolution are told apart
-        // by reading the output rather than by guessing.
+        // The URL is disclosed BEFORE the fetch (on stderr, so --json stays one object): a bare
+        // `fetch failed` with no URL was the 2026-08-19/20 dead end.
         const hostBaseUrl = this.resolveHostBaseUrl(ctx.values.host);
-        console.log(`host ${hostBaseUrl}`);
+        console.error(`host ${hostBaseUrl}`);
         const catalog = await readCatalog(undefined, hostBaseUrl, {
           bridgeSessionId: asOptionalString(ctx.values.bridgeSessionId),
         });
         if ("isError" in catalog) throw new Error(catalog.content);
-        const rows = findCapabilities(catalog.capabilities, {
-          query: firstNonBlank(ctx.values.query),
-          kind: capabilityKindSchema.optional().parse(firstNonBlank(ctx.values.kind)),
-          needs: capabilityNeedsSchema.optional().parse(firstNonBlank(ctx.values.needs)),
-          limit: ctx.values.limit,
-        });
-        for (const row of rows) {
-          console.log(`${row.key}  ${row.title}`);
-          console.log(`  ${row.description}`);
-          console.log(`  ${row.needs}${row.mutates ? ", mutates" : ""}`);
+        const key = firstNonBlank(ctx.values.mention);
+        if (key) {
+          const row = catalog.capabilities.find((candidate) => candidate.key === key);
+          if (!row) throw new Error(`No row '${key}' in the catalog. Find keys with \`pea find\`.`);
+          console.log(JSON.stringify(mentionOf(row, catalog), null, 2));
+          return;
         }
+        // Same filter as pe_find: a human-only row is the person's press, never offered.
+        const rows = findCapabilities(
+          catalog.capabilities.filter((row) => row.actor !== "human"),
+          {
+            query: firstNonBlank(ctx.positionals.slice(ctx.commandPath.length).join(" ")),
+            kind: capabilityKindSchema.optional().parse(firstNonBlank(ctx.values.kind)),
+            needs: capabilityNeedsSchema.optional().parse(firstNonBlank(ctx.values.needs)),
+            limit: ctx.values.limit,
+          },
+        );
+        if (ctx.values.json) console.log(JSON.stringify(rows, null, 2));
+        else for (const row of rows) console.log(`${row.key}  ${row.kind}  ${row.title}`);
       },
     });
   }

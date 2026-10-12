@@ -378,27 +378,58 @@ tr.dl-row[data-active]::before {
   margin: 4px 0;
   background: var(--pe-line);
 }
+/* A group head IS the roster's shelf head (navigation.css): sentence case, its count quiet, a
+   hairline to the edge. No fill: it stands on the ground it sits on, so rows pass under it. */
 .dl-row-head {
   position: sticky;
   top: 0;
   z-index: 1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 4px;
   min-height: var(--item-h);
   padding: 0 var(--item-mark-pad-x);
+  background: var(--pe-on);
   font-size: var(--type-small-size);
   font-weight: var(--weight-strong);
   color: var(--pe-ink-2);
 }
-/* A group head reads like the roster's shelves: sentence case, its count quiet. */
 .dl-row-head > :first-child::first-letter {
   text-transform: uppercase;
 }
-.dl-row-head > .dl-row-meta {
-  font-family: var(--font-body);
+.dl-row-head > [data-slot="count"] {
   font-weight: var(--weight-regular);
+  font-variant-numeric: tabular-nums;
   color: var(--pe-ink-mute);
+}
+.dl-row-head > [data-slot="rule"] {
+  flex: 1;
+  height: 1px;
+  margin-inline: 4px;
+  background: var(--pe-line);
+}
+.dl-row-aside {
+  margin-left: 0.5em;
+  color: var(--pe-ink-2);
+}
+/* A key in the aside sits a step under the title, as inline code sits under its sentence. */
+.dl-row-aside > .face-mono {
+  font-size: var(--type-mono-inline);
+}
+/* A list's DETAIL: the cursor row's description, said once under the rows. Two lines are always
+   held, so the popup never moves as the cursor does. */
+.dl-list-detail {
+  display: -webkit-box;
+  height: 2lh;
+  box-sizing: content-box;
+  overflow: hidden;
+  padding: 4px var(--item-mark-pad-x) 2px;
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line-height);
+  color: var(--pe-ink-2);
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 /* The control frame: one height, hairline, radius and ground for every freestanding control. An

@@ -6,9 +6,10 @@ import {
   type PromptAttachment,
 } from "@pe/agent-contracts";
 
-import { chatManifest, type PromptInput } from "#/chat/manifest";
+import { chatManifest } from "#/chat/manifest";
+import { emptyPrompt } from "#/workbench/prompt";
 import { emptyChatState, selectMessages } from "#/workbench/chat-state";
-import { harnessClient } from "#/workbench/provider/harness-client";
+import { harnessClient, type PromptRequest } from "#/workbench/provider/harness-client";
 
 const png: PromptAttachment = { name: "riser.png", mimeType: "image/png", size: 4, data: "iVBO" };
 const csv: PromptAttachment = {
@@ -23,7 +24,7 @@ const ctx = { readings: { head: { state: "absent" }, inventory: { state: "absent
 afterEach(() => vi.unstubAllGlobals());
 
 it("a sent draft with attachments reaches send, and attachments alone are a prompt", async () => {
-  const sent: PromptInput[] = [];
+  const sent: PromptRequest[] = [];
   const send = chatManifest({
     thread: "t",
     ready: true,
@@ -36,8 +37,24 @@ it("a sent draft with attachments reaches send, and attachments alone are a prom
   await send.run(ctx, draft);
   expect(sent).toEqual([{ text: "", attachments: [png, csv] }]);
   expect(send.ready(ctx, { text: " ", attachments: [] } as never)).toBe(
-    "Enter a prompt or attachment",
+    "Enter a prompt, attachment or mention",
   );
+});
+
+it("a draft holding only mentions is a prompt: the composer, the route and the host agree", () => {
+  const send = chatManifest({ thread: "t", ready: true, send: async () => {} }).actions!.send;
+  const mention = {
+    key: "skill:execute",
+    kind: "skill",
+    title: "execute",
+    takenAt: "2026-10-12T12:00:00.000Z",
+    facts: {},
+  };
+  const draft = { text: " ", attachments: [], mentions: [mention] };
+  expect(emptyPrompt(draft)).toBeNull();
+  expect(send.ready(ctx, draft as never)).toBeNull();
+  expect(promptRequestSchema.safeParse(draft).success).toBe(true);
+  expect(emptyPrompt({ ...draft, mentions: [] })).toBe("Enter a prompt, attachment or mention");
 });
 
 it("Send refuses a kind the thread's harness does not read, before the request", () => {
@@ -59,7 +76,7 @@ it("the client posts the attachments in the prompt body the host parses", async 
     bodies.push(JSON.parse(String(init.body)));
     return Response.json({ turnId: "t1" });
   });
-  await harnessClient("http://host").prompt("t", "look", [png, csv]);
+  await harnessClient("http://host").prompt("t", { text: "look", attachments: [png, csv] });
   expect(promptRequestSchema.parse(bodies[0])).toEqual({ text: "look", attachments: [png, csv] });
 });
 

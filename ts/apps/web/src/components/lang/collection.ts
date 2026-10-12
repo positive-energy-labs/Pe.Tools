@@ -35,6 +35,8 @@ export interface CollectionOptions<T> {
   keyOf: (item: T) => string;
   labelOf: (item: T) => string;
   groupOf?: (item: T) => string | undefined;
+  /** A named group shows this many rows, then one "N more" row that opens the rest in place. */
+  groupCap?: number;
   filter?: FilterMode;
   select?: SelectMode;
   /** Controlled selection by key. */
@@ -62,7 +64,8 @@ export interface CollectionOptions<T> {
   onTab?: (back: boolean) => boolean;
   /** A query owned outside the list (the composer's text after "/"). */
   query?: string;
-  /** False, typing never puts the cursor on the top hit: Enter keeps free text. */
+  /** False, the cursor never lands on the top hit by itself: Enter keeps free text. Otherwise the
+   * top hit is cursored while typing, and on open when the query is owned outside the list. */
   autoCursor?: boolean;
   /** The query the list opens with (a cell opened by a printable key). */
   initialQuery?: string;
@@ -73,7 +76,9 @@ export interface CollectionOptions<T> {
 export type VisibleRow<T> =
   | { kind: "head"; key: string; label: string; count: number }
   | { kind: "item"; key: string; item: T; path: readonly T[]; level: number }
-  | { kind: "create"; key: string; text: string };
+  | { kind: "create"; key: string; text: string }
+  /** A capped group's tail: `count` rows hidden; a pick shows them and cursors `next`. */
+  | { kind: "more"; key: string; group: string; count: number; next: string };
 
 /* ── ranking ─────────────────────────────────────────────────────────────────────────────── */
 
@@ -126,6 +131,7 @@ export function useCollection<T>(options: CollectionOptions<T>) {
     keyOf,
     labelOf,
     groupOf,
+    groupCap,
     filter = "none",
     select = "none",
     levels,
@@ -146,6 +152,8 @@ export function useCollection<T>(options: CollectionOptions<T>) {
   const [path, setPath] = useState<T[]>([]);
   // The rung is its own state, so a ladder can open below a path it did not walk (startLevel).
   const [depth, setDepth] = useState(options.startLevel ?? 0);
+  // Capped groups the user opened with their "more" row.
+  const [expanded, setExpanded] = useState<readonly string[]>([]);
   const [ownSelection, setOwnSelection] = useState<string[]>([]);
   const selectedKeys = options.selected ?? ownSelection;
   const setSelected = (keys: string[]) => {
@@ -190,13 +198,26 @@ export function useCollection<T>(options: CollectionOptions<T>) {
       for (const [group, members] of byGroup) {
         if (group !== undefined)
           rows.push({ kind: "head", key: `head:${group}`, label: group, count: members.length });
-        for (const item of members)
+        const capped =
+          group !== undefined &&
+          groupCap !== undefined &&
+          members.length > groupCap &&
+          !expanded.includes(group);
+        for (const item of capped ? members.slice(0, groupCap) : members)
           rows.push({
             kind: "item",
             key: keyOf(item),
             item,
             path: pool.path,
             level: pool.level,
+          });
+        if (capped)
+          rows.push({
+            kind: "more",
+            key: `more:${group}`,
+            group,
+            count: members.length - groupCap,
+            next: keyOf(members[groupCap]!),
           });
       }
     }
@@ -209,12 +230,15 @@ export function useCollection<T>(options: CollectionOptions<T>) {
       rows.push({ kind: "create", key: `create:${text}`, text });
     return rows;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- items are identified by the render
-  }, [levelItems, query, filter, path, level, levels, options.onCreate]);
+  }, [levelItems, query, filter, path, level, levels, options.onCreate, groupCap, expanded]);
 
   const pickable = visible.filter((row) => row.kind !== "head");
   const cursor =
     pickable.find((row) => row.key === cursorKey) ??
-    (query.trim() && options.autoCursor !== false ? pickable[0] : undefined);
+    // An owned query (a menu on a text input) opens with its top row cursored: Enter picks it.
+    (options.autoCursor !== false && (query.trim() || options.query !== undefined)
+      ? pickable[0]
+      : undefined);
   const status: CollectionStatus = levels?.[level]?.refusal
     ? "refused"
     : remote === "pending"
@@ -251,6 +275,10 @@ export function useCollection<T>(options: CollectionOptions<T>) {
   const pick = (row: VisibleRow<T> | undefined, shift = false) => {
     if (!row || row.kind === "head") return;
     if (row.kind === "create") return options.onCreate?.(row.text);
+    if (row.kind === "more") {
+      setExpanded([...expanded, row.group]);
+      return setCursorKey(row.next);
+    }
     setCursorKey(row.key);
     if (options.refusalOf?.(row.item)) return;
     if (select === "multi") {

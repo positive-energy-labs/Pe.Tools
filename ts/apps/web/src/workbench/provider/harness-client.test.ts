@@ -51,7 +51,7 @@ describe("harnessClient", () => {
     const client = harnessClient("http://host");
     await client.cancel("t");
     await client.remove("t");
-    await client.prompt("t", "hi");
+    await client.prompt("t", { text: "hi" });
     await client.body("t");
     expect(sent).toEqual([
       { method: "POST", type: "application/json", body: undefined },

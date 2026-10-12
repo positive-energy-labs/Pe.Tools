@@ -8,22 +8,18 @@ import {
   attachmentRefusal,
   threadHeadSchema,
   type DocumentRequest,
-  type PromptAttachment,
   type PromptCapabilities,
 } from "@pe/agent-contracts";
 
 import { defineRoute, type RouteManifest } from "#/route";
 import { previousOf, targetInventory } from "#/readings";
 import { targetClosure } from "#/chat/thread-navigation";
+import type { PromptRequest } from "#/workbench/provider/harness-client";
+import { emptyPrompt } from "#/workbench/prompt";
 import type { ChatState } from "#/workbench/chat-state";
 import { CHAT_SEEDS, type ChatPage } from "#/chat/seeds";
 
-export type ChatReading = "head" | "inventory" | "receipts";
-
-export interface PromptInput {
-  text: string;
-  attachments?: PromptAttachment[];
-}
+export type ChatReading = "head" | "inventory" | "receipts" | "capabilities";
 
 /** What the route needs from the live surface to run its actions; absent on seeds. */
 export interface ChatRouteDeps {
@@ -31,7 +27,7 @@ export interface ChatRouteDeps {
   /** The thread body has loaded (or there is no thread yet). */
   ready?: boolean;
   running?: boolean;
-  send?: (input: PromptInput) => Promise<void>;
+  send?: (input: PromptRequest) => Promise<void>;
   cancel?: () => Promise<void>;
   newThread?: () => Promise<void>;
   forkThread?: () => Promise<void>;
@@ -51,6 +47,7 @@ const CLOSED_SEND = "Its document is closed: choose a live document or clear the
 const promptInput = z.object({
   text: z.string(),
   attachments: z.array(z.unknown()).optional(),
+  mentions: z.array(z.unknown()).optional(),
 });
 
 export type ChatActionKey = "send" | "stop" | "new" | "fork";
@@ -67,6 +64,8 @@ export const chatManifest = (
       head: { kind: "thread-head", thread: deps.thread || "draft" },
       inventory: { kind: "inventory" },
       receipts: { kind: "receipts" },
+      // The one catalog the `@` menu searches; the same rows `pe_find` and `pea find` read.
+      capabilities: { kind: "capabilities" },
     },
     actions: {
       send: {
@@ -87,17 +86,18 @@ export const chatManifest = (
             : (deps.draftTarget ?? null);
           if (targetClosure(target, targetInventory(ctx.readings.inventory as never)))
             return CLOSED_SEND;
-          const prompt = input as PromptInput | undefined;
+          const prompt = input as PromptRequest | undefined;
           if (!prompt) return null;
-          if (!prompt.text.trim() && !prompt.attachments?.length)
-            return "Enter a prompt or attachment";
-          return attachmentRefusal(
-            prompt.attachments ?? [],
-            deps.promptCapabilities ?? null,
-            deps.providerName ?? "This harness",
+          return (
+            emptyPrompt(prompt) ??
+            attachmentRefusal(
+              prompt.attachments ?? [],
+              deps.promptCapabilities ?? null,
+              deps.providerName ?? "This harness",
+            )
           );
         },
-        run: async (_ctx, input) => deps.send?.(input as PromptInput),
+        run: async (_ctx, input) => deps.send?.(input as PromptRequest),
       },
       stop: {
         label: "stop",

@@ -1,7 +1,7 @@
 import { Activity, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ThreadComposer } from "./composer";
 import type { ChatHandle } from "./composer-head";
-import type { ChatDraft } from "#/workbench/prompt";
+import { EMPTY_CHAT_DRAFT, type ChatDraft } from "#/workbench/prompt";
 
 /** Visited composers retain React-local drafts until their thread is explicitly deleted. */
 export function ComposerBank({
@@ -40,7 +40,9 @@ export function ComposerBank({
     <div className="pointer-events-auto">
       {composerIds.map((threadId) => {
         const initialDraft: ChatDraft | undefined =
-          threadId === currentThreadId && prompt ? { text: prompt, attachments: [] } : undefined;
+          threadId === currentThreadId && prompt
+            ? { ...EMPTY_CHAT_DRAFT, text: prompt }
+            : undefined;
         return (
           <Activity key={threadId} mode={threadId === currentThreadId ? "visible" : "hidden"}>
             <ThreadComposer

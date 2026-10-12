@@ -43,7 +43,8 @@ import { ActionLine, ProposedLine } from "./record-lines";
 import { Button } from "#/components/lang/button";
 import { annotation } from "#/components/anatomy";
 import { PressContent } from "#/components/anatomy/press-content";
-import { FactChip, FileChip } from "#/components/lang/chip";
+import { FactChip, FileChip, MentionChip } from "#/components/lang/chip";
+import { mentionWord } from "#/chat/use-mentions";
 import { isPdf, openPdf } from "./open-pdf";
 import { Thumbnail } from "./thumbnail";
 import { useCopy } from "#/lib/use-copy";
@@ -195,8 +196,19 @@ function UserMoment({ message, head }: { message: ChatMessage; head: ReactNode }
     <ConversationBody role="user">
       {head}
       <div className="ml-auto flex w-fit max-w-[76%] flex-col items-end gap-1.5">
-        {attachments.length > 0 ? (
+        {attachments.length > 0 || message.mentions ? (
           <div className="flex flex-wrap items-end justify-end gap-1.5">
+            {/* What Pea received with the turn; the `@Title` tokens in the text stay plain. */}
+            {message.mentions?.map((mention) => (
+              <MentionChip
+                key={mention.key}
+                label={mention.title}
+                kind={mentionWord(mention.kind)}
+                pointer={mention.key}
+                facts={mention.facts}
+                takenAt={mention.takenAt}
+              />
+            ))}
             {attachments.map((part, index) => (
               <Attachment key={index} part={part} />
             ))}

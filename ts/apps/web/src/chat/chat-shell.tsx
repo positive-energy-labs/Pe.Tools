@@ -101,7 +101,7 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
         thread: currentThreadId,
         ready: !loading,
         running: isRunning,
-        send: (input) => sendPrompt(input.text, input.attachments),
+        send: sendPrompt,
         cancel,
         newThread: () => newThread(),
         forkThread: () => forkThread(),

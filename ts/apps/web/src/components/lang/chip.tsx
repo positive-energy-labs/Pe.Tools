@@ -3,10 +3,12 @@
  * narrowing that scopes the view and never hides rows. `title` is required on both; tone comes from
  * the meaning tokens only, and `dashed` means seam (typed but unproven) and nothing else.
  */
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
+import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 import { X } from "lucide-react";
 
 import { Button } from "#/components/lang/button";
+import { Tooltip } from "#/components/lang/tooltip";
 
 import { tv } from "#/lib/tv";
 
@@ -152,6 +154,61 @@ interface FileChipProps {
   open?: () => void;
   /** Present, the chip carries a remove press. */
   onRemove?: () => void;
+}
+
+interface MentionChipProps {
+  /** What the `@` token says. */
+  label: string;
+  /** The kind word after the label: document, skill, route, op. */
+  kind: string;
+  /** The pointer Pea reads again when the snapshot is stale (`doc:<session>/<openId>`). */
+  pointer: string;
+  /** The snapshot Pea received, shown on hover. */
+  facts: Record<string, string | number | boolean | null>;
+  /** When `facts` were read (ISO). */
+  takenAt: string;
+  onRemove?: () => void;
+}
+
+/** An `@` mention: label and kind; hover inspects what Pea received (pointer, facts, when read). */
+export function MentionChip({ label, kind, pointer, facts, takenAt, onRemove }: MentionChipProps) {
+  const { base, label: name, count } = chipRecipe();
+  const rows = Object.entries(facts).filter(([, value]) => value !== null && value !== "");
+  return (
+    <Tooltip.Root>
+      <TooltipPrimitive.Trigger
+        render={<span tabIndex={0} />}
+        // A title plus its kind word: wider than a fact, still one line.
+        className={base({ class: "max-w-[48ch]" })}
+        data-surface="artifact"
+        aria-label={`@${label}, ${kind}`}
+      >
+        <span className={name()}>@{label}</span>
+        <span className={count()}>{kind}</span>
+        {onRemove ? <Button icon={X} label={`Remove @${label}`} onClick={onRemove} /> : null}
+      </TooltipPrimitive.Trigger>
+      <Tooltip.Portal>
+        <Tooltip.Positioner side="top" align="start" sideOffset={4}>
+          <Tooltip.Popup>
+            <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5">
+              <span className="text-ink-2">what Pea received</span>
+              <span className="face-mono break-all">{pointer}</span>
+              {rows.map(([fact, value]) => (
+                <Fragment key={fact}>
+                  <span className="text-ink-2">{fact}</span>
+                  <span className="face-mono break-words">{String(value)}</span>
+                </Fragment>
+              ))}
+              <span className="text-ink-2">read</span>
+              <time className="face-mono" dateTime={takenAt}>
+                {new Date(takenAt).toLocaleString()}
+              </time>
+            </div>
+          </Tooltip.Popup>
+        </Tooltip.Positioner>
+      </Tooltip.Portal>
+    </Tooltip.Root>
+  );
 }
 
 /** One file as a chip: optional lead, the name (a nav-out press when it opens), its size, remove. */

@@ -14,8 +14,9 @@ import {
  * buttons, skills) projects into `Capability` rows here; `GET /pe/capabilities` serves it,
  * `pe_find` ranks it, `pe_read`/`pe_do` dispatch by kind, the web `/ops` route renders it.
  *
- * Assembled on request (cached 30 s per bridge selector), not at boot: the op and pod sources
- * describe whichever Revit session is connected right now. Host-only sources have a 2 s budget;
+ * Assembled on request (ops and pods cached 30 s per bridge selector; sessions and their open
+ * documents read on every request), not at boot: the op and pod sources describe whichever Revit
+ * session is connected right now. Host-only sources have a 2 s budget;
  * the native catalog allows SDK resolution and bridge dispatch. Sources are read with
  * `Promise.allSettled`, and a source that did not answer is named in `sources`.
  */
@@ -29,7 +30,12 @@ import {
   type HostOpResponse,
   type PodList,
 } from "@pe/host-contracts/operation-types";
-import type { Capability, CapabilityCatalog, RouteStateSpec } from "@pe/agent-contracts";
+import {
+  catalogSessions,
+  type Capability,
+  type CapabilityCatalog,
+  type RouteStateSpec,
+} from "@pe/agent-contracts";
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 import { bundledPeaSkills, type BundledPeaSkill } from "./skills.ts";
 import type { RouteRegistration } from "./routes.ts";
@@ -312,9 +318,6 @@ export function createCapabilityCatalogSource(options: {
     read: async (scope = {}) => {
       const cacheKey = JSON.stringify(scope);
       const hit = cache.get(cacheKey);
-      if (hit && Date.now() - hit.at < CATALOG_TTL_MS) return hit.catalog;
-
-      const sources: Record<string, string> = { "route registry": "ok", skills: "ok" };
       const caller = new HostRpcCaller({
         hostBaseUrl: base,
         ...scope,
@@ -322,6 +325,21 @@ export function createCapabilityCatalogSource(options: {
         // Host-owned reads must not wait for the independent native catalog source.
         catalogOverride: tsOnlyOperationCatalog,
       });
+      if (hit && Date.now() - hit.at < CATALOG_TTL_MS) {
+        // Ops and pods may be 30 s old; the open documents never are (a closed one is no target).
+        const live = await caller.call("bridge.sessions.list").then(
+          (answer) => ({ sessions: catalogSessions(answer.sessions), status: "ok" }),
+          (error) => ({ sessions: [], status: `did not answer: ${message(error)}` }),
+        );
+        return {
+          ...hit.catalog,
+          at: new Date().toISOString(),
+          sessions: live.sessions,
+          sources: { ...hit.catalog.sources, sessions: live.status },
+        };
+      }
+
+      const sources: Record<string, string> = { "route registry": "ok", skills: "ok" };
       const [ops, pods, sessions] = await Promise.allSettled([
         fetchOps(base, scope),
         caller.call("pod.list"),
@@ -345,16 +363,7 @@ export function createCapabilityCatalogSource(options: {
       const catalog: CapabilityCatalog = {
         at: new Date().toISOString(),
         bridgeSessionId: opsValue.bridgeSessionId,
-        sessions: sessionList.map((session) => ({
-          sessionId: session.sessionId,
-          custody: session.custody ?? undefined,
-          sdkSessionId: session.sdkSessionId,
-          revitVersion: session.revitVersion,
-          activeDocumentTitle: session.activeDocumentTitle,
-          activeDocument: session.activeDocumentCloudModelGuid ?? session.activeDocumentPath,
-          openDocuments:
-            session.openDocuments?.map((doc) => ({ ...doc, address: doc.address ?? null })) ?? null,
-        })),
+        sessions: catalogSessions(sessionList),
         sources,
         capabilities: buildCapabilities({
           ops: opsValue.operations ?? [],

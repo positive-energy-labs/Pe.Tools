@@ -1,6 +1,13 @@
 import { CellStateKey, cellStateKeyRecipe } from "#/components/lang/cell-key";
 import { StateCell, stateCellRecipe } from "#/components/lang/cell";
-import { FactChip, FileChip, NarrowChip, Tag, chipRecipe } from "#/components/lang/chip";
+import {
+  FactChip,
+  FileChip,
+  MentionChip,
+  NarrowChip,
+  Tag,
+  chipRecipe,
+} from "#/components/lang/chip";
 
 import { RecipeGrid } from "./recipe-grid";
 
@@ -35,7 +42,7 @@ export function LangCellSpecimens() {
         render={() => <CellStateKey />}
       />
       <RecipeGrid
-        name="FactChip · NarrowChip · Tag"
+        name="FactChip · NarrowChip · FileChip · MentionChip · Tag"
         importPath="#/components/lang/chip"
         recipe={chipRecipe}
         render={(props) => (
@@ -71,6 +78,14 @@ export function LangCellSpecimens() {
               title="Click the label to edit; removing it widens the view."
               onRemove={noop}
               onEdit={noop}
+            />
+            <MentionChip
+              label="Operations Demo.rvt"
+              kind="document"
+              pointer="doc:pe.app-26/open-1"
+              facts={{ session: "pe.app-26", openId: "open-1", family: false }}
+              takenAt="2026-08-30T19:29:00.000Z"
+              onRemove={noop}
             />
             <Tag>door 421</Tag>
           </div>

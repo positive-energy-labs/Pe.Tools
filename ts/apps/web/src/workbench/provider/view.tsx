@@ -8,15 +8,16 @@ import { createChatPageStore } from "../store";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";
 import { WorkbenchContext } from "./thread-summary";
 import { chatLoading, useThreadStream } from "./thread-stream";
-import { harnessClient, notFound } from "./harness-client";
+import { harnessClient, notFound, type PromptRequest } from "./harness-client";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { CHAT_SEEDS } from "#/chat/seeds";
 import { errorMessage } from "./use-workbench";
 import { EMPTY_HEAD, isReady, useProviders, type HeadDraft } from "./providers";
-import { targetKey, type DocumentRequest, type PromptAttachment } from "@pe/agent-contracts";
+import { targetKey, type DocumentRequest } from "@pe/agent-contracts";
 import { demoThreads } from "#/chat/thread-navigation";
 import { mergeThreadRoster, mergeThreadSummary } from "./thread-merge";
+import { emptyPrompt } from "../prompt";
 
 export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const config = useMemo(() => resolveWorkbenchConfig(), []);
@@ -151,12 +152,13 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   }, [client, draft, draftTarget, drafted, gotoThread, newRefusal, refreshThreads]);
 
   const sendPrompt = useCallback(
-    async (text: string, attachments?: PromptAttachment[]) => {
-      const prompt = text.trim();
-      if (!prompt && !attachments?.length) throw Error("Enter a prompt or attachment");
+    async (input: PromptRequest) => {
+      const text = input.text.trim();
+      const empty = emptyPrompt(input);
+      if (empty) throw Error(empty);
       // A send on a running turn is the host's interrupt; the browser never gates on it.
       const ok = await attempt(async () =>
-        client.prompt(currentThreadId || (await createThread()), prompt, attachments),
+        client.prompt(currentThreadId || (await createThread()), { ...input, text }),
       );
       if (!ok) throw Error("Send failed");
     },

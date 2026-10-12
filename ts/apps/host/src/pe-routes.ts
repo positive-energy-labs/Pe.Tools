@@ -10,6 +10,7 @@ import {
   addressSchema,
   bindWork,
   documentRefSchema,
+  documentRows,
   familiesViewAckSchema,
   familiesViewCommandSchema,
   familiesViewSchema,
@@ -183,14 +184,17 @@ export function createPeRoutes(options: PeRoutesOptions) {
       if (scope instanceof Response) return scope;
       try {
         const query = url.searchParams;
-        return json(
-          await options.capabilityCatalog.read({
-            bridgeSessionId: query.get("session") ?? undefined,
-            session: query.has("sdk")
-              ? sdkSessionSelectionSchema.parse(JSON.parse(query.get("sdk")!))
-              : undefined,
-          }),
-        );
+        const catalog = await options.capabilityCatalog.read({
+          bridgeSessionId: query.get("session") ?? undefined,
+          session: query.has("sdk")
+            ? sdkSessionSelectionSchema.parse(JSON.parse(query.get("sdk")!))
+            : undefined,
+        });
+        // Open documents are rows too, so every door's one search finds them to mention.
+        return json({
+          ...catalog,
+          capabilities: [...catalog.capabilities, ...documentRows(catalog)],
+        });
       } catch (error) {
         return json({ error: message(error) }, 502);
       }

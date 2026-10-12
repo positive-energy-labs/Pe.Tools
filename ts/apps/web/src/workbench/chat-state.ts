@@ -3,6 +3,7 @@ import {
   emptyThreadLifecycle,
   type HarnessEvent,
   type HarnessThreadBody,
+  type Mention,
   type PromptAttachment,
 } from "@pe/agent-contracts";
 import { stringify } from "../components/lang/code-format.ts";
@@ -94,6 +95,8 @@ export interface ChatMessage {
   role: "user" | "assistant" | "system";
   parts: ChatPart[];
   createdAt?: Date;
+  /** A user turn's `@` mentions, as the prompt event recorded what Pea received. */
+  mentions?: Mention[];
   /** The assistant row the run is producing now; its last part is the one still moving. */
   running: boolean;
 }
@@ -256,6 +259,7 @@ function fold(state: ChatState): Fold {
           id: `you-${event.seq}`,
           role: "user",
           parts: [{ type: "text", text: event.text }, ...(event.attachments ?? []).map(sentPart)],
+          ...(event.mentions?.length ? { mentions: event.mentions } : {}),
           running: false,
           ...at(event),
         });

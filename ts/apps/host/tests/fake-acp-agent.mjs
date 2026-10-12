@@ -8,7 +8,8 @@
 // `FAKE_ACP_AUTH` (`account` by default, `none`), and `required` refuses `session/new`. `session/resume` picks a stored
 // session up with no replay and refuses the id "lost"; `session/fork` answers a new id. It reads
 // images and embedded context unless `FAKE_ACP_PROMPT=none`, and says `blocks: <json>` for every
-// non-text prompt block (a linked file's bytes read back from its path).
+// non-text prompt block (a linked file's bytes read back from its path), then `order: <types>` when
+// a `pe://` mention resource rode along.
 import { Readable, Writable } from "node:stream";
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -178,6 +179,9 @@ new AgentSideConnection(
               : [],
       );
       if (blocks.length) await say(`blocks: ${JSON.stringify(blocks)}`);
+      // Mentions must follow the text, so a prompt carrying one says its block order.
+      if (prompt.some((b) => b.type === "resource" && b.resource.uri.startsWith("pe://")))
+        await say(`order: ${prompt.map((b) => b.type).join(",")}`);
       if (text === "settings") {
         configOptions[0].id = "live-model";
         configOptions[0].currentValue = "m2";

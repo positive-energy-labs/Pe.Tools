@@ -315,7 +315,9 @@ export function SlashPanel({ say }: { say: (text: string) => void }) {
           setText((t) => t.replace(/\/\w*$/, `${c.label} `));
           say(`inserted ${c.label}`);
         }}
-        row={(c) => ({ label: <span className="face-mono">{c.label}</span>, meta: c.sub })}
+        row={(c) => ({ label: <span className="face-mono">{c.label}</span> })}
+        // what the cursor row does, said once under the rows
+        detail={(c) => c.sub}
       />
     </div>
   );

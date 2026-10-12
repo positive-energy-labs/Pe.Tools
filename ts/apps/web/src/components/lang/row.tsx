@@ -61,6 +61,9 @@ type RowProps = RowState & {
         as?: "div";
         lead?: ReactNode;
         label: ReactNode;
+        /** One short fact after the title on its line, in ink-2 (mono when it is a key); it
+         *  truncates before the title does. */
+        aside?: ReactNode;
         /** A second line: only with `lines={2}`, which is two item heights. */
         sub?: ReactNode;
         lines?: 1 | 2 | 3;
@@ -154,7 +157,10 @@ export function Row(props: RowProps) {
         {/* The first line: the title, then one trailing slot where the state and the verbs
             share a cell (lang.css), so a sub line runs the full width under it. */}
         <span className="dl-row-line">
-          <span className="dl-row-title">{props.label}</span>
+          <span className="dl-row-title">
+            {props.label}
+            {props.aside != null ? <span className="dl-row-aside">{props.aside}</span> : null}
+          </span>
           {fact || props.actions != null ? (
             <span className={slots.meta()}>
               {fact}
@@ -174,15 +180,17 @@ export function Row(props: RowProps) {
   );
 }
 
-/** A group's section head, sticky inside its scroll container. A group named with blank
- *  space is an unnamed section — a menu's verb cluster — and draws as a rule, not a head. */
+/** A group's section head, sticky inside its scroll container, drawn as the roster's shelf head:
+ *  label, quiet count, a hairline to the edge, no fill. A group named with blank space is an
+ *  unnamed section — a menu's verb cluster — and draws as a rule, not a head. */
 export function RowGroupHead({ label, count }: { label: ReactNode; count?: number }) {
   if (typeof label === "string" && label.trim() === "")
     return <div className="dl-row-sep" role="separator" />;
   return (
-    <div className="dl-row-head" role="presentation" data-surface="recess">
+    <div className="dl-row-head" role="presentation">
       <span>{label}</span>
-      {count != null ? <span className="dl-row-meta">{count}</span> : null}
+      {count != null ? <span data-slot="count">{count}</span> : null}
+      <span data-slot="rule" aria-hidden />
     </div>
   );
 }

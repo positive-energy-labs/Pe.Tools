@@ -9,11 +9,15 @@ import type {
   HarnessEvent,
   HarnessThreadBody,
   HarnessThreadSummary,
-  PromptAttachment,
   Provider,
+  promptRequestSchema,
   UpdateThreadRequest,
 } from "@pe/agent-contracts";
+import type { z } from "zod";
 import { openEventSource } from "#/readings";
+
+/** What a send posts: text, attachments, mentions (`promptRequestSchema`). */
+export type PromptRequest = z.input<typeof promptRequestSchema>;
 
 export function harnessClient(origin: string) {
   const call = async <T>(path: string, method = "GET", body?: object, signal?: AbortSignal) => {
@@ -76,8 +80,8 @@ export function harnessClient(origin: string) {
         },
       ),
     remove: (id: string) => call<void>(thread(id), "DELETE"),
-    prompt: (id: string, text: string, attachments?: PromptAttachment[]) =>
-      call<{ turnId: string }>(`${thread(id)}/prompt`, "POST", { text, attachments }),
+    prompt: (id: string, input: PromptRequest) =>
+      call<{ turnId: string }>(`${thread(id)}/prompt`, "POST", input),
     cancel: (id: string) => call<void>(`${thread(id)}/cancel`, "POST"),
     permission: (id: string, requestId: string, optionId: string) =>
       call<void>(`${thread(id)}/permission`, "POST", { requestId, optionId }),

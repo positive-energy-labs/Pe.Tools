@@ -43,6 +43,7 @@ import {
   resolveCallTarget,
   addressSchema,
   findCapabilities,
+  mentionOf,
   message,
   parsePodKey,
   parseRouteKey,
@@ -147,7 +148,7 @@ async function routeWorkScope(target: Target): Promise<{ query: string; target: 
 export const peFind = createTool({
   id: "pe_find",
   description:
-    "Find a capability. No query returns the map: connected Revit sessions with their active document and custody, counts per kind, top rows per kind, and which sources answered. A query ranks rows across host operations (op:), the collaborative route documents you co-edit with the user and their commands (route:), pod buttons the user presses in Revit's Do palette (pod:), and skills (skill:). Filter with kind, needs, mutates. Every row you may run is visible; nothing is tiered, and human-only rows (the person's presses) are not offered. Then pe_read a non-mutating row or pe_do any row.",
+    "Find a capability. No query returns the map: connected Revit sessions with their active document and custody, counts per kind, top rows per kind, and which sources answered. A query ranks rows across host operations (op:), the collaborative route documents you co-edit with the user and their commands (route:), pod buttons the user presses in Revit's Do palette (pod:), skills (skill:), and documents open in Revit (doc:<session>/<openId>, the same pointer the user @-mentions). Filter with kind, needs, mutates. Every row you may run is visible; nothing is tiered, and human-only rows (the person's presses) are not offered. Then pe_read a non-mutating row or pe_do any row.",
   inputSchema: z.object({
     query: z.string().optional().describe("Keywords describing what you need."),
     kind: capabilityKindSchema.optional(),
@@ -226,7 +227,7 @@ type RunInput = z.infer<typeof runInputSchema>;
 export const peRead = createTool({
   id: "pe_read",
   description:
-    "Run one capability that does not mutate: an op: row with mutates false, a route: document read, or a skill: body. Refuses mutating rows with a hint to use pe_do. Split from pe_do so reads never wait on an approval prompt. Runs under this thread's Scope; the result names the revision and the resolved target.",
+    "Run one capability that does not mutate: an op: row with mutates false, a route: document read, a skill: body, or a doc: row's mention (its session, openId, address and custody, read now). Refuses mutating rows with a hint to use pe_do. Split from pe_do so reads never wait on an approval prompt. Runs under this thread's Scope; the result names the revision and the resolved target.",
   inputSchema: runInputSchema,
   execute: (input, context) =>
     executeTool(input, context, (row) =>
@@ -239,7 +240,16 @@ export const peDo = createTool({
   description:
     "Do one capability by key from pe_find. Approval-gated because it may mutate; use pe_read for rows that do not. Human-only rows refuse. Op calls accept an exact per-call target override; omission uses the thread's default Target, read live. The result separately names Scope revision and actual target. For Takeoffs actions, retain input.actionId from the first result to recover the same attempt; never mint another ID after an uncertain outcome.",
   inputSchema: runInputSchema,
-  execute: (input, context) => executeTool(input, context, () => null, true),
+  execute: (input, context) =>
+    executeTool(
+      input,
+      context,
+      (row) =>
+        row.kind === "document"
+          ? `'${row.key}' is a document, a pointer and not an action; pass its session and openId to an op as target {kind: open, ref: {session, openId}}.`
+          : null,
+      true,
+    ),
 });
 
 async function executeTool(
@@ -495,6 +505,11 @@ async function dispatch(
         result: result.action ? result : result.ok ? result.response : result,
         elapsedMs: result.elapsedMs,
       };
+    }
+    case "document": {
+      // Reading a document pointer is its mention: the facts a first hop needs, read now.
+      if (!catalog) throw Error("A document row needs the catalog it was read from.");
+      return { ok: true, target: scopeTarget, result: mentionOf(row, catalog) };
     }
     case "skill": {
       const skill = bundledPeaSkills.find((entry) => `skill:${entry.name}` === row.key);

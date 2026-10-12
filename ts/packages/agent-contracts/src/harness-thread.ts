@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { mentionSchema } from "./mention.ts";
 import { threadHeadSchema } from "./target.ts";
 
 /**
@@ -31,8 +32,9 @@ import { threadHeadSchema } from "./target.ts";
  *   GET    /pe/threads/:id                     -> HarnessThreadBody
  *   PUT    /pe/threads/:id    {title}          -> HarnessThreadSummary
  *   DELETE /pe/threads/:id
- *   POST   /pe/threads/:id/prompt {text, attachments?} -> { turnId }   (interrupts a running turn: it ends
- *            cancelled, then this one starts; 409 when it does not stop; 400 on an unreadable attachment kind)
+ *   POST   /pe/threads/:id/prompt {text, attachments?, mentions?} -> { turnId }   (interrupts a running
+ *            turn: it ends cancelled, then this one starts; 409 when it does not stop; 400 on an unreadable
+ *            attachment kind; a mention is never refused, see `mentionSchema`)
  *   POST   /pe/threads/:id/cancel
  *   POST   /pe/threads/:id/permission {requestId, optionId}
  *   POST   /pe/threads/:id/question {requestId, action, content?}   (answers an ACP elicitation form)
@@ -177,6 +179,7 @@ export const harnessEventSchema = z.discriminatedUnion("kind", [
     turnId: z.string(),
     text: z.string(),
     attachments: z.array(promptAttachmentSchema).optional(),
+    mentions: z.array(mentionSchema).optional(),
   }),
   /** `turnId` is null for updates the harness sends outside a turn (commands, mode, session info). */
   z.object({
@@ -382,13 +385,19 @@ export const harnessThreadBodySchema = harnessThreadSummarySchema.extend({
 });
 export type HarnessThreadBody = z.infer<typeof harnessThreadBodySchema>;
 
-/** A refused attachment kind is 400 `{error}` with `attachmentRefusal`'s sentence. */
+/** A refused attachment kind is 400 `{error}` with `attachmentRefusal`'s sentence. Each mention
+ * reaches the harness as one embedded `pe://<key>` resource after the text, or a text line when the
+ * harness reads no embedded context. */
 export const promptRequestSchema = z
   .object({
     text: z.string(),
     attachments: z.array(promptAttachmentSchema).optional(),
+    mentions: z.array(mentionSchema).optional(),
   })
-  .refine((p) => p.text.trim() || p.attachments?.length, "Enter a prompt or attachment");
+  .refine(
+    (p) => p.text.trim() || p.attachments?.length || p.mentions?.length,
+    "Enter a prompt, attachment or mention",
+  );
 export const permissionResponseSchema = z.object({ requestId: z.string(), optionId: z.string() });
 /** `accept` carries the form's answers keyed by property; `decline` is "skip", the harness goes on. */
 export const questionResponseSchema = z.object({

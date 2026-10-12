@@ -140,7 +140,7 @@ export async function readCapabilityIntent(
   throw new Error(
     catalog.bridgeCatalogError
       ? `The operation catalog of session '${session}' is unreachable: ${catalog.bridgeCatalogError}. '${key}' was not checked; retry once the session answers.`
-      : `'${key}' is not in the operation catalog of session '${session}'. Run \`pea host operations search\`.`,
+      : `'${key}' is not in the operation catalog of session '${session}'. Run \`pea find\`.`,
   );
 }
 

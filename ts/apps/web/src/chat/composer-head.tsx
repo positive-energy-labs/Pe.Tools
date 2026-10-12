@@ -35,7 +35,7 @@ import { targetClosure, targetLabel } from "./thread-navigation";
 import { ProposalHead } from "./proposal-head";
 import { ComposerPending } from "./composer-pending";
 import { HeadLadder } from "./head-chips";
-import type { ChatDraft } from "#/workbench/prompt";
+import { emptyPrompt, type ChatDraft } from "#/workbench/prompt";
 
 export type ChatHandle = RouteHandle<ChatState, ChatReading, ChatPage, ChatActionKey>;
 
@@ -49,14 +49,14 @@ export function useSend(
   onSent?: (sent: ChatDraft) => void,
 ): ActionHandle {
   const send = handle.actions.send;
-  const empty = !draft.text.trim() && draft.attachments.length === 0;
   return {
     ...send,
-    refusal: send.refusal ?? (empty ? "Enter a prompt or attachment" : null),
+    refusal: send.refusal ?? emptyPrompt(draft),
     run: async () => {
       const result = await send.run({
         text: draft.text.trim(),
         attachments: draft.attachments.length ? draft.attachments : undefined,
+        mentions: draft.mentions.length ? draft.mentions : undefined,
       });
       if (!result) onSent?.(draft);
       return result;

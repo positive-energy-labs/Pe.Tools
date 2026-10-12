@@ -5,7 +5,7 @@
  */
 import { useContext, useEffect, useState, type ComponentProps, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Ellipsis } from "lucide-react";
 
 import { CellHost } from "#/components/lang/cell";
 import { Input } from "#/components/lang/input";
@@ -23,6 +23,7 @@ import { Row, RowGroupHead, type RowState } from "./row";
 type RowParts = Omit<RowState, "cursor" | "selected"> & {
   lead?: ReactNode;
   label: ReactNode;
+  aside?: ReactNode;
   sub?: ReactNode;
   lines?: 1 | 2;
   meta?: ReactNode;
@@ -52,6 +53,8 @@ type ListProps<T> = Omit<CollectionOptions<T>, "target"> & {
   /** Verbs under the rows that are not rows (the head picker's "Clear target"); a ladder's
    * footer may differ per rung. */
   footer?: ReactNode | ((level: number) => ReactNode);
+  /** What the cursor row is, said once under the rows (two lines), so each row stays one line. */
+  detail?: (item: T) => ReactNode;
   /** Hand the collection to the caller (a table reads its selection, the composer its cursor). */
   onCollection?: (collection: Collection<T>) => void;
   /** False: group heads carry no member count (a list whose rows already carry a count). */
@@ -83,6 +86,7 @@ export function List<T>(props: ListProps<T>) {
   });
   props.onCollection?.(collection);
   const { status, visible, query } = collection;
+  const cursorRow = visible.find((row) => row.key === collection.cursor);
   const footer = typeof props.footer === "function" ? props.footer(collection.level) : props.footer;
   // An owner (the composer's textarea, a free-text input) points at the list and its cursor.
   const owner = props.owner;
@@ -120,6 +124,17 @@ export function List<T>(props: ListProps<T>) {
         />
       );
     }
+    if (row.kind === "more")
+      return (
+        <Row
+          key={row.key}
+          {...collection.rowProps(row.key)}
+          lead={<Ellipsis aria-hidden />}
+          label={
+            <span className="text-ink-2">{`${row.count} more ${row.group.toLowerCase()}`}</span>
+          }
+        />
+      );
     const slots = props.row(row.item);
     return <Row key={row.key} {...collection.rowProps(row.key)} {...slots} />;
   };
@@ -195,6 +210,11 @@ export function List<T>(props: ListProps<T>) {
           ? null
           : visible.map(render)}
       </div>
+      {props.detail ? (
+        <div className="dl-list-detail hairline-t" data-list-detail="">
+          {cursorRow?.kind === "item" ? props.detail(cursorRow.item) : null}
+        </div>
+      ) : null}
       {footer != null ? <div className="hairline-t px-1 pt-1">{footer}</div> : null}
     </div>
   );
@@ -206,6 +226,8 @@ type PopupFrameProps = {
   label: string;
   /** An input-owned popup never takes focus: the owner keeps the caret and the keys. */
   owned?: boolean;
+  /** Anchored at a text caret (the composer's `/` and `@`), not at a field or trigger. */
+  atCaret?: boolean;
   side?: "top" | "bottom";
   align?: "start" | "end";
 };
@@ -216,6 +238,7 @@ export function PopupFrame({
   anchor,
   label,
   owned,
+  atCaret,
   side = "bottom",
   align = "start",
 }: PopupFrameProps) {
@@ -234,7 +257,9 @@ export function PopupFrame({
           finalFocus={owned ? false : undefined}
           data-list-popup=""
           data-surface="artifact"
-          className="block min-w-48 max-w-[min(36rem,var(--available-width))] overflow-hidden p-1 text-ink float-surface"
+          // A caret menu holds one width while its query narrows it; a field's suggestions match
+          // the field; a triggered list is as wide as its rows.
+          className={`block overflow-hidden p-1 text-ink float-surface ${atCaret ? "w-[min(28rem,var(--available-width))]" : owned ? "w-(--anchor-width) min-w-48" : "min-w-48 max-w-[min(36rem,var(--available-width))]"}`}
         >
           {children}
         </Popover.Popup>
@@ -356,6 +381,7 @@ export function ListPopup<T>({
           side={side}
           label={list["aria-label"]}
           owned={list.owner !== undefined}
+          atCaret={anchor === "caret"}
         >
           <List
             {...list}

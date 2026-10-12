@@ -9,6 +9,7 @@ import { z } from "zod";
 import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-types";
 import {
   address,
+  documentRows,
   findCapabilities,
   type CapabilityCatalog,
   type ThreadHead,
@@ -132,6 +133,36 @@ test("native catalog survives SDK latency while host-only sources keep their sho
     timeout.mockRestore();
     vi.useRealTimers();
   }
+});
+
+test("a cached catalog still reads the open documents fresh: a closed one is gone on the next read", async () => {
+  fakeRuntimeHost("http://127.0.0.1:19");
+  let open = [
+    { openId: "o1", title: "A.rvt", address: null, isFamilyDocument: false, isActive: true },
+  ];
+  let opsReads = 0;
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname === "/ops") {
+      opsReads += 1;
+      return Response.json({ operations: ops });
+    }
+    const key = JSON.parse(typeof init?.body === "string" ? init.body : "{}").key;
+    return Response.json(
+      key === "pod.list"
+        ? pods
+        : { sessions: [{ sessionId: "b1", connected: true, openDocuments: open }] },
+    );
+  });
+  const source = createCapabilityCatalogSource({
+    hostBaseUrl: "http://127.0.0.1:19",
+    registrations: [],
+  });
+  expect(documentRows(await source.read()).map((row) => row.key)).toEqual(["doc:b1/o1"]);
+  open = [];
+  const again = await source.read();
+  expect(documentRows(again)).toEqual([]);
+  expect(opsReads).toBe(1);
 });
 
 test("an op's [Op(Finds)] search terms find it when its key, title, and description do not", () => {
@@ -514,6 +545,65 @@ test("pe_find reads native capabilities under an exact-open turn Target", async 
   expect(result.matches).toContainEqual(
     expect.objectContaining({ key: "op:revit.catalog.loaded-families" }),
   );
+});
+
+test("an open document is a doc: row: pe_find finds it, pe_read returns its mention, pe_do refuses", async () => {
+  fakeRuntimeHost("http://127.0.0.1:9");
+  // What GET /pe/capabilities serves: the catalog plus its sessions' open documents as rows.
+  const base = catalog();
+  base.sessions = [
+    {
+      sessionId: "b1",
+      custody: "controlled",
+      revitVersion: "2025",
+      openDocuments: [
+        {
+          openId: "o1",
+          address: "C:\\Models\\Riser.rvt",
+          title: "Mechanical Riser",
+          isFamilyDocument: false,
+          isActive: true,
+        },
+      ],
+    },
+  ];
+  const served = { ...base, capabilities: [...base.capabilities, ...documentRows(base)] };
+  vi.stubGlobal("fetch", async () => Response.json(served));
+  const found = (await run(peFind, { query: "mechanical riser" })) as {
+    matches: Array<{ key: string; kind: string; title: string }>;
+  };
+  expect(found.matches[0]).toMatchObject({
+    key: "doc:b1/o1",
+    kind: "document",
+    title: "Mechanical Riser",
+  });
+  const read = (await run(peRead, { key: "doc:b1/o1", timeoutSeconds: 30 })) as {
+    ok: boolean;
+    kind: string;
+    result: unknown;
+  };
+  expect(read).toMatchObject({ ok: true, kind: "document" });
+  expect(read.result).toEqual({
+    key: "doc:b1/o1",
+    kind: "document",
+    title: "Mechanical Riser",
+    takenAt: served.at,
+    facts: {
+      session: "b1",
+      openId: "o1",
+      address: "C:\\Models\\Riser.rvt",
+      family: false,
+      active: true,
+      revit: "2025",
+      custody: "controlled",
+    },
+  });
+  const done = (await run(peDo, { key: "doc:b1/o1", timeoutSeconds: 30 })) as {
+    isError: boolean;
+    content: string;
+  };
+  expect(done.isError).toBe(true);
+  expect(done.content).toContain("a pointer and not an action");
 });
 
 test("an exact-open turn Target reads and writes route Work under its document's Address (E2E-J1)", async () => {
