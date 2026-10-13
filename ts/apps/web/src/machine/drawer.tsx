@@ -24,7 +24,13 @@ export function MachineHelpTrigger({ onOpen }: { onOpen?: () => void }) {
         openMachine();
       }}
     >
-      This machine · <span className="face-mono">{chipText(reading, fixture)}</span>
+      This machine
+      {chipText(reading, fixture) ? (
+        <>
+          {" · "}
+          <span className="face-mono">{chipText(reading, fixture)}</span>
+        </>
+      ) : null}
     </Button>
   );
 }
@@ -65,7 +71,7 @@ export function VersionChip({ hideTrigger = false }: { hideTrigger?: boolean }) 
   return (
     <>
       {/* Chat reaches this drawer through its tutorial; other routes keep the global door. */}
-      {!hideTrigger ? (
+      {!hideTrigger && chipText(reading, fixture) ? (
         <span className="fixed right-(--gutter) bottom-(--gutter) z-sticky flex h-(--rail-h) items-center">
           <Button
             ref={chip}

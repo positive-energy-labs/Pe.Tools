@@ -38,7 +38,15 @@ export const planWaits = (machine: Machine): UpdatePlan | null => {
 
 export function runtimeIdentity(reading: Reading<Machine>, fixture = false) {
   const host = machineOf(reading)?.host;
-  if (!host) return { text: "Runtime unknown", detail: "Host identity has not been read." };
+  // Before the first reading there is nothing to say, so the chip is omitted; "unknown" was not a
+  // runtime. A reading without a host identity keeps the door open and says why in its detail.
+  if (!host)
+    return reading.state === "absent"
+      ? { text: "", detail: "Reading this machine." }
+      : {
+          text: "This machine",
+          detail: reading.state === "failed" ? reading.message : "Host identity is unread.",
+        };
   if (fixture)
     return {
       text: `Fixture · ${host.version}`,
@@ -184,6 +192,7 @@ export function shareState(machine: Machine): Said {
   const share = machine.share;
   if (!share)
     return { text: machine.legs.share?.error ? "read failed" : "unread", tone: "caution" };
+  if (share.state === "needs-tailscale") return { text: "needs Tailscale" };
   if (share.state === "refused") return { text: "refused", tone: "caution" };
   if (share.state === "unknown") return { text: "unknown", tone: "caution" };
   if (share.desired !== share.state) return { text: `turning ${share.desired}` };

@@ -97,6 +97,20 @@ export function createShare(options: ShareOptions) {
     };
     return state;
   };
+  // A missing `tailscale` binary is a state of the machine, not something the host refused.
+  const failed = (error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+      return refused("share.unavailable", String(error));
+    state = {
+      ...state,
+      allowRemoteAdministration: intent.allowRemoteAdministration ?? true,
+      desired: intent.desired,
+      state: "needs-tailscale",
+      url: null,
+      refusal: null,
+    };
+    return state;
+  };
   // Mutations and reads share one queue so an older status cannot overwrite a newer switch.
   function exclusive<T>(run: () => Promise<T>): Promise<T> {
     const next = serial.then(run);
@@ -168,7 +182,7 @@ export function createShare(options: ShareOptions) {
     try {
       await status();
     } catch (error) {
-      refused("share.unavailable", String(error));
+      failed(error);
     } finally {
       checkedAt = Date.parse(now());
     }
@@ -231,7 +245,7 @@ export function createShare(options: ShareOptions) {
             return refused("share.not-verified", "Serve did not confirm the requested mapping.");
           return state;
         } catch (error) {
-          return refused("share.unavailable", String(error));
+          return failed(error);
         } finally {
           checkedAt = Date.parse(now());
           notify();
