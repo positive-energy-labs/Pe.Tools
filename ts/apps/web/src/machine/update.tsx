@@ -10,13 +10,59 @@ import { Button } from "#/components/lang/button";
 import { LegStrip } from "#/components/lang/leg-strip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { PidChip } from "#/components/lang/process";
+import { SwitchRow } from "#/components/lang/switch-row";
 import { dirty, useAction } from "#/readings";
 import { recheckUpdate } from "#/host/install";
+import { hostFetch } from "#/host/runtime";
 
 import { blockersOf, disconnected, hhmm, machineOf, receiptRunning } from "./model";
 import { SEED_REFUSAL, useUpdateConsent } from "./use-machine";
 
 const mb = (bytes: number) => `${Math.round(bytes / 1_048_576)} MB`;
+
+async function setAutomaticUpdates(enabled: boolean): Promise<void> {
+  const response = await hostFetch("/host/update/automatic", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  if (response.ok) return;
+  const body = (await response.json().catch(() => null)) as { error?: string } | null;
+  throw Error(body?.error ?? `Switch refused (${response.status}).`);
+}
+
+/** The automatic-update off switch: one instrument, drawn in the Update group and on its card. */
+export function AutomaticUpdates({
+  reading,
+  fixture,
+}: {
+  reading: Reading<Machine>;
+  fixture: boolean;
+}) {
+  const machine = machineOf(reading);
+  const toggle = useAction<boolean, void>(async (enabled) => {
+    try {
+      await setAutomaticUpdates(enabled);
+    } finally {
+      dirty({ kind: "machine" });
+    }
+  });
+  if (!machine) return null;
+  return (
+    <>
+      <SwitchRow
+        label="Update automatically"
+        says="Installs a new version once no Revit has been open for two minutes and Pea is idle"
+        checked={machine.update.automatic}
+        onCheckedChange={(enabled) => toggle.mutate(enabled)}
+        refusal={
+          fixture ? SEED_REFUSAL : disconnected(reading) ? "The host is disconnected." : null
+        }
+      />
+      {toggle.error ? <OutcomeLine kind="refused" label={toggle.error.message} /> : null}
+    </>
+  );
+}
 
 function Receipt({ machine, gap }: { machine: Machine; gap: boolean }) {
   const receipt = machine.update.receipt;
@@ -121,6 +167,7 @@ export function UpdateGroup({ reading, fixture }: { reading: Reading<Machine>; f
           )}
           <span className="ml-auto">{recheck}</span>
         </span>
+        <AutomaticUpdates reading={reading} fixture={fixture} />
         <Receipt machine={machine} gap={gap} />
       </div>
     );
@@ -140,6 +187,7 @@ export function UpdateGroup({ reading, fixture }: { reading: Reading<Machine>; f
           <span className="text-ink-2">checked {hhmm(plan.observedAtUtc)}</span>
           <span className="ml-auto">{recheck}</span>
         </span>
+        <AutomaticUpdates reading={reading} fixture={fixture} />
         <Receipt machine={machine} gap={gap} />
       </div>
     );
@@ -210,6 +258,7 @@ export function UpdateGroup({ reading, fixture }: { reading: Reading<Machine>; f
         <span data-tone="caution">Consent waits for the blocker above.</span>
       ) : null}
       {consent.error ? <OutcomeLine kind="refused" label={consent.error.message} /> : null}
+      <AutomaticUpdates reading={reading} fixture={fixture} />
       <Receipt machine={machine} gap={gap} />
     </div>
   );
