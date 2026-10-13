@@ -1157,3 +1157,22 @@ test("a document arriving after admission refuses stop at effect entry", async (
   });
   expect(f.calls.every((args) => args[1] === "list")).toBe(true);
 });
+
+test("fresh Machine ownership rechecks a Pea session before the lifecycle effect", async () => {
+  const row = controlledRow({ shape: shape("background") });
+  const f = await setup(() => ({ result: { state: "ok" } }), [row]);
+  await recordPeaLaunch(f.owner);
+  const admit = f.owner.admit.bind(f.owner);
+  f.owner.admit = (...args) => {
+    row.shape = shape("foreground");
+    return admit(...args);
+  };
+  expect(
+    await f.admit("instances.stop", { session, unsaved: "keep" }, undefined, "agent"),
+  ).toMatchObject({
+    state: "failed",
+    notDispatched: true,
+    error: expect.stringContaining("lifecycle.ungranted-documents"),
+  });
+  expect(f.calls.every((args) => args[1] === "list")).toBe(true);
+});

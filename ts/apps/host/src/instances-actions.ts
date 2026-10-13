@@ -233,12 +233,12 @@ export async function admitInstancesAction(
     });
   // Resolve before admission: the receipt must carry the basis that admits its effects.
   const censusBasis = async (target: Target): Promise<Basis> => {
-    if (whoseOf(target, await owner.list()) === "pea")
-      return {
-        kind: "pea-session",
-        session: `${target.process.pid}:${target.process.processStartUtc}`,
-      };
     if (launch) {
+      if (whoseOf(target, await owner.list()) === "pea")
+        return {
+          kind: "pea-session",
+          session: `${target.process.pid}:${target.process.processStartUtc}`,
+        };
       requireHuman(crossing.caller, door, `${key} into your Revit`);
       return { kind: "human" };
     }
@@ -250,6 +250,8 @@ export async function admitInstancesAction(
     }
     const documents = row.documents!;
     const attached = row.attachment;
+    const session = attached?.session ?? `${target.process.pid}:${target.process.processStartUtc}`;
+    if (row.whose === "pea") return { kind: "pea-session", session };
     if (
       key !== "instances.close" &&
       documents.length === 0 &&
@@ -257,7 +259,7 @@ export async function admitInstancesAction(
     )
       return {
         kind: "empty-user-session",
-        session: attached?.session ?? `${target.process.pid}:${target.process.processStartUtc}`,
+        session,
       };
     const affected =
       key === "instances.close"
