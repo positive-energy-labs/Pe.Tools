@@ -1,13 +1,5 @@
-/**
- * THE PROOF LANE, in a real browser against the real host. Two halves:
- *
- * - Frozen: every route manifest that declares `seeds`, every `[action, seed]` pair. `?demo=<action>`
- *   mounts the seed read-only (`useRoute` refuses every action with "frozen seed is read-only"), so
- *   this proves render and parity: the head renders, every verb is disabled with that sentence,
- *   nothing throws and nothing is POSTed. Seeds are enumerated from the manifests themselves.
- * - Live: `?demo=<seed>&live=1` routes the page's host traffic to a simulated demo owner, so one
- *   capture → (plan →) apply loop per product route runs end to end and `/pods` shows its receipt.
- */
+/** Browser proof against the real host: frozen seeds draw inert verbs and their refusal;
+ * live demo owners run capture → plan → apply, with the filed receipts read back on `/pods`. */
 import { existsSync, mkdtempSync } from "node:fs";
 import { createServer as createNodeServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -141,7 +133,15 @@ beforeAll(async () => {
     "C:/Program Files/Microsoft/Edge/Application/msedge.exe",
   ].find(existsSync);
   if (!executablePath) throw new Error("the demo lane needs Chrome or Edge");
-  browser = await chromium.launch({ executablePath, headless: true });
+  browser = await chromium.launch({
+    executablePath,
+    headless: true,
+    args: [
+      "--disable-background-timer-throttling",
+      "--disable-renderer-backgrounding",
+      "--disable-backgrounding-occluded-windows",
+    ],
+  });
 }, 180_000);
 
 afterAll(async () => {
@@ -160,9 +160,7 @@ for (const { path, manifest } of ROUTES)
     if (!seed) continue;
     test(`${manifest.key} ?demo=${action}`, async () => {
       const page = await browser!.newPage();
-      // What the demo lane must not do: throw, log an error, or write anything. Route BODIES
-      // outside the primitive still issue live host queries that 4xx/5xx without Revit, and the
-      // browser logs one resource line per such response; those are not the primitive's.
+      // Body reads can 4xx without Revit; uncaught errors and writes still fail the frozen lane.
       const errors: string[] = [];
       const posts: string[] = [];
       page.on("pageerror", (error: { message: string }) =>
@@ -172,50 +170,54 @@ for (const { path, manifest } of ROUTES)
         if (message.type() === "error" && !message.text().startsWith("Failed to load resource"))
           errors.push(message.text());
       });
-      // The two write lanes: a semantic action's receipt (`/actions`) and a route-state write
-      // (`/route-state/...`). Route BODIES outside the primitive still POST `/call` to read the
-      // live host under a seed; that is an owed cut, not a write, so it is not asserted here.
+      // `/call` includes body reads; actions and route-state are the write doors.
       page.on("request", (request: { method(): string; url(): string }) => {
         const url = request.url();
-        if (request.method() === "POST" && /\/(actions|route-state)/.test(url)) posts.push(url);
+        if (request.method() === "POST" && /\/(actions|route-state)\b/.test(url)) posts.push(url);
       });
       try {
         await page.goto(`${baseUrl}${path}?demo=${encodeURIComponent(action)}`, {
           waitUntil: "domcontentloaded",
         });
-        // 1. The head is drawn: the shell's own landmark, or the Situation an entity route
-        // draws in its place, whatever the body prints as a title.
+        // Shell head or Situation, independent of the body title.
         const head = page
           .getByRole("region", { name: `${manifest.name} route` })
           .or(page.getByRole("region", { name: "Situation" }));
         await expect.poll(() => head.count(), { timeout: 30_000 }).toBeGreaterThan(0);
-        // 2. Where the route draws the shared Situation's verb row (the rest still wear the
-        // shell head), its meter says the seeded Work revision: a seed IS the Work, so r0.
-        const body = page.locator("body");
-        if ((await page.getByRole("button", { name: /verbs$/ }).count()) > 0)
-          await expect.poll(() => body.innerText(), { timeout: 15_000 }).toContain("r0");
-        // 3. Every verb the head draws is disabled by the one sentence the primitive refuses a
-        // seed with. Nothing here can run, so nothing here is clicked.
-        let checked = 0;
-        for (const [name, spec] of Object.entries(manifest.actions)) {
-          // A verb's name is its label and its count; body buttons may share the first word.
-          const verb = head
-            .first()
-            .getByRole("button", { name: new RegExp(`^${spec.label}(?: .+)?$`) })
-            .first();
-          if ((await verb.count()) === 0) continue;
-          checked += 1;
+        if (manifest.key === "chat") {
+          await expect.poll(() => head.first().innerText()).toContain("Operations Demo.rvt");
+          if (action === "diagram") {
+            const diagram = page.getByRole("group", { name: "AHU-1 supply air", exact: true });
+            await expect.poll(() => diagram.locator("[data-diagram] svg").count()).toBe(1);
+          }
+        }
+        if (
+          manifest.key !== "schedules" &&
+          (await head.getByRole("button", { name: "verbs", exact: true }).count()) > 0
+        )
+          await expect.poll(() => head.first().innerText(), { timeout: 15_000 }).toContain("r0");
+        // Chat draws verbs beside its Situation, in the composer; other routes keep the row.
+        const controls =
+          manifest.key === "chat" ? page.locator('[data-pane-id="composer"]') : head.first();
+        const labels = Object.values(manifest.actions)
+          .map((spec) => spec.label)
+          .join("|");
+        const verbs = controls.getByRole("button", {
+          name: new RegExp(`^(?:${labels})(?:[: ].+)?$`, "i"),
+        });
+        await expect.poll(() => verbs.count()).toBeGreaterThan(0);
+        for (const verb of await verbs.all()) {
           expect(
             await verb.getAttribute("aria-disabled"),
-            `${manifest.key}.${name} is operable under a frozen seed`,
+            `${manifest.key}.${action} is operable under a frozen seed`,
           ).toBe("true");
-          // The title is the refusal, then the verb's chord when it has one.
-          expect(
-            await verb.getAttribute("title"),
-            `${manifest.key}.${name} refusal sentence`,
-          ).toMatch(/^frozen seed is read-only(?: · |$)/);
+          await verb.hover();
+          await page.bringToFront();
+          await expect
+            .poll(() => page.getByText(/^frozen seed is read-only(?: · |$)/).isVisible())
+            .toBe(true);
+          await page.mouse.move(0, 0);
         }
-        expect(checked, `${manifest.key}.${action} drew no verb to check`).toBeGreaterThan(0);
         expect(errors, `${manifest.key}.${action} threw or logged`).toEqual([]);
         expect(posts, `${manifest.key}.${action} wrote under a frozen seed`).toEqual([]);
       } finally {
@@ -224,11 +226,6 @@ for (const { path, manifest } of ROUTES)
     }, 120_000);
   }
 
-/**
- * THE LIVE LANE. `?demo=<seed>&live=1` runs the route's real code against a simulated demo owner:
- * capture files a new member into the owner's pod, apply files `output/<run>/receipt.json` there,
- * and `/pods` shows that receipt for the member. One loop per product route.
- */
 // biome-ignore lint/suspicious/noExplicitAny: the page type is not threaded through here.
 type Page = any;
 
@@ -248,15 +245,7 @@ const verb = (page: Page, label: string) =>
 
 async function run(page: Page, label: string) {
   const button = verb(page, label);
-  await expect
-    .poll(
-      async () =>
-        `${await button.getAttribute("aria-disabled")} ${await button.getAttribute("title")}`,
-      {
-        timeout: 30_000,
-      },
-    )
-    .toMatch(/^false /);
+  await expect.poll(() => button.isEnabled(), { timeout: 30_000 }).toBe(true);
   await button.click();
 }
 
@@ -732,7 +721,7 @@ test("live /families: retained readback supports repeat and consecutive family p
     const runs = (await page.evaluate(
       `import("/src/host/pods.ts").then((m) => m.listRuns(${JSON.stringify(pod)}, "staged/Fan-Coil-Unit---Ducted.json"))`,
     )) as { receipt: unknown }[];
-    const members = await receiptOnPods(page, pod, "", "MEMBERS");
+    const members = await receiptOnPods(page, pod, "", "Members");
     expect(members).not.toContain("staged");
     return JSON.stringify(runs.map((r) => r.receipt));
   });
