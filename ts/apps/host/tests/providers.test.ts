@@ -37,6 +37,46 @@ const add = {
   auth: { kind: "endpoint", baseUrl: "https://synthetic.invalid", apiKey: "synthetic-key" },
 };
 
+test("an Anthropic credit refusal crosses add as a classified line without model retries", async () => {
+  const raw = JSON.stringify({
+    type: "error",
+    error: {
+      type: "invalid_request_error",
+      message: "Your credit balance is too low to access the Anthropic API.",
+    },
+  });
+  let calls = 0;
+  const server = createServer((req, res) => {
+    if (req.url === "/v1/models") {
+      res.writeHead(200).end(JSON.stringify({ data: [{ id: "claude-a" }, { id: "claude-b" }] }));
+    } else {
+      calls++;
+      res.writeHead(400).end(raw);
+    }
+  });
+  const baseUrl = await listen(server);
+  try {
+    const providers = createProviders({ probeOnStart: false });
+    const response = await providers.fetch(
+      request("providers", "POST", { ...add, auth: { ...add.auth, baseUrl } }),
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      step: "endpoint",
+      message: "billing: Out of credit or billing limit reached.",
+      failure: {
+        kind: "billing",
+        message: "billing: Out of credit or billing limit reached.",
+        raw,
+      },
+    });
+    expect(calls).toBe(1);
+    expect(providers.get("claude-synthetic")).toBeNull();
+  } finally {
+    await close(server);
+  }
+});
+
 test("each child gets fresh PATH and a capture failure is visible in provider readiness", async () => {
   let captures = 0;
   let failed = false;

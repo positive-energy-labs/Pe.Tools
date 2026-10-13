@@ -99,6 +99,7 @@ export interface ChatMessage {
   mentions?: Mention[];
   /** The assistant row the run is producing now; its last part is the one still moving. */
   running: boolean;
+  failure?: Extract<HarnessEvent, { kind: "error" }>["failure"];
 }
 
 /** An ACP `ToolCall` / `ToolCallUpdate` body, as the host kept it verbatim. */
@@ -206,6 +207,7 @@ function fold(state: ChatState): Fold {
       id: `${event.kind}-${event.seq}`,
       role: "system",
       parts: [{ type: "text", text: said }],
+      ...(event.kind === "error" && event.failure ? { failure: event.failure } : {}),
       running: false,
       ...at(event),
     });

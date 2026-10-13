@@ -155,6 +155,15 @@ new AgentSideConnection(
     cancel: () => cancelled(),
     async prompt({ sessionId, prompt }) {
       const text = prompt.map((block) => block.text ?? "").join("");
+      if (text === "credit-refusal")
+        throw new Error(
+          JSON.stringify({
+            error: {
+              type: "invalid_request_error",
+              message: "Your credit balance is too low to access the Anthropic API.",
+            },
+          }),
+        );
       const say = (chunk) =>
         conn.sessionUpdate({
           sessionId,

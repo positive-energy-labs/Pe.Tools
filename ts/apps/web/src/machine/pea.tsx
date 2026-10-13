@@ -1,12 +1,12 @@
 /**
  * The Pea group: harness readiness is machine state (agent ledger 2026-10-09), so the provider
- * list, sign-in, probe and endpoint config live here, in the drawer and the tray, and left
- * `/settings`. Each provider is a row with its readiness in the host's words and the one step
+ * list, sign-in, probe and endpoint config have one component shared by the drawer, tray,
+ * composer and settings. Each provider is a row with its readiness in the host's words and the one step
  * that readies it; an endpoint is probed by the host before it is saved.
  */
 import { useState, type ReactNode } from "react";
 import { Plug } from "lucide-react";
-import type { HarnessId, Machine } from "@pe/agent-contracts";
+import type { EndpointFailure, HarnessId, Machine } from "@pe/agent-contracts";
 
 import { Input } from "#/components/lang/input";
 import { ListSegmentInput } from "#/components/lang/list-popup";
@@ -18,12 +18,17 @@ import {
   useProviders,
   type ProvidersState,
 } from "#/workbench/provider/providers";
+import { EndpointError } from "#/workbench/endpoint-error";
 import { errorMessage } from "#/workbench/provider/use-workbench";
 
 export function PeaGroup({ fixture, machine }: { fixture: boolean; machine: Machine }) {
   const providers = useProviders("", !fixture, machine);
   if (fixture)
     return <span className="text-ink-2">Fixture: provider details are read from a live host.</span>;
+  return <ProviderSetup providers={providers} />;
+}
+
+export function ProviderSetup({ providers }: { providers: ProvidersState }) {
   if (!providers.list)
     return providers.error ? (
       <OutcomeLine kind="error" label={providers.error} />
@@ -43,7 +48,9 @@ export function PeaGroup({ fixture, machine }: { fixture: boolean; machine: Mach
               }
               title={readinessSub(provider)}
             >
-              {readinessSub(provider)}
+              {provider.readiness.state === "refused" && provider.readiness.failure
+                ? "refused"
+                : readinessSub(provider)}
             </span>
             <span className="ml-auto flex gap-1">
               <Button label="Probe" onClick={() => void providers.probe(provider.id)}>
@@ -51,11 +58,18 @@ export function PeaGroup({ fixture, machine }: { fixture: boolean; machine: Mach
               </Button>
               {provider.auth.kind === "subscription" ? (
                 <Button
-                  label="Sign in"
-                  reason="open the harness's own login in a console on this machine"
+                  label={
+                    provider.readiness.state === "refused" &&
+                    provider.readiness.step === "installed"
+                      ? "Install"
+                      : "Sign in"
+                  }
+                  reason="open the harness installer or login in a console on this machine"
                   onClick={() => void providers.openLogin(provider.id)}
                 >
-                  Sign in
+                  {provider.readiness.state === "refused" && provider.readiness.step === "installed"
+                    ? "Install"
+                    : "Sign in"}
                 </Button>
               ) : (
                 <Button label="Remove" onClick={() => void providers.remove(provider.id)}>
@@ -64,6 +78,12 @@ export function PeaGroup({ fixture, machine }: { fixture: boolean; machine: Mach
               )}
             </span>
           </span>
+          {provider.readiness.state === "refused" && provider.readiness.failure ? (
+            <EndpointError
+              message={provider.readiness.message}
+              failure={provider.readiness.failure}
+            />
+          ) : null}
           <span className="break-all face-mono text-ink-2">
             {provider.harness} ·{" "}
             {provider.auth.kind === "subscription"
@@ -159,7 +179,7 @@ function AddEndpoint({ providers }: { providers: ProvidersState }) {
   const [apiKey, setApiKey] = useState("");
   const [modelId, setModelId] = useState("");
   const [busy, setBusy] = useState(false);
-  const [refusal, setRefusal] = useState<string>();
+  const [refusal, setRefusal] = useState<{ message: string; failure?: EndpointFailure }>();
   const save = async () => {
     setBusy(true);
     setRefusal(undefined);
@@ -179,7 +199,10 @@ function AddEndpoint({ providers }: { providers: ProvidersState }) {
       setApiKey("");
       setModelId("");
     } catch (caught) {
-      setRefusal(errorMessage(caught));
+      setRefusal({
+        message: errorMessage(caught),
+        failure: (caught as { failure?: EndpointFailure } | null)?.failure,
+      });
     } finally {
       setBusy(false);
     }
@@ -235,11 +258,7 @@ function AddEndpoint({ providers }: { providers: ProvidersState }) {
           Save
         </Button>
       </span>
-      {refusal ? (
-        <p className="face-mono whitespace-pre-wrap" data-tone="caution">
-          {refusal}
-        </p>
-      ) : null}
+      {refusal ? <EndpointError {...refusal} /> : null}
     </div>
   );
 }

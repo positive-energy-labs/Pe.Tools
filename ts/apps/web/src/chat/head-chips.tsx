@@ -1,6 +1,9 @@
 /** The composer's ladder: provider › model › one rung per provider trait (effort, fast). Before a
  *  thread exists every rung edits the draft, which the first send binds; after, the provider is
  *  fixed (fork to change) and the model and traits go to the thread. */
+import { useState } from "react";
+import { Button } from "#/components/lang/button";
+import { openMachine } from "#/machine/door";
 import type { TraitOption } from "@pe/agent-contracts";
 import { Ladder, type Rung } from "#/route/ladder";
 import { ProviderMark } from "#/components/lang/provider-mark";
@@ -91,6 +94,18 @@ const DEFAULT = "pea-default";
  * bound, every other provider: a thread never changes provider. */
 export function HeadLadder() {
   const head = useHead();
+  const [open, setOpen] = useState(false);
+  const manage = (
+    <Button
+      label="Manage providers"
+      onClick={() => {
+        setOpen(false);
+        openMachine("pea");
+      }}
+    >
+      Manage providers
+    </Button>
+  );
   const fixed = head.bound ? "fork to change" : undefined;
   const modelName = head.modelId
     ? (head.models.find((m) => m.modelId === head.modelId)?.name ?? head.modelId)
@@ -98,6 +113,8 @@ export function HeadLadder() {
   return (
     <Ladder
       face="control"
+      open={open}
+      onOpenChange={setOpen}
       // Open on the model; the first trait (effort) ends the walk, or the model when there is none.
       openOn="model"
       closeOn={[head.traits[0]?.id ?? "model"]}
@@ -108,6 +125,7 @@ export function HeadLadder() {
       levels={[
         {
           key: "provider",
+          extra: manage,
           label: head.providerName,
           placeholder: "choose a provider",
           options: [
@@ -134,12 +152,13 @@ export function HeadLadder() {
         },
         {
           key: "model",
+          extra: manage,
           label: modelName,
           placeholder: "choose a model",
           options: head.models.length
             ? head.models.map((m) => ({ id: m.modelId, label: m.name }))
             : null,
-          note: "this provider lists no models; probe it in Settings",
+          note: "this provider lists no models; use Manage providers to probe it",
           picked: (id) => id === head.modelId,
           pick: head.pickModel,
         },

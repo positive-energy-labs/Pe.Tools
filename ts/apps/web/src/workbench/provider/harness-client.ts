@@ -1,3 +1,4 @@
+import { endpointFailureSchema } from "@pe/agent-contracts";
 import { hostFetch } from "#/host/runtime";
 /**
  * The harness-thread wire, typed (`@pe/agent-contracts` harness-thread.ts lists every route). The
@@ -29,13 +30,18 @@ export function harnessClient(origin: string) {
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
     if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      let failure;
+      try {
+        failure = endpointFailureSchema.safeParse(JSON.parse(text).failure).data;
+      } catch {
+        /* Non-JSON failures still carry the host's words. */
+      }
       throw Object.assign(
-        new Error(
-          said(await response.text().catch(() => "")) ||
-            `${method} /pe${path} failed (${response.status}).`,
-        ),
+        new Error(said(text) || `${method} /pe${path} failed (${response.status}).`),
         {
           status: response.status,
+          failure,
         },
       );
     }
@@ -104,7 +110,7 @@ export function harnessClient(origin: string) {
 function said(text: string): string {
   try {
     const body = JSON.parse(text) as { step?: string; message?: string; error?: string };
-    return body.step ? `${body.step}: ${body.message}` : (body.message ?? body.error ?? text);
+    return body.message ?? body.error ?? text;
   } catch {
     return text;
   }
