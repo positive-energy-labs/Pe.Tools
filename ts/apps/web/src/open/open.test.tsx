@@ -177,7 +177,7 @@ describe("launch plan", () => {
     });
     expect(yours.argv).toEqual([
       "pe-revit session start --year 2024 --quarantine",
-      "pe-revit doc open C:\\Projects\\Clinic\\Clinic-Fitout.rvt --id <minted> --upgrade --unsynced keep --links allow",
+      "pe-revit doc open C:\\Projects\\Clinic\\Clinic-Fitout.rvt --id <minted> --upgrade --links allow",
     ]);
     const pea = launchPlan(
       { ...EMPTY_DRAFT, doc: row("Chadds-Ford-Coord.rvt"), target: "new", owner: "pea" },

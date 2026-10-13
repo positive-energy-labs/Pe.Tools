@@ -12,6 +12,7 @@ import type {
   Machine,
   MachineSession,
 } from "@pe/agent-contracts";
+import { launchUnsynced } from "@pe/agent-contracts";
 import {
   docOpenArgv,
   sessionStartArgv,
@@ -356,7 +357,7 @@ export function launchPlan(
           detach,
           upgrade,
           links,
-          unsynced: "keep",
+          unsynced: launchUnsynced({ source: doc.selector }),
         }),
       ),
     ];
@@ -388,7 +389,7 @@ export function launchPlan(
                 detach,
                 upgrade,
                 links,
-                unsynced: "keep",
+                unsynced: launchUnsynced({ source: doc.selector }),
               }),
             ),
           ]

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { basename, extname, isAbsolute, join, win32 } from "node:path";
 import { z } from "zod";
-import type { ActionReceipt, InstancesLaunch } from "@pe/agent-contracts";
+import { isCloudSource, type ActionReceipt, type InstancesLaunch } from "@pe/agent-contracts";
 
 /** Intent is frozen before allocation; the journal fold is the sole acquisition authority (ADR 0017 D6). */
 
@@ -66,7 +66,6 @@ export type Acquisition = {
 const acquisitionRoot = (peaWork: string, id: string) =>
   join(peaWork, createHash("sha256").update(id).digest("hex").slice(0, 32));
 
-const isCloud = (source: string) => /^(cld:\/\/|cloud:)/i.test(source);
 const resultName = (source: string) => {
   const ext = extname(source).toLowerCase();
   const stem = basename(source, extname(source)).replace(/[<>:"/\\|?*{}]/g, "_") || "document";
@@ -86,7 +85,7 @@ export function planAcquisition(
   if (launch.reload) throw Error("A reload acts on an open document; it is never an acquisition.");
   let origin: z.infer<typeof originSchema>;
   if (launch.template) origin = { kind: "new", template: launch.source };
-  else if (isCloud(launch.source)) origin = { kind: "detached", source: launch.source };
+  else if (isCloudSource(launch.source)) origin = { kind: "detached", source: launch.source };
   else {
     if (!isAbsolute(launch.source))
       throw Error(

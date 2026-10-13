@@ -105,7 +105,21 @@ async function setup(
         resolved: { ...process, id: "dev" },
       });
     }
-    const reply = await answer(args);
+    // The SDK's own rule (DocRoutes.ValidateOpen): unsynced belongs to a cloud source open only.
+    const unsyncedMisplaced =
+      args[0] === "doc" &&
+      args[1] === "open" &&
+      args.includes("--unsynced") &&
+      (args.includes("--template") || args.includes("--reload") || !/^cld:\/\//i.test(args[2]!));
+    const reply: Answer = unsyncedMisplaced
+      ? {
+          result: { state: "refused" },
+          exitCode: 2,
+          diagnostics: [
+            { code: "doc.bad-body", detail: "unsynced belongs to a cloud open.", fix: null },
+          ],
+        }
+      : await answer(args);
     if (reply instanceof Error) throw reply;
     return JSON.stringify({
       ...JSON.parse(sdkEnvelope(reply.result)),
@@ -499,7 +513,7 @@ test("every option reaches doc open for a running session, and the receipt names
   expect(open).toContain("--detach");
   expect(open).toContain("--upgrade");
   expect(flag(open, "--links")).toBe("allow");
-  expect(flag(open, "--unsynced")).toBe("keep");
+  expect(open).not.toContain("--unsynced");
   expect(flag(open, "--request-id")).toBe(receipt.steps[0]!.id);
   expect(flag(open, "--expect-session")).toBe(receiptPath);
   expect(flag(open, "--expect-doc")).toBe("absent");
@@ -519,7 +533,7 @@ test("an open that names no option sends none of them", async () => {
     "succeeded",
   );
   const open = f.calls.at(-1)!;
-  for (const name of ["--detach", "--upgrade", "--reload", "--template"])
+  for (const name of ["--detach", "--upgrade", "--reload", "--template", "--unsynced"])
     expect(open).not.toContain(name);
   expect(open).not.toContain("--links");
 });
@@ -644,6 +658,8 @@ test("a Pea launch of a cloud model opens detached", async () => {
   const open = f.calls.at(-1)!;
   expect(open[2]).toBe(source);
   expect(open).toContain("--detach");
+  // A cloud open has no default for unsaved local work; the launch keeps it.
+  expect(flag(open, "--unsynced")).toBe("keep");
 });
 
 test("Pea refuses, undispatched, a file whose worksharing it cannot read or a source it cannot resolve", async () => {

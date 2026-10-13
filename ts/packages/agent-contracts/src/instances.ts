@@ -45,6 +45,19 @@ export const instancesLaunchSchema = z.strictObject({
 });
 export type InstancesLaunch = z.infer<typeof instancesLaunchSchema>;
 
+/** A Revit cloud identity. Every other source is a local path, a `recent:` title or an openId. */
+export const isCloudSource = (source: string) => /^(cld:\/\/|cloud:)/i.test(source);
+/**
+ * The SDK's `--unsynced` answer for one open: a cloud source open has no default and must say,
+ * and the launch keeps this machine's unsynced work; the SDK refuses the flag on any other open
+ * ("unsynced belongs to a cloud open"). A `recent:` title the SDK resolves to a cloud model
+ * refuses `doc.unsynced-required`; name its `cld://` identity instead.
+ */
+export const launchUnsynced = (
+  launch: Pick<InstancesLaunch, "source" | "template" | "reload">,
+): "keep" | undefined =>
+  !launch.template && !launch.reload && isCloudSource(launch.source) ? "keep" : undefined;
+
 const sessionInput = z.strictObject({
   session: z.strictObject({ selection: sdkSessionSelectionSchema, process: nativeProcessSchema }),
 });
