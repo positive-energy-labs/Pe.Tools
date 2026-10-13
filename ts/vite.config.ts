@@ -11,6 +11,8 @@ export default defineConfig({
       "**/routeTree.gen.ts",
       // host-typegen owns this checked-in contract artifact; codegen:check compares exact bytes
       "**/host-ops.generated.ts",
+      // `pe-revit context product` writes this file ("DO NOT EDIT"); regeneration undoes any reformat
+      "**/product.g.ts",
       // Pe.Revit.Sdk owns these files byte-for-byte and `pe-revit doctor`'s ts-client-drift check
       // compares them to the copies embedded in the CLI. Reformatting one IS drift: the check goes
       // red and the remedy is "re-copy clients/ts from the Pe.Revit.Sdk package", which undoes the
