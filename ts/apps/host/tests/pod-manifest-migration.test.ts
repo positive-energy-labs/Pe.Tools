@@ -46,16 +46,13 @@ test("id without sourcePath and other unknown fields remain strict reader diagno
   const manifest = join(pods, "renamed", "pod.json");
   const value = {
     id: "legacy",
-    entrypoints: [
-      { id: "missing" },
-      { id: "run", sourcePath: "src/Run.cs", permissionMode: "ReadOnly" },
-    ],
+    entrypoints: [{ id: "missing" }, { id: "run", sourcePath: "src/Run.cs", unexpected: true }],
   };
   await writeFile(manifest, JSON.stringify(value));
   await migratePodManifests(pods);
   expect(JSON.parse(await readFile(manifest, "utf8"))).toEqual({
     ...value,
-    entrypoints: [{ id: "missing" }, { sourcePath: "src/Run.cs", permissionMode: "ReadOnly" }],
+    entrypoints: [{ id: "missing" }, { sourcePath: "src/Run.cs", unexpected: true }],
   });
   expect(
     (await listPackages(pods)).packages[0]!.diagnostics.filter(
@@ -63,6 +60,38 @@ test("id without sourcePath and other unknown fields remain strict reader diagno
     ),
   ).toHaveLength(2);
 });
+
+test.each([
+  { id: "run", permissionMode: "NoTransaction" },
+  { permissionMode: "NoTransaction" },
+  { permissionMode: "ReadOnly" },
+])(
+  "migration removes legacy permissionMode with or without an already-migrated id: %j",
+  async (legacy) => {
+    const manifest = join(pods, "renamed", "pod.json");
+    const old = Buffer.from(
+      JSON.stringify({
+        id: "legacy",
+        entrypoints: [{ ...legacy, sourcePath: "src/Run.cs", name: "Run" }],
+      }),
+    );
+    await writeFile(manifest, old);
+    expect((await listPackages(pods)).packages[0]!.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "InvalidEntrypoint" }),
+    );
+    const changes = await migratePodManifests(pods);
+    expect(changes).toHaveLength(1);
+    expect(changes[0]!.removed).toBe(Object.keys(legacy).length);
+    expect(await readFile(changes[0]!.backupPath)).toEqual(old);
+    expect(JSON.parse(await readFile(manifest, "utf8"))).toEqual({
+      id: "legacy",
+      entrypoints: [{ sourcePath: "src/Run.cs", name: "Run" }],
+    });
+    expect((await listPackages(pods)).packages[0]!.diagnostics).toEqual([]);
+    expect(await migratePodManifests(pods)).toEqual([]);
+    expect(await readdir(join(home, ".backups", "pods"))).toHaveLength(1);
+  },
+);
 
 test("a failed backup cannot change the manifest, and directory links are never migrated", async () => {
   const manifest = join(pods, "renamed", "pod.json");

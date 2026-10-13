@@ -61,9 +61,12 @@ export async function migratePodManifests(
     if (!Array.isArray(value?.entrypoints)) continue;
     let removed = 0;
     for (const entry of value.entrypoints) {
-      if (entry && typeof entry.sourcePath === "string" && Object.hasOwn(entry, "id")) {
-        delete entry.id;
-        removed++;
+      if (!entry || typeof entry.sourcePath !== "string") continue;
+      for (const field of ["id", "permissionMode"]) {
+        if (Object.hasOwn(entry, field)) {
+          delete entry[field];
+          removed++;
+        }
       }
     }
     if (!removed) continue;
@@ -99,7 +102,7 @@ export async function migratePodManifests(
     changes.push({ id, manifestPath, backupPath, removed });
     Effect.runSync(
       Effect.logInfo(
-        `Migrated ${manifestPath}: removed ${removed} entrypoint id field(s); backup: ${backupPath}`,
+        `Migrated ${manifestPath}: removed ${removed} legacy entrypoint field(s) (id/permissionMode); backup: ${backupPath}`,
       ),
     );
   }
