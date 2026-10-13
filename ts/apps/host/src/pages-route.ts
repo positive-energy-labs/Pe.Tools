@@ -375,6 +375,9 @@ const unresolved = (door: string, resolution: Exclude<TargetResolution, { kind: 
   return json({ error: message, message, resolution, notDispatched: true }, 409);
 };
 
+/** A catalog row's `op:<key>` (what `pe.find` answers) names the operation `<key>`. */
+const bareOp = (key: string) => key.replace(/^op:/, "");
+
 const escapeHtml = (text: string) =>
   text.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
@@ -658,7 +661,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
               }
             : {},
           {
-            key: body.data.key,
+            key: bareOp(body.data.key),
             ...(body.data.request === undefined ? {} : { request: body.data.request }),
           },
         );
@@ -698,7 +701,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
   ): Promise<{ key: string; input: Record<string, unknown> } | { problem: string }> {
     const ref = parseContributionKey(key);
     const sent = (input ?? {}) as Record<string, unknown>;
-    if (!ref) return { key, input: sent };
+    if (!ref) return { key: bareOp(key), input: sent };
     if (ref.kind !== "script")
       return { problem: `${key} is a ${ref.kind}: it reads and mentions, it never runs.` };
     const pod = pods

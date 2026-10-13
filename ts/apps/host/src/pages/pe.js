@@ -2,7 +2,7 @@
  *
  *   <script src="/pages/pe.js"></script>
  *   await pe.target();                                   // the document this page's binding names: { session, openId, title }
- *   await pe.find("show elements");                      // rank the catalog by words → [{ key, intent, description }]
+ *   await pe.find("show elements");                      // the host's catalog ranked by words → [{ key, kind, title, description }]
  *   await pe.read("revit.context.summary");              // run a read on the bound document; the answer is the op's response
  *   await pe.do("revit.context.show-elements", { elementIds: [1234] });   // run a mutation as this page; waits until it settles
  *   await pe.script("checks/census.csx");                // run C# in Revit: a source string, or a .cs/.csx path beside the page
@@ -142,26 +142,24 @@
     throw error;
   };
 
-  /** Rank the catalog by words, like `pe_find`. No words lists everything. */
-  pe.find = async (words = "") => {
-    const q = pe.doc ? `?session=${encodeURIComponent(pe.doc.session)}` : "";
-    const { operations } = await json(
-      await pe.fetch(`/ops${q}`, { headers: { accept: "application/json" } }),
+  /**
+   * Find catalog rows by words, exactly as `pe_find` and the `@` menu do: the host's one catalog and ranker answer,
+   * in its order (`/pe/capabilities`). `kind` narrows (`op`, `script`, `page`, `skill`, `member`, ...). Rows are
+   * `{ key, kind, title, description }`; `pe.do(row.key)` runs an `op:` or `script:` row.
+   */
+  pe.find = async (words = "", { kind } = {}) => {
+    const q = new URLSearchParams({ query: words });
+    if (kind) q.set("kind", kind);
+    if (pe.doc) q.set("session", pe.doc.session);
+    const { capabilities } = await json(
+      await pe.fetch(`/pe/capabilities?${q}`, { headers: { accept: "application/json" } }),
     );
-    const terms = words.toLowerCase().split(/\s+/).filter(Boolean);
-    return operations
-      .map((op) => {
-        const text = `${op.key} ${op.displayName || ""} ${op.description || ""}`.toLowerCase();
-        return {
-          key: op.key,
-          intent: op.intent,
-          description: op.description || "",
-          score: terms.filter((t) => text.includes(t)).length,
-        };
-      })
-      .filter((op) => !terms.length || op.score)
-      .sort((a, b) => b.score - a.score)
-      .map(({ score: _score, ...op }) => op);
+    return capabilities.map(({ key, kind, title, description }) => ({
+      key,
+      kind,
+      title,
+      description,
+    }));
   };
 
   /** Run a read on the bound document (`/pages/<slug>/call`). A mutation is refused here by the host; use `pe.do`. */

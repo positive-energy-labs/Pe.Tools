@@ -635,6 +635,13 @@ ${source}`),
         key: "revit.context.lens",
         destination: { kind: "document", ref: docA },
       });
+      // A catalog row's `op:` key (what pe.find answers) runs as the bare operation.
+      await page.post("/pages/todo/act", { key: "op:revit.context.lens" });
+      await page.post("/pages/todo/call", { key: "op:revit.context.summary" });
+      expect(forwarded.slice(1).map((one) => one.body.key)).toEqual([
+        "revit.context.lens",
+        "revit.context.summary",
+      ]);
       const reading = (await (await page.get("/pages/todo/target")).json()) as PageTargetReading;
       expect(reading).toMatchObject({
         page: "page:@pages/todo",
@@ -919,7 +926,19 @@ ${source}`),
           if (mine) return mine;
           if (url.pathname === "/pages/todo/target") return Response.json(resolved);
           if (url.pathname === "/pages/todo/call") return Response.json({ ok: true });
-          if (url.pathname === "/ops") return Response.json({ operations: [] });
+          if (url.pathname === "/pe/capabilities")
+            return Response.json({
+              capabilities: [
+                {
+                  key: "op:b.show",
+                  kind: "op",
+                  title: "B",
+                  description: "second by text",
+                  needs: "document",
+                },
+                { key: "op:a.x", kind: "op", title: "A", description: "x x x", needs: "document" },
+              ],
+            });
           if (url.pathname.endsWith("/state"))
             return Response.json({ seq: 0, events: [], snapshot: null, text: null });
           return new Response("<p>page</p>");
@@ -973,19 +992,24 @@ ${source}`),
       const { pe, sent } = await page();
       expect(pe.page).toBe("page:@pages/todo");
       await pe.target!();
-      await pe.find!("x");
+      // The host's one ranker answers; the page keeps its order and never ranks again.
+      expect(await pe.find!("x")).toEqual([
+        { key: "op:b.show", kind: "op", title: "B", description: "second by text" },
+        { key: "op:a.x", kind: "op", title: "A", description: "x x x" },
+      ]);
       await pe.read!("revit.context.summary");
       await pe.state!({ base: {}, state: {}, replay() {}, fire() {} });
       const paths = sent.map((r) => r.url);
       expect(paths).toEqual(
         expect.arrayContaining([
           "/pages/todo/target",
-          "/ops?session=s1",
+          "/pe/capabilities?query=x&session=s1",
           "/pages/todo/call",
           "/pages/todo/state",
         ]),
       );
       expect(paths).not.toContain("/call");
+      expect(paths.some((path) => path.startsWith("/ops"))).toBe(false);
       // Nothing polls the page's own file; the host pushes `file` on its stream.
       expect(paths).not.toContain("/pages/todo/");
       expect(paths.some((p) => p.startsWith("/pages/todo/events?after=0&peRuntimeService="))).toBe(
