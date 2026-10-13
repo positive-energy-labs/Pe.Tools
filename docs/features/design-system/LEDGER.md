@@ -8,6 +8,327 @@ The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/
 
 ## Decided
 
+### ADV2-S3 owner provenance, restored verbatim
+
+These rows are byte-for-byte text from `34bd5e17`. The searchable comment preserves the pre-purge row id. A later ruling can supersede behavior, but it does not erase the owner's words or attribution.
+
+<!-- ADV2-S3 R16 -->
+- 2026-10-12, recents slice of `@` landed: `recentRows` in `ts/packages/agent-contracts/src/mention.ts` makes `recent` capability rows from Revit's recents (`recent:<path>`, `recent:cloud:<region>/<projectGuid>/<modelGuid>`), drops `.rte` templates and any document already open (the `doc:` row wins), labels families, and counts a local path's words once so an open document wins a shared search; `mentionOf` gives `openWith` = the recent's own path or `cld://` source, which the host's open verb takes as-is. The catalog caches recents 5 minutes with a 2 s budget. `pe_do` refuses a recent and points Pea at opening it. The `@` menu shows a Recent group. PROVEN[deterministic: contracts 130, mcps 105, web chat 38; live read-only on a private host against 109 real recents, `pea find Fowlkes Studio` returned the cloud row, 2026-10-12]; UNPROVEN[kaitpw's dev host serving them; Pea opening a recent end to end].
+
+<!-- ADV2-S3 R17 -->
+- 2026-10-12, kaitpw: recent documents are the next `@` slice (Revit's recents, read without a running Revit, carry local paths and cloud model ids). Cloud browsing for Pea is wanted ("as long as pea ends up having some way to browse the cloud that's all that matters") and follows the standing rule that Pea's Revit verbs go through the host catalog as SDK verbs with receipts (`docs/features/agent/LEDGER.md`), not a Pea-only CLI path: the SDK browses companies, projects and folders by name through a signed-in Revit (`pe-revit doc list --cloud --hub NAME --project P --folder PATH`, each entry returning its next browse command and an `exactSource` for `doc open`; bridge route `/doc/cloud`). It belongs to the paused Revit document-control rework when it regrounds.
+
+<!-- ADV2-S3 R20 -->
+- 2026-10-12, kaitpw rules `@` (Fable's design): a mention never retargets; it is a stable pointer carrying its key plus a timestamped snapshot of facts, so the first hop lands aligned. `pe_find` is the one index every mention source joins as rows; the first slice is open documents plus the five existing `pe_find` kinds (op, route-doc, route-command, pod, skill), then recent documents, open views (needs an op), cloud (needs APS). kaitpw: "the piece that really brings it together is the unification of the interface across pea web, the pea cli, and the pea mcp" — one search, one mention shape and one resolver serve all three doors. PDF attachments open in the browser's own viewer; no PDF library for now.
+
+<!-- ADV2-S3 R23 -->
+- 2026-10-12, kaitpw: "any message sent while pea is going simply interrupts. no queue." This supersedes the same day's ruling for B's persistent pending queue and commit `77ee6f91`. The host owns the interrupt: a prompt on a running thread cancels the turn, then starts the new one. The cancel verb is Stop and wears the alarm tone while a turn runs.
+
+<!-- ADV2-S3 R24 -->
+- 2026-10-12, kaitpw deletes the chat Trace lane: the framed in-place tool expansion replaces it. The copy press on a code block head is an icon-only button.
+
+<!-- ADV2-S3 R25 -->
+- 2026-10-12, kaitpw: "closed session should not be a valid target." The live document inventory is the authority and a saved thread target is only a request: a closed session or document is never offered by a picker, a "New thread on this target" verb, or the Target filter (closed targets collapse into one "Closed" option), and a thread bound to one shows it missing.
+
+<!-- ADV2-S3 R26 -->
+- 2026-10-12, kit base round 5, kaitpw rules: greyed menu items show no refusal sentence ("the menu refusal messages are way too long. i say delete all together"); this overrides house law 3 for menu items, and the reason stays one hover away. Auto-settle stays one-thread and out of scope; kaitpw intends it as an app-wide setting. Deselecting threads is broken and owed a fix. An opened tool call reads as part of its call row inside one frame, its mono is a size smaller, done/failed align to the far right, and the rollup row's icons sit centred.
+
+<!-- ADV2-S3 R28 -->
+- 2026-10-12, kit base round 4, kaitpw rules: reasoning ("Thought process") belongs to the same collapsible run as the tool calls; tool rows reserve no hover-control space because they never show the control cluster; snooze, settle and mark unread work on a multi-selection, and with several threads selected every verb that cannot apply stays listed but greyed with its reason. The model picker opens on the model, a model pick advances to effort, and the effort pick closes it (`HeadLadder` `closeOn` = the first trait, or the model when there is none; landed with `chat/head-chips.test.tsx`).
+
+<!-- ADV2-S3 R30 -->
+- 2026-10-12, kit base round 3, kaitpw rules: unread is its own filter toggle beside Target, Provider and State. Images and files cross to the model ("we solved it back in the mastra days but i guess we lost it now"); the attach button stays and Send stops refusing them. The model picker always opens on the model crumb; an off toggle is left out of its trigger; picking a model closes it. The threads sidebar still shows no border on the live app and owes one. A row's three-dot menu takes the state/time slot in place rather than floating mid-row, so that slot reads as the row's state and its verbs.
+
+<!-- ADV2-S3 R32 -->
+- 2026-10-12, kit base round 2, kaitpw rules on round 1: the model picker is one ladder whose crumbs are provider › model › effort › speed (each trait its own rung; "flat just makes it completely unnavigable"), and the separate traits chip goes; `Ladder` gains a control face so the composer stops restating the frame. Anything on the artifact ground draws an always-on hairline ("it feels too jank otherwise"). Sidebar shelf heads stick to the edge they leave by, top and bottom; pressing a head scrolls its shelf into view and must never read as a dead press. Row hover and selection fills reach past the text by the inset, so text never touches a fill edge. The target filter leaves the search row and joins the list as header-like rows: target, provider and state filters that reflow at narrow widths. Fork moves to the composer's bottom row beside attach and send. Send stays framed when it refuses and commit-filled when it can send (Fable default, kaitpw undecided). Fixture examples owed for attachments and skill use. Open: what `@` addresses; kaitpw's Occam cut is open documents and route plugins.
+
+<!-- ADV2-S3 R33 -->
+- 2026-10-12, kit base round 1 landed (Fable swarm, main, uncommitted): `Button` has no `disabled` prop, twelve sites now carry a refusal sentence or `busy`; `card.tsx` deleted; one chrome rung (`--type-small-size` 12px, navigation/conversation/composer type tokens deleted, `--gutter` 8px, `.t-upper` strong, two chrome weights); `Pane` declares the 8px inset once and no sidebar child pads, measured tab, search, group label and row label all at x=17; Snoozed and Settled are `NavigationGroup stick="bottom"` heads, footer buttons deleted; the composer box reads work, text, then one bottom row (model, traits, document, status, plan; attach, cancel, send), `ComposerCaption` is `ComposerRow`, `composer.css` folded into `conversation.css`, revert is a framed `Undo2` button; every framed control draws the `dl-control` hairline (`button.css` scopes the transparent edge to `:not(.dl-control)`). PROVEN[compile + deterministic, ts/apps/web 0 errors, 57 chat and kit tests, 2026-10-12]; PROVEN[browser, hostless web dev server, `/chat?demo=send`, `.artifacts/runs/ui-base-20261012/r1/shots/final-light.png`]. Open for kaitpw: the thread-head fork verb is now framed beside three quiet icons; send is framed when it refuses and commit-filled when it can send; pending-request options are framed buttons with a 4px gap; `Ladder` has no control face so the composer restates `.dl-control` for its pickers; the Archived shelf does not stick; the `lang-chat.tsx` navigation specimen sits outside a `Pane`.
+
+<!-- ADV2-S3 R34 -->
+- 2026-10-12, kit base round 1, kaitpw rules on the round-0 base ("i like it all"): button labels stay lowercase as the data says; one geometry for every route, no density switch until a table feels too loose; the plain action button is `framed` (hairline, no fill), no tinted kind; `Button` has no native `disabled`, a refusal is the only inert state and the type makes a reasonless inert button unrepresentable; the per-pane key card stays gone, Help is the key listing. From the live-app annotations: one chrome rung (12px) for tabs, group heads, triggers, counts, kbd, buttons and search, with weight and ink the only differentiators, titles 15; a pane's inner inset equals the pane separation (8px), declared once on `Pane`, and every child aligns to it; Snoozed and Settled are ordinary group heads that stick to the bottom of the scroller while collapsed, footer buttons deleted; the composer's model, effort and target move to the bottom row beside send, revert is a framed icon button, review stays a nav link; the composer input row joins the kit's `conversation.css`; `card.tsx` deleted. Harvested source rulings stay owed until the base settles.
+
+<!-- ADV2-S3 R35 -->
+- 2026-10-12, kit base round 0 (Fable, swarm on main, uncommitted; kaitpw rules at the muse). Seven judgements in `.artifacts/runs/ui-base-20261012/BRIEF.md`, landed: one palette and one type ladder in `base.css` (the chat `comfort` values are `:root`; `[data-density="dense"]` holds 16 geometry tokens; `useDensity` deleted); one `Button` (`components/lang/button.tsx`, label required, refusal replaces the tooltip, kinds quiet/framed/commit/nav) replaces `Press`, `ActionButton` and `IconPress` across 102 files; `Pane` is a header, a scrolling body and an error boundary (12 props, was 22; collapse moved to `PaneSplit`; the pane key-card engine is gone, keys register through `ScopeKeys` from `route/keys`); kit headers are three lines (comment lines 881 to 605) and each primitive's CSS sits beside its tsx (`cell.css`, `conversation.css`, `navigation.css`, `pane.css`, `button.css`; `lang.css` 1270 to 365); the composer is DOM only (423 to 197 lines) over `useAttachments` and `useSlashMenu`; `Band` left the kit for `components/work/band.tsx`. Rulings harvested from the deleted source headers are listed per lane in the run folder, not yet folded here. PROVEN[compile + deterministic, ts/apps/web 0 errors, 252 tests pass, 2026-10-12]; browser: chat fixture and `/design-system` and `/schedules` mount on a web dev server with no host (`shots/`), UNPROVEN against a live host.
+
+<!-- ADV2-S3 R36 -->
+- 2026-10-12, kaitpw places question Answer/Skip actions at the panel's bottom right using house action controls, with Answer carrying the commit mark. The question owns Enter inside its region (including text fields); Enter on Skip declines. Single-choice fields expose radio semantics with arrow/Home/End navigation and Space selection; Tab reaches other fields and actions. Required-field and in-flight guards apply to keyboard and pointer alike, without submitting the surrounding chat draft. Production-component browser fixture and focused tests: `.artifacts/runs/chat-refine-20261012/`.
+
+<!-- ADV2-S3 R37 -->
+- 2026-10-12, kaitpw refines promoted chat: two dense rows place normal-weight title top left, activity plus age top right, muted smaller target bottom left and provider bottom right. Untargeted rows leave the target slot empty. New thread moves to an icon beside search, superseding the footer-only ruling below; fixed Snoozed/Settled shortcuts open and scroll to their existing shelves. Latest-turn navigation leaves the header for the lens rail and a small floater above the composer, visible only away from the tail. Attachment and send controls align with the last input line. Woke marks observed snooze expiry or activity-driven exits until the thread is visited; the current contract has no durable wake reason, so reload retention remains unproven. Focused checks and browser shelf/scroll interaction evidence: `.artifacts/runs/chat-refine-20261012/`.
+
+<!-- ADV2-S3 R38 -->
+- 2026-10-12, kaitpw selects B's persistent pending queue and authorizes chat R3 promotion on main. Chat now uses the D type and color register, pane-view tabs, title-first thread rows with independent activity/unread marks, one counted uninterrupted tool sequence, reserved hover/focus message controls, composer-owned pending requests, and feedback/machine controls in the real tutorial. Existing request IDs, targets, question drafts, staging, thread lifecycle, queued sends and trace inspection remain connected. Evidence: `.artifacts/runs/chat-promote-20261012/`.
+
+<!-- ADV2-S3 R39 -->
+- 2026-10-12, kaitpw accepts the D-baseline recommendations provisionally: retain D type, icons, lists and pane borders; collapse uninterrupted tool calls into count plus latest activity; reserve hover/focus message controls below prose; put pending actions on the composer; use state glyphs and independent unread emphasis in thread rows; align gray truncated targets under titles; keep only New thread in the sidebar footer; place feedback and installation facts under Help. Round 3 compares pending-work placement in [chat-r3.html](prototypes/chat-r3.html). These fixture mocks guide later web normalization; Trace/World placement and production integration remain open.
+
+<!-- ADV2-S3 R40 -->
+- 2026-10-12, chat rudiments protoui round 1 (variants in `.artifacts/chat-density/round1.html`: 0 now, A one ladder, B ledger grid, C inspector). Ruled by kaitpw: B leads ("of rop i like B the best"). The user's own messages sit on the right side. The floating composer stays, but its parts need one home ("its started growing a lot of parts that i dont know how to fit into it"). The top-right control cluster holds global controls only, never a page verb. A bottom status bar reads more put together than floating chrome, but only content that is always important may spend vertical space. Open: one register or two, row height, the home of run state, and the scope of a rudiment rethink. Round 2 builds full-chrome variants of B.
+
+<!-- ADV2-S3 R41 -->
+- 2026-10-12, chat polish swarm (kaitpw: "brutally utilitarian, I need a little more friendliness"). Ruled by kaitpw: rounded corners read cheap, so surfaces, rows, fills, popovers, bubbles and code are `--radius` (2px) and only freestanding controls wear the one `--control-radius` (3px, `rounded-control`); switcher, input, select trigger and framed presses are one `.dl-control` family with one height, border, radius and inset; single-icon verbs are `IconPress` and the answering harness is `ProviderMark`; chat thread management copies T3's shelves (Pinned, Active, Snoozed, Settled; Snoozed and Settled collapse by default) and its row menu over the host lifecycle routes, replacing the All/Attention/Pinned/Archive filter. Defaults awaiting kaitpw (numbered lists in `.artifacts/chat-polish/{foundation,sidebar,transcript,composer}.md`): a `comfort` density register (`[data-density="comfort"]` in `base.css`, set document-wide by `useDensity`) redeclares the ladder for chat only (small 11.5, prose 13, navigation 14, conversation 15, title 18, rows 28, controls 32) while dense stays the app default; two-line rows that show a target line only when targeted; consecutive plain tool calls fold into one counted row; verb labels are sentence case via `t-sentence`; Send takes the commit fill. Supersedes the three-line rows and 14px reading role of the 2026-10-11 line below.
+
+<!-- ADV2-S3 R45 -->
+- 2026-09-26, kaitpw: targeting or selecting a subject revalidates it. Choosing a view on `/rooms` reads it at once, with no refresh press; the same holds for schedules and every route. Families is the one exemption, for performance. This refines the 2026-09-22 freshness ruling (re-read on focus only when the document is marked changed): a new target is a new reading, not a re-read under the hands. Where the two still disagree, this one wins and the 2026-09-22 line is re-openable.
+
+<!-- ADV2-S3 R81 -->
+- 2026-09-16, A `mermaid` fence renders as a diagram inside `Code`, with a source and render toggle in the head. The renderer is `beautiful-mermaid`, because it takes `var(--pe-*)` colors and needs no live DOM; official `mermaid` needs a live DOM, rejects `var()` colors, and leaks an element on each failed render. The fence renders once it closes and shows its source while open. `gantt`, `pie`, and `mindmap` stay as source. A closed fence that fails to parse renders collapsed to its head band with `invalid diagram` and a `show source` toggle, because invalid mermaid is hard to read as text (kaitpw). D2 (5.85 MB wasm), PlantUML, and Structurizr (JVM) are rejected (`.artifacts/handoffs/render-blocks-20260916/diagram.md`).
+
+<!-- ADV2-S3 R83 -->
+- 2026-09-15, `JsonEditor` is the one editable JSON surface, controlled `value`/`onChange`, paint under a transparent textarea in a shared grid cell (kaitpw: "yes agree" to the tanstack worktree). Read-only paint and editing stay two exports of one module, never one component with an editable flag, because a textarea owns caret, selection, and undo and paint is a pure function of a string.
+
+<!-- ADV2-S3 R86 -->
+- 2026-09-15, One word says whether Revit can answer. The host lamp reads `Revit attached` or `Revit not attached`, and `/instances` marks a world `not attached` when the SDK census sees the process but no host session holds it. The SDK bridge proves only that the payload loaded; scripts and operations need the host bridge, so no surface reports ready or connected on SDK evidence alone. Consumers: `route/shell.tsx` lamp, `instances/route.tsx` phase column.
+
+<!-- ADV2-S3 R89 -->
+- 2026-09-15, No superseded primitive system may remain at merge: alternate state owners, targeting grammars, mutation doors, compatibility APIs and their supporting exports must be removed. Low-priority product work may remain unfinished, but cannot retain a competing primitive. Preserve unresolved operation evidence; do not erase data or invent success to make legacy removal appear complete.
+
+<!-- ADV2-S3 R90 -->
+- 2026-09-15, The evidence rule applies to current operation receipts, which retain original request identity and unknown outcomes. The user expressly authorized discarding 66 old RP rows without archive for this greenfield cutover; no legacy migration, census or forensic read surface remains.
+
+<!-- ADV2-S3 R139 -->
+- 2026-10-05 — The Revit facsimile (`apps/web/src/revit/`, specimens at `/design-system/revit`) is
+  a deliberate foreign body: stateless components that compose fake Revit chrome (ribbon, options
+  bar, Properties palette, TaskDialog, classic modal) for explainers, with no images. It is not
+  house style. Its literals live in the `--rv-*` block of `base.css` (the one file that may name a
+  colour); `revit.css` consumes only those tokens and is exempt from the house value rules by name
+  in `design-guard.test.ts` (`SKIP_FILES`); its classes still register through `styles.css` and
+  its TSX is scanned. Nothing outside `revit/` may consume `--rv-*` or `.rv-*`. Re-openable:
+  decided in an autonomous session against three critic rounds on Autodesk Help screenshots
+  (`.artifacts/revit-mock/critic-*.md`), not by kaitpw.
+
+<!-- ADV2-S3 R140 -->
+- 2026-10-05 — Revit facsimile ground truth is kaitpw's own Revit 2025 on Windows 11 at 200%
+  (`.artifacts/revit-mock/ref/user-*.png`), not Autodesk Help images. Colours are sampled from
+  those captures. Control lines are one device pixel (`--rv-hair: 0.5px`). Text is Segoe UI at
+  9pt (12px: titles, grids) or 8pt (10.5px: buttons, labels, trees, group titles), and the app's
+  `font-size-adjust` is reset inside `.rv`. A dialog is mocked by pinning pieces with `RvAt` at
+  coordinates read off a 200% capture: subtract the window frame origin, then halve.
+  `.artifacts/revit-mock/compare.py` and `align.py` render the specimens at device scale 2 and
+  report per-line offsets. Mechanical Settings, Edit Shared Parameters and Routing Preferences
+  sit within 1px per text line. Re-openable, as above.
+
+<!-- ADV2-S3 R144 -->
+- 2026-08-16 — Standing mode preference (kaitpw): light is the preferred palette but dark reads
+  with better contrast, and the fix is ground/background tokens — never re-tuning accents per mode.
+
+<!-- ADV2-S3 R152 -->
+- 2026-08-31 — Density round 1 winner **C (extreme)**: "honestly extreme is the best" (kaitpw).
+  20px list rows, 10px caption/label/value at 1.2 line-height, 11px prose at 1.4, 2px cell edge
+  padding. Folded into `base.css` `:root`; the 24px middle variant and the throwaway switcher were
+  deleted on verdict. Consequence: caption, label and value now share one 10px size and differ
+  only by face, case and weight — see open questions.
+
+<!-- ADV2-S3 R153 -->
+- 2026-08-31 — Proposal-state demiurge (round 2, kaitpw: "B definitely, + D, and no denied
+  state"): the trichotomy (`agent-contracts/src/trichotomy.ts` — proposal → staged → committed,
+  `review` marks aside) is the ONE proposal lifecycle. No `denied` state: a denial clears the
+  proposal and the cell shows the real value again. No `written` state: commit clears `staged`;
+  saved/unsaved and fresh/stale carry what those two tried to say. Family's
+  `ProposalVerdict`/`CellVerdict` (`family/world.ts:145`) and the proposal-flow fixture's
+  `review` are parallel machines owed deletion; one shared reader derives `StateCellProps` from
+  a trichotomy cell so routes cannot re-derive the mapping. `cap{readonly,excluded}` collapse to
+  locked + reason; `nohome` stays — it draws the seam. `stagedBy` plumbs from `proposal.by`.
+
+<!-- ADV2-S3 R154 -->
+- 2026-08-31 — REVIEW IS DELETED from the trichotomy (ruled kaitpw: "staged + attention doesn't
+  seem load bearing… I don't really want pea to be able to flag staged"). The cell is two fields,
+  `proposal | staged`. Staging IS the human's approval; validation is DERIVED from the value,
+  never stored; pea's disagreement channels are chat or the COUNTER-PROPOSAL — proposal and
+  staged both standing with different values draws pea's fold alone (`data-contest`, no body
+  wash) and says `pea proposes X` in the facts. The commit/save attention gates, the
+  low-confidence refine, pea's `review` mask path, and `CellReview` are all gone; old persisted
+  docs parse unchanged (zod strips the dead key).
+
+<!-- ADV2-S3 R155 -->
+- 2026-08-31 — Per-cell grounding stays even when several cells cite one OCR block (kaitpw).
+  The card-scale footline may not wrap a cell to two lines: it collapses to hover; the 10px
+  floor forbids shrinking it. Locate is the cell's own `onLocate`; family's rail locate icon
+  (`family/marks.tsx`) dies into it.
+
+<!-- ADV2-S3 R166 -->
+- 2026-09-01 — Re-cutover grill verdicts (kaitpw). (1) Takeoffs opens the cutover, amending the
+  2026-08-31 seam order; chat follows. Pea-takeoffs integration lands within two sessions and is
+  the real test of the state model. (2) Fixture lane spells `?source=fixture`, resolved by the S2a
+  lane resolver, deliberately unadvertised in UI ("obscured unless u know"). (3)
+  `StateCellProps.placeholder` ships with `onLocate`; `ProposedCell` dies — same precedent as the
+  rejected `<Text>` wrapper. (4) `chat-appearance` is ruled a `lang/` primitive and improved
+  systemically, not folded into `chat/`.
+
+<!-- ADV2-S3 R167 -->
+- 2026-09-01 — CellSelect adopts `Combobox`; the native `<select>` popup exception is REJECTED
+  (kaitpw). Perf gate: the popup stays unmounted when closed (base-ui default) and a cell mounts
+  the Combobox machinery on edit, not one root per resting cell; row heights on `/takeoffs` are
+  re-measured after adoption.
+
+<!-- ADV2-S3 R169 -->
+- 2026-09-01 — Front-door lamp lineup verdict (kaitpw): **L3 instrument cluster wins** ("instrument
+  cluster for header is best"). The demoted `t-label t-upper` wordmark is REJECTED — the title
+  "should be bigger", and the same complaint covers `/takeoffs`' route label. Direction: the
+  display face the user likes on the h1 (`face-display`, Spectral) at a smaller tier — `t-head`
+  24px, which nothing wears yet. Canon rewrite of L3 WAITS on the route-title demiurge (title may
+  move into the targeting kit with the targeting flow expanding below when a manifest exists);
+  the lineup stays mounted until then. Canon fixes already landed: wordmark tier, UpdateButton
+  `commit → act`, ThemeToggle nowrap, front-door page frame `px-6` inset.
+
+<!-- ADV2-S3 R170 -->
+- 2026-09-01 — Type-tier lineup round 1 verdict (kaitpw, on the live `/takeoffs` fixture): **D is
+  KILLED** ("too loose" — the roomier caption leading fights density). A and B retire — "honestly
+  can't tell much of a difference", which is itself the round's finding (the tier words do no
+  visible work). **C advances** ("does feel less busy which is nice") with one amendment owed
+  before adoption: C's mono text is "all a bit too dim" — the caption bundle's `ink-mute` must
+  brighten (candidate: `ink-2`) in round 2. Not yet canon; the throwaway lineup stays mounted.
+
+<!-- ADV2-S3 R171 -->
+- 2026-09-01 — Route-title demiurge: **S2 ADOPTED pending spike** (kaitpw: "yes s2 is what i
+  imagined"). `RouteHead` lives in the targeting kit: the route name at `t-head face-display`
+  (paying the owed "route heads have no head" line), with the targeting sentence/flow expanding
+  below when a manifest exists and the name standing alone when none does; `aside` carries chrome
+  like the front-door instrument cluster. Front door and product routes share the primitive. The
+  header lamp reads targeting's world facts (`targeting/world.ts` already consumes `host/fleet`),
+  retiring the lamp's private 5s `usePeInfo` poll. S1 (bigger label) and S4 (no titles) killed;
+  S3 (name inside `Product`) killed for taxing manifest-less routes. Spike consumers: `/takeoffs`
+  and `/`. The S2a shell mounts RouteHead when it lands.
+
+<!-- ADV2-S3 R173 -->
+- 2026-09-01 — **C2 ADOPTED** (kaitpw: "yes adopt c"): composite roles are the sub-prose tier
+  model. `t-label` = upper + tracked + medium + ink-2; `t-caption` = mono + ink-mute→**ink-2
+  floor** + tabular; `t-value` = plain ink; one word dresses the whole look and the bundle beats
+  call-site fragments. Mono floor: no mono text below `ink-2` unless genuinely absent/disabled.
+  Canonization rewrites the bundles into the tier owners (`base.css` + `design-lang.css`), fixes
+  the call sites C makes visibly wrong, and deletes the throwaway lineup.
+
+<!-- ADV2-S3 R174 -->
+- 2026-09-01 — The instrument cluster (host lamp · release · theme) is ROUTEHEAD CHROME, not
+  front-door chrome (kaitpw: "I also wanted the instrument cluster there too"). `RouteHead`
+  renders it on the name line on every route; `aside` remains for extra route chrome. This
+  raises the priority of collapsing the lamp's private poll into targeting's world facts.
+
+<!-- ADV2-S3 R177 -->
+- 2026-09-01 — TWO-AXIS TYPE (grill verdict kaitpw, SUPERSEDES the C2 ADOPTED and C2 CANONIZED
+  lines above; evidence `.artifacts/handoffs/2026-09-01-critic-design.md`): the three 10px
+  sub-prose tiers were never size tiers — they collapse to one size word `t-small`, with
+  `face-mono` (machine measured) and `t-upper` (section head) as OPT-IN marks. Mono returns to
+  the marked case (95 `t-caption`+`face-mono` pairs were redundant; 799 mono spans marked
+  nothing). The ink floor moves into the tone layer so a claim about meaning always outranks a
+  tier; the `:not()` escape at `base.css` is deleted — it listed five `text-*` classes with zero
+  real uses and lost to every `data-tone` site (`(0,3,0)` beats `:where()`'s zero), silencing
+  the targeting head's unbound caution and `FactChip.tone` entirely.
+
+<!-- ADV2-S3 R178 -->
+- 2026-09-01 — TONE AND GROUND CANON (grill verdict kaitpw): `data-tone`/`data-surface` are the
+  ONE meaning vocabulary. The `text-alarm|caution|done|pea|commit` tone utilities and the four
+  `bg-page|artifact|recess|select` ground colors leave `@theme` (`design-lang.css`); a ground is
+  legal only where it rebinds `--pe-on`, so a wash never mixes against the wrong plane.
+
+<!-- ADV2-S3 R179 -->
+- 2026-09-01 — DECLARED-ONCE GUARD (grill verdict kaitpw): `design-guard` asserts no class is
+  declared in two of `base.css`, `design-lang.css`, `lang.css`. The 16 restatements, the `veil`
+  hover contradiction (utility made it an always-on wash), the diverged `t-title`/`t-head`/
+  `t-display` bundles, and the dead `squiggle-*`/`ghost-drift`/`page-wrap` classes fall to it.
+
+<!-- ADV2-S3 R180 -->
+- 2026-09-01 — `chat-appearance.ts` is DELETED (grill verdict kaitpw, SUPERSEDES the 2026-09-01
+  "ruled a `lang/` primitive" line): 73 numbered positional slots, 72 with exactly one consumer,
+  `threadPalette4` already missing — a className bag, not a primitive. Class strings return to
+  their JSX; the ~4 genuine roles (thread row active/quiet, doc sub active/quiet, `emptyMark`)
+  are promoted to named homes.
+
+<!-- ADV2-S3 R181 -->
+- 2026-09-01 — OPACITY RULED (verdict kaitpw, option 1a): opacity is legal only as the 0<->100
+  visibility pair of a transition on floating chrome (pane halo `lang/pane.tsx:167`, shortcut
+  card `:224-225`); any value between is de-emphasis and stays counted. The `opacityDim` regex at
+  `design-adherence.test.ts:93` now skips `opacity-0`/`opacity-100`; the baseline is re-stamped
+  at the new count. Refines the 2026-08-29 "not a de-emphasis mechanism" line, does not replace it.
+
+<!-- ADV2-S3 R182 -->
+- 2026-10-04, kaitpw: THE ADDRESS IS GENERATED FROM THE MANIFEST. A route names the Page keys the URL carries in `manifest.url`; `route/url.ts` derives the TanStack `validateSearch` reader and `stripSearchParams(defaults)` middleware from the page schema (Standard Schema, so zod is the one source), and `useRoute` syncs both ways: a Page move pushes one history entry per place, an address move (Back, Forward, a link) moves the Page. Every url key needs a default so a bare route URL stays bare. Replaces the hand-written `useEntityUrl`, `entitySearch` and per-route search shims; `url: false` on `useRoute` is for chat panes and seeds, which own no address. `view` is the declared home for UI variants. Proven on `/rooms` stage in a browser (push, strip, Back, Forward). Owed: port `/ducts` on `feat/pressure-drop` to `url` keys when it merges.
+
+<!-- ADV2-S3 R203 -->
+- 2026-09-01 — EXECUTION-SCOPE LAW (grill verdict kaitpw; evidence
+  `.artifacts/handoffs/2026-09-01-critic-{chat,contracts}.md`, both critics independently):
+  every Revit execution carries an exact document contract. The persisted binding is the
+  restart-stable SDK selector; it resolves to a live session id AT COMMAND TIME, and
+  `HostRpcCaller` always receives a target — an untargeted caller is a defect
+  (`takeoffs-commands.ts` built one; the takeoffs store's `setBindings` never wrote `world`).
+  A route binds ONE document. Chat is task-scoped and may touch MANY documents across a task;
+  every touch is transparent and traceable in the transcript.
+
+<!-- ADV2-S3 R204 -->
+- 2026-09-01 — Transcript tool cards are AUDIT RECORDS (grill verdict kaitpw): a card retains
+  the event/receipt its turn observed. Overlaying the current live `route.slice` onto an old
+  card (today's `tool-names.tsx` behavior via `sessionState={{}}` at `aui.tsx`) is a defect —
+  a receipt that changes after the fact is not a receipt. Falls to the chat reducer demiurge.
+
+<!-- ADV2-S3 R205 -->
+- 2026-09-01 — APPROVAL SETTLEMENT is server-only (grill verdict kaitpw): the host is the one
+  authority; the client never clears the gate itself — it renders in-flight until the host's
+  `permission_resolved` event (`harness/threads.ts`). Superseded by ADR 0015 (2026-10-12): the
+  patched agent-runtime settlement and `display_state_changed` are deleted.
+
+<!-- ADV2-S3 R206 -->
+- 2026-09-03 — CHAT PRIMITIVE (2026-09-01) is SUPERSEDED (verdict kaitpw): it named a mechanism
+  (`{threadId, epoch, sequence}`, one reducer) and that mechanism was built and deleted in two
+  days. The chat transport verdicts live in `docs/features/agent/LEDGER.md` (CHAT TRANSPORT S1).
+
+<!-- ADV2-S3 R207 -->
+- 2026-09-01 — ONE ROUTE SPEC (grill verdict kaitpw: "this was the biggest thing I wanted to
+  demiurge"): a `CollaborativeRouteSpec` from which UI verbs, Pea commands, the server route
+  registry, and the chat-plugin registry all DERIVE; one provider owns world resolution, doc
+  atoms, picker state, and head rendering. Targeting rides every route — tool-like routes mount
+  the manifest, docs-like routes (`/`, `/design-system`) are name-plus-cluster only. Lands
+  AFTER the execution-scope law so command scoping is in the spec from day one.
+
+<!-- ADV2-S3 R208 -->
+- 2026-09-01 — PANE SLOTS + TWO-TIER HOTKEYS (demiurge verdict kaitpw: "yes s3"; evidence
+  `.artifacts/handoffs/2026-09-01-census-{pane-hotkeys,tutorial-panes}.md`): the route spec
+  declares pane SLOTS (key, kind, title) — structural identity that joins Pane, tutorial
+  measure, and product manifest; title string-matching dies. Hotkeys are two-tier: navigation
+  keys (focus, Escape, j/k/a/d) are pane-owned page code acting on page atoms; route VERBS
+  derive from the spec, and a verb's chord is declared on its command. The route document
+  gains ZERO fields from the pane/hotkey/tutorial cluster. S1 (all keys spec-derived), S2
+  (spikes as-is, second vocabulary), S4 (persist focus/tutorial in the doc) are killed.
+  The provider owns the manifest and a pane-element registry keyed by slot when ONE ROUTE
+  SPEC lands; until then `manifest-ref.ts` is the named interim shim.
+
+<!-- ADV2-S3 R210 -->
+- 2026-09-01 — Tutorial round-2 projection: INK ADOPTED, rails and badges KILLED (demiurge
+  verdict kaitpw: "yes ink", ruled on state shape): ink is the only projection that gives the
+  chart base's `hot` emphasis state its writer; `ChartArea` consumes `hot` under every
+  projection, so rails would leave a dangling producer. Rails' epitaph: a static duplicate of
+  on-demand emphasis; adds geometry, answers no state question.
+
+<!-- ADV2-S3 R211 -->
+- 2026-09-01 — `activePaneAtom` is NEVER (demiurge verdict kaitpw: "do it never as long as ts
+  hotkeys still scopes and focuses properly. occam"): pane focus scoping belongs to
+  `@tanstack/react-hotkeys` DOM targets alone (the 2026-08-31 keyboard law's one door). The
+  spike's `activePaneAtom`, `AtlasPageState.activePane`, and `Pane.onActivate` do not port —
+  the atom had a producer and no consumer. Re-open only if a surface needs to READ focus and
+  DOM targeting cannot answer it.
+
+<!-- ADV2-S3 R243 -->
+- 2026-09-11 — Route chrome rulings (kaitpw). The lamp shows host status only. Beside it sits one route-wide control group: tutorial, inspector, settings later, theme; the host lamp leaves that group once it is a dev-only concern. The inspector is a dev tool that a stranger still reads at first glance, and it lives in the control group, never inline. `/instances` is a standalone route and the same component is the body of any route that needs Revit and has no resolved Target.
+
+<!-- ADV2-S3 R244 -->
+- 2026-09-11 — Composition laws (kaitpw). Judge nouns only composed on a real page; per-noun variants out of context are not judgeable. Every picker is searchable, sortable and keyboard-navigable. Every label states its relationship to the other nouns. No fact is shown more than twice on a page, ideally once, and that one placement is deliberate. Color, motion and marks carry role, identity and provenance. Concept and flow outrank polish. Why: the 48 per-noun variants of 2026-09-11 did not resonate; the old targeting sentence (branch `proto/targeting-round3`, `components/sentence.tsx`) did, because it folded every noun into one readable line.
+
+<!-- ADV2-S3 R245 -->
+- 2026-09-12 — UX revival rulings (kaitpw): display as little as possible with clear disclosure. The six architecture nouns need not become six visible elements. A continuous, readable sentence remains a strong candidate; connective language may carry status and staged work.
+
+<!-- ADV2-S3 R251 -->
+- 2026-09-15 — Chat's send is a Situation action (kaitpw: "it uses primitives the way i want, keep it that way"). Its look is not liked; a children slot on the verb may replace the rendering later. Not a button component of its own.
+
+<!-- ADV2-S3 R252 -->
+- 2026-10-08 — Feedback picker (`components/feedback-picker.tsx`, mounted at the root): pick one element, write a note, send. Built on `react-grab/primitives` for hit testing and component context, `modern-screenshot` for the picture. Notes go to PostHog as `ui_feedback` through host `POST /pe/feedback` (kaitpw: "notes go to posthog").
+
+<!-- ADV2-S3 R253 -->
+- 2026-10-08 — Feedback send waits on PostHog and keeps the popover and typed note on failure (kaitpw: a note that vanished on a failed send is state lost forever). Enter sends, Shift+Enter breaks a line, like a chat composer. An outside click does not dismiss; Esc and cancel do.
+
+<!-- ADV2-S3 R254 -->
+- 2026-10-08 — Feedback picks one element only; no whole-panel selection (kaitpw: "no to whole panels").
+
+
 ### Global navigation, app bar, Situation (2026-10)
 
 - 2026-10-13, the `[data-density="dense"]` register is deleted (ruled round 0, superseded round 1, only the laws specimen used it). One 24px control register. Re-mint a compact Table recipe only on the first table that feels too loose. Supersedes the 2026-08-31 20px-row density round and its two-height split (`--item-h` and `--control-h` are both 24px); a surface that needs another height names it here before authoring one. The 2026-08-31 density law stands (kaitpw): denser and smaller is better; conventional accessibility sizes do not fit this use.
@@ -170,6 +491,49 @@ The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/
 - 2026-10-08, react-grab `freeze()` during feedback picking (halts the note popover); `.pick-mark` in `--pe-line-2` (vanishes); rasterizing `document.body` (drops `<html>` styles, 10px crop error; rasterize `document.documentElement`).
 
 ## Owed
+
+### ADV2-S3 owner provenance, restored verbatim
+
+These rows are byte-for-byte text from `34bd5e17`. The searchable comment preserves the pre-purge row id. A later ruling can supersede behavior, but it does not erase the owner's words or attribution.
+
+<!-- ADV2-S3 R296 -->
+- 2026-10-12, kaitpw, installed 0.7.21 help overlay (Alt+/) on /chat: four "COMPOSER · KEYS" cards and region boxes drawn on top of each other ("1 threads" over "3 composer"). Cause: `chat/composer-bank.tsx:47` keeps one `Composer` per visited thread inside `<Activity mode="hidden">` so drafts survive, and every hidden composer still mounts `<Pane id="composer">` plus `<ScopeKeys>`, so the overlay reads N composer regions and measures hidden panes to a zero rect. Fix at the overlay: list and measure only visible panes (`checkVisibility()` or an `offsetParent` test), never per composer. Also the help text is behind the composer: it still describes `/` as "skill commands" only, and says nothing about the new `/` and `@` behaviours; kaitpw to say what they do now before the `says` strings are rewritten.
+
+<!-- ADV2-S3 R303 -->
+- Kit base round 0 (2026-10-12): table routes (`/schedules`, `/data-tables`, `/families`, `/takeoffs`, `/param-tables`, `/parameter-links`) render at the comfort geometry until something sets `data-density="dense"`; portalled menus need it on the document root. Fold the harvested rulings (`.artifacts/runs/ui-base-20261012/{register,button,kit-prose,pane}.md`) into this ledger once kaitpw says which still stand. Lower the stale adherence baselines (`hostBelowRoute` 6 to 4, `opacityDim` 9 to 8, `longTitle` 26 to 21). `chat/composer.css` input-row rules belong in `conversation.css`. `ts/apps/web/AGENTS.md:43` still describes two registers. `card.tsx` is `rounded-lg` on the landing page against the square-surface rule.
+
+<!-- ADV2-S3 R307 -->
+- **IMPORTANT, deferred by kaitpw 2026-10-01 (his scope is bigger than this line):** a firm-wide catalog store fed by cited Pea proposals. Pea finds the manufacturer document for each product in a model, the grounded-doc engine (`/doc-lab`) parses it, and Pea proposes values (first: air-terminal pressure drop by model, size and airflow; then equipment static, coil, filter and valve drops) each citing the page and table cell. A person approves, edits or rejects beside the highlighted PDF; approved tables live in one firm-wide store reused across projects, and a script interpolates them onto every matching instance with provenance. Why: native duct pressure drop needs a drop on every terminal and unit connector, and per-product tables (a few dozen) replace per-instance entry (hundreds per model).
+
+<!-- ADV2-S3 R315 -->
+- Chat prompt suggestions wait until kaitpw has example prompts that are proven to work.
+
+<!-- ADV2-S3 R334 -->
+- 2026-09-01 pane/tutorial refinements (kaitpw at the merge verdict: "some refinements need to
+  be done on the pane+hotkey stuff"; the integration wave itself LANDED — report
+  `.artifacts/handoffs/2026-09-01-integrate-pane-tutorial-report.md`): specific refinements are
+  not yet enumerated by the owner. Known candidates from the wave's own audit: tutorial pane
+  tags read kind-fallback labels ("visual", "room") instead of pane titles — the measure join
+  labels want the pane's rendered title; the shortcut card renders disabled rows unmuted; a
+  non-string hotkey renders the literal word `custom`; card placement has no scroll or
+  `ResizeObserver` repositioning. Ink hover emphasis and final rendered geometry are still
+  UNPROVEN on the browser lane (hidden-tab limits; needs one visible-tab pass).
+  `manifest-ref.ts` rides as the named interim until the ONE ROUTE SPEC provider owns the
+  manifest and pane-element registry; pane slot declarations enter `CollaborativeRouteSpec`
+  when it lands.
+
+<!-- ADV2-S3 R356 -->
+- `Combobox` needs major improvement (kaitpw 2026-09-01, ruled with the CellSelect adoption): the
+  cell keyboard/commit contract, filling-trigger parity with the header facet, chips density, and
+  whatever the takeoffs cutover surfaces. It is now the one menu primitive, so its debts are
+  cross-route.
+
+<!-- ADV2-S3 R396 -->
+- `/takeoffs` has "a lot of obvious problems" (kaitpw, 2026-08-31, unenumerated). Ruled to its
+  phase-4 cutover round, not before: route fixes on an unsettled density law get redone. Family
+  rows whose identity cell wraps to two lines still break the 20px rhythm (`density round 1`,
+  measured); nowrap/ellipsis lands at the same cutover.
+
 
 ### Navigation and installed shell
 
