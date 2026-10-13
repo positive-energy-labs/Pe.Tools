@@ -12,12 +12,7 @@ import { Input } from "#/components/lang/input";
 import { ListSegmentInput } from "#/components/lang/list-popup";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Button } from "#/components/lang/button";
-import {
-  isFresh,
-  readinessSub,
-  useProviders,
-  type ProvidersState,
-} from "#/workbench/provider/providers";
+import { readinessSub, useProviders, type ProvidersState } from "#/workbench/provider/providers";
 import { EndpointError } from "#/workbench/endpoint-error";
 import { errorMessage } from "#/workbench/provider/use-workbench";
 
@@ -43,9 +38,7 @@ export function ProviderSetup({ providers }: { providers: ProvidersState }) {
             <span className="font-semibold">{provider.name}</span>
             <span
               className="min-w-0 truncate face-mono"
-              data-tone={
-                provider.readiness.state === "ready" && isFresh(provider) ? undefined : "caution"
-              }
+              data-tone={provider.readiness.state === "ready" ? undefined : "caution"}
               title={readinessSub(provider)}
             >
               {provider.readiness.state === "refused" && provider.readiness.failure

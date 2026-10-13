@@ -100,7 +100,7 @@ describe("groups", () => {
     vi.stubGlobal("fetch", fetch);
     const rendered = body({ state: "ready", observation: machine });
     fireEvent.click(header("Pea"));
-    expect(header("Pea").textContent).toContain("1 of 2 last ready");
+    expect(header("Pea").textContent).toContain("1 of 2 ready");
     expect(screen.getByText("Codex")).toBeTruthy();
     const next: Machine = {
       ...machine,

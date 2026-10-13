@@ -258,14 +258,7 @@ export function peaState(machine: Machine): Said {
   if (!providers) return { text: "unread", tone: "caution" };
   const ready = providers.filter((provider) => provider.readiness.state === "ready");
   if (!ready.length) return { text: "no provider ready", tone: "caution" };
-  const stale = ready.some(
-    (provider) =>
-      provider.probedAt === null || Date.now() - Date.parse(provider.probedAt) >= 60_000,
-  );
-  return {
-    text: `${ready.length} of ${providers.length} ${stale ? "last ready" : "ready"}`,
-    ...(stale ? { tone: "caution" as const } : {}),
-  };
+  return { text: `${ready.length} of ${providers.length} ready` };
 }
 
 export const hostOfUrl = (url: string) => url.replace(/^https?:\/\//, "").split(/[./]/)[0]!;
