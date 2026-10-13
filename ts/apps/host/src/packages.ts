@@ -83,7 +83,7 @@ export async function capturePackage(packageOrId: AdmittedPackage | string, pods
   return { ...pod, sourceBundle: { files: pod.members.map(member => ({ path: member.path, bytesBase64: Buffer.from(member.bytes).toString("base64") })) } };
 }
 
-async function readFolder(directory: string, folder: string): Promise<AdmittedPackage> {
+export async function captureDirectory(directory: string): Promise<{ members: PackageMember[]; diagnostics: MemberIssue[] }> {
   const members: PackageMember[] = [];
   const diagnostics: MemberIssue[] = [];
   const names = new Set<string>();
@@ -129,6 +129,11 @@ async function readFolder(directory: string, folder: string): Promise<AdmittedPa
     }
   };
   await walk("");
+  return { members, diagnostics };
+}
+
+async function readFolder(directory: string, folder: string): Promise<AdmittedPackage> {
+  const { members, diagnostics } = await captureDirectory(directory);
   const manifest = members.find(member => member.path === "pod.json");
   if (!manifest) throw Error("Pod has no admitted pod.json.");
   const value = JSON.parse(Buffer.from(manifest.bytes).toString("utf8").replace(/^\uFEFF/, ""));

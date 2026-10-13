@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rename, rm, symlink, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
-import { capturePackage, kindOfMember, listPackages, readPackage } from "../src/packages.ts";
+import { captureDirectory, capturePackage, kindOfMember, listPackages, readPackage } from "../src/packages.ts";
 
 let root: string;
 const authored: Record<string, string | Uint8Array> = {
@@ -65,4 +65,13 @@ test("directory links cannot admit files outside the package", async () => {
   const pod = await readPackage("mixed", root);
   expect(pod.diagnostics).toContainEqual(expect.objectContaining({ path: "linked", severity: "error" }));
   await expect(capturePackage(pod)).rejects.toThrow(/links/);
+});
+
+test("canonical skill directories use the same bounded admission without a Pod manifest", async () => {
+  await put("Skills", "inspect/SKILL.md", "Inspect");
+  await put("Skills", "inspect/references/guide.md", "Guide");
+  await put("Skills", "inspect/node_modules/ignored", "Ignored");
+  const captured = await captureDirectory(join(root, "Skills"));
+  expect(captured.diagnostics).toEqual([]);
+  expect(captured.members.map(member => member.path)).toEqual(["inspect/references/guide.md", "inspect/SKILL.md"]);
 });
