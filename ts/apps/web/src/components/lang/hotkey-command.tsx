@@ -78,11 +78,7 @@ export function HotkeyHint({
   face?: Props["face"];
 }) {
   return (
-    <span
-      className="dl-hotkey-command"
-      data-command-face={face}
-      aria-label={chordLabel(hotkey)}
-    >
+    <span className="dl-hotkey-command" data-command-face={face} aria-label={chordLabel(hotkey)}>
       <ChordFaces hotkey={hotkey} />
     </span>
   );
