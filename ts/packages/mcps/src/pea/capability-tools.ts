@@ -941,7 +941,7 @@ function requestIdentity(context: unknown): string {
 export const targetSet = createTool({
   id: "target_set",
   description:
-    "Select Pea's own document as this thread's default Target for later calls. Name an exact open lifetime or a saved Address plus its Pea-owned session. Only the human can move the head onto a user document and grant rw. null removes the default. Calls resolve against the live inventory; a close or reopen never silently redirects. Without a bound thread, use exact per-call op targets. The new revision applies to the next call.",
+    "Select Pea's own document as this thread's default Target for later calls. Name an exact open lifetime Pea acquired (pe_find access kind pea names its acquisition), or a saved Address in a Revit Pea's acquisition started. Only the human can move the head onto a user document and grant rw. null removes the default. Calls resolve against the live inventory; a close or reopen never silently redirects. Without a bound thread, use exact per-call op targets. The new revision applies to the next call.",
   inputSchema: z.object({ defaultTarget: documentRequestSchema.nullable() }),
   execute: async (input) => {
     const turn = await scopeOf();

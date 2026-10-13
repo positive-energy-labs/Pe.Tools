@@ -367,10 +367,15 @@ ${source}`),
     });
     afterEach(() => {
       heads = {};
-      bindControl({ heads: null, whose: () => "you" });
+      bindControl({ heads: null, acquired: () => null, acquiredSession: () => null });
     });
-    const bind = (whose: (session: string) => "you" | "pea" = () => "you") =>
-      bindControl({ heads: (thread) => heads[thread] ?? emptyThreadHead, whose });
+    /** `peaSession`: every document there is one Pea acquired. */
+    const bind = (peaSession?: string) =>
+      bindControl({
+        heads: (thread) => heads[thread] ?? emptyThreadHead,
+        acquired: (ref) => (ref.session === peaSession ? `acq-${peaSession}` : null),
+        acquiredSession: (session) => (session === peaSession ? `acq-${peaSession}` : null),
+      });
 
     type Forwarded = {
       path: string;
@@ -530,7 +535,7 @@ ${source}`),
     });
 
     it("a pinned binding writes only Pea's documents", async () => {
-      bind((s) => (s === "S2" ? "pea" : "you"));
+      bind("S2");
       const yours = await host([session("S1")]);
       await yours.as(human).put("/pe/pages/todo/binding", { kind: "pinned", address: MODEL });
       expect(await code(await yours.page.post("/pages/todo/act", { key: "k" }))).toMatchObject({
@@ -540,7 +545,7 @@ ${source}`),
       const peas = await host([session("S2")]);
       await peas.as(human).put("/pe/pages/todo/binding", { kind: "pinned", address: MODEL });
       expect(await (await peas.page.post("/pages/todo/act", { key: "k" })).json()).toMatchObject({
-        basis: { kind: "pea-session", session: "S2" },
+        basis: { kind: "acquisition", id: "acq-S2" },
       });
     });
 
@@ -590,7 +595,7 @@ ${source}`),
     });
 
     it("binding: a person binds anything; Pea pins only its own documents; a page cannot bind itself", async () => {
-      bind((s) => (s === "S2" ? "pea" : "you"));
+      bind("S2");
       const { as, page, root } = await host([
         session("S1", MODEL),
         session("S2", "C:\\Pea\\Copy.rvt"),

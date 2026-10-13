@@ -60,7 +60,8 @@ import {
   Refused,
   requireHuman,
   retireContext,
-  sessionWhose,
+  documentAcquisition,
+  sessionAcquisition,
 } from "../control.ts";
 import { Effect } from "effect";
 import { z } from "zod";
@@ -521,11 +522,18 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     const target = input.defaultTarget;
     const session =
       target === null ? null : target.kind === "open" ? target.ref.session : target.session;
-    if (caller.kind === "pea" && session !== null && sessionWhose(session) !== "pea")
+    // Acquisition evidence per document: a user's document inside Pea's Revit is still yours.
+    const acquired =
+      target === null
+        ? null
+        : target.kind === "open"
+          ? documentAcquisition(target.ref)
+          : sessionAcquisition(target.session);
+    if (caller.kind === "pea" && target !== null && acquired === null)
       throw new Refused({
         code: "grant.required",
         door,
-        reason: `Refused at ${door}: Pea may point its thread only at Pea's own documents; session '${session}' is your Revit. Point this thread at it in the composer to grant rw, or open a copy.`,
+        reason: `Refused at ${door}: Pea may point its thread only at documents it acquired; this one in session '${session}' is yours. Point this thread at it in the composer to grant rw, or open a copy.`,
       });
     const current = readHead(threadId);
     if (current.revision !== input.expectedRevision)
@@ -536,9 +544,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       revision: current.revision + 1,
       ...(input.displayLabel ? { displayLabel: input.displayLabel } : {}),
       grant:
-        caller.kind === "human" &&
-        target?.kind === "open" &&
-        sessionWhose(target.ref.session) === "you"
+        caller.kind === "human" && target?.kind === "open" && acquired === null
           ? {
               lifetime: target.ref,
               grantedAt: new Date(now).toISOString(),

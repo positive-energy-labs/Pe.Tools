@@ -1456,6 +1456,13 @@ const T0 = Date.parse("2026-10-12T12:00:00.000Z");
 const at = (ms: number) => new Date(ms).toISOString();
 const yours = { kind: "open", ref: { session: "S1", openId: "A" } } as const;
 const peas = { kind: "open", ref: { session: "P", openId: "copy" } } as const;
+/** Pea acquired the copy in Revit "P"; a user document opened there later is not acquired. */
+const peaAcquiredCopy = {
+  acquired: (ref: { session: string; openId: string }) =>
+    ref.session === "P" && ref.openId === "copy" ? "acq-copy" : null,
+  acquiredSession: (session: string) => (session === "P" ? "acq-P" : null),
+};
+const userInPeas = { kind: "open", ref: { session: "P", openId: "B" } } as const;
 const peaOf = (thread: string): Caller => ({ kind: "pea", context: `ctx-${thread}`, thread });
 const onDoc = (ref: { session: string; openId: string }) => ({ kind: "document", ref }) as const;
 const crossing = (caller: Caller, ref: { session: string; openId: string }) => {
@@ -1466,7 +1473,7 @@ const crossing = (caller: Caller, ref: { session: string; openId: string }) => {
     throw error;
   }
 };
-afterEach(() => bindControl({ heads: null, whose: () => "you" }));
+afterEach(() => bindControl({ heads: null, acquired: () => null, acquiredSession: () => null }));
 
 test("the head reading projects expiry and republishes it on the host clock", async () => {
   vi.useFakeTimers();
@@ -1492,7 +1499,7 @@ test("the head reading projects expiry and republishes it on the host clock", as
 test("door 6: a human PUT on your open lifetime stamps rw; a move retires it; a named target never holds one", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(T0);
-  bindControl({ whose: (session) => (session === "P" ? "pea" : "you") });
+  bindControl(peaAcquiredCopy);
   const call = caller(host());
   const id = "grant-door-6";
   const set = await call("PUT", `/pe/scope/${id}`, { defaultTarget: yours, expectedRevision: 0 });
@@ -1516,15 +1523,21 @@ test("door 6: a human PUT on your open lifetime stamps rw; a move retires it; a 
   // Pea's own document needs no grant, so none is stamped.
   const own = await call("PUT", `/pe/scope/${id}`, { defaultTarget: peas, expectedRevision: 3 });
   expect(own.json.head.grant).toBeNull();
+  // A user's document inside Pea's Revit is yours: pointing at it grants rw like any other.
+  const mine = await call("PUT", `/pe/scope/${id}`, {
+    defaultTarget: userInPeas,
+    expectedRevision: 4,
+  });
+  expect(mine.json.head.grant).toMatchObject({ lifetime: userInPeas.ref });
   const cleared = await call("PUT", `/pe/scope/${id}`, {
     defaultTarget: null,
-    expectedRevision: 4,
+    expectedRevision: 5,
   });
   expect(cleared.json.head.grant).toBeNull();
 });
 
 test("door 6 for Pea: only its own thread, only Pea's documents; anonymous cannot write a head", async () => {
-  bindControl({ whose: (session) => (session === "P" ? "pea" : "you") });
+  bindControl(peaAcquiredCopy);
   const threads = host();
   const call = caller(threads);
   const id = "grant-door-6-pea";
@@ -1534,6 +1547,11 @@ test("door 6 for Pea: only its own thread, only Pea's documents; anonymous canno
     expectedRevision: 0,
   });
   expect([refused.status, refused.json.refusal.code]).toEqual([403, "grant.required"]);
+  const inherited = await call("PUT", "/pe/scope/self", {
+    defaultTarget: userInPeas,
+    expectedRevision: 0,
+  });
+  expect([inherited.status, inherited.json.refusal.code]).toEqual([403, "grant.required"]);
   const own = await call("PUT", "/pe/scope/self", { defaultTarget: peas, expectedRevision: 0 });
   expect(own.json).toMatchObject({ ok: true, head: { defaultTarget: peas, grant: null } });
   expect((await call("GET", "/pe/scope/self")).json).toMatchObject({

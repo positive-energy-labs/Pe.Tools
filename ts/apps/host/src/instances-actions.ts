@@ -57,7 +57,6 @@ import { productPeaWorkPath } from "./product-paths.ts";
 import { resolveStartProject, runPeRevitCli } from "./session-route.ts";
 import { admitCrossing, live, Refused, requireHuman } from "./control.ts";
 import { readMachineSession } from "./machine.ts";
-import { whoseOf } from "./whose.ts";
 
 export type InstancesActionDependencies = {
   sdk?: SdkReceiptReader;
@@ -269,12 +268,16 @@ export async function admitInstancesAction(
     });
   // Resolve before admission: the receipt must carry the basis that admits its effects.
   const censusBasis = async (target: Target): Promise<Basis> => {
+    // The Revit an acquisition started, by its receipts: a label for documents, never their write.
+    const held = heldProcess(foldAcquisitions(await owner.list()), target.process);
+    const processBasis = (session: string): Basis | null =>
+      held ? { kind: "acquisition", id: held.id, scope: { kind: "process", session } } : null;
     if (launch) {
-      if (whoseOf(target, await owner.list()) === "pea")
-        return {
-          kind: "pea-session",
-          session: `${target.process.pid}:${target.process.processStartUtc}`,
-        };
+      // A new copy into Pea's own Revit is a new acquisition; a reload mutates an open lifetime.
+      const basis = launch.reload
+        ? null
+        : processBasis(`${target.process.pid}:${target.process.processStartUtc}`);
+      if (basis) return basis;
       requireHuman(crossing.caller, door, `${key} into your Revit`);
       return { kind: "human" };
     }
@@ -287,13 +290,9 @@ export async function admitInstancesAction(
     const documents = row.documents!;
     const attached = row.attachment;
     const session = attached?.session ?? `${target.process.pid}:${target.process.processStartUtc}`;
-    if (row.whose === "pea") return { kind: "pea-session", session };
     const one = definition.needs === "document";
     if (!one && documents.length === 0 && (!attached || attached.documents?.length === 0))
-      return {
-        kind: "empty-user-session",
-        session,
-      };
+      return processBasis(session) ?? { kind: "empty-user-session", session };
     const affected = one
       ? documents.filter((doc) => doc.openId === control!.document?.openId)
       : documents;
@@ -327,7 +326,8 @@ export async function admitInstancesAction(
       throw lifecycleRefusal(
         `would affect uncovered documents: ${uncovered.join(", ") || "unknown"}.`,
       );
-    return basis;
+    // Every document is covered on its own evidence; the session effect also needs the process.
+    return (!one && processBasis(session)) || basis;
   };
   let admittedTarget: Target | undefined;
   if (crossing.caller.kind !== "human") {

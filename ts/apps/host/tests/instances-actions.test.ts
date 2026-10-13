@@ -11,7 +11,13 @@ import { admitInstancesAction, recoverInstancesAction } from "../src/instances-a
 import { makeCallRoute } from "../src/call-route.ts";
 import { RevitBridge } from "../src/bridge.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
-import { createMachine, useHostMachine, unavailableShare } from "../src/machine.ts";
+import {
+  createMachine,
+  machineAcquisition,
+  machineSessionAcquisition,
+  useHostMachine,
+  unavailableShare,
+} from "../src/machine.ts";
 import { bindControl } from "../src/control.ts";
 import type { ThreadHead } from "@pe/agent-contracts";
 import type { SessionObservation } from "@pe/host-contracts/pe-revit-contract";
@@ -106,7 +112,13 @@ async function setup(
   const owner = new ActionJournal(join(dir, "actions.json"));
   const peaWork = join(dir, "pea-work");
   const deps = { sdk, peaWork };
-  const census = { documents: [openId], reads: 0, fail: false };
+  const census = {
+    documents: [openId],
+    reads: 0,
+    fail: false,
+    /** Native independence facts the SDK census reports for every document; unknown by default. */
+    facts: {} as { isWorkshared?: boolean; isDetached?: boolean },
+  };
   const update = {
     plan: null,
     receipt: null,
@@ -139,7 +151,11 @@ async function setup(
         observedAtUtc: new Date().toISOString(),
         bridge: {
           bridge: "ready",
-          documents: census.documents.map((openId) => ({ openId, title: openId })),
+          documents: census.documents.map((openId) => ({
+            openId,
+            title: openId,
+            ...census.facts,
+          })),
         },
       })) as SessionObservation[];
     },
@@ -161,11 +177,15 @@ async function setup(
     ],
   });
   useHostMachine(machine);
-  bindControl({ heads: null, whose: () => "you" });
+  bindControl({
+    heads: null,
+    acquired: machineAcquisition,
+    acquiredSession: machineSessionAcquisition,
+  });
   cleanup.push(async () => {
     useHostMachine(undefined);
     machine.close();
-    bindControl({ heads: null, whose: () => "you" });
+    bindControl({ heads: null, acquired: () => null, acquiredSession: () => null });
   });
   let serial = 0;
   const admit = async (
@@ -315,10 +335,13 @@ test("a user's own background run stays you and refuses agent stop without a gra
 });
 
 test.each(["start", "open"])(
-  "a succeeded Pea %s receipt admits agent stop of that background process",
+  "a held Pea %s acquisition admits agent stop only when every document is its own",
   async (verb) => {
     const f = await setup(
-      (args) => (args[1] === "start" ? startedAnswer : { result: { state: "ok", openId } }),
+      (args) =>
+        args[1] === "start"
+          ? startedAnswer
+          : { result: { state: "ok", document: { openId, path: null } } },
       [controlledRow({ shape: shape("background") })],
     );
     const launch = await f.admit(
@@ -328,12 +351,48 @@ test.each(["start", "open"])(
         : { source: "cld://US/{p}p/{m}Tower.rvt", into: newRevit({ owner: "pea" }) },
     );
     expect(launch.state).toBe("succeeded");
-    expect(
-      (await f.admit("instances.stop", { session, unsaved: "keep" }, undefined, "agent")).state,
-    ).toBe("succeeded");
+    const stop = () => f.admit("instances.stop", { session, unsaved: "keep" }, undefined, "agent");
+    if (verb === "start") {
+      // The empty Revit it started: the process acquisition admits it.
+      f.census.documents = [];
+    } else {
+      // Its own detached copy, natively certified: the document acquisition covers it.
+      f.census.facts = { isWorkshared: true, isDetached: true };
+    }
+    const stopped = await stop();
+    expect(stopped).toMatchObject({
+      state: "succeeded",
+      basis: { kind: "acquisition", id: launch.id, scope: { kind: "process" } },
+    });
     expect(f.calls.at(-1)!.slice(0, 2)).toEqual(["session", "stop"]);
+    // A user document B opened in the same Revit later is not Pea's: the stop refuses.
+    f.census.documents = verb === "start" ? ["b".repeat(32)] : [openId, "b".repeat(32)];
+    await expect(stop()).rejects.toMatchObject({
+      refusal: { code: "lifecycle.ungranted-documents" },
+    });
   },
 );
+
+test("an agent opens a new copy into the Revit an acquisition started; a reload there stays human", async () => {
+  const f = await setup(
+    () => ({ result: { state: "ok", document: { openId, path: null } } }),
+    [controlledRow({ shape: shape("background") })],
+  );
+  const source = await f.file("Tower.rvt", "Worksharing: Not enabled");
+  // No acquisition holds this Revit yet: it is yours.
+  await expect(
+    f.admit("instances.open", { source, into: into() }, undefined, "agent"),
+  ).rejects.toMatchObject({ refusal: { code: "human.only" } });
+  await recordPeaLaunch(f.owner, f.peaWork);
+  const copy = await f.admit("instances.open", { source, into: into() }, undefined, "agent");
+  expect(copy).toMatchObject({
+    basis: { kind: "acquisition", id: "pea-launch", scope: { kind: "process" } },
+    result: { acquisition: copy.id, copiedFrom: source },
+  });
+  await expect(
+    f.admit("instances.open", { source: openId, reload: true, into: into() }, undefined, "agent"),
+  ).rejects.toMatchObject({ refusal: { code: "human.only" } });
+});
 
 test("the launch schema carries every open option and no staged state", () => {
   const launch = instancesActions["instances.open"].input;
@@ -1247,13 +1306,13 @@ test("a document arriving after admission refuses stop at effect entry", async (
   expect(f.calls.every((args) => args[1] === "list")).toBe(true);
 });
 
-test("fresh Machine ownership rechecks a Pea session before the lifecycle effect", async () => {
-  const row = controlledRow({ shape: shape("background") });
-  const f = await setup(() => ({ result: { state: "ok" } }), [row]);
+test("a user document opened in Pea's Revit after admission refuses Pea's stop at effect entry", async () => {
+  const f = await setup(() => ({ result: { state: "ok" } }), [controlledRow()]);
   await recordPeaLaunch(f.owner);
+  f.census.documents = [];
   const admit = f.owner.admit.bind(f.owner);
   f.owner.admit = (...args) => {
-    row.shape = shape("foreground");
+    f.census.documents = [openId];
     return admit(...args);
   };
   expect(

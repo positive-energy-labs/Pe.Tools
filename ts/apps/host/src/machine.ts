@@ -38,7 +38,13 @@ import type { RevitBridge } from "./bridge.ts";
 import type { Providers } from "./harness/providers.ts";
 import { unreadLeg, type UpdateReader } from "./update-reader.ts";
 import { hostActionJournal } from "./gateway-owner.ts";
-import { whoseOf } from "./whose.ts";
+import {
+  acquiredOpenIds,
+  foldAcquisitions,
+  heldProcess,
+  processWhose,
+  type Acquisition,
+} from "./acquisition.ts";
 import { grantDead } from "./control.ts";
 
 export interface MachineShareAdapter {
@@ -77,13 +83,13 @@ export type AttachmentRead = Omit<MachineAttachment, "documents"> & {
 };
 
 /**
- * Per open document: Pea's own sessions write freely, a live grant on the exact lifetime
- * (bridge session + product openId) writes, everything else is read. Expired and revoked grants
- * are dead, so a stale head never draws rw.
+ * Per open document: a document Pea's acquisition holds (product openId → acquisition id) is
+ * Pea's, a live grant on the exact lifetime (bridge session + product openId) writes, everything
+ * else is read. Expired and revoked grants are dead, so a stale head never draws rw.
  */
 export function withAccess(
   attachment: AttachmentRead,
-  whose: MachineSession["whose"],
+  acquired: ReadonlyMap<string, string>,
   grants: readonly HeldGrant[],
   at: number,
 ): MachineAttachment {
@@ -97,17 +103,17 @@ export function withAccess(
             grant.lifetime.openId === document.openId &&
             grantDead(grant, at) === null,
         );
-        const access: MachineAccess =
-          whose === "pea"
-            ? { kind: "pea" }
-            : held
-              ? {
-                  kind: "rw",
-                  context: held.thread,
-                  label: held.title,
-                  until: held.grant.expiresAt,
-                }
-              : { kind: "read" };
+        const acquisition = acquired.get(document.openId);
+        const access: MachineAccess = acquisition
+          ? { kind: "pea", acquisition }
+          : held
+            ? {
+                kind: "rw",
+                context: held.thread,
+                label: held.title,
+                until: held.grant.expiresAt,
+              }
+            : { kind: "read" };
         return { ...document, access };
       }) ?? null,
   };
@@ -181,6 +187,8 @@ export function createMachine(
   let access: Access | null = null;
   let share: MachineShare | null = null;
   let legs: Record<string, MachineLeg> = {};
+  /** The last fold of the journal this Machine read; an unread actions leg folds nothing. */
+  let acquisitions: readonly Acquisition[] = [];
   const documents = new Map<string, { value: MachineSession["documents"]; leg: MachineLeg }>();
   let latest: Machine = {
     observedAtUtc: now(),
@@ -355,6 +363,7 @@ export function createMachine(
           }),
         );
       const classified = new Set<AttachmentRead>();
+      acquisitions = foldAcquisitions(actions);
       const heldGrants = sources.grants.grants();
       const at = Date.parse(now());
       const rows =
@@ -366,15 +375,22 @@ export function createMachine(
           const attachment = matched.length === 1 ? matched[0]! : null;
           if (attachment) classified.add(attachment);
           const held = process ? documents.get(processKey(process)) : undefined;
-          const whose = whoseOf({ posture: row.shape.posture, process }, actions);
+          const allowed = row.execution?.allowed === true;
           return {
             row,
-            whose,
+            whose: process ? processWhose(acquisitions, process) : "you",
             attachment: attachment
               ? withAccess(
                   attachment,
-                  row.execution?.allowed === true ? whose : "you",
-                  row.execution?.allowed === true ? heldGrants : [],
+                  allowed && process
+                    ? acquiredOpenIds(
+                        acquisitions,
+                        process,
+                        held?.value ?? null,
+                        attachment.documents?.map((doc) => doc.openId) ?? [],
+                      )
+                    : new Map(),
+                  allowed ? heldGrants : [],
                   at,
                 )
               : null,
@@ -399,7 +415,7 @@ export function createMachine(
           // Nobody proved these Pea's, so they are yours: only a live grant writes.
           unclassifiedAttachments: attachments
             .filter((attachment) => !classified.has(attachment))
-            .map((attachment) => withAccess(attachment, "you", heldGrants, at)),
+            .map((attachment) => withAccess(attachment, new Map(), heldGrants, at)),
         },
         update: sources.update.current(),
         share,
@@ -453,6 +469,7 @@ export function createMachine(
     },
     observe,
     current: () => latest,
+    acquisitions: () => acquisitions,
     close: () => {
       closed = true;
       clearInterval(timer);
@@ -526,12 +543,22 @@ export async function readMachineSession(process: {
   return row;
 }
 
-/** Whose the Revit behind one bridge session is; unproven (no census, no row) is yours. */
-export function attachmentWhose(session: string): "you" | "pea" {
-  return (
-    hostMachine?.current().revit.sessions?.find((row) => row.attachment?.session === session)
-      ?.whose ?? "you"
-  );
+/** The acquisition that holds one exact product lifetime now; unproven (no census) is none. */
+export function machineAcquisition(lifetime: { session: string; openId: string }): string | null {
+  for (const row of hostMachine?.current().revit.sessions ?? [])
+    for (const doc of row.attachment?.documents ?? [])
+      if (doc.session === lifetime.session && doc.openId === lifetime.openId)
+        return doc.access.kind === "pea" ? doc.access.acquisition : null;
+  return null;
+}
+
+/** The held acquisition that started the Revit behind one bridge session; none when unproven. */
+export function machineSessionAcquisition(session: string): string | null {
+  const row = hostMachine
+    ?.current()
+    .revit.sessions?.find((each) => each.attachment?.session === session);
+  const process = row ? processOf(row.row) : null;
+  return process ? (heldProcess(hostMachine!.acquisitions(), process)?.id ?? null) : null;
 }
 
 function processOf(row: SessionObservation): ProcessIdentity | null {

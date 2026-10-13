@@ -8,8 +8,9 @@ import {
 } from "./sdk-session.ts";
 
 /**
- * A new Revit. `owner: "pea"` is a background posture (no window brought forward); `addins: "off"`
- * quarantines third-party add-ins for that Revit.
+ * A new Revit. `owner: "pea"` starts it in the background (no window brought forward) as an
+ * acquisition: Pea may stop it while every document in it is its own. `addins: "off"` quarantines
+ * third-party add-ins for that Revit.
  */
 export const instancesStartSchema = z.strictObject({
   year: z.string().regex(/^20\d{2}$/),
@@ -21,8 +22,8 @@ export type InstancesStart = z.infer<typeof instancesStartSchema>;
 /**
  * One launch: a source opened into a running session or into a new Revit. Every option is the
  * SDK's own `doc open` flag; the press that named it is the consent (ADR 0016), so nothing is
- * staged and nothing waits for a second approval. Whether a launch is Pea's is derived from the
- * target session's posture, never passed.
+ * staged and nothing waits for a second approval. Whether a launch is an acquisition is derived
+ * from `into.start.owner` or the target Revit's acquisition receipts, never passed.
  */
 export const instancesLaunchSchema = z.strictObject({
   /** A local path, a `cld://` identity, `recent:<title>`, or an openId (with `reload`). */
@@ -76,7 +77,7 @@ export const instancesActions = {
     input: instancesStartSchema,
   },
   "instances.open": {
-    says: "Open a source into a running session (into.session) or into a new Revit (into.start). A local, non-workshared file opened for Pea is copied into Pea's work folder first and the copy opens; a workshared or cloud model opens detached. The receipt names the opened path.",
+    says: "Open a source into a running session (into.session) or into a new Revit (into.start). Into a new Revit with owner pea, or into a Revit Pea's acquisition started, the open is an acquisition: a local file is copied into Pea's work folder first and the copy opens (detached when workshared); a cloud model opens detached. Pea writes the document only once its native facts certify it independent. The receipt names the acquisition id and the opened path.",
     dirties: ["sdk"],
     needs: "nothing",
     actor: "any",

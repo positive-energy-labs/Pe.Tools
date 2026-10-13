@@ -211,7 +211,11 @@ test.each(["http", "stdio"])(
         revoked: null,
       },
     };
-    bindControl({ whose: (session) => (session === "pea" ? "pea" : "you"), heads: () => head });
+    bindControl({
+      acquired: (ref) => (ref.session === "pea" ? "acq-copy" : null),
+      acquiredSession: (session) => (session === "pea" ? "acq-pea" : null),
+      heads: () => head,
+    });
     const nativeOps = [
       ...ops,
       { key: "revit.context.view-image", intent: "Read" as const, needs: "document" as const },
@@ -433,7 +437,7 @@ test.each(["http", "stdio"])(
             label: transport === "stdio" ? "pea-stdio" : "f-a",
           }),
           destination: { kind: "document", ref: own },
-          basis: { kind: "pea-session", session: "pea" },
+          basis: { kind: "acquisition", id: "acq-copy", scope: { kind: "document", lifetime: own } },
         },
       ]);
       expect(reads).toEqual(
@@ -486,7 +490,7 @@ test.each(["http", "stdio"])(
       for (const client of clients) await client.close();
       await door.close();
       retireContext(peaToken);
-      bindControl({ heads: null, whose: () => "you" });
+      bindControl({ heads: null, acquired: () => null, acquiredSession: () => null });
       backend.closeAllConnections();
       await new Promise<void>((resolve) => backend.close(() => resolve()));
     }

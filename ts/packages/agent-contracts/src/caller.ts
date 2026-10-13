@@ -30,7 +30,19 @@ export type Caller = z.infer<typeof callerSchema>;
 /** Why a crossing was admitted; stored on the receipt and rechecked at every step begin (D4). */
 export const basisSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("human") }),
-  z.strictObject({ kind: z.literal("pea-session"), session: z.string() }),
+  /**
+   * Evidence from the action journal that this exact resource is one Pea's action created (ADR
+   * 0017 D6 at document grain). `document` is rechecked at every step begin; `process` admits a
+   * session-wide effect on the Revit it started.
+   */
+  z.strictObject({
+    kind: z.literal("acquisition"),
+    id: z.string(),
+    scope: z.discriminatedUnion("kind", [
+      z.strictObject({ kind: z.literal("document"), lifetime: documentRefSchema }),
+      z.strictObject({ kind: z.literal("process"), session: z.string() }),
+    ]),
+  }),
   z.strictObject({
     kind: z.literal("grant"),
     thread: z.string(),
@@ -51,6 +63,7 @@ export const refusalCodes = [
   "grant.revoked",
   "grant.other-lifetime",
   "grant.context-cannot-hold",
+  "acquisition.unproven",
   "sdk.dialog-identity-missing",
   "lifecycle.ungranted-documents",
   "page.unbound",

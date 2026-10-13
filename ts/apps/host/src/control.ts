@@ -162,18 +162,37 @@ export function requireHuman(caller: Caller, door: string, what: string) {
       );
 }
 
-/* ── Sources: the head store and whose a session is ───────────────────────────────────── */
+/* ── Sources: the head store and what Pea's acquisitions hold ─────────────────────────── */
 
 type Sources = {
   heads: ((thread: string) => ThreadHead) | null;
   subscribeHeads?: (notify: () => void) => () => void;
-  /** Fail closed: a session nobody has proven Pea's is yours. */
-  whose: (session: string) => "you" | "pea";
+  /** The acquisition that holds this exact lifetime; null (fail closed) when none is proven. */
+  acquired: (lifetime: DocumentRef) => string | null;
+  /** The held acquisition that started the Revit behind this bridge session. */
+  acquiredSession: (session: string) => string | null;
 };
-const sources: Sources = { heads: null, whose: () => "you" };
-/** Bound once at boot (and by tests): the harness head store and Machine's `whose`. */
+const sources: Sources = { heads: null, acquired: () => null, acquiredSession: () => null };
+/** Bound once at boot (and by tests): the harness head store and Machine's acquisitions. */
 export const bindControl = (bound: Partial<Sources>) => void Object.assign(sources, bound);
-export const sessionWhose = (session: string) => sources.whose(session);
+export const documentAcquisition = (lifetime: DocumentRef) => sources.acquired(lifetime);
+export const sessionAcquisition = (session: string) => sources.acquiredSession(session);
+
+/** Pea's own resource, by acquisition evidence only (never a posture or a session label). */
+function acquisitionBasis(
+  destination: Extract<ExecutionTarget, { kind: "session" | "document" }>,
+): Basis | null {
+  if (destination.kind === "document") {
+    const id = sources.acquired(destination.ref);
+    return id
+      ? { kind: "acquisition", id, scope: { kind: "document", lifetime: destination.ref } }
+      : null;
+  }
+  const id = sources.acquiredSession(destination.session);
+  return id
+    ? { kind: "acquisition", id, scope: { kind: "process", session: destination.session } }
+    : null;
+}
 /** The head a thread carries now; null before the head store is bound. */
 export const threadHead = (thread: string): ThreadHead | null => sources.heads?.(thread) ?? null;
 export const subscribeHeads = (notify: () => void) =>
@@ -227,8 +246,8 @@ export function admitCrossing(
   }
   if (caller.kind === "human") return { kind: "human" };
   if (destination.kind === "host" || destination.kind === "sdk-session") return null;
-  const session = destination.kind === "session" ? destination.session : destination.ref.session;
-  if (sources.whose(session) === "pea") return { kind: "pea-session", session };
+  const acquired = acquisitionBasis(destination);
+  if (acquired) return acquired;
   if (caller.kind === "external-mcp")
     throw refuse(
       "grant.context-cannot-hold",
@@ -291,13 +310,14 @@ export function admitPage(
       `Refused at ${door}: this Page has no target. Bind it to a thread or pin a document from the chip.`,
     );
   if (destination.kind === "host" || destination.kind === "sdk-session") return null;
+  const acquired = acquisitionBasis(destination);
+  if (acquired) return acquired;
   const session = destination.kind === "session" ? destination.session : destination.ref.session;
-  if (sources.whose(session) === "pea") return { kind: "pea-session", session };
   if (slot.kind === "pinned")
     throw refuse(
       "grant.required",
       door,
-      `Refused at ${door}: a pinned Page writes only Pea's documents, and session '${session}' is your Revit. Bind this Page to a thread that holds rw on it.`,
+      `Refused at ${door}: a pinned Page writes only documents Pea acquired, and this one in session '${session}' is not one. Bind this Page to a thread that holds rw on it.`,
       destination.kind === "document" ? { lifetime: destination.ref } : {},
     );
   return admitThread(slot.thread, destination, door);
@@ -319,9 +339,19 @@ export function mintPageDoor(page: string, slot: PageChoice, door: string) {
 
 /**
  * D4: the step-begin check. A grant basis holds while its thread still grants that exact lifetime,
- * unrevoked and unexpired; every other basis holds for the attempt.
+ * unrevoked and unexpired; a document acquisition while that acquisition still holds that exact
+ * lifetime; every other basis holds for the attempt.
  */
 export function live(basis: Basis | null, door = "step begin"): Refused | null {
+  if (basis?.kind === "acquisition" && basis.scope.kind === "document")
+    return sources.acquired(basis.scope.lifetime) === basis.id
+      ? null
+      : refuse(
+          "acquisition.unproven",
+          door,
+          `Refused at ${door}: acquisition '${basis.id}' no longer holds ${basis.scope.lifetime.session}/${basis.scope.lifetime.openId} (closed, released, or no longer certified independent).`,
+          { lifetime: basis.scope.lifetime },
+        );
   if (basis?.kind !== "grant") return null;
   const grant = sources.heads?.(basis.thread).grant ?? null;
   const code =

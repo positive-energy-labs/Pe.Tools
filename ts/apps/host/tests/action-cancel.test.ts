@@ -459,7 +459,7 @@ test("F-c revoke lets a dispatched step report and refuses the next step without
       const intent = fixture.intent("revoke-begun");
       const target = intent.destination.ref;
       const head = revokeHead(target);
-      bindControl({ heads: () => head, whose: () => "you" });
+      bindControl({ heads: () => head });
       const unbind = bindRevoke(owner, bridge);
       try {
         const caller = pea();
@@ -502,7 +502,7 @@ test("F-c revoke lets a dispatched step report and refuses the next step without
         expect(result.steps).toHaveLength(2);
       } finally {
         unbind();
-        bindControl({ heads: null, whose: () => "you" });
+        bindControl({ heads: null });
       }
     }),
   ));
@@ -519,7 +519,6 @@ test.each([false, true])(
         const other = revokeHead(otherTarget);
         bindControl({
           heads: (thread) => (thread === "thread-1" ? head : other),
-          whose: () => "you",
         });
         const unbind = bindRevoke(owner, bridge);
         const holding = yield* Effect.forkScoped(
@@ -619,7 +618,7 @@ test.each([false, true])(
           expect(wire).toEqual(["unrelated"]);
         } finally {
           unbind();
-          bindControl({ heads: null, whose: () => "you" });
+          bindControl({ heads: null });
         }
       }),
     ),

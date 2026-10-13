@@ -573,7 +573,7 @@ test("Pea's own session is rw by its access, with no thread or expiry", () => {
         address: null,
         isFamilyDocument: false,
         isActive: true,
-        access: { kind: "pea" } as const,
+        access: { kind: "pea", acquisition: "acq-1" } as const,
       })),
     },
   };

@@ -43,8 +43,15 @@ const headWith = (grant: HeadGrant | null): ThreadHead => ({
   grant,
 });
 let heads: Record<string, ThreadHead> = {};
-const bind = (whose: (session: string) => "you" | "pea" = () => "you") =>
-  bindControl({ heads: (thread) => heads[thread] ?? emptyThreadHead, whose });
+/** Pea acquired one copy in Revit "P"; a user document opened there later is not acquired. */
+const acquiredCopy = (ref: DocumentRef) =>
+  ref.session === "P" && ref.openId === "copy" ? "acq-copy" : null;
+const bind = (acquired: (ref: DocumentRef) => string | null = () => null) =>
+  bindControl({
+    heads: (thread) => heads[thread] ?? emptyThreadHead,
+    acquired,
+    acquiredSession: (session) => (acquired === acquiredCopy && session === "P" ? "acq-P" : null),
+  });
 const refusal = (run: () => unknown) => {
   try {
     run();
@@ -57,7 +64,7 @@ const refusal = (run: () => unknown) => {
 
 afterEach(() => {
   heads = {};
-  bindControl({ heads: null, whose: () => "you" });
+  bindControl({ heads: null, acquired: () => null, acquiredSession: () => null });
   vi.useRealTimers();
 });
 
@@ -121,16 +128,26 @@ test("an anonymous write is context.missing and a page is sent to its own door",
   });
 });
 
-test("pea needs the grant on the exact lifetime; Pea's own sessions need none", () => {
-  bind((session) => (session === "P" ? "pea" : "you"));
+test("pea needs the grant on the exact lifetime; only a document Pea acquired needs none", () => {
+  bind(acquiredCopy);
   const on = (ref: DocumentRef) => ({ kind: "document", ref }) as const;
   expect(refusal(() => admitCrossing(pea, on(docA), "/actions"))).toBe("grant.required");
   expect(refusal(() => admitCrossing(pea, { kind: "session", session: "S1" }, "/actions"))).toBe(
     "grant.required",
   );
   expect(admitCrossing(pea, on({ session: "P", openId: "copy" }), "/actions")).toEqual({
-    kind: "pea-session",
-    session: "P",
+    kind: "acquisition",
+    id: "acq-copy",
+    scope: { kind: "document", lifetime: { session: "P", openId: "copy" } },
+  });
+  // A user's document B opened inside Pea's Revit inherits nothing from the process.
+  expect(refusal(() => admitCrossing(pea, on({ session: "P", openId: "B" }), "/actions"))).toBe(
+    "grant.required",
+  );
+  expect(admitCrossing(pea, { kind: "session", session: "P" }, "/actions")).toEqual({
+    kind: "acquisition",
+    id: "acq-P",
+    scope: { kind: "process", session: "P" },
   });
   expect(admitCrossing(pea, { kind: "host" }, "/actions")).toBeNull();
   heads.t1 = headWith(grantOn(docA));
@@ -150,8 +167,13 @@ test("pea needs the grant on the exact lifetime; Pea's own sessions need none", 
     "grant.context-cannot-hold",
   );
   expect(admitCrossing(external, on({ session: "P", openId: "copy" }), "mcp:pe_do")).toMatchObject({
-    kind: "pea-session",
+    kind: "acquisition",
   });
+  // The step-begin check holds only while that acquisition still holds that exact lifetime.
+  const basis = admitCrossing(pea, on({ session: "P", openId: "copy" }), "/actions");
+  expect(live(basis)).toBeNull();
+  bind();
+  expect(live(basis)?.refusal.code).toBe("acquisition.unproven");
 });
 
 test("a grant expires 60 minutes after it was stamped, and a revoked one is refused", () => {

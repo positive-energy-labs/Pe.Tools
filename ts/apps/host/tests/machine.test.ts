@@ -28,6 +28,7 @@ import {
 import type { Providers } from "../src/harness/providers.ts";
 import { unreadLeg } from "../src/update-reader.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
+import { planAcquisition } from "../src/acquisition.ts";
 
 const sdkRun = vi.hoisted(() => vi.fn<(args: readonly string[]) => Promise<string>>());
 vi.mock("../src/session-route.ts", async (original) => {
@@ -163,39 +164,66 @@ test("a stalled observed-document leg publishes unknown at the Machine deadline"
   }
 });
 
+/** A Pea acquisition receipt as instances-actions records it: intent first, then its steps. */
+function acquiring(
+  verb: "start" | "open",
+  state: ActionReceipt["state"],
+  process: { pid: number; processStartUtc: string },
+  stepState: "succeeded" | "running" = "succeeded",
+  openId = "product-id",
+): ActionReceipt {
+  const start = { year: "2025", owner: "pea", addins: "on" } as const;
+  const intent = planAcquisition(
+    "launch",
+    "C:/pea-work",
+    { kind: "create", year: "2025" },
+    verb === "open" ? { source: "C:/Tower.rvt", into: { start } } : null,
+    false,
+  );
+  const work = verb === "open" ? (intent.document!.origin as { work: string }).work : null;
+  const step = (key: string, result: unknown) =>
+    stepState === "succeeded"
+      ? { id: key, kind: "native", key, input: {}, state: "succeeded", result }
+      : { id: key, kind: "native", key, input: {}, state: "running" };
+  return {
+    kind: "workflow",
+    id: "launch",
+    key: `instances.${verb}`,
+    caller: { kind: "human", via: "local" },
+    basis: { kind: "human" },
+    state,
+    destination: { kind: "host" },
+    request: verb === "start" ? start : { source: "C:/Tower.rvt", into: { start } },
+    bases: {},
+    steps:
+      verb === "start"
+        ? [step("instances.start", { session: { process } })]
+        : [
+            step("instances.open.start", { session: { process } }),
+            step("instances.open", { document: { openId, path: work } }),
+          ],
+    preparation: { state: "ready", value: { target: null, acquisition: intent } },
+    recovery: [],
+    startedAt: row.observedAtUtc,
+    publication: { state: "unrequested" },
+    ...(state === "succeeded" ? { result: null } : {}),
+    ...(state === "failed" ? { error: "failed", status: 409 } : {}),
+  } as ActionReceipt;
+}
+
 test.each([
-  ["start", "pea", "succeeded", 42, row.process.processStartUtc, "background", "pea"],
-  ["open", "pea", "succeeded", 42, row.process.processStartUtc, "background", "pea"],
-  ["start", "you", "succeeded", 42, row.process.processStartUtc, "background", "you"],
-  ["start", "pea", "failed", 42, row.process.processStartUtc, "background", "you"],
-  ["start", "pea", "running", 42, row.process.processStartUtc, "background", "you"],
-  ["start", "pea", "succeeded", 43, row.process.processStartUtc, "background", "you"],
-  ["start", "pea", "succeeded", 42, "2026-10-09T00:00:01Z", "background", "you"],
-  ["start", "pea", "succeeded", 42, row.process.processStartUtc, "foreground", "you"],
+  ["start", "succeeded", "succeeded", 42, row.process.processStartUtc, "background", "pea"],
+  ["open", "succeeded", "succeeded", 42, row.process.processStartUtc, "background", "pea"],
+  // An acquisition stays evidence when the posture changes: background is presentation.
+  ["start", "succeeded", "succeeded", 42, row.process.processStartUtc, "foreground", "pea"],
+  ["start", "running", "running", 42, row.process.processStartUtc, "background", "you"],
+  ["start", "succeeded", "succeeded", 43, row.process.processStartUtc, "background", "you"],
+  ["start", "succeeded", "succeeded", 42, "2026-10-09T00:00:01Z", "background", "you"],
 ] as const)(
-  "whose: %s owner %s state %s pid %s start %s posture %s gives %s",
-  async (verb, owner, state, pid, processStartUtc, posture, whose) => {
+  "whose: %s %s, step %s, pid %s start %s posture %s gives %s",
+  async (verb, state, stepState, pid, processStartUtc, posture, whose) => {
     const f = fixture();
-    const process = { ...row.process, pid, processStartUtc };
-    const start = { year: "2025", owner, addins: "on" };
-    const receipt = {
-      kind: "workflow",
-      id: "launch",
-      key: `instances.${verb}`,
-      caller: { kind: "human", via: "local" },
-      basis: { kind: "human" },
-      state,
-      destination: { kind: "host" },
-      request: verb === "start" ? start : { source: "C:/Tower.rvt", into: { start } },
-      result: verb === "start" ? { session: { process } } : { session: { session: { process } } },
-      bases: {},
-      steps: [],
-      preparation: { state: "unprepared" },
-      recovery: [],
-      startedAt: row.observedAtUtc,
-      publication: { state: "unrequested" },
-      ...(state === "failed" ? { error: "failed", status: 409 } : {}),
-    } as ActionReceipt;
+    const receipt = acquiring(verb, state, { pid, processStartUtc }, stepState);
     vi.mocked(f.sources.sessions).mockResolvedValue([{ ...row, shape: { ...row.shape, posture } }]);
     vi.mocked(f.sources.actions).mockResolvedValue([receipt]);
     try {
@@ -206,6 +234,23 @@ test.each([
     }
   },
 );
+
+test("a background row whose launch carried no acquisition intent projects whose you", async () => {
+  const f = fixture();
+  const legacy = {
+    ...acquiring("start", "succeeded", row.process),
+    preparation: { state: "unprepared" },
+  };
+  vi.mocked(f.sources.actions).mockResolvedValue([legacy as ActionReceipt]);
+  vi.mocked(f.sources.sessions).mockResolvedValue([
+    { ...row, shape: { ...row.shape, posture: "background" } },
+  ]);
+  try {
+    expect((await f.machine.refresh()).revit.sessions![0]).toHaveProperty("whose", "you");
+  } finally {
+    f.machine.close();
+  }
+});
 
 test("a background SDK row with no launch receipt projects whose you", async () => {
   const f = fixture();
@@ -685,41 +730,50 @@ const grantHeld = (extra: Partial<HeadGrant> = {}): HeldGrant => ({
     ...extra,
   },
 });
-const accessAt = async (grants: readonly HeldGrant[], at: string, whose: "you" | "pea" = "you") => {
+/** A controlled Revit whose SDK census natively certifies each document's independence. */
+const controlled = (documents: { openId: string; isWorkshared: boolean | null }[]) =>
+  ({
+    ...row,
+    case: "controlled-active",
+    id: "dev",
+    receipt: { receiptPath: "C:/receipts/dev.json" },
+    bridge: {
+      bridge: "ready",
+      documents: documents.map((doc) => ({ ...doc, isDetached: false, title: doc.openId })),
+    },
+  }) as unknown as SessionObservation;
+const accessesAt = async (
+  grants: readonly HeldGrant[],
+  at: string,
+  acquired?: { sdk: { openId: string; isWorkshared: boolean | null }[]; products?: string[] },
+) => {
   const f = fixture();
   vi.mocked(f.sources.grants.grants).mockReturnValue(grants);
-  if (whose === "pea")
-    vi.mocked(f.sources.actions).mockResolvedValue([
+  if (acquired) {
+    vi.mocked(f.sources.actions).mockResolvedValue([acquiring("open", "succeeded", row.process)]);
+    vi.mocked(f.sources.sessions).mockResolvedValue([controlled(acquired.sdk)]);
+    vi.mocked(f.sources.attachments).mockResolvedValue([
       {
-        kind: "workflow",
-        id: "launch",
-        key: "instances.start",
-        caller: { kind: "human", via: "local" },
-        basis: { kind: "human" },
-        state: "succeeded",
-        destination: { kind: "host" },
-        request: { year: "2025", owner: "pea", addins: "on" },
-        result: { session: { process: row.process } },
-        bases: {},
-        steps: [],
-        preparation: { state: "unprepared" },
-        recovery: [],
-        startedAt: row.observedAtUtc,
-        publication: { state: "unrequested" },
-      } as ActionReceipt,
+        ...attached,
+        documents: (acquired.products ?? ["product-id"]).map((openId) => ({
+          ...attached.documents![0]!,
+          openId,
+        })),
+      },
     ]);
-  if (whose === "pea")
-    vi.mocked(f.sources.sessions).mockResolvedValue([
-      { ...row, shape: { ...row.shape, posture: "background" } },
-    ]);
+  }
   const machine = createMachine(f.sources, { periodMs: 60_000, now: () => at });
   try {
-    return (await machine.refresh()).revit.sessions![0]!.attachment!.documents![0]!.access;
+    return (await machine.refresh()).revit.sessions![0]!.attachment!.documents!.map(
+      (doc) => doc.access,
+    );
   } finally {
     machine.close();
     f.machine.close();
   }
 };
+const accessAt = async (grants: readonly HeldGrant[], at: string) =>
+  (await accessesAt(grants, at))[0];
 
 test("access: a live grant on the exact lifetime draws rw with its thread and expiry", async () => {
   expect(await accessAt([grantHeld()], "2026-10-12T12:30:00.000Z")).toEqual({
@@ -748,10 +802,33 @@ test("access: expired, revoked and other-lifetime grants are read, and no grant 
   expect(await accessAt([], "2026-10-12T12:30:00.000Z")).toEqual(read);
 });
 
-test("access: Pea's own session is rw by session, not by any grant", async () => {
-  expect(await accessAt([], "2026-10-12T12:30:00.000Z", "pea")).toEqual({
-    kind: "pea",
-  });
+test("access: only the document Pea acquired is Pea's; a user document opened in Pea's Revit is read", async () => {
+  const at = "2026-10-12T12:30:00.000Z";
+  const sdk = [
+    { openId: "product-id", isWorkshared: false },
+    { openId: "user-b", isWorkshared: false },
+  ];
+  expect(await accessesAt([], at, { sdk, products: ["product-id", "user-b"] })).toEqual([
+    { kind: "pea", acquisition: "launch" },
+    { kind: "read" },
+  ]);
+  // A human grant on B in Pea's Revit is an ordinary grant.
+  expect(
+    (
+      await accessesAt(
+        [grantHeld({ lifetime: { session: "product-open", openId: "user-b" } })],
+        at,
+        {
+          sdk,
+          products: ["product-id", "user-b"],
+        },
+      )
+    )[1],
+  ).toMatchObject({ kind: "rw" });
+  // Native facts unknown: the acquired copy is not certified independent, so it stays read.
+  expect(await accessesAt([], at, { sdk: [{ openId: "product-id", isWorkshared: null }] })).toEqual(
+    [{ kind: "read" }],
+  );
 });
 
 test("access: a head move re-reads the machine through the grant source", async () => {

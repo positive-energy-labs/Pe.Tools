@@ -63,11 +63,12 @@ export interface MachinePeer {
 }
 
 /**
- * What the thread heads let a caller do to one open document, projected on the host (ADR
- * 0016/0017). The browser draws `rw` from this and from nothing else; no head is read there.
+ * What a caller may do to one open document, projected on the host (ADR 0016/0017). `pea` is a
+ * document Pea's own acquisition created (its id is what cleanup and handover name); `rw` is a
+ * thread grant. The browser draws access from this and from nothing else.
  */
 export type MachineAccess =
-  | { readonly kind: "pea" }
+  | { readonly kind: "pea"; readonly acquisition: string }
   | { readonly kind: "read" }
   | {
       readonly kind: "rw";
@@ -94,6 +95,7 @@ export interface MachineAttachment {
 }
 
 export interface MachineSession {
+  /** Provenance label: an acquisition started this Revit. Never write authority (access is). */
   readonly whose: "you" | "pea";
   readonly row: SessionObservation;
   readonly attachment: MachineAttachment | null;

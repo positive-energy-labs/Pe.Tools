@@ -55,7 +55,13 @@ import { createHarnessThreads } from "./harness/threads.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { productHarnessThreadsPath, productRouteWorkPath } from "./product-paths.ts";
 import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
-import { attachmentWhose, createMachine, machineSources, useHostMachine } from "./machine.ts";
+import {
+  createMachine,
+  machineAcquisition,
+  machineSessionAcquisition,
+  machineSources,
+  useHostMachine,
+} from "./machine.ts";
 import { bindControl, currentCaller, routeActorOf, writeTerminalContext } from "./control.ts";
 import { bindRevoke } from "./revoke.ts";
 import { hostActionJournal } from "./gateway-owner.ts";
@@ -478,7 +484,8 @@ export const peRoutesLayer = (
       bindControl({
         heads: threads.heads.read,
         subscribeHeads: threads.heads.subscribe,
-        whose: attachmentWhose,
+        acquired: machineAcquisition,
+        acquiredSession: machineSessionAcquisition,
       });
       const unbindRevoke = bridge ? bindRevoke(hostActionJournal(), bridge) : undefined;
       const terminal = writeTerminalContext(hostOwnership.serviceName);
@@ -486,7 +493,12 @@ export const peRoutesLayer = (
         Effect.sync(() => {
           unbindRevoke?.();
           terminal.retire();
-          bindControl({ heads: null, subscribeHeads: undefined, whose: () => "you" });
+          bindControl({
+            heads: null,
+            subscribeHeads: undefined,
+            acquired: () => null,
+            acquiredSession: () => null,
+          });
           useHostMachine(undefined);
           machine.close();
         }),

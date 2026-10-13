@@ -74,7 +74,7 @@ import {
   pageActDoor,
   pageKeyOf,
   Refused,
-  sessionWhose,
+  documentAcquisition,
   threadHead,
   subscribeHeads,
 } from "./control.ts";
@@ -685,15 +685,15 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
         slot.kind === "pinned"
           ? resolvePinned(slot.address, inventoryOf(await live.sessions()))
           : null;
-      const session =
+      const lifetime =
         resolution?.kind === "resolved" && resolution.target.kind === "document"
-          ? resolution.target.ref.session
+          ? resolution.target.ref
           : null;
-      if (!session || sessionWhose(session) !== "pea")
+      if (!lifetime || documentAcquisition(lifetime) === null)
         return refused({
           code: "page.binding-not-yours",
           door: at,
-          reason: "Pea may pin a Page only to its own documents.",
+          reason: "Pea may pin a Page only to a document it acquired.",
         });
     }
     const current = await bindingOf(dir);

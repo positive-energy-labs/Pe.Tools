@@ -1911,8 +1911,8 @@ test("door 2: anonymous /actions is context.missing, a body actor is a strict pa
     ).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, {} as RevitBridge["Service"]))),
     { disableLogger: true },
   );
-  // The session is Pea's, so the grant passes and only eligibility can refuse.
-  bindControl({ whose: () => "pea" });
+  // The document is Pea's acquisition, so the grant passes and only eligibility can refuse.
+  bindControl({ acquired: () => "acq-1" });
   const admission = {
     id: "door-2",
     kind: "workflow",
@@ -1944,7 +1944,7 @@ test("door 2: anonymous /actions is context.missing, a body actor is a strict pa
     expect([header.status, header.json.refusal?.code]).toEqual([403, "human.only"]);
     expect(header.json.refusal.reason).toContain("pea calls are refused");
   } finally {
-    bindControl({ whose: () => "you" });
+    bindControl({ acquired: () => null, acquiredSession: () => null });
     await web.dispose();
     await rm(root, { recursive: true, force: true });
   }

@@ -55,14 +55,14 @@ beforeEach(async () => {
     { disableLogger: true },
   );
   // Every document is in a session the person owns, unless a test says otherwise.
-  bindControl({ heads: (thread) => heads[thread] ?? emptyThreadHead, whose: () => "you" });
+  bindControl({ heads: (thread) => heads[thread] ?? emptyThreadHead });
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(T0 + 1000);
 });
 afterEach(async () => {
   vi.useRealTimers();
   heads = {};
-  bindControl({ heads: null, whose: () => "you" });
+  bindControl({ heads: null, acquired: () => null, acquiredSession: () => null });
   await web.dispose();
   await rm(root, { recursive: true, force: true });
 });
@@ -238,7 +238,7 @@ test("door 2: an external MCP client cannot hold rw on your document", async () 
 });
 
 test("door 2: human-only keys refuse an agent, and a body actor or actor header is not identity", async () => {
-  bindControl({ whose: () => "pea" });
+  bindControl({ acquired: () => "acq-1" });
   const humanOnly = { ...admission(), key: "family.build" };
   refused(
     await send(pea("t1"), "/actions", humanOnly, { "x-pe-action-actor": "human" }),
