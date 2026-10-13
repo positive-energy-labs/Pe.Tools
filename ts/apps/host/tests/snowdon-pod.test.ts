@@ -116,13 +116,18 @@ function runPage(html: string, scriptResult: (key: string) => unknown) {
   const source = /<script>\n([\s\S]*?)<\/script>/.exec(html.slice(html.indexOf("</style>")))![1]!;
   const els = new Map<string, Record<string, unknown>>();
   const el = (id: string) => {
-    if (!els.has(id)) els.set(id, { id, textContent: "", innerHTML: "", disabled: false, dataset: {} });
+    if (!els.has(id))
+      els.set(id, { id, textContent: "", innerHTML: "", disabled: false, dataset: {} });
     return els.get(id)!;
   };
   const calls: string[] = [];
   const pe = {
     doc: null,
-    kernel: (reduce: (s: unknown, e: unknown) => unknown, base: unknown, draw: (s: unknown) => void) => {
+    kernel: (
+      reduce: (s: unknown, e: unknown) => unknown,
+      base: unknown,
+      draw: (s: unknown) => void,
+    ) => {
       const k = {
         state: base,
         fire: (e: unknown) => {
@@ -139,9 +144,21 @@ function runPage(html: string, scriptResult: (key: string) => unknown) {
       calls.push(key);
       return scriptResult(key);
     },
-    reading: async (source: string, run: () => Promise<unknown>) => ({ source, at: Date.now(), rows: await run() }),
+    reading: async (source: string, run: () => Promise<unknown>) => ({
+      source,
+      at: Date.now(),
+      rows: await run(),
+    }),
   };
-  runInNewContext(source, { document: { getElementById: el }, pe, setInterval: () => 0, Date, JSON, Number, String });
+  runInNewContext(source, {
+    document: { getElementById: el },
+    pe,
+    setInterval: () => 0,
+    Date,
+    JSON,
+    Number,
+    String,
+  });
   return { el, calls };
 }
 
@@ -156,7 +173,16 @@ test("the Page draws a real-shaped successful census without throwing, and surfa
       revitVersion: "2025",
       systemCount: 1,
       listed: 1,
-      systems: [{ id: 7, name: "Supply 1", type: "Supply", elementCount: 4, fittingCount: 2, baseEquipment: null }],
+      systems: [
+        {
+          id: 7,
+          name: "Supply 1",
+          type: "Supply",
+          elementCount: 4,
+          fittingCount: 2,
+          baseEquipment: null,
+        },
+      ],
       ductWarnings: [],
     },
   };
@@ -169,7 +195,15 @@ test("the Page draws a real-shaped successful census without throwing, and surfa
 
   const experiment = {
     status: "Succeeded",
-    data: { parameter: "Comments", examined: 3, writable: 3, changed: 3, alreadyCurrent: 0, applied: true, sample: [] },
+    data: {
+      parameter: "Comments",
+      examined: 3,
+      writable: 3,
+      changed: 3,
+      alreadyCurrent: 0,
+      applied: true,
+      sample: [],
+    },
   };
   const exp = runPage(html, (key) => (key.endsWith("Census.cs") ? census : experiment));
   await (exp.el("census").onclick as () => Promise<void>)();
