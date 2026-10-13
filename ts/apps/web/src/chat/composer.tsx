@@ -246,6 +246,7 @@ export function ThreadComposer({
                     label="Attach files: images and text, 5 MB each, 10 a message"
                     onClick={files.browse}
                   />
+                  {/* One slot: Stop replaces Send while a turn runs, so the two never coexist. */}
                   {isRunning ? (
                     <SituationAction
                       handle={handle}
@@ -254,14 +255,15 @@ export function ThreadComposer({
                       icon={Square}
                       tone="alarm"
                     />
-                  ) : null}
-                  <SituationAction
-                    handle={handle}
-                    name="send"
-                    action={send}
-                    commit
-                    icon={ArrowUp}
-                  />
+                  ) : (
+                    <SituationAction
+                      handle={handle}
+                      name="send"
+                      action={send}
+                      commit
+                      icon={ArrowUp}
+                    />
+                  )}
                 </>
               }
             />
