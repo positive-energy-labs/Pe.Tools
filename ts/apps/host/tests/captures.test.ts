@@ -12,6 +12,8 @@ import { captureListSchema } from "@pe/agent-contracts";
 import { RevitBridge } from "../src/bridge.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { CaptureStore, capturesRoute } from "../src/captures-route.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
+import { sdkSessions } from "./native-receipt-fixture.ts";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -32,6 +34,10 @@ async function host(
     list: Effect.succeed([
       {
         sessionId: "bridge-a",
+        connected: true,
+        lane: hostOwnership.lane,
+        sourceRoot: hostOwnership.sourceRoot,
+        serviceName: hostOwnership.serviceName,
         processId: 42,
         processStartUtcUnixMs: 1000,
         state: {
@@ -84,7 +90,7 @@ async function host(
   const spa = () => Effect.succeed(HttpServerResponse.text("spa"));
   const web = HttpRouter.toWebHandler(
     Layer.mergeAll(
-      makeCallRoute(undefined, undefined, { captureStore: store }),
+      makeCallRoute(undefined, undefined, { captureStore: store, sdk: sdkSessions }),
       capturesRoute(spa, () => store),
     ).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
     { disableLogger: true },
