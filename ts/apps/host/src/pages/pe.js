@@ -120,7 +120,7 @@
 
   /**
    * The document this page's binding names, as the host resolves it now; sets `pe.doc`. A binding that names no one
-   * document (two Revits and no binding, a pinned file open twice or closed, a thread pointed nowhere) is thrown as a
+   * document (no binding, a pinned file open twice or closed, a thread pointed nowhere) is thrown as a
    * `PeTargetRefusal` with the resolver's word as `code` (`ambiguous`, `document-closed`, `session-gone`, `missing`)
    * and shown on the page; nothing is ever picked for it. Bind the page from the chip.
    */

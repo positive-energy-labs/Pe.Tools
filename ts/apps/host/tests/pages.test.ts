@@ -431,7 +431,8 @@ ${source}`),
 
     it("mints the D12 page key into index.html and stamps it, never a header", async () => {
       bind();
-      const { fetch, page, forwarded } = await host([session("S1")]);
+      const { fetch, page, forwarded, as } = await host([session("S1")]);
+      await as(human).put("/pe/pages/todo/binding", { kind: "pinned", address: MODEL });
       const html = await (await fetch("/pages/todo/")).text();
       expect(html).toContain('<meta name="pe-page" content="page:@pages/todo">');
       expect(html.indexOf("pe-page")).toBeLessThan(html.indexOf("<p>hi</p>"));
@@ -549,21 +550,27 @@ ${source}`),
       });
     });
 
-    it("no binding and two Revits is choose, never a guess; one Revit reads its active document", async () => {
+    it("no binding is choose with one Revit or two, never a guess at the active document", async () => {
       bind();
       const two = await host([session("S1"), session("S2")]);
       const reading = (await (
         await two.page.get("/pages/todo/target")
       ).json()) as PageTargetReading;
-      expect(reading.resolution).toEqual({ kind: "choose", reason: "ambiguous" });
+      expect(reading.resolution).toEqual({ kind: "choose", reason: "missing" });
       expect(reading.write).toMatchObject({ kind: "read", refusal: { code: "page.unbound" } });
       const read = await two.page.post("/pages/todo/call", { key: "revit.context.summary" });
       expect(read.status).toBe(409);
       expect(two.forwarded).toEqual([]);
+      // K15/ADR 0017 D10: one Revit is no binding either; its active document is never read for it.
       const one = await host([session("S1")]);
-      expect(
-        ((await (await one.page.get("/pages/todo/target")).json()) as PageTargetReading).document,
-      ).toMatchObject({ session: "S1", openId: "A" });
+      const alone = (await (
+        await one.page.get("/pages/todo/target")
+      ).json()) as PageTargetReading;
+      expect(alone.resolution).toEqual({ kind: "choose", reason: "missing" });
+      expect(alone.document).toBeNull();
+      const unbound = await one.page.post("/pages/todo/call", { key: "revit.context.summary" });
+      expect(unbound.status).toBe(409);
+      expect(one.forwarded).toEqual([]);
     });
 
     it("/actions from a page's own browser is page.use-page-door; only the minted door crosses", async () => {

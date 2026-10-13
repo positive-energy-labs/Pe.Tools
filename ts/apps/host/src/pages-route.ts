@@ -222,8 +222,8 @@ const inventoryOf = (sessions: readonly LiveSession[]): TargetInventory => ({
 });
 
 /**
- * A slot against the live sessions. `none` resolves only the one unambiguous case (one Revit, its
- * active document) so an unbound page can still read; two Revits is `choose`, never a pick.
+ * A slot against the live sessions. `none` names nothing: it is `choose`, with one Revit or two,
+ * never the active document (K15, ADR 0017 D10).
  */
 function resolveSlot(slot: PageChoice, sessions: readonly LiveSession[]): TargetResolution {
   if (slot.kind === "thread")
@@ -233,16 +233,7 @@ function resolveSlot(slot: PageChoice, sessions: readonly LiveSession[]): Target
       inventoryOf(sessions),
     );
   if (slot.kind === "pinned") return resolvePinned(slot.address, inventoryOf(sessions));
-  const [only, ...more] = sessions;
-  if (!only || more.length) return { kind: "choose", reason: only ? "ambiguous" : "missing" };
-  if (only.documents === null) return { kind: "checking" };
-  const active = only.documents.find((doc) => doc.isActive);
-  return active
-    ? {
-        kind: "resolved",
-        target: { kind: "document", ref: { session: only.session, openId: active.openId } },
-      }
-    : { kind: "choose", reason: "missing" };
+  return { kind: "choose", reason: "missing" };
 }
 
 /** The host-stamped origin of a row: the page key, `human`, or `agent`; never a header. */
