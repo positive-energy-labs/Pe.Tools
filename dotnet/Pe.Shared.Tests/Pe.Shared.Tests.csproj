@@ -20,6 +20,11 @@
     </ItemGroup>
 
     <ItemGroup>
+        <!-- The dev bridge supervisor's real appBase derivation, compiled in so a test reads it without Revit. -->
+        <Compile Include="..\Pe.App\Host\TsHostLauncher.cs" Link="Product\TsHostLauncher.cs" />
+    </ItemGroup>
+
+    <ItemGroup>
         <ProjectReference Include="..\Pe.Aps\Pe.Aps.csproj" />
         <ProjectReference Include="..\Pe.Dev.RevitAutomation\Pe.Dev.RevitAutomation.csproj" />
         <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj" />

@@ -131,6 +131,27 @@ public sealed class DeploymentRuntimeContractTests {
         }
     }
 
+    // Acceptance round 4 F6-A: the dev bridge supervisor took its service lease and read service files
+    // under the owner's %LOCALAPPDATA% even with the override set. It must use the one runtime root.
+    [Test, NonParallelizable]
+    public void Dev_bridge_supervisor_app_base_and_service_files_land_under_the_product_home_override() {
+        var home = Path.Combine(Path.GetTempPath(), $"pe-home-{Guid.NewGuid():N}", "Pe.Tools");
+        var ownerRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Positive Energy", "Pe.Tools");
+        var previous = Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable);
+        Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, home);
+        try {
+            var appBase = Pe.App.Host.TsHostLauncher.ServiceAppBase;
+            var serviceFile = PeServiceDiscovery.ServiceFilePath(appBase, "pe-host-source-test");
+            Assert.That(appBase, Is.EqualTo(ProductRuntimeLayout.ForCurrentUser().RootPath));
+            Assert.That(serviceFile, Does.StartWith(Path.Combine(home, ".local-state", "state", "service")).IgnoreCase);
+            Assert.That(serviceFile, Does.Not.StartWith(ownerRoot).IgnoreCase);
+        } finally {
+            Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, previous);
+            TryDeleteDirectory(Path.GetDirectoryName(home)!);
+        }
+    }
+
     [Test]
     public void Scripting_workspace_layout_accepts_local_names_and_refuses_path_escape() {
         var rootPath = Path.Combine(Path.GetTempPath(), $"pe-workspaces-{Guid.NewGuid():N}");

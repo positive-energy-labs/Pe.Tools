@@ -1,3 +1,4 @@
+using Pe.Shared.Product;
 using Pe.Revit.DocumentData.AgentContext;
 
 namespace Pe.Revit.Placement;
@@ -25,7 +26,8 @@ public sealed class DuctPlacer
     /// <param name="planViewId">Floor plan view id; auto-resolved from the level when null.</param>
     /// <param name="isoViewId">3D/iso view id; auto-resolved when null.</param>
     /// <param name="stateDir">Where last_solve.json lives. Defaults to
-    /// %LOCALAPPDATA%\Pe.Tools\placement\&lt;sanitized doc title&gt; (created on demand).</param>
+    /// <c>&lt;product state&gt;\placement\&lt;sanitized doc title&gt;</c> (created on demand; the one runtime root, so
+    /// PE_TOOLS_PRODUCT_HOME moves it).</param>
     public DuctPlacer(Document doc, string level, long? planViewId = null, long? isoViewId = null, string stateDir = null)
     {
         _doc = doc ?? throw new ArgumentNullException(nameof(doc));
@@ -37,9 +39,10 @@ public sealed class DuctPlacer
 
         if (string.IsNullOrWhiteSpace(stateDir))
         {
-            var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             var title = Sanitize(doc.Title);
-            stateDir = Path.Combine(local, "Pe.Tools", "placement", string.IsNullOrEmpty(title) ? "untitled" : title);
+            stateDir = Path.Combine(
+                ProductRuntimeLayout.ForCurrentUser().State.ResolveModuleStatePath("placement"),
+                string.IsNullOrEmpty(title) ? "untitled" : title);
         }
         _stateDir = stateDir;
         Directory.CreateDirectory(_stateDir);
