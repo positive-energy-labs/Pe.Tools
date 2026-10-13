@@ -12,7 +12,7 @@ import { inspectAtomRegistry } from "../state/atom-inspect";
 import { appAtomRegistry, routeSearch } from "../route/route-owner";
 import { AppChrome, AppDevtools } from "../route/app-chrome";
 import { InstallScrim } from "../machine/install-scrim";
-import { AppNavigation } from "../route/app-chrome";
+import { AppBar } from "#/navigation/app-bar";
 import { NavigationProvider } from "#/navigation/state";
 import { RouteControlsProvider, SituationPinnedSlot } from "#/navigation/route-controls";
 
@@ -66,7 +66,7 @@ export function RootComponent() {
     <NavigationProvider>
       <RouteControlsProvider>
         <div className="flex h-dvh min-h-0 min-w-0 flex-col">
-          <AppNavigation />
+          <AppBar />
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <SituationPinnedSlot />
             <div className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-none" data-app-content>

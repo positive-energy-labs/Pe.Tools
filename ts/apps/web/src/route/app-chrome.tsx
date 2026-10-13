@@ -7,11 +7,6 @@ import { VersionChip } from "#/machine/drawer";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import { OwnerInspector } from "#/state/owner-inspector";
-import { AppBar } from "#/navigation/app-bar";
-
-export function AppNavigation() {
-  return <AppBar />;
-}
 
 export function AppChrome({ pathname }: { pathname: string }) {
   if (pathname === "/machine") return null;
