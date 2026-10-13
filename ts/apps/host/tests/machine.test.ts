@@ -133,6 +133,25 @@ function fixture() {
   return { sources, machine: createMachine(sources, { periodMs: 60_000 }) };
 }
 
+test("a stalled observed-document leg publishes unknown at the Machine deadline", async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  vi.mocked(f.sources.documents).mockReturnValue(new Promise(() => {}));
+  let value: Machine | undefined;
+  try {
+    void f.machine.refresh().then((reading) => { value = reading; });
+    await vi.advanceTimersByTimeAsync(15_001);
+    expect(value?.revit.sessions?.[0]).toMatchObject({
+      whose: "you",
+      documents: null,
+      documentsLeg: { observedAtUtc: null, error: expect.stringContaining("leg exceeded") },
+    });
+  } finally {
+    f.machine.close();
+    vi.useRealTimers();
+  }
+});
+
 test.each([
   ["start", "pea", "succeeded", 42, row.process.processStartUtc, "background", "pea"],
   ["open", "pea", "succeeded", 42, row.process.processStartUtc, "background", "pea"],

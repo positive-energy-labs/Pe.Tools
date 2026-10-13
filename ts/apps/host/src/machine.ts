@@ -338,7 +338,7 @@ export function createMachine(
               const previous = documents.get(key) ?? { value: null, leg: unreadLeg() };
               const attemptedAtUtc = now();
               try {
-                const result = await sources.documents(process);
+                const result = await withDeadline(sources.documents(process), LEG_DEADLINE_MS, `documents:${key}`);
                 documents.set(key, {
                   value: result.documents.map((doc) => ({ ...doc, persistence: null })),
                   leg: { observedAtUtc: now(), attemptedAtUtc, error: null },
